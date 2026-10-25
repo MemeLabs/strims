@@ -22,6 +22,18 @@
 //!   oracle the upload meter is measured against.
 //! - `STRIMS_SIM_MINUTES=<m>` sets the stream length of the scenarios that
 //!   take one ([`stream_minutes`]).
+//! - `STRIMS_SIM_CHUNK=<bytes>` and `STRIMS_SIM_MUNRO=<bytes>` give every
+//!   swarm chunks and signatures of those sizes
+//!   ([`with_chunks`](crate::SwarmSpec::with_chunks)): a media swarm's 4096
+//!   and 32768 against the scenarios' 1 KiB frames. Either alone keeps the
+//!   other's bytes.
+//! - `STRIMS_SIM_STREAM_SECS=<s>` streams every swarm for `s` seconds from
+//!   its start, the run ending 10 s after the last stops: the WAN cases'
+//!   minute, longer. A scenario's faults, steps and competing uploads keep
+//!   their times.
+//! - `STRIMS_SIM_SERIES=1` samples every node's transfers
+//!   ([`Scenario::transfer_samples`]), so the row carries the run second by
+//!   second ([`Report::series`]).
 //! - `STRIMS_SIM_ROWS=1` prints each run's measures as one line,
 //!   `ROW {json}`, on stdout ([`Report::row`]).
 //! - `STRIMS_SIM_JOB=1` runs the sweep as one sim farm job
@@ -144,9 +156,20 @@ impl Run<'_> {
     }
 }
 
-/// A scenario setting from the run's environment, if set and it parses.
+/// A scenario setting from the run's environment, if set and not blank.
+/// A value that doesn't parse fails the test, so a mistyped setting can't
+/// run the default instead.
+#[allow(clippy::panic)] // a mistyped setting fails its test
 pub fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
-    env(name).and_then(|s| s.trim().parse().ok())
+    let v = env(name)?;
+    let v = v.trim();
+    if v.is_empty() {
+        return None;
+    }
+    match v.parse() {
+        Ok(x) => Some(x),
+        Err(_) => panic!("{name}={v} doesn't parse"),
+    }
 }
 
 /// The stream length of a scenario that takes it from the run's settings:
@@ -198,6 +221,10 @@ fn sweep_seeds(
         "STRIMS_SIM_JOB runs one seed: set STRIMS_SIM_SEED"
     );
     let window = env("STRIMS_SIM_TCP").is_some_and(|s| s.trim() == "1");
+    let series = env("STRIMS_SIM_SERIES").is_some_and(|s| s.trim() == "1");
+    let chunk: Option<usize> = knob("STRIMS_SIM_CHUNK");
+    let munro: Option<usize> = knob("STRIMS_SIM_MUNRO");
+    let stream_secs: Option<u64> = knob("STRIMS_SIM_STREAM_SECS");
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -210,6 +237,28 @@ fn sweep_seeds(
         }
         if window && let Some(b) = &mut spec.send_buffer {
             b.window = true;
+        }
+        if series {
+            spec.transfer_samples = true;
+        }
+        if let Some(secs) = stream_secs {
+            for s in &mut spec.swarms {
+                s.stop = s.start + Duration::from_secs(secs);
+            }
+            if let Some(stop) = spec.swarms.iter().map(|s| s.stop).max() {
+                spec.duration = stop + Duration::from_secs(10);
+            }
+        }
+        if chunk.is_some() || munro.is_some() {
+            spec.swarms = std::mem::take(&mut spec.swarms)
+                .into_iter()
+                .map(|s| {
+                    let c = chunk.unwrap_or(s.options.chunk_size);
+                    let m = munro.unwrap_or(s.options.chunk_size * s.options.chunks_per_signature);
+                    s.with_chunks(c, m)
+                        .unwrap_or_else(|e| fail(test, seed, &e, &[]))
+                })
+                .collect();
         }
         if known_uplink {
             for h in &mut spec.hosts {

@@ -27,7 +27,7 @@
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
 //! | `stats` | | Reports `stats`. |
-//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, and optionally `rate` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. Only the first `testbed` runs. |
+//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, and optionally `rate`, and `chunk` with `munro` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. Only the first `testbed` runs. |
 //!
 //! Events, from the node:
 //!
@@ -277,12 +277,18 @@ impl Control {
                     v if v.is_undefined() => RATE,
                     _ => int(cmd, "rate")?,
                 };
+                let size = |key: &str| usize::try_from(int(cmd, key)?).map_err(|e| e.to_string());
+                let chunks = match property(cmd, "chunk") {
+                    v if v.is_undefined() => None,
+                    _ => Some((size("chunk")?, size("munro")?)),
+                };
                 let settings = Settings {
-                    index: usize::try_from(int(cmd, "index")?).map_err(|e| e.to_string())?,
-                    nodes: usize::try_from(int(cmd, "nodes")?).map_err(|e| e.to_string())?,
+                    index: size("index")?,
+                    nodes: size("nodes")?,
                     start_ms: int(cmd, "startMs")?,
                     secs: int(cmd, "secs")?,
                     rate,
+                    chunks,
                 };
                 let out = self.out.clone();
                 // Detached: it ends 5 s after the stream does.

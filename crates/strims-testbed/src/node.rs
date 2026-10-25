@@ -74,6 +74,9 @@ pub struct Settings {
     pub secs: u64,
     /// The stream rate in bytes per second.
     pub rate: u64,
+    /// The chunk size and munro in bytes ([`LiveShape::with_chunks`]);
+    /// `None` keeps [`LiveShape::testbed`]'s.
+    pub chunks: Option<(usize, usize)>,
 }
 
 /// Runs the node's part (see the [module docs](self)), taking the node's
@@ -84,7 +87,10 @@ pub async fn run(
     s: Settings,
     rt: &impl Runtime,
 ) -> Result<(), String> {
-    let shape = LiveShape::testbed(s.rate);
+    let mut shape = LiveShape::testbed(s.rate);
+    if let Some((chunk, munro)) = s.chunks {
+        shape = shape.with_chunks(chunk, munro)?;
+    }
     let key = swarm_key();
     let seed = s.index == 0;
     let (swarm, writer) = if seed {

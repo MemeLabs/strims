@@ -9,8 +9,8 @@
 //!
 //! ```text
 //! testbed_node --index <i> --topology <file> [--secs <s>] [--start <unix ms>]
-//!              [--rate <bytes/s>] [--join-at <s>] [--hosts <dir>]
-//!              [--capture <dir>]
+//!              [--rate <bytes/s>] [--chunk <bytes> --munro <bytes>]
+//!              [--join-at <s>] [--hosts <dir>] [--capture <dir>]
 //! testbed_node --relay-only --topology <file> [--secs <s>] [--start <unix ms>]
 //! ```
 //!
@@ -23,8 +23,11 @@
 //! there ([`strims_testbed::native`]) for the browsers that exchange with
 //! it. The seed starts writing at `--start` (all nodes share the clock)
 //! and writes for `--secs`; a viewer makes its links `--join-at` seconds
-//! after the start. Each node prints its line per second on stdout, with
-//! the process's CPU time as `cpu_ms`.
+//! after the start. `--chunk` and `--munro` size the swarm's chunks and
+//! signatures
+//! ([`with_chunks`](strims_testbed::shape::LiveShape::with_chunks)); every
+//! node must take the same. Each node prints its line per second on
+//! stdout, with the process's CPU time as `cpu_ms`.
 //!
 //! `--relay-only` runs the relay: it listens where the topology's `relay`
 //! line says, joins the testbed network, runs no swarm, and stops 5 s
@@ -52,6 +55,8 @@ struct Args {
     secs: u64,
     start_ms: Option<u64>,
     rate: u64,
+    chunk: Option<usize>,
+    munro: Option<usize>,
     join_at: u64,
     hosts: Option<PathBuf>,
     capture: Option<String>,
@@ -68,6 +73,8 @@ fn args() -> Result<Args, String> {
         secs: 180,
         start_ms: None,
         rate: RATE,
+        chunk: None,
+        munro: None,
         join_at: 0,
         hosts: None,
         capture: None,
@@ -82,6 +89,8 @@ fn args() -> Result<Args, String> {
             "--secs" => a.secs = num(value()?)?,
             "--start" => a.start_ms = Some(num(value()?)?),
             "--rate" => a.rate = num(value()?)?,
+            "--chunk" => a.chunk = Some(num(value()?)? as usize),
+            "--munro" => a.munro = Some(num(value()?)? as usize),
             "--join-at" => a.join_at = num(value()?)?,
             "--hosts" => a.hosts = Some(value()?.into()),
             "--capture" => a.capture = Some(value()?),
@@ -90,6 +99,9 @@ fn args() -> Result<Args, String> {
     }
     if (a.index == usize::MAX && !a.relay_only) || a.topology.is_empty() {
         return Err("--index (or --relay-only) and --topology are required".to_owned());
+    }
+    if a.chunk.is_some() != a.munro.is_some() {
+        return Err("--chunk and --munro go together".to_owned());
     }
     Ok(a)
 }
@@ -228,6 +240,7 @@ async fn run() -> Result<(), String> {
         start_ms,
         secs: a.secs,
         rate: a.rate,
+        chunks: a.chunk.zip(a.munro),
     };
     let ran = tokio::select! {
         biased;

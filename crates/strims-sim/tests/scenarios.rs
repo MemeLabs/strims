@@ -1742,6 +1742,24 @@ fn wan_super_peer_adaptive_uncapped() {
 /// `STRIMS_SIM_CAL_` prefix (and the uplink queue from
 /// `STRIMS_SIM_SEND_BUFFER`). `STRIMS_SIM_CAL_JITTER=1` adds the cable
 /// profile's jitter, so seeds differ the way a real link's timing does.
+///
+/// Three more serve sweeps on the sim farm, whose jobs take no files:
+///
+/// - `STRIMS_SIM_CAL_MESH=full` links every pair of nodes, and
+///   `STRIMS_SIM_CAL_MESH=mesh6` takes the farm's testbed meshes
+///   (`hack/sim-farm/matrices/topologies/mesh6-v<viewers>`: the seed linked
+///   to up to 32 viewers, each viewer to 6 others), built in, for 3, 7, 15,
+///   31 or 63 viewers. Either replaces `STRIMS_SIM_CAL_TOPOLOGY`.
+/// - `STRIMS_SIM_CAL_SEED_UP_SCALE=<s>:<factor> ...` steps the seed's
+///   uplink to `factor` times `STRIMS_SIM_CAL_SEED_UP_MBIT`, so one value
+///   fits every seed uplink (`60:0.5 180:1` halves it from 60 s to 180 s).
+///   It replaces `STRIMS_SIM_CAL_SEED_UP_STEPS`.
+/// - `STRIMS_SIM_CAL_RATE_LIMIT_PCT=<pct>` gives every node a rate limit
+///   (`NodeConfig::rate_limit`) of `pct` percent of its starting uplink,
+///   so the node's QoS, not the access link, is where its peers' data
+///   waits and the seed's holders' weights apply. A rate limit is also the
+///   capacity the upload meter knows, and it doesn't follow the uplink's
+///   steps, as a user's setting wouldn't.
 struct Calibration {
     viewers: usize,
     seed_up_mbit: u64,
@@ -1757,6 +1775,8 @@ struct Calibration {
     /// The seed's uplink from given seconds of stream on, in Mbit/s
     /// (`<s>:<mbit> ...`).
     seed_up_steps: Vec<(f64, f64)>,
+    /// Every node's rate limit, in percent of its starting uplink.
+    rate_limit_pct: Option<u64>,
     /// Bulk uploads from the seed's host, from given seconds of stream on
     /// for given seconds (`<s>:<d> ...`), to a sink 30 ms away (the seed's
     /// delay and the testbed sink's). They need the window model
@@ -1765,19 +1785,70 @@ struct Calibration {
 }
 
 fn calibration_settings() -> Calibration {
+    let viewers = knob("STRIMS_SIM_CAL_VIEWERS").unwrap_or(3);
+    let seed_up_mbit = knob("STRIMS_SIM_CAL_SEED_UP_MBIT").unwrap_or(10);
+    let file = knob::<String>("STRIMS_SIM_CAL_TOPOLOGY");
+    let mesh = knob::<String>("STRIMS_SIM_CAL_MESH");
+    assert!(
+        file.is_none() || mesh.is_none(),
+        "STRIMS_SIM_CAL_TOPOLOGY or STRIMS_SIM_CAL_MESH, not both"
+    );
+    let topology = match mesh.as_deref() {
+        None => file.map(|path| std::fs::read_to_string(&path).unwrap()),
+        Some("full") => Some(full_mesh(viewers)),
+        Some("mesh6") => Some(mesh6(viewers).to_owned()),
+        Some(m) => panic!("STRIMS_SIM_CAL_MESH={m}: full or mesh6"),
+    };
+    let steps = pairs_knob("STRIMS_SIM_CAL_SEED_UP_STEPS");
+    let scale = pairs_knob("STRIMS_SIM_CAL_SEED_UP_SCALE");
+    assert!(
+        steps.is_empty() || scale.is_empty(),
+        "STRIMS_SIM_CAL_SEED_UP_STEPS or STRIMS_SIM_CAL_SEED_UP_SCALE, not both"
+    );
+    let seed_up_steps = if scale.is_empty() {
+        steps
+    } else {
+        scale
+            .into_iter()
+            .map(|(at, f)| (at, f * seed_up_mbit as f64))
+            .collect()
+    };
     Calibration {
-        viewers: knob("STRIMS_SIM_CAL_VIEWERS").unwrap_or(3),
-        seed_up_mbit: knob("STRIMS_SIM_CAL_SEED_UP_MBIT").unwrap_or(10),
+        viewers,
+        seed_up_mbit,
         viewer_up_mbit: knob("STRIMS_SIM_CAL_VIEWER_UP_MBIT").unwrap_or(20),
         seed_delay_ms: knob("STRIMS_SIM_CAL_SEED_DELAY_MS").unwrap_or(20),
         viewer_delay_ms: knob("STRIMS_SIM_CAL_VIEWER_DELAY_MS").unwrap_or(10),
         secs: knob("STRIMS_SIM_CAL_SECS").unwrap_or(180),
         join_at: knob("STRIMS_SIM_CAL_JOIN_AT").unwrap_or(0),
         slow_down_kbit: knob("STRIMS_SIM_CAL_SLOW_DOWN_KBIT"),
-        topology: knob::<String>("STRIMS_SIM_CAL_TOPOLOGY")
-            .map(|path| std::fs::read_to_string(&path).unwrap()),
-        seed_up_steps: pairs_knob("STRIMS_SIM_CAL_SEED_UP_STEPS"),
+        topology,
+        seed_up_steps,
+        rate_limit_pct: knob("STRIMS_SIM_CAL_RATE_LIMIT_PCT"),
         compete: pairs_knob("STRIMS_SIM_CAL_COMPETE"),
+    }
+}
+
+/// `link` lines between every pair of a seed and `viewers` viewers.
+fn full_mesh(viewers: usize) -> String {
+    let mut t = String::new();
+    for a in 0..=viewers {
+        for b in a + 1..=viewers {
+            t.push_str(&format!("link {a} {b}\n"));
+        }
+    }
+    t
+}
+
+/// The farm's testbed mesh for `viewers` viewers.
+fn mesh6(viewers: usize) -> &'static str {
+    match viewers {
+        3 => include_str!("../../../hack/sim-farm/matrices/topologies/mesh6-v3"),
+        7 => include_str!("../../../hack/sim-farm/matrices/topologies/mesh6-v7"),
+        15 => include_str!("../../../hack/sim-farm/matrices/topologies/mesh6-v15"),
+        31 => include_str!("../../../hack/sim-farm/matrices/topologies/mesh6-v31"),
+        63 => include_str!("../../../hack/sim-farm/matrices/topologies/mesh6-v63"),
+        n => panic!("no mesh6 topology for {n} viewers: 3, 7, 15, 31 or 63"),
     }
 }
 
@@ -1796,7 +1867,8 @@ fn pairs_knob(name: &str) -> Vec<(f64, f64)> {
 /// A seed and `viewers` viewers, each linked to the seed alone (a star:
 /// whatever the seed doesn't push its viewers pull from it, so its load is
 /// the viewers times the stream rate), or as the topology says. No jitter
-/// or loss; fixed delays; no upload limits, and send buffers.
+/// or loss; fixed delays; no upload limits unless
+/// `STRIMS_SIM_CAL_RATE_LIMIT_PCT` sets them; send buffers.
 fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
     let mut s = Scenario::new("calibration_star");
     let site = |mbit: u64| Site::new(City::Chicago, Access::Cable).with_up(mbit * 125_000);
@@ -1813,7 +1885,9 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
         })
         .collect();
     for h in &mut s.hosts {
-        h.uplink = None;
+        h.uplink = c
+            .rate_limit_pct
+            .and_then(|pct| Some(h.site?.profile.up * pct / 100));
     }
     s.hosts[seed_host].up_steps = c
         .seed_up_steps

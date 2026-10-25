@@ -33,6 +33,11 @@
 //!   [`STANDING_WINDOW`], and whether the delay reads past a threshold
 //!   exactly when the uplink stayed busy throughout that window (WAN
 //!   mode).
+//! - **series** ([`Report::series`]): with transfer samples, a swarm's run
+//!   second by second from its stream's start to the run's end, for
+//!   `hack/capture/analyze.py`'s collapse verdicts: each viewer's lag and
+//!   frames read, the viewers' pushes, prunes and parents, and the seed's
+//!   meter, uplink and copies.
 
 use std::fmt::Write;
 use std::time::Duration;
@@ -676,7 +681,198 @@ impl Report {
             .int("switched", c.switched)
             .num("sim_secs", self.sim_secs)
             .num("wall_secs", self.wall_secs);
+        if let Some(series) = self.series(swarm) {
+            j.field("series", format_args!("{series}"));
+        }
         j.finish()
+    }
+
+    /// Swarm `swarm`'s run second by second, as one JSON object; `None`
+    /// without transfer samples ([`Scenario::transfer_samples`]). Second
+    /// `k` is `[k, k + 1)` s after the stream's start, through the run's
+    /// end. Its fields, the per-second ones as arrays:
+    ///
+    /// | field | |
+    /// |---|---|
+    /// | `rate`, `chunk`, `frame` | the stream's bytes per second, chunk and frame sizes |
+    /// | `secs` | the stream's length in seconds; the seconds after it are the run's tail |
+    /// | `seed_up` | `[s, bytes per second]`: the seed's uplink from the start and at each step, `s` from the stream's start |
+    /// | `viewer_up` | the viewers' uplinks, summed |
+    /// | `lag`, `frames` | per viewer, the p99 lag in ms of the frames it read in each second (-1 without any) and how many it read |
+    /// | `present` | viewers with a transfer sample in the second |
+    /// | `hits`, `misses`, `pruned` | over the viewers, pushes before their deadline, deadlines released to pull, and parents pruned |
+    /// | `parents` | the viewers' median count of streams with an open parent |
+    /// | `capacity`, `busy`, `avail` | the seed's meter at its last reading in the second (capacity, busy in thousandths) and the upload it had then |
+    /// | `copies` | the adaptive seed's copies |
+    /// | `sent`, `pushed` | chunks the seed sent, and of them pushes |
+    ///
+    /// [`Scenario::transfer_samples`]: crate::Scenario::transfer_samples
+    pub fn series(&self, swarm: usize) -> Option<String> {
+        let spec = self.scenario.swarms.get(swarm)?;
+        let viewers: Vec<_> = self.viewers.iter().filter(|v| v.swarm == swarm).collect();
+        let sampled = |h: HostIx| {
+            self.hosts.get(h).map_or(Vec::new(), |r| {
+                r.transfers
+                    .iter()
+                    .filter(|(t, s, _)| *s == swarm && *t > spec.start)
+                    .map(|(t, _, x)| (*t, x))
+                    .collect::<Vec<_>>()
+            })
+        };
+        if viewers.iter().all(|v| sampled(v.host).is_empty()) {
+            return None;
+        }
+        let start = spec.start;
+        let n = self.scenario.duration.saturating_sub(start).as_secs() as usize;
+        let second = |t: Duration| -> Option<usize> {
+            let k = (t.checked_sub(start)?.as_millis() / 1000) as usize;
+            (k < n).then_some(k)
+        };
+        // A transfer sample counts what happened in the second before its
+        // tick; a pass over the nodes takes a few ms, so a tick's samples
+        // land just after it.
+        let sample_second = |t: Duration| {
+            let k = (t.checked_sub(start)?.as_millis() + 500) / 1000;
+            (k >= 1 && (k as usize) <= n).then(|| k as usize - 1)
+        };
+        let ints = |v: &[i64]| {
+            let v: Vec<String> = v.iter().map(i64::to_string).collect();
+            format!("[{}]", v.join(","))
+        };
+        let fpw = spec.frames_per_write.max(1) as u64;
+        let mut lags = Vec::new();
+        let mut frames = Vec::new();
+        for v in &viewers {
+            let mut by: Vec<Vec<u32>> = vec![Vec::new(); n];
+            for &(seq, lag) in &v.stats.lags {
+                let written =
+                    start + spec.write_interval * u32::try_from(seq / fpw).unwrap_or(u32::MAX);
+                if let Some(k) = second(written + Duration::from_millis(u64::from(lag)))
+                    && let Some(b) = by.get_mut(k)
+                {
+                    b.push(lag);
+                }
+            }
+            lags.push(ints(
+                &by.iter()
+                    .map(|b| {
+                        if b.is_empty() {
+                            -1
+                        } else {
+                            i64::from(Percentiles::of(b.iter().copied()).p99)
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+            ));
+            frames.push(ints(&by.iter().map(|b| b.len() as i64).collect::<Vec<_>>()));
+        }
+        // Counters restart from 0 with a restarted node.
+        let delta = |now: u64, before: u64| if now >= before { now - before } else { now };
+        let (mut hits, mut misses, mut pruned, mut present) =
+            (vec![0; n], vec![0; n], vec![0; n], vec![0; n]);
+        let mut parents: Vec<Vec<i64>> = vec![Vec::new(); n];
+        for v in &viewers {
+            let mut last: Option<&crate::TransferSample> = None;
+            for (t, x) in sampled(v.host) {
+                if let Some(k) = sample_second(t) {
+                    let (h, m, p) = last.map_or((0, 0, 0), |l| (l.hits, l.misses, l.pruned));
+                    if let (Some(a), Some(b), Some(c), Some(d), Some(e)) = (
+                        hits.get_mut(k),
+                        misses.get_mut(k),
+                        pruned.get_mut(k),
+                        present.get_mut(k),
+                        parents.get_mut(k),
+                    ) {
+                        *a += delta(x.hits, h) as i64;
+                        *b += delta(x.misses, m) as i64;
+                        *c += delta(x.pruned, p) as i64;
+                        *d += 1;
+                        e.push(x.parents as i64);
+                    }
+                }
+                last = Some(x);
+            }
+        }
+        let parents: Vec<i64> = parents
+            .iter_mut()
+            .map(|p| {
+                p.sort_unstable();
+                p.get(p.len() / 2).copied().unwrap_or(-1)
+            })
+            .collect();
+        let seed = spec.seed;
+        let (mut sent, mut pushed) = (vec![0; n], vec![0; n]);
+        let mut last: Option<&crate::TransferSample> = None;
+        for (t, x) in sampled(seed) {
+            if let Some(k) = sample_second(t)
+                && let (Some(a), Some(b)) = (sent.get_mut(k), pushed.get_mut(k))
+            {
+                let (c, p) = last.map_or((0, 0), |l| (l.chunks_sent, l.pushed_chunks));
+                *a += delta(x.chunks_sent, c) as i64;
+                *b += delta(x.pushed_chunks, p) as i64;
+            }
+            last = Some(x);
+        }
+        let (mut capacity, mut busy) = (vec![-1; n], vec![-1; n]);
+        if let Some(h) = self.hosts.get(seed) {
+            for m in &h.runner.meter {
+                if let Some(k) = second(m.t)
+                    && let (Some(c), Some(b)) = (capacity.get_mut(k), busy.get_mut(k))
+                {
+                    *c = m.capacity as i64;
+                    *b = i64::from(m.busy_permille);
+                }
+            }
+        }
+        let at = |k: usize| start + Duration::from_millis(k as u64 * 1000 + 500);
+        let avail: Vec<i64> = (0..n)
+            .map(|k| self.upload_cap_at(seed, at(k)).map_or(-1, |c| c as i64))
+            .collect();
+        let copies: Vec<i64> = (0..n)
+            .map(|k| {
+                self.hosts.get(seed).map_or(-1, |h| {
+                    h.runner
+                        .seed_changes
+                        .iter()
+                        .rev()
+                        .find(|(t, s, _)| *s == swarm && *t <= at(k))
+                        .map_or(0, |(_, _, x)| x.copies as i64)
+                })
+            })
+            .collect();
+        let host = self.scenario.hosts.get(seed);
+        let mut seed_up = vec![format!(
+            "[0,{}]",
+            host.and_then(|h| h.site).map_or(0, |s| s.profile.up)
+        )];
+        for &(t, rate) in host.map_or(&[][..], |h| &h.up_steps[..]) {
+            seed_up.push(format!(
+                "[{:.1},{rate}]",
+                t.saturating_sub(start).as_secs_f64()
+            ));
+        }
+        let viewer_up: u64 = viewers.iter().filter_map(|v| self.upload_cap(v.host)).sum();
+        let mut j = JsonRow::default();
+        j.int("rate", spec.rate() as u64)
+            .int("chunk", spec.options.chunk_size as u64)
+            .int("frame", crate::stream::FRAME_LEN as u64)
+            .int("secs", spec.stop.saturating_sub(start).as_secs())
+            .field("seed_up", format_args!("[{}]", seed_up.join(",")))
+            .int("viewer_up", viewer_up)
+            .field("lag", format_args!("[{}]", lags.join(",")))
+            .field("frames", format_args!("[{}]", frames.join(",")))
+            .field("present", format_args!("{}", ints(&present)))
+            .field("hits", format_args!("{}", ints(&hits)))
+            .field("misses", format_args!("{}", ints(&misses)))
+            .field("pruned", format_args!("{}", ints(&pruned)))
+            .field("parents", format_args!("{}", ints(&parents)))
+            .field("capacity", format_args!("{}", ints(&capacity)))
+            .field("busy", format_args!("{}", ints(&busy)))
+            .field("avail", format_args!("{}", ints(&avail)))
+            .field("copies", format_args!("{}", ints(&copies)))
+            .field("sent", format_args!("{}", ints(&sent)))
+            .field("pushed", format_args!("{}", ints(&pushed)));
+        Some(j.finish())
     }
 }
 

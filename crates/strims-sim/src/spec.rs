@@ -137,6 +137,19 @@ impl SwarmSpec {
         }
     }
 
+    /// The same stream in `chunk`-byte chunks signed `munro` bytes at a
+    /// time ([`LiveShape::with_chunks`]).
+    pub fn with_chunks(mut self, chunk: usize, munro: usize) -> Result<SwarmSpec, String> {
+        let shape = LiveShape {
+            options: self.options,
+            write_interval: self.write_interval,
+            frames_per_write: self.frames_per_write,
+        }
+        .with_chunks(chunk, munro)?;
+        self.options = shape.options;
+        Ok(self)
+    }
+
     pub fn with_push_mode(mut self, mode: PushMode) -> SwarmSpec {
         self.options.push_mode = mode;
         self

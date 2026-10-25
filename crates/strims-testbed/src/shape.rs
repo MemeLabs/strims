@@ -60,4 +60,30 @@ impl LiveShape {
         s.options.seed = SeedPolicy::ADAPTIVE;
         s
     }
+
+    /// Bytes per signature.
+    pub fn munro(&self) -> usize {
+        self.options.chunk_size * self.options.chunks_per_signature
+    }
+
+    /// The same stream in `chunk`-byte chunks signed `munro` bytes at a
+    /// time (a media swarm's 4 KiB and 32 KiB, say), its window holding as
+    /// many bytes as before. Frames stay [`FRAME_LEN`] bytes, so a chunk may
+    /// carry several: readers parse frames from the byte stream. Each write
+    /// must be whole munros and each munro whole chunks, or a write's tail
+    /// would wait for the next.
+    pub fn with_chunks(mut self, chunk: usize, munro: usize) -> Result<LiveShape, String> {
+        let write = self.frames_per_write * FRAME_LEN;
+        if chunk == 0 || munro == 0 || !munro.is_multiple_of(chunk) || !write.is_multiple_of(munro)
+        {
+            return Err(format!(
+                "{chunk}-byte chunks and {munro}-byte munros don't divide a {write}-byte write"
+            ));
+        }
+        let window = self.options.live_window * self.options.chunk_size;
+        self.options.chunk_size = chunk;
+        self.options.chunks_per_signature = munro / chunk;
+        self.options.live_window = window / chunk;
+        Ok(self)
+    }
 }

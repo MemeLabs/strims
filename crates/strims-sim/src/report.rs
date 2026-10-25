@@ -482,9 +482,7 @@ impl Report {
     /// One line per seed for the sweep's log.
     /// Swarm `swarm`'s data rate in bytes per second, as its seed writes.
     fn swarm_rate(&self, swarm: usize) -> f64 {
-        self.scenario.swarms.get(swarm).map_or(0.0, |s| {
-            (s.frames_per_write * s.options.chunk_size) as f64 / s.write_interval.as_secs_f64()
-        })
+        self.scenario.swarms.get(swarm).map_or(0.0, |s| s.rate())
     }
 
     /// The most host `h` can upload, in bytes per second: the smaller of

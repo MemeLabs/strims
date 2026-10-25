@@ -471,6 +471,19 @@ struct Sim {
     viewer_bytes: u64,
     /// With `SIM_COLLUDE`, when each greedy viewer reports next.
     collude_at: Vec<Time>,
+    /// With `SIM_SERIES=1`, the honest viewers' and the seed's counters
+    /// once a second ([`Sim::series`]).
+    series: Option<Vec<SeriesSample>>,
+}
+
+/// One second's sample for [`Sim::series`].
+struct SeriesSample {
+    /// Per honest viewer: pushes before their deadline, deadlines released
+    /// to pull, parents pruned, and streams with an open parent.
+    viewers: Vec<[u64; 4]>,
+    /// The seed's meter capacity and busy thousandths, copies, chunks sent
+    /// and pushed, and uplink.
+    seed: [u64; 6],
 }
 
 impl Verdicts {
@@ -972,6 +985,7 @@ impl Sim {
             announce: (0, 0),
             viewer_bytes: 0,
             collude_at,
+            series: (knob::<u32>("SIM_SERIES") == Some(1)).then(Vec::new),
         }
     }
 
@@ -1044,6 +1058,7 @@ impl Sim {
                 self.next_alloc += Duration::SECOND;
                 self.sample_alloc();
                 self.sample_grafts();
+                self.sample_series();
             }
             if let Some(every) = progress
                 && self.now >= next_progress
@@ -1311,6 +1326,128 @@ impl Sim {
     }
 
     /// Records the seed's allocation and objective.
+    fn sample_series(&mut self) {
+        let Some(series) = self.series.as_mut() else {
+            return;
+        };
+        let viewers = self
+            .nodes
+            .iter()
+            .skip(1)
+            .filter(|n| n.role == Role::Peer)
+            .map(|n| {
+                n.runner.push_stats(n.swarm).map_or([0; 4], |p| {
+                    let parents = p.parents.iter().filter(|x| x.is_some()).count();
+                    [p.hits, p.misses, p.pruned, parents as u64]
+                })
+            })
+            .collect();
+        let seed = &self.nodes[0];
+        let p = seed.runner.push_stats(seed.swarm).unwrap_or_default();
+        let (sent, pushed) = seed
+            .runner
+            .swarm_stats(seed.swarm)
+            .map_or((0, 0), |s| (s.chunks_sent, s.pushed_chunks));
+        series.push(SeriesSample {
+            viewers,
+            seed: [
+                p.upload_capacity,
+                u64::from(p.upload_busy_permille),
+                p.seed_copies as u64,
+                sent,
+                pushed,
+                seed.up_bw,
+            ],
+        });
+    }
+
+    /// With `SIM_SERIES=1`, the run second by second from the stream's
+    /// start, as one JSON object with the fields of strims-sim's
+    /// `Report::series`. A chunk is a frame here (lags are per chunk), and
+    /// the meter's and the seed's readings are at each second's end.
+    fn series(&self) -> Option<String> {
+        let samples = self.series.as_ref()?;
+        let start = t0() + Duration::SECOND;
+        let n = samples.len().saturating_sub(1);
+        let ints = |v: &mut dyn Iterator<Item = i64>| {
+            let v: Vec<String> = v.map(|x| x.to_string()).collect();
+            format!("[{}]", v.join(","))
+        };
+        let honest: Vec<&Node> = self
+            .nodes
+            .iter()
+            .skip(1)
+            .filter(|n| n.role == Role::Peer)
+            .collect();
+        let (mut lags, mut frames) = (Vec::new(), Vec::new());
+        for v in &honest {
+            let mut by: Vec<Vec<Duration>> = vec![Vec::new(); n];
+            for &(at, lag) in &v.lags {
+                if at >= start
+                    && let Some(b) = by.get_mut(((at - start).as_millis() / 1000) as usize)
+                {
+                    b.push(lag);
+                }
+            }
+            lags.push(ints(&mut by.iter_mut().map(|b| {
+                b.sort_unstable();
+                let i = ((b.len().max(1) - 1) as f64 * 0.99).round() as usize;
+                b.get(i).map_or(-1, |d| d.as_millis())
+            })));
+            frames.push(ints(&mut by.iter().map(|b| b.len() as i64)));
+        }
+        // Sample k + 1 closes second k.
+        let pairs = || samples.windows(2);
+        let pooled = |f: usize| {
+            ints(&mut pairs().map(|w| {
+                w[1].viewers
+                    .iter()
+                    .zip(&w[0].viewers)
+                    .map(|(a, b)| a[f].saturating_sub(b[f]) as i64)
+                    .sum()
+            }))
+        };
+        let parents = ints(&mut pairs().map(|w| {
+            let mut p: Vec<u64> = w[1].viewers.iter().map(|v| v[3]).collect();
+            p.sort_unstable();
+            p.get(p.len() / 2).map_or(-1, |&x| x as i64)
+        }));
+        let seed = |f: usize| ints(&mut pairs().map(|w| w[1].seed[f] as i64));
+        let seed_delta =
+            |f: usize| ints(&mut pairs().map(|w| w[1].seed[f].saturating_sub(w[0].seed[f]) as i64));
+        let mut seed_up = Vec::new();
+        for (k, w) in pairs().enumerate() {
+            if k == 0 || w[1].seed[5] != w[0].seed[5] {
+                seed_up.push(format!("[{k},{}]", w[1].seed[5]));
+            }
+        }
+        let viewer_up: u64 = honest.iter().map(|v| v.up_bw).sum();
+        let mut j = JsonRow::default();
+        j.int("rate", self.cfg.stream_rate)
+            .int("chunk", self.cfg.chunk_size as u64)
+            .int("frame", self.cfg.chunk_size as u64)
+            .int("secs", self.cfg.stream_secs)
+            .field("seed_up", format_args!("[{}]", seed_up.join(",")))
+            .int("viewer_up", viewer_up)
+            .field("lag", format_args!("[{}]", lags.join(",")))
+            .field("frames", format_args!("[{}]", frames.join(",")))
+            .field(
+                "present",
+                format_args!("{}", ints(&mut pairs().map(|_| honest.len() as i64))),
+            )
+            .field("hits", format_args!("{}", pooled(0)))
+            .field("misses", format_args!("{}", pooled(1)))
+            .field("pruned", format_args!("{}", pooled(2)))
+            .field("parents", format_args!("{parents}"))
+            .field("capacity", format_args!("{}", seed(0)))
+            .field("busy", format_args!("{}", seed(1)))
+            .field("avail", format_args!("{}", seed(5)))
+            .field("copies", format_args!("{}", seed(2)))
+            .field("sent", format_args!("{}", seed_delta(3)))
+            .field("pushed", format_args!("{}", seed_delta(4)));
+        Some(j.finish())
+    }
+
     fn sample_alloc(&mut self) {
         let seed = &self.nodes[0];
         let Some(a) = seed.runner.seed_allocation(seed.swarm, self.now) else {
@@ -5008,7 +5145,8 @@ fn wan_cable_seed() {
 /// or `bbr`). A case that [takes slots](AllocCase::takes_slots) takes them
 /// from `SIM_SLOTS`: the `seed_slots` of the `Admission` job's row, rounded,
 /// which a matrix's `[[derive]]` table gives it. `SIM_SEED` (1) is the sim
-/// seed.
+/// seed. With `SIM_SERIES=1` the row carries the run second by second
+/// (`series`, [`Sim::series`]).
 #[test]
 #[ignore = "one sim farm job; run in release with --ignored --nocapture"]
 fn sim_job() {
@@ -5196,6 +5334,9 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         )
         .num("announce_share", r.announce.2)
         .int("asks", r.asks);
+    if let Some(series) = sim.series() {
+        row.field("series", format_args!("{series}"));
+    }
     row.finish()
 }
 
