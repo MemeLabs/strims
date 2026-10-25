@@ -17,6 +17,8 @@ delivery or latency collapsed.
   hack/capture/analyze.py answers run.jsonl [--node NAME] [--from S] [--until S]
   hack/capture/analyze.py holders run.jsonl [--node NAME] [--holder NAME]
                                   [--from S] [--until S]
+  hack/capture/analyze.py diverge  a.jsonl b.jsonl [--source NAME] [--from S]
+                                  [--until S]
 
 `reduce` writes the rows the other commands read: `ppspp-capture swarm
 --labels --start` over every node's dumps (the capture crate's swarm module
@@ -52,6 +54,11 @@ The other commands print tables about one question each, `--from` and
           copy's rate against what the node wrote to it, the pushes queued
           for it and its connection's window, what it relayed, its pushes
           dropped, and its children's prunes of it
+  diverge two runs of one cell side by side per second (the seed's copies,
+          busy share, pushes and answers, the viewers' requests to it, hits,
+          misses and prunes), the first second they part (on-time pushes or
+          the seed's answers twice the other's), and each run's decisions
+          that the other lacks in the 2 s before it
 
 Runs, second by second (no capture needed):
 
@@ -730,6 +737,69 @@ def holders(a):
                 )
 
 
+# Runs part where one's count is this many times the other's.
+DIVERGE_RATIO = 2
+
+
+def per_second(rows, source):
+    per = collections.defaultdict(collections.Counter)
+    for r in rows:
+        c = per[int(r["t"] // 1000)]
+        t, n = r["type"], r["node"]
+        if n == source:
+            if t == "DATA" and r["dir"] == "out":
+                c["pushes" if r.get("ann") == "push" else "answers"] += 1
+            elif t == "SeedWindow":
+                c["copies"] = r["copies"]
+            elif t == "Upload":
+                c["busy%"] = r["busy"] // 10
+        else:
+            if t == "REQUEST" and r["dir"] == "out" and r.get("peer") == source:
+                c["asked"] += 1
+            elif t == "DATA" and r["dir"] == "in" and r.get("ann") in ("hit", "late"):
+                c[r["ann"] + "s"] += 1
+            elif t in ("PushMiss", "Pruned"):
+                c[t.lower() + "s" if t == "PushMiss" else "prunes"] += 1
+    return per
+
+
+def diverge(a):
+    runs = []
+    for path in a.runs:
+        a.rows = path
+        runs.append(load(a))
+    per = [per_second(rows, a.source) for rows in runs]
+    keys = ("copies", "busy%", "pushes", "answers", "asked", "hits", "lates", "pushmisss", "prunes")
+    print("      " + "  ".join(f"{k:>15s}" for k in keys) + "   (a / b)")
+    parted = None
+    for k in sorted(set(per[0]) | set(per[1])):
+        x, y = per[0][k], per[1][k]
+        print(f"{k:5d}s " + "  ".join(f"{x[f]:>7d}/{y[f]:<7d}" for f in keys))
+        # The outcomes: on-time pushes, and the seed's answers.
+        if parted is None and any(
+            max(x[f], y[f]) > 100 and max(x[f], y[f]) > DIVERGE_RATIO * max(min(x[f], y[f]), 1)
+            for f in ("hits", "answers")
+        ):
+            parted = k
+    print(f"-- they part in second {parted}")
+    if parted is None:
+        return
+    lo, hi = (parted - 2) * 1000, (parted + 1) * 1000
+    kinds = [
+        collections.Counter(
+            (r["node"], r["type"], r.get("rule") or r.get("why") or r.get("action") or "")
+            for r in rows if lo <= r["t"] < hi and r["dir"] == "tap"
+            and r["type"] not in ("Upload", "RequestRound", "DataSent", "PushHit", "PushMiss")
+        )
+        for rows in runs
+    ]
+    for name, mine, other in (("a", kinds[0], kinds[1]), ("b", kinds[1], kinds[0])):
+        extra = {k: v - other[k] for k, v in mine.items() if v > other[k]}
+        print(f"-- decisions in {parted - 2}-{parted + 1} s that {name} has beyond the other (node, kind, rule), by count:")
+        for k, v in sorted(extra.items(), key=lambda kv: -kv[1])[:20]:
+            print(f"   {v:5d} {k}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -772,6 +842,9 @@ def main():
     p.add_argument("rows")
     p.add_argument("--node", default="seed")
     p.add_argument("--holder", help="one holder only")
+    p = command("diverge", diverge)
+    p.add_argument("runs", nargs=2)
+    p.add_argument("--source", default="seed")
     for name, f in (("series", series), ("collapse", collapse), ("map", map_)):
         p = sub.add_parser(name)
         p.set_defaults(f=f)
