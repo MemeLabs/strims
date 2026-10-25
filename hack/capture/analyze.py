@@ -448,9 +448,9 @@ def runs(paths):
         rows = p / "rows.jsonl" if p.is_dir() else p
         with open(rows) as f:
             for line in f:
-                line = line.strip()
-                if line.startswith("ROW "):
-                    line = line[4:]
+                # A test's output may share the harness's "test ... " line.
+                at = line.find("ROW {")
+                line = line[at + 4:] if at >= 0 else line.strip()
                 if not line.startswith("{"):
                     continue
                 r = json.loads(line)
