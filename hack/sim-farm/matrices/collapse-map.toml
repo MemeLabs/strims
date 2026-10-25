@@ -1,0 +1,44 @@
+# Where an honest Hybrid swarm's push trees fail and its delivery and
+# latency collapse under the swarm defaults (4 KiB chunks, 32 KiB munros,
+# 16 streams, the adaptive seed): strims-sim's testbed twin
+# (calibration_star) in the window model, a 2 Mbit/s stream for 240 s, by
+# swarm size, the seed's uplink (about 2, 5, 10 and 20 copies), whether
+# the nodes know their uplinks, a full mesh or the testbed's 6-degree
+# meshes, and a steady seed uplink or one halved from 60 s to 180 s.
+# collapse-map-1k.toml is the same at the testbed's 1 KiB chunks. Read
+# them with `hack/capture/analyze.py map target/sim-farm/collapse-map`.
+
+package = "strims-sim"
+target = "scenarios"
+test = "calibration_star"
+slot_mem_gib = 1
+
+[arms]
+main = "565028e5"
+
+[env]
+STRIMS_SIM_JOB = "1"
+STRIMS_SIM_TCP = "1"
+STRIMS_SIM_CAL_SECS = "240"
+STRIMS_SIM_CHUNK = "4096"
+STRIMS_SIM_MUNRO = "32768"
+
+[axes]
+STRIMS_SIM_CAL_VIEWERS = ["3", "7", "15", "31"]
+STRIMS_SIM_CAL_SEED_UP_MBIT = ["5", "10", "20", "40"]
+STRIMS_SIM_KNOWN_UPLINK = ["0", "1"]
+STRIMS_SIM_CAL_MESH = ["full", "mesh6"]
+STRIMS_SIM_CAL_SEED_UP_SCALE = ["", "60:0.5 180:1"]
+STRIMS_SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+STRIMS_SIM_CAL_SECS = "5"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "push_misses/push_hits:ratio",
+  "seed_first_wave:median",
+]

@@ -1,0 +1,35 @@
+# The sim twin of testbed-swarm-size.toml: calibration_star in the window
+# model on the same 6-degree meshes, a 10 Mbit seed halved from 60 s to
+# 180 s, viewers joining 30 s in, 1 KiB chunks, 8 seeds a size. Compare
+# `hack/capture/analyze.py map` of the two.
+
+package = "strims-sim"
+target = "scenarios"
+test = "calibration_star"
+slot_mem_gib = 1
+
+[arms]
+main = "565028e5"
+
+[env]
+STRIMS_SIM_JOB = "1"
+STRIMS_SIM_TCP = "1"
+STRIMS_SIM_CAL_SECS = "240"
+STRIMS_SIM_CAL_MESH = "mesh6"
+STRIMS_SIM_CAL_SEED_UP_STEPS = "60:5 180:10"
+STRIMS_SIM_CAL_JOIN_AT = "30"
+
+[axes]
+STRIMS_SIM_CAL_VIEWERS = ["3", "7", "15", "31", "63"]
+STRIMS_SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+STRIMS_SIM_CAL_SECS = "5"
+STRIMS_SIM_CAL_JOIN_AT = "0"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+]

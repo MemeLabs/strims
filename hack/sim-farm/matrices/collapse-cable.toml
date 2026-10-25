@@ -1,0 +1,41 @@
+# The ppspp sim's cable seed (wan_cable_seed: 50 or 100 honest viewers
+# behind a cable seed at 4-8 Mbit/s) at the swarm defaults (4 KiB chunks,
+# 32 KiB munros, 16 streams, the adaptive seed), streaming 120 s with each
+# run's seconds in its row. Read it with
+# `hack/capture/analyze.py map target/sim-farm/collapse-cable`.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 3
+
+[arms]
+main = "565028e5"
+
+[env]
+SIM_SCENARIO = "cable-seed"
+SIM_SEED_POLICY = "adaptive"
+SIM_SEED_ACCESS = "cable"
+SIM_STREAMS = "16"
+SIM_CHUNK = "4096"
+SIM_MUNRO = "32768"
+SIM_SECS = "120"
+SIM_GREEDY = "0"
+SIM_SERIES = "1"
+
+[axes]
+SIM_MBIT = ["4", "6", "8"]
+SIM_PEERS = ["50", "100"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_PEERS = "10"
+SIM_SECS = "2"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "push_misses/push_hits:ratio",
+]

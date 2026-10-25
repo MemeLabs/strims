@@ -1,0 +1,37 @@
+# The ppspp sim's A/B scenarios at the swarm defaults (4 KiB chunks,
+# 32 KiB munros, 16 streams, the adaptive seed with shares by allocation),
+# honest viewers only, streaming 120 s with each run's seconds in its row.
+# Read it with `hack/capture/analyze.py map target/sim-farm/collapse-ab`.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 2
+
+[arms]
+main = "565028e5"
+
+[env]
+SIM_CASE = "AdaptiveQos"
+SIM_STREAMS = "16"
+SIM_CHUNK = "4096"
+SIM_MUNRO = "32768"
+SIM_SECS = "120"
+SIM_GREEDY = "0"
+SIM_SERIES = "1"
+
+[axes]
+SIM_SCENARIO = ["LiveMesh", "SparseLossy", "LatencyStep", "CappedSeed", "SeedStarved", "CrossTraffic", "WanGlobal", "WanMobile", "WanResidentialSeed", "WanSuperPeer"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_SECS = "2"
+SIM_WARM = "1"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "push_misses/push_hits:ratio",
+]
