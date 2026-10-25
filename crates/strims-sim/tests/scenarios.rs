@@ -1960,8 +1960,11 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
             .with_push_mode(PushMode::Hybrid)
             .with_live_window(WAN_WINDOW),
     );
+    // The heap grows with the swarm: a 32-node full mesh holds about
+    // 450 MiB. Past the bound, the trace names the heap's bytes, which
+    // vary between processes, and the farm's reruns would disagree.
     s.invariants = Invariants {
-        max_heap: Some(256 * MIB),
+        max_heap: Some((256 + 24 * c.viewers as i64) * MIB),
         ..Invariants::for_window(WAN_WINDOW)
     };
     s.duration = secs(5 + c.secs + 10);
