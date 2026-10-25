@@ -90,7 +90,9 @@ fn wan_mesh() -> Scenario {
     let site = Site::new(City::Chicago, Access::Cable);
     let src = s.host_at("seed", site);
     let viewers: Vec<_> = (0..3).map(|i| s.host_at(&format!("v{i}"), site)).collect();
-    let all: Vec<_> = std::iter::once(src).chain(viewers.iter().copied()).collect();
+    let all: Vec<_> = std::iter::once(src)
+        .chain(viewers.iter().copied())
+        .collect();
     for (i, &a) in all.iter().enumerate() {
         for &b in all.iter().skip(i + 1) {
             s.link(b, a, Transport::Tcp);
