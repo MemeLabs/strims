@@ -105,11 +105,22 @@ pub(crate) struct SimNet {
     buffers: Option<SendBuffers>,
     /// The run's WAN model, for the capture's link probes.
     wan: Option<SharedWan>,
+    /// [`Scenario::tcp_segment`](crate::Scenario::tcp_segment).
+    segment: Option<usize>,
 }
 
 impl SimNet {
     pub fn new(buffers: Option<SendBuffers>) -> SimNet {
-        SimNet { buffers, wan: None }
+        SimNet {
+            buffers,
+            wan: None,
+            segment: None,
+        }
+    }
+
+    /// Splits TCP writes into pieces of at most `segment` bytes.
+    pub fn with_segment(self, segment: Option<usize>) -> SimNet {
+        SimNet { segment, ..self }
     }
 
     /// Lets the capture's link probes read `wan`.
@@ -131,6 +142,7 @@ impl SimNet {
         SimTcpStream {
             inner: stream,
             conn,
+            segment: self.segment,
         }
     }
 }
@@ -174,6 +186,7 @@ impl LinkProbe for SimProbe {
 pub(crate) struct SimTcpStream {
     inner: turmoil::net::TcpStream,
     conn: Option<(ConnKey, SendBuffers)>,
+    segment: Option<usize>,
 }
 
 impl Drop for SimTcpStream {
@@ -213,6 +226,10 @@ impl AsyncWrite for SimTcpStream {
                 return Poll::Pending;
             }
         }
+        let buf = match this.segment {
+            Some(n) => buf.get(..buf.len().min(n.max(1))).unwrap_or(buf),
+            None => buf,
+        };
         let r = Pin::new(&mut this.inner).poll_write(cx, buf);
         if let (Poll::Ready(Ok(n)), Some((key, b))) = (&r, &this.conn) {
             b.with(|x| {

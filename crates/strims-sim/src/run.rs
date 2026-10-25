@@ -53,14 +53,20 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
     strims_node::seed_str0m_thread_rng(w.seed);
     // No `fail_rate`: loss comes from `Fault`s alone, since a TCP stream
     // that loses a segment stalls until its read timeout.
-    let mut sim = turmoil::Builder::new()
+    let mut builder = turmoil::Builder::new();
+    builder
         .rng_seed(w.seed)
         .epoch(UNIX_EPOCH + Duration::from_millis(EPOCH_MS.unsigned_abs()))
         .simulation_duration(spec.duration + Duration::from_secs(30))
         .tick_duration(spec.tick)
         .min_message_latency(spec.latency.0)
-        .max_message_latency(spec.latency.1)
-        .build();
+        .max_message_latency(spec.latency.1);
+    // turmoil holds 64 unread segments a connection: keep that many bytes
+    // with segments split from 16 KiB writes.
+    if let Some(n) = spec.tcp_segment {
+        builder.tcp_capacity(64 * (16 * 1024usize).div_ceil(n.max(1)));
+    }
+    let mut sim = builder.build();
     for (h, hs) in spec.hosts.iter().enumerate() {
         let wc = w.clone();
         sim.host(hs.name.as_str(), move || host::host_main(wc.clone(), h));

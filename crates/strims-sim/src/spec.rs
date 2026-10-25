@@ -390,6 +390,12 @@ pub struct Scenario {
     /// ([`crate::HostReport::transfers`]), as `calibration_star` does to
     /// compare with the testbed's nodes. Changes no trace.
     pub transfer_samples: bool,
+    /// TCP writes in pieces of at most this many bytes, as segments: the
+    /// window model ([`SendBuffer::window`]) then fills a window segment by
+    /// segment, as real TCP does, where a whole write of up to the
+    /// `TCP_NOTSENT_LOWAT` mark (16 KiB) otherwise waits until the window
+    /// takes all of it. `None`: writes stay whole.
+    pub tcp_segment: Option<usize>,
 }
 
 /// The TCP send buffer model of WAN mode. A connection whose node set a
@@ -438,6 +444,7 @@ impl Scenario {
             capture: None,
             send_buffer: None,
             transfer_samples: false,
+            tcp_segment: None,
         }
     }
 
