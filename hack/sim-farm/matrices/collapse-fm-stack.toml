@@ -1,0 +1,39 @@
+# The collapse ablations stacked: fm-answer-bound (a seed answers each
+# chunk at most twice; a local branch, never to land) with every node's
+# rate limit at 90 % of its uplink (so the holders' QoS weights apply), and
+# with the uplinks known, on collapse-fm.toml's cells. The arm with
+# neither repeats collapse-fm's fm-answer-bound runs.
+
+package = "strims-sim"
+target = "scenarios"
+test = "calibration_star"
+slot_mem_gib = 1
+
+[arms]
+fm-answer-bound = "fm-answer-bound"
+
+[env]
+STRIMS_SIM_JOB = "1"
+STRIMS_SIM_TCP = "1"
+STRIMS_SIM_CAL_SECS = "240"
+STRIMS_SIM_CAL_MESH = "full"
+STRIMS_SIM_CHUNK = "4096"
+STRIMS_SIM_MUNRO = "32768"
+
+[axes]
+STRIMS_SIM_CAL_RATE_LIMIT_PCT = ["", "90"]
+STRIMS_SIM_KNOWN_UPLINK = ["0", "1"]
+STRIMS_SIM_CAL_VIEWERS = ["3", "7", "15", "31"]
+STRIMS_SIM_CAL_SEED_UP_MBIT = ["5", "10", "20"]
+STRIMS_SIM_CAL_SEED_UP_SCALE = ["", "60:0.5 180:1"]
+STRIMS_SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+STRIMS_SIM_CAL_SECS = "5"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+]
