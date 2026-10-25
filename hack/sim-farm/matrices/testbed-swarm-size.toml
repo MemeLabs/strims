@@ -1,0 +1,31 @@
+# Testbed swarms of 4 to 64 nodes on one 64-core host each, linked as the
+# ppspp sim's wide-area meshes (topologies/mesh6-v*): the seed's uplink
+# halved 60 s in and back at 180 s. Viewers dial in 30 s after the start,
+# so a big swarm's containers are all up first.
+
+kind = "testbed"
+repeats = 2
+host_cores = 64
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+
+[files]
+TOPOLOGY = "topologies/mesh6-v${VIEWERS}"
+
+[arms]
+ee4b4ff2 = "ee4b4ff2"
+
+[env]
+SECS = "240"
+SEED_UP_STEPS = "60:5 180:10"
+JOIN_AT = "30"
+
+[axes]
+VIEWERS = ["3", "7", "15", "31", "63"]
+
+[report]
+group = ["VIEWERS"]

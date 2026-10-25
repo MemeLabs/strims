@@ -138,8 +138,9 @@ into the arm's bundle, target/sim-farm/bin/testbed-<hash>.tar.gz, which
 hashes the arm's source, the commands and the artifacts. A host runs
 run.sh from the bundle's hack/testbed with each artifact's variable set
 to its path there, and each [files] variable (a file relative to the
-matrix, the same for every arm) to the host's copy. A job's id hashes its
-source, build, files, environment and repeat.
+matrix, the same for every arm, whose path may name the job's variables
+as ${VAR}: "topologies/mesh6-v${VIEWERS}") to the host's copy. A job's id
+hashes its source, build, files, environment and repeat.
 
 Testbed runs are real time, so nothing checks that they reproduce: no
 canary, no --verify, and a reissued job just runs again (a job's second
@@ -418,14 +419,10 @@ class Matrix:
         self.source_paths = sorted({*map(str, m.get("sources", SOURCES)), TESTBED})
         self.commands = [str(c) for c in m.get("build", {}).get("commands", [])]
         self.artifacts = {k: str(v) for k, v in m.get("artifacts", {}).items()}
-        # variable -> (the file here, its name in bin/)
-        self.files: dict[str, tuple[Path, str]] = {}
-        for var, rel in m.get("files", {}).items():
-            p = (self.path.parent / str(rel)).resolve()
-            if not p.is_file():
-                bad(f"[files] {var}: no file {p}")
-            sha = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
-            self.files[var] = (p, f"file-{sha}-{p.name}")
+        # variable -> its path, which may name the job's variables
+        self.files = {k: str(v) for k, v in m.get("files", {}).items()}
+        # name in bin/ -> the file here, for the jobs made so far
+        self.shipped: dict[str, Path] = {}
         given = [set(self.env) | set(self.axes), set(self.artifacts), set(self.files)]
         twice = set().union(*(a & b for a, b in itertools.combinations(given, 2)))
         if twice:
@@ -487,10 +484,20 @@ class Matrix:
             after, derive.set if derive is not None else (),
         )
 
+    def file_of(self, var: str, env: dict[str, str]) -> str:
+        """[files]' `var` for a job of `env`: its name in bin/, which hashes
+        the file."""
+        p = (self.path.parent / expand(self.files[var], env)).resolve()
+        if not p.is_file():
+            sys.exit(f"{self.path}: [files] {var}: no file {p}")
+        name = f"file-{hashlib.sha256(p.read_bytes()).hexdigest()[:12]}-{p.name}"
+        self.shipped[name] = p
+        return name
+
     def testbed_job(self, arm: str, env: dict[str, str], repeat: int, group: str) -> Job:
         source = self.sources[arm]
         env_t = tuple(sorted(env.items()))
-        files = tuple(sorted((k, name) for k, (_, name) in self.files.items()))
+        files = tuple(sorted((k, self.file_of(k, env)) for k in self.files))
         key = ["testbed", source, self.commands, sorted(self.artifacts.items()), files, env_t, repeat]
         jid = hashlib.sha256(json.dumps(key).encode()).hexdigest()[:16]
         return Job(
@@ -645,18 +652,19 @@ def build(matrix: Matrix) -> None:
 
 
 def expand(spec: str, env: dict[str, str]) -> str:
-    """$VAR and ${VAR} in an artifact's path, from the build's environment."""
+    """$VAR and ${VAR} in a path, from `env`."""
     def var(m: re.Match) -> str:
         name = m.group(1) or m.group(2)
         if name not in env:
-            sys.exit(f"artifact {spec!r}: ${name} isn't set")
+            sys.exit(f"{spec!r}: ${name} isn't set")
         return env[name]
 
     return re.sub(r"\$(?:\{(\w+)\}|(\w+))", var, spec)
 
 
 def build_testbed(matrix: Matrix) -> None:
-    for path, name in matrix.files.values():
+    matrix.jobs()  # each job's files
+    for name, path in matrix.shipped.items():
         out = BIN / name
         if not out.exists():
             tmp = out.with_name(out.name + ".tmp")
