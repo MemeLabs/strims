@@ -1,0 +1,41 @@
+# collapse-fm-qos.toml's cells (every node's rate limit at 90 % of its
+# uplink, so the node's QoS orders its peers' data) under each way a seed
+# can weight the neighbours it pushes nothing to (STRIMS_SIM_PULL_WEIGHT,
+# on the local branch seed-pacer): the floor of 50 (main's), weight 1, and
+# a split of what the copies leave. Whether QoS, binding at a correct rate,
+# clears the lock-in once the pullers' weights no longer shrink the
+# holders' share.
+
+package = "strims-sim"
+target = "scenarios"
+test = "calibration_star"
+slot_mem_gib = 1
+
+[arms]
+seed-pacer = "e5ad389e"
+
+[env]
+STRIMS_SIM_JOB = "1"
+STRIMS_SIM_TCP = "1"
+STRIMS_SIM_CAL_SECS = "240"
+STRIMS_SIM_CAL_MESH = "full"
+STRIMS_SIM_CHUNK = "4096"
+STRIMS_SIM_MUNRO = "32768"
+STRIMS_SIM_CAL_RATE_LIMIT_PCT = "90"
+
+[axes]
+STRIMS_SIM_PULL_WEIGHT = ["floor", "one", "split"]
+STRIMS_SIM_CAL_VIEWERS = ["3", "7", "15", "31"]
+STRIMS_SIM_CAL_SEED_UP_MBIT = ["5", "10", "20", "40"]
+STRIMS_SIM_CAL_SEED_UP_SCALE = ["", "60:0.5 180:1"]
+STRIMS_SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+STRIMS_SIM_CAL_SECS = "5"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+]
