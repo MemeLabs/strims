@@ -481,21 +481,22 @@ async fn client_host(w: World) -> turmoil::Result {
     let mut reader = h.node.open_reader(h.swarm.unwrap()).await.unwrap();
     let b = h.node.dial(&w.uri("ws", WS_PORT)).await.unwrap();
     let a = w.id("a").await;
-    let NodeEvent::PeerAdded(p) = h
-        .wait(
-            "a over webrtc",
-            |e| matches!(e, NodeEvent::PeerAdded(p) if p.host_id == a),
-        )
-        .await
-    else {
-        unreachable!()
-    };
+    // b stops once a has the new link, which may be before c has it.
+    let (mut webrtc, mut b_gone) = (None, false);
+    while webrtc.is_none() || !b_gone {
+        match h
+            .wait("a over webrtc and b gone", |e| {
+                matches!(e, NodeEvent::PeerAdded(p) if p.host_id == a)
+                    || matches!(e, NodeEvent::PeerRemoved { host_id } if *host_id == b)
+            })
+            .await
+        {
+            NodeEvent::PeerAdded(p) => webrtc = Some(p),
+            _ => b_gone = true,
+        }
+    }
+    let p = webrtc.unwrap();
     assert_eq!((p.kind, p.dialed), (LinkKind::WebRtc, false));
-    h.wait(
-        "b gone",
-        |e| matches!(e, NodeEvent::PeerRemoved { host_id } if *host_id == b),
-    )
-    .await;
     let NodeEvent::Message(d) = h
         .wait(
             "ping",
