@@ -80,11 +80,13 @@
 //! describes, with control frames on [`ports::KEEPALIVE_PORT`]
 //! ([`crate::control`]):
 //!
-//! - A probe goes out with the link's first egress; after a frame an owner
-//!   filled, once [`Host::probe_interval`] has passed since the last probe
+//! - A probe goes out with the link's first egress; with a frame an owner
+//!   fills, once [`Host::probe_interval`] has passed since the last probe
 //!   if the owners wrote [`strims_base::path::BUSY_BYTES`] since, or
-//!   [`strims_base::path::QUIET_PROBE_INTERVAL`] if they wrote less; and as
-//!   the keepalive of an idle link. Its nonce is drawn from the host's rng.
+//!   [`strims_base::path::QUIET_PROBE_INTERVAL`] if they wrote less (ahead
+//!   of the frame when both fit, so it waits only for what was queued
+//!   before; after it otherwise); and as the keepalive of an idle link. Its
+//!   nonce is drawn from the host's rng.
 //! - The newest probe read from the peer is echoed at the start of the next
 //!   [`Host::poll_egress`], ahead of the owners' frames.
 //! - Control frames need only their own length free in the link buffer, go
@@ -1503,6 +1505,15 @@ impl<T: Copy> Host<T> {
                 continue;
             };
             let mtu = link.mtu;
+            // A probe due goes ahead of the frame, as long as the frame
+            // still fits: it then waits only for what was queued before.
+            let probe_first = interval.is_some_and(|i| link.path.probe_due(now, i))
+                && link.out.as_ref().is_some_and(|o| {
+                    o.free() >= mtu + control::frame_len(link.echo.is_pending(), true)
+                });
+            if probe_first {
+                write_control(link, rng, now, true, metrics);
+            }
             let Link {
                 out,
                 aes,
