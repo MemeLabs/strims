@@ -48,10 +48,13 @@
 //! stream, inside its packets, and take uplink and downlink time like any
 //! bytes.
 //! Each runner gets every round trip, and its links' readings before its
-//! ticks and polls, as node-core hands it vnic's. Free riders hold their
-//! echoes [`ECHO_HOLD`], and liars echo nonces they never read: their own
-//! links read farther, or go unmeasured. `SIM_PATHS=0` runs without the
-//! model.
+//! ticks and polls, as node-core hands it vnic's. Greedy viewers echo
+//! promptly, as they answer pings: delayed or forged echoes only make
+//! their own links read farther, or go unmeasured, which no greedy viewer
+//! wants. `SIM_ECHO_GREED=1` makes them anyway, to check that: free riders
+//! hold their echoes [`ECHO_HOLD`], and liars echo nonces they never read.
+//! `SIM_PATHS=0` runs without the model. `SIM_PATH` moves the runners' readers of round trips from pings to
+//! it (`PathSources`: `link`, or readers joined by `+`).
 //!
 //! The push/pull comparison runs the same scenarios with the same seed in
 //! every [`PushMode`] and stream count: `sim_push_*` tests assert the
@@ -102,9 +105,9 @@ use strims_ppspp::codec::{
 };
 use strims_ppspp::store::{self, BufferReader};
 use strims_ppspp::{
-    DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, PeerKey, PushMode, PushStats, ReportCounters,
-    RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey,
-    SwarmOptions, Writer, WriterOptions,
+    DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, PathSources, PeerKey, PushMode, PushStats,
+    ReportCounters, RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId,
+    SwarmKey, SwarmOptions, Writer, WriterOptions,
 };
 use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
 use strims_wan::sample::pick;
@@ -120,7 +123,7 @@ const MUNRO: usize = 64 * CHUNK;
 
 /// An idle link probes this often: vnic's keepalive interval.
 const KEEPALIVE: Duration = Duration::from_secs(10);
-/// How long a free rider holds its echoes.
+/// How long a free rider holds its echoes with `SIM_ECHO_GREED=1`.
 const ECHO_HOLD: Duration = Duration::from_millis(300);
 /// A control frame's header, and each of its records
 /// (`strims_vnic::control`).
@@ -316,6 +319,12 @@ struct Config {
     /// Model vnic's path measure (see the module docs); `SIM_PATHS=0` runs
     /// without it.
     paths: bool,
+    /// Greedy viewers hold or forge their echoes (see the module docs);
+    /// `SIM_ECHO_GREED=1` sets it for any run.
+    echo_greed: bool,
+    /// Where the runners' readers of round trips take them; `SIM_PATH`
+    /// sets it for any run.
+    path_sources: PathSources,
 }
 
 /// Where a run's captures go: `node-<i>.ppcap` in `dir`, one per node,
@@ -386,6 +395,8 @@ impl Config {
             wan: None,
             capture: None,
             paths: knob::<u32>("SIM_PATHS") != Some(0),
+            echo_greed: knob::<u32>("SIM_ECHO_GREED") == Some(1),
+            path_sources: knob("SIM_PATH").unwrap_or_default(),
         }
     }
 }
@@ -795,6 +806,10 @@ impl Sim {
             (1..=cfg.peers).map(|i| greedy.get(&i).map_or(Role::Peer, |&g| Role::Greedy(g))),
         );
         roles.extend(cfg.adversaries.iter().map(|&a| Role::Adversary(a)));
+        assert!(
+            cfg.paths || cfg.path_sources == PathSources::default(),
+            "SIM_PATH reads the path model: SIM_PATHS=0 leaves it out"
+        );
         if let Some(w) = &cfg.wan {
             assert_eq!(w.sites.len(), roles.len(), "a site per node");
             assert!(cfg.loss <= 0.0, "WAN paths lose packets of their own");
@@ -803,6 +818,7 @@ impl Sim {
         let mut nodes = Vec::new();
         for (i, &role) in roles.iter().enumerate() {
             let mut runner = Runner::new(fork(&mut rng));
+            runner.set_path_sources(cfg.path_sources);
             let (writer, swarm) = if role == Role::Seed {
                 let (w, s) = Writer::new(
                     WriterOptions {
@@ -1391,7 +1407,7 @@ impl Sim {
             let b = &mut self.links[back];
             if !b.echo.is_pending() {
                 b.echo_at = match self.nodes[to].role {
-                    Role::Greedy(Greed::FreeRider) => now + ECHO_HOLD,
+                    Role::Greedy(Greed::FreeRider) if self.cfg.echo_greed => now + ECHO_HOLD,
                     _ => now,
                 };
             }
@@ -2126,7 +2142,8 @@ impl Sim {
     /// (none for a frame of control alone), as vnic's would.
     fn take_control(&mut self, l: usize, data: usize) -> Ctl {
         let now = self.now;
-        let liar = self.nodes[self.links[l].from].role == Role::Greedy(Greed::Liar);
+        let liar =
+            self.cfg.echo_greed && self.nodes[self.links[l].from].role == Role::Greedy(Greed::Liar);
         let link = &mut self.links[l];
         let probe = link.probe_alone(now)
             || (data > 0 && {
@@ -3441,8 +3458,10 @@ impl Scenario {
 /// holds for them. `SIM_CAPTURE=<dir>` captures any run into
 /// `<dir>/<run tag>/` (`SIM_CAPTURE_TAP=0` leaves out the decisions):
 /// capture changes no trace. `SIM_GREEDY=0` runs any test that draws its
-/// greedy viewers without them, and `SIM_PATHS=0` any test without the
-/// path measure's probes, for comparisons. A knob that is set but
+/// greedy viewers without them, `SIM_PATHS=0` any test without the path
+/// measure's probes, `SIM_PATH` any test with its readers of round trips
+/// on the path measure, and `SIM_ECHO_GREED=1` any with greedy viewers
+/// that hold or forge their echoes, for comparisons. A knob that is set but
 /// doesn't parse panics, so a typo can't run the default unnoticed.
 #[allow(clippy::disallowed_methods)]
 fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
