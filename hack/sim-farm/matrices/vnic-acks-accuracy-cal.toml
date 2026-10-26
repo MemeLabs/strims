@@ -1,0 +1,38 @@
+# vnic-acks-accuracy.toml's comparison on calibration_star, the testbed's
+# twin: a star of cable viewers behind a 5 or 10 Mbit/s seed, steady or
+# halved from 60 s to 180 s, with whole writes and with 1448-byte segments.
+
+package = "strims-sim"
+target = "scenarios"
+test = "calibration_star"
+slot_mem_gib = 1
+
+[arms]
+vnic-acks = "vnic-acks"
+
+[env]
+STRIMS_SIM_JOB = "1"
+STRIMS_SIM_TCP = "1"
+STRIMS_SIM_CAL_SECS = "240"
+STRIMS_SIM_CHUNK = "4096"
+STRIMS_SIM_MUNRO = "32768"
+
+[axes]
+STRIMS_SIM_TCP_SEGMENT = ["", "1448"]
+STRIMS_SIM_CAL_VIEWERS = ["3", "15"]
+STRIMS_SIM_CAL_SEED_UP_MBIT = ["5", "10"]
+STRIMS_SIM_CAL_SEED_UP_SCALE = ["", "60:0.5 180:1"]
+STRIMS_SIM_SEED = ["1", "2", "3", "4"]
+
+[canary]
+STRIMS_SIM_CAL_SECS = "5"
+
+[report]
+columns = [
+  "qd_err_seeds_ms:median",
+  "qdv_err_seeds_ms:median",
+  "qdb_err_seeds_ms:median",
+  "qd_fn_seeds:median",
+  "qdv_fn_seeds:median",
+  "qdb_fn_seeds:median",
+]

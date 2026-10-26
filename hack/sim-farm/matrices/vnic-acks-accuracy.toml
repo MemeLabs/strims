@@ -1,0 +1,46 @@
+# vnic's path measure against the WAN model's uplink queue, beside the
+# meter's ping-based queueing delay: strims-sim's uncapped WAN cases, their
+# `_varying` and `_step` versions, under the window model, with whole
+# writes and with 1448-byte segments. Read with `hack/capture/analyze.py
+# delays` (qd: pings, qdv: vnic's excess round trip, qdb: vnic's queued
+# bytes over the delivery rate). vnic-acks-accuracy-cal.toml has the
+# testbed twin's cells.
+
+package = "strims-sim"
+target = "scenarios"
+test = [
+  "wan_residential_seed_adaptive_uncapped",
+  "wan_super_peer_adaptive_uncapped",
+  "wan_global_audience_adaptive_uncapped",
+  "wan_mobile_viewers_adaptive_uncapped",
+  "wan_residential_two_streams_adaptive_uncapped",
+  "wan_slow_viewer_adaptive_uncapped",
+  "wan_residential_seed_adaptive_uncapped_varying",
+  "wan_super_peer_adaptive_uncapped_varying",
+  "wan_residential_seed_adaptive_uncapped_step",
+]
+slot_mem_gib = 1
+
+[arms]
+vnic-acks = "vnic-acks"
+
+[env]
+STRIMS_SIM_JOB = "1"
+STRIMS_SIM_TCP = "1"
+
+[axes]
+STRIMS_SIM_TCP_SEGMENT = ["", "1448"]
+STRIMS_SIM_SEED = ["1", "2", "3", "4", "5", "6"]
+
+[canary]
+STRIMS_SIM_STREAM_SECS = "5"
+
+[report]
+columns = [
+  "qd_err_seeds_ms:median",
+  "qdv_err_seeds_ms:median",
+  "qdb_err_seeds_ms:median",
+  "qd_fn_seeds:median",
+  "qdv_fn_seeds:median",
+  "qdb_fn_seeds:median",
+]
