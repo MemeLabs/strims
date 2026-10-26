@@ -14,6 +14,7 @@ use std::ops::{Deref, DerefMut};
 
 use indexmap::IndexMap;
 use slotmap::SlotMap;
+use strims_base::path::{PathReading, PathSample};
 use strims_base::rng::{DetRng, fork};
 use strims_base::stats::Sma;
 use strims_base::time::{Duration, Time};
@@ -181,8 +182,8 @@ impl UploadMeter {
     fn update_queue_delay(&mut self, now: Time, peers: &mut SlotMap<PeerKey, RunnerPeer>) {
         self.excesses.clear();
         for p in peers.values_mut() {
-            p.path.fold();
-            if let Some(e) = p.path.excess(now) {
+            p.ping_delay.fold();
+            if let Some(e) = p.ping_delay.excess(now) {
                 self.excesses.push(e);
             }
         }
@@ -278,6 +279,9 @@ pub struct ChannelStats {
 ///   until [`store::Error::WouldBlock`](crate::store::Error::WouldBlock);
 ///   recover an underrun reader through [`Runner::swarm_mut`]. A reader's
 ///   offset is unknown until the scheduler sets the first read position.
+/// - **Paths.** Measure each peer's link as [`strims_base::path`] does
+///   (vnic's probes), pass every round trip to [`Runner::on_path_sample`]
+///   as it comes, and the reading to [`Runner::set_peer_path`] every pass.
 /// - **Clock.** Pass wall-clock time with millisecond precision or better.
 ///   Peers' clocks may differ: the congestion controllers use only
 ///   differences of one-way delays.
@@ -460,7 +464,7 @@ fn handle_payload(
                 if let Some(rtt) = sched.handle_pong(peer, p.nonce, now)
                     && let Some(rp) = q.peers.get_mut(peer)
                 {
-                    rp.path.add(now, rtt);
+                    rp.ping_delay.add(now, rtt);
                 }
             }
             Message::StreamRequest(s) => {
@@ -527,6 +531,26 @@ impl Runner {
     /// configuration, never from a peer.
     pub fn set_upload_capacity(&mut self, bytes_per_sec: Option<u64>) {
         self.upload.hint = bytes_per_sec.filter(|&b| b > 0);
+    }
+
+    // --- the link's path --------------------------------------------------
+
+    /// The driver's measure of the link to `peer` as of its latest echo
+    /// ([`strims_base::path`]: vnic's probes, or a simulation's model of
+    /// them), or `None` before one. The driver sets it every pass, so it is
+    /// never older than the pass. Nothing decides on it yet.
+    pub fn set_peer_path(&mut self, peer: PeerKey, reading: Option<PathReading>) {
+        if let Some(p) = self.peers.get_mut(peer) {
+            p.link_path = reading;
+        }
+    }
+
+    /// A round trip of the link to `peer`, from the driver's path measure:
+    /// one call per echo. Nothing decides on it yet.
+    pub fn on_path_sample(&mut self, peer: PeerKey, sample: PathSample) {
+        if let Some(p) = self.peers.get_mut(peer) {
+            p.link_sample = Some(sample);
+        }
     }
 
     // --- tap ------------------------------------------------------------

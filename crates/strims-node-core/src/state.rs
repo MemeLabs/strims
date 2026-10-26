@@ -505,6 +505,7 @@ impl State {
             self.vpn.handle_timeout(now);
         }
         if self.runner.poll_timeout().is_some_and(|t| t <= now) {
+            self.refresh_paths(now);
             self.runner.handle_timeout(now);
         }
         if let Some(c) = &mut self.capture
@@ -717,6 +718,7 @@ impl State {
             self.process_events(now);
             self.vpn.flush(&mut self.vnic, now);
             self.process_events(now);
+            self.refresh_paths(now);
             let State {
                 vnic,
                 vpn,
@@ -755,6 +757,20 @@ impl State {
             }
         }
         true
+    }
+
+    /// Hands the runner each peer's path measure as vnic reads it now.
+    fn refresh_paths(&mut self, now: Time) {
+        let State {
+            peers,
+            vnic,
+            runner,
+            ..
+        } = self;
+        for (link, ps) in peers.iter() {
+            let reading = vnic.link_path(link, now).and_then(|p| p.reading);
+            runner.set_peer_path(ps.pp, reading);
+        }
     }
 
     /// Whether the runner is captured.
@@ -953,7 +969,11 @@ impl State {
                 self.emit(NodeEvent::PeerRemoved { host_id });
             }
             strims_vnic::Event::LinkClosed { link, reason } => self.link_closed(link, reason, now),
-            strims_vnic::Event::PathSample { .. } => {}
+            strims_vnic::Event::PathSample { peer, sample } => {
+                if let Some(ps) = self.peers.get(peer) {
+                    self.runner.on_path_sample(ps.pp, sample);
+                }
+            }
         }
     }
 

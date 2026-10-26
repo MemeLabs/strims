@@ -18,6 +18,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use strims_base::path::{PathReading, PathSample};
 use strims_base::stats::Sma;
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
@@ -109,6 +110,10 @@ pub struct PeerStats {
     pub queue_ring: [usize; 2],
     /// Requests and pushes refused because a queue was full.
     pub dropped: u64,
+    /// The driver's measure of the link's path ([`Runner::set_peer_path`]).
+    ///
+    /// [`Runner::set_peer_path`]: crate::Runner::set_peer_path
+    pub path: Option<PathReading>,
 }
 
 /// A peer's runner state.
@@ -131,7 +136,10 @@ pub(crate) struct RunnerPeer {
     pub(crate) qos_weight: Option<u64>,
     pub(crate) dropped: u64,
     /// Ping round trips, for the upload meter's queueing delay.
-    pub(crate) path: PathDelay,
+    pub(crate) ping_delay: PathDelay,
+    /// The driver's measure of the link's path, and its latest round trip.
+    pub(crate) link_path: Option<PathReading>,
+    pub(crate) link_sample: Option<PathSample>,
 }
 
 impl RunnerPeer {
@@ -147,7 +155,9 @@ impl RunnerPeer {
             useful: TransferMetrics::new(now),
             qos_weight: None,
             dropped: 0,
-            path: PathDelay::default(),
+            ping_delay: PathDelay::default(),
+            link_path: None,
+            link_sample: None,
         }
     }
 
@@ -163,6 +173,7 @@ impl RunnerPeer {
             queued_data: [self.dq[0].len(), self.dq[1].len()],
             queue_ring: [self.dq[0].ring_len(), self.dq[1].ring_len()],
             dropped: self.dropped,
+            path: self.link_path,
         }
     }
 }

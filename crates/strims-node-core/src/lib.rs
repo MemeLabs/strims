@@ -64,6 +64,11 @@
 //! ([`Interfaces`]). Without TCP, peer exchanges offer no TCP candidate
 //! and `tcp://` dials fail with [`NodeError::Unsupported`].
 //!
+//! **Paths.** vnic measures every link's path the same way on every
+//! transport (`strims_base::path`). The runner gets each round trip as vnic
+//! reports it, and each peer's reading every pump round and before its
+//! tick.
+//!
 //! # Bindings
 //!
 //! Peers join networks through [`Node::bind_peer_network`], reported as

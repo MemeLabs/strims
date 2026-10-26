@@ -538,6 +538,7 @@ fn peer_stats(s: PeerStats) -> v1::PeerStats {
         queued_data,
         queue_ring,
         dropped,
+        path: _,
     } = s;
     v1::PeerStats {
         wants_transmit,
