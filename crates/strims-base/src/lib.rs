@@ -7,6 +7,7 @@
 //! [`time::Time`], and randomness comes from a seeded [`rng::DetRng`] owned
 //! by the state machine that needs it.
 
+pub mod path;
 pub mod rng;
 pub mod stats;
 pub mod time;
