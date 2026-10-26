@@ -32,7 +32,9 @@ columns = [
   "qd_err_seeds_ms:median",
   "qdv_err_seeds_ms:median",
   "qdb_err_seeds_ms:median",
+  "qdbi_err_seeds_ms:median",
   "qd_fn_seeds:median",
   "qdv_fn_seeds:median",
   "qdb_fn_seeds:median",
+  "qdbi_fn_seeds:median",
 ]

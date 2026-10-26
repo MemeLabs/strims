@@ -32,7 +32,9 @@
 //!   uplink, the least wait of the WAN model's queue over the last
 //!   [`STANDING_WINDOW`], and whether the delay reads past a threshold
 //!   exactly when the uplink stayed busy throughout that window (WAN
-//!   mode).
+//!   mode). vnic's queued bytes, which read the queue as it is rather than
+//!   its floor, are also scored against the wait at the moment
+//!   ([`QueueTruth`]).
 //! - **series** ([`Report::series`]): with transfer samples, a swarm's run
 //!   second by second from its stream's start to the run's end, for
 //!   `hack/capture/analyze.py`'s collapse verdicts: each viewer's lag and
@@ -59,6 +61,17 @@ pub const QUEUE_DELAY_THRESHOLD_MS: u32 = 80;
 /// An uplink whose least wait over the window is at least this never
 /// emptied in it: it was saturated.
 pub const SATURATED_STANDING_MS: u32 = 5;
+/// What [`Report::queue_delay_accuracy`] scores a reading against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QueueTruth {
+    /// The standing queue, the least wait over [`STANDING_WINDOW`]: a
+    /// positive is an uplink that never emptied in it.
+    Standing,
+    /// The wait at the moment: a positive is one of at least the
+    /// threshold.
+    Instant,
+}
+
 /// An uplink queue that waits longer than this stands.
 pub const STANDING_QUEUE: strims_base::time::Duration =
     strims_base::time::Duration::from_millis(50);
@@ -278,16 +291,17 @@ impl Report {
     }
 
     /// A queueing delay reading at `hosts` (`read`, in milliseconds, from
-    /// each meter sample) against their standing uplink queues, over the
-    /// samples that had a delay while a swarm streamed: the median absolute
-    /// error in milliseconds; the share of samples whose uplink emptied in
-    /// the window where the delay read at least `threshold_ms` (false
-    /// positives); and the share whose uplink stayed busy where it read less
-    /// (false negatives). `None` outside WAN mode or without samples.
+    /// each meter sample) against their uplink queues as `truth` takes
+    /// them, over the samples that had a delay while a swarm streamed: the
+    /// median absolute error in milliseconds; the share of negatives (see
+    /// [`QueueTruth`]) where the delay read at least `threshold_ms` (false
+    /// positives); and the share of positives where it read less (false
+    /// negatives). `None` outside WAN mode or without samples.
     pub fn queue_delay_accuracy(
         &self,
         hosts: &[HostIx],
         threshold_ms: u32,
+        truth: QueueTruth,
         read: impl Fn(&MeterSample) -> Option<u32>,
     ) -> Option<[f64; 3]> {
         let wan = self.wan.as_ref()?;
@@ -318,17 +332,29 @@ impl Report {
                 let Some(delay) = read(m) else {
                     continue;
                 };
-                let from = m.t.saturating_sub(STANDING_WINDOW);
-                let Some(standing) = queue
-                    .iter()
-                    .filter(|(t, _)| *t >= from && *t <= m.t)
-                    .map(|&(_, d)| d)
-                    .min()
-                else {
+                let wait = match truth {
+                    QueueTruth::Standing => {
+                        let from = m.t.saturating_sub(STANDING_WINDOW);
+                        queue
+                            .iter()
+                            .filter(|(t, _)| *t >= from && *t <= m.t)
+                            .map(|&(_, d)| d)
+                            .min()
+                    }
+                    QueueTruth::Instant => queue
+                        .get(..queue.partition_point(|(t, _)| *t <= m.t))
+                        .and_then(<[_]>::last)
+                        .map(|&(_, d)| d),
+                };
+                let Some(wait) = wait else {
                     continue;
                 };
-                errors.push(f64::from(delay.abs_diff(standing)));
-                if standing < SATURATED_STANDING_MS {
+                errors.push(f64::from(delay.abs_diff(wait)));
+                let negative = match truth {
+                    QueueTruth::Standing => wait < SATURATED_STANDING_MS,
+                    QueueTruth::Instant => wait < threshold_ms,
+                };
+                if negative {
                     neg.1 += 1;
                     neg.0 += u64::from(delay >= threshold_ms);
                 } else {
@@ -654,15 +680,16 @@ impl Report {
             )
             .num("peak_committed", self.peak_committed());
         type Reading = fn(&MeterSample) -> Option<u32>;
-        let readings: [(&str, Reading); 3] = [
-            ("qd", |m| m.queue_delay_ms),
-            ("qdv", |m| m.path_delay_ms),
-            ("qdb", |m| m.path_queued_ms),
+        let readings: [(&str, QueueTruth, Reading); 4] = [
+            ("qd", QueueTruth::Standing, |m| m.queue_delay_ms),
+            ("qdv", QueueTruth::Standing, |m| m.path_delay_ms),
+            ("qdb", QueueTruth::Standing, |m| m.path_queued_ms),
+            ("qdbi", QueueTruth::Instant, |m| m.path_queued_ms),
         ];
-        for (reading, read) in readings {
+        for (reading, truth, read) in readings {
             for (name, hosts) in [("seeds", &roles.seeds), ("forwarders", &roles.forwarders)] {
                 if let Some([err, fp, fneg]) =
-                    self.queue_delay_accuracy(hosts, QUEUE_DELAY_THRESHOLD_MS, read)
+                    self.queue_delay_accuracy(hosts, QUEUE_DELAY_THRESHOLD_MS, truth, read)
                 {
                     j.num(&format!("{reading}_err_{name}_ms"), err)
                         .num(&format!("{reading}_fp_{name}"), fp)

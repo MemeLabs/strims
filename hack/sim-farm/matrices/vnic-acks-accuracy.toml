@@ -3,8 +3,8 @@
 # `_varying` and `_step` versions, under the window model, with whole
 # writes and with 1448-byte segments. Read with `hack/capture/analyze.py
 # delays` (qd: pings, qdv: vnic's excess round trip, qdb: vnic's queued
-# bytes over the delivery rate). vnic-acks-accuracy-cal.toml has the
-# testbed twin's cells.
+# bytes over the delivery rate; qdbi: the same against the wait at the
+# moment). vnic-acks-accuracy-cal.toml has the testbed twin's cells.
 
 package = "strims-sim"
 target = "scenarios"
@@ -40,7 +40,9 @@ columns = [
   "qd_err_seeds_ms:median",
   "qdv_err_seeds_ms:median",
   "qdb_err_seeds_ms:median",
+  "qdbi_err_seeds_ms:median",
   "qd_fn_seeds:median",
   "qdv_fn_seeds:median",
   "qdb_fn_seeds:median",
+  "qdbi_fn_seeds:median",
 ]
