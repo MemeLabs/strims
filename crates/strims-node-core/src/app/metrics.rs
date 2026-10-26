@@ -396,6 +396,7 @@ fn swarm_scheduler(s: SwarmSchedulerStats) -> v1::SwarmSchedulerStats {
         have_bin_max,
         peer_max_have_bin,
         wasted_chunks,
+        requests_timed_out: _,
         bin_time_nodes,
         have_map_size,
         request_map_size,

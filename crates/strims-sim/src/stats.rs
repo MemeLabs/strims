@@ -130,6 +130,9 @@ pub struct SwarmCounters {
     pub chunks_sent: u64,
     pub pushed_chunks: u64,
     pub distinct_chunks_sent: u64,
+    /// Requests that timed out unanswered
+    /// (`SwarmSchedulerStats::requests_timed_out`).
+    pub timeouts: u64,
 }
 
 impl SwarmCounters {
@@ -172,6 +175,7 @@ impl SwarmCounters {
             self.chunks_sent,
             self.pushed_chunks,
             self.distinct_chunks_sent,
+            self.timeouts,
         ]
     }
 
@@ -199,6 +203,7 @@ impl SwarmCounters {
             chunks_sent,
             pushed_chunks,
             distinct_chunks_sent,
+            timeouts,
         ] = a;
         SwarmCounters {
             data_sent,
@@ -223,6 +228,7 @@ impl SwarmCounters {
             chunks_sent,
             pushed_chunks,
             distinct_chunks_sent,
+            timeouts,
         }
     }
 }
@@ -336,7 +342,7 @@ impl<const N: usize> Tracked<N> {
 }
 
 /// Swarm counters, in [`SwarmCounters`]' field order.
-const SWARM_COUNTERS: usize = 22;
+const SWARM_COUNTERS: usize = 23;
 
 /// Channel counters: data sent, data received, invalid, rejected,
 /// requests, haves.
@@ -497,6 +503,7 @@ impl HostStats {
                 chunks_sent: sched.chunks_sent,
                 pushed_chunks: sched.pushed_chunks,
                 distinct_chunks_sent: sched.distinct_chunks_sent,
+                timeouts: sched.requests_timed_out,
                 ..SwarmCounters::default()
             };
             self.swarms.entry(s).or_default().observe(c.to_array());

@@ -679,6 +679,7 @@ impl Report {
             .int("pruned", c.pruned)
             .int("shed", c.shed)
             .int("switched", c.switched)
+            .int("timeouts", c.timeouts)
             .num("sim_secs", self.sim_secs)
             .num("wall_secs", self.wall_secs);
         if let Some(series) = self.series(swarm) {

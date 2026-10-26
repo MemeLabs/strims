@@ -287,6 +287,8 @@ pub(crate) struct SwarmState {
     pub(crate) have_bins: Map,
     pub(crate) have_bin_max: Bin,
     pub(crate) wasted_chunks: u64,
+    /// Requests that timed out unanswered.
+    requests_timed_out: u64,
     /// Chunks written to peers, pushes included, and the pushes alone.
     chunks_sent: u64,
     pushed_chunks: u64,
@@ -692,6 +694,7 @@ impl PeerChannelScheduler {
             self.controller.on_settled(now, size);
         }
         if n > 0 {
+            s.requests_timed_out = s.requests_timed_out.saturating_add(n);
             self.backoff_until = now + REQUEST_BACKOFF;
             let size = (n as i64).saturating_mul(s.chunk_size as i64);
             self.controller.on_timed_out(now, size);
@@ -1140,6 +1143,7 @@ impl PeerSwarmScheduler {
                 have_bins,
                 have_bin_max: Bin(0),
                 wasted_chunks: 0,
+                requests_timed_out: 0,
                 chunks_sent: 0,
                 pushed_chunks: 0,
                 sent_bins: Map::new(),
@@ -2066,6 +2070,7 @@ impl PeerSwarmScheduler {
             have_bin_max: s.have_bin_max,
             peer_max_have_bin: s.peer_max_have_bin,
             wasted_chunks: s.wasted_chunks,
+            requests_timed_out: s.requests_timed_out,
             bin_time_nodes: s.bin_times.size(),
             have_map_size: map_size(&s.have_bins),
             request_map_size: map_size(&s.request_bins),
@@ -2147,6 +2152,8 @@ pub struct SwarmSchedulerStats {
     pub peer_max_have_bin: Bin,
     /// Chunks received that we already had.
     pub wasted_chunks: u64,
+    /// Requests that timed out unanswered.
+    pub requests_timed_out: u64,
     pub bin_time_nodes: usize,
     pub have_map_size: usize,
     pub request_map_size: usize,
