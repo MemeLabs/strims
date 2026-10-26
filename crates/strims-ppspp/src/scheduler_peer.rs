@@ -109,7 +109,7 @@ use crate::codec::{
 use crate::controller::{ChannelController, RequestController, RequestControllerKind};
 use crate::integrity::ProtectionMethod;
 use crate::options::{DeliveryMode, PushMode, SchedulingMethod, SeedPolicy};
-use crate::queue_delay::METER_PING;
+use crate::queue_delay::{METER_PING, PathSource, PathSources};
 use crate::runner::{PeerKey, SwarmKey, TICK_INTERVAL};
 use crate::scheduler::{PeerPriority, PeerTaskQueue, stream_bin_offset};
 use crate::store;
@@ -289,6 +289,8 @@ pub(crate) struct SwarmState {
     pub(crate) wasted_chunks: u64,
     /// Requests that timed out unanswered.
     requests_timed_out: u64,
+    /// Where round trips come from (`Runner::set_path_sources`).
+    path_sources: PathSources,
     /// Chunks written to peers, pushes included, and the pushes alone.
     chunks_sent: u64,
     pushed_chunks: u64,
@@ -1144,6 +1146,7 @@ impl PeerSwarmScheduler {
                 have_bin_max: Bin(0),
                 wasted_chunks: 0,
                 requests_timed_out: 0,
+                path_sources: PathSources::default(),
                 chunks_sent: 0,
                 pushed_chunks: 0,
                 sent_bins: Map::new(),
@@ -1742,6 +1745,11 @@ impl PeerSwarmScheduler {
         }
     }
 
+    /// Where round trips come from.
+    pub(crate) fn set_path_sources(&mut self, p: PathSources) {
+        self.s.path_sources = p;
+    }
+
     /// A pong counts once, and only for the outstanding ping: its round
     /// trip sets the request timeout, so a forged or repeated pong must not.
     /// Returns the round trip of any of the latest [`SENT_PINGS`] pings,
@@ -1759,12 +1767,40 @@ impl PeerSwarmScheduler {
             });
         if c.ping_nonce != 0 && nonce == c.ping_nonce {
             c.ping_nonce = 0;
-            c.controller.on_ping_rtt(now, rtt);
-            if self.s.is_seed {
+            let p = self.s.path_sources;
+            if p.controller == PathSource::Ping {
+                c.controller.on_ping_rtt(now, rtt);
+            }
+            if p.holder == PathSource::Ping && self.s.is_seed {
                 push::seed::ping(&mut c.push, rtt, now);
             }
         }
         sample
+    }
+
+    /// A round trip of the link to `peer`, from the driver's path measure,
+    /// for the readers that take it ([`PathSource::Link`]). Each sample
+    /// counts once: the driver vouches for it. The channel then writes at
+    /// the next tick, as after a pong.
+    pub(crate) fn handle_path_sample(
+        &mut self,
+        peer: PeerKey,
+        rtt: Duration,
+        now: Time,
+        q: &mut impl PeerTaskQueue,
+    ) {
+        let p = self.s.path_sources;
+        let key = self.s.key;
+        let Some(c) = self.channels.get_mut(&peer) else {
+            return;
+        };
+        if p.controller == PathSource::Link {
+            c.controller.on_ping_rtt(now, rtt);
+            q.enqueue(peer, key);
+        }
+        if p.holder == PathSource::Link && self.s.is_seed {
+            push::seed::ping(&mut c.push, rtt, now);
+        }
     }
 
     /// The peer asks us to push `stream` from `b`. In hybrid mode the
@@ -1948,12 +1984,14 @@ impl PeerSwarmScheduler {
             return Ok(());
         };
         // The controller takes a ping a second; while data flows in a
-        // hybrid swarm the meter takes one every `METER_PING` too.
-        let meter_ping = s.push.is_some()
+        // hybrid swarm the meter takes one every `METER_PING` too. Readers
+        // of the link take none.
+        let meter_ping = s.path_sources.meter == PathSource::Ping
+            && s.push.is_some()
             && !c.last_data_sent.is_nil()
             && now - c.last_data_sent <= Duration::SECOND
             && now > c.next_meter_ping;
-        if now > c.next_ping_time || meter_ping {
+        if (s.path_sources.pings() && now > c.next_ping_time) || meter_ping {
             let nonce = now.unix_nanos() as u64;
             cw.write(&Message::Ping(Ping { nonce }))?;
             if now > c.next_ping_time {

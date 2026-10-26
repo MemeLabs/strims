@@ -11,6 +11,7 @@
 //! testbed_node --index <i> --topology <file> [--secs <s>] [--start <unix ms>]
 //!              [--rate <bytes/s>] [--chunk <bytes> --munro <bytes>]
 //!              [--join-at <s>] [--hosts <dir>] [--capture <dir>]
+//!              [--path ping|link|<reader>+...]
 //! testbed_node --relay-only --topology <file> [--secs <s>] [--start <unix ms>]
 //! ```
 //!
@@ -26,8 +27,10 @@
 //! after the start. `--chunk` and `--munro` size the swarm's chunks and
 //! signatures
 //! ([`with_chunks`](strims_testbed::shape::LiveShape::with_chunks)); every
-//! node must take the same. Each node prints its line per second on
-//! stdout, with the process's CPU time as `cpu_ms`.
+//! node must take the same. `--path` moves the node's readers of round
+//! trips from pings to vnic's path measure
+//! ([`PathSources`](strims_ppspp::PathSources)). Each node prints its line
+//! per second on stdout, with the process's CPU time as `cpu_ms`.
 //!
 //! `--relay-only` runs the relay: it listens where the topology's `relay`
 //! line says, joins the testbed network, runs no swarm, and stops 5 s
@@ -60,6 +63,7 @@ struct Args {
     join_at: u64,
     hosts: Option<PathBuf>,
     capture: Option<String>,
+    path: strims_ppspp::PathSources,
 }
 
 fn args() -> Result<Args, String> {
@@ -78,6 +82,7 @@ fn args() -> Result<Args, String> {
         join_at: 0,
         hosts: None,
         capture: None,
+        path: strims_ppspp::PathSources::default(),
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -94,6 +99,7 @@ fn args() -> Result<Args, String> {
             "--join-at" => a.join_at = num(value()?)?,
             "--hosts" => a.hosts = Some(value()?.into()),
             "--capture" => a.capture = Some(value()?),
+            "--path" => a.path = value()?.parse()?,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -180,6 +186,7 @@ async fn run() -> Result<(), String> {
     config.max_peers = 64;
     config.rate_limit = None;
     config.upload_capacity = None;
+    config.path_sources = a.path;
     if topo.relay.is_some() {
         let at = me.browser_addr().to_string();
         match topo.browser_links {

@@ -386,6 +386,9 @@ pub struct Scenario {
     /// vnic once its uplink queue is full (see [`SendBuffer`]). `None`
     /// accepts every write at once.
     pub send_buffer: Option<SendBuffer>,
+    /// Where every node's readers of round trips take them
+    /// (`STRIMS_SIM_PATH`).
+    pub path_sources: strims_ppspp::PathSources,
     /// Keep every node's transfers per swarm at every stats sample
     /// ([`crate::HostReport::transfers`]), as `calibration_star` does to
     /// compare with the testbed's nodes. Changes no trace.
@@ -443,6 +446,7 @@ impl Scenario {
             tick: Duration::from_millis(1),
             capture: None,
             send_buffer: None,
+            path_sources: strims_ppspp::PathSources::default(),
             transfer_samples: false,
             tcp_segment: None,
         }

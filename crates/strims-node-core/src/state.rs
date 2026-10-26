@@ -416,6 +416,7 @@ impl State {
         let broker_class = vnic.add_qos_class(vnic.qos_root(), rpc::BROKER_QOS_WEIGHT)?;
         let mut runner = Runner::new(fork(&mut rng));
         runner.set_upload_capacity(upload_hint(config.upload_capacity, config.rate_limit));
+        runner.set_path_sources(config.path_sources);
         let capture = config
             .ppspp_capture
             .as_ref()

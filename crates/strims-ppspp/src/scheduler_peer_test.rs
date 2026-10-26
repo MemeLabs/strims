@@ -907,6 +907,98 @@ fn channels_that_send_data_ping_for_the_meter() {
 }
 
 #[test]
+fn channels_ping_only_for_readers_of_pings() {
+    let pings = |sources: PathSources| {
+        let mut f = fixture(SwarmOptions {
+            push_mode: PushMode::Hybrid,
+            ..Default::default()
+        });
+        f.sched.set_path_sources(sources);
+        let mut q = MockQueue::default();
+        let p = ready_channel(&mut f, &mut q);
+        let cfg = f.swarm.reader_config();
+        f.sched.channels.get_mut(&p).unwrap().last_data_sent = now();
+        let mut n = 0;
+        for ms in (0..3000).step_by(100) {
+            let (sched, swarm) = (&mut f.sched, &f.swarm);
+            let at = now() + Duration::from_millis(ms);
+            let msgs = written(|cw| sched.write(p, at, swarm, cw).unwrap(), cfg);
+            n += msgs
+                .iter()
+                .filter(|m| matches!(m, Message::Ping(_)))
+                .count();
+            f.sched.channels.get_mut(&p).unwrap().last_data_sent = at;
+        }
+        n
+    };
+    // A ping a second and the meter's every 200 ms, while any reads them.
+    assert!(pings(PathSources::default()) > 10);
+    let meter_on_link = PathSources {
+        meter: PathSource::Link,
+        ..Default::default()
+    };
+    assert_eq!(pings(meter_on_link), 3);
+    assert_eq!(pings(PathSources::LINK), 0);
+}
+
+#[test]
+fn path_samples_reach_the_controller_that_reads_the_link() {
+    for kind in CONTROLLERS {
+        for source in [PathSource::Ping, PathSource::Link] {
+            let mut f = fixture(with_controller(pull(), kind));
+            f.sched.set_path_sources(PathSources {
+                controller: source,
+                ..Default::default()
+            });
+            let mut q = MockQueue::default();
+            let p = ready_channel(&mut f, &mut q);
+            q.enqueued.clear();
+            let cfg = f.swarm.reader_config();
+            let (sched, swarm) = (&mut f.sched, &f.swarm);
+            let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+            let Message::Ping(ping) = msgs[0] else {
+                panic!("{msgs:?}")
+            };
+            f.sched
+                .handle_pong(p, ping.nonce, now() + Duration::from_millis(40));
+            f.sched
+                .handle_path_sample(p, Duration::from_millis(70), now(), &mut q);
+            let (rtt, enqueued) = match source {
+                PathSource::Ping => (40, 0),
+                PathSource::Link => (70, 1),
+            };
+            assert_eq!(
+                f.sched.channels[&p].controller.rtt(),
+                Duration::from_millis(rtt),
+                "{kind:?} {source:?}"
+            );
+            assert_eq!(q.enqueued.len(), enqueued, "{kind:?} {source:?}");
+        }
+    }
+}
+
+#[test]
+fn path_samples_rank_the_holders_of_a_seed_that_reads_the_link() {
+    for source in [PathSource::Ping, PathSource::Link] {
+        let mut f = adaptive_seed(4, 2);
+        f.sched.set_path_sources(PathSources {
+            holder: source,
+            ..Default::default()
+        });
+        let mut q = MockQueue::default();
+        let p = add_ready(&mut f, &mut q, 0);
+        f.sched
+            .handle_path_sample(p, Duration::from_millis(30), now(), &mut q);
+        f.sched
+            .handle_path_sample(p, Duration::from_millis(20), now(), &mut q);
+        let a = f.sched.seed_allocation(now()).unwrap();
+        let n = a.neighbours.iter().find(|n| n.peer == p).unwrap();
+        let want = (source == PathSource::Link).then(|| Duration::from_millis(20));
+        assert_eq!(n.min_rtt, want, "{source:?}");
+    }
+}
+
+#[test]
 fn bbr_like_measures_with_local_times_only() {
     // The BBR-style window takes its round trip from our request to the
     // data, on our clock: data stamped by a peer clock hours off changes

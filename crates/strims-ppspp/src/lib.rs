@@ -107,6 +107,7 @@ pub use writer::{Writer, WriterOptions};
 pub use channel::{ChannelMetrics, HandshakeError};
 pub use peer::{MetricsSnapshot, PeerMetricsSnapshot, PeerStats, TransferMetricsSnapshot};
 pub use peer_data_queue::DATA_QUEUE_CAP;
+pub use queue_delay::{PathSource, PathSources};
 pub use runner::{
     ChannelStats, Event, MAX_PEER_QOS_WEIGHT, MIN_PEER_QOS_WEIGHT, PEER_QOS_UPDATE_INTERVAL,
     PeerKey, Runner, RunnerError, SwarmKey, SwarmMut, TICK_INTERVAL,

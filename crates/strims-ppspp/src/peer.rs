@@ -18,7 +18,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use strims_base::path::{PathReading, PathSample};
+use strims_base::path::PathReading;
 use strims_base::stats::Sma;
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
@@ -137,9 +137,8 @@ pub(crate) struct RunnerPeer {
     pub(crate) dropped: u64,
     /// Ping round trips, for the upload meter's queueing delay.
     pub(crate) ping_delay: PathDelay,
-    /// The driver's measure of the link's path, and its latest round trip.
+    /// The driver's measure of the link's path.
     pub(crate) link_path: Option<PathReading>,
-    pub(crate) link_sample: Option<PathSample>,
 }
 
 impl RunnerPeer {
@@ -157,7 +156,6 @@ impl RunnerPeer {
             dropped: 0,
             ping_delay: PathDelay::default(),
             link_path: None,
-            link_sample: None,
         }
     }
 

@@ -17,6 +17,10 @@
 //!   replacing the scenario's own, for comparisons.
 //! - `STRIMS_SIM_TCP=1` gives the send buffers congestion windows and
 //!   bounded access queues ([`SendBuffer::window`]).
+//! - `STRIMS_SIM_PATH=link|<reader>+...` moves every node's readers of
+//!   round trips from pings to vnic's path measure
+//!   ([`PathSources`](strims_ppspp::PathSources)): all, or those named of
+//!   `meter`, `holder` and `controller`.
 //! - `STRIMS_SIM_TCP_SEGMENT=<bytes>` splits TCP writes into segments of at
 //!   most that many bytes ([`Scenario::tcp_segment`]), so the window model
 //!   fills windows as real TCP does (1448, a segment's payload).
@@ -229,6 +233,7 @@ fn sweep_seeds(
     let munro: Option<usize> = knob("STRIMS_SIM_MUNRO");
     let stream_secs: Option<u64> = knob("STRIMS_SIM_STREAM_SECS");
     let segment: Option<usize> = knob("STRIMS_SIM_TCP_SEGMENT");
+    let path_sources: Option<strims_ppspp::PathSources> = knob("STRIMS_SIM_PATH");
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -241,6 +246,9 @@ fn sweep_seeds(
         }
         if window && let Some(b) = &mut spec.send_buffer {
             b.window = true;
+        }
+        if let Some(p) = path_sources {
+            spec.path_sources = p;
         }
         if series {
             spec.transfer_samples = true;

@@ -987,3 +987,61 @@ fn the_tap_tells_pushes_from_answers() {
         [&b"again"[..]]
     );
 }
+
+#[test]
+fn a_path_sample_reaches_every_swarm_the_peer_shares() {
+    for (sources, want) in [
+        (PathSources::default(), Duration::ZERO),
+        (PathSources::LINK, Duration::from_millis(30)),
+    ] {
+        let mut r = Runner::new(det_rng(1));
+        r.set_path_sources(sources);
+        let peer = r.add_peer(b"peer", t(0));
+        let swarms: Vec<SwarmKey> = (1..3u8)
+            .map(|i| {
+                let s = r.add_swarm(Swarm::new(SwarmId::new(&[i; 32]), options()).unwrap());
+                r.run_swarm(peer, s, u64::from(i), u64::from(i), t(0))
+                    .unwrap();
+                s
+            })
+            .collect();
+        r.on_path_sample(
+            peer,
+            PathSample {
+                at: t(10),
+                rtt: Duration::from_millis(30),
+            },
+        );
+        for s in swarms {
+            let c = r.channel_stats(peer, s).unwrap().scheduler;
+            assert_eq!(c.rtt_mean, want, "{sources:?}");
+        }
+    }
+}
+
+#[test]
+fn the_meter_takes_the_links_excesses_when_it_reads_the_link() {
+    let mut peers: SlotMap<PeerKey, RunnerPeer> = SlotMap::with_key();
+    for ms in [10, 40, 90] {
+        let mut p = RunnerPeer::new(b"p", t(0));
+        p.link_path = Some(PathReading {
+            samples: 5,
+            at: t(1000),
+            rtt: Duration::from_millis(50 + ms),
+            base: Some(Duration::from_millis(50)),
+            recent_min: Some(Duration::from_millis(50 + ms)),
+            in_flight: 0,
+            rate: None,
+            queued: None,
+            written_since: 0,
+        });
+        peers.insert(p);
+    }
+    let mut m = UploadMeter::new();
+    m.update_queue_delay(t(1000), &mut peers);
+    assert_eq!(m.queue_delay, None, "no pings");
+    m.source = PathSource::Link;
+    m.update_queue_delay(t(1000), &mut peers);
+    // The second least of three.
+    assert_eq!(m.queue_delay, Some(Duration::from_millis(40)));
+}
