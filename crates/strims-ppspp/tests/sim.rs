@@ -2465,6 +2465,16 @@ impl Sim {
             .unwrap_or_default()
     }
 
+    /// Requests honest viewers timed out.
+    fn timeouts(&self) -> u64 {
+        self.nodes
+            .iter()
+            .filter(|n| n.role == Role::Peer)
+            .filter_map(|n| n.runner.swarm_stats(n.swarm))
+            .map(|s| s.requests_timed_out)
+            .sum()
+    }
+
     /// How long after `at` seconds the stream took to settle: the publish
     /// time of the last chunk that reached a peer with more than
     /// `threshold` of lag, minus `at` (zero if none did).
@@ -3788,7 +3798,7 @@ fn node_sim_sweep() {
 fn node_sim_row(name: &str, sim: &Sim, r: &Report) -> String {
     let missing: usize = sim.missing(0, i64::MAX / 2).iter().map(|m| m.1).sum();
     format!(
-        "{name} seed {}: delivery {:.4} missing {missing} underruns {} lag p50 {} p99 {} max {} (from 30 s {}) seed share {:.2} wasted {} frames {} invalid {}",
+        "{name} seed {}: delivery {:.4} missing {missing} underruns {} lag p50 {} p99 {} max {} (from 30 s {}) seed share {:.2} wasted {} timeouts {} frames {} invalid {}",
         sim.cfg.seed,
         r.delivery,
         r.underruns,
@@ -3798,6 +3808,7 @@ fn node_sim_row(name: &str, sim: &Sim, r: &Report) -> String {
         ms(sim.max_lag_from(30)),
         r.seed_share,
         r.wasted,
+        sim.timeouts(),
         r.frames,
         count_invalid(sim),
     )
@@ -5333,7 +5344,8 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             r.announce.1 as f64 / cfg.stream_secs.max(1) as f64,
         )
         .num("announce_share", r.announce.2)
-        .int("asks", r.asks);
+        .int("asks", r.asks)
+        .int("timeouts", sim.timeouts());
     if let Some(series) = sim.series() {
         row.field("series", format_args!("{series}"));
     }
