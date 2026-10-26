@@ -990,12 +990,12 @@ fn the_tap_tells_pushes_from_answers() {
 
 #[test]
 fn a_path_sample_reaches_every_swarm_the_peer_shares() {
-    for (sources, want) in [
-        (PathSources::default(), Duration::ZERO),
-        (PathSources::LINK, Duration::from_millis(30)),
+    for (source, want) in [
+        (RttSource::Ping, Duration::ZERO),
+        (RttSource::Link, Duration::from_millis(30)),
     ] {
         let mut r = Runner::new(det_rng(1));
-        r.set_path_sources(sources);
+        r.set_rtt_source(source);
         let peer = r.add_peer(b"peer", t(0));
         let swarms: Vec<SwarmKey> = (1..3u8)
             .map(|i| {
@@ -1014,13 +1014,13 @@ fn a_path_sample_reaches_every_swarm_the_peer_shares() {
         );
         for s in swarms {
             let c = r.channel_stats(peer, s).unwrap().scheduler;
-            assert_eq!(c.rtt_mean, want, "{sources:?}");
+            assert_eq!(c.rtt_mean, want, "{source:?}");
         }
     }
 }
 
 #[test]
-fn the_meter_takes_the_links_excesses_when_it_reads_the_link() {
+fn the_meter_takes_the_links_excesses() {
     let mut peers: SlotMap<PeerKey, RunnerPeer> = SlotMap::with_key();
     for ms in [10, 40, 90] {
         let mut p = RunnerPeer::new(b"p", t(0));
@@ -1038,10 +1038,7 @@ fn the_meter_takes_the_links_excesses_when_it_reads_the_link() {
         peers.insert(p);
     }
     let mut m = UploadMeter::new();
-    m.update_queue_delay(t(1000), &mut peers);
-    assert_eq!(m.queue_delay, None, "no pings");
-    m.source = PathSource::Link;
-    m.update_queue_delay(t(1000), &mut peers);
+    m.update_queue_delay(&peers);
     // The second least of three.
     assert_eq!(m.queue_delay, Some(Duration::from_millis(40)));
 }

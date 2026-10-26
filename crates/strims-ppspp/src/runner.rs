@@ -22,13 +22,14 @@ use strims_binmap::Bin;
 
 use crate::channel::{ChannelMetrics, HandshakeError, MeteredWriter, validate_handshake};
 use crate::codec::{self, FrameReader, Message, Reader, ReaderConfig, Stream};
+use crate::controller::RttSource;
 use crate::epoch::EpochError;
 use crate::integrity::ChannelVerifier;
 use crate::options::PushMode;
 use crate::peer::{
     MetricsSnapshot, PeerMetricsSnapshot, PeerStats, Queues, RunnerPeer, TransferMetrics, Wake,
 };
-use crate::queue_delay::{self, PathSource, PathSources};
+use crate::queue_delay;
 use crate::scheduler::PeerPriority;
 use crate::scheduler_peer::push::seed::SeedAllocationStats;
 use crate::scheduler_peer::push::{PushStats, UploadInfo};
@@ -147,9 +148,9 @@ struct Events {
 /// queues data further on (a rate limit's burst, kernel socket buffers)
 /// hides that time, and the reading runs high; one that holds a peer's data
 /// back for that peer alone makes it read low. The driver's hint, when it
-/// has one, bounds it. The queueing delay past the runner, from the peers'
-/// ping round trips ([`queue_delay`](crate::queue_delay)), shows the time
-/// those further queues hold data.
+/// has one, bounds it. The queueing delay below the runner, from the
+/// driver's measure of the peers' links ([`queue_delay`](crate::queue_delay)),
+/// shows the time those further queues hold data.
 #[derive(Debug)]
 struct UploadMeter {
     busy_since: Option<Time>,
@@ -163,8 +164,6 @@ struct UploadMeter {
     queue_delay: Option<Duration>,
     /// Scratch for the peers' excesses. Bound: one per peer.
     excesses: Vec<Duration>,
-    /// Where the excesses come from ([`Runner::set_path_sources`]).
-    source: PathSource,
 }
 
 impl UploadMeter {
@@ -176,24 +175,14 @@ impl UploadMeter {
             hint: None,
             queue_delay: None,
             excesses: Vec::new(),
-            source: PathSource::Ping,
         }
     }
 
-    /// Folds the peers' round trips into their bases and takes the node's
-    /// queueing delay.
-    fn update_queue_delay(&mut self, now: Time, peers: &mut SlotMap<PeerKey, RunnerPeer>) {
+    /// Takes the node's queueing delay from the peers' links.
+    fn update_queue_delay(&mut self, peers: &SlotMap<PeerKey, RunnerPeer>) {
         self.excesses.clear();
-        for p in peers.values_mut() {
-            p.ping_delay.fold();
-            let excess = match self.source {
-                PathSource::Ping => p.ping_delay.excess(now),
-                PathSource::Link => p.link_path.and_then(|r| r.excess()),
-            };
-            if let Some(e) = excess {
-                self.excesses.push(e);
-            }
-        }
+        self.excesses
+            .extend(peers.values().filter_map(|p| p.link_path?.excess()));
         self.queue_delay = queue_delay::aggregate(&mut self.excesses);
     }
 
@@ -318,8 +307,9 @@ pub struct Runner {
     /// Lifecycle events; the schedulers keep their own.
     tap: Tap,
     tap_level: TapLevel,
-    /// Where round trips come from ([`Runner::set_path_sources`]).
-    path_sources: PathSources,
+    /// Where the request controllers take round trips
+    /// ([`Runner::set_rtt_source`]).
+    rtt_source: RttSource,
 }
 
 /// Hands a swarm's queued events to its scheduler and the driver. Called
@@ -470,13 +460,7 @@ fn handle_payload(
             Message::Choke => sched.handle_choke(peer, true),
             Message::Unchoke => sched.handle_choke(peer, false),
             Message::Ping(p) => sched.handle_ping(peer, p.nonce),
-            Message::Pong(p) => {
-                if let Some(rtt) = sched.handle_pong(peer, p.nonce, now)
-                    && let Some(rp) = q.peers.get_mut(peer)
-                {
-                    rp.ping_delay.add(now, rtt);
-                }
-            }
+            Message::Pong(p) => sched.handle_pong(peer, p.nonce, now),
             Message::StreamRequest(s) => {
                 let tail = swarm.store().tail();
                 if !sched.handle_stream_request(peer, s.stream, s.bin, tail, now, q)? {
@@ -530,7 +514,7 @@ impl Runner {
             committed: 0.0,
             tap: Tap::default(),
             tap_level: TapLevel::Off,
-            path_sources: PathSources::default(),
+            rtt_source: RttSource::default(),
         }
     }
 
@@ -546,13 +530,13 @@ impl Runner {
 
     // --- the link's path --------------------------------------------------
 
-    /// Where the readers of round trips take them (see [`PathSources`]).
-    pub fn set_path_sources(&mut self, p: PathSources) {
-        self.path_sources = p;
-        self.upload.source = p.meter;
+    /// Where the request controllers take round trips (see
+    /// [`RttSource`]).
+    pub fn set_rtt_source(&mut self, source: RttSource) {
+        self.rtt_source = source;
         for rs in self.swarms.values_mut() {
             if let Some(s) = rs.scheduler.as_mut() {
-                s.set_path_sources(p);
+                s.set_rtt_source(source);
             }
         }
     }
@@ -560,8 +544,8 @@ impl Runner {
     /// The driver's measure of the link to `peer` as of its latest echo
     /// ([`strims_base::path`]: vnic's probes, or a simulation's model of
     /// them), or `None` before one. The driver sets it every pass, so it is
-    /// never older than the pass. The meter reads it with
-    /// [`PathSource::Link`].
+    /// never older than the pass. The upload meter's queueing delay reads
+    /// it.
     pub fn set_peer_path(&mut self, peer: PeerKey, reading: Option<PathReading>) {
         if let Some(p) = self.peers.get_mut(peer) {
             p.link_path = reading;
@@ -569,8 +553,9 @@ impl Runner {
     }
 
     /// A round trip of the link to `peer`, from the driver's path measure:
-    /// one call per echo. Every channel to `peer` takes it for the readers
-    /// on [`PathSource::Link`].
+    /// one call per echo. Every channel to `peer` takes it: an adaptive
+    /// seed's holder ranking, and the request controller on
+    /// [`RttSource::Link`].
     pub fn on_path_sample(&mut self, peer: PeerKey, sample: PathSample) {
         let Runner {
             swarms,
@@ -881,7 +866,7 @@ impl Runner {
             next_tick,
             tap,
             tap_level,
-            path_sources,
+            rtt_source,
             ..
         } = self;
         let p = peers.get_mut(peer).ok_or(RunnerError::UnknownPeer)?;
@@ -904,7 +889,7 @@ impl Runner {
             .scheduler
             .get_or_insert_with(|| PeerSwarmScheduler::new(&rs.swarm, swarm, &mut fork(rng), now));
         sched.tap_mut().set(*tap_level == TapLevel::All);
-        sched.set_path_sources(*path_sources);
+        sched.set_rtt_source(*rtt_source);
         tap.push(TapEvent {
             swarm: Some(swarm),
             peer: Some(peer),
@@ -1252,7 +1237,7 @@ impl Runner {
         self.next_tick += TICK_INTERVAL * behind;
 
         if self.hybrid_swarms > 0 {
-            self.upload.update_queue_delay(now, &mut self.peers);
+            self.upload.update_queue_delay(&self.peers);
         }
         let upload = (self.hybrid_swarms > 0).then(|| self.upload.info(now));
         let Runner {

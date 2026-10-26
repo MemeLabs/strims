@@ -623,7 +623,7 @@ fn pong_needs_an_outstanding_ping() {
 }
 
 #[test]
-fn round_trips_longer_than_the_ping_interval_reach_the_meter() {
+fn a_superseded_ping_skips_the_controller() {
     let mut f = fixture(pull());
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
@@ -638,17 +638,9 @@ fn round_trips_longer_than_the_ping_interval_reach_the_meter() {
         nonces.push(ping.nonce);
     }
     let back = now() + Duration::from_millis(2500);
-    assert_eq!(
-        f.sched.handle_pong(p, nonces[0], back),
-        Some(Duration::from_millis(2500))
-    );
-    // The first ping was superseded, so its round trip skips the controller.
+    f.sched.handle_pong(p, nonces[0], back);
     assert_eq!(f.sched.channels[&p].controller.rtt(), Duration::ZERO);
-    assert_eq!(f.sched.handle_pong(p, nonces[0], back), None);
-    assert_eq!(
-        f.sched.handle_pong(p, nonces[1], back),
-        Some(Duration::from_millis(1400))
-    );
+    f.sched.handle_pong(p, nonces[1], back);
     assert_eq!(
         f.sched.channels[&p].controller.rtt(),
         Duration::from_millis(1400)
@@ -872,52 +864,16 @@ fn requests_pruned_behind_the_store_leave_the_flight() {
 }
 
 #[test]
-fn channels_that_send_data_ping_for_the_meter() {
-    let mut f = fixture(SwarmOptions {
-        push_mode: PushMode::Hybrid,
-        ..Default::default()
-    });
-    let mut q = MockQueue::default();
-    let p = ready_channel(&mut f, &mut q);
-    let cfg = f.swarm.reader_config();
-    let pings = |f: &mut Fixture, at: Time| {
-        let (sched, swarm) = (&mut f.sched, &f.swarm);
-        let msgs = written(|cw| sched.write(p, at, swarm, cw).unwrap(), cfg);
-        msgs.iter()
-            .filter_map(|m| match m {
-                Message::Ping(x) => Some(x.nonce),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(pings(&mut f, now()).len(), 1);
-    // Without data sent, the next ping waits for the interval ...
-    assert!(pings(&mut f, now() + Duration::from_millis(300)).is_empty());
-    // ... and with data, the meter pings every `METER_PING`; only the
-    // meter takes their round trips.
-    f.sched.channels.get_mut(&p).unwrap().last_data_sent = now() + Duration::from_millis(300);
-    let meter = pings(&mut f, now() + Duration::from_millis(400));
-    assert_eq!(meter.len(), 1);
-    let back = now() + Duration::from_millis(450);
-    assert_eq!(
-        f.sched.handle_pong(p, meter[0], back),
-        Some(Duration::from_millis(50))
-    );
-    assert_eq!(f.sched.channels[&p].controller.rtt(), Duration::ZERO);
-}
-
-#[test]
-fn channels_ping_only_for_readers_of_pings() {
-    let pings = |sources: PathSources| {
+fn channels_ping_once_a_second_only_for_a_controller_on_pings() {
+    let pings = |source: RttSource| {
         let mut f = fixture(SwarmOptions {
             push_mode: PushMode::Hybrid,
             ..Default::default()
         });
-        f.sched.set_path_sources(sources);
+        f.sched.set_rtt_source(source);
         let mut q = MockQueue::default();
         let p = ready_channel(&mut f, &mut q);
         let cfg = f.swarm.reader_config();
-        f.sched.channels.get_mut(&p).unwrap().last_data_sent = now();
         let mut n = 0;
         for ms in (0..3000).step_by(100) {
             let (sched, swarm) = (&mut f.sched, &f.swarm);
@@ -927,45 +883,36 @@ fn channels_ping_only_for_readers_of_pings() {
                 .iter()
                 .filter(|m| matches!(m, Message::Ping(_)))
                 .count();
-            f.sched.channels.get_mut(&p).unwrap().last_data_sent = at;
         }
         n
     };
-    // A ping a second and the meter's every 200 ms, while any reads them.
-    assert!(pings(PathSources::default()) > 10);
-    let meter_on_link = PathSources {
-        meter: PathSource::Link,
-        ..Default::default()
-    };
-    assert_eq!(pings(meter_on_link), 3);
-    assert_eq!(pings(PathSources::LINK), 0);
+    assert_eq!(pings(RttSource::Ping), 3);
+    assert_eq!(pings(RttSource::Link), 0);
 }
 
 #[test]
-fn path_samples_reach_the_controller_that_reads_the_link() {
+fn pongs_and_path_samples_reach_only_the_controller_that_reads_them() {
     for kind in CONTROLLERS {
-        for source in [PathSource::Ping, PathSource::Link] {
+        for source in [RttSource::Ping, RttSource::Link] {
             let mut f = fixture(with_controller(pull(), kind));
-            f.sched.set_path_sources(PathSources {
-                controller: source,
-                ..Default::default()
-            });
+            f.sched.set_rtt_source(source);
             let mut q = MockQueue::default();
             let p = ready_channel(&mut f, &mut q);
             q.enqueued.clear();
             let cfg = f.swarm.reader_config();
             let (sched, swarm) = (&mut f.sched, &f.swarm);
             let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
-            let Message::Ping(ping) = msgs[0] else {
-                panic!("{msgs:?}")
+            let nonce = match msgs.first() {
+                Some(Message::Ping(ping)) => ping.nonce,
+                _ => now().unix_nanos() as u64,
             };
             f.sched
-                .handle_pong(p, ping.nonce, now() + Duration::from_millis(40));
+                .handle_pong(p, nonce, now() + Duration::from_millis(40));
             f.sched
                 .handle_path_sample(p, Duration::from_millis(70), now(), &mut q);
             let (rtt, enqueued) = match source {
-                PathSource::Ping => (40, 0),
-                PathSource::Link => (70, 1),
+                RttSource::Ping => (40, 0),
+                RttSource::Link => (70, 1),
             };
             assert_eq!(
                 f.sched.channels[&p].controller.rtt(),
@@ -978,24 +925,31 @@ fn path_samples_reach_the_controller_that_reads_the_link() {
 }
 
 #[test]
-fn path_samples_rank_the_holders_of_a_seed_that_reads_the_link() {
-    for source in [PathSource::Ping, PathSource::Link] {
-        let mut f = adaptive_seed(4, 2);
-        f.sched.set_path_sources(PathSources {
-            holder: source,
-            ..Default::default()
-        });
-        let mut q = MockQueue::default();
-        let p = add_ready(&mut f, &mut q, 0);
-        f.sched
-            .handle_path_sample(p, Duration::from_millis(30), now(), &mut q);
-        f.sched
-            .handle_path_sample(p, Duration::from_millis(20), now(), &mut q);
+fn path_samples_rank_a_seeds_holders_and_pongs_dont() {
+    let mut f = adaptive_seed(4, 2);
+    let mut q = MockQueue::default();
+    let p = add_ready(&mut f, &mut q, 0);
+    let min_rtt = |f: &mut Fixture| {
         let a = f.sched.seed_allocation(now()).unwrap();
-        let n = a.neighbours.iter().find(|n| n.peer == p).unwrap();
-        let want = (source == PathSource::Link).then(|| Duration::from_millis(20));
-        assert_eq!(n.min_rtt, want, "{source:?}");
-    }
+        a.neighbours.iter().find(|n| n.peer == p).unwrap().min_rtt
+    };
+    let cfg = f.swarm.reader_config();
+    let (sched, swarm) = (&mut f.sched, &f.swarm);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let Some(ping) = msgs.iter().find_map(|m| match m {
+        Message::Ping(x) => Some(x.nonce),
+        _ => None,
+    }) else {
+        panic!("{msgs:?}")
+    };
+    f.sched
+        .handle_pong(p, ping, now() + Duration::from_millis(10));
+    assert_eq!(min_rtt(&mut f), None);
+    f.sched
+        .handle_path_sample(p, Duration::from_millis(30), now(), &mut q);
+    f.sched
+        .handle_path_sample(p, Duration::from_millis(20), now(), &mut q);
+    assert_eq!(min_rtt(&mut f), Some(Duration::from_millis(20)));
 }
 
 #[test]
@@ -1636,7 +1590,7 @@ fn adaptive_seed_with_rtts() -> (Fixture, MockQueue, Vec<PeerKey>) {
     let peers: Vec<PeerKey> = (0..6).map(|i| add_ready(&mut f, &mut q, i)).collect();
     for (i, &p) in peers.iter().enumerate() {
         let rtt = Duration::from_millis(10 * (i as i64 + 1));
-        push::seed::ping(&mut f.sched.channels[&p].push, rtt, now());
+        push::seed::round_trip(&mut f.sched.channels[&p].push, rtt, now());
     }
     (f, q, peers)
 }
@@ -1743,7 +1697,7 @@ fn an_adaptive_seeds_window_follows_its_pushes() {
     let peers: Vec<PeerKey> = (0..3).map(|i| add_ready(&mut f, &mut q, i)).collect();
     for (i, &p) in peers.iter().enumerate() {
         let rtt = Duration::from_millis(10 * (i as i64 + 1));
-        push::seed::ping(&mut f.sched.channels[&p].push, rtt, now());
+        push::seed::round_trip(&mut f.sched.channels[&p].push, rtt, now());
     }
     for &p in &peers[..2] {
         ask(&mut f, &mut q, p, 0, now());

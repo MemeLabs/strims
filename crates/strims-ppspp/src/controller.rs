@@ -20,6 +20,8 @@
 //!
 //! [`SwarmOptions::request_controller`]: crate::SwarmOptions::request_controller
 
+use std::str::FromStr;
+
 use strims_base::time::{Duration, Time};
 
 pub use crate::bbr::BbrLike;
@@ -60,6 +62,34 @@ impl RequestControllerKind {
     }
 }
 
+/// Where the request controllers take their round trips
+/// ([`RequestController::on_ping_rtt`]): a trial's option, set with
+/// [`Runner::set_rtt_source`](crate::Runner::set_rtt_source). Channels ping
+/// once a second only on [`RttSource::Ping`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RttSource {
+    /// The channels' pings.
+    #[default]
+    Ping,
+    /// The driver's measure of each peer's link
+    /// ([`Runner::on_path_sample`](crate::Runner::on_path_sample): vnic's
+    /// probes, one link for every swarm the peer shares).
+    Link,
+}
+
+/// `ping` (or nothing) or `link`.
+impl FromStr for RttSource {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<RttSource, String> {
+        match s.trim() {
+            "" | "ping" => Ok(RttSource::Ping),
+            "link" => Ok(RttSource::Link),
+            _ => Err(format!("unknown round trip source {s:?}")),
+        }
+    }
+}
+
 /// What the peer scheduler asks of a channel's request window. Every time
 /// is the local clock, passed in; the only peer-supplied value is
 /// `peer_time` in [`RequestController::on_answered`], which a controller
@@ -82,7 +112,8 @@ pub trait RequestController {
     /// Requests for `bytes` that the peer never answered timed out after
     /// their chunks arrived from elsewhere: out of flight, not lost.
     fn on_settled(&mut self, now: Time, bytes: i64);
-    /// A ping's round trip.
+    /// A round trip to the peer: a ping's, or, by the swarm's
+    /// [`RttSource`], the link's.
     fn on_ping_rtt(&mut self, now: Time, rtt: Duration);
     /// The end of a frame from the peer.
     fn on_frame_end(&mut self, now: Time);
@@ -340,6 +371,14 @@ mod tests {
 
     fn t(ms: i64) -> Time {
         Time::from_unix_millis(1_700_000_000_000 + ms)
+    }
+
+    #[test]
+    fn rtt_source_parses() {
+        assert_eq!("".parse::<RttSource>(), Ok(RttSource::Ping));
+        assert_eq!("ping".parse::<RttSource>(), Ok(RttSource::Ping));
+        assert_eq!(" link".parse::<RttSource>(), Ok(RttSource::Link));
+        assert!("meter".parse::<RttSource>().is_err());
     }
 
     #[test]

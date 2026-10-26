@@ -113,8 +113,9 @@
 //!   that didn't: children miss what the seed was slow to send. A verdict
 //!   is a majority over other nodes' observations, each checked against
 //!   the seed's own. A holder no reporter votes on keeps its copy.
-//! - **Round trips** are each neighbour's smallest ping round trip over
-//!   the last one or two [`RTT_WINDOW`]s, which leaves out queueing.
+//! - **Round trips** are each neighbour's smallest link round trip (the
+//!   driver's path measure, `Runner::on_path_sample`) over the last one or
+//!   two [`RTT_WINDOW`]s, which leaves out queueing.
 //! - With room for every neighbour's every stream, everything is accepted.
 //!
 //! # Pins and uplink shares
@@ -253,7 +254,7 @@ pub(crate) struct Holder {
     holds: bool,
     /// When it last asked for a stream, or became a holder.
     active: Time,
-    /// The smallest ping round trip in the current [`RTT_WINDOW`] (its
+    /// The smallest link round trip in the current [`RTT_WINDOW`] (its
     /// index) and in the one before.
     window: i64,
     rtt: Option<Duration>,
@@ -296,8 +297,8 @@ pub(crate) struct Holder {
 }
 
 impl Holder {
-    /// A ping round trip.
-    fn ping(&mut self, rtt: Duration, now: Time) {
+    /// A round trip of the link.
+    fn round_trip(&mut self, rtt: Duration, now: Time) {
         let w = now.unix_nanos() / RTT_WINDOW.as_nanos();
         if w != self.window {
             self.rtt_before = if w == self.window.saturating_add(1) {
@@ -719,7 +720,7 @@ pub struct SeedNeighbour {
     /// Per stream, its mean HAVE lag after publishing, if it announced the
     /// stream within [`CANDIDATE_FRESHNESS`](super::CANDIDATE_FRESHNESS).
     pub lags: Vec<Option<Duration>>,
-    /// The channel's round trip, and its smallest ping round trip lately.
+    /// The channel's round trip, and its smallest link round trip lately.
     pub rtt: Duration,
     pub min_rtt: Option<Duration>,
     /// An adaptive seed's holder.
@@ -749,10 +750,10 @@ pub(crate) struct Grant {
     pub(crate) per_holder: usize,
 }
 
-/// A ping round trip to the channel's peer, at a seed.
-pub(crate) fn ping(pc: &mut Option<PushChannel>, rtt: Duration, now: Time) {
+/// A round trip of the link to the channel's peer, at a seed.
+pub(crate) fn round_trip(pc: &mut Option<PushChannel>, rtt: Duration, now: Time) {
     if let Some(pc) = pc.as_mut() {
-        pc.holder.ping(rtt, now);
+        pc.holder.round_trip(rtt, now);
     }
 }
 
@@ -1637,15 +1638,15 @@ mod tests {
         let ms = Duration::from_millis;
         let mut h = Holder::default();
         assert_eq!(h.min_rtt(t(0)), None);
-        h.ping(ms(50), t(0));
-        h.ping(ms(30), t(1));
-        h.ping(ms(80), t(2));
+        h.round_trip(ms(50), t(0));
+        h.round_trip(ms(30), t(1));
+        h.round_trip(ms(80), t(2));
         assert_eq!(h.min_rtt(t(2)), Some(ms(30)));
         // The window before still counts ...
-        h.ping(ms(60), t(10));
+        h.round_trip(ms(60), t(10));
         assert_eq!(h.min_rtt(t(11)), Some(ms(30)));
         // ... and the one before that no longer does.
-        h.ping(ms(70), t(20));
+        h.round_trip(ms(70), t(20));
         assert_eq!(h.min_rtt(t(21)), Some(ms(60)));
         assert_eq!(h.min_rtt(t(31)), Some(ms(70)));
         assert_eq!(h.min_rtt(t(45)), None);
