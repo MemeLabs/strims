@@ -2258,36 +2258,37 @@ impl Sim {
         {
             return;
         }
-        // The records lead the frame: they leave once their own bytes have.
-        let ahead = if n > 0 && ctl.len() > 0 {
-            let at = if self.cfg.paced_uplinks {
+        // The records lead the frame in its first packet: they leave once
+        // their own bytes have, and take the frame's path, and its fate.
+        let ahead = (n > 0 && ctl.len() > 0).then(|| {
+            if self.cfg.paced_uplinks {
                 now
             } else {
                 now + tx_time(ctl.len(), self.nodes[i].up_bw)
-            };
-            Some(at)
-        } else {
-            None
-        };
-        let mut arrive = |depart: Time, packets: u32| match self.wan.as_mut() {
+            }
+        });
+        let (delay, before) = match self.wan.as_mut() {
             Some(net) => {
                 let tr = net.transit(depart, link.from, link.to, packets, Carrier::Stream);
-                let at = (tr.arrival + tr.retransmit).max(link.last_arrival);
-                link.last_arrival = at;
-                at
+                (tr.arrival - depart + tr.retransmit, link.last_arrival)
             }
-            None => depart + link.latency,
+            None => (link.latency, Time::NIL),
         };
+        let then = (depart + delay).max(before);
+        if self.wan.is_some() {
+            link.last_arrival = then;
+        }
         let events = match ahead {
-            Some(ctl_depart) => {
-                let first = arrive(ctl_depart, 1);
-                let then = arrive(depart, packets);
-                vec![
-                    (first, Vec::new(), ctl, ctl.len()),
-                    (then, frame, Ctl::default(), wire - ctl.len()),
-                ]
-            }
-            None => vec![(arrive(depart, packets), frame, ctl, wire)],
+            Some(ctl_depart) => vec![
+                (
+                    (ctl_depart + delay).max(before).min(then),
+                    Vec::new(),
+                    ctl,
+                    ctl.len(),
+                ),
+                (then, frame, Ctl::default(), wire - ctl.len()),
+            ],
+            None => vec![(then, frame, ctl, wire)],
         };
         for (at, frame, ctl, wire) in events {
             self.push(
