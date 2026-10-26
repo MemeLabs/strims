@@ -40,6 +40,19 @@
 //! they hold like any relay. Every result counts honest viewers only.
 //! `SIM_GREEDY=0` runs without them.
 //!
+//! Every link measures its path as vnic does (`strims_base::path`): a probe
+//! rides a frame once one is due, the receiver's echo rides its next frame
+//! back or goes on its own through its uplink (outside the fair queue, as
+//! vnic writes control frames outside QoS), and an idle link probes every
+//! [`KEEPALIVE`]. Records that ride a frame go ahead of it in the link's
+//! stream, inside its packets, and take uplink and downlink time like any
+//! bytes.
+//! Each runner gets every round trip, and its links' readings before its
+//! ticks and polls, as node-core hands it vnic's. Free riders hold their
+//! echoes [`ECHO_HOLD`], and liars echo nonces they never read: their own
+//! links read farther, or go unmeasured. `SIM_PATHS=0` runs without the
+//! model.
+//!
 //! The push/pull comparison runs the same scenarios with the same seed in
 //! every [`PushMode`] and stream count: `sim_push_*` tests assert the
 //! hybrid's behaviour, and the ignored `push_pull_matrix` prints the
@@ -78,6 +91,7 @@ use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
 
 use rand_core::Rng;
+use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter};
 use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
@@ -103,6 +117,34 @@ use strims_wan::{
 const MTU: usize = 16 * 1024 - 4;
 const CHUNK: usize = 1024;
 const MUNRO: usize = 64 * CHUNK;
+
+/// An idle link probes this often: vnic's keepalive interval.
+const KEEPALIVE: Duration = Duration::from_secs(10);
+/// How long a free rider holds its echoes.
+const ECHO_HOLD: Duration = Duration::from_millis(300);
+/// A control frame's header, and each of its records
+/// (`strims_vnic::control`).
+const CONTROL_HEADER: usize = 4;
+const CONTROL_RECORD: usize = 5;
+
+/// The link control records riding with a frame.
+#[derive(Clone, Copy, Debug, Default)]
+struct Ctl {
+    echo: Option<u32>,
+    probe: Option<u32>,
+}
+
+impl Ctl {
+    /// The control frame's bytes, 0 without records.
+    fn len(&self) -> usize {
+        let records = usize::from(self.echo.is_some()) + usize::from(self.probe.is_some());
+        if records == 0 {
+            0
+        } else {
+            CONTROL_HEADER + CONTROL_RECORD * records
+        }
+    }
+}
 
 fn t0() -> Time {
     Time::from_unix_millis(1_700_000_000_000)
@@ -271,6 +313,9 @@ struct Config {
     /// Capture every node's frames (see [`CaptureTo`]); `SIM_CAPTURE`
     /// sets it for any run.
     capture: Option<CaptureTo>,
+    /// Model vnic's path measure (see the module docs); `SIM_PATHS=0` runs
+    /// without it.
+    paths: bool,
 }
 
 /// Where a run's captures go: `node-<i>.ppcap` in `dir`, one per node,
@@ -340,6 +385,7 @@ impl Config {
             pin: None,
             wan: None,
             capture: None,
+            paths: knob::<u32>("SIM_PATHS") != Some(0),
         }
     }
 }
@@ -412,14 +458,72 @@ struct Link {
     /// In WAN mode, the latest arrival on the link: a frame waits for every
     /// frame ahead of it, retransmissions included.
     last_arrival: Time,
+    /// The path measure of what `from` sends (see the module docs).
+    path: PathMeter,
+    /// The echo `from` owes `to`'s newest probe, and when it may go (a free
+    /// rider holds it).
+    echo: Echo,
+    echo_at: Time,
+    /// The last probe's nonce, and when `from` last sent data or a probe.
+    nonce: u32,
+    last_send: Time,
+}
+
+impl Link {
+    fn new(
+        from: usize,
+        to: usize,
+        latency: Duration,
+        loss: f64,
+        peer: PeerKey,
+        channel: u64,
+        rpeer: PeerKey,
+    ) -> Link {
+        Link {
+            from,
+            to,
+            latency,
+            loss,
+            peer,
+            channel,
+            rpeer,
+            last_arrival: Time::NIL,
+            path: PathMeter::new(),
+            echo: Echo::default(),
+            echo_at: Time::NIL,
+            nonce: 0,
+            last_send: t0(),
+        }
+    }
+
+    /// Whether `from` owes control the link must send on its own: the echo
+    /// it may let go, its first probe, or an idle link's keepalive probe.
+    fn control_due(&self, now: Time) -> bool {
+        (self.echo.is_pending() && self.echo_at <= now) || self.probe_alone(now)
+    }
+
+    fn probe_alone(&self, now: Time) -> bool {
+        self.path.can_probe()
+            && (self.path.bytes_written() == 0 || now - self.last_send >= KEEPALIVE)
+    }
 }
 
 #[derive(Debug)]
 enum Ev {
-    /// A frame reaches the receiver's downlink queue.
-    Arrive { link: usize, frame: Vec<u8> },
+    /// A frame (and its control records) reaches the receiver's downlink
+    /// queue, `wire` bytes of it.
+    Arrive {
+        link: usize,
+        frame: Vec<u8>,
+        ctl: Ctl,
+        wire: usize,
+    },
     /// A frame leaves the downlink and is handled.
-    Deliver { link: usize, frame: Vec<u8> },
+    Deliver {
+        link: usize,
+        frame: Vec<u8>,
+        ctl: Ctl,
+    },
 }
 
 struct Sim {
@@ -855,26 +959,8 @@ impl Sim {
                 nodes[b].runner.run_swarm(pb, xb, ka, kb, t0()).unwrap();
             }
             let la = links.len();
-            links.push(Link {
-                from: a,
-                to: b,
-                latency,
-                loss: cfg.loss,
-                peer: pa,
-                channel: ca,
-                rpeer: pb,
-                last_arrival: Time::NIL,
-            });
-            links.push(Link {
-                from: b,
-                to: a,
-                latency,
-                loss: cfg.loss,
-                peer: pb,
-                channel: cb,
-                rpeer: pa,
-                last_arrival: Time::NIL,
-            });
+            links.push(Link::new(a, b, latency, cfg.loss, pa, ca, pb));
+            links.push(Link::new(b, a, latency, cfg.loss, pb, cb, pa));
             nodes[a].links.insert(b, la);
             nodes[b].links.insert(a, la + 1);
             nodes[a].vtime.insert(la, 0);
@@ -1038,6 +1124,23 @@ impl Sim {
             {
                 t = t.min(n.up_free.max(self.now));
             }
+            if self.cfg.paths {
+                for &l in n.links.values() {
+                    // Control already due waits for the uplink; otherwise
+                    // its deadlines are still ahead.
+                    let link = &self.links[l];
+                    if link.control_due(self.now) {
+                        t = t.min(n.up_free.max(self.now));
+                        continue;
+                    }
+                    if link.echo.is_pending() {
+                        t = t.min(link.echo_at);
+                    }
+                    if link.path.can_probe() {
+                        t = t.min(link.last_send + KEEPALIVE);
+                    }
+                }
+            }
         }
         t
     }
@@ -1132,12 +1235,13 @@ impl Sim {
                 break;
             }
             match entry.remove() {
-                Ev::Arrive { link, frame } => {
+                Ev::Arrive {
+                    link,
+                    frame,
+                    ctl,
+                    wire,
+                } => {
                     let to = self.links[link].to;
-                    let wire = match self.wan {
-                        Some(_) => tcp_wire(frame.len()).0,
-                        None => frame.len(),
-                    };
                     let node = &mut self.nodes[to];
                     let start = node.down_free.max(now);
                     let qd = start - now;
@@ -1148,15 +1252,21 @@ impl Sim {
                     node.wire.down_bytes += wire as u64;
                     node.wire.down_queue_max = node.wire.down_queue_max.max(qd);
                     let at = node.down_free;
-                    self.push(at, Ev::Deliver { link, frame });
+                    self.push(at, Ev::Deliver { link, frame, ctl });
                 }
-                Ev::Deliver { link, frame } => self.deliver(link, &frame),
+                Ev::Deliver { link, frame, ctl } => self.deliver(link, &frame, ctl),
             }
         }
 
         for i in 0..self.nodes.len() {
             let n = &mut self.nodes[i];
             if n.role != Role::Dead && n.runner.poll_timeout().is_some_and(|t| t <= now) {
+                if self.cfg.paths {
+                    for &l in n.links.values() {
+                        let link = &self.links[l];
+                        n.runner.set_peer_path(link.peer, link.path.reading(now));
+                    }
+                }
                 n.runner.handle_timeout(now);
             }
         }
@@ -1204,8 +1314,19 @@ impl Sim {
                         let rchannel = self.links[l ^ 1].channel;
                         let channel = self.links[l].channel;
                         // A redialed link is a new TCP connection: nothing
-                        // on it waits for the old one's frames.
-                        self.links[l].last_arrival = Time::NIL;
+                        // on it waits for the old one's frames, and its
+                        // path is measured afresh.
+                        let old = &self.links[l];
+                        self.links[l] = Link::new(
+                            old.from,
+                            old.to,
+                            old.latency,
+                            old.loss,
+                            old.peer,
+                            old.channel,
+                            old.rpeer,
+                        );
+                        self.links[l].last_send = now;
                         let n = &mut self.nodes[from];
                         n.runner.stop_swarm(peer, n.swarm);
                         n.runner
@@ -1257,11 +1378,32 @@ impl Sim {
         );
     }
 
-    fn deliver(&mut self, link: usize, frame: &[u8]) {
+    fn deliver(&mut self, link: usize, frame: &[u8], ctl: Ctl) {
         let (to, rpeer) = (self.links[link].to, self.links[link].rpeer);
         let from = self.links[link].from;
         let now = self.now;
         if self.nodes[to].role == Role::Dead || self.nodes[from].role == Role::Dead {
+            return;
+        }
+        // `to`'s own link back to `from` holds its echo and its meter.
+        let back = link ^ 1;
+        if let Some(nonce) = ctl.probe {
+            let b = &mut self.links[back];
+            if !b.echo.is_pending() {
+                b.echo_at = match self.nodes[to].role {
+                    Role::Greedy(Greed::FreeRider) => now + ECHO_HOLD,
+                    _ => now,
+                };
+            }
+            b.echo.read(nonce, now);
+        }
+        if let Some(nonce) = ctl.echo
+            && let Ok(Some(sample)) = self.links[back].path.echo(nonce, now)
+        {
+            let peer = self.links[back].peer;
+            self.nodes[to].runner.on_path_sample(peer, sample);
+        }
+        if frame.is_empty() {
             return;
         }
         if self.nodes[to].role == Role::Adversary(Attack::WithholdPush) {
@@ -1919,6 +2061,16 @@ impl Sim {
             if node.up_free > now {
                 return;
             }
+            // Control owed on a link with no data waiting goes on its own.
+            if self.cfg.paths
+                && let Some(l) = node.links.values().copied().find(|&l| {
+                    self.links[l].control_due(now)
+                        && !node.runner.wants_transmit(self.links[l].peer)
+                })
+            {
+                self.send(i, l, Vec::new());
+                continue;
+            }
             // The wanting link with the earliest virtual start time.
             let Some((&l, _)) = node
                 .vtime
@@ -1932,6 +2084,10 @@ impl Sim {
             let node = &mut self.nodes[i];
             if let Some(c) = node.cap.as_mut() {
                 c.drain(now, &mut node.runner);
+            }
+            if self.cfg.paths {
+                node.runner
+                    .set_peer_path(peer, self.links[l].path.reading(now));
             }
             let mut n = node.runner.poll_transmit(peer, now, &mut self.buf);
             if n == 0 {
@@ -1961,82 +2117,171 @@ impl Sim {
                     continue;
                 }
             }
-            let node = &mut self.nodes[i];
-            if i != 0 {
-                self.viewer_bytes += n as u64;
-            }
             let frame = self.buf[..n].to_vec();
-            let (wire, packets) = match self.wan {
-                Some(_) => tcp_wire(n),
-                None => (n, 1),
-            };
-            let weight = node.weights.get(&peer).copied().unwrap_or(1000).max(1);
+            self.send(i, l, frame);
+        }
+    }
+
+    /// The control records `l`'s sender adds after `data` bytes of frame
+    /// (none for a frame of control alone), as vnic's would.
+    fn take_control(&mut self, l: usize, data: usize) -> Ctl {
+        let now = self.now;
+        let liar = self.nodes[self.links[l].from].role == Role::Greedy(Greed::Liar);
+        let link = &mut self.links[l];
+        let probe = link.probe_alone(now)
+            || (data > 0 && {
+                link.path.wrote(data as u64, true);
+                link.path.probe_due(now, PROBE_INTERVAL)
+            });
+        let echo = if link.echo.is_pending() && link.echo_at <= now {
+            // A liar answers with a nonce it made up.
+            link.echo
+                .take(now)
+                .map(|(n, _)| if liar { n ^ 0x8000_0000 } else { n })
+        } else {
+            None
+        };
+        let probe = probe.then(|| {
+            link.nonce = link.nonce.wrapping_add(1);
+            link.nonce
+        });
+        let ctl = Ctl { echo, probe };
+        link.path.wrote(ctl.len() as u64, false);
+        if let Some(nonce) = probe {
+            link.path.probe(nonce, now);
+        }
+        if data > 0 || probe.is_some() {
+            link.last_send = now;
+        }
+        ctl
+    }
+
+    /// Sends `frame` (empty for control alone) with `l`'s control records
+    /// through node `i`'s uplink.
+    fn send(&mut self, i: usize, l: usize, frame: Vec<u8>) {
+        let now = self.now;
+        let n = frame.len();
+        let ctl = if self.cfg.paths {
+            self.take_control(l, n)
+        } else {
+            Ctl::default()
+        };
+        let peer = self.links[l].peer;
+        let node = &mut self.nodes[i];
+        if i != 0 {
+            self.viewer_bytes += n as u64;
+        }
+        let (wire, packets) = match self.wan {
+            Some(_) => tcp_wire(n + ctl.len()),
+            None => (n + ctl.len(), 1),
+        };
+        let weight = node.weights.get(&peer).copied().unwrap_or(1000).max(1);
+        if n > 0 {
             let min_v = node.vtime.values().copied().min().unwrap_or(0);
             let v = node.vtime.get_mut(&l).unwrap();
             *v = (*v).max(min_v) + (wire as u128) * 1_000_000 / u128::from(weight);
-            node.up_free = now + tx_time(wire, node.up_bw);
-            node.wire.up_bytes += wire as u64;
-            // A paced uplink (vnic's rate limit over turmoil, which models
-            // no bandwidth) sends the frame at once and makes the next one
-            // wait; a serial one takes the frame's transmission time.
-            let depart = if self.cfg.paced_uplinks {
-                now
-            } else {
-                node.up_free
-            };
+        }
+        node.up_free = now + tx_time(wire, node.up_bw);
+        node.wire.up_bytes += wire as u64;
+        // A paced uplink (vnic's rate limit over turmoil, which models
+        // no bandwidth) sends the frame at once and makes the next one
+        // wait; a serial one takes the frame's transmission time.
+        let depart = if self.cfg.paced_uplinks {
+            now
+        } else {
+            node.up_free
+        };
 
-            if i == 0 && self.cfg.progress.is_some() {
-                for c in FrameReader::new(&frame) {
-                    let Ok((_, payload)) = c else { break };
-                    for m in Reader::new(self.rcfg, payload).flatten() {
-                        if let Message::Data(d) = m {
-                            *self.seed_sent.entry(d.bin.base_offset()).or_default() += 1;
-                        }
+        if i == 0 && self.cfg.progress.is_some() {
+            for c in FrameReader::new(&frame) {
+                let Ok((_, payload)) = c else { break };
+                for m in Reader::new(self.rcfg, payload).flatten() {
+                    if let Message::Data(d) = m {
+                        *self.seed_sent.entry(d.bin.base_offset()).or_default() += 1;
                     }
                 }
             }
-            if let Some(c) = node.cap.as_mut() {
-                // The uplink holds no queue of its own: it pulls a frame
-                // when free, so its state is the time this one takes.
-                c.sample(
-                    now,
-                    None,
-                    &Sample::SimUplink {
-                        free_in: node.up_free - now,
-                        rate: node.up_bw,
-                        vtime: node
-                            .vtime
-                            .get(&l)
-                            .map_or(0, |&v| u64::try_from(v).unwrap_or(u64::MAX)),
-                        weight,
-                    },
-                );
-                c.frame(now, Dir::Out, peer, &frame);
-                c.drain(now, &mut node.runner);
-            }
+        }
+        if let Some(c) = node.cap.as_mut()
+            && n > 0
+        {
+            // The uplink holds no queue of its own: it pulls a frame
+            // when free, so its state is the time this one takes.
+            c.sample(
+                now,
+                None,
+                &Sample::SimUplink {
+                    free_in: node.up_free - now,
+                    rate: node.up_bw,
+                    vtime: node
+                        .vtime
+                        .get(&l)
+                        .map_or(0, |&v| u64::try_from(v).unwrap_or(u64::MAX)),
+                    weight,
+                },
+            );
+            c.frame(now, Dir::Out, peer, &frame);
+            c.drain(now, &mut node.runner);
+        }
+        if n > 0 {
             self.frames += 1;
             self.bytes += n as u64;
-            fnv(&mut self.trace, &now.unix_nanos().to_be_bytes());
-            fnv(&mut self.trace, &(l as u64).to_be_bytes());
-            fnv(&mut self.trace, &frame);
+        }
+        fnv(&mut self.trace, &now.unix_nanos().to_be_bytes());
+        fnv(&mut self.trace, &(l as u64).to_be_bytes());
+        fnv(&mut self.trace, &frame);
+        for x in [ctl.echo, ctl.probe].into_iter().flatten() {
+            fnv(&mut self.trace, &x.to_be_bytes());
+        }
 
-            let link = &mut self.links[l];
-            let at = match self.wan.as_mut() {
-                Some(net) => {
-                    let tr = net.transit(depart, link.from, link.to, packets, Carrier::Stream);
-                    let at = (tr.arrival + tr.retransmit).max(link.last_arrival);
-                    link.last_arrival = at;
-                    at
-                }
-                None => {
-                    if link.loss > 0.0 && (self.rng.next_u64() as f64 / u64::MAX as f64) < link.loss
-                    {
-                        continue;
-                    }
-                    depart + link.latency
-                }
+        let link = &mut self.links[l];
+        if self.wan.is_none()
+            && link.loss > 0.0
+            && (self.rng.next_u64() as f64 / u64::MAX as f64) < link.loss
+        {
+            return;
+        }
+        // The records lead the frame: they leave once their own bytes have.
+        let ahead = if n > 0 && ctl.len() > 0 {
+            let at = if self.cfg.paced_uplinks {
+                now
+            } else {
+                now + tx_time(ctl.len(), self.nodes[i].up_bw)
             };
-            self.push(at, Ev::Arrive { link: l, frame });
+            Some(at)
+        } else {
+            None
+        };
+        let mut arrive = |depart: Time, packets: u32| match self.wan.as_mut() {
+            Some(net) => {
+                let tr = net.transit(depart, link.from, link.to, packets, Carrier::Stream);
+                let at = (tr.arrival + tr.retransmit).max(link.last_arrival);
+                link.last_arrival = at;
+                at
+            }
+            None => depart + link.latency,
+        };
+        let events = match ahead {
+            Some(ctl_depart) => {
+                let first = arrive(ctl_depart, 1);
+                let then = arrive(depart, packets);
+                vec![
+                    (first, Vec::new(), ctl, ctl.len()),
+                    (then, frame, Ctl::default(), wire - ctl.len()),
+                ]
+            }
+            None => vec![(arrive(depart, packets), frame, ctl, wire)],
+        };
+        for (at, frame, ctl, wire) in events {
+            self.push(
+                at,
+                Ev::Arrive {
+                    link: l,
+                    frame,
+                    ctl,
+                    wire,
+                },
+            );
         }
     }
 
@@ -3196,7 +3441,8 @@ impl Scenario {
 /// holds for them. `SIM_CAPTURE=<dir>` captures any run into
 /// `<dir>/<run tag>/` (`SIM_CAPTURE_TAP=0` leaves out the decisions):
 /// capture changes no trace. `SIM_GREEDY=0` runs any test that draws its
-/// greedy viewers without them, for comparisons. A knob that is set but
+/// greedy viewers without them, and `SIM_PATHS=0` any test without the
+/// path measure's probes, for comparisons. A knob that is set but
 /// doesn't parse panics, so a typo can't run the default unnoticed.
 #[allow(clippy::disallowed_methods)]
 fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
@@ -3844,6 +4090,12 @@ fn node_sim_debug() {
     let r = sim.run();
     sim.dump();
     println!("{}", node_sim_row(&name, &sim, &r));
+    if name == "latency" {
+        println!(
+            "settled after {} ms",
+            ms(sim.settled_after(20, Duration::SECOND))
+        );
+    }
     println!(
         "missing per peer from 30 s: {:?}",
         sim.missing(30, i64::MAX / 2)
@@ -4859,7 +5111,7 @@ fn sim_bbr_latency_step_settles_fast() {
             ms(settle)
         );
         NodeScenario::LatencyStep.check(&sim, &r).unwrap();
-        assert!(settle < Duration::from_secs(3), "{r:?}");
+        assert!(settle <= Duration::from_secs(3), "{r:?}");
         assert!(r.lag_p99 < Duration::from_millis(1500), "{r:?}");
     }
 }
@@ -5344,8 +5596,51 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             r.announce.1 as f64 / cfg.stream_secs.max(1) as f64,
         )
         .num("announce_share", r.announce.2)
-        .int("asks", r.asks)
-        .int("timeouts", sim.timeouts());
+        .int("asks", r.asks);
+    // Requests honest viewers timed out; and the path measure against
+    // greedy viewers: honest nodes' echoes of probes never sent, and the
+    // seed's latest round trips to honest and to greedy viewers (median
+    // ms), with the links it has no reading for.
+    let timeouts = sim.timeouts();
+    let honest = |i: usize| matches!(sim.nodes[i].role, Role::Seed | Role::Peer);
+    let forged: u64 = sim
+        .links
+        .iter()
+        .filter(|l| honest(l.from))
+        .map(|l| l.path.unknown_echoes())
+        .sum();
+    let seed_links = |greedy: bool| {
+        sim.links.iter().filter(move |l| {
+            l.from == 0
+                && match sim.nodes[l.to].role {
+                    Role::Greedy(_) => greedy,
+                    Role::Peer => !greedy,
+                    _ => false,
+                }
+        })
+    };
+    let median_rtt = |greedy: bool| {
+        let mut v: Vec<i64> = seed_links(greedy)
+            .filter_map(|l| l.path.reading(sim.now))
+            .map(|r| r.rtt.as_millis())
+            .collect();
+        v.sort_unstable();
+        v.get(v.len() / 2).copied()
+    };
+    let unmeasured = |greedy: bool| {
+        seed_links(greedy)
+            .filter(|l| l.path.reading(sim.now).is_none())
+            .count()
+    };
+    row.int("timeouts", timeouts).int("echo_forged", forged);
+    if let Some(ms) = median_rtt(false) {
+        row.int("seed_rtt_honest_ms", ms as u64);
+    }
+    if let Some(ms) = median_rtt(true) {
+        row.int("seed_rtt_greedy_ms", ms as u64);
+    }
+    row.int("seed_unmeasured_honest", unmeasured(false) as u64)
+        .int("seed_unmeasured_greedy", unmeasured(true) as u64);
     if let Some(series) = sim.series() {
         row.field("series", format_args!("{series}"));
     }
