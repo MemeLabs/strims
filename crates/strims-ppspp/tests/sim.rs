@@ -53,8 +53,9 @@
 //! their own links read farther, or go unmeasured, which no greedy viewer
 //! wants. `SIM_ECHO_GREED=1` makes them anyway, to check that: free riders
 //! hold their echoes [`ECHO_HOLD`], and liars echo nonces they never read.
-//! `SIM_PATHS=0` runs without the model. `SIM_PATH` moves the runners' readers of round trips from pings to
-//! it (`PathSources`: `link`, or readers joined by `+`).
+//! The runners' upload meters and adaptive seeds read it; `SIM_RTT=link`
+//! moves their request controllers' round trips from pings to it too
+//! (`RttSource`).
 //!
 //! The push/pull comparison runs the same scenarios with the same seed in
 //! every [`PushMode`] and stream count: `sim_push_*` tests assert the
@@ -105,8 +106,8 @@ use strims_ppspp::codec::{
 };
 use strims_ppspp::store::{self, BufferReader};
 use strims_ppspp::{
-    DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, PathSources, PeerKey, PushMode, PushStats,
-    ReportCounters, RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId,
+    DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, PeerKey, PushMode, PushStats, ReportCounters,
+    RequestControllerKind, RttSource, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId,
     SwarmKey, SwarmOptions, Writer, WriterOptions,
 };
 use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
@@ -316,15 +317,12 @@ struct Config {
     /// Capture every node's frames (see [`CaptureTo`]); `SIM_CAPTURE`
     /// sets it for any run.
     capture: Option<CaptureTo>,
-    /// Model vnic's path measure (see the module docs); `SIM_PATHS=0` runs
-    /// without it.
-    paths: bool,
     /// Greedy viewers hold or forge their echoes (see the module docs);
     /// `SIM_ECHO_GREED=1` sets it for any run.
     echo_greed: bool,
-    /// Where the runners' readers of round trips take them; `SIM_PATH`
+    /// Where the runners' request controllers take round trips; `SIM_RTT`
     /// sets it for any run.
-    path_sources: PathSources,
+    rtt_source: RttSource,
 }
 
 /// Where a run's captures go: `node-<i>.ppcap` in `dir`, one per node,
@@ -394,9 +392,8 @@ impl Config {
             pin: None,
             wan: None,
             capture: None,
-            paths: knob::<u32>("SIM_PATHS") != Some(0),
             echo_greed: knob::<u32>("SIM_ECHO_GREED") == Some(1),
-            path_sources: knob("SIM_PATH").unwrap_or_default(),
+            rtt_source: knob("SIM_RTT").unwrap_or_default(),
         }
     }
 }
@@ -806,10 +803,6 @@ impl Sim {
             (1..=cfg.peers).map(|i| greedy.get(&i).map_or(Role::Peer, |&g| Role::Greedy(g))),
         );
         roles.extend(cfg.adversaries.iter().map(|&a| Role::Adversary(a)));
-        assert!(
-            cfg.paths || cfg.path_sources == PathSources::default(),
-            "SIM_PATH reads the path model: SIM_PATHS=0 leaves it out"
-        );
         if let Some(w) = &cfg.wan {
             assert_eq!(w.sites.len(), roles.len(), "a site per node");
             assert!(cfg.loss <= 0.0, "WAN paths lose packets of their own");
@@ -818,7 +811,7 @@ impl Sim {
         let mut nodes = Vec::new();
         for (i, &role) in roles.iter().enumerate() {
             let mut runner = Runner::new(fork(&mut rng));
-            runner.set_path_sources(cfg.path_sources);
+            runner.set_rtt_source(cfg.rtt_source);
             let (writer, swarm) = if role == Role::Seed {
                 let (w, s) = Writer::new(
                     WriterOptions {
@@ -1140,21 +1133,19 @@ impl Sim {
             {
                 t = t.min(n.up_free.max(self.now));
             }
-            if self.cfg.paths {
-                for &l in n.links.values() {
-                    // Control already due waits for the uplink; otherwise
-                    // its deadlines are still ahead.
-                    let link = &self.links[l];
-                    if link.control_due(self.now) {
-                        t = t.min(n.up_free.max(self.now));
-                        continue;
-                    }
-                    if link.echo.is_pending() {
-                        t = t.min(link.echo_at);
-                    }
-                    if link.path.can_probe() {
-                        t = t.min(link.last_send + KEEPALIVE);
-                    }
+            for &l in n.links.values() {
+                // Control already due waits for the uplink; otherwise its
+                // deadlines are still ahead.
+                let link = &self.links[l];
+                if link.control_due(self.now) {
+                    t = t.min(n.up_free.max(self.now));
+                    continue;
+                }
+                if link.echo.is_pending() {
+                    t = t.min(link.echo_at);
+                }
+                if link.path.can_probe() {
+                    t = t.min(link.last_send + KEEPALIVE);
                 }
             }
         }
@@ -1277,11 +1268,9 @@ impl Sim {
         for i in 0..self.nodes.len() {
             let n = &mut self.nodes[i];
             if n.role != Role::Dead && n.runner.poll_timeout().is_some_and(|t| t <= now) {
-                if self.cfg.paths {
-                    for &l in n.links.values() {
-                        let link = &self.links[l];
-                        n.runner.set_peer_path(link.peer, link.path.reading(now));
-                    }
+                for &l in n.links.values() {
+                    let link = &self.links[l];
+                    n.runner.set_peer_path(link.peer, link.path.reading(now));
                 }
                 n.runner.handle_timeout(now);
             }
@@ -2078,12 +2067,9 @@ impl Sim {
                 return;
             }
             // Control owed on a link with no data waiting goes on its own.
-            if self.cfg.paths
-                && let Some(l) = node.links.values().copied().find(|&l| {
-                    self.links[l].control_due(now)
-                        && !node.runner.wants_transmit(self.links[l].peer)
-                })
-            {
+            if let Some(l) = node.links.values().copied().find(|&l| {
+                self.links[l].control_due(now) && !node.runner.wants_transmit(self.links[l].peer)
+            }) {
                 self.send(i, l, Vec::new());
                 continue;
             }
@@ -2101,10 +2087,8 @@ impl Sim {
             if let Some(c) = node.cap.as_mut() {
                 c.drain(now, &mut node.runner);
             }
-            if self.cfg.paths {
-                node.runner
-                    .set_peer_path(peer, self.links[l].path.reading(now));
-            }
+            node.runner
+                .set_peer_path(peer, self.links[l].path.reading(now));
             let mut n = node.runner.poll_transmit(peer, now, &mut self.buf);
             if n == 0 {
                 continue;
@@ -2178,11 +2162,7 @@ impl Sim {
     fn send(&mut self, i: usize, l: usize, frame: Vec<u8>) {
         let now = self.now;
         let n = frame.len();
-        let ctl = if self.cfg.paths {
-            self.take_control(l, n)
-        } else {
-            Ctl::default()
-        };
+        let ctl = self.take_control(l, n);
         let peer = self.links[l].peer;
         let node = &mut self.nodes[i];
         if i != 0 {
@@ -3459,9 +3439,8 @@ impl Scenario {
 /// holds for them. `SIM_CAPTURE=<dir>` captures any run into
 /// `<dir>/<run tag>/` (`SIM_CAPTURE_TAP=0` leaves out the decisions):
 /// capture changes no trace. `SIM_GREEDY=0` runs any test that draws its
-/// greedy viewers without them, `SIM_PATHS=0` any test without the path
-/// measure's probes, `SIM_PATH` any test with its readers of round trips
-/// on the path measure, and `SIM_ECHO_GREED=1` any with greedy viewers
+/// greedy viewers without them, `SIM_RTT` any test with its request
+/// controllers' round trips elsewhere, and `SIM_ECHO_GREED=1` any with greedy viewers
 /// that hold or forge their echoes, for comparisons. A knob that is set but
 /// doesn't parse panics, so a typo can't run the default unnoticed.
 #[allow(clippy::disallowed_methods)]
