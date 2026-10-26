@@ -106,7 +106,7 @@ use crate::codec::{
     self, Announce, Cancel, Have, MAX_PEER_ID, Message, MessageWriter, Ping, Pong, Request, Stream,
     StreamCancel, StreamClose, StreamOpen, StreamRequest,
 };
-use crate::controller::{ChannelController, RequestController, RequestControllerKind, RttSource};
+use crate::controller::{ChannelController, RequestController, RequestControllerKind};
 use crate::integrity::ProtectionMethod;
 use crate::options::{DeliveryMode, PushMode, SchedulingMethod, SeedPolicy};
 use crate::runner::{PeerKey, SwarmKey, TICK_INTERVAL};
@@ -126,7 +126,7 @@ pub(crate) const SCHEDULER_GC_INTERVAL: Duration = Duration::from_secs(5);
 /// How long a channel waits for the peer's handshake before it sends
 /// RESTART (again).
 pub(crate) const SCHEDULER_RESTART_COOLDOWN: Duration = Duration::from_secs(1);
-/// How often a channel that writes also pings, on [`RttSource::Ping`].
+/// How often a channel that writes also pings.
 pub(crate) const PING_INTERVAL: Duration = Duration::from_secs(1);
 /// How long a channel leaves bins alone after its peer failed to deliver
 /// them: two ticks, so every other channel gets a write cycle to request
@@ -285,9 +285,6 @@ pub(crate) struct SwarmState {
     pub(crate) wasted_chunks: u64,
     /// Requests that timed out unanswered.
     requests_timed_out: u64,
-    /// Where the request controllers take round trips
-    /// (`Runner::set_rtt_source`).
-    rtt_source: RttSource,
     /// Chunks written to peers, pushes included, and the pushes alone.
     chunks_sent: u64,
     pushed_chunks: u64,
@@ -1133,7 +1130,6 @@ impl PeerSwarmScheduler {
                 have_bin_max: Bin(0),
                 wasted_chunks: 0,
                 requests_timed_out: 0,
-                rtt_source: RttSource::default(),
                 chunks_sent: 0,
                 pushed_chunks: 0,
                 sent_bins: Map::new(),
@@ -1732,11 +1728,6 @@ impl PeerSwarmScheduler {
         }
     }
 
-    /// Where the request controllers take round trips.
-    pub(crate) fn set_rtt_source(&mut self, source: RttSource) {
-        self.s.rtt_source = source;
-    }
-
     /// A pong counts once, and only for the outstanding ping: its round
     /// trip sets the request timeout, so a forged or repeated pong must not.
     pub(crate) fn handle_pong(&mut self, peer: PeerKey, nonce: u64, now: Time) {
@@ -1745,34 +1736,19 @@ impl PeerSwarmScheduler {
         };
         if c.ping_nonce != 0 && nonce == c.ping_nonce {
             c.ping_nonce = 0;
-            if self.s.rtt_source == RttSource::Ping {
-                let rtt = now - Time::from_unix_nanos(nonce as i64);
-                c.controller.on_ping_rtt(now, rtt);
-            }
+            let rtt = now - Time::from_unix_nanos(nonce as i64);
+            c.controller.on_ping_rtt(now, rtt);
         }
     }
 
-    /// A round trip of the link to `peer`, from the driver's path measure.
-    /// It ranks an adaptive seed's holders, and goes to the request
-    /// controller on [`RttSource::Link`]. Each sample counts once: the
-    /// driver vouches for it. The channel then writes at the next tick, as
-    /// after a pong.
-    pub(crate) fn handle_path_sample(
-        &mut self,
-        peer: PeerKey,
-        rtt: Duration,
-        now: Time,
-        q: &mut impl PeerTaskQueue,
-    ) {
-        let key = self.s.key;
-        let Some(c) = self.channels.get_mut(&peer) else {
+    /// A round trip of the link to `peer`, from the driver's path measure:
+    /// it ranks an adaptive seed's holders. Each sample counts once: the
+    /// driver vouches for it.
+    pub(crate) fn handle_path_sample(&mut self, peer: PeerKey, rtt: Duration, now: Time) {
+        if !self.s.is_seed {
             return;
-        };
-        if self.s.rtt_source == RttSource::Link {
-            c.controller.on_ping_rtt(now, rtt);
-            q.enqueue(peer, key);
         }
-        if self.s.is_seed {
+        if let Some(c) = self.channels.get_mut(&peer) {
             push::seed::round_trip(&mut c.push, rtt, now);
         }
     }
@@ -1957,9 +1933,8 @@ impl PeerSwarmScheduler {
         let Some((s, c)) = self.channel(peer) else {
             return Ok(());
         };
-        // The controller takes a ping a second, unless it reads round trips
-        // elsewhere.
-        if s.rtt_source == RttSource::Ping && now > c.next_ping_time {
+        // The controller takes a ping a second.
+        if now > c.next_ping_time {
             let nonce = now.unix_nanos() as u64;
             cw.write(&Message::Ping(Ping { nonce }))?;
             c.next_ping_time = now + PING_INTERVAL;

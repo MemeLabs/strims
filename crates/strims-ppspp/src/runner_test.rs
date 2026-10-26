@@ -990,32 +990,39 @@ fn the_tap_tells_pushes_from_answers() {
 
 #[test]
 fn a_path_sample_reaches_every_swarm_the_peer_shares() {
-    for (source, want) in [
-        (RttSource::Ping, Duration::ZERO),
-        (RttSource::Link, Duration::from_millis(30)),
-    ] {
-        let mut r = Runner::new(det_rng(1));
-        r.set_rtt_source(source);
-        let peer = r.add_peer(b"peer", t(0));
-        let swarms: Vec<SwarmKey> = (1..3u8)
-            .map(|i| {
-                let s = r.add_swarm(Swarm::new(SwarmId::new(&[i; 32]), options()).unwrap());
-                r.run_swarm(peer, s, u64::from(i), u64::from(i), t(0))
-                    .unwrap();
-                s
-            })
-            .collect();
-        r.on_path_sample(
-            peer,
-            PathSample {
-                at: t(10),
-                rtt: Duration::from_millis(30),
-            },
-        );
-        for s in swarms {
-            let c = r.channel_stats(peer, s).unwrap().scheduler;
-            assert_eq!(c.rtt_mean, want, "{source:?}");
-        }
+    // Each adaptive seed ranks its holders by it; the request controllers
+    // take pings alone.
+    let seed = SwarmOptions {
+        scheduling_method: crate::SchedulingMethod::SEED,
+        seed: crate::SeedPolicy {
+            allocation: crate::SeedAllocation::Adaptive,
+            qos: crate::SeedQos::ByAllocation,
+        },
+        ..hybrid()
+    };
+    let mut r = Runner::new(det_rng(1));
+    let peer = r.add_peer(b"peer", t(0));
+    let swarms: Vec<SwarmKey> = (1..3u8)
+        .map(|i| {
+            let s = r.add_swarm(Swarm::new(SwarmId::new(&[i; 32]), seed.clone()).unwrap());
+            r.run_swarm(peer, s, u64::from(i), u64::from(i), t(0))
+                .unwrap();
+            s
+        })
+        .collect();
+    r.on_path_sample(
+        peer,
+        PathSample {
+            at: t(10),
+            rtt: Duration::from_millis(30),
+        },
+    );
+    for s in swarms {
+        let a = r.seed_allocation(s, t(10)).unwrap();
+        let n = a.neighbours.iter().find(|n| n.peer == peer).unwrap();
+        assert_eq!(n.min_rtt, Some(Duration::from_millis(30)));
+        let c = r.channel_stats(peer, s).unwrap().scheduler;
+        assert_eq!(c.rtt_mean, Duration::ZERO);
     }
 }
 

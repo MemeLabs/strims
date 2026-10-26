@@ -22,7 +22,6 @@ use strims_binmap::Bin;
 
 use crate::channel::{ChannelMetrics, HandshakeError, MeteredWriter, validate_handshake};
 use crate::codec::{self, FrameReader, Message, Reader, ReaderConfig, Stream};
-use crate::controller::RttSource;
 use crate::epoch::EpochError;
 use crate::integrity::ChannelVerifier;
 use crate::options::PushMode;
@@ -294,8 +293,7 @@ pub struct Runner {
     next_tick: Time,
     next_weight_update: Time,
     events: Events,
-    /// Scratch for `handle_frame` and `on_path_sample`. Bound: one per
-    /// channel of the peer.
+    /// Scratch for `handle_frame`. Bound: one per channel of the peer.
     touched: Vec<SwarmKey>,
     /// The latest time a call passed (for calls that take none).
     last_now: Time,
@@ -307,9 +305,6 @@ pub struct Runner {
     /// Lifecycle events; the schedulers keep their own.
     tap: Tap,
     tap_level: TapLevel,
-    /// Where the request controllers take round trips
-    /// ([`Runner::set_rtt_source`]).
-    rtt_source: RttSource,
 }
 
 /// Hands a swarm's queued events to its scheduler and the driver. Called
@@ -514,7 +509,6 @@ impl Runner {
             committed: 0.0,
             tap: Tap::default(),
             tap_level: TapLevel::Off,
-            rtt_source: RttSource::default(),
         }
     }
 
@@ -530,17 +524,6 @@ impl Runner {
 
     // --- the link's path --------------------------------------------------
 
-    /// Where the request controllers take round trips (see
-    /// [`RttSource`]).
-    pub fn set_rtt_source(&mut self, source: RttSource) {
-        self.rtt_source = source;
-        for rs in self.swarms.values_mut() {
-            if let Some(s) = rs.scheduler.as_mut() {
-                s.set_rtt_source(source);
-            }
-        }
-    }
-
     /// The driver's measure of the link to `peer` as of its latest echo
     /// ([`strims_base::path`]: vnic's probes, or a simulation's model of
     /// them), or `None` before one. The driver sets it every pass, so it is
@@ -553,29 +536,19 @@ impl Runner {
     }
 
     /// A round trip of the link to `peer`, from the driver's path measure:
-    /// one call per echo. Every channel to `peer` takes it: an adaptive
-    /// seed's holder ranking, and the request controller on
-    /// [`RttSource::Link`].
+    /// one call per echo. Every channel to `peer` takes it, for an adaptive
+    /// seed's holder ranking.
     pub fn on_path_sample(&mut self, peer: PeerKey, sample: PathSample) {
-        let Runner {
-            swarms,
-            peers,
-            events,
-            touched,
-            ..
-        } = self;
-        let Some(p) = peers.get(peer) else {
+        let Some(p) = self.peers.get(peer) else {
             return;
         };
-        touched.clear();
-        touched.extend(p.channels.values().copied());
-        let mut q = Queues {
-            peers,
-            transmit: &mut events.transmit,
-        };
-        for &key in touched.iter() {
-            if let Some(sched) = swarms.get_mut(key).and_then(|rs| rs.scheduler.as_mut()) {
-                sched.handle_path_sample(peer, sample.rtt, sample.at, &mut q);
+        for &key in p.channels.values() {
+            if let Some(sched) = self
+                .swarms
+                .get_mut(key)
+                .and_then(|rs| rs.scheduler.as_mut())
+            {
+                sched.handle_path_sample(peer, sample.rtt, sample.at);
             }
         }
     }
@@ -866,7 +839,6 @@ impl Runner {
             next_tick,
             tap,
             tap_level,
-            rtt_source,
             ..
         } = self;
         let p = peers.get_mut(peer).ok_or(RunnerError::UnknownPeer)?;
@@ -889,7 +861,6 @@ impl Runner {
             .scheduler
             .get_or_insert_with(|| PeerSwarmScheduler::new(&rs.swarm, swarm, &mut fork(rng), now));
         sched.tap_mut().set(*tap_level == TapLevel::All);
-        sched.set_rtt_source(*rtt_source);
         tap.push(TapEvent {
             swarm: Some(swarm),
             peer: Some(peer),
@@ -919,10 +890,11 @@ impl Runner {
             sched.pin_allocation(rs.seed_pin.clone(), &mut q);
         }
         sched.add_channel(peer, &id, now, &mut q);
-        // The link's latest round trip, for its readers, as the first ping
-        // and its pong give one with the handshake.
+        // The link's latest round trip, for an adaptive seed's holder
+        // ranking: the probe at the link's start was echoed before any
+        // swarm ran.
         if let Some(r) = q.peers.get(peer).and_then(|p| p.link_path) {
-            sched.handle_path_sample(peer, r.rtt, now, &mut q);
+            sched.handle_path_sample(peer, r.rtt, now);
         }
         Ok(())
     }

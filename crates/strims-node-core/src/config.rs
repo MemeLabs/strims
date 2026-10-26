@@ -64,9 +64,6 @@ pub struct NodeConfig {
     /// measurement that reads more (see `Runner::set_upload_capacity`).
     /// `None` takes `rate_limit`, when one below QoS's default is set.
     pub upload_capacity: Option<u64>,
-    /// Where ppspp's request controllers take round trips: pings, or
-    /// vnic's path measure (`Runner::set_rtt_source`).
-    pub rtt_source: strims_ppspp::RttSource,
     /// vnic's peer budget, which gates peer exchange. 0 is unlimited.
     /// Change it at runtime with `Node::set_max_peers`.
     pub max_peers: u32,
@@ -231,7 +228,6 @@ impl NodeConfig {
             allow_insecure_ws: false,
             rate_limit: None,
             upload_capacity: None,
-            rtt_source: strims_ppspp::RttSource::default(),
             max_peers: 0,
             tcp: TcpOptions::default(),
             tcp_socket: TcpSocketConfig::default(),

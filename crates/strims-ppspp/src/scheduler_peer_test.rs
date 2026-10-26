@@ -864,63 +864,48 @@ fn requests_pruned_behind_the_store_leave_the_flight() {
 }
 
 #[test]
-fn channels_ping_once_a_second_only_for_a_controller_on_pings() {
-    let pings = |source: RttSource| {
-        let mut f = fixture(SwarmOptions {
-            push_mode: PushMode::Hybrid,
-            ..Default::default()
-        });
-        f.sched.set_rtt_source(source);
-        let mut q = MockQueue::default();
-        let p = ready_channel(&mut f, &mut q);
-        let cfg = f.swarm.reader_config();
-        let mut n = 0;
-        for ms in (0..3000).step_by(100) {
-            let (sched, swarm) = (&mut f.sched, &f.swarm);
-            let at = now() + Duration::from_millis(ms);
-            let msgs = written(|cw| sched.write(p, at, swarm, cw).unwrap(), cfg);
-            n += msgs
-                .iter()
-                .filter(|m| matches!(m, Message::Ping(_)))
-                .count();
-        }
-        n
-    };
-    assert_eq!(pings(RttSource::Ping), 3);
-    assert_eq!(pings(RttSource::Link), 0);
+fn channels_ping_once_a_second() {
+    let mut f = fixture(SwarmOptions {
+        push_mode: PushMode::Hybrid,
+        ..Default::default()
+    });
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let cfg = f.swarm.reader_config();
+    let mut n = 0;
+    for ms in (0..3000).step_by(100) {
+        let (sched, swarm) = (&mut f.sched, &f.swarm);
+        let at = now() + Duration::from_millis(ms);
+        let msgs = written(|cw| sched.write(p, at, swarm, cw).unwrap(), cfg);
+        n += msgs
+            .iter()
+            .filter(|m| matches!(m, Message::Ping(_)))
+            .count();
+    }
+    assert_eq!(n, 3);
 }
 
 #[test]
-fn pongs_and_path_samples_reach_only_the_controller_that_reads_them() {
+fn pongs_reach_the_controller_and_path_samples_dont() {
     for kind in CONTROLLERS {
-        for source in [RttSource::Ping, RttSource::Link] {
-            let mut f = fixture(with_controller(pull(), kind));
-            f.sched.set_rtt_source(source);
-            let mut q = MockQueue::default();
-            let p = ready_channel(&mut f, &mut q);
-            q.enqueued.clear();
-            let cfg = f.swarm.reader_config();
-            let (sched, swarm) = (&mut f.sched, &f.swarm);
-            let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
-            let nonce = match msgs.first() {
-                Some(Message::Ping(ping)) => ping.nonce,
-                _ => now().unix_nanos() as u64,
-            };
-            f.sched
-                .handle_pong(p, nonce, now() + Duration::from_millis(40));
-            f.sched
-                .handle_path_sample(p, Duration::from_millis(70), now(), &mut q);
-            let (rtt, enqueued) = match source {
-                RttSource::Ping => (40, 0),
-                RttSource::Link => (70, 1),
-            };
-            assert_eq!(
-                f.sched.channels[&p].controller.rtt(),
-                Duration::from_millis(rtt),
-                "{kind:?} {source:?}"
-            );
-            assert_eq!(q.enqueued.len(), enqueued, "{kind:?} {source:?}");
-        }
+        let mut f = fixture(with_controller(pull(), kind));
+        let mut q = MockQueue::default();
+        let p = ready_channel(&mut f, &mut q);
+        let cfg = f.swarm.reader_config();
+        let (sched, swarm) = (&mut f.sched, &f.swarm);
+        let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+        let Some(Message::Ping(ping)) = msgs.first() else {
+            panic!("{kind:?} {msgs:?}")
+        };
+        f.sched
+            .handle_pong(p, ping.nonce, now() + Duration::from_millis(40));
+        f.sched
+            .handle_path_sample(p, Duration::from_millis(70), now());
+        assert_eq!(
+            f.sched.channels[&p].controller.rtt(),
+            Duration::from_millis(40),
+            "{kind:?}"
+        );
     }
 }
 
@@ -946,9 +931,9 @@ fn path_samples_rank_a_seeds_holders_and_pongs_dont() {
         .handle_pong(p, ping, now() + Duration::from_millis(10));
     assert_eq!(min_rtt(&mut f), None);
     f.sched
-        .handle_path_sample(p, Duration::from_millis(30), now(), &mut q);
+        .handle_path_sample(p, Duration::from_millis(30), now());
     f.sched
-        .handle_path_sample(p, Duration::from_millis(20), now(), &mut q);
+        .handle_path_sample(p, Duration::from_millis(20), now());
     assert_eq!(min_rtt(&mut f), Some(Duration::from_millis(20)));
 }
 

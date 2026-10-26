@@ -53,9 +53,7 @@
 //! their own links read farther, or go unmeasured, which no greedy viewer
 //! wants. `SIM_ECHO_GREED=1` makes them anyway, to check that: free riders
 //! hold their echoes [`ECHO_HOLD`], and liars echo nonces they never read.
-//! The runners' upload meters and adaptive seeds read it; `SIM_RTT=link`
-//! moves their request controllers' round trips from pings to it too
-//! (`RttSource`).
+//! The runners' upload meters and adaptive seeds read it.
 //!
 //! The push/pull comparison runs the same scenarios with the same seed in
 //! every [`PushMode`] and stream count: `sim_push_*` tests assert the
@@ -107,8 +105,8 @@ use strims_ppspp::codec::{
 use strims_ppspp::store::{self, BufferReader};
 use strims_ppspp::{
     DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, PeerKey, PushMode, PushStats, ReportCounters,
-    RequestControllerKind, RttSource, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId,
-    SwarmKey, SwarmOptions, Writer, WriterOptions,
+    RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey,
+    SwarmOptions, Writer, WriterOptions,
 };
 use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
 use strims_wan::sample::pick;
@@ -320,9 +318,6 @@ struct Config {
     /// Greedy viewers hold or forge their echoes (see the module docs);
     /// `SIM_ECHO_GREED=1` sets it for any run.
     echo_greed: bool,
-    /// Where the runners' request controllers take round trips; `SIM_RTT`
-    /// sets it for any run.
-    rtt_source: RttSource,
 }
 
 /// Where a run's captures go: `node-<i>.ppcap` in `dir`, one per node,
@@ -393,7 +388,6 @@ impl Config {
             wan: None,
             capture: None,
             echo_greed: knob::<u32>("SIM_ECHO_GREED") == Some(1),
-            rtt_source: knob("SIM_RTT").unwrap_or_default(),
         }
     }
 }
@@ -811,7 +805,6 @@ impl Sim {
         let mut nodes = Vec::new();
         for (i, &role) in roles.iter().enumerate() {
             let mut runner = Runner::new(fork(&mut rng));
-            runner.set_rtt_source(cfg.rtt_source);
             let (writer, swarm) = if role == Role::Seed {
                 let (w, s) = Writer::new(
                     WriterOptions {
@@ -3439,10 +3432,9 @@ impl Scenario {
 /// holds for them. `SIM_CAPTURE=<dir>` captures any run into
 /// `<dir>/<run tag>/` (`SIM_CAPTURE_TAP=0` leaves out the decisions):
 /// capture changes no trace. `SIM_GREEDY=0` runs any test that draws its
-/// greedy viewers without them, `SIM_RTT` any test with its request
-/// controllers' round trips elsewhere, and `SIM_ECHO_GREED=1` any with greedy viewers
-/// that hold or forge their echoes, for comparisons. A knob that is set but
-/// doesn't parse panics, so a typo can't run the default unnoticed.
+/// greedy viewers without them, and `SIM_ECHO_GREED=1` any with greedy
+/// viewers that hold or forge their echoes, for comparisons. A knob that is
+/// set but doesn't parse panics, so a typo can't run the default unnoticed.
 #[allow(clippy::disallowed_methods)]
 fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
     let s = std::env::var(name).ok()?;

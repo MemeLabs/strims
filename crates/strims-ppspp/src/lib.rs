@@ -94,7 +94,7 @@ mod windowed;
 mod writer;
 
 pub use constants::{MINIMUM_PROTOCOL_VERSION, PROTOCOL_VERSION};
-pub use controller::{RequestControllerKind, RttSource};
+pub use controller::RequestControllerKind;
 pub use epoch::{Epoch, EpochError};
 pub use options::{
     DeliveryMode, PushMode, SchedulingMethod, SeedAllocation, SeedPolicy, SeedQos, SwarmOptions,

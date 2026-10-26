@@ -306,7 +306,6 @@ impl World {
         c.max_peers = spec.max_peers;
         c.rate_limit = spec.uplink;
         c.upload_capacity = spec.upload_capacity;
-        c.rtt_source = self.spec.rtt_source;
         c.vpn.routing = spec.routing.unwrap_or(self.spec.routing);
         if let Some(dir) = &self.spec.capture {
             let path = dir.join(format!("{}-{incarnation}.ppcap", spec.name));
