@@ -9,7 +9,7 @@ test = "sim_job"
 slot_mem_gib = 4
 
 [arms]
-vnic-acks = "78fa46fa"
+vnic-acks = "c80b1ac6"
 
 [env]
 SIM_SCENARIO = "cable-seed"
