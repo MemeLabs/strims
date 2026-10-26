@@ -22,7 +22,7 @@ test = [
 slot_mem_gib = 1
 
 [arms]
-vnic-acks = "vnic-acks"
+vnic-acks = "c9a1af65"
 
 [env]
 STRIMS_SIM_JOB = "1"
