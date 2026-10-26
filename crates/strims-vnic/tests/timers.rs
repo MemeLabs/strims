@@ -284,6 +284,7 @@ fn frames(wire: &[u8]) -> Vec<(u16, Vec<u8>)> {
 #[test]
 fn idle_links_send_keepalives() {
     let (mut a, la, mut b, lb) = linked();
+    a.host.set_probe_interval(None);
     assert_eq!(a.host.poll_timeout(), Some(at(10)));
     a.host.handle_timeout(at(10) - Duration::MILLISECOND);
     assert!(a.take_transmit(la).is_empty());
@@ -314,6 +315,7 @@ fn idle_links_send_keepalives() {
 #[test]
 fn busy_links_send_no_keepalives() {
     let (mut a, la, mut b, lb) = linked();
+    a.host.set_probe_interval(None);
     b.host.set_handler(lb, 7, 7).unwrap();
     let w = a.host.open_writer(la, 7, a.host.qos_root(), 0).unwrap();
     let mut t = now();
@@ -342,6 +344,7 @@ fn busy_links_send_no_keepalives() {
 #[test]
 fn keepalives_wait_behind_unsent_bytes() {
     let (mut a, la, _b, _lb) = linked();
+    a.host.set_probe_interval(None);
     let w = a.host.open_writer(la, 7, a.host.qos_root(), 0).unwrap();
     a.host.set_backlog(w).unwrap();
     a.host.poll_egress(now(), &mut |f| {
@@ -365,10 +368,12 @@ fn keepalives_on_aes_links_keep_the_stream_in_step() {
     b.host.set_handler(lb, 9, 9).unwrap();
     a.host.handle_timeout(at(10));
     let mut wire = a.take_transmit(la);
-    assert_eq!(wire.len(), 4);
-    assert_ne!(wire, [0xff, 0xff, 0, 0], "encrypted");
+    // A probe: the header and one record.
+    assert_eq!(wire.len(), 9);
+    assert_ne!(wire[..4], [0xff, 0xff, 0, 5], "encrypted");
     b.input(lb, at(10), &mut wire, &mut no_handlers).unwrap();
     assert_eq!(b.host.metrics().keepalive_read_count, 1);
+    assert_eq!(b.host.metrics().probe_read_count, 1);
     // A frame after it still decrypts.
     let w = a.host.open_writer(la, 9, a.host.qos_root(), 0).unwrap();
     a.host.set_backlog(w).unwrap();
@@ -384,6 +389,7 @@ fn keepalives_on_aes_links_keep_the_stream_in_step() {
 #[test]
 fn keepalive_interval_is_configurable() {
     let (mut a, la, _b, _lb) = linked();
+    a.host.set_probe_interval(None);
     a.host.set_keepalive_interval(Some(Duration::from_secs(3)));
     assert_eq!(a.host.poll_timeout(), Some(at(3)));
     a.host.handle_timeout(at(3));

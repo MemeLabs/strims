@@ -59,6 +59,7 @@
 //! link state changes since the last poll.
 
 pub mod aes_link;
+pub mod control;
 pub mod frame;
 pub mod host;
 pub mod interface;
@@ -76,8 +77,8 @@ pub use frame::{
 };
 pub use host::{
     AesLinkConfig, CloseReason, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_KEEPALIVE_INTERVAL,
-    DEFAULT_MAX_PENDING_LINKS, EgressFrame, Event, Fill, Host, HostConfig, InboundFrame,
-    LinkConfig, LinkKind, Peer, PeerInitError, PeerKey, WriterId, ports,
+    DEFAULT_MAX_PENDING_LINKS, DEFAULT_PROBE_INTERVAL, EgressFrame, Event, Fill, Host, HostConfig,
+    InboundFrame, LinkConfig, LinkKind, LinkPath, Peer, PeerInitError, PeerKey, WriterId, ports,
 };
 pub use interface::{
     CandidateError, CandidateErrors, DialTarget, LinkCandidate, LinkCandidatePool, LinkDescription,

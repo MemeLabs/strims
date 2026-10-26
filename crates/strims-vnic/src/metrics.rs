@@ -26,10 +26,25 @@ pub struct HostMetrics {
     /// Frames filled by owners in `poll_egress`.
     pub frame_write_count: u64,
     pub frame_write_bytes: u64,
-    /// Keepalive frames queued and received. Received keepalives count only
-    /// here.
+    /// Frames on the keepalive port queued and received: keepalives and
+    /// link control. Received ones count only here and below.
     pub keepalive_write_count: u64,
     pub keepalive_read_count: u64,
+    /// Bytes of the frames on the keepalive port queued.
+    pub keepalive_write_bytes: u64,
+    /// Path probes written and read.
+    pub probe_write_count: u64,
+    pub probe_read_count: u64,
+    /// Echoes written, and how long their probes waited for them in all.
+    pub echo_write_count: u64,
+    pub echo_hold_ms: u64,
+    /// Echoes of this host's probes received.
+    pub echo_read_count: u64,
+    /// Echoes of probes this host never sent or that were already
+    /// answered, which are ignored.
+    pub echo_unknown_count: u64,
+    /// Echoes whose round trip came out negative (the clock stepped back).
+    pub path_negative_rtt_count: u64,
     /// Links closed by the handshake deadline.
     pub handshake_timeout_count: u64,
     /// Links in the handshake closed to make room for newer ones.

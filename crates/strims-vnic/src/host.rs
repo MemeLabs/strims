@@ -63,18 +63,42 @@
 //!   its bytes trickle in, or the link is closed with
 //!   [`Error::HandshakeTimeout`].
 //! - After it, the keepalive check: an established link that has queued
-//!   nothing for [`Host::keepalive_interval`] queues an empty frame on
-//!   [`ports::KEEPALIVE_PORT`]. Frames only update a timestamp, and the
-//!   timer re-arms from it when it fires, so a busy link costs one wakeup per
-//!   interval.
+//!   nothing for [`Host::keepalive_interval`] queues a keepalive frame on
+//!   [`ports::KEEPALIVE_PORT`], which carries a probe when one may go out
+//!   (see Path). Owners' frames and keepalives only update a timestamp, and
+//!   the timer re-arms from it when it fires, so a busy link costs one
+//!   wakeup per interval. Other control frames leave it: an echo answers
+//!   the peer's probe and doesn't stand in for this host's own.
 //!
-//! Received keepalives are dropped before handler lookup, counted in
-//! [`HostMetrics::keepalive_read_count`], and set
-//! [`Peer::sends_keepalives`].
+//! Received keepalives are handled before handler lookup (their bodies
+//! hold [`crate::control`] records), counted in
+//! [`HostMetrics::keepalive_read_count`], and set [`Peer::sends_keepalives`].
+//!
+//! # Path
+//!
+//! Each established link measures its path as [`strims_base::path`]
+//! describes, with control frames on [`ports::KEEPALIVE_PORT`]
+//! ([`crate::control`]):
+//!
+//! - A probe goes out with the link's first egress; after a frame an owner
+//!   filled, once [`Host::probe_interval`] has passed since the last probe
+//!   if the owners wrote [`strims_base::path::BUSY_BYTES`] since, or
+//!   [`strims_base::path::QUIET_PROBE_INTERVAL`] if they wrote less; and as
+//!   the keepalive of an idle link. Its nonce is drawn from the host's rng.
+//! - The newest probe read from the peer is echoed at the start of the next
+//!   [`Host::poll_egress`], ahead of the owners' frames.
+//! - Control frames need only their own length free in the link buffer, go
+//!   behind the bytes already in it, and bypass QoS and its rate limit.
+//!   One that doesn't fit waits for [`Host::advance_link_transmit`] to make
+//!   room.
+//!
+//! Every accepted echo queues an [`Event::PathSample`], and
+//! [`Host::link_path`] reads the link's measure.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use slotmap::SlotMap;
+use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter, PathReading, PathSample};
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
@@ -88,6 +112,7 @@ use strims_proto::vnic::v1::{PeerInit, TcpMuxInit};
 use strims_qos::{ClassId, Control, SessionId};
 
 use crate::aes_link::{AesLink, AesLinkHandshake};
+use crate::control::{self, Record};
 use crate::frame::{FRAME_HEADER_LEN, FrameDecoder, FrameHeader, MAX_FRAME_BODY_LEN};
 use crate::metrics::{HostMetrics, LinkMetrics};
 use crate::out_buf::OutBuf;
@@ -116,7 +141,8 @@ pub mod ports {
     pub const PEER_RPC_SERVER_PORT: u16 = 5;
     pub const REPLICATION_PORT: u16 = 6;
 
-    /// vnic's keepalive frames (empty bodies). No service may bind it:
+    /// vnic's keepalive and link control frames ([`crate::control`]). No
+    /// service may bind it:
     /// [`crate::Host::set_handler`], [`crate::Host::open_writer`] and the
     /// channel calls refuse it with [`crate::Error::PortInUse`], and
     /// [`crate::Host::reserve_port`] never draws it.
@@ -134,6 +160,10 @@ pub const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(25);
 /// ([`crate::TcpOptions::read_timeout`], [`crate::ws::WsOptions::read_timeout`]),
 /// with room for timer and write latency.
 pub const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
+
+/// How often a link that sends data probes its path (see
+/// [`Host::set_probe_interval`]).
+pub const DEFAULT_PROBE_INTERVAL: Duration = PROBE_INTERVAL;
 
 /// How many links may be in the handshake at once. Adding one more closes
 /// the oldest (see [`Host::set_max_pending_links`]).
@@ -292,6 +322,25 @@ pub enum Event {
     /// vnic closed the link: the driver drops the transport. Not emitted
     /// for [`Host::remove_link`], which the driver calls itself.
     LinkClosed { link: PeerKey, reason: CloseReason },
+    /// The peer echoed one of the link's probes: a round trip of its path.
+    PathSample { peer: PeerKey, sample: PathSample },
+}
+
+/// A link's path measure (see [`strims_base::path`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LinkPath {
+    /// As of the latest echo. `None` before the first.
+    pub reading: Option<PathReading>,
+    /// Bytes this host has put into the link's buffer since the peer was
+    /// established.
+    pub written: u64,
+    /// Probes the peer hasn't answered.
+    pub unanswered: usize,
+    /// Echoes from the peer of probes it was never sent.
+    pub unknown_echoes: u64,
+    /// How long this host's latest echo to the peer waited after the
+    /// peer's probe was read.
+    pub last_hold: Duration,
 }
 
 /// Handshake failures.
@@ -459,6 +508,10 @@ struct Link<T> {
     last_send: Time,
     /// This link's entry in [`Host`]'s `timers`.
     timer: Option<Time>,
+    /// The path measure of what this host sends.
+    path: PathMeter,
+    /// The echo owed to the peer's newest probe.
+    echo: Echo,
 }
 
 impl<T> Link<T> {
@@ -511,6 +564,10 @@ pub struct Host<T: Copy = ()> {
     keepalive_interval: Option<Duration>,
     /// 0 means unbounded.
     max_pending_links: usize,
+    probe_interval: Option<Duration>,
+    /// Established links owing an echo or a probe that hasn't fit their
+    /// buffer yet. Bounded by `links`.
+    control_due: BTreeSet<PeerKey>,
 }
 
 impl<T: Copy> Host<T> {
@@ -547,6 +604,8 @@ impl<T: Copy> Host<T> {
             handshake_timeout: Some(DEFAULT_HANDSHAKE_TIMEOUT),
             keepalive_interval: Some(DEFAULT_KEEPALIVE_INTERVAL),
             max_pending_links: DEFAULT_MAX_PENDING_LINKS,
+            probe_interval: Some(DEFAULT_PROBE_INTERVAL),
+            control_due: BTreeSet::new(),
         })
     }
 
@@ -658,6 +717,8 @@ impl<T: Copy> Host<T> {
             added: now,
             last_send: now,
             timer: None,
+            path: PathMeter::new(),
+            echo: Echo::default(),
         });
         if plain && let Err(e) = self.queue_peer_init(key, now) {
             self.links.remove(key);
@@ -713,7 +774,8 @@ impl<T: Copy> Host<T> {
     /// hasn't run [`Host::handle_timeout`] yet): the link is closed and an
     /// [`Event::LinkClosed`] is queued.
     ///
-    /// Frames on [`ports::KEEPALIVE_PORT`] are dropped and counted
+    /// Frames on [`ports::KEEPALIVE_PORT`] go to the path measure (see
+    /// Path in the module docs) and are counted
     /// ([`HostMetrics::keepalive_read_count`]).
     pub fn handle_link_input(
         &mut self,
@@ -788,10 +850,34 @@ impl<T: Copy> Host<T> {
                         aes.decrypt(rest);
                     }
                     let metrics = &mut self.metrics;
+                    let events = &mut self.events;
+                    let control_due = &mut self.control_due;
+                    let (path, echo) = (&mut link.path, &mut link.echo);
                     link.decoder.decode(rest, &mut |f| {
                         if f.port == ports::KEEPALIVE_PORT {
                             metrics.keepalive_read_count += 1;
                             peer.sends_keepalives = true;
+                            for r in control::records(f.body) {
+                                match r {
+                                    Record::Probe(nonce) => {
+                                        metrics.probe_read_count += 1;
+                                        echo.read(nonce, now);
+                                        control_due.insert(key);
+                                    }
+                                    Record::Echo(nonce) => match path.echo(nonce, now) {
+                                        Ok(Some(sample)) => {
+                                            metrics.echo_read_count += 1;
+                                            events
+                                                .push_back(Event::PathSample { peer: key, sample });
+                                        }
+                                        Ok(None) => {
+                                            metrics.echo_read_count += 1;
+                                            metrics.path_negative_rtt_count += 1;
+                                        }
+                                        Err(_) => metrics.echo_unknown_count += 1,
+                                    },
+                                }
+                            }
                             return;
                         }
                         metrics.frame_read_count += 1;
@@ -860,6 +946,9 @@ impl<T: Copy> Host<T> {
         link.blocked = false;
         link.last_send = now;
         self.metrics.links_active += 1;
+        if self.probe_interval.is_some() {
+            self.control_due.insert(key);
+        }
         // The handshake deadline gives way to keepalives.
         self.arm_timer(key);
 
@@ -945,6 +1034,7 @@ impl<T: Copy> Host<T> {
         if let Some(t) = link.timer {
             self.timers.remove(&(t, key));
         }
+        self.control_due.remove(&key);
         if let Stage::Established(peer) = link.stage {
             for w in &peer.writers {
                 if let Some(wr) = self.writers.remove(*w) {
@@ -1003,6 +1093,17 @@ impl<T: Copy> Host<T> {
     /// Whether the link's writers are blocked on its full buffer.
     pub fn link_blocked(&self, link: PeerKey) -> Option<bool> {
         self.links.get(link).map(|l| l.blocked)
+    }
+
+    /// The link's path measure. `None` for an unknown link.
+    pub fn link_path(&self, link: PeerKey, now: Time) -> Option<LinkPath> {
+        self.links.get(link).map(|l| LinkPath {
+            reading: l.path.reading(now),
+            written: l.path.bytes_written(),
+            unanswered: l.path.unanswered_probes(),
+            unknown_echoes: l.path.unknown_echoes(),
+            last_hold: l.echo.last_hold(),
+        })
     }
 
     /// Bytes held for a frame or handshake message split across reads.
@@ -1371,8 +1472,21 @@ impl<T: Copy> Host<T> {
             sessions,
             qos,
             metrics,
+            rng,
+            probe_interval,
+            control_due,
             ..
         } = self;
+        let interval = *probe_interval;
+        control_due.retain(|&key| {
+            let Some(link) = links.get_mut(key) else {
+                return false;
+            };
+            let probe = interval.is_some_and(|i| link.path.probe_due(now, i));
+            let owed = write_control(link, rng, now, probe, metrics) == ControlWrite::Deferred;
+            update_link_blocked(links, writers, qos, key);
+            owed
+        });
         let mut frames = 0;
         while let Some((s, _)) = qos.dequeue(now) {
             let Some(wr) = sessions
@@ -1435,6 +1549,12 @@ impl<T: Copy> Host<T> {
                 o.commit(frame_len);
             }
             *last_send = now;
+            link.path.wrote(frame_len as u64, true);
+            if interval.is_some_and(|i| link.path.probe_due(now, i))
+                && write_control(link, rng, now, true, metrics) == ControlWrite::Deferred
+            {
+                control_due.insert(peer);
+            }
             let _ = qos.complete(s, frame_len, now);
             if !filled.more {
                 let _ = qos.clear_backlog(s);
@@ -1465,9 +1585,10 @@ impl<T: Copy> Host<T> {
     ///   [`Host::add_link`] is closed with
     ///   `LinkClosed { reason: Failed(Error::HandshakeTimeout) }`;
     /// - an established link that has queued nothing for
-    ///   [`Host::keepalive_interval`] queues a keepalive frame (an empty
-    ///   body on [`ports::KEEPALIVE_PORT`], 4 bytes; skipped while bytes are
-    ///   still waiting to be sent).
+    ///   [`Host::keepalive_interval`] queues a keepalive frame on
+    ///   [`ports::KEEPALIVE_PORT`] (skipped while bytes are still waiting to
+    ///   be sent): a probe, with any echo owed, when one may go out, and
+    ///   otherwise an empty body, 4 bytes.
     ///
     /// The rate limit needs no handling: call [`Host::poll_egress`] after
     /// this (it also runs this itself), drain events, and send what the
@@ -1545,29 +1666,49 @@ impl<T: Copy> Host<T> {
             writers,
             qos,
             metrics,
+            rng,
+            probe_interval,
             ..
         } = self;
         let Some(link) = links.get_mut(key) else {
             return;
         };
         link.last_send = now;
-        let Link {
-            control, out, aes, ..
-        } = link;
-        let Some(out) = out.as_mut().filter(|o| o.len() == 0 && control.is_empty()) else {
+        if link.out.as_ref().is_none_or(|o| o.len() > 0) || !link.control.is_empty() {
             return;
-        };
-        // An empty buffer always has room for a header (mtu > 4).
-        let Some(slot) = out.slot(FRAME_HEADER_LEN) else {
-            return;
-        };
-        slot.copy_from_slice(&KEEPALIVE_FRAME);
-        if let Some(aes) = aes.as_mut() {
-            aes.encrypt(slot);
         }
-        out.commit(FRAME_HEADER_LEN);
-        metrics.keepalive_write_count += 1;
+        let probe = probe_interval.is_some();
+        if write_control(link, rng, now, probe, metrics) != ControlWrite::Written {
+            let Link { out, aes, path, .. } = link;
+            // An empty buffer always has room for a header (mtu > 4).
+            let Some(slot) = out.as_mut().and_then(|o| o.slot(FRAME_HEADER_LEN)) else {
+                return;
+            };
+            slot.copy_from_slice(&KEEPALIVE_FRAME);
+            if let Some(aes) = aes.as_mut() {
+                aes.encrypt(slot);
+            }
+            if let Some(o) = out.as_mut() {
+                o.commit(FRAME_HEADER_LEN);
+            }
+            path.wrote(FRAME_HEADER_LEN as u64, false);
+            metrics.keepalive_write_count += 1;
+            metrics.keepalive_write_bytes += FRAME_HEADER_LEN as u64;
+        }
         update_link_blocked(links, writers, qos, key);
+    }
+
+    /// See [`Host::set_probe_interval`].
+    pub fn probe_interval(&self) -> Option<Duration> {
+        self.probe_interval
+    }
+
+    /// Sets how often a link that sends data probes its path (see Path in
+    /// the module docs); `None` (or a duration that isn't positive) stops
+    /// probing, and keepalives go out empty. Probes from the peer are
+    /// echoed either way. Default [`DEFAULT_PROBE_INTERVAL`].
+    pub fn set_probe_interval(&mut self, interval: Option<Duration>) {
+        self.probe_interval = interval.filter(|i| *i > Duration::ZERO);
     }
 
     /// See [`Host::set_handshake_timeout`].
@@ -1631,6 +1772,75 @@ impl<T: Copy> Host<T> {
     pub fn metrics(&self) -> HostMetrics {
         self.metrics
     }
+}
+
+/// What [`write_control`] did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ControlWrite {
+    /// It wrote a control frame.
+    Written,
+    /// The frame didn't fit behind the bytes waiting: it is still owed.
+    Deferred,
+    /// Nothing was owed, or the link's buffer can never hold the frame.
+    Nothing,
+}
+
+/// Writes what the link owes of its path measure as one control frame: the
+/// echo of the peer's newest probe, and a probe of its own if `probe` and
+/// fewer than [`strims_base::path::MAX_PROBES`] are unanswered.
+fn write_control<T>(
+    link: &mut Link<T>,
+    rng: &mut DetRng,
+    now: Time,
+    probe: bool,
+    metrics: &mut HostMetrics,
+) -> ControlWrite {
+    let Link {
+        out,
+        aes,
+        path,
+        echo,
+        ..
+    } = link;
+    let Some(out) = out.as_mut() else {
+        return ControlWrite::Nothing;
+    };
+    let probe = probe && path.can_probe();
+    let len = control::frame_len(echo.is_pending(), probe);
+    if len == FRAME_HEADER_LEN || out.capacity() < len {
+        return ControlWrite::Nothing;
+    }
+    let Some(slot) = out.slot(len) else {
+        return ControlWrite::Deferred;
+    };
+    let echoed = echo.take(now).map(|(nonce, hold)| {
+        metrics.echo_write_count += 1;
+        metrics.echo_hold_ms += u64::try_from(hold.as_millis()).unwrap_or(0);
+        nonce
+    });
+    let nonce = probe.then(|| {
+        loop {
+            let n = rand_core::Rng::next_u32(rng);
+            if !path.outstanding(n) {
+                break n;
+            }
+        }
+    });
+    let Some(n) = control::encode(echoed, nonce, slot) else {
+        return ControlWrite::Nothing;
+    };
+    if let (Some(aes), Some(frame)) = (aes.as_mut(), slot.get_mut(..n)) {
+        aes.encrypt(frame);
+    }
+    out.commit(n);
+    path.wrote(n as u64, false);
+    metrics.keepalive_write_count += 1;
+    metrics.keepalive_write_bytes += n as u64;
+    if let Some(nonce) = nonce {
+        path.probe(nonce, now);
+        metrics.probe_write_count += 1;
+    }
+    ControlWrite::Written
 }
 
 /// Blocks or unblocks a link's writers when its free space crosses an MTU.

@@ -1,8 +1,8 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Golden vectors (`golden/vectors.txt`): frames, `FrameWriter` batching,
-//! `TCPMuxInit`, the AES link handshake and ciphertext, a host's
+//! Golden vectors (`golden/vectors.txt`): frames, link control frames,
+//! `FrameWriter` batching, `TCPMuxInit`, the AES link handshake and ciphertext, a host's
 //! `PeerInit`, listener URIs and the WebRTC session description JSON.
 //! Values are hex, and lists are comma-separated. `STRIMS_GOLDEN=update`
 //! rewrites the vectors from the code (see `strims-golden`).
@@ -21,13 +21,14 @@ use strims_crypto::{
 };
 use strims_golden::Golden;
 use strims_proto::vnic::v1::PeerInit;
+use strims_vnic::control::{self, Record};
 use strims_vnic::stream::{MessageReader, decode_stream_message, encode_stream_message};
 use strims_vnic::tcp::{encode_tcp_mux_init, format_tcp_uri};
 use strims_vnic::webrtc::{SdpType, SessionDescription};
 use strims_vnic::ws::{WsListenAddress, format_ws_uri};
 use strims_vnic::{
     AesLinkHandshake, Event, FRAME_HEADER_LEN, Frame, FrameDecoder, FrameWriter, Host, HostConfig,
-    LinkConfig, LinkKind, TcpMuxAcceptor,
+    LinkConfig, LinkKind, TcpMuxAcceptor, ports,
 };
 
 fn open() -> Golden {
@@ -86,6 +87,30 @@ fn frames() {
             assert_eq!(got, vec![(port, body.clone())]);
         }
         g.check_hex(e, "wire", &wire);
+    }
+}
+
+/// `echo` and `probe` are big-endian nonces, empty for none.
+#[test]
+fn control_frames() {
+    let mut g = open();
+    let nonce = |g: &Golden, e: usize, k: &str| -> Option<u32> {
+        let b = g.bytes(e, k);
+        (!b.is_empty()).then(|| u32::from_be_bytes(arr(b)))
+    };
+    for e in entries(&g, "control") {
+        let (echo, probe) = (nonce(&g, e, "echo"), nonce(&g, e, "probe"));
+        let mut wire = [0u8; control::MAX_CONTROL_FRAME_LEN];
+        let n = control::encode(echo, probe, &mut wire).unwrap();
+        let (f, len) = Frame::decode(&wire[..n]).unwrap();
+        assert_eq!((f.port, len), (ports::KEEPALIVE_PORT, n));
+        let want: Vec<Record> = echo
+            .map(Record::Echo)
+            .into_iter()
+            .chain(probe.map(Record::Probe))
+            .collect();
+        assert_eq!(control::records(f.body).collect::<Vec<_>>(), want);
+        g.check_hex(e, "wire", &wire[..n]);
     }
 }
 
