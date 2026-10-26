@@ -44,6 +44,7 @@ use std::time::Duration;
 
 use crate::report::{Percentiles, Report};
 use crate::spec::HostIx;
+use crate::stats::MeterSample;
 
 /// The width of the stream-time buckets.
 pub const BUCKET: Duration = Duration::from_secs(30);
@@ -276,14 +277,19 @@ impl Report {
         if n == 0 { 0.0 } else { over as f64 / n as f64 }
     }
 
-    /// The meter's queueing delay at `hosts` against their standing uplink
-    /// queues, over the samples that had a delay while a swarm streamed:
-    /// the median absolute error in milliseconds; the share of samples
-    /// whose uplink emptied in the window where the delay read at least
-    /// `threshold_ms` (false positives); and the share whose uplink stayed
-    /// busy where it read less (false negatives). `None` outside WAN mode
-    /// or without samples.
-    pub fn queue_delay_accuracy(&self, hosts: &[HostIx], threshold_ms: u32) -> Option<[f64; 3]> {
+    /// A queueing delay reading at `hosts` (`read`, in milliseconds, from
+    /// each meter sample) against their standing uplink queues, over the
+    /// samples that had a delay while a swarm streamed: the median absolute
+    /// error in milliseconds; the share of samples whose uplink emptied in
+    /// the window where the delay read at least `threshold_ms` (false
+    /// positives); and the share whose uplink stayed busy where it read less
+    /// (false negatives). `None` outside WAN mode or without samples.
+    pub fn queue_delay_accuracy(
+        &self,
+        hosts: &[HostIx],
+        threshold_ms: u32,
+        read: impl Fn(&MeterSample) -> Option<u32>,
+    ) -> Option<[f64; 3]> {
         let wan = self.wan.as_ref()?;
         let (mut errors, mut neg, mut pos) = (Vec::new(), (0u64, 0u64), (0u64, 0u64));
         for &h in hosts {
@@ -309,7 +315,7 @@ impl Report {
                 .iter()
                 .filter(|m| self.live(m.t))
             {
-                let Some(delay) = m.queue_delay_ms else {
+                let Some(delay) = read(m) else {
                     continue;
                 };
                 let from = m.t.saturating_sub(STANDING_WINDOW);
@@ -336,6 +342,29 @@ impl Report {
         }
         let share = |(k, n): (u64, u64)| if n == 0 { 0.0 } else { k as f64 / n as f64 };
         Some([deciles(&mut errors)[1], share(neg), share(pos)])
+    }
+
+    /// Bytes per link per second that hosts wrote to measure their paths,
+    /// over every host: vnic's frames on the keepalive port, and ppspp's
+    /// PING and PONG messages (9 and 17 bytes, before the headers of the
+    /// channel payloads they ride in). `None` without link time.
+    pub fn path_overhead(&self) -> Option<(f64, f64)> {
+        let mut o = crate::stats::PathOverhead::default();
+        for h in &self.hosts {
+            let p = h.runner.path_overhead;
+            o.control_bytes += p.control_bytes;
+            o.pings += p.pings;
+            o.pongs += p.pongs;
+            o.link_ms += p.link_ms;
+        }
+        if o.link_ms == 0 {
+            return None;
+        }
+        let secs = o.link_ms as f64 / 1000.0;
+        Some((
+            o.control_bytes as f64 / secs,
+            (9 * o.pings + 17 * o.pongs) as f64 / secs,
+        ))
     }
 
     /// STREAM_REQUESTs declined while the node's upload rate was under half
@@ -624,17 +653,29 @@ impl Report {
                 self.standing_queue(&roles.forwarders),
             )
             .num("peak_committed", self.peak_committed());
-        for (name, hosts) in [("seeds", &roles.seeds), ("forwarders", &roles.forwarders)] {
-            if let Some([err, fp, fneg]) =
-                self.queue_delay_accuracy(hosts, QUEUE_DELAY_THRESHOLD_MS)
-            {
-                j.num(&format!("qd_err_{name}_ms"), err)
-                    .num(&format!("qd_fp_{name}"), fp)
-                    .num(&format!("qd_fn_{name}"), fneg);
+        type Reading = fn(&MeterSample) -> Option<u32>;
+        let readings: [(&str, Reading); 3] = [
+            ("qd", |m| m.queue_delay_ms),
+            ("qdv", |m| m.path_delay_ms),
+            ("qdb", |m| m.path_queued_ms),
+        ];
+        for (reading, read) in readings {
+            for (name, hosts) in [("seeds", &roles.seeds), ("forwarders", &roles.forwarders)] {
+                if let Some([err, fp, fneg]) =
+                    self.queue_delay_accuracy(hosts, QUEUE_DELAY_THRESHOLD_MS, read)
+                {
+                    j.num(&format!("{reading}_err_{name}_ms"), err)
+                        .num(&format!("{reading}_fp_{name}"), fp)
+                        .num(&format!("{reading}_fn_{name}"), fneg);
+                }
             }
         }
         let (wrong, declined) = self.declined();
         j.int("declined_wrongly", wrong).int("declined", declined);
+        if let Some((control, pings)) = self.path_overhead() {
+            j.num("control_bps_link", control)
+                .num("ping_bps_link", pings);
+        }
         let tracking = self.tracking();
         if !tracking.is_empty() {
             for (name, drop) in [("drop", true), ("rise", false)] {

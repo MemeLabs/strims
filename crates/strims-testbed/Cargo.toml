@@ -8,6 +8,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+strims-base.workspace = true
 strims-crypto.workspace = true
 strims-node-core.workspace = true
 strims-ppspp.workspace = true

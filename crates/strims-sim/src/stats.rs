@@ -27,6 +27,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use strims_base::path;
 use strims_node::{HostId, NodeMetrics, SwarmKey};
 use strims_ppspp::PushMode;
 pub use strims_testbed::transfer::{PeerTransfer, TransferSample};
@@ -251,6 +252,32 @@ pub struct RunnerReport {
     /// An adaptive seed's state each time it changed: (time since the
     /// start, scenario swarm, state).
     pub seed_changes: Vec<(Duration, usize, SeedSample)>,
+    pub path_overhead: PathOverhead,
+}
+
+/// What a host wrote to measure its paths, and its links' time to share it
+/// over.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PathOverhead {
+    /// Bytes of vnic's frames on the keepalive port: keepalives, probes and
+    /// echoes (`HostMetrics`).
+    pub control_bytes: u64,
+    /// ppspp PING and PONG messages written, each 9 and 17 bytes before
+    /// their channel payload's header (`ChannelMetrics::ping`, `pong`).
+    pub pings: u64,
+    pub pongs: u64,
+    /// Established links times the time they were up, in ms, summed over
+    /// samples.
+    pub link_ms: u64,
+}
+
+impl PathOverhead {
+    fn add(&mut self, o: &PathOverhead) {
+        self.control_bytes += o.control_bytes;
+        self.pings += o.pings;
+        self.pongs += o.pongs;
+        self.link_ms += o.link_ms;
+    }
 }
 
 /// A node's upload meter at one sample (`PushStats::upload_rate`,
@@ -258,6 +285,12 @@ pub struct RunnerReport {
 /// milliseconds), with the subscriptions it served per scenario swarm
 /// (`PushStats::children`) and the STREAM_REQUESTs it answered (`accepted`
 /// plus `rejected`, over its hybrid swarms, since the incarnation started).
+///
+/// Beside the meter's queueing delay, two from vnic's path measure over
+/// the node's links with a recent round trip, each aggregated as the meter
+/// does ([`strims_base::path::aggregate`]): how far each link's recent
+/// round trip stands above its base (`path_delay_ms`), and how long each
+/// link's queued bytes take at its delivery rate (`path_queued_ms`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MeterSample {
     /// Simulated time since the start of the run.
@@ -265,6 +298,8 @@ pub struct MeterSample {
     pub rate: u64,
     pub busy_permille: u32,
     pub queue_delay_ms: Option<u32>,
+    pub path_delay_ms: Option<u32>,
+    pub path_queued_ms: Option<u32>,
     pub capacity: u64,
     pub children: BTreeMap<usize, usize>,
     pub requests_in: u32,
@@ -298,6 +333,7 @@ impl RunnerReport {
         self.meter.extend(o.meter.iter().cloned());
         self.seeds.extend(o.seeds.iter().map(|(&s, &x)| (s, x)));
         self.seed_changes.extend(o.seed_changes.iter().copied());
+        self.path_overhead.add(&o.path_overhead);
     }
 }
 
@@ -368,6 +404,13 @@ pub(crate) struct HostStats {
     seeds: BTreeMap<usize, SeedSample>,
     /// Their changes (see [`RunnerReport::seed_changes`]).
     seed_changes: Vec<(Duration, usize, SeedSample)>,
+    /// PING and PONG messages written, by peer and scenario swarm.
+    pings: BTreeMap<(HostId, usize), Tracked<2>>,
+    /// vnic's control bytes.
+    control: Tracked<1>,
+    /// Link time so far, and the time of the last sample.
+    link_ms: u64,
+    last_t: Option<Duration>,
 }
 
 /// What one sample showed that the invariants check.
@@ -424,6 +467,10 @@ impl HostStats {
                     haves,
                 ];
                 if let Some(st) = &ch.stats {
+                    self.pings
+                        .entry((peer.host_id, s))
+                        .or_default()
+                        .observe([st.outbound.ping, st.outbound.pong]);
                     let sc = &st.scheduler;
                     if sc.handshake_received {
                         p.cwnd_min = Some(p.cwnd_min.map_or(sc.cwnd, |x| x.min(sc.cwnd)));
@@ -508,7 +555,24 @@ impl HostStats {
             };
             self.swarms.entry(s).or_default().observe(c.to_array());
         }
+        if let Some(ms) = meter.as_mut() {
+            let ms_of = |d: strims_base::time::Duration| {
+                u32::try_from(d.as_millis().max(0)).unwrap_or(u32::MAX)
+            };
+            let (excess, queued) =
+                path::node_delays(m.links.iter().filter_map(|l| l.path?.reading));
+            ms.path_delay_ms = excess.map(ms_of);
+            ms.path_queued_ms = queued.map(ms_of);
+        }
         self.meter.extend(meter);
+        let h = &m.host;
+        self.control.observe([h.keepalive_write_bytes]);
+        let up = m.links.iter().filter(|l| l.host_id.is_some()).count() as u64;
+        if let Some(last) = self.last_t {
+            let dt = u64::try_from(t.saturating_sub(last).as_millis()).unwrap_or(u64::MAX);
+            self.link_ms += up * dt;
+        }
+        self.last_t = Some(t);
         for l in &m.links {
             p.link_pending = p.link_pending.max(l.transmit_pending);
             p.write_blocked += u64::from(l.write_blocked);
@@ -534,6 +598,10 @@ impl HostStats {
         self.meter.clear();
         self.seeds.clear();
         self.seed_changes.clear();
+        self.pings.clear();
+        self.control = Tracked::default();
+        self.link_ms = 0;
+        self.last_t = None;
     }
 
     fn current(&self) -> RunnerReport {
@@ -572,6 +640,17 @@ impl HostStats {
         r.meter = self.meter.clone();
         r.seeds = self.seeds.clone();
         r.seed_changes = self.seed_changes.clone();
+        let [pings, pongs] = self
+            .pings
+            .values()
+            .map(Tracked::total)
+            .fold([0, 0], |[a, b], [x, y]| [a + x, b + y]);
+        r.path_overhead = PathOverhead {
+            control_bytes: self.control.total()[0],
+            pings,
+            pongs,
+            link_ms: self.link_ms,
+        };
         r
     }
 

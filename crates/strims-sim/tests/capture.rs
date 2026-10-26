@@ -136,9 +136,11 @@ fn a_captured_wan_run_samples_every_link() {
     for name in ["seed", "v0", "v1", "v2"] {
         let f = std::fs::read(dir.join(format!("{name}-1.ppcap"))).unwrap();
         let mut r = Reader::new(&f[..]).unwrap();
-        // Peers each source sampled, and whether a window ever showed.
+        // Peers each source sampled, whether a window ever showed, and
+        // the peers whose path readings had echoes.
         let mut sampled: BTreeMap<&str, BTreeSet<u32>> = BTreeMap::new();
         let mut windowed = false;
+        let mut echoed = BTreeSet::new();
         while let Some(e) = r.next_record() {
             if let Record::Sample(s) = e.unwrap().record {
                 let k = sample_kind(s.source).unwrap().name;
@@ -146,10 +148,19 @@ fn a_captured_wan_run_samples_every_link() {
                 if k == "SimConn" && s.field(2) > 0 {
                     windowed = true;
                 }
+                if k == "Path" && s.field(7) > 0 {
+                    // The round trip is at least the WAN path's, and the
+                    // queued bytes are within those in flight.
+                    assert!(s.field(0) > 0, "{name}");
+                    assert!(s.field(5) <= s.field(3), "{name}");
+                    echoed.insert(s.peer);
+                }
             }
         }
         assert_eq!(sampled["Queues"].len(), 3, "{name}: {sampled:?}");
         assert_eq!(sampled["SimConn"], sampled["Queues"], "{name}");
+        assert_eq!(sampled["Path"], sampled["Queues"], "{name}");
+        assert_eq!(echoed, sampled["Queues"], "{name}");
         assert!(windowed, "{name}");
     }
     let _ = std::fs::remove_dir_all(&dir);
