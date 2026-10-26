@@ -441,7 +441,37 @@ async fn a_page_node_sends_its_capture() {
     let r = strims_ppspp_capture::Reader::new(&dump[..]).unwrap();
     assert_eq!(hex::encode(&r.header().node), hex_id(p));
     assert_eq!(r.header().label, "page");
+    // The page's link measures its path like any other: a sample with an
+    // echo shows up within a few flushes.
+    let mut dump = dump;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !path_samples(&dump).iter().any(|f| f[7] > 0) {
+        assert!(Instant::now() < deadline, "no path sample with an echo");
+        dump = page
+            .captured(0, dump.len() + 1, Duration::from_secs(5))
+            .await;
+    }
+    for f in path_samples(&dump).iter().filter(|f| f[7] > 0) {
+        // rtt, and queued within in flight.
+        assert!(f[0] >= 0, "{f:?}");
+        assert!(f[5] <= f[3], "{f:?}");
+    }
     b.node.shutdown().await.unwrap();
+}
+
+/// The fields of the `Path` samples in a capture, up to its first
+/// incomplete record.
+fn path_samples(dump: &[u8]) -> Vec<Vec<i64>> {
+    let mut r = strims_ppspp_capture::Reader::new(dump).unwrap();
+    let mut out = Vec::new();
+    while let Some(Ok(e)) = r.next_record() {
+        if let strims_ppspp_capture::Record::Sample(s) = e.record
+            && strims_ppspp_capture::sample_kind(s.source).map(|k| k.name) == Some("Path")
+        {
+            out.push((0..12).map(|i| s.field(i)).collect());
+        }
+    }
+    out
 }
 
 /// Two page nodes in one browser link over WebRTC: node 0 offers, node 1

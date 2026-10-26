@@ -274,7 +274,7 @@ impl World {
                     }
                 }
                 strims_vnic::Event::PeerRemoved { peer, .. } => node.vpn.handle_peer_removed(peer),
-                strims_vnic::Event::LinkClosed { .. } => {}
+                strims_vnic::Event::LinkClosed { .. } | strims_vnic::Event::PathSample { .. } => {}
             }
         }
         let _ = now;

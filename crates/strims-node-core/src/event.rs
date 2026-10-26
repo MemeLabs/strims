@@ -8,7 +8,7 @@ use strims_kademlia::ID;
 use strims_ppspp::{
     ChannelStats, MetricsSnapshot, PeerStats, PushStats, SwarmId, SwarmKey, SwarmSchedulerStats,
 };
-use strims_vnic::{HostMetrics, LinkKind, LinkMetrics};
+use strims_vnic::{HostMetrics, LinkKind, LinkMetrics, LinkPath};
 use strims_vpn::{Delivery, ExchangeOutcome, NetworkId};
 
 /// Notifications from the node task.
@@ -80,6 +80,8 @@ pub struct LinkInfo {
     /// channel that the peer hasn't acknowledged, sent or not. At most
     /// `WebRtcConfig::max_buffered_amount`. 0 for TCP and WebSocket links.
     pub buffered_amount: usize,
+    /// vnic's measure of the link's path, the same on every transport.
+    pub path: Option<LinkPath>,
 }
 
 /// The driver's own counters: dials, accepts, transports, queues, the

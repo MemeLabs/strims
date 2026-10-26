@@ -136,6 +136,14 @@ fn host(m: HostMetrics) -> v1::HostMetrics {
         frame_write_bytes,
         keepalive_write_count,
         keepalive_read_count,
+        keepalive_write_bytes: _,
+        probe_write_count: _,
+        probe_read_count: _,
+        echo_write_count: _,
+        echo_hold_ms: _,
+        echo_read_count: _,
+        echo_unknown_count: _,
+        path_negative_rtt_count: _,
         handshake_timeout_count,
         handshake_evict_count,
     } = m;
@@ -324,6 +332,7 @@ fn link(l: LinkInfo) -> v1::LinkInfo {
         input_buffered,
         write_blocked,
         buffered_amount,
+        path: _,
     } = l;
     v1::LinkInfo {
         host_id: host_id.map(|id| id.to_bytes().to_vec()).unwrap_or_default(),
@@ -1160,6 +1169,7 @@ mod tests {
                 input_buffered: 0,
                 write_blocked: false,
                 buffered_amount: 64,
+                path: None,
             }],
             runner: RunnerMetrics {
                 swarms: vec![SwarmInfo {

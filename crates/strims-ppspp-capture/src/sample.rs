@@ -15,10 +15,12 @@
 //! | 4 | `WebSocket` | `buffered` |
 //! | 5 | `SimConn` | `unsent`, `lowat`, `cwnd`, `ssthresh`, `in_flight`, `pending`, `uplink_queue`, `uplink_rate` |
 //! | 6 | `SimUplink` | `free_in`, `rate`, `vtime`, `weight` |
+//! | 8 | `Path` | `rtt`, `base`, `recent_min`, `in_flight`, `rate`, `queued`, `written_since`, `samples`, `age`, `hold`, `unanswered`, `unknown` |
 //!
 //! [`Sample`] documents each field.
 
-use strims_base::time::Duration;
+use strims_base::path::PathReading;
+use strims_base::time::{Duration, Time};
 
 use crate::capture::{KindInfo, num};
 
@@ -75,6 +77,24 @@ pub const SAMPLE_KINDS: &[KindInfo] = &[
         6,
         "SimUplink",
         &[num("free_in"), num("rate"), num("vtime"), num("weight")],
+    ),
+    KindInfo::new(
+        8,
+        "Path",
+        &[
+            num("rtt"),
+            num("base"),
+            num("recent_min"),
+            num("in_flight"),
+            num("rate"),
+            num("queued"),
+            num("written_since"),
+            num("samples"),
+            num("age"),
+            num("hold"),
+            num("unanswered"),
+            num("unknown"),
+        ],
     ),
 ];
 
@@ -151,9 +171,55 @@ pub enum Sample {
         vtime: u64,
         weight: u64,
     },
+    /// A link's path measure ([`strims_base::path`]) as of its latest
+    /// echo: the round trip, the base and the recent minimum, the bytes in
+    /// flight, the delivery rate and the bytes queued, the bytes written
+    /// since, the echoes so far and the reading's age (all unknown before
+    /// the first echo; base, recent minimum, rate and queued may be on
+    /// their own). Then what the node holds itself: how long its latest
+    /// echo to the peer waited, its probes the peer hasn't answered, and
+    /// the peer's echoes of unknown probes.
+    Path {
+        rtt: Option<Duration>,
+        base: Option<Duration>,
+        recent_min: Option<Duration>,
+        in_flight: Option<u64>,
+        rate: Option<u64>,
+        queued: Option<u64>,
+        written_since: Option<u64>,
+        samples: u64,
+        age: Option<Duration>,
+        hold: Duration,
+        unanswered: u64,
+        unknown: u64,
+    },
 }
 
 impl Sample {
+    /// A [`Sample::Path`] of `reading` at `now`.
+    pub fn path(
+        now: Time,
+        reading: Option<&PathReading>,
+        hold: Duration,
+        unanswered: u64,
+        unknown: u64,
+    ) -> Sample {
+        Sample::Path {
+            rtt: reading.map(|r| r.rtt),
+            base: reading.and_then(|r| r.base),
+            recent_min: reading.and_then(|r| r.recent_min),
+            in_flight: reading.map(|r| r.in_flight),
+            rate: reading.and_then(|r| r.rate),
+            queued: reading.and_then(|r| r.queued),
+            written_since: reading.map(|r| r.written_since),
+            samples: reading.map_or(0, |r| r.samples),
+            age: reading.map(|r| r.age(now)),
+            hold,
+            unanswered,
+            unknown,
+        }
+    }
+
     /// The source code and fields, in [`SAMPLE_KINDS`] order.
     pub fn encode(&self) -> (u32, Vec<i64>) {
         let u = |v: u64| i64::try_from(v).unwrap_or(i64::MAX);
@@ -240,6 +306,39 @@ impl Sample {
                 vtime,
                 weight,
             } => (6, vec![free_in.as_nanos(), u(rate), u(vtime), u(weight)]),
+            Sample::Path {
+                rtt,
+                base,
+                recent_min,
+                in_flight,
+                rate,
+                queued,
+                written_since,
+                samples,
+                age,
+                hold,
+                unanswered,
+                unknown,
+            } => {
+                let d = |v: Option<Duration>| v.map_or(-1, Duration::as_nanos);
+                (
+                    8,
+                    vec![
+                        d(rtt),
+                        d(base),
+                        d(recent_min),
+                        opt(in_flight),
+                        opt(rate),
+                        opt(queued),
+                        opt(written_since),
+                        u(samples),
+                        d(age),
+                        hold.as_nanos(),
+                        u(unanswered),
+                        u(unknown),
+                    ],
+                )
+            }
         }
     }
 }
@@ -295,6 +394,7 @@ mod tests {
                 vtime: 2,
                 weight: 3,
             },
+            Sample::path(Time::EPOCH, None, d, 1, 0),
         ];
         for s in all {
             let (code, fields) = s.encode();

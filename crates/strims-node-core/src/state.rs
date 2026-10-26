@@ -820,6 +820,16 @@ impl State {
             if let Some(t) = transport {
                 c.sample(now, Some(ps.pp), &t);
             }
+            if let Some(p) = vnic.link_path(link, now) {
+                let sample = CaptureSample::path(
+                    now,
+                    p.reading.as_ref(),
+                    p.last_hold,
+                    p.unanswered as u64,
+                    p.unknown_echoes,
+                );
+                c.sample(now, Some(ps.pp), &sample);
+            }
         }
     }
 
@@ -943,6 +953,7 @@ impl State {
                 self.emit(NodeEvent::PeerRemoved { host_id });
             }
             strims_vnic::Event::LinkClosed { link, reason } => self.link_closed(link, reason, now),
+            strims_vnic::Event::PathSample { .. } => {}
         }
     }
 
@@ -1387,13 +1398,13 @@ impl State {
             host: self.vnic.metrics(),
             vpn: self.vpn.metrics(),
             driver: self.metrics,
-            links: self.link_metrics(),
+            links: self.link_metrics(now),
             runner: self.runner_metrics(now),
             networks: self.network_metrics(),
         }
     }
 
-    fn link_metrics(&mut self) -> Vec<LinkInfo> {
+    fn link_metrics(&mut self, now: Time) -> Vec<LinkInfo> {
         let State {
             vnic, links, rtc, ..
         } = self;
@@ -1420,6 +1431,7 @@ impl State {
                     input_buffered: vnic.link_input_buffered(k).unwrap_or(0),
                     write_blocked,
                     buffered_amount,
+                    path: vnic.link_path(k, now),
                 })
             })
             .collect()
