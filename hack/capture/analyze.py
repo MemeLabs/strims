@@ -11,6 +11,8 @@ delivery or latency collapsed.
   hack/capture/analyze.py queues run.jsonl NODE [--from S] [--until S] [--step S]
   hack/capture/analyze.py links  run.jsonl NODE PEER... [--from S] [--until S]
                                  [--step S]
+  hack/capture/analyze.py paths  run.jsonl NODE [PEER...] [--from S] [--until S]
+                                 [--step S]
   hack/capture/analyze.py prunes run.jsonl [--node NAME] [--from S] [--until S]
   hack/capture/analyze.py pulls  run.jsonl [--source NAME] [--from S] [--until S]
   hack/capture/analyze.py node   run.jsonl NODE [--from S] [--until S]
@@ -41,6 +43,13 @@ The other commands print tables about one question each, `--from` and
           write buffers, and the transport (the sim's model, TCP_INFO, or
           a browser's buffered amounts)
   links   the same per link, for the peers named
+  paths   vnic's path measure of each of a node's links (or the peers
+          named) per sample, beside what the link's queues held: the round
+          trip, its base and excess, the bytes in flight and queued, the
+          delivery rate and the queued bytes' delay; and the bytes below
+          vnic not yet sent (vnic's buffer, the driver's write buffers and
+          the transport's unsent bytes) with the model's uplink queue in a
+          sim. Then each link's medians
   prunes  stale pushes and push waits at a node, the prunes by rule with
           their numbers, and the misses and pushes behind the first prune
   pulls   where the viewers' requests went (the source or other viewers),
@@ -52,8 +61,10 @@ The other commands print tables about one question each, `--from` and
           how long pushes and answers waited in its queue
   holders per holder of a node (the seed), per second while it holds: the
           copy's rate against what the node wrote to it, the pushes queued
-          for it and its connection's window, what it relayed, its pushes
-          dropped, and its children's prunes of it
+          for it and its connection's window, vnic's measure of the link
+          (round trip, base, recent least, queued), what it relayed, its
+          pushes dropped, and its children's prunes of it; then how often
+          holders changed, and why
   diverge two runs of one cell side by side per second (the seed's copies,
           busy share, pushes and answers, the viewers' requests to it, hits,
           misses and prunes), the first second they part (on-time pushes or
@@ -69,6 +80,7 @@ Runs, second by second (no capture needed):
                                    [--where K=V...] [--ignore K,...]
   hack/capture/analyze.py track    RUNS... [--where K=V...] [--group K,...]
                                    [--runs]
+  hack/capture/analyze.py delays   RUNS... [--where K=V...] [--group K,...]
 
 RUNS are farm matrix dirs (`target/sim-farm/<matrix>`: its rows.jsonl, and
 a testbed matrix's run dirs), rows.jsonl files, stdout with `ROW {json}`
@@ -98,7 +110,9 @@ with or without the STRIMS_SIM_CAL_, STRIMS_SIM_ or SIM_ prefix.
             unhealthy share and absorbing runs, the median per-seed
             difference in unhealthy share, and the geometric mean of the
             per-seed ratios of lag p50 and p99 (B over A) with bootstrap 95 %
-            intervals
+            intervals; each --metric F adds the geometric mean of the
+            per-seed ratios of the row's field F (pairs where both are 0
+            or missing drop out)
   track     how the seed's capacity reading (a pacer's estimate, or a known
             capacity) follows its true uplink: per cell, the median of its
             runs' reading over the uplink (p10, p50, p90), the seconds after
@@ -107,6 +121,14 @@ with or without the STRIMS_SIM_CAL_, STRIMS_SIM_ or SIM_ prefix.
             chunks used, the median viewer's first frame (seconds into the
             stream) and the row's startup p50 lag, and the row's off_drop
             and off_rise medians when it has them; --runs prints each run
+  delays    how the node's queueing delay readings follow its true uplink
+            queue, per cell: for the meter's pings (qd), vnic's path excess
+            (qdv) and its queued bytes over the delivery rate (qdb), the
+            median over runs of the reading's median error in ms, its false
+            positives and false negatives (`Report::queue_delay_accuracy`),
+            at seeds and at forwarders. A sim row has them; a testbed run's
+            are its seed's lines against tc's tbf backlog (tc-0.log) over
+            the stream, at the same threshold and window
 
 The verdicts, judged over the stream's seconds (not the run's tail):
 
@@ -242,6 +264,7 @@ SUMS = {
     "Tcp": ("unsent", "unacked"),
     "WebSocket": ("buffered",),
     "WebRtc": ("buffered",),
+    "Path": ("in_flight", "queued", "written_since"),
 }
 
 
@@ -283,6 +306,52 @@ def links(a):
         last[p] = t
         d = by[(t, p)]
         print(f"{t / 1000:6.1f} {p:>10s} " + " ".join(f"{k}={v}" for k, v in sorted(d.items())))
+
+
+def paths(a):
+    by = collections.defaultdict(dict)
+    for r in load(a):
+        if r["node"] != a.node or r.get("peer") is None or (a.peers and r["peer"] not in a.peers):
+            continue
+        if r["type"] in ("Path", "Queues", "SimConn", "Tcp"):
+            by[(r["t"], r["peer"])][r["type"]] = r
+    kb = lambda b: None if b is None or b < 0 else round(b / 1000, 1)
+    pos = lambda v: v if v is not None and v >= 0 else None
+    per = collections.defaultdict(lambda: collections.defaultdict(list))
+    last = {}
+    print("t      peer       rtt base excess (ms) | in_flight queued kB rate kB/s q_delay ms | held kB uplink_q ms")
+    for (t, peer) in sorted(by):
+        d = by[(t, peer)]
+        p = d.get("Path")
+        if p is None or p["samples"] == 0:
+            continue
+        rtt, base, recent = ms(p["rtt"]), ms(p["base"]), ms(p["recent_min"])
+        excess = None if recent is None or base is None else max(0.0, round(recent - base, 1))
+        rate = pos(p["rate"])
+        qd = None if not rate or pos(p["queued"]) is None else round(1000 * p["queued"] / rate, 1)
+        q, sc, tcp = d.get("Queues"), d.get("SimConn"), d.get("Tcp")
+        held = None
+        if q is not None:
+            held = q["link_pending"] + q["write_held"]
+            held += sum(max(0, sc[k]) for k in ("unsent", "pending")) if sc else 0
+            held += max(0, tcp["unsent"]) if tcp else 0
+        uplink = ms(sc["uplink_queue"]) if sc else None
+        row = {"excess": excess, "queued": kb(p["queued"]), "q_delay": qd, "held": kb(held), "uplink": uplink}
+        for k, v in row.items():
+            if v is not None:
+                per[peer][k].append(v)
+        if t - last.get(peer, float("-inf")) < a.step * 1000:
+            continue
+        last[peer] = t
+        f = lambda x: "-" if x is None else x
+        print(
+            f"{t / 1000:6.1f} {peer:>8s} {f(rtt):>6} {f(base):>5} {f(excess):>6} | {f(kb(p['in_flight'])):>9} {f(kb(p['queued'])):>9}"
+            f" {f(kb(rate)):>9} {f(qd):>10} | {f(kb(held)):>7} {f(uplink):>11}"
+        )
+    print("-- medians per link: excess ms, q_delay ms, queued kB, held kB, uplink queue ms")
+    for peer in sorted(per):
+        m = {k: med(v) for k, v in per[peer].items()}
+        print(f"{peer:>8s} {m.get('excess')} {m.get('q_delay')} {m.get('queued')} {m.get('held')} {m.get('uplink')}")
 
 
 def prunes(a):
@@ -494,7 +563,12 @@ def runs(paths):
                     continue
                 r = json.loads(line)
                 if "row" in r:
-                    env = {**r.get("env", {}), "arm": r.get("arm", ""), "test": r.get("test", "")}
+                    env = {
+                        **r.get("env", {}),
+                        "arm": r.get("arm", ""),
+                        "commit": r.get("commit", "")[:8],
+                        "test": r.get("test", ""),
+                    }
                     if r.get("kind") == "testbed":
                         env["repeat"] = r.get("repeat")
                         yield r["id"], env, r["row"], testbed_series(rows.parent / r["run_dir"], r.get("env", {}))
@@ -502,6 +576,134 @@ def runs(paths):
                         yield r["id"], env, r["row"], r["row"]["series"]
                 elif "series" in r:
                     yield f"{r.get('test', r.get('scenario'))} seed {r.get('seed')}", {"seed": r.get("seed")}, r, r["series"]
+
+
+# `delays`: the readings, and how `Report::queue_delay_accuracy` judges
+# them (crates/strims-sim/src/measures.rs).
+# (row prefix, node line field, scored against the wait at the moment rather
+# than the standing queue), as strims-sim's Report::row scores them.
+DELAY_READINGS = (
+    ("qd", "queue_delay_ms", False),
+    ("qdv", "path_delay_ms", False),
+    ("qdb", "path_queued_ms", False),
+    ("qdbi", "path_queued_ms", True),
+)
+STANDING_MS = 3000
+SATURATED_STANDING_MS = 5
+QUEUE_DELAY_THRESHOLD_MS = 80
+
+
+def tc_queue(path):
+    """(wall ms, ms to drain the tbf backlog at its rate) per line of a
+    testbed tc log (run.sh's tc-0.log)."""
+    import re
+
+    unit = {"": 1, "K": 1024, "M": 1024 * 1024, "G": 1024 ** 3}
+    rate_unit = {"": 1, "K": 1e3, "M": 1e6, "G": 1e9}
+    out = []
+    for line in path.read_text().splitlines():
+        t, _, rest = line.partition(" ")
+        tbf = rest.partition("qdisc tbf")[2]
+        b = re.search(r"backlog ([\d.]+)([KMG]?)b", tbf)
+        r = re.search(r"rate ([\d.]+)([KMG]?)bit", tbf)
+        if not (t.isdigit() and b and r):
+            continue
+        backlog = float(b[1]) * unit[b[2]]
+        rate = float(r[1]) * rate_unit[r[2]] / 8
+        out.append((int(t), 1000 * backlog / rate))
+    return out
+
+
+def testbed_delays(d):
+    """A testbed run's `<reading>_{err,fp,fn}_seeds*` fields: its seed's
+    lines against tc's standing queue, or its wait at the moment, over the
+    stream."""
+    env = settings(d / "settings")
+    secs = int(env.get("SECS", 180))
+    queue = tc_queue(d / "tc-0.log") if (d / "tc-0.log").exists() else []
+    lines = [json.loads(x) for x in (d / "node-0.jsonl").read_text().splitlines() if x.startswith("{")]
+    out = {}
+    for name, field, instant in DELAY_READINGS:
+        errs, neg, pos_ = [], [0, 0], [0, 0]
+        for ln in lines:
+            v = ln.get(field)
+            if v is None or not 0 <= ln["rel_ms"] <= secs * 1000:
+                continue
+            window = [w for t, w in queue if ln["t_ms"] - STANDING_MS <= t <= ln["t_ms"]]
+            if not window:
+                continue
+            wait = window[-1] if instant else min(window)
+            errs.append(abs(v - wait))
+            if wait < (QUEUE_DELAY_THRESHOLD_MS if instant else SATURATED_STANDING_MS):
+                neg[1] += 1
+                neg[0] += v >= QUEUE_DELAY_THRESHOLD_MS
+            else:
+                pos_[1] += 1
+                pos_[0] += v < QUEUE_DELAY_THRESHOLD_MS
+        if errs:
+            out[f"{name}_err_seeds_ms"] = med(errs)
+            out[f"{name}_fp_seeds"] = neg[0] / neg[1] if neg[1] else 0.0
+            out[f"{name}_fn_seeds"] = pos_[0] / pos_[1] if pos_[1] else 0.0
+    return out
+
+
+def delay_rows(paths):
+    """(env, row) per run in `paths`: sim rows as they are, testbed runs
+    with the fields `testbed_delays` gives."""
+    for p in map(Path, paths):
+        if p.is_dir() and (p / "node-0.jsonl").exists():
+            yield settings(p / "settings"), testbed_delays(p)
+            continue
+        rows = p / "rows.jsonl" if p.is_dir() else p
+        with open(rows) as f:
+            for line in f:
+                at = line.find("ROW {")
+                line = line[at + 4:] if at >= 0 else line.strip()
+                if not line.startswith("{"):
+                    continue
+                r = json.loads(line)
+                if "row" in r:
+                    env = {
+                        **r.get("env", {}),
+                        "arm": r.get("arm", ""),
+                        "commit": r.get("commit", "")[:8],
+                        "test": r.get("test", ""),
+                    }
+                    if r.get("kind") == "testbed":
+                        env["repeat"] = r.get("repeat")
+                        yield env, testbed_delays(rows.parent / r["run_dir"])
+                    else:
+                        yield env, r["row"]
+                else:
+                    yield {"seed": r.get("seed"), "test": r.get("test", "")}, r
+
+
+def delays(a):
+    done = [(env, row) for env, row in delay_rows(a.runs) if matches(env, row, a.where)]
+    keys = {k for env, _ in done for k in env}
+    if a.group:
+        group = [k for g in a.group.split(",") for k in sorted(keys) if short(k) == short(g)]
+    else:
+        group = sorted(k for k in keys if k not in SEED_KEYS and len({str(e.get(k)) for e, _ in done}) > 1)
+    cells = collections.defaultdict(list)
+    for env, row in done:
+        cells[tuple(str(env.get(k, "")) for k in group)].append(row)
+    num = lambda x: (0, float(x)) if x.replace(".", "", 1).isdigit() else (1, x)
+    f = lambda x, fmt: "-" if x is None else format(x, fmt)
+    cols = " | ".join(f"{n} err fp fn" for n, _, _ in DELAY_READINGS)
+    print(" ".join(short(k) for k in group) + f" | role n | {cols}")
+    for cell in sorted(cells, key=lambda c: [num(x) for x in c]):
+        rows = cells[cell]
+        for role in ("seeds", "forwarders"):
+            parts = []
+            for name, _, _ in DELAY_READINGS:
+                v = lambda k: med([r[k] for r in rows if r.get(k) is not None])
+                parts.append(
+                    f"{f(v(f'{name}_err_{role}_ms'), '.0f')} {f(v(f'{name}_fp_{role}'), '.2f')} {f(v(f'{name}_fn_{role}'), '.2f')}"
+                )
+            n = sum(1 for r in rows if r.get(f"qd_err_{role}_ms") is not None or r.get(f"qdv_err_{role}_ms") is not None)
+            if n:
+                print(f"{' '.join(cell)} | {role} {n} | " + " | ".join(parts))
 
 
 def matches(env, row, where):
@@ -706,7 +908,7 @@ def pair(a):
     sels_b = [selector(b) for b in a.b]
     arm_keys = {short(w.partition("=")[0]) for sel in [sel_a, *sels_b] for w in sel}
     arm_keys |= {short(k) for k in (a.ignore or "").split(",") if k}
-    arm_keys |= {"arm", "test"}
+    arm_keys |= {"arm", "commit"}
     seed_keys = {short(k) for k in SEED_KEYS}
     found = []
     for _, env, row, s in runs(a.runs):
@@ -735,7 +937,9 @@ def pair(a):
     print(f"A = {a.a}")
     for i, b in enumerate(a.b):
         print(f"B{i + 1} = {b}")
-    print(" ".join(shown) + " | B | pairs | unhealthy A B | absorbing A B | d unhealthy | lag_p50 B/A | lag_p99 B/A")
+    metrics = a.metric or []
+    extra = "".join(f" | {m} B/A" for m in metrics)
+    print(" ".join(shown) + " | B | pairs | unhealthy A B | absorbing A B | d unhealthy | lag_p50 B/A | lag_p99 B/A" + extra)
     for cell in sorted(arms[0], key=lambda c: [num(x) for x in c]):
         label = " ".join(cell[cell_keys.index(k)] or "-" for k in shown)
         for i in range(1, len(arms)):
@@ -753,6 +957,7 @@ def pair(a):
             print(
                 f"{label} | B{i} | {len(seeds)} | {100 * un(pa):3.0f}% {100 * un(pb):3.0f}% | {ab(pa)} {ab(pb)} |"
                 f" {100 * (d or 0):+4.0f} | {ratio(boot_ci(logs('lag_p50_ms')))} | {ratio(boot_ci(logs('lag_p99_ms')))}"
+                + "".join(f" | {ratio(boot_ci(logs(m)))} ({len(logs(m))})" for m in metrics)
             )
 
 
@@ -873,6 +1078,12 @@ def holders(a):
                 d["cwnd"].append(r["cwnd"])
                 d["flight"].append(r["in_flight"] if r["type"] == "SimConn" else r["unacked"])
                 d["pending"].append(max(r.get("pending", 0), 0) + max(r["unsent"], 0))
+            elif r["type"] == "Path" and r["samples"] > 0:
+                for k in ("rtt", "base", "recent_min"):
+                    if ms(r[k]) is not None:
+                        d[k].append(ms(r[k]))
+                if r["queued"] >= 0:
+                    d["path_queued"].append(r["queued"])
         elif r["node"] in spans:
             d = per[(r["node"], k)]
             if r["type"] == "DATA" and r["dir"] == "out" and r.get("ann") == "push":
@@ -892,12 +1103,18 @@ def holders(a):
                 d = per.get((h, k))
                 if not d:
                     continue
+                path = " ".join(f"{med(d[k]) if d[k] else '-':>5}" for k in ("rtt", "base", "recent_min"))
+                pq = med(d["path_queued"]) // 1000 if d["path_queued"] else "-"
                 print(
                     f"  {k:5d}s pushed {sum(d['pushed']) // 1000:5d} kB queued {med(d['queued']) if d['queued'] else '-':>5}"
                     f" cwnd {med(d['cwnd']) or '-':>6} in flight {med(d['flight']) or '-':>7} waiting {med(d['pending']) or '-':>8}"
+                    f" | path rtt base recent {path} ms queued {pq:>5} kB"
                     f" | relayed {sum(d['relayed']) // 1000:5d} kB dropped {dict(collections.Counter(d['dropped']))}"
                     f" pruned by {sorted(collections.Counter(d['pruned by']).items())}"
                 )
+    joined = sum(len(v) for v in spans.values())
+    left = collections.Counter(why for v in spans.values() for _, t1, why in v if t1 is not None)
+    print(f"-- {joined} holder spans over {len(spans)} peers; left: {dict(left)}")
 
 
 # Runs part where one's count is this many times the other's.
@@ -995,6 +1212,11 @@ def main():
     p.add_argument("node")
     p.add_argument("peers", nargs="+")
     p.add_argument("--step", type=float, default=0.5, help="seconds between samples")
+    p = command("paths", paths)
+    p.add_argument("rows")
+    p.add_argument("node")
+    p.add_argument("peers", nargs="*")
+    p.add_argument("--step", type=float, default=1.0, help="seconds between samples")
     p = command("pulls", pulls)
     p.add_argument("rows")
     p.add_argument("--source", default="seed")
@@ -1008,7 +1230,14 @@ def main():
     p = command("diverge", diverge)
     p.add_argument("runs", nargs=2)
     p.add_argument("--source", default="seed")
-    for name, f in (("series", series), ("collapse", collapse), ("map", map_), ("pair", pair), ("track", track)):
+    for name, f in (
+        ("series", series),
+        ("collapse", collapse),
+        ("map", map_),
+        ("pair", pair),
+        ("track", track),
+        ("delays", delays),
+    ):
         p = sub.add_parser(name)
         p.set_defaults(f=f)
         p.add_argument("runs", nargs="+")
@@ -1021,6 +1250,9 @@ def main():
     p.add_argument("--a", required=True, help="K=V[,K=V]: the runs of arm A")
     p.add_argument("--b", required=True, action="append", help="K=V[,K=V]: the runs of an arm B")
     p.add_argument("--ignore", help="K,...: settings that don't tell cells apart")
+    p.add_argument("--metric", action="append", help="F: also compare the row field F")
+    p = sub.choices["delays"]
+    p.add_argument("--group", help="the env keys of a cell (default: every key that varies)")
     p = sub.choices["track"]
     p.add_argument("--group", help="the env keys of a cell (default: every key that varies)")
     p.add_argument("--runs", dest="runs_", action="store_true", help="one line per run")
