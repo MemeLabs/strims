@@ -1,0 +1,41 @@
+# ppspp's readers of round trips on vnic's path measure instead of pings,
+# one at a time and all together (SIM_PATH; "link" sends no pings at all),
+# in the ppspp sim's A/B scenarios at the swarm defaults (4 KiB chunks,
+# 32 KiB munros, 16 streams, the adaptive seed), streaming 120 s with each
+# run's seconds in its row. vnic-acks-ab-main.toml has main's twin. Read it
+# with `hack/capture/analyze.py pair`, by seed: each SIM_PATH against "",
+# and "link" against main.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 2
+
+[arms]
+vnic-acks = "78fa46fa"
+
+[env]
+SIM_CASE = "AdaptiveQos"
+SIM_STREAMS = "16"
+SIM_CHUNK = "4096"
+SIM_MUNRO = "32768"
+SIM_SECS = "120"
+SIM_SERIES = "1"
+
+[axes]
+SIM_SCENARIO = ["LiveMesh", "SparseLossy", "LatencyStep", "CappedSeed", "SeedStarved", "CrossTraffic", "WanGlobal", "WanMobile", "WanResidentialSeed", "WanSuperPeer"]
+SIM_PATH = ["", "meter", "holder", "controller", "link"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_SECS = "2"
+SIM_WARM = "1"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "timeouts:mean",
+  "wasted/chunks_read:ratio",
+]

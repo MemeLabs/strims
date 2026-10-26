@@ -1,0 +1,36 @@
+# vnic-acks-ab-cable.toml's cells at main, without vnic's probes.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 4
+
+[arms]
+main = "2e0e2c94"
+
+[env]
+SIM_SCENARIO = "cable-seed"
+SIM_SEED_POLICY = "adaptive"
+SIM_PEERS = "100"
+SIM_STREAMS = "16"
+SIM_CHUNK = "4096"
+SIM_MUNRO = "32768"
+SIM_SECS = "120"
+SIM_SERIES = "1"
+
+[axes]
+SIM_MBIT = ["2", "6", "12"]
+SIM_SEED_ACCESS = ["cable", "fiber"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_PEERS = "10"
+SIM_SECS = "2"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "wasted/chunks_read:ratio",
+]

@@ -1,0 +1,41 @@
+# vnic-acks-ab.toml's comparison behind the ppspp sim's cable seed
+# (wan_cable_seed: 100 viewers behind a cable or fiber seed at 2, 6 or
+# 12 Mbit/s) at the swarm defaults, streaming 120 s with each run's seconds
+# in its row. vnic-acks-ab-cable-main.toml has main's twin.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 4
+
+[arms]
+vnic-acks = "78fa46fa"
+
+[env]
+SIM_SCENARIO = "cable-seed"
+SIM_SEED_POLICY = "adaptive"
+SIM_PEERS = "100"
+SIM_STREAMS = "16"
+SIM_CHUNK = "4096"
+SIM_MUNRO = "32768"
+SIM_SECS = "120"
+SIM_SERIES = "1"
+
+[axes]
+SIM_MBIT = ["2", "6", "12"]
+SIM_SEED_ACCESS = ["cable", "fiber"]
+SIM_PATH = ["", "meter", "holder", "controller", "link"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_PEERS = "10"
+SIM_SECS = "2"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "timeouts:mean",
+  "wasted/chunks_read:ratio",
+]
