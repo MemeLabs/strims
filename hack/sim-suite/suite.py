@@ -10,6 +10,8 @@ working tree's sims against the base's, cell by cell, paired by seed.
                               [--tree-env KEY=VALUE ...]
   hack/sim-suite/suite.py calibrate [--base REF] [--tier ...] [--seeds N]
                                     [--only CELL,...]
+  hack/sim-suite/suite.py race --flags A,B,... [--knob SIM_EXP,STRIMS_SIM_EXP]
+                               [--base REF] [--tier ...] [--keep N]
 
 `run` builds the ppspp sim and strims-sim's scenarios from the working
 tree (the checkout this script is in, changes and all) and from `--base`
@@ -46,6 +48,18 @@ budget) are listed first. Four seeds show direction, not effect sizes:
 take what moves to the farm. Cheap cells run more seeds, and so do cells
 that tip between healthy and collapsed by seed.
 
+`race` finds the best combination of the working tree's flags (a knob
+naming them comma-separated, by default SIM_EXP and STRIMS_SIM_EXP): round
+0 runs a two-level fractional factorial over them (each flag's main effect
+free of two-flag interactions) at half the cells' seeds, then each round
+keeps the better half at more seeds (all of them, then twice), and the
+last few are confirmed at fresh seeds (1001 on). An arm scores, against
+the base on the same seeds, by its collapsed runs over all cells, then by
+the geometric mean over cells of its lag p99 ratio; it is out if a cell's
+delivery falls significantly, or a cell where the base never collapsed
+gets a lag p99 or startup p99 ratio whose interval lies past 1.10. Rounds
+print their tables and round 0 each flag's main effects.
+
 `calibrate` scores the base against itself at other seeds (seeds 1..N
 against N+1..2N, paired in order): what moves there is seed noise, an
 upper bound on what a change that only perturbs the timeline shows, and
@@ -54,6 +68,7 @@ a metric that moves in it needs a wider tie band.
 
 import argparse
 import collections
+import itertools
 import concurrent.futures as cf
 import hashlib
 import importlib.util
@@ -521,6 +536,127 @@ def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False):
     print(f"\nmoved: {totals['+']} better, {totals['-']} worse, {totals['~']} changed; {totals[' ']} ties")
 
 
+# --- race -------------------------------------------------------------------
+
+def design(flags):
+    """Round 0's arms: a two-level fractional factorial over `flags`, the
+    first five crossed in full and each further one the product of three of
+    them (resolution IV: main effects aren't aliased with two-flag
+    interactions). The all-off arm, the base itself, is left out."""
+    k = len(flags)
+    n = min(k, 5)
+    gens = list(itertools.combinations(range(n), 3))[: k - n]
+    arms = []
+    for i in range(2 ** n):
+        bits = [(i >> j) & 1 for j in range(n)]
+        bits += [bits[a] ^ bits[b] ^ bits[c] for a, b, c in gens]
+        arm = tuple(f for f, b in zip(flags, bits) if b)
+        if arm:
+            arms.append(arm)
+    return arms
+
+
+GUARD_RATIO = 1.10
+
+
+def arm_score(cells, base_rows, arm_rows):
+    """An arm against the base on the same seeds: its collapsed runs and the
+    base's, the geometric mean over cells of its lag p99 ratio, and the
+    guardrails it broke."""
+    ka_all = kb_all = 0
+    logs = []
+    broken = []
+    get = {name: (fn, better, kind, tie) for name, fn, better, kind, tie in METRICS}
+    for c in cells:
+        ka, kb, n = collapses(c, base_rows, arm_rows)
+        if n == 0:
+            continue
+        ka_all += ka
+        kb_all += kb
+        def pairs(name):
+            fn = get[name][0]
+            out = []
+            for (cell, seed), ra in base_rows.items():
+                rb = arm_rows.get((cell, seed))
+                if cell != c["name"] or rb is None:
+                    continue
+                va, vb = fn(ra), fn(rb)
+                if va is not None and vb is not None:
+                    out.append((va, vb))
+            return out
+        e = effect("ratio", pairs("lag_p99_ms"))
+        if e is not None:
+            logs.append(math.log(e[0]))
+        fn, better, kind, tie = get["delivery"]
+        if mark(better, kind, tie, effect(kind, pairs("delivery"))) == "-":
+            broken.append(f"{c['name']} delivery")
+        if ka == 0:
+            for name in ("lag_p99_ms", "startup_p99_ms"):
+                e = effect("ratio", pairs(name))
+                if e is not None and e[1] > GUARD_RATIO:
+                    broken.append(f"{c['name']} {name} x{e[0]:.2f}")
+    p99 = math.exp(sum(logs) / len(logs)) if logs else None
+    return {"collapsed": kb_all, "base_collapsed": ka_all, "p99": p99, "broken": broken}
+
+
+def rank_key(sc):
+    return (bool(sc["broken"]), sc["collapsed"], sc["p99"] if sc["p99"] is not None else math.inf)
+
+
+def race(a, cells, count, sha, base, sims, union):
+    flags = [f.strip() for f in a.flags.split(",") if f.strip()]
+    knobs = [k.strip() for k in a.knob.split(",") if k.strip()]
+    tree = {sim: tree_binary(sim, base[sim]) for sim in sims}
+
+    def arm_runs(arm, seeds):
+        env = {k: ",".join(arm) for k in knobs}
+        tag = hashlib.sha1(json.dumps(sorted(env.items())).encode()).hexdigest()[:8]
+        return {f"{label}~{tag}": (bin_dir, seeds, sim, env) for sim, (label, bin_dir) in tree.items()}
+
+    def play(arms, seeds, title):
+        runs = {label: (bin_dir, seeds, sim, {}) for sim, (label, bin_dir) in base.items()}
+        labels = {}
+        for arm in arms:
+            r = arm_runs(arm, seeds)
+            labels[arm] = list(r)
+            runs.update(r)
+        rows, failures = run_cells(cells, runs, a.slots, a.mem_gib)
+        base_rows = union(rows, [label for label, _ in base.values()])
+        scores = {arm: arm_score(cells, base_rows, union(rows, labels[arm])) for arm in arms}
+        print(f"\n{title}: {len(arms)} arms")
+        print(f"   {'arm':58} collapsed (base)   p99 ratio   guardrails")
+        for arm in sorted(arms, key=lambda x: rank_key(scores[x])):
+            sc = scores[arm]
+            p99 = "-" if sc["p99"] is None else f"x{sc['p99']:.3f}"
+            print(f"   {','.join(arm):58} {sc['collapsed']:5} ({sc['base_collapsed']:3})   {p99:>9}   "
+                  f"{'; '.join(sc['broken'][:3]) + (' ...' if len(sc['broken']) > 3 else '') or 'ok'}")
+        for f in failures:
+            print("   FAILURE " + f)
+        sys.stdout.flush()
+        return scores
+
+    upto = lambda mult: (lambda c: list(range(1, max(2, math.ceil(count(c) * mult)) + 1)))
+    arms = design(flags)
+    scores = play(arms, upto(0.5), "round 0 (fractional factorial, half the seeds)")
+    # Main effects: the mean with a flag on less the mean with it off.
+    print("\nmain effects (round 0): log p99 ratio, collapsed runs, arms out")
+    for f in flags:
+        on = [scores[x] for x in arms if f in x]
+        off = [scores[x] for x in arms if f not in x] + [{"collapsed": scores[arms[0]]["base_collapsed"], "p99": 1.0, "broken": []}]
+        lp = lambda xs: sum(math.log(x["p99"]) for x in xs if x["p99"]) / max(1, sum(1 for x in xs if x["p99"]))
+        col = lambda xs: sum(x["collapsed"] for x in xs) / max(1, len(xs))
+        out = lambda xs: sum(1 for x in xs if x["broken"]) / max(1, len(xs))
+        print(f"   {f:18} {lp(on) - lp(off):+.3f}   {col(on) - col(off):+6.2f}   {out(on):.0%} vs {out(off):.0%}")
+    for mult in (1.0, 2.0):
+        live = sorted(arms, key=lambda x: rank_key(scores[x]))
+        live = [x for x in live if not scores[x]["broken"]] or live[:1]
+        arms = live[: max(a.keep, math.ceil(len(live) / 2))]
+        scores = play(arms, upto(mult), f"round at {mult:g}x the seeds")
+    best = sorted(arms, key=lambda x: rank_key(scores[x]))[: a.keep]
+    fresh = lambda c: list(range(1001, 1001 + max(2, count(c))))
+    play(best, fresh, "confirmation at fresh seeds")
+
+
 def run_cells(cells, runs, slots, mem_gib):
     """Runs every binary of `runs` ({label: (bin_dir, seeds, sim, env)})
     at its seeds for the cells of its sim, with `env` added to every job's
@@ -587,6 +723,18 @@ def main():
     r.add_argument("--all", action="store_true", help="every metric, ties too")
     r.add_argument("--tree-env", action="append", default=[], metavar="KEY=VALUE",
                    help="set for the working tree's runs only, e.g. a knob that turns a change on")
+    rc = sub.add_parser("race")
+    rc.add_argument("--flags", required=True, help="the flags to race, comma-separated")
+    rc.add_argument("--knob", default="SIM_EXP,STRIMS_SIM_EXP",
+                    help="the environment knobs that take the flags, comma-separated")
+    rc.add_argument("--base", default="main")
+    rc.add_argument("--tier", default="peers", choices=sorted(TIERS))
+    rc.add_argument("--seeds", type=int, default=4)
+    rc.add_argument("--slots", type=int, default=max(1, (os.cpu_count() or 2) - 1))
+    rc.add_argument("--mem-gib", type=float, default=40)
+    rc.add_argument("--only", help="cells, comma-separated")
+    rc.add_argument("--rebuild", action="store_true")
+    rc.add_argument("--keep", type=int, default=3, help="arms the confirmation keeps")
     a = ap.parse_args()
 
     cells = TIERS[a.tier]
@@ -600,6 +748,9 @@ def main():
     base = {sim: base_binary(sha, sim, a.rebuild) for sim in sims}
     (WORK / "rows").mkdir(parents=True, exist_ok=True)
     union = lambda rows, labels: {k: r for label in labels for k, r in rows[label].items()}
+    if a.cmd == "race":
+        race(a, cells, count, sha, base, sims, union)
+        return
     if a.cmd == "calibrate":
         both = lambda c: list(range(1, 2 * count(c) + 1))
         runs = {label: (bin_dir, both, sim, {}) for sim, (label, bin_dir) in base.items()}
