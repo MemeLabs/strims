@@ -1,0 +1,40 @@
+# gate-greedy.toml's cells with grabbers (SIM_GREEDY_KINDS=grab) for the
+# greedy viewers, at 10 and 20 % of them, main's arm.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 4
+
+[arms]
+main = "4daedef5"
+
+[env]
+SIM_SCENARIO = "cable-seed"
+SIM_SEED_POLICY = "adaptive"
+SIM_SEED_ACCESS = "cable"
+SIM_STREAMS = "16"
+SIM_CHUNK = "4096"
+SIM_MUNRO = "32768"
+SIM_SECS = "120"
+SIM_SERIES = "1"
+SIM_GREEDY_KINDS = "grab"
+
+[axes]
+SIM_PEERS = ["50", "100"]
+SIM_MBIT = ["4", "6", "8"]
+SIM_GREEDY_SHARE = ["10", "20"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_PEERS = "10"
+SIM_SECS = "2"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "holder_short:mean",
+  "seed_pull_share:mean",
+]

@@ -1,0 +1,43 @@
+# The answer gate's greedy-peer cells, main's arm: the ppspp sim's cable
+# seed (50 and 100 viewers at 4, 6 and 8 Mbit/s, the swarm defaults,
+# 120 s) with the default greedy mix (SIM_GREEDY=1) and none (0).
+# gate-grab.toml has grabbers at 10 and 20 %; gate-greedy-on.toml and
+# gate-grab-on.toml run the gate. Read them with
+# `hack/capture/analyze.py pair` (--ignore SIM_GATE).
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 4
+
+[arms]
+main = "4daedef5"
+
+[env]
+SIM_SCENARIO = "cable-seed"
+SIM_SEED_POLICY = "adaptive"
+SIM_SEED_ACCESS = "cable"
+SIM_STREAMS = "16"
+SIM_CHUNK = "4096"
+SIM_MUNRO = "32768"
+SIM_SECS = "120"
+SIM_SERIES = "1"
+
+[axes]
+SIM_PEERS = ["50", "100"]
+SIM_MBIT = ["4", "6", "8"]
+SIM_GREEDY = ["1", "0"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_PEERS = "10"
+SIM_SECS = "2"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "holder_short:mean",
+  "seed_pull_share:mean",
+]

@@ -1,0 +1,40 @@
+# The answer gate's do-no-harm cable-seed cells, main's arm:
+# vnic-acks-ab-cable.toml's (100 viewers behind a cable or fiber seed at 2,
+# 6 or 12 Mbit/s, the default greedy mix, 120 s).
+# gate-noharm-cable-on.toml runs the gate's arm.
+
+package = "strims-ppspp"
+target = "sim"
+test = "sim_job"
+slot_mem_gib = 4
+
+[arms]
+main = "4daedef5"
+
+[env]
+SIM_SCENARIO = "cable-seed"
+SIM_SEED_POLICY = "adaptive"
+SIM_PEERS = "100"
+SIM_STREAMS = "16"
+SIM_CHUNK = "4096"
+SIM_MUNRO = "32768"
+SIM_SECS = "120"
+SIM_SERIES = "1"
+
+[axes]
+SIM_MBIT = ["2", "6", "12"]
+SIM_SEED_ACCESS = ["cable", "fiber"]
+SIM_SEED = ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+[canary]
+SIM_PEERS = "10"
+SIM_SECS = "2"
+
+[report]
+columns = [
+  "delivery:mean,min",
+  "lag_p50_ms:median",
+  "lag_p99_ms:median,max",
+  "timeouts:mean",
+  "wasted/chunks_read:ratio",
+]
