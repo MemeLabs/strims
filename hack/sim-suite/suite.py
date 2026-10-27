@@ -14,9 +14,10 @@ working tree's sims against the base's, cell by cell, paired by seed.
 tree (the checkout this script is in, changes and all) and from `--base`
 (default `main`, a commit checked out in a worktree under
 target/sim-suite/src), runs every cell of the tier at seeds 1..N under each,
-and prints a scorecard. The base's rows are kept per commit
-(target/sim-suite/rows/<commit>.jsonl), so later runs against the same base
-run only the working tree. Rows are the sims' `ROW` objects with each run's
+and prints a scorecard. Builds and rows are kept by what the binaries are
+built from (crates/ and the workspace's Cargo and toolchain files: a
+commit that changes only scripts reuses its parent's), so later runs
+against the same base run only the working tree. Rows are the sims' `ROW` objects with each run's
 wall time and peak memory; runs are deterministic, so a cell and seed
 always give the same row.
 
@@ -95,12 +96,12 @@ TIPPING = 8
 TIERS = {
     "smoke": [
         cell("large", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "200", "SIM_MBIT": "2", "SIM_SECS": "10"}, 2,
-             "a large swarm runs"),
+             "a large swarm runs", 1),
         cell("wan-global", PPSPP, "sim_job", {**PP_AB, "SIM_SCENARIO": "WanGlobal", "SIM_SECS": "20"}, 1,
-             "relays on residential uplinks"),
+             "relays on residential uplinks", 1),
         cell("star-15", SIM, "calibration_star", {**SS_STAR, "STRIMS_SIM_CAL_VIEWERS": "15",
-             "STRIMS_SIM_CAL_SEED_UP_MBIT": "10", "STRIMS_SIM_CAL_SECS": "20"}, 1, "the real stack runs"),
-        cell("capped-hybrid", SIM, "capped_seed_hybrid", SS_BASE, 1, "pull behind a capped seed"),
+             "STRIMS_SIM_CAL_SEED_UP_MBIT": "10", "STRIMS_SIM_CAL_SECS": "20"}, 1, "the real stack runs", 1),
+        cell("capped-hybrid", SIM, "capped_seed_hybrid", SS_BASE, 1, "pull behind a capped seed", 1),
     ],
     "peers": [
         cell("large-2mbit", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "500", "SIM_MBIT": "2", "SIM_SECS": "30"}, 5,
@@ -248,29 +249,42 @@ def build(src, dest):
         tmp.replace(bin_path)
 
 
+# What the test binaries are built from.
+BUILD_PATHS = ["crates", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml"]
+
+
+def build_key(sha):
+    """A key for the binaries `sha` builds: its build inputs' hashes."""
+    trees = git("rev-parse", *(f"{sha}:{p}" for p in BUILD_PATHS))
+    return hashlib.sha1(trees.encode()).hexdigest()[:12]
+
+
 def base_binaries(sha, rebuild):
-    """The base commit's binaries, built once in a worktree of their own."""
-    dest = WORK / "bin" / sha
+    """The base commit's binaries and their key, built once in a worktree
+    of their own."""
+    key = build_key(sha)
+    dest = WORK / "bin" / key
     if not rebuild and all((dest / sim).exists() for sim in BINARIES):
-        return dest
-    src = WORK / "src" / sha
+        return key, dest
+    src = WORK / "src" / key
     if not src.exists():
         git("worktree", "add", "--detach", str(src), sha)
-    print(f"building base {sha[:8]}", file=sys.stderr)
+    print(f"building base {sha[:8]} ({key})", file=sys.stderr)
     build(src, dest)
-    return dest
+    return key, dest
 
 
 def tree_binaries():
-    """The working tree's binaries, under a label naming its commit and its
-    changes."""
-    head = git("rev-parse", "HEAD")
-    diff = subprocess.run(["git", "diff", "HEAD"], cwd=ROOT, check=True, capture_output=True).stdout
+    """The working tree's binaries, under a label naming its commit's
+    build inputs and its changes to them."""
+    diff = subprocess.run(["git", "diff", "HEAD", "--", *BUILD_PATHS], cwd=ROOT, check=True,
+                          capture_output=True).stdout
     # New files under crates/ build too.
     for f in git("ls-files", "--others", "--exclude-standard", "crates").splitlines():
         diff += f.encode() + (ROOT / f).read_bytes()
-    label = f"{head[:8]}+{hashlib.sha1(diff).hexdigest()[:8]}" if diff else head[:8]
-    dest = WORK / "bin" / f"tree-{label}"
+    key = build_key("HEAD")
+    label = f"tree-{key}+{hashlib.sha1(diff).hexdigest()[:8]}" if diff else f"tree-{key}"
+    dest = WORK / "bin" / label
     print(f"building working tree {label}", file=sys.stderr)
     build(ROOT, dest)
     return label, dest
@@ -547,25 +561,25 @@ def main():
     count = lambda c: c["seeds"] or a.seeds
     seeds = lambda c: list(range(1, count(c) + 1))
     sha = git("rev-parse", a.base)
-    base_bin = base_binaries(sha, a.rebuild)
+    key, base_bin = base_binaries(sha, a.rebuild)
     (WORK / "rows").mkdir(parents=True, exist_ok=True)
-    base_store = WORK / "rows" / f"{sha}.jsonl"
+    base_store = WORK / "rows" / f"{key}.jsonl"
     if a.cmd == "calibrate":
         both = lambda c: list(range(1, 2 * count(c) + 1))
-        rows, failures = run_cells(cells, [(sha, base_bin, base_store, both)], a.slots, a.mem_gib)
+        rows, failures = run_cells(cells, [(key, base_bin, base_store, both)], a.slots, a.mem_gib)
         per = {c["name"]: count(c) for c in cells}
-        b = {(c, s - per[c]): r for (c, s), r in rows[sha].items() if s > per[c]}
-        a_rows = {k: r for k, r in rows[sha].items() if k[1] <= per[k[0]]}
+        b = {(c, s - per[c]): r for (c, s), r in rows[key].items() if s > per[c]}
+        a_rows = {k: r for k, r in rows[key].items() if k[1] <= per[k[0]]}
         report = lambda: scorecard(cells, a_rows, b, f"{a.base} {sha[:8]} at seeds 1..N",
                                    "the same at seeds N+1..2N", True)
     else:
         tree_label, tree_bin = tree_binaries()
-        tree_store = WORK / "rows" / f"tree-{tree_label}.jsonl"
+        tree_store = WORK / "rows" / f"{tree_label}.jsonl"
         rows, failures = run_cells(
-            cells, [(sha, base_bin, base_store, seeds), (tree_label, tree_bin, tree_store, seeds)],
+            cells, [(key, base_bin, base_store, seeds), (tree_label, tree_bin, tree_store, seeds)],
             a.slots, a.mem_gib,
         )
-        report = lambda: scorecard(cells, rows[sha], rows[tree_label], f"{a.base} {sha[:8]}",
+        report = lambda: scorecard(cells, rows[key], rows[tree_label], f"{a.base} {sha[:8]}",
                                    f"working tree {tree_label}", a.all)
     if failures:
         print("FAILURES")
