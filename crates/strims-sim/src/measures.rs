@@ -764,6 +764,26 @@ impl Report {
                 }
             }
         }
+        // The viewers' uplink use: bytes written to sockets over the run
+        // against their uplink for the stream's span.
+        if let Some(spec) = self.scenario.swarms.get(swarm) {
+            let secs = spec.stop.saturating_sub(spec.start).as_secs_f64().max(1e-9);
+            let mut util: Vec<f64> = spec
+                .viewers
+                .iter()
+                .chain(&spec.relays)
+                .filter_map(|&h| {
+                    let cap = self.upload_cap(h)? as f64;
+                    Some(self.hosts.get(h)?.uploaded as f64 / (cap * secs))
+                })
+                .collect();
+            util.sort_by(f64::total_cmp);
+            for p in [50, 90, 95] {
+                if let Some(&u) = util.get(util.len().saturating_sub(1) * p / 100) {
+                    j.num(&format!("viewer_util_p{p}"), u);
+                }
+            }
+        }
         let c = self.swarm_counters(swarm);
         j.num("seed_data_share", self.data_share(swarm))
             .num("seed_share", self.uploads(swarm).seed_share)

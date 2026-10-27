@@ -614,6 +614,9 @@ struct Sim {
     alloc: Vec<AllocSample>,
     next_alloc: Time,
     grafts: Grafts,
+    /// The push trees' shape and the upload meters, once a second after
+    /// the warm-up.
+    shape: Shape,
     /// The reports' verdicts against the real subtrees.
     verdicts: Verdicts,
     /// Per liar, the samples in a row so far at which it held a copy, and
@@ -681,6 +684,30 @@ struct Verdicts {
     not_kept: u64,
     /// Honest holders barred that had a real child at the sample before.
     barred_with_children: u64,
+}
+
+/// Hops from the seed that [`Shape::depth`] counts one by one; deeper
+/// chains count together.
+const DEPTH_HOPS: usize = 6;
+
+/// The push trees' shape and the nodes' upload meters, sampled once a
+/// second after the warm-up (report only).
+#[derive(Default)]
+struct Shape {
+    /// Honest (viewer, stream) samples by how the viewer gets the stream:
+    /// `[0]` with no open parent; `[h]` through a chain of open parents `h`
+    /// hops from the seed, up to [`DEPTH_HOPS`]; then deeper chains; then
+    /// cycles; last, chains that end at a viewer with no open parent (its
+    /// subtree is rooted in pull).
+    depth: [u64; DEPTH_HOPS + 4],
+    /// Over the samples, honest viewers with at least one push subscriber,
+    /// and honest viewers.
+    relays: u64,
+    viewers: u64,
+    /// Per sample of each honest node whose upload meter has a capacity:
+    /// the capacity over the node's true uplink, for the seed, relays and
+    /// the other viewers.
+    meter: [Vec<f64>; 3],
 }
 
 /// Honest viewers' open parents, sampled with the seed's allocation after
@@ -1132,6 +1159,7 @@ impl Sim {
             alloc: vec![],
             next_alloc: t0() + Duration::SECOND,
             grafts: Grafts::default(),
+            shape: Shape::default(),
             verdicts: Verdicts::default(),
             liar_runs: BTreeMap::new(),
             liar_spans: Vec::new(),
@@ -1227,6 +1255,7 @@ impl Sim {
                 self.sample_alloc();
                 self.sample_grafts();
                 self.sample_series();
+                self.sample_shape();
             }
             if let Some(every) = progress
                 && self.now >= next_progress
@@ -1791,6 +1820,73 @@ impl Sim {
             capacity,
             hits,
         });
+    }
+
+    /// Samples [`Sim::shape`]: every honest viewer's chain of open parents
+    /// per stream, and every honest node's meter against its uplink.
+    fn sample_shape(&mut self) {
+        if self.now <= t0() + Duration::from_secs(self.cfg.warm_secs) {
+            return;
+        }
+        let streams = self.cfg.stream_count;
+        // Each node's open parent per stream, by node index.
+        let parents: Vec<Vec<Option<usize>>> = self
+            .nodes
+            .iter()
+            .map(|n| {
+                let ps = n.runner.push_stats(n.swarm).map(|p| p.parents);
+                ps.unwrap_or_default()
+                    .iter()
+                    .map(|p| {
+                        p.and_then(|k| n.runner.peer_id(k))
+                            .map(|id| usize::from(id[0]))
+                    })
+                    .collect()
+            })
+            .collect();
+        let parent = |i: usize, s: usize| parents.get(i).and_then(|v| v.get(s)).copied().flatten();
+        let shape = &mut self.shape;
+        for (i, n) in self.nodes.iter().enumerate() {
+            let push = n.runner.push_stats(n.swarm);
+            if matches!(n.role, Role::Seed | Role::Peer)
+                && let Some(p) = &push
+                && p.upload_capacity > 0
+            {
+                let role = match (n.role, p.children) {
+                    (Role::Seed, _) => 0,
+                    (_, 0) => 2,
+                    _ => 1,
+                };
+                shape.meter[role].push(p.upload_capacity as f64 / n.up_bw.max(1) as f64);
+            }
+            if n.role != Role::Peer {
+                continue;
+            }
+            shape.viewers += 1;
+            if push.is_some_and(|p| p.children > 0) {
+                shape.relays += 1;
+            }
+            for s in 0..streams {
+                let mut at = parent(i, s);
+                let mut seen = vec![i];
+                let k = loop {
+                    match at {
+                        None if seen.len() == 1 => break 0,
+                        None => break DEPTH_HOPS + 3,
+                        Some(0) if seen.len() <= DEPTH_HOPS => break seen.len(),
+                        Some(0) => break DEPTH_HOPS + 1,
+                        Some(p) if seen.contains(&p) => break DEPTH_HOPS + 2,
+                        Some(p) => {
+                            seen.push(p);
+                            at = parent(p, s);
+                        }
+                    }
+                };
+                if let Some(c) = shape.depth.get_mut(k) {
+                    *c += 1;
+                }
+            }
+        }
     }
 
     /// With `SIM_COLLUDE`, greedy viewer `i`'s report due on link `l` to
@@ -5922,6 +6018,54 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
                 if let Some(d) = h.percentile(f64::from(p)) {
                     row.int(&format!("seed_{name}_wait_p{p}_ms"), ms(d) as u64);
                 }
+            }
+        }
+    }
+    // The push trees' depth, the honest viewers' uplink use (wire bytes
+    // over the uplink for the run), their parents' admissions, and the
+    // upload meters against the true uplinks.
+    let sh = &sim.shape;
+    let samples = sh.depth.iter().sum::<u64>().max(1) as f64;
+    for (k, &n) in sh.depth.iter().enumerate() {
+        let name = match k {
+            0 => "depth_none".to_owned(),
+            k if k <= DEPTH_HOPS => format!("depth_{k}"),
+            k if k == DEPTH_HOPS + 1 => "depth_deeper".to_owned(),
+            k if k == DEPTH_HOPS + 2 => "depth_cycle".to_owned(),
+            _ => "depth_pull_rooted".to_owned(),
+        };
+        row.num(&name, n as f64 / samples);
+    }
+    row.num("relay_share", sh.relays as f64 / sh.viewers.max(1) as f64);
+    let mut util: Vec<f64> = sim
+        .nodes
+        .iter()
+        .filter(|n| n.role == Role::Peer)
+        .map(|n| n.wire.up_bytes as f64 / (n.up_bw.max(1) as f64 * span.max(1e-9)))
+        .collect();
+    util.sort_by(f64::total_cmp);
+    for p in [50, 90, 95] {
+        if let Some(&u) = util.get((util.len().saturating_sub(1)) * p / 100) {
+            row.num(&format!("viewer_util_p{p}"), u);
+        }
+    }
+    let (mut acc, mut rej, mut shed) = (0, 0, 0);
+    for n in sim.nodes.iter().filter(|n| n.role == Role::Peer) {
+        if let Some(p) = n.runner.push_stats(n.swarm) {
+            acc += p.accepted;
+            rej += p.rejected;
+            shed += p.sheds_sent;
+        }
+    }
+    row.int("relay_accepted", acc)
+        .int("relay_rejected", rej)
+        .int("relay_sheds", shed);
+    for (name, v) in ["seed", "relays", "others"].iter().zip(&sh.meter) {
+        let mut v = v.clone();
+        v.sort_by(f64::total_cmp);
+        for p in [10, 50, 90] {
+            if let Some(&x) = v.get((v.len().saturating_sub(1)) * p / 100) {
+                row.num(&format!("meter_{name}_p{p}"), x);
             }
         }
     }
