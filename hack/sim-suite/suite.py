@@ -12,14 +12,16 @@ working tree's sims against the base's, cell by cell, paired by seed.
 
 `run` builds the ppspp sim and strims-sim's scenarios from the working
 tree (the checkout this script is in, changes and all) and from `--base`
-(default `main`, a commit checked out in a worktree under
-target/sim-suite/src), runs every cell of the tier at seeds 1..N under each,
-and prints a scorecard. Builds and rows are kept by what the binaries are
-built from (crates/ and the workspace's Cargo and toolchain files: a
-commit that changes only scripts reuses its parent's), so later runs
-against the same base run only the working tree. Rows are the sims' `ROW` objects with each run's
-wall time and peak memory; runs are deterministic, so a cell and seed
-always give the same row.
+(default `main`, checked out in the suite's worktree,
+target/sim-suite/src/base), runs every cell of the tier at seeds 1..N under each,
+and prints a scorecard. Each sim's binary, and its rows, are kept by what
+it is built from: crates/ and the workspace's Cargo and toolchain files,
+less other packages' tests. A change to scripts, or to one sim's tests,
+reuses the rest; later runs against the same base run only the working
+tree, and a sim the working tree leaves as the base's isn't run twice.
+Rows are the sims' `ROW` objects with each run's wall time and peak
+memory; runs are deterministic, so a cell and seed always give the same
+row.
 
 Tiers:
 
@@ -71,8 +73,11 @@ GiB = 1 << 30
 
 PPSPP = "ppspp"
 SIM = "strims-sim"
-# The test binaries: (package, test target, test the jobs run).
-BINARIES = {PPSPP: ("strims-ppspp", "sim"), SIM: ("strims-sim", "scenarios")}
+# The test binaries: (package, test target, the package's directory).
+BINARIES = {
+    PPSPP: ("strims-ppspp", "sim", "crates/strims-ppspp"),
+    SIM: ("strims-sim", "scenarios", "crates/strims-sim"),
+}
 
 PP_BASE = {"SIM_STREAMS": "16", "SIM_CHUNK": "4096", "SIM_MUNRO": "32768", "SIM_SERIES": "1"}
 PP_CABLE = {**PP_BASE, "SIM_SCENARIO": "cable-seed", "SIM_SEED_POLICY": "adaptive", "SIM_SEED_ACCESS": "cable"}
@@ -225,68 +230,90 @@ def git(*args, cwd=ROOT):
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
 
-def build(src, dest):
-    """Builds the test binaries at `src` and copies them into `dest`."""
+def build(src, sim, dest):
+    """Builds `sim`'s test binary at `src` and copies it into `dest`."""
     dest.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "CARGO_TARGET_DIR": str(CARGO), "CARGO_INCREMENTAL": "0"}
-    for sim, (package, target) in BINARIES.items():
-        out = subprocess.run(
-            ["cargo", "test", "--release", "--locked", "-p", package, "--test", target, "--no-run",
-             "--message-format=json"],
-            cwd=src, env=env, check=True, capture_output=True, text=True,
-        ).stdout
-        exe = None
-        for line in out.splitlines():
-            m = json.loads(line)
-            if m.get("reason") == "compiler-artifact" and m.get("target", {}).get("name") == target and m.get("executable"):
-                exe = m["executable"]
-        if exe is None:
-            sys.exit(f"no {target} binary from {src}")
-        bin_path = dest / sim
-        tmp = bin_path.with_suffix(".tmp")
-        tmp.write_bytes(Path(exe).read_bytes())
-        tmp.chmod(0o755)
-        tmp.replace(bin_path)
+    package, target, _ = BINARIES[sim]
+    out = subprocess.run(
+        ["cargo", "test", "--release", "--locked", "-p", package, "--test", target, "--no-run",
+         "--message-format=json"],
+        cwd=src, env=env, check=True, capture_output=True, text=True,
+    ).stdout
+    exe = None
+    for line in out.splitlines():
+        m = json.loads(line)
+        if m.get("reason") == "compiler-artifact" and m.get("target", {}).get("name") == target and m.get("executable"):
+            exe = m["executable"]
+    if exe is None:
+        sys.exit(f"no {target} binary from {src}")
+    bin_path = dest / sim
+    tmp = bin_path.with_suffix(".tmp")
+    tmp.write_bytes(Path(exe).read_bytes())
+    tmp.chmod(0o755)
+    tmp.replace(bin_path)
 
 
 # What the test binaries are built from.
 BUILD_PATHS = ["crates", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml"]
 
 
-def build_key(sha):
-    """A key for the binaries `sha` builds: its build inputs' hashes."""
-    trees = git("rev-parse", *(f"{sha}:{p}" for p in BUILD_PATHS))
-    return hashlib.sha1(trees.encode()).hexdigest()[:12]
+def builds_into(path, sim):
+    """Whether a file under BUILD_PATHS goes into `sim`'s binary: every one
+    but other packages' tests, so editing one sim keeps the other's rows."""
+    parts = path.split("/")
+    if len(parts) > 2 and parts[0] == "crates" and parts[2] == "tests":
+        return "/".join(parts[:2]) == BINARIES[sim][2]
+    return True
 
 
-def base_binaries(sha, rebuild):
-    """The base commit's binaries and their key, built once in a worktree
-    of their own."""
-    key = build_key(sha)
-    dest = WORK / "bin" / key
-    if not rebuild and all((dest / sim).exists() for sim in BINARIES):
-        return key, dest
-    src = WORK / "src" / key
+def build_key(sha, sim):
+    """A key for `sim`'s binary at `sha`: its build inputs' hashes."""
+    listing = git("ls-tree", "-r", sha, "--", *BUILD_PATHS)
+    kept = [line for line in listing.splitlines() if builds_into(line.split("\t", 1)[1], sim)]
+    return hashlib.sha1("\n".join(kept).encode()).hexdigest()[:12]
+
+
+def base_binary(sha, sim, rebuild):
+    """The base commit's `sim` binary: its label and directory, built once
+    in a worktree of the commit."""
+    label = f"{sim}-{build_key(sha, sim)}"
+    dest = WORK / "bin" / label
+    if not rebuild and (dest / sim).exists():
+        return label, dest
+    # One worktree, moved to each base: cargo's fingerprints hold paths, so
+    # a worktree per commit would rebuild every crate.
+    src = WORK / "src" / "base"
     if not src.exists():
         git("worktree", "add", "--detach", str(src), sha)
-    print(f"building base {sha[:8]} ({key})", file=sys.stderr)
-    build(src, dest)
-    return key, dest
+    git("checkout", "--detach", "--quiet", sha, cwd=src)
+    print(f"building base {sha[:8]} {sim} ({label})", file=sys.stderr)
+    build(src, sim, dest)
+    return label, dest
 
 
-def tree_binaries():
-    """The working tree's binaries, under a label naming its commit's
-    build inputs and its changes to them."""
-    diff = subprocess.run(["git", "diff", "HEAD", "--", *BUILD_PATHS], cwd=ROOT, check=True,
-                          capture_output=True).stdout
+def tree_binary(sim, base):
+    """The working tree's `sim` binary under a label naming its commit's
+    build inputs and its changes to them: the base's own (`base`, its
+    label and directory) when they are the same."""
+    names = [f for f in git("diff", "HEAD", "--name-only", "--", *BUILD_PATHS).splitlines()
+             if builds_into(f, sim)]
+    diff = b""
+    if names:
+        diff = subprocess.run(["git", "diff", "HEAD", "--", *names], cwd=ROOT, check=True,
+                              capture_output=True).stdout
     # New files under crates/ build too.
     for f in git("ls-files", "--others", "--exclude-standard", "crates").splitlines():
-        diff += f.encode() + (ROOT / f).read_bytes()
-    key = build_key("HEAD")
-    label = f"tree-{key}+{hashlib.sha1(diff).hexdigest()[:8]}" if diff else f"tree-{key}"
+        if builds_into(f, sim):
+            diff += f.encode() + (ROOT / f).read_bytes()
+    key = build_key("HEAD", sim)
+    if not diff and base[0] == f"{sim}-{key}":
+        return base
+    label = f"tree-{sim}-{key}+{hashlib.sha1(diff).hexdigest()[:8]}" if diff else f"tree-{sim}-{key}"
     dest = WORK / "bin" / label
-    print(f"building working tree {label}", file=sys.stderr)
-    build(ROOT, dest)
+    if not (dest / sim).exists():
+        print(f"building working tree {sim} ({label})", file=sys.stderr)
+        build(ROOT, sim, dest)
     return label, dest
 
 
@@ -494,20 +521,23 @@ def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False):
 
 
 def run_cells(cells, runs, slots, mem_gib):
-    """Runs every (label, bin_dir, store) at `seeds` for `cells`, skipping
-    rows kept; returns each label's rows by (cell, seed) and the
-    failures."""
-    have = {label: load_rows(store) for label, _, store, _ in runs}
+    """Runs every binary of `runs` ({label: (bin_dir, seeds, sim)}) at its
+    seeds for the cells of its sim, skipping rows kept (per label, in
+    target/sim-suite/rows/<label>.jsonl); returns each label's rows by
+    (cell, seed) and the failures."""
+    store = lambda label: WORK / "rows" / f"{label}.jsonl"
+    have = {label: load_rows(store(label)) for label in runs}
     jobs = [
         (label, bin_dir, c, s)
-        for label, bin_dir, _, seeds in runs
+        for label, (bin_dir, seeds, sim) in runs.items()
         for c in cells
+        if c["sim"] == sim
         for s in seeds(c)
         if job_id(label, c, s) not in have[label]
     ]
     failures = []
     t0 = time.monotonic()
-    files = {label: open(store, "a") for label, _, store, _ in runs}
+    files = {label: open(store(label), "a") for label in runs}
     for done, ((label, _, c, s), row, err) in enumerate(run_jobs(jobs, slots, mem_gib), 1):
         if err:
             failures.append(f"{label} {c['name']} seed {s}: {err}")
@@ -524,10 +554,11 @@ def run_cells(cells, runs, slots, mem_gib):
         label: {
             (c["name"], s): have[label][job_id(label, c, s)]["row"]
             for c in cells
+            if c["sim"] == sim
             for s in seeds(c)
             if job_id(label, c, s) in have[label]
         }
-        for label, _, _, seeds in runs
+        for label, (_, seeds, sim) in runs.items()
     }
     return rows, failures
 
@@ -561,26 +592,29 @@ def main():
     count = lambda c: c["seeds"] or a.seeds
     seeds = lambda c: list(range(1, count(c) + 1))
     sha = git("rev-parse", a.base)
-    key, base_bin = base_binaries(sha, a.rebuild)
+    sims = sorted({c["sim"] for c in cells})
+    base = {sim: base_binary(sha, sim, a.rebuild) for sim in sims}
     (WORK / "rows").mkdir(parents=True, exist_ok=True)
-    base_store = WORK / "rows" / f"{key}.jsonl"
+    union = lambda rows, labels: {k: r for label in labels for k, r in rows[label].items()}
     if a.cmd == "calibrate":
         both = lambda c: list(range(1, 2 * count(c) + 1))
-        rows, failures = run_cells(cells, [(key, base_bin, base_store, both)], a.slots, a.mem_gib)
+        runs = {label: (bin_dir, both, sim) for sim, (label, bin_dir) in base.items()}
+        rows, failures = run_cells(cells, runs, a.slots, a.mem_gib)
+        every = union(rows, runs)
         per = {c["name"]: count(c) for c in cells}
-        b = {(c, s - per[c]): r for (c, s), r in rows[key].items() if s > per[c]}
-        a_rows = {k: r for k, r in rows[key].items() if k[1] <= per[k[0]]}
+        b = {(c, s - per[c]): r for (c, s), r in every.items() if s > per[c]}
+        a_rows = {k: r for k, r in every.items() if k[1] <= per[k[0]]}
         report = lambda: scorecard(cells, a_rows, b, f"{a.base} {sha[:8]} at seeds 1..N",
                                    "the same at seeds N+1..2N", True)
     else:
-        tree_label, tree_bin = tree_binaries()
-        tree_store = WORK / "rows" / f"{tree_label}.jsonl"
-        rows, failures = run_cells(
-            cells, [(key, base_bin, base_store, seeds), (tree_label, tree_bin, tree_store, seeds)],
-            a.slots, a.mem_gib,
-        )
-        report = lambda: scorecard(cells, rows[key], rows[tree_label], f"{a.base} {sha[:8]}",
-                                   f"working tree {tree_label}", a.all)
+        tree = {sim: tree_binary(sim, base[sim]) for sim in sims}
+        runs = {label: (bin_dir, seeds, sim) for arm in (base, tree) for sim, (label, bin_dir) in arm.items()}
+        rows, failures = run_cells(cells, runs, a.slots, a.mem_gib)
+        a_rows = union(rows, [label for label, _ in base.values()])
+        b_rows = union(rows, [label for label, _ in tree.values()])
+        tree_labels = ", ".join(label for label, _ in tree.values())
+        report = lambda: scorecard(cells, a_rows, b_rows, f"{a.base} {sha[:8]}",
+                                   f"working tree ({tree_labels})", a.all)
     if failures:
         print("FAILURES")
         for f in failures:
