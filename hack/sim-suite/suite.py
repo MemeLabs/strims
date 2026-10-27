@@ -104,6 +104,9 @@ TIERS = {
              "SIM_GREEDY_KINDS": "grab", "SIM_GREEDY_SHARE": "20"}, 6, "20 % grabbers: answer backlogs, memory"),
         cell("no-greedy", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "50", "SIM_MBIT": "6", "SIM_SECS": "30",
              "SIM_GREEDY": "0"}, 2, "the same swarm with honest viewers only"),
+        cell("churn", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "100", "SIM_MBIT": "4", "SIM_SECS": "60",
+             "SIM_CHURN": "120", "SIM_CHURN_AWAY": "5"}, 3,
+             "100 viewers, 120 % leaving a minute, new ones in their places 5 s on: trees repair or tip"),
         cell("wan-global", PPSPP, "sim_job", {**PP_AB, "SIM_SCENARIO": "WanGlobal", "SIM_SECS": "60"}, 1,
              "24 viewers worldwide, 6 links each, a datacenter seed", CHEAP),
         cell("wan-mobile", PPSPP, "sim_job", {**PP_AB, "SIM_SCENARIO": "WanMobile", "SIM_SECS": "60"}, 1,
@@ -125,6 +128,8 @@ TIERS = {
         cell("mobile-uncapped", SIM, "wan_mobile_viewers_adaptive_uncapped", SS_BASE, 1, "mobile viewers", CHEAP),
         cell("capped-hybrid", SIM, "capped_seed_hybrid", SS_BASE, 1, "pull behind a capped seed", CHEAP),
         cell("starved-hybrid", SIM, "seed_starved_hybrid", SS_BASE, 1, "a seed starved for a while", CHEAP),
+        cell("viewer-churn", SIM, "viewer_churn_hybrid", SS_BASE, 1, "real stack: viewers crash and restart",
+             CHEAP),
     ],
     "scale": [
         cell("scale-1000", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "1000", "SIM_MBIT": "2", "SIM_SECS": "30"}, 10,
@@ -185,6 +190,9 @@ METRICS = [
     ("meter_others_p50", lambda r: r.get("meter_others_p50") or (r.get("meter_others") or [None] * 3)[1],
      None, "ratio", 0.10),
     ("holder_short", lambda r: r.get("holder_short"), LOWER, "diff", 0.03),
+    ("join_p50_ms", lambda r: r.get("join_p50_ms"), LOWER, "ratio", 0.10),
+    ("join_p90_ms", lambda r: r.get("join_p90_ms"), LOWER, "ratio", 0.10),
+    ("startup_p99_ms", lambda r: r.get("startup_p99_ms"), LOWER, "ratio", 0.10),
     ("rss_mb", lambda r: r.get("_rss_mb"), LOWER, "diff", 100),
     ("wall_s", lambda r: r.get("_wall_s"), LOWER, "ratio", 0.20),
 ]

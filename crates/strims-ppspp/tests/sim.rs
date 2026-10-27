@@ -390,6 +390,22 @@ struct Config {
     /// A drawn run's share of greedy viewers in place of the draw's
     /// (`SIM_GREEDY_SHARE`).
     greedy_share: Option<f64>,
+    /// Honest viewers leaving mid-stream and new ones taking their places
+    /// (`SIM_CHURN`, [`churn_knob`]).
+    churn: Option<Churn>,
+}
+
+/// Honest viewers leaving mid-stream, each place taken again a while later
+/// by a new viewer with nothing, on the same links. The leaves come at
+/// random (a Poisson process) from the end of the warm-up until `away`
+/// before the stream ends; a leaving viewer's neighbours see its links
+/// close (`remove_peer`), as a closed tab's.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Churn {
+    /// The share of the honest viewers that leave per minute.
+    per_min: f64,
+    /// How long a place stays empty.
+    away: Duration,
 }
 
 /// Where a run's captures go: `node-<i>.ppcap` in `dir`, one per node,
@@ -462,6 +478,7 @@ impl Config {
             echo_greed: knob::<u32>("SIM_ECHO_GREED") == Some(1),
             greedy_kinds: greedy_kinds_knob(),
             greedy_share: greedy_share_knob(),
+            churn: churn_knob(),
         }
     }
 }
@@ -518,6 +535,10 @@ struct Node {
     /// network's ([`Sim::wan_stats`]).
     wire: EndStats,
     cap: Option<SimCapture>,
+    /// It left at least once ([`Churn`]).
+    churned: bool,
+    /// When it last took a place again, until it reads its first chunk.
+    rejoined: Option<Time>,
 }
 
 struct Link {
@@ -669,13 +690,23 @@ struct Sim {
     /// With `SIM_SERIES=1`, the honest viewers' and the seed's counters
     /// once a second ([`Sim::series`]).
     series: Option<Vec<SeriesSample>>,
+    /// The churn's leaves and returns ([`churn_plan`]), and how many are
+    /// done.
+    churn: Vec<(Time, usize, bool)>,
+    churn_done: usize,
+    /// From each place taken again to its viewer's first chunk read.
+    joins: Vec<Duration>,
+    /// What a new viewer's swarm is made from.
+    swarm_id: SwarmId,
+    options: SwarmOptions,
 }
 
 /// One second's sample for [`Sim::series`].
 struct SeriesSample {
-    /// Per honest viewer: pushes before their deadline, deadlines released
-    /// to pull, parents pruned, and streams with an open parent.
-    viewers: Vec<[u64; 4]>,
+    /// Per viewer node (from 1), if honest and present: pushes before
+    /// their deadline, deadlines released to pull, parents pruned, and
+    /// streams with an open parent.
+    viewers: Vec<Option<[u64; 4]>>,
     /// The seed's meter capacity and busy thousandths, copies, chunks sent
     /// and pushed, and uplink.
     seed: [u64; 6],
@@ -1038,6 +1069,8 @@ impl Sim {
                 cross,
                 wire: EndStats::default(),
                 cap: None,
+                churned: false,
+                rejoined: None,
             });
         }
 
@@ -1184,6 +1217,16 @@ impl Sim {
         let collude_at = vec![t0(); nodes.len()];
         let every: BTreeSet<usize> = (0..nodes.len()).collect();
         let wake_of = vec![None; nodes.len()];
+        let churn = match cfg.churn {
+            Some(c) => {
+                assert!(
+                    capture.is_none() && cfg.cross.is_none(),
+                    "churn takes no capture or cross traffic"
+                );
+                churn_plan(&cfg, c, &roles, &mut rng)
+            }
+            None => Vec::new(),
+        };
         Sim {
             cfg,
             nodes,
@@ -1226,6 +1269,11 @@ impl Sim {
             viewer_bytes: 0,
             collude_at,
             series: (knob::<u32>("SIM_SERIES") == Some(1)).then(Vec::new),
+            churn,
+            churn_done: 0,
+            joins: Vec::new(),
+            swarm_id: SwarmId::new(&key.public),
+            options,
         }
     }
 
@@ -1266,6 +1314,9 @@ impl Sim {
         }
         if let Some(&(secs, _)) = self.cfg.steps.get(self.steps_done) {
             t = t.min(t0() + Duration::from_secs(secs));
+        }
+        if let Some(&(at, _, _)) = self.churn.get(self.churn_done) {
+            t = t.min(at);
         }
         self.refresh_wakes();
         if let Some(&(wt, _)) = self.wakes.first() {
@@ -1551,6 +1602,17 @@ impl Sim {
             }
         }
 
+        while let Some(&(at, i, leaves)) = self.churn.get(self.churn_done) {
+            if now < at {
+                break;
+            }
+            self.churn_done += 1;
+            match leaves {
+                true => self.leave(i),
+                false => self.take_place(i),
+            }
+        }
+
         // Only a runner called since its last drain holds events.
         for i in std::mem::take(&mut self.undrained) {
             self.drain(i);
@@ -1569,6 +1631,70 @@ impl Sim {
                 }
             }
         }
+    }
+
+    /// Viewer `i` leaves: its neighbours see its links close.
+    fn leave(&mut self, i: usize) {
+        let n = &mut self.nodes[i];
+        n.role = Role::Dead;
+        n.churned = true;
+        n.rejoined = None;
+        let links: Vec<usize> = n.links.values().copied().collect();
+        for l in links {
+            let (to, rpeer) = (self.links[l].to, self.links[l].rpeer);
+            self.nodes[to].runner.remove_peer(rpeer);
+            self.touch(to);
+        }
+        self.touch(i);
+    }
+
+    /// A new viewer with nothing takes viewer `i`'s place, on its links.
+    fn take_place(&mut self, i: usize) {
+        let now = self.now;
+        // Frames of the old viewer's links still on the way are lost.
+        let links = &self.links;
+        self.events.retain(|_, e| {
+            let (Ev::Arrive { link, .. } | Ev::Deliver { link, .. }) = e;
+            links[*link].from != i && links[*link].to != i
+        });
+        let mut runner = Runner::new(fork(&mut self.rng));
+        let swarm = strims_ppspp::Swarm::new(self.swarm_id.clone(), self.options.clone()).unwrap();
+        let reader = swarm.reader();
+        let key = runner.add_swarm(swarm);
+        let n = &mut self.nodes[i];
+        n.role = Role::Peer;
+        n.runner = runner;
+        n.swarm = key;
+        n.reader = reader;
+        n.start = None;
+        n.pos = 0;
+        n.up_free = now;
+        n.down_free = now;
+        n.weights.clear();
+        n.removed.clear();
+        n.vtime.values_mut().for_each(|v| *v = 0);
+        n.rejoined = Some(now);
+        if let Some(last) = self.shape.last.get_mut(i) {
+            *last = None;
+        }
+        let links: Vec<(usize, usize)> = n.links.iter().map(|(&j, &l)| (j, l)).collect();
+        for (j, l) in links {
+            let pi = self.nodes[i].runner.add_peer(node_id(j), now);
+            let pj = self.nodes[j].runner.add_peer(node_id(i), now);
+            let (ci, cj) = (i as u64 + 1, j as u64 + 1);
+            let (si, sj) = (self.nodes[i].swarm, self.nodes[j].swarm);
+            self.nodes[i].runner.run_swarm(pi, si, cj, ci, now).unwrap();
+            self.nodes[j].runner.run_swarm(pj, sj, ci, cj, now).unwrap();
+            for (l, from, to, peer, channel, rpeer) in
+                [(l, i, j, pi, ci, pj), (l ^ 1, j, i, pj, cj, pi)]
+            {
+                let old = &self.links[l];
+                self.links[l] = Link::new(from, to, old.latency, old.loss, peer, channel, rpeer);
+                self.links[l].last_send = now;
+            }
+            self.touch(j);
+        }
+        self.touch(i);
     }
 
     fn write(&mut self) {
@@ -1721,11 +1847,12 @@ impl Sim {
             .nodes
             .iter()
             .skip(1)
-            .filter(|n| n.role == Role::Peer)
             .map(|n| {
-                n.runner.push_stats(n.swarm).map_or([0; 4], |p| {
-                    let parents = p.parents.iter().filter(|x| x.is_some()).count();
-                    [p.hits, p.misses, p.pruned, parents as u64]
+                (n.role == Role::Peer).then(|| {
+                    n.runner.push_stats(n.swarm).map_or([0; 4], |p| {
+                        let parents = p.parents.iter().filter(|x| x.is_some()).count();
+                        [p.hits, p.misses, p.pruned, parents as u64]
+                    })
                 })
             })
             .collect();
@@ -1783,19 +1910,25 @@ impl Sim {
             })));
             frames.push(ints(&mut by.iter().map(|b| b.len() as i64)));
         }
-        // Sample k + 1 closes second k.
+        // Sample k + 1 closes second k, over the viewers present at both.
         let pairs = || samples.windows(2);
+        let both = |w: &[SeriesSample]| -> Vec<([u64; 4], [u64; 4])> {
+            w[1].viewers
+                .iter()
+                .zip(&w[0].viewers)
+                .filter_map(|(a, b)| Some(((*a)?, (*b)?)))
+                .collect()
+        };
         let pooled = |f: usize| {
             ints(&mut pairs().map(|w| {
-                w[1].viewers
+                both(w)
                     .iter()
-                    .zip(&w[0].viewers)
                     .map(|(a, b)| a[f].saturating_sub(b[f]) as i64)
                     .sum()
             }))
         };
         let parents = ints(&mut pairs().map(|w| {
-            let mut p: Vec<u64> = w[1].viewers.iter().map(|v| v[3]).collect();
+            let mut p: Vec<u64> = both(w).iter().map(|(a, _)| a[3]).collect();
             p.sort_unstable();
             p.get(p.len() / 2).map_or(-1, |&x| x as i64)
         }));
@@ -1820,7 +1953,7 @@ impl Sim {
             .field("frames", format_args!("[{}]", frames.join(",")))
             .field(
                 "present",
-                format_args!("{}", ints(&mut pairs().map(|_| honest.len() as i64))),
+                format_args!("{}", ints(&mut pairs().map(|w| both(w).len() as i64))),
             )
             .field("hits", format_args!("{}", pooled(0)))
             .field("misses", format_args!("{}", pooled(1)))
@@ -2358,6 +2491,11 @@ impl Sim {
                             *r = true;
                         }
                     }
+                    if end > first
+                        && let Some(at) = node.rejoined.take()
+                    {
+                        self.joins.push(now - at);
+                    }
                     node.pos += n as u64;
                 }
                 Err(store::Error::WouldBlock) => return,
@@ -2772,13 +2910,18 @@ impl Sim {
                 .clone()
                 .map(|n| (n.start.unwrap_or(u64::MAX), n.pos))
                 .collect(),
+            // Over the viewers that never left: a place taken again misses
+            // what was written while it stood empty.
             delivery: {
-                let (read, all) = peers.clone().fold((0, 0), |(r, a), n| {
-                    (
-                        r + n.read_chunks.iter().filter(|&&x| x).count(),
-                        a + n.read_chunks.len(),
-                    )
-                });
+                let (read, all) = peers
+                    .clone()
+                    .filter(|n| !n.churned)
+                    .fold((0, 0), |(r, a), n| {
+                        (
+                            r + n.read_chunks.iter().filter(|&&x| x).count(),
+                            a + n.read_chunks.len(),
+                        )
+                    });
                 read as f64 / all.max(1) as f64
             },
             mismatches: peers.clone().map(|n| n.mismatches).sum(),
@@ -3261,6 +3404,60 @@ fn greedy_share_knob() -> Option<f64> {
         "SIM_GREEDY_SHARE={s}: 0 to 100"
     );
     Some(pct / 100.0)
+}
+
+/// `SIM_CHURN`, the percentage of the honest viewers that leave per minute
+/// (blank or 0: none), and `SIM_CHURN_AWAY`, the seconds until each place
+/// is taken again (default 5).
+fn churn_knob() -> Option<Churn> {
+    let s = knob::<String>("SIM_CHURN").filter(|s| !s.trim().is_empty())?;
+    let pct: f64 = s
+        .trim()
+        .parse()
+        .unwrap_or_else(|_| panic!("SIM_CHURN={s}: a percentage"));
+    (pct > 0.0).then(|| Churn {
+        per_min: pct / 100.0,
+        away: Duration::from_secs(knob("SIM_CHURN_AWAY").unwrap_or(5)),
+    })
+}
+
+/// When `cfg`'s churn has each honest viewer (`Role::Peer`) leave and its
+/// place be taken again: `(at, node, leaves)`, sorted.
+fn churn_plan(
+    cfg: &Config,
+    c: Churn,
+    roles: &[Role],
+    rng: &mut DetRng,
+) -> Vec<(Time, usize, bool)> {
+    let honest: Vec<usize> = (1..roles.len())
+        .filter(|&i| roles[i] == Role::Peer)
+        .collect();
+    let rate = c.per_min * honest.len() as f64 / 60.0;
+    let mut plan = Vec::new();
+    if rate <= 0.0 {
+        return plan;
+    }
+    let from = t0() + Duration::from_secs(cfg.warm_secs);
+    let until = t0() + Duration::from_secs(cfg.stream_secs as i64) - c.away;
+    let mut back = vec![Time::NIL; roles.len()];
+    let mut at = from;
+    loop {
+        let u = (rng.next_u64() as f64 / u64::MAX as f64).max(f64::MIN_POSITIVE);
+        at += Duration::from_nanos((-u.ln() / rate * 1e9) as i64);
+        if at >= until {
+            break;
+        }
+        let here: Vec<usize> = honest.iter().copied().filter(|&i| back[i] <= at).collect();
+        if here.is_empty() {
+            continue;
+        }
+        let i = here[(rng.next_u64() % here.len() as u64) as usize];
+        back[i] = at + c.away;
+        plan.push((at, i, true));
+        plan.push((back[i], i, false));
+    }
+    plan.sort_by_key(|&(t, i, leaves)| (t, !leaves, i));
+    plan
 }
 
 /// What a greedy viewer's frame keeps of what its runner wrote: everything
@@ -3897,7 +4094,9 @@ impl Scenario {
 /// greedy viewers without them, and `SIM_ECHO_GREED=1` any with greedy
 /// viewers that hold or forge their echoes, for comparisons;
 /// `SIM_GREEDY_KINDS` picks a draw's kinds ([`greedy_kinds_knob`]) and
-/// `SIM_GREEDY_SHARE=<percent>` fixes its share. A knob that is set but
+/// `SIM_GREEDY_SHARE=<percent>` fixes its share. `SIM_CHURN=<percent>`
+/// has that share of any run's honest viewers leave per minute, each place
+/// taken again `SIM_CHURN_AWAY` seconds on ([`Churn`]). A knob that is set but
 /// doesn't parse panics, so a typo can't run the default unnoticed.
 #[allow(clippy::disallowed_methods)]
 fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
@@ -4203,6 +4402,54 @@ fn sim_push_parent_dies() {
         let dead = n.links.get(&victim).map(|&l| sim.links[l].peer);
         let p = n.runner.push_stats(n.swarm).unwrap();
         assert!(dead.is_none_or(|d| !p.parents.contains(&Some(d))), "{p:?}");
+    }
+}
+
+#[test]
+fn sim_push_churn() {
+    // Viewers leave at random, twice the swarm a minute, and a new viewer
+    // takes each place 2 s on: every new one reads within a second, the
+    // ones that stay miss nothing, and nobody keeps a gone viewer as a
+    // parent.
+    let mut cfg = Config::new(10, 8);
+    cfg.seed_up = 8 * cfg.stream_rate;
+    cfg.push_mode = PushMode::Hybrid;
+    cfg.stream_count = 4;
+    cfg.stream_secs = 20;
+    cfg.churn = Some(Churn {
+        per_min: 2.0,
+        away: Duration::from_secs(2),
+    });
+    let mut sim = Sim::new(cfg);
+    let r = sim.run();
+    let leaves = sim.churn.iter().filter(|c| c.2).count();
+    eprintln!("{leaves} leaves, joins {:?}\n{r:?}", sim.joins);
+    assert!(leaves >= 3, "{:?}", sim.churn);
+    assert_eq!(sim.churn_done, sim.churn.len());
+    assert_eq!(sim.joins.len(), leaves);
+    assert!(
+        sim.joins.iter().all(|&j| j < Duration::SECOND),
+        "{:?}",
+        sim.joins
+    );
+    assert_eq!((r.mismatches, r.underruns, r.resets), (0, 0, 0), "{r:?}");
+    for (i, n) in sim
+        .nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| n.role == Role::Peer)
+    {
+        if !n.churned {
+            assert!(
+                n.start.is_some_and(|s| s <= 4 * MUNRO as u64),
+                "node {i} late"
+            );
+        }
+        assert_eq!(n.pos, r.total, "node {i} incomplete");
+        let p = n.runner.push_stats(n.swarm).unwrap();
+        for parent in p.parents.iter().flatten() {
+            assert!(n.runner.peer_id(*parent).is_some(), "node {i}: {p:?}");
+        }
     }
 }
 
@@ -6224,6 +6471,21 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         for p in [10, 50, 90] {
             if let Some(&x) = v.get((v.len().saturating_sub(1)) * p / 100) {
                 row.num(&format!("meter_{name}_p{p}"), x);
+            }
+        }
+    }
+    // The churn's leaves, and from each place taken again to its first
+    // chunk read (`join_unread`: places taken that never read one).
+    if sim.cfg.churn.is_some() {
+        let leaves = sim.churn[..sim.churn_done].iter().filter(|c| c.2).count();
+        let unread = sim.nodes.iter().filter(|n| n.rejoined.is_some()).count();
+        let mut joins = sim.joins.clone();
+        joins.sort_unstable();
+        row.int("churn_leaves", leaves as u64)
+            .int("join_unread", unread as u64);
+        for p in [50, 90] {
+            if !joins.is_empty() {
+                row.int(&format!("join_p{p}_ms"), ms(percentile(&joins, p)) as u64);
             }
         }
     }
