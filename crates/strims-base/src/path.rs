@@ -84,6 +84,10 @@ pub const RECENT: Duration = Duration::from_secs(3);
 const SAMPLES: usize = 32;
 /// The fewest paths with recent samples that give an [`aggregate`].
 pub const MIN_PATHS: usize = 3;
+/// How old a link's latest echo may be to count in [`latest_excess`]:
+/// several probe intervals of a link that writes, so a link that stopped
+/// writing drops out.
+pub const LATEST_MAX_AGE: Duration = Duration::SECOND;
 
 /// One round trip, from a probe to its echo.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -545,6 +549,40 @@ pub fn aggregate(scratch: &mut [Duration]) -> Option<Duration> {
     scratch.get(k).copied()
 }
 
+/// A node's queueing delay as its links' latest echoes show it at `now`:
+/// how far each link's latest round trip stands above its base, over the
+/// links whose latest echo is at most [`LATEST_MAX_AGE`] old; their
+/// [`aggregate`] with at least [`MIN_PATHS`], the least with fewer, `None`
+/// with none (`scratch` is cleared and refilled).
+///
+/// It follows a queue within a probe interval and a round trip, where
+/// [`PathReading::excess`] reads the least of the last [`RECENT`]: a
+/// controller can act on it. One sample that met a burst moves only its
+/// own link. A peer can only delay its echoes, which raises its own link's
+/// reading, so with the low quantile (or the least of two) no single peer
+/// lowers the node's reading, or raises it for the others' sake.
+pub fn latest_excess(
+    readings: impl IntoIterator<Item = PathReading>,
+    now: Time,
+    scratch: &mut Vec<Duration>,
+) -> Option<Duration> {
+    scratch.clear();
+    scratch.extend(
+        readings
+            .into_iter()
+            .filter(|r| r.age(now) <= LATEST_MAX_AGE)
+            .map(|r| {
+                r.base
+                    .map_or(Duration::ZERO, |b| (r.rtt - b).max(Duration::ZERO))
+            }),
+    );
+    if scratch.len() >= MIN_PATHS {
+        aggregate(scratch)
+    } else {
+        scratch.iter().copied().min()
+    }
+}
+
 /// A node's queueing delay from its links' readings, two ways: the
 /// [`aggregate`] of their [`PathReading::excess`]es, and of their
 /// [`PathReading::queued_delay`]s. Readings without a recent round trip
@@ -853,6 +891,40 @@ mod tests {
         p.add(at(0), ms(40));
         p.fold();
         assert_eq!(p.excess(at(RECENT.as_millis() + 1)), None);
+    }
+
+    fn reading(at_ms: i64, rtt: i64, base: i64) -> PathReading {
+        PathReading {
+            samples: 1,
+            at: at(at_ms),
+            rtt: ms(rtt),
+            base: Some(ms(base)),
+            recent_min: Some(ms(rtt)),
+            in_flight: 0,
+            rate: None,
+            queued: None,
+            written_since: 0,
+        }
+    }
+
+    #[test]
+    fn the_latest_excess_reads_fresh_links_and_resists_one_delayer() {
+        let mut v = Vec::new();
+        let now = 10_000;
+        // Three fresh links read 20, 30 and 40 ms over their bases; a
+        // fourth delays its echoes by 2 s; a fifth is stale.
+        let links = [
+            reading(now - 100, 60, 40),
+            reading(now - 50, 80, 50),
+            reading(now - 300, 70, 30),
+            reading(now - 10, 2_040, 40),
+            reading(now - 5_000, 40, 40),
+        ];
+        assert_eq!(latest_excess(links, at(now), &mut v), Some(ms(30)));
+        // The delayer can't close it for the others: two links, the least.
+        let two = [reading(now, 60, 40), reading(now, 2_040, 40)];
+        assert_eq!(latest_excess(two, at(now), &mut v), Some(ms(20)));
+        assert_eq!(latest_excess([reading(0, 60, 40)], at(now), &mut v), None);
     }
 
     #[test]

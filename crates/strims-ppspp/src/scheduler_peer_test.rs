@@ -296,14 +296,25 @@ fn a_far_have_leaves_a_seeds_publish_times() {
 #[test]
 fn sent_chunks_count_pushes_and_distinct_chunks() {
     let mut f = fixture(hybrid(1));
-    f.sched.s.count_sent(Bin::new(1, 0), PeerPriority::High);
-    f.sched.s.count_sent(Bin(2), PeerPriority::Low);
-    f.sched.s.count_sent(Bin(4), PeerPriority::Low);
+    let ms = Duration::from_millis;
+    let t = now();
+    f.sched
+        .s
+        .count_sent(Bin::new(1, 0), PeerPriority::High, t, t + ms(30));
+    f.sched
+        .s
+        .count_sent(Bin(2), PeerPriority::Low, t, t + ms(5));
+    f.sched
+        .s
+        .count_sent(Bin(4), PeerPriority::Low, t, t + ms(500));
     let st = f.sched.stats();
     assert_eq!(
         (st.chunks_sent, st.pushed_chunks, st.distinct_chunks_sent),
         (4, 2, 3)
     );
+    assert_eq!((st.push_wait.count(), st.answer_wait.count()), (1, 2));
+    let p = st.push_wait.percentile(50.0).unwrap();
+    assert!((ms(30)..=ms(36)).contains(&p), "{p}");
 }
 
 #[test]

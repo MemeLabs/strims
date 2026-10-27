@@ -587,6 +587,7 @@ DELAY_READINGS = (
     ("qdv", "path_delay_ms", False),
     ("qdb", "path_queued_ms", False),
     ("qdbi", "path_queued_ms", True),
+    ("qdl", "path_latest_ms", True),
 )
 STANDING_MS = 3000
 SATURATED_STANDING_MS = 5

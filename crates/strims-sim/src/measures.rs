@@ -680,11 +680,12 @@ impl Report {
             )
             .num("peak_committed", self.peak_committed());
         type Reading = fn(&MeterSample) -> Option<u32>;
-        let readings: [(&str, QueueTruth, Reading); 4] = [
+        let readings: [(&str, QueueTruth, Reading); 5] = [
             ("qd", QueueTruth::Standing, |m| m.queue_delay_ms),
             ("qdv", QueueTruth::Standing, |m| m.path_delay_ms),
             ("qdb", QueueTruth::Standing, |m| m.path_queued_ms),
             ("qdbi", QueueTruth::Instant, |m| m.path_queued_ms),
+            ("qdl", QueueTruth::Instant, |m| m.path_latest_ms),
         ];
         for (reading, truth, read) in readings {
             for (name, hosts) in [("seeds", &roles.seeds), ("forwarders", &roles.forwarders)] {
@@ -737,6 +738,31 @@ impl Report {
                 .int("seed_first_wave_capacity", seed.first_wave_capacity)
                 .int("seed_budget", seed.budget as u64)
                 .int("seed_copies", seed.copies as u64);
+        }
+        // The seed's answers queued and refused, and how long its pushes
+        // and answers waited in its runner's queues.
+        if let Some(r) = self
+            .scenario
+            .swarms
+            .get(swarm)
+            .and_then(|s| self.hosts.get(s.seed))
+            .map(|h| &h.runner)
+        {
+            let c = r.swarm(swarm);
+            j.int("seed_answers_queued", c.answers_queued)
+                .int("seed_answers_refused", c.answers_refused);
+            if let Some(w) = r.waits.get(&swarm) {
+                for (name, h) in [("push", &w[0]), ("answer", &w[1])] {
+                    for p in [50, 99] {
+                        if let Some(d) = h.percentile(f64::from(p)) {
+                            j.int(
+                                &format!("seed_{name}_wait_p{p}_ms"),
+                                d.as_millis().max(0) as u64,
+                            );
+                        }
+                    }
+                }
+            }
         }
         let c = self.swarm_counters(swarm);
         j.num("seed_data_share", self.data_share(swarm))

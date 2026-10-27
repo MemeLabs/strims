@@ -20,7 +20,7 @@
 //! | `index`, `seed` | the node, and whether it seeds |
 //! | `bytes_written` | bytes the driver wrote to its links |
 //! | `upload_rate`, `busy_permille`, `capacity`, `queue_delay_ms` | the upload meter |
-//! | `path_delay_ms`, `path_queued_ms` | the queueing delay from vnic's path measure ([`strims_base::path::node_delays`]): the links' excess round trips, and their queued bytes over their delivery rates |
+//! | `path_delay_ms`, `path_queued_ms`, `path_latest_ms` | the queueing delay from vnic's path measure ([`strims_base::path::node_delays`]): the links' excess round trips, and their queued bytes over their delivery rates; and their latest round trips' excess ([`strims_base::path::latest_excess`]) |
 //! | `children`, `seed_budget`, `seed_window`, `seed_copies`, `seed_first_wave` | the push scheduler |
 //! | `frames`, `lag_p50_ms`, `lag_p99_ms`, `lag_max_ms` | at a viewer, the frames read in that second and their lag |
 //! | `rtt_mean_ms` | the swarm's channels' round trips |
@@ -304,9 +304,14 @@ impl Line<'_> {
             .collect();
         let (path_delay, path_queued) =
             path::node_delays(m.links.iter().filter_map(|l| l.path?.reading));
+        let path_latest = path::latest_excess(
+            m.links.iter().filter_map(|l| l.path?.reading),
+            self.now,
+            &mut Vec::new(),
+        );
         let lag = self.lag;
         format!(
-            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{}}}",
+            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{}}}",
             self.t_ms,
             self.t_ms as i64 - self.s.start_ms as i64,
             self.s.index,
@@ -318,6 +323,7 @@ impl Line<'_> {
             opt(p.upload_queue_delay.map(|d| d.as_millis())),
             opt(path_delay.map(ms)),
             opt(path_queued.map(ms)),
+            opt(path_latest.map(ms)),
             p.children,
             p.seed_budget,
             p.seed_window,

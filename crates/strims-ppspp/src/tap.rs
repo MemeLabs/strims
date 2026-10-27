@@ -65,8 +65,8 @@ pub enum TapKind {
     ChannelClosed,
 
     /// Data written to the peer: a push to a subscriber, or an answer to
-    /// its request. `queued` is when a hybrid push was queued, or the
-    /// request's time for an answer ([`Time::EPOCH`] when unknown).
+    /// its request. `queued` is when a hybrid push was queued, or when the
+    /// request arrived for an answer ([`Time::EPOCH`] when unknown).
     DataSent {
         bin: Bin,
         push: bool,

@@ -5910,6 +5910,21 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     }
     row.int("seed_unmeasured_honest", unmeasured(false) as u64)
         .int("seed_unmeasured_greedy", unmeasured(true) as u64);
+    // The seed's chunks pushed and answered, the requests it queued and
+    // refused, and how long pushes and answers waited in its queues.
+    if let Some(st) = seed.runner.swarm_stats(seed.swarm) {
+        row.int("seed_pushed", st.pushed_chunks)
+            .int("seed_answered", st.chunks_sent - st.pushed_chunks)
+            .int("seed_answers_queued", st.answers_queued)
+            .int("seed_answers_refused", st.answers_refused);
+        for (name, h) in [("push", st.push_wait), ("answer", st.answer_wait)] {
+            for p in [50, 99] {
+                if let Some(d) = h.percentile(f64::from(p)) {
+                    row.int(&format!("seed_{name}_wait_p{p}_ms"), ms(d) as u64);
+                }
+            }
+        }
+    }
     if let Some(series) = sim.series() {
         row.field("series", format_args!("{series}"));
     }

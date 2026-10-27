@@ -447,7 +447,7 @@ fn handle_payload(
                 }
             }
             Message::Request(r) => {
-                if !sched.handle_request(peer, r.bin, r.timestamp, q) {
+                if !sched.handle_request(peer, r.bin, now, q) {
                     ch.metrics_in.rejected = ch.metrics_in.rejected.saturating_add(1);
                 }
             }

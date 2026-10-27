@@ -95,7 +95,7 @@
 use indexmap::IndexMap;
 use slotmap::Key;
 use strims_base::rng::DetRng;
-use strims_base::stats::Sma;
+use strims_base::stats::{Sma, WaitHistogram};
 use strims_base::time::{Duration, Time};
 use strims_binmap::{Bin, Cursor, IntersectionIter, Map};
 
@@ -288,6 +288,13 @@ pub(crate) struct SwarmState {
     /// Chunks written to peers, pushes included, and the pushes alone.
     chunks_sent: u64,
     pushed_chunks: u64,
+    /// Requests queued to answer, and those a full queue refused.
+    answers_queued: u64,
+    answers_refused: u64,
+    /// How long pushes (hybrid only) and answers waited from queued, or the
+    /// request's arrival, to written.
+    push_wait: WaitHistogram,
+    answer_wait: WaitHistogram,
     /// The chunks written to anyone. Bound: pruned behind the store's
     /// window at GC.
     sent_bins: Map,
@@ -376,12 +383,19 @@ impl SwarmState {
         self.bin_times.get(b).map_or(Time::EPOCH, |(_, t)| t)
     }
 
-    /// Counts the chunks of `b`, written to a peer at `pri`.
-    fn count_sent(&mut self, b: Bin, pri: PeerPriority) {
+    /// Counts the chunks of `b`, written to a peer at `pri` at `now`, and
+    /// how long they waited since `queued` (the entry's time).
+    fn count_sent(&mut self, b: Bin, pri: PeerPriority, queued: Time, now: Time) {
         let n = b.base_length();
         self.chunks_sent = self.chunks_sent.saturating_add(n);
         if pri == PeerPriority::High {
             self.pushed_chunks = self.pushed_chunks.saturating_add(n);
+            // Only hybrid pushes carry the time they were queued.
+            if self.push.is_some() {
+                self.push_wait.add(now - queued);
+            }
+        } else {
+            self.answer_wait.add(now - queued);
         }
         let (mut x, r) = b.base();
         while x <= r {
@@ -1132,6 +1146,10 @@ impl PeerSwarmScheduler {
                 requests_timed_out: 0,
                 chunks_sent: 0,
                 pushed_chunks: 0,
+                answers_queued: 0,
+                answers_refused: 0,
+                push_wait: WaitHistogram::default(),
+                answer_wait: WaitHistogram::default(),
                 sent_bins: Map::new(),
                 distinct_chunks_sent: 0,
                 streams: vec![PeerSchedulerStream::default(); usize::from(stream_count)],
@@ -1670,13 +1688,14 @@ impl PeerSwarmScheduler {
         true
     }
 
-    /// The peer requested `b`: queue the answer at low priority. False if
-    /// the bin was refused.
+    /// The peer requested `b`, arriving at `now`: queue the answer at low
+    /// priority, stamped with `now` (the request's own timestamp is the
+    /// peer's clock). False if the bin was refused.
     pub(crate) fn handle_request(
         &mut self,
         peer: PeerKey,
         b: Bin,
-        t: Time,
+        now: Time,
         q: &mut impl PeerTaskQueue,
     ) -> bool {
         let Some((s, c)) = self.channel(peer) else {
@@ -1688,7 +1707,10 @@ impl PeerSwarmScheduler {
         if !crate::peer_bin_ok(b, s.window) {
             return false;
         }
-        if !q.push_data(peer, s.key, b, t, PeerPriority::Low) {
+        if q.push_data(peer, s.key, b, now, PeerPriority::Low) {
+            s.answers_queued = s.answers_queued.saturating_add(1);
+        } else {
+            s.answers_refused = s.answers_refused.saturating_add(1);
             s.tap.emit(s.key, Some(peer), || TapKind::DataRefused {
                 bin: b,
                 push: false,
@@ -1978,7 +2000,7 @@ impl PeerSwarmScheduler {
             if chunks <= cw.available() {
                 match write_bin(swarm, b, &c.peer_have_bins, now, cw) {
                     Ok(()) => {
-                        s.count_sent(b, pri);
+                        s.count_sent(b, pri, t, now);
                         s.tap.emit(s.key, Some(peer), || TapKind::DataSent {
                             bin: b,
                             push,
@@ -2052,6 +2074,10 @@ impl PeerSwarmScheduler {
             chunks_sent: s.chunks_sent,
             pushed_chunks: s.pushed_chunks,
             distinct_chunks_sent: s.distinct_chunks_sent,
+            answers_queued: s.answers_queued,
+            answers_refused: s.answers_refused,
+            push_wait: s.push_wait,
+            answer_wait: s.answer_wait,
         }
     }
 }
@@ -2139,6 +2165,13 @@ pub struct SwarmSchedulerStats {
     /// Chunks written to anyone at least once (a seed's count of distinct
     /// chunks uploaded).
     pub distinct_chunks_sent: u64,
+    /// Requests queued to answer, and those a full queue refused.
+    pub answers_queued: u64,
+    pub answers_refused: u64,
+    /// How long pushes waited from queued to written (hybrid only), and
+    /// answers from their request's arrival.
+    pub push_wait: WaitHistogram,
+    pub answer_wait: WaitHistogram,
 }
 
 #[cfg(test)]

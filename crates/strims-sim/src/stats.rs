@@ -28,6 +28,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use strims_base::path;
+use strims_base::stats::{WAIT_BUCKETS, WaitHistogram};
 use strims_node::{HostId, NodeMetrics, SwarmKey};
 use strims_ppspp::PushMode;
 pub use strims_testbed::transfer::{PeerTransfer, TransferSample};
@@ -134,6 +135,10 @@ pub struct SwarmCounters {
     /// Requests that timed out unanswered
     /// (`SwarmSchedulerStats::requests_timed_out`).
     pub timeouts: u64,
+    /// Requests queued to answer, and those a full queue refused
+    /// (`SwarmSchedulerStats::answers_queued`, `answers_refused`).
+    pub answers_queued: u64,
+    pub answers_refused: u64,
 }
 
 impl SwarmCounters {
@@ -177,6 +182,8 @@ impl SwarmCounters {
             self.pushed_chunks,
             self.distinct_chunks_sent,
             self.timeouts,
+            self.answers_queued,
+            self.answers_refused,
         ]
     }
 
@@ -205,6 +212,8 @@ impl SwarmCounters {
             pushed_chunks,
             distinct_chunks_sent,
             timeouts,
+            answers_queued,
+            answers_refused,
         ] = a;
         SwarmCounters {
             data_sent,
@@ -230,6 +239,8 @@ impl SwarmCounters {
             pushed_chunks,
             distinct_chunks_sent,
             timeouts,
+            answers_queued,
+            answers_refused,
         }
     }
 }
@@ -253,6 +264,9 @@ pub struct RunnerReport {
     /// start, scenario swarm, state).
     pub seed_changes: Vec<(Duration, usize, SeedSample)>,
     pub path_overhead: PathOverhead,
+    /// Per scenario swarm, how long pushes and answers waited in the
+    /// runner's queues (`SwarmSchedulerStats::push_wait`, `answer_wait`).
+    pub waits: BTreeMap<usize, [WaitHistogram; 2]>,
 }
 
 /// What a host wrote to measure its paths, and its links' time to share it
@@ -290,7 +304,9 @@ impl PathOverhead {
 /// the node's links with a recent round trip, each aggregated as the meter
 /// does ([`strims_base::path::aggregate`]): how far each link's recent
 /// round trip stands above its base (`path_delay_ms`), and how long each
-/// link's queued bytes take at its delivery rate (`path_queued_ms`).
+/// link's queued bytes take at its delivery rate (`path_queued_ms`). And
+/// how far the links' latest round trips stand above their bases
+/// ([`strims_base::path::latest_excess`], `path_latest_ms`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MeterSample {
     /// Simulated time since the start of the run.
@@ -300,6 +316,7 @@ pub struct MeterSample {
     pub queue_delay_ms: Option<u32>,
     pub path_delay_ms: Option<u32>,
     pub path_queued_ms: Option<u32>,
+    pub path_latest_ms: Option<u32>,
     pub capacity: u64,
     pub children: BTreeMap<usize, usize>,
     pub requests_in: u32,
@@ -334,6 +351,12 @@ impl RunnerReport {
         self.seeds.extend(o.seeds.iter().map(|(&s, &x)| (s, x)));
         self.seed_changes.extend(o.seed_changes.iter().copied());
         self.path_overhead.add(&o.path_overhead);
+        for (&s, w) in &o.waits {
+            let e = self.waits.entry(s).or_default();
+            for (a, b) in e.iter_mut().zip(w) {
+                a.merge(b);
+            }
+        }
     }
 }
 
@@ -378,7 +401,10 @@ impl<const N: usize> Tracked<N> {
 }
 
 /// Swarm counters, in [`SwarmCounters`]' field order.
-const SWARM_COUNTERS: usize = 23;
+const SWARM_COUNTERS: usize = 25;
+
+/// Wait histogram counters: pushes' buckets, then answers'.
+const WAIT_COUNTERS: usize = 2 * WAIT_BUCKETS;
 
 /// Channel counters: data sent, data received, invalid, rejected,
 /// requests, haves.
@@ -397,6 +423,8 @@ pub(crate) struct HostStats {
     peers: BTreeMap<HostId, Tracked<1>>,
     /// Scheduler and push counters by scenario swarm.
     swarms: BTreeMap<usize, Tracked<SWARM_COUNTERS>>,
+    /// Push and answer wait histograms by scenario swarm.
+    waits: BTreeMap<usize, Tracked<WAIT_COUNTERS>>,
     /// The upload meter, one entry per sample (a run takes tens to
     /// hundreds).
     meter: Vec<MeterSample>,
@@ -551,9 +579,16 @@ impl HostStats {
                 pushed_chunks: sched.pushed_chunks,
                 distinct_chunks_sent: sched.distinct_chunks_sent,
                 timeouts: sched.requests_timed_out,
+                answers_queued: sched.answers_queued,
+                answers_refused: sched.answers_refused,
                 ..SwarmCounters::default()
             };
             self.swarms.entry(s).or_default().observe(c.to_array());
+            let mut w = [0; WAIT_COUNTERS];
+            let (push, answer) = w.split_at_mut(WAIT_BUCKETS);
+            push.copy_from_slice(&sched.push_wait.buckets);
+            answer.copy_from_slice(&sched.answer_wait.buckets);
+            self.waits.entry(s).or_default().observe(w);
         }
         if let Some(ms) = meter.as_mut() {
             let ms_of = |d: strims_base::time::Duration| {
@@ -563,6 +598,14 @@ impl HostStats {
                 path::node_delays(m.links.iter().filter_map(|l| l.path?.reading));
             ms.path_delay_ms = excess.map(ms_of);
             ms.path_queued_ms = queued.map(ms_of);
+            // The node's clock: the run's epoch plus the simulated time.
+            let now = crate::world::epoch() + strims_base::time::Duration::from(t);
+            ms.path_latest_ms = path::latest_excess(
+                m.links.iter().filter_map(|l| l.path?.reading),
+                now,
+                &mut Vec::new(),
+            )
+            .map(ms_of);
         }
         self.meter.extend(meter);
         let h = &m.host;
@@ -595,6 +638,7 @@ impl HostStats {
         self.channels.clear();
         self.peers.clear();
         self.swarms.clear();
+        self.waits.clear();
         self.meter.clear();
         self.seeds.clear();
         self.seed_changes.clear();
@@ -635,6 +679,14 @@ impl HostStats {
             if let Some(c) = r.swarms.get_mut(s) {
                 c.add(&SwarmCounters::from_array(t.total()));
             }
+        }
+        for (&s, t) in &self.waits {
+            let total = t.total();
+            let mut w = [WaitHistogram::default(); 2];
+            for (h, b) in w.iter_mut().zip(total.as_chunks::<WAIT_BUCKETS>().0) {
+                h.buckets = *b;
+            }
+            r.waits.insert(s, w);
         }
         r.queue_drops = self.peers.values().map(|t| t.total()[0]).sum();
         r.meter = self.meter.clone();
