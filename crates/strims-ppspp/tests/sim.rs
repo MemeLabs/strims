@@ -745,6 +745,16 @@ struct Shape {
     /// the capacity over the node's true uplink, for the seed, relays and
     /// the other viewers.
     meter: [Vec<f64>; 3],
+    /// Per sample of each honest relay: its push subscribers, all streams.
+    fanout: Vec<u64>,
+    /// STREAM_REQUESTs honest viewers declined over the samples, and those
+    /// declined in a second in which the viewer used under half its
+    /// uplink.
+    declines: u64,
+    declines_idle: u64,
+    /// Per node at the last sample: its declines so far and its wire
+    /// bytes up.
+    last: Vec<Option<(u64, u64)>>,
 }
 
 /// Honest viewers' open parents, sampled with the seed's allocation after
@@ -1978,9 +1988,27 @@ impl Sim {
                 continue;
             }
             shape.viewers += 1;
-            if push.is_some_and(|p| p.children > 0) {
+            if let Some(p) = &push
+                && p.children > 0
+            {
                 shape.relays += 1;
+                shape.fanout.push(p.children as u64);
             }
+            if shape.last.len() < self.nodes.len() {
+                shape.last.resize(self.nodes.len(), None);
+            }
+            // The second since the last sample: its declines, and the
+            // uplink's use in it.
+            let rejected = push.as_ref().map_or(0, |p| p.rejected);
+            if let Some((was_rejected, was_up)) = shape.last[i] {
+                let declined = rejected.saturating_sub(was_rejected);
+                let util = n.wire.up_bytes.saturating_sub(was_up) as f64 / n.up_bw.max(1) as f64;
+                shape.declines += declined;
+                if util < 0.5 {
+                    shape.declines_idle += declined;
+                }
+            }
+            shape.last[i] = Some((rejected, n.wire.up_bytes));
             for s in 0..streams {
                 let mut at = parent(i, s);
                 let mut seen = vec![i];
@@ -6141,6 +6169,32 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         row.num(&name, n as f64 / samples);
     }
     row.num("relay_share", sh.relays as f64 / sh.viewers.max(1) as f64);
+    let mut fanout = sh.fanout.clone();
+    fanout.sort_unstable();
+    for p in [50, 90] {
+        if let Some(&f) = fanout.get(fanout.len().saturating_sub(1) * p / 100) {
+            row.int(&format!("fanout_p{p}"), f);
+        }
+    }
+    if sh.declines > 0 {
+        row.num(
+            "declines_idle",
+            sh.declines_idle as f64 / sh.declines as f64,
+        );
+    }
+    // Parent changes (prunes and switches) per honest viewer-minute after
+    // the warm-up.
+    let minutes = ((r.finish - t0()).as_secs_f64() - cfg.warm_secs as f64).max(1.0) / 60.0;
+    let viewers = sim
+        .nodes
+        .iter()
+        .filter(|n| n.role == Role::Peer)
+        .count()
+        .max(1) as f64;
+    row.num(
+        "parent_changes_per_min",
+        (p.pruned + p.switched) as f64 / (viewers * minutes),
+    );
     let mut util: Vec<f64> = sim
         .nodes
         .iter()

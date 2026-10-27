@@ -783,6 +783,33 @@ impl Report {
                     j.num(&format!("viewer_util_p{p}"), u);
                 }
             }
+            // Relays' fan-out: push subscribers per transfer sample of a
+            // viewer with any.
+            let mut fanout: Vec<usize> = spec
+                .viewers
+                .iter()
+                .chain(&spec.relays)
+                .filter_map(|&h| self.hosts.get(h))
+                .flat_map(|r| {
+                    r.transfers
+                        .iter()
+                        .filter(|(_, s, x)| *s == swarm && x.children > 0)
+                        .map(|(_, _, x)| x.children)
+                })
+                .collect();
+            fanout.sort_unstable();
+            for p in [50, 90] {
+                if let Some(&f) = fanout.get(fanout.len().saturating_sub(1) * p / 100) {
+                    j.int(&format!("fanout_p{p}"), f as u64);
+                }
+            }
+            // Parent changes (prunes and switches) per viewer-minute.
+            let c = self.swarm_counters(swarm);
+            let viewers = spec.viewers.len().max(1) as f64;
+            j.num(
+                "parent_changes_per_min",
+                (c.pruned + c.switched) as f64 / (viewers * secs / 60.0),
+            );
         }
         let c = self.swarm_counters(swarm);
         j.num("seed_data_share", self.data_share(swarm))
