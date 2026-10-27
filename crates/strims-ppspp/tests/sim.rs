@@ -38,7 +38,10 @@
 //! harness drops their data on the way out, so what they withhold costs
 //! them no uplink. Free riders also drop their HAVEs; liars announce what
 //! they hold like any relay. Every result counts honest viewers only.
-//! `SIM_GREEDY=0` runs without them.
+//! `SIM_GREEDY=0` runs without them. Grabbers, a kind only
+//! `SIM_GREEDY_KINDS` draws, serve like honest viewers but request every
+//! chunk announced to them from everyone who announced it, never cancel,
+//! and ignore chokes.
 //!
 //! Every link measures its path as vnic does (`strims_base::path`): a probe
 //! rides a frame once one is due, the receiver's echo rides its next frame
@@ -201,6 +204,42 @@ enum Greed {
     FreeRider,
     /// Announces what it holds and serves none of it.
     Liar,
+    /// Serves and announces like an honest viewer, but asks every
+    /// neighbour that announces a chunk for it, the seed included, as soon
+    /// as the announcement arrives, and never cancels: its frames drop
+    /// CANCEL and STREAM_CANCEL ([`Grabs`]). It ignores being choked: the
+    /// harness drops the CHOKEs and UNCHOKEs sent to it, and its forged
+    /// requests go on whatever became of the earlier ones.
+    Grabber,
+}
+
+/// A grabber's forged requests on one link: the chunks announced to it
+/// that it hasn't asked for yet, and those it asked for lately.
+#[derive(Debug, Default)]
+struct Grabs {
+    queue: Vec<Bin>,
+    asked: BTreeSet<Bin>,
+}
+
+/// How many bins a grabber remembers asking a neighbour for, and queues.
+const GRAB_MEMORY: usize = 4096;
+/// The room a grabber's runner leaves in each frame for its forged
+/// requests.
+const GRAB_ROOM: usize = 1024;
+
+impl Grabs {
+    fn add(&mut self, b: Bin) {
+        if !self.asked.insert(b) {
+            return;
+        }
+        self.queue.push(b);
+        if self.asked.len() > GRAB_MEMORY {
+            self.asked.pop_first();
+        }
+        if self.queue.len() > GRAB_MEMORY {
+            self.queue.remove(0);
+        }
+    }
 }
 
 /// Which viewers are greedy.
@@ -318,6 +357,12 @@ struct Config {
     /// Greedy viewers hold or forge their echoes (see the module docs);
     /// `SIM_ECHO_GREED=1` sets it for any run.
     echo_greed: bool,
+    /// The kinds a drawn run's greedy viewers take in turn
+    /// (`SIM_GREEDY_KINDS`, [`greedy_kinds_knob`]).
+    greedy_kinds: Vec<Greed>,
+    /// A drawn run's share of greedy viewers in place of the draw's
+    /// (`SIM_GREEDY_SHARE`).
+    greedy_share: Option<f64>,
 }
 
 /// Where a run's captures go: `node-<i>.ppcap` in `dir`, one per node,
@@ -388,6 +433,8 @@ impl Config {
             wan: None,
             capture: None,
             echo_greed: knob::<u32>("SIM_ECHO_GREED") == Some(1),
+            greedy_kinds: greedy_kinds_knob(),
+            greedy_share: greedy_share_knob(),
         }
     }
 }
@@ -539,6 +586,8 @@ struct Sim {
     publish_times: Vec<Time>,
     /// The REQUESTs a `WithholdPush` adversary got, per link into it.
     requested: BTreeMap<usize, BTreeSet<Bin>>,
+    /// The requests grabbers will forge, per link out of one.
+    grabs: BTreeMap<usize, Grabs>,
     /// STREAM_OPENs `WithholdPush` adversaries sent.
     withheld_opens: u64,
     /// Copies of each chunk the seed sent, for the debugging aids.
@@ -665,7 +714,14 @@ struct AllocSample {
     with_children: BTreeSet<usize>,
     /// The seed's upload capacity estimate (`PushStats::upload_capacity`).
     capacity: u64,
+    /// Per honest neighbour holding every stream: its on-time pushes
+    /// (`PushStats::hits`), all of them from the seed.
+    hits: BTreeMap<usize, u64>,
 }
+
+/// The share of its copy a holder must get as on-time pushes in an interval
+/// to count as whole ([`Report::holder_short`]).
+const HOLDER_WHOLE: f64 = 0.95;
 
 /// What a stream a neighbour stopped announcing counts as in the seed's
 /// objective (`push::CANDIDATE_FRESHNESS`).
@@ -731,6 +787,14 @@ struct Report {
     cross: Option<CrossReport>,
     /// The greedy viewers: free riders and liars.
     greedy: (usize, usize),
+    /// The grabbers, and their share of the seed's push slots.
+    grabbers: (usize, f64),
+    /// Over the samples after the warm-up, per honest neighbour holding
+    /// every stream between two samples: the share of those intervals in
+    /// which it got under [`HOLDER_WHOLE`] of its copy as on-time pushes,
+    /// and the median share it got ([`Sim::holder_copies`]).
+    holder_short: f64,
+    holder_copy: f64,
     /// Of the seed's push slots (one stream at one neighbour) over the
     /// samples after the warm-up, the shares at free riders and at liars.
     greedy_slots: (f64, f64),
@@ -1048,6 +1112,7 @@ impl Sim {
             now: t0(),
             publish_times: vec![],
             requested: BTreeMap::new(),
+            grabs: BTreeMap::new(),
             withheld_opens: 0,
             seed_sent: BTreeMap::new(),
             incident: None,
@@ -1419,8 +1484,28 @@ impl Sim {
                 }
             }
         }
+        if self.nodes[to].role == Role::Greedy(Greed::Grabber) {
+            // Asks for what it hears of on the way back.
+            let grabs = self.grabs.entry(link ^ 1).or_default();
+            for c in FrameReader::new(frame) {
+                let Ok((h, payload)) = c else { break };
+                if h.channel >= 1000 {
+                    continue;
+                }
+                for m in Reader::new(self.rcfg, payload) {
+                    match m {
+                        Ok(Message::Have(h)) => grabs.add(h.bin),
+                        Ok(_) => {}
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
         if self.nodes[to].role == Role::Peer
-            && matches!(self.nodes[from].role, Role::Seed | Role::Peer)
+            && matches!(
+                self.nodes[from].role,
+                Role::Seed | Role::Peer | Role::Greedy(Greed::Grabber)
+            )
             && !self.nodes[to].removed.contains(&rpeer)
         {
             self.record_arrivals(to, frame);
@@ -1443,6 +1528,11 @@ impl Sim {
                 }
             }
         }
+        // A grabber ignores chokes.
+        let unchoked = (self.nodes[to].role == Role::Greedy(Greed::Grabber))
+            .then(|| without_chokes(frame, self.rcfg))
+            .flatten();
+        let frame = unchoked.as_deref().unwrap_or(frame);
         let node = &mut self.nodes[to];
         if node.removed.contains(&rpeer) {
             return;
@@ -1634,6 +1724,7 @@ impl Sim {
                     let greed = match self.nodes[usize::from(id)].role {
                         Role::Greedy(Greed::FreeRider) => "F",
                         Role::Greedy(Greed::Liar) => "L",
+                        Role::Greedy(Greed::Grabber) => "G",
                         _ => "",
                     };
                     let served = match nb.served {
@@ -1681,6 +1772,15 @@ impl Sim {
             .runner
             .push_stats(seed.swarm)
             .map_or(0, |p| p.upload_capacity);
+        let whole = self.cfg.stream_count;
+        let hits = held
+            .iter()
+            .filter(|&(&id, &n)| n >= whole && self.nodes[id].role == Role::Peer)
+            .filter_map(|(&id, _)| {
+                let n = &self.nodes[id];
+                Some((id, n.runner.push_stats(n.swarm)?.hits))
+            })
+            .collect();
         self.alloc.push(AllocSample {
             at: self.now,
             held,
@@ -1689,6 +1789,7 @@ impl Sim {
             barred,
             with_children,
             capacity,
+            hits,
         });
     }
 
@@ -2082,7 +2183,13 @@ impl Sim {
             }
             node.runner
                 .set_peer_path(peer, self.links[l].path.reading(now));
-            let mut n = node.runner.poll_transmit(peer, now, &mut self.buf);
+            let room = if node.role == Role::Greedy(Greed::Grabber) {
+                GRAB_ROOM
+            } else {
+                0
+            };
+            let len = self.buf.len() - room;
+            let mut n = node.runner.poll_transmit(peer, now, &mut self.buf[..len]);
             if n == 0 {
                 continue;
             }
@@ -2105,7 +2212,8 @@ impl Sim {
             }
             if let Role::Greedy(g) = node.role {
                 let collusion = self.collusion(i, l);
-                n = withhold(g, &mut self.buf, n, self.rcfg, collusion.as_deref());
+                let grabs = self.grabs.get_mut(&l).map(|g| (g, now));
+                n = withhold(g, &mut self.buf, n, self.rcfg, collusion.as_deref(), grabs);
                 if n == 0 {
                     continue;
                 }
@@ -2276,6 +2384,34 @@ impl Sim {
         }
     }
 
+    /// [`Report::holder_short`] and [`Report::holder_copy`]: per pair of
+    /// consecutive samples after `warm` and honest whole-copy holder in
+    /// both, its on-time pushes between them over the chunks the stream
+    /// published in that time.
+    fn holder_copies(&self, warm: Time) -> (f64, f64) {
+        let per_sec = self.cfg.stream_rate as f64 / self.cfg.chunk_size as f64;
+        let mut shares = Vec::new();
+        for w in self.alloc.windows(2) {
+            let [a, b] = w else { continue };
+            if a.at <= warm {
+                continue;
+            }
+            let need = per_sec * (b.at - a.at).as_secs_f64();
+            for (id, &hb) in &b.hits {
+                if let Some(&ha) = a.hits.get(id) {
+                    shares.push(hb.saturating_sub(ha) as f64 / need);
+                }
+            }
+        }
+        if shares.is_empty() {
+            return (0.0, 0.0);
+        }
+        let short =
+            shares.iter().filter(|&&x| x < HOLDER_WHOLE).count() as f64 / shares.len() as f64;
+        shares.sort_by(f64::total_cmp);
+        (short, shares[shares.len() / 2])
+    }
+
     fn report(&self) -> Report {
         let total = (self.munros * self.munro) as u64;
         let warm = t0() + Duration::from_secs(self.cfg.warm_secs);
@@ -2362,19 +2498,20 @@ impl Sim {
                 .count()
         };
         let greedy_slots = {
-            let (mut all, mut free, mut liar) = (0, 0, 0);
+            let (mut all, mut free, mut liar, mut grab) = (0, 0, 0, 0);
             for a in self.alloc.iter().filter(|a| a.at > warm) {
                 for (&i, &n) in &a.held {
                     all += n;
                     match greed(i) {
                         Some(Greed::FreeRider) => free += n,
                         Some(Greed::Liar) => liar += n,
+                        Some(Greed::Grabber) => grab += n,
                         None => {}
                     }
                 }
             }
             let all = all.max(1) as f64;
-            (free as f64 / all, liar as f64 / all)
+            (free as f64 / all, liar as f64 / all, grab as f64 / all)
         };
         let greedy_held = {
             let mut longest = 0;
@@ -2394,6 +2531,7 @@ impl Sim {
         };
         let g = &self.grafts;
         let spans: Vec<u32> = g.spans.iter().chain(g.runs.values()).copied().collect();
+        let (holder_short, holder_copy) = self.holder_copies(warm);
         Report {
             trace: self.trace,
             frames: self.frames,
@@ -2484,7 +2622,10 @@ impl Sim {
             recovery,
             cross,
             greedy: (count(Greed::FreeRider), count(Greed::Liar)),
-            greedy_slots,
+            grabbers: (count(Greed::Grabber), greedy_slots.2),
+            holder_short,
+            holder_copy,
+            greedy_slots: (greedy_slots.0, greedy_slots.1),
             greedy_held,
             barred: self.barred(),
             verdicts: self.verdicts,
@@ -2678,7 +2819,7 @@ impl Sim {
     /// runner counts what the harness drops.
     fn uploaded(&self, i: usize) -> u64 {
         let n = &self.nodes[i];
-        if matches!(n.role, Role::Greedy(_)) {
+        if matches!(n.role, Role::Greedy(g) if g != Greed::Grabber) {
             return 0;
         }
         n.links
@@ -2812,7 +2953,8 @@ impl Sim {
 }
 
 /// A run's greedy viewers, by node index. A drawn set is [`GREEDY_SHARE`]
-/// of the viewers, the kinds alternating from a random first one, from an
+/// of the viewers (or [`Config::greedy_share`]), the kinds
+/// ([`Config::greedy_kinds`]) alternating from a random first one, from an
 /// rng of its own: the mesh, the paths and every runner draw what they
 /// would without it. Viewers the config names (constrained ones, the
 /// cross-traffic seed, the traced node, `keep_honest`) are passed over,
@@ -2832,9 +2974,10 @@ fn greedy(cfg: &Config) -> BTreeMap<usize, Greed> {
             let mut rng = det_rng(cfg.seed ^ 0x4752_4545);
             let (lo, hi) = GREEDY_SHARE;
             let share = lo + (hi - lo) * (rng.next_u64() as f64 / u64::MAX as f64);
+            let share = cfg.greedy_share.unwrap_or(share);
             let n = (cfg.peers as f64 * share).round() as usize;
-            let mut kinds = [Greed::FreeRider, Greed::Liar];
-            if rng.next_u64() % 2 == 1 {
+            let mut kinds = cfg.greedy_kinds.clone();
+            if rng.next_u64() % 2 == 1 && kinds.len() > 1 {
                 kinds.swap(0, 1);
             }
             let named: BTreeSet<usize> = cfg
@@ -2857,27 +3000,75 @@ fn greedy(cfg: &Config) -> BTreeMap<usize, Greed> {
     }
 }
 
+/// The kinds a drawn run's greedy viewers take in turn: `SIM_GREEDY_KINDS`,
+/// comma-separated `free`, `liar` and `grab`, by default (or blank) free
+/// riders and liars.
+fn greedy_kinds_knob() -> Vec<Greed> {
+    let Some(s) = knob::<String>("SIM_GREEDY_KINDS").filter(|s| !s.trim().is_empty()) else {
+        return vec![Greed::FreeRider, Greed::Liar];
+    };
+    let kinds: Vec<Greed> = s
+        .split(',')
+        .map(|k| match k.trim() {
+            "free" => Greed::FreeRider,
+            "liar" => Greed::Liar,
+            "grab" => Greed::Grabber,
+            k => panic!("SIM_GREEDY_KINDS: unknown kind {k:?}: free, liar or grab"),
+        })
+        .collect();
+    assert!(!kinds.is_empty(), "SIM_GREEDY_KINDS names no kind");
+    kinds
+}
+
+/// A drawn run's share of greedy viewers in place of the draw's:
+/// `SIM_GREEDY_SHARE`, a percentage (blank: the draw's).
+fn greedy_share_knob() -> Option<f64> {
+    let s = knob::<String>("SIM_GREEDY_SHARE").filter(|s| !s.trim().is_empty())?;
+    let pct: f64 = s
+        .trim()
+        .parse()
+        .unwrap_or_else(|_| panic!("SIM_GREEDY_SHARE={s}: a percentage"));
+    assert!(
+        (0.0..=100.0).contains(&pct),
+        "SIM_GREEDY_SHARE={s}: 0 to 100"
+    );
+    Some(pct / 100.0)
+}
+
 /// What a greedy viewer's frame keeps of what its runner wrote: everything
 /// but data and its integrity, and a free rider's HAVEs. A colluder's
 /// frame to the seed carries the `collusion` entries ([`Sim::collusion`])
-/// that fit in place of its own reports. Returns the new length, 0 if
-/// nothing is left.
+/// that fit in place of its own reports. A grabber's keeps everything but
+/// its cancels, and ends with the requests queued in `grabs`, stamped with
+/// its time, that fit the room its runner left ([`GRAB_ROOM`]). Returns
+/// the new length, 0 if nothing is left.
 fn withhold(
     g: Greed,
     buf: &mut [u8],
     n: usize,
     cfg: ReaderConfig,
     collusion: Option<&[AnnounceEntry<'_>]>,
+    grabs: Option<(&mut Grabs, Time)>,
 ) -> usize {
     let frame = buf[..n].to_vec();
     let mut off = 0;
     let mut injected = false;
+    let mut main_channel = None;
     for c in FrameReader::new(&frame) {
         let (h, payload) = c.unwrap();
         let mut cw = ChannelWriter::new(&mut buf[off..], h.channel);
         let main = h.channel < 1000;
+        if main {
+            main_channel = Some(h.channel);
+        }
         for m in Reader::new(cfg, payload) {
             match m.unwrap() {
+                Message::Cancel(_) | Message::StreamCancel(_) if g == Greed::Grabber => {}
+                m @ (Message::Data(_) | Message::Integrity(_) | Message::SignedIntegrity(_))
+                    if g == Greed::Grabber =>
+                {
+                    cw.write(&m).unwrap();
+                }
                 Message::Data(_) | Message::Integrity(_) | Message::SignedIntegrity(_) => {}
                 Message::Have(_) if g == Greed::FreeRider => {}
                 Message::Announce(a) if main && collusion.is_some() && !a.is_empty() => {}
@@ -2899,7 +3090,50 @@ fn withhold(
         }
         off += cw.finish();
     }
+    // The forged requests go last, in the room the runner left.
+    if let (Some((grabs, now)), Some(channel)) = (grabs, main_channel) {
+        let mut cw = ChannelWriter::new(&mut buf[off..], channel);
+        let mut sent = 0;
+        for &bin in &grabs.queue {
+            let r = Request {
+                bin,
+                timestamp: now,
+            };
+            if cw.write(&Message::Request(r)).is_err() {
+                break;
+            }
+            sent += 1;
+        }
+        grabs.queue.drain(..sent);
+        off += cw.finish();
+    }
     off
+}
+
+/// `frame` without its CHOKEs and UNCHOKEs, or `None` if it has none.
+fn without_chokes(frame: &[u8], cfg: ReaderConfig) -> Option<Vec<u8>> {
+    let choke = |m: &Message<'_>| matches!(m, Message::Choke | Message::Unchoke);
+    let any = FrameReader::new(frame).any(|c| {
+        c.is_ok_and(|(_, payload)| Reader::new(cfg, payload).any(|m| m.is_ok_and(|m| choke(&m))))
+    });
+    if !any {
+        return None;
+    }
+    let mut buf = vec![0; frame.len()];
+    let mut off = 0;
+    for c in FrameReader::new(frame) {
+        let (h, payload) = c.ok()?;
+        let mut cw = ChannelWriter::new(&mut buf[off..], h.channel);
+        for m in Reader::new(cfg, payload) {
+            let m = m.ok()?;
+            if !choke(&m) {
+                cw.write(&m).ok()?;
+            }
+        }
+        off += cw.finish();
+    }
+    buf.truncate(off);
+    Some(buf)
 }
 
 /// Adds `b`'s counts to `a`'s.
@@ -3433,8 +3667,10 @@ impl Scenario {
 /// `<dir>/<run tag>/` (`SIM_CAPTURE_TAP=0` leaves out the decisions):
 /// capture changes no trace. `SIM_GREEDY=0` runs any test that draws its
 /// greedy viewers without them, and `SIM_ECHO_GREED=1` any with greedy
-/// viewers that hold or forge their echoes, for comparisons. A knob that is
-/// set but doesn't parse panics, so a typo can't run the default unnoticed.
+/// viewers that hold or forge their echoes, for comparisons;
+/// `SIM_GREEDY_KINDS` picks a draw's kinds ([`greedy_kinds_knob`]) and
+/// `SIM_GREEDY_SHARE=<percent>` fixes its share. A knob that is set but
+/// doesn't parse panics, so a typo can't run the default unnoticed.
 #[allow(clippy::disallowed_methods)]
 fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
     let s = std::env::var(name).ok()?;
@@ -3818,7 +4054,7 @@ fn sim_greedy_viewers_serve_nothing() {
             );
             match g {
                 Greed::FreeRider => assert_eq!(i.have, 0, "{remote}: {i:?}"),
-                Greed::Liar => assert!(i.have > 0, "{remote}: {i:?}"),
+                Greed::Liar | Greed::Grabber => assert!(i.have > 0, "{remote}: {i:?}"),
             }
             asked[usize::from(g == Greed::Liar)] += cs.outbound.request;
             asking[usize::from(g == Greed::Liar)] += i.request + i.stream_request;
@@ -3827,6 +4063,44 @@ fn sim_greedy_viewers_serve_nothing() {
     assert_eq!(asked[0], 0, "requests to the free rider");
     assert!(asked[1] > 0, "no requests to the liar");
     assert!(asking.iter().all(|&n| n > 0), "{asking:?}");
+}
+
+/// Grabbers serve like honest viewers, ask the seed for more than any
+/// honest viewer does, and never cancel.
+#[test]
+fn sim_grabbers_ask_everyone_and_never_cancel() {
+    let mut cfg = Scenario::FullMesh.config(PushMode::Hybrid, 4);
+    cfg.greedy = Greedy::Nodes(vec![(1, Greed::Grabber), (2, Greed::Grabber)]);
+    let mut sim = Sim::new(cfg);
+    let r = sim.run();
+    check_delivery(&r, 4 * MUNRO as u64);
+    // Per grabber: data it sent honest nodes; the most requests the seed
+    // had from a grabber, and from an honest viewer.
+    let mut served = BTreeMap::new();
+    let (mut grabbed, mut honest) = (0, 0);
+    for (k, n) in sim.nodes.iter().enumerate() {
+        if n.role == Role::Greedy(Greed::Grabber) {
+            continue;
+        }
+        for (&remote, &l) in &n.links {
+            let i = n
+                .runner
+                .channel_stats(sim.links[l].peer, n.swarm)
+                .unwrap()
+                .inbound;
+            if sim.nodes[remote].role == Role::Greedy(Greed::Grabber) {
+                assert_eq!((i.cancel, i.stream_cancel), (0, 0), "{remote}: {i:?}");
+                *served.entry(remote).or_default() += i.data;
+                if k == 0 {
+                    grabbed = i.request.max(grabbed);
+                }
+            } else if k == 0 {
+                honest = i.request.max(honest);
+            }
+        }
+    }
+    assert!(served.values().all(|&d: &u64| d > 0), "{served:?}");
+    assert!(grabbed > honest, "{grabbed} {honest}");
 }
 
 #[test]
@@ -5554,6 +5828,10 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         .int("liars", r.greedy.1 as u64)
         .num("free_rider_slots", r.greedy_slots.0)
         .num("liar_slots", r.greedy_slots.1)
+        .int("grabbers", r.grabbers.0 as u64)
+        .num("grabber_slots", r.grabbers.1)
+        .num("holder_short", r.holder_short)
+        .num("holder_copy", r.holder_copy)
         .int("greedy_held_s", r.greedy_held.as_secs() as u64)
         .num("liar_grafts", r.liar_grafts)
         .int("liar_graft_span_ms", ms(r.liar_graft_span) as u64)
