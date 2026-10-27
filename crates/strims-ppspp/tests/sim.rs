@@ -617,6 +617,16 @@ struct Sim {
     /// The push trees' shape and the upload meters, once a second after
     /// the warm-up.
     shape: Shape,
+    /// Each live node's next wake time ([`Sim::wake_time`]), by time and
+    /// node, and its entry per node. Only `stale` nodes' times are
+    /// recomputed (and those that came due), so the event loop costs what
+    /// the nodes that act do, not the swarm's size.
+    wakes: BTreeSet<(Time, usize)>,
+    wake_of: Vec<Option<Time>>,
+    /// Nodes whose state changed since their wake time was computed, and
+    /// nodes whose runner may hold events to drain. Bound: one per node.
+    stale: BTreeSet<usize>,
+    undrained: BTreeSet<usize>,
     /// The reports' verdicts against the real subtrees.
     verdicts: Verdicts,
     /// Per liar, the samples in a row so far at which it held a copy, and
@@ -1129,6 +1139,8 @@ impl Sim {
         let end = t0() + Duration::from_secs(cfg.stream_secs as i64 + 20);
         let mtu = cfg.mtu;
         let collude_at = vec![t0(); nodes.len()];
+        let every: BTreeSet<usize> = (0..nodes.len()).collect();
+        let wake_of = vec![None; nodes.len()];
         Sim {
             cfg,
             nodes,
@@ -1160,6 +1172,10 @@ impl Sim {
             next_alloc: t0() + Duration::SECOND,
             grafts: Grafts::default(),
             shape: Shape::default(),
+            wakes: BTreeSet::new(),
+            wake_of,
+            stale: every.clone(),
+            undrained: every,
             verdicts: Verdicts::default(),
             liar_runs: BTreeMap::new(),
             liar_spans: Vec::new(),
@@ -1190,7 +1206,9 @@ impl Sim {
                 .all(|x| !x.reads || x.pos >= total)
     }
 
-    fn next_time(&self) -> Time {
+    /// The next time anything happens: an event, a write, a step, or a
+    /// node's wake time.
+    fn next_time(&mut self) -> Time {
         let mut t = Time::MAX;
         if let Some((&(et, _), _)) = self.events.first_key_value() {
             t = t.min(et);
@@ -1206,36 +1224,88 @@ impl Sim {
         if let Some(&(secs, _)) = self.cfg.steps.get(self.steps_done) {
             t = t.min(t0() + Duration::from_secs(secs));
         }
-        for n in &self.nodes {
-            if n.role == Role::Dead {
-                continue;
-            }
-            if let Some(rt) = n.runner.poll_timeout() {
-                t = t.min(rt);
-            }
-            if n.links
-                .values()
-                .any(|&l| n.runner.wants_transmit(self.links[l].peer))
-            {
-                t = t.min(n.up_free.max(self.now));
-            }
-            for &l in n.links.values() {
-                // Control already due waits for the uplink; otherwise its
-                // deadlines are still ahead.
-                let link = &self.links[l];
-                if link.control_due(self.now) {
-                    t = t.min(n.up_free.max(self.now));
-                    continue;
-                }
-                if link.echo.is_pending() {
-                    t = t.min(link.echo_at);
-                }
-                if link.path.can_probe() {
-                    t = t.min(link.last_send + KEEPALIVE);
-                }
-            }
+        self.refresh_wakes();
+        if let Some(&(wt, _)) = self.wakes.first() {
+            t = t.min(wt);
         }
         t
+    }
+
+    /// When node `i` next has something to do as of now: its runner's
+    /// timeout, its uplink freeing up while it has frames or control due,
+    /// or its links' echoes and keepalives coming due. `None` for a dead
+    /// node.
+    ///
+    /// The time only grows as the clock moves on while the node's state
+    /// stays as it was, and while it lies ahead it stays exact: so a node's
+    /// time is recomputed only when its state changes ([`Sim::touch`]) or
+    /// the time comes.
+    fn wake_time(&self, i: usize) -> Option<Time> {
+        let n = &self.nodes[i];
+        if n.role == Role::Dead {
+            return None;
+        }
+        let mut t = Time::MAX;
+        if let Some(rt) = n.runner.poll_timeout() {
+            t = t.min(rt);
+        }
+        if n.links
+            .values()
+            .any(|&l| n.runner.wants_transmit(self.links[l].peer))
+        {
+            t = t.min(n.up_free.max(self.now));
+        }
+        for &l in n.links.values() {
+            // Control already due waits for the uplink; otherwise its
+            // deadlines are still ahead.
+            let link = &self.links[l];
+            if link.control_due(self.now) {
+                t = t.min(n.up_free.max(self.now));
+                continue;
+            }
+            if link.echo.is_pending() {
+                t = t.min(link.echo_at);
+            }
+            if link.path.can_probe() {
+                t = t.min(link.last_send + KEEPALIVE);
+            }
+        }
+        Some(t)
+    }
+
+    /// Node `i`'s state changed: its wake time is stale, and its runner may
+    /// hold events.
+    fn touch(&mut self, i: usize) {
+        self.stale.insert(i);
+        self.undrained.insert(i);
+    }
+
+    /// Recomputes the wake times of the stale nodes and of those that came
+    /// due.
+    fn refresh_wakes(&mut self) {
+        let mut due = std::mem::take(&mut self.stale);
+        due.extend(self.wakes.range(..=(self.now, usize::MAX)).map(|&(_, i)| i));
+        for i in due {
+            if let Some(old) = self.wake_of[i].take() {
+                self.wakes.remove(&(old, i));
+            }
+            self.wake_of[i] = self.wake_time(i);
+            if let Some(t) = self.wake_of[i] {
+                self.wakes.insert((t, i));
+            }
+        }
+    }
+
+    /// The nodes due now, by index.
+    fn due_nodes(&mut self) -> Vec<usize> {
+        self.refresh_wakes();
+        let mut due: Vec<usize> = self
+            .wakes
+            .range(..=(self.now, usize::MAX))
+            .map(|&(_, i)| i)
+            .collect();
+        due.sort_unstable();
+        due
     }
 
     fn run(&mut self) -> Report {
@@ -1352,7 +1422,8 @@ impl Sim {
             }
         }
 
-        for i in 0..self.nodes.len() {
+        // Only nodes due now can have a timeout due.
+        for i in self.due_nodes() {
             let n = &mut self.nodes[i];
             if n.role != Role::Dead && n.runner.poll_timeout().is_some_and(|t| t <= now) {
                 for &l in n.links.values() {
@@ -1360,11 +1431,16 @@ impl Sim {
                     n.runner.set_peer_path(link.peer, link.path.reading(now));
                 }
                 n.runner.handle_timeout(now);
+                self.touch(i);
             }
         }
 
         if self.written < self.munros && now >= self.next_write {
             self.write();
+            self.touch(0);
+            if let Some(c) = self.cfg.cross {
+                self.touch(c.seed);
+            }
         }
 
         if let Some((secs, what)) = self.cfg.incident
@@ -1377,6 +1453,7 @@ impl Sim {
                 Incident::Slows(bw) => self.nodes[victim].up_bw = bw,
             }
             self.incident = Some((now, victim));
+            self.touch(victim);
         }
 
         while let Some(&(secs, step)) = self.cfg.steps.get(self.steps_done) {
@@ -1384,6 +1461,7 @@ impl Sim {
                 break;
             }
             self.steps_done += 1;
+            self.touch(0);
             match step {
                 SeedStep::Uplink(bw) => self.nodes[0].up_bw = bw,
                 SeedStep::Latency(d) => {
@@ -1424,22 +1502,28 @@ impl Sim {
                         n.runner
                             .run_swarm(peer, n.swarm, rchannel, channel, now)
                             .unwrap();
+                        self.touch(from);
                     }
                 }
             }
         }
 
-        for i in 0..self.nodes.len() {
+        // Only a runner called since its last drain holds events.
+        for i in std::mem::take(&mut self.undrained) {
             self.drain(i);
         }
 
-        for i in 0..self.nodes.len() {
+        // Only nodes due now can send.
+        for i in self.due_nodes() {
             self.transmit(i);
+            self.touch(i);
         }
 
-        for n in &mut self.nodes {
-            if let Some(c) = n.cap.as_mut() {
-                c.drain(now, &mut n.runner);
+        if self.cfg.capture.is_some() {
+            for n in &mut self.nodes {
+                if let Some(c) = n.cap.as_mut() {
+                    c.drain(now, &mut n.runner);
+                }
             }
         }
     }
@@ -1477,6 +1561,7 @@ impl Sim {
         if self.nodes[to].role == Role::Dead || self.nodes[from].role == Role::Dead {
             return;
         }
+        self.touch(to);
         // `to`'s own link back to `from` holds its echo and its meter.
         let back = link ^ 1;
         if let Some(nonce) = ctl.probe {
@@ -2136,6 +2221,10 @@ impl Sim {
         }
         if reads_cross {
             self.read_cross(i, now);
+        }
+        if reads_main || reads_cross {
+            // A reader that recovers calls the runner.
+            self.touch(i);
         }
     }
 
