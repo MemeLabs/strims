@@ -364,6 +364,7 @@ fn swarm(s: SwarmInfo) -> v1::SwarmInfo {
         store: st,
         scheduler,
         push: p,
+        parent_hosts: _,
         readers,
         readers_waiting,
         publishers,
@@ -1178,6 +1179,7 @@ mod tests {
             }],
             runner: RunnerMetrics {
                 swarms: vec![SwarmInfo {
+                    parent_hosts: Vec::new(),
                     swarm: swarm_key,
                     id: SwarmId::new(&[1, 2, 3]),
                     label: "mock".into(),

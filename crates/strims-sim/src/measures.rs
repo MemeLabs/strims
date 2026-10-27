@@ -41,12 +41,16 @@
 //!   frames read, the viewers' pushes, prunes and parents, and the seed's
 //!   meter, uplink and copies.
 
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::time::Duration;
 
 use crate::report::{Percentiles, Report};
 use crate::spec::HostIx;
 use crate::stats::MeterSample;
+
+/// Tree depth counts from this long after a stream starts.
+const DEPTH_WARM: Duration = Duration::from_secs(10);
 
 /// The width of the stream-time buckets.
 pub const BUCKET: Duration = Duration::from_secs(30);
@@ -803,6 +807,11 @@ impl Report {
                     j.int(&format!("fanout_p{p}"), f as u64);
                 }
             }
+            if let Some(d) = self.depths(swarm) {
+                for (name, v) in d {
+                    j.num(name, v);
+                }
+            }
             // Parent changes (prunes and switches) per viewer-minute.
             let c = self.swarm_counters(swarm);
             let viewers = spec.viewers.len().max(1) as f64;
@@ -827,6 +836,94 @@ impl Report {
             j.field("series", format_args!("{series}"));
         }
         j.finish()
+    }
+
+    /// The push trees' depth over the viewers' (viewer, stream) pairs,
+    /// once a second from [`DEPTH_WARM`] after the stream's start, from the
+    /// transfer samples (each host's latest by then): the shares with no
+    /// open parent, `h` hops from the seed (1 to 6), deeper, in a cycle,
+    /// and in a chain that ends at a viewer with no open parent. `None`
+    /// without transfer samples.
+    pub fn depths(&self, swarm: usize) -> Option<Vec<(&'static str, f64)>> {
+        let spec = self.scenario.swarms.get(swarm)?;
+        let hosts: Vec<HostIx> = spec.viewers.iter().chain(&spec.relays).copied().collect();
+        let mut samples: Vec<(Duration, HostIx, &[Option<usize>])> = hosts
+            .iter()
+            .filter_map(|&h| self.hosts.get(h).map(|r| (h, r)))
+            .flat_map(|(h, r)| {
+                r.transfers
+                    .iter()
+                    .filter(|(_, s, _)| *s == swarm)
+                    .map(move |(t, _, x)| (*t, h, x.parent_peers.as_slice()))
+            })
+            .collect();
+        if samples.is_empty() {
+            return None;
+        }
+        samples.sort_by_key(|&(t, h, _)| (t, h));
+        let streams = samples.iter().map(|s| s.2.len()).max().unwrap_or(0);
+        let mut latest: BTreeMap<HostIx, &[Option<usize>]> = BTreeMap::new();
+        let mut counts = [0u64; 10];
+        let from = spec.start + DEPTH_WARM;
+        let mut next = from;
+        let mut it = samples.iter().peekable();
+        while let Some(&&(t, h, p)) = it.peek() {
+            if t >= next {
+                // A second's snapshot: every viewer's chain per stream.
+                for &v in &hosts {
+                    let Some(pv) = latest.get(&v) else { continue };
+                    for st in 0..streams {
+                        let parent =
+                            |x: usize| latest.get(&x).and_then(|p| p.get(st).copied().flatten());
+                        let mut at = pv.get(st).copied().flatten();
+                        let mut seen = vec![v];
+                        let k = loop {
+                            match at {
+                                None if seen.len() == 1 => break 0,
+                                None => break 9,
+                                Some(x) if x == spec.seed && seen.len() <= 6 => break seen.len(),
+                                Some(x) if x == spec.seed => break 7,
+                                Some(x) if seen.contains(&x) => break 8,
+                                Some(x) => {
+                                    seen.push(x);
+                                    at = parent(x);
+                                }
+                            }
+                        };
+                        if let Some(c) = counts.get_mut(k) {
+                            *c += 1;
+                        }
+                    }
+                }
+                next = t.max(next) + Duration::from_secs(1);
+                continue;
+            }
+            latest.insert(h, p);
+            it.next();
+        }
+        let all = counts.iter().sum::<u64>();
+        if all == 0 {
+            return None;
+        }
+        let names = [
+            "depth_none",
+            "depth_1",
+            "depth_2",
+            "depth_3",
+            "depth_4",
+            "depth_5",
+            "depth_6",
+            "depth_deeper",
+            "depth_cycle",
+            "depth_pull_rooted",
+        ];
+        Some(
+            names
+                .into_iter()
+                .zip(counts)
+                .map(|(n, c)| (n, c as f64 / all as f64))
+                .collect(),
+        )
     }
 
     /// Swarm `swarm`'s run second by second, as one JSON object; `None`

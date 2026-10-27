@@ -1458,6 +1458,8 @@ impl State {
     }
 
     fn runner_metrics(&mut self, now: Time) -> RunnerMetrics {
+        let hosts: BTreeMap<PpsppPeer, ID> =
+            self.peers.values().map(|ps| (ps.pp, ps.host_id)).collect();
         let swarms = self
             .swarms
             .iter()
@@ -1485,6 +1487,12 @@ impl State {
                     store,
                     scheduler: self.runner.swarm_stats(key),
                     push: self.runner.push_stats(key),
+                    parent_hosts: self.runner.push_stats(key).map_or(Vec::new(), |p| {
+                        p.parents
+                            .iter()
+                            .map(|k| k.and_then(|k| hosts.get(&k).copied()))
+                            .collect()
+                    }),
                     readers: readers.clone().count(),
                     readers_waiting: readers.filter(|r| r.pending.is_some()).count(),
                     publishers: self.publishers.values().filter(|p| p.swarm == key).count(),

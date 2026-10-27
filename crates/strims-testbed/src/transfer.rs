@@ -18,6 +18,9 @@ pub struct TransferSample {
     /// Subscriptions served, and the streams with an open parent.
     pub children: usize,
     pub parents: usize,
+    /// Per stream, its open parent's index, as the caller maps host ids
+    /// (`None`: no parent, or one it can't map).
+    pub parent_peers: Vec<Option<usize>>,
     /// As a child: pushes before their deadline, deadlines released to
     /// pull, and pushes after their release.
     pub hits: u64,
@@ -106,6 +109,11 @@ impl TransferSample {
             pushed_chunks: sched.pushed_chunks,
             children: push.children,
             parents: push.parents.iter().filter(|p| p.is_some()).count(),
+            parent_peers: sw
+                .parent_hosts
+                .iter()
+                .map(|h| h.as_ref().and_then(&index_of))
+                .collect(),
             hits: push.hits,
             misses: push.misses,
             late: push.late,

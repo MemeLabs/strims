@@ -204,6 +204,8 @@ pub struct SwarmInfo {
     /// Push/pull state and counters (ppspp `Runner::push_stats`); `None`
     /// while the swarm has no channel.
     pub push: Option<PushStats>,
+    /// Per stream, the host of its open parent (`PushStats::parents`).
+    pub parent_hosts: Vec<Option<ID>>,
     /// Open [`crate::SwarmReader`]s, and those waiting for data.
     pub readers: usize,
     pub readers_waiting: usize,
