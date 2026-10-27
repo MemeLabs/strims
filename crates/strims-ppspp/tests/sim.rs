@@ -817,7 +817,17 @@ struct Loops {
     switches_down: u64,
     /// Every parent decision on either side, counted by kind.
     kinds: BTreeMap<String, u64>,
+    /// Chunks honest viewers asked the seed for, by how many of the
+    /// asker's other neighbours had held them for [`HELD_FOR`]: none, one
+    /// or two, three or more; and of those held by none, the ones whose
+    /// stream had no open parent at the asker.
+    seed_asks: [u64; 3],
+    seed_asks_parentless: u64,
 }
+
+/// How long a neighbour must have held a chunk for its HAVE to have
+/// reached a peer that asks the seed for it ([`Loops::seed_asks`]).
+const HELD_FOR: Duration = Duration::from_millis(100);
 
 /// The decisions log keeps per (viewer, stream).
 const LOOP_LOG: usize = 16;
@@ -1895,6 +1905,39 @@ impl Sim {
                         Ok(m @ Message::Announce(a)) if !a.is_empty() => {
                             self.announce.0 += 1;
                             self.announce.1 += m.encoded_len() as u64;
+                        }
+                        Ok(Message::Request(r))
+                            if self.loops.is_some() && self.nodes[from].role == Role::Peer =>
+                        {
+                            let parents = {
+                                let n = &self.nodes[from];
+                                n.runner.push_stats(n.swarm).map(|p| p.parents)
+                            };
+                            let (mut x, end) = r.bin.base();
+                            while x <= end {
+                                let c = x.base_offset() as usize;
+                                x += 2;
+                                let stream = c % self.cfg.stream_count.max(1);
+                                let parentless = parents
+                                    .as_ref()
+                                    .is_none_or(|p| p.get(stream).is_none_or(|x| x.is_none()));
+                                let held = self.nodes[from]
+                                    .links
+                                    .keys()
+                                    .filter(|&&n| n != 0)
+                                    .filter(|&&n| {
+                                        self.nodes[n]
+                                            .arrived
+                                            .get(c)
+                                            .is_some_and(|&t| !t.is_nil() && now - t >= HELD_FOR)
+                                    })
+                                    .count();
+                                let loops = self.loops.as_mut().unwrap();
+                                loops.seed_asks[held.min(3).div_ceil(2)] += 1;
+                                if held == 0 && parentless {
+                                    loops.seed_asks_parentless += 1;
+                                }
+                            }
                         }
                         Ok(_) => {}
                         Err(_) => break,
@@ -6766,6 +6809,13 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         for (k, n) in &l.kinds {
             row.int(&format!("decision {k}"), *n);
         }
+        for (k, n) in ["held_by_none", "held_by_1_2", "held_by_3_plus"]
+            .iter()
+            .zip(l.seed_asks)
+        {
+            row.int(&format!("seed_asks_{k}"), n);
+        }
+        row.int("seed_asks_held_by_none_parentless", l.seed_asks_parentless);
         for (how, n) in &l.closed_by {
             row.int(&format!("loops_by_{}", how.replace(' ', "_")), *n);
         }
