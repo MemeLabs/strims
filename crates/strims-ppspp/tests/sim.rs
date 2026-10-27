@@ -107,9 +107,9 @@ use strims_ppspp::codec::{
 };
 use strims_ppspp::store::{self, BufferReader};
 use strims_ppspp::{
-    DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, PeerKey, PushMode, PushStats, ReportCounters,
-    RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey,
-    SwarmOptions, Writer, WriterOptions,
+    DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, ParentAction, PeerKey, PushMode, PushStats,
+    ReportCounters, RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId,
+    SwarmKey, SwarmOptions, TapKind, TapLevel, Writer, WriterOptions,
 };
 use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
 use strims_wan::sample::pick;
@@ -699,6 +699,8 @@ struct Sim {
     /// What a new viewer's swarm is made from.
     swarm_id: SwarmId,
     options: SwarmOptions,
+    /// With `SIM_LOOPS=1`, how push loops form.
+    loops: Option<Loops>,
 }
 
 /// One second's sample for [`Sim::series`].
@@ -786,6 +788,81 @@ struct Shape {
     /// Per node at the last sample: its declines so far and its wire
     /// bytes up.
     last: Vec<Option<(u64, u64)>>,
+}
+
+/// With `SIM_LOOPS=1`, how push loops (cycles of open parents) form and
+/// how long they last: every runner's decision tap feeds a log of each
+/// viewer's parent decisions per stream, and each second's sample finds
+/// the loops ([`Sim::sample_loops`]).
+#[derive(Default)]
+struct Loops {
+    /// Per (viewer, stream), its latest parent decisions.
+    log: BTreeMap<(usize, Stream), std::collections::VecDeque<(Time, Decision)>>,
+    /// The loops at the latest sample, by stream and members (sorted), with
+    /// when each was first seen.
+    active: BTreeMap<(Stream, Vec<usize>), Time>,
+    /// The loops that formed, by how their newest edge formed.
+    closed_by: BTreeMap<String, u64>,
+    /// Members of each loop that formed, and the lifetimes of those that
+    /// broke.
+    lens: Vec<u64>,
+    lives: Vec<Duration>,
+    /// Tap events dropped between drains.
+    lost: u64,
+    /// Grafts and switches asked, and those that asked one of the asking
+    /// viewer's own descendants for the stream.
+    grafts: u64,
+    grafts_down: u64,
+    switches: u64,
+    switches_down: u64,
+    /// Every parent decision on either side, counted by kind.
+    kinds: BTreeMap<String, u64>,
+}
+
+/// The decisions log keeps per (viewer, stream).
+const LOOP_LOG: usize = 16;
+
+/// A parent decision, naming peers by node.
+#[derive(Clone, Copy, Debug)]
+enum Decision {
+    /// With no parent, asked this node.
+    Graft(usize),
+    /// Asked this node to replace the parent.
+    Switch(usize),
+    /// Pruned the parent: silent, or else lossy.
+    Pruned {
+        silent: bool,
+    },
+    ShedBy,
+    Declined,
+    OpenTimeout,
+}
+
+impl Loops {
+    /// How the edge from `child` to `parent` on `stream` formed, and
+    /// when: the latest graft or switch that asked `parent`, and for a
+    /// graft the latest loss before it.
+    fn edge(&self, child: usize, parent: usize, stream: Stream) -> Option<(Time, String)> {
+        let log = self.log.get(&(child, stream))?;
+        let at = log.iter().rposition(
+            |(_, d)| matches!(d, Decision::Graft(p) | Decision::Switch(p) if *p == parent),
+        )?;
+        let (t, d) = log[at];
+        let how = match d {
+            Decision::Switch(_) => "switch".to_owned(),
+            _ => {
+                let lost = log.iter().take(at).rev().find_map(|(_, d)| match d {
+                    Decision::Pruned { silent: true, .. } => Some("silent prune"),
+                    Decision::Pruned { .. } => Some("lossy prune"),
+                    Decision::ShedBy => Some("shed"),
+                    Decision::Declined | Decision::OpenTimeout => Some("decline"),
+                    _ => None,
+                });
+                format!("graft after {}", lost.unwrap_or("nothing logged"))
+            }
+        };
+        Some((t, how))
+    }
 }
 
 /// Honest viewers' open parents, sampled with the seed's allocation after
@@ -1217,6 +1294,16 @@ impl Sim {
         let collude_at = vec![t0(); nodes.len()];
         let every: BTreeSet<usize> = (0..nodes.len()).collect();
         let wake_of = vec![None; nodes.len()];
+        let loops = (knob::<u32>("SIM_LOOPS") == Some(1)).then(|| {
+            assert!(
+                capture.is_none(),
+                "SIM_LOOPS drains the tap a capture would"
+            );
+            for n in &mut nodes {
+                n.runner.set_tap(TapLevel::All);
+            }
+            Loops::default()
+        });
         let churn = match cfg.churn {
             Some(c) => {
                 assert!(
@@ -1274,6 +1361,7 @@ impl Sim {
             joins: Vec::new(),
             swarm_id: SwarmId::new(&key.public),
             options,
+            loops,
         }
     }
 
@@ -1658,6 +1746,9 @@ impl Sim {
             links[*link].from != i && links[*link].to != i
         });
         let mut runner = Runner::new(fork(&mut self.rng));
+        if self.loops.is_some() {
+            runner.set_tap(TapLevel::All);
+        }
         let swarm = strims_ppspp::Swarm::new(self.swarm_id.clone(), self.options.clone()).unwrap();
         let reader = swarm.reader();
         let key = runner.add_swarm(swarm);
@@ -2102,6 +2193,9 @@ impl Sim {
                     .collect()
             })
             .collect();
+        if self.loops.is_some() {
+            self.sample_loops(&parents);
+        }
         let parent = |i: usize, s: usize| parents.get(i).and_then(|v| v.get(s)).copied().flatten();
         let shape = &mut self.shape;
         for (i, n) in self.nodes.iter().enumerate() {
@@ -2162,6 +2256,84 @@ impl Sim {
                     *c += 1;
                 }
             }
+        }
+    }
+
+    /// Whether node `x`'s chain of open parents for `stream` passes
+    /// through `ancestor`.
+    fn descends(&self, x: usize, ancestor: usize, stream: usize) -> bool {
+        let mut at = x;
+        for _ in 0..self.nodes.len() {
+            if at == ancestor {
+                return true;
+            }
+            let n = &self.nodes[at];
+            let Some(p) = n
+                .runner
+                .push_stats(n.swarm)
+                .and_then(|p| p.parents.get(stream).copied().flatten())
+                .and_then(|k| n.runner.peer_id(k))
+                .map(id_node)
+            else {
+                return false;
+            };
+            at = p;
+        }
+        false
+    }
+
+    /// Finds the loops of open parents among honest viewers, notes how each
+    /// new one closed, and the lifetimes of those that broke.
+    fn sample_loops(&mut self, parents: &[Vec<Option<usize>>]) {
+        let now = self.now;
+        let parent = |i: usize, s: usize| parents.get(i).and_then(|v| v.get(s)).copied().flatten();
+        let mut found: BTreeMap<(Stream, Vec<usize>), Vec<usize>> = BTreeMap::new();
+        for i in (1..self.nodes.len()).filter(|&i| self.nodes[i].role == Role::Peer) {
+            for s in 0..self.cfg.stream_count {
+                let mut seen = vec![i];
+                let mut at = parent(i, s);
+                while let Some(p) = at {
+                    if let Some(k) = seen.iter().position(|&x| x == p) {
+                        let ring = seen[k..].to_vec();
+                        let mut members = ring.clone();
+                        members.sort_unstable();
+                        found.entry((s as Stream, members)).or_insert(ring);
+                        break;
+                    }
+                    if p == 0 {
+                        break;
+                    }
+                    seen.push(p);
+                    at = parent(p, s);
+                }
+            }
+        }
+        let Some(loops) = self.loops.as_mut() else {
+            return;
+        };
+        let gone: Vec<_> = loops
+            .active
+            .keys()
+            .filter(|k| !found.contains_key(*k))
+            .cloned()
+            .collect();
+        for k in gone {
+            let first = loops.active.remove(&k).unwrap();
+            loops.lives.push(now - first);
+        }
+        for (key, ring) in found {
+            if loops.active.contains_key(&key) {
+                continue;
+            }
+            let stream = key.0;
+            // The newest edge closed it: ring[j]'s parent is ring[j + 1].
+            let newest = (0..ring.len())
+                .filter_map(|j| loops.edge(ring[j], ring[(j + 1) % ring.len()], stream))
+                .max_by_key(|(t, _)| *t);
+            let how = newest.map_or("unknown".to_owned(), |(_, how)| how);
+            *loops.closed_by.entry(how).or_default() += 1;
+            loops.lens.push(ring.len() as u64);
+            loops.active.insert(key, now);
         }
     }
 
@@ -2393,6 +2565,106 @@ impl Sim {
                 }
             }
         }
+        let mut asked = Vec::new();
+        if let Some(loops) = self.loops.as_mut() {
+            let mut events = Vec::new();
+            node.runner.drain_tap(|e| events.push(e));
+            for e in events {
+                let peer = e.peer.and_then(|k| node.runner.peer_id(k)).map(id_node);
+                let who = if i == 0 { "seed" } else { "viewer" };
+                let kind = match e.kind {
+                    TapKind::ParentChoice { choice, .. } => {
+                        Some(format!("check {:?}", choice.action))
+                    }
+                    TapKind::Switched { .. } => Some("switched".to_owned()),
+                    TapKind::Pruned { why, .. } => {
+                        let age = why.age.unwrap_or_default();
+                        let what = match (why.pushes, why.since_hit) {
+                            (0, _) => "never pushed",
+                            (_, Some(h)) if h >= age => "pushed, never a hit",
+                            _ => "hits, then silent",
+                        };
+                        let old = match age.as_millis() {
+                            ..1500 => "under 1.5 s",
+                            1500..5000 => "1.5-5 s",
+                            _ => "over 5 s",
+                        };
+                        Some(format!(
+                            "pruned {}: {what}, at {old}",
+                            if why.silent { "silent" } else { "lossy" }
+                        ))
+                    }
+                    TapKind::ShedBy { .. } => Some("shed by parent".to_owned()),
+                    TapKind::Declined { .. } => Some("declined".to_owned()),
+                    TapKind::OpenTimeout { .. } => Some("open timeout".to_owned()),
+                    TapKind::Admitted { why, .. } => Some(format!(
+                        "{who} admitted {:?}{}",
+                        why.rule,
+                        if why.extra { " extra" } else { "" }
+                    )),
+                    TapKind::Rejected { why, .. } => {
+                        // Whether the true uplink had room at the target.
+                        let need = why.upload_rate.max(why.committed) + why.stream_rate;
+                        let room = (need as f64)
+                            <= node.up_bw as f64 * why.target_permille as f64 / 1000.0;
+                        Some(format!(
+                            "{who} rejected {:?}{}{}",
+                            why.rule,
+                            if why.extra { " extra" } else { "" },
+                            if room { " (uplink had room)" } else { "" }
+                        ))
+                    }
+                    TapKind::Shed { why, .. } => Some(format!(
+                        "{who} shed {}",
+                        match why {
+                            strims_ppspp::Shed::Saturated { .. } => "saturated",
+                            strims_ppspp::Shed::SeedBudget { .. } => "seed budget",
+                        }
+                    )),
+                    _ => None,
+                };
+                if let Some(k) = kind {
+                    *loops.kinds.entry(k).or_default() += 1;
+                }
+                let (stream, d) = match (e.kind, peer) {
+                    (TapKind::ParentChoice { stream, choice }, Some(p)) => match choice.action {
+                        ParentAction::Graft => (stream, Decision::Graft(p)),
+                        ParentAction::Switch => (stream, Decision::Switch(p)),
+                        _ => continue,
+                    },
+                    (TapKind::Pruned { stream, why }, _) => {
+                        (stream, Decision::Pruned { silent: why.silent })
+                    }
+                    (TapKind::ShedBy { stream }, _) => (stream, Decision::ShedBy),
+                    (TapKind::Declined { stream }, _) => (stream, Decision::Declined),
+                    (TapKind::OpenTimeout { stream, .. }, _) => (stream, Decision::OpenTimeout),
+                    (TapKind::Lost { count }, _) => {
+                        loops.lost += count;
+                        continue;
+                    }
+                    _ => continue,
+                };
+                if let Decision::Graft(p) | Decision::Switch(p) = d {
+                    asked.push((stream, d, p));
+                }
+                let log = loops.log.entry((i, stream)).or_default();
+                if log.len() == LOOP_LOG {
+                    log.pop_front();
+                }
+                log.push_back((now, d));
+            }
+        }
+        for (stream, d, p) in asked {
+            let down = self.descends(p, i, usize::from(stream));
+            let loops = self.loops.as_mut().unwrap();
+            let (n, n_down) = match d {
+                Decision::Graft(_) => (&mut loops.grafts, &mut loops.grafts_down),
+                _ => (&mut loops.switches, &mut loops.switches_down),
+            };
+            *n += 1;
+            *n_down += u64::from(down);
+        }
+        let node = &mut self.nodes[i];
         let reads_main = readable && node.role == Role::Peer;
         let reads_cross = readable_cross && node.cross.as_ref().is_some_and(|x| x.reads);
         if reads_main {
@@ -4096,7 +4368,9 @@ impl Scenario {
 /// `SIM_GREEDY_KINDS` picks a draw's kinds ([`greedy_kinds_knob`]) and
 /// `SIM_GREEDY_SHARE=<percent>` fixes its share. `SIM_CHURN=<percent>`
 /// has that share of any run's honest viewers leave per minute, each place
-/// taken again `SIM_CHURN_AWAY` seconds on ([`Churn`]). A knob that is set but
+/// taken again `SIM_CHURN_AWAY` seconds on ([`Churn`]). `SIM_LOOPS=1` adds
+/// every parent decision, counted by kind, and how push loops formed to a
+/// job's row ([`Loops`]); it changes no trace. A knob that is set but
 /// doesn't parse panics, so a typo can't run the default unnoticed.
 #[allow(clippy::disallowed_methods)]
 fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
@@ -6471,6 +6745,39 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         for p in [10, 50, 90] {
             if let Some(&x) = v.get((v.len().saturating_sub(1)) * p / 100) {
                 row.num(&format!("meter_{name}_p{p}"), x);
+            }
+        }
+    }
+    // How push loops formed (`SIM_LOOPS=1`): how many, by how their newest
+    // edge formed, their sizes, and the lifetimes of those that broke
+    // (`loops_alive`: still there at the end).
+    if let Some(l) = &sim.loops {
+        let mut lens = l.lens.clone();
+        lens.sort_unstable();
+        let mut lives = l.lives.clone();
+        lives.sort_unstable();
+        row.int("loops", lens.len() as u64)
+            .int("loops_alive", l.active.len() as u64)
+            .int("loops_tap_lost", l.lost)
+            .int("grafts", l.grafts)
+            .int("grafts_down", l.grafts_down)
+            .int("switches", l.switches)
+            .int("switches_down", l.switches_down);
+        for (k, n) in &l.kinds {
+            row.int(&format!("decision {k}"), *n);
+        }
+        for (how, n) in &l.closed_by {
+            row.int(&format!("loops_by_{}", how.replace(' ', "_")), *n);
+        }
+        if let Some(&m) = lens.get(lens.len() / 2) {
+            row.int("loop_len_p50", m);
+        }
+        for p in [50, 90] {
+            if !lives.is_empty() {
+                row.int(
+                    &format!("loop_life_p{p}_ms"),
+                    ms(percentile(&lives, p)) as u64,
+                );
             }
         }
     }
