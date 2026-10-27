@@ -166,6 +166,33 @@ fn cross_byte(o: u64) -> u8 {
     stream_byte(o ^ 0x5bd1_e995_0000_0000)
 }
 
+/// The most nodes a run can have: their ids take at most two bytes.
+const MAX_NODES: usize = 1 << 16;
+
+/// Node `i`'s id at its peers ([`Runner::add_peer`]), which reports name it
+/// by: one byte below 256, two (big-endian) from there, so a run of up to
+/// 256 nodes keeps the ids, and the trace, it always had.
+fn node_id(i: usize) -> &'static [u8] {
+    static IDS: std::sync::LazyLock<Vec<Vec<u8>>> = std::sync::LazyLock::new(|| {
+        (0..MAX_NODES)
+            .map(|i| match u8::try_from(i) {
+                Ok(b) => vec![b],
+                Err(_) => (i as u16).to_be_bytes().to_vec(),
+            })
+            .collect()
+    });
+    &IDS[i]
+}
+
+/// The node whose id is `id` ([`node_id`]).
+fn id_node(id: &[u8]) -> usize {
+    match *id {
+        [b] => usize::from(b),
+        [a, b] => usize::from(u16::from_be_bytes([a, b])),
+        _ => panic!("not a node id: {id:?}"),
+    }
+}
+
 /// A directory name for a run's captures: its seed and a hash of its
 /// config.
 fn run_tag(cfg: &Config) -> String {
@@ -872,6 +899,12 @@ struct CrossReport {
 
 impl Sim {
     fn new(cfg: Config) -> Sim {
+        assert!(
+            cfg.peers < MAX_NODES,
+            "{} viewers: at most {}",
+            cfg.peers,
+            MAX_NODES - 1
+        );
         let mut rng = det_rng(cfg.seed);
         let key = strims_crypto::key_from_seed(&[9; 32]);
         let options = SwarmOptions {
@@ -1046,8 +1079,8 @@ impl Sim {
         for &(a, b) in &edges {
             let span = (cfg.latency_ms.1 - cfg.latency_ms.0).max(1) as u64;
             let latency = Duration::from_millis(cfg.latency_ms.0 + (rng.next_u64() % span) as i64);
-            let pa = nodes[a].runner.add_peer(&[b as u8], t0());
-            let pb = nodes[b].runner.add_peer(&[a as u8], t0());
+            let pa = nodes[a].runner.add_peer(node_id(b), t0());
+            let pb = nodes[b].runner.add_peer(node_id(a), t0());
             let (ca, cb) = (a as u64 + 1, b as u64 + 1);
             let sa = nodes[a].swarm;
             let sb = nodes[b].swarm;
@@ -1113,7 +1146,7 @@ impl Sim {
                     Box::new(move |_| Ok(BufWriter::new(std::fs::File::create(&path)?)));
                 let opts = CaptureOptions {
                     clock: Clock::Sim,
-                    node: &[i as u8],
+                    node: node_id(i),
                     label: &label,
                     max_file_bytes: 0,
                     tap: to.tap,
@@ -1358,7 +1391,7 @@ impl Sim {
                         .parents
                         .iter()
                         .map(|x| {
-                            x.and_then(|k| n.runner.peer_id(k).map(|id| id[0].to_string()))
+                            x.and_then(|k| n.runner.peer_id(k).map(|id| id_node(id).to_string()))
                                 .unwrap_or("-".into())
                         })
                         .collect();
@@ -1802,7 +1835,7 @@ impl Sim {
         let mut barred = BTreeSet::new();
         let mut worst = Vec::new();
         for nb in &a.neighbours {
-            let Some(id) = seed.runner.peer_id(nb.peer).map(|id| usize::from(id[0])) else {
+            let Some(id) = seed.runner.peer_id(nb.peer).map(id_node) else {
                 continue;
             };
             held.insert(id, nb.streams.len());
@@ -1828,14 +1861,14 @@ impl Sim {
                 .iter()
                 .filter(|nb| !nb.streams.is_empty() || nb.holder || nb.barred)
                 .map(|nb| {
-                    let id = seed.runner.peer_id(nb.peer).map_or(0, |id| id[0]);
+                    let id = seed.runner.peer_id(nb.peer).map_or(0, id_node);
                     let rtt = nb.min_rtt.map_or(-1, ms);
                     let mark = match (nb.holder, nb.barred) {
                         (true, _) => "*",
                         (false, true) => "!",
                         _ => "",
                     };
-                    let greed = match self.nodes[usize::from(id)].role {
+                    let greed = match self.nodes[id].role {
                         Role::Greedy(Greed::FreeRider) => "F",
                         Role::Greedy(Greed::Liar) => "L",
                         Role::Greedy(Greed::Grabber) => "G",
@@ -1922,10 +1955,7 @@ impl Sim {
                 let ps = n.runner.push_stats(n.swarm).map(|p| p.parents);
                 ps.unwrap_or_default()
                     .iter()
-                    .map(|p| {
-                        p.and_then(|k| n.runner.peer_id(k))
-                            .map(|id| usize::from(id[0]))
-                    })
+                    .map(|p| p.and_then(|k| n.runner.peer_id(k)).map(id_node))
                     .collect()
             })
             .collect();
@@ -1979,15 +2009,6 @@ impl Sim {
     /// the stream its index picks, a liar is praised and anyone else
     /// defamed, eight pushes each.
     fn collusion(&mut self, i: usize, l: usize) -> Option<Vec<AnnounceEntry<'static>>> {
-        const IDS: [[u8; 1]; 256] = {
-            let mut ids = [[0u8]; 256];
-            let mut i = 0;
-            while i < 256 {
-                ids[i] = [i as u8];
-                i += 1;
-            }
-            ids
-        };
         if self.links[l].to != 0
             || self.now < self.collude_at[i]
             || knob::<u32>("SIM_COLLUDE").is_none_or(|c| c == 0)
@@ -2003,7 +2024,7 @@ impl Sim {
             .unwrap_or_default();
         let entries: Vec<AnnounceEntry<'static>> = holders
             .iter()
-            .filter(|&&h| h != i && h < IDS.len())
+            .filter(|&&h| h != i)
             .map(|&h| {
                 let liar = self.nodes[h].role == Role::Greedy(Greed::Liar);
                 AnnounceEntry {
@@ -2012,7 +2033,7 @@ impl Sim {
                     late: 0,
                     misses: if liar { 0 } else { 8 },
                     delay: Duration::from_millis(20),
-                    parent: &IDS[h],
+                    parent: node_id(h),
                 }
             })
             .collect();
@@ -2027,10 +2048,7 @@ impl Sim {
                 n.runner.push_stats(n.swarm).map_or_else(Vec::new, |s| {
                     s.parents
                         .iter()
-                        .map(|x| {
-                            x.and_then(|k| n.runner.peer_id(k))
-                                .map(|id| usize::from(id[0]))
-                        })
+                        .map(|x| x.and_then(|k| n.runner.peer_id(k)).map(id_node))
                         .collect()
                 })
             })
@@ -2041,7 +2059,7 @@ impl Sim {
     /// children, into [`Sim::verdicts`], and tracks how long liars hold.
     fn score_verdicts(&mut self, a: &strims_ppspp::SeedAllocationStats) {
         let seed = &self.nodes[0];
-        let id = |k| seed.runner.peer_id(k).map_or(0, |id| usize::from(id[0]));
+        let id = |k| seed.runner.peer_id(k).map_or(0, id_node);
         let holders: BTreeSet<usize> = a
             .neighbours
             .iter()
@@ -2154,9 +2172,9 @@ impl Sim {
                 continue;
             };
             for (s, parent) in p.parents.iter().enumerate() {
-                let liar = parent.and_then(|k| n.runner.peer_id(k)).is_some_and(|id| {
-                    self.nodes[usize::from(id[0])].role == Role::Greedy(Greed::Liar)
-                });
+                let liar = parent
+                    .and_then(|k| n.runner.peer_id(k))
+                    .is_some_and(|id| self.nodes[id_node(id)].role == Role::Greedy(Greed::Liar));
                 g.samples += 1;
                 if liar {
                     g.to_liars += 1;
@@ -2848,10 +2866,7 @@ impl Sim {
                 let mut greedy = ReportCounters::default();
                 if let Some(a) = seed.runner.seed_allocation(seed.swarm, self.now) {
                     for nb in &a.neighbours {
-                        let i = seed
-                            .runner
-                            .peer_id(nb.peer)
-                            .map_or(0, |id| usize::from(id[0]));
+                        let i = seed.runner.peer_id(nb.peer).map_or(0, id_node);
                         let c = if matches!(self.nodes[i].role, Role::Greedy(_)) {
                             &mut greedy
                         } else {
@@ -3616,7 +3631,7 @@ fn sim_capture_changes_no_trace() {
         for i in 0..=cfg.peers {
             let f = std::fs::read(to.join(format!("node-{i}.ppcap"))).unwrap();
             let mut rd = strims_ppspp_capture::Reader::new(&f[..]).unwrap();
-            assert_eq!(rd.header().node, [i as u8]);
+            assert_eq!(rd.header().node, node_id(i));
             while let Some(e) = rd.next_record() {
                 match e.unwrap().record {
                     strims_ppspp_capture::Record::Frame {
@@ -4043,7 +4058,7 @@ fn push_debug_nodes() {
             .parents
             .iter()
             .map(|x| {
-                x.and_then(|k| n.runner.peer_id(k).map(|id| id[0].to_string()))
+                x.and_then(|k| n.runner.peer_id(k).map(|id| id_node(id).to_string()))
                     .unwrap_or("-".into())
             })
             .collect();
