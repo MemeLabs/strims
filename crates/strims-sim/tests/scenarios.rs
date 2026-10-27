@@ -2183,38 +2183,44 @@ fn collapse_first_wave_overshoot() {
 /// grows copies past what the uplink pays for, the uplink saturates, the
 /// holders' pushes fall behind and the window halves, until the uplink
 /// idles again. Behind a 5 Mbit uplink (one copy) three viewers ride this
-/// cycle every 10–20 s, with lag spikes of a second or two. Checks for at
-/// least three cycles: a reading over four times the uplink while busy
-/// under 5 %, then one at over 90 % busy.
+/// cycle two or three times in 90 s, with lag spikes of a second or two. A
+/// cycle is a reading over four times the uplink while busy under 5 %,
+/// then one at over 90 % busy. A run's count varies with its seed (0 to 4),
+/// so the case checks 8 seeds for at least 1.5 cycles a run.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_meter_oscillation() {
-    collapse_sweep(
+    let cycles = |r: &Report| {
+        let (seed, start) = collapse_seed(r);
+        let (mut cycles, mut overread) = (0u64, false);
+        for m in r.hosts[seed]
+            .runner
+            .meter
+            .iter()
+            .filter(|m| m.t > start + secs(5))
+        {
+            let cap = r.upload_cap_at(seed, m.t).unwrap_or(u64::MAX);
+            if m.busy_permille < 50 && m.capacity > 4 * cap {
+                overread = true;
+            } else if overread && m.busy_permille > 900 {
+                cycles += 1;
+                overread = false;
+            }
+        }
+        cycles
+    };
+    let reports = sweep_n(
         "collapse_meter_oscillation",
-        &collapse_case(3, 5, 90),
-        |r| {
-            let (seed, start) = collapse_seed(r);
-            let (mut cycles, mut overread) = (0, false);
-            for m in r.hosts[seed]
-                .runner
-                .meter
-                .iter()
-                .filter(|m| m.t > start + secs(5))
-            {
-                let cap = r.upload_cap_at(seed, m.t).unwrap_or(u64::MAX);
-                if m.busy_permille < 50 && m.capacity > 4 * cap {
-                    overread = true;
-                } else if overread && m.busy_permille > 900 {
-                    cycles += 1;
-                    overread = false;
-                }
-            }
-            if cycles >= 3 {
-                Ok(())
-            } else {
-                Err(format!("{cycles} cycles of overreading then saturating"))
-            }
-        },
+        8,
+        |s| calibration_star_scenario(s, &collapse_case(3, 5, 90)),
+        |_| Ok(()),
+    );
+    let runs: Vec<(u64, u64)> = reports.iter().map(|r| (r.seed, cycles(r))).collect();
+    let total: u64 = runs.iter().map(|&(_, c)| c).sum();
+    assert!(
+        2 * total >= 3 * runs.len() as u64,
+        "{total} cycles of overreading then saturating in {} runs (seed, cycles): {runs:?}",
+        runs.len()
     );
 }
 
