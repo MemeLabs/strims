@@ -7,6 +7,7 @@ working tree's sims against the base's, cell by cell, paired by seed.
   hack/sim-suite/suite.py run [--base REF] [--tier smoke|peers|scale]
                               [--seeds N] [--slots N] [--mem-gib N]
                               [--only CELL,...] [--rebuild] [--all]
+                              [--tree-env KEY=VALUE ...]
   hack/sim-suite/suite.py calibrate [--base REF] [--tier ...] [--seeds N]
                                     [--only CELL,...]
 
@@ -330,14 +331,14 @@ def run_jobs(jobs, slots, mem_gib):
     used = [0.0]
 
     def one(job):
-        _, bin_dir, c, seed = job
+        _, bin_dir, c, seed, extra = job
         need = min(c["mem_gib"], mem_gib)
         with lock:
             lock.wait_for(lambda: used[0] + need <= mem_gib)
             used[0] += need
         try:
             seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
-            env = {**os.environ, **c["env"], seed_key: str(seed)}
+            env = {**os.environ, **c["env"], **extra, seed_key: str(seed)}
             t0 = time.monotonic()
             p = subprocess.Popen(
                 [str(bin_dir / c["sim"]), "--exact", c["test"], "--include-ignored", "--nocapture",
@@ -521,15 +522,16 @@ def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False):
 
 
 def run_cells(cells, runs, slots, mem_gib):
-    """Runs every binary of `runs` ({label: (bin_dir, seeds, sim)}) at its
-    seeds for the cells of its sim, skipping rows kept (per label, in
+    """Runs every binary of `runs` ({label: (bin_dir, seeds, sim, env)})
+    at its seeds for the cells of its sim, with `env` added to every job's
+    environment, skipping rows kept (per label, in
     target/sim-suite/rows/<label>.jsonl); returns each label's rows by
     (cell, seed) and the failures."""
     store = lambda label: WORK / "rows" / f"{label}.jsonl"
     have = {label: load_rows(store(label)) for label in runs}
     jobs = [
-        (label, bin_dir, c, s)
-        for label, (bin_dir, seeds, sim) in runs.items()
+        (label, bin_dir, c, s, env)
+        for label, (bin_dir, seeds, sim, env) in runs.items()
         for c in cells
         if c["sim"] == sim
         for s in seeds(c)
@@ -538,7 +540,7 @@ def run_cells(cells, runs, slots, mem_gib):
     failures = []
     t0 = time.monotonic()
     files = {label: open(store(label), "a") for label in runs}
-    for done, ((label, _, c, s), row, err) in enumerate(run_jobs(jobs, slots, mem_gib), 1):
+    for done, ((label, _, c, s, _), row, err) in enumerate(run_jobs(jobs, slots, mem_gib), 1):
         if err:
             failures.append(f"{label} {c['name']} seed {s}: {err}")
         if row is not None:
@@ -558,7 +560,7 @@ def run_cells(cells, runs, slots, mem_gib):
             for s in seeds(c)
             if job_id(label, c, s) in have[label]
         }
-        for label, (_, seeds, sim) in runs.items()
+        for label, (_, seeds, sim, _) in runs.items()
     }
     return rows, failures
 
@@ -583,6 +585,8 @@ def main():
     r.add_argument("--only", help="cells, comma-separated")
     r.add_argument("--rebuild", action="store_true", help="rebuild the base's binaries")
     r.add_argument("--all", action="store_true", help="every metric, ties too")
+    r.add_argument("--tree-env", action="append", default=[], metavar="KEY=VALUE",
+                   help="set for the working tree's runs only, e.g. a knob that turns a change on")
     a = ap.parse_args()
 
     cells = TIERS[a.tier]
@@ -598,7 +602,7 @@ def main():
     union = lambda rows, labels: {k: r for label in labels for k, r in rows[label].items()}
     if a.cmd == "calibrate":
         both = lambda c: list(range(1, 2 * count(c) + 1))
-        runs = {label: (bin_dir, both, sim) for sim, (label, bin_dir) in base.items()}
+        runs = {label: (bin_dir, both, sim, {}) for sim, (label, bin_dir) in base.items()}
         rows, failures = run_cells(cells, runs, a.slots, a.mem_gib)
         every = union(rows, runs)
         per = {c["name"]: count(c) for c in cells}
@@ -608,13 +612,21 @@ def main():
                                    "the same at seeds N+1..2N", True)
     else:
         tree = {sim: tree_binary(sim, base[sim]) for sim in sims}
-        runs = {label: (bin_dir, seeds, sim) for arm in (base, tree) for sim, (label, bin_dir) in arm.items()}
+        # The working tree's knobs name its rows apart from the same binary's
+        # without them.
+        env = dict(kv.split("=", 1) for kv in a.tree_env)
+        if env:
+            tag = hashlib.sha1(json.dumps(sorted(env.items())).encode()).hexdigest()[:8]
+            tree = {sim: (f"{label}~{tag}", bin_dir) for sim, (label, bin_dir) in tree.items()}
+        runs = {label: (bin_dir, seeds, sim, {}) for sim, (label, bin_dir) in base.items()}
+        runs.update({label: (bin_dir, seeds, sim, env) for sim, (label, bin_dir) in tree.items()})
         rows, failures = run_cells(cells, runs, a.slots, a.mem_gib)
         a_rows = union(rows, [label for label, _ in base.values()])
         b_rows = union(rows, [label for label, _ in tree.values()])
         tree_labels = ", ".join(label for label, _ in tree.values())
+        knobs = " ".join(a.tree_env)
         report = lambda: scorecard(cells, a_rows, b_rows, f"{a.base} {sha[:8]}",
-                                   f"working tree ({tree_labels})", a.all)
+                                   f"working tree ({tree_labels}){' with ' + knobs if knobs else ''}", a.all)
     if failures:
         print("FAILURES")
         for f in failures:
