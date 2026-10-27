@@ -814,6 +814,7 @@ def verdict(s):
         "absorbing": absorbing, "feasible": feasible(s), "lag_p50": med([x for x in lag if x is not None]),
         "unhealthy": 1 - sum(healthy) / n if n else None,
         "lag_max": max((x for x in lag if x is not None), default=None),
+        "healthy": healthy,
     }
 
 

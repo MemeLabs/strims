@@ -8,6 +8,7 @@ working tree's sims against the base's, cell by cell, paired by seed.
                               [--seeds N] [--slots N] [--mem-gib N]
                               [--only CELL,...] [--rebuild] [--all]
   hack/sim-suite/suite.py calibrate [--base REF] [--tier ...] [--seeds N]
+                                    [--only CELL,...]
 
 `run` builds the ppspp sim and strims-sim's scenarios from the working
 tree (the checkout this script is in, changes and all) and from `--base`
@@ -22,19 +23,24 @@ always give the same row.
 Tiers:
 
   smoke   a handful of short cells, one seed: does anything break.
-  peers   the directional tier (about 5 minutes on 16 cores, fewer once the
-          base is cached): large swarms, an overloaded one, greedy peers,
-          WAN mixes, pull-heavy seeds, and the real stack (strims-sim).
+  peers   the directional tier (about 8 minutes on 16 cores, 5 once the
+          base's rows are kept): large swarms, an overloaded one, churn,
+          greedy peers, WAN mixes, pull-heavy seeds, and the real stack
+          (strims-sim).
   scale   1000 viewers, opt-in: memory and depth at scale.
 
-The scorecard, per cell, shows each metric's base and working-tree medians
+The scorecard, per cell, shows the seeds whose runs collapsed (8 unhealthy
+seconds in a row, lasting past the first 15) under each, with a Fisher
+exact test,
+then each metric's base and working-tree medians
 and the paired effect over seeds: the geometric mean ratio of B to A for
 rates and times, the mean difference for shares, with a 95 % t-interval. A metric moved when the interval excludes no change and the
 effect passes its tie band; it is then marked better (+) or worse (-) by
 the metric's direction, or changed (~) where no direction is better.
 Hard failures (a run without a row, a panic, memory past the cell's
 budget) are listed first. Four seeds show direction, not effect sizes:
-take what moves to the farm. Cheap cells run more seeds.
+take what moves to the farm. Cheap cells run more seeds, and so do cells
+that tip between healthy and collapsed by seed.
 
 `calibrate` scores the base against itself at other seeds (seeds 1..N
 against N+1..2N, paired in order): what moves there is seed noise, an
@@ -81,6 +87,9 @@ def cell(name, sim, test, env, mem_gib, why, seeds=None):
 
 
 CHEAP = 12
+# Cells whose seeds split between healthy runs and collapsed ones: at 4
+# seeds only a huge effect shows.
+TIPPING = 8
 
 
 TIERS = {
@@ -97,16 +106,17 @@ TIERS = {
         cell("large-2mbit", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "500", "SIM_MBIT": "2", "SIM_SECS": "30"}, 5,
              "500 viewers of a cable seed: depth, fan-out, relay use at scale"),
         cell("large-4mbit", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "200", "SIM_MBIT": "4", "SIM_SECS": "30"}, 4,
-             "200 viewers at a higher rate"),
+             "200 viewers at a higher rate", TIPPING),
         cell("overload", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "100", "SIM_MBIT": "6", "SIM_SECS": "30"}, 3,
-             "100 viewers at 6 Mbit/s: trees fragment into cycles and pull-rooted chains"),
+             "100 viewers at 6 Mbit/s: trees fragment into cycles and pull-rooted chains", TIPPING),
         cell("grabbers", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "50", "SIM_MBIT": "6", "SIM_SECS": "30",
              "SIM_GREEDY_KINDS": "grab", "SIM_GREEDY_SHARE": "20"}, 6, "20 % grabbers: answer backlogs, memory"),
         cell("no-greedy", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "50", "SIM_MBIT": "6", "SIM_SECS": "30",
              "SIM_GREEDY": "0"}, 2, "the same swarm with honest viewers only"),
         cell("churn", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "100", "SIM_MBIT": "4", "SIM_SECS": "60",
              "SIM_CHURN": "120", "SIM_CHURN_AWAY": "5"}, 3,
-             "100 viewers, 120 % leaving a minute, new ones in their places 5 s on: trees repair or tip"),
+             "100 viewers, 120 % leaving a minute, new ones in their places 5 s on: trees repair or tip",
+             TIPPING),
         cell("wan-global", PPSPP, "sim_job", {**PP_AB, "SIM_SCENARIO": "WanGlobal", "SIM_SECS": "60"}, 1,
              "24 viewers worldwide, 6 links each, a datacenter seed", CHEAP),
         cell("wan-mobile", PPSPP, "sim_job", {**PP_AB, "SIM_SCENARIO": "WanMobile", "SIM_SECS": "60"}, 1,
@@ -363,6 +373,40 @@ def effect(kind, pairs):
     return t_interval(v)
 
 
+# A run collapsed when this many seconds in a row are unhealthy and they
+# last past its startup (the real stack's trees take about 10 s to form).
+STARTUP_SECS = 15
+COLLAPSED_SECS = 8
+
+
+def collapsed(r):
+    s = r.get("series")
+    if not s:
+        return None
+    run = 0
+    for k, h in enumerate(analyze().verdict(s)["healthy"]):
+        run = 0 if h else run + 1
+        if run >= COLLAPSED_SECS and k >= STARTUP_SECS:
+            return True
+    return False
+
+
+def fisher(k, n, m, n2):
+    """The two-sided Fisher exact p of k in n against m in n2."""
+    total, hits = n + n2, k + m
+    prob = lambda x: math.comb(n, x) * math.comb(n2, hits - x) / math.comb(total, hits)
+    seen = prob(k)
+    return min(1.0, sum(prob(x) for x in range(max(0, hits - n2), min(n, hits) + 1) if prob(x) <= seen * (1 + 1e-9)))
+
+
+def collapses(c, a_rows, b_rows):
+    """The seeds whose runs collapsed under A and under B, and how many
+    seeds both have."""
+    seeds = sorted({s for (name, s) in a_rows if name == c["name"]} & {s for (name, s) in b_rows if name == c["name"]})
+    count = lambda rows: sum(1 for s in seeds if collapsed(rows[(c["name"], s)]))
+    return count(a_rows), count(b_rows), len(seeds)
+
+
 def mark(better, kind, tie, e):
     """+ better, - worse, ~ moved with no better direction, blank for a
     tie."""
@@ -422,7 +466,14 @@ def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False):
             else:
                 eff = f"{e[0]:+.3f} [{e[1]:+.3f},{e[2]:+.3f}]"
             lines.append(f"   {m} {name:20} {fmt(med([p[0] for p in pairs])):>9} {fmt(med([p[1] for p in pairs])):>9}  {eff}")
-        n = len({s for (name_, s) in a_rows if name_ == c["name"]} & {s for (name_, s) in b_rows if name_ == c["name"]})
+        # Whether a run collapses is near all-or-nothing, and a change
+        # redraws which seeds do: the counts, not the pairs, carry it.
+        ka, kb, n = collapses(c, a_rows, b_rows)
+        if ka or kb:
+            p = fisher(ka, n, kb, n)
+            m = " " if p >= 0.05 else ("+" if kb < ka else "-")
+            totals[m] += 1
+            lines.insert(0, f"   {m} {'collapsed':20} {ka:>7}/{n} {kb:>7}/{n}  Fisher p={p:.2f}")
         print(f"\n{c['name']}, {n} seeds ({c['why']})")
         print("\n".join(lines) if lines else "   (no rows)")
     print(f"\nmoved: {totals['+']} better, {totals['-']} worse, {totals['~']} changed; {totals[' ']} ties")
@@ -476,6 +527,7 @@ def main():
     cal.add_argument("--seeds", type=int, default=4)
     cal.add_argument("--slots", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     cal.add_argument("--mem-gib", type=float, default=40)
+    cal.add_argument("--only", help="cells, comma-separated")
     cal.add_argument("--rebuild", action="store_true")
     r = sub.add_parser("run")
     r.add_argument("--base", default="main")
