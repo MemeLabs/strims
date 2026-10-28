@@ -2185,8 +2185,11 @@ fn collapse_seed(r: &Report) -> (HostIx, Duration) {
 /// store rate since the first chunk, so behind a 10 Mbit uplink that pays
 /// for 2 copies it opens a copy to each of 15 neighbours. The pushes queue
 /// behind each holder's connection, go stale, and its window falls back
-/// over the next seconds while the viewers pull. Checks that the first
-/// wave opens at least twice the copies the seed's uplink pays for.
+/// over the next seconds while the viewers pull. Without a known capacity
+/// the first wave now ramps, as a slow start, from two copies until a
+/// queue forms below the runner, and ends on the queue its last doubling
+/// built. Checks that the first wave opens at most twice the copies the
+/// seed's uplink pays for.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_first_wave_overshoot() {
@@ -2201,7 +2204,7 @@ fn collapse_first_wave_overshoot() {
                 .get(&0)
                 .map_or(0, |s| s.first_wave);
             let paid = r.paid_copies(0).unwrap_or(0).max(1);
-            if wave >= 2 * paid {
+            if wave <= 2 * paid {
                 Ok(())
             } else {
                 Err(format!(
@@ -2220,8 +2223,11 @@ fn collapse_first_wave_overshoot() {
 /// idles again. Behind a 5 Mbit uplink (one copy) three viewers ride this
 /// cycle two or three times in 90 s, with lag spikes of a second or two. A
 /// cycle is a reading over four times the uplink while busy under 5 %,
-/// then one at over 90 % busy. A run's count varies with its seed (0 to 4),
-/// so the case checks 8 seeds for at least 1.5 cycles a run.
+/// then one at over 90 % busy. A run's count varies with its seed (0 to
+/// 4). Once a queue has stood below the runner, what the links delivered
+/// under it bounds the reading, and the window grows only on copies held
+/// for a check, so the cycle mostly comes once, as the stream starts. The
+/// case checks 8 seeds for under 1.5 cycles a run.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_meter_oscillation() {
@@ -2253,7 +2259,7 @@ fn collapse_meter_oscillation() {
     let runs: Vec<(u64, u64)> = reports.iter().map(|r| (r.seed, cycles(r))).collect();
     let total: u64 = runs.iter().map(|&(_, c)| c).sum();
     assert!(
-        2 * total >= 3 * runs.len() as u64,
+        2 * total < 3 * runs.len() as u64,
         "{total} cycles of overreading then saturating in {} runs (seed, cycles): {runs:?}",
         runs.len()
     );
@@ -2269,9 +2275,11 @@ fn collapse_meter_oscillation() {
 /// the seed. Behind a 5 Mbit seed 15 viewers never get out: the seed sends
 /// most of its chunks as answers and the lag grows for the whole stream.
 /// Bounding the seed's answers per chunk, or a rate limit under the uplink
-/// (so the holders' QoS weights apply), lets the trees close. Checks that
-/// the seed sent under half its chunks as pushes and that the frames
-/// written in the stream's last 20 s lag over 5 s at p99.
+/// (so the holders' QoS weights apply), lets the trees close, and so does
+/// pacing the answers while a queue stands below the runner or pushes wait
+/// in it. Checks that the seed sends at least half its chunks as pushes
+/// and that the frames written in the stream's last 20 s lag under 2 s at
+/// p99.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_pull_lock_in() {
@@ -2284,7 +2292,7 @@ fn collapse_pull_lock_in() {
             .find(|(_, s, _)| *s == 0)
             .map_or((0, 0), |(_, _, x)| (x.chunks_sent, x.pushed_chunks));
         let late = r.lag_between(0, start + secs(40), start + secs(60)).p99;
-        if pushed * 2 < sent && late > 5000 {
+        if pushed * 2 >= sent && late < 2000 {
             Ok(())
         } else {
             Err(format!(
@@ -2302,8 +2310,10 @@ fn collapse_pull_lock_in() {
 /// 30 s, 7 viewers stream well before and lag seconds after. Checks that
 /// frames written in the 10 s before the halving lag under 2 s at p99, and
 /// those written from 10 s after it over 2 s: healthy before, not after.
-/// Holding answers below pushes, routing by expected delivery and holding
-/// late pushes for their parent ease the mode but don't remove it.
+/// Holding answers below pushes, routing by expected delivery, holding
+/// late pushes for their parent and pacing answers ease the mode (to about
+/// 2.3 s) but don't remove it: once its window is cut, the seed holds two
+/// or three copies while the viewers it dropped find relays.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_halving_lock_in() {
