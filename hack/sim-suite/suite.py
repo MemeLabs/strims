@@ -33,6 +33,10 @@ row.
 Tiers:
 
   smoke   a handful of short cells, one seed: does anything break.
+  robust  the real stack across shapes (stars of 3-31 viewers behind 5-20
+          Mbit/s seeds, halvings, sparse meshes, jitter, rate limits, thin
+          relays, every WAN and fault case), for a change that must hold in
+          general: run it with --seeds 8 or more.
   peers   the directional tier (about 8 minutes on 16 cores, 5 once the
           base's rows are kept): large swarms, an overloaded one, churn,
           greedy peers, WAN mixes, pull-heavy seeds, and the real stack
@@ -134,6 +138,44 @@ CHEAP = 12
 TIPPING = 8
 
 
+def robust_tier():
+    """The real stack across shapes, for a change that must hold in
+    general: stars of 3 to 31 viewers behind 5 to 20 Mbit/s seeds, steady
+    and with the seed's uplink halved, sparse meshes, jitter, rate limits,
+    small relay uplinks, and every WAN, step, starvation, churn and restart
+    case of strims-sim's Hybrid streams."""
+    star = lambda v, m, **env: {**SS_STAR, "STRIMS_SIM_CAL_VIEWERS": str(v), "STRIMS_SIM_CAL_SEED_UP_MBIT": str(m),
+                                "STRIMS_SIM_CAL_SECS": "60", **env}
+    cells = [cell(f"star-{v}-{m}", SIM, "calibration_star", star(v, m), 1, f"{v} viewers, a {m} Mbit/s seed")
+             for v in (3, 7, 15, 31) for m in (5, 10, 20)]
+    cells += [cell(f"halve-{v}-{m}", SIM, "calibration_star",
+                   star(v, m, STRIMS_SIM_CAL_SECS="70", STRIMS_SIM_CAL_SEED_UP_SCALE="30:0.5"), 1,
+                   f"{v} viewers, a {m} Mbit/s seed halved at 30 s")
+              for v in (7, 15, 31) for m in (10, 20)]
+    cells += [
+        cell("mesh6-31-10", SIM, "calibration_star", star(31, 10, STRIMS_SIM_CAL_MESH="mesh6"), 1,
+             "31 viewers in a 6-link mesh, a 10 Mbit/s seed"),
+        cell("mesh6-15-5", SIM, "calibration_star", star(15, 5, STRIMS_SIM_CAL_MESH="mesh6"), 1,
+             "15 viewers in a 6-link mesh, a 5 Mbit/s seed"),
+        cell("jitter-15-10", SIM, "calibration_star", star(15, 10, STRIMS_SIM_CAL_JITTER="1"), 1,
+             "15 viewers on jittery cable, a 10 Mbit/s seed"),
+        cell("limited-15-10", SIM, "calibration_star", star(15, 10, STRIMS_SIM_CAL_RATE_LIMIT_PCT="80"), 1,
+             "15 viewers, every node rate limited to 80 % of its uplink"),
+        cell("thin-15-10", SIM, "calibration_star", star(15, 10, STRIMS_SIM_CAL_VIEWER_UP_MBIT="3"), 1,
+             "15 viewers with 3 Mbit/s uplinks, a 10 Mbit/s seed"),
+    ]
+    cells += [cell(t.replace("_adaptive_uncapped", "").replace("_hybrid", "").replace("_", "-"), SIM, t, SS_BASE, 1, t)
+              for t in ("wan_residential_seed_adaptive", "wan_super_peer_adaptive",
+                        "wan_residential_seed_adaptive_uncapped", "wan_super_peer_adaptive_uncapped",
+                        "wan_global_audience_adaptive_uncapped", "wan_mobile_viewers_adaptive_uncapped",
+                        "wan_residential_two_streams_adaptive_uncapped", "wan_slow_viewer_adaptive_uncapped",
+                        "wan_residential_seed_adaptive_uncapped_varying",
+                        "wan_super_peer_adaptive_uncapped_varying", "wan_residential_seed_adaptive_uncapped_step",
+                        "latency_step_hybrid", "capped_seed_hybrid", "seed_starved_hybrid", "viewer_churn_hybrid",
+                        "seed_restart_hybrid")]
+    return cells
+
+
 TIERS = {
     "smoke": [
         cell("large", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "200", "SIM_MBIT": "2", "SIM_SECS": "10"}, 2,
@@ -191,6 +233,7 @@ TIERS = {
         cell("scale-1000", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "1000", "SIM_MBIT": "2", "SIM_SECS": "30"}, 10,
              "1000 viewers"),
     ],
+    "robust": robust_tier(),
 }
 
 # Metrics: (name, how to read it from a row, better: "lower", "higher" or
