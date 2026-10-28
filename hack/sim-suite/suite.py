@@ -745,10 +745,15 @@ def farm_root():
     return Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent
 
 
-def peak_gib():
-    """Each cell's peak memory over every kept row, in GiB."""
+def peak_gib(sha):
+    """Each cell's peak memory, in GiB, over the kept rows of binaries
+    built from `sha`'s build inputs (with knobs, or changes on top)."""
+    keys = [f"{sim}-{build_key(sha, sim)}" for sim in BINARIES]
     peaks = {}
     for path in (WORK / "rows").glob("*.jsonl"):
+        if not any(path.stem in (k, f"tree-{k}") or path.stem.startswith((f"{k}~", f"tree-{k}~", f"tree-{k}+"))
+                   for k in keys):
+            continue
         for rec in load_rows(path).values():
             m = rec["row"].get("_rss_mb")
             if m:
@@ -769,7 +774,7 @@ def farm(a, cells):
     # name the inputs so a rerun adopts the run.
     key = json.dumps([sha, values, knob, seeds, [c["name"] for c in cells]])
     name = "s" + hashlib.sha1(key.encode()).hexdigest()[:5]
-    peaks = peak_gib()
+    peaks = peak_gib(sha)
     out = WORK / "farm"
     out.mkdir(parents=True, exist_ok=True)
     paths, mems = [], []
