@@ -71,7 +71,23 @@ pub struct FrameInfo {
 /// Checks a whole frame: magic, swarm and every payload byte.
 pub fn decode_frame(run_seed: u64, swarm: u32, b: &[u8]) -> Option<FrameInfo> {
     let b = b.get(..FRAME_LEN)?;
-    let (header, payload) = b.split_at(HEADER_LEN);
+    let FrameInfo { seq, time_ms } = frame_header(swarm, b)?;
+    let payload = b.get(HEADER_LEN..)?;
+    let mut s = payload_seed(run_seed, swarm, seq);
+    for c in payload.chunks(8) {
+        s = splitmix(s);
+        if c != s.to_le_bytes().get(..c.len())? {
+            return None;
+        }
+    }
+    Some(FrameInfo { seq, time_ms })
+}
+
+/// The sequence number and write time in the header `b` starts with, if
+/// it is a header of `swarm`'s frames. The payload goes unchecked: the
+/// frame must be [`encode_frame`]'s.
+pub fn frame_header(swarm: u32, b: &[u8]) -> Option<FrameInfo> {
+    let header = b.get(..HEADER_LEN)?;
     let word = |r: std::ops::Range<usize>| -> Option<u64> {
         let mut a = [0u8; 8];
         let s = header.get(r)?;
@@ -81,16 +97,10 @@ pub fn decode_frame(run_seed: u64, swarm: u32, b: &[u8]) -> Option<FrameInfo> {
     if header.get(..4)? != MAGIC || word(4..8)? != u64::from(swarm) {
         return None;
     }
-    let seq = word(8..16)?;
-    let time_ms = word(16..24)?;
-    let mut s = payload_seed(run_seed, swarm, seq);
-    for c in payload.chunks(8) {
-        s = splitmix(s);
-        if c != s.to_le_bytes().get(..c.len())? {
-            return None;
-        }
-    }
-    Some(FrameInfo { seq, time_ms })
+    Some(FrameInfo {
+        seq: word(8..16)?,
+        time_ms: word(16..24)?,
+    })
 }
 
 /// Splits a viewer's byte stream into frames. Reads always resume at a

@@ -396,6 +396,11 @@ pub struct Scenario {
     /// `TCP_NOTSENT_LOWAT` mark (16 KiB) otherwise waits until the window
     /// takes all of it. `None`: writes stay whole.
     pub tcp_segment: Option<usize>,
+    /// Every node's stores keep their chunks' bytes, rather than each
+    /// chunk's frames as [`FrameCodec`](crate::stream::FrameCodec) state:
+    /// the same run, with every node holding its window of the stream.
+    /// Changes no trace.
+    pub stored_chunks: bool,
 }
 
 /// The TCP send buffer model of WAN mode. A connection whose node set a
@@ -445,6 +450,7 @@ impl Scenario {
             send_buffer: None,
             transfer_samples: false,
             tcp_segment: None,
+            stored_chunks: false,
         }
     }
 

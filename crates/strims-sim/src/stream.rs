@@ -2,13 +2,89 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The self-checking stream the seeds write ([`strims_testbed::stream`]),
-//! and what viewers record.
+//! how the nodes' stores keep it ([`FrameCodec`]), and what viewers record.
 
 pub use strims_testbed::stream::{
-    FRAME_LEN, FrameInfo, FrameParser, Parsed, decode_frame, encode_frame,
+    FRAME_LEN, FrameInfo, FrameParser, Parsed, decode_frame, encode_frame, frame_header,
 };
 
+use strims_ppspp::store::ChunkCodec;
+
 use crate::report::Percentiles;
+
+/// How a node's store keeps a swarm's stream ([`ChunkCodec`]): a chunk of
+/// whole frames as its first frame's sequence number and write time, 16
+/// bytes in place of the chunk. A write's frames follow in sequence with
+/// one time, and a chunk never spans writes ([`LiveShape::with_chunks`]),
+/// so the rest of the chunk's frames follow from the first's; their
+/// payloads follow from the run's seed, the swarm's index and their
+/// sequence numbers ([`encode_frame`]). A seed that restarts, or resets its
+/// writer, starts its chunks over at offset 0 and its sequence numbers
+/// where its clock is, which the state carries.
+///
+/// [`LiveShape::with_chunks`]: strims_testbed::shape::LiveShape::with_chunks
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameCodec {
+    run_seed: u64,
+    swarm: u32,
+}
+
+impl FrameCodec {
+    /// The codec of swarm `swarm`'s stream in a run of seed `run_seed`.
+    pub fn new(run_seed: u64, swarm: u32) -> FrameCodec {
+        FrameCodec { run_seed, swarm }
+    }
+
+    /// Whether chunks of `chunk_size` bytes are whole frames, which the
+    /// codec needs.
+    pub fn fits(chunk_size: usize) -> bool {
+        chunk_size > 0 && chunk_size.is_multiple_of(FRAME_LEN)
+    }
+}
+
+impl ChunkCodec for FrameCodec {
+    fn state_len(&self) -> usize {
+        16
+    }
+
+    /// Panics if `chunk`'s frame headers aren't the state's, in sequence
+    /// from the first: a stream the codec would change fails its run
+    /// rather than mislead it. Payloads go unchecked, as every chunk comes
+    /// from the seed's writer or a peer the integrity checks verified.
+    #[allow(clippy::panic)]
+    fn encode(&self, offset: u64, chunk: &[u8], state: &mut [u8]) {
+        let Some(first) = frame_header(self.swarm, chunk) else {
+            panic!("chunk at {offset} of swarm {} isn't a frame", self.swarm);
+        };
+        for (i, f) in chunk.chunks(FRAME_LEN).enumerate() {
+            let seq = first.seq + i as u64;
+            let want = FrameInfo { seq, ..first };
+            if f.len() != FRAME_LEN || frame_header(self.swarm, f) != Some(want) {
+                panic!(
+                    "chunk at {offset} of swarm {}: frame {i} isn't frame {seq} of {} ms",
+                    self.swarm, first.time_ms
+                );
+            }
+        }
+        let words = [first.seq.to_le_bytes(), first.time_ms.to_le_bytes()];
+        if let Some(dst) = state.get_mut(..16) {
+            dst.copy_from_slice(words.as_flattened());
+        }
+    }
+
+    fn decode(&self, _: u64, state: &[u8], out: &mut [u8]) {
+        let word = |r: std::ops::Range<usize>| {
+            state
+                .get(r)
+                .and_then(|w| w.try_into().ok())
+                .map_or(0, u64::from_le_bytes)
+        };
+        let (seq, time_ms) = (word(0..8), word(8..16));
+        for (i, f) in out.chunks_mut(FRAME_LEN).enumerate() {
+            encode_frame(self.run_seed, self.swarm, seq + i as u64, time_ms, f);
+        }
+    }
+}
 
 /// A growable bitset of frame sequence numbers.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

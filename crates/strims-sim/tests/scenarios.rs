@@ -552,6 +552,41 @@ fn seed_restart_hybrid() {
     );
 }
 
+/// Stores that keep each chunk's frames as
+/// [`FrameCodec`](strims_sim::stream::FrameCodec) state make the trace that
+/// stores keeping the bytes do, through a seed restart and a writer reset
+/// (sequence numbers go on while chunk offsets start over), in chunks of a
+/// frame and of four.
+#[test]
+fn frame_codec_changes_no_trace() {
+    let seed = 1;
+    for chunks in [None, Some((4 * KIB as usize, 8 * KIB as usize))] {
+        let scenario = |stored_chunks| {
+            let mut s = seed_restart(seed, PushMode::Hybrid);
+            if let Some((chunk, munro)) = chunks {
+                s.swarms = std::mem::take(&mut s.swarms)
+                    .into_iter()
+                    .map(|sw| sw.with_chunks(chunk, munro).unwrap())
+                    .collect();
+            }
+            s.stored_chunks = stored_chunks;
+            s
+        };
+        let stored = strims_sim::run(scenario(true), seed).unwrap();
+        let coded = strims_sim::run(scenario(false), seed).unwrap();
+        assert_eq!(coded.trace_hash, stored.trace_hash, "{chunks:?}");
+        check_seed_restart(&coded).unwrap();
+        // every node's window, 1 MiB, less 16 bytes a chunk
+        let peak = |r: &Report| r.memory.as_ref().map_or(0, |m| m.peak);
+        assert!(
+            peak(&coded) + 8 * MIB < peak(&stored),
+            "{chunks:?}: {} against {}",
+            peak(&coded),
+            peak(&stored)
+        );
+    }
+}
+
 // --- 6. vpn services over multi-hop paths ----------------------------------
 
 /// How the vpn scenarios lay out their hosts.

@@ -10,8 +10,12 @@
 //! same networks and swarms with a new host key, its seed continues the
 //! stream from the current time, and its viewers keep accumulating into the
 //! same statistics.
+//!
+//! Every node's stores keep each chunk of a stream as its frames' sequence
+//! number and write time ([`FrameCodec`]), not its bytes.
 
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::stream::{Empty, empty};
@@ -20,18 +24,33 @@ use strims_node::{
     HostId, NetworkId, NetworkOptions, Node, NodeError, NodeEvent, NodeEvents, PeerInfo, ReadError,
     SimClock, SwarmId, SwarmKey, SwarmWriter, WriterOptions,
 };
+use strims_ppspp::SwarmOptions;
+use strims_ppspp::store::ChunkBytes;
 use strims_rpc::{Client, Router};
 use strims_transfer::TransferControl;
 use tokio::task::spawn_local;
 
 use crate::APP_PORT;
 use crate::net::SimNet;
-use crate::spec::{Binding, Fault, HostIx, LinkSpec};
-use crate::stream::{FRAME_LEN, FrameParser, encode_frame};
+use crate::spec::{Binding, Fault, HostIx, LinkSpec, SwarmSpec};
+use crate::stream::{FRAME_LEN, FrameCodec, FrameParser, encode_frame};
 use crate::world::{HASH_TABLE_SALT, PEER_INDEX_KEY, World, epoch, sim_now, sim_now_ms};
 
 /// How long a dial may take before the supervisor gives up on it.
 const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Swarm `s`'s options at every node: its stores keep [`FrameCodec`]
+/// state, unless the scenario keeps the bytes
+/// ([`Scenario::stored_chunks`](crate::Scenario::stored_chunks)) or the
+/// chunks aren't whole frames.
+fn swarm_options(w: &World, s: usize, spec: &SwarmSpec) -> SwarmOptions {
+    let mut o = spec.options.clone();
+    if !w.spec.stored_chunks && FrameCodec::fits(o.chunk_size) {
+        let swarm = u32::try_from(s).unwrap_or(u32::MAX);
+        o.chunk_bytes = ChunkBytes::Codec(Arc::new(FrameCodec::new(w.seed, swarm)));
+    }
+    o
+}
 
 pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
     let inc = w.begin_incarnation(h);
@@ -82,7 +101,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         let swarm = if spec.seed == h {
             let (swarm, _, writer) = node
                 .create_swarm(WriterOptions {
-                    swarm_options: spec.options.clone(),
+                    swarm_options: swarm_options(&w, s, spec),
                     key: key.clone(),
                 })
                 .await?;
@@ -90,7 +109,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
             swarm
         } else if spec.member(h) {
             let swarm = node
-                .add_swarm(SwarmId::new(&key.public), spec.options.clone())
+                .add_swarm(SwarmId::new(&key.public), swarm_options(&w, s, spec))
                 .await?;
             if spec.viewers.contains(&h) {
                 spawn_local(reader_task(w.clone(), h, s, node.clone(), swarm));
