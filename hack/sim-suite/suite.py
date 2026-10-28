@@ -56,9 +56,12 @@ keeps the better half at more seeds (all of them, then twice), and the
 last few are confirmed at fresh seeds (1001 on). An arm scores, against
 the base on the same seeds, by its collapsed runs over all cells, then by
 the geometric mean over cells of its lag p99 ratio; it is out if a cell's
-delivery falls significantly, or a cell where the base never collapsed
-gets a lag p99 or startup p99 ratio whose interval lies past 1.10. Rounds
-print their tables and round 0 each flag's main effects.
+delivery falls significantly, a cell collapses more often (Fisher p under
+0.05: a sum over cells would let one cell's losses buy another's gains),
+or a cell where the base never collapsed gets a lag p99 or startup p99
+ratio whose interval lies past 1.10. Rounds print their tables, round 0
+each flag's main effects, and the confirmation each cell's collapses and
+lag p99 ratio.
 
 `calibrate` scores the base against itself at other seeds (seeds 1..N
 against N+1..2N, paired in order): what moves there is seed noise, an
@@ -566,6 +569,7 @@ def arm_score(cells, base_rows, arm_rows):
     ka_all = kb_all = 0
     logs = []
     broken = []
+    cells_out = []
     get = {name: (fn, better, kind, tie) for name, fn, better, kind, tie in METRICS}
     for c in cells:
         ka, kb, n = collapses(c, base_rows, arm_rows)
@@ -573,6 +577,8 @@ def arm_score(cells, base_rows, arm_rows):
             continue
         ka_all += ka
         kb_all += kb
+        if kb > ka and fisher(ka, n, kb, n) < 0.05:
+            broken.append(f"{c['name']} collapsed {ka}->{kb}/{n}")
         def pairs(name):
             fn = get[name][0]
             out = []
@@ -587,6 +593,7 @@ def arm_score(cells, base_rows, arm_rows):
         e = effect("ratio", pairs("lag_p99_ms"))
         if e is not None:
             logs.append(math.log(e[0]))
+        cells_out.append((c["name"], ka, kb, n, e))
         fn, better, kind, tie = get["delivery"]
         if mark(better, kind, tie, effect(kind, pairs("delivery"))) == "-":
             broken.append(f"{c['name']} delivery")
@@ -596,7 +603,7 @@ def arm_score(cells, base_rows, arm_rows):
                 if e is not None and e[1] > GUARD_RATIO:
                     broken.append(f"{c['name']} {name} x{e[0]:.2f}")
     p99 = math.exp(sum(logs) / len(logs)) if logs else None
-    return {"collapsed": kb_all, "base_collapsed": ka_all, "p99": p99, "broken": broken}
+    return {"collapsed": kb_all, "base_collapsed": ka_all, "p99": p99, "broken": broken, "cells": cells_out}
 
 
 def rank_key(sc):
@@ -613,7 +620,7 @@ def race(a, cells, count, sha, base, sims, union):
         tag = hashlib.sha1(json.dumps(sorted(env.items())).encode()).hexdigest()[:8]
         return {f"{label}~{tag}": (bin_dir, seeds, sim, env) for sim, (label, bin_dir) in tree.items()}
 
-    def play(arms, seeds, title):
+    def play(arms, seeds, title, per_cell=False):
         runs = {label: (bin_dir, seeds, sim, {}) for sim, (label, bin_dir) in base.items()}
         labels = {}
         for arm in arms:
@@ -630,6 +637,9 @@ def race(a, cells, count, sha, base, sims, union):
             p99 = "-" if sc["p99"] is None else f"x{sc['p99']:.3f}"
             print(f"   {','.join(arm):58} {sc['collapsed']:5} ({sc['base_collapsed']:3})   {p99:>9}   "
                   f"{'; '.join(sc['broken'][:3]) + (' ...' if len(sc['broken']) > 3 else '') or 'ok'}")
+            for name, ka, kb, n, e in sc["cells"] if per_cell else ():
+                p99 = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
+                print(f"      {name:22} collapsed {ka:>3} -> {kb:>3} of {n:<3}  lag p99 {p99}")
         for f in failures:
             print("   FAILURE " + f)
         sys.stdout.flush()
@@ -654,7 +664,7 @@ def race(a, cells, count, sha, base, sims, union):
         scores = play(arms, upto(mult), f"round at {mult:g}x the seeds")
     best = sorted(arms, key=lambda x: rank_key(scores[x]))[: a.keep]
     fresh = lambda c: list(range(1001, 1001 + max(2, count(c))))
-    play(best, fresh, "confirmation at fresh seeds")
+    play(best, fresh, "confirmation at fresh seeds", per_cell=True)
 
 
 def run_cells(cells, runs, slots, mem_gib):
