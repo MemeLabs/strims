@@ -2301,8 +2301,9 @@ fn collapse_pull_lock_in() {
 /// halved uplink still carries two copies. Behind a 10 Mbit seed halved at
 /// 30 s, 7 viewers stream well before and lag seconds after. Checks that
 /// frames written in the 10 s before the halving lag under 2 s at p99, and
-/// those written from 10 s after it over 3 s (`hack/capture/analyze.py`'s
-/// latency collapse).
+/// those written from 10 s after it over 2 s: healthy before, not after.
+/// Holding answers below pushes, routing by expected delivery and holding
+/// late pushes for their parent ease the mode but don't remove it.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_halving_lock_in() {
@@ -2312,7 +2313,7 @@ fn collapse_halving_lock_in() {
         let (_, start) = collapse_seed(r);
         let before = r.lag_between(0, start + secs(20), start + secs(30)).p99;
         let after = r.lag_between(0, start + secs(40), start + secs(70)).p99;
-        if before < 2000 && after > 3000 {
+        if before < 2000 && after > 2000 {
             Ok(())
         } else {
             Err(format!(
