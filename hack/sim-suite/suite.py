@@ -14,7 +14,8 @@ working tree's sims against the base's, cell by cell, paired by seed.
                                [--base REF] [--tier ...] [--keep N]
   hack/sim-suite/suite.py farm --sets "A,B;C" [--knob SIM_EXP,STRIMS_SIM_EXP]
                                [--ref REF] [--tier ...] [--seeds N]
-                               [--first-seed N] [--farm-args ARGS] [--no-run]
+                               [--first-seed N] [--against SET]
+                               [--farm-args ARGS] [--no-run]
 
 `run` builds the ppspp sim and strims-sim's scenarios from the working
 tree (the checkout this script is in, changes and all) and from `--base`
@@ -80,7 +81,7 @@ alike) and the knob (the first of `--knob` for the ppspp sim, the second
 for strims-sim) at `off` and at each set. Each set is scored against
 `off`, which stands for the base: with its flags off the commit must
 reproduce the base's traces. It prints each set's collapses and lag p99
-by cell, then its scorecard.
+by cell, then its scorecard, against `off` or the set `--against` names.
 """
 
 import argparse
@@ -824,17 +825,21 @@ def farm(a, cells):
             if v in rows:
                 row = {**rec["row"], "_rss_mb": rec.get("max_rss_mb"), "_wall_s": rec.get("wall_s")}
                 rows[v][(c["name"], int(rec["env"][seed_key]))] = row
-    for v in values[1:]:
-        sc = arm_score(cells, rows["off"], rows[v])
+    base = a.against.strip()
+    if base not in rows:
+        sys.exit(f"--against {base!r} is none of the sets")
+    others = [v for v in values if v != base]
+    for v in others:
+        sc = arm_score(cells, rows[base], rows[v])
         p99 = "-" if sc["p99"] is None else f"x{sc['p99']:.3f}"
-        print(f"\n{v} against off at {sha[:8]}: collapsed {sc['collapsed']} ({sc['base_collapsed']}), "
+        print(f"\n{v} against {base} at {sha[:8]}: collapsed {sc['collapsed']} ({sc['base_collapsed']}), "
               f"p99 {p99}, guardrails {'; '.join(sc['broken']) or 'ok'}")
         for cname, ka, kb, n, e in sc["cells"]:
             p = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
             print(f"   {cname:22} collapsed {ka:>3} -> {kb:>3} of {n:<3} Fisher p={fisher(ka, n, kb, n):.2f}  lag p99 {p}")
-    for v in values[1:]:
+    for v in others:
         print()
-        scorecard(cells, rows["off"], rows[v], f"{sha[:8]} off", f"{sha[:8]} {v}", a.all)
+        scorecard(cells, rows[base], rows[v], f"{sha[:8]} {base}", f"{sha[:8]} {v}", a.all)
 
 
 def main():
@@ -879,6 +884,7 @@ def main():
     fc.add_argument("--tier", default="peers", choices=sorted(TIERS))
     fc.add_argument("--seeds", type=int, default=32, help="seeds per cell, every cell alike")
     fc.add_argument("--first-seed", type=int, default=2001)
+    fc.add_argument("--against", default="off", help="the set the others are scored against")
     fc.add_argument("--only", help="cells, comma-separated")
     fc.add_argument("--all", action="store_true", help="every metric, ties too")
     fc.add_argument("--farm-args", default="", help="more arguments for farm.py run")
