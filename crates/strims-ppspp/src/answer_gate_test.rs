@@ -44,7 +44,7 @@ fn flowing() -> AnswerRate {
     let mut r = AnswerRate::new();
     for i in 1..=11 {
         r.spend(1024);
-        r.update(t(i * 100), three(t(i * 100), 10));
+        r.update(t(i * 100), three(t(i * 100), 10), &mut []);
     }
     r
 }
@@ -65,7 +65,7 @@ fn bursts_and_jitter_go_through() {
     // Delay past the target, deep even, that doesn't last: still unpaced.
     for i in 12..40 {
         let excess = if i % 3 == 0 { 10 } else { 300 };
-        r.update(t(i * 100), three(t(i * 100), excess));
+        r.update(t(i * 100), three(t(i * 100), excess), &mut []);
         r.spend(1 << 16);
         assert!(r.open(t(i * 100)), "{i}");
     }
@@ -78,7 +78,7 @@ fn a_standing_queue_paces_at_what_answers_had_then_lets_go() {
     // at half that.
     for i in 11..=21 {
         r.spend(40 * 1024);
-        r.update(t(i * 100), three(t(i * 100), 100));
+        r.update(t(i * 100), three(t(i * 100), 100), &mut []);
     }
     assert_eq!(r.rate(), 200 * 1024);
     assert!(r.open(t(2_100)));
@@ -88,14 +88,14 @@ fn a_standing_queue_paces_at_what_answers_had_then_lets_go() {
     // after that, then free.
     r.note_limited();
     r.spend(1024);
-    r.update(t(2_200), three(t(2_200), 10));
+    r.update(t(2_200), three(t(2_200), 10), &mut []);
     for i in 23..=31 {
         r.spend(1024);
-        r.update(t(i * 100), three(t(i * 100), 10));
+        r.update(t(i * 100), three(t(i * 100), 10), &mut []);
     }
     assert!(!r.open(t(3_100)));
     r.spend(1024);
-    r.update(t(3_200), three(t(3_200), 10));
+    r.update(t(3_200), three(t(3_200), 10), &mut []);
     assert!(r.open(t(3_200)) && !r.exhausted());
 }
 
@@ -104,11 +104,11 @@ fn a_deep_queue_paces_within_a_quarter_span() {
     let mut r = flowing();
     for i in 12..=14 {
         r.spend(40 * 1024);
-        r.update(t(i * 100), three(t(i * 100), 300));
+        r.update(t(i * 100), three(t(i * 100), 300), &mut []);
         assert!(r.open(t(i * 100)), "{i}");
     }
     r.spend(40 * 1024);
-    r.update(t(1_500), three(t(1_500), 300));
+    r.update(t(1_500), three(t(1_500), 300), &mut []);
     r.spend(1 << 20);
     assert!(!r.open(t(1_500)));
 }
@@ -118,7 +118,7 @@ fn a_gap_in_the_readings_shows_no_standing_queue() {
     let mut r = flowing();
     for i in 11..=21 {
         let at = if i == 16 { t(-5_000) } else { t(i * 100) };
-        r.update(t(i * 100), three(at, 100));
+        r.update(t(i * 100), three(at, 100), &mut []);
     }
     r.spend(1 << 20);
     assert!(r.open(t(2_100)));
@@ -130,7 +130,11 @@ fn one_peer_delaying_its_echoes_doesnt_start_the_pace() {
     for i in 11..=21 {
         r.spend(40 * 1024);
         let at = t(i * 100);
-        r.update(at, [link(at, 0), link(at, 0), link(at, 0), link(at, 2_000)]);
+        r.update(
+            at,
+            [link(at, 0), link(at, 0), link(at, 0), link(at, 2_000)],
+            &mut [],
+        );
     }
     r.spend(1 << 20);
     assert!(r.open(t(2_100)));
@@ -141,7 +145,7 @@ fn a_drained_queue_doubles_the_rate_back() {
     let mut r = flowing();
     for i in 11..=21 {
         r.spend(40 * 1024);
-        r.update(t(i * 100), three(t(i * 100), 100));
+        r.update(t(i * 100), three(t(i * 100), 100), &mut []);
     }
     let paced = r.rate();
     // Drained to a fifth of the target, answers waiting: doubles per probe
@@ -149,7 +153,7 @@ fn a_drained_queue_doubles_the_rate_back() {
     for i in 22..=25 {
         r.note_limited();
         r.spend(1024);
-        r.update(t(i * 100), three(t(i * 100), 10));
+        r.update(t(i * 100), three(t(i * 100), 10), &mut []);
     }
     assert!(r.rate() >= 2 * paced, "{} {}", r.rate(), paced);
 }
@@ -162,7 +166,7 @@ fn answers_are_cut_by_their_share_of_the_queue() {
     for i in 11..=21 {
         r.spend(40 * 1024);
         r.wrote(100 * 1024);
-        r.update(t(i * 100), three(t(i * 100), 100));
+        r.update(t(i * 100), three(t(i * 100), 100), &mut []);
     }
     assert_eq!(r.rate(), 400 * 1024 * 80 / 100);
 }
@@ -173,7 +177,7 @@ fn a_queue_of_the_nodes_own_pushes_doesnt_start_the_pace() {
     for i in 11..=21 {
         r.spend(4 * 1024);
         r.wrote(400 * 1024);
-        r.update(t(i * 100), three(t(i * 100), 300));
+        r.update(t(i * 100), three(t(i * 100), 300), &mut []);
     }
     r.spend(1 << 20);
     assert!(r.open(t(2_100)));
@@ -183,11 +187,11 @@ fn a_queue_of_the_nodes_own_pushes_doesnt_start_the_pace() {
 fn the_pace_never_falls_below_its_floor() {
     let mut r = flowing();
     for i in 11..=21 {
-        r.update(t(i * 100), three(t(i * 100), 300));
+        r.update(t(i * 100), three(t(i * 100), 300), &mut []);
     }
     for i in 22..60 {
         r.note_limited();
-        r.update(t(i * 100), three(t(i * 100), 300));
+        r.update(t(i * 100), three(t(i * 100), 300), &mut []);
     }
     assert_eq!(r.rate(), ANSWER_RATE_FLOOR);
 }
@@ -197,7 +201,7 @@ fn a_paced_rate_grows_back_while_the_queue_is_the_nodes_pushes() {
     let mut r = flowing();
     for i in 11..=21 {
         r.spend(40 * 1024);
-        r.update(t(i * 100), three(t(i * 100), 100));
+        r.update(t(i * 100), three(t(i * 100), 100), &mut []);
     }
     let paced = r.rate();
     // The queue stands on, but answers are now a twentieth of what goes
@@ -206,7 +210,37 @@ fn a_paced_rate_grows_back_while_the_queue_is_the_nodes_pushes() {
         r.note_limited();
         r.spend(10 * 1024);
         r.wrote(200 * 1024);
-        r.update(t(i * 100), three(t(i * 100), 100));
+        r.update(t(i * 100), three(t(i * 100), 100), &mut []);
     }
     assert!(r.rate() >= 2 * paced, "{} {}", r.rate(), paced);
+}
+
+#[test]
+fn pushes_waiting_in_the_runner_pace_answers_as_a_queue_below_it_does() {
+    // The links read no queue: each flow's backlog delays only its own
+    // echoes, and the answers' flows are short. The one child's pushes
+    // have waited 300 ms in the runner for a quarter span: answers have
+    // its share of the uplink, and they're paced.
+    let mut r = flowing();
+    for i in 12..=15 {
+        r.spend(40 * 1024);
+        r.update(t(i * 100), three(t(i * 100), 0), &mut [ms(300)]);
+    }
+    assert_eq!(r.reading(), Some(ms(300)));
+    r.spend(1 << 20);
+    assert!(!r.open(t(1_500)));
+    // Of three children one is slow by its own link: the low quantile
+    // reads the two that keep up, and answers go unpaced.
+    let mut r = flowing();
+    for i in 12..=24 {
+        r.spend(40 * 1024);
+        r.update(
+            t(i * 100),
+            three(t(i * 100), 0),
+            &mut [ms(0), ms(900), ms(0)],
+        );
+    }
+    assert_eq!(r.reading(), Some(ms(0)));
+    r.spend(1 << 20);
+    assert!(r.open(t(2_400)));
 }

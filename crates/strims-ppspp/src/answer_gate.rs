@@ -28,7 +28,8 @@
 //! answers mustn't hold a standing queue below the runner either
 //! ([`AnswerRate`]). Jitter and a burst of repairs don't stand, and answers
 //! that only fill idle uplink cost nothing, so answers go unpaced until the
-//! node's queueing delay below the runner, read from its links' probes,
+//! node's queueing delay below the runner, read from its links' probes or,
+//! if longer, from how long the pushes queued in the runner have waited,
 //! has stood past [`TARGET_DELAY`] for [`STANDING_SPAN`] (past [`DEEP`]
 //! times it, for a quarter of that) while answers made a fair share of
 //! what went out: a queue of the node's own pushes isn't theirs to drain,
@@ -41,12 +42,18 @@
 //! lets go once answers went out over a span without waiting and the queue
 //! stands under half the target.
 //!
+//! The pushes' wait counts because each transport connection's backlog
+//! delays only its own echoes: where the access link keeps the connections
+//! apart, answer connections with short backlogs read no queue while a
+//! holder's pushes wait for the share of the uplink the answers took.
+//!
 //! The gate reads only the node's own queues and its links' round trips: it
 //! needs no capacity estimate, and trusts no requester. A peer that stops
 //! reading holds back no answer for longer than [`BLOCKED_SPAN`]. A peer can
 //! only delay its echoes, which makes its own link read farther, never
-//! nearer; the reading is a low quantile over the links (the least of one or
-//! two), so no single peer starts pacing, or stops it for the others.
+//! nearer, or read slowly, which makes its own pushes wait; each reading is
+//! a low quantile over the peers (the least of one or two), so no single
+//! peer starts pacing, or stops it for the others.
 
 use std::collections::VecDeque;
 
@@ -251,9 +258,20 @@ impl AnswerRate {
     /// links' `readings`, starts or stops pacing, and while pacing, once per
     /// probe interval, moves the rate: a move shows only once a later
     /// probe's echo returns.
-    pub(crate) fn update(&mut self, now: Time, readings: impl IntoIterator<Item = PathReading>) {
+    pub(crate) fn update(
+        &mut self,
+        now: Time,
+        readings: impl IntoIterator<Item = PathReading>,
+        push_waits: &mut [Duration],
+    ) {
         self.refill(now);
-        self.reading = path::latest_excess(readings, now, &mut self.scratch);
+        let links = path::latest_excess(readings, now, &mut self.scratch);
+        let pushes = if push_waits.len() >= path::MIN_PATHS {
+            path::aggregate(push_waits)
+        } else {
+            push_waits.iter().copied().min()
+        };
+        self.reading = links.max(pushes);
         if core::mem::take(&mut self.waited) {
             self.last_limited = now;
         }
@@ -378,7 +396,8 @@ impl AnswerRate {
         self.rate as u64
     }
 
-    /// The links' latest queueing excess, as of the last update.
+    /// The queueing delay read at the last update: the links' latest
+    /// excess, or the pushing peers' oldest pushes' wait if longer.
     pub(crate) fn reading(&self) -> Option<Duration> {
         self.reading
     }

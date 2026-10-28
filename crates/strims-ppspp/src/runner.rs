@@ -370,6 +370,9 @@ pub struct Runner {
     held: BTreeSet<PeerKey>,
     /// The pace of hybrid answers while a queue stands below the runner.
     answer_rate: AnswerRate,
+    /// Scratch for the pushing peers' oldest pushes' waits. Bound: one per
+    /// peer.
+    push_waits: Vec<Duration>,
     /// The rate and reading last tapped, so a tap marks a change.
     tapped_rate: Option<(u64, Option<Duration>)>,
 }
@@ -578,6 +581,7 @@ impl Runner {
             tap_level: TapLevel::Off,
             held: BTreeSet::new(),
             answer_rate: AnswerRate::new(),
+            push_waits: Vec::new(),
             tapped_rate: None,
         }
     }
@@ -1394,11 +1398,24 @@ impl Runner {
     }
 
     /// The tick of the answers' pace ([`crate::answer_gate`]): reads the
-    /// links' queueing excess, and taps the rate and reading when they
-    /// change.
+    /// links' queueing excess and how long the oldest push queued for each
+    /// peer pushed to within a span has waited, and taps the rate and
+    /// reading when they change.
     fn pace_answers(&mut self, now: Time) {
-        self.answer_rate
-            .update(now, self.peers.values().filter_map(|p| p.link_path));
+        let mut waits = core::mem::take(&mut self.push_waits);
+        waits.clear();
+        for p in self.peers.values_mut() {
+            if !p.pushed.is_nil() && now - p.pushed < answer_gate::STANDING_SPAN {
+                let oldest = p.queue_mut(PeerPriority::High).front_time();
+                waits.push(oldest.map_or(Duration::ZERO, |t| (now - t).max(Duration::ZERO)));
+            }
+        }
+        self.answer_rate.update(
+            now,
+            self.peers.values().filter_map(|p| p.link_path),
+            &mut waits,
+        );
+        self.push_waits = waits;
         let tapped = (self.answer_rate.rate(), self.answer_rate.reading());
         if self.tap_level == TapLevel::All && self.tapped_rate != Some(tapped) {
             self.tapped_rate = Some(tapped);

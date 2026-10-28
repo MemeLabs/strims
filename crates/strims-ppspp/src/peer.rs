@@ -136,6 +136,8 @@ pub(crate) struct RunnerPeer {
     pub(crate) dropped: u64,
     /// The driver's measure of the link's path.
     pub(crate) link_path: Option<PathReading>,
+    /// When a push was last queued for it; nil before the first.
+    pub(crate) pushed: Time,
 }
 
 impl RunnerPeer {
@@ -152,6 +154,7 @@ impl RunnerPeer {
             qos_weight: None,
             dropped: 0,
             link_path: None,
+            pushed: Time::NIL,
         }
     }
 
@@ -229,8 +232,13 @@ impl PeerTaskQueue for Queues<'_> {
         t: Time,
         pri: PeerPriority,
     ) -> bool {
-        if let Some(p) = self.peers.get_mut(peer)
-            && let Some(q) = p.dq.get_mut(pri.index())
+        let Some(p) = self.peers.get_mut(peer) else {
+            return true;
+        };
+        if pri == PeerPriority::High {
+            p.pushed = t;
+        }
+        if let Some(q) = p.dq.get_mut(pri.index())
             && !q.push(swarm, b, t)
         {
             p.dropped = p.dropped.saturating_add(1);
