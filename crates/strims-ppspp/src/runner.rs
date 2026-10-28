@@ -172,7 +172,22 @@ struct UploadMeter {
     latest_delay: Option<Duration>,
     /// Scratch for the peers' excesses. Bound: one per peer.
     excesses: Vec<Duration>,
+    /// The links' delivery rates summed, at the last tick a queue stood
+    /// below the runner, and when ...
+    drained: Option<(f64, Time)>,
+    /// ... and whether one stood at the last tick.
+    standing: bool,
 }
+
+/// While a queue stands below the runner the uplink delivers all it can:
+/// the links' delivery rates, which the driver measures from their probes'
+/// echoes, sum to its capacity. A queue reads as standing at this delay.
+const DRAIN_QUEUE: Duration = Duration::from_millis(50);
+/// Without a standing queue since, the delivered rate is a floor: the
+/// reading grows by this share of it per [`DRAIN_PROBE_PERIOD`], as BBR
+/// probes for more bandwidth, until a queue stands again.
+const DRAIN_PROBE: f64 = 0.25;
+const DRAIN_PROBE_PERIOD: Duration = Duration::from_secs(10);
 
 impl UploadMeter {
     fn new() -> UploadMeter {
@@ -187,6 +202,8 @@ impl UploadMeter {
             queue_delay: None,
             latest_delay: None,
             excesses: Vec::new(),
+            drained: None,
+            standing: false,
         }
     }
 
@@ -201,6 +218,13 @@ impl UploadMeter {
             now,
             &mut self.excesses,
         );
+        self.standing = self.queue_delay.is_some_and(|d| d >= DRAIN_QUEUE);
+        if self.standing {
+            let delivered: u64 = peers.values().filter_map(|p| p.link_path?.rate).sum();
+            if delivered > 0 {
+                self.drained = Some((delivered as f64, now));
+            }
+        }
     }
 
     /// Accounts the time since the last call as busy if data was queued
@@ -236,6 +260,11 @@ impl UploadMeter {
             others: 0.0,
             queue_delay: self.queue_delay,
             latest_delay: self.latest_delay,
+            drained: self.drained.map(|(c, at)| {
+                c * (1.0
+                    + DRAIN_PROBE * (now - at).as_secs_f64() / DRAIN_PROBE_PERIOD.as_secs_f64())
+            }),
+            draining: self.standing && self.drained.is_some_and(|(_, at)| at == now),
         }
     }
 }

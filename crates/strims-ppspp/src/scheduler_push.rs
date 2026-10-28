@@ -314,6 +314,12 @@ pub(crate) struct UploadInfo {
     /// The same from the links' latest round trips, which see a queue as
     /// it forms; `None` without fresh readings.
     pub(crate) latest_delay: Option<Duration>,
+    /// The rate the uplink delivered at while a queue last stood below the
+    /// runner (bytes per second), growing slowly since as a probe; `None`
+    /// before one stood ...
+    pub(crate) drained: Option<f64>,
+    /// ... and whether one stands now.
+    pub(crate) draining: bool,
 }
 
 impl UploadInfo {
@@ -327,7 +333,14 @@ impl UploadInfo {
         match (measured, self.hint.map(|h| h as f64)) {
             (Some(m), Some(h)) if self.busy >= SATURATED_BUSY => Some(m.min(h)),
             (_, Some(h)) => Some(h),
-            (m, None) => m,
+            // Below the runner the data waits unseen by the busy time, which
+            // reads many times the uplink while buffers take writes at once,
+            // and next to nothing while the transport stalls. Under a
+            // standing queue what the links deliver is the capacity; after
+            // one it bounds the busy time's reading.
+            (_, None) if self.draining => self.drained,
+            (Some(m), None) => Some(self.drained.map_or(m, |d| m.min(d))),
+            (None, None) => None,
         }
     }
 }
