@@ -20,7 +20,7 @@ use strims_base::stats::Sma;
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 
-use crate::answer_gate;
+use crate::answer_gate::{self, AnswerRate};
 use crate::channel::{ChannelMetrics, HandshakeError, MeteredWriter, validate_handshake};
 use crate::codec::{self, FrameReader, Message, Reader, ReaderConfig, Stream};
 use crate::epoch::EpochError;
@@ -309,6 +309,10 @@ pub struct Runner {
     /// Peers whose hybrid answers the answer gate held back at their last
     /// poll ([`crate::answer_gate`]). Bound: one per peer.
     held: BTreeSet<PeerKey>,
+    /// The pace of hybrid answers while a queue stands below the runner.
+    answer_rate: AnswerRate,
+    /// The rate and reading last tapped, so a tap marks a change.
+    tapped_rate: Option<(u64, Option<Duration>)>,
 }
 
 /// Hands a swarm's queued events to its scheduler and the driver. Called
@@ -514,6 +518,8 @@ impl Runner {
             tap: Tap::default(),
             tap_level: TapLevel::Off,
             held: BTreeSet::new(),
+            answer_rate: AnswerRate::new(),
+            tapped_rate: None,
         }
     }
 
@@ -621,17 +627,21 @@ impl Runner {
         }
     }
 
-    /// Feeds the upload meter whether any data is queued (hybrid only).
-    /// Answers the answer gate holds count too: it holds them only while
-    /// pushes are queued.
+    /// Feeds the upload meter whether any data is queued that the node
+    /// would send now (hybrid only). Answers the push rule holds count:
+    /// it holds them only while pushes are queued. Answers the pace holds
+    /// count only while it has tokens, so answers held back don't read as
+    /// a busy uplink.
     fn observe_upload(&mut self, now: Time) {
         if self.hybrid_swarms == 0 {
             return;
         }
-        let backlog = self
-            .peers
-            .values()
-            .any(|p| p.dq.iter().any(|q| !q.is_empty()));
+        let paced = self.answer_rate.open(now);
+        let backlog = self.peers.values().any(|p| {
+            p.dq.iter()
+                .zip(PeerPriority::ALL)
+                .any(|(q, pri)| !q.is_empty() && (paced || pri != PeerPriority::Scavenger))
+        });
         self.upload.observe(now, backlog);
     }
 
@@ -1113,6 +1123,7 @@ impl Runner {
             peers,
             events,
             held,
+            answer_rate,
             ..
         } = self;
         let mut detached = match peers.get_mut(peer) {
@@ -1137,7 +1148,7 @@ impl Runner {
         'priorities: for pri in PeerPriority::ALL {
             let gated = pri == PeerPriority::Scavenger;
             loop {
-                if gated && !answer_gate::admits(peers, now) {
+                if gated && !answer_gate::admits(peers, answer_rate, now) {
                     if peers.get(peer).is_some_and(|p| !p.queue(pri).is_empty()) {
                         held.insert(peer);
                     }
@@ -1163,7 +1174,12 @@ impl Runner {
                     rest,
                     frame_empty,
                 ) {
-                    Ok(n) => off += n,
+                    Ok(n) => {
+                        off += n;
+                        if gated {
+                            answer_rate.spend(n);
+                        }
+                    }
                     Err(WriteDataError::NotEnoughSpace) => continue 'priorities,
                     Err(WriteDataError::Dropped) => {}
                 }
@@ -1183,6 +1199,7 @@ impl Runner {
         self.reopen(now);
         if self.hybrid_swarms > 0 {
             self.upload.bytes.add(off as u64, now);
+            self.answer_rate.wrote(off);
             self.observe_upload(now);
         }
         off
@@ -1191,7 +1208,8 @@ impl Runner {
     /// Wakes the peers whose answers the answer gate held back, once it
     /// admits answers again.
     fn reopen(&mut self, now: Time) {
-        if self.held.is_empty() || !answer_gate::admits(&mut self.peers, now) {
+        if self.held.is_empty() || !answer_gate::admits(&mut self.peers, &mut self.answer_rate, now)
+        {
             return;
         }
         for peer in core::mem::take(&mut self.held) {
@@ -1224,6 +1242,10 @@ impl Runner {
                 }
             }
         }
+        // Answers held for want of tokens go when the bucket refills.
+        if !self.held.is_empty() && self.answer_rate.exhausted() {
+            t = t.min(self.answer_rate.open_at());
+        }
         Some(t)
     }
 
@@ -1250,6 +1272,7 @@ impl Runner {
         if self.hybrid_swarms > 0 {
             self.upload.update_queue_delay(&self.peers);
         }
+        self.pace_answers(now);
         let upload = (self.hybrid_swarms > 0).then(|| self.upload.info(now));
         let Runner {
             swarms,
@@ -1305,6 +1328,26 @@ impl Runner {
         }
         self.refresh_seed_weights(now);
         self.observe_upload(now);
+    }
+
+    /// The tick of the answers' pace ([`crate::answer_gate`]): reads the
+    /// links' queueing excess, and taps the rate and reading when they
+    /// change.
+    fn pace_answers(&mut self, now: Time) {
+        self.answer_rate
+            .update(now, self.peers.values().filter_map(|p| p.link_path));
+        let tapped = (self.answer_rate.rate(), self.answer_rate.reading());
+        if self.tap_level == TapLevel::All && self.tapped_rate != Some(tapped) {
+            self.tapped_rate = Some(tapped);
+            self.tap.push(TapEvent {
+                swarm: None,
+                peer: None,
+                kind: TapKind::AnswerRate {
+                    rate: tapped.0,
+                    reading: tapped.1,
+                },
+            });
+        }
     }
 
     /// Releases push-expected chunks whose deadline passed to pull.

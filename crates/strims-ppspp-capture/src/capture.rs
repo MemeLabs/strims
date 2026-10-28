@@ -47,6 +47,7 @@
 //! | 28 | `RequestRound` | floor (bin), cap, in_flight, room, fit, candidates, requested |
 //! | 29 | `Upload` | rate, busy (thousandths), capacity, hint, others, committed, queue_delay |
 //! | 30 | `SeedFirstWave` | capacity, early_rate, others, neighbours, copies |
+//! | 31 | `AnswerRate` | rate, reading |
 //!
 //! Version 1 dumps hold only the fields of kinds 1 to 26 up to `Switched`'s
 //! `from`, `SeedBudget`'s `streams` and the first of the others
@@ -363,6 +364,7 @@ pub const TAP_KINDS: &[KindInfo] = &[
             num("copies"),
         ],
     ),
+    KindInfo::new(31, "AnswerRate", &[num("rate"), num("reading")]),
 ];
 
 /// The kind with `code`.
@@ -1058,6 +1060,7 @@ fn tap_record(
                 n(copies),
             ],
         ),
+        TapKind::AnswerRate { rate, reading } => r(31, &[n(rate), od(reading)]),
         TapKind::PeerAdded
         | TapKind::PeerRemoved
         | TapKind::SwarmAdded
@@ -1248,6 +1251,10 @@ mod tests {
                 behind: 1,
             },
             TapKind::Upload(Upload::default()),
+            TapKind::AnswerRate {
+                rate: 1,
+                reading: Some(d),
+            },
         ]
     }
 

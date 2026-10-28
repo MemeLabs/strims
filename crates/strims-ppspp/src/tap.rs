@@ -236,6 +236,13 @@ pub enum TapKind {
         pushed: u64,
         behind: u64,
     },
+    /// The pace of the node's hybrid answers at a tick, when it changed:
+    /// its rate in bytes per second, and the node's queueing delay below
+    /// the runner it read ([`crate::answer_gate`]).
+    AnswerRate {
+        rate: u64,
+        reading: Option<Duration>,
+    },
 
     /// Events dropped because a buffer filled between drains.
     Lost {

@@ -17,6 +17,7 @@ delivery or latency collapsed.
   hack/capture/analyze.py pulls  run.jsonl [--source NAME] [--from S] [--until S]
   hack/capture/analyze.py node   run.jsonl NODE [--from S] [--until S]
   hack/capture/analyze.py answers run.jsonl [--node NAME] [--from S] [--until S]
+  hack/capture/analyze.py gate   run.jsonl [--node NAME] [--from S] [--until S]
   hack/capture/analyze.py holders run.jsonl [--node NAME] [--holder NAME]
                                   [--from S] [--until S]
   hack/capture/analyze.py diverge  a.jsonl b.jsonl [--source NAME] [--from S]
@@ -59,6 +60,8 @@ The other commands print tables about one question each, `--from` and
   answers per second, what a node (the seed) sent: chunks new to it, pushes,
           answers, the copies of each fresh chunk it sent as answers, and
           how long pushes and answers waited in its queue
+  gate    per second, a node's answer pace (the seed's): its rate and the
+          queueing delay it read, requests in, pushes and answers out
   holders per holder of a node (the seed), per second while it holds: the
           copy's rate against what the node wrote to it, the pushes queued
           for it and its connection's window, vnic's measure of the link
@@ -1057,6 +1060,37 @@ def answers(a):
         )
 
 
+def gate(a):
+    """Per second at `--node`: the answer pace's rate and the queueing delay
+    it read (as of its latest tick), the requests that arrived, and the
+    pushes and answers sent."""
+    per = collections.defaultdict(collections.Counter)
+    rate = {}
+    for r in load(a):
+        if r["node"] != a.node:
+            continue
+        k = int(r["t"] // 1000)
+        d = per[k]
+        t = r["type"]
+        if t == "AnswerRate":
+            rate[k] = (r["rate"], ms(r["reading"]))
+        elif t == "REQUEST" and r.get("dir") == "in":
+            d["requests"] += 1
+        elif t == "DATA" and r.get("dir") == "out":
+            d["push" if r.get("ann") == "push" else "answer"] += 1
+    print(f"-- {a.node}'s answer pace per second: rate (kB/s) and delay read (ms), requests in, pushes and"
+          " answers out")
+    last = (None, None)
+    for k in sorted(per):
+        last = rate.get(k, last)
+        d = per[k]
+        r = "-" if last[0] is None else f"{last[0] // 1000:6d}"
+        print(
+            f"  {k:5d}s rate {r:>6} read {'-' if last[1] is None else last[1]:>6} req {d['requests']:5d}"
+            f" push {d['push']:5d} answer {d['answer']:5d}"
+        )
+
+
 def holders(a):
     rows = load(a)
     spans = collections.defaultdict(list)
@@ -1223,6 +1257,9 @@ def main():
     p.add_argument("rows")
     p.add_argument("--source", default="seed")
     p = command("answers", answers)
+    p.add_argument("rows")
+    p.add_argument("--node", default="seed")
+    p = command("gate", gate)
     p.add_argument("rows")
     p.add_argument("--node", default="seed")
     p = command("holders", holders)
