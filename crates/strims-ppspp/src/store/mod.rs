@@ -13,7 +13,7 @@ mod writer;
 #[cfg(test)]
 mod buffer_test;
 
-pub use buffer::{Buffer, BufferLayout, BufferReader};
+pub use buffer::{Buffer, BufferLayout, BufferReader, ChunkBytes};
 pub use writer::Writer;
 
 use crate::codec;

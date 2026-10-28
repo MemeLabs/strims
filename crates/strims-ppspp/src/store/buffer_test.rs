@@ -475,3 +475,135 @@ fn elastic_layout() {
     assert_eq!(c.buf.len(), 3 * cs);
     assert_eq!(c.export_cache().unwrap(), cache[..3 * cs]);
 }
+
+/// The stream the generated buffers make: a byte per offset.
+fn fill(o: u64, dst: &mut [u8]) {
+    for (k, b) in dst.iter_mut().enumerate() {
+        let o = o + k as u64;
+        *b = (o.wrapping_mul(31) ^ (o >> 8)) as u8;
+    }
+}
+
+/// The chunks of `b` in the stream [`fill`] makes.
+fn stream(b: Bin, cs: usize) -> Vec<u8> {
+    let mut d = vec![0; b.base_length() as usize * cs];
+    fill(bin_byte(b.base_left(), cs) as u64, &mut d);
+    d
+}
+
+/// Every read until `WouldBlock`, 5 bytes at most, recovering from
+/// underruns.
+fn drain(r: &mut BufferReader, b: &mut Buffer) -> Vec<Result<Vec<u8>, Error>> {
+    let mut out = vec![];
+    let mut p = [0u8; 5];
+    loop {
+        match r.read(b, &mut p) {
+            Ok(n) => out.push(Ok(p[..n].to_vec())),
+            Err(Error::WouldBlock) => return out,
+            Err(Error::BufferUnderrun) => {
+                out.push(Err(Error::BufferUnderrun));
+                match r.recover(b) {
+                    Ok(skipped) => out.push(Ok(skipped.to_le_bytes().to_vec())),
+                    Err(e) => {
+                        out.push(Err(e));
+                        return out;
+                    }
+                }
+            }
+            Err(e) => {
+                out.push(Err(e));
+                return out;
+            }
+        }
+    }
+}
+
+/// Every `Data` message's bin and bytes.
+#[derive(Default)]
+struct DataRecorder(Vec<(Bin, Vec<u8>)>);
+
+impl MessageWriter for DataRecorder {
+    fn write(&mut self, m: &Message<'_>) -> Result<usize, codec::Error> {
+        if let Message::Data(d) = m {
+            self.0.push((d.bin, d.data.to_vec()));
+        }
+        Ok(m.encoded_len())
+    }
+}
+
+/// A buffer that makes its chunks' bytes reads, sends and caches what one
+/// that stores them does, in either layout: out of order, in bins of
+/// several chunks, past the window and through an underrun, and from an
+/// imported cache. It holds no bytes.
+#[test]
+fn generated_bytes_match_stored() {
+    let cs = 16;
+    let writes = [
+        Bin::new(0, 1),
+        Bin::new(0, 0),
+        Bin::new(0, 3),
+        Bin::new(0, 2),
+        Bin::new(1, 2),
+        Bin::new(0, 7),
+        Bin::new(0, 6),
+        Bin::new(0, 9),
+        Bin::new(0, 8),
+        Bin::new(2, 4),
+        Bin::new(0, 21),
+    ];
+    let sends: Vec<Bin> = (0..24)
+        .map(|o| Bin::new(0, o))
+        .chain([Bin::new(1, 2), Bin::new(2, 1), Bin::new(2, 4)])
+        .collect();
+    for layout in [BufferLayout::CIRCULAR, BufferLayout::ELASTIC] {
+        let mut stored = Buffer::with_layout(8, cs, layout).unwrap();
+        let mut generated =
+            Buffer::with_chunk_bytes(8, cs, layout, ChunkBytes::Generated(fill)).unwrap();
+        stored.set_offset(Bin(0));
+        generated.set_offset(Bin(0));
+        let mut rs = BufferReader::new(&stored);
+        let mut rg = BufferReader::new(&generated);
+        let (mut caches, mut underruns) = (0, 0);
+        for &b in &writes {
+            stored.consume(b, &stream(b, cs)).unwrap();
+            generated.consume(b, &stream(b, cs)).unwrap();
+            let reads = drain(&mut rs, &mut stored);
+            assert_eq!(drain(&mut rg, &mut generated), reads, "{layout:?} {b:?}");
+            underruns += reads
+                .iter()
+                .filter(|r| **r == Err(Error::BufferUnderrun))
+                .count();
+            assert_eq!(rg.position(), rs.position());
+
+            let (mut ws, mut wg) = (DataRecorder::default(), DataRecorder::default());
+            for &s in &sends {
+                assert_eq!(
+                    generated.write_data(s, Time::EPOCH, &mut wg),
+                    stored.write_data(s, Time::EPOCH, &mut ws),
+                );
+            }
+            assert_eq!(wg.0, ws.0, "{layout:?} {b:?}");
+            assert!(ws.0.iter().all(|(s, d)| *d == stream(*s, cs)));
+
+            let cache = stored.export_cache();
+            assert_eq!(generated.export_cache(), cache);
+            if let Ok(cache) = cache {
+                caches += 1;
+                let mut stored = Buffer::with_layout(8, cs, layout).unwrap();
+                let mut generated =
+                    Buffer::with_chunk_bytes(8, cs, layout, ChunkBytes::Generated(fill)).unwrap();
+                stored.import_cache(&cache).unwrap();
+                generated.import_cache(&cache).unwrap();
+                let mut rs = BufferReader::new(&stored);
+                let mut rg = BufferReader::new(&generated);
+                assert_eq!(
+                    drain(&mut rg, &mut generated),
+                    drain(&mut rs, &mut stored)
+                );
+            }
+        }
+        assert!(caches > 0);
+        assert_eq!(underruns > 0, layout == BufferLayout::CIRCULAR);
+        assert!(generated.buf.is_empty());
+    }
+}

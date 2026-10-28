@@ -13,7 +13,7 @@
 use crate::codec::ProtocolOptionType;
 use crate::controller::RequestControllerKind;
 use crate::integrity::{SwarmVerifierOptions, VerifierOptions};
-use crate::store::BufferLayout;
+use crate::store::{BufferLayout, ChunkBytes};
 use crate::uri::UriOptions;
 
 /// Whether the node publishes the swarm (`SEED`) or receives it (`PEER`).
@@ -177,6 +177,10 @@ pub struct SwarmOptions {
     pub scheduling_method: SchedulingMethod,
     pub delivery_mode: DeliveryMode,
     pub buffer_layout: BufferLayout,
+    /// What the store keeps of each chunk, local to this node: its bytes
+    /// (`Default`), or only that it holds it, for simulations
+    /// ([`ChunkBytes::Generated`]).
+    pub chunk_bytes: ChunkBytes,
     /// How push is mixed into pull; local, in neither handshakes nor
     /// URIs. `Default` resolves to [`PushMode::DEFAULT`].
     pub push_mode: PushMode,
@@ -204,6 +208,7 @@ impl SwarmOptions {
             scheduling_method: SchedulingMethod::PEER,
             delivery_mode: DeliveryMode::LOW_LATENCY,
             buffer_layout: BufferLayout::CIRCULAR,
+            chunk_bytes: ChunkBytes::Stored,
             push_mode: PushMode::DEFAULT,
             request_controller: RequestControllerKind::DEFAULT,
             seed: SeedPolicy {
@@ -243,6 +248,7 @@ impl SwarmOptions {
             scheduling_method: or(self.scheduling_method, d.scheduling_method),
             delivery_mode: or(self.delivery_mode, d.delivery_mode),
             buffer_layout: or(self.buffer_layout, d.buffer_layout),
+            chunk_bytes: or(self.chunk_bytes, d.chunk_bytes),
             push_mode: or(self.push_mode, d.push_mode),
             request_controller: or(self.request_controller, d.request_controller),
             seed: SeedPolicy {
@@ -312,6 +318,7 @@ mod tests {
             },
             delivery_mode: DeliveryMode::MANDATORY,
             buffer_layout: BufferLayout::CIRCULAR,
+            chunk_bytes: ChunkBytes::Stored,
             push_mode: PushMode::Hybrid,
             request_controller: RequestControllerKind::BbrLike,
             seed: SeedPolicy {
