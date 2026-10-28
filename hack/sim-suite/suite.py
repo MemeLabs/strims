@@ -341,16 +341,16 @@ def job_id(label, c, seed):
     return f"{label}:{c['name']}:{seed}:{hashlib.sha1(key.encode()).hexdigest()[:12]}"
 
 
-def run_jobs(jobs, slots, mem_gib):
+def run_jobs(jobs, slots, mem_gib, need_gib):
     """Runs (label, bin_dir, cell, seed) jobs, the heaviest first, under
-    `slots` processes and `mem_gib` of declared memory. Yields (job,
-    row, error)."""
+    `slots` processes and `mem_gib` of memory, a job taking its cell's
+    `need_gib`. Yields (job, row, error)."""
     lock = threading.Condition()
     used = [0.0]
 
     def one(job):
         _, bin_dir, c, seed, extra = job
-        need = min(c["mem_gib"], mem_gib)
+        need = min(need_gib(c), mem_gib)
         with lock:
             lock.wait_for(lambda: used[0] + need <= mem_gib)
             used[0] += need
@@ -683,10 +683,19 @@ def run_cells(cells, runs, slots, mem_gib):
         for s in seeds(c)
         if job_id(label, c, s) not in have[label]
     ]
+    # A job takes its cell's peak memory in kept rows, a quarter over, and
+    # the declared budget until the cell has rows: budgets are worst cases,
+    # and holding to them left most cores idle while the heavy cells ran.
+    peaks = {}
+    for kept in have.values():
+        for rec in kept.values():
+            if rec["row"].get("_rss_mb"):
+                peaks[rec["cell"]] = max(peaks.get(rec["cell"], 0), rec["row"]["_rss_mb"])
+    need = lambda c: min(c["mem_gib"], 1.25 * peaks[c["name"]] / 1024) if c["name"] in peaks else c["mem_gib"]
     failures = []
     t0 = time.monotonic()
     files = {label: open(store(label), "a") for label in runs}
-    for done, ((label, _, c, s, _), row, err) in enumerate(run_jobs(jobs, slots, mem_gib), 1):
+    for done, ((label, _, c, s, _), row, err) in enumerate(run_jobs(jobs, slots, mem_gib, need), 1):
         if err:
             failures.append(f"{label} {c['name']} seed {s}: {err}")
         if row is not None:
