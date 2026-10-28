@@ -95,6 +95,7 @@ import json
 import math
 import os
 import random
+import re
 import shlex
 import subprocess
 import sys
@@ -358,6 +359,13 @@ def job_id(label, c, seed):
     return f"{label}:{c['name']}:{seed}:{hashlib.sha1(key.encode()).hexdigest()[:12]}"
 
 
+# A job's peak memory: the kernel keeps a process's peak across exec, so
+# one forked from this script starts at the script's own, rows and all.
+# GNU time forks the sim from its own small process and reports the sim's.
+TIME_TAG = "SIM_SUITE_MAXRSS_KIB"
+TIME = ["/usr/bin/time", "-f", f"{TIME_TAG} %M"] if Path("/usr/bin/time").exists() else []
+
+
 def run_jobs(jobs, slots, mem_gib, need_gib):
     """Runs (label, bin_dir, cell, seed) jobs, the heaviest first, under
     `slots` processes and `mem_gib` of memory, a job taking its cell's
@@ -376,7 +384,7 @@ def run_jobs(jobs, slots, mem_gib, need_gib):
             env = {**os.environ, **c["env"], **extra, seed_key: str(seed)}
             t0 = time.monotonic()
             p = subprocess.Popen(
-                [str(bin_dir / c["sim"]), "--exact", c["test"], "--include-ignored", "--nocapture",
+                [*TIME, str(bin_dir / c["sim"]), "--exact", c["test"], "--include-ignored", "--nocapture",
                  "--test-threads", "1"],
                 env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             )
@@ -393,9 +401,12 @@ def run_jobs(jobs, slots, mem_gib, need_gib):
                 return job, None, f"exit {p.returncode}: {tail}"
             row = json.loads(out[at + 4:].split("\n", 1)[0])
             row["_wall_s"] = round(wall, 2)
-            row["_rss_mb"] = round(usage.ru_maxrss / 1024)
-            if usage.ru_maxrss * 1024 > c["mem_gib"] * GiB:
-                return job, row, f"peak memory {usage.ru_maxrss // 1024} MiB past the cell's {c['mem_gib']} GiB"
+            kib = usage.ru_maxrss
+            if TIME and (m := re.search(rf"^{TIME_TAG} (\d+)$", out, re.M)):
+                kib = int(m.group(1))
+            row["_rss_mb"] = round(kib / 1024)
+            if kib * 1024 > c["mem_gib"] * GiB:
+                return job, row, f"peak memory {kib // 1024} MiB past the cell's {c['mem_gib']} GiB"
             return job, row, None
         finally:
             with lock:
