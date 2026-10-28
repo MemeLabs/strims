@@ -821,6 +821,9 @@ def farm(a, cells):
     farm_py = farm_root() / "hack" / "sim-farm" / "farm.py"
     if not a.no_run:
         print(f"farm run {name}: {len(cells)} matrices, {len(values)} sets x {len(seeds)} seeds", file=sys.stderr)
+        # Build first, once: two runs would build the same commit in one
+        # worktree at once.
+        subprocess.run([sys.executable, str(farm_py), "build", *map(str, paths)], check=True)
         groups = [[p for p, m in zip(paths, mems) if (m > FARM_SPLIT_GIB) == heavy] for heavy in (True, False)]
         procs = [subprocess.Popen([sys.executable, str(farm_py), "run", *map(str, g), *shlex.split(a.farm_args)])
                  for g in groups if g]
