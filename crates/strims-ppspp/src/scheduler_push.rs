@@ -115,8 +115,10 @@
 //!   controller sees them only as delivered bytes. Push load is bounded by
 //!   admission, shedding, the child's deadlines and prunes, and stale drops;
 //!   pull answers on the same link see push queueing in their delays.
-//! - Within a peer's queue, pushes go before request answers; across peers
-//!   the transport's weights decide.
+//! - Pushes go before request answers: within a peer's queue, and across
+//!   peers through the answer gate ([`crate::answer_gate`]), which writes
+//!   no answer while a push waits on a link that drains. Otherwise the
+//!   transport's weights decide between peers.
 //! - Pushed data counts toward upload weights like pulled data (verified
 //!   and new only), so a child weighs its parent highly. Children never send
 //!   a parent the stream they get from it.

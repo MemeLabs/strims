@@ -21,7 +21,7 @@ pub(crate) struct MockQueue {
     pub(crate) enqueued_now: Vec<(PeerKey, SwarmKey)>,
     pub(crate) pushed: Vec<(PeerKey, Bin, PeerPriority)>,
     pub(crate) pushed_front: Vec<(PeerKey, Bin, PeerPriority)>,
-    pub(crate) removed: Vec<(PeerKey, Bin)>,
+    pub(crate) removed: Vec<(PeerKey, Bin, PeerPriority)>,
     pub(crate) removed_runner: Vec<PeerKey>,
 }
 
@@ -46,8 +46,8 @@ impl PeerTaskQueue for MockQueue {
     fn push_front_data(&mut self, peer: PeerKey, _: SwarmKey, b: Bin, _: Time, pri: PeerPriority) {
         self.pushed_front.push((peer, b, pri));
     }
-    fn remove_data(&mut self, peer: PeerKey, _: SwarmKey, b: Bin, _: PeerPriority) {
-        self.removed.push((peer, b));
+    fn remove_data(&mut self, peer: PeerKey, _: SwarmKey, b: Bin, pri: PeerPriority) {
+        self.removed.push((peer, b, pri));
     }
     fn remove_runner(&mut self, peer: PeerKey, _: SwarmKey) {
         self.removed_runner.push(peer);
@@ -2298,6 +2298,24 @@ fn a_missed_push_is_pulled_from_the_others_first() {
     assert_eq!(requests(&mut f, deadline + REQUEST_BACKOFF), 4);
 }
 
+/// Answers queue below pushes, a hybrid swarm's apart for the answer gate
+/// ([`crate::answer_gate`]); a CANCEL takes them from the same queue.
+#[test]
+fn answers_queue_by_push_mode() {
+    for (options, pri) in [
+        (pull(), PeerPriority::Low),
+        (hybrid(1), PeerPriority::Scavenger),
+    ] {
+        let mut f = fixture(options);
+        let mut q = MockQueue::default();
+        let p = add_ready(&mut f, &mut q, 0);
+        assert!(f.sched.handle_request(p, Bin(2), now(), &mut q));
+        assert_eq!(q.pushed, [(p, Bin(2), pri)]);
+        f.sched.handle_cancel(p, Bin(2), Bin(0), &mut q);
+        assert_eq!(q.removed, [(p, Bin(2), pri)]);
+    }
+}
+
 #[test]
 fn a_cancelled_push_is_not_sent() {
     // A CANCEL drops its chunk's push at write time, whenever the push was
@@ -2309,7 +2327,10 @@ fn a_cancelled_push_is_not_sent() {
     let ms = Duration::from_millis;
     let t = now();
     f.sched.handle_cancel(child, Bin(2), Bin(0), &mut q);
-    assert!(q.removed.contains(&(child, Bin(2))));
+    assert!(
+        q.removed
+            .contains(&(child, Bin(2), PeerPriority::Scavenger))
+    );
     assert!(f.sched.push_unwanted(child, Bin(2), t - ms(100), t));
     assert!(
         f.sched
@@ -2325,7 +2346,10 @@ fn a_cancelled_push_is_not_sent() {
     let st = f.sched.push_stats();
     assert_eq!((st.suppressed, st.stale_drops), (2, 1));
     assert!(f.sched.handle_request(child, Bin(2), t, &mut q));
-    assert_eq!(q.pushed.last(), Some(&(child, Bin(2), PeerPriority::Low)));
+    assert_eq!(
+        q.pushed.last(),
+        Some(&(child, Bin(2), PeerPriority::Scavenger))
+    );
 
     // Behind the window, past a live window beyond our newest chunk, or
     // wider than a window: ignored.

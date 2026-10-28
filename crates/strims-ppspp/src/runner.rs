@@ -20,6 +20,7 @@ use strims_base::stats::Sma;
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 
+use crate::answer_gate;
 use crate::channel::{ChannelMetrics, HandshakeError, MeteredWriter, validate_handshake};
 use crate::codec::{self, FrameReader, Message, Reader, ReaderConfig, Stream};
 use crate::epoch::EpochError;
@@ -305,6 +306,9 @@ pub struct Runner {
     /// Lifecycle events; the schedulers keep their own.
     tap: Tap,
     tap_level: TapLevel,
+    /// Peers whose hybrid answers the answer gate held back at their last
+    /// poll ([`crate::answer_gate`]). Bound: one per peer.
+    held: BTreeSet<PeerKey>,
 }
 
 /// Hands a swarm's queued events to its scheduler and the driver. Called
@@ -509,6 +513,7 @@ impl Runner {
             committed: 0.0,
             tap: Tap::default(),
             tap_level: TapLevel::Off,
+            held: BTreeSet::new(),
         }
     }
 
@@ -617,6 +622,8 @@ impl Runner {
     }
 
     /// Feeds the upload meter whether any data is queued (hybrid only).
+    /// Answers the answer gate holds count too: it holds them only while
+    /// pushes are queued.
     fn observe_upload(&mut self, now: Time) {
         if self.hybrid_swarms == 0 {
             return;
@@ -797,6 +804,7 @@ impl Runner {
             self.stop_channel(key, peer);
         }
         self.peers.remove(peer);
+        self.held.remove(&peer);
         self.events.transmit.remove(&peer);
         self.events.weights.remove(&peer);
         self.tap.push(TapEvent {
@@ -1096,12 +1104,15 @@ impl Runner {
     /// Fills `buf` with one frame body for `peer` and returns its length:
     /// the channels queued to write (handshakes, HAVEs, CANCELs, requests)
     /// first, then queued data by priority, each channel payload as large as
-    /// fits. Returns 0 when there is nothing to send.
+    /// fits. Hybrid swarms' answers go only while the answer gate admits
+    /// them ([`crate::answer_gate`]). Returns 0 when there is nothing to
+    /// send.
     pub fn poll_transmit(&mut self, peer: PeerKey, now: Time, buf: &mut [u8]) -> usize {
         let Runner {
             swarms,
             peers,
             events,
+            held,
             ..
         } = self;
         let mut detached = match peers.get_mut(peer) {
@@ -1124,7 +1135,14 @@ impl Runner {
         }
 
         'priorities: for pri in PeerPriority::ALL {
+            let gated = pri == PeerPriority::Scavenger;
             loop {
+                if gated && !answer_gate::admits(peers, now) {
+                    if peers.get(peer).is_some_and(|p| !p.queue(pri).is_empty()) {
+                        held.insert(peer);
+                    }
+                    continue 'priorities;
+                }
                 let Some((key, b, t)) = peers
                     .get_mut(peer)
                     .and_then(|p| p.dq.get_mut(pri.index()))
@@ -1156,16 +1174,35 @@ impl Runner {
             if p.is_idle() {
                 p.wake = Wake::Idle;
             } else if off == 0 {
-                // Nothing fit although work remains: wait for the next tick
-                // so the driver doesn't spin on empty frames.
+                // Nothing fit, or the answer gate holds what's left: wait
+                // for the next tick (or the gate) so the driver doesn't
+                // spin on empty frames.
                 p.wake = Wake::AtTick;
             }
         }
+        self.reopen(now);
         if self.hybrid_swarms > 0 {
             self.upload.bytes.add(off as u64, now);
             self.observe_upload(now);
         }
         off
+    }
+
+    /// Wakes the peers whose answers the answer gate held back, once it
+    /// admits answers again.
+    fn reopen(&mut self, now: Time) {
+        if self.held.is_empty() || !answer_gate::admits(&mut self.peers, now) {
+            return;
+        }
+        for peer in core::mem::take(&mut self.held) {
+            if let Some(p) = self.peers.get_mut(peer)
+                && !p.queue(PeerPriority::Scavenger).is_empty()
+                && p.wake != Wake::Now
+            {
+                p.wake = Wake::Now;
+                self.events.transmit.insert(peer);
+            }
+        }
     }
 
     // --- timers ---------------------------------------------------------
@@ -1195,12 +1232,14 @@ impl Runner {
     /// deferred write cycles, and every
     /// [`PEER_QOS_UPDATE_INTERVAL`] the peers' upload weights. In
     /// [`PushMode::Hybrid`] every call also releases push-expected chunks
-    /// whose deadline passed to pull.
+    /// whose deadline passed to pull. Every call wakes the peers whose
+    /// answers the answer gate held, once it admits them.
     pub fn handle_timeout(&mut self, now: Time) {
         self.touch_clock(now);
         if self.hybrid_swarms > 0 {
             self.expire_push(now);
         }
+        self.reopen(now);
         if now < self.next_tick {
             self.observe_upload(now);
             return;

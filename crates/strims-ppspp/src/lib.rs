@@ -28,6 +28,8 @@
 //!   [`scheduler_peer::push`] the push/pull hybrid selected by [`PushMode`].
 //! - [`controller`]: the per-channel request window, [`ledbat`] (RFC 6817)
 //!   or [`bbr::BbrLike`], selected by [`SwarmOptions::request_controller`].
+//! - [`answer_gate`]: a hybrid node's answers to requests from the uplink
+//!   its pushes leave.
 //!
 //! # Driving the runner
 //!
@@ -66,6 +68,7 @@
 //! scheduling methods) never reach the wire, so nodes with different local
 //! options interoperate.
 
+pub mod answer_gate;
 pub mod bbr;
 mod bin_queue;
 pub mod channel;

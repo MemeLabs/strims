@@ -14,18 +14,26 @@ use strims_binmap::Bin;
 use crate::codec::Stream;
 use crate::runner::{PeerKey, SwarmKey};
 
-/// The data queue an entry goes to. A peer's write cycle drains `High`
-/// before `Low`.
+/// The data queue an entry goes to. A peer's write cycle drains them in
+/// order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum PeerPriority {
     /// Pushes to stream subscribers.
     High = 0,
-    /// Answers to requests.
+    /// Answers to requests, in swarms that don't push.
     Low = 1,
+    /// Answers to requests in [`PushMode::Hybrid`](crate::PushMode::Hybrid)
+    /// swarms, which go only while no push waits
+    /// ([`crate::answer_gate`]).
+    Scavenger = 2,
 }
 
 impl PeerPriority {
-    pub(crate) const ALL: [PeerPriority; 2] = [PeerPriority::High, PeerPriority::Low];
+    pub(crate) const ALL: [PeerPriority; 3] = [
+        PeerPriority::High,
+        PeerPriority::Low,
+        PeerPriority::Scavenger,
+    ];
 
     pub(crate) fn index(self) -> usize {
         self as usize

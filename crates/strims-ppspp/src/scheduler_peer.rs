@@ -383,6 +383,16 @@ impl SwarmState {
         self.bin_times.get(b).map_or(Time::EPOCH, |(_, t)| t)
     }
 
+    /// The queue answers go to: a hybrid swarm's wait for its pushes
+    /// ([`crate::answer_gate`]).
+    fn answer_priority(&self) -> PeerPriority {
+        if self.push.is_some() {
+            PeerPriority::Scavenger
+        } else {
+            PeerPriority::Low
+        }
+    }
+
     /// Counts the chunks of `b`, written to a peer at `pri` at `now`, and
     /// how long they waited since `queued` (the entry's time).
     fn count_sent(&mut self, b: Bin, pri: PeerPriority, queued: Time, now: Time) {
@@ -1688,9 +1698,10 @@ impl PeerSwarmScheduler {
         true
     }
 
-    /// The peer requested `b`, arriving at `now`: queue the answer at low
-    /// priority, stamped with `now` (the request's own timestamp is the
-    /// peer's clock). False if the bin was refused.
+    /// The peer requested `b`, arriving at `now`: queue the answer below
+    /// pushes ([`SwarmState::answer_priority`]), stamped with `now` (the
+    /// request's own timestamp is the peer's clock). False if the bin was
+    /// refused.
     pub(crate) fn handle_request(
         &mut self,
         peer: PeerKey,
@@ -1707,7 +1718,7 @@ impl PeerSwarmScheduler {
         if !crate::peer_bin_ok(b, s.window) {
             return false;
         }
-        if q.push_data(peer, s.key, b, now, PeerPriority::Low) {
+        if q.push_data(peer, s.key, b, now, s.answer_priority()) {
             s.answers_queued = s.answers_queued.saturating_add(1);
         } else {
             s.answers_refused = s.answers_refused.saturating_add(1);
@@ -1730,7 +1741,7 @@ impl PeerSwarmScheduler {
         q: &mut impl PeerTaskQueue,
     ) {
         if self.channels.contains_key(&peer) {
-            q.remove_data(peer, self.s.key, b, PeerPriority::Low);
+            q.remove_data(peer, self.s.key, b, self.s.answer_priority());
             self.push_cancelled(peer, b, window_start);
         }
     }

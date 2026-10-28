@@ -6,6 +6,7 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
 use super::*;
+use crate::answer_gate::BLOCKED_SPAN;
 use crate::codec::{ChannelWriter, Have, MessageWriter};
 use crate::{SwarmId, SwarmOptions, WriterOptions, store};
 use strims_base::rng::det_rng;
@@ -1048,4 +1049,206 @@ fn the_meter_takes_the_links_excesses() {
     m.update_queue_delay(&peers);
     // The second least of three.
     assert_eq!(m.queue_delay, Some(Duration::from_millis(40)));
+}
+
+/// A hybrid seed and `n` leeches wired back to back with instant
+/// delivery, as in [`Pair`], whose frames move only when a test asks.
+struct Star {
+    seed: Runner,
+    swarm: SwarmKey,
+    writer: Writer,
+    /// The seed's key for each leech.
+    peers: Vec<PeerKey>,
+    leeches: Vec<Node>,
+    now: Time,
+    written: u64,
+}
+
+impl Star {
+    fn new(n: usize) -> Star {
+        let key = strims_crypto::key_from_seed(&[4; 32]);
+        let (writer, swarm) = Writer::new(
+            WriterOptions {
+                swarm_options: hybrid(),
+                key: key.clone(),
+            },
+            t(0),
+        )
+        .unwrap();
+        let mut seed = Runner::new(det_rng(1));
+        let ss = seed.add_swarm(swarm);
+        let (mut peers, mut leeches) = (Vec::new(), Vec::new());
+        for i in 0..n {
+            let sp = seed.add_peer(&[b'l', i as u8], t(0));
+            seed.run_swarm(sp, ss, 1, 2, t(0)).unwrap();
+            let swarm = Swarm::new(SwarmId::new(&key.public), hybrid()).unwrap();
+            let reader = swarm.reader();
+            let mut runner = Runner::new(det_rng(2 + i as u64));
+            let ls = runner.add_swarm(swarm);
+            let lp = runner.add_peer(b"seed", t(0));
+            runner.run_swarm(lp, ls, 2, 1, t(0)).unwrap();
+            peers.push(sp);
+            leeches.push(Node {
+                runner,
+                swarm: ls,
+                peer: lp,
+                reader,
+            });
+        }
+        Star {
+            seed,
+            swarm: ss,
+            writer,
+            peers,
+            leeches,
+            now: t(0),
+            written: 0,
+        }
+    }
+
+    /// Frames from the seed to leech `i`, while the seed has them.
+    fn down(&mut self, i: usize) -> Vec<Vec<u8>> {
+        let mut buf = vec![0u8; MTU];
+        let mut out = Vec::new();
+        let peer = self.peers[i];
+        while self.seed.wants_transmit(peer) {
+            let n = self.seed.poll_transmit(peer, self.now, &mut buf);
+            if n == 0 {
+                break;
+            }
+            let l = &mut self.leeches[i];
+            l.runner.handle_frame(l.peer, self.now, &buf[..n]).unwrap();
+            out.push(buf[..n].to_vec());
+        }
+        out
+    }
+
+    /// Frames from leech `i` to the seed; returns how many.
+    fn up(&mut self, i: usize) -> usize {
+        let mut buf = vec![0u8; MTU];
+        let mut frames = 0;
+        let l = &mut self.leeches[i];
+        while l.runner.wants_transmit(l.peer) {
+            let n = l.runner.poll_transmit(l.peer, self.now, &mut buf);
+            if n == 0 {
+                break;
+            }
+            self.seed
+                .handle_frame(self.peers[i], self.now, &buf[..n])
+                .unwrap();
+            frames += 1;
+        }
+        frames
+    }
+
+    fn pump(&mut self) {
+        loop {
+            let mut moved = 0;
+            for i in 0..self.leeches.len() {
+                moved += self.up(i) + self.down(i).len();
+            }
+            if moved == 0 {
+                return;
+            }
+        }
+    }
+
+    fn tick(&mut self, ms: i64) {
+        self.now += Duration::from_millis(ms);
+        self.seed.handle_timeout(self.now);
+        for l in &mut self.leeches {
+            l.runner.handle_timeout(self.now);
+        }
+        self.pump();
+    }
+
+    fn write(&mut self, munros: usize) {
+        for _ in 0..munros {
+            let data: Vec<u8> = (self.written..self.written + MUNRO as u64)
+                .map(byte)
+                .collect();
+            self.seed
+                .write(self.swarm, &mut self.writer, self.now, &data)
+                .unwrap();
+            self.written += MUNRO as u64;
+        }
+    }
+
+    /// The chunks of data in `frames`.
+    fn data(&self, frames: &[Vec<u8>]) -> u64 {
+        let cfg = self.seed.swarm(self.swarm).unwrap().reader_config();
+        frames
+            .iter()
+            .flat_map(|f| crate::codec::FrameReader::new(f).flatten())
+            .flat_map(|(_, payload)| crate::codec::Reader::new(cfg, payload).flatten())
+            .map(|m| match m {
+                crate::codec::Message::Data(d) => d.bin.base_length(),
+                _ => 0,
+            })
+            .sum()
+    }
+
+    /// Leech 0 holds every stream from the seed, the others pull.
+    fn subscribe_first(&mut self) {
+        self.seed
+            .pin_seed_allocation(self.swarm, Some(vec![vec![self.peers[0]]]))
+            .unwrap();
+        self.tick(100);
+        self.tick(100);
+        let l = &mut self.leeches[0];
+        l.runner.request_stream(l.peer, l.swarm, 0, Bin(0)).unwrap();
+        self.pump();
+        self.write(1);
+        for _ in 0..5 {
+            self.tick(100);
+        }
+        assert!(
+            self.seed.swarm_stats(self.swarm).unwrap().pushed_chunks > 0,
+            "no pushes"
+        );
+    }
+}
+
+/// The answer gate: no answer goes while a push waits for a peer whose
+/// link takes data, and the answers' peer is woken once the pushes drain.
+#[test]
+fn answers_wait_while_a_push_waits() {
+    let mut s = Star::new(2);
+    s.subscribe_first();
+    // A munro: pushes for leech 0, HAVEs and then requests from leech 1.
+    s.write(1);
+    let haves = s.down(1);
+    assert_eq!(s.data(&haves), 0);
+    assert!(s.up(1) > 0);
+    let held = s.down(1);
+    assert_eq!(s.data(&held), 0, "an answer went ahead of a push");
+    assert!(!s.seed.wants_transmit(s.peers[1]));
+    assert_eq!(s.seed.held.len(), 1);
+    // The pushes go; the answers follow.
+    s.now += Duration::from_millis(100);
+    s.seed.handle_timeout(s.now);
+    let pushed = s.down(0);
+    assert!(s.data(&pushed) > 0);
+    assert!(s.seed.wants_transmit(s.peers[1]));
+    let answered = s.down(1);
+    assert!(s.data(&answered) > 0);
+}
+
+/// The answer gate's exception: a peer whose pushes haven't drained in
+/// [`BLOCKED_SPAN`] (a link that doesn't take data) holds no answer back.
+#[test]
+fn a_blocked_link_holds_no_answer_back() {
+    let mut s = Star::new(2);
+    s.subscribe_first();
+    s.write(1);
+    s.down(1);
+    s.up(1);
+    let held = s.down(1);
+    assert_eq!(s.data(&held), 0);
+    // Leech 0 takes nothing for longer than the span.
+    s.now += BLOCKED_SPAN + Duration::from_millis(1);
+    s.seed.handle_timeout(s.now);
+    assert!(s.seed.wants_transmit(s.peers[1]));
+    let answered = s.down(1);
+    assert!(s.data(&answered) > 0);
 }

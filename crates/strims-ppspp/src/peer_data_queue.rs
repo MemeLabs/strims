@@ -21,8 +21,9 @@
 //!   ones. A refused request is never answered; the requester times it out
 //!   and asks again, from us or another peer.
 //!
-//! Each entry carries a time the scheduler gets back on pop: a request's
-//! timestamp, or when a push was queued.
+//! Each entry carries a time the scheduler gets back on pop: when a
+//! request arrived, or when a push was queued. The answer gate reads the
+//! oldest live entry's ([`PeerDataQueue::front_time`]).
 
 use std::collections::{BTreeMap, VecDeque};
 
@@ -150,6 +151,18 @@ impl<K: Copy + Ord> PeerDataQueue<K> {
         }
         self.maybe_clear();
         self.maybe_compact();
+    }
+
+    /// The time of the oldest live entry: the front's, once the dead
+    /// entries ahead of it are dropped.
+    pub(crate) fn front_time(&mut self) -> Option<Time> {
+        while let Some(i) = self.ring.front() {
+            if Self::is_live(&self.live, i) {
+                return Some(i.t);
+            }
+            self.ring.pop_front();
+        }
+        None
     }
 
     /// Takes the oldest live entry.
@@ -440,6 +453,7 @@ mod tests {
                     }
                     prop_assert_eq!(q.len(), model.len());
                     prop_assert_eq!(q.is_empty(), model.is_empty());
+                    prop_assert_eq!(q.front_time(), model.front().map(|e| e.2));
                     if !matches!(op, Op::Pop) {
                         prop_assert!(q.ring_len() <= 2 * q.len() + 64);
                     }

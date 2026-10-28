@@ -103,7 +103,7 @@ pub struct PeerStats {
     pub wants_transmit: bool,
     /// Channels queued to write.
     pub queued_channels: bool,
-    /// Live entries per priority (pushes, then requests).
+    /// Live entries per priority (pushes, then answers).
     pub queued_data: [usize; 2],
     /// Ring entries per priority, live or dead.
     pub queue_ring: [usize; 2],
@@ -124,7 +124,7 @@ pub(crate) struct RunnerPeer {
     /// Channels with messages to write. Bound: one entry per channel.
     pub(crate) rq: PeerTaskRunnerQueue<SwarmKey>,
     /// Data to send, by [`PeerPriority`].
-    pub(crate) dq: [PeerDataQueue<SwarmKey>; 2],
+    pub(crate) dq: [PeerDataQueue<SwarmKey>; 3],
     pub(crate) wake: Wake,
     pub(crate) read: TransferMetrics,
     pub(crate) write: TransferMetrics,
@@ -144,7 +144,7 @@ impl RunnerPeer {
             id: id.to_vec(),
             channels: BTreeMap::new(),
             rq: PeerTaskRunnerQueue::default(),
-            dq: [PeerDataQueue::default(), PeerDataQueue::default()],
+            dq: Default::default(),
             wake: Wake::Idle,
             read: TransferMetrics::new(now),
             write: TransferMetrics::new(now),
@@ -152,6 +152,25 @@ impl RunnerPeer {
             qos_weight: None,
             dropped: 0,
             link_path: None,
+        }
+    }
+
+    /// The data queue for `pri`.
+    pub(crate) fn queue(&self, pri: PeerPriority) -> &PeerDataQueue<SwarmKey> {
+        let [high, low, scavenger] = &self.dq;
+        match pri {
+            PeerPriority::High => high,
+            PeerPriority::Low => low,
+            PeerPriority::Scavenger => scavenger,
+        }
+    }
+
+    pub(crate) fn queue_mut(&mut self, pri: PeerPriority) -> &mut PeerDataQueue<SwarmKey> {
+        let [high, low, scavenger] = &mut self.dq;
+        match pri {
+            PeerPriority::High => high,
+            PeerPriority::Low => low,
+            PeerPriority::Scavenger => scavenger,
         }
     }
 
@@ -164,8 +183,11 @@ impl RunnerPeer {
         PeerStats {
             wants_transmit: self.wake == Wake::Now,
             queued_channels: !self.rq.is_empty(),
-            queued_data: [self.dq[0].len(), self.dq[1].len()],
-            queue_ring: [self.dq[0].ring_len(), self.dq[1].ring_len()],
+            queued_data: [self.dq[0].len(), self.dq[1].len() + self.dq[2].len()],
+            queue_ring: [
+                self.dq[0].ring_len(),
+                self.dq[1].ring_len() + self.dq[2].ring_len(),
+            ],
             dropped: self.dropped,
             path: self.link_path,
         }
