@@ -296,8 +296,12 @@ pub const REPORT_LEASE: Duration = Duration::from_secs(10);
 pub(crate) struct UploadInfo {
     /// Data bytes written per second over the meter's window.
     pub(crate) rate: u64,
-    /// The fraction of the window during which data was queued to send.
+    /// The fraction of the window during which data was queued to send ...
     pub(crate) busy: f64,
+    /// ... and of the last 300 ms, and the fraction of those during which
+    /// pushes were queued.
+    pub(crate) busy_recent: f64,
+    pub(crate) push_busy_recent: f64,
     /// The capacity the driver knows, in bytes per second.
     pub(crate) hint: Option<u64>,
     /// The push rate the node's other swarms commit (their subscriptions
@@ -307,6 +311,9 @@ pub(crate) struct UploadInfo {
     /// The queueing delay past the runner, from the peers' ping round
     /// trips; `None` with too few peers.
     pub(crate) queue_delay: Option<Duration>,
+    /// The same from the links' latest round trips, which see a queue as
+    /// it forms; `None` without fresh readings.
+    pub(crate) latest_delay: Option<Duration>,
 }
 
 impl UploadInfo {
@@ -1839,6 +1846,8 @@ impl PeerSwarmScheduler {
             return;
         }
         if self.adaptive_seed() {
+            self.ramp_first_wave(now);
+            self.answer_deferred(now, q);
             self.ask_reports(now, q);
             self.check_allocation(now, q);
         } else {

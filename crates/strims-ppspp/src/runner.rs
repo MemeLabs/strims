@@ -154,14 +154,22 @@ struct Events {
 #[derive(Debug)]
 struct UploadMeter {
     busy_since: Option<Time>,
-    /// Busy nanoseconds; 2 s in 100 ms intervals.
+    /// Busy nanoseconds; 2 s in 100 ms intervals ...
     busy: Sma,
+    /// ... and the last 300 ms, and the last 300 ms during which pushes were
+    /// queued.
+    busy_recent: Sma,
+    push_busy_recent: Sma,
+    /// Since when pushes were queued, as `busy_since` for any data.
+    push_since: Option<Time>,
     /// Bytes written; the same window.
     bytes: Sma,
     /// The capacity the driver knows ([`Runner::set_upload_capacity`]).
     hint: Option<u64>,
-    /// The queueing delay at the last tick.
+    /// The queueing delay at the last tick, and the links' latest excess
+    /// then (their latest round trips, not their recent least).
     queue_delay: Option<Duration>,
+    latest_delay: Option<Duration>,
     /// Scratch for the peers' excesses. Bound: one per peer.
     excesses: Vec<Duration>,
 }
@@ -171,41 +179,63 @@ impl UploadMeter {
         UploadMeter {
             busy_since: None,
             busy: Sma::new(20, Duration::from_millis(100), Time::EPOCH),
+            busy_recent: Sma::new(3, Duration::from_millis(100), Time::EPOCH),
+            push_busy_recent: Sma::new(3, Duration::from_millis(100), Time::EPOCH),
+            push_since: None,
             bytes: Sma::new(20, Duration::from_millis(100), Time::EPOCH),
             hint: None,
             queue_delay: None,
+            latest_delay: None,
             excesses: Vec::new(),
         }
     }
 
     /// Takes the node's queueing delay from the peers' links.
-    fn update_queue_delay(&mut self, peers: &SlotMap<PeerKey, RunnerPeer>) {
+    fn update_queue_delay(&mut self, peers: &SlotMap<PeerKey, RunnerPeer>, now: Time) {
         self.excesses.clear();
         self.excesses
             .extend(peers.values().filter_map(|p| p.link_path?.excess()));
         self.queue_delay = queue_delay::aggregate(&mut self.excesses);
+        self.latest_delay = strims_base::path::latest_excess(
+            peers.values().filter_map(|p| p.link_path),
+            now,
+            &mut self.excesses,
+        );
     }
 
     /// Accounts the time since the last call as busy if data was queued
     /// then, and records whether data is queued now.
-    fn observe(&mut self, now: Time, backlog: bool) {
+    fn observe(&mut self, now: Time, backlog: bool, pushes: bool) {
         if let Some(t) = self.busy_since {
             let d = (now - t).as_nanos();
             if d > 0 {
                 self.busy.add(d as u64, now);
+                self.busy_recent.add(d as u64, now);
+            }
+        }
+        if let Some(t) = self.push_since {
+            let d = (now - t).as_nanos();
+            if d > 0 {
+                self.push_busy_recent.add(d as u64, now);
             }
         }
         self.busy_since = backlog.then_some(now);
+        self.push_since = pushes.then_some(now);
     }
 
     fn info(&mut self, now: Time) -> UploadInfo {
         let busy = self.busy.rate(Duration::SECOND, now) as f64 / 1e9;
+        let busy_recent = self.busy_recent.rate(Duration::SECOND, now) as f64 / 1e9;
+        let push_busy_recent = self.push_busy_recent.rate(Duration::SECOND, now) as f64 / 1e9;
         UploadInfo {
             rate: self.bytes.rate(Duration::SECOND, now),
             busy: busy.clamp(0.0, 1.0),
+            busy_recent: busy_recent.clamp(0.0, 1.0),
+            push_busy_recent: push_busy_recent.clamp(0.0, 1.0),
             hint: self.hint,
             others: 0.0,
             queue_delay: self.queue_delay,
+            latest_delay: self.latest_delay,
         }
     }
 }
@@ -642,7 +672,11 @@ impl Runner {
                 .zip(PeerPriority::ALL)
                 .any(|(q, pri)| !q.is_empty() && (paced || pri != PeerPriority::Scavenger))
         });
-        self.upload.observe(now, backlog);
+        let pushes = self
+            .peers
+            .values()
+            .any(|p| !p.queue(PeerPriority::High).is_empty());
+        self.upload.observe(now, backlog, pushes);
     }
 
     // --- swarms ---------------------------------------------------------
@@ -1270,7 +1304,7 @@ impl Runner {
         self.next_tick += TICK_INTERVAL * behind;
 
         if self.hybrid_swarms > 0 {
-            self.upload.update_queue_delay(&self.peers);
+            self.upload.update_queue_delay(&self.peers, now);
         }
         self.pace_answers(now);
         let upload = (self.hybrid_swarms > 0).then(|| self.upload.info(now));

@@ -37,6 +37,23 @@
 //!   the first munros arrive: the first wave, every neighbour asking for
 //!   every stream, is what places whole copies.
 //!
+//!   Without a known capacity, until the uplink was busy, that reading
+//!   means nothing: buffers below the runner take a fresh stream's data at
+//!   once, so the busy time reads near zero and the capacity at up to 20
+//!   times the uplink, and a wave sized from it lands megabytes below the
+//!   runner that every holder's pushes then wait behind. The first wave
+//!   ramps instead, as a transport's slow start: it opens
+//!   [`FIRST_WAVE_UNKNOWN`] copies and every [`RAMP_STEP`] doubles them
+//!   while the links' latest excess stays under half [`RAMP_QUEUE`], or
+//!   adds one under it (HyStart++'s conservative growth). It holds while
+//!   pushes wait in the runner ([`RAMP_BUSY`]) or a copy has no subscribed
+//!   holder, and grows no further than the reading pays for (it over-reads
+//!   a load buffers hide, never under-reads one it saw). The requests its
+//!   copies don't cover wait up to [`PENDING_MAX`]. A queue past
+//!   [`RAMP_QUEUE`] for [`RAMP_OVER`] steps ends it at half the copies,
+//!   where doubling stops; once the budget is measured, or with a copy at
+//!   every neighbour, the window takes over.
+//!
 //!   From then on the window follows the pushes. Each check reads, per
 //!   holder, the shortest wait of the pushes written to it or dropped
 //!   because it cancelled them (they waited all the same) since the last
@@ -152,7 +169,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 
-use super::{DEADLINE_MARGIN, PRUNE_MISS_RATE, PRUNE_SILENT_MISSES, PushChannel, SHED_UTILIZATION};
+use super::{
+    DEADLINE_MARGIN, PRUNE_MISS_RATE, PRUNE_SILENT_MISSES, PushChannel, SATURATED_BUSY,
+    SHED_UTILIZATION,
+};
 use crate::codec::{Announce, AnnounceEntry, Stream};
 use crate::controller::RequestController;
 use crate::options::{SeedAllocation, SeedQos};
@@ -186,6 +206,24 @@ pub const WINDOW_PROBE: Duration = Duration::from_secs(10);
 pub const HOLDER_GRACE: Duration = Duration::from_secs(4);
 /// How far the budget must fall before it is lowered.
 pub const OVER_BUDGET: f64 = 0.1;
+/// Without a known capacity the first wave opens this many copies: before
+/// buffers below the runner fill, the meter reads many times the uplink.
+pub const FIRST_WAVE_UNKNOWN: usize = 2;
+/// The first wave's ramp steps this often.
+pub const RAMP_STEP: Duration = Duration::from_millis(250);
+/// The links' latest excess that shows a ramp step overshot ...
+pub const RAMP_QUEUE: Duration = Duration::from_millis(50);
+/// ... once it lasts this many steps in a row: one alone may be a
+/// retransmission's delay, and holds the ramp.
+pub const RAMP_OVER: u8 = 2;
+/// The ramp holds while pushes waited in the runner this share of the last
+/// 300 ms: a load the busy time sees.
+pub const RAMP_BUSY: f64 = 0.5;
+/// The ramp holds the requests its copies don't cover this long, inside
+/// the child's [`OPEN_TIMEOUT`](super::OPEN_TIMEOUT), before it declines
+/// them: a declined child doesn't ask again for its
+/// [`DECLINE_BACKOFF`](super::DECLINE_BACKOFF).
+pub const PENDING_MAX: Duration = Duration::from_millis(700);
 /// How much nearer (or a tenth, if more) a neighbour must be to displace
 /// a holder.
 pub const NEAR_MARGIN: Duration = Duration::from_millis(5);
@@ -578,6 +616,26 @@ pub(crate) struct Allocator {
     /// that sized them.
     first_wave: usize,
     first_wave_capacity: u64,
+    /// The first wave ramps: its capacity reading means nothing yet. Once it
+    /// has, the reading sizes no wave ([`Allocator::ramped`]).
+    ramping: bool,
+    ramped: bool,
+    /// Ramp steps in a row that read a queue below the runner.
+    over: u8,
+    next_step: Time,
+    /// STREAM_REQUESTs the ramp's copies don't cover yet, oldest first.
+    /// Bound: one per neighbour and stream.
+    pending: Vec<Pending>,
+}
+
+/// A STREAM_REQUEST held while the first wave ramps.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Pending {
+    pub(crate) peer: PeerKey,
+    pub(crate) stream: Stream,
+    pub(crate) b: Bin,
+    pub(crate) tail: Bin,
+    pub(crate) at: Time,
 }
 
 impl Allocator {
@@ -595,6 +653,11 @@ impl Allocator {
             stats: AllocCounters::default(),
             first_wave: 0,
             first_wave_capacity: 0,
+            ramping: false,
+            ramped: false,
+            over: 0,
+            next_step: Time::NIL,
+            pending: Vec::new(),
         }
     }
 
@@ -765,6 +828,167 @@ impl PeerSwarmScheduler {
             && self.s.push.as_ref().is_some_and(|p| p.pin.is_none())
     }
 
+    /// Whether `peer`'s request for `stream` waits for the first wave's
+    /// ramp rather than being declined now: the ramp's copies are taken
+    /// and `peer` holds none. It is then held.
+    pub(crate) fn defer_request(
+        &mut self,
+        peer: PeerKey,
+        stream: Stream,
+        b: Bin,
+        tail: Bin,
+        now: Time,
+    ) -> bool {
+        if !self.adaptive_seed() {
+            return false;
+        }
+        let holders = self.holders();
+        let free = self
+            .channels
+            .get(&peer)
+            .and_then(|c| c.push.as_ref())
+            .is_some_and(|pc| !pc.holder.holds && !pc.holder.barred(now));
+        let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {
+            return false;
+        };
+        if !a.ramping || !free || a.unconstrained || holders < a.copies {
+            return false;
+        }
+        if !a
+            .pending
+            .iter()
+            .any(|x| x.peer == peer && x.stream == stream)
+        {
+            a.pending.push(Pending {
+                peer,
+                stream,
+                b,
+                tail,
+                at: now,
+            });
+        }
+        true
+    }
+
+    /// The first wave's ramp: while the uplink keeps up, double the copies
+    /// every [`RAMP_STEP`]; it ends at the first sign it doesn't, once the
+    /// budget is measured, or with a copy for every neighbour.
+    pub(crate) fn ramp_first_wave(&mut self, now: Time) {
+        let neighbours = self
+            .channels
+            .values()
+            .filter(|c| c.handshake_received)
+            .count();
+        let carried = self.holders_subscribed();
+        let early = self.s.early_stream_rate(now);
+        let streams = usize::from(self.s.stream_count.max(1));
+        let Some(p) = self.s.push.as_mut() else {
+            return;
+        };
+        let upload = p.upload;
+        let Some(a) = p.alloc.as_mut() else {
+            return;
+        };
+        if !a.ramping || now < a.next_step {
+            return;
+        }
+        a.next_step = now + RAMP_STEP;
+        let delay = upload.latest_delay.unwrap_or(Duration::ZERO);
+        // A queue below the runner for two steps in a row shows the ramp
+        // overshot where the busy time can't see (one alone may be a
+        // retransmission's delay, which holds it): it ends at half, as the
+        // window's slow start, and past it the window grows a copy at a time.
+        if delay >= RAMP_QUEUE {
+            a.over = a.over.saturating_add(1);
+            if a.over < RAMP_OVER {
+                return;
+            }
+            a.ramping = false;
+            let copies = (a.window.copies / 2).max(FIRST_WAVE_UNKNOWN);
+            a.window.copies = copies;
+            a.window.ssthresh = copies;
+            a.window.since = now;
+            a.window.probe_at = now + WINDOW_PROBE;
+            a.copies = copies;
+            return;
+        }
+        a.over = 0;
+        // Measured, or a copy at every neighbour: the window takes over.
+        if a.measured || a.window.copies >= neighbours {
+            a.ramping = false;
+            return;
+        }
+        // Pushes waiting in the runner are load the busy time sees: hold
+        // until they clear. Answers waiting don't count: they yield to
+        // pushes, and waiting viewers pull while the ramp holds them.
+        if upload.push_busy_recent >= RAMP_BUSY {
+            return;
+        }
+        // It grows only while every copy is carried, as a congestion
+        // window only while it limits what's sent (RFC 7661): a copy with
+        // no subscription (free, or given to a neighbour still backing off
+        // a decline) carries no load for the queue or the busy time to
+        // read, and those neighbours may all ask later, at once.
+        if carried < a.window.copies {
+            return;
+        }
+        // The busy-time reading over-reads while buffers below the runner
+        // hide a load, and never under-reads one it saw: the copies it pays
+        // for bound the ramp.
+        let paid = match (upload.capacity(), early) {
+            (Some(cap), Some(rate)) => {
+                ((cap * ALLOC_UTILIZATION - upload.others).max(0.0) / rate) as usize / streams
+            }
+            _ => usize::MAX,
+        };
+        let copies = if delay < RAMP_QUEUE / 2 {
+            a.window.copies.saturating_mul(2)
+        } else {
+            a.window.copies.saturating_add(1)
+        }
+        .min(neighbours)
+        .min(paid.max(FIRST_WAVE_UNKNOWN));
+        if copies <= a.window.copies {
+            return;
+        }
+        a.window.copies = copies;
+        a.window.since = now;
+        a.copies = copies;
+        a.first_wave = a.first_wave.max(copies);
+    }
+
+    /// The held requests to answer now: all once the ramp ended, those
+    /// past [`PENDING_MAX`], and, oldest first, as many as the copies cover.
+    pub(crate) fn due_requests(&mut self, now: Time) -> Vec<Pending> {
+        let holders = self.holders();
+        let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {
+            return Vec::new();
+        };
+        if a.pending.is_empty() {
+            return Vec::new();
+        }
+        if !a.ramping {
+            return std::mem::take(&mut a.pending);
+        }
+        let mut room = a.copies.saturating_sub(holders);
+        let mut due = Vec::new();
+        let mut seen: Vec<PeerKey> = Vec::new();
+        a.pending.retain(|x| {
+            let new_holder = !seen.contains(&x.peer);
+            if now - x.at >= PENDING_MAX || !new_holder || room > 0 {
+                if new_holder && now - x.at < PENDING_MAX {
+                    room -= 1;
+                    seen.push(x.peer);
+                }
+                due.push(*x);
+                false
+            } else {
+                true
+            }
+        });
+        due
+    }
+
     /// An adaptive seed's admission of `peer`'s new request for a stream.
     pub(crate) fn grant(&mut self, peer: PeerKey, now: Time) -> Grant {
         let holders = self.holders();
@@ -805,12 +1029,28 @@ impl PeerSwarmScheduler {
         let a = p.alloc.get_or_insert_with(|| Allocator::new(now));
         // The first wave's size, from the early measurements.
         if !a.measured
+            && !a.ramped
             && a.window.ssthresh == usize::MAX
             && let (Some(cap), Some(rate)) = (cap, early)
         {
             let paid =
                 ((cap * ALLOC_UTILIZATION - p.upload.others).max(0.0) / rate) as usize / streams;
-            let w = paid.min(neighbours).max(a.window.copies);
+            // The reading holds only once the uplink was busy: without a
+            // known capacity, and before, the wave ramps.
+            let unknown = p.upload.hint.is_none() && p.upload.busy < SATURATED_BUSY;
+            if unknown && !a.ramping && a.first_wave == 0 {
+                a.ramping = true;
+                a.ramped = true;
+                a.next_step = now + RAMP_STEP;
+            }
+            let w = paid
+                .min(neighbours)
+                .min(if a.ramping {
+                    FIRST_WAVE_UNKNOWN
+                } else {
+                    usize::MAX
+                })
+                .max(a.window.copies);
             if w > a.window.copies {
                 a.window.copies = w;
                 a.window.since = now;
@@ -965,6 +1205,21 @@ impl PeerSwarmScheduler {
             }
         }
         s
+    }
+
+    /// The neighbours holding a copy and subscribed to a stream of it.
+    fn holders_subscribed(&self) -> usize {
+        self.channels
+            .iter()
+            .filter(|(peer, c)| {
+                c.push.as_ref().is_some_and(|pc| pc.holder.holds)
+                    && self
+                        .s
+                        .streams
+                        .iter()
+                        .any(|st| st.subscribers.iter().any(|x| x.channel == **peer))
+            })
+            .count()
     }
 
     /// The neighbours holding a copy.

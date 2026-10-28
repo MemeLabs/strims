@@ -1046,7 +1046,7 @@ fn the_meter_takes_the_links_excesses() {
         peers.insert(p);
     }
     let mut m = UploadMeter::new();
-    m.update_queue_delay(&peers);
+    m.update_queue_delay(&peers, t(1000));
     // The second least of three.
     assert_eq!(m.queue_delay, Some(Duration::from_millis(40)));
 }

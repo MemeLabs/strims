@@ -1599,6 +1599,154 @@ fn ask(f: &mut Fixture, q: &mut MockQueue, p: PeerKey, s: u16, t: Time) -> bool 
     subscribed(f, p, usize::from(s))
 }
 
+/// The upload a first wave's ramp step reads: no known capacity, a rate
+/// whose reading pays for every neighbour's copy, busy `busy` of the last
+/// 300 ms, the links' latest excess `delay_ms`.
+fn ramp_upload(f: &mut Fixture, busy: f64, delay_ms: i64) {
+    f.sched.set_upload(push::UploadInfo {
+        rate: 1_000_000,
+        busy_recent: busy,
+        push_busy_recent: busy,
+        latest_delay: Some(Duration::from_millis(delay_ms)),
+        ..Default::default()
+    });
+}
+
+/// Whether `p` was sent a STREAM_CLOSE for `stream`.
+fn declined(f: &mut Fixture, p: PeerKey, stream: u16, t: Time) -> bool {
+    next_messages(f, p, t)
+        .iter()
+        .any(|m| matches!(m, Message::StreamClose(c) if c.stream == stream))
+}
+
+#[test]
+fn without_a_known_capacity_the_first_wave_ramps_and_holds_the_rest() {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    let step = push::seed::RAMP_STEP;
+    publish(&mut f, now() - Duration::SECOND, now());
+    // The meter reads 20 times what went out (nothing waited in the runner):
+    // a reading that sizes nothing yet.
+    ramp_upload(&mut f, 0.0, 0);
+    for &p in &peers {
+        ask(&mut f, &mut q, p, 0, now());
+    }
+    // Two copies, to the first two that asked; the rest wait, undeclined.
+    assert_eq!(holders(&f), peers[..2].to_vec());
+    for &p in &peers[2..] {
+        assert!(!subscribed(&f, p, 0) && !declined(&mut f, p, 0, now()));
+    }
+    // The uplink keeps up: twice the copies a step later, to the next to
+    // have asked.
+    let mut t = now() + step;
+    f.sched.run_push(t, &mut q);
+    assert_eq!(holders(&f), peers[..4].to_vec());
+    // A queue forms below the runner: a copy more.
+    ramp_upload(&mut f, 0.0, 30);
+    t += step;
+    f.sched.run_push(t, &mut q);
+    assert_eq!(holders(&f), peers[..5].to_vec());
+    // Past the ramp's queue: it holds a step (a lone delayed echo may be a
+    // retransmission), and on the second stops at half; the one still
+    // waiting was declined at PENDING_MAX.
+    let window = |f: &Fixture, t| f.sched.seed_allocation(t).unwrap().window;
+    ramp_upload(&mut f, 0.0, 60);
+    t += step;
+    f.sched.run_push(t, &mut q);
+    assert_eq!(window(&f, t), 5);
+    t += step;
+    f.sched.run_push(t, &mut q);
+    assert_eq!(window(&f, t), 2);
+    assert!(declined(&mut f, peers[5], 0, t));
+    assert!(!subscribed(&f, peers[5], 0));
+}
+
+#[test]
+fn the_ramp_grows_only_while_its_copies_are_held() {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    let step = push::seed::RAMP_STEP;
+    let window = |f: &Fixture, t| f.sched.seed_allocation(t).unwrap().window;
+    publish(&mut f, now() - Duration::SECOND, now());
+    ramp_upload(&mut f, 0.0, 0);
+    for &p in &peers[..2] {
+        ask(&mut f, &mut q, p, 0, now());
+    }
+    // Both copies held: it doubles. Then two of four are held, and it
+    // holds however idle the uplink, until the rest ask.
+    let mut t = now() + step;
+    f.sched.run_push(t, &mut q);
+    assert_eq!(window(&f, t), 4);
+    t += step;
+    f.sched.run_push(t, &mut q);
+    assert_eq!(window(&f, t), 4);
+    for &p in &peers[2..] {
+        ask(&mut f, &mut q, p, 0, t);
+    }
+    assert_eq!(holders(&f), peers[..4].to_vec());
+    t += step;
+    f.sched.run_push(t, &mut q);
+    assert_eq!(holders(&f), peers.to_vec());
+}
+
+#[test]
+fn the_ramp_stops_at_the_copies_the_reading_pays_for() {
+    // The busy-time reading pays for three copies (150 KB/s at no busy
+    // time reads 3 MB/s): with no queue to stop it, the ramp stops there
+    // rather than doubling to four.
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    let step = push::seed::RAMP_STEP;
+    let window = |f: &Fixture, t| f.sched.seed_allocation(t).unwrap().window;
+    publish(&mut f, now() - Duration::SECOND, now());
+    f.sched.set_upload(push::UploadInfo {
+        rate: 150_000,
+        latest_delay: Some(Duration::ZERO),
+        ..Default::default()
+    });
+    for &p in &peers {
+        ask(&mut f, &mut q, p, 0, now());
+    }
+    let mut t = now();
+    for _ in 0..4 {
+        publish(&mut f, t, t + step);
+        t += step;
+        f.sched.run_push(t, &mut q);
+    }
+    assert_eq!(window(&f, t), 3);
+}
+
+#[test]
+fn a_held_request_is_declined_inside_the_childs_open_timeout() {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    publish(&mut f, now() - Duration::SECOND, now());
+    ramp_upload(&mut f, 0.0, 30);
+    for &p in &peers {
+        ask(&mut f, &mut q, p, 0, now());
+    }
+    // A copy more per step, as a queue forms; at PENDING_MAX the requests
+    // the copies didn't reach are declined, before the child gives up.
+    let t = now() + push::seed::PENDING_MAX;
+    assert!(t < now() + push::OPEN_TIMEOUT);
+    f.sched.run_push(t, &mut q);
+    assert_eq!(holders(&f), peers[..3].to_vec());
+    for &p in &peers[3..] {
+        assert!(declined(&mut f, p, 0, t));
+    }
+}
+
+#[test]
+fn a_known_capacity_sizes_the_first_wave_at_once() {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    publish(&mut f, now() - Duration::SECOND, now());
+    f.sched.set_upload(push::UploadInfo {
+        rate: 100_000,
+        hint: Some(10_000_000),
+        ..Default::default()
+    });
+    for &p in &peers {
+        ask(&mut f, &mut q, p, 0, now());
+    }
+    assert_eq!(holders(&f), peers.to_vec());
+}
+
 #[test]
 fn an_adaptive_seed_pushes_whole_copies_to_its_nearest() {
     let (mut f, mut q, peers) = adaptive_seed_with_rtts();

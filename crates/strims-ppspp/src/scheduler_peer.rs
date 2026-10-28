@@ -1869,9 +1869,27 @@ impl PeerSwarmScheduler {
         if b >= MAX_BIN {
             return Ok(false);
         }
+        if self.defer_request(peer, stream, b, tail, now) {
+            return Ok(true);
+        }
+        self.answer_stream_request(peer, stream, b, tail, now, q);
+        Ok(true)
+    }
+
+    /// Admits or declines `peer`'s STREAM_REQUEST, opening the stream if
+    /// admitted.
+    fn answer_stream_request(
+        &mut self,
+        peer: PeerKey,
+        stream: Stream,
+        b: Bin,
+        tail: Bin,
+        now: Time,
+        q: &mut impl PeerTaskQueue,
+    ) {
         let (ok, extra) = self.push_admit(peer, stream, now, q);
         if !ok {
-            return Ok(true);
+            return;
         }
         if let Some((s, c)) = self.channel(peer) {
             c.add_stream_open(s, stream, b, tail, extra, now, q);
@@ -1879,7 +1897,19 @@ impl PeerSwarmScheduler {
                 q.enqueue_now(peer, s.key);
             }
         }
-        Ok(true)
+    }
+
+    /// Answers the STREAM_REQUESTs the first wave's ramp held that are due
+    /// ([`push::seed::PENDING_MAX`]).
+    pub(crate) fn answer_deferred(&mut self, now: Time, q: &mut impl PeerTaskQueue) {
+        for x in self.due_requests(now) {
+            if self
+                .channel(x.peer)
+                .is_some_and(|(_, c)| c.handshake_received)
+            {
+                self.answer_stream_request(x.peer, x.stream, x.b, x.tail, now, q);
+            }
+        }
     }
 
     /// The peer unsubscribes from `stream`.
