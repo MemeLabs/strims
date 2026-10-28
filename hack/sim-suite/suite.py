@@ -12,6 +12,9 @@ working tree's sims against the base's, cell by cell, paired by seed.
                                     [--only CELL,...]
   hack/sim-suite/suite.py race --flags A,B,... [--knob SIM_EXP,STRIMS_SIM_EXP]
                                [--base REF] [--tier ...] [--keep N]
+  hack/sim-suite/suite.py farm --sets "A,B;C" [--knob SIM_EXP,STRIMS_SIM_EXP]
+                               [--ref REF] [--tier ...] [--seeds N]
+                               [--first-seed N] [--farm-args ARGS] [--no-run]
 
 `run` builds the ppspp sim and strims-sim's scenarios from the working
 tree (the checkout this script is in, changes and all) and from `--base`
@@ -67,6 +70,17 @@ lag p99 ratio.
 against N+1..2N, paired in order): what moves there is seed noise, an
 upper bound on what a change that only perturbs the timeline shows, and
 a metric that moves in it needs a wider tie band.
+
+`farm` confirms flag sets on the sim farm (the main checkout's
+hack/sim-farm, which keeps its config and state, also when this script
+runs in a worktree). The farm builds commits, never the working tree, so
+it runs one commit (`--ref`, default HEAD) with a matrix per cell whose
+axes are the seeds (`--seeds` of them from `--first-seed`, every cell
+alike) and the knob (the first of `--knob` for the ppspp sim, the second
+for strims-sim) at `off` and at each set. Each set is scored against
+`off`, which stands for the base: with its flags off the commit must
+reproduce the base's traces. It prints each set's collapses and lag p99
+by cell, then its scorecard.
 """
 
 import argparse
@@ -79,6 +93,7 @@ import json
 import math
 import os
 import random
+import shlex
 import subprocess
 import sys
 import threading
@@ -720,6 +735,92 @@ def run_cells(cells, runs, slots, mem_gib):
     return rows, failures
 
 
+# --- farm -------------------------------------------------------------------
+
+def farm_root():
+    """The main checkout, whose hack/sim-farm keeps the farm's config and
+    state."""
+    return Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent
+
+
+def peak_gib():
+    """Each cell's peak memory over every kept row, in GiB."""
+    peaks = {}
+    for path in (WORK / "rows").glob("*.jsonl"):
+        for rec in load_rows(path).values():
+            m = rec["row"].get("_rss_mb")
+            if m:
+                peaks[rec["cell"]] = max(peaks.get(rec["cell"], 0), m / 1024)
+    return peaks
+
+
+def farm(a, cells):
+    sha = git("rev-parse", a.ref)
+    values = ["off"] + [x.strip() for x in a.sets.split(";") if x.strip()]
+    knob = dict(zip((PPSPP, SIM), (k.strip() for k in a.knob.split(","))))
+    seeds = [str(s) for s in range(a.first_seed, a.first_seed + a.seeds)]
+    # Matrix names are the run's EC2 tag, joined: keep them short, and
+    # name the inputs so a rerun adopts the run.
+    key = json.dumps([sha, values, knob, seeds, [c["name"] for c in cells]])
+    name = "s" + hashlib.sha1(key.encode()).hexdigest()[:5]
+    peaks = peak_gib()
+    out = WORK / "farm"
+    out.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for i, c in enumerate(cells):
+        package, target, _ = BINARIES[c["sim"]]
+        seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
+        mem = c["mem_gib"]
+        if c["name"] in peaks:
+            mem = min(mem, math.ceil(1.25 * peaks[c["name"]] * 2) / 2)
+        canary = {"SIM_SECS": "2"} if c["sim"] == PPSPP else {"STRIMS_SIM_STREAM_SECS": "5"}
+        q = json.dumps
+        text = "\n".join([
+            f"# sim-suite farm {name}: {c['name']}, {c['why']}",
+            f"package = {q(package)}",
+            f"target = {q(target)}",
+            f"test = {q(c['test'])}",
+            f"slot_mem_gib = {mem}",
+            "[arms]",
+            f"x = {q(sha)}",
+            "[env]",
+            *(f"{k} = {q(v)}" for k, v in sorted(c["env"].items())),
+            "[axes]",
+            f"{knob[c['sim']]} = {q(values)}",
+            f"{seed_key} = {q(seeds)}",
+            "[canary]",
+            *(f"{k} = {q(v)}" for k, v in canary.items()),
+            "",
+        ])
+        path = out / f"{name}-{i:02d}.toml"
+        path.write_text(text)
+        paths.append(path)
+    farm_py = farm_root() / "hack" / "sim-farm" / "farm.py"
+    if not a.no_run:
+        print(f"farm run {name}: {len(cells)} matrices, {len(values)} sets x {len(seeds)} seeds", file=sys.stderr)
+        subprocess.run([sys.executable, str(farm_py), "run", *map(str, paths), *shlex.split(a.farm_args)])
+    rows = {v: {} for v in values}
+    for i, c in enumerate(cells):
+        seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
+        state = farm_root() / "target" / "sim-farm" / f"{name}-{i:02d}" / "rows.jsonl"
+        for rec in load_rows(state).values() if state.exists() else ():
+            v = rec["env"].get(knob[c["sim"]])
+            if v in rows:
+                row = {**rec["row"], "_rss_mb": rec.get("max_rss_mb"), "_wall_s": rec.get("wall_s")}
+                rows[v][(c["name"], int(rec["env"][seed_key]))] = row
+    for v in values[1:]:
+        sc = arm_score(cells, rows["off"], rows[v])
+        p99 = "-" if sc["p99"] is None else f"x{sc['p99']:.3f}"
+        print(f"\n{v} against off at {sha[:8]}: collapsed {sc['collapsed']} ({sc['base_collapsed']}), "
+              f"p99 {p99}, guardrails {'; '.join(sc['broken']) or 'ok'}")
+        for cname, ka, kb, n, e in sc["cells"]:
+            p = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
+            print(f"   {cname:22} collapsed {ka:>3} -> {kb:>3} of {n:<3} Fisher p={fisher(ka, n, kb, n):.2f}  lag p99 {p}")
+    for v in values[1:]:
+        print()
+        scorecard(cells, rows["off"], rows[v], f"{sha[:8]} off", f"{sha[:8]} {v}", a.all)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -754,12 +855,27 @@ def main():
     rc.add_argument("--only", help="cells, comma-separated")
     rc.add_argument("--rebuild", action="store_true")
     rc.add_argument("--keep", type=int, default=3, help="arms the confirmation keeps")
+    fc = sub.add_parser("farm")
+    fc.add_argument("--sets", required=True, help="flag sets, ;-separated, each comma-separated")
+    fc.add_argument("--knob", default="SIM_EXP,STRIMS_SIM_EXP",
+                    help="the knobs that take a set: the ppspp sim's, then strims-sim's")
+    fc.add_argument("--ref", default="HEAD", help="the commit the farm builds")
+    fc.add_argument("--tier", default="peers", choices=sorted(TIERS))
+    fc.add_argument("--seeds", type=int, default=32, help="seeds per cell, every cell alike")
+    fc.add_argument("--first-seed", type=int, default=2001)
+    fc.add_argument("--only", help="cells, comma-separated")
+    fc.add_argument("--all", action="store_true", help="every metric, ties too")
+    fc.add_argument("--farm-args", default="", help="more arguments for farm.py run")
+    fc.add_argument("--no-run", action="store_true", help="report the rows the farm has")
     a = ap.parse_args()
 
     cells = TIERS[a.tier]
     if getattr(a, "only", None):
         want = set(a.only.split(","))
         cells = [c for c in cells if c["name"] in want]
+    if a.cmd == "farm":
+        farm(a, cells)
+        return
     count = lambda c: c["seeds"] or a.seeds
     seeds = lambda c: list(range(1, count(c) + 1))
     sha = git("rev-parse", a.base)
