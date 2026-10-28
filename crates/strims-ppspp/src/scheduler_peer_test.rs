@@ -2298,6 +2298,50 @@ fn a_missed_push_is_pulled_from_the_others_first() {
     assert_eq!(requests(&mut f, deadline + REQUEST_BACKOFF), 4);
 }
 
+/// A channel leaves a chunk to one expected to deliver it sooner: a peer
+/// that answers quickly and, by its announcement lag, will announce the
+/// chunk soon. Once that announcement is overdue, the channel asks.
+#[test]
+fn requests_go_to_whoever_is_expected_to_deliver_first() {
+    let ms = Duration::from_millis;
+    let mut f = fixture(hybrid(1));
+    let mut q = MockQueue::default();
+    let slow = add_ready(&mut f, &mut q, 0);
+    let fast = add_ready(&mut f, &mut q, 1);
+    f.sched.s.first_chunk_set = true;
+    let t = now();
+    // Both announce chunk 0, `fast` 10 ms later: its announcement lag.
+    f.sched.handle_have(slow, Bin(0), t);
+    f.sched.handle_have(fast, Bin(0), t + ms(10));
+    // `fast` answers in 20 ms; `slow` is untimed, so it expects its
+    // request timeout.
+    f.sched
+        .channels
+        .get_mut(&fast)
+        .unwrap()
+        .answer_time
+        .sample(ms(20));
+    // `fast`'s request round leaves window room.
+    let t1 = t + ms(20);
+    assert_eq!(requests_at(&mut f, fast, t1), vec![Bin(0)]);
+
+    // Chunks only `slow` announced, of chunk 0's signature unit, so first
+    // seen at `t`: `fast` is expected to announce them 10 ms after that and
+    // deliver them 20 ms later.
+    f.sched.handle_have(slow, Bin::new(2, 1), t1);
+    assert_eq!(f.sched.s.bin_time(Bin(8)), t);
+    assert!(requests_at(&mut f, slow, t1).is_empty());
+    // Until `fast`'s horizon (its lag's peak or mean plus two deviations,
+    // 20 ms) and the slack are past, while `fast` has room; then `slow`
+    // asks.
+    let horizon = t + ms(20) + PREDICT_SLACK;
+    assert!(requests_at(&mut f, fast, horizon).is_empty());
+    assert!(requests_at(&mut f, slow, horizon).is_empty());
+    let late = horizon + ms(1);
+    assert!(requests_at(&mut f, fast, late).is_empty());
+    assert_eq!(requests_at(&mut f, slow, late).len(), 4);
+}
+
 /// Answers queue below pushes, a hybrid swarm's apart for the answer gate
 /// ([`crate::answer_gate`]); a CANCEL takes them from the same queue.
 #[test]

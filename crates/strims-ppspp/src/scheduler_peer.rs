@@ -40,6 +40,10 @@
 //!   peer while this one never answered leaves the window's flight at its
 //!   timeout without a loss signal; an answer unsets its request time, so a
 //!   second copy doesn't count again.
+//! - **Routed by expected delivery.** In [`PushMode::Hybrid`], a channel
+//!   leaves a chunk to one expected to deliver it sooner, by their peers'
+//!   measured answer times, its peer's announcement predicted from its
+//!   announcement lag if it hasn't come ([`crate::route`]).
 //!
 //! In [`PushMode::EagerHave`] and [`PushMode::Hybrid`], HAVEs go out as soon
 //! as chunks are stored and requests as soon as a HAVE makes chunks
@@ -86,11 +90,14 @@
 //! - STREAM_REQUEST walks only the stream's own bins, and none on a repeat;
 //!   STREAM_CLOSE walks only the bins left to sources, from the store's
 //!   window;
-//! - invalid data releases its bin only inside our window.
+//! - invalid data releases its bin only inside our window;
+//! - routing keeps one route per channel, with one lag per stream.
 //!
 //! [`Ledbat::set_min_cwnd`]: crate::ledbat::Ledbat::set_min_cwnd
 //! [`Runner::request_stream`]: crate::Runner::request_stream
 //! [`peer_bin_ok`]: crate::peer_bin_ok
+
+use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
 use slotmap::Key;
@@ -109,6 +116,7 @@ use crate::codec::{
 use crate::controller::{ChannelController, RequestController, RequestControllerKind};
 use crate::integrity::ProtectionMethod;
 use crate::options::{DeliveryMode, PushMode, SchedulingMethod, SeedPolicy};
+use crate::route::{AnswerTime, PREDICT_SLACK, ROOM_FRESH, ROUTE_MARGIN, Route};
 use crate::runner::{PeerKey, SwarmKey, TICK_INTERVAL};
 use crate::scheduler::{PeerPriority, PeerTaskQueue, stream_bin_offset};
 use crate::store;
@@ -298,6 +306,9 @@ pub(crate) struct SwarmState {
     /// The chunks written to anyone. Bound: pruned behind the store's
     /// window at GC.
     sent_bins: Map,
+    /// Per channel, what routing predicts its deliveries from
+    /// ([`crate::route`]). Bound: one per channel.
+    route: BTreeMap<PeerKey, Route>,
     distinct_chunks_sent: u64,
 
     /// Bins requested from someone or had. Bound: filled before the store's
@@ -520,6 +531,8 @@ pub(crate) struct PeerChannelScheduler {
     /// When we requested each bin. Bound: requested bins, pruned behind the
     /// store's read position.
     request_times: TimeSet,
+    /// How long the peer takes to answer our requests.
+    answer_time: AnswerTime,
 
     /// Bins to send HAVEs for. Bound: our window.
     have_bins: Map,
@@ -574,6 +587,7 @@ impl PeerChannelScheduler {
             id: (1..=MAX_PEER_ID).contains(&id.len()).then(|| id.to_vec()),
             choked: false,
             request_times: TimeSet::default(),
+            answer_time: AnswerTime::default(),
             have_bins: s.have_bins.clone(),
             cancel_bins: Map::new(),
             request_bins: BinQueue::default(),
@@ -950,7 +964,9 @@ impl PeerChannelScheduler {
 
     /// Writes requests: as many as the request window, the frame and
     /// [`max_pending_requests`] allow, from [`Self::request_floor`] on, by
-    /// request group.
+    /// request group, leaving the chunks another channel is expected to
+    /// deliver sooner to it ([`crate::route`]). Updates the channel's
+    /// [`Route`].
     fn write1(
         &mut self,
         s: &mut SwarmState,
@@ -958,6 +974,9 @@ impl PeerChannelScheduler {
         cw: &mut MeteredWriter<'_>,
     ) -> Result<(), codec::Error> {
         if self.choked {
+            if let Some(r) = s.route.get_mut(&self.peer) {
+                r.room = None;
+            }
             return Ok(());
         }
 
@@ -986,6 +1005,9 @@ impl PeerChannelScheduler {
             .min(room)
             .min(fit);
         if n == 0 {
+            if let Some(r) = s.route.get_mut(&self.peer) {
+                r.room = None;
+            }
             return Ok(());
         }
         if now >= self.backoff_until && !self.backoff_bins.is_empty() {
@@ -1000,11 +1022,38 @@ impl PeerChannelScheduler {
                 .iterate_empty_at(self.peer_have_bins.root_bin()),
             self.peer_have_bins.iterate_filled(),
         );
+        let mine = self
+            .answer_time
+            .mean()
+            .unwrap_or_else(|| self.controller.request_timeout());
+        let peer = self.peer;
+        // A channel expected to deliver sooner, with window room, takes
+        // the chunk, its peer's announcement predicted if it hasn't come.
+        let yields = |b: Bin| {
+            let stream = usize::from(s.bin_stream(b));
+            let first = match s.bin_time(b) {
+                Time::EPOCH => now,
+                t => t,
+            };
+            let own = now + mine;
+            s.route.iter().any(|(&who, r)| {
+                who != peer
+                    && r.room.is_some_and(|t| now - t <= ROOM_FRESH)
+                    && r.lags
+                        .get(stream)
+                        .copied()
+                        .flatten()
+                        .is_some_and(|(mean, horizon)| {
+                            now <= first + horizon.min(push::DEADLINE_MAX) + PREDICT_SLACK
+                                && (first + mean).max(now) + r.answer + ROUTE_MARGIN < own
+                        })
+            })
+        };
         let mut next = it.next_after(min);
         'walk: while let Some(x) = next {
             let (mut b, br) = x.base();
             while b <= br {
-                if !self.backoff_bins.filled_at(b) {
+                if !self.backoff_bins.filled_at(b) && !yields(b) {
                     let v = &self.candidate_bins;
                     let open = v.len() < n
                         || v.get(n - 1)
@@ -1047,6 +1096,13 @@ impl PeerChannelScheduler {
             self.controller
                 .on_sent(now, (b.base_length() as i64).saturating_mul(size));
             requested += 1;
+        }
+        let r = s.route.entry(self.peer).or_default();
+        r.answer = mine;
+        r.room = ((requested as usize) < n).then_some(now);
+        r.lags.clear();
+        if let Some(pc) = self.push.as_ref() {
+            pc.fresh_lags(now, &mut r.lags);
         }
         if requested > 0 {
             let candidates = self.candidate_bins.len() as u64;
@@ -1161,6 +1217,7 @@ impl PeerSwarmScheduler {
                 push_wait: WaitHistogram::default(),
                 answer_wait: WaitHistogram::default(),
                 sent_bins: Map::new(),
+                route: BTreeMap::new(),
                 distinct_chunks_sent: 0,
                 streams: vec![PeerSchedulerStream::default(); usize::from(stream_count)],
                 stream_sources: 0,
@@ -1391,6 +1448,7 @@ impl PeerSwarmScheduler {
         q: &mut impl PeerTaskQueue,
     ) {
         self.tap_holder_closed(peer);
+        self.s.route.remove(&peer);
         let Some(c) = self.channels.get_mut(&peer) else {
             return;
         };
@@ -1577,6 +1635,7 @@ impl PeerSwarmScheduler {
         c.controller.on_delivered(now, size);
         if let Some((_, ts)) = c.request_times.get(b) {
             c.controller.on_answered(now, size, ts, t);
+            c.answer_time.sample(now - ts);
             // Answered: a second copy doesn't ack again, and the timeout
             // doesn't settle it.
             c.request_times.unset(b);
@@ -1598,6 +1657,7 @@ impl PeerSwarmScheduler {
         c.controller.on_delivered(now, size);
         if let Some((_, ts)) = c.request_times.get(b) {
             c.controller.on_answered(now, size, ts, t);
+            c.answer_time.sample(now - ts);
             c.request_times.unset(b);
         }
     }

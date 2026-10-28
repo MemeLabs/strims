@@ -208,6 +208,9 @@ pub const DEADLINE_MAX: Duration = Duration::SECOND;
 pub const DEADLINE_INITIAL: Duration = Duration::from_millis(300);
 /// Deadlines are rounded up to this, so a burst of chunks shares a timer.
 pub const DEADLINE_GRANULARITY: Duration = Duration::from_millis(10);
+/// A peer's announcement lag stays plausible this many mean deviations
+/// past its mean ([`crate::route`]).
+pub const HORIZON_DEVS: f64 = 2.0;
 /// A parent that delivered nothing for this long while at least
 /// [`PRUNE_SILENT_MISSES`] chunks missed is pruned (dead, withholding, or
 /// cut off).
@@ -349,6 +352,12 @@ impl LagEwma {
 
     fn mean(&self) -> Duration {
         Duration::from_nanos(self.mean as i64)
+    }
+
+    /// How late a sample still fits the estimate: the decaying peak, or
+    /// the mean plus [`HORIZON_DEVS`] deviations, whichever is later.
+    fn horizon(&self) -> Duration {
+        Duration::from_nanos(self.peak.max(self.mean + HORIZON_DEVS * self.dev) as i64)
     }
 
     /// How long a push from this parent may take.
@@ -548,6 +557,16 @@ impl PushChannel {
 
     fn tally(&mut self, stream: Stream) -> Option<&mut Tally> {
         self.tally.get_mut(usize::from(stream))
+    }
+
+    /// Appends to `lags` the peer's announcement lag per stream, where
+    /// fresh: its mean, and how late it still fits.
+    pub(crate) fn fresh_lags(&self, now: Time, lags: &mut Vec<Option<(Duration, Duration)>>) {
+        lags.extend(
+            self.have_lag
+                .iter()
+                .map(|l| l.fresh(now).then(|| (l.mean(), l.horizon()))),
+        );
     }
 
     fn back_off(&mut self, stream: Stream, until: Time) {

@@ -30,6 +30,8 @@
 //!   or [`bbr::BbrLike`], selected by [`SwarmOptions::request_controller`].
 //! - [`answer_gate`]: a hybrid node's answers to requests from the uplink
 //!   its pushes leave.
+//! - [`route`]: a hybrid node's requests to whoever is expected to deliver
+//!   first.
 //!
 //! # Driving the runner
 //!
@@ -84,6 +86,7 @@ mod peer;
 mod peer_data_queue;
 mod peer_writer_queue;
 mod queue_delay;
+pub mod route;
 mod runner;
 mod scheduler;
 pub mod scheduler_peer;

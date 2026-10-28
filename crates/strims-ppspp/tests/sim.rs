@@ -5019,7 +5019,12 @@ fn sim_greedy_viewers_serve_nothing() {
 }
 
 /// Grabbers serve like honest viewers, ask the seed for more than any
-/// honest viewer does, and never cancel.
+/// honest viewer does, and never cancel. The seed here pushes nearly
+/// every chunk, so only the first few are pulled, from whoever is expected
+/// to deliver them first ([`strims_ppspp::route`]): not every viewer is
+/// asked for any, honest or grabber (a grabber's own grabs load its link).
+/// So each grabber answers every request an honest node made of it, and
+/// the grabbers serve some.
 #[test]
 fn sim_grabbers_ask_everyone_and_never_cancel() {
     let mut cfg = Scenario::FullMesh.config(PushMode::Hybrid, 4);
@@ -5027,23 +5032,21 @@ fn sim_grabbers_ask_everyone_and_never_cancel() {
     let mut sim = Sim::new(cfg);
     let r = sim.run();
     check_delivery(&r, 4 * MUNRO as u64);
-    // Per grabber: data it sent honest nodes; the most requests the seed
-    // had from a grabber, and from an honest viewer.
-    let mut served = BTreeMap::new();
+    // The data grabbers sent honest nodes; the most requests the seed had
+    // from a grabber, and from an honest viewer.
+    let mut served = 0;
     let (mut grabbed, mut honest) = (0, 0);
     for (k, n) in sim.nodes.iter().enumerate() {
         if n.role == Role::Greedy(Greed::Grabber) {
             continue;
         }
         for (&remote, &l) in &n.links {
-            let i = n
-                .runner
-                .channel_stats(sim.links[l].peer, n.swarm)
-                .unwrap()
-                .inbound;
+            let cs = n.runner.channel_stats(sim.links[l].peer, n.swarm).unwrap();
+            let i = cs.inbound;
             if sim.nodes[remote].role == Role::Greedy(Greed::Grabber) {
                 assert_eq!((i.cancel, i.stream_cancel), (0, 0), "{remote}: {i:?}");
-                *served.entry(remote).or_default() += i.data;
+                assert!(i.data >= cs.outbound.request, "{k}<-{remote}: {cs:?}");
+                served += i.data;
                 if k == 0 {
                     grabbed = i.request.max(grabbed);
                 }
@@ -5052,7 +5055,7 @@ fn sim_grabbers_ask_everyone_and_never_cancel() {
             }
         }
     }
-    assert!(served.values().all(|&d: &u64| d > 0), "{served:?}");
+    assert!(served > 0);
     assert!(grabbed > honest, "{grabbed} {honest}");
 }
 
