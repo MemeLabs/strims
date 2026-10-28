@@ -21,10 +21,18 @@
 //!   chunk, the chunks of streams with an open parent that we neither have
 //!   nor requested, from the parent's start on, are marked requested (so
 //!   pull leaves them alone) with a deadline. A chunk whose deadline passes
-//!   goes back to pull at once, counts as a miss against the parent, and is
-//!   cancelled at the parent (CANCEL), which then drops its push if it
-//!   hasn't sent it. Pull leaves it to the other channels for
-//!   `REQUEST_BACKOFF`: the parent's answer would queue behind its pushes.
+//!   goes back to pull once pull is expected to win (below), counts as a
+//!   miss against the parent, and is cancelled at the parent (CANCEL),
+//!   which then drops its push if it hasn't sent it. Pull leaves it to the
+//!   other channels for `REQUEST_BACKOFF`: the parent's answer would queue
+//!   behind its pushes.
+//! - **Late pushes.** The parent may still push a chunk until
+//!   [`DEADLINE_MAX`] past its first announcement, and a repair that comes
+//!   after the push only adds load. So while no other holder is expected
+//!   to answer before then (by its mean answer time,
+//!   [`crate::route::AnswerTime`]; a holder not yet timed counts as quick),
+//!   a chunk past its deadline stays expected, looked at again every
+//!   [`RELEASE_RECHECK`].
 //! - **Deadlines** run from when anyone first announced the chunk, and come
 //!   from the parent's push delay (see [`DEADLINE_K`] to
 //!   [`DEADLINE_GRANULARITY`]). Pushes leave in munro bursts, so the delay
@@ -167,6 +175,7 @@ use crate::codec::{
     Stream,
 };
 use crate::options::PushMode;
+use crate::route::ROUTE_MARGIN;
 use crate::runner::PeerKey;
 use crate::scheduler::PeerTaskQueue;
 use crate::tap::{
@@ -208,6 +217,10 @@ pub const DEADLINE_MAX: Duration = Duration::SECOND;
 pub const DEADLINE_INITIAL: Duration = Duration::from_millis(300);
 /// Deadlines are rounded up to this, so a burst of chunks shares a timer.
 pub const DEADLINE_GRANULARITY: Duration = Duration::from_millis(10);
+/// A chunk past its deadline that no other holder is expected to deliver
+/// before the parent's last chance ([`DEADLINE_MAX`]) looks for one again
+/// this often.
+pub const RELEASE_RECHECK: Duration = Duration::from_millis(100);
 /// A peer's announcement lag stays plausible this many mean deviations
 /// past its mean ([`crate::route`]).
 pub const HORIZON_DEVS: f64 = 2.0;
@@ -990,10 +1003,37 @@ impl PeerSwarmScheduler {
             if !p.marked.filled_at(x) {
                 continue;
             }
-            p.marked.reset(x);
             if s.have_bins.filled_at(x) {
+                p.marked.reset(x);
                 continue;
             }
+            // The parent may push until DEADLINE_MAX past the chunk's first
+            // announcement: pull only if a holder is expected to beat that.
+            let stream = usize::from(((x.0 >> 1) & s.stream_bits) as Stream);
+            let cap = s.bin_times.get(x).map(|(_, t)| t + DEADLINE_MAX);
+            let parent = p
+                .subs
+                .get(stream)
+                .and_then(|sub| sub.open.filter(|o| x >= o.start))
+                .map(|o| o.peer);
+            if let Some(parent) = parent
+                && let Some(cap) = cap
+                && now < cap
+            {
+                // A holder we haven't timed yet may well win.
+                let pull = self
+                    .channels
+                    .values()
+                    .filter(|c| c.peer != parent && !c.choked && c.peer_have_bins.filled_at(x))
+                    .map(|c| c.answer_time.mean().unwrap_or(Duration::ZERO))
+                    .min()
+                    .map(|d| now + d);
+                if pull.is_none_or(|t| cap + ROUTE_MARGIN < t) {
+                    p.deadlines.push(x, cap.min(now + RELEASE_RECHECK));
+                    continue;
+                }
+            }
+            p.marked.reset(x);
             s.request_bins.reset(x);
             p.released.set(x);
             released += 1;

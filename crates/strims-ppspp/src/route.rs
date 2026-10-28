@@ -42,7 +42,8 @@
 use strims_base::time::{Duration, Time};
 
 /// A channel leaves a chunk to another expected to deliver it this much
-/// sooner.
+/// sooner, and a late push goes to pull only if a holder is expected to
+/// answer this much before the parent's last chance.
 pub const ROUTE_MARGIN: Duration = Duration::from_millis(20);
 /// A channel had window room if its last request round, this recent, left
 /// some.

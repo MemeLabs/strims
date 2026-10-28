@@ -2275,10 +2275,14 @@ fn a_missed_push_is_cancelled_at_its_parent() {
 #[test]
 fn a_missed_push_is_pulled_from_the_others_first() {
     // The parent's answer would queue behind its pushes, so a chunk it
-    // missed is left to the other channels for REQUEST_BACKOFF.
+    // missed is left to the other channels for REQUEST_BACKOFF. Another
+    // holder, untimed and so counted as quick, is what releases it at the
+    // deadline: with none, the push waits for the parent
+    // (`a_late_push_waits_while_pull_cant_win`).
     let mut f = fixture(hybrid(1));
     let mut q = MockQueue::default();
     let parent = ready_channel(&mut f, &mut q);
+    let other = add_ready(&mut f, &mut q, 1);
     f.sched.s.first_chunk_set = true;
     assert!(f.sched.do_stream_sub(parent, 0, Bin(0)));
     assert_eq!(
@@ -2286,6 +2290,7 @@ fn a_missed_push_is_pulled_from_the_others_first() {
         Ok(StreamOpenOutcome::Accepted)
     );
     f.sched.handle_have(parent, Bin::new(2, 0), now());
+    f.sched.handle_have(other, Bin::new(2, 0), now());
     let deadline = f.sched.next_push_deadline().unwrap();
     f.sched.expire_push(deadline, &mut q);
     let requests = |f: &mut Fixture, t: Time| {
@@ -2296,6 +2301,47 @@ fn a_missed_push_is_pulled_from_the_others_first() {
     };
     assert_eq!(requests(&mut f, deadline), 0);
     assert_eq!(requests(&mut f, deadline + REQUEST_BACKOFF), 4);
+}
+
+/// A late push waits for the parent while no other holder is expected to
+/// answer before [`push::DEADLINE_MAX`] past the chunk's first
+/// announcement, the parent's last chance, looking again every
+/// [`push::RELEASE_RECHECK`]; at that cap pull takes it.
+#[test]
+fn a_late_push_waits_while_pull_cant_win() {
+    let mut f = fixture(hybrid(1));
+    let mut q = MockQueue::default();
+    let parent = ready_channel(&mut f, &mut q);
+    let other = add_ready(&mut f, &mut q, 1);
+    f.sched.s.first_chunk_set = true;
+    assert!(f.sched.do_stream_sub(parent, 0, Bin(0)));
+    assert_eq!(
+        f.sched.handle_stream_open(parent, 0, Bin(0), now(), &mut q),
+        Ok(StreamOpenOutcome::Accepted)
+    );
+    let t = now();
+    f.sched.handle_have(parent, Bin::new(2, 0), t);
+    // `other` holds the chunks too, but answers in two seconds.
+    f.sched.handle_have(other, Bin::new(2, 0), t);
+    f.sched
+        .channels
+        .get_mut(&other)
+        .unwrap()
+        .answer_time
+        .sample(Duration::from_secs(2));
+    let cap = t + push::DEADLINE_MAX;
+    let deadline = f.sched.next_push_deadline().unwrap();
+    assert!(deadline + push::RELEASE_RECHECK < cap);
+    f.sched.expire_push(deadline, &mut q);
+    assert_eq!(f.sched.push_stats().misses, 0);
+    assert!(f.sched.s.request_bins.filled_at(Bin::new(2, 0)));
+    assert_eq!(
+        f.sched.next_push_deadline(),
+        Some(deadline + push::RELEASE_RECHECK)
+    );
+    f.sched.expire_push(cap, &mut q);
+    assert_eq!(f.sched.push_stats().misses, 4);
+    assert!(f.sched.s.request_bins.empty_at(Bin::new(2, 0)));
 }
 
 /// A channel leaves a chunk to one expected to deliver it sooner: a peer
