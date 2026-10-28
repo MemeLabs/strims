@@ -178,8 +178,8 @@ pub struct SwarmOptions {
     pub delivery_mode: DeliveryMode,
     pub buffer_layout: BufferLayout,
     /// What the store keeps of each chunk, local to this node: its bytes
-    /// (`Default`), or only that it holds it, for simulations
-    /// ([`ChunkBytes::Generated`]).
+    /// (`Default`), or, for simulations, a codec's few bytes of state it
+    /// makes the chunk from again ([`ChunkBytes::Codec`]).
     pub chunk_bytes: ChunkBytes,
     /// How push is mixed into pull; local, in neither handshakes nor
     /// URIs. `Default` resolves to [`PushMode::DEFAULT`].

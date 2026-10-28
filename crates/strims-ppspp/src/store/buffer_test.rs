@@ -6,6 +6,8 @@
 
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
+use std::sync::Arc;
+
 use strims_base::time::Time;
 use strims_binmap::Bin;
 
@@ -476,26 +478,69 @@ fn elastic_layout() {
     assert_eq!(c.export_cache().unwrap(), cache[..3 * cs]);
 }
 
-/// The stream the generated buffers make: a byte per offset.
-fn fill(o: u64, dst: &mut [u8]) {
-    for (k, b) in dst.iter_mut().enumerate() {
-        let o = o + k as u64;
-        *b = (o.wrapping_mul(31) ^ (o >> 8)) as u8;
+/// The chunk at `off` of the codecs' stream: 8 bytes of its own, then a
+/// byte per offset.
+fn test_chunk(off: u64, cs: usize) -> Vec<u8> {
+    let own = (off / cs as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    let mut c: Vec<u8> = (off..off + cs as u64)
+        .map(|o| (o.wrapping_mul(31) ^ (o >> 8)) as u8)
+        .collect();
+    c[..8].copy_from_slice(&own.to_le_bytes());
+    c
+}
+
+/// The chunks of `b` in the codecs' stream.
+fn stream(b: Bin, cs: usize) -> Vec<u8> {
+    let first = bin_byte(b.base_left(), cs) as u64;
+    (0..b.base_length())
+        .flat_map(|k| test_chunk(first + k * cs as u64, cs))
+        .collect()
+}
+
+/// Makes each chunk from its offset alone.
+#[derive(Debug)]
+struct OffsetCodec(usize);
+
+impl ChunkCodec for OffsetCodec {
+    fn state_len(&self) -> usize {
+        0
+    }
+
+    fn encode(&self, _: u64, _: &[u8], _: &mut [u8]) {
+        panic!("a codec without state encodes nothing");
+    }
+
+    fn decode(&self, offset: u64, state: &[u8], out: &mut [u8]) {
+        assert!(state.is_empty());
+        out.copy_from_slice(&test_chunk(offset, self.0));
     }
 }
 
-/// The chunks of `b` in the stream [`fill`] makes.
-fn stream(b: Bin, cs: usize) -> Vec<u8> {
-    let mut d = vec![0; b.base_length() as usize * cs];
-    fill(bin_byte(b.base_left(), cs) as u64, &mut d);
-    d
+/// Keeps each chunk's own 8 bytes, and makes the rest from the offset.
+#[derive(Debug)]
+struct HeadCodec(usize);
+
+impl ChunkCodec for HeadCodec {
+    fn state_len(&self) -> usize {
+        8
+    }
+
+    fn encode(&self, offset: u64, chunk: &[u8], state: &mut [u8]) {
+        assert_eq!(offset % self.0 as u64, 0);
+        state.copy_from_slice(&chunk[..8]);
+    }
+
+    fn decode(&self, offset: u64, state: &[u8], out: &mut [u8]) {
+        out[8..].copy_from_slice(&test_chunk(offset, self.0)[8..]);
+        out[..8].copy_from_slice(state);
+    }
 }
 
-/// Every read until `WouldBlock`, 5 bytes at most, recovering from
+/// Every read until `WouldBlock`, `size` bytes at most, recovering from
 /// underruns.
-fn drain(r: &mut BufferReader, b: &mut Buffer) -> Vec<Result<Vec<u8>, Error>> {
+fn drain(r: &mut BufferReader, b: &mut Buffer, size: usize) -> Vec<Result<Vec<u8>, Error>> {
     let mut out = vec![];
-    let mut p = [0u8; 5];
+    let mut p = vec![0u8; size];
     loop {
         match r.read(b, &mut p) {
             Ok(n) => out.push(Ok(p[..n].to_vec())),
@@ -531,12 +576,14 @@ impl MessageWriter for DataRecorder {
     }
 }
 
-/// A buffer that makes its chunks' bytes reads, sends and caches what one
-/// that stores them does, in either layout: out of order, in bins of
-/// several chunks, past the window and through an underrun, and from an
-/// imported cache. It holds no bytes.
+/// A buffer that keeps its chunks' codec states reads, sends and caches
+/// what one that stores the chunks does, with state and without, in either
+/// layout: out of order, in bins of several chunks, past the window and
+/// through an underrun, in reads that start and end mid-chunk, and from an
+/// imported cache. It holds no bytes, and states only for a codec that has
+/// them.
 #[test]
-fn generated_bytes_match_stored() {
+fn codec_matches_stored() {
     let cs = 16;
     let writes = [
         Bin::new(0, 1),
@@ -555,55 +602,76 @@ fn generated_bytes_match_stored() {
         .map(|o| Bin::new(0, o))
         .chain([Bin::new(1, 2), Bin::new(2, 1), Bin::new(2, 4)])
         .collect();
-    for layout in [BufferLayout::CIRCULAR, BufferLayout::ELASTIC] {
-        let mut stored = Buffer::with_layout(8, cs, layout).unwrap();
-        let mut generated =
-            Buffer::with_chunk_bytes(8, cs, layout, ChunkBytes::Generated(fill)).unwrap();
-        stored.set_offset(Bin(0));
-        generated.set_offset(Bin(0));
-        let mut rs = BufferReader::new(&stored);
-        let mut rg = BufferReader::new(&generated);
-        let (mut caches, mut underruns) = (0, 0);
-        for &b in &writes {
-            stored.consume(b, &stream(b, cs)).unwrap();
-            generated.consume(b, &stream(b, cs)).unwrap();
-            let reads = drain(&mut rs, &mut stored);
-            assert_eq!(drain(&mut rg, &mut generated), reads, "{layout:?} {b:?}");
-            underruns += reads
-                .iter()
-                .filter(|r| **r == Err(Error::BufferUnderrun))
-                .count();
-            assert_eq!(rg.position(), rs.position());
+    let codecs: [Arc<dyn ChunkCodec>; 2] = [Arc::new(OffsetCodec(cs)), Arc::new(HeadCodec(cs))];
+    for codec in codecs {
+        for layout in [BufferLayout::CIRCULAR, BufferLayout::ELASTIC] {
+            let coded = || {
+                Buffer::with_chunk_bytes(8, cs, layout, ChunkBytes::Codec(codec.clone())).unwrap()
+            };
+            let mut stored = Buffer::with_layout(8, cs, layout).unwrap();
+            let mut coding = coded();
+            stored.set_offset(Bin(0));
+            coding.set_offset(Bin(0));
+            // one reader in pieces of a third of a chunk, one in two and a half
+            let mut readers: Vec<(usize, BufferReader, BufferReader)> = [5, 40]
+                .into_iter()
+                .map(|n| (n, BufferReader::new(&stored), BufferReader::new(&coding)))
+                .collect();
+            let (mut caches, mut underruns) = (0, 0);
+            for &b in &writes {
+                stored.consume(b, &stream(b, cs)).unwrap();
+                coding.consume(b, &stream(b, cs)).unwrap();
+                for (n, rs, rc) in &mut readers {
+                    let reads = drain(rs, &mut stored, *n);
+                    assert_eq!(
+                        drain(rc, &mut coding, *n),
+                        reads,
+                        "{codec:?} {layout:?} {b:?}"
+                    );
+                    assert_eq!(rc.position(), rs.position());
+                    underruns += reads
+                        .iter()
+                        .filter(|r| **r == Err(Error::BufferUnderrun))
+                        .count();
+                }
 
-            let (mut ws, mut wg) = (DataRecorder::default(), DataRecorder::default());
-            for &s in &sends {
-                assert_eq!(
-                    generated.write_data(s, Time::EPOCH, &mut wg),
-                    stored.write_data(s, Time::EPOCH, &mut ws),
-                );
-            }
-            assert_eq!(wg.0, ws.0, "{layout:?} {b:?}");
-            assert!(ws.0.iter().all(|(s, d)| *d == stream(*s, cs)));
+                let (mut ws, mut wc) = (DataRecorder::default(), DataRecorder::default());
+                for &s in &sends {
+                    assert_eq!(
+                        coding.write_data(s, Time::EPOCH, &mut wc),
+                        stored.write_data(s, Time::EPOCH, &mut ws),
+                    );
+                }
+                assert_eq!(wc.0, ws.0, "{codec:?} {layout:?} {b:?}");
+                assert!(ws.0.iter().all(|(s, d)| *d == stream(*s, cs)));
 
-            let cache = stored.export_cache();
-            assert_eq!(generated.export_cache(), cache);
-            if let Ok(cache) = cache {
-                caches += 1;
-                let mut stored = Buffer::with_layout(8, cs, layout).unwrap();
-                let mut generated =
-                    Buffer::with_chunk_bytes(8, cs, layout, ChunkBytes::Generated(fill)).unwrap();
-                stored.import_cache(&cache).unwrap();
-                generated.import_cache(&cache).unwrap();
-                let mut rs = BufferReader::new(&stored);
-                let mut rg = BufferReader::new(&generated);
-                assert_eq!(
-                    drain(&mut rg, &mut generated),
-                    drain(&mut rs, &mut stored)
-                );
+                let cache = stored.export_cache();
+                assert_eq!(coding.export_cache(), cache);
+                if let Ok(cache) = cache {
+                    caches += 1;
+                    let mut stored = Buffer::with_layout(8, cs, layout).unwrap();
+                    let mut coding = coded();
+                    // a trailing partial chunk is stored but never read
+                    let partial = match cache.len() < 8 * cs {
+                        true => [&cache[..], &[7; 5]].concat(),
+                        false => cache.clone(),
+                    };
+                    stored.import_cache(&partial).unwrap();
+                    coding.import_cache(&partial).unwrap();
+                    let mut rs = BufferReader::new(&stored);
+                    let mut rc = BufferReader::new(&coding);
+                    assert_eq!(
+                        drain(&mut rc, &mut coding, 40),
+                        drain(&mut rs, &mut stored, 40)
+                    );
+                    assert_eq!(coding.export_cache(), stored.export_cache());
+                }
             }
+            assert!(caches > 0);
+            assert_eq!(underruns > 0, layout == BufferLayout::CIRCULAR);
+            assert!(coding.buf.is_empty());
+            let states = codec.state_len() * 8;
+            assert_eq!(coding.states.len(), states, "{codec:?} {layout:?}");
         }
-        assert!(caches > 0);
-        assert_eq!(underruns > 0, layout == BufferLayout::CIRCULAR);
-        assert!(generated.buf.is_empty());
     }
 }

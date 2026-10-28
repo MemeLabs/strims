@@ -153,9 +153,9 @@ impl Swarm {
     /// (sizes of 0 or past `u32`, stream counts outside 1..=65535, a window
     /// that isn't a power of two up to 2^31) or the verifier can't serve
     /// are rejected.
-    /// The live window buffer is allocated here, unless its chunks' bytes
-    /// are [generated](crate::store::ChunkBytes::Generated). With ed25519
-    /// the id must be the 32 byte public key.
+    /// The live window buffer is allocated here (with a
+    /// [codec](crate::store::ChunkBytes::Codec), its ring of chunk states).
+    /// With ed25519 the id must be the 32 byte public key.
     pub fn new(id: SwarmId, options: SwarmOptions) -> Result<Swarm, SwarmError> {
         let options = options.assign_defaults(&SwarmOptions::default_options());
         validate(&options)?;
@@ -164,7 +164,7 @@ impl Swarm {
             options.live_window,
             options.chunk_size,
             options.buffer_layout,
-            options.chunk_bytes,
+            options.chunk_bytes.clone(),
         )?;
         let ivo = options.integrity_verifier_options();
         let sv = ivo

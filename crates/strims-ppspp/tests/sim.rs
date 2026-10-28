@@ -17,12 +17,12 @@
 //! Peers verify the bytes they read against the generator the seed writes
 //! from, and record each chunk's delivery lag (read time minus the time the
 //! seed published it). No store keeps the stream's bytes, only which chunks
-//! it holds: it copies their bytes from one copy of the stream for the
-//! whole run ([`Prefix`]) when it sends or reads them
-//! ([`ChunkBytes::Generated`]). Chunks still travel as real data that peers
-//! verify, and the frames, so the trace, are those of stores that keep the
-//! bytes ([`sim_generated_bytes_change_no_trace`]), but a run's memory no
-//! longer grows with its viewers times the stream each holds.
+//! it holds: its codec ([`Content`]) copies their bytes from one copy of the
+//! stream for the whole run ([`Prefix`]) when it sends or reads them.
+//! Chunks still travel as real data that peers verify, and the frames, so
+//! the trace, are those of stores that keep the bytes
+//! ([`sim_chunk_codecs_change_no_trace`]), but a run's memory no longer
+//! grows with its viewers times the stream each holds.
 //!
 //! In WAN mode ([`Wan`]) every node sits at a [`Site`] of `strims_wan`: a
 //! major city and an access link, whose rates its uplink and downlink run
@@ -101,6 +101,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use rand_core::Rng;
 use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter};
@@ -112,7 +113,7 @@ use strims_ppspp::codec::{
     Message, MessageWriter, Pong, Reader, ReaderConfig, Request, Stream, StreamClose, StreamOpen,
     StreamRequest,
 };
-use strims_ppspp::store::{self, BufferReader, ChunkBytes};
+use strims_ppspp::store::{self, BufferReader, ChunkBytes, ChunkCodec};
 use strims_ppspp::{
     DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, ParentAction, PeerKey, PushMode, PushStats,
     ReportCounters, RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId,
@@ -173,15 +174,78 @@ fn cross_byte(o: u64) -> u8 {
     stream_byte(o ^ 0x5bd1_e995_0000_0000)
 }
 
-/// The stream from offset `o` on: the seed writes it, and the nodes'
-/// stores make their chunks' bytes with it ([`ChunkBytes::Generated`]).
-fn fill_stream(o: u64, dst: &mut [u8]) {
-    STREAM.with_borrow_mut(|s| s.fill(o, dst));
+/// A swarm's stream: what its seed writes, and the codec its nodes' stores
+/// make their chunks with from the offset alone, keeping no state.
+#[derive(Clone, Copy, Debug)]
+enum Content {
+    /// The main swarm's ([`stream_byte`]).
+    Main,
+    /// The cross-traffic swarm's ([`cross_byte`]).
+    Cross,
 }
 
-/// [`fill_stream`] for the cross-traffic swarm.
-fn fill_cross(o: u64, dst: &mut [u8]) {
-    CROSS.with_borrow_mut(|s| s.fill(o, dst));
+impl Content {
+    /// The stream from offset `o` on, into `dst`.
+    fn fill(self, o: u64, dst: &mut [u8]) {
+        let prefix = match self {
+            Content::Main => &STREAM,
+            Content::Cross => &CROSS,
+        };
+        prefix.with_borrow_mut(|s| s.fill(o, dst));
+    }
+}
+
+impl ChunkCodec for Content {
+    fn state_len(&self) -> usize {
+        0
+    }
+
+    fn encode(&self, _: u64, _: &[u8], _: &mut [u8]) {}
+
+    fn decode(&self, offset: u64, _: &[u8], out: &mut [u8]) {
+        self.fill(offset, out);
+    }
+}
+
+/// A codec with state, to check the stores' rings of states: each chunk's
+/// first 8 bytes are its state, the rest come from the offset.
+#[derive(Debug)]
+struct Head(Content);
+
+impl ChunkCodec for Head {
+    fn state_len(&self) -> usize {
+        8
+    }
+
+    fn encode(&self, _: u64, chunk: &[u8], state: &mut [u8]) {
+        state.copy_from_slice(&chunk[..8]);
+    }
+
+    fn decode(&self, offset: u64, state: &[u8], out: &mut [u8]) {
+        self.0.fill(offset, out);
+        out[..8].copy_from_slice(state);
+    }
+}
+
+/// What the nodes' stores keep of each chunk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Keep {
+    /// Nothing: [`Content`] makes it from its offset.
+    Nothing,
+    /// Its first 8 bytes ([`Head`]).
+    Head,
+    /// Its bytes.
+    Bytes,
+}
+
+impl Keep {
+    fn chunk_bytes(self, content: Content) -> ChunkBytes {
+        match self {
+            Keep::Nothing => ChunkBytes::Codec(Arc::new(content)),
+            Keep::Head => ChunkBytes::Codec(Arc::new(Head(content))),
+            Keep::Bytes => ChunkBytes::Stored,
+        }
+    }
 }
 
 thread_local! {
@@ -444,10 +508,10 @@ struct Config {
     /// Honest viewers leaving mid-stream and new ones taking their places
     /// (`SIM_CHURN`, [`churn_knob`]).
     churn: Option<Churn>,
-    /// The nodes' stores keep their chunks' bytes rather than make them
-    /// from the generators: the same run, with every node holding the
-    /// stream ([`sim_generated_bytes_change_no_trace`]).
-    stored_bytes: bool,
+    /// What the nodes' stores keep of each chunk: any choice gives the same
+    /// run ([`sim_chunk_codecs_change_no_trace`]), and only [`Keep::Bytes`]
+    /// holds the stream at every node.
+    keep: Keep,
 }
 
 /// Honest viewers leaving mid-stream, each place taken again a while later
@@ -534,7 +598,7 @@ impl Config {
             greedy_kinds: greedy_kinds_knob(),
             greedy_share: greedy_share_knob(),
             churn: churn_knob(),
-            stored_bytes: false,
+            keep: Keep::Nothing,
         }
     }
 }
@@ -1091,15 +1155,11 @@ impl Sim {
         );
         let mut rng = det_rng(cfg.seed);
         let key = strims_crypto::key_from_seed(&[9; 32]);
-        let bytes = |fill| match cfg.stored_bytes {
-            true => ChunkBytes::Stored,
-            false => ChunkBytes::Generated(fill),
-        };
         let options = SwarmOptions {
             chunk_size: cfg.chunk_size,
             chunks_per_signature: cfg.munro_chunks,
             live_window: cfg.live_window,
-            chunk_bytes: bytes(fill_stream),
+            chunk_bytes: cfg.keep.chunk_bytes(Content::Main),
             delivery_mode: cfg.delivery_mode,
             stream_count: cfg.stream_count,
             push_mode: cfg.push_mode,
@@ -1109,7 +1169,7 @@ impl Sim {
         };
         let cross_key = strims_crypto::key_from_seed(&[10; 32]);
         let cross_options = cfg.cross.map(|c| SwarmOptions {
-            chunk_bytes: bytes(fill_cross),
+            chunk_bytes: cfg.keep.chunk_bytes(Content::Cross),
             push_mode: c.push_mode,
             request_controller: c.controller,
             ..options.clone()
@@ -1865,14 +1925,14 @@ impl Sim {
         let munro = self.munro;
         let off = self.written * munro;
         let mut data = vec![0; munro];
-        fill_stream(off as u64, &mut data);
+        Content::Main.fill(off as u64, &mut data);
         let seed = &mut self.nodes[0];
         let mut w = seed.writer.take().unwrap();
         seed.runner.write(seed.swarm, &mut w, now, &data).unwrap();
         seed.writer = Some(w);
         if let Some(c) = self.cfg.cross {
             let mut data = vec![0; munro];
-            fill_cross(off as u64, &mut data);
+            Content::Cross.fill(off as u64, &mut data);
             let Node { runner, cross, .. } = &mut self.nodes[c.seed];
             if let Some(x) = cross.as_mut() {
                 let mut w = x.writer.take().unwrap();
@@ -4255,10 +4315,11 @@ fn sim_capture_changes_no_trace() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Stores that make their chunks' bytes from the generators send the
-/// frames that stores keeping the bytes do, cross traffic's included.
+/// Stores that keep no state or a little per chunk, and make their chunks'
+/// bytes with codecs, send the frames that stores keeping the bytes do,
+/// cross traffic's included.
 #[test]
-fn sim_generated_bytes_change_no_trace() {
+fn sim_chunk_codecs_change_no_trace() {
     let mut mesh = Config::new(3, 8);
     mesh.stream_secs = 4;
     mesh.degree = 4;
@@ -4274,16 +4335,20 @@ fn sim_generated_bytes_change_no_trace() {
     );
     cross.stream_secs = 6;
     for mut cfg in [mesh, cross] {
-        let generated = Sim::new(cfg.clone()).run();
-        cfg.stored_bytes = true;
-        let stored = Sim::new(cfg).run();
-        assert_eq!(
-            (generated.trace, generated.frames, generated.bytes),
-            (stored.trace, stored.frames, stored.bytes)
-        );
+        cfg.keep = Keep::Bytes;
+        let stored = Sim::new(cfg.clone()).run();
         assert_eq!(stored.mismatches, 0);
-        assert!(generated.delivery > 0.9);
-        assert!(generated.cross.is_none_or(|c| c.delivery > 0.9));
+        assert!(stored.delivery > 0.9);
+        assert!(stored.cross.as_ref().is_none_or(|c| c.delivery > 0.9));
+        for keep in [Keep::Nothing, Keep::Head] {
+            cfg.keep = keep;
+            let coded = Sim::new(cfg.clone()).run();
+            assert_eq!(
+                (coded.trace, coded.frames, coded.bytes),
+                (stored.trace, stored.frames, stored.bytes),
+                "{keep:?}"
+            );
+        }
     }
 }
 
