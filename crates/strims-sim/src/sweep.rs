@@ -22,7 +22,8 @@
 //!   fills windows as real TCP does (1448, a segment's payload).
 //! - `STRIMS_SIM_KNOWN_UPLINK=1` tells every WAN host its site's uplink
 //!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)): the
-//!   oracle the upload meter is measured against.
+//!   oracle the upload meter is measured against. `=seed` tells only the
+//!   hosts that seed a swarm, `=viewers` only the others.
 //! - `STRIMS_SIM_MINUTES=<m>` sets the stream length of the scenarios that
 //!   take one ([`stream_minutes`]).
 //! - `STRIMS_SIM_CHUNK=<bytes>` and `STRIMS_SIM_MUNRO=<bytes>` give every
@@ -62,7 +63,7 @@ use std::time::Duration;
 
 use crate::report::Report;
 use crate::run::run;
-use crate::spec::{Scenario, SendBuffer};
+use crate::spec::{HostIx, Scenario, SendBuffer};
 
 /// Seeds per sweep when `STRIMS_SIM_SEEDS` isn't set.
 pub const DEFAULT_SEEDS: u64 = 8;
@@ -216,7 +217,7 @@ fn sweep_seeds(
 ) -> Vec<Report> {
     let capture = env("STRIMS_SIM_CAPTURE");
     let send_buffer = env("STRIMS_SIM_SEND_BUFFER").and_then(|s| s.trim().parse::<u64>().ok());
-    let known_uplink = env("STRIMS_SIM_KNOWN_UPLINK").is_some_and(|s| s.trim() == "1");
+    let known_uplink = env("STRIMS_SIM_KNOWN_UPLINK").map(|s| s.trim().to_owned());
     let rows = env("STRIMS_SIM_ROWS").is_some_and(|s| s.trim() == "1");
     let job = env("STRIMS_SIM_JOB").is_some_and(|s| s.trim() == "1");
     assert!(
@@ -267,9 +268,17 @@ fn sweep_seeds(
                 })
                 .collect();
         }
-        if known_uplink {
-            for h in &mut spec.hosts {
-                if let Some(site) = h.site {
+        if let Some(which) = known_uplink.as_deref() {
+            let seeds: Vec<HostIx> = spec.swarms.iter().map(|s| s.seed).collect();
+            for (i, h) in spec.hosts.iter_mut().enumerate() {
+                let seed = seeds.contains(&i);
+                let told = match which {
+                    "1" => true,
+                    "seed" => seed,
+                    "viewers" => !seed,
+                    _ => false,
+                };
+                if told && let Some(site) = h.site {
                     h.upload_capacity = Some(site.profile.up);
                 }
             }
