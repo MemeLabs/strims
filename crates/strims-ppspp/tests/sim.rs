@@ -16,7 +16,13 @@
 //!
 //! Peers verify the bytes they read against the generator the seed writes
 //! from, and record each chunk's delivery lag (read time minus the time the
-//! seed published it).
+//! seed published it). No store keeps the stream's bytes, only which chunks
+//! it holds: it copies their bytes from one copy of the stream for the
+//! whole run ([`Prefix`]) when it sends or reads them
+//! ([`ChunkBytes::Generated`]). Chunks still travel as real data that peers
+//! verify, and the frames, so the trace, are those of stores that keep the
+//! bytes ([`sim_generated_bytes_change_no_trace`]), but a run's memory no
+//! longer grows with its viewers times the stream each holds.
 //!
 //! In WAN mode ([`Wan`]) every node sits at a [`Site`] of `strims_wan`: a
 //! major city and an access link, whose rates its uplink and downlink run
@@ -91,6 +97,7 @@
     clippy::panic
 )]
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
@@ -105,7 +112,7 @@ use strims_ppspp::codec::{
     Message, MessageWriter, Pong, Reader, ReaderConfig, Request, Stream, StreamClose, StreamOpen,
     StreamRequest,
 };
-use strims_ppspp::store::{self, BufferReader};
+use strims_ppspp::store::{self, BufferReader, ChunkBytes};
 use strims_ppspp::{
     DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, ParentAction, PeerKey, PushMode, PushStats,
     ReportCounters, RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId,
@@ -164,6 +171,50 @@ fn stream_byte(o: u64) -> u8 {
 /// The cross-traffic swarm's stream.
 fn cross_byte(o: u64) -> u8 {
     stream_byte(o ^ 0x5bd1_e995_0000_0000)
+}
+
+/// The stream from offset `o` on: the seed writes it, and the nodes'
+/// stores make their chunks' bytes with it ([`ChunkBytes::Generated`]).
+fn fill_stream(o: u64, dst: &mut [u8]) {
+    STREAM.with_borrow_mut(|s| s.fill(o, dst));
+}
+
+/// [`fill_stream`] for the cross-traffic swarm.
+fn fill_cross(o: u64, dst: &mut [u8]) {
+    CROSS.with_borrow_mut(|s| s.fill(o, dst));
+}
+
+thread_local! {
+    static STREAM: RefCell<Prefix> = RefCell::new(Prefix::new(stream_byte));
+    static CROSS: RefCell<Prefix> = RefCell::new(Prefix::new(cross_byte));
+}
+
+/// A stream's bytes up to the furthest asked for, made once per thread.
+/// Stores copy their chunks from it rather than make each byte on every
+/// send and read: in debug builds, making a byte costs several times what
+/// copying it does.
+struct Prefix {
+    byte: fn(u64) -> u8,
+    bytes: Vec<u8>,
+}
+
+impl Prefix {
+    fn new(byte: fn(u64) -> u8) -> Prefix {
+        Prefix {
+            byte,
+            bytes: Vec::new(),
+        }
+    }
+
+    fn fill(&mut self, o: u64, dst: &mut [u8]) {
+        let o = usize::try_from(o).unwrap();
+        let end = o + dst.len();
+        if self.bytes.len() < end {
+            let from = self.bytes.len() as u64;
+            self.bytes.extend((from..end as u64).map(self.byte));
+        }
+        dst.copy_from_slice(&self.bytes[o..end]);
+    }
 }
 
 /// The most nodes a run can have: their ids take at most two bytes.
@@ -393,6 +444,10 @@ struct Config {
     /// Honest viewers leaving mid-stream and new ones taking their places
     /// (`SIM_CHURN`, [`churn_knob`]).
     churn: Option<Churn>,
+    /// The nodes' stores keep their chunks' bytes rather than make them
+    /// from the generators: the same run, with every node holding the
+    /// stream ([`sim_generated_bytes_change_no_trace`]).
+    stored_bytes: bool,
 }
 
 /// Honest viewers leaving mid-stream, each place taken again a while later
@@ -479,6 +534,7 @@ impl Config {
             greedy_kinds: greedy_kinds_knob(),
             greedy_share: greedy_share_knob(),
             churn: churn_knob(),
+            stored_bytes: false,
         }
     }
 }
@@ -1035,10 +1091,15 @@ impl Sim {
         );
         let mut rng = det_rng(cfg.seed);
         let key = strims_crypto::key_from_seed(&[9; 32]);
+        let bytes = |fill| match cfg.stored_bytes {
+            true => ChunkBytes::Stored,
+            false => ChunkBytes::Generated(fill),
+        };
         let options = SwarmOptions {
             chunk_size: cfg.chunk_size,
             chunks_per_signature: cfg.munro_chunks,
             live_window: cfg.live_window,
+            chunk_bytes: bytes(fill_stream),
             delivery_mode: cfg.delivery_mode,
             stream_count: cfg.stream_count,
             push_mode: cfg.push_mode,
@@ -1048,6 +1109,7 @@ impl Sim {
         };
         let cross_key = strims_crypto::key_from_seed(&[10; 32]);
         let cross_options = cfg.cross.map(|c| SwarmOptions {
+            chunk_bytes: bytes(fill_cross),
             push_mode: c.push_mode,
             request_controller: c.controller,
             ..options.clone()
@@ -1802,13 +1864,15 @@ impl Sim {
         let now = self.now;
         let munro = self.munro;
         let off = self.written * munro;
-        let data: Vec<u8> = (off..off + munro).map(|o| stream_byte(o as u64)).collect();
+        let mut data = vec![0; munro];
+        fill_stream(off as u64, &mut data);
         let seed = &mut self.nodes[0];
         let mut w = seed.writer.take().unwrap();
         seed.runner.write(seed.swarm, &mut w, now, &data).unwrap();
         seed.writer = Some(w);
         if let Some(c) = self.cfg.cross {
-            let data: Vec<u8> = (off..off + munro).map(|o| cross_byte(o as u64)).collect();
+            let mut data = vec![0; munro];
+            fill_cross(off as u64, &mut data);
             let Node { runner, cross, .. } = &mut self.nodes[c.seed];
             if let Some(x) = cross.as_mut() {
                 let mut w = x.writer.take().unwrap();
@@ -4189,6 +4253,38 @@ fn sim_capture_changes_no_trace() {
         assert_eq!(taps > 0, tap);
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Stores that make their chunks' bytes from the generators send the
+/// frames that stores keeping the bytes do, cross traffic's included.
+#[test]
+fn sim_generated_bytes_change_no_trace() {
+    let mut mesh = Config::new(3, 8);
+    mesh.stream_secs = 4;
+    mesh.degree = 4;
+    mesh.loss = 0.01;
+    mesh.push_mode = PushMode::Hybrid;
+    mesh.stream_count = 4;
+    let mut cross = cross_traffic_config(
+        3,
+        PushMode::Hybrid,
+        RequestControllerKind::Ledbat,
+        RequestControllerKind::BbrLike,
+        CROSS_UPLINK_TENTHS,
+    );
+    cross.stream_secs = 6;
+    for mut cfg in [mesh, cross] {
+        let generated = Sim::new(cfg.clone()).run();
+        cfg.stored_bytes = true;
+        let stored = Sim::new(cfg).run();
+        assert_eq!(
+            (generated.trace, generated.frames, generated.bytes),
+            (stored.trace, stored.frames, stored.bytes)
+        );
+        assert_eq!(stored.mismatches, 0);
+        assert!(generated.delivery > 0.9);
+        assert!(generated.cross.is_none_or(|c| c.delivery > 0.9));
+    }
 }
 
 #[test]
