@@ -79,8 +79,10 @@ axes are the seeds (`--seeds` of them from `--first-seed`, every cell
 alike) and the knob (the first of `--knob` for the ppspp sim, the second
 for strims-sim) at `off` and at each set. Each set is scored against
 `off`, which stands for the base: with its flags off the commit must
-reproduce the base's traces. It prints each set's collapses and lag p99
-by cell, then its scorecard.
+reproduce the base's traces. The cells needing more than 1 GiB a job go
+in one farm run and the rest in another, side by side: the farm sizes
+every slot of a run for its largest job. It prints each set's collapses
+and lag p99 by cell, then its scorecard.
 """
 
 import argparse
@@ -754,6 +756,10 @@ def peak_gib():
     return peaks
 
 
+# Cells whose jobs need more than this go in a farm run of their own.
+FARM_SPLIT_GIB = 1
+
+
 def farm(a, cells):
     sha = git("rev-parse", a.ref)
     values = ["off"] + [x.strip() for x in a.sets.split(";") if x.strip()]
@@ -766,7 +772,7 @@ def farm(a, cells):
     peaks = peak_gib()
     out = WORK / "farm"
     out.mkdir(parents=True, exist_ok=True)
-    paths = []
+    paths, mems = [], []
     for i, c in enumerate(cells):
         package, target, _ = BINARIES[c["sim"]]
         seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
@@ -795,10 +801,15 @@ def farm(a, cells):
         path = out / f"{name}-{i:02d}.toml"
         path.write_text(text)
         paths.append(path)
+        mems.append(mem)
     farm_py = farm_root() / "hack" / "sim-farm" / "farm.py"
     if not a.no_run:
         print(f"farm run {name}: {len(cells)} matrices, {len(values)} sets x {len(seeds)} seeds", file=sys.stderr)
-        subprocess.run([sys.executable, str(farm_py), "run", *map(str, paths), *shlex.split(a.farm_args)])
+        groups = [[p for p, m in zip(paths, mems) if (m > FARM_SPLIT_GIB) == heavy] for heavy in (True, False)]
+        procs = [subprocess.Popen([sys.executable, str(farm_py), "run", *map(str, g), *shlex.split(a.farm_args)])
+                 for g in groups if g]
+        for p in procs:
+            p.wait()
     rows = {v: {} for v in values}
     for i, c in enumerate(cells):
         seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
