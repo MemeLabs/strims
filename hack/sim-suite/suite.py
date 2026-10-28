@@ -12,7 +12,7 @@ working tree's sims against the base's, cell by cell, paired by seed.
                                     [--only CELL,...]
   hack/sim-suite/suite.py race --flags A,B,... [--knob SIM_EXP,STRIMS_SIM_EXP]
                                [--base REF] [--tier ...] [--keep N]
-  hack/sim-suite/suite.py farm --sets "A,B;C" [--knob SIM_EXP,STRIMS_SIM_EXP]
+  hack/sim-suite/suite.py farm (--sets "A,B;C" | --refs a=REF,b=REF) [--knob SIM_EXP,STRIMS_SIM_EXP]
                                [--ref REF] [--tier ...] [--seeds N]
                                [--first-seed N] [--against SET]
                                [--farm-args ARGS] [--no-run]
@@ -86,6 +86,8 @@ for strims-sim) at `off` and at each set. Each set is scored against
 `off`, which stands for the base: with its flags off the commit must
 reproduce the base's traces. It prints each set's collapses and lag p99
 by cell, then its scorecard, against `off` or the set `--against` names.
+With `--refs` the arms are commits instead (the matrices' arms, no knob
+axis), scored against the first.
 """
 
 import argparse
@@ -819,15 +821,26 @@ def peak_gib(sha):
 
 
 def farm(a, cells):
-    sha = git("rev-parse", a.ref)
-    values = ["off"] + [x.strip() for x in a.sets.split(";") if x.strip()]
+    # Either one commit with the flag sets as an axis, or several commits
+    # as the matrices' arms.
+    if a.refs:
+        arms = {n.strip(): git("rev-parse", r.strip()) for n, r in (x.split("=", 1) for x in a.refs.split(","))}
+        values = list(arms)
+        sha = next(iter(arms.values()))
+    else:
+        sha = git("rev-parse", a.ref)
+        arms = {"x": sha}
+        values = ["off"] + [x.strip() for x in a.sets.split(";") if x.strip()]
     knob = dict(zip((PPSPP, SIM), (k.strip() for k in a.knob.split(","))))
     seeds = [str(s) for s in range(a.first_seed, a.first_seed + a.seeds)]
     # Matrix names are the run's EC2 tag, joined: keep them short, and
     # name the inputs so a rerun adopts the run.
-    key = json.dumps([sha, values, knob, seeds, [c["name"] for c in cells]])
+    key = json.dumps([sorted(arms.items()), values, knob, seeds, [c["name"] for c in cells]])
     name = "s" + hashlib.sha1(key.encode()).hexdigest()[:5]
-    peaks = peak_gib(sha)
+    peaks = {}
+    for r in arms.values():
+        for cell_, g in peak_gib(r).items():
+            peaks[cell_] = max(peaks.get(cell_, 0), g)
     out = WORK / "farm"
     out.mkdir(parents=True, exist_ok=True)
     paths = []
@@ -846,11 +859,11 @@ def farm(a, cells):
             f"test = {q(c['test'])}",
             f"slot_mem_gib = {mem}",
             "[arms]",
-            f"x = {q(sha)}",
+            *(f"{n} = {q(r)}" for n, r in arms.items()),
             "[env]",
             *(f"{k} = {q(v)}" for k, v in sorted(c["env"].items())),
             "[axes]",
-            f"{knob[c['sim']]} = {q(values)}",
+            *([] if a.refs else [f"{knob[c['sim']]} = {q(values)}"]),
             f"{seed_key} = {q(seeds)}",
             "[canary]",
             *(f"{k} = {q(v)}" for k, v in canary.items()),
@@ -861,18 +874,18 @@ def farm(a, cells):
         paths.append(path)
     farm_py = farm_root() / "hack" / "sim-farm" / "farm.py"
     if not a.no_run:
-        print(f"farm run {name}: {len(cells)} matrices, {len(values)} sets x {len(seeds)} seeds", file=sys.stderr)
+        print(f"farm run {name}: {len(cells)} matrices, {len(values)} arms x {len(seeds)} seeds", file=sys.stderr)
         subprocess.run([sys.executable, str(farm_py), "run", *map(str, paths), *shlex.split(a.farm_args)])
     rows = {v: {} for v in values}
     for i, c in enumerate(cells):
         seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
         state = farm_root() / "target" / "sim-farm" / f"{name}-{i:02d}" / "rows.jsonl"
         for rec in load_rows(state).values() if state.exists() else ():
-            v = rec["env"].get(knob[c["sim"]])
+            v = rec["arm"] if a.refs else rec["env"].get(knob[c["sim"]])
             if v in rows:
                 row = {**rec["row"], "_rss_mb": rec.get("max_rss_mb"), "_wall_s": rec.get("wall_s")}
                 rows[v][(c["name"], int(rec["env"][seed_key]))] = row
-    base = a.against.strip()
+    base = a.against.strip() if a.against else values[0]
     if base not in rows:
         sys.exit(f"--against {base!r} is none of the sets")
     others = [v for v in values if v != base]
@@ -924,14 +937,15 @@ def main():
     rc.add_argument("--rebuild", action="store_true")
     rc.add_argument("--keep", type=int, default=3, help="arms the confirmation keeps")
     fc = sub.add_parser("farm")
-    fc.add_argument("--sets", required=True, help="flag sets, ;-separated, each comma-separated")
+    fc.add_argument("--sets", help="flag sets, ;-separated, each comma-separated")
+    fc.add_argument("--refs", help="commits instead, name=ref,...: the matrices' arms, the first the base")
     fc.add_argument("--knob", default="SIM_EXP,STRIMS_SIM_EXP",
                     help="the knobs that take a set: the ppspp sim's, then strims-sim's")
     fc.add_argument("--ref", default="HEAD", help="the commit the farm builds")
     fc.add_argument("--tier", default="peers", choices=sorted(TIERS))
     fc.add_argument("--seeds", type=int, default=32, help="seeds per cell, every cell alike")
     fc.add_argument("--first-seed", type=int, default=2001)
-    fc.add_argument("--against", default="off", help="the set the others are scored against")
+    fc.add_argument("--against", help="the set or arm the others are scored against (off, or the first ref)")
     fc.add_argument("--only", help="cells, comma-separated")
     fc.add_argument("--all", action="store_true", help="every metric, ties too")
     fc.add_argument("--farm-args", default="", help="more arguments for farm.py run")
