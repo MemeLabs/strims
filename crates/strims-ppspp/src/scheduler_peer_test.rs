@@ -1760,20 +1760,24 @@ fn an_adaptive_seed_pushes_whole_copies_to_its_nearest() {
     assert!(ask(&mut f, &mut q, peers[5], 1, now()));
     assert!(!ask(&mut f, &mut q, peers[0], 1, now()));
 
-    // Its pushes keep up on an uplink with idle time: the window doubles
-    // at each check, up to what the uplink pays for at the store rate so
-    // far (three copies), and the free copies go to the nearest that
+    // Its pushes keep up: the window doubles at each check while it leads
+    // the copies in use at most twice, up to what the uplink pays for at
+    // the store rate so far, and the free copies go to the nearest that
     // asked.
     let ms = Duration::from_millis;
-    let mut t = now();
-    for _ in 0..2 {
-        t = alloc_check(&mut f, &mut q, t, &[peers[5]], ms(5), (1_200_000, 0.5));
-    }
+    let t = alloc_check(&mut f, &mut q, now(), &[peers[5]], ms(5), (1_200_000, 0.5));
+    assert_eq!(holders(&f), vec![peers[0], peers[5]]);
+    let t = alloc_check(&mut f, &mut q, t, &[peers[5]], ms(5), (1_200_000, 0.5));
+    assert_eq!(holders(&f), vec![peers[0], peers[5]]);
+    assert!(ask(&mut f, &mut q, peers[0], 0, t));
+    let mut t = alloc_check(&mut f, &mut q, t, &[peers[5]], ms(5), (1_200_000, 0.5));
     assert_eq!(holders(&f), vec![peers[0], peers[1], peers[5]]);
-    for &p in &peers[..2] {
+    t = alloc_check(&mut f, &mut q, t, &[peers[5]], ms(5), (1_200_000, 0.5));
+    assert_eq!(holders(&f), vec![peers[0], peers[1], peers[2], peers[5]]);
+    for &p in &peers[1..3] {
         assert!(ask(&mut f, &mut q, p, 0, t));
     }
-    assert!(!ask(&mut f, &mut q, peers[2], 0, t));
+    assert!(!ask(&mut f, &mut q, peers[3], 0, t));
 
     // Once measured, a budget of two copies (8 subscribers at about
     // 100 KB/s, at 70 % of the capacity): the farthest go, losing their
@@ -1864,6 +1868,9 @@ fn an_adaptive_seeds_window_follows_its_pushes() {
     t = alloc_check(&mut f, &mut q, t, &[peers[0]], ms(20), saturated);
     assert_eq!(window(&f), 2);
     assert!(ask(&mut f, &mut q, peers[1], 0, t));
+    // The second copy in use is a check old before the window grows on it.
+    t = alloc_check(&mut f, &mut q, t, &peers[..2], ms(20), saturated);
+    assert_eq!(window(&f), 2);
     // Pushes queued before the window changed don't count. Queues that
     // don't empty hold it; queues near going stale at both holders halve
     // it, and the farther goes.
@@ -1914,7 +1921,9 @@ fn an_adaptive_seed_bars_a_holder_that_doesnt_announce_its_pushes() {
     let mut t = now();
     assert!(ask(&mut f, &mut q, peers[0], 0, t));
     assert!(!ask(&mut f, &mut q, peers[1], 0, t));
-    // The window doubles and the free copy goes to the one that asked.
+    // A check in use later the window doubles, and the free copy goes to
+    // the one that asked.
+    t = check(&mut f, &mut q, t);
     t = check(&mut f, &mut q, t);
     assert_eq!(holders(&f), peers[..2].to_vec());
     assert!(ask(&mut f, &mut q, peers[1], 0, t));

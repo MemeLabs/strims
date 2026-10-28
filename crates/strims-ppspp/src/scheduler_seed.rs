@@ -66,11 +66,14 @@
 //!     more than half the holders pushed to are overloaded, the window
 //!     halves (at least one copy), and doubling stops there (at two copies
 //!     at least).
-//!   - With no majority behind and pushes written, it grows, provided it
-//!     is under twice the holders with a subscription or the uplink has
-//!     idle time: so a wave of neighbours asking at once can at most
-//!     double a load that kept up. It doubles until the first cut, then
-//!     takes one copy per [`WINDOW_PROBE`].
+//!   - With no majority behind and pushes written, it grows to at most
+//!     twice the holders with a subscription at this check and the last,
+//!     however idle the uplink reads: as a congestion window grows only
+//!     while it limits what's sent (RFC 7661), a wave of neighbours asking
+//!     at once can at most double a load that kept up for a check. Socket
+//!     buffers hide a load from the busy time until they fill, so idle time
+//!     read with copies to spare shows nothing about them. It doubles until
+//!     the first cut, then takes one copy per [`WINDOW_PROBE`].
 //!
 //!   A holder that is slow by its own path, or stops reading, leaves the
 //!   window alone while the uplink has room or most holders keep up. A
@@ -539,6 +542,8 @@ pub(crate) struct Window {
     since: Time,
     /// Past the first cut, when it may grow by one copy next.
     probe_at: Time,
+    /// The holders with a subscription at the last check.
+    in_use: usize,
 }
 
 impl Window {
@@ -548,6 +553,7 @@ impl Window {
             ssthresh: usize::MAX,
             since: now,
             probe_at: Time::NIL,
+            in_use: 0,
         }
     }
 
@@ -556,18 +562,19 @@ impl Window {
     fn update(&mut self, s: Signals, cap: usize, now: Time) -> bool {
         let before = self.copies;
         let majority = s.behind.saturating_mul(2) > s.pushed;
+        // Copies in use at this check and the last: a wave of neighbours
+        // that asked since hasn't shown what it costs yet.
+        let lead = s.in_use.min(self.in_use).saturating_mul(2);
+        self.in_use = s.in_use;
         if s.saturated && s.overloaded.saturating_mul(2) > s.pushed {
             // At one copy the cut changes nothing, so doubling may still
             // take the next step.
             self.ssthresh = (self.copies / 2).max(2);
             self.copies = (self.copies / 2).max(1);
             self.probe_at = now + WINDOW_PROBE;
-        } else if !majority
-            && s.pushed > 0
-            && (self.copies < s.in_use.saturating_mul(2) || !s.saturated)
-        {
+        } else if !majority && s.pushed > 0 && self.copies < lead {
             if self.copies < self.ssthresh {
-                self.copies = self.copies.saturating_mul(2).min(self.ssthresh);
+                self.copies = self.copies.saturating_mul(2).min(self.ssthresh).min(lead);
             } else if now >= self.probe_at {
                 self.copies = self.copies.saturating_add(1);
                 self.probe_at = now + WINDOW_PROBE;
@@ -1924,29 +1931,37 @@ mod tests {
         // No pushes, no evidence.
         assert!(!w.update(signals(0, 0, 0, 0, false), 64, t(1)));
         assert_eq!(w.copies, 1);
-        // On a saturated uplink it leads the copies in use at most twice.
-        assert!(w.update(signals(1, 0, 0, 1, true), 64, t(2)));
-        assert_eq!((w.copies, w.since), (2, t(2)));
-        assert!(!w.update(signals(1, 0, 0, 1, true), 64, t(3)));
-        assert!(w.update(signals(2, 0, 0, 2, true), 64, t(4)));
+        // It grows to at most twice the copies in use at this check and
+        // the last, however idle the uplink reads: a copy in use for a
+        // check, then two.
+        assert!(!w.update(signals(1, 0, 0, 1, true), 64, t(2)));
+        assert!(w.update(signals(1, 0, 0, 1, true), 64, t(3)));
+        assert_eq!((w.copies, w.since), (2, t(3)));
+        assert!(!w.update(signals(1, 0, 0, 1, false), 64, t(4)));
+        // A wave that asked since the last check waits a check.
+        assert!(!w.update(signals(2, 0, 0, 3, true), 64, t(5)));
+        assert!(w.update(signals(2, 0, 0, 3, false), 64, t(6)));
         assert_eq!(w.copies, 4);
-        // An uplink with idle time lets it run ahead, up to the cap.
-        assert!(w.update(signals(1, 0, 0, 1, false), 64, t(5)));
+        assert!(w.update(signals(4, 0, 0, 4, false), 64, t(7)));
+        assert_eq!(w.copies, 6);
+        assert!(w.update(signals(4, 0, 0, 4, false), 64, t(8)));
         assert_eq!(w.copies, 8);
-        assert!(w.update(signals(1, 0, 0, 1, false), 5, t(6)));
+        // Up to the cap.
+        assert!(w.update(signals(8, 0, 0, 8, false), 5, t(9)));
         assert_eq!(w.copies, 5);
-        // A minority behind doesn't hold it back; a majority does.
-        assert!(w.update(signals(3, 1, 0, 3, true), 64, t(7)));
-        assert_eq!(w.copies, 10);
-        assert!(!w.update(signals(10, 6, 0, 10, true), 64, t(8)));
+        // A minority behind doesn't hold it back, and doubling stops at
+        // twice the copies in use; a majority behind holds it.
+        assert!(w.update(signals(3, 1, 0, 3, true), 64, t(10)));
+        assert_eq!(w.copies, 6);
+        assert!(!w.update(signals(10, 6, 0, 10, true), 64, t(11)));
     }
 
     #[test]
     fn the_window_halves_when_most_holders_are_overloaded() {
         let t = |s: i64| Time::from_unix_millis(1_000_000_000) + Duration::from_secs(s);
-        let mut w = Window::new(t(0));
-        for i in 1..=3 {
-            w.update(signals(1, 0, 0, 1, false), 64, t(i));
+        let mut w = Window::new(t(-6));
+        for (i, n) in [(-5, 1), (-4, 1), (-3, 2), (-2, 2), (-1, 4), (0, 4)] {
+            w.update(signals(n, 0, 0, n, false), 64, t(i));
         }
         assert_eq!(w.copies, 8);
         // Overloaded on an uplink with idle time: their own paths.
