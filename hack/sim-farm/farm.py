@@ -86,27 +86,39 @@ first takes in what the matrices' rows.jsonl have added since
 and before them those no earlier row times, which may be long, so a run
 ends on short jobs; jobs expected alike keep their matrices' order.
 
+Work is in seconds of a slot of the CPU generation with the most rows
+here (c7a, m7a and r7a run one CPU; the generation is the family but its
+letter), and a slot of another does its generation's speed of it: fitted
+from the rows of configs (commit, test, and environment but seeds) that
+ran on several generations, as log wall = the config's term plus the
+generation's, over walls of 5 s or more, and pulled toward 1 for a
+generation of few rows (100 rows of no difference weigh against it). A
+generation no row times counts as 1. Walls are taken at that speed for
+the expected ones, and an instance's capacity is its slots times its
+speed. A run logs the speeds before its best pools.
+
 - Test jobs' instances run one job per physical core, fewer if memory
   binds (the largest slot_mem_gib of the run's matrices each, and 4 GiB
   for the system). The candidates are the x86 types of --families from
   8xlarge up to --max-instance-cores (64) cores, in each of the run's
   regions (AWS, below) in the zones its VPC's public subnets cover. A pool
   is a type in a zone, and the pools of every region are ranked as one,
-  by spot price per slot it would fill, then by the quota's vCPUs per slot
-  (an SMT core costs two): the cheapest pools anywhere fill first, and a
-  run goes on to dearer ones, in its region or another, only as the
-  cheaper ones are full or out of capacity.
+  by spot price per unit of work it would fill (its slots times their
+  speed, below), then by the quota's vCPUs per slot (an SMT core costs
+  two): the cheapest pools anywhere fill first, and a run goes on to
+  dearer ones, in its region or another, only as the cheaper ones are
+  full or out of capacity.
 - A run launches slots for its work, not its jobs. An instance's boot
   (launch to its canary passed, most of a minute: this run's mean, else
   that of the last runs in costs.jsonl) is billed and runs nothing, so a
   slot is worth launching only for enough work. With B the boot and k
-  --work-per-boot (2), the run wants as many new slots as the work left
-  (the queued and waiting jobs' expected walls, and half theirs for the
-  jobs out), less what its instances will have done (1 + k)B from now (a
-  booting one's slots from when it should be ready), would keep busy for
-  kB each: a new instance spends at most 1/(1 + k) of its time booting.
-  It launches no more slots than jobs, and no instance of twice the slots
-  it wants or more unless it has none.
+  --work-per-boot (2), the run wants as much new capacity (slots times
+  their speed) as the work left (the queued and waiting jobs' expected
+  walls, and half theirs for the jobs out), less what its instances will
+  have done (1 + k)B from now (a booting one's from when it should be
+  ready), would keep busy for kB: a new instance spends at most 1/(1 + k)
+  of its time booting. It launches no more slots than jobs, and no
+  instance of twice the capacity it wants or more unless it has none.
 - Each region has a spot quota of its own. A region's budget is its quota
   less the spot vCPUs it counts there outside this run's instances (those
   shutting down count too), at most --max-region-vcpus; the run's
@@ -341,12 +353,17 @@ PREFETCH_S = 3 * TICK
 # The rows a job's expected wall averages, the latest: code and instance
 # types change what a job takes.
 RECENT_ROWS = 64
+# Walls shorter than this time no CPU generation (speeds), and a
+# generation's rows weigh against this many of no difference at all.
+SPEED_MIN_WALL_S = 5
+SPEED_PRIOR_ROWS = 100
 # EC2 bills a minute at least, and an instance's public IPv4 address
 # ($0.005/h) and 16 GiB gp3 root volume ($0.08/GiB-month) on top of its
 # spot price.
 MIN_BILLED_S = 60
 INSTANCE_EXTRA_HOURLY = 0.005 + 16 * 0.08 / 730
-# Every test row's test, environment, wall and time (index_walls), how far
+# Every test row's test, environment, wall, time, type and commit
+# (index_walls), how far
 # each matrix's rows.jsonl has been read into it, and a line per finished
 # run.
 WALLS = FARM / "walls.jsonl"
@@ -766,7 +783,8 @@ def row_head(line: bytes) -> dict | None:
 
 
 def index_walls() -> list[dict]:
-    """Every test row's test, environment, wall and time here: walls.jsonl,
+    """Every test row's test, environment, wall, time, instance type and
+    commit here: walls.jsonl,
     after it takes in what each matrix's rows.jsonl has added since it was
     last read (all of it the first time)."""
     FARM.mkdir(parents=True, exist_ok=True)
@@ -793,6 +811,7 @@ def index_walls() -> list[dict]:
                         new.append({
                             "test": rec.get("test"), "env": rec.get("env", {}),
                             "wall_s": rec["wall_s"], "at": rec.get("at", ""),
+                            "type": rec.get("type"), "commit": rec.get("commit"),
                         })
             read[key] = at
         append_jsonl(WALLS, new)
@@ -806,22 +825,64 @@ def env_key(env: dict[str, str], drop: set[str]) -> tuple:
     return tuple(sorted((k, v) for k, v in env.items() if k not in drop))
 
 
+def gen_of(itype: str) -> str:
+    """An instance type's CPU generation: its family but the letter (c7a,
+    m7a and r7a run one CPU)."""
+    return itype.split(".")[0][1:]
+
+
+def speeds(recs: list[dict]) -> tuple[str | None, dict[str, float]]:
+    """The CPU generation with the most rows, and each generation's work
+    per slot against it: from the rows of the configs (commit, test, and
+    environment but seeds) that ran on several generations, a fit of log
+    wall as the config's term plus the generation's, over walls of
+    SPEED_MIN_WALL_S or more; a generation of few rows is pulled toward 1
+    (SPEED_PRIOR_ROWS)."""
+    groups = collections.defaultdict(list)
+    for r in recs:
+        if r.get("type") and r["wall_s"] >= SPEED_MIN_WALL_S:
+            key = (r.get("commit"), r["test"], env_key(r["env"], SEED_KEYS))
+            groups[key].append((gen_of(r["type"]), math.log(r["wall_s"])))
+    rows = [(k, g, lw) for k, v in groups.items() if len({g for g, _ in v}) > 1 for g, lw in v]
+    if not rows:
+        return None, {}
+    gen: dict[str, float] = collections.defaultdict(float)
+    for _ in range(30):
+        sums = collections.defaultdict(lambda: [0.0, 0])
+        for k, g, lw in rows:
+            sums[k][0] += lw - gen[g]
+            sums[k][1] += 1
+        cfg = {k: t / n for k, (t, n) in sums.items()}
+        sums = collections.defaultdict(lambda: [0.0, 0])
+        for k, g, lw in rows:
+            sums[g][0] += lw - cfg[k]
+            sums[g][1] += 1
+        gen = collections.defaultdict(float, {g: t / n for g, (t, n) in sums.items()})
+    n = collections.Counter(g for _, g, _ in rows)
+    ref = n.most_common(1)[0][0]
+    return ref, {g: math.exp((gen[ref] - gen[g]) * n[g] / (n[g] + SPEED_PRIOR_ROWS)) for g in n}
+
+
 def recent_mean(walls: list[tuple[str, float]]) -> float:
     """The mean wall of the latest RECENT_ROWS of (time, wall)."""
     return statistics.fmean(w for _, w in sorted(walls)[-RECENT_ROWS:])
 
 
-def priors(owners: dict[str, list[tuple["Matrix", "Job"]]]) -> dict[str, float]:
-    """Each job's expected wall, from past rows (index_walls), if any: the
+def priors(owners: dict[str, list[tuple["Matrix", "Job"]]], recs: list[dict],
+           speed: dict[str, float]) -> dict[str, float]:
+    """Each job's expected wall at the speed of the generation with the
+    most rows (speeds), from past rows (index_walls), if any: the
     mean of the latest RECENT_ROWS rows of its test and environment, seeds
     aside, else of its matrix's cell, the rows of its test whose environment
     is the matrix's [env] but for the axes and what [[derive]] sets (another
     value of an axis), else whose environment has the matrix's [env] among
     other variables (a knob the matrix doesn't name)."""
-    recs = index_walls()
+    def wall(r: dict) -> tuple[str, float]:
+        return r.get("at", ""), r["wall_s"] * speed.get(gen_of(r.get("type") or ""), 1.0)
+
     exact = collections.defaultdict(list)
     for r in recs:
-        exact[(r["test"], env_key(r["env"], SEED_KEYS))].append((r.get("at", ""), r["wall_s"]))
+        exact[(r["test"], env_key(r["env"], SEED_KEYS))].append(wall(r))
     out = {}
     missed = collections.defaultdict(list)
     for jid, own in owners.items():
@@ -838,7 +899,7 @@ def priors(owners: dict[str, list[tuple["Matrix", "Job"]]]) -> dict[str, float]:
         for r in recs:
             e = r["env"]
             if r["test"] in m.tests and all(e.get(k) == v for k, v in fixed.items()):
-                loose[r["test"]].append((r.get("at", ""), r["wall_s"]))
+                loose[r["test"]].append(wall(r))
                 if all(k in fixed or k in drop for k in e):
                     cell[r["test"]].append(loose[r["test"]][-1])
         means = {t: recent_mean(cell[t] or w) for t, w in loose.items()}
@@ -1167,10 +1228,11 @@ class Pool:
     spec: Spec
     price: float
     region: str
+    speed: float = 1.0  # a slot's work, its CPU generation's (speeds)
 
     @property
-    def per_slot(self) -> float:
-        return self.price / self.spec.slots
+    def per_work(self) -> float:
+        return self.price / (self.spec.slots * self.speed)
 
     @property
     def key(self) -> tuple[str, str]:
@@ -1229,17 +1291,17 @@ def specs(region: str, slot_mem_gib: float, types: list[str] | None = None,
 
 
 def pool_order(p: Pool) -> tuple:
-    return (p.per_slot, p.spec.vcpus / p.spec.slots, p.type, p.zone)
+    return (p.per_work, p.spec.vcpus / p.spec.slots, p.type, p.zone)
 
 
 def cheapest(pools: list[Pool], rooms: dict[str, float], caps: dict[str, float],
              per_pool: collections.Counter, deficit: float, pinned: str | None = None) -> Pool | None:
-    """The pool to launch in for `deficit` slots: of those with space in
-    their region's room and under their cap (vCPUs; one instance always
-    fits the cap), the one whose price per slot it would fill is least, in
-    any region, then whose quota's vCPUs per slot: as the queue drains,
-    smaller types. A testbed run's first type comes first, so its hosts are
-    alike."""
+    """The pool to launch in for `deficit` of capacity (slots times their
+    speed): of those with space in their region's room and under their cap
+    (vCPUs; one instance always fits the cap), the one whose price per
+    capacity it would fill is least, in any region, then whose quota's
+    vCPUs per slot: as the queue drains, smaller types. A testbed run's
+    first type comes first, so its hosts are alike."""
     return min(
         (
             p for p in pools
@@ -1248,7 +1310,7 @@ def cheapest(pools: list[Pool], rooms: dict[str, float], caps: dict[str, float],
         ),
         key=lambda p: (
             pinned is not None and p.type != pinned,
-            p.price / min(p.spec.slots, deficit), p.spec.vcpus / p.spec.slots,
+            p.price / min(p.spec.slots * p.speed, deficit), p.spec.vcpus / p.spec.slots,
         ),
         default=None,
     )
@@ -1256,8 +1318,8 @@ def cheapest(pools: list[Pool], rooms: dict[str, float], caps: dict[str, float],
 
 def plan_fleet(pools: list[Pool], budgets: dict[str, int], max_vcpus: int | None,
                want: float) -> list[Pool]:
-    """The instances a run launches for `want` slots, as Run.scale picks
-    them, if every pool had capacity."""
+    """The instances a run launches for `want` of capacity, as Run.scale
+    picks them, if every pool had room for them."""
     used: collections.Counter = collections.Counter()
     per_pool: collections.Counter = collections.Counter()
     out = []
@@ -1269,12 +1331,12 @@ def plan_fleet(pools: list[Pool], budgets: dict[str, int], max_vcpus: int | None
         }
         caps = {r: (b if max_vcpus is None else min(b, max_vcpus)) / 2 for r, b in budgets.items()}
         p = cheapest(pools, rooms, caps, per_pool, want)
-        if p is None or (out and want < p.spec.slots / 2):
+        if p is None or (out and want < p.spec.slots * p.speed / 2):
             break
         out.append(p)
         used[p.region] += p.spec.vcpus
         per_pool[p.key] += p.spec.vcpus
-        want -= p.spec.slots
+        want -= p.spec.slots * p.speed
     return out
 
 
@@ -1363,10 +1425,15 @@ class Host:
     ready_at: float | None = None
     busy_s: float = 0.0  # its jobs' walls, summed
     adopted: bool = False
+    speed: float = 1.0  # a slot's work (speeds)
 
     @property
     def slots(self) -> int:
         return self.spec.slots
+
+    @property
+    def capacity(self) -> float:
+        return self.spec.slots * self.speed
 
     @property
     def hourly(self) -> float:
@@ -1532,8 +1599,11 @@ class Run:
         # the last to finish are short (a stable sort: otherwise matrix by
         # matrix).
         self.prior: dict[str, float] = {}
+        self.speed_ref, self.speeds = None, {}
         if self.testbed is None:
-            self.prior = priors(self.owners)
+            recs = index_walls()
+            self.speed_ref, self.speeds = speeds(recs)
+            self.prior = priors(self.owners, recs, self.speeds)
             self.queue = collections.deque(sorted(
                 self.queue, key=lambda i: (i.job.id in self.prior, -self.prior.get(i.job.id, 0))
             ))
@@ -1652,7 +1722,7 @@ class Run:
         self.done.add(item.wid)
         self.ran += 1
         if res.get("wall_s"):
-            self.seen[self.owners[item.job.id][0][0].name].append(res["wall_s"])
+            self.seen[self.owners[item.job.id][0][0].name].append(res["wall_s"] * host.speed)
         rec = recs[0][1]
         first = self.rows.setdefault(item.job.id, rec)
         self.release(item.job.id)
@@ -1718,13 +1788,13 @@ class Run:
         if self.testbed is not None:
             return self.take_group(host, others)
         # Its free slots, then jobs queued behind the running ones while
-        # they're short (no longer than PREFETCH_S), which a sync's worth
-        # couldn't keep busy: up to PREFETCH_S of work per slot, and no more
-        # work than its slots' share of what's left. A long job queued
+        # they're short (no longer than PREFETCH_S there), which a sync's
+        # worth couldn't keep busy: up to PREFETCH_S of work per slot, and
+        # no more work than its capacity's share of what's left. A long job queued
         # behind others would start a job's length late and could end the
         # run late, so one at the head stops it.
-        ready = sum(h.slots for h in self.hosts if h.state == "ready")
-        goal = min(host.slots * PREFETCH_S, self.work_left() * host.slots / max(ready, 1))
+        ready = sum(h.capacity for h in self.hosts if h.state == "ready")
+        goal = min(host.capacity * PREFETCH_S, self.work_left() * host.capacity / max(ready, 1))
         have = sum(self.expected(i) for i in host.assigned.values() if i.copy != "canary")
         out, skipped = [], []
         while self.queue and (len(host.assigned) < host.slots or have < goal):
@@ -1734,7 +1804,7 @@ class Run:
             if host.id in self.took[item.job.id] and others:
                 skipped.append(item)
                 continue
-            if len(host.assigned) >= host.slots and self.expected(item) > PREFETCH_S:
+            if len(host.assigned) >= host.slots and self.expected(item) / host.speed > PREFETCH_S:
                 self.queue.appendleft(item)
                 break
             out.append(item)
@@ -2135,10 +2205,14 @@ class Run:
 
     # -- sizing
 
+    def speed(self, itype: str) -> float:
+        """A type's work per slot (speeds); 1 if no row times its CPU."""
+        return self.speeds.get(gen_of(itype), 1.0)
+
     def expected(self, item: Item) -> float:
-        """What an item is expected to take, in seconds of its slot: its
-        prior, else the mean of what its matrix's jobs took this run, else
-        DEFAULT_JOB_S."""
+        """What an item is expected to take, in seconds of a slot at the
+        speed of speed_ref: its prior, else the mean of what its matrix's
+        jobs took this run, else DEFAULT_JOB_S."""
         e = self.prior.get(item.job.id)
         if e is not None:
             return e
@@ -2164,25 +2238,25 @@ class Run:
         return statistics.fmean(got) if got else self.boot_prior
 
     def wanted(self, now: float) -> float:
-        """The slots worth launching: with B the boot and k --work-per-boot,
-        the work the live instances won't have done (1 + k)B from now, over
-        the kB each new slot would then have done. A booting instance's
-        slots count from when it should be ready."""
+        """The capacity (slots times speed) worth launching: with B the boot
+        and k --work-per-boot, the work the live instances won't have done
+        (1 + k)B from now, over the kB each new slot would then have done. A
+        booting instance's capacity counts from when it should be ready."""
         k, b = self.args.work_per_boot, self.boot_s()
         d = (1 + k) * b
         can = 0.0
         for h in self.hosts:
             if h.state == "ready":
-                can += h.slots * d
+                can += h.capacity * d
             elif h.state != "lost":
-                can += h.slots * max(0.0, d - max(0.0, h.launched + b - now))
+                can += h.capacity * max(0.0, d - max(0.0, h.launched + b - now))
         return (self.work_left() - can) / (k * b)
 
     def estimate(self) -> dict:
         """What the run should take, before it launches: its work, the
         instances Run.scale would launch for it if every pool had capacity,
-        and the model's wall time, a boot then the work over their slots (or
-        the longest job, if longer) and two syncs, and their cost for that
+        and the model's wall time, a boot then the work over their capacity
+        (or the longest job, if longer) and two syncs, and their cost for that
         long; then both times what the last runs took over their model's
         (past_ratios)."""
         work = self.work_left()
@@ -2192,8 +2266,9 @@ class Run:
         budgets = {n: r.budget - self.live_vcpus(n) for n, r in self.regions.items()}
         fleet = plan_fleet(self.pools, budgets, self.args.max_vcpus, work / (k * b))
         slots = sum(p.spec.slots for p in fleet)
+        capacity = sum(p.spec.slots * p.speed for p in fleet)
         longest = max((self.expected(i) for i in items), default=0.0)
-        wall = b + max(work / slots, longest) + 2 * TICK if slots else None
+        wall = b + max(work / capacity, longest) + 2 * TICK if slots else None
         cost = sum(p.price + INSTANCE_EXTRA_HOURLY for p in fleet) * wall / 3600 if slots else None
         wall_x, cost_x, runs = past_ratios()
         by_region = collections.Counter()
@@ -2307,8 +2382,8 @@ class Run:
             groups = {i.job.group for i in self.queue if i.wid not in self.done}
             deficit = len(groups) - sum(1 for h in live if not h.assigned)
         else:
-            # A slot per job at most, and only the slots whose work pays for
-            # their boot (wanted).
+            # A slot per job at most, and only the capacity whose work pays
+            # for its boot (wanted).
             waiting = sum(len(w) for w in self.waiting.values())
             demand = len(self.queue) + waiting + sum(len(h.assigned) for h in live)
             deficit = min(demand - sum(h.slots for h in live), self.wanted(now))
@@ -2322,9 +2397,9 @@ class Run:
                     self.last_stuck = now
                     log("no pool fits the budget or has capacity; waiting")
                 return
-            # An instance of twice the slots wanted or more waits, unless the
-            # run has none.
-            if self.testbed is None and deficit < pool.spec.slots / 2 and (live or launched):
+            # An instance of twice the capacity wanted or more waits, unless
+            # the run has none.
+            if self.testbed is None and deficit < pool.spec.slots * pool.speed / 2 and (live or launched):
                 return
             r = self.regions[pool.region]
             record_region(r.name)
@@ -2332,7 +2407,8 @@ class Run:
                 with self.held():
                     hid = launch(self.name, pool, r, self.user_data)
                     self.hosts.append(
-                        Host(hid, pool.type, pool.zone, pool.spec, pool.price, now, region=r.name)
+                        Host(hid, pool.type, pool.zone, pool.spec, pool.price, now, region=r.name,
+                             speed=pool.speed)
                     )
                     self.start_boot(self.hosts[-1])
                     log(f"launched {hid}: {pool.type} in {pool.zone}, {pool.spec.slots} slots, "
@@ -2358,7 +2434,7 @@ class Run:
                 raise
             if self.testbed is not None and self.pinned is None:
                 self.pinned = pool.type
-            deficit -= pool.spec.slots
+            deficit -= pool.spec.slots * pool.speed
             launched += 1
 
     def retire_idle(self) -> None:
@@ -2466,7 +2542,7 @@ class Run:
                 launched = datetime.datetime.fromisoformat(i["LaunchTime"]).timestamp()
                 h = Host(
                     i["InstanceId"], i["InstanceType"], zone, spec, price, launched,
-                    state="adopting", region=r, adopted=True,
+                    state="adopting", region=r, adopted=True, speed=self.speed(i["InstanceType"]),
                 )
                 self.hosts.append(h)
                 self.start_boot(h)
@@ -2474,8 +2550,13 @@ class Run:
                     self.pinned = h.type
                 log(f"adopting {h.id} ({h.type} in {h.zone})")
         self.read_budgets(time.time())
+        if self.speeds:
+            log(f"work per slot against {self.speed_ref}: " + ", ".join(
+                f"{g} {v:.2f}" for g, v in sorted(self.speeds.items(), key=lambda kv: -kv[1])
+            ))
         log("best pools: " + ", ".join(
-            f"{p.type}@{self.where(p.zone)} {p.spec.slots} slots ${p.per_slot * 1000:.1f}m/slot-h"
+            f"{p.type}@{self.where(p.zone)} {p.spec.slots} slots x{p.speed:.2f} "
+            f"${p.per_work * 1000:.1f}m/slot-h" + (f" of {self.speed_ref}" if self.speeds else "")
             for p in self.pools[:5]
         ))
         if self.testbed is None:
@@ -2507,8 +2588,8 @@ class Run:
         return zone if len(self.regions) > 1 else zone[-1]
 
     def find_pools(self) -> None:
-        """Every region's pools, in one ranking; a region whose prices
-        can't be read again keeps the pools it had."""
+        """Every region's pools with their speed, in one ranking; a region
+        whose prices can't be read again keeps the pools it had."""
         def find(r: str) -> list[Pool]:
             return pools(
                 r, self.slot_mem_gib, self.families, self.args.max_instance_cores,
@@ -2522,7 +2603,10 @@ class Run:
                 log(f"{r}: finding its pools: {got}; keeping the last")
             else:
                 self.regions[r].pools = got
-        self.pools = sorted((p for r in self.regions.values() for p in r.pools), key=pool_order)
+        self.pools = sorted(
+            (dataclasses.replace(p, speed=self.speed(p.type)) for r in self.regions.values() for p in r.pools),
+            key=pool_order,
+        )
         self.priced = time.time()
 
     def setup_local(self) -> None:
@@ -2556,9 +2640,9 @@ class Run:
         spend = sum(h.cost(now) for h in self.hosts)
         kinds = collections.Counter(f"{h.type}@{self.where(h.zone)}:{h.state}" for h in live)
         eta = ""
-        slots = sum(h.slots for h in live if h.state == "ready")
-        if slots and (self.prior or any(self.seen.values())):
-            eta = f", about {self.work_left() / slots / 60:.0f} min left"
+        capacity = sum(h.capacity for h in live if h.state == "ready")
+        if capacity and (self.prior or any(self.seen.values())):
+            eta = f", about {self.work_left() / capacity / 60:.0f} min left"
         waiting = sum(len(w) for w in self.waiting.values())
         log(
             f"{ndone}/{total} done ({self.failed} failed, {self.verified} verified, "
