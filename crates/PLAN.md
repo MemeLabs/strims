@@ -227,11 +227,14 @@ in `TRIED.md`.
      window, to ppspp's cap, and are dropped as stale only when written;
      and a viewer that falls a window behind sends its neighbours messages
      they count as invalid (strims-sim's slow viewer).
-   - Seeds whose uplink pays for one or two copies still collapse on a
-     third of seeds or more (the robust tier's star-31-5 and halve-31-10),
-     and after a halving trees take seconds to re-form on some seeds
-     (`collapse_halving_lock_in`): speed up tree repair after a seed sheds
-     holders.
+   - After its uplink halves, an adaptive seed's viewers take 10-17 s to
+     recover (the robust tier's halve-x-10 cells,
+     `collapse_halving_lock_in`). Before the halving the seed runs near its
+     full uplink with copies to spare: buffers below the runner keep its
+     busy time near zero, so its budget reads twenty times its rate and
+     only the window bounds its copies, and the halving lands on a backlog
+     the budget sees a second or two late. Find a headroom signal the
+     seed's own munro bursts don't trip (the relay bound does: `TRIED.md`).
 2. **A residential seed at a real bitrate.** Behind a cable seed at
    6-8 Mbit/s honest viewers lag several times what they do behind fiber.
    - **Pull from a constrained seed.** Bound the answers a constrained
@@ -332,11 +335,6 @@ in `TRIED.md`.
      decorrelation (rarest-first) could replace the groups.
    - Convergence on sparse meshes.
 5. **Push-tree refinements.** Smaller or narrower costs.
-   - After a switch, the old parent's queued pushes of chunks the new
-     parent also pushes duplicate most of what switching wastes:
-     STREAM_CANCEL leaves a child's queued pushes alive and names no
-     start chunk. A parent could drop them, or keep only those before a
-     start the cancel names.
    - Slow parents are detected late, so `sim_push_slow_parent`'s p99 can
      still pass 1 s on some seeds. The upload meter's 2 s busy window
      takes about 1.5 s to reach `SHED_UTILIZATION`, a child's deadline
