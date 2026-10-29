@@ -148,3 +148,26 @@ delivered 1.5–2.5 points less (viewers' requests overlapped), its p99 was
 about 9 % worse on sparse lossy meshes, pulling behind a cable seed on WAN
 paths it lagged far behind LEDBAT, and on a shared parent it yielded to
 LEDBAT.
+
+**A deadline-aware request scheduler.** (`deadline`, against a356f676)
+Switches over pull: a timed out request sampled its channel's answer time
+at twice its wait, so liars ranked slow; a request past its channel's mean
+answer time plus four deviations was cancelled there and left to the
+others; the reader's next missing chunk left its parent's push at the
+parent's horizon, not its deadline; and request rounds asked oldest first,
+not in the node's order within a group. Readers read chunks as soon as
+they arrive and never skip, so a deadline from first sight has no slack to
+spend and can only move repairs earlier. Moving them lost (ppspp sim,
+16 seeds: wan-mobile ×1.08–1.22, wan-global ×1.08–1.32): overdue pushes
+mostly still arrive, and pulling them adds load. The rest tied once an
+empty window carried a request (48 seeds: ×0.92–1.03 on capped-seed,
+sparse-lossy, wan-mobile, wan-global and residential).
+
+**One request through any empty window.** (`one-request`, against
+a356f676) A window with nothing in flight always asked for a chunk, which
+also ended LEDBAT's silence after a timeout (its 2 KiB minimum is under a
+4 KiB chunk for `FLOOR_LOSS_HOLD`). The ppspp sim's pull gained (peers
+tier, 32 seeds: large-4mbit and overload ×0.81, wan-mobile ×0.93), the
+real stack's busy stars lost (robust tier: star-31-10 and mesh6-31-10
+×1.20, star-15-5 and thin-15-10 ×1.15 with timeouts ×1.12–1.28; lock-in
+×1.16): there a peer that timed out is better left alone for the hold.
