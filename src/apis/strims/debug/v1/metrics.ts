@@ -3692,6 +3692,7 @@ export type IIngressMetrics = {
   deadlines?: bigint;
   mediaErrors?: bigint;
   writeErrors?: bigint;
+  earlySigns?: bigint;
 }
 
 export class IngressMetrics {
@@ -3709,6 +3710,7 @@ export class IngressMetrics {
   deadlines: bigint;
   mediaErrors: bigint;
   writeErrors: bigint;
+  earlySigns: bigint;
 
   constructor(v?: IIngressMetrics) {
     this.listens = v?.listens || BigInt(0);
@@ -3725,6 +3727,7 @@ export class IngressMetrics {
     this.deadlines = v?.deadlines || BigInt(0);
     this.mediaErrors = v?.mediaErrors || BigInt(0);
     this.writeErrors = v?.writeErrors || BigInt(0);
+    this.earlySigns = v?.earlySigns || BigInt(0);
   }
 
   static encode(m: IngressMetrics, w?: Writer): Writer {
@@ -3743,6 +3746,7 @@ export class IngressMetrics {
     if (m.deadlines) w.uint32(96).uint64(m.deadlines);
     if (m.mediaErrors) w.uint32(104).uint64(m.mediaErrors);
     if (m.writeErrors) w.uint32(112).uint64(m.writeErrors);
+    if (m.earlySigns) w.uint32(120).uint64(m.earlySigns);
     return w;
   }
 
@@ -3794,6 +3798,9 @@ export class IngressMetrics {
         break;
         case 14:
         m.writeErrors = r.uint64();
+        break;
+        case 15:
+        m.earlySigns = r.uint64();
         break;
         default:
         r.skipType(tag & 7);

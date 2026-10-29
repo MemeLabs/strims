@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The RTMP ingress: a broadcaster's stream to one of the profile's
-//! channels, cut into fMP4 records and written into the channel's live
-//! video swarm.
+//! channels, written into the channel's live video swarm as fMP4 records
+//! or in the unit format.
 //!
 //! # Listener
 //!
@@ -64,36 +64,49 @@
 //!   served for the swarm. A changed channel record is signed and served
 //!   again, with the same start time.
 //! - **The listing.** Once the first record is written, a media listing
-//!   of the records' MIME type ([`fmp4_mime`] of their decoder configs)
-//!   and the swarm URI is kept on the directory of the channel's
-//!   network. A record of other codecs lists the new MIME type in its
-//!   place.
+//!   of the stream's MIME type ([`fmp4_mime`] or [`units_mime`] of its
+//!   decoder configs) and the swarm URI is kept on the directory of the
+//!   channel's network. A record of other codecs lists the new MIME type
+//!   in its place.
 //!
 //! A publish to a channel that streams replaces its session: the old
 //! connection closes, and the new session takes over the old one's
 //! listing, if on the same network, and its slot among the node's video
 //! swarms. The slot's swarm is replaced, so the node's streams of the
-//! channel go on after a discontinuity. A deleted channel, or one moved to another network,
-//! ends its session.
+//! channel go on after a discontinuity. A deleted channel, or one moved
+//! to another network, ends its session.
 //!
 //! # Media
 //!
-//! Audio and video go through an [`FlvSource`] into a [`Segmenter`] over a
-//! [`PackedSink`], cut under the rule of
+//! Audio and video go through an [`FlvSource`] into the muxer of the
+//! format [`IngressSettings::format`](crate::IngressSettings::format)
+//! names. A unit's publish time is when the connection took its message
+//! from the RTMP server, on the node's clock. A codec or tag the source
+//! refuses, or a record over its bound, ends the session; the publisher
+//! gets the reason in an error status. Metadata is counted and otherwise
+//! ignored.
+//!
+//! **fMP4**, the default: a [`Segmenter`] over a [`PackedSink`], cut under
+//! the rule of
 //! [`IngressSettings::min_segment_media_bytes`](crate::IngressSettings::min_segment_media_bytes)
 //! and
 //! [`IngressSettings::max_record_bytes`](crate::IngressSettings::max_record_bytes),
 //! with a fragment per
 //! [`IngressSettings::fragment_duration`](crate::IngressSettings::fragment_duration)
-//! of media within each record. A unit's publish time, in its fragment's
-//! `prft`, is when the connection took its message from the RTMP server,
-//! on the node's clock. The packed stream's bytes go into the swarm as
-//! they become final: a frame at a time, or up to a record's end.
-//! The swarm writer is never flushed, which would pad a partial integrity
-//! unit with zeros a reader takes for record bytes. A codec or tag the
-//! source refuses, or a record over its bound, ends the session; the
-//! publisher gets the reason in an error status. Metadata is counted and
-//! otherwise ignored.
+//! of media within each record, each with its first unit's publish time
+//! in its `prft`. The packed stream's bytes go into the swarm as they
+//! become final: a frame at a time, or up to a record's end. The swarm
+//! writer is never flushed, which would pad a partial integrity unit with
+//! zeros a reader takes for record bytes, so a stream's last partial unit
+//! is never published.
+//!
+//! **Units**: a [`UnitWriter`] in frames of the swarm's chunk size, whose
+//! records go into the swarm as each unit arrives. A partial integrity
+//! unit is signed
+//! [`IngressSettings::sign_interval`](crate::IngressSettings::sign_interval)
+//! after its first byte ([`SignTimer`]): the writer ends its frame, the
+//! swarm writer is flushed, which pads the unit with zeros that read as
+//! padding frames, and the writer goes on where the next unit starts.
 //!
 //! # Teardown
 //!
@@ -102,7 +115,8 @@
 //! ingress is disabled, when its channel is deleted or moved, and when
 //! the control stops. Its end:
 //!
-//! 1. ends the record in progress and writes it;
+//! 1. ends the record in progress and writes it, and has a unit-format
+//!    stream's last partial integrity unit signed;
 //! 2. stops the listing keeper, which unpublishes the listing, waiting at
 //!    most the listing settings'
 //!    [`unpublish_timeout`](crate::ListingSettings::unpublish_timeout);
@@ -146,15 +160,16 @@ use strims_proto::video::v1::{VideoChannel, VideoIngressConfig, VideoIngressStre
 use strims_rpc::Timer;
 use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
 
-use crate::config::{RtmpSettings, check_ingress_config};
+use crate::config::{IngestFormat, RtmpSettings, check_ingress_config};
 use crate::control::{Shared, Slot, Swarm};
 use crate::flv::{FlvSource, SourceEvent};
 use crate::host::{Accepted, VideoHost};
-use crate::media::{Muxer, fmp4_mime};
+use crate::media::{Muxer, fmp4_mime, units_mime};
 use crate::record::PackedSink;
 use crate::registry::{Added, SwarmKind};
 use crate::rtmp::{Phase, RtmpConfig, RtmpError, RtmpEvent, RtmpServer};
 use crate::segment::{CutRule, Segmenter};
+use crate::units::{SignTimer, UnitWriter, UnitWriterMetrics};
 use crate::{VideoError, VideoEvent};
 
 /// The app a publish names.
@@ -241,10 +256,16 @@ pub struct IngressMetrics {
     pub sessions: u64,
     /// Sessions a later publish to their channel replaced.
     pub replaced: u64,
-    /// Records written, and their bytes: prefix, init and padding
-    /// included.
+    /// Records written, fMP4 segments or unit-format records, and the
+    /// stream bytes written: an fMP4 record's prefix, init and padding,
+    /// and the unit format's frame headers and padding, and the zeros that
+    /// pad an integrity unit signed early.
     pub segments: u64,
     pub bytes: u64,
+    /// Integrity units of unit-format streams signed before they filled:
+    /// at [`IngressSettings::sign_interval`](crate::IngressSettings::sign_interval),
+    /// and at a session's end.
+    pub early_signs: u64,
     /// Units dropped: before their track's config, before the first
     /// keyframe, or of a changed config the record in progress doesn't
     /// declare.
@@ -865,10 +886,28 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             ingress_options().uri_options(),
         )
         .to_string();
+        let options = ingress_options();
+        let media = match self.config.ingress.format {
+            IngestFormat::Fmp4 => Mux::Fmp4(Segmenter::new(rule, PackedSink::new())),
+            IngestFormat::Units => {
+                let unit = options
+                    .chunk_size
+                    .saturating_mul(options.chunks_per_signature);
+                Mux::Units {
+                    // invariant: the ingest swarm's chunk size is a valid
+                    // frame size.
+                    #[allow(clippy::expect_used)]
+                    writer: UnitWriter::new(options.chunk_size)
+                        .expect("the ingest chunk size is a frame size"),
+                    sign: SignTimer::new(unit as u64, self.config.ingress.sign_interval),
+                    counted: UnitWriterMetrics::default(),
+                }
+            }
+        };
         Ok(Live {
             publication,
             source: FlvSource::new(),
-            segmenter: Segmenter::new(rule, PackedSink::new()),
+            media,
             writer,
             uri,
             mime: None,
@@ -1162,11 +1201,24 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Drop for Publication<K, H, V, T> {
     }
 }
 
+/// What a session writes its media as.
+enum Mux {
+    /// fMP4 segments in the packed layout.
+    Fmp4(Segmenter<PackedSink>),
+    /// The unit format, signed early by `sign`; `counted` is what the
+    /// metrics hold of the writer's.
+    Units {
+        writer: UnitWriter,
+        sign: SignTimer,
+        counted: UnitWriterMetrics,
+    },
+}
+
 /// A publishing session's media path.
 struct Live<K: Kv, H: Host, V: VideoHost, T: Timer> {
     publication: Publication<K, H, V, T>,
     source: FlvSource,
-    segmenter: Segmenter<PackedSink>,
+    media: Mux,
     writer: <H as SwarmHost>::Writer,
     uri: String,
     /// The MIME type listed.
@@ -1185,22 +1237,29 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
         } else {
             self.source.audio(ts, body, now)
         };
-        let res = match event {
-            Err(e) => Err(End::Media(e.to_string())),
-            Ok(None) => Ok(()),
-            Ok(Some(SourceEvent::Config(c))) => self
-                .segmenter
-                .set_config(&c)
-                .map_err(|e| End::Media(e.to_string())),
-            Ok(Some(SourceEvent::Unit(u))) => self
-                .segmenter
-                .push(&u)
-                .map_err(|e| End::Media(e.to_string())),
+        let media = |e: &dyn std::fmt::Display| End::Media(e.to_string());
+        let res = match (event, &mut self.media) {
+            (Err(e), _) => Err(media(&e)),
+            (Ok(None), _) => Ok(()),
+            (Ok(Some(SourceEvent::Config(c))), Mux::Fmp4(s)) => {
+                s.set_config(&c).map_err(|e| media(&e))
+            }
+            (Ok(Some(SourceEvent::Config(c))), Mux::Units { writer, .. }) => {
+                writer.set_config(&c).map_err(|e| media(&e))
+            }
+            (Ok(Some(SourceEvent::Unit(u))), Mux::Fmp4(s)) => s.push(&u).map_err(|e| media(&e)),
+            (Ok(Some(SourceEvent::Unit(u))), Mux::Units { writer, .. }) => {
+                writer.push(&u).map_err(|e| media(&e))
+            }
         };
-        let seg = self.segmenter.metrics();
-        let dropped = self.source.metrics().before_config
-            + seg.dropped_before_start
-            + seg.dropped_pending_config;
+        let muxed = match &self.media {
+            Mux::Fmp4(s) => {
+                let m = s.metrics();
+                m.dropped_before_start + m.dropped_pending_config
+            }
+            Mux::Units { writer, .. } => writer.metrics().dropped_before_start,
+        };
+        let dropped = self.source.metrics().before_config + muxed;
         let new = dropped.saturating_sub(self.dropped);
         if new > 0 {
             self.dropped = dropped;
@@ -1209,36 +1268,111 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
         res
     }
 
-    /// Writes the packed stream's final bytes into the swarm.
-    async fn write_output(&mut self) -> Result<(), End> {
-        let out = self.segmenter.sink_mut().take_output();
+    /// Writes the stream's final bytes into the swarm at `now`.
+    async fn write_output(&mut self, now: Time) -> Result<(), End> {
+        let out = match &mut self.media {
+            Mux::Fmp4(s) => s.sink_mut().take_output(),
+            Mux::Units { writer, .. } => writer.take_output(),
+        };
         let res = if out.is_empty() {
             Ok(())
         } else {
             self.writer.write(&out).await
         };
-        self.segmenter.sink_mut().restore(out);
+        match &mut self.media {
+            Mux::Fmp4(s) => s.sink_mut().restore(out),
+            Mux::Units { writer, sign, .. } => {
+                writer.restore(out);
+                if res.is_ok() {
+                    sign.written(writer.offset(), now);
+                }
+            }
+        }
         res.map_err(|e| {
             self.publication.shared.count(|m| m.write_errors += 1);
             End::Write(e.to_string())
         })
     }
 
-    /// Counts the records ended, and keeps their listing if `list`.
-    fn take_segments(&mut self, now: Time, list: bool) {
-        let mut written = false;
-        while let Some(info) = self.segmenter.take_segment() {
-            written = true;
-            let bytes = info.bytes as u64;
-            self.publication.shared.count(|m| {
-                m.segments += 1;
-                m.bytes += bytes;
-            });
+    /// When the unit-format stream's partial integrity unit is due for
+    /// signing.
+    fn sign_due(&self) -> Option<Time> {
+        match &self.media {
+            Mux::Fmp4(_) => None,
+            Mux::Units { sign, .. } => sign.due(),
         }
+    }
+
+    /// The unit-format stream has a partial integrity unit.
+    fn partial(&self) -> bool {
+        match &self.media {
+            Mux::Fmp4(_) => false,
+            Mux::Units { sign, .. } => sign.is_partial(),
+        }
+    }
+
+    /// Has the swarm sign a unit-format stream's partial integrity unit:
+    /// ends the frame in progress, writes it, flushes the swarm writer and
+    /// goes on where the next unit starts. The fMP4 format's packed layout
+    /// would read the padding as record bytes, so it is never flushed.
+    async fn sign(&mut self, now: Time) -> Result<(), End> {
+        let Mux::Units { writer, .. } = &mut self.media else {
+            return Ok(());
+        };
+        writer.end_frame();
+        self.write_output(now).await?;
+        let flushed = self.writer.flush().await;
+        let next = flushed.map_err(|e| {
+            self.publication.shared.count(|m| m.write_errors += 1);
+            End::Write(e.to_string())
+        })?;
+        let Mux::Units { writer, sign, .. } = &mut self.media else {
+            return Ok(());
+        };
+        let padding = next.saturating_sub(writer.offset());
+        writer
+            .continue_at(next)
+            .map_err(|e| End::Write(e.to_string()))?;
+        sign.flushed(next);
+        self.publication.shared.count(|m| {
+            m.early_signs += 1;
+            m.bytes += padding;
+        });
+        Ok(())
+    }
+
+    /// Counts the records written, and keeps their listing if `list`.
+    fn take_segments(&mut self, now: Time, list: bool) {
+        let (written, mime) = match &mut self.media {
+            Mux::Fmp4(s) => {
+                let mut written = false;
+                while let Some(info) = s.take_segment() {
+                    written = true;
+                    let bytes = info.bytes as u64;
+                    self.publication.shared.count(|m| {
+                        m.segments += 1;
+                        m.bytes += bytes;
+                    });
+                }
+                (written, fmp4_mime(s.segment_configs()))
+            }
+            Mux::Units {
+                writer, counted, ..
+            } => {
+                let m = writer.metrics();
+                let records = m.records.saturating_sub(counted.records);
+                let bytes = m.bytes.saturating_sub(counted.bytes);
+                *counted = m;
+                self.publication.shared.count(|i| {
+                    i.segments += records;
+                    i.bytes += bytes;
+                });
+                (records > 0, units_mime(writer.configs()))
+            }
+        };
         if !written {
             return;
         }
-        let mime = fmp4_mime(self.segmenter.segment_configs());
         let listing = (list && self.mime.as_ref() != Some(&mime)).then(|| {
             self.mime = Some(mime.clone());
             Listing {
@@ -1252,10 +1386,18 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
         s.segment_written(&self.publication, now, listing);
     }
 
-    /// Ends and writes the record in progress: step 1 of the
+    /// Ends and writes the record in progress, and has the swarm sign a
+    /// unit-format stream's last partial unit: step 1 of the
     /// [teardown](self#teardown).
     async fn finish(&mut self, now: Time) {
-        if self.segmenter.finish().is_ok() && self.write_output().await.is_ok() {
+        let finished = match &mut self.media {
+            Mux::Fmp4(s) => s.finish().is_ok(),
+            Mux::Units { writer, .. } => writer.finish().is_ok(),
+        };
+        if finished && self.write_output(now).await.is_ok() {
+            self.take_segments(now, false);
+        }
+        if self.partial() && self.sign(now).await.is_ok() {
             self.take_segments(now, false);
         }
     }
@@ -1292,16 +1434,16 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Drop for Connection<K, H, V, T> {
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
     async fn run(mut self) {
         let s = self.shared.clone();
-        let (mut armed, _) = self.due();
+        let mut armed = self.wake_at();
         let mut sleep = Box::pin(s.timer.sleep_until(armed));
         let end = loop {
             if let Err(end) = self.process().await {
                 break end;
             }
-            let (due, _) = self.due();
-            if due < armed {
-                armed = due;
-                sleep = Box::pin(s.timer.sleep_until(due));
+            let at = self.wake_at();
+            if at < armed {
+                armed = at;
+                sleep = Box::pin(s.timer.sleep_until(at));
             }
             match self.wait(sleep.as_mut()).await {
                 Woke::Input(b) => {
@@ -1309,12 +1451,21 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
                     self.pos = 0;
                 }
                 Woke::Deadline => {
+                    let now = s.timer.now();
+                    if let Some(l) = &mut self.live
+                        && l.sign_due().is_some_and(|t| now >= t)
+                    {
+                        if let Err(end) = l.sign(now).await {
+                            break end;
+                        }
+                        l.take_segments(now, true);
+                    }
                     let (due, which) = self.due();
-                    if s.timer.now() >= due {
+                    if now >= due {
                         break End::Deadline(which);
                     }
-                    armed = due;
-                    sleep = Box::pin(s.timer.sleep_until(due));
+                    armed = self.wake_at();
+                    sleep = Box::pin(s.timer.sleep_until(armed));
                 }
                 Woke::Stop(r) => break End::Stopped(r),
                 Woke::Closed => break End::PeerClosed,
@@ -1342,6 +1493,16 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
                 channel_id,
                 reason: end.to_string(),
             });
+        }
+    }
+
+    /// When the connection's task wakes: at its deadline, or when a
+    /// unit-format stream's partial integrity unit is due for signing.
+    fn wake_at(&self) -> Time {
+        let (due, _) = self.due();
+        match self.live.as_ref().and_then(|l| l.sign_due()) {
+            Some(sign) => sign.min(due),
+            None => due,
         }
     }
 
@@ -1397,7 +1558,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
                     self.publish(&app, &name).await;
                 }
                 if let Some(l) = &mut self.live {
-                    l.write_output().await?;
+                    l.write_output(now).await?;
                     l.take_segments(now, true);
                 }
             }

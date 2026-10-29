@@ -549,6 +549,7 @@ message IngressMetrics {
   uint64 deadlines = 12;
   uint64 media_errors = 13;
   uint64 write_errors = 14;
+  uint64 early_signs = 15;
 }
 
 // The debug control's counters and its mock streams.

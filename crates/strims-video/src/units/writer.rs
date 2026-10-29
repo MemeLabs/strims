@@ -435,6 +435,11 @@ impl SignTimer {
         self.offset = offset;
     }
 
+    /// Whether a unit is partial: written to, and not yet full or signed.
+    pub fn is_partial(&self) -> bool {
+        self.since.is_some()
+    }
+
     /// When the partial unit is due for signing; `None` without one.
     pub fn due(&self) -> Option<Time> {
         if self.interval == Duration::MAX {

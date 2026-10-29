@@ -1093,6 +1093,7 @@ fn ingress(m: strims_video::IngressMetrics) -> v1::IngressMetrics {
         deadlines,
         media_errors,
         write_errors,
+        early_signs,
     } = m;
     v1::IngressMetrics {
         listens,
@@ -1109,6 +1110,7 @@ fn ingress(m: strims_video::IngressMetrics) -> v1::IngressMetrics {
         deadlines,
         media_errors,
         write_errors,
+        early_signs,
     }
 }
 

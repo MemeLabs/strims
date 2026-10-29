@@ -61,6 +61,18 @@ pub struct IngressSettings {
     /// The media a fragment within a record holds before it is written
     /// ([`CutRule::fragment_duration`](crate::CutRule::fragment_duration)).
     pub fragment_duration: Duration,
+    /// The format sessions write. The record bounds above are the fMP4
+    /// format's; the unit format's records are bounded by
+    /// [`units::MAX_RECORD_LEN`](crate::units::MAX_RECORD_LEN).
+    pub format: IngestFormat,
+    /// How long a unit-format stream's partial integrity unit waits after
+    /// its first byte before it is signed, padded to its end
+    /// ([`SignTimer`](crate::units::SignTimer)). The padding is sent, so a
+    /// stream below the unit size over this interval is sent at about that
+    /// rate: 1 Mbit/s for the ingest swarm's 32 KiB units at 250 ms, below
+    /// the bitrates live streams are usually sent at, whose units fill
+    /// sooner. No byte waits longer than this for its signature.
+    pub sign_interval: Duration,
     pub rtmp: RtmpSettings,
     /// How long a closing connection has to take its last output, such as
     /// the status that tells a publisher why.
@@ -80,10 +92,24 @@ impl Default for IngressSettings {
             min_segment_media_bytes: 32 * 1024,
             max_record_bytes: 8 * 1024 * 1024,
             fragment_duration: CutRule::DEFAULT_FRAGMENT_DURATION,
+            format: IngestFormat::default(),
+            sign_interval: Duration::from_millis(250),
             rtmp: RtmpSettings::default(),
             close_timeout: Duration::from_secs(5),
         }
     }
+}
+
+/// The format an ingest session writes into its swarm.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum IngestFormat {
+    /// fMP4 records, one per segment, in the packed layout; listed as
+    /// [`fmp4_mime`](crate::fmp4_mime).
+    #[default]
+    Fmp4,
+    /// The [unit format](crate::units): a record per access unit, in the
+    /// chunked layout; listed as [`units_mime`](crate::units_mime).
+    Units,
 }
 
 /// What one RTMP connection takes and holds. Decoder configs (avcC,

@@ -92,14 +92,16 @@
 //!   Its session's swarm is under the channel key, with
 //!   [`ingress_options`], so the swarm id is the channel's public key.
 //!   Its records are fMP4 segments, each starting at a keyframe and cut
-//!   by a [`Segmenter`] into a [`PackedSink`]; a record over its bound,
-//!   or a codec the [`FlvSource`] refuses, ends the session with the
-//!   reason. The session serves the channel's snippet, live from the
+//!   by a [`Segmenter`] into a [`PackedSink`], or with
+//!   [`IngestFormat::Units`] the unit format's, written by a
+//!   [`UnitWriter`] and signed early; a record over its bound, or a codec
+//!   the [`FlvSource`] refuses, ends the session with the reason. The session serves the channel's snippet, live from the
 //!   publish's start time and signed with the channel key, and keeps a
 //!   listing of the records' MIME type and swarm URI on the channel's
 //!   network from its first record. A changed channel serves the snippet
 //!   again; a deleted or moved one ends the session. Its end writes the
-//!   record in progress, then takes the listing, snippet, transfer, slot
+//!   record in progress (and has a unit-format stream's last partial
+//!   integrity unit signed), then takes the listing, snippet, transfer, slot
 //!   and swarm down; a session that replaces it keeps the slot, so the
 //!   node's streams of the channel go on after a discontinuity.
 //! - **Captures** ([`capture`]): the UI's recording. A capture has a
@@ -192,8 +194,8 @@ pub use capture::{CaptureInfo, capture_options};
 pub use channels::{ChannelUrl, MAX_CHANNELS};
 pub use config::{
     AutoseedSettings, CaptureSettings, Config, ConfigError, EgressSettings, HlsSettings,
-    IngressSettings, ListingSettings, MAX_ADDR_BYTES, MAX_NETWORK_KEY_BYTES, MAX_SERVICE_NETWORKS,
-    Metrics, RtmpSettings, check_hls_config, check_ingress_config,
+    IngestFormat, IngressSettings, ListingSettings, MAX_ADDR_BYTES, MAX_NETWORK_KEY_BYTES,
+    MAX_SERVICE_NETWORKS, Metrics, RtmpSettings, check_hls_config, check_ingress_config,
 };
 pub use control::VideoControl;
 pub use egress::{
