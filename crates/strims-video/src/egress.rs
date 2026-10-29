@@ -26,18 +26,29 @@
 //!
 //! # Reading
 //!
-//! A video swarm carries records in the packed chunkstream layout
-//! ([`strims_chunkstream::packed`], [`DEFAULT_SIZE`] byte frames). A
-//! [`PackedReader`] yields their bytes and ends ([`EgressPiece`]):
+//! A stream reads its swarm in the layout of its format
+//! ([`StreamFormat`], from the listing's MIME type) and yields the bytes
+//! and ends of its records ([`EgressPiece`]):
 //!
-//! - It reads from the swarm reader's start, which may fall inside a
-//!   record: unless it starts at offset 0, it drops the bytes up to the
-//!   first record end.
-//! - A discontinuity (the swarm reader's, a gap between the offsets of two
-//!   reads, a corrupt frame, or a new swarm) drops the record in
-//!   progress and the bytes up to the next whole record. Once something
-//!   was yielded, it yields [`EgressPiece::Discontinuity`] once before that
-//!   record.
+//! - **Packed** ([`PackedReader`]): the fMP4 format and a capture's
+//!   records, in the packed chunkstream layout
+//!   ([`strims_chunkstream::packed`], [`DEFAULT_SIZE`] byte frames). Unless
+//!   it starts at offset 0, it drops the bytes up to the first record end.
+//! - **Units** ([`ChunkedReader`]): the [unit format](crate::units), in the
+//!   chunked layout ([`strims_chunkstream::chunked`]) in frames of the
+//!   swarm's chunk size. It yields the records from the first frame
+//!   boundary it reads, after joining at a GOP: the first whole record names
+//!   its GOP's sync record, and when that is behind it, the reader rewinds
+//!   the swarm reader there ([`Rewind`]) and yields from the sync record
+//!   on. A reader that can't rewind in time yields from the record it read
+//!   first, and the unit reader waits for the next keyframe.
+//!
+//! A reader reads from the swarm reader's start, which may fall inside a
+//! record. A discontinuity (the swarm reader's, a gap between the offsets
+//! of two reads, records the layout lost, or a new swarm) drops the record
+//! in progress and the bytes up to the next whole record. Once something
+//! was yielded, it yields [`EgressPiece::Discontinuity`] once before that
+//! record.
 //!
 //! So the bytes between two record ends, or between a discontinuity and
 //! the next record end, are one whole record as its writer wrote it.
@@ -48,11 +59,15 @@
 //! [`VideoError::StreamClosed`].
 
 use std::collections::BTreeSet;
-use std::future::poll_fn;
+use std::future::{Future, poll_fn};
+use std::pin::pin;
 use std::rc::Rc;
 
 use futures_util::FutureExt;
+use futures_util::future::{Either, select};
+use strims_base::time::{Duration, Time};
 use strims_chunkstream::Frag;
+use strims_chunkstream::chunked::{ChunkedDecoder, FrameSizeError, Piece};
 use strims_chunkstream::packed::{DEFAULT_SIZE, PackedDecoder};
 use strims_crypto::ED25519_PUBLIC_KEY_SIZE;
 use strims_directory::Host;
@@ -65,7 +80,9 @@ use strims_transfer::{ReadFailure, SwarmHost, SwarmRead, TransferId};
 
 use crate::config::EgressSettings;
 use crate::control::{Shared, Swarm};
+use crate::media::mime_essence;
 use crate::registry::{Added, Claim, SwarmKind};
+use crate::units::{self, record::GOP_HEAD_LEN};
 use crate::{VideoControl, VideoError, VideoHost};
 
 /// A piece of a video swarm's records, in stream order.
@@ -81,16 +98,24 @@ pub enum EgressPiece<'a> {
     Discontinuity,
 }
 
-/// What a [`PackedReader`] has done.
+/// What a [`PackedReader`] or [`ChunkedReader`] has done.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ReaderMetrics {
     /// Discontinuities: the swarm reader's, gaps between read offsets,
     /// failed reads and new swarms.
     pub discontinuities: u64,
-    /// Frames whose header flagged an end outside the frame.
+    /// Frames whose header disagreed with the stream: a packed frame's end
+    /// outside the frame, or a chunked frame the layout skipped as corrupt.
     pub corrupt_frames: u64,
+    /// Places the chunked layout lost records: a record cut short, a
+    /// corrupt frame, or a record over the bound.
+    pub losses: u64,
     /// Records yielded whole.
     pub records: u64,
+    /// Rewinds to a GOP's sync record, and those the swarm reader refused
+    /// or didn't answer in time.
+    pub rewinds: u64,
+    pub refused_rewinds: u64,
 }
 
 /// What [`PackedReader::advance`] found, before it is borrowed as an
@@ -299,6 +324,432 @@ impl<R: SwarmRead> PackedReader<R> {
     }
 }
 
+/// The layout of a video swarm's stream, which its listing's MIME type
+/// names.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StreamFormat {
+    /// Records in the packed layout: the fMP4 format, and a capture's.
+    #[default]
+    Packed,
+    /// The [unit format](crate::units): records in the chunked layout, in
+    /// frames of the swarm's chunk size, joined at a GOP.
+    Units,
+}
+
+impl StreamFormat {
+    /// The format of a stream listed with MIME type `mime`: the unit
+    /// format's ([`units::MIME_TYPE`]), compared without case, or else
+    /// packed records.
+    pub fn from_mime(mime: &str) -> StreamFormat {
+        if mime_essence(mime).eq_ignore_ascii_case(units::MIME_TYPE) {
+            StreamFormat::Units
+        } else {
+            StreamFormat::Packed
+        }
+    }
+}
+
+/// A swarm reader that can move back within its live window.
+pub trait Rewind {
+    /// Moves reading back to stream offset `offset`: the offset the next
+    /// read starts at, `offset`'s chunk start. `None` when it can't, within
+    /// its own deadline; reading then goes on where it was.
+    fn rewind(&mut self, offset: u64) -> impl Future<Output = Option<u64>>;
+}
+
+/// What a [`ChunkedReader`] found, before it is borrowed as an
+/// [`EgressPiece`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChunkedStep {
+    /// The bytes `buf[start..end]`.
+    Data(usize, usize),
+    /// The bytes `head[start..end]` of the first record, held while it
+    /// was joined.
+    Head(usize, usize),
+    End,
+    Discontinuity,
+}
+
+/// Where a [`ChunkedReader`] is in joining its stream at a GOP.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Join {
+    /// Waiting for the first whole record.
+    Waiting,
+    /// Holding the first record's head: the record's offset and the bytes
+    /// of it to hold.
+    Holding { offset: u64, want: usize },
+    /// Rewinding the swarm reader to the GOP's sync record at `to`.
+    Rewinding { to: u64 },
+    /// Reading on.
+    Joined,
+}
+
+/// Reads the records of a unit-format swarm's stream; see the
+/// [module docs](self).
+///
+/// It joins after it starts and after [`replace`](Self::replace): it holds
+/// the first whole record's head, at most
+/// [`GOP_HEAD_LEN`] bytes, which names the
+/// offset `K` of its GOP's sync record. When `K` is before the record, it
+/// rewinds the swarm reader to `K`, resets its layout decoder where reading
+/// resumes and drops the records before `K`; when the reader can't rewind,
+/// it yields the record it holds and reads on. It rewinds once a join.
+pub struct ChunkedReader<R> {
+    reader: R,
+    decoder: ChunkedDecoder,
+    /// Bytes read and not yet decoded are `buf[start..end]`. Bound: the
+    /// size given to [`ChunkedReader::new`].
+    buf: Box<[u8]>,
+    start: usize,
+    end: usize,
+    /// The stream offset just past the last read. `None` before the first
+    /// read and after a discontinuity: the decoder restarts at the next
+    /// read's offset.
+    next: Option<u64>,
+    join: Join,
+    /// The first record's head while joining. Its yielded bytes are
+    /// `head[..head_out]` of `head[..head_len]`.
+    head: [u8; GOP_HEAD_LEN],
+    head_len: usize,
+    head_out: usize,
+    /// Records whose offset is below it are dropped: those before the sync
+    /// record a rewind went back to.
+    skip_below: u64,
+    /// The record in progress is dropped.
+    skipping: bool,
+    /// Something was yielded, so a later discontinuity is reported.
+    started: bool,
+    /// A discontinuity to report before the next piece.
+    gap: bool,
+    /// The piece found while the discontinuity before it was reported.
+    held: Option<ChunkedStep>,
+    metrics: ReaderMetrics,
+}
+
+impl<R: SwarmRead + Rewind> ChunkedReader<R> {
+    /// A reader of `reader`'s stream in frames of `frame_size` bytes, the
+    /// swarm's chunk size, that takes up to `buffer_bytes` bytes (at least
+    /// 1) per read. Records are at most [`units::MAX_RECORD_LEN`].
+    pub fn new(reader: R, frame_size: usize, buffer_bytes: usize) -> Result<Self, FrameSizeError> {
+        Ok(ChunkedReader {
+            reader,
+            decoder: ChunkedDecoder::new(frame_size, units::MAX_RECORD_LEN)?,
+            buf: vec![0; buffer_bytes.max(1)].into_boxed_slice(),
+            start: 0,
+            end: 0,
+            next: None,
+            join: Join::Waiting,
+            head: [0; GOP_HEAD_LEN],
+            head_len: 0,
+            head_out: 0,
+            skip_below: 0,
+            skipping: false,
+            started: false,
+            gap: false,
+            held: None,
+            metrics: ReaderMetrics::default(),
+        })
+    }
+
+    /// The next piece of the records; a data piece holds at most `max`
+    /// bytes (at least 1).
+    ///
+    /// # Errors
+    ///
+    /// [`VideoError::StreamClosed`] once the swarm reader closes; then
+    /// every call fails so. [`VideoError::StreamRead`] for a failed read,
+    /// after which reading goes on as after a discontinuity.
+    pub async fn next(&mut self, max: usize) -> Result<EgressPiece<'_>, VideoError> {
+        let step = self.advance(max).await?;
+        Ok(self.piece(step))
+    }
+
+    /// Reads from `reader` from now on, as after a discontinuity, and joins
+    /// again.
+    pub fn replace(&mut self, reader: R) {
+        self.reader = reader;
+        self.start = 0;
+        self.end = 0;
+        self.next = None;
+        self.held = None;
+        self.rejoin();
+        self.discontinuity();
+    }
+
+    pub fn metrics(&self) -> ReaderMetrics {
+        ReaderMetrics {
+            corrupt_frames: self.decoder.metrics().corrupt,
+            ..self.metrics
+        }
+    }
+
+    fn piece(&self, step: ChunkedStep) -> EgressPiece<'_> {
+        match step {
+            ChunkedStep::Data(start, end) => {
+                EgressPiece::Data(self.buf.get(start..end).unwrap_or_default())
+            }
+            ChunkedStep::Head(start, end) => {
+                EgressPiece::Data(self.head.get(start..end).unwrap_or_default())
+            }
+            ChunkedStep::End => EgressPiece::RecordEnd,
+            ChunkedStep::Discontinuity => EgressPiece::Discontinuity,
+        }
+    }
+
+    /// [`next`](Self::next), without the borrow.
+    async fn advance(&mut self, max: usize) -> Result<ChunkedStep, VideoError> {
+        if let Some(step) = self.held.take() {
+            return Ok(self.yielded(step));
+        }
+        let max = max.max(1);
+        if let Join::Rewinding { .. } = self.join {
+            // A rewind whose call was dropped: read on from the record held.
+            self.metrics.refused_rewinds += 1;
+            self.join = Join::Joined;
+        }
+        if self.head_out < self.head_len {
+            let end = self.head_len.min(self.head_out.saturating_add(max));
+            let step = ChunkedStep::Head(self.head_out, end);
+            self.head_out = end;
+            return Ok(self.report(step));
+        }
+        loop {
+            let room = match self.join {
+                Join::Holding { want, .. } => want.saturating_sub(self.head_len).max(1),
+                _ => max,
+            };
+            let limit = self.end.min(self.start.saturating_add(room));
+            let input = self.buf.get(self.start..limit).unwrap_or_default();
+            let (used, piece) = self.decoder.decode(input);
+            self.start += used;
+            let step = match piece {
+                None if self.start < self.end => continue,
+                None => {
+                    self.read().await?;
+                    continue;
+                }
+                Some(Piece::Start { offset, len }) => {
+                    self.skipping = offset < self.skip_below;
+                    if !self.skipping && self.join == Join::Waiting {
+                        self.join = Join::Holding {
+                            offset,
+                            want: len.min(GOP_HEAD_LEN),
+                        };
+                        self.head_len = 0;
+                        self.head_out = 0;
+                    }
+                    continue;
+                }
+                Some(Piece::Data(_)) if self.skipping => continue,
+                Some(Piece::Data(d)) => {
+                    let Join::Holding { offset, want } = self.join else {
+                        // A data piece is the last of the bytes the call used.
+                        let step =
+                            ChunkedStep::Data(self.start.saturating_sub(d.len()), self.start);
+                        return Ok(self.report(step));
+                    };
+                    let take = d.len().min(want.saturating_sub(self.head_len));
+                    if let (Some(dst), Some(src)) = (
+                        self.head.get_mut(self.head_len..self.head_len + take),
+                        d.get(..take),
+                    ) {
+                        dst.copy_from_slice(src);
+                    }
+                    self.head_len += take;
+                    if self.head_len < want {
+                        continue;
+                    }
+                    if self.joined(offset).await {
+                        continue;
+                    }
+                    let end = self.head_len.min(max);
+                    self.head_out = end;
+                    ChunkedStep::Head(0, end)
+                }
+                Some(Piece::End) if self.skipping => {
+                    self.skipping = false;
+                    continue;
+                }
+                Some(Piece::End) => {
+                    self.metrics.records += 1;
+                    ChunkedStep::End
+                }
+                Some(Piece::Lost) => {
+                    self.metrics.losses += 1;
+                    self.skipping = false;
+                    self.rejoin_held();
+                    self.lose();
+                    continue;
+                }
+            };
+            return Ok(self.report(step));
+        }
+    }
+
+    /// The first record's head is whole: rewinds to its GOP's sync record
+    /// when that is behind it. Whether it did, dropping what it read.
+    async fn joined(&mut self, offset: u64) -> bool {
+        let head = self.head.get(..self.head_len).unwrap_or_default();
+        let to = units::record::gop_back(head).and_then(|back| offset.checked_sub(back));
+        self.join = Join::Joined;
+        let Some(to) = to.filter(|&k| k < offset) else {
+            return false;
+        };
+        self.join = Join::Rewinding { to };
+        let resumed = self.reader.rewind(to).await;
+        self.join = Join::Joined;
+        match resumed {
+            Some(at) if at <= to => {
+                self.metrics.rewinds += 1;
+                self.start = 0;
+                self.end = 0;
+                self.next = Some(at);
+                self.decoder.reset(at);
+                self.skip_below = to;
+                self.skipping = false;
+                self.head_len = 0;
+                self.head_out = 0;
+                true
+            }
+            _ => {
+                self.metrics.refused_rewinds += 1;
+                false
+            }
+        }
+    }
+
+    /// A step to yield, after the discontinuity before it.
+    fn report(&mut self, step: ChunkedStep) -> ChunkedStep {
+        if self.gap {
+            self.gap = false;
+            self.held = Some(step);
+            return ChunkedStep::Discontinuity;
+        }
+        self.yielded(step)
+    }
+
+    fn yielded(&mut self, step: ChunkedStep) -> ChunkedStep {
+        self.started = true;
+        step
+    }
+
+    /// A join that was holding a record's head waits for the next record:
+    /// the one it held is lost.
+    fn rejoin_held(&mut self) {
+        if let Join::Holding { .. } = self.join {
+            self.join = Join::Waiting;
+            self.head_len = 0;
+            self.head_out = 0;
+        }
+    }
+
+    /// Joins again at the next whole record.
+    fn rejoin(&mut self) {
+        self.join = Join::Waiting;
+        self.head_len = 0;
+        self.head_out = 0;
+        self.skip_below = 0;
+        self.skipping = false;
+    }
+
+    /// The record in progress is lost.
+    fn lose(&mut self) {
+        if self.started {
+            self.gap = true;
+        }
+    }
+
+    fn discontinuity(&mut self) {
+        self.metrics.discontinuities += 1;
+        self.lose();
+    }
+
+    /// Reads into the empty buffer.
+    async fn read(&mut self) -> Result<(), VideoError> {
+        match self.reader.read_at(&mut self.buf).await {
+            Ok((offset, n)) => {
+                let n = n.min(self.buf.len());
+                if n == 0 {
+                    // A swarm read returns data or fails, so a read of
+                    // nothing ends the stream.
+                    return Err(VideoError::StreamClosed);
+                }
+                self.start = 0;
+                self.end = n;
+                let expected = self.next.replace(offset.saturating_add(n as u64));
+                if expected != Some(offset) {
+                    if expected.is_some() {
+                        self.discontinuity();
+                    }
+                    self.decoder.reset(offset);
+                    self.skipping = false;
+                    self.rejoin_held();
+                }
+                Ok(())
+            }
+            Err(ReadFailure::Discontinuity) => {
+                self.next = None;
+                self.discontinuity();
+                Ok(())
+            }
+            Err(ReadFailure::Closed) => Err(VideoError::StreamClosed),
+            Err(ReadFailure::Failed(e)) => {
+                self.next = None;
+                self.discontinuity();
+                Err(VideoError::StreamRead(e.to_string()))
+            }
+        }
+    }
+}
+
+/// A host's swarm reader, rewinding within `timeout`.
+struct HostReader<R, T> {
+    reader: R,
+    timer: T,
+    timeout: Duration,
+}
+
+impl<R: SwarmRead, T: Timer> SwarmRead for HostReader<R, T> {
+    type Error = R::Error;
+
+    async fn read_at(&mut self, out: &mut [u8]) -> Result<(u64, usize), ReadFailure<R::Error>> {
+        self.reader.read_at(out).await
+    }
+}
+
+impl<R: SwarmRead, T: Timer> Rewind for HostReader<R, T> {
+    async fn rewind(&mut self, offset: u64) -> Option<u64> {
+        let deadline = self.timer.now() + self.timeout;
+        within(
+            &self.timer,
+            deadline,
+            rewind_reader(&mut self.reader, offset),
+        )
+        .await
+    }
+}
+
+/// `rewind`'s answer, or `None` once `deadline` passes, which drops it.
+async fn within<T: Timer>(
+    timer: &T,
+    deadline: Time,
+    rewind: impl Future<Output = Option<u64>>,
+) -> Option<u64> {
+    let rewind = pin!(rewind);
+    let sleep = pin!(timer.sleep_until(deadline));
+    match select(rewind, sleep).await {
+        Either::Left((at, _)) => at,
+        Either::Right(_) => None,
+    }
+}
+
+/// Moves `reader` back to stream offset `offset`. Swarm readers don't move
+/// back, so a join waits for the next keyframe.
+async fn rewind_reader<R: SwarmRead>(reader: &mut R, offset: u64) -> Option<u64> {
+    let _ = (reader, offset);
+    None
+}
+
 /// Checks a stream's swarm URI and network keys against `s`: the URI, and
 /// the options to add its swarm with. See the [module docs](self).
 pub(crate) fn check_stream(
@@ -453,10 +904,41 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Drop for StreamHold<K, H, V, T> {
     }
 }
 
+/// A stream's reader, in its format's layout.
+enum Reader<R, T> {
+    Packed(PackedReader<R>),
+    Units(ChunkedReader<HostReader<R, T>>),
+}
+
+/// A step of either reader.
+#[derive(Clone, Copy, Debug)]
+enum AnyStep {
+    Packed(Step),
+    Units(ChunkedStep),
+}
+
+impl<R: SwarmRead, T: Timer> Reader<R, T> {
+    async fn advance(&mut self, max: usize) -> Result<AnyStep, VideoError> {
+        match self {
+            Reader::Packed(r) => r.advance(max).await.map(AnyStep::Packed),
+            Reader::Units(r) => r.advance(max).await.map(AnyStep::Units),
+        }
+    }
+
+    fn piece(&self, step: AnyStep) -> EgressPiece<'_> {
+        match (self, step) {
+            (Reader::Packed(r), AnyStep::Packed(step)) => r.piece(step),
+            (Reader::Units(r), AnyStep::Units(step)) => r.piece(step),
+            // invariant: a reader's steps are its own; the arm is unreachable.
+            _ => EgressPiece::Discontinuity,
+        }
+    }
+}
+
 /// A viewer's stream of a video swarm's records; see the
 /// [module docs](self). Dropping it releases the swarm.
 pub struct EgressStream<K: Kv, H: Host, V: VideoHost, T: Timer> {
-    reader: PackedReader<<H as SwarmHost>::Reader>,
+    reader: Reader<<H as SwarmHost>::Reader, T>,
     hold: StreamHold<K, H, V, T>,
 }
 
@@ -490,7 +972,10 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> EgressStream<K, H, V, T> {
                         .open_reader(swarm)
                         .await
                         .map_err(|e| s.host_failed("opening a video stream reader", &e))?;
-                    self.reader.replace(reader);
+                    match &mut self.reader {
+                        Reader::Packed(r) => r.replace(reader),
+                        Reader::Units(r) => r.replace(s.host_reader(reader)),
+                    }
                     s.metrics.borrow_mut().reopens += 1;
                 }
                 Err(e) => return Err(e),
@@ -499,11 +984,26 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> EgressStream<K, H, V, T> {
     }
 
     pub fn metrics(&self) -> ReaderMetrics {
-        self.reader.metrics()
+        match &self.reader {
+            Reader::Packed(r) => r.metrics(),
+            Reader::Units(r) => r.metrics(),
+        }
     }
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
+    /// `reader`, rewinding within the egress settings' timeout.
+    fn host_reader(
+        &self,
+        reader: <H as SwarmHost>::Reader,
+    ) -> HostReader<<H as SwarmHost>::Reader, T> {
+        HostReader {
+            reader,
+            timer: self.timer.clone(),
+            timeout: self.config.egress.rewind_timeout,
+        }
+    }
+
     /// Takes a stream's claim on the slot of `t`: the slot there is, or a
     /// new egress slot whose swarm a task adds.
     fn claim_stream(
@@ -584,7 +1084,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
     /// A stream of the records of the swarm `swarm_uri` names, read on the
-    /// networks `network_keys` names; see the [module docs](self).
+    /// networks `network_keys` names in the layout of `format`; see the
+    /// [module docs](self).
     ///
     /// # Errors
     ///
@@ -595,22 +1096,28 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         &self,
         swarm_uri: &str,
         network_keys: &[Vec<u8>],
+        format: StreamFormat,
     ) -> Result<EgressStream<K, H, V, T>, VideoError> {
         let s = &self.shared;
         let (uri, options) = check_stream(&s.config.egress, swarm_uri, network_keys)?;
         let t = TransferId::new(&uri.id, b"");
         let mut hold = StreamHold::new(s, t)?;
-        hold.claim = Some(s.claim_stream(t, uri.id, options, network_keys)?);
+        hold.claim = Some(s.claim_stream(t, uri.id, options.clone(), network_keys)?);
         let swarm = hold.next_swarm().await.ok_or(VideoError::StreamClosed)?;
         let reader = s
             .host
             .open_reader(swarm)
             .await
             .map_err(|e| s.host_failed("opening a video stream reader", &e))?;
-        Ok(EgressStream {
-            reader: PackedReader::new(reader, s.config.egress.read_buffer_bytes),
-            hold,
-        })
+        let buffer = s.config.egress.read_buffer_bytes;
+        let reader = match format {
+            StreamFormat::Packed => Reader::Packed(PackedReader::new(reader, buffer)),
+            StreamFormat::Units => Reader::Units(
+                ChunkedReader::new(s.host_reader(reader), options.chunk_size, buffer)
+                    .map_err(|_| VideoError::SwarmOption("chunk size"))?,
+            ),
+        };
+        Ok(EgressStream { reader, hold })
     }
 }
 

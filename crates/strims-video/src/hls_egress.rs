@@ -66,7 +66,7 @@ use strims_rpc::Timer;
 use strims_transfer::TransferId;
 
 use crate::control::Shared;
-use crate::egress::{EgressPiece, EgressStream, check_stream};
+use crate::egress::{EgressPiece, EgressStream, StreamFormat, check_stream};
 use crate::fmp4::{InitInfo, media_duration, parse_init, split_record};
 use crate::hls::{HlsProfile, HlsRoutes, HlsStream, PlaylistConfig, RouteError, playlist_path};
 use crate::{VideoControl, VideoError, VideoEvent, VideoHost};
@@ -493,7 +493,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
             id,
             done: false,
         };
-        let egress = self.open_stream(swarm_uri, network_keys).await?;
+        let egress = self
+            .open_stream(swarm_uri, network_keys, StreamFormat::Packed)
+            .await?;
         let task = {
             let mut h = s.hls.borrow_mut();
             let entry = h

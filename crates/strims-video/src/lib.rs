@@ -82,9 +82,11 @@
 //! one to seed. Each is the transfer of its swarm id under the empty
 //! salt, so a transfer id names one video swarm, and a stream or a seed
 //! of a swarm the node already runs takes it where it is.
-//! A video swarm carries opaque records in the packed chunkstream layout
-//! ([`strims_chunkstream::packed`]), with at most one record end per
-//! frame.
+//! A video swarm carries records in the layout of its format, which its
+//! listing's MIME type names: opaque records in the packed chunkstream
+//! layout ([`strims_chunkstream::packed`]), with at most one record end per
+//! frame, or the [unit format](units)'s records in the chunked layout
+//! ([`strims_chunkstream::chunked`]).
 //!
 //! - **Ingest** ([`ingress`]): a broadcaster's RTMP stream to a channel.
 //!   Its session's swarm is under the channel key, with
@@ -109,9 +111,10 @@
 //!   opened it, taking its listings, snippet, transfer and swarm with it.
 //!   Bounds: [`CaptureSettings`].
 //! - **Streams** ([`egress`]): a viewer's read of the swarm a magnet URI
-//!   names, as [`EgressPiece`]s: data, record ends, and a discontinuity
-//!   before the next whole record once the stream skipped. A swarm added
-//!   for streams gets a live window of
+//!   names, in the layout of its [`StreamFormat`], as [`EgressPiece`]s:
+//!   data, record ends, and a discontinuity before the next whole record
+//!   once the stream skipped. A unit-format stream starts at the GOP it
+//!   joins. A swarm added for streams gets a live window of
 //!   [`EgressSettings::window_bytes`], and goes with the last of them; a
 //!   capture's or an ingest session's stays with it. A stream whose swarm
 //!   closes reads the swarm that replaced it under its transfer id, if
@@ -193,7 +196,9 @@ pub use config::{
     Metrics, RtmpSettings, check_hls_config, check_ingress_config,
 };
 pub use control::VideoControl;
-pub use egress::{EgressPiece, EgressStream, PackedReader, ReaderMetrics};
+pub use egress::{
+    ChunkedReader, EgressPiece, EgressStream, PackedReader, ReaderMetrics, Rewind, StreamFormat,
+};
 pub use error::VideoError;
 pub use events::VideoEvent;
 pub use frontend::{CaptureFrontend, VideoFrontend, bind_frontend};

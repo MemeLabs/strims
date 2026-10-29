@@ -75,8 +75,8 @@ use strims_video::synth::script::{
     MetaValue, Script, ScriptConfig, Tag, TagKind, expected_records, without_publish_times,
 };
 use strims_video::{
-    CutRule, DecoderConfig, EgressPiece, EgressStream, FlvSource, SourceEvent, SwarmKind,
-    VideoControl, VideoEvent, fmp4_mime,
+    CutRule, DecoderConfig, EgressPiece, EgressStream, FlvSource, SourceEvent, StreamFormat,
+    SwarmKind, VideoControl, VideoEvent, fmp4_mime,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::spawn_local;
@@ -649,7 +649,11 @@ async fn owner(w: World) -> turmoil::Result {
     // o's own stream reads the ingest swarm
     let mut stream = h
         .video
-        .open_stream(&channel.uri(), std::slice::from_ref(&net))
+        .open_stream(
+            &channel.uri(),
+            std::slice::from_ref(&net),
+            StreamFormat::Packed,
+        )
         .await
         .unwrap();
     assert_eq!(stream.transfer_id(), t);
@@ -752,7 +756,11 @@ async fn member(w: World) -> turmoil::Result {
     // a stream of the ingest swarm, joined mid stream
     let mut stream = h
         .video
-        .open_stream(&media.swarm_uri, std::slice::from_ref(&net))
+        .open_stream(
+            &media.swarm_uri,
+            std::slice::from_ref(&net),
+            StreamFormat::from_mime(&media.mime_type),
+        )
         .await
         .unwrap();
     let swarms = h.video.video_swarms();

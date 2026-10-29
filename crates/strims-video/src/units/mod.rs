@@ -115,7 +115,7 @@ pub const MAX_RECORD_LEN: usize = 8 * 1024 * 1024;
 pub const AUDIO_SYNC_SPAN: Duration = Duration::from_secs(1);
 
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 #[cfg(test)]
 #[path = "units_test.rs"]
 mod tests;

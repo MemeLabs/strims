@@ -39,8 +39,8 @@ use strims_video::synth::script::{
 };
 use strims_video::{
     Config, CutRule, DecoderConfig, EgressPiece, EgressStream, FlvSource, IngressSettings,
-    NoVideoHost, SourceEvent, SwarmKind, VideoControl, VideoEvent, VideoHost, bind_frontend,
-    fmp4_mime,
+    NoVideoHost, SourceEvent, StreamFormat, SwarmKind, VideoControl, VideoEvent, VideoHost,
+    bind_frontend, fmp4_mime,
 };
 use support::{FakeVideo, TestPublisher};
 
@@ -378,7 +378,11 @@ fn a_published_stream_is_listed_and_read_by_another_node() {
         assert!(shown.start_time >= before && shown.start_time <= s.a.timer.now().unix());
 
         let mut stream = vb
-            .open_stream(&m.swarm_uri, std::slice::from_ref(&s.net.public))
+            .open_stream(
+                &m.swarm_uri,
+                std::slice::from_ref(&s.net.public),
+                StreamFormat::from_mime(&m.mime_type),
+            )
             .await
             .unwrap();
         p.send_tags(&script.tags[third..], &script).await;
@@ -537,6 +541,7 @@ fn a_second_publish_replaces_the_first() {
             s.va.open_stream(
                 &channel_uri(&s.channel),
                 std::slice::from_ref(&s.net.public),
+                StreamFormat::Packed,
             )
             .await
             .unwrap();

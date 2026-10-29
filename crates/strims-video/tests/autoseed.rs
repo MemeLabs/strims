@@ -396,6 +396,7 @@ fn a_stream_on_a_seeded_swarm_survives_deleting_the_rule() {
                 .open_stream(&EgressOpenStreamRequest {
                     swarm_uri: uri,
                     network_keys: vec![p.key.clone()],
+                    mime_type: String::new(),
                 })
                 .await
                 .unwrap();

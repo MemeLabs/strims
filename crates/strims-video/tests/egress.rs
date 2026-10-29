@@ -147,6 +147,7 @@ async fn open(
         .open_stream(&EgressOpenStreamRequest {
             swarm_uri: uri.into(),
             network_keys: keys.to_vec(),
+            mime_type: String::new(),
         })
         .await
         .unwrap();

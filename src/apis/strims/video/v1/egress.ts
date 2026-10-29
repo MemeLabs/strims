@@ -5,21 +5,25 @@ import Writer from "@memelabs/protobuf/lib/pb/writer";
 export type IEgressOpenStreamRequest = {
   swarmUri?: string;
   networkKeys?: Uint8Array[];
+  mimeType?: string;
 }
 
 export class EgressOpenStreamRequest {
   swarmUri: string;
   networkKeys: Uint8Array[];
+  mimeType: string;
 
   constructor(v?: IEgressOpenStreamRequest) {
     this.swarmUri = v?.swarmUri || "";
     this.networkKeys = v?.networkKeys ? v.networkKeys : [];
+    this.mimeType = v?.mimeType || "";
   }
 
   static encode(m: EgressOpenStreamRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.swarmUri.length) w.uint32(10).string(m.swarmUri);
     for (const v of m.networkKeys) w.uint32(18).bytes(v);
+    if (m.mimeType.length) w.uint32(26).string(m.mimeType);
     return w;
   }
 
@@ -35,6 +39,9 @@ export class EgressOpenStreamRequest {
         break;
         case 2:
         m.networkKeys.push(r.bytes())
+        break;
+        case 3:
+        m.mimeType = r.string();
         break;
         default:
         r.skipType(tag & 7);

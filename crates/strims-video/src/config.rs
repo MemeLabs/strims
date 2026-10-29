@@ -173,6 +173,13 @@ pub struct EgressSettings {
     pub max_stream_count: u32,
     /// The bytes one read takes from a swarm.
     pub read_buffer_bytes: usize,
+    /// How long a unit-format stream waits for its swarm reader to rewind
+    /// to the GOP it joins, before it reads on and waits for the next
+    /// keyframe. A rewind fetches the GOP's bytes so far: a 2 s GOP of a
+    /// 6 Mbit/s stream is 1.5 MB, a quarter second at 50 Mbit/s and 1.2 s
+    /// at 10 Mbit/s. Past that, the backlog's holders are likely not
+    /// answering, and the next keyframe is at most a GOP away.
+    pub rewind_timeout: Duration,
 }
 
 impl Default for EgressSettings {
@@ -190,6 +197,7 @@ impl Default for EgressSettings {
             max_chunks_per_signature: 4096,
             max_stream_count: 64,
             read_buffer_bytes: 64 * 1024,
+            rewind_timeout: Duration::from_secs(2),
         }
     }
 }

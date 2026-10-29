@@ -8,12 +8,17 @@
     clippy::indexing_slicing
 )]
 
+use std::cell::RefCell;
 use std::collections::VecDeque;
 
 use futures_util::FutureExt;
+use strims_chunkstream::chunked::{ChunkedRecordDecoder, Item};
 use strims_chunkstream::packed::PackedEncoder;
 
 use super::*;
+use crate::Muxer;
+use crate::units::UnitWriter;
+use crate::units::test_support::{audio, unit, video};
 
 /// A scripted read: the offset and bytes, or the failure.
 type Read = Result<(u64, Vec<u8>), ReadFailure<String>>;
@@ -23,6 +28,10 @@ type Read = Result<(u64, Vec<u8>), ReadFailure<String>>;
 #[derive(Default)]
 struct Script {
     reads: VecDeque<Read>,
+    /// What a rewind answers, and the reads after it when it moves.
+    rewind: Option<(Option<u64>, VecDeque<Read>)>,
+    /// The offsets rewinds were asked for.
+    asked: Rc<RefCell<Vec<u64>>>,
 }
 
 impl Script {
@@ -41,6 +50,23 @@ impl Script {
     fn fail(mut self, f: ReadFailure<String>) -> Script {
         self.reads.push_back(Err(f));
         self
+    }
+
+    /// A rewind answers `answer`, then reads `then`'s reads when it moved.
+    fn rewound(mut self, answer: Option<u64>, then: Script) -> Script {
+        self.rewind = Some((answer, then.reads));
+        self
+    }
+}
+
+impl Rewind for Script {
+    async fn rewind(&mut self, offset: u64) -> Option<u64> {
+        self.asked.borrow_mut().push(offset);
+        let (answer, reads) = self.rewind.take()?;
+        if answer.is_some() {
+            self.reads = reads;
+        }
+        answer
     }
 }
 
@@ -358,4 +384,321 @@ fn stream_options_take_the_uri_within_the_bounds() {
         check_stream(&s, &uri(""), &[vec![1; 65]]).unwrap_err(),
         VideoError::NetworkKeyTooLong
     );
+}
+
+// --- the chunked layout -------------------------------------------------------
+
+const CHUNK: usize = 4096;
+
+/// A unit-format stream in 4 KiB frames: video at 30 fps in GOPs of 30
+/// pictures, keyframes of 20 KiB and pictures of 2 KiB, and AAC frames
+/// between, signed early every 25 units. Its records with their offsets.
+fn units_stream(pictures: i64) -> (Vec<u8>, Vec<(u64, Vec<u8>)>) {
+    let mut w = UnitWriter::new(CHUNK).unwrap();
+    w.set_config(&video(1)).unwrap();
+    w.set_config(&audio(2)).unwrap();
+    let mut stream = Vec::new();
+    let mut n = 0i64;
+    let mut pushed = 0;
+    let big = vec![0x5a; 20 * 1024];
+    for k in 0..pictures {
+        let key = k % 30 == 0;
+        let mut u = unit(1, k * 3000, key, 2048);
+        if key {
+            u.payload = &big;
+        }
+        w.push(&u).unwrap();
+        pushed += 1;
+        while n * 1024 * 90_000 / 48_000 <= k * 3000 {
+            w.push(&unit(2, n * 1024, true, 300)).unwrap();
+            n += 1;
+            pushed += 1;
+        }
+        if pushed % 25 == 0 {
+            w.end_frame();
+            stream.extend(w.take_output());
+            let unit = 8 * CHUNK;
+            let next = stream.len().div_ceil(unit) * unit;
+            stream.resize(next, 0);
+            w.continue_at(next as u64).unwrap();
+        }
+    }
+    stream.extend(w.take_output());
+    let mut d = ChunkedRecordDecoder::new(CHUNK, units::MAX_RECORD_LEN).unwrap();
+    let mut records = Vec::new();
+    let mut at = 0;
+    loop {
+        let (used, item) = d.decode(&stream[at..]);
+        at += used;
+        match item {
+            Some(Item::Record { offset, payload }) => records.push((offset, payload.to_vec())),
+            Some(Item::Lost) => panic!("lost"),
+            None => break,
+        }
+    }
+    (stream, records)
+}
+
+fn collect_chunked<R: SwarmRead + Rewind>(
+    r: &mut ChunkedReader<R>,
+    max: usize,
+) -> (Vec<Out>, VideoError) {
+    let mut out = Vec::new();
+    let mut rec = Vec::new();
+    loop {
+        match r.next(max).now_or_never().expect("the script never waits") {
+            Ok(EgressPiece::Data(d)) => {
+                assert!(!d.is_empty() && d.len() <= max, "{} bytes", d.len());
+                rec.extend_from_slice(d);
+            }
+            Ok(EgressPiece::RecordEnd) => out.push(Out::Record(std::mem::take(&mut rec))),
+            Ok(EgressPiece::Discontinuity) => {
+                rec.clear();
+                out.push(Out::Discontinuity);
+            }
+            Err(e) => return (out, e),
+        }
+    }
+}
+
+fn records_from(records: &[(u64, Vec<u8>)], from: u64) -> Vec<Out> {
+    records
+        .iter()
+        .filter(|(o, _)| *o >= from)
+        .map(|(_, r)| Out::Record(r.clone()))
+        .collect()
+}
+
+/// The offset of the GOP's sync record of the first record at or after
+/// `from`'s next frame start.
+fn gop_of_first(records: &[(u64, Vec<u8>)], from: u64) -> (u64, u64) {
+    let frame = from.div_ceil(CHUNK as u64) * CHUNK as u64;
+    let (offset, r) = records.iter().find(|(o, _)| *o >= frame).unwrap();
+    let k = offset - units::record::parse_record(r).unwrap().gop_back();
+    (*offset, k)
+}
+
+#[test]
+fn unit_records_read_from_the_start_come_whole() {
+    let (s, recs) = units_stream(70);
+    for (chunk, max) in [
+        (1000, 32 * 1024),
+        (CHUNK, 100),
+        (7, 1),
+        (s.len(), usize::MAX),
+    ] {
+        let script = Script::default().reads(&s, 0, s.len(), chunk);
+        let mut r = ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap();
+        let (out, end) = collect_chunked(&mut r, max);
+        assert_eq!(out, records_from(&recs, 0), "chunk {chunk} max {max}");
+        assert_eq!(end, VideoError::StreamClosed);
+        let m = r.metrics();
+        assert_eq!(
+            (m.records, m.discontinuities, m.losses),
+            (recs.len() as u64, 0, 0)
+        );
+        // The first record is a sync record: nothing to rewind to.
+        assert_eq!((m.rewinds, m.refused_rewinds), (0, 0));
+    }
+}
+
+#[test]
+fn a_join_mid_gop_rewinds_to_its_sync_record() {
+    let (s, recs) = units_stream(70);
+    // Join in the second GOP, past its keyframe.
+    let join = (recs
+        .iter()
+        .filter(|(_, r)| r.len() > 10_000)
+        .nth(1)
+        .unwrap()
+        .0 as usize
+        + 3 * CHUNK)
+        / CHUNK
+        * CHUNK;
+    let (first, k) = gop_of_first(&recs, join as u64);
+    assert!(k < first);
+    let resume = k - k % CHUNK as u64;
+    let asked = Rc::new(RefCell::new(Vec::new()));
+    for max in [32 * 1024, 3] {
+        let script = Script {
+            asked: asked.clone(),
+            ..Script::default().reads(&s, join, s.len(), 5000).rewound(
+                Some(resume),
+                Script::default().reads(&s, resume as usize, s.len(), 5000),
+            )
+        };
+        let mut r = ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap();
+        let (out, _) = collect_chunked(&mut r, max);
+        assert_eq!(out, records_from(&recs, k));
+        let m = r.metrics();
+        assert_eq!((m.rewinds, m.refused_rewinds, m.discontinuities), (1, 0, 0));
+    }
+    assert_eq!(*asked.borrow(), [k, k]);
+}
+
+#[test]
+fn a_join_that_can_not_rewind_reads_on_from_its_first_record() {
+    let (s, recs) = units_stream(70);
+    let join = s.len() / 2 / CHUNK * CHUNK;
+    let (first, k) = gop_of_first(&recs, join as u64);
+    assert!(k < first);
+    // Refused, and an answer past the offset asked for, which can't be
+    // used.
+    for answer in [None, Some(first)] {
+        let script = Script::default().reads(&s, join, s.len(), 5000).rewound(
+            answer,
+            Script::default().reads(&s, first as usize, s.len(), 5000),
+        );
+        let mut r = ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap();
+        let (out, _) = collect_chunked(&mut r, 32 * 1024);
+        if answer.is_none() {
+            assert_eq!(out, records_from(&recs, first));
+        }
+        let m = r.metrics();
+        assert_eq!((m.rewinds, m.refused_rewinds), (0, 1), "{answer:?}");
+    }
+}
+
+#[test]
+fn a_lost_chunk_is_one_discontinuity_before_the_next_whole_record() {
+    let (s, recs) = units_stream(70);
+    // Lose a chunk inside the second GOP's keyframe.
+    let key = recs
+        .iter()
+        .filter(|(_, r)| r.len() > 10_000)
+        .nth(1)
+        .unwrap()
+        .0 as usize;
+    let lost = (key / CHUNK + 2) * CHUNK;
+    let script = Script::default()
+        .reads(&s, 0, lost, 3000)
+        .reads(&s, lost + CHUNK, s.len(), 3000);
+    let mut r = ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap();
+    let (out, _) = collect_chunked(&mut r, 32 * 1024);
+    let mut expected = records_from(&recs, 0);
+    expected.retain(|o| match o {
+        Out::Record(r) => recs
+            .iter()
+            .any(|(off, rr)| rr == r && ((*off as usize) < key || *off as usize >= lost + CHUNK)),
+        Out::Discontinuity => false,
+    });
+    let before = recs.iter().filter(|(o, _)| (*o as usize) < key).count();
+    expected.insert(before, Out::Discontinuity);
+    assert_eq!(out, expected);
+    let m = r.metrics();
+    assert_eq!((m.discontinuities, m.rewinds), (1, 0));
+}
+
+#[test]
+fn a_corrupt_chunked_frame_drops_the_records_it_touches() {
+    let (mut s, recs) = units_stream(70);
+    let key = recs
+        .iter()
+        .filter(|(_, r)| r.len() > 10_000)
+        .nth(1)
+        .unwrap()
+        .0 as usize;
+    let bad = (key / CHUNK + 1) * CHUNK;
+    // Inside the keyframe a header names a boundary: it disagrees.
+    s[bad..bad + 2].copy_from_slice(&100u16.to_be_bytes());
+    let script = Script::default().reads(&s, 0, s.len(), 4096);
+    let mut r = ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap();
+    let (out, _) = collect_chunked(&mut r, 32 * 1024);
+    let before = recs.iter().filter(|(o, _)| (*o as usize) < key).count();
+    assert_eq!(out[..before], records_from(&recs, 0)[..before]);
+    assert_eq!(out[before], Out::Discontinuity);
+    let m = r.metrics();
+    assert_eq!((m.corrupt_frames, m.losses), (1, 1));
+}
+
+#[test]
+fn a_replaced_reader_joins_the_new_stream_again() {
+    let (a, old) = units_stream(40);
+    let (b, new) = units_stream(70);
+    let join = b.len() / 2 / CHUNK * CHUNK;
+    let (_, k) = gop_of_first(&new, join as u64);
+    let resume = k - k % CHUNK as u64;
+    let mut r = ChunkedReader::new(
+        Script::default().reads(&a, 0, a.len(), 4096),
+        CHUNK,
+        64 * 1024,
+    )
+    .unwrap();
+    let (out, _) = collect_chunked(&mut r, 32 * 1024);
+    assert_eq!(out, records_from(&old, 0));
+    r.replace(Script::default().reads(&b, join, b.len(), 4096).rewound(
+        Some(resume),
+        Script::default().reads(&b, resume as usize, b.len(), 4096),
+    ));
+    let (out, _) = collect_chunked(&mut r, 32 * 1024);
+    let mut expected = vec![Out::Discontinuity];
+    expected.extend(records_from(&new, k));
+    assert_eq!(out, expected);
+    assert_eq!(r.metrics().rewinds, 1);
+}
+
+#[test]
+fn stream_formats_follow_the_listings_mime_type() {
+    assert_eq!(
+        StreamFormat::from_mime(r#"video/x.strims-units;codecs="avc1.64001f,mp4a.40.2""#),
+        StreamFormat::Units
+    );
+    assert_eq!(
+        StreamFormat::from_mime("Video/X.Strims-Units"),
+        StreamFormat::Units
+    );
+    for packed in [
+        "",
+        r#"video/mp4;codecs="avc1.64001f""#,
+        "video/webm;codecs=vp9,opus",
+    ] {
+        assert_eq!(
+            StreamFormat::from_mime(packed),
+            StreamFormat::Packed,
+            "{packed}"
+        );
+    }
+}
+
+/// A clock that stands at `now`, whose sleeps never wake.
+#[derive(Clone)]
+struct Still {
+    now: Time,
+}
+
+impl Timer for Still {
+    type Sleep = futures_util::future::Either<std::future::Ready<()>, std::future::Pending<()>>;
+
+    fn now(&self) -> Time {
+        self.now
+    }
+
+    fn sleep_until(&self, deadline: Time) -> Self::Sleep {
+        if deadline <= self.now {
+            futures_util::future::Either::Left(std::future::ready(()))
+        } else {
+            futures_util::future::Either::Right(std::future::pending())
+        }
+    }
+}
+
+#[test]
+fn a_rewind_answers_until_its_deadline() {
+    let t = Still {
+        now: Time::from_unix_millis(10_000),
+    };
+    let later = t.now + Duration::from_secs(2);
+    let ready = within(&t, later, std::future::ready(Some(4096))).now_or_never();
+    assert_eq!(ready, Some(Some(4096)));
+    let stuck = within(&t, later, std::future::pending()).now_or_never();
+    assert_eq!(stuck, None);
+    let past = within(&t, t.now, std::future::pending()).now_or_never();
+    assert_eq!(past, Some(None));
+    // A host reader's swarm reader doesn't rewind.
+    let mut h = HostReader {
+        reader: Script::default(),
+        timer: t.clone(),
+        timeout: Duration::from_secs(2),
+    };
+    assert_eq!(Rewind::rewind(&mut h, 0).now_or_never(), Some(None));
 }
