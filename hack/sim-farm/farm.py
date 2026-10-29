@@ -134,12 +134,14 @@ ends on short jobs; jobs expected alike keep their matrices' order.
   steps when it's ready: running with an address, SSH answering, its
   worker started, ready, each after its launch.
 - Every 15 s the controller syncs each instance over SSH (worker.py
-  sync), and at once when an instance's boot ends, and again at once each
-  one with room once the jobs it finished are taken off. A sync tops the instance's queue up to its slots plus a
-  quarter, and with short jobs to 45 s of expected work per slot (three
-  syncs' worth), but to no more work than the instance's share of what's
-  left; it stores the rows that came back (fsync), and acks them on the
-  next sync.
+  sync), at once when an instance's boot ends, and again at once each one
+  with room once the jobs it finished are taken off. A sync fills the
+  instance's free slots, and queues jobs behind them while they're short
+  (45 s or less expected): up to 45 s of expected work per slot (three
+  syncs' worth), but no more work than the instance's share of what's
+  left (a long job queued behind others would start late, and could end
+  the run late). It stores the rows that came back (fsync), and acks them
+  on the next sync.
 - An instance that is gone, has a spot interruption notice, or fails SSH
   for 3 minutes is terminated, and its jobs go back to the head of the
   queue. Runs are deterministic, so a reissued job must print the same
@@ -1715,21 +1717,26 @@ class Run:
         others = sum(1 for h in self.hosts if h is not host and h.state != "lost")
         if self.testbed is not None:
             return self.take_group(host, others)
-        # Its slots and a quarter, and as many more as hold PREFETCH_S of
-        # work per slot, but no more work than its slots' share of what's
-        # left: no instance holds jobs others could run sooner.
-        least = host.slots + max(1, host.slots // 4)
+        # Its free slots, then jobs queued behind the running ones while
+        # they're short (no longer than PREFETCH_S), which a sync's worth
+        # couldn't keep busy: up to PREFETCH_S of work per slot, and no more
+        # work than its slots' share of what's left. A long job queued
+        # behind others would start a job's length late and could end the
+        # run late, so one at the head stops it.
         ready = sum(h.slots for h in self.hosts if h.state == "ready")
         goal = min(host.slots * PREFETCH_S, self.work_left() * host.slots / max(ready, 1))
         have = sum(self.expected(i) for i in host.assigned.values() if i.copy != "canary")
         out, skipped = [], []
-        while self.queue and (len(host.assigned) < least or have < goal):
+        while self.queue and (len(host.assigned) < host.slots or have < goal):
             item = self.queue.popleft()
             if item.wid in self.done or item.wid in host.assigned:
                 continue
             if host.id in self.took[item.job.id] and others:
                 skipped.append(item)
                 continue
+            if len(host.assigned) >= host.slots and self.expected(item) > PREFETCH_S:
+                self.queue.appendleft(item)
+                break
             out.append(item)
             host.assigned[item.wid] = item
             self.took[item.job.id].add(host.id)
