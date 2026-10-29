@@ -91,7 +91,11 @@ measured against 91ded310 (branch `thin`, switches in `STRIMS_X_METER`):
 - **The delivered rate under a standing queue, taken more carefully**
   (only while the links' latest round trips show the queue too, the largest
   of the last 2 s, or only while the node writes at least 90 % of what its
-  links deliver): thin-15-10 stayed collapsed on 8 of 8 seeds.
+  links deliver): thin-15-10 stayed collapsed on 8 of 8 seeds. The largest
+  of the last 2 s, retried for a seed whose reading fell to a third of its
+  halved uplink (branch `drain-max`, on 2bcca388), didn't reach that dip,
+  which was the busy time's reading while stale pushes were dropped:
+  halve-7-10's lag p99 ×1.06 and halve-15-10's ×1.07 at 16 local seeds.
 
 **Twice the rate below saturation, and holding a saturated reading.**
 (branch `upload-meter`, recorded in d16a7b92 and de76f727) In a screen of
