@@ -19,6 +19,12 @@ pub const INITIAL_CHUNKS: i64 = 32;
 /// How long the minimum round trip holds before it expires (BBR's
 /// `min_rtt_win_sec`).
 pub const MIN_RTT_WINDOW: Duration = Duration::from_secs(10);
+/// The most an expiry raises the minimum round trip to an answer slower
+/// than every recent ping. Pings bypass the peer's data queue, so the
+/// difference is that queue: at a peer that many channels ask, it never
+/// drains, and taking it as the path's would size windows that keep it
+/// standing. A slower path shows in steady pings.
+const MIN_RTT_RISE: (i64, i64) = (5, 4);
 /// How long a delivery-rate sample counts toward the maximum.
 pub const RATE_WINDOW: Duration = Duration::from_secs(2);
 /// Request rounds remembered for delivery-rate samples: an answer to a
@@ -107,8 +113,9 @@ pub enum Mode {
 ///   the rate it was asked for at.
 /// - **Minimum round trip:** request to data, on our clock; the smallest
 ///   over [`MIN_RTT_WINDOW`] (pings stand in until the first answer). When
-///   it expires the next sample replaces it, and ProbeRTT lasts until one
-///   has. While recent pings agree on a higher round trip, the path got
+///   it expires the next sample replaces it (rising at most a quarter
+///   when it is slower than every recent ping: `MIN_RTT_RISE`), and
+///   ProbeRTT lasts until one has. While recent pings agree on a higher round trip, the path got
 ///   slower and that is the minimum (see `PING_STEADY`).
 /// - **In-flight cap:** a gain times rate times minimum round trip, at
 ///   least [`FLOOR_CHUNKS`]. Startup's gain is 2.89 until the rate stops
@@ -512,7 +519,14 @@ impl RequestController for BbrLike {
         let expired = self.min_rtt_expired(now);
         if self.min_rtt <= Duration::ZERO || self.min_rtt_from_ping || rtt < self.min_rtt || expired
         {
-            self.min_rtt = rtt;
+            let (n, d) = MIN_RTT_RISE;
+            let pings = self.ping_max.get(now);
+            let queued = pings > 0 && rtt.as_nanos() > pings;
+            self.min_rtt = if expired && queued && !self.min_rtt_from_ping {
+                rtt.min(self.min_rtt * n / d)
+            } else {
+                rtt
+            };
             self.min_rtt_stamp = now;
             self.min_rtt_from_ping = false;
             if expired {
