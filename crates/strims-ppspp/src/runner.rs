@@ -173,7 +173,8 @@ struct UploadMeter {
     /// Scratch for the peers' excesses. Bound: one per peer.
     excesses: Vec<Duration>,
     /// The links' delivery rates summed, at the last tick a queue stood
-    /// below the runner, and when ...
+    /// below the runner (one of the node's own, or a sample that raises
+    /// it: [`APP_LIMITED_QUEUED`]), and when ...
     drained: Option<(f64, Time)>,
     /// ... and whether one stood at the last tick.
     standing: bool,
@@ -191,6 +192,25 @@ const DRAIN_QUEUE: Duration = Duration::from_millis(50);
 /// probes for more bandwidth, until a queue stands again.
 const DRAIN_PROBE: f64 = 0.25;
 const DRAIN_PROBE_PERIOD: Duration = Duration::from_secs(10);
+/// A queue that stands below the runner while nothing waited in it lately
+/// and the node's links hold less than this of its own data (bytes in
+/// flight beyond what their paths hold at their bases) isn't the node's:
+/// a competing flow on its uplink, or its peers' queues on the echoes'
+/// way back. Its links then delivered what the node had to send, not what
+/// the uplink holds, so such a sample never lowers the reading, as BBR
+/// takes an application-limited sample only when it raises its estimate.
+/// A node that read its demand as its capacity paced its answers to it,
+/// and its requesters timed out on it.
+const APP_LIMITED_QUEUED: u64 = 16 * 1024;
+/// Whether a delivered rate measured under a standing queue becomes the
+/// meter's drained reading: while the node's own data waited (in the
+/// runner lately, or [`APP_LIMITED_QUEUED`] below it), and otherwise only
+/// when it raises the reading.
+fn takes_drained(drained: Option<f64>, delivered: f64, waited: bool, own_queued: u64) -> bool {
+    delivered > 0.0
+        && (waited || own_queued >= APP_LIMITED_QUEUED || drained.is_some_and(|d| delivered >= d))
+}
+
 /// How long the meter holds its largest write rate
 /// ([`UploadInfo::written_peak`]).
 const PEAK_SPAN: Duration = Duration::from_secs(10);
@@ -228,7 +248,10 @@ impl UploadMeter {
         self.standing = self.queue_delay.is_some_and(|d| d >= DRAIN_QUEUE);
         if self.standing {
             let delivered: u64 = peers.values().filter_map(|p| p.link_path?.rate).sum();
-            if delivered > 0 {
+            let own: u64 = peers.values().filter_map(|p| p.link_path?.queued).sum();
+            let waited = self.busy.rate(Duration::SECOND, now) > 0;
+            let drained = self.drained.map(|(d, _)| d);
+            if takes_drained(drained, delivered as f64, waited, own) {
                 self.drained = Some((delivered as f64, now));
             }
         }

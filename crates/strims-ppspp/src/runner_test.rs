@@ -1252,3 +1252,20 @@ fn a_blocked_link_holds_no_answer_back() {
     let answered = s.down(1);
     assert!(s.data(&answered) > 0);
 }
+
+#[test]
+fn a_queue_not_of_the_nodes_own_never_lowers_the_drained_reading() {
+    // The node's own data waited: the delivered rate is the uplink's.
+    assert!(takes_drained(Some(500_000.0), 300_000.0, true, 0));
+    assert!(takes_drained(
+        Some(500_000.0),
+        300_000.0,
+        false,
+        APP_LIMITED_QUEUED
+    ));
+    // A queue it didn't build: only a rate above the reading counts.
+    assert!(!takes_drained(Some(500_000.0), 2_000.0, false, 100));
+    assert!(!takes_drained(None, 2_000.0, false, 100));
+    assert!(takes_drained(Some(500_000.0), 600_000.0, false, 100));
+    assert!(!takes_drained(None, 0.0, true, APP_LIMITED_QUEUED));
+}
