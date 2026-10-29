@@ -12,7 +12,7 @@
 //! consume both.
 //!
 //! - [`media`]: tracks, decoder configs, access units, the [`Muxer`]
-//!   trait and the fMP4 MIME type.
+//!   trait and the MIME types of the fMP4 and unit formats.
 //! - [`avc`]: H.264 avcC records and the picture size from their SPS.
 //! - [`aac`]: AAC AudioSpecificConfig and the `esds` box.
 //! - [`flv`]: the source over FLV tags, legacy and Enhanced RTMP. It takes
@@ -30,6 +30,9 @@
 //!   records they produce, and an RTMP publisher client.
 //! - [`hls`]: HLS playlists of fMP4 segments, and the routes a driver
 //!   serves them on.
+//! - [`units`]: the unit format, a record per access unit in the chunked
+//!   chunkstream layout: its records, the [`UnitWriter`] muxer and the
+//!   [`UnitReader`], which builds for wasm32.
 //!
 //! Every parser takes hostile input: none panics, and decoder configs are
 //! bounded by [`MAX_CONFIG_LEN`].
@@ -180,6 +183,7 @@ pub mod synth;
 #[cfg(any(test, feature = "test-support"))]
 #[cfg_attr(not(test), allow(dead_code))]
 mod test_util;
+pub mod units;
 
 pub use capture::{CaptureInfo, capture_options};
 pub use channels::{ChannelUrl, MAX_CHANNELS};
@@ -201,6 +205,8 @@ pub use registry::{SwarmKind, VideoSwarm};
 pub use flv::{FlvError, FlvMetrics, FlvSource, SourceEvent, Unsupported};
 pub use media::{
     AccessUnit, CodecParams, DecoderConfig, MAX_CONFIG_LEN, Muxer, TrackId, TrackKind, fmp4_mime,
+    mime_essence, units_mime,
 };
 pub use record::{PackedSink, RecordSink, VecSink};
 pub use segment::{CutRule, SegmentError, SegmentInfo, Segmenter, SegmenterMetrics};
+pub use units::{UnitReader, UnitWriter};

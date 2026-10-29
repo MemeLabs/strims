@@ -110,7 +110,21 @@ pub trait Muxer {
 ///
 /// `video/mp4;codecs="avc1.64001f,mp4a.40.2"`
 pub fn fmp4_mime(configs: &[DecoderConfig]) -> String {
-    let mut mime = String::from("video/mp4");
+    with_codecs("video/mp4", configs)
+}
+
+/// The MIME type of a unit-format stream of these tracks
+/// ([`units`](crate::units)), with the codecs parameter as
+/// [`fmp4_mime`] writes it.
+///
+/// `video/x.strims-units;codecs="avc1.64001f,mp4a.40.2"`
+pub fn units_mime(configs: &[DecoderConfig]) -> String {
+    with_codecs(crate::units::MIME_TYPE, configs)
+}
+
+/// `essence` with the codecs parameter of `configs`, if any.
+fn with_codecs(essence: &str, configs: &[DecoderConfig]) -> String {
+    let mut mime = String::from(essence);
     let mut codecs = 0;
     for kind in [TrackKind::Video, TrackKind::Audio] {
         for config in configs.iter().filter(|c| c.kind == kind) {
@@ -123,6 +137,12 @@ pub fn fmp4_mime(configs: &[DecoderConfig]) -> String {
         mime.push('"');
     }
     mime
+}
+
+/// The essence of MIME type `mime`, its type and subtype without
+/// parameters or surrounding whitespace.
+pub fn mime_essence(mime: &str) -> &str {
+    mime.split(';').next().unwrap_or_default().trim()
 }
 
 #[cfg(test)]
@@ -170,6 +190,32 @@ mod tests {
     #[test]
     fn fmp4_mime_without_configs_has_no_codecs_parameter() {
         assert_eq!(fmp4_mime(&[]), "video/mp4");
+    }
+
+    #[test]
+    fn units_mime_names_the_unit_format_with_the_codecs() {
+        let configs = [
+            config(2, TrackKind::Audio, "mp4a.40.2"),
+            config(1, TrackKind::Video, "avc1.64001f"),
+        ];
+        assert_eq!(
+            units_mime(&configs),
+            r#"video/x.strims-units;codecs="avc1.64001f,mp4a.40.2""#
+        );
+        assert_eq!(units_mime(&[]), "video/x.strims-units");
+    }
+
+    #[test]
+    fn mime_essence_drops_the_parameters() {
+        assert_eq!(
+            mime_essence(r#"video/mp4;codecs="avc1.64001f""#),
+            "video/mp4"
+        );
+        assert_eq!(
+            mime_essence(" video/x.strims-units ; codecs=x"),
+            "video/x.strims-units"
+        );
+        assert_eq!(mime_essence(""), "");
     }
 
     #[test]
