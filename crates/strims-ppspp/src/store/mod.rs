@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Chunk storage: the live-window [`Buffer`] with its non-blocking
-//! [`BufferReader`]s, and the local [`Writer`]'s bin assignment.
+//! [`BufferReader`]s, which can move back within the window
+//! ([`BufferReader::rewind`]), and the local [`Writer`]'s bin assignment.
 //!
 //! The store is written only through [`crate::Swarm`], which also queues
 //! every stored chunk for the scheduler ([`crate::Swarm::poll_event`]).
@@ -59,4 +60,28 @@ pub enum Error {
     DataLength,
     #[error(transparent)]
     Codec(#[from] codec::Error),
+}
+
+/// Why a reader stays where it was instead of moving back
+/// ([`BufferReader::rewind`], [`crate::Runner::rewind`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum RewindError {
+    /// The offset is past the reader's next byte.
+    #[error("offset past the read position")]
+    Ahead,
+    /// The offset's chunk is outside the live window: its slot in the ring
+    /// holds a newer chunk, or its munro is behind the verifier's ring, or
+    /// the buffer never moves its window ([`BufferLayout::ELASTIC`]).
+    #[error("offset outside the live window")]
+    OutsideWindow,
+    /// No peer can serve the chunks from the offset's on: none announced
+    /// one of them, they left every holder's window before they arrived,
+    /// or the swarm has no channels.
+    #[error("no peer can serve the offset")]
+    Unavailable,
+    /// The reader's next read returns this error first (a reset, an
+    /// underrun, a close), or the reader has no position yet
+    /// ([`Error::WouldBlock`]). The rewind left it for that read.
+    #[error(transparent)]
+    Read(Error),
 }

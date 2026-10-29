@@ -45,6 +45,15 @@
 //!   leaves a chunk to one expected to deliver it sooner, by their peers'
 //!   measured answer times, its peer's announcement predicted from its
 //!   announcement lag if it hasn't come ([`crate::route`]).
+//! - **A rewind's backlog after the live chunks.** Chunks before the
+//!   store's window that a local reader moves back to
+//!   ([`Runner::rewind`]) take the room a round's live requests leave,
+//!   oldest group first, and live requests never go below them. They are
+//!   for local readers alone: never announced, pushed to subscribers or
+//!   counted in the hybrid's store rate, so no peer sees anything but the
+//!   requests. The backlog ends when the store holds it all, or when a
+//!   chunk it lacks is announced by no channel whose request floor is at
+//!   or before it.
 //!
 //! In [`PushMode::EagerHave`] and [`PushMode::Hybrid`], HAVEs go out as soon
 //! as chunks are stored and requests as soon as a HAVE makes chunks
@@ -84,7 +93,7 @@
 //!   window, so the HAVEs we send never claim more than a window behind it;
 //! - a channel has at most [`max_pending_requests`] request deadlines, and a
 //!   request round collects at most a frame of requests plus one request
-//!   group;
+//!   group per lane (live and a rewind's backlog);
 //! - extra messages are deduplicated: a handshake, a restart, one pong,
 //!   one ask for reports and one message per stream and direction; a
 //!   report holds at most twice the stream count of entries;
@@ -96,6 +105,7 @@
 //!
 //! [`Ledbat::set_min_cwnd`]: crate::ledbat::Ledbat::set_min_cwnd
 //! [`Runner::request_stream`]: crate::Runner::request_stream
+//! [`Runner::rewind`]: crate::Runner::rewind
 //! [`peer_bin_ok`]: crate::peer_bin_ok
 
 use std::collections::BTreeMap;
@@ -352,6 +362,24 @@ pub(crate) struct SwarmState {
     pub(crate) tap: Tap,
     /// Our subscribers changed since the runner last asked.
     subscribers_changed: bool,
+
+    /// A rewind's backlog ([`PeerSwarmScheduler::open_backlog`]), kept
+    /// after it ends until the store's window passes it.
+    backlog: Option<Backlog>,
+    /// The backlog chunks we hold: never announced, pushed or counted in
+    /// the store rate. Bound: pruned with `have_bins`.
+    unannounced: Map,
+}
+
+/// Chunks `[from, to)` before the store's window, fetched for local
+/// readers only ([`PeerSwarmScheduler::open_backlog`]). Requests for them
+/// go out after the live chunks', and live requests never go below `to`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Backlog {
+    from: Bin,
+    to: Bin,
+    /// The store is still waiting for them.
+    pending: bool,
 }
 
 impl SwarmState {
@@ -456,6 +484,23 @@ impl SwarmState {
         {
             self.stream_sources -= 1;
         }
+    }
+
+    /// True if chunk bin `b` is in the backlog.
+    fn in_backlog(&self, b: Bin) -> bool {
+        self.backlog
+            .is_some_and(|bl| b.base_left() >= bl.from && b.base_left() < bl.to)
+    }
+
+    /// The have map without the backlog chunks: what the HAVEs we send
+    /// cover.
+    fn announced(&self) -> Map {
+        let mut m = self.have_bins.clone();
+        if !self.unannounced.is_empty() {
+            let all = self.unannounced.root_bin();
+            crate::bin_range::subtract_filled(&mut m, &self.unannounced, all);
+        }
+        m
     }
 
     fn check_stream(&self, s: Stream) -> Result<(), SchedulerError> {
@@ -569,7 +614,8 @@ pub(crate) struct PeerChannelScheduler {
     ping_nonce: u64,
 
     /// Scratch for `write1`. Bound: one frame of requests plus a request
-    /// group, and [`CANDIDATE_CAPACITY`] between rounds.
+    /// group per lane (live and backlog), and [`CANDIDATE_CAPACITY`]
+    /// between rounds.
     candidate_bins: Vec<Bin>,
 
     /// The hybrid's view of the peer as a parent, with
@@ -587,7 +633,7 @@ impl PeerChannelScheduler {
             choked: false,
             request_times: TimeSet::default(),
             answer_time: AnswerTime::default(),
-            have_bins: s.have_bins.clone(),
+            have_bins: s.announced(),
             cancel_bins: Map::new(),
             request_bins: BinQueue::default(),
             backoff_bins: Map::new(),
@@ -857,6 +903,7 @@ impl PeerChannelScheduler {
             }
             while x <= s.have_bin_max.0 {
                 if s.have_bins.filled_at(Bin(x))
+                    && s.unannounced.empty_at(Bin(x))
                     && !q.push_data(self.peer, s.key, Bin(x), queued, PeerPriority::High)
                 {
                     s.tap.emit(s.key, Some(self.peer), || TapKind::DataRefused {
@@ -963,6 +1010,10 @@ impl PeerChannelScheduler {
     /// request group, leaving the chunks another channel is expected to
     /// deliver sooner to it ([`crate::route`]). Updates the channel's
     /// [`Route`].
+    ///
+    /// With a backlog, live chunks come first and never from below it; the
+    /// room they leave goes to the backlog's chunks, oldest group first,
+    /// none left to another channel: they are all announced already.
     fn write1(
         &mut self,
         s: &mut SwarmState,
@@ -1045,7 +1096,8 @@ impl PeerChannelScheduler {
                         })
             })
         };
-        let mut next = it.next_after(min);
+        let live_min = s.backlog.map_or(min, |bl| min.max(bl.to));
+        let mut next = it.next_after(live_min);
         'walk: while let Some(x) = next {
             let (mut b, br) = x.base();
             while b <= br {
@@ -1073,6 +1125,9 @@ impl PeerChannelScheduler {
             let order = &s.request_order;
             self.candidate_bins
                 .sort_unstable_by_key(|&b| request_key(order, b));
+        }
+        if let Some(bl) = s.backlog.filter(|bl| bl.pending) {
+            self.backlog_candidates(s, bl, min, n);
         }
 
         let size = (s.chunk_size as i64).max(1);
@@ -1118,6 +1173,51 @@ impl PeerChannelScheduler {
         self.candidate_bins.clear();
         self.candidate_bins.shrink_to(CANDIDATE_CAPACITY);
         Ok(())
+    }
+}
+
+impl PeerChannelScheduler {
+    /// Adds the backlog's candidates to the live ones while they number
+    /// fewer than `n`: up to the end of the request group of the `n`th, in
+    /// this node's order within a group, from `min` (the request floor).
+    fn backlog_candidates(&mut self, s: &SwarmState, bl: Backlog, min: Bin, n: usize) {
+        let live = self.candidate_bins.len();
+        if live >= n {
+            return;
+        }
+        let k = n - live;
+        let mut it = IntersectionIter::new(
+            s.request_bins
+                .iterate_empty_at(self.peer_have_bins.root_bin()),
+            self.peer_have_bins.iterate_filled(),
+        );
+        let mut next = it.next_after(min.max(bl.from));
+        'walk: while let Some(x) = next {
+            let (mut b, br) = x.base();
+            while b <= br {
+                if b >= bl.to {
+                    break 'walk;
+                }
+                if !self.backoff_bins.filled_at(b) {
+                    let v = self.candidate_bins.get(live..).unwrap_or_default();
+                    let open = v.len() < k
+                        || v.get(k - 1)
+                            .is_some_and(|&kth| request_group(kth) == request_group(b));
+                    if !open {
+                        break 'walk;
+                    }
+                    self.candidate_bins.push(b);
+                }
+                b += 2;
+            }
+            next = it.next();
+        }
+        if let Some(v) = self.candidate_bins.get_mut(live..)
+            && v.len() > k
+        {
+            let order = &s.request_order;
+            v.sort_unstable_by_key(|&b| request_key(order, b));
+        }
     }
 }
 
@@ -1235,6 +1335,8 @@ impl PeerSwarmScheduler {
                 }),
                 tap: Tap::default(),
                 subscribers_changed: false,
+                backlog: None,
+                unannounced: Map::new(),
             },
             channels: IndexMap::new(),
         }
@@ -1281,6 +1383,7 @@ impl PeerSwarmScheduler {
                 q.enqueue(peer, self.s.key);
             }
         }
+        self.check_backlog(now, swarm);
     }
 
     /// Prunes bin times, the request map, the hybrid's maps and request
@@ -1293,7 +1396,14 @@ impl PeerSwarmScheduler {
         }
 
         let store = swarm.store();
-        self.s.request_bins.fill_before(store.window_start());
+        self.s.request_bins.fill_before(store.store_from());
+        if self
+            .s
+            .backlog
+            .is_some_and(|bl| !bl.pending && store.window_start() >= bl.to)
+        {
+            self.s.backlog = None;
+        }
         self.s.source_bins.reset_before(store.window_start());
         self.s.sent_bins.reset_before(store.window_start());
         self.gc_push(store.window_start());
@@ -1310,10 +1420,17 @@ impl PeerSwarmScheduler {
         if next.is_none() {
             return;
         }
-        let threshold = next.max(store.window_start());
+        let mut threshold = next.max(store.window_start());
+        // A pending backlog's requests keep their times: its answers count
+        // as answers.
+        let mut settle = next;
+        if let Some(bl) = self.s.backlog.filter(|bl| bl.pending) {
+            threshold = threshold.min(bl.from);
+            settle = settle.min(bl.from);
+        }
         let size = self.s.chunk_size as i64;
         for c in self.channels.values_mut() {
-            let settled = c.request_times.take_before(next);
+            let settled = c.request_times.take_before(settle);
             if settled > 0 {
                 c.controller
                     .on_settled(now, (settled as i64).saturating_mul(size));
@@ -1340,6 +1457,8 @@ impl PeerSwarmScheduler {
         s.first_chunk_set = false;
         // The new stream starts at bin 0; see `PeerChannelScheduler::reset`.
         s.peer_max_have_bin = Bin(0);
+        s.backlog = None;
+        s.unannounced = Map::new();
 
         for c in self.channels.values_mut() {
             c.reset(s, now);
@@ -1349,7 +1468,8 @@ impl PeerSwarmScheduler {
     }
 
     /// Chunks were stored: push them to subscribers, queue their HAVEs and
-    /// mark them requested.
+    /// mark them requested. A backlog's chunks are only marked: they are
+    /// for local readers.
     pub(crate) fn consume(
         &mut self,
         bin: Bin,
@@ -1364,10 +1484,15 @@ impl PeerSwarmScheduler {
         // be dropped.
         let queued = if s.push.is_some() { now } else { Time::EPOCH };
         let mut wasted = bin.base_length();
+        let mut backlog_new = 0u64;
         {
             let mut it = s.have_bins.iterate_empty_at(bin);
             while let Some(x) = it.next_base() {
                 wasted = wasted.saturating_sub(1);
+                if s.in_backlog(x) {
+                    backlog_new += 1;
+                    continue;
+                }
                 if let Some(stream) = s.streams.get(usize::from(s.bin_stream(x))) {
                     for sub in &stream.subscribers {
                         if sub.start_bin <= x
@@ -1384,7 +1509,8 @@ impl PeerSwarmScheduler {
             }
         }
         s.wasted_chunks = s.wasted_chunks.saturating_add(wasted);
-        s.push_consumed(bin, bin.base_length().saturating_sub(wasted), now);
+        let new = bin.base_length().saturating_sub(wasted);
+        s.push_consumed(bin, new.saturating_sub(backlog_new), now);
         s.source_bins.reset(bin);
 
         s.have_bins.set(bin);
@@ -1396,12 +1522,35 @@ impl PeerSwarmScheduler {
             .0
             .saturating_sub(s.live_window.0));
         s.have_bins.reset_before(prune);
+        let mut hidden = false;
+        if let Some(bl) = s.backlog {
+            let (l, r) = bin.base();
+            let (lo, hi) = (l.max(bl.from), (r + 2).min(bl.to));
+            for b in crate::bin_range::aligned(lo, hi) {
+                s.unannounced.set(b);
+            }
+            hidden = l >= bl.from && r < bl.to;
+            if bl.pending && swarm.store().backlog().is_none() {
+                s.backlog = Some(Backlog {
+                    pending: false,
+                    ..bl
+                });
+            }
+        }
+        if !s.unannounced.is_empty() {
+            s.unannounced.reset_before(prune);
+        }
         let mut hb = s.have_bins.cover(bin);
         if hb.is_all() {
             hb = s.have_bins.root_bin();
         }
         for c in self.channels.values_mut() {
-            c.have_bins.set(hb);
+            if !hidden {
+                c.have_bins.set(hb);
+                if !s.unannounced.is_empty() {
+                    crate::bin_range::subtract_filled(&mut c.have_bins, &s.unannounced, hb);
+                }
+            }
             // Eager modes write the HAVEs (and the pushes) at once, `Off` at
             // the next tick. Every chunk of the frame being handled lands in
             // `have_bins` before the driver polls, so this is one write cycle
@@ -1419,6 +1568,95 @@ impl PeerSwarmScheduler {
         }
 
         s.request_bins.set(bin);
+    }
+
+    /// True if every chunk of `[from, to)` we lack is announced by a
+    /// channel that can request it: one with a handshake whose request
+    /// floor is at or before the chunk. A rewind waits for no one else.
+    /// O(channels × announced runs in the range).
+    pub(crate) fn backlog_servable(&mut self, from: Bin, to: Bin, now: Time) -> bool {
+        let s = &mut self.s;
+        let rate = s.peer_have_chunk_rate.rate(Duration::SECOND, now);
+        let mut held = Map::new();
+        for c in self.channels.values() {
+            if !c.handshake_received {
+                continue;
+            }
+            let lo = c.request_floor(s, rate).max(from);
+            crate::bin_range::copy_filled(&mut held, &c.peer_have_bins, lo, to);
+        }
+        crate::bin_range::empty_covered(&s.have_bins, &held, from, to)
+    }
+
+    /// Fetches chunks `[from, to)`, before the store's window, for local
+    /// readers: the store's backlog. Extends a backlog it already fetches.
+    /// The chunks we lack become requestable, every channel gets a write
+    /// cycle, and the backlog's chunks are never announced, pushed or
+    /// counted in the store rate.
+    pub(crate) fn open_backlog(&mut self, from: Bin, to: Bin, q: &mut impl PeerTaskQueue) {
+        let s = &mut self.s;
+        // From an earlier backlog's start on, its requests are still
+        // marked, or released by their timeouts. The walk starts where the
+        // store's backlog does: lower while one is pending, `from` once it
+        // ended.
+        let (lim, bl) = match s.backlog {
+            Some(bl) => (
+                bl.from.min(to),
+                Backlog {
+                    from: if bl.pending { bl.from.min(from) } else { from },
+                    to: bl.to.max(to),
+                    pending: true,
+                },
+            ),
+            None => (
+                to,
+                Backlog {
+                    from,
+                    to,
+                    pending: true,
+                },
+            ),
+        };
+        if from < lim {
+            crate::bin_range::reset(&mut s.request_bins, from, lim);
+            crate::bin_range::copy_filled(&mut s.request_bins, &s.have_bins, from, lim);
+        }
+        s.backlog = Some(bl);
+        for &peer in self.channels.keys() {
+            q.enqueue_now(peer, s.key);
+        }
+    }
+
+    /// Ends a pending backlog the store no longer waits for: complete, or
+    /// closed because it stopped fitting. Closes it in the store when a
+    /// chunk it lacks can't be requested any more
+    /// ([`Self::backlog_servable`]) or its first munro left the verifier's
+    /// ring.
+    fn check_backlog(&mut self, now: Time, swarm: &mut Swarm) {
+        let Some(bl) = self.s.backlog.filter(|bl| bl.pending) else {
+            return;
+        };
+        let open = swarm.store().backlog().is_some()
+            && bl.from >= swarm.verifier().verifiable_from()
+            && self.backlog_servable(bl.from, bl.to, now);
+        if !open {
+            swarm.close_backlog();
+            self.s.backlog = Some(Backlog {
+                pending: false,
+                ..bl
+            });
+        }
+    }
+
+    /// Stops fetching the backlog: its chunks stay unrequested.
+    pub(crate) fn close_backlog(&mut self, swarm: &mut Swarm) {
+        if let Some(bl) = self.s.backlog.filter(|bl| bl.pending) {
+            swarm.close_backlog();
+            self.s.backlog = Some(Backlog {
+                pending: false,
+                ..bl
+            });
+        }
     }
 
     /// Adds the peer's channel; `id` names the peer in reports.
@@ -1571,7 +1809,7 @@ impl PeerSwarmScheduler {
     pub(crate) fn handle_restart(&mut self, peer: PeerKey) {
         if let Some((s, c)) = self.channel(peer) {
             c.extra.handshake = true;
-            c.have_bins.clone_from(&s.have_bins);
+            c.have_bins = s.announced();
         }
     }
 
@@ -1630,7 +1868,11 @@ impl PeerSwarmScheduler {
         c.controller.on_delivered(now, size);
         if let Some((_, ts)) = c.request_times.get(b) {
             c.controller.on_answered(now, size, ts, t);
-            c.answer_time.sample(now - ts);
+            // A backlog's answers come in bulk: they don't sample how soon
+            // a live request is answered.
+            if !s.in_backlog(b) {
+                c.answer_time.sample(now - ts);
+            }
             // Answered: a second copy doesn't ack again, and the timeout
             // doesn't settle it.
             c.request_times.unset(b);

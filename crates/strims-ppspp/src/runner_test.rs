@@ -1269,3 +1269,162 @@ fn a_queue_not_of_the_nodes_own_never_lowers_the_drained_reading() {
     assert!(takes_drained(Some(500_000.0), 600_000.0, false, 100));
     assert!(!takes_drained(None, 0.0, true, APP_LIMITED_QUEUED));
 }
+
+/// A leech that joins `munros` munros into the stream (1 KiB chunks, 64 a
+/// munro, a 1024 chunk window) and reads from its first read position.
+fn joined_late(o: SwarmOptions, munros: usize) -> Pair {
+    let mut p = Pair::with(o.clone(), o);
+    p.write(munros);
+    for _ in 0..4 {
+        p.tick(50);
+    }
+    let first = p.read().unwrap();
+    assert!(!first.is_empty(), "the leech reads from its first position");
+    p
+}
+
+impl Pair {
+    fn rewind(&mut self, offset: u64) -> Result<Rewind, RewindError> {
+        let n = &mut self.leech;
+        let r = n.runner.rewind(n.swarm, &mut n.reader, offset, self.now);
+        while n.runner.poll_event().is_some() {}
+        r
+    }
+
+    /// The stream offset of the leech's tail.
+    fn leech_tail(&self) -> u64 {
+        let s = self.leech.runner.swarm(self.leech.swarm).unwrap();
+        s.store().tail().base_offset() * s.store().chunk_size() as u64
+    }
+
+    /// True if the seed heard the leech announce the chunk at `offset`.
+    fn seed_heard(&self, offset: u64) -> bool {
+        let rs = self.seed.runner.swarms.get(self.seed.swarm).unwrap();
+        let c = rs.scheduler.as_ref().unwrap().channels[&self.seed.peer]
+            .peer_have_bins
+            .clone();
+        c.filled_at(Bin(offset / 1024 * 2))
+    }
+}
+
+/// A leech moves its reader back three munros behind its first read
+/// position: the chunks come from the seed, the reader reads exactly the
+/// stream from the offset's chunk on, and the leech never announces them.
+#[test]
+fn a_rewind_fetches_the_chunks_before_the_tail() {
+    for o in [options(), hybrid()] {
+        let mut p = joined_late(o.clone(), 6);
+        let tail = p.leech_tail();
+        assert!(tail >= 5 * MUNRO as u64, "{tail}");
+        let k = tail - 3 * MUNRO as u64 + 100;
+        let at = k - k % 1024;
+        assert_eq!(p.rewind(k), Ok(Rewind::Pending), "{:?}", o.push_mode);
+        assert_eq!(p.leech_tail(), tail, "the tail stays until it is whole");
+        let mut done = None;
+        for _ in 0..40 {
+            p.tick(50);
+            if let Rewind::Done(r) = p.rewind(k).unwrap() {
+                done = Some(r);
+                break;
+            }
+        }
+        assert_eq!(done, Some(at), "{:?}", o.push_mode);
+        assert_eq!(p.leech_tail(), at);
+        p.write(2);
+        for _ in 0..8 {
+            p.tick(50);
+        }
+        let got = p.read().unwrap();
+        assert_eq!(got.len() as u64, p.written - at);
+        assert!(
+            got.iter()
+                .enumerate()
+                .all(|(i, &b)| b == byte(at + i as u64)),
+            "the stream from the chunk on"
+        );
+        for off in (at..tail).step_by(1024) {
+            assert!(!p.seed_heard(off), "announced backlog chunk at {off}");
+        }
+        assert!(p.seed_heard(p.written - 1));
+        assert_eq!(p.rewind(at), Ok(Rewind::Done(at)), "within the window");
+    }
+}
+
+/// A rewind further back than the window reaches, or past the reader's
+/// position, is refused, and reading goes on as before.
+#[test]
+fn a_rewind_out_of_reach_is_refused_and_reading_goes_on() {
+    let mut p = joined_late(options(), 20);
+    let tail = p.leech_tail();
+    let pos = p.leech.reader.position();
+    assert_eq!(p.rewind(pos + 1), Err(RewindError::Ahead));
+    // a window behind the newest chunk its slot holds a newer one
+    assert_eq!(
+        p.rewind(tail - 1024 * 1024),
+        Err(RewindError::OutsideWindow)
+    );
+    // inside the ring, below where the seed is asked for anything
+    assert_eq!(p.rewind(tail - 1000 * 1024), Err(RewindError::Unavailable));
+    assert_eq!(p.leech.reader.position(), pos);
+    p.write(1);
+    for _ in 0..4 {
+        p.tick(50);
+    }
+    let got = p.read().unwrap();
+    assert_eq!(pos + got.len() as u64, p.written);
+    assert!(
+        got.iter()
+            .enumerate()
+            .all(|(i, &b)| b == byte(pos + i as u64))
+    );
+}
+
+/// Readers share a backlog; one further back extends it; a cancelled
+/// backlog stops and a later rewind opens it again.
+#[test]
+fn readers_share_a_backlog_and_a_cancel_stops_it() {
+    let mut p = joined_late(options(), 6);
+    let tail = p.leech_tail();
+    let mut other = p.leech.runner.swarm(p.leech.swarm).unwrap().reader();
+    let k = tail - 2 * MUNRO as u64;
+    assert_eq!(p.rewind(k), Ok(Rewind::Pending));
+    let n = &mut p.leech;
+    let swarm = n.runner.swarm(n.swarm).unwrap();
+    assert!(other.offset(swarm.store()).is_ok());
+    assert_eq!(
+        n.runner.rewind(n.swarm, &mut other, k + 4096, p.now),
+        Ok(Rewind::Pending),
+        "shares the backlog"
+    );
+    let backlog = |p: &Pair| {
+        let s = p.leech.runner.swarm(p.leech.swarm).unwrap();
+        s.store().backlog()
+    };
+    let to = backlog(&p).unwrap().1;
+    p.leech.runner.cancel_rewind(p.leech.swarm, p.now);
+    assert_eq!(backlog(&p), None);
+    p.tick(50);
+    assert_eq!(p.leech_tail(), tail, "nothing came back");
+    assert_eq!(p.rewind(k - MUNRO as u64), Ok(Rewind::Pending));
+    assert_eq!(backlog(&p), Some((Bin((k - MUNRO as u64) / 1024 * 2), to)));
+    for _ in 0..40 {
+        p.tick(50);
+    }
+    let n = &mut p.leech;
+    assert_eq!(
+        n.runner.rewind(n.swarm, &mut other, k + 4096, p.now),
+        Ok(Rewind::Done(k + 4096))
+    );
+}
+
+/// The last channel closing ends a backlog: nothing fetches it.
+#[test]
+fn a_backlog_ends_with_the_last_channel() {
+    let mut p = joined_late(options(), 6);
+    let k = p.leech_tail() - MUNRO as u64;
+    assert_eq!(p.rewind(k), Ok(Rewind::Pending));
+    p.leech.runner.stop_swarm(p.leech.peer, p.leech.swarm);
+    let events: Vec<Event> = core::iter::from_fn(|| p.leech.runner.poll_event()).collect();
+    assert!(events.contains(&Event::Readable(p.leech.swarm)));
+    assert_eq!(p.rewind(k), Err(RewindError::Unavailable));
+}

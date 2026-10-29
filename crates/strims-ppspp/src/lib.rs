@@ -42,7 +42,9 @@
 //! [`Runner::poll_event`] after every call: transmit backlogs and upload
 //! weights go to its transport, readable swarms wake their readers. Local
 //! chunks are published through [`Runner::write`] and reach the scheduler
-//! before it returns. [`Runner`]'s docs give the full contract.
+//! before it returns. A reader moves back within the live window through
+//! [`Runner::rewind`], which fetches chunks before the store's window for
+//! it. [`Runner`]'s docs give the full contract.
 //!
 //! # Hostile peers
 //!
@@ -70,6 +72,7 @@
 
 pub mod answer_gate;
 mod bin_queue;
+mod bin_range;
 pub mod channel;
 pub mod codec;
 mod constants;
@@ -111,13 +114,14 @@ pub use peer::{MetricsSnapshot, PeerMetricsSnapshot, PeerStats, TransferMetricsS
 pub use peer_data_queue::DATA_QUEUE_CAP;
 pub use runner::{
     ChannelStats, Event, MAX_PEER_QOS_WEIGHT, MIN_PEER_QOS_WEIGHT, PEER_QOS_UPDATE_INTERVAL,
-    PeerKey, Runner, RunnerError, SwarmKey, SwarmMut, TICK_INTERVAL,
+    PeerKey, Rewind, Runner, RunnerError, SwarmKey, SwarmMut, TICK_INTERVAL,
 };
 pub use scheduler_peer::push::PushStats;
 pub use scheduler_peer::push::seed::{
     AllocCounters, ReportCounters, SeedAllocationStats, SeedNeighbour,
 };
 pub use scheduler_peer::{ChannelSchedulerStats, SwarmSchedulerStats};
+pub use store::RewindError;
 pub use tap::{
     Admission, AdmitRule, HolderLeft, LagEstimate, ParentAction, ParentChoice, Prune, RequestRound,
     Shed, TAP_CAP, TapEvent, TapKind, TapLevel, Upload,

@@ -9,10 +9,11 @@
 use std::sync::Arc;
 
 use strims_base::time::Time;
-use strims_binmap::Bin;
+use strims_binmap::{Bin, Map};
 
 use super::*;
 use crate::codec::{self, Message, MessageWriter};
+use crate::store::RewindError;
 
 fn bin_byte(b: Bin, cs: usize) -> usize {
     (b.0 / 2) as usize * cs
@@ -673,5 +674,222 @@ fn codec_matches_stored() {
             let states = codec.state_len() * 8;
             assert_eq!(coding.states.len(), states, "{codec:?} {layout:?}");
         }
+    }
+}
+
+/// The bytes of chunk `o` in the rewind tests: its index, then a count.
+fn chunk_bytes(o: u64, cs: usize) -> Vec<u8> {
+    (0..cs)
+        .map(|i| (o as u8).wrapping_mul(16).wrapping_add(i as u8))
+        .collect()
+}
+
+fn stream_bytes(chunks: core::ops::Range<u64>, cs: usize) -> Vec<u8> {
+    chunks.flat_map(|o| chunk_bytes(o, cs)).collect()
+}
+
+/// A joiner's buffer of 16 chunks of 8 bytes: chunk 13 came first, then
+/// chunks 20..24, the read offset is at 20 (the window starts there), and
+/// the reader has read to the end.
+fn joined() -> (Buffer, BufferReader, Map) {
+    let cs = 8;
+    let mut b = Buffer::new(16, cs).unwrap();
+    let mut had = Map::new();
+    for o in [13].into_iter().chain(20..24) {
+        b.consume(Bin::new(0, o), &chunk_bytes(o, cs)).unwrap();
+        had.set(Bin::new(0, o));
+    }
+    b.set_offset(Bin::new(0, 23));
+    assert_eq!(b.tail(), Bin::new(0, 20));
+    let mut r = BufferReader::new(&b);
+    assert_eq!(read_n(&mut r, &b, 1000), stream_bytes(20..24, cs));
+    (b, r, had)
+}
+
+/// A rewind within the window moves only its reader, to the start of the
+/// offset's chunk, and the bytes from there come again in order. An
+/// offset past the reader's position or before the tail stays refused.
+#[test]
+fn a_rewind_moves_its_reader_alone_to_the_chunk_start() {
+    let cs = 8;
+    let mut b = Buffer::new(16, cs).unwrap();
+    let mut unready = BufferReader::new(&b);
+    assert_eq!(
+        unready.rewind(&b, 0),
+        Err(RewindError::Read(Error::WouldBlock))
+    );
+    b.set_offset(Bin(0));
+    for o in 0..10 {
+        b.consume(Bin::new(0, o), &chunk_bytes(o, cs)).unwrap();
+    }
+    let mut r = BufferReader::new(&b);
+    let mut other = BufferReader::new(&b);
+    assert_eq!(read_n(&mut r, &b, 1000), stream_bytes(0..10, cs));
+    assert_eq!(read_n(&mut other, &b, 37).len(), 37);
+
+    assert_eq!(r.rewind(&b, 81), Err(RewindError::Ahead));
+    assert_eq!(r.rewind(&b, 3 * 8 + 5), Ok(24));
+    assert_eq!(r.position(), 24);
+    assert_eq!(read_n(&mut r, &b, 1000), stream_bytes(3..10, cs));
+    assert_eq!(other.position(), 37, "the other reader stays");
+    assert_eq!(read_n(&mut other, &b, 1000), stream_bytes(0..10, cs)[37..]);
+    // the reader's own position is the furthest it may go
+    assert_eq!(r.rewind(&b, 80), Ok(80));
+
+    // once the window slides on, chunks before its tail are out of reach
+    for o in 10..40 {
+        b.consume(Bin::new(0, o), &chunk_bytes(o, cs)).unwrap();
+    }
+    let mut r = BufferReader::new(&b);
+    assert_eq!(b.tail(), Bin::new(0, 24));
+    read_n(&mut r, &b, 10_000);
+    assert_eq!(r.rewind(&b, 23 * 8), Err(RewindError::OutsideWindow));
+    assert_eq!(r.rewind(&b, 24 * 8), Ok(24 * 8));
+    assert_eq!(
+        b.open_backlog(Bin::new(0, 23), &Map::new()),
+        Err(RewindError::OutsideWindow),
+        "a sliding window's backlog shares its slots"
+    );
+}
+
+/// A reader whose next read fails keeps that error for the read.
+#[test]
+fn a_rewind_leaves_a_pending_error_to_the_next_read() {
+    let (mut b, mut r, _) = joined();
+    b.reset();
+    assert_eq!(
+        r.rewind(&b, 160),
+        Err(RewindError::Read(Error::StreamReset))
+    );
+    assert_eq!(r.read(&b, &mut [0; 8]), Err(Error::StreamReset));
+}
+
+/// A backlog before the tail stores its chunks while the tail, `next` and
+/// every reader stay, new readers included. Chunks stored before the
+/// window moved past them count as stored. Once all are stored the window
+/// starts at the backlog, and a reader moves back into it.
+#[test]
+fn a_backlog_becomes_the_window_once_it_is_whole() {
+    let cs = 8;
+    let (mut b, mut r, had) = joined();
+    let seq = b.readable_seq();
+    b.open_backlog(Bin::new(0, 12), &had).unwrap();
+    assert_eq!(b.backlog(), Some((Bin::new(0, 12), Bin::new(0, 20))));
+    assert_eq!(b.store_from(), Bin::new(0, 12));
+    assert_eq!(b.tail(), Bin::new(0, 20));
+    assert!(b.bins_filled_at(Bin::new(0, 13)));
+    assert!(!b.bins_filled_at(Bin::new(0, 12)));
+    assert!(b.bins_filled_at(Bin::new(0, 11)), "before the backlog");
+    assert_eq!(b.readable_seq(), seq);
+
+    for o in [12, 14, 15, 16, 17, 18] {
+        b.consume(Bin::new(0, o), &chunk_bytes(o, cs)).unwrap();
+    }
+    assert_eq!(b.tail(), Bin::new(0, 20));
+    assert_eq!(b.next(), Bin::new(0, 24));
+    assert_eq!(r.rewind(&b, 12 * 8), Err(RewindError::OutsideWindow));
+    let mut fresh = BufferReader::new(&b);
+    assert_eq!(fresh.position(), 20 * 8, "new readers start at the tail");
+    assert_eq!(b.readable_seq(), seq, "nothing readable changed");
+
+    b.consume(Bin::new(0, 19), &chunk_bytes(19, cs)).unwrap();
+    assert_eq!(b.backlog(), None);
+    assert_eq!(b.tail(), Bin::new(0, 12));
+    assert_ne!(b.readable_seq(), seq);
+    assert_eq!(r.rewind(&b, 12 * 8 + 7), Ok(12 * 8));
+    assert_eq!(read_n(&mut r, &b, 1000), stream_bytes(12..24, cs));
+    assert_eq!(
+        read_n(&mut fresh, &b, 1000),
+        stream_bytes(20..24, cs),
+        "a reader opened before stays"
+    );
+
+    // the window goes on from there
+    for o in 24..28 {
+        b.consume(Bin::new(0, o), &chunk_bytes(o, cs)).unwrap();
+    }
+    assert_eq!(b.tail(), Bin::new(0, 12));
+    assert_eq!(read_n(&mut r, &b, 1000), stream_bytes(24..28, cs));
+    b.consume(Bin::new(0, 28), &chunk_bytes(28, cs)).unwrap();
+    assert_eq!(b.tail(), Bin::new(0, 13));
+}
+
+/// A backlog extends down to an earlier chunk, and one its chunks already
+/// fill is whole at once.
+#[test]
+fn a_backlog_extends_and_completes_from_what_the_buffer_had() {
+    let cs = 8;
+    let (mut b, _, had) = joined();
+    b.open_backlog(Bin::new(0, 16), &had).unwrap();
+    b.consume(Bin::new(0, 17), &chunk_bytes(17, cs)).unwrap();
+    b.open_backlog(Bin::new(0, 18), &had).unwrap();
+    assert_eq!(b.backlog(), Some((Bin::new(0, 16), Bin::new(0, 20))));
+    b.open_backlog(Bin::new(0, 14), &had).unwrap();
+    assert_eq!(b.backlog(), Some((Bin::new(0, 14), Bin::new(0, 20))));
+    assert!(
+        b.bins_filled_at(Bin::new(0, 17)),
+        "kept across the extension"
+    );
+    assert!(!b.bins_filled_at(Bin::new(0, 14)));
+
+    let (mut b, mut r, had) = joined();
+    b.open_backlog(Bin::new(0, 13), &had).unwrap();
+    for o in 14..20 {
+        assert!(b.backlog().is_some());
+        b.consume(Bin::new(0, o), &chunk_bytes(o, cs)).unwrap();
+    }
+    assert_eq!(b.tail(), Bin::new(0, 13));
+    assert_eq!(r.rewind(&b, 13 * 8), Ok(13 * 8));
+    assert_eq!(read_n(&mut r, &b, 1000), stream_bytes(13..24, cs));
+
+    let mut whole = had.clone();
+    whole.set(Bin::new(1, 7)); // chunks 14 and 15
+    let (mut b, _, _) = joined();
+    b.open_backlog(Bin::new(0, 14), &whole).unwrap();
+    b.consume(Bin::new(2, 4), &stream_bytes(16..20, cs))
+        .unwrap();
+    assert_eq!(b.tail(), Bin::new(0, 14));
+}
+
+/// A backlog that no longer fits the ring, or whose window moved on, is
+/// closed: its chunks count as before the window again and readers stay.
+#[test]
+fn a_backlog_that_stops_fitting_is_closed() {
+    let cs = 8;
+    // a backlog a window or more behind the newest chunk never fits
+    let (mut b, _, had) = joined();
+    assert_eq!(
+        b.open_backlog(Bin::new(0, 7), &had),
+        Err(RewindError::OutsideWindow)
+    );
+    assert_eq!(b.backlog(), None);
+    b.open_backlog(Bin::new(0, 8), &had).unwrap();
+
+    // the chunk sharing chunk 8's slot closes it
+    let seq = b.readable_seq();
+    b.consume(Bin::new(0, 9), &chunk_bytes(9, cs)).unwrap();
+    b.consume(Bin::new(0, 24), &chunk_bytes(24, cs)).unwrap();
+    assert_eq!(b.backlog(), None);
+    assert_ne!(b.readable_seq(), seq);
+    assert!(b.bins_filled_at(Bin::new(0, 10)));
+    assert_eq!(b.tail(), Bin::new(0, 20));
+    assert_eq!(b.store_from(), Bin::new(0, 20));
+
+    // a reset, a recovery, a close, and a new read offset drop it too
+    for end in 0..4 {
+        let (mut b, mut r, had) = joined();
+        b.open_backlog(Bin::new(0, 12), &had).unwrap();
+        match end {
+            0 => b.reset(),
+            1 => {
+                b.consume(Bin::new(0, 40), &chunk_bytes(40, cs)).unwrap();
+                assert_eq!(b.backlog(), None);
+                assert_eq!(r.read(&b, &mut [0; 8]), Err(Error::BufferUnderrun));
+                r.recover(&mut b).unwrap();
+            }
+            2 => b.close(),
+            _ => b.set_offset(Bin::new(0, 21)),
+        }
+        assert_eq!(b.backlog(), None, "{end}");
     }
 }

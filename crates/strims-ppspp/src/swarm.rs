@@ -39,7 +39,7 @@ use crate::codec::{
 use crate::epoch::{Epoch, EpochError};
 use crate::integrity::{self, ChannelVerifier, SwarmVerifier};
 use crate::options::SwarmOptions;
-use crate::store::{self, Buffer, BufferReader};
+use crate::store::{self, Buffer, BufferReader, RewindError};
 use crate::swarm_id::SwarmId;
 use crate::uri::Uri;
 use crate::{MINIMUM_PROTOCOL_VERSION, PROTOCOL_VERSION};
@@ -276,6 +276,35 @@ impl Swarm {
         r.recover(&mut self.store)
     }
 
+    /// [`BufferReader::rewind`] on this swarm's store: within the chunks it
+    /// holds from its tail. [`Runner::rewind`](crate::Runner::rewind) also
+    /// fetches chunks before the tail.
+    pub fn rewind_reader(&self, r: &mut BufferReader, offset: u64) -> Result<u64, RewindError> {
+        r.rewind(&self.store, offset)
+    }
+
+    /// Whether a backlog from `from` fits the store
+    /// ([`Buffer::backlog_fits`]) and the verifier: a munro behind its ring
+    /// can't be verified again.
+    pub(crate) fn backlog_fits(&self, from: Bin) -> Result<(), RewindError> {
+        if from.base_left() < self.verifier.verifiable_from() {
+            return Err(RewindError::OutsideWindow);
+        }
+        self.store.backlog_fits(from)
+    }
+
+    /// Opens or extends the store's backlog down to `from`; see
+    /// [`Buffer::open_backlog`].
+    pub(crate) fn open_backlog(&mut self, from: Bin, had: &Map) -> Result<(), RewindError> {
+        self.backlog_fits(from)?;
+        self.store.open_backlog(from, had)
+    }
+
+    /// Closes the store's backlog.
+    pub(crate) fn close_backlog(&mut self) {
+        self.store.close_backlog();
+    }
+
     /// Sets the read offset. The scheduler calls this once it knows where
     /// the stream is. Bins at or past [`MAX_BIN`](crate::MAX_BIN) are
     /// ignored.
@@ -386,9 +415,7 @@ impl Swarm {
         let new = !self.store.bins_filled_at(b);
         self.store.consume(b, data)?;
         self.events.published.set(b);
-        self.events
-            .published
-            .reset_before(self.store.window_start());
+        self.events.published.reset_before(self.store.store_from());
         Ok(Published { bin: b, new })
     }
 

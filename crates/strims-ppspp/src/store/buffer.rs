@@ -29,6 +29,20 @@
 //! reader that hasn't seen the latest one picks up its error on its next
 //! call. The buffer also counts every change a reader could observe
 //! ([`Buffer::readable_seq`]) so a driver knows when to retry reads.
+//!
+//! # Moving back
+//!
+//! Everything from the tail up to `next` is stored, so a reader can move
+//! back to any chunk from the tail up to its position
+//! ([`BufferReader::rewind`]) and read on from there; no other reader moves.
+//!
+//! Chunks before the tail come back as a *backlog* (`open_backlog`):
+//! chunks `[from, to)`, `to` being the tail, that the buffer stores as they
+//! arrive while the tail, `next` and every reader stay where they were. A
+//! chunk's ring slot is shared with the chunk a window on, so a backlog
+//! fits only while nothing is stored from `from` plus a window on: a chunk
+//! that arrives there closes it. Once all of `[from, to)` is stored the
+//! window starts at `from` and readers may move back into it.
 
 use core::fmt;
 use std::sync::Arc;
@@ -36,7 +50,7 @@ use std::sync::Arc;
 use strims_base::time::Time;
 use strims_binmap::{Bin, Map};
 
-use super::Error;
+use super::{Error, RewindError};
 use crate::codec::{Data, Message, MessageWriter};
 
 /// The buffer layout: a `u8`, with 0 unset, so any value from options
@@ -143,6 +157,10 @@ pub struct Buffer {
     signal_seq: u64,
     signal: Option<Error>,
     readable_seq: u64,
+    /// The backlog being stored: base bins `[from, to)` before the window.
+    /// Bound: the ring's slots of the chunks from `from` plus a window on,
+    /// none of which is stored while it lasts.
+    backlog: Option<(Bin, Bin)>,
 }
 
 impl Buffer {
@@ -208,6 +226,7 @@ impl Buffer {
             signal_seq: 0,
             signal: None,
             readable_seq: 0,
+            backlog: None,
         })
     }
 
@@ -238,9 +257,97 @@ impl Buffer {
         Bin(self.head.0.saturating_sub(self.size.0))
     }
 
+    /// The first bin the buffer stores: the window's start, or the
+    /// backlog's while one is open.
+    pub(crate) fn store_from(&self) -> Bin {
+        match self.backlog {
+            Some((from, _)) => from.min(self.window_start()),
+            None => self.window_start(),
+        }
+    }
+
+    /// The backlog being stored for a rewind
+    /// ([`Runner::rewind`](crate::Runner::rewind)): base bins `[from, to)`
+    /// before the window.
+    pub fn backlog(&self) -> Option<(Bin, Bin)> {
+        self.backlog
+    }
+
+    /// Opens a backlog from base bin `from` up to the tail, or extends the
+    /// open one down to `from`. Its chunks `had` holds count as stored:
+    /// they were stored before the window moved past them, and their slots
+    /// still hold them while the backlog fits. A backlog `had` fills is
+    /// complete at once.
+    ///
+    /// Fails as [`Buffer::backlog_fits`] does. Costs O(runs of `had` in
+    /// the backlog).
+    pub(crate) fn open_backlog(&mut self, from: Bin, had: &Map) -> Result<(), RewindError> {
+        let tail = self.tail();
+        let from = from.base_left();
+        if !tail.is_none() && from >= tail {
+            return Ok(());
+        }
+        self.backlog_fits(from)?;
+        let (lim, to) = match self.backlog {
+            Some((f, _)) if from >= f => return Ok(()),
+            Some((f, t)) => (f, t),
+            None => (tail, tail),
+        };
+        self.bins.reset_before(lim);
+        self.bins.fill_before(from);
+        crate::bin_range::copy_filled(&mut self.bins, had, from, lim);
+        self.backlog = Some((from, to));
+        self.complete_backlog();
+        Ok(())
+    }
+
+    /// Whether a backlog from base bin `from` fits the ring: nothing is
+    /// stored from `from` plus a window on (always so once the window has
+    /// slid past the first read position), and the layout moves its
+    /// window. [`Error::WouldBlock`] before the first read offset.
+    pub(crate) fn backlog_fits(&self, from: Bin) -> Result<(), RewindError> {
+        if self.tail().is_none() {
+            return Err(RewindError::Read(Error::WouldBlock));
+        }
+        if self.layout != BufferLayout::CIRCULAR {
+            return Err(RewindError::OutsideWindow);
+        }
+        // the prefix before the window is filled, so a `from` a window or
+        // more behind the tail finds it too
+        let shared = Bin(from.base_left().0.saturating_add(self.size.0));
+        if self.bins.find_filled_after(shared).is_none() {
+            Ok(())
+        } else {
+            Err(RewindError::OutsideWindow)
+        }
+    }
+
+    /// Forgets the backlog: its chunks count as before the window again.
+    pub(crate) fn close_backlog(&mut self) {
+        if self.backlog.take().is_some() {
+            self.bins.fill_before(self.window_start());
+            self.readable_seq += 1;
+        }
+    }
+
+    /// Once every chunk of the backlog is stored, starts the window at its
+    /// first: nothing is stored from there plus a window on.
+    fn complete_backlog(&mut self) {
+        let Some((from, to)) = self.backlog else {
+            return;
+        };
+        let gap = self.bins.find_empty_after(from);
+        if gap.is_none() || gap >= to {
+            self.head = Bin(from.0.saturating_add(self.size.0));
+            self.backlog = None;
+            self.readable_seq += 1;
+        }
+    }
+
     /// Drops everything and waits for a new offset. Readers get
     /// [`Error::StreamReset`].
     pub fn reset(&mut self) {
+        self.backlog = None;
         if self.bins.is_empty() {
             return;
         }
@@ -271,6 +378,7 @@ impl Buffer {
 
     /// Closes the buffer: readers get [`Error::Closed`].
     pub fn close(&mut self) {
+        self.close_backlog();
         self.swap_readable(Some(Error::Closed));
         self.set_ready();
     }
@@ -298,7 +406,13 @@ impl Buffer {
 
     fn set(&mut self, b: Bin, d: &[u8]) {
         let (l, r) = b.base();
-        if l < self.window_start() {
+        // a chunk in the slot of a backlog chunk: the backlog no longer fits
+        if let Some((from, _)) = self.backlog
+            && r >= Bin(from.0.saturating_add(self.size.0))
+        {
+            self.close_backlog();
+        }
+        if l < self.store_from() {
             return;
         }
         if self.layout == BufferLayout::ELASTIC {
@@ -330,6 +444,9 @@ impl Buffer {
             self.encode(b.base_offset(), d);
         }
         self.bins.set(b);
+        if self.backlog.is_some_and(|(_, to)| l < to) {
+            self.complete_backlog();
+        }
 
         if self.next < self.tail() {
             self.swap_readable(Some(Error::BufferUnderrun));
@@ -465,6 +582,7 @@ impl Buffer {
     /// The walk back over stored chunks stops at the tail, so the window
     /// never moves back over chunks the ring has overwritten.
     pub fn set_offset(&mut self, b: Bin) {
+        self.backlog = None;
         self.sem += 1;
 
         let tail = self.window_start();
@@ -495,6 +613,8 @@ impl Buffer {
             return Err(Error::ReadOffsetNotFound);
         }
 
+        // the window moves on past any backlog
+        self.backlog = None;
         self.head = next + self.size.0;
         self.bins.fill_before(next);
         self.next = self.find_empty_after(next);
@@ -659,6 +779,51 @@ impl BufferReader {
         }
         self.sync(buf);
         Ok(self.off)
+    }
+
+    /// Moves the reader back to the chunk holding stream offset `offset`
+    /// and returns the chunk's offset, where the next read starts. The
+    /// bytes from there come again in stream order, those read before
+    /// included. No other reader moves.
+    ///
+    /// The chunk must be at or after the tail, which holds everything up
+    /// to `next`, and `offset` at or before the reader's next byte
+    /// ([`RewindError::Ahead`]); a chunk before the tail is
+    /// [`RewindError::OutsideWindow`] here. A reader whose next read
+    /// returns an error stays where it is and gets it as
+    /// [`RewindError::Read`]: the read still returns it. Before the buffer
+    /// has a read offset that is [`Error::WouldBlock`].
+    pub fn rewind(&mut self, buf: &Buffer, offset: u64) -> Result<u64, RewindError> {
+        if let Some(e) = self.err {
+            return Err(RewindError::Read(e));
+        }
+        // a broadcast not seen yet stays for the next read
+        if self.seen_signal != buf.signal_seq
+            && let Some(e) = buf.signal
+        {
+            return Err(RewindError::Read(e));
+        }
+        if !buf.ready {
+            return Err(RewindError::Read(Error::WouldBlock));
+        }
+        // as the next read does: its position is where that read starts
+        self.sync(buf);
+        if let Some(e) = self.err {
+            return Err(RewindError::Read(e));
+        }
+        if offset > self.off {
+            return Err(RewindError::Ahead);
+        }
+        let cs = buf.chunk_size;
+        let at = offset - offset % cs;
+        let b = byte_bin(at, cs);
+        let tail = buf.tail();
+        if tail.is_none() || b < tail {
+            return Err(RewindError::OutsideWindow);
+        }
+        self.off = at;
+        self.prev = b;
+        Ok(at)
     }
 
     /// After [`Error::BufferUnderrun`], skips to the new tail and returns

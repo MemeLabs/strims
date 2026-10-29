@@ -3220,3 +3220,161 @@ fn reports_the_seeds_observations_rule_out_count_for_nothing() {
     let c = f.sched.seed_allocation(t).unwrap().counters.reports;
     assert_eq!(c.invalid, 3);
 }
+
+/// A joiner whose window starts at chunk 512 (1 KiB chunks, a 1024 chunk
+/// window): it holds chunks 512..520, its peer announces chunks 0..520,
+/// and a backlog of chunks 384..512 is open.
+fn rewound(options: SwarmOptions) -> (Fixture, MockQueue, PeerKey) {
+    let mut f = fixture(SwarmOptions {
+        live_window: 1 << 10,
+        integrity: crate::integrity::VerifierOptions {
+            protection_method: ProtectionMethod::NONE,
+            ..Default::default()
+        },
+        ..options
+    });
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    for o in 512..520u64 {
+        f.swarm.publish(Bin(2 * o), &[o as u8; 1024]).unwrap();
+    }
+    f.swarm.set_offset(Bin(2 * 519));
+    f.sched.s.first_chunk_set = true;
+    f.sched.s.request_bins.fill_before(Bin(2 * 519));
+    drain(&mut f, &mut q);
+    assert_eq!(f.swarm.store().tail(), Bin(2 * 512));
+    assert!(f.sched.handle_have(p, Bin::new(9, 0), now()));
+    assert!(f.sched.handle_have(p, Bin::new(3, 64), now()));
+    assert!(f.sched.backlog_servable(Bin(2 * 384), Bin(2 * 512), now()));
+    let had = f.sched.s.have_bins.clone();
+    f.swarm.open_backlog(Bin(2 * 384), &had).unwrap();
+    f.sched.open_backlog(Bin(2 * 384), Bin(2 * 512), &mut q);
+    (f, q, p)
+}
+
+/// Hands the swarm's published chunks to the scheduler.
+fn drain(f: &mut Fixture, q: &mut MockQueue) {
+    while let Some(e) = f.swarm.poll_event() {
+        if let crate::SwarmEvent::Published(b) = e {
+            f.sched.consume(b, now(), &f.swarm, q);
+        }
+    }
+}
+
+/// Live chunks are requested first; the room they leave goes to the
+/// backlog's oldest group, and nothing below it.
+#[test]
+fn a_backlog_takes_the_room_live_requests_leave() {
+    let (mut f, _, p) = rewound(pull());
+    // the peer announces 8 more live chunks; the window allows 32 requests
+    assert!(f.sched.handle_have(p, Bin::new(3, 65), now()));
+    let requests = requests_at(&mut f, p, now());
+    assert_eq!(requests.len(), 32, "{requests:?}");
+    let (live, backlog) = requests.split_at(8);
+    assert!(live.iter().all(|b| (520..528).contains(&b.base_offset())));
+    assert!(
+        backlog
+            .iter()
+            .all(|b| (384..384 + REQUEST_GROUP).contains(&b.base_offset())),
+        "{backlog:?}"
+    );
+
+    // no backlog: nothing before the live chunks is asked for
+    let (mut f, _, p) = rewound(pull());
+    let s = &mut f.sched;
+    s.close_backlog(&mut f.swarm);
+    assert!(s.handle_have(p, Bin::new(3, 65), now()));
+    s.s.request_bins.reset(Bin(2 * 400));
+    let requests = requests_at(&mut f, p, now());
+    assert!(
+        requests.iter().all(|b| b.base_offset() >= 520),
+        "{requests:?}"
+    );
+}
+
+/// A backlog's chunks go to no HAVE, push or new channel, and a live
+/// chunk's HAVE leaves them out; the store becomes whole and the backlog
+/// ends.
+#[test]
+fn backlog_chunks_are_never_announced_or_pushed() {
+    let (mut f, mut q, p) = rewound(pull());
+    let sub = f.peers[1];
+    f.sched.add_channel(sub, &[2], now(), &mut q);
+    f.sched.handle_handshake(sub, 1 << 10);
+    f.sched.channels.get_mut(&sub).unwrap().have_bins = Map::new();
+    f.sched.s.streams[0].add_subscriber(sub, Bin(0), false, now());
+    q.pushed.clear();
+    for o in 384..512u64 {
+        f.swarm.publish(Bin(2 * o), &[o as u8; 1024]).unwrap();
+    }
+    drain(&mut f, &mut q);
+    assert!(q.pushed.is_empty(), "{:?}", q.pushed);
+    let c = &f.sched.channels[&sub];
+    assert!(c.have_bins.is_empty(), "{:?}", c.have_bins.debug_string());
+    assert_eq!(f.swarm.store().tail(), Bin(2 * 384));
+    assert!(!f.sched.s.backlog.unwrap().pending);
+
+    // a live chunk whose cover spans the backlog
+    for o in 520..1024u64 {
+        f.swarm.publish(Bin(2 * o), &[o as u8; 1024]).unwrap();
+    }
+    drain(&mut f, &mut q);
+    let c = &f.sched.channels[&sub];
+    assert!(c.have_bins.filled_at(Bin::new(9, 1)));
+    assert!(c.have_bins.empty_at(Bin::new(7, 3)), "chunks 384..512");
+    assert_eq!(q.pushed.len(), 1024 - 520);
+    // a new channel and a restart announce no backlog chunk either
+    let late = f.peers[2];
+    f.sched.add_channel(late, &[3], now(), &mut q);
+    assert!(f.sched.channels[&late].have_bins.empty_at(Bin::new(7, 3)));
+    assert!(f.sched.channels[&late].have_bins.filled_at(Bin(2 * 520)));
+    f.sched.channels.get_mut(&sub).unwrap().have_bins = Map::new();
+    f.sched.handle_restart(sub);
+    assert!(f.sched.channels[&sub].have_bins.empty_at(Bin::new(7, 3)));
+    let _ = p;
+}
+
+/// A backlog whose holder goes, or that left every holder's window, ends
+/// at the next tick: the store's backlog closes.
+#[test]
+fn a_backlog_no_one_can_serve_ends() {
+    let (mut f, mut q, p) = rewound(pull());
+    f.sched.run(now(), &mut f.swarm, &mut q);
+    assert!(f.swarm.store().backlog().is_some());
+    f.sched.close_channel(p, &f.swarm, &mut q);
+    f.sched.run(now(), &mut f.swarm, &mut q);
+    assert_eq!(f.swarm.store().backlog(), None);
+    assert!(!f.sched.s.backlog.unwrap().pending);
+}
+
+/// GC keeps a pending backlog's request times, so its answers count as
+/// answers.
+#[test]
+fn gc_keeps_a_backlogs_request_times() {
+    let (mut f, _, p) = rewound(pull());
+    let requests = requests_at(&mut f, p, now());
+    assert!(requests.iter().any(|b| b.base_offset() < 512));
+    let before = f.sched.channels[&p].request_times.size();
+    f.sched.gc(&f.swarm, now());
+    assert_eq!(f.sched.channels[&p].request_times.size(), before);
+}
+
+/// A backlog opened again after one ended asks only from its own start,
+/// where the store takes chunks.
+#[test]
+fn a_reopened_backlog_asks_only_from_its_start() {
+    let (mut f, mut q, p) = rewound(pull());
+    f.sched.close_backlog(&mut f.swarm);
+    let had = f.sched.s.have_bins.clone();
+    f.swarm.open_backlog(Bin(2 * 448), &had).unwrap();
+    f.sched.open_backlog(Bin(2 * 448), Bin(2 * 512), &mut q);
+    assert_eq!(f.swarm.store().store_from(), Bin(2 * 448));
+    let requests = requests_at(&mut f, p, now());
+    assert!(!requests.is_empty());
+    assert!(
+        requests
+            .iter()
+            .all(|b| (448..512).contains(&b.base_offset())),
+        "{requests:?}"
+    );
+}

@@ -37,6 +37,7 @@ use crate::scheduler_peer::{
     ChannelSchedulerStats, PeerSwarmScheduler, SchedulerError, StreamOpenOutcome,
     SwarmSchedulerStats, WriteDataError,
 };
+use crate::store::{self, BufferReader, RewindError};
 use crate::swarm::{Swarm, SwarmError, SwarmEvent};
 use crate::tap::{Tap, TapEvent, TapKind, TapLevel};
 use crate::writer::Writer;
@@ -89,6 +90,18 @@ pub enum RunnerError {
     Scheduler(#[from] SchedulerError),
     #[error(transparent)]
     Swarm(#[from] SwarmError),
+}
+
+/// What [`Runner::rewind`] did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rewind {
+    /// The reader moved: its next read starts at this stream offset, the
+    /// start of the chunk holding the offset asked for.
+    Done(u64),
+    /// The swarm fetches the chunks from the offset's on, or waits for its
+    /// first read position: call again at the swarm's next
+    /// [`Event::Readable`].
+    Pending,
 }
 
 /// Notifications for the driver.
@@ -358,7 +371,8 @@ pub struct ChannelStats {
 /// - **Events.** Drain [`Runner::poll_event`] after every call that takes
 ///   input or time (`add_peer`, `run_swarm`, `handle_frame`,
 ///   `handle_timeout`, `write` and the [`SwarmMut`] guard,
-///   `request_stream`, `cancel_stream`): [`Event::Transmit`] sets the
+///   `request_stream`, `cancel_stream`, `rewind`, `cancel_rewind`):
+///   [`Event::Transmit`] sets the
 ///   peer's backlog, [`Event::QosWeight`] sets its writer's weight
 ///   ([`MIN_PEER_QOS_WEIGHT`]..=[`MAX_PEER_QOS_WEIGHT`]), and
 ///   [`Event::Readable`] wakes the swarm's local readers.
@@ -370,6 +384,8 @@ pub struct ChannelStats {
 ///   until [`store::Error::WouldBlock`](crate::store::Error::WouldBlock);
 ///   recover an underrun reader through [`Runner::swarm_mut`]. A reader's
 ///   offset is unknown until the scheduler sets the first read position.
+///   Move a reader back with [`Runner::rewind`], again at each
+///   `Readable` while it is [`Rewind::Pending`].
 /// - **Paths.** Measure each peer's link as [`strims_base::path`] does
 ///   (vnic's probes), pass every round trip to [`Runner::on_path_sample`]
 ///   as it comes, and the reading to [`Runner::set_peer_path`] every pass.
@@ -495,9 +511,10 @@ fn handle_payload(
                 if !sched.expect_data(peer, d.bin) {
                     continue;
                 }
-                let window_start = swarm.store().window_start();
-                // Behind the window the chunk can't be stored, and behind the
-                // verifier's ring its munro's signature won't come again.
+                let window_start = swarm.store().store_from();
+                // Behind the window (and the backlog) the chunk can't be
+                // stored, and behind the verifier's ring its munro's
+                // signature won't come again.
                 if d.bin.base_right() < window_start.max(swarm.verifier().verifiable_from()) {
                     let m = &mut ch.metrics_in;
                     m.stale_data = m.stale_data.saturating_add(1);
@@ -873,6 +890,131 @@ impl Runner {
         Ok(writer.reset(&mut s, now)?)
     }
 
+    /// Moves `reader`, a reader of the swarm's store, back to the chunk
+    /// holding stream offset `offset`, at or before its next byte: its
+    /// next read starts at that chunk's offset, and the bytes from there
+    /// come in stream order, those it read before included. No other reader
+    /// moves.
+    ///
+    /// [`Rewind::Done`] once every chunk from there to the reader's
+    /// position is stored. While chunks before the store's window must come
+    /// from peers, [`Rewind::Pending`]: the swarm fetches them as a
+    /// backlog, after its live chunks, from the channels that announced
+    /// them, and stores them for local readers alone (they are never
+    /// announced, pushed or counted in the store rate). Call again at the
+    /// swarm's next [`Event::Readable`]. So too before the swarm's first
+    /// read position. Readers asking for chunks one backlog holds share it;
+    /// an earlier chunk extends it.
+    ///
+    /// An error leaves the reader where it was:
+    /// - [`RewindError::Ahead`]: `offset` is past the reader's next byte;
+    /// - [`RewindError::OutsideWindow`]: the chunk's ring slot holds a
+    ///   newer chunk, or its munro is behind the verifier's ring;
+    /// - [`RewindError::Unavailable`]: a chunk from there on that the swarm
+    ///   lacks can't be requested from any channel (none announced it, it
+    ///   is below every channel's request floor, or there are no channels);
+    ///   a pending backlog ends so too, or once it stops fitting the ring,
+    ///   and the next call says why;
+    /// - [`RewindError::Read`]: the reader's next read returns that error
+    ///   first ([`store::Error::Closed`] for an unknown swarm).
+    ///
+    /// A backlog's work and memory are bounded by the window: its chunks
+    /// fit the ring's free slots, and a check costs O(channels × announced
+    /// runs) per tick. A backlog whose only holders never answer stays
+    /// pending until it leaves their windows, so callers bound a rewind
+    /// with a deadline of their own and [`Runner::cancel_rewind`].
+    pub fn rewind(
+        &mut self,
+        key: SwarmKey,
+        reader: &mut BufferReader,
+        offset: u64,
+        now: Time,
+    ) -> Result<Rewind, RewindError> {
+        self.touch_clock(now);
+        let Runner {
+            swarms,
+            peers,
+            events,
+            ..
+        } = self;
+        let Some(rs) = swarms.get_mut(key) else {
+            return Err(RewindError::Read(store::Error::Closed));
+        };
+        match rs.swarm.rewind_reader(reader, offset) {
+            Ok(at) => return Ok(Rewind::Done(at)),
+            Err(RewindError::Read(store::Error::WouldBlock)) => return Ok(Rewind::Pending),
+            Err(RewindError::OutsideWindow) => {}
+            Err(e) => return Err(e),
+        }
+        let RunnerSwarm {
+            swarm, scheduler, ..
+        } = rs;
+        let cs = swarm.store().chunk_size().max(1) as u64;
+        let from = Bin((offset / cs).saturating_mul(2));
+        let (backlog, tail) = (swarm.store().backlog(), swarm.store().tail());
+        if backlog.is_some_and(|(f, _)| f <= from) {
+            return Ok(Rewind::Pending);
+        }
+        let to = backlog.map_or(tail, |(_, to)| to);
+        swarm.backlog_fits(from)?;
+        let Some(sched) = scheduler.as_mut() else {
+            return Err(RewindError::Unavailable);
+        };
+        if !sched.backlog_servable(from, to, now) {
+            return Err(RewindError::Unavailable);
+        }
+        swarm.open_backlog(from, &sched.s.have_bins)?;
+        let mut q = Queues {
+            peers,
+            transmit: &mut events.transmit,
+        };
+        let pending = swarm.store().backlog().is_some();
+        if pending {
+            sched.open_backlog(from, to, &mut q);
+        }
+        drain_swarm(swarm, Some(sched), key, now, &mut q, &mut events.readable);
+        if pending {
+            return Ok(Rewind::Pending);
+        }
+        // every chunk was stored before the window moved past it
+        swarm.rewind_reader(reader, offset).map(Rewind::Done)
+    }
+
+    /// Stops fetching the swarm's backlog ([`Runner::rewind`]). A reader
+    /// still waiting for it finds it gone at its next call, which may open
+    /// it again.
+    pub fn cancel_rewind(&mut self, key: SwarmKey, now: Time) {
+        self.touch_clock(now);
+        let Runner {
+            swarms,
+            peers,
+            events,
+            ..
+        } = self;
+        let Some(rs) = swarms.get_mut(key) else {
+            return;
+        };
+        let RunnerSwarm {
+            swarm, scheduler, ..
+        } = rs;
+        match scheduler.as_mut() {
+            Some(sched) => sched.close_backlog(swarm),
+            None => swarm.close_backlog(),
+        }
+        let mut q = Queues {
+            peers,
+            transmit: &mut events.transmit,
+        };
+        drain_swarm(
+            swarm,
+            scheduler.as_mut(),
+            key,
+            now,
+            &mut q,
+            &mut events.readable,
+        );
+    }
+
     // --- peers ----------------------------------------------------------
 
     /// Adds a peer; `id` names it in the reports a swarm's seed asks for,
@@ -1062,6 +1204,11 @@ impl Runner {
             && let Some(mut sched) = rs.scheduler.take()
         {
             tap.absorb(sched.tap_mut());
+            // nothing fetches the backlog without channels
+            if rs.swarm.store().backlog().is_some() {
+                rs.swarm.close_backlog();
+                events.readable.insert(key);
+            }
         }
     }
 
