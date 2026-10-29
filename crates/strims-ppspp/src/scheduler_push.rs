@@ -75,8 +75,15 @@
 //!   isn't its parent trigger another STREAM_CANCEL, at most once per
 //!   [`UNSOLICITED_CANCEL_INTERVAL`]. Invalid data from the parent is a
 //!   miss, released at once. A peer that declined, shed or timed out is
-//!   backed off for [`DECLINE_BACKOFF`]; one pruned or with an unacceptable
-//!   OPEN for [`PRUNE_BACKOFF`].
+//!   backed off for [`DECLINE_BACKOFF`], and one with an unacceptable OPEN
+//!   for [`PRUNE_BACKOFF`]. A pruned parent is backed off by the child's
+//!   own count: [`PRUNE_BACKOFF`] if it never pushed us anything (a liar
+//!   that announces first, grafted after every fixed backoff, would cost
+//!   each child about a second of every eleven), [`PRUNE_BACKOFF_PUSHED`]
+//!   if it did (a parent that fell behind for a moment, as a seed whose
+//!   uplink halved, would otherwise lose its child for many times the
+//!   moment), each doubling with the prunes in a row, which start over
+//!   once its pushes arrived over [`SERVED_SPAN`].
 //! - **Reports.** Per parent and stream we tally its hits, its late pushes
 //!   and its misses, as the prune rules count them, and the hits' push
 //!   delay. Every [`REPORT_INTERVAL`] the tallies go out as ANNOUNCE
@@ -142,9 +149,9 @@
 //! - Parent checks cost O(streams × channels) per [`PARENT_CHECK_INTERVAL`];
 //!   shedding sorts the subscribers at most once per [`SHED_INTERVAL`].
 //! - Per-stream state is fixed: one subscription per stream; one lag,
-//!   backoff, cancel time and tally per channel and stream; one subscriber
-//!   entry per channel and stream. A report due to a neighbour holds at
-//!   most twice the stream count of entries.
+//!   backoff, prune count, cancel time and tally per channel and stream;
+//!   one subscriber entry per channel and stream. A report due to a
+//!   neighbour holds at most twice the stream count of entries.
 //!
 //! # Wire
 //!
@@ -194,9 +201,19 @@ pub const OPEN_TIMEOUT: Duration = Duration::SECOND;
 /// A peer that declined, shed or never answered a stream isn't asked for
 /// it again for this long.
 pub const DECLINE_BACKOFF: Duration = Duration::from_secs(3);
-/// A parent pruned for misses isn't asked for the stream again for this
-/// long.
+/// A parent pruned for misses before it pushed us anything isn't asked for
+/// the stream again for this long, doubling with each prune in a row (at
+/// most [`MAX_PRUNE_DOUBLINGS`] times).
 pub const PRUNE_BACKOFF: Duration = Duration::from_secs(10);
+/// One that pushed before it fell behind, for this long, doubling likewise:
+/// its misses were most likely a passing overload, which a fixed backoff
+/// outlasts many times over.
+pub const PRUNE_BACKOFF_PUSHED: Duration = Duration::from_secs(2);
+/// A parent whose pushes arrived over this long served: its prunes in a row
+/// start over.
+pub const SERVED_SPAN: Duration = Duration::from_secs(10);
+/// A prune backoff doubles at most this many times.
+pub const MAX_PRUNE_DOUBLINGS: u32 = 3;
 /// Deviations of the parent's push delay a deadline allows ...
 pub const DEADLINE_K: f64 = 4.0;
 /// ... or this times its recent peak, whichever is longer. Pushes leave in
@@ -609,6 +626,9 @@ pub(crate) struct PushChannel {
     have_lag: Vec<LagEwma>,
     /// Not a candidate for the stream until then. Bound: one per stream.
     backoff: Vec<Time>,
+    /// The peer's prunes in a row as the stream's parent. Bound: one per
+    /// stream.
+    prunes: Vec<u32>,
     /// When we last cancelled the peer's unsolicited pushes of the stream.
     /// Bound: one per stream.
     cancel_at: Vec<Time>,
@@ -634,6 +654,7 @@ impl PushChannel {
         PushChannel {
             have_lag: vec![LagEwma::default(); streams],
             backoff: vec![Time::EPOCH; streams],
+            prunes: vec![0; streams],
             cancel_at: vec![Time::EPOCH; streams],
             cancelled: Map::new(),
             tally: vec![Tally::default(); streams],
@@ -662,6 +683,26 @@ impl PushChannel {
         if let Some(b) = self.backoff.get_mut(usize::from(stream)) {
             *b = (*b).max(until);
         }
+    }
+
+    /// The backoff for a prune of the peer as the stream's parent, by what
+    /// it pushed us between `since` (when it opened) and `last_hit`.
+    fn prune_backoff(&mut self, stream: Stream, since: Time, last_hit: Time) -> Duration {
+        let pushed = !since.is_nil() && last_hit > since;
+        let Some(n) = self.prunes.get_mut(usize::from(stream)) else {
+            return PRUNE_BACKOFF;
+        };
+        if pushed && last_hit - since >= SERVED_SPAN {
+            *n = 0;
+        }
+        let base = if pushed {
+            PRUNE_BACKOFF_PUSHED
+        } else {
+            PRUNE_BACKOFF
+        };
+        let backoff = base * (1 << (*n).min(MAX_PRUNE_DOUBLINGS));
+        *n = n.saturating_add(1);
+        backoff
     }
 }
 
@@ -1249,12 +1290,16 @@ impl PeerSwarmScheduler {
             stream,
             why: sub.prune_why(rule, &parent, now),
         });
+        let last_hit = sub.last_hit;
         p.open = p.open.saturating_sub(1);
         p.stats.pruned = p.stats.pruned.saturating_add(1);
         p.next_check = now;
         if let Some(c) = self.channels.get_mut(&parent.peer) {
             c.push_cancel(stream);
-            c.push_backoff(stream, now + PRUNE_BACKOFF);
+            let backoff = c.push.as_mut().map_or(PRUNE_BACKOFF, |pc| {
+                pc.prune_backoff(stream, parent.since, last_hit)
+            });
+            c.push_backoff(stream, now + backoff);
             q.enqueue_now(parent.peer, s.key);
         }
         self.drop_parent(stream, Some((parent, now)), q);
@@ -2481,5 +2526,28 @@ mod tests {
             }
         }
         assert_eq!(pruned, Some(2000));
+    }
+
+    #[test]
+    fn a_pruned_parent_is_backed_off_by_what_it_pushed_and_how_often() {
+        let t = Time::from_unix_millis(1_000);
+        let s = Duration::SECOND;
+        let mut pc = PushChannel::new(2);
+        // Nothing pushed (a liar): the full backoff, doubling at each prune,
+        // at most three times.
+        let liar: Vec<Duration> = (0..5).map(|_| pc.prune_backoff(0, t, t)).collect();
+        assert_eq!(liar, [10, 20, 40, 80, 80].map(|x| s * x));
+        // Pushes, then misses: a short backoff, doubling likewise; per stream.
+        assert_eq!(pc.prune_backoff(1, t, t + s), PRUNE_BACKOFF_PUSHED);
+        assert_eq!(pc.prune_backoff(1, t, t + s), PRUNE_BACKOFF_PUSHED * 2);
+        // A parent that served over SERVED_SPAN starts over.
+        assert_eq!(
+            pc.prune_backoff(1, t, t + SERVED_SPAN),
+            PRUNE_BACKOFF_PUSHED
+        );
+        assert_eq!(
+            pc.prune_backoff(0, t, t + SERVED_SPAN),
+            PRUNE_BACKOFF_PUSHED
+        );
     }
 }

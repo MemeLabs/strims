@@ -2189,18 +2189,19 @@ fn collapse_pull_lock_in() {
 /// those written from 10 s after it over 2 s: healthy before, not after.
 /// Holding answers below pushes, routing by expected delivery, holding
 /// late pushes for their parent, pacing answers, frames of about a chunk
-/// (little waits below the runner when the uplink halves) and bounding
-/// relays' capacity readings by what they wrote ease the mode but don't
-/// remove it: once its window is cut, the seed holds two or
-/// three copies while the viewers it dropped find relays, and on some seeds
-/// that takes long enough to show. At this seed frames lag about 0.2 s at
-/// p99 before the halving and 2.1 s after.
+/// (little waits below the runner when the uplink halves), bounding
+/// relays' capacity readings by what they wrote and backing a pruned
+/// parent that had pushed off for only a moment ease the mode but don't
+/// remove it: once its window is cut, the seed holds two or three copies
+/// while the viewers it dropped find relays, and on some seeds that takes
+/// long enough to show. At this seed frames lag about 0.2 s at p99 before
+/// the halving and 3.2 s after.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_halving_lock_in() {
     let mut c = collapse_case(7, 10, 70);
     c.seed_up_steps = vec![(30.0, 5.0)];
-    collapse_sweep("collapse_halving_lock_in", 6, &c, |r| {
+    collapse_sweep("collapse_halving_lock_in", 12, &c, |r| {
         let (_, start) = collapse_seed(r);
         let before = r.lag_between(0, start + secs(20), start + secs(30)).p99;
         let after = r.lag_between(0, start + secs(40), start + secs(70)).p99;
