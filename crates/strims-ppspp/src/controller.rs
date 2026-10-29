@@ -30,8 +30,9 @@ pub const STREAM_WINDOW_FLOOR_RTT: Duration = Duration::SECOND;
 /// may ignore.
 pub trait RequestController {
     /// Before a request round. `stream_rate` is the swarm's rate as its
-    /// peers' HAVEs advance, in bytes per second (0 while unknown).
-    fn on_round(&mut self, now: Time, stream_rate: u64);
+    /// peers' HAVEs advance, in bytes per second (0 while unknown), and
+    /// `chunk` its chunk size in bytes.
+    fn on_round(&mut self, now: Time, stream_rate: u64, chunk: i64);
     /// A request for `bytes` was sent.
     fn on_sent(&mut self, now: Time, bytes: i64);
     /// `bytes` of verified data arrived from the peer, pushed or pulled,
@@ -70,20 +71,29 @@ pub trait RequestController {
 
 impl RequestController for Ledbat {
     /// Sets the window floor: [`STREAM_WINDOW_FLOOR`] times the
-    /// stream's bandwidth-delay product over the ping round trip
+    /// stream's bandwidth-delay product, and at least one chunk, over the
+    /// ping round trip
     /// ([`Ledbat::floor_rtt`], at most [`STREAM_WINDOW_FLOOR_RTT`]): in
     /// [`PushMode::Hybrid`](crate::PushMode::Hybrid) the smallest of the
     /// last [`MIN_RTT_WINDOW`](crate::ledbat::MIN_RTT_WINDOW), otherwise
     /// the smoothed one.
     ///
-    /// LEDBAT's minimum of 2 chunks carries 2 chunks per round trip, a
-    /// fifth of a 32 KiB/s stream at 300 ms. A rise in the path's base
+    /// LEDBAT's minimum of 2 KiB per round trip is a fifth of a 32 KiB/s
+    /// stream at 300 ms. A rise in the path's base
     /// delay reads as queueing until the old base ages out of LEDBAT's
     /// history (4 minutes here, RFC 6817's `BASE_HISTORY` is 10), and the
     /// window sits at that minimum all the while. At the floor one channel
     /// still carries the stream and can catch up. The floor overrides only
     /// LEDBAT's delay signal; after a timed out request LEDBAT governs
     /// alone for a while ([`crate::ledbat::FLOOR_LOSS_HOLD`]).
+    ///
+    /// A window under one chunk asks for nothing: with nothing in flight
+    /// no answer comes to grow it, and the chunk the reader waits for goes
+    /// unasked until the floor happens to pass a chunk. Twice a 1 Mbit/s
+    /// stream over a 10 ms path is 2.5 KiB, and LEDBAT's minimum is 2 KiB,
+    /// both under a 4 KiB chunk, so the floor is at least one. The minimum
+    /// after a loss stays LEDBAT's: a peer that timed out is left alone
+    /// for the hold.
     ///
     /// When the peer's uplink is full, a ping waits behind every byte the
     /// peer has already written to us, in its frames, its socket and the
@@ -100,7 +110,7 @@ impl RequestController for Ledbat {
     /// to hold back, a congested seed's uplink is best kept full of
     /// distinct requests, and a floor on the minimum costs them lag on
     /// long paths.
-    fn on_round(&mut self, now: Time, stream_rate: u64) {
+    fn on_round(&mut self, now: Time, stream_rate: u64, chunk: i64) {
         let rtt = self
             .floor_rtt()
             .min(STREAM_WINDOW_FLOOR_RTT)
@@ -108,7 +118,8 @@ impl RequestController for Ledbat {
             .max(0) as i128;
         let bytes = i128::from(stream_rate) * rtt * i128::from(STREAM_WINDOW_FLOOR)
             / i128::from(Duration::SECOND.as_nanos());
-        self.set_min_cwnd(i64::try_from(bytes).unwrap_or(i64::MAX), now);
+        let bytes = i64::try_from(bytes).unwrap_or(i64::MAX).max(chunk);
+        self.set_min_cwnd(bytes, now);
     }
 
     fn on_sent(&mut self, _now: Time, bytes: i64) {
@@ -176,13 +187,16 @@ mod tests {
         // The floor is twice the stream's bytes per ping round trip.
         let mut c = Ledbat::new();
         c.on_ping_rtt(t(0), Duration::from_millis(300));
-        c.on_round(t(0), 32 * 1024);
+        c.on_round(t(0), 32 * 1024, 1024);
         let floor = 2 * 32 * 1024 * 3 / 10;
         assert_eq!(c.min_cwnd(), floor);
         assert!(c.in_flight_cap() >= floor);
-        // An unknown rate leaves LEDBAT's own minimum.
-        c.on_round(t(1), 0);
+        // An unknown rate leaves LEDBAT's own minimum ...
+        c.on_round(t(1), 0, 1024);
         assert_eq!(c.min_cwnd(), 2 * MSS);
+        // ... or a chunk, if that is more.
+        c.on_round(t(2), 0, 4096);
+        assert_eq!(c.min_cwnd(), 4096);
     }
 
     #[test]
@@ -198,13 +212,13 @@ mod tests {
         }
         assert!(c.rtt() > Duration::from_millis(400), "{:?}", c.rtt());
         assert_eq!(c.min_rtt(), Duration::from_millis(50));
-        c.on_round(t(0) + step * 9, 32 * 1024);
+        c.on_round(t(0) + step * 9, 32 * 1024, 1024);
         let floor = 2 * 32 * 1024 * 50 / 1000;
         assert_eq!(c.min_cwnd(), floor);
         // The path's delay rose: the floor follows within the window.
         let later = t(0) + MIN_RTT_WINDOW;
         c.on_ping_rtt(later, Duration::from_millis(700));
-        c.on_round(later, 32 * 1024);
+        c.on_round(later, 32 * 1024, 1024);
         let floor = 2 * 32 * 1024 * 700 / 1000;
         assert_eq!(c.min_cwnd(), floor);
     }
@@ -216,7 +230,7 @@ mod tests {
         c.on_ping_rtt(t(1_000), Duration::from_millis(700));
         let rtt = c.rtt();
         assert!(rtt > Duration::from_millis(50), "{rtt:?}");
-        c.on_round(t(1_000), 32 * 1024);
+        c.on_round(t(1_000), 32 * 1024, 1024);
         let floor = 2 * 32 * 1024 * rtt.as_nanos() / Duration::SECOND.as_nanos();
         assert_eq!(c.min_cwnd(), floor);
     }

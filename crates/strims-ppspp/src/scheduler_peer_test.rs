@@ -1123,6 +1123,43 @@ fn window_floor_carries_the_stream() {
 }
 
 #[test]
+fn a_window_at_its_floor_still_asks_for_a_chunk() {
+    // Twice a slow stream over a short path is less than a 4 KiB chunk,
+    // and so is LEDBAT's minimum: a window held there by queueing delay
+    // would ask for nothing, and never get the answer it needs to grow.
+    let mut f = fixture(SwarmOptions {
+        chunk_size: 4096,
+        live_window: 1 << 10,
+        chunks_per_signature: 8,
+        ..pull()
+    });
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    f.sched.s.first_chunk_set = true;
+    // 8 chunks a second.
+    let mut t = now();
+    for i in 0..40u64 {
+        t = now() + Duration::from_millis(125 * i as i64);
+        assert!(f.sched.handle_have(p, Bin::new(0, i), t));
+    }
+    {
+        let l = &mut f.sched.channels[&p].controller;
+        l.add_rtt_sample(Duration::from_millis(5), t);
+        l.add_delay_sample(Duration::from_millis(10), 1024, t);
+        l.digest_delay_samples(t);
+        for _ in 0..500 {
+            l.add_sent(8192);
+            l.add_delay_sample(Duration::from_millis(150), 8192, t);
+            l.digest_delay_samples(t);
+        }
+        assert!(l.cwnd() < 4096, "{}", l.cwnd());
+        assert_eq!(l.in_flight(), 0);
+    }
+    assert_eq!(requests_at(&mut f, p, t).len(), 1);
+    assert_eq!(f.sched.channels[&p].controller.min_cwnd(), 4096);
+}
+
+#[test]
 fn hybrid_window_floor_reads_the_minimum_round_trip() {
     for (options, on_min) in [(pull(), false), (hybrid(4), true)] {
         let mut f = fixture(SwarmOptions { ..options });

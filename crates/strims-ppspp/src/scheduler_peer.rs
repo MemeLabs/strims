@@ -35,7 +35,8 @@
 //!   keep them.
 //! - **Enough to carry the stream.** LEDBAT's window has a floor of
 //!   [`STREAM_WINDOW_FLOOR`] times the stream's bandwidth-delay product,
-//!   which yields to losses ([`Ledbat::set_min_cwnd`]).
+//!   and at least one chunk, which yields to losses
+//!   ([`Ledbat::set_min_cwnd`]).
 //! - **Flight that settles.** A request whose chunk arrived from another
 //!   peer while this one never answered leaves the window's flight at its
 //!   timeout without a loss signal; an answer unsets its request time, so a
@@ -987,7 +988,7 @@ impl PeerChannelScheduler {
 
         let chunk = s.chunk_size.max(1) as i64;
         self.controller
-            .on_round(now, rate.saturating_mul(s.chunk_size as u64));
+            .on_round(now, rate.saturating_mul(s.chunk_size as u64), chunk);
         let timeout = now + self.controller.request_timeout();
         let (cap, in_flight) = (self.controller.in_flight_cap(), self.controller.in_flight());
         let budget = (cap - in_flight).max(0) / chunk;

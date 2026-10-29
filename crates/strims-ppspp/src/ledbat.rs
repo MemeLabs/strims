@@ -134,8 +134,8 @@ impl Ledbat {
     /// Sets a floor of `bytes` on the window (at least `MIN_CWND`
     /// segments) and raises the window to it.
     ///
-    /// RFC 6817's minimum of 2 segments lets a request window carry 2
-    /// chunks per round trip, and LEDBAT holds the window there for as
+    /// RFC 6817's minimum of 2 segments lets a request window carry 2 KiB
+    /// per round trip, and LEDBAT holds the window there for as
     /// long as it reads a rise in the path's base delay as queueing: until
     /// the old base ages out of its history, minutes. The scheduler sets a
     /// floor that still carries the stream. The floor only overrides the
