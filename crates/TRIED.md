@@ -52,6 +52,20 @@ current paths.
 d82c04df) It stopped the first wave's later copies from going to farther
 neighbours without holders' shares, and cost 15–20 % of p99 with them.
 
+**Dropping a cancelled stream's queued pushes at the old parent.**
+(`queued-cancel-only`, `queued-cancel-from`, `queued-cancel`; against
+bde51268) On STREAM_CANCEL the parent dropped at write time what it still
+had queued of the stream for that child: all of it, only from a start
+chunk the cancel named (the new parent's start after a switch, a wire
+change), or every push of a stream the child no longer subscribes to. By
+the time the cancel arrives the old parent's pushes are mostly below the
+runner: in a 50-viewer cable-seed run the drop caught none of the ~620
+pushes that came from former parents. Duplicates are about 1 % of chunks
+received; the first two variants left them within ±2 % over the robust
+and peers tiers, and the named start made wan-super-peer-varying's p99
+×1.26 [1.01, 1.57] at 32 seeds. Dropping for every lost subscription cut
+duplicates 3–6 %, but star-31-5 collapsed on 6 of 16 seeds against 2.
+
 ## Upload meter
 
 Relay readings other than the bound in `UploadInfo::relay_capacity`,
@@ -91,6 +105,15 @@ life cut p99 16 %, but only because no uplink in the sim changed.
 **Other queue-delay samples.** (branch `queue-delay-source`, recorded in
 bdd133a7) HAVE round trips and ACK one-way delays measured the queue no
 better than pings did on a real link.
+
+**The seed's budget on the relay bound.** (branch `repair`: eaf110fc
+against its parent 9755d210, on bde51268) The seed's budget took `relay_capacity` for the busy time's
+twentyfold over-read, which leaves a 10 Mbit/s seed with 7 viewers seven
+copies and no headroom when its uplink halves. Its own munro bursts show
+its links a queue, so the bound held the reading near what it wrote and
+the budget at one or two copies, and trees deepened: at 16 local seeds
+star-3-10's lag p99 went ×2.06, halve-7-10 collapsed 12 times against 7
+and halve-15-10 9 against 5; only halve-7-20 gained (×0.42).
 
 ## Request control
 
