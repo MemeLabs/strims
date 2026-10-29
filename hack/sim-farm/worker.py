@@ -32,17 +32,21 @@ of the out dir as root: what the worker can't read or remove goes
 through sudo where it needs no password (EC2), else a container.
 
 With --imds it polls the instance metadata for a spot
-interruption notice and, once one comes, starts nothing new. With nothing
+interruption notice and, once one comes, starts no testbed job; test jobs
+go on, as the controller sends only those that should end before the
+notice's time and drops the rest from the queue. With nothing
 running or queued and no sync for --idle-minutes it exits, and with
 --poweroff it powers the host off first; farm.py launches instances that
 terminate on shutdown, so a host whose controller went away stops costing
 money.
 
 `sync` is the controller's one round trip per tick. It reads one JSON
-object from stdin, {"ack": [ids], "jobs": [jobs]}: it deletes the acked
-results (the controller has stored them) and queues the jobs. It prints
-one JSON object: the results not yet acked, the queued and running ids,
-whether serve is up and whether the host is being interrupted, and why
+object from stdin, {"ack": [ids], "jobs": [jobs], "drop": [ids]}: it
+deletes the acked results (the controller has stored them), queues the
+jobs, and deletes the dropped ones from the queue if serve hasn't started
+them. It prints one JSON object: the results not yet acked, the queued
+and running ids, when each running job started, whether serve is up,
+when the host will be interrupted (the notice's time, or null), and why
 serve waits, if it does. A result stays until it is acked, so a sync
 whose reply is lost loses nothing.
 
@@ -178,8 +182,9 @@ def log_tail(log: Path) -> str:
     return "\n".join(lines[-LOG_TAIL:])
 
 
-def spot_notice() -> bool:
-    """Whether EC2 has scheduled this spot instance's interruption."""
+def spot_notice() -> float | None:
+    """When EC2 will interrupt this spot instance, if it has scheduled it:
+    the notice's time, else two minutes from now."""
     base = "http://169.254.169.254/latest"
     try:
         req = urllib.request.Request(
@@ -192,10 +197,20 @@ def spot_notice() -> bool:
             f"{base}/meta-data/spot/instance-action",
             headers={"X-aws-ec2-metadata-token": token},
         )
-        urllib.request.urlopen(req, timeout=1).read()
-        return True
+        action = urllib.request.urlopen(req, timeout=1).read()
     except Exception:
-        return False
+        return None
+    return notice_time(action)
+
+
+def notice_time(action: bytes) -> float:
+    """An instance-action notice's time ({"action": ..., "time":
+    "2026-10-29T14:49:40Z"}), else two minutes from now."""
+    try:
+        t = json.loads(action)["time"]
+        return datetime.datetime.fromisoformat(t.replace("Z", "+00:00")).timestamp()
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return time.time() + 120
 
 
 # --- testbed jobs
@@ -427,13 +442,14 @@ def serve(args: argparse.Namespace) -> None:
 
         if args.imds and not interrupting and now >= next_notice:
             next_notice = now + 5
-            if spot_notice():
+            deadline = spot_notice()
+            if deadline is not None:
                 interrupting = True
-                write_atomic(root / "interrupting", "1")
+                write_atomic(root / "interrupting", str(deadline))
 
         queued = sorted(d["queue"].glob("*.json"), key=queue_order)
         waits = None
-        while not interrupting and len(running) < args.slots and queued:
+        while len(running) < args.slots and queued:
             q = queued[0]
             try:
                 job = json.loads(q.read_text())
@@ -441,6 +457,10 @@ def serve(args: argparse.Namespace) -> None:
                 queued.pop(0)
                 continue
             testbed = job.get("kind") == "testbed"
+            # Test jobs go on until the interruption: the controller sends
+            # only those that should end in time, and drops the rest.
+            if testbed and interrupting:
+                break
             if testbed:
                 others = testbed_names()
                 if others:
@@ -522,6 +542,9 @@ def sync(args: argparse.Namespace) -> None:
     for jid in req.get("ack", []):
         (d["done"] / f"{jid}.tar.gz").unlink(missing_ok=True)
         (d["done"] / f"{jid}.json").unlink(missing_ok=True)
+    # A dropped job that serve has started already runs on.
+    for jid in req.get("drop", []):
+        (d["queue"] / f"{jid}.json").unlink(missing_ok=True)
     known = {p.stem for p in d["queue"].glob("*.json")}
     known |= {p.name for p in d["work"].iterdir()}
     known |= {p.stem for p in d["done"].glob("*.json")}
@@ -535,6 +558,14 @@ def sync(args: argparse.Namespace) -> None:
     # it can't fall between the listings.
     queued = sorted(p.stem for p in d["queue"].glob("*.json"))
     running = sorted(p.name for p in d["work"].iterdir())
+    # When each running job started: moving its job.json into work/ set
+    # the file's ctime.
+    started = {}
+    for jid in running:
+        try:
+            started[jid] = (d["work"] / jid / "job.json").stat().st_ctime
+        except FileNotFoundError:
+            pass
     done = []
     for p in d["done"].glob("*.json"):
         try:
@@ -558,12 +589,19 @@ def sync(args: argparse.Namespace) -> None:
         note = (root / "note").read_text()
     except FileNotFoundError:
         note = None
+    try:
+        interrupting = float((root / "interrupting").read_text())
+    except FileNotFoundError:
+        interrupting = None
+    except ValueError:
+        interrupting = time.time() + 120
     reply = {
         "done": done,
         "queued": queued,
         "running": running,
+        "started": started,
         "serving": serving,
-        "interrupting": (root / "interrupting").exists(),
+        "interrupting": interrupting,
         "load": os.getloadavg()[0],
         "mem_available_mb": mem,
         "note": note,
