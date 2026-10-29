@@ -1828,15 +1828,25 @@ impl PeerSwarmScheduler {
         }
     }
 
-    /// A round trip of the link to `peer`, from the driver's path measure:
-    /// it ranks an adaptive seed's holders. Each sample counts once: the
-    /// driver vouches for it.
-    pub(crate) fn handle_path_sample(&mut self, peer: PeerKey, rtt: Duration, now: Time) {
+    /// A round trip of the link to `peer`, from the driver's path measure,
+    /// and the link's delivery rate as of its latest reading: they rank an
+    /// adaptive seed's holders and spill their streams. Each sample counts
+    /// once: the driver vouches for it.
+    pub(crate) fn handle_path_sample(
+        &mut self,
+        peer: PeerKey,
+        rtt: Duration,
+        rate: Option<u64>,
+        now: Time,
+    ) {
         if !self.s.is_seed {
             return;
         }
         if let Some(c) = self.channels.get_mut(&peer) {
             push::seed::round_trip(&mut c.push, rtt, now);
+            if let Some(rate) = rate {
+                push::seed::delivered(&mut c.push, rate);
+            }
         }
     }
 

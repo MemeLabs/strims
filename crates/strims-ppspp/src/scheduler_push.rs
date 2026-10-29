@@ -1424,7 +1424,7 @@ impl PeerSwarmScheduler {
                 .streams
                 .get(usize::from(stream))
                 .is_some_and(|st| st.subscribers.iter().any(|x| x.channel == peer)))
-        .then(|| self.grant(peer, now));
+        .then(|| self.grant(peer, stream, now));
         let rate = self.s.stream_rate(now);
         let children = self.s.children();
         let s = &mut self.s;

@@ -94,6 +94,44 @@
 //!   [`ALLOC_CHECK_INTERVAL`], so jitter doesn't move the allocation and
 //!   no copy goes empty. A neighbour that stops being a holder loses all
 //!   its subscriptions (STREAM_CLOSE).
+//! - **Spilling.** A whole copy rides one transport connection, whose rate
+//!   is its window over a round trip that queues at both ends' uplinks (a
+//!   relaying holder's own queue delays the acknowledgements): behind a
+//!   seed whose uplink pays for a copy or two, a holder's pushes can stand
+//!   seconds below the runner while the uplink has room. Each check reads
+//!   how far each holder's link's least round trip since the last check
+//!   stood above its smallest: the queue all its pushes waited behind. A
+//!   holder whose link read [`SPILL_QUEUE`] while its least delivery rate
+//!   (the path measure's) since the last check fell short of its streams'
+//!   data rate (a link that keeps carrying its streams reads a queue only
+//!   as latency, as when its acknowledgements wait behind the holder's own
+//!   relaying) at [`SPILL_CHECKS`] checks in a row while no queue stood
+//!   below the runner node-wide and the window held (the uplink isn't what
+//!   is full) spills: it may hold half the streams it could, and half again
+//!   at each check its link still reads behind. Only while the window holds
+//!   a single copy, past the first wave: that copy rides one connection,
+//!   which must win half the uplink and more against every answer's; with
+//!   more copies each carries less of it, and a window that cuts copies
+//!   would strand the satellites of those it drops, whose subtrees in a
+//!   sparse mesh then starve. A stream it spills stays with it until a
+//!   *satellite* subscribed to it, the first neighbour to ask for it that
+//!   isn't barred, has room, and holds no more of our streams than any
+//!   other with room that asked within [`HOLDER_GRACE`]; then the holder's
+//!   subscription closes (make-before-break). The rest of a capped holder's
+//!   copy spills too, the streams fewest hold first, so the copy stays
+//!   whole across it and its satellites. A satellite takes no copy, takes
+//!   no more streams once its own link reads behind so, and goes once it
+//!   held nothing for [`HOLDER_GRACE`]. When its holder leaves, a capped
+//!   holder whose copy lacks the stream takes it over, or else the next
+//!   holder to join while a copy is free, which then holds only the rest;
+//!   otherwise its streams close. A holder whose link read clear for
+//!   [`SPILL_HOLD`] may hold one more stream, which it takes back from its
+//!   satellite the same way. A holder with spilled streams keeps its place
+//!   against nearer neighbours, and its copy stays before the others when
+//!   the copies fall: its link's queue reads as distance. The readings are
+//!   the seed's own; a holder that delays its echoes spills only its own
+//!   streams. Where the links deliver, nothing spills and the copies are
+//!   whole.
 //! - **Silent holders.** A holder announces what it is pushed. Each check
 //!   samples the first push written to each holder since the last; at the
 //!   check after next, at least [`ANNOUNCE_TIMEOUT`] later, the holder's
@@ -162,7 +200,8 @@
 //! # Bounds
 //!
 //! Per channel a fixed record, plus two tallies per stream of the
-//! subjects its reports named. A report costs O(entries × channels), and a
+//! subjects its reports named, and per holder and stream a spilled
+//! stream's satellite. A report costs O(entries × channels), and a
 //! reporter's entries past [`report_entry_limit`] per check are invalid. A
 //! check costs O(channels × streams × log channels) plus the subscribers;
 //! an admission O(channels).
@@ -173,8 +212,8 @@ use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 
 use super::{
-    DEADLINE_MARGIN, PRUNE_MISS_RATE, PRUNE_SILENT_MISSES, PushChannel, SATURATED_BUSY,
-    SHED_UTILIZATION,
+    DEADLINE_MARGIN, PRUNE_MISS_RATE, PRUNE_SILENT_MISSES, PUSH_OVERHEAD, PushChannel,
+    SATURATED_BUSY, SHED_UTILIZATION,
 };
 use crate::codec::{Announce, AnnounceEntry, Stream};
 use crate::controller::RequestController;
@@ -202,6 +241,16 @@ pub const PUSH_WAIT_OVERLOAD: Duration = Duration::from_millis(500);
 /// After its first cut, the window grows by one copy at most this often:
 /// each holder that leaves costs its children a backoff and a graft.
 pub const WINDOW_PROBE: Duration = Duration::from_secs(10);
+/// A holder's link is behind when its least round trip over a check stands
+/// this far above its smallest, the wait that makes a holder's pushes
+/// behind: they stood below the runner the whole check ...
+pub const SPILL_QUEUE: Duration = PUSH_WAIT_TARGET;
+/// ... and once it was behind at this many checks in a row with the
+/// uplink unsaturated, its streams spill.
+pub const SPILL_CHECKS: u8 = 2;
+/// A holder whose streams spilled takes one more only once its link read
+/// clear this long.
+pub const SPILL_HOLD: Duration = Duration::from_secs(10);
 /// A holder with no subscription keeps its copy this long after it joined
 /// or last asked, and a neighbour that asked this recently may be given a
 /// free copy: a declined neighbour asks again after its
@@ -300,6 +349,18 @@ pub(crate) struct Holder {
     window: i64,
     rtt: Option<Duration>,
     rtt_before: Option<Duration>,
+    /// The least link round trip since the last check, and the least
+    /// delivery rate the link read (bytes per second).
+    least: Option<Duration>,
+    delivered: Option<u64>,
+    /// It holds streams spilled from other holders: it takes no copy.
+    satellite: bool,
+    /// Once its streams spilled, the most it may hold; when its link last
+    /// read behind; and the checks in a row it was behind with the uplink
+    /// unsaturated.
+    cap: Option<usize>,
+    behind_at: Time,
+    behind: u8,
     /// Since the last check, of the pushes queued since the window last
     /// changed: the shortest wait of one written or cancelled, and whether
     /// one went stale.
@@ -351,6 +412,26 @@ impl Holder {
             self.window = w;
         }
         self.rtt = Some(self.rtt.map_or(rtt, |r| r.min(rtt)));
+        self.least = Some(self.least.map_or(rtt, |r| r.min(rtt)));
+    }
+
+    /// How far the link's least round trip since the last check stood
+    /// above its smallest: the queue below the runner that all its pushes
+    /// waited behind. Takes the least.
+    fn take_queue(&mut self, now: Time) -> Option<Duration> {
+        let least = self.least.take()?;
+        let base = self.min_rtt(now)?;
+        Some((least - base).max(Duration::ZERO))
+    }
+
+    /// A primary holder: one that holds a copy.
+    fn primary(&self) -> bool {
+        self.holds && !self.satellite
+    }
+
+    /// Whether it may take one more stream than `held`.
+    fn room(&self, held: usize) -> bool {
+        self.cap.is_none_or(|c| held < c)
     }
 
     fn barred(&self, now: Time) -> bool {
@@ -367,6 +448,7 @@ impl Holder {
     /// It becomes a holder.
     fn join(&mut self, now: Time) {
         self.holds = true;
+        self.satellite = false;
         self.active = now;
         self.joined = now;
     }
@@ -633,6 +715,10 @@ pub(crate) struct Allocator {
     /// STREAM_REQUESTs the ramp's copies don't cover yet, oldest first.
     /// Bound: one per neighbour and stream.
     pending: Vec<Pending>,
+    /// Streams spilled from a holder whose link fell behind: by the holder
+    /// and stream, the satellite that took it, once one did. Bound: one per
+    /// holder and stream.
+    spilled: BTreeMap<(PeerKey, Stream), Option<PeerKey>>,
 }
 
 /// A STREAM_REQUEST held while the first wave ramps.
@@ -665,6 +751,7 @@ impl Allocator {
             over: 0,
             next_step: Time::NIL,
             pending: Vec::new(),
+            spilled: BTreeMap::new(),
         }
     }
 
@@ -824,6 +911,14 @@ pub(crate) struct Grant {
 pub(crate) fn round_trip(pc: &mut Option<PushChannel>, rtt: Duration, now: Time) {
     if let Some(pc) = pc.as_mut() {
         pc.holder.round_trip(rtt, now);
+    }
+}
+
+/// The delivery rate of the link to the channel's peer (bytes per second,
+/// the driver's path measure), at a seed.
+pub(crate) fn delivered(pc: &mut Option<PushChannel>, rate: u64) {
+    if let Some(pc) = pc.as_mut() {
+        pc.holder.delivered = Some(pc.holder.delivered.map_or(rate, |r| r.min(rate)));
     }
 }
 
@@ -996,8 +1091,66 @@ impl PeerSwarmScheduler {
         due
     }
 
-    /// An adaptive seed's admission of `peer`'s new request for a stream.
-    pub(crate) fn grant(&mut self, peer: PeerKey, now: Time) -> Grant {
+    /// Whether `peer`, which holds `held` of our streams, takes `stream`
+    /// where it spilled from a holder: it is not that holder, and holds no
+    /// more of our streams than any other neighbour with room that asked
+    /// within [`HOLDER_GRACE`]. It then holds it as a satellite.
+    fn take_spilled(&mut self, peer: PeerKey, stream: Stream, held: usize, now: Time) -> bool {
+        let Some(from) = self
+            .s
+            .push
+            .as_ref()
+            .and_then(|p| p.alloc.as_ref())
+            .and_then(|a| {
+                a.spilled
+                    .iter()
+                    .find(|&(&(h, s), to)| s == stream && h != peer && to.is_none())
+                    .map(|(&(h, _), _)| h)
+            })
+        else {
+            return false;
+        };
+        let mut counts: BTreeMap<PeerKey, usize> = BTreeMap::new();
+        for st in &self.s.streams {
+            for x in &st.subscribers {
+                *counts.entry(x.channel).or_default() += 1;
+            }
+        }
+        let fewest = self
+            .channels
+            .iter()
+            .filter(|(p, c)| **p != from && c.handshake_received)
+            .filter_map(|(p, c)| c.push.as_ref().map(|pc| (p, &pc.holder)))
+            .filter(|(p, h)| {
+                let n = counts.get(*p).copied().unwrap_or(0);
+                !h.barred(now) && now - h.active <= HOLDER_GRACE && h.room(n)
+            })
+            .map(|(p, _)| counts.get(p).copied().unwrap_or(0))
+            .min();
+        if fewest.is_some_and(|f| held > f) {
+            return false;
+        }
+        if let Some(h) = self
+            .channels
+            .get_mut(&peer)
+            .and_then(|c| c.push.as_mut())
+            .map(|pc| &mut pc.holder)
+            && !h.holds
+        {
+            h.join(now);
+            h.satellite = true;
+            let key = self.s.key;
+            self.s.tap.emit(key, Some(peer), || TapKind::HolderJoined);
+        }
+        if let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) {
+            a.spilled.insert((from, stream), Some(peer));
+            a.stats.accepted = a.stats.accepted.saturating_add(1);
+        }
+        true
+    }
+
+    /// An adaptive seed's admission of `peer`'s new request for `stream`.
+    pub(crate) fn grant(&mut self, peer: PeerKey, stream: Stream, now: Time) -> Grant {
         let holders = self.holders();
         let held = self
             .s
@@ -1005,13 +1158,17 @@ impl PeerSwarmScheduler {
             .iter()
             .filter(|st| st.subscribers.iter().any(|x| x.channel == peer))
             .count();
-        let Some((holds, barred)) = self
+        let Some((holds, barred, room)) = self
             .channels
             .get_mut(&peer)
             .and_then(|c| c.push.as_mut())
             .map(|pc| {
                 pc.holder.active = now;
-                (pc.holder.holds, pc.holder.barred(now))
+                (
+                    pc.holder.primary(),
+                    pc.holder.barred(now),
+                    pc.holder.room(held),
+                )
             })
         else {
             return Grant {
@@ -1019,6 +1176,22 @@ impl PeerSwarmScheduler {
                 ..Grant::default()
             };
         };
+        if !barred && room && self.take_spilled(peer, stream, held, now) {
+            let copies = self
+                .s
+                .push
+                .as_ref()
+                .and_then(|p| p.alloc.as_ref())
+                .map_or(0, |a| a.copies);
+            return Grant {
+                ok: true,
+                rule: AdmitRule::SeedHolder,
+                holders,
+                copies,
+                held,
+                per_holder: held + 1,
+            };
+        }
         let early = self.s.early_stream_rate(now);
         let streams = usize::from(self.s.stream_count.max(1));
         let neighbours = self
@@ -1091,6 +1264,7 @@ impl PeerSwarmScheduler {
             if let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) {
                 a.stats.joined = a.stats.joined.saturating_add(1);
             }
+            self.adopt(peer, now);
         }
         let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {
             return Grant {
@@ -1098,7 +1272,7 @@ impl PeerSwarmScheduler {
                 ..Grant::default()
             };
         };
-        let ok = holder && held < a.streams;
+        let ok = holder && held < a.streams && room;
         let n = if ok {
             &mut a.stats.accepted
         } else {
@@ -1198,7 +1372,7 @@ impl PeerSwarmScheduler {
             }
             let kept = !starved && fed.is_some_and(|w| w <= PUSH_WAIT_OVERLOAD);
             h.kept = (h.kept << 1) | u8::from(kept);
-            if in_use.contains(peer) {
+            if in_use.contains(peer) && !h.satellite {
                 s.in_use += 1;
             }
             if wait.is_some() || stale {
@@ -1219,7 +1393,7 @@ impl PeerSwarmScheduler {
         self.channels
             .iter()
             .filter(|(peer, c)| {
-                c.push.as_ref().is_some_and(|pc| pc.holder.holds)
+                c.push.as_ref().is_some_and(|pc| pc.holder.primary())
                     && self
                         .s
                         .streams
@@ -1233,7 +1407,7 @@ impl PeerSwarmScheduler {
     fn holders(&self) -> usize {
         self.channels
             .values()
-            .filter(|c| c.push.as_ref().is_some_and(|pc| pc.holder.holds))
+            .filter(|c| c.push.as_ref().is_some_and(|pc| pc.holder.primary()))
             .count()
     }
 
@@ -1348,6 +1522,16 @@ impl PeerSwarmScheduler {
             });
         }
 
+        // A cut shows the uplink full, as a queue standing below the runner
+        // does.
+        let cut = self
+            .s
+            .push
+            .as_ref()
+            .and_then(|p| p.alloc.as_ref())
+            .is_some_and(|a| a.copies < before.1);
+        self.spill(upload.draining || cut, now, q);
+
         // A holder announces what it is pushed: the first push written to
         // it in an interval is due announced at the check after next.
         let mut silent: Vec<PeerKey> = Vec::new();
@@ -1382,7 +1566,8 @@ impl PeerSwarmScheduler {
         }
         let unserved = self.judge(now, q);
 
-        // Holders by round trip, unmeasured ones farthest. One without a
+        // Holders by round trip, unmeasured ones farthest, after those whose
+        // streams spilled (their copies stay spread). One without a
         // subscription is pending: it keeps its copy for HOLDER_GRACE after
         // it joined or last asked. Past the copies the farthest subscribed
         // holders go; free copies go to the nearest neighbours that asked
@@ -1395,7 +1580,7 @@ impl PeerSwarmScheduler {
             .iter()
             .flat_map(|st| st.subscribers.iter().map(|x| x.channel))
             .collect();
-        let mut held: Vec<(bool, Option<Duration>, PeerKey)> = Vec::new();
+        let mut held: Vec<(bool, bool, Option<Duration>, PeerKey)> = Vec::new();
         let mut askers: Vec<(Duration, PeerKey)> = Vec::new();
         let mut leave: Vec<(PeerKey, HolderLeft)> = Vec::new();
         let mut pending = 0;
@@ -1405,6 +1590,13 @@ impl PeerSwarmScheduler {
             };
             let recent = now - h.active <= HOLDER_GRACE;
             let rtt = h.min_rtt(now);
+            if h.satellite {
+                // A satellite takes no copy: it goes once it holds nothing.
+                if h.holds && !subscribed.contains(&peer) && !recent {
+                    leave.push((peer, HolderLeft::Idle));
+                }
+                continue;
+            }
             if !h.holds {
                 if recent
                     && c.handshake_received
@@ -1414,7 +1606,7 @@ impl PeerSwarmScheduler {
                     askers.push((r, peer));
                 }
             } else if subscribed.contains(&peer) {
-                held.push((rtt.is_none(), rtt, peer));
+                held.push((h.cap.is_none(), rtt.is_none(), rtt, peer));
             } else if recent {
                 pending += 1;
             } else {
@@ -1426,15 +1618,24 @@ impl PeerSwarmScheduler {
         leave.extend(
             held.iter()
                 .skip(copies)
-                .map(|h| (h.2, HolderLeft::PastCopies)),
+                .map(|h| (h.3, HolderLeft::PastCopies)),
         );
         let kept = held.len().min(copies);
         let free = copies.saturating_sub(kept + pending);
         let mut join: Vec<PeerKey> = askers.iter().take(free).map(|a| a.1).collect();
         let farthest = kept.checked_sub(1).and_then(|i| held.get(i));
+        // A holder whose streams spilled keeps its place: its copy is spread
+        // over its satellites, and its link's queue reads as distance.
+        let spilled = |p: PeerKey| {
+            self.channels
+                .get(&p)
+                .and_then(|c| c.push.as_ref())
+                .is_some_and(|pc| pc.holder.cap.is_some())
+        };
         if free == 0
             && pending == 0
-            && let (Some(&(r, peer)), Some(&(_, far, _))) = (askers.first(), farthest)
+            && let (Some(&(r, peer)), Some(&(_, _, far, holder))) = (askers.first(), farthest)
+            && !spilled(holder)
             && far.is_none_or(|f| r + NEAR_MARGIN.max(f / 10) < f)
         {
             join.push(peer);
@@ -1453,6 +1654,7 @@ impl PeerSwarmScheduler {
             }
             let key = self.s.key;
             self.s.tap.emit(key, Some(peer), || TapKind::HolderJoined);
+            self.adopt(peer, now);
         }
         if let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) {
             let left = leave.len() + silent.len() + unserved;
@@ -1460,6 +1662,271 @@ impl PeerSwarmScheduler {
             a.stats.joined = a.stats.joined.saturating_add(join.len() as u64);
             a.stats.silenced = a.stats.silenced.saturating_add(silent.len() as u64);
             a.stats.unserved = a.stats.unserved.saturating_add(unserved as u64);
+        }
+    }
+
+    /// `peer` joined as a holder: it takes over the copy whose holder left
+    /// while its satellites kept their streams, and holds what they don't.
+    fn adopt(&mut self, peer: PeerKey, now: Time) {
+        let gone: Vec<PeerKey> = {
+            let Some(a) = self.s.push.as_ref().and_then(|p| p.alloc.as_ref()) else {
+                return;
+            };
+            let mut v: Vec<PeerKey> = a
+                .spilled
+                .keys()
+                .map(|&(h, _)| h)
+                .filter(|h| {
+                    *h != peer
+                        && !self
+                            .channels
+                            .get(h)
+                            .and_then(|c| c.push.as_ref())
+                            .is_some_and(|pc| pc.holder.primary())
+                })
+                .collect();
+            v.dedup();
+            v
+        };
+        let Some(&from) = gone.first() else {
+            return;
+        };
+        let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {
+            return;
+        };
+        let taken: Vec<(Stream, Option<PeerKey>)> = a
+            .spilled
+            .iter()
+            .filter(|&(&(h, _), _)| h == from)
+            .map(|(&(_, s), &t)| (s, t))
+            .collect();
+        for &(s, t) in &taken {
+            a.spilled.remove(&(from, s));
+            a.spilled.insert((peer, s), t);
+        }
+        let copy = a.streams;
+        let cap = copy.saturating_sub(taken.len()).max(1);
+        if let Some(h) = self
+            .channels
+            .get_mut(&peer)
+            .and_then(|c| c.push.as_mut())
+            .map(|pc| &mut pc.holder)
+        {
+            h.cap = Some(h.cap.map_or(cap, |c| c.min(cap)));
+            h.behind_at = now;
+        }
+    }
+
+    /// Reads each holder's link and moves streams off those whose links
+    /// fall behind (see the module docs), make-before-break.
+    fn spill(&mut self, saturated: bool, now: Time, q: &mut impl PeerTaskQueue) {
+        let holders = self.holders();
+        let Some(a) = self.s.push.as_ref().and_then(|p| p.alloc.as_ref()) else {
+            return;
+        };
+        let copy = a.streams;
+        let free = holders < a.copies;
+        // Only a single copy spills: see the module docs.
+        let steady = !a.ramping && a.copies <= 1;
+        let mut held: BTreeMap<PeerKey, Vec<Stream>> = BTreeMap::new();
+        for (i, st) in self.s.streams.iter().enumerate() {
+            for x in &st.subscribers {
+                held.entry(x.channel).or_default().push(i as Stream);
+            }
+        }
+        let streams = usize::from(self.s.stream_count.max(1));
+        // A stream's data rate, without what pushes add.
+        let data = self.s.stream_rate(now) / PUSH_OVERHEAD;
+        let mut spill: Vec<(PeerKey, Stream)> = Vec::new();
+        for (&peer, c) in &mut self.channels {
+            let Some(h) = c.push.as_mut().map(|pc| &mut pc.holder) else {
+                continue;
+            };
+            let queue = h.take_queue(now);
+            let delivered = h.delivered.take();
+            let mine = held.get(&peer).map_or(&[][..], Vec::as_slice);
+            if !h.holds || mine.is_empty() {
+                h.behind = 0;
+                continue;
+            }
+            // A link whose delivery rate kept up with its streams' data rate
+            // since the last check carries them: a queue its round trip
+            // reads is latency (its acknowledgements wait behind the
+            // holder's own relaying), not a link too slow.
+            let carries = delivered.is_some_and(|d| d as f64 >= mine.len() as f64 * data);
+            if queue.is_some_and(|d| d >= SPILL_QUEUE) && !carries {
+                h.behind_at = now;
+                // Behind counts only where it would spill: a single copy
+                // on an uplink with room.
+                h.behind = if saturated || !steady {
+                    0
+                } else {
+                    h.behind.saturating_add(1)
+                };
+            } else {
+                h.behind = 0;
+                if let Some(cap) = h.cap
+                    && now - h.behind_at >= SPILL_HOLD
+                {
+                    h.cap = (cap + 1 < streams).then_some(cap + 1);
+                    h.behind_at = now;
+                }
+            }
+            if h.behind >= SPILL_CHECKS && steady {
+                // Still behind at the next check, it spills again. A
+                // satellite takes no more, and keeps what it holds.
+                h.behind = SPILL_CHECKS - 1;
+                h.behind_at = now;
+                if h.satellite {
+                    h.cap = Some(mine.len());
+                    continue;
+                }
+                let cap = (h.cap.unwrap_or(copy.min(streams)) / 2).max(1);
+                h.cap = Some(cap);
+                spill.extend(mine.iter().skip(cap).map(|&s| (peer, s)));
+            }
+        }
+        // A capped holder's copy is whole across it and its satellites: what
+        // it doesn't hold spills too, the streams fewest hold first.
+        let mut on: Vec<usize> = self
+            .s
+            .streams
+            .iter()
+            .map(|st| st.subscribers.len())
+            .collect();
+        let primaries: Vec<PeerKey> = self
+            .channels
+            .iter()
+            .filter(|(_, c)| c.push.as_ref().is_some_and(|pc| pc.holder.primary()))
+            .map(|(&p, _)| p)
+            .collect();
+        let capped: Vec<PeerKey> = self
+            .channels
+            .iter()
+            .filter(|(_, c)| {
+                c.push
+                    .as_ref()
+                    .is_some_and(|pc| pc.holder.primary() && pc.holder.cap.is_some())
+            })
+            .map(|(&p, _)| p)
+            .collect();
+        let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {
+            return;
+        };
+        for k in spill {
+            a.spilled.entry(k).or_insert(None);
+        }
+        // What the satellites of a holder that left keep goes to a capped
+        // holder whose copy lacks it.
+        let sub = |p: PeerKey, s: Stream| held.get(&p).is_some_and(|v| v.contains(&s));
+        let mut need: BTreeMap<PeerKey, usize> = capped
+            .iter()
+            .map(|&p| {
+                let mine = held.get(&p).map_or(0, Vec::len);
+                let out = a.spilled.keys().filter(|&&(h, _)| h == p).count();
+                (p, copy.min(streams).saturating_sub(mine + out))
+            })
+            .collect();
+        let orphans: Vec<((PeerKey, Stream), PeerKey)> = a
+            .spilled
+            .iter()
+            .filter(|&(&(h, _), _)| !capped.contains(&h) && !primaries.contains(&h))
+            .filter_map(|(&k, &t)| Some((k, t?)))
+            .filter(|&((_, s), t)| sub(t, s))
+            .collect();
+        for ((from, s), t) in orphans {
+            let to = need.iter().find(|&(&p, &n)| {
+                n > 0 && p != t && !sub(p, s) && !a.spilled.contains_key(&(p, s))
+            });
+            if let Some((&p, _)) = to {
+                a.spilled.remove(&(from, s));
+                a.spilled.insert((p, s), Some(t));
+                if let Some(n) = need.get_mut(&p) {
+                    *n -= 1;
+                }
+            }
+        }
+        for peer in capped {
+            let mine = held.get(&peer).map_or(&[][..], Vec::as_slice);
+            let need = need.get(&peer).copied().unwrap_or(0);
+            let mut free: Vec<(usize, Stream)> = (0..streams as Stream)
+                .filter(|s| !mine.contains(s) && !a.spilled.contains_key(&(peer, *s)))
+                .map(|s| (on.get(usize::from(s)).copied().unwrap_or(0), s))
+                .collect();
+            free.sort();
+            for &(_, s) in free.iter().take(need) {
+                a.spilled.insert((peer, s), None);
+                if let Some(n) = on.get_mut(usize::from(s)) {
+                    *n += 1;
+                }
+            }
+        }
+        // Make-before-break: a holder past its cap gives a stream up once its
+        // satellite subscribed to it; a satellite gives it back once the
+        // holder, with room again, did.
+        let mut close: Vec<(PeerKey, Stream)> = Vec::new();
+        let mut counts: BTreeMap<PeerKey, usize> =
+            held.iter().map(|(&p, v)| (p, v.len())).collect();
+        let records: Vec<((PeerKey, Stream), Option<PeerKey>)> =
+            a.spilled.iter().map(|(&k, &v)| (k, v)).collect();
+        for ((from, s), to) in records {
+            let holder = self
+                .channels
+                .get(&from)
+                .and_then(|c| c.push.as_ref())
+                .map(|pc| pc.holder);
+            let Some(h) = holder.filter(|h| h.primary()) else {
+                // Its satellites keep what they took for the next holder to
+                // join while a copy is free; otherwise the copy went.
+                match to.filter(|&t| sub(t, s)) {
+                    Some(_) if free => {}
+                    Some(t) => {
+                        close.push((t, s));
+                        a.spilled.remove(&(from, s));
+                    }
+                    None => {
+                        a.spilled.remove(&(from, s));
+                    }
+                }
+                continue;
+            };
+            let n = counts.get(&from).copied().unwrap_or(0);
+            match to {
+                Some(t) if sub(t, s) && sub(from, s) => {
+                    if h.cap.is_some_and(|c| n > c) {
+                        close.push((from, s));
+                        *counts.entry(from).or_default() -= 1;
+                    } else {
+                        close.push((t, s));
+                        a.spilled.remove(&(from, s));
+                    }
+                }
+                Some(t) if !sub(t, s) => {
+                    if sub(from, s) && h.cap.is_none_or(|c| n <= c) {
+                        a.spilled.remove(&(from, s));
+                    } else {
+                        a.spilled.insert((from, s), None);
+                    }
+                }
+                None if sub(from, s) && h.cap.is_none_or(|c| n <= c) => {
+                    a.spilled.remove(&(from, s));
+                }
+                _ => {}
+            }
+        }
+        for (peer, stream) in close {
+            self.close_subscriber(peer, stream, q);
+            let key = self.s.key;
+            let room = self
+                .channels
+                .get(&peer)
+                .and_then(|c| c.push.as_ref())
+                .and_then(|pc| pc.holder.cap)
+                .unwrap_or(streams) as u64;
+            self.s.tap.emit(key, Some(peer), || TapKind::Shed {
+                stream,
+                why: Shed::SeedBudget { room },
+            });
         }
     }
 
@@ -1715,6 +2182,7 @@ impl PeerSwarmScheduler {
             .map(|pc| &mut pc.holder)
         {
             h.holds = false;
+            h.satellite = false;
         }
         let PeerSwarmScheduler { s, channels } = self;
         s.tap.emit(s.key, Some(peer), || TapKind::HolderLeft {

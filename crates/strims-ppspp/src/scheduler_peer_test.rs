@@ -885,7 +885,7 @@ fn pongs_reach_the_controller_and_path_samples_dont() {
     f.sched
         .handle_pong(p, ping.nonce, now() + Duration::from_millis(40));
     f.sched
-        .handle_path_sample(p, Duration::from_millis(70), now());
+        .handle_path_sample(p, Duration::from_millis(70), None, now());
     assert_eq!(
         f.sched.channels[&p].controller.rtt(),
         Duration::from_millis(40)
@@ -914,9 +914,9 @@ fn path_samples_rank_a_seeds_holders_and_pongs_dont() {
         .handle_pong(p, ping, now() + Duration::from_millis(10));
     assert_eq!(min_rtt(&mut f), None);
     f.sched
-        .handle_path_sample(p, Duration::from_millis(30), now());
+        .handle_path_sample(p, Duration::from_millis(30), None, now());
     f.sched
-        .handle_path_sample(p, Duration::from_millis(20), now());
+        .handle_path_sample(p, Duration::from_millis(20), None, now());
     assert_eq!(min_rtt(&mut f), Some(Duration::from_millis(20)));
 }
 
@@ -1732,6 +1732,63 @@ fn an_adaptive_seed_pushes_whole_copies_to_its_nearest() {
         t = alloc_check(&mut f, &mut q, t, &[peers[0]], ms(5), (100_000_000, 0.5));
     }
     assert!(ask(&mut f, &mut q, peers[4], 3, t));
+}
+
+#[test]
+fn a_holder_whose_link_stands_a_queue_spills_its_streams() {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    let ms = Duration::from_millis;
+    for s in 0..4 {
+        assert!(ask(&mut f, &mut q, peers[0], s, now()));
+    }
+    // A check at which peers[0]'s link stood 300 ms of queue, on an uplink
+    // with no queue of its own (or with one: `draining`).
+    let check = |f: &mut Fixture, q: &mut MockQueue, t: Time, draining: bool| -> Time {
+        let next = t + push::seed::ALLOC_CHECK_INTERVAL;
+        publish(f, t, next);
+        push_to(f, peers[0], t, t + ms(5), Some(ms(20)));
+        push::seed::round_trip(&mut f.sched.channels[&peers[0]].push, ms(310), t + ms(500));
+        // One copy's budget (600 KB/s at 70 % pays for four subscribers at
+        // about 100 KB/s).
+        f.sched.set_upload(push::UploadInfo {
+            rate: 600_000,
+            busy: 1.0,
+            draining,
+            drained: Some(600_000.0),
+            ..Default::default()
+        });
+        f.sched.run_push(next, q);
+        next
+    };
+    let streams = |f: &Fixture, p: PeerKey| (0..4).filter(|&s| subscribed(f, p, s)).count();
+    // A full uplink is no slow link: nothing spills.
+    let mut t = now();
+    for _ in 0..3 {
+        t = check(&mut f, &mut q, t, true);
+    }
+    assert_eq!(streams(&f, peers[0]), 4);
+    // An uplink with room: after two checks behind, half its streams spill,
+    // and it keeps them until a satellite took them.
+    for _ in 0..2 {
+        t = check(&mut f, &mut q, t, false);
+    }
+    assert_eq!(streams(&f, peers[0]), 4);
+    assert!(!ask(&mut f, &mut q, peers[1], 0, t));
+    assert!(!ask(&mut f, &mut q, peers[2], 0, t));
+    assert!(ask(&mut f, &mut q, peers[1], 3, t));
+    // A satellite holds as few of the seed's streams as any neighbour that
+    // asked lately: one each here.
+    assert!(!ask(&mut f, &mut q, peers[1], 2, t));
+    assert!(ask(&mut f, &mut q, peers[2], 2, t));
+    t = check(&mut f, &mut q, t, false);
+    assert!(!subscribed(&f, peers[0], 3) && !subscribed(&f, peers[0], 2));
+    assert!(subscribed(&f, peers[1], 3) && subscribed(&f, peers[2], 2));
+    assert_eq!(holders(&f), peers[..3].to_vec());
+    // Still behind: it spills again, down to one.
+    t = check(&mut f, &mut q, t, false);
+    assert!(ask(&mut f, &mut q, peers[3], 1, t));
+    check(&mut f, &mut q, t, false);
+    assert_eq!(streams(&f, peers[0]), 1);
 }
 
 #[test]

@@ -646,19 +646,21 @@ impl Runner {
     }
 
     /// A round trip of the link to `peer`, from the driver's path measure:
-    /// one call per echo. Every channel to `peer` takes it, for an adaptive
-    /// seed's holder ranking.
+    /// one call per echo. Every channel to `peer` takes it, with the link's
+    /// delivery rate as of the latest reading ([`Runner::set_peer_path`]),
+    /// for an adaptive seed's holder ranking and spilling.
     pub fn on_path_sample(&mut self, peer: PeerKey, sample: PathSample) {
         let Some(p) = self.peers.get(peer) else {
             return;
         };
+        let rate = p.link_path.and_then(|r| r.rate);
         for &key in p.channels.values() {
             if let Some(sched) = self
                 .swarms
                 .get_mut(key)
                 .and_then(|rs| rs.scheduler.as_mut())
             {
-                sched.handle_path_sample(peer, sample.rtt, sample.at);
+                sched.handle_path_sample(peer, sample.rtt, rate, sample.at);
             }
         }
     }
@@ -1015,7 +1017,7 @@ impl Runner {
         // ranking: the probe at the link's start was echoed before any
         // swarm ran.
         if let Some(r) = q.peers.get(peer).and_then(|p| p.link_path) {
-            sched.handle_path_sample(peer, r.rtt, now);
+            sched.handle_path_sample(peer, r.rtt, r.rate, now);
         }
         Ok(())
     }
