@@ -198,9 +198,10 @@ what it leaves out (the syncs' latency, waves of jobs, the end).
 or launching anything: run it with --regions and without to see what
 more regions buy. Once it's done a run logs what it took (launch to
 finish), what it cost, per 1,000 jobs and as instances booting, running
-jobs (their walls) and idle, its instances AWS interrupted, and each
-region's mean boot, and adds that and its estimate as a line of
-target/sim-farm/costs.jsonl.
+jobs (their walls) and idle, and each region's mean boot, and adds that,
+its estimate, and each instance AWS interrupted (its id, type, zone,
+launch, notice and how it ended, which the run asks once more as it
+ends) as a line of target/sim-farm/costs.jsonl.
 
 A testbed matrix (kind = "testbed") runs hack/testbed/run.sh as a black
 box: `run.sh <out dir>` with the job's environment, real nodes in Docker
@@ -1459,6 +1460,7 @@ class Host:
     # run terminated it after all (False).
     interrupted: float | None = None
     reclaimed: bool | None = None
+    end_code: str | None = None  # how it ended, as AWS tells (StateReason)
 
     @property
     def slots(self) -> int:
@@ -2157,12 +2159,9 @@ class Run:
             inst = by_id.get(h.id)
             st = inst["State"]["Name"] if inst else "gone"
             if st not in ("pending", "running"):
-                code = end_reason(h.region, h.id, inst)
-                h.reclaimed = code == SPOT_TERMINATION
-                log(f"{h.id}: AWS reclaimed it ({code})" if h.reclaimed
-                    else f"{h.id}: ended after its interruption notice ({code}), as AWS bills")
+                self.settle(h, end_reason(h.region, h.id, inst))
             elif now - h.interrupted > RECLAIM_GRACE:
-                h.reclaimed = False
+                h.reclaimed, h.end_code = False, "terminated by the run"
                 log(f"{h.id}: still running {RECLAIM_GRACE // 60} min after its interruption notice; "
                     "terminating it")
                 try:
@@ -2178,10 +2177,33 @@ class Run:
             st = inst["State"]["Name"] if inst else "gone"
             if st not in ("pending", "running"):
                 reason = (inst or {}).get("StateReason", {})
-                if reason.get("Code") == SPOT_TERMINATION:
+                h.end_code = reason.get("Code")
+                if h.end_code == SPOT_TERMINATION:
                     # Reclaimed before its worker told of the notice.
                     h.interrupted, h.reclaimed = now, True
+                    log(f"{h.id}: AWS reclaimed it ({SPOT_TERMINATION}) before its worker told of the notice")
                 self.lose(h, reason.get("Message", st), terminate_it=h.reclaimed is None)
+
+    def settle(self, h: Host, code: str | None) -> None:
+        """An interrupted instance has ended, as AWS tells: reclaimed (and
+        unbilled in its first hour) if as a spot termination."""
+        h.reclaimed, h.end_code = code == SPOT_TERMINATION, code
+        log(f"{h.id}: AWS reclaimed it ({code})" if h.reclaimed
+            else f"{h.id}: ended after its interruption notice ({code}), as AWS bills")
+
+    def settle_interrupted(self) -> None:
+        """At the run's end, how its interrupted instances not yet seen to
+        end have ended, asked for by id; one still up is AWS's to reclaim
+        within 2 minutes of its notice, and stays unsettled."""
+        for h in self.hosts:
+            if h.interrupted is None or h.reclaimed is not None:
+                continue
+            code = end_reason(h.region, h.id, None)
+            if code is not None:
+                self.settle(h, code)
+            else:
+                log(f"{h.id}: still up at the run's end, {time.time() - h.interrupted:.0f} s after "
+                    "its interruption notice; AWS should reclaim it")
 
     def boots(self) -> None:
         """The instances whose boot has ended: ready (a new one of test jobs
@@ -2405,6 +2427,15 @@ class Run:
             "instances": len(self.hosts),
             "spot_interrupted": sum(1 for h in self.hosts if h.interrupted is not None),
             "unbilled": sum(1 for h in self.hosts if not h.billed()),
+            "interruptions": [
+                {
+                    "id": h.id, "type": h.type, "zone": h.zone,
+                    "launched": datetime.datetime.fromtimestamp(h.launched, datetime.UTC).isoformat(
+                        timespec="seconds"),
+                    "notice_s": round(h.interrupted - h.launched), "end": h.end_code, "billed": h.billed(),
+                }
+                for h in self.hosts if h.interrupted is not None
+            ],
             "peak_slots": self.peak_slots,
             "cost": round(cost, 4),
             "boot_cost": round(boot, 4),
@@ -2550,7 +2581,8 @@ class Run:
         known = {h.id for h in self.hosts}
         reclaiming = {h.id for h in self.hosts if h.interrupted is not None and h.reclaimed is None}
         if reclaiming:
-            log(f"leaving {len(reclaiming)} interrupted instances for AWS to reclaim")
+            log(f"leaving {len(reclaiming)} interrupted instances for AWS to reclaim: "
+                + ", ".join(sorted(reclaiming)))
         for r, got in in_regions(lambda r: farm_instances(r, self.name), self.sweep).items():
             if isinstance(got, BaseException):
                 log(f"{r}: CAN'T LIST the run's instances ({got}); "
@@ -2854,6 +2886,7 @@ class Run:
                 self.serve.wait()
             elif not (interrupted and self.args.keep):
                 self.terminate_all()
+                self.settle_interrupted()
             else:
                 kept = collections.Counter(h.region for h in self.hosts if h.state != "lost")
                 if kept:
