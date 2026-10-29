@@ -20,6 +20,10 @@ enforce the mechanical parts.
 - Results and measurements belong in test output, not in files.
 - `crates/PLAN.md` is the only planning document. It holds forward-looking
   work and open questions, nothing about what's already done.
+- `crates/TRIED.md` keeps ideas that were built, measured and dropped, so
+  they aren't retried by accident: a few lines each with what sank them and
+  the numbers that decided it. It isn't a log; its own header sets what
+  goes in and when entries go.
 
 ## Architecture: sans-IO core
 
