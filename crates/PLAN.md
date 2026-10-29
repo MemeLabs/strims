@@ -214,10 +214,11 @@ in `TRIED.md`.
      uplink. Measure the gap on the robust tier by role
      (`STRIMS_SIM_KNOWN_UPLINK=seed` and `=viewers`) before choosing the
      next meter change.
-   - An idle relay reads its capacity as twenty times its control
-     traffic, so it declines its first children until answering pulls
-     raises its rate. Candidate: until a node has seen its uplink saturate
-     it admits by count, a few subscriptions past those it serves.
+   - A relay with few links reads a standing queue once each backs up a
+     window, so its drained reading is what those links deliver, not its
+     uplink: star-3-10's viewers (20 Mbit/s uplinks) read about 550 KB/s
+     and declined extra streams at half that. Clamping on the least latest
+     excess across its links lost a thin relay's own queue (`TRIED.md`).
    - One peer whose link blocks keeps its data queued, so the meter reads
      the node busy: its parent sheds subscribers and an adaptive seed's
      budget falls to that link's rate. Count busy only while every peer
