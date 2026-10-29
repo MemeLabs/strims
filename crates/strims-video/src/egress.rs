@@ -596,7 +596,7 @@ impl<R: SwarmRead + Rewind> ChunkedReader<R> {
             return false;
         };
         self.join = Join::Rewinding { to };
-        let resumed = self.reader.rewind(to).await;
+        let resumed = Rewind::rewind(&mut self.reader, to).await;
         self.join = Join::Joined;
         match resumed {
             Some(at) if at <= to => {
@@ -743,11 +743,11 @@ async fn within<T: Timer>(
     }
 }
 
-/// Moves `reader` back to stream offset `offset`. Swarm readers don't move
-/// back, so a join waits for the next keyframe.
+/// Moves `reader` back to stream offset `offset`: the offset reading
+/// resumes from, or `None` when the swarm refuses, in which case the join
+/// waits for the next keyframe.
 async fn rewind_reader<R: SwarmRead>(reader: &mut R, offset: u64) -> Option<u64> {
-    let _ = (reader, offset);
-    None
+    SwarmRead::rewind(reader, offset).await.ok()
 }
 
 /// Checks a stream's swarm URI and network keys against `s`: the URI, and
