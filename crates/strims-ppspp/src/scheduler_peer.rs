@@ -13,9 +13,9 @@
 //!
 //! Each channel requests chunks its peer HAVEs and nobody was asked for
 //! (`request_bins`), oldest request group first, up to its request window:
-//! a [`RequestController`] chosen by `SwarmOptions::request_controller`. A
-//! request not answered within the window's request timeout is cancelled
-//! and becomes requestable again.
+//! a [`RequestController`], LEDBAT's ([`Ledbat`]). A request not answered
+//! within the window's request timeout is cancelled and becomes
+//! requestable again.
 //!
 //! Constraints on what a channel asks for:
 //!
@@ -100,7 +100,6 @@
 use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
-use slotmap::Key;
 use strims_base::rng::DetRng;
 use strims_base::stats::{Sma, WaitHistogram};
 use strims_base::time::{Duration, Time};
@@ -113,8 +112,9 @@ use crate::codec::{
     self, Announce, Cancel, Have, MAX_PEER_ID, Message, MessageWriter, Ping, Pong, Request, Stream,
     StreamCancel, StreamClose, StreamOpen, StreamRequest,
 };
-use crate::controller::{ChannelController, RequestController, RequestControllerKind};
+use crate::controller::RequestController;
 use crate::integrity::ProtectionMethod;
+use crate::ledbat::Ledbat;
 use crate::options::{DeliveryMode, PushMode, SchedulingMethod, SeedPolicy};
 use crate::route::{AnswerTime, PREDICT_SLACK, ROOM_FRESH, ROUTE_MARGIN, Route};
 use crate::runner::{PeerKey, SwarmKey, TICK_INTERVAL};
@@ -341,8 +341,6 @@ pub(crate) struct SwarmState {
 
     /// How push mixes into pull.
     mode: PushMode,
-    /// The channels' request window model (resolved).
-    controller: RequestControllerKind,
     /// The node publishes the swarm (`SchedulingMethod::SEED`).
     is_seed: bool,
     /// How a hybrid seed spends its upload.
@@ -560,7 +558,7 @@ pub(crate) struct PeerChannelScheduler {
     pub(crate) peer_have_bins: Map,
 
     /// The request window.
-    pub(crate) controller: ChannelController,
+    pub(crate) controller: Ledbat,
 
     next_restart_time: Time,
     pub(crate) handshake_received: bool,
@@ -603,7 +601,7 @@ impl PeerChannelScheduler {
             peer_live_window: Bin(0),
             peer_max_have_bin: Bin(0),
             peer_have_bins: Map::new(),
-            controller: Self::new_controller(peer, s, now),
+            controller: Self::new_controller(s),
             next_restart_time: now + SCHEDULER_RESTART_COOLDOWN,
             handshake_received: false,
             next_ping_time: Time::EPOCH,
@@ -613,16 +611,13 @@ impl PeerChannelScheduler {
         }
     }
 
-    /// A fresh request window. Its probing phase derives from the peer's
-    /// key, so channels probe at different times, deterministically.
-    fn new_controller(peer: PeerKey, s: &SwarmState, now: Time) -> ChannelController {
-        let mut c = ChannelController::new(s.controller, s.chunk_size, peer.data().as_ffi(), now);
+    /// A fresh request window.
+    fn new_controller(s: &SwarmState) -> Ledbat {
+        let mut c = Ledbat::new();
         // The hybrid's pushes share the peer's uplink with the answers to
         // our requests (`<Ledbat as RequestController>::on_round`).
-        if s.push.is_some()
-            && let Some(l) = c.ledbat_mut()
-        {
-            l.set_floor_on_min(true);
+        if s.push.is_some() {
+            c.set_floor_on_min(true);
         }
         c
     }
@@ -647,7 +642,7 @@ impl PeerChannelScheduler {
         // The new stream starts at bin 0: requests must not wait for it to
         // pass the old stream's position.
         self.peer_max_have_bin = Bin(0);
-        self.controller = Self::new_controller(self.peer, s, now);
+        self.controller = Self::new_controller(s);
         self.next_restart_time = now + SCHEDULER_RESTART_COOLDOWN;
         self.handshake_received = false;
         if self.push.is_some() {
@@ -1230,7 +1225,6 @@ impl PeerSwarmScheduler {
                 next_gc_time: now + rand_millis(rng, 5000),
                 request_order,
                 mode: o.push_mode,
-                controller: o.request_controller.resolve(),
                 is_seed: o.scheduling_method == SchedulingMethod::SEED,
                 seed: o.seed,
                 push: (o.push_mode == PushMode::Hybrid).then(|| {
@@ -2141,13 +2135,11 @@ impl PeerSwarmScheduler {
         Some(ChannelSchedulerStats {
             handshake_received: c.handshake_received,
             choked: c.choked,
-            controller: c.controller.kind(),
             cwnd: c.controller.in_flight_cap(),
             flight_size: c.controller.in_flight(),
             cto: c.controller.request_timeout(),
             rtt_mean: c.controller.rtt(),
             min_rtt: c.controller.min_rtt(),
-            delivery_rate: c.controller.delivery_rate(),
             pending_requests: c.request_bins.len(),
             request_time_nodes: c.request_times.size(),
             extra_messages: c.extra.len(),
@@ -2217,22 +2209,17 @@ fn map_size(m: &Map) -> usize {
 pub struct ChannelSchedulerStats {
     pub handshake_received: bool,
     pub choked: bool,
-    /// The request window's model.
-    pub controller: RequestControllerKind,
     /// The request window (in-flight cap) in bytes: LEDBAT's congestion
-    /// window, or `BbrLike`'s cap.
+    /// window.
     pub cwnd: i64,
     /// Bytes requested and not yet answered.
     pub flight_size: i64,
     /// The request timeout (LEDBAT's congestion timeout).
     pub cto: Duration,
-    /// The smoothed round trip: LEDBAT's ping round trip, `BbrLike`'s
-    /// request-to-data round trip.
+    /// The smoothed ping round trip.
     pub rtt_mean: Duration,
-    /// `BbrLike`'s minimum round trip (zero for LEDBAT).
+    /// The smallest recent ping round trip.
     pub min_rtt: Duration,
-    /// `BbrLike`'s delivery-rate estimate, bytes per second (0 for LEDBAT).
-    pub delivery_rate: u64,
     /// Outstanding request deadlines.
     pub pending_requests: usize,
     pub request_time_nodes: usize,

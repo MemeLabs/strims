@@ -62,9 +62,8 @@ use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_ppspp::codec::Stream;
 use strims_ppspp::{
-    Admission, AdmitRule, HolderLeft, LagEstimate, ParentAction, PeerKey, PushMode,
-    RequestControllerKind, Runner, SeedAllocation, SeedQos, Shed, Swarm, SwarmKey, TapEvent,
-    TapKind, TapLevel,
+    Admission, AdmitRule, HolderLeft, LagEstimate, ParentAction, PeerKey, PushMode, Runner,
+    SeedAllocation, SeedQos, Shed, Swarm, SwarmKey, TapEvent, TapKind, TapLevel,
 };
 
 use crate::format::{Clock, Dir, Header, Record, SampleRecord, SwarmParams, TapRecord};
@@ -1097,11 +1096,8 @@ fn swarm_record(id: u32, swarm: &Swarm) -> Record<'_> {
                 PushMode::Hybrid => 3,
                 PushMode::Default => 0,
             },
-            request_controller: match o.request_controller.resolve() {
-                RequestControllerKind::Ledbat => 1,
-                RequestControllerKind::BbrLike => 2,
-                RequestControllerKind::Default => 0,
-            },
+            // LEDBAT, the only request controller.
+            request_controller: 1,
             seed_allocation: match o.seed.allocation.resolve() {
                 SeedAllocation::Admission => 1,
                 SeedAllocation::Adaptive => 2,

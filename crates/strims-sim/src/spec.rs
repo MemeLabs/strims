@@ -10,7 +10,7 @@
 
 use std::time::Duration;
 
-use strims_ppspp::{PushMode, RequestControllerKind, SeedPolicy, SwarmOptions};
+use strims_ppspp::{PushMode, SeedPolicy, SwarmOptions};
 use strims_testbed::shape::LiveShape;
 use strims_vpn::Routing;
 use strims_wan::Site;
@@ -152,12 +152,6 @@ impl SwarmSpec {
 
     pub fn with_push_mode(mut self, mode: PushMode) -> SwarmSpec {
         self.options.push_mode = mode;
-        self
-    }
-
-    /// The request controller every node runs for this swarm.
-    pub fn with_controller(mut self, kind: RequestControllerKind) -> SwarmSpec {
-        self.options.request_controller = kind;
         self
     }
 

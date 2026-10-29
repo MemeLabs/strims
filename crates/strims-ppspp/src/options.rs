@@ -11,7 +11,6 @@
 //! [`Swarm::new`]: crate::Swarm::new
 
 use crate::codec::ProtocolOptionType;
-use crate::controller::RequestControllerKind;
 use crate::integrity::{SwarmVerifierOptions, VerifierOptions};
 use crate::store::{BufferLayout, ChunkBytes};
 use crate::uri::UriOptions;
@@ -184,9 +183,6 @@ pub struct SwarmOptions {
     /// How push is mixed into pull; local, in neither handshakes nor
     /// URIs. `Default` resolves to [`PushMode::DEFAULT`].
     pub push_mode: PushMode,
-    /// The channels' request window model, local to this node.
-    /// `Default` resolves to [`RequestControllerKind::DEFAULT`].
-    pub request_controller: RequestControllerKind,
     /// How a hybrid seed spends its upload, local to this node. Each
     /// `Default` field resolves to its type's `DEFAULT`.
     pub seed: SeedPolicy,
@@ -210,7 +206,6 @@ impl SwarmOptions {
             buffer_layout: BufferLayout::CIRCULAR,
             chunk_bytes: ChunkBytes::Stored,
             push_mode: PushMode::DEFAULT,
-            request_controller: RequestControllerKind::DEFAULT,
             seed: SeedPolicy {
                 allocation: SeedAllocation::DEFAULT,
                 qos: SeedQos::DEFAULT,
@@ -250,7 +245,6 @@ impl SwarmOptions {
             buffer_layout: or(self.buffer_layout, d.buffer_layout),
             chunk_bytes: or(self.chunk_bytes, d.chunk_bytes),
             push_mode: or(self.push_mode, d.push_mode),
-            request_controller: or(self.request_controller, d.request_controller),
             seed: SeedPolicy {
                 allocation: or(self.seed.allocation, d.seed.allocation),
                 qos: or(self.seed.qos, d.seed.qos),
@@ -298,7 +292,7 @@ mod tests {
     use super::*;
     use crate::integrity::{LiveSignatureAlgorithm, MerkleHashTreeFunction, ProtectionMethod};
 
-    /// Defaults fill zero fields only, the request controller included.
+    /// Defaults fill zero fields only.
     #[test]
     fn swarm_options() {
         let defaults = SwarmOptions::default_options();
@@ -320,31 +314,12 @@ mod tests {
             buffer_layout: BufferLayout::CIRCULAR,
             chunk_bytes: ChunkBytes::Stored,
             push_mode: PushMode::Hybrid,
-            request_controller: RequestControllerKind::BbrLike,
             seed: SeedPolicy {
                 allocation: SeedAllocation::Adaptive,
                 qos: SeedQos::ByAllocation,
             },
         };
         assert_eq!(custom.clone().assign_defaults(&defaults), custom);
-        // Both controllers can be chosen whichever is the default.
-        for kind in [
-            RequestControllerKind::Ledbat,
-            RequestControllerKind::BbrLike,
-        ] {
-            let o = SwarmOptions {
-                request_controller: kind,
-                ..Default::default()
-            }
-            .assign_defaults(&defaults);
-            assert_eq!(o.request_controller, kind);
-        }
-        assert_eq!(
-            SwarmOptions::default()
-                .assign_defaults(&defaults)
-                .request_controller,
-            RequestControllerKind::DEFAULT
-        );
     }
 
     /// Every push mode and seed policy can be chosen whichever is the

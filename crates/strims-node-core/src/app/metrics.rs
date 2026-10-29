@@ -17,7 +17,7 @@ use strims_kv::Kv;
 use strims_network::NetworkControl;
 use strims_ppspp::{
     ChannelMetrics, ChannelSchedulerStats, ChannelStats, MetricsSnapshot, PeerStats, PushMode,
-    PushStats, RequestControllerKind, SwarmSchedulerStats, TransferMetricsSnapshot,
+    PushStats, SwarmSchedulerStats, TransferMetricsSnapshot,
 };
 use strims_proto::debug::v1;
 use strims_proto::service::Error as RpcError;
@@ -610,25 +610,15 @@ fn channel_stats(s: ChannelStats) -> v1::ChannelStats {
     }
 }
 
-fn controller(k: RequestControllerKind) -> v1::RequestControllerKind {
-    match k {
-        RequestControllerKind::Default => v1::RequestControllerKind::Default,
-        RequestControllerKind::Ledbat => v1::RequestControllerKind::Ledbat,
-        RequestControllerKind::BbrLike => v1::RequestControllerKind::BbrLike,
-    }
-}
-
 fn channel_scheduler(s: ChannelSchedulerStats) -> v1::ChannelSchedulerStats {
     let ChannelSchedulerStats {
         handshake_received,
         choked,
-        controller: kind,
         cwnd,
         flight_size,
         cto,
         rtt_mean,
         min_rtt,
-        delivery_rate,
         pending_requests,
         request_time_nodes,
         extra_messages,
@@ -640,13 +630,14 @@ fn channel_scheduler(s: ChannelSchedulerStats) -> v1::ChannelSchedulerStats {
     v1::ChannelSchedulerStats {
         handshake_received,
         choked,
-        controller: controller(kind).into(),
+        // Channels run LEDBAT, the only request controller.
+        controller: v1::RequestControllerKind::Ledbat.into(),
         cwnd,
         flight_size,
         cto: cto.as_nanos(),
         rtt_mean: rtt_mean.as_nanos(),
         min_rtt: min_rtt.as_nanos(),
-        delivery_rate,
+        delivery_rate: 0,
         pending_requests: count(pending_requests),
         request_time_nodes: count(request_time_nodes),
         extra_messages: count(extra_messages),
@@ -1138,13 +1129,11 @@ mod tests {
         ChannelSchedulerStats {
             handshake_received: true,
             choked: false,
-            controller: RequestControllerKind::BbrLike,
             cwnd: -2,
             flight_size: 3,
             cto: Duration::from_millis(250),
             rtt_mean: Duration::from_millis(40),
             min_rtt: Duration::from_millis(30),
-            delivery_rate: 1000,
             pending_requests: 4,
             request_time_nodes: 5,
             extra_messages: 6,
@@ -1290,7 +1279,7 @@ mod tests {
         let stats = channel.stats.unwrap();
         assert_eq!(stats.inbound.unwrap().data_bytes, 100);
         let scheduler = stats.scheduler.unwrap();
-        assert_eq!(scheduler.controller(), v1::RequestControllerKind::BbrLike);
+        assert_eq!(scheduler.controller(), v1::RequestControllerKind::Ledbat);
         assert_eq!(
             (scheduler.cwnd, scheduler.cto, scheduler.rtt_mean),
             (-2, 250_000_000, 40_000_000)

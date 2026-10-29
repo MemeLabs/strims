@@ -26,8 +26,7 @@
 //! - [`channel`]: handshake validation and per-message counters.
 //! - [`scheduler_peer`]: the pull scheduler, and in
 //!   [`scheduler_peer::push`] the push/pull hybrid selected by [`PushMode`].
-//! - [`controller`]: the per-channel request window, [`ledbat`] (RFC 6817)
-//!   or [`bbr::BbrLike`], selected by [`SwarmOptions::request_controller`].
+//! - [`controller`]: the per-channel request window, [`ledbat`] (RFC 6817).
 //! - [`answer_gate`]: a hybrid node's answers to requests from the uplink
 //!   its pushes leave.
 //! - [`route`]: a hybrid node's requests to whoever is expected to deliver
@@ -66,12 +65,10 @@
 //! must stay byte-identical to protocol v2 plus ANNOUNCE (message type
 //! 18, the reports an adaptive seed asks for); `tests/golden.rs` pins
 //! them.
-//! Local options ([`PushMode`], the request controller, the delivery and
-//! scheduling methods) never reach the wire, so nodes with different local
-//! options interoperate.
+//! Local options ([`PushMode`], the delivery and scheduling methods) never
+//! reach the wire, so nodes with different local options interoperate.
 
 pub mod answer_gate;
-pub mod bbr;
 mod bin_queue;
 pub mod channel;
 pub mod codec;
@@ -100,7 +97,6 @@ mod windowed;
 mod writer;
 
 pub use constants::{MINIMUM_PROTOCOL_VERSION, PROTOCOL_VERSION};
-pub use controller::RequestControllerKind;
 pub use epoch::{Epoch, EpochError};
 pub use options::{
     DeliveryMode, PushMode, SchedulingMethod, SeedAllocation, SeedPolicy, SeedQos, SwarmOptions,

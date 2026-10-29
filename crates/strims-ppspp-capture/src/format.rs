@@ -123,7 +123,7 @@ pub struct SwarmParams {
     pub buffer_layout: u64,
     /// 1 off, 2 eager HAVE, 3 hybrid.
     pub push_mode: u64,
-    /// 1 LEDBAT, 2 BBR-like.
+    /// 1 LEDBAT (2, BBR-like, in older captures).
     pub request_controller: u64,
     /// 1 admission, 2 adaptive.
     pub seed_allocation: u64,

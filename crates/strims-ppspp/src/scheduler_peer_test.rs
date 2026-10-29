@@ -588,49 +588,33 @@ fn an_open_at_none_starts_where_we_asked() {
     }
 }
 
-/// Options with request controller `kind`.
-fn with_controller(o: SwarmOptions, kind: RequestControllerKind) -> SwarmOptions {
-    SwarmOptions {
-        request_controller: kind,
-        ..o
-    }
-}
-
-const CONTROLLERS: [RequestControllerKind; 2] = [
-    RequestControllerKind::Ledbat,
-    RequestControllerKind::BbrLike,
-];
-
 #[test]
 fn pong_needs_an_outstanding_ping() {
-    for kind in CONTROLLERS {
-        let mut f = fixture(with_controller(pull(), kind));
-        let mut q = MockQueue::default();
-        let p = ready_channel(&mut f, &mut q);
-        assert_eq!(f.sched.channels[&p].controller.kind(), kind);
-        // Nonce 0 before any ping isn't a round trip (it would be one since
-        // 1970).
-        f.sched.handle_pong(p, 0, now());
-        let c = &f.sched.channels[&p].controller;
-        assert_eq!(c.request_timeout(), Duration::SECOND, "{kind:?}");
-        assert_eq!(c.rtt(), Duration::ZERO, "{kind:?}");
+    let mut f = fixture(pull());
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    // Nonce 0 before any ping isn't a round trip (it would be one since
+    // 1970).
+    f.sched.handle_pong(p, 0, now());
+    let c = &f.sched.channels[&p].controller;
+    assert_eq!(c.request_timeout(), Duration::SECOND);
+    assert_eq!(c.rtt(), Duration::ZERO);
 
-        let cfg = f.swarm.reader_config();
-        let (sched, swarm) = (&mut f.sched, &f.swarm);
-        let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
-        let Message::Ping(ping) = msgs[0] else {
-            panic!("{msgs:?}")
-        };
-        f.sched
-            .handle_pong(p, ping.nonce, now() + Duration::from_millis(40));
-        let c = &f.sched.channels[&p].controller;
-        assert_eq!(c.rtt(), Duration::from_millis(40), "{kind:?}");
-        // A repeat is ignored.
-        f.sched
-            .handle_pong(p, ping.nonce, now() + Duration::from_secs(30));
-        let c = &f.sched.channels[&p].controller;
-        assert_eq!(c.rtt(), Duration::from_millis(40), "{kind:?}");
-    }
+    let cfg = f.swarm.reader_config();
+    let (sched, swarm) = (&mut f.sched, &f.swarm);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let Message::Ping(ping) = msgs[0] else {
+        panic!("{msgs:?}")
+    };
+    f.sched
+        .handle_pong(p, ping.nonce, now() + Duration::from_millis(40));
+    let c = &f.sched.channels[&p].controller;
+    assert_eq!(c.rtt(), Duration::from_millis(40));
+    // A repeat is ignored.
+    f.sched
+        .handle_pong(p, ping.nonce, now() + Duration::from_secs(30));
+    let c = &f.sched.channels[&p].controller;
+    assert_eq!(c.rtt(), Duration::from_millis(40));
 }
 
 #[test]
@@ -662,7 +646,6 @@ fn a_superseded_ping_skips_the_controller() {
 fn requests_are_bounded_by_the_window() {
     let mut f = fixture(SwarmOptions {
         live_window: 256,
-        request_controller: RequestControllerKind::Ledbat,
         ..pull()
     });
     let mut q = MockQueue::default();
@@ -671,16 +654,12 @@ fn requests_are_bounded_by_the_window() {
     f.sched.handle_have(p, Bin::new(8, 0), now());
     // A huge congestion window.
     for _ in 0..200 {
-        f.sched.channels[&p]
-            .controller
-            .ledbat_mut()
-            .unwrap()
-            .add_delay_sample(Duration::from_millis(-1_000_000_000), 1 << 40, now());
-        f.sched.channels[&p]
-            .controller
-            .ledbat_mut()
-            .unwrap()
-            .digest_delay_samples(now());
+        f.sched.channels[&p].controller.add_delay_sample(
+            Duration::from_millis(-1_000_000_000),
+            1 << 40,
+            now(),
+        );
+        f.sched.channels[&p].controller.digest_delay_samples(now());
     }
     let cfg = f.swarm.reader_config();
     let mut total = 0;
@@ -778,52 +757,50 @@ fn unanswered_requests_filled_elsewhere_leave_the_flight() {
     // elsewhere first (a push), times out with the chunk already stored.
     // It must leave the flight without a loss: two such requests stuck in
     // flight would fill the minimum window and stop the channel.
-    for kind in CONTROLLERS {
-        let mut f = fixture(with_controller(pull(), kind));
-        let mut q = MockQueue::default();
-        let p = ready_channel(&mut f, &mut q);
-        let other = f.peers[1];
-        f.sched.add_channel(other, &[], now(), &mut q);
-        f.sched.handle_handshake(other, 1 << 16);
-        f.sched.s.first_chunk_set = true;
-        f.sched.handle_have(p, Bin::new(1, 0), now());
-        let cfg = f.swarm.reader_config();
-        let (sched, swarm) = (&mut f.sched, &f.swarm);
-        let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
-        let requested: Vec<Bin> = msgs
-            .iter()
-            .filter_map(|m| match m {
-                Message::Request(r) => Some(r.bin),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(requested, vec![Bin(0), Bin(2)]);
-        assert_eq!(f.sched.channels[&p].controller.in_flight(), 2048);
+    let mut f = fixture(pull());
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let other = f.peers[1];
+    f.sched.add_channel(other, &[], now(), &mut q);
+    f.sched.handle_handshake(other, 1 << 16);
+    f.sched.s.first_chunk_set = true;
+    f.sched.handle_have(p, Bin::new(1, 0), now());
+    let cfg = f.swarm.reader_config();
+    let (sched, swarm) = (&mut f.sched, &f.swarm);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let requested: Vec<Bin> = msgs
+        .iter()
+        .filter_map(|m| match m {
+            Message::Request(r) => Some(r.bin),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(requested, vec![Bin(0), Bin(2)]);
+    assert_eq!(f.sched.channels[&p].controller.in_flight(), 2048);
 
-        // Bin 0 is answered by `p` (acked); bin 2 comes from the other peer.
-        f.sched.consume(Bin(0), now(), &f.swarm, &mut q);
-        f.sched
-            .handle_data(p, Bin(0), now(), true, true, now(), Bin(0), &mut q);
-        f.sched.handle_message_end(p, now(), &mut q);
-        f.sched.consume(Bin(2), now(), &f.swarm, &mut q);
-        f.sched
-            .handle_data(other, Bin(2), now(), true, true, now(), Bin(0), &mut q);
-        // A duplicate answer from `p` doesn't ack twice.
-        f.sched
-            .handle_data(p, Bin(0), now(), true, false, now(), Bin(0), &mut q);
-        f.sched.handle_message_end(p, now(), &mut q);
-        assert_eq!(f.sched.channels[&p].controller.in_flight(), 1024);
+    // Bin 0 is answered by `p` (acked); bin 2 comes from the other peer.
+    f.sched.consume(Bin(0), now(), &f.swarm, &mut q);
+    f.sched
+        .handle_data(p, Bin(0), now(), true, true, now(), Bin(0), &mut q);
+    f.sched.handle_message_end(p, now(), &mut q);
+    f.sched.consume(Bin(2), now(), &f.swarm, &mut q);
+    f.sched
+        .handle_data(other, Bin(2), now(), true, true, now(), Bin(0), &mut q);
+    // A duplicate answer from `p` doesn't ack twice.
+    f.sched
+        .handle_data(p, Bin(0), now(), true, false, now(), Bin(0), &mut q);
+    f.sched.handle_message_end(p, now(), &mut q);
+    assert_eq!(f.sched.channels[&p].controller.in_flight(), 1024);
 
-        // Past the timeout nothing is left in flight, and nothing was lost:
-        // no CANCEL, no backoff.
-        let later = now() + Duration::from_secs(2);
-        let mut swarm = f.swarm;
-        f.sched.run(later, &mut swarm, &mut q);
-        let c = &f.sched.channels[&p];
-        assert_eq!(c.controller.in_flight(), 0, "{kind:?}");
-        assert!(c.cancel_bins.is_empty());
-        assert!(c.backoff_bins.is_empty());
-    }
+    // Past the timeout nothing is left in flight, and nothing was lost:
+    // no CANCEL, no backoff.
+    let later = now() + Duration::from_secs(2);
+    let mut swarm = f.swarm;
+    f.sched.run(later, &mut swarm, &mut q);
+    let c = &f.sched.channels[&p];
+    assert_eq!(c.controller.in_flight(), 0);
+    assert!(c.cancel_bins.is_empty());
+    assert!(c.backoff_bins.is_empty());
 }
 
 #[test]
@@ -832,46 +809,44 @@ fn requests_pruned_behind_the_store_leave_the_flight() {
     // it) before its deadline: the deadline can't settle it, so the prune
     // must. Stranded flight accumulates until it fills the window, and a
     // channel whose flight never drains stops requesting for good.
-    for kind in CONTROLLERS {
-        let mut f = fixture(with_controller(pull(), kind));
-        let mut q = MockQueue::default();
-        let p = ready_channel(&mut f, &mut q);
-        let other = f.peers[1];
-        f.sched.add_channel(other, &[], now(), &mut q);
-        f.sched.handle_handshake(other, 1 << 16);
-        f.sched.s.first_chunk_set = true;
-        f.swarm.set_offset(Bin(0));
-        f.sched.handle_have(p, Bin::new(1, 0), now());
-        let cfg = f.swarm.reader_config();
-        let (sched, swarm) = (&mut f.sched, &f.swarm);
-        let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
-        assert_eq!(
-            msgs.iter()
-                .filter(|m| matches!(m, Message::Request(_)))
-                .count(),
-            2
-        );
-        assert_eq!(f.sched.channels[&p].controller.in_flight(), 2048);
+    let mut f = fixture(pull());
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let other = f.peers[1];
+    f.sched.add_channel(other, &[], now(), &mut q);
+    f.sched.handle_handshake(other, 1 << 16);
+    f.sched.s.first_chunk_set = true;
+    f.swarm.set_offset(Bin(0));
+    f.sched.handle_have(p, Bin::new(1, 0), now());
+    let cfg = f.swarm.reader_config();
+    let (sched, swarm) = (&mut f.sched, &f.swarm);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    assert_eq!(
+        msgs.iter()
+            .filter(|m| matches!(m, Message::Request(_)))
+            .count(),
+        2
+    );
+    assert_eq!(f.sched.channels[&p].controller.in_flight(), 2048);
 
-        // Both chunks come from the other peer and fill the store past them.
-        let chunk = vec![0u8; f.swarm.options().chunk_size];
-        for b in [Bin(0), Bin(2)] {
-            f.swarm.publish(b, &chunk).unwrap();
-            f.sched.consume(b, now(), &f.swarm, &mut q);
-            f.sched
-                .handle_data(other, b, now(), true, true, now(), Bin(0), &mut q);
-        }
-        assert_eq!(f.swarm.store().next(), Bin(4));
-        f.sched.gc(&f.swarm, now());
-        assert_eq!(f.sched.channels[&p].controller.in_flight(), 0, "{kind:?}");
-
-        let later = now() + Duration::from_secs(2);
-        let mut swarm = f.swarm;
-        f.sched.run(later, &mut swarm, &mut q);
-        let c = &f.sched.channels[&p];
-        assert_eq!(c.controller.in_flight(), 0, "{kind:?}");
-        assert!(c.backoff_bins.is_empty());
+    // Both chunks come from the other peer and fill the store past them.
+    let chunk = vec![0u8; f.swarm.options().chunk_size];
+    for b in [Bin(0), Bin(2)] {
+        f.swarm.publish(b, &chunk).unwrap();
+        f.sched.consume(b, now(), &f.swarm, &mut q);
+        f.sched
+            .handle_data(other, b, now(), true, true, now(), Bin(0), &mut q);
     }
+    assert_eq!(f.swarm.store().next(), Bin(4));
+    f.sched.gc(&f.swarm, now());
+    assert_eq!(f.sched.channels[&p].controller.in_flight(), 0);
+
+    let later = now() + Duration::from_secs(2);
+    let mut swarm = f.swarm;
+    f.sched.run(later, &mut swarm, &mut q);
+    let c = &f.sched.channels[&p];
+    assert_eq!(c.controller.in_flight(), 0);
+    assert!(c.backoff_bins.is_empty());
 }
 
 #[test]
@@ -898,26 +873,23 @@ fn channels_ping_once_a_second() {
 
 #[test]
 fn pongs_reach_the_controller_and_path_samples_dont() {
-    for kind in CONTROLLERS {
-        let mut f = fixture(with_controller(pull(), kind));
-        let mut q = MockQueue::default();
-        let p = ready_channel(&mut f, &mut q);
-        let cfg = f.swarm.reader_config();
-        let (sched, swarm) = (&mut f.sched, &f.swarm);
-        let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
-        let Some(Message::Ping(ping)) = msgs.first() else {
-            panic!("{kind:?} {msgs:?}")
-        };
-        f.sched
-            .handle_pong(p, ping.nonce, now() + Duration::from_millis(40));
-        f.sched
-            .handle_path_sample(p, Duration::from_millis(70), now());
-        assert_eq!(
-            f.sched.channels[&p].controller.rtt(),
-            Duration::from_millis(40),
-            "{kind:?}"
-        );
-    }
+    let mut f = fixture(pull());
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let cfg = f.swarm.reader_config();
+    let (sched, swarm) = (&mut f.sched, &f.swarm);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let Some(Message::Ping(ping)) = msgs.first() else {
+        panic!("{msgs:?}")
+    };
+    f.sched
+        .handle_pong(p, ping.nonce, now() + Duration::from_millis(40));
+    f.sched
+        .handle_path_sample(p, Duration::from_millis(70), now());
+    assert_eq!(
+        f.sched.channels[&p].controller.rtt(),
+        Duration::from_millis(40)
+    );
 }
 
 #[test]
@@ -946,47 +918,6 @@ fn path_samples_rank_a_seeds_holders_and_pongs_dont() {
     f.sched
         .handle_path_sample(p, Duration::from_millis(20), now());
     assert_eq!(min_rtt(&mut f), Some(Duration::from_millis(20)));
-}
-
-#[test]
-fn bbr_like_measures_with_local_times_only() {
-    // The BBR-style window takes its round trip from our request to the
-    // data, on our clock: data stamped by a peer clock hours off changes
-    // nothing, and pushed data counts toward the peer's delivery rate.
-    let mut caps = Vec::new();
-    for skew in [
-        Duration::ZERO,
-        Duration::from_secs(-7200),
-        Duration::from_secs(36_000),
-    ] {
-        let mut f = fixture(with_controller(pull(), RequestControllerKind::BbrLike));
-        let mut q = MockQueue::default();
-        let p = ready_channel(&mut f, &mut q);
-        f.sched.s.first_chunk_set = true;
-        let cfg = f.swarm.reader_config();
-        let mut t = now();
-        for i in 0..40u64 {
-            f.sched.handle_have(p, Bin::new(1, i), t);
-            let (sched, swarm) = (&mut f.sched, &f.swarm);
-            let msgs = written(|cw| sched.write(p, t, swarm, cw).unwrap(), cfg);
-            let at = t + Duration::from_millis(30);
-            for m in msgs {
-                if let Message::Request(r) = m {
-                    f.sched.consume(r.bin, at, &f.swarm, &mut q);
-                    f.sched
-                        .handle_data(p, r.bin, at + skew, true, true, at, Bin(0), &mut q);
-                }
-            }
-            f.sched.handle_message_end(p, at, &mut q);
-            t += Duration::from_millis(100);
-        }
-        let s = f.sched.channel_stats(p).unwrap();
-        assert_eq!(s.controller, RequestControllerKind::BbrLike);
-        assert_eq!(s.min_rtt, Duration::from_millis(30));
-        assert!(s.delivery_rate > 0, "{s:?}");
-        caps.push((s.cwnd, s.cto, s.rtt_mean));
-    }
-    assert!(caps.windows(2).all(|w| w[0] == w[1]), "{caps:?}");
 }
 
 /// The REQUESTs in what `p` writes at `t`.
@@ -1145,7 +1076,6 @@ fn window_floor_carries_the_stream() {
     let mut f = fixture(SwarmOptions {
         live_window: 1 << 10,
         chunks_per_signature: 8,
-        request_controller: RequestControllerKind::Ledbat,
         ..pull()
     });
     let mut q = MockQueue::default();
@@ -1160,7 +1090,7 @@ fn window_floor_carries_the_stream() {
     let rate = f.sched.s.peer_have_chunk_rate.rate(Duration::SECOND, t);
     assert!((24..=40).contains(&rate), "{rate}");
     {
-        let l = f.sched.channels[&p].controller.ledbat_mut().unwrap();
+        let l = &mut f.sched.channels[&p].controller;
         // 10 ms one way, then 150 ms: read as 140 ms of queueing.
         l.add_delay_sample(Duration::from_millis(10), 1024, t);
         l.digest_delay_samples(t);
@@ -1174,7 +1104,7 @@ fn window_floor_carries_the_stream() {
     }
     let requests = requests_at(&mut f, p, t);
     let floor = 2 * rate as i64 * 1024 * 300 / 1000;
-    let l = f.sched.channels[&p].controller.ledbat().unwrap();
+    let l = &f.sched.channels[&p].controller;
     assert!(l.min_cwnd() >= floor - 1024, "{} {floor}", l.min_cwnd());
     assert!(l.cwnd() >= l.min_cwnd());
     assert!(
@@ -1186,24 +1116,19 @@ fn window_floor_carries_the_stream() {
     // Round trips past STREAM_WINDOW_FLOOR_RTT count as that.
     f.sched.channels[&p]
         .controller
-        .ledbat_mut()
-        .unwrap()
         .add_rtt_sample(Duration::from_secs(600), t);
     let _ = requests_at(&mut f, p, t);
     let cap = 2 * rate as i64 * 1024 * STREAM_WINDOW_FLOOR_RTT.as_millis() / 1000;
-    assert!(f.sched.channels[&p].controller.ledbat().unwrap().min_cwnd() <= cap);
+    assert!(f.sched.channels[&p].controller.min_cwnd() <= cap);
 }
 
 #[test]
 fn hybrid_window_floor_reads_the_minimum_round_trip() {
     for (options, on_min) in [(pull(), false), (hybrid(4), true)] {
-        let mut f = fixture(SwarmOptions {
-            request_controller: RequestControllerKind::Ledbat,
-            ..options
-        });
+        let mut f = fixture(SwarmOptions { ..options });
         let mut q = MockQueue::default();
         let p = ready_channel(&mut f, &mut q);
-        let l = f.sched.channels[&p].controller.ledbat().unwrap();
+        let l = &f.sched.channels[&p].controller;
         assert_eq!(l.floor_on_min(), on_min);
     }
 }

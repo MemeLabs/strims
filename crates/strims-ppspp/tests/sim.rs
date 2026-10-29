@@ -70,12 +70,8 @@
 //! comparison table (`cargo test --release -p strims-ppspp --test sim
 //! -- --ignored --nocapture push_pull_matrix`).
 //!
-//! The request controller comparison runs the same scenarios with the same
-//! seeds under LEDBAT and the BBR-style controller
-//! (`SwarmOptions::request_controller`): `sim_bbr_*` tests assert the
-//! BBR-style one, and the ignored `controller_ab` prints the table. Cross
-//! traffic is a second swarm in the same runners, seeded by a peer, viewed
-//! by every other node, sharing every uplink.
+//! Cross traffic is a second swarm in the same runners, seeded by a peer,
+//! viewed by every other node, sharing every uplink.
 //!
 //! The seed allocation runs measure how a seed on a constrained uplink
 //! spends it, at 16 streams on WAN paths: the ignored
@@ -116,8 +112,8 @@ use strims_ppspp::codec::{
 use strims_ppspp::store::{self, BufferReader, ChunkBytes, ChunkCodec};
 use strims_ppspp::{
     DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, ParentAction, PeerKey, PushMode, PushStats,
-    ReportCounters, RequestControllerKind, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId,
-    SwarmKey, SwarmOptions, TapKind, TapLevel, Writer, WriterOptions,
+    ReportCounters, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey, SwarmOptions,
+    TapKind, TapLevel, Writer, WriterOptions,
 };
 use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
 use strims_wan::sample::pick;
@@ -480,8 +476,6 @@ struct Config {
     trace_node: Option<usize>,
     /// Print every peer's read position every this many seconds.
     progress: Option<i64>,
-    /// The swarm's request controller.
-    controller: RequestControllerKind,
     /// A second swarm sharing the nodes.
     cross: Option<Cross>,
     /// How the seed spends its upload in Hybrid.
@@ -552,7 +546,6 @@ struct Wan {
 #[derive(Clone, Copy, Debug)]
 struct Cross {
     seed: usize,
-    controller: RequestControllerKind,
     push_mode: PushMode,
 }
 
@@ -588,7 +581,6 @@ impl Config {
             warm_secs: 4,
             trace_node: None,
             progress: None,
-            controller: RequestControllerKind::Default,
             cross: None,
             seed_policy: SeedPolicy::ADMISSION,
             pin: None,
@@ -1163,7 +1155,6 @@ impl Sim {
             delivery_mode: cfg.delivery_mode,
             stream_count: cfg.stream_count,
             push_mode: cfg.push_mode,
-            request_controller: cfg.controller,
             seed: cfg.seed_policy,
             ..Default::default()
         };
@@ -1171,7 +1162,6 @@ impl Sim {
         let cross_options = cfg.cross.map(|c| SwarmOptions {
             chunk_bytes: cfg.keep.chunk_bytes(Content::Cross),
             push_mode: c.push_mode,
-            request_controller: c.controller,
             ..options.clone()
         });
 
@@ -4326,13 +4316,7 @@ fn sim_chunk_codecs_change_no_trace() {
     mesh.loss = 0.01;
     mesh.push_mode = PushMode::Hybrid;
     mesh.stream_count = 4;
-    let mut cross = cross_traffic_config(
-        3,
-        PushMode::Hybrid,
-        RequestControllerKind::Ledbat,
-        RequestControllerKind::BbrLike,
-        CROSS_UPLINK_TENTHS,
-    );
+    let mut cross = cross_traffic_config(3, PushMode::Hybrid, CROSS_UPLINK_TENTHS);
     cross.stream_secs = 6;
     for mut cfg in [mesh, cross] {
         cfg.keep = Keep::Bytes;
@@ -4562,7 +4546,7 @@ impl Scenario {
 
 /// An environment knob for the ignored evaluation and debugging tests only
 /// (`SIM_SCENARIO`, `SIM_STREAMS`, `SIM_SECS`, `SIM_WARM`, `SIM_SEED_POLICY`,
-/// `SIM_TRACE_NODE`, `SIM_VERBOSE`, `SIM_CONTROLLER`, `SIM_CROSS_UP_X10`);
+/// `SIM_TRACE_NODE`, `SIM_VERBOSE`, `SIM_CROSS_UP_X10`);
 /// the asserting tests use fixed configs, so the determinism guardrail
 /// holds for them. `SIM_CAPTURE=<dir>` captures any run into
 /// `<dir>/<run tag>/` (`SIM_CAPTURE_TAP=0` leaves out the decisions):
@@ -4620,11 +4604,6 @@ fn apply_knobs(cfg: &mut Config) {
     }
     cfg.trace_node = knob("SIM_TRACE_NODE");
     cfg.progress = knob("SIM_PROGRESS");
-    match knob::<String>("SIM_CONTROLLER").as_deref() {
-        Some("ledbat") => cfg.controller = RequestControllerKind::Ledbat,
-        Some("bbr") => cfg.controller = RequestControllerKind::BbrLike,
-        _ => {}
-    }
 }
 
 /// `SIM_SEED_POLICY=adaptive`: the seed allocates adaptively, with uplink
@@ -4635,19 +4614,6 @@ fn seed_policy_knob(cfg: &mut Config) {
             allocation: SeedAllocation::Adaptive,
             qos: SeedQos::ByAllocation,
         };
-    }
-}
-
-/// The knobs the A/B tables take: stream count, stream length, warm-up
-/// and the seed's policy.
-fn ab_knobs(cfg: &mut Config) {
-    seed_policy_knob(cfg);
-    streams_knob(cfg);
-    if let Some(secs) = knob("SIM_SECS") {
-        cfg.stream_secs = secs;
-    }
-    if let Some(secs) = knob("SIM_WARM") {
-        cfg.warm_secs = secs;
     }
 }
 
@@ -5282,7 +5248,7 @@ fn node_sim_row(name: &str, sim: &Sim, r: &Report) -> String {
 }
 
 #[test]
-#[ignore = "debugging aid: SIM_SCENARIO=starved|latency|capped|sparse, SIM_MODE=off|eager|hybrid, SIM_SEED, SIM_CONTROLLER=ledbat|bbr"]
+#[ignore = "debugging aid: SIM_SCENARIO=starved|latency|capped|sparse, SIM_MODE=off|eager|hybrid, SIM_SEED"]
 fn node_sim_debug() {
     let name: String = knob("SIM_SCENARIO").unwrap_or_else(|| "starved".into());
     let mode = match knob::<String>("SIM_MODE").as_deref() {
@@ -5376,32 +5342,21 @@ fn sim_capped_seed_spreads_load() {
     }
 }
 
-// --- request controller A/B -------------------------------------------------
+// --- evaluation scenarios ---------------------------------------------------
 //
-// The same scenarios, seeds and traces under each request controller, in
-// pull (`Off`) and `Hybrid`. `controller_ab` prints the comparison;
-// `sim_bbr_*` assert the BBR-style controller's behaviour.
+// The scenarios the evaluations below run, in pull (`Off`) and `Hybrid`.
 
 /// Cross traffic: a second stream at the same rate, seeded by peer 1 and
 /// viewed by every other node, through the same runners and the same
 /// uplinks, each capped at `tenths / 10` times the stream rate (two
-/// streams need about 2x on average, plus overhead). The main swarm runs
-/// `a`, the second one `b`.
-fn cross_traffic_config(
-    seed: u64,
-    mode: PushMode,
-    a: RequestControllerKind,
-    b: RequestControllerKind,
-    tenths: u64,
-) -> Config {
+/// streams need about 2x on average, plus overhead).
+fn cross_traffic_config(seed: u64, mode: PushMode, tenths: u64) -> Config {
     let mut cfg = node_sim_config(seed, 8, 40);
     cfg.seed_up = tenths * 32 * 1024 / 10;
     cfg.peer_up = tenths * 32 * 1024 / 10;
     cfg.push_mode = mode;
-    cfg.controller = a;
     cfg.cross = Some(Cross {
         seed: 1,
-        controller: b,
         push_mode: mode,
     });
     cfg
@@ -5447,14 +5402,8 @@ impl AbScenario {
         AbScenario::WanSuperPeer,
     ];
 
-    /// The config for `seed`; `b` is the cross-traffic swarm's controller.
-    fn config(
-        self,
-        seed: u64,
-        mode: PushMode,
-        a: RequestControllerKind,
-        b: RequestControllerKind,
-    ) -> Config {
+    /// The config for `seed`.
+    fn config(self, seed: u64, mode: PushMode) -> Config {
         let mut cfg = match self {
             AbScenario::LiveMesh => Config::new(seed, 8),
             AbScenario::SparseLossy => {
@@ -5467,7 +5416,7 @@ impl AbScenario {
             AbScenario::SeedStarved => seed_starved_config(seed, mode),
             AbScenario::CrossTraffic => {
                 let tenths = knob("SIM_CROSS_UP_X10").unwrap_or(CROSS_UPLINK_TENTHS);
-                cross_traffic_config(seed, mode, a, b, tenths)
+                cross_traffic_config(seed, mode, tenths)
             }
             AbScenario::WanGlobal => wan_global_config(seed),
             AbScenario::WanMobile => wan_mobile_config(seed),
@@ -5475,83 +5424,7 @@ impl AbScenario {
             AbScenario::WanSuperPeer => wan_super_peer_config(seed),
         };
         cfg.push_mode = mode;
-        cfg.controller = a;
         cfg
-    }
-
-    /// The window the scenario's check requires complete, in seconds of
-    /// publishing; `None`: every peer reads from
-    /// where it started to the end.
-    fn required(self) -> Option<(i64, i64)> {
-        match self {
-            AbScenario::SeedStarved => Some((105, 131)),
-            AbScenario::LatencyStep => Some((30, 61)),
-            AbScenario::CappedSeed | AbScenario::CrossTraffic => Some((0, i64::MAX / 2)),
-            AbScenario::LiveMesh
-            | AbScenario::SparseLossy
-            | AbScenario::WanGlobal
-            | AbScenario::WanMobile
-            | AbScenario::WanResidentialSeed
-            | AbScenario::WanSuperPeer => None,
-        }
-    }
-}
-
-/// One run's measurements.
-#[derive(Clone, Debug)]
-struct AbRun {
-    delivery: f64,
-    p50: Duration,
-    p99: Duration,
-    /// Duplicate chunks over chunks read.
-    dup: f64,
-    seed_share: f64,
-    /// Latency step: how long after the step chunks still arrived with
-    /// more than 1 s of lag.
-    settle: Duration,
-    /// Chunks of the required window that some peer missed.
-    missing: usize,
-    /// Cross traffic: the second swarm's delivery and p99.
-    cross: Option<(f64, Duration)>,
-}
-
-fn ab_run(
-    sc: AbScenario,
-    seed: u64,
-    mode: PushMode,
-    a: RequestControllerKind,
-    b: RequestControllerKind,
-) -> AbRun {
-    let mut cfg = sc.config(seed, mode, a, b);
-    ab_knobs(&mut cfg);
-    let mut sim = Sim::new(cfg);
-    let r = sim.run();
-    let mut missing: usize = match sc.required() {
-        Some((from, to)) => sim.missing(from, to).iter().map(|m| m.1).sum(),
-        None => {
-            r.positions
-                .iter()
-                .map(|&(_, pos)| (r.total.saturating_sub(pos) / sim.cfg.chunk_size as u64) as usize)
-                .sum::<usize>()
-                + (r.mismatches + r.underruns + r.resets) as usize
-        }
-    };
-    if let Some(c) = &r.cross {
-        missing += c.incomplete;
-    }
-    AbRun {
-        delivery: r.delivery,
-        p50: r.lag_p50,
-        p99: r.lag_p99,
-        dup: r.wasted as f64 / sim.chunks_read().max(1) as f64,
-        seed_share: r.seed_share,
-        settle: if sc == AbScenario::LatencyStep {
-            sim.settled_after(20, Duration::SECOND)
-        } else {
-            Duration::ZERO
-        },
-        missing,
-        cross: r.cross.as_ref().map(|c| (c.delivery, c.lag_p99)),
     }
 }
 
@@ -5560,140 +5433,8 @@ fn median(mut v: Vec<i64>) -> i64 {
     v.get(v.len() / 2).copied().unwrap_or(0)
 }
 
-/// Jain's fairness index of two shares.
-fn jain(x: f64, y: f64) -> f64 {
-    let d = 2.0 * (x * x + y * y);
-    if d == 0.0 { 1.0 } else { (x + y) * (x + y) / d }
-}
-
-/// One aggregated row: delivery mean (min), lag p50 median, p99 median
-/// (max), duplicates mean, seed share mean, settle median (max), and for
-/// cross traffic the second swarm and the fairness between the two.
-fn ab_row(name: &str, runs: &[AbRun]) -> String {
-    let n = runs.len().max(1) as f64;
-    let ms_of = |f: &dyn Fn(&AbRun) -> Duration| -> Vec<i64> {
-        runs.iter().map(|r| f(r).as_millis()).collect()
-    };
-    let p50 = ms_of(&|r| r.p50);
-    let p99 = ms_of(&|r| r.p99);
-    let settle = ms_of(&|r| r.settle);
-    let delivery = runs.iter().map(|r| r.delivery).sum::<f64>() / n;
-    let delivery_min = runs.iter().map(|r| r.delivery).fold(1.0, f64::min);
-    let dup = runs.iter().map(|r| r.dup).sum::<f64>() / n;
-    let share = runs.iter().map(|r| r.seed_share).sum::<f64>() / n;
-    let missing: usize = runs.iter().map(|r| r.missing).sum();
-    let failed = runs.iter().filter(|r| r.missing > 0).count();
-    let mut row = format!(
-        "| {name} | {delivery:.4} ({delivery_min:.4}) | {} | {} ({}) | {:.2}% | {:.0}% | {} ({}) | {failed}/{} ({missing}) |",
-        median(p50),
-        median(p99.clone()),
-        p99.iter().max().unwrap_or(&0),
-        100.0 * dup,
-        100.0 * share,
-        median(settle.clone()),
-        settle.iter().max().unwrap_or(&0),
-        runs.len(),
-    );
-    if runs.iter().any(|r| r.cross.is_some()) {
-        let cd: Vec<f64> = runs.iter().filter_map(|r| r.cross.map(|c| c.0)).collect();
-        let cp99: Vec<i64> = runs
-            .iter()
-            .filter_map(|r| r.cross.map(|c| c.1.as_millis()))
-            .collect();
-        let fair: f64 = runs
-            .iter()
-            .filter_map(|r| r.cross.map(|c| jain(r.delivery, c.0)))
-            .sum::<f64>()
-            / n;
-        row += &format!(
-            " second swarm: delivery {:.4}, p99 {} ({}) ms; fairness {fair:.4} |",
-            cd.iter().sum::<f64>() / cd.len().max(1) as f64,
-            median(cp99.clone()),
-            cp99.iter().max().unwrap_or(&0)
-        );
-    }
-    row
-}
-
 /// Cross traffic's uplinks, in tenths of the stream rate.
 const CROSS_UPLINK_TENTHS: u64 = 35;
-
-const LEDBAT: RequestControllerKind = RequestControllerKind::Ledbat;
-const BBR: RequestControllerKind = RequestControllerKind::BbrLike;
-
-#[test]
-#[ignore = "the request controller comparison over seeds 1..=SIM_SEEDS (default 8); run in release with --ignored --nocapture"]
-fn controller_ab() {
-    let seeds: u64 = knob("SIM_SEEDS").unwrap_or(8);
-    let only: Option<String> = knob("SIM_SCENARIO");
-    let verbose = knob::<String>("SIM_VERBOSE").is_some();
-    // (scenario, mode, main controller, cross-traffic controller)
-    let mut cases = Vec::new();
-    for sc in AbScenario::ALL {
-        if only
-            .as_ref()
-            .is_some_and(|o| !format!("{sc:?}").eq_ignore_ascii_case(o))
-        {
-            continue;
-        }
-        for mode in [PushMode::Off, PushMode::Hybrid] {
-            let pairs: &[(RequestControllerKind, RequestControllerKind)] =
-                if sc == AbScenario::CrossTraffic {
-                    &[(LEDBAT, LEDBAT), (BBR, BBR), (LEDBAT, BBR)]
-                } else {
-                    &[(LEDBAT, LEDBAT), (BBR, BBR)]
-                };
-            for &(a, b) in pairs {
-                cases.push((sc, mode, a, b));
-            }
-        }
-    }
-    let jobs: Vec<(usize, u64)> = (0..cases.len())
-        .flat_map(|c| (1..=seeds).map(move |s| (c, s)))
-        .collect();
-    // Independent simulations, spread over threads; each is deterministic.
-    let (tx, rx) = std::sync::mpsc::channel();
-    let next = std::sync::atomic::AtomicUsize::new(0);
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
-    std::thread::scope(|scope| {
-        for _ in 0..workers {
-            let tx = tx.clone();
-            let (jobs, cases, next) = (&jobs, &cases, &next);
-            scope.spawn(move || {
-                loop {
-                    let j = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let Some(&(c, seed)) = jobs.get(j) else { break };
-                    let (sc, mode, a, b) = cases[c];
-                    let r = ab_run(sc, seed, mode, a, b);
-                    if verbose {
-                        eprintln!("{sc:?} {mode:?} {a:?}/{b:?} seed {seed}: {r:?}");
-                    }
-                    tx.send((c, seed, r)).unwrap();
-                }
-            });
-        }
-    });
-    drop(tx);
-    let mut results = vec![Vec::new(); cases.len()];
-    for (c, seed, r) in rx {
-        results[c].push((seed, r));
-    }
-    println!(
-        "| scenario, mode, controller | delivery mean (min) | lag p50 ms (median) | p99 ms median (max) | duplicates | seed share | settle ms median (max) | runs short (chunks) |"
-    );
-    println!("|---|---|---|---|---|---|---|---|");
-    for (c, &(sc, mode, a, b)) in cases.iter().enumerate() {
-        let runs = &mut results[c];
-        runs.sort_by_key(|(seed, _)| *seed);
-        let runs: Vec<AbRun> = runs.iter().map(|(_, r)| r.clone()).collect();
-        let name = if sc == AbScenario::CrossTraffic {
-            format!("{sc:?} {mode:?} {a:?} vs {b:?}")
-        } else {
-            format!("{sc:?} {mode:?} {a:?}")
-        };
-        println!("{}", ab_row(&name, &runs));
-    }
-}
 
 // --- seed allocation --------------------------------------------------------
 //
@@ -5951,7 +5692,7 @@ impl AllocCase {
     ];
 
     /// Whether the case pins as many slots as the admission used at the
-    /// same scenario, controller and seed, so the admission runs first.
+    /// same scenario and seed, so the admission runs first.
     /// [`AllocCase::DcOnly`] pins the datacenter viewer whatever the count.
     fn takes_slots(self) -> bool {
         matches!(
@@ -6070,19 +5811,13 @@ fn random_pin(cfg: &Config, slots: usize) -> Vec<Vec<usize>> {
 /// streams for `SIM_SECS` (30) seconds, lags from `SIM_WARM` (10), with
 /// the scenario's chunk and munro sizes unless [`size_knobs`] sets them; a
 /// pin gets `slots`.
-fn alloc_config(
-    sc: AbScenario,
-    seed: u64,
-    controller: RequestControllerKind,
-    case: AllocCase,
-    slots: usize,
-) -> Config {
+fn alloc_config(sc: AbScenario, seed: u64, case: AllocCase, slots: usize) -> Config {
     let mode = if case == AllocCase::Pull {
         PushMode::Off
     } else {
         PushMode::Hybrid
     };
-    let mut cfg = sc.config(seed, mode, controller, controller);
+    let mut cfg = sc.config(seed, mode);
     cfg.stream_count = 16;
     streams_knob(&mut cfg);
     size_knobs(&mut cfg);
@@ -6114,8 +5849,8 @@ fn alloc_config(
     cfg
 }
 
-/// Prints the seed allocation table: each of `scenarios` under LEDBAT and
-/// BBR in each of its `cases`, over `SIM_SEEDS` (4) seeds. `SIM_SCENARIO`
+/// Prints the seed allocation table: each of `scenarios` in each of its
+/// `cases`, over `SIM_SEEDS` (4) seeds. `SIM_SCENARIO`
 /// picks one scenario and `SIM_CASES` (comma-separated) some cases. The
 /// admission runs first when a case is pinned: they set each seed's slots.
 fn allocation_table(scenarios: &[AbScenario], cases: &dyn Fn(AbScenario) -> Vec<AllocCase>) {
@@ -6141,17 +5876,14 @@ fn allocation_table(scenarios: &[AbScenario], cases: &dyn Fn(AbScenario) -> Vec<
         {
             continue;
         }
-        for controller in [LEDBAT, BBR] {
-            groups.push((sc, controller));
-        }
+        groups.push(sc);
     }
     let first: Vec<(usize, u64)> = (0..groups.len())
-        .filter(|&g| cases(groups[g].0).iter().any(|c| c.takes_slots()))
+        .filter(|&g| cases(groups[g]).iter().any(|c| c.takes_slots()))
         .flat_map(|g| (1..=seeds).map(move |s| (g, s)))
         .collect();
     let admission = par_map(&first, |&(g, seed)| {
-        let (sc, controller) = groups[g];
-        eval_run(alloc_config(sc, seed, controller, AllocCase::Admission, 0))
+        eval_run(alloc_config(groups[g], seed, AllocCase::Admission, 0))
     });
     let slots: BTreeMap<(usize, u64), usize> = first
         .iter()
@@ -6161,20 +5893,19 @@ fn allocation_table(scenarios: &[AbScenario], cases: &dyn Fn(AbScenario) -> Vec<
     let jobs: Vec<(usize, u64, AllocCase)> = (0..groups.len())
         .flat_map(|g| {
             let ran = slots.contains_key(&(g, 1));
-            cases(groups[g].0)
+            cases(groups[g])
                 .into_iter()
                 .filter(move |&c| c != AllocCase::Admission || !ran)
                 .flat_map(move |c| (1..=seeds).map(move |s| (g, s, c)))
         })
         .collect();
     let runs = par_map(&jobs, |&(g, seed, case)| {
-        let (sc, controller) = groups[g];
         let k = slots.get(&(g, seed)).copied().unwrap_or(0);
-        eval_run(alloc_config(sc, seed, controller, case, k))
+        eval_run(alloc_config(groups[g], seed, case, k))
     });
     println!("{EVAL_HEADER}");
     println!("|{}", "---|".repeat(20));
-    for (g, &(sc, controller)) in groups.iter().enumerate() {
+    for (g, &sc) in groups.iter().enumerate() {
         for case in cases(sc) {
             let mut of: Vec<EvalRun> = jobs
                 .iter()
@@ -6190,10 +5921,7 @@ fn allocation_table(scenarios: &[AbScenario], cases: &dyn Fn(AbScenario) -> Vec<
                     .map(|(_, r)| r.clone())
                     .collect();
             }
-            println!(
-                "{}",
-                eval_row(&format!("{sc:?} {controller:?} {case:?}"), &of)
-            );
+            println!("{}", eval_row(&format!("{sc:?} {case:?}"), &of));
         }
     }
 }
@@ -6223,12 +5951,8 @@ fn seed_allocation_trace() {
         knob::<String>("SIM_CASES").is_some_and(|o| format!("{c:?}").eq_ignore_ascii_case(&o))
     })
     .unwrap_or(AllocCase::AdaptiveQos);
-    let controller = match knob::<String>("SIM_CONTROLLER").as_deref() {
-        Some("bbr") => BBR,
-        _ => LEDBAT,
-    };
     let seed = knob("SIM_SEED").unwrap_or(1);
-    let mut cfg = alloc_config(sc, seed, controller, case, knob("SIM_SLOTS").unwrap_or(64));
+    let mut cfg = alloc_config(sc, seed, case, knob("SIM_SLOTS").unwrap_or(64));
     cfg.trace_node = knob("SIM_TRACE_NODE");
     if let Some(w) = &cfg.wan {
         let greedy = greedy(&cfg);
@@ -6243,7 +5967,7 @@ fn seed_allocation_trace() {
     println!("{EVAL_HEADER}");
     println!(
         "{}",
-        eval_row(&format!("{sc:?} {controller:?} {case:?} seed {seed}"), &[r])
+        eval_row(&format!("{sc:?} {case:?} seed {seed}"), &[r])
     );
 }
 
@@ -6302,107 +6026,24 @@ fn seed_allocation_ab() {
 }
 
 #[test]
-fn sim_bbr_full_mesh() {
-    let mut cfg = Config::new(1, 8);
-    cfg.controller = BBR;
-    let r = Sim::new(cfg).run();
-    eprintln!("bbr 1+8: {r:?}");
-    check_delivery(&r, MUNRO as u64);
-    assert!(r.lag_p99 < Duration::from_millis(1500), "{r:?}");
-}
-
-#[test]
-fn sim_bbr_latency_step_settles_fast() {
-    // The seed's links step from 2–20 ms to 150 ms one way at 20 s. Steady
-    // pings move the model's minimum round trip to the new path at once, so
-    // the stream settles within a few seconds.
-    for (seed, mode) in [
-        (1, PushMode::Off),
-        (2, PushMode::Off),
-        (1, PushMode::Hybrid),
-    ] {
-        let mut cfg = latency_step_config(seed, mode);
-        cfg.controller = BBR;
-        let mut sim = Sim::new(cfg);
-        let r = sim.run();
-        let settle = sim.settled_after(20, Duration::SECOND);
-        eprintln!(
-            "{} settled after {} ms",
-            node_sim_row(&format!("bbr latency step {mode:?}"), &sim, &r),
-            ms(settle)
-        );
-        NodeScenario::LatencyStep.check(&sim, &r).unwrap();
-        assert!(settle <= Duration::from_secs(3), "{r:?}");
-        assert!(r.lag_p99 < Duration::from_millis(1500), "{r:?}");
-    }
-}
-
-#[test]
-fn sim_bbr_capped_seed_spreads_load() {
-    for (seed, mode) in [(1, PushMode::Off), (1, PushMode::Hybrid)] {
-        let mut cfg = capped_seed_config(seed, mode);
-        cfg.controller = BBR;
-        let mut sim = Sim::new(cfg);
-        let r = sim.run();
-        eprintln!(
-            "{}",
-            node_sim_row(&format!("bbr capped {mode:?}"), &sim, &r)
-        );
-        NodeScenario::CappedSeed.check(&sim, &r).unwrap();
-        assert!(r.lag_p99 < Duration::from_secs(5), "{r:?}");
-    }
-}
-
-#[test]
-fn sim_bbr_seed_starved_recovers() {
-    let mut cfg = seed_starved_config(1, PushMode::Off);
-    cfg.controller = BBR;
-    let mut sim = Sim::new(cfg);
-    let r = sim.run();
-    eprintln!("{}", node_sim_row("bbr starved", &sim, &r));
-    NodeScenario::SeedStarved.check(&sim, &r).unwrap();
-    assert!(r.delivery > 0.6, "{r:?}");
-}
-
-#[test]
 fn sim_cross_traffic_delivers_both_streams() {
     // Two streams through the same runners and uplinks (3.5x the stream
-    // each), under each controller and with one of each.
-    for (a, b) in [(LEDBAT, LEDBAT), (BBR, BBR), (LEDBAT, BBR)] {
-        let mut sim = Sim::new(cross_traffic_config(
-            1,
-            PushMode::Hybrid,
-            a,
-            b,
-            CROSS_UPLINK_TENTHS,
-        ));
-        let r = sim.run();
-        let c = r.cross.as_ref().unwrap();
-        eprintln!(
-            "cross {a:?}/{b:?}: main {} / {} ms, second {c:?}",
-            ms(r.lag_p50),
-            ms(r.lag_p99)
-        );
-        assert!(complete(&r), "{r:?}");
-        assert_eq!(c.incomplete, 0, "{c:?}");
-        assert_eq!(count_invalid(&sim), 0);
-    }
-}
-
-#[test]
-fn sim_bbr_same_seed_same_trace() {
-    let mut cfg = Config::new(4, 6);
-    cfg.stream_secs = 4;
-    cfg.loss = 0.02;
-    cfg.degree = 3;
-    cfg.controller = BBR;
-    let a = Sim::new(cfg.clone()).run();
-    let b = Sim::new(cfg.clone()).run();
-    assert_eq!(a.trace, b.trace);
-    assert_eq!(a.frames, b.frames);
-    cfg.controller = LEDBAT;
-    let c = Sim::new(cfg).run();
-    assert_ne!(a.trace, c.trace);
+    // each).
+    let mut sim = Sim::new(cross_traffic_config(
+        1,
+        PushMode::Hybrid,
+        CROSS_UPLINK_TENTHS,
+    ));
+    let r = sim.run();
+    let c = r.cross.as_ref().unwrap();
+    eprintln!(
+        "cross: main {} / {} ms, second {c:?}",
+        ms(r.lag_p50),
+        ms(r.lag_p99)
+    );
+    assert!(complete(&r), "{r:?}");
+    assert_eq!(c.incomplete, 0, "{c:?}");
+    assert_eq!(count_invalid(&sim), 0);
 }
 
 // --- real-world paths -------------------------------------------------------
@@ -6657,11 +6298,6 @@ fn sim_job() {
             .into_iter()
             .find(|c| format!("{c:?}").eq_ignore_ascii_case(&name))
             .unwrap_or_else(|| panic!("SIM_CASE={name}: an AllocCase"));
-        let controller = match knob::<String>("SIM_CONTROLLER").as_deref() {
-            None | Some("ledbat") => LEDBAT,
-            Some("bbr") => BBR,
-            Some(c) => panic!("SIM_CONTROLLER={c}: ledbat or bbr"),
-        };
         let slots = match case.takes_slots() {
             true => knob("SIM_SLOTS").unwrap_or_else(|| {
                 panic!("SIM_CASE={case:?} takes SIM_SLOTS: the Admission row's seed_slots")
@@ -6671,7 +6307,7 @@ fn sim_job() {
         (
             format!("{sc:?}"),
             format!("{case:?}"),
-            alloc_config(sc, seed, controller, case, slots),
+            alloc_config(sc, seed, case, slots),
         )
     };
     let mut sim = Sim::new(cfg);
@@ -6705,7 +6341,6 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     let mut row = JsonRow::default();
     row.str("scenario", scenario)
         .str("case", case)
-        .str("controller", &format!("{:?}", cfg.controller))
         .int("seed", cfg.seed)
         .int("peers", cfg.peers as u64)
         .num("mbit", cfg.stream_rate as f64 * 8e-6)
@@ -7121,26 +6756,22 @@ fn sim_wan_residential_seed_relays() {
 fn sim_wan_lossy_mobile_viewers() {
     // Every other viewer on LTE: a frame that loses a packet holds back
     // every frame behind it on its link, and the stream still arrives whole.
-    for controller in [LEDBAT, BBR] {
-        let mut cfg = wan_mobile_config(1);
-        cfg.controller = controller;
-        let mut sim = Sim::new(cfg);
-        let r = sim.run();
-        eprintln!(
-            "{controller:?}: lag {} / {} / {} ms, seed share {:.2}, retransmits {}",
-            ms(r.lag_p50),
-            ms(r.lag_p99),
-            ms(r.lag_max),
-            r.seed_share,
-            sim.retransmits()
-        );
-        check_delivery(&r, 4 * MUNRO as u64);
-        assert!(sim.retransmits() > 0);
-        // A viewer with liars among its few neighbours keeps losing its
-        // requests to them for a timeout each.
-        assert!(r.lag_p99 < Duration::from_secs(10), "{r:?}");
-        assert!(r.lag_max < Duration::from_secs(10), "{r:?}");
-    }
+    let mut sim = Sim::new(wan_mobile_config(1));
+    let r = sim.run();
+    eprintln!(
+        "lag {} / {} / {} ms, seed share {:.2}, retransmits {}",
+        ms(r.lag_p50),
+        ms(r.lag_p99),
+        ms(r.lag_max),
+        r.seed_share,
+        sim.retransmits()
+    );
+    check_delivery(&r, 4 * MUNRO as u64);
+    assert!(sim.retransmits() > 0);
+    // A viewer with liars among its few neighbours keeps losing its
+    // requests to them for a timeout each.
+    assert!(r.lag_p99 < Duration::from_secs(10), "{r:?}");
+    assert!(r.lag_max < Duration::from_secs(10), "{r:?}");
 }
 
 #[test]
@@ -7179,7 +6810,6 @@ fn sim_wan_adaptive_seed_bars_liars_its_reporters_name() {
     let mut cfg = alloc_config(
         AbScenario::WanResidentialSeed,
         1,
-        LEDBAT,
         AllocCase::AdaptiveQos,
         64,
     );
