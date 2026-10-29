@@ -97,7 +97,7 @@ ends on short jobs; jobs expected alike keep their matrices' order.
   run goes on to dearer ones, in its region or another, only as the
   cheaper ones are full or out of capacity.
 - A run launches slots for its work, not its jobs. An instance's boot
-  (launch to its canary passed, a minute or more: this run's mean, else
+  (launch to its canary passed, most of a minute: this run's mean, else
   that of the last runs in costs.jsonl) is billed and runs nothing, so a
   slot is worth launching only for enough work. With B the boot and k
   --work-per-boot (2), the run wants as many new slots as the work left
@@ -124,15 +124,18 @@ ends on short jobs; jobs expected alike keep their matrices' order.
   dies costs little. `down` terminates them; `status` and `down` given a
   matrix act on every run that includes it. Both look in every region the
   run could have used (AWS, below).
-- Each new instance of test jobs first runs the canary: the first
-  matrix's first job that waits on none, with its [canary] overrides, also
-  run here. A different trace means the binaries don't reproduce across
-  hosts, and the run stops.
-- An instance logs its boot's steps when it's ready: listed running, SSH
-  answering, its worker started, its canary passed, each after its launch.
+- An instance boots on a thread of its own from its launch, waiting on
+  no sync: it polls for its address until it's running, then for SSH,
+  uploads the worker and the binaries, starts the worker, and a new
+  instance of test jobs then runs the canary (polled a second apart): the
+  first matrix's first job that waits on none, with its [canary]
+  overrides, also run here. A different trace means the binaries don't
+  reproduce across hosts, and the run stops. The instance logs its boot's
+  steps when it's ready: running with an address, SSH answering, its
+  worker started, ready, each after its launch.
 - Every 15 s the controller syncs each instance over SSH (worker.py
-  sync), and at once again each one with room once the jobs it finished
-  are taken off. A sync tops the instance's queue up to its slots plus a
+  sync), and at once when an instance's boot ends, and again at once each
+  one with room once the jobs it finished are taken off. A sync tops the instance's queue up to its slots plus a
   quarter, and with short jobs to 45 s of expected work per slot (three
   syncs' worth), but to no more work than the instance's share of what's
   left; it stores the rows that came back (fsync), and acks them on the
@@ -1340,7 +1343,7 @@ class Host:
     spec: Spec
     price: float
     launched: float
-    # booting -> canary -> ready, or adopting -> ready; lost at the end.
+    # booting -> ready, or adopting -> ready; lost at the end.
     state: str = "booting"
     ip: str | None = None
     boot: cf.Future | None = None
@@ -1350,8 +1353,8 @@ class Host:
     ended: float | None = None
     note: str | None = None  # why its worker waits, as it last said
     region: str = ""
-    # Its boot's steps: first listed running, SSH answering, the worker
-    # started, and ready (its canary passed).
+    # Its boot's steps: running with an address, SSH answering, the worker
+    # started, and ready (its canary passed, for a new one of test jobs).
     running_at: float | None = None
     ssh_at: float | None = None
     up_at: float | None = None
@@ -1456,6 +1459,10 @@ class Run:
         self.derived: dict[str, dict[str, str]] = {}  # job id -> what it took from the row
         self.hosts: list[Host] = []
         self.pool = cf.ThreadPoolExecutor(max_workers=16)
+        # The instances' boots, a thread each from launch to ready, which
+        # wake the loop when they end.
+        self.booter = cf.ThreadPoolExecutor(max_workers=64)
+        self.wake = threading.Event()
         self.regions: dict[str, Region] = {}
         self.pools: list[Pool] = []  # every region's, in one ranking
         self.priced = 0.0
@@ -1703,12 +1710,6 @@ class Run:
     # -- dispatch
 
     def take(self, host: Host) -> list[Item]:
-        if host.state == "canary":
-            if any(i.copy == "canary" for i in host.assigned.values()):
-                return []
-            item = self.canary_item
-            host.assigned[item.wid] = item
-            return [item]
         if host.state != "ready":
             return []
         others = sum(1 for h in self.hosts if h is not host and h.state != "lost")
@@ -1822,11 +1823,10 @@ class Run:
                 item = self.items.get(wid)
                 if item is None or wid in self.done:
                     continue
-            if item.copy != "canary":
-                host.busy_s += res.get("wall_s") or 0
             if item.copy == "canary":
-                self.check_canary(host, res)
-            elif res.get("row") is not None:
+                continue  # the boot's, whose ack didn't arrive
+            host.busy_s += res.get("wall_s") or 0
+            if res.get("row") is not None:
                 self.store(host, item, res)
             else:
                 self.fail(host, item, res)
@@ -1896,7 +1896,7 @@ class Run:
     def check_canary(self, host: Host, res: dict) -> None:
         trace = (res.get("row") or {}).get("trace")
         if trace == self.canary_trace:
-            host.state, host.ready_at = "ready", time.time()
+            host.state = "ready"
             log(f"{host.id} ({host.type} in {host.zone}) passed the canary; {host.slots} slots; "
                 f"{host.steps()}")
             return
@@ -1921,12 +1921,42 @@ class Run:
         if p.returncode:
             raise RuntimeError(f"starting the worker: {p.stderr.strip()}")
 
-    def bootstrap(self, host: Host) -> None:
+    def start_boot(self, host: Host) -> None:
+        host.boot = self.booter.submit(self.bootstrap, host)
+        host.boot.add_done_callback(lambda _: self.wake.set())
+
+    def booting(self, host: Host) -> None:
+        if self.stopping.is_set():
+            raise RuntimeError("stopping")
+        if host.state == "lost":
+            raise RuntimeError("lost")
+
+    def bootstrap(self, host: Host) -> dict | None:
+        """An instance's boot, on a thread of its own from its launch: its
+        address once it's running, SSH, the worker and the binaries, the
+        worker started, and for a new instance of test jobs the canary, whose
+        result it returns (check_canary). None of it waits for a tick."""
         start = time.time()
+        while host.ip is None:
+            self.booting(host)
+            try:
+                got = aws(host.region, "ec2", "describe-instances", "--instance-ids", host.id)
+                inst = got["Reservations"][0]["Instances"][0]
+                st = inst["State"]["Name"]
+                if st not in ("pending", "running"):
+                    raise RuntimeError(f"it's {st}")
+                if st == "running" and inst.get("PublicIpAddress"):
+                    host.ip, host.running_at = inst["PublicIpAddress"], time.time()
+                    break
+            except AwsError as e:
+                if e.code != "InvalidInstanceID.NotFound":  # not listed yet
+                    raise
+            if time.time() - start > 600:
+                raise RuntimeError("not running after 10 minutes")
+            time.sleep(2)
         denied = None
         while True:
-            if self.stopping.is_set():
-                raise RuntimeError("stopping")
+            self.booting(host)
             try:
                 # The boot leaves farm/bin last, or a failed setup's log.
                 p = self.ssh.run(
@@ -1952,16 +1982,44 @@ class Run:
                 denied = None
             if time.time() - start > 600:
                 raise RuntimeError(f"no SSH after 10 minutes: {why}")
-            time.sleep(5)
+            time.sleep(2)
         host.ssh_at = time.time()
         self.ssh.put(host, [HERE / "worker.py"], "farm/")
         self.ssh.put(host, [BIN / b for b in self.bins], "farm/bin/")
         self.start_worker(host)
         host.up_at = time.time()
+        res = None
+        if not host.adopted and self.testbed is None:
+            res = self.run_canary(host)
+        host.ready_at = time.time()
+        return res
+
+    def run_canary(self, host: Host) -> dict:
+        """The canary's result from the instance, polled a second apart (a
+        sync that fails is tried again), and acked."""
+        wid = self.canary_item.wid
+        jobs = [self.canary_item]
+        deadline = time.time() + self.args.job_timeout * 60 + 120
+        while time.time() < deadline:
+            self.booting(host)
+            try:
+                reply = self.sync(host, jobs, [])
+            except Exception:
+                time.sleep(1)
+                continue
+            jobs = []
+            res = next((r for r in reply["done"] if r["id"] == wid), None)
+            if res is not None:
+                with contextlib.suppress(Exception):
+                    self.sync(host, [], [wid])
+                return res
+            time.sleep(1)
+        raise RuntimeError("the canary didn't finish")
 
     def refresh(self, now: float) -> None:
-        """Each live host's state, from its region; a region that can't be
-        listed this time leaves its hosts as they were."""
+        """Each live host's state, from its region, for the ones that are
+        gone (the boot finds the address); a region that can't be listed
+        this time leaves its hosts as they were."""
         regions = sorted({h.region for h in self.hosts if h.state != "lost"})
         by_id, unlisted = {}, set()
         for r, got in in_regions(lambda r: farm_instances(r, self.name), regions).items():
@@ -1980,26 +2038,26 @@ class Run:
             if st not in ("pending", "running"):
                 reason = (inst or {}).get("StateReason", {}).get("Message", st)
                 self.lose(h, reason)
+
+    def boots(self) -> None:
+        """The instances whose boot has ended: ready (a new one of test jobs
+        once its canary's trace is the one here), or lost."""
+        for h in self.hosts:
+            if h.state not in ("booting", "adopting") or h.boot is None or not h.boot.done():
                 continue
-            h.ip = inst.get("PublicIpAddress")
-            if st == "running" and h.running_at is None:
-                h.running_at = now
-            if h.boot is None and st == "running" and h.ip:
-                h.boot = self.pool.submit(self.bootstrap, h)
-            elif h.boot is not None and h.boot.done() and h.state in ("booting", "adopting"):
-                try:
-                    h.boot.result()
-                    if h.state == "booting" and self.testbed is None:
-                        h.state = "canary"
-                    else:
-                        h.state, h.ready_at = "ready", time.time()
-                        if self.testbed is not None:
-                            log(f"{h.id} ({h.type} in {h.zone}) is ready; {h.steps()}")
-                except Exception as e:
-                    self.lose(h, f"bootstrap failed: {e}")
-                    self.boot_failures += 1
-                    if self.boot_failures >= 3:
-                        raise SystemExit("instances keep failing to bootstrap; stopping")
+            try:
+                res = h.boot.result()
+            except Exception as e:
+                self.lose(h, f"bootstrap failed: {e}")
+                self.boot_failures += 1
+                if self.boot_failures >= 3:
+                    raise SystemExit("instances keep failing to bootstrap; stopping")
+                continue
+            if res is not None:
+                self.check_canary(h, res)
+                continue
+            h.state = "ready"
+            log(f"{h.id} ({h.type} in {h.zone}) is ready; {h.steps()}")
 
     def read_budgets(self, now: float) -> None:
         """The budgets of the regions whose reading is due: each region's
@@ -2269,6 +2327,7 @@ class Run:
                     self.hosts.append(
                         Host(hid, pool.type, pool.zone, pool.spec, pool.price, now, region=r.name)
                     )
+                    self.start_boot(self.hosts[-1])
                     log(f"launched {hid}: {pool.type} in {pool.zone}, {pool.spec.slots} slots, "
                         f"${pool.price:.3f}/h")
             except AwsError as e:
@@ -2403,6 +2462,7 @@ class Run:
                     state="adopting", region=r, adopted=True,
                 )
                 self.hosts.append(h)
+                self.start_boot(h)
                 if self.testbed is not None and self.pinned is None:
                     self.pinned = h.type
                 log(f"adopting {h.id} ({h.type} in {h.zone})")
@@ -2506,7 +2566,8 @@ class Run:
             if now - self.priced > PRICE_REFRESH:
                 self.find_pools()
             self.refresh(now)
-        ready = [h for h in self.hosts if h.state in ("canary", "ready")]
+            self.boots()
+        ready = [h for h in self.hosts if h.state == "ready"]
         batches = {h.id: (self.take(h), list(h.acks)) for h in ready}
         futs = {h.id: self.pool.submit(self.exchange, h, *batches[h.id]) for h in ready}
         for h in ready:
@@ -2593,13 +2654,14 @@ class Run:
             signal.signal(sig, interrupt)
         try:
             while not self.finished():
+                self.wake.clear()
                 now = time.time()
                 self.tick(now)
                 if now - last_progress >= 60 or self.finished():
                     self.progress(now)
                     last_progress = now
                 if not self.finished():
-                    time.sleep(TICK if not self.local else 2)
+                    self.wake.wait(TICK if not self.local else 2)
             # Ack what's left, so a kept instance's worker can go idle.
             for h in self.hosts:
                 if h.state != "lost" and h.acks:
@@ -2629,6 +2691,7 @@ class Run:
                     log("keeping " + ", ".join(f"{n} in {r}" for r, n in sorted(kept.items()))
                         + f"; `farm.py down {self.name}` terminates them")
             self.pool.shutdown(wait=False, cancel_futures=True)
+            self.booter.shutdown(wait=False, cancel_futures=True)
             self.progress(time.time())
             if not self.local and self.hosts:
                 used = collections.Counter(f"{h.type} in {h.zone}" for h in self.hosts)
