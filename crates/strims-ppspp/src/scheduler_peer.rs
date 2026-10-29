@@ -1929,8 +1929,13 @@ impl PeerSwarmScheduler {
             return Ok(());
         }
         s.check_stream(stream)?;
-        if let Some(st) = s.streams.get_mut(usize::from(stream)) {
-            s.subscribers_changed |= st.remove_subscriber(peer);
+        let removed = s
+            .streams
+            .get_mut(usize::from(stream))
+            .is_some_and(|st| st.remove_subscriber(peer));
+        s.subscribers_changed |= removed;
+        if removed {
+            self.holder_released(peer, stream);
         }
         Ok(())
     }

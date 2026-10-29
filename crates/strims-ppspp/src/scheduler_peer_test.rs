@@ -1792,6 +1792,33 @@ fn a_holder_whose_link_stands_a_queue_spills_its_streams() {
 }
 
 #[test]
+fn a_stream_its_holder_cancels_goes_to_a_near_satellite_until_it_asks_again() {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    let ms = Duration::from_millis;
+    // One copy, held by peers[1] (20 ms).
+    for s in 0..4 {
+        assert!(ask(&mut f, &mut q, peers[1], s, now()));
+    }
+    let one_copy = (600_000, 1.0);
+    let mut t = alloc_check(&mut f, &mut q, now(), &[peers[1]], ms(5), one_copy);
+    assert_eq!(holders(&f), vec![peers[1]]);
+    // It cancels stream 3 and keeps its copy: no one else takes stream 3
+    // from the seed, so a neighbour no farther than the holder may hold it
+    // as a satellite, and one farther may not.
+    f.sched.handle_stream_cancel(peers[1], 3).unwrap();
+    assert!(!ask(&mut f, &mut q, peers[5], 3, t));
+    assert!(ask(&mut f, &mut q, peers[0], 3, t));
+    t = alloc_check(&mut f, &mut q, t, &[peers[1]], ms(5), one_copy);
+    assert!(subscribed(&f, peers[0], 3));
+    assert_eq!(holders(&f), vec![peers[0], peers[1]]);
+    // The holder asks for it again and takes it back.
+    assert!(ask(&mut f, &mut q, peers[1], 3, t));
+    alloc_check(&mut f, &mut q, t, &[peers[1]], ms(5), one_copy);
+    assert!(subscribed(&f, peers[1], 3));
+    assert!(!subscribed(&f, peers[0], 3));
+}
+
+#[test]
 fn a_nearer_neighbour_takes_a_copy_once_it_subscribed() {
     let (mut f, mut q, peers) = adaptive_seed_with_rtts();
     let ms = Duration::from_millis;

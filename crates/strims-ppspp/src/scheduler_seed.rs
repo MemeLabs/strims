@@ -132,6 +132,15 @@
 //!   the seed's own; a holder that delays its echoes spills only its own
 //!   streams. Where the links deliver, nothing spills and the copies are
 //!   whole.
+//! - **Released streams.** A holder that cancels a stream of its copy
+//!   (it pruned us while our pushes were late) keeps its copy, and backs
+//!   off the stream for longer than our queue takes to drain: the stream
+//!   would go unpushed meanwhile, and everyone else would be declined. So
+//!   while no one else takes the stream from us, the next neighbour to ask
+//!   that is no farther than the farthest holder (one that ranks among
+//!   them) holds it as a satellite, until the holder asks for it again and
+//!   takes it back. A holder that joins in the released one's place takes
+//!   none of its releases over.
 //! - **Silent holders.** A holder announces what it is pushed. Each check
 //!   samples the first push written to each holder since the last; at the
 //!   check after next, at least [`ANNOUNCE_TIMEOUT`] later, the holder's
@@ -201,10 +210,10 @@
 //!
 //! Per channel a fixed record, plus two tallies per stream of the
 //! subjects its reports named, and per holder and stream a spilled
-//! stream's satellite. A report costs O(entries × channels), and a
-//! reporter's entries past [`report_entry_limit`] per check are invalid. A
-//! check costs O(channels × streams × log channels) plus the subscribers;
-//! an admission O(channels).
+//! stream's satellite or a release. A report costs O(entries × channels),
+//! and a reporter's entries past [`report_entry_limit`] per check are
+//! invalid. A check costs O(channels × streams × log channels) plus the
+//! subscribers; an admission O(channels).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -719,6 +728,10 @@ pub(crate) struct Allocator {
     /// and stream, the satellite that took it, once one did. Bound: one per
     /// holder and stream.
     spilled: BTreeMap<(PeerKey, Stream), Option<PeerKey>>,
+    /// Streams of their copies that holders cancelled and no one else
+    /// takes from us, until a satellite takes one (it is then spilled) or
+    /// the holder asks for it again. Bound: one per holder and stream.
+    released: BTreeSet<(PeerKey, Stream)>,
 }
 
 /// A STREAM_REQUEST held while the first wave ramps.
@@ -752,6 +765,7 @@ impl Allocator {
             next_step: Time::NIL,
             pending: Vec::new(),
             spilled: BTreeMap::new(),
+            released: BTreeSet::new(),
         }
     }
 
@@ -1107,6 +1121,7 @@ impl PeerSwarmScheduler {
                     .find(|&(&(h, s), to)| s == stream && h != peer && to.is_none())
                     .map(|(&(h, _), _)| h)
             })
+            .or_else(|| self.released_from(peer, stream, now))
         else {
             return false;
         };
@@ -1143,10 +1158,75 @@ impl PeerSwarmScheduler {
             self.s.tap.emit(key, Some(peer), || TapKind::HolderJoined);
         }
         if let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) {
+            a.released.remove(&(from, stream));
             a.spilled.insert((from, stream), Some(peer));
             a.stats.accepted = a.stats.accepted.saturating_add(1);
         }
         true
+    }
+
+    /// `peer` cancelled its subscription to `stream`. A holder's own
+    /// cancel of a stream of its copy releases the stream: while no one
+    /// else takes it from us, the next near neighbour to ask holds it as a
+    /// satellite, so the copy stays whole while the holder backs off it.
+    pub(crate) fn holder_released(&mut self, peer: PeerKey, stream: Stream) {
+        if !self.adaptive_seed() {
+            return;
+        }
+        let primary = self
+            .channels
+            .get(&peer)
+            .and_then(|c| c.push.as_ref())
+            .is_some_and(|pc| pc.holder.primary());
+        if !primary {
+            return;
+        }
+        let held = self
+            .s
+            .streams
+            .iter()
+            .filter(|st| st.subscribers.iter().any(|x| x.channel == peer))
+            .count();
+        let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {
+            return;
+        };
+        let out = a.spilled.keys().filter(|&&(h, _)| h == peer).count()
+            + a.released.iter().filter(|&&(h, _)| h == peer).count();
+        if !a.unconstrained && held + out < a.streams {
+            a.released.insert((peer, stream));
+        }
+    }
+
+    /// The holder whose released `stream` `peer` may take: the stream has
+    /// no subscriber, and `peer` is no farther than the farthest holder.
+    fn released_from(&self, peer: PeerKey, stream: Stream, now: Time) -> Option<PeerKey> {
+        let a = self.s.push.as_ref().and_then(|p| p.alloc.as_ref())?;
+        let from = a
+            .released
+            .iter()
+            .find(|&&(h, s)| s == stream && h != peer)
+            .map(|&(h, _)| h)?;
+        let uncovered = self
+            .s
+            .streams
+            .get(usize::from(stream))
+            .is_some_and(|st| st.subscribers.is_empty());
+        let rtt = |p: &PeerKey| {
+            self.channels
+                .get(p)
+                .and_then(|c| c.push.as_ref())
+                .and_then(|pc| pc.holder.min_rtt(now))
+        };
+        let farthest = self
+            .channels
+            .iter()
+            .filter(|(_, c)| c.push.as_ref().is_some_and(|pc| pc.holder.primary()))
+            .filter_map(|(p, _)| rtt(p))
+            .max();
+        let near = rtt(&peer)
+            .zip(farthest)
+            .is_some_and(|(r, f)| r <= f + NEAR_MARGIN.max(f / 10));
+        (uncovered && near).then_some(from)
     }
 
     /// An adaptive seed's admission of `peer`'s new request for `stream`.
@@ -1816,6 +1896,10 @@ impl PeerSwarmScheduler {
         for k in spill {
             a.spilled.entry(k).or_insert(None);
         }
+        // A release ends when its holder goes or asks for the stream again.
+        a.released.retain(|&(h, s)| {
+            primaries.contains(&h) && !held.get(&h).is_some_and(|v| v.contains(&s))
+        });
         // What the satellites of a holder that left keep goes to a capped
         // holder whose copy lacks it.
         let sub = |p: PeerKey, s: Stream| held.get(&p).is_some_and(|v| v.contains(&s));
