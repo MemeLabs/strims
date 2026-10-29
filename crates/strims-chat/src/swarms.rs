@@ -120,7 +120,7 @@ mod tests {
         );
         assert_eq!(
             o.integrity.merkle_hash_tree_function,
-            MerkleHashTreeFunction::BLAKE2B256
+            MerkleHashTreeFunction::BLAKE3
         );
         assert_eq!(o.stream_count, 1);
         assert_eq!(o.delivery_mode, DeliveryMode::BEST_EFFORT);

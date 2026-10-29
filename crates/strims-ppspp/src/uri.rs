@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Swarm magnet URIs,
-//! `magnet:?xt=urn:ppspp:<id>&x.im=2&x.hf=4&x.sa=2&x.cs=1024&x.ps=64&x.sc=1`.
+//! `magnet:?xt=urn:ppspp:<id>&x.im=2&x.hf=7&x.sa=2&x.cs=1024&x.ps=64&x.sc=1`.
 //!
 //! URIs pass between nodes, and caches compare them as strings, so the
 //! string form and what [`Uri::parse`] accepts must stay as the golden

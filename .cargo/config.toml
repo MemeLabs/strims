@@ -1,2 +1,5 @@
 [target.wasm32-unknown-unknown]
 runner = "wasm-bindgen-test-runner"
+# Every browser the worker runs in has simd128, and BLAKE3's SIMD backend
+# needs it anyway; sha2 picks its SIMD backend under it.
+rustflags = ["-C", "target-feature=+simd128"]

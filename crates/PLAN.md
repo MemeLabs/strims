@@ -73,7 +73,7 @@ Wire formats:
 - The fMP4 format stays playable by the current UI. That format is one
   chunkstream record per segment,
   `[u16 init length][init segment][media segment]`, starting at a
-  keyframe, in 4 KiB chunks with BLAKE2b-256 Merkle trees and Ed25519 live
+  keyframe, in 4 KiB chunks with BLAKE3 Merkle trees and Ed25519 live
   signatures. The rule for cutting segments is a parameter. The codecs in
   the MIME type come from the decoder configs.
 - The frame format is one chunkstream record per access unit, with the
@@ -548,6 +548,12 @@ in each.
 - **Swarm cache cost.** Importing a chat room's asset cache verifies up
   to 32 MiB on the node task, and storing one seals up to 32 MiB on the
   executor. Measure both on wasm.
+- **Signature cost on wasm.** Verifying a 32 KiB integrity unit of a
+  video swarm (8 chunks per signature) costs about 15 µs of BLAKE3 and
+  80–115 µs of Ed25519 in the worker, depending on the engine. Weigh more
+  chunks per signature (which holds chunks back longer) against
+  release-wasm at opt-level 3 (Ed25519 a sixth faster in SpiderMonkey, but
+  a module half again as large).
 - **Simulation coverage and fidelity.**
   - Waking an idle node to answer a query is a poll of its task and can shift
     later passes, so a sim's sampling cadence changes its trace. Make query

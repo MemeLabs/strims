@@ -190,7 +190,7 @@ pub struct SwarmOptions {
 
 impl SwarmOptions {
     /// The defaults: 1 KiB chunks, 64 per signature, one
-    /// stream, a 64 Ki chunk (64 MiB) window, Merkle/BLAKE2b-256/ed25519,
+    /// stream, a 64 Ki chunk (64 MiB) window, Merkle/BLAKE3/ed25519,
     /// the peer scheduler, low latency delivery, a circular buffer, and
     /// hybrid push with the adaptive seed.
     pub fn default_options() -> SwarmOptions {
@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(o.integrity.protection_method, ProtectionMethod::SIGN_ALL);
         assert_eq!(
             o.integrity.merkle_hash_tree_function,
-            MerkleHashTreeFunction::BLAKE2B256
+            MerkleHashTreeFunction::BLAKE3
         );
     }
 }

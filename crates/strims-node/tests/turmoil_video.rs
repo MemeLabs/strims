@@ -114,7 +114,7 @@ impl Channel {
     /// The URI of the channel's ingest swarm.
     fn uri(&self) -> String {
         format!(
-            "magnet:?xt=urn:ppspp:{}&x.im=2&x.hf=4&x.sa=2&x.cs=4096&x.ps=8&x.sc=16",
+            "magnet:?xt=urn:ppspp:{}&x.im=2&x.hf=7&x.sa=2&x.cs=4096&x.ps=8&x.sc=16",
             SwarmId::new(&self.key)
         )
     }

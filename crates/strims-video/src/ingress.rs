@@ -170,7 +170,7 @@ const CHANNEL_MOVED: &str = "the channel moved to another network";
 
 /// The options of an ingest session's swarm; its URI carries every one
 /// but the window. 4 KiB chunks, 8 per signature (32 KiB integrity units),
-/// 16 streams, a 4 Ki-chunk (16 MiB) window, Merkle/BLAKE2b-256/Ed25519.
+/// 16 streams, a 4 Ki-chunk (16 MiB) window, Merkle/BLAKE3/Ed25519.
 /// Below 4 KiB, HAVEs, requests and hashes take a large share of the wire,
 /// and a larger integrity unit holds a chunk back until the unit is signed.
 pub fn ingress_options() -> SwarmOptions {
@@ -181,7 +181,7 @@ pub fn ingress_options() -> SwarmOptions {
         live_window: 4 * 1024,
         integrity: VerifierOptions {
             protection_method: ProtectionMethod::MERKLE_TREE,
-            merkle_hash_tree_function: MerkleHashTreeFunction::BLAKE2B256,
+            merkle_hash_tree_function: MerkleHashTreeFunction::BLAKE3,
             live_signature_algorithm: LiveSignatureAlgorithm::ED25519,
         },
         ..SwarmOptions::default()

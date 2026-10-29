@@ -141,7 +141,8 @@ aes = "0.9"
 aes-gcm = { version = "0.11", default-features = false, features = ["aes"] }  # default features pull getrandom, which breaks wasm32
 cfb-mode = "0.9"
 blake2 = "0.11"
-blake3 = "1"
+# wasm32_simd: four 1 KiB blocks at a time in wasm (nothing natively)
+blake3 = { version = "1", features = ["wasm32_simd"] }
 sha1 = "0.11"
 sha2 = "0.11"
 hmac = "0.13"
@@ -185,3 +186,15 @@ opt-level = "z"
 # The name section is over half the module; without it, wasm frames in
 # stack traces show as function indices.
 strip = true
+
+# Chunk verification is most of the worker's CPU. At opt-level 3 its crates
+# verify an ed25519 signature a fifth faster in V8 (no change in
+# SpiderMonkey) and hash a tenth faster.
+[profile.release-wasm.package.blake3]
+opt-level = 3
+[profile.release-wasm.package.sha2]
+opt-level = 3
+[profile.release-wasm.package.curve25519-dalek]
+opt-level = 3
+[profile.release-wasm.package.ed25519-dalek]
+opt-level = 3

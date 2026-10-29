@@ -97,7 +97,7 @@ fn swarm_id(c: &VideoChannel) -> SwarmId {
 /// The URI of a channel's swarm.
 fn channel_uri(c: &VideoChannel) -> String {
     format!(
-        "magnet:?xt=urn:ppspp:{}&x.im=2&x.hf=4&x.sa=2&x.cs=4096&x.ps=8&x.sc=16",
+        "magnet:?xt=urn:ppspp:{}&x.im=2&x.hf=7&x.sa=2&x.cs=4096&x.ps=8&x.sc=16",
         swarm_id(c)
     )
 }

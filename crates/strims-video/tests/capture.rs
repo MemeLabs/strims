@@ -250,7 +250,7 @@ fn a_capture_is_read_by_another_nodes_stream() {
         assert_eq!(TransferId::new(&swarm, b""), tid);
         assert!(
             c[0].swarm_uri
-                .ends_with("&x.im=2&x.hf=4&x.sa=2&x.cs=4096&x.ps=8&x.sc=16")
+                .ends_with("&x.im=2&x.hf=7&x.sa=2&x.cs=4096&x.ps=8&x.sc=16")
         );
         assert!(a.transfers.is_published(tid, a.net(&net.public)));
         assert_eq!(a.host.swarms_of(&swarm), (1, 0));

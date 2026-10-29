@@ -720,7 +720,7 @@ mod tests {
         assert_eq!(o.chunks_per_signature, Some(64));
         assert_eq!(o.stream_count, Some(1));
         assert_eq!(o.content_integrity_protection_method, Some(2));
-        assert_eq!(o.merkle_hash_tree_function, Some(4));
+        assert_eq!(o.merkle_hash_tree_function, Some(7));
         assert_eq!(o.live_signature_algorithm, Some(2));
         assert_eq!(o.epoch.map(|e| e.timestamp), Some(now()));
     }

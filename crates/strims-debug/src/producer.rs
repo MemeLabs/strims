@@ -36,7 +36,7 @@ pub fn mock_stream_options() -> SwarmOptions {
         live_window: 4 * 1024,
         integrity: VerifierOptions {
             protection_method: ProtectionMethod::MERKLE_TREE,
-            merkle_hash_tree_function: MerkleHashTreeFunction::BLAKE2B256,
+            merkle_hash_tree_function: MerkleHashTreeFunction::BLAKE3,
             live_signature_algorithm: LiveSignatureAlgorithm::ED25519,
         },
         ..SwarmOptions::default()
@@ -391,7 +391,7 @@ mod tests {
         let o = mock_stream_options();
         let uri = Uri::new(SwarmId::new(&[0; 32]), o.uri_options()).to_string();
         assert!(
-            uri.ends_with("&x.im=2&x.hf=4&x.sa=2&x.cs=4096&x.ps=8&x.sc=16"),
+            uri.ends_with("&x.im=2&x.hf=7&x.sa=2&x.cs=4096&x.ps=8&x.sc=16"),
             "{uri}"
         );
         assert_eq!(o.live_window * o.chunk_size, crate::MOCK_WINDOW_BYTES);

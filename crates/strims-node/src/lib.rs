@@ -103,7 +103,7 @@
 //!   [`app::AppConfig`]'s default [`app::PsiMode::Inline`]. A
 //!   [`psi::ThreadPsi`] answers in wall time, so a simulation never uses
 //!   [`app::PsiMode::Thread`].
-//! - **Cost.** Debug builds spend most of a run in ed25519, BLAKE2b and
+//! - **Cost.** Debug builds spend most of a run in ed25519, hashing and
 //!   AES; run large suites with `--release` or `opt-level = 1`.
 
 pub mod app;

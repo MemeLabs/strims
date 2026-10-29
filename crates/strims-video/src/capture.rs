@@ -6,7 +6,7 @@
 //!
 //! [`VideoControl::open_capture`] creates a swarm under a fresh ed25519
 //! key ([`capture_options`]: 4 KiB chunks, 8 per signature, 16 streams, an
-//! 8 Ki-chunk window, Merkle/BLAKE2b-256/Ed25519), adds its transfer under
+//! 8 Ki-chunk window, Merkle/BLAKE3/Ed25519), adds its transfer under
 //! the empty salt and publishes it on the capture's networks the node has
 //! joined, and on the rest as it joins them. It serves the capture's
 //! snippet, signed with the capture key, and keeps a media listing of the
@@ -80,7 +80,7 @@ pub fn capture_options() -> SwarmOptions {
         live_window: 8 * 1024,
         integrity: VerifierOptions {
             protection_method: ProtectionMethod::MERKLE_TREE,
-            merkle_hash_tree_function: MerkleHashTreeFunction::BLAKE2B256,
+            merkle_hash_tree_function: MerkleHashTreeFunction::BLAKE3,
             live_signature_algorithm: LiveSignatureAlgorithm::ED25519,
         },
         ..SwarmOptions::default()
@@ -639,7 +639,7 @@ mod tests {
         let o = capture_options();
         let uri = Uri::new(SwarmId::new(&[0; 32]), o.uri_options()).to_string();
         assert!(
-            uri.ends_with("&x.im=2&x.hf=4&x.sa=2&x.cs=4096&x.ps=8&x.sc=16"),
+            uri.ends_with("&x.im=2&x.hf=7&x.sa=2&x.cs=4096&x.ps=8&x.sc=16"),
             "{uri}"
         );
         assert_eq!(o.live_window, 8 * 1024);
