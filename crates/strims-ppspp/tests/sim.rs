@@ -70,6 +70,10 @@
 //! comparison table (`cargo test --release -p strims-ppspp --test sim
 //! -- --ignored --nocapture push_pull_matrix`).
 //!
+//! With [`Config::early`] the seed signs munros early, so they end in
+//! data-less chunks: readers expect zeros there, and the harness counts
+//! every message on the wire that names one ([`Sim::dataless_messages`]).
+//!
 //! Cross traffic is a second swarm in the same runners, seeded by a peer,
 //! viewed by every other node, sharing every uplink.
 //!
@@ -310,6 +314,18 @@ impl Prefix {
     }
 }
 
+/// The chunks with data in munro `k` of a stream signed early by
+/// `early` ([`Config::early`]).
+fn early_chunks(early: &[u64], k: u64) -> u64 {
+    early[(k % early.len() as u64) as usize]
+}
+
+/// Whether chunk `c` of a stream of `per` chunks per munro, signed early by
+/// `early`, is data-less.
+fn chunk_dataless(early: &[u64], per: u64, c: u64) -> bool {
+    !early.is_empty() && c % per >= early_chunks(early, c / per)
+}
+
 /// The most nodes a run can have: their ids take at most two bytes.
 const MAX_NODES: usize = 1 << 16;
 
@@ -481,6 +497,10 @@ struct Config {
     chunk_size: usize,
     /// Chunks per munro (one signature, one write).
     munro_chunks: usize,
+    /// Munros signed early: the seed writes munro `k`'s first
+    /// `early[k % len]` chunks and flushes, so the rest are data-less.
+    /// Empty: whole munros.
+    early: Vec<u64>,
     /// The largest frame body a link carries.
     mtu: usize,
     /// Uplinks pace frames with a rate limiter in front of a link that has
@@ -613,6 +633,7 @@ impl Config {
             stream_rate: 256 * 1024,
             chunk_size: CHUNK,
             munro_chunks: MUNRO / CHUNK,
+            early: vec![],
             mtu: MTU,
             paced_uplinks: false,
             stream_secs: 12,
@@ -804,6 +825,8 @@ struct Sim {
     grabs: BTreeMap<usize, Grabs>,
     /// STREAM_OPENs `WithholdPush` adversaries sent.
     withheld_opens: u64,
+    /// Messages that named a data-less chunk ([`Sim::dataless_messages`]).
+    dataless_on_wire: u64,
     /// Copies of each chunk the seed sent, for the debugging aids.
     seed_sent: BTreeMap<u64, u32>,
     /// When the incident happened, and to whom.
@@ -1562,6 +1585,7 @@ impl Sim {
             requested: BTreeMap::new(),
             grabs: BTreeMap::new(),
             withheld_opens: 0,
+            dataless_on_wire: 0,
             seed_sent: BTreeMap::new(),
             incident: None,
             steps_done: 0,
@@ -2046,11 +2070,11 @@ impl Sim {
         }
     }
 
-    /// Chunks published a second, padding included.
+    /// Chunks sent a second, padding included.
     fn chunk_rate(&self) -> f64 {
         match &self.media {
             Some(m) => {
-                m.plan.stream_bytes as f64
+                m.plan.sent_bytes as f64
                     / self.cfg.chunk_size as f64
                     / self.cfg.stream_secs.max(1) as f64
             }
@@ -2097,11 +2121,21 @@ impl Sim {
         let now = self.now;
         let munro = self.munro;
         let off = self.written * munro;
-        let mut data = vec![0; munro];
+        let len = match self.cfg.early.is_empty() {
+            true => munro,
+            false => {
+                early_chunks(&self.cfg.early, self.written as u64) as usize * self.cfg.chunk_size
+            }
+        };
+        let mut data = vec![0; len];
         Content::Main.fill(off as u64, &mut data);
         let seed = &mut self.nodes[0];
         let mut w = seed.writer.take().unwrap();
         seed.runner.write(seed.swarm, &mut w, now, &data).unwrap();
+        if !self.cfg.early.is_empty() {
+            let next = seed.runner.flush_writer(seed.swarm, &mut w, now).unwrap();
+            assert_eq!(next, (off + munro) as u64);
+        }
         seed.writer = Some(w);
         if let Some(c) = self.cfg.cross {
             let mut data = vec![0; munro];
@@ -2164,6 +2198,9 @@ impl Sim {
                     }
                 }
             }
+        }
+        if self.signs_dataless() && !matches!(self.nodes[from].role, Role::Adversary(_)) {
+            self.dataless_on_wire += self.dataless_messages(frame);
         }
         if self.nodes[to].role == Role::Greedy(Greed::Grabber) {
             // Asks for what it hears of on the way back.
@@ -2375,7 +2412,7 @@ impl Sim {
         let viewer_up: u64 = honest.iter().map(|v| v.up_bw).sum();
         let mut j = JsonRow::default();
         let rate = match &self.media {
-            Some(m) => m.plan.stream_bytes / self.cfg.stream_secs.max(1),
+            Some(m) => m.plan.sent_bytes / self.cfg.stream_secs.max(1),
             None => self.cfg.stream_rate,
         };
         j.int("rate", rate)
@@ -2400,25 +2437,24 @@ impl Sim {
             .field("copies", format_args!("{}", seed(2)))
             .field("sent", format_args!("{}", seed_delta(3)))
             .field("pushed", format_args!("{}", seed_delta(4)));
-        // A media run's chunks signed each second: those holding media
-        // (`written`, what `frames` counts) and all of them (`chunks`).
+        // A media run's chunks sent each second, by their signing: those
+        // holding media (`written`, what `frames` counts), as its other
+        // chunks are data-less.
         if let Some(m) = &self.media {
-            let (mut written, mut chunks) = (vec![0i64; n], vec![0i64; n]);
+            let mut written = vec![0i64; n];
             for (c, &t) in m.signed.iter().enumerate() {
                 let Some(k) = (t >= start).then(|| ((t - start).as_millis() / 1000) as usize)
                 else {
                     continue;
                 };
-                if let (Some(w), Some(a)) = (written.get_mut(k), chunks.get_mut(k)) {
-                    *a += 1;
+                if let Some(w) = written.get_mut(k) {
                     *w += i64::from(!self.publish_times[c].is_nil());
                 }
             }
             j.field(
                 "written",
                 format_args!("{}", ints(&mut written.into_iter())),
-            )
-            .field("chunks", format_args!("{}", ints(&mut chunks.into_iter())));
+            );
         }
         Some(j.finish())
     }
@@ -2883,6 +2919,60 @@ impl Sim {
         }
     }
 
+    /// Whether the main stream has data-less chunks: munros signed early
+    /// ([`Config::early`]), or a media run's flushes past a chunk.
+    fn signs_dataless(&self) -> bool {
+        !self.cfg.early.is_empty()
+            || self
+                .media
+                .as_ref()
+                .is_some_and(|m| !m.plan.dataless.is_empty())
+    }
+
+    /// Whether any of the main stream's chunks `first..=last` is
+    /// data-less.
+    fn has_dataless(&self, first: u64, last: u64) -> bool {
+        if let Some(m) = &self.media {
+            return m.plan.has_dataless(first, last);
+        }
+        let (early, per) = (&self.cfg.early, self.cfg.munro_chunks as u64);
+        (first / per..=last / per).take(1 << 16).any(|k| {
+            let from = k * per + early_chunks(early, k);
+            from.max(first) <= ((k + 1) * per - 1).min(last)
+        })
+    }
+
+    /// The main swarm's messages in `frame` that name a data-less chunk:
+    /// data or a request for one, a HAVE claiming one, or the hash of a
+    /// subtree of data-less chunks only.
+    fn dataless_messages(&self, frame: &[u8]) -> u64 {
+        let touches = |b: Bin| {
+            let (l, r) = (b.base_left().base_offset(), b.base_right().base_offset());
+            self.has_dataless(l, r)
+        };
+        let mut n = 0;
+        for c in FrameReader::new(frame) {
+            let Ok((h, payload)) = c else { break };
+            if h.channel >= 1000 {
+                continue;
+            }
+            for m in Reader::new(self.rcfg, payload) {
+                n += u64::from(match m {
+                    Ok(Message::Data(d)) => touches(d.bin),
+                    Ok(Message::Request(r)) => touches(r.bin),
+                    Ok(Message::Have(h)) => touches(h.bin),
+                    Ok(Message::Integrity(i)) => {
+                        let o = i.bin.base_offset();
+                        self.has_dataless(o, o)
+                    }
+                    Ok(_) => false,
+                    Err(_) => break,
+                });
+            }
+        }
+        n
+    }
+
     /// Notes the first arrival of each main-swarm chunk in `frame` at node
     /// `to`. Cross-traffic channels are numbered from 1000.
     fn record_arrivals(&mut self, to: usize, frame: &[u8]) {
@@ -3121,8 +3211,15 @@ impl Sim {
                             .filter(|(a, b)| a != b)
                             .count() as u64;
                     } else {
+                        let (early, cs) = (&self.cfg.early, self.cfg.chunk_size as u64);
+                        let per = self.cfg.munro_chunks as u64;
                         for (k, &b) in self.read_buf[..n].iter().enumerate() {
-                            if b != stream_byte(node.pos + k as u64) {
+                            let o = node.pos + k as u64;
+                            let want = match chunk_dataless(early, per, o / cs) {
+                                true => 0,
+                                false => stream_byte(o),
+                            };
+                            if b != want {
                                 node.mismatches += 1;
                             }
                         }
@@ -4631,7 +4728,7 @@ fn sim_media_runs_replay_and_pad_like_stored_bytes() {
 
 /// Every honest viewer of a healthy media run reads the stream from its
 /// first two units to its end, each media chunk no sooner than its unit
-/// was signed.
+/// was signed, and no honest message names a data-less chunk.
 #[test]
 fn sim_media_viewers_read_the_whole_stream() {
     for (encoder, sign) in [("3000c", "ur200,t300"), ("128c", "u4,t100-500x1.5")] {
@@ -4644,6 +4741,8 @@ fn sim_media_viewers_read_the_whole_stream() {
         );
         let m = sim.media.as_ref().unwrap();
         assert_eq!(m.done, m.plan.ops.len());
+        assert!(encoder != "128c" || !m.plan.dataless.is_empty());
+        assert_eq!(sim.dataless_on_wire, 0, "{encoder} {sign}");
         for n in sim.nodes.iter().filter(|n| n.role == Role::Peer) {
             assert!(n.sign_lags.iter().all(|&(_, l)| l >= Duration::ZERO));
         }
@@ -4660,8 +4759,8 @@ const COST_SIGNS: &str = "u1,t100;u1,t200;u1,t300;u1,t500;u2,t100;u2,t200;u2,t30
 /// (`SIM_MEDIAS`, comma-separated) and policy (`SIM_SIGNS`,
 /// semicolon-separated), over `SIM_SEEDS` (8) traces of `SIM_SECS` (60) s
 /// in 4 KiB chunks, the means of the units signed a second (each peer's
-/// verifications), stream bytes per media byte, and each media chunk's
-/// wait to be signed (p50, p99).
+/// verifications), stream bytes sent per media byte, and each media
+/// chunk's wait to be signed (p50, p99).
 #[test]
 #[ignore = "a table; run in release with --ignored --nocapture"]
 fn sign_costs() {
@@ -4689,8 +4788,8 @@ fn sign_costs() {
                 let secs = span.as_secs_f64();
                 for (s, x) in sums.iter_mut().zip([
                     p.units() as f64 / secs,
-                    p.stream_bytes as f64 / p.media_bytes as f64,
-                    p.stream_bytes as f64 * 8e-3 / secs,
+                    p.sent_bytes as f64 / p.media_bytes as f64,
+                    p.sent_bytes as f64 * 8e-3 / secs,
                     ms(percentile(&w, 50)) as f64,
                     ms(percentile(&w, 99)) as f64,
                 ]) {
@@ -4722,8 +4821,10 @@ fn sim_ledbat_constrained_downlink() {
         "{}",
         node.max_queue_delay
     );
-    // Its windows stay sane and it isn't drowning in timeouts. A greedy
-    // viewer answers no request, so each one asked of it is cancelled.
+    // Its windows stay sane, and the requests it sends peers that answer
+    // rarely time out: LEDBAT keeps the answers' queue at its downlink
+    // short. A greedy viewer answers no request whatever the window, so
+    // the requests asked of it say nothing about that queue.
     for (&remote, &l) in &node.links {
         let s = node
             .runner
@@ -5433,6 +5534,77 @@ fn sim_push_sparse_mesh_delivers() {
     );
     check_delivery(&r, 4 * MUNRO as u64);
     assert!(r.lag_max < Duration::from_secs(5), "{r:?}");
+}
+
+/// Munros signed early, from one chunk with data to all eight.
+const EARLY: [u64; 8] = [1, 3, 8, 5, 2, 8, 7, 4];
+
+/// `cfg` with munros signed early ([`EARLY`]) and the same run with whole
+/// munros: the early run's report and data-less messages on the wire,
+/// and the whole run's report.
+fn early_and_whole(cfg: Config) -> (Report, u64, Report) {
+    let mut early = cfg.clone();
+    early.early = EARLY.to_vec();
+    let mut sim = Sim::new(early);
+    let r = sim.run();
+    let whole = Sim::new(cfg).run();
+    (r, sim.dataless_on_wire, whole)
+}
+
+/// Pull with munros signed early: no message names a data-less chunk,
+/// every reader reads them as zeros, and delivery and lag hold.
+#[test]
+fn sim_early_signed_units_pull() {
+    for mode in [PushMode::Off, PushMode::EagerHave] {
+        let mut cfg = Config::new(41, 10);
+        cfg.degree = 4;
+        cfg.seed_degree = 4;
+        cfg.munro_chunks = 8;
+        cfg.push_mode = mode;
+        let (r, on_wire, whole) = early_and_whole(cfg);
+        eprintln!("{mode:?} early: {r:?}\nwhole: {whole:?}");
+        assert_eq!(on_wire, 0, "{mode:?}");
+        check_delivery(&r, MUNRO as u64);
+        check_delivery(&whole, MUNRO as u64);
+        assert!(
+            r.lag_p99 <= whole.lag_p99 * 5 / 4 + Duration::from_millis(20),
+            "{mode:?}: early {} whole {}",
+            r.lag_p99,
+            whole.lag_p99
+        );
+    }
+}
+
+/// The hybrid with munros signed early over 16 streams, so that most
+/// munros leave streams without data: nothing names a data-less chunk,
+/// readers read zeros, delivery and lag hold, and honest parents, those of
+/// empty streams included, take no more misses than with whole munros
+/// and no prunes, from the first munro on.
+#[test]
+fn sim_early_signed_units_push() {
+    let mut cfg = Scenario::FullMesh.config(PushMode::Hybrid, 16);
+    cfg.seed = 42;
+    cfg.munro_chunks = 8;
+    cfg.greedy = Greedy::Nodes(vec![]);
+    let (r, on_wire, whole) = early_and_whole(cfg);
+    eprintln!("early: {r:?}\n{:?}\nwhole: {whole:?}", r.push);
+    assert_eq!(on_wire, 0);
+    check_delivery(&r, MUNRO as u64);
+    check_delivery(&whole, MUNRO as u64);
+    assert!(
+        r.lag_p99 <= whole.lag_p99 * 5 / 4 + Duration::from_millis(20),
+        "early {} whole {}",
+        r.lag_p99,
+        whole.lag_p99
+    );
+    assert!(hit_rate(&r) > 0.95, "{:?}", r.push);
+    assert_eq!(r.push.pruned, 0, "{:?}", r.push);
+    assert!(
+        r.push.misses <= whole.push.misses,
+        "{:?}\n{:?}",
+        r.push,
+        whole.push
+    );
 }
 
 #[test]
@@ -7052,9 +7224,10 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
 }
 
 /// A media run's columns: its encoder and policy, the chunks per unit, the
-/// media and stream rates, units signed a second (each peer's signature
-/// verifications), each media chunk's wait to be signed, the lag from the
-/// signing, and every node's wire bytes per media byte per viewer.
+/// media and sent stream rates, units signed a second (each peer's
+/// signature verifications), each media chunk's wait to be signed, the lag
+/// from the signing, every node's wire bytes per media byte per viewer, and
+/// the honest messages that named a data-less chunk.
 fn media_cols(row: &mut JsonRow, sim: &Sim, m: &MediaRun, r: &Report) {
     let p = &m.plan;
     let secs = sim.cfg.stream_secs.max(1) as f64;
@@ -7064,10 +7237,10 @@ fn media_cols(row: &mut JsonRow, sim: &Sim, m: &MediaRun, r: &Report) {
         .str("sign", &m.media.sign.to_string())
         .int("unit", p.unit_chunks)
         .num("media_kbit", p.media_bytes as f64 * 8e-3 / secs)
-        .num("sent_kbit", p.stream_bytes as f64 * 8e-3 / secs)
+        .num("sent_kbit", p.sent_bytes as f64 * 8e-3 / secs)
         .num(
             "stream_per_media",
-            p.stream_bytes as f64 / p.media_bytes.max(1) as f64,
+            p.sent_bytes as f64 / p.media_bytes.max(1) as f64,
         )
         .num("units_per_s", p.units() as f64 / secs)
         .int("sign_wait_p50_ms", ms(percentile(&waits, 50)) as u64)
@@ -7077,7 +7250,8 @@ fn media_cols(row: &mut JsonRow, sim: &Sim, m: &MediaRun, r: &Report) {
         .num(
             "wire_per_media",
             wire as f64 / (p.media_bytes.max(1) as f64 * sim.cfg.peers.max(1) as f64),
-        );
+        )
+        .int("dataless_msgs", sim.dataless_on_wire);
 }
 
 /// A flat JSON object, field by field: numbers and plain tokens.

@@ -1115,29 +1115,17 @@ impl Report {
             .field("copies", format_args!("{}", ints(&copies)))
             .field("sent", format_args!("{}", ints(&sent)))
             .field("pushed", format_args!("{}", ints(&pushed)));
-        // A media swarm's chunks published each second: those holding
-        // media, by their first byte (`written`, what `frames` counts), and
-        // with the padding alone the flushes made (`chunks`).
+        // A media swarm's chunks sent each second, those holding media, by
+        // their first byte (`written`, what `frames` counts): its other
+        // chunks are data-less.
         if let Some(m) = media {
-            let (mut written, mut chunks) = (vec![0i64; n], vec![0i64; n]);
-            let mut add = |ms: u64, k: i64, both: bool| {
-                if let Some(i) = second(Duration::from_millis(ms)) {
-                    if both && let Some(w) = written.get_mut(i) {
-                        *w += k;
-                    }
-                    if let Some(c) = chunks.get_mut(i) {
-                        *c += k;
-                    }
-                }
-            };
+            let mut written = vec![0i64; n];
             for &t in &m.times {
-                add(t, 1, true);
+                if let Some(w) = second(Duration::from_millis(t)).and_then(|i| written.get_mut(i)) {
+                    *w += 1;
+                }
             }
-            for &(t, k) in &m.pad_chunks {
-                add(t, i64::try_from(k).unwrap_or(0), false);
-            }
-            j.field("written", format_args!("{}", ints(&written)))
-                .field("chunks", format_args!("{}", ints(&chunks)));
+            j.field("written", format_args!("{}", ints(&written)));
         }
         Some(j.finish())
     }
@@ -1161,10 +1149,10 @@ impl Report {
             .str("sign", &media.sign.to_string())
             .int("unit", m.unit_chunks)
             .num("media_kbit", m.media_bytes as f64 * 8e-3 / secs)
-            .num("sent_kbit", m.stream_bytes as f64 * 8e-3 / secs)
+            .num("sent_kbit", m.sent_bytes as f64 * 8e-3 / secs)
             .num(
                 "stream_per_media",
-                m.stream_bytes as f64 / m.media_bytes.max(1) as f64,
+                m.sent_bytes as f64 / m.media_bytes.max(1) as f64,
             )
             .num("units_per_s", m.units as f64 / secs)
             .int("sign_wait_p50_ms", u64::from(waits.p50))

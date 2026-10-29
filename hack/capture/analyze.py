@@ -743,13 +743,13 @@ def lags(s):
 def measures(s):
     """The per-second measures the verdicts read, over the stream's seconds.
     A series whose stream varies in rate (a media run's) carries the chunks
-    published each second (`chunks`, which on-time pushes count against)
-    and those of them that `frames` counts (`written`), and is measured
-    against those."""
+    sent each second that `frames` counts (`written`), which on-time pushes
+    count against, and is measured against those; older rows carry the
+    chunks published (`chunks`), padding alone included."""
     n = min(s["secs"], len(s["present"]))
     per_s = s["rate"] / s["chunk"]
     chunks, written = s.get("chunks"), s.get("written")
-    need = lambda k: chunks[k] if chunks else per_s
+    need = lambda k: chunks[k] if chunks else written[k] if written else per_s
     share = [s["hits"][k] / (s["present"][k] * need(k)) if s["present"][k] and need(k) else None for k in range(n)]
     smooth = []
     for k in range(n):

@@ -355,8 +355,9 @@ impl fmt::Display for Sign {
 ///
 /// Records go one after another, a chunk header ahead of each chunk's
 /// first byte. A unit is signed once its last byte is written; a unit in
-/// progress is due at its deadline, and [`Signer::flush`] pads it to its
-/// end, as `strims_ppspp::Writer::flush` does.
+/// progress is due at its deadline, and [`Signer::flush`] ends it as
+/// `strims_ppspp::Writer::flush` does: the chunk in progress padded with
+/// zeros, the unit's chunks after it data-less, never sent.
 #[derive(Clone, Debug)]
 pub struct Signer {
     deadline: Deadline,
@@ -449,8 +450,8 @@ impl Signer {
         }
     }
 
-    /// Signs the unit in progress, padded to its end: returns the padding,
-    /// empty with no unit in progress.
+    /// Signs the unit in progress: returns the zeros to its end, padding
+    /// and data-less chunks alike, empty with no unit in progress.
     pub fn flush(&mut self) -> Range<u64> {
         let start = self.offset;
         self.offset = start.div_ceil(self.unit) * self.unit;
@@ -512,13 +513,19 @@ pub struct Plan {
     pub media_at: Vec<Option<Duration>>,
     /// Per chunk: when its unit was signed.
     pub signed_at: Vec<Duration>,
-    /// The padding, by stream offset, in order.
+    /// The zeros, by stream offset, in order: each flush's padding and
+    /// data-less chunks.
     pub pads: Vec<Range<u64>>,
+    /// The data-less chunks, by stream offset, in order: each flush's
+    /// chunks after the chunk in progress, never sent.
+    pub dataless: Vec<Range<u64>>,
     pub chunk: u64,
     pub unit_chunks: u64,
-    /// Access unit bytes, and stream bytes (records, headers and padding).
+    /// Access unit bytes, stream bytes (records, headers and zeros), and
+    /// the stream bytes sent (all but the data-less chunks).
     pub media_bytes: u64,
     pub stream_bytes: u64,
+    pub sent_bytes: u64,
 }
 
 impl Plan {
@@ -527,10 +534,17 @@ impl Plan {
         self.stream_bytes / (self.chunk * self.unit_chunks).max(1)
     }
 
-    /// Whether the byte at `offset` is padding.
+    /// Whether the byte at `offset` is padding or data-less.
     pub fn is_pad(&self, offset: u64) -> bool {
         let i = self.pads.partition_point(|p| p.end <= offset);
         self.pads.get(i).is_some_and(|p| p.contains(&offset))
+    }
+
+    /// Whether any of chunks `first..=last` is data-less.
+    pub fn has_dataless(&self, first: u64, last: u64) -> bool {
+        let (lo, hi) = (first * self.chunk, (last + 1) * self.chunk);
+        let i = self.dataless.partition_point(|d| d.end <= lo);
+        self.dataless.get(i).is_some_and(|d| d.start < hi)
     }
 
     /// Per chunk holding media, its sign time minus its earliest media
@@ -561,6 +575,10 @@ pub fn plan(trace: &[Au], mut signer: Signer) -> Plan {
         let pad = signer.flush();
         sign_through(p, pad.end, at);
         p.ops.push(Op::Flush { at, next: pad.end });
+        let dataless = pad.start.next_multiple_of(chunk).min(pad.end)..pad.end;
+        if !dataless.is_empty() {
+            p.dataless.push(dataless);
+        }
         if !pad.is_empty() {
             p.pads.push(pad);
         }
@@ -593,6 +611,7 @@ pub fn plan(trace: &[Au], mut signer: Signer) -> Plan {
         flush(&mut p, &mut signer, due);
     }
     p.stream_bytes = signer.offset();
+    p.sent_bytes = p.stream_bytes - p.dataless.iter().map(|d| d.end - d.start).sum::<u64>();
     p.media_at
         .resize(usize::try_from(p.stream_bytes / chunk).unwrap_or(0), None);
     p
@@ -726,10 +745,13 @@ mod tests {
             "{padded} of {}",
             p.stream_bytes
         );
-        // 128 kbit/s fills 2 chunks in 0.5 s: flushed at 200 ms, padded.
+        // 128 kbit/s fills 2 chunks in 0.5 s: flushed at 200 ms, padded,
+        // and the second chunk data-less
         let p = plan_of(128, Mode::Cbr, "u2,t200", 30);
         let ratio = p.stream_bytes as f64 / p.media_bytes as f64;
         assert!((2.2..2.6).contains(&ratio), "{ratio}");
+        let sent = p.sent_bytes as f64 / p.media_bytes as f64;
+        assert!((1.1..1.3).contains(&sent), "{sent}");
     }
 
     #[test]
@@ -756,6 +778,15 @@ mod tests {
         for pad in &p.pads {
             assert!(p.is_pad(pad.start) && p.is_pad(pad.end - 1) && !p.is_pad(pad.end));
         }
+        // A flush's chunks after the chunk in progress are data-less, and
+        // hold no media.
+        for d in &p.dataless {
+            assert!(d.start.is_multiple_of(p.chunk) && d.end.is_multiple_of(unit));
+            let (first, last) = (d.start / p.chunk, d.end / p.chunk - 1);
+            assert!(p.has_dataless(first, last) && !p.has_dataless(first - 1, first - 1));
+            assert!((first..=last).all(|c| p.media_at[c as usize].is_none()));
+        }
+        assert!(!p.dataless.is_empty() && p.sent_bytes < p.stream_bytes);
         // Every unit starts with media.
         assert!(
             p.media_at

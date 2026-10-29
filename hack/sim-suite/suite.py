@@ -7,15 +7,16 @@ working tree's sims against the base's, cell by cell, paired by seed.
   hack/sim-suite/suite.py run [--base REF] [--tier smoke|peers|scale]
                               [--seeds N] [--slots N] [--mem-gib N]
                               [--only CELL,...] [--rebuild] [--all]
-                              [--tree-env KEY=VALUE ...]
+                              [--tree-env KEY=VALUE ...] [--env KEY=VALUE ...]
   hack/sim-suite/suite.py calibrate [--base REF] [--tier ...] [--seeds N]
-                                    [--only CELL,...]
+                                    [--only CELL,...] [--env KEY=VALUE ...]
   hack/sim-suite/suite.py race --flags A,B,... [--knob SIM_EXP,STRIMS_SIM_EXP]
                                [--base REF] [--tier ...] [--keep N]
+                               [--env KEY=VALUE ...]
   hack/sim-suite/suite.py farm (--sets "A,B;C" | --refs a=REF,b=REF) [--knob SIM_EXP,STRIMS_SIM_EXP]
                                [--ref REF] [--tier ...] [--seeds N]
                                [--first-seed N] [--against SET]
-                               [--farm-args ARGS] [--no-run]
+                               [--farm-args ARGS] [--no-run] [--env KEY=VALUE ...]
 
 `run` builds the ppspp sim and strims-sim's scenarios from the working
 tree (the checkout this script is in, changes and all) and from `--base`
@@ -28,7 +29,8 @@ reuses the rest; later runs against the same base run only the working
 tree, and a sim the working tree leaves as the base's isn't run twice.
 Rows are the sims' `ROW` objects with each run's wall time and peak
 memory; runs are deterministic, so a cell and seed always give the same
-row.
+row. `--env` sets a variable for every arm's runs as part of each cell,
+so the rows of one setting never stand for another's.
 
 Tiers:
 
@@ -1010,12 +1012,18 @@ def main():
     fc.add_argument("--all", action="store_true", help="every metric, ties too")
     fc.add_argument("--farm-args", default="", help="more arguments for farm.py run")
     fc.add_argument("--no-run", action="store_true", help="report the rows the farm has")
+    for p in (cal, r, rc, fc):
+        p.add_argument("--env", action="append", default=[], metavar="KEY=VALUE",
+                       help="set for every arm's runs, as part of each cell")
     a = ap.parse_args()
 
     cells = TIERS[a.tier]
     if getattr(a, "only", None):
         want = set(a.only.split(","))
         cells = [c for c in cells if c["name"] in want]
+    every = dict(kv.split("=", 1) for kv in a.env)
+    if every:
+        cells = [{**c, "env": {**c["env"], **every}} for c in cells]
     if a.cmd == "farm":
         farm(a, cells)
         return

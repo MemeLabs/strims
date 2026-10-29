@@ -254,7 +254,7 @@ fn media_signed_early_reaches_every_viewer() {
             sound(r)?;
             whole_stream(r)?;
             let m = r.media[0].as_ref().ok_or("no media log")?;
-            let per = m.stream_bytes as f64 / m.media_bytes.max(1) as f64;
+            let per = m.sent_bytes as f64 / m.media_bytes.max(1) as f64;
             if m.units == 0 || !(1.0..1.5).contains(&per) {
                 return Err(format!(
                     "{} units, {per:.2} stream bytes per media byte",

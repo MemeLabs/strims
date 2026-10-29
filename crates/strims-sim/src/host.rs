@@ -524,7 +524,7 @@ async fn media_writer_task(
         );
         w.media_log(s, |l| {
             l.media_bytes += u64::from(au.len);
-            l.stream_bytes += placed.len;
+            l.sent_bytes += placed.len;
             l.units += placed.signed;
         });
     }
@@ -620,14 +620,11 @@ impl MediaWriter {
         }
         let size = self.chunk.max(1);
         self.signed(w, s, pad.end / size);
-        let alone = pad.end / size - pad.start.div_ceil(size);
-        let now = sim_now_ms();
+        // the unit's chunks after the chunk in progress are data-less
+        let sent = pad.start.next_multiple_of(size).min(pad.end) - pad.start;
         w.media_log(s, |l| {
             l.units += 1;
-            l.stream_bytes += pad.end - pad.start;
-            if alone > 0 {
-                l.pad_chunks.push((now, alone));
-            }
+            l.sent_bytes += sent;
         });
         true
     }
