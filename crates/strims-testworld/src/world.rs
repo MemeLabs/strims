@@ -252,6 +252,8 @@ impl Sink<(HostAddr, Vec<u8>)> for VpnWriter {
 pub struct FakeWriter {
     pub(crate) log: Log,
     pub(crate) closed: Rc<Cell<bool>>,
+    /// The swarm's integrity unit in bytes, which a flush pads to.
+    pub(crate) unit: u64,
 }
 
 impl SwarmWrite for FakeWriter {
@@ -281,6 +283,28 @@ impl SwarmWrite for FakeWriter {
         let wakers = self.log.borrow_mut().new_epoch();
         wake_all(wakers);
         Ok(())
+    }
+
+    /// Pads the stream with zeros to the next unit boundary, as a swarm
+    /// writer's flush does, and returns its offset.
+    async fn flush(&mut self) -> Result<u64, Closed> {
+        if self.closed.get() {
+            return Err(Closed);
+        }
+        let (off, wakers) = {
+            let mut l = self.log.borrow_mut();
+            let at = l.tail + l.data.len() as u64;
+            let unit = self.unit.max(1);
+            let pad = (unit - at % unit) % unit;
+            l.data.extend(std::iter::repeat_n(0, pad as usize));
+            l.written += pad;
+            let excess = l.data.len().saturating_sub(l.window);
+            l.data.drain(..excess);
+            l.tail += excess as u64;
+            (at + pad, l.take_wakers())
+        };
+        wake_all(wakers);
+        Ok(off)
     }
 }
 

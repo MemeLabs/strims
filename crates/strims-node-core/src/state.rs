@@ -284,7 +284,8 @@ pub(crate) enum WriteOp {
 #[derive(Debug)]
 pub(crate) struct WriteReply {
     pub(crate) buf: Vec<u8>,
-    pub(crate) result: Result<(), NodeError>,
+    /// A flush's next unit offset; 0 for a write or reset.
+    pub(crate) result: Result<u64, NodeError>,
 }
 
 #[derive(Debug)]
@@ -1957,9 +1958,9 @@ impl State {
                     now,
                     buf.get(..len).unwrap_or_default(),
                 )
-                .map(|_| ()),
+                .map(|_| 0),
             WriteOp::Flush => runner.flush_writer(p.swarm, &mut p.writer, now),
-            WriteOp::Reset => runner.reset_writer(p.swarm, &mut p.writer, now),
+            WriteOp::Reset => runner.reset_writer(p.swarm, &mut p.writer, now).map(|()| 0),
         }
         .map_err(NodeError::from);
         let _ = p.reply.try_send(WriteReply { buf, result });

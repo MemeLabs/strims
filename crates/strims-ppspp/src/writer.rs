@@ -161,20 +161,35 @@ impl Writer {
     }
 
     /// Publishes a partial unit, padded with zeros to a whole unit, so the
-    /// units written after it stay aligned with their signatures.
-    pub fn flush(&mut self, swarm: &mut Swarm, now: Time) -> Result<(), SwarmError> {
+    /// units written after it stay aligned with their signatures. The zeros
+    /// are signed and sent like any data.
+    ///
+    /// Returns the stream offset, in bytes from the epoch's first, at which
+    /// the next unit starts: the bytes written so far plus the padding. The
+    /// next byte written lands there. With nothing staged it publishes
+    /// nothing and returns the current offset, always a unit boundary.
+    pub fn flush(&mut self, swarm: &mut Swarm, now: Time) -> Result<u64, SwarmError> {
         self.check(swarm)?;
-        if self.staged == 0 {
-            return Ok(());
+        if self.staged > 0 {
+            if let Some(pad) = self.staging.get_mut(self.staged..) {
+                pad.fill(0);
+            }
+            self.staged = 0;
+            let staging = mem::take(&mut self.staging);
+            let r = self.process(swarm, now.truncate(Time::PRECISION), &staging);
+            self.staging = staging;
+            r?;
         }
-        if let Some(pad) = self.staging.get_mut(self.staged..) {
-            pad.fill(0);
-        }
-        self.staged = 0;
-        let staging = mem::take(&mut self.staging);
-        let r = self.process(swarm, now.truncate(Time::PRECISION), &staging);
-        self.staging = staging;
-        r
+        Ok(self.offset())
+    }
+
+    /// The stream offset of the next byte written, if nothing is staged:
+    /// the start of the next unit.
+    fn offset(&self) -> u64 {
+        self.chunks
+            .peek()
+            .base_offset()
+            .saturating_mul(self.chunk_size as u64)
     }
 
     /// Starts the stream over at chunk 0 under a new epoch signed at `now`:

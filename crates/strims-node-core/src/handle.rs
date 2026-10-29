@@ -694,7 +694,7 @@ pub struct SwarmWriter {
 }
 
 impl SwarmWriter {
-    async fn op(&mut self, op: WriteOp, buf: Vec<u8>) -> Result<(), NodeError> {
+    async fn op(&mut self, op: WriteOp, buf: Vec<u8>) -> Result<u64, NodeError> {
         let cmd = Command::Write {
             publisher: self.publisher,
             op,
@@ -718,8 +718,9 @@ impl SwarmWriter {
         Ok(())
     }
 
-    /// Publishes the partial unit, zero-padded.
-    pub async fn flush(&mut self) -> Result<(), NodeError> {
+    /// Publishes the partial unit, zero-padded (`strims_ppspp::Writer::flush`),
+    /// and returns the stream offset at which the next unit starts.
+    pub async fn flush(&mut self) -> Result<u64, NodeError> {
         let buf = self.buf.take().ok_or(NodeError::Closed)?;
         self.op(WriteOp::Flush, buf).await
     }
@@ -727,7 +728,7 @@ impl SwarmWriter {
     /// Starts a new epoch.
     pub async fn reset(&mut self) -> Result<(), NodeError> {
         let buf = self.buf.take().ok_or(NodeError::Closed)?;
-        self.op(WriteOp::Reset, buf).await
+        self.op(WriteOp::Reset, buf).await.map(|_| ())
     }
 }
 
@@ -829,5 +830,9 @@ impl SwarmWrite for SwarmWriter {
 
     async fn reset(&mut self) -> Result<(), NodeError> {
         SwarmWriter::reset(self).await
+    }
+
+    async fn flush(&mut self) -> Result<u64, NodeError> {
+        SwarmWriter::flush(self).await
     }
 }

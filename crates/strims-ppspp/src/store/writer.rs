@@ -23,6 +23,11 @@ impl Writer {
         b
     }
 
+    /// The bin the next chunk takes.
+    pub fn peek(&self) -> Bin {
+        self.bin
+    }
+
     /// Restarts at bin 0. Resetting the swarm is the caller's job.
     pub fn reset(&mut self) {
         self.bin = Bin(0);

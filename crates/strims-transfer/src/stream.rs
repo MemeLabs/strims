@@ -71,8 +71,16 @@ pub trait SwarmWrite: 'static {
     type Error: fmt::Display;
 
     /// Appends `data` to the stream. The integrity units it completes are
-    /// published; a partial unit waits for the bytes that complete it.
+    /// published; a partial unit waits for the bytes that complete it, or
+    /// for [`SwarmWrite::flush`].
     fn write(&mut self, data: &[u8]) -> impl Future<Output = Result<(), Self::Error>>;
+
+    /// Publishes the partial unit at once (`strims_ppspp::Writer::flush`),
+    /// padded with zeros to a whole unit, which readers read as zeros.
+    /// Returns the stream offset at which the next unit starts, where the
+    /// next write lands: the bytes written so far plus the padding. With
+    /// nothing staged it publishes nothing and returns the current offset.
+    fn flush(&mut self) -> impl Future<Output = Result<u64, Self::Error>>;
 
     /// Starts the stream over at offset 0 under a new epoch, dropping a
     /// partial unit. Readers see a discontinuity.

@@ -96,6 +96,17 @@ impl SwarmWrite for FakeWriter {
         p.resets += 1;
         Ok(())
     }
+
+    async fn flush(&mut self) -> Result<u64, String> {
+        let mut p = self.0.borrow_mut();
+        if !p.staged.is_empty() {
+            let pad = p.unit - p.staged.len();
+            let mut unit = std::mem::take(&mut p.staged);
+            unit.resize(unit.len() + pad, 0);
+            p.stream.extend(unit);
+        }
+        Ok(p.stream.len() as u64)
+    }
 }
 
 /// The stream of `msgs` written through a record writer.

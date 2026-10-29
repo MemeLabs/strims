@@ -850,13 +850,14 @@ impl Runner {
         Ok(writer.write(&mut s, now, data)?)
     }
 
-    /// [`Writer::flush`] through the runner.
+    /// [`Writer::flush`] through the runner: returns the stream offset at
+    /// which the next unit starts.
     pub fn flush_writer(
         &mut self,
         key: SwarmKey,
         writer: &mut Writer,
         now: Time,
-    ) -> Result<(), RunnerError> {
+    ) -> Result<u64, RunnerError> {
         let mut s = self.swarm_mut(key, now).ok_or(RunnerError::UnknownSwarm)?;
         Ok(writer.flush(&mut s, now)?)
     }

@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use strims_kademlia::ID;
+use strims_ppspp::integrity::ProtectionMethod;
 use strims_ppspp::{SwarmId, SwarmOptions, WriterOptions};
 use strims_proto::types::Key;
 use strims_vpn::HostAddr;
@@ -266,7 +267,22 @@ impl strims_transfer::SwarmHost for FakeHost {
         let (h, log, closed) = self.add_entry(id.clone(), &options.swarm_options, true);
         let wakers = log.borrow_mut().new_epoch();
         wake_all(wakers);
-        Ok((h, id, FakeWriter { log, closed }))
+        let o = options
+            .swarm_options
+            .assign_defaults(&SwarmOptions::default_options());
+        let unit = match o.integrity.protection_method {
+            ProtectionMethod::MERKLE_TREE => o.chunk_size * o.chunks_per_signature,
+            _ => o.chunk_size,
+        };
+        Ok((
+            h,
+            id,
+            FakeWriter {
+                log,
+                closed,
+                unit: unit as u64,
+            },
+        ))
     }
 
     async fn add_swarm(&self, id: SwarmId, options: SwarmOptions) -> Result<u32, Closed> {
@@ -313,5 +329,60 @@ impl strims_directory::Host for FakeHost {
             .copied()
             .unwrap_or(port);
         self.open_port(net, port)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! The fake swarm writer's flush.
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
+    use strims_transfer::{SwarmHost, SwarmRead, SwarmWrite};
+
+    use super::*;
+
+    /// A flush pads the stream with zeros to the swarm's integrity unit and
+    /// returns the offset where the next unit starts, where the next write
+    /// lands; with nothing staged it returns the same offset.
+    #[test]
+    fn flush_pads_to_the_unit() {
+        crate::exec::run(async {
+            let world = World::default();
+            let host = FakeHost {
+                id: ID::from_bytes(&[1; 32]),
+                state: Rc::default(),
+                world: world.clone(),
+                timer: world.timer(),
+            };
+            let options = WriterOptions {
+                swarm_options: SwarmOptions {
+                    chunk_size: 64,
+                    chunks_per_signature: 8,
+                    live_window: 64,
+                    ..Default::default()
+                },
+                key: strims_crypto::key_from_seed(&[2; 32]),
+            };
+            let (h, _, mut w) = host.create_swarm(options).await.unwrap();
+            let mut r = host.open_reader(h).await.unwrap();
+            w.write(&[1; 100]).await.unwrap();
+            assert_eq!(w.flush().await.ok(), Some(512));
+            assert_eq!(w.flush().await.ok(), Some(512));
+            w.write(&[2; 10]).await.unwrap();
+            assert_eq!(w.flush().await.ok(), Some(1024));
+
+            let mut got = Vec::new();
+            let mut buf = [0u8; 2048];
+            while got.len() < 1024 {
+                let (off, n) = r.read_at(&mut buf).await.unwrap();
+                assert_eq!(off, got.len() as u64);
+                got.extend_from_slice(&buf[..n]);
+            }
+            let mut want = vec![1; 100];
+            want.resize(512, 0);
+            want.extend([2; 10]);
+            want.resize(1024, 0);
+            assert_eq!(got, want);
+        });
     }
 }

@@ -563,7 +563,7 @@ mod tests {
 
         let data = vec![7u8; 1024 * 3];
         assert_eq!(w.write(&mut s, now(), &data), Ok(data.len()));
-        assert_eq!(w.flush(&mut s, now()), Ok(()));
+        assert_eq!(w.flush(&mut s, now()), Ok(3 * 1024));
         // three chunks, merged into the largest aligned bins
         assert_eq!(
             drain(&mut s),
@@ -587,6 +587,73 @@ mod tests {
         assert_eq!(s.read(&mut r, &mut [0; 1]), Err(store::Error::StreamReset));
         w.write(&mut s, now(), &[2; 1024]).unwrap();
         assert_eq!(drain(&mut s)[0], SwarmEvent::Published(Bin(0)));
+    }
+
+    /// A flush pads the partial unit with zeros to a whole one and
+    /// publishes it, and returns the offset of the next unit: the bytes
+    /// written so far plus the padding, where the next write lands. With
+    /// nothing staged it publishes nothing and returns the same offset.
+    #[test]
+    fn flush_returns_where_the_next_unit_starts() {
+        let units = [
+            (ProtectionMethod::MERKLE_TREE, 8 * 64),
+            (ProtectionMethod::SIGN_ALL, 64),
+            (ProtectionMethod::NONE, 64),
+        ];
+        for (pm, unit) in units {
+            let (mut w, mut s) = Writer::new(
+                WriterOptions {
+                    swarm_options: SwarmOptions {
+                        chunk_size: 64,
+                        chunks_per_signature: 8,
+                        live_window: 64,
+                        integrity: VerifierOptions {
+                            protection_method: pm,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    key: strims_crypto::key_from_seed(&[14; 32]),
+                },
+                now(),
+            )
+            .unwrap();
+            drain(&mut s);
+            let mut r = s.reader();
+
+            // a unit and a bit, then a flush
+            let first: Vec<u8> = (0..unit + 40).map(|i| (i % 251 + 1) as u8).collect();
+            w.write(&mut s, now(), &first).unwrap();
+            let next = w.flush(&mut s, now()).unwrap();
+            assert_eq!(next, 2 * unit as u64, "{pm:?}");
+            assert_eq!(next, first.len() as u64 + (unit as u64 - 40), "{pm:?}");
+            let mut want = first.clone();
+            want.resize(2 * unit, 0);
+            assert_eq!(read_all(&s, &mut r, 10_000), want, "{pm:?}");
+
+            // nothing staged: nothing published, the same offset
+            drain(&mut s);
+            assert_eq!(w.flush(&mut s, now()), Ok(next), "{pm:?}");
+            assert_eq!(drain(&mut s), vec![], "{pm:?}");
+
+            // the next write lands at the offset
+            let more: Vec<u8> = (0..unit).map(|i| (i % 13 + 200) as u8).collect();
+            w.write(&mut s, now(), &more).unwrap();
+            assert_eq!(read_all(&s, &mut r, 10_000), more, "{pm:?}");
+            assert_eq!(w.flush(&mut s, now()), Ok(next + unit as u64), "{pm:?}");
+        }
+    }
+
+    /// A flush takes only its own writer's swarm.
+    #[test]
+    fn flush_refuses_another_swarm() {
+        let options = |seed| WriterOptions {
+            swarm_options: SwarmOptions::default(),
+            key: strims_crypto::key_from_seed(&[seed; 32]),
+        };
+        let (mut w, _) = Writer::new(options(16), now()).unwrap();
+        let (_, mut other) = Writer::new(options(17), now()).unwrap();
+        assert_eq!(w.flush(&mut other, now()), Err(SwarmError::WrongSwarm));
     }
 
     #[test]
