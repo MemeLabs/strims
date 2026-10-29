@@ -14,6 +14,7 @@ hex.workspace = true
 proptest.workspace = true
 prost.workspace = true
 sha2.workspace = true
+strims-golden.workspace = true
 strims-proto.workspace = true
 
 [lints]
