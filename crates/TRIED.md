@@ -66,6 +66,14 @@ and peers tiers, and the named start made wan-super-peer-varying's p99
 ×1.26 [1.01, 1.57] at 32 seeds. Dropping for every lost subscription cut
 duplicates 3–6 %, but star-31-5 collapsed on 6 of 16 seeds against 2.
 
+**Other prune backoffs.** (`prune-backoff5`, `prune-backoff-liar`, against
+c72c399e) A parent that had pushed backed off 5 s at first instead of 2 s:
+robust tier collapsed 192 against main's 186 at 32 seeds. Escalating only
+a parent that pushed nothing, with a fixed 10 s for one that had pushed:
+184 against 186, and the seed-starved cell's delivery 1.8 points lower.
+Both kept most of the liar gain (honest p99 ×0.88 and ×0.87, against
+×0.83 for 2 s).
+
 ## Upload meter
 
 Relay readings other than the bound in `UploadInfo::relay_capacity`,

@@ -262,13 +262,6 @@ in `TRIED.md`.
    - **Budget hysteresis in copies.** The budget's hysteresis is in
      slots, so at a copy boundary a holder joins and leaves with each
      swing.
-   - **Prune backoff.** A child backs a pruned parent off for
-     `PRUNE_BACKOFF` whatever caused the misses and however often it has
-     pruned it. A seed's cut can cost it a holder for 10 s, and a liar
-     that announces first is grafted again after every backoff: each
-     child loses about 1 s of every 11 s on each stream it is the best
-     candidate for. Back off by cause, and a parent pruned again and
-     again longer, by the child's own count.
    - **Protocol overhead.** Find where the bytes go at the media swarms'
      4 KiB chunks, from a capture. Coalesce HAVE-only frames. One chunk
      per request costs about 27 % at 1 KiB chunks; requesting runs of
@@ -282,7 +275,7 @@ in `TRIED.md`.
      matrix and strims-sim's WAN cases.
 3. **Greedy peers.** Free riders and liars cost honest viewers more tail
    lag than anything but a constrained seed, most of it on the child
-   side (with the prune backoff above).
+   side.
    - **Pull from liars.** A request that timed out may go back to the
      same channel after `REQUEST_BACKOFF` (200 ms), and LEDBAT's floor
      reopens its window, so liars among a viewer's few neighbours keep
