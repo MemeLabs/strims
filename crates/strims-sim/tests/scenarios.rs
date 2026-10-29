@@ -2188,18 +2188,19 @@ fn collapse_pull_lock_in() {
 /// frames written in the 10 s before the halving lag under 2 s at p99, and
 /// those written from 10 s after it over 2 s: healthy before, not after.
 /// Holding answers below pushes, routing by expected delivery, holding
-/// late pushes for their parent, pacing answers and frames of about a
-/// chunk (little waits below the runner when the uplink halves) ease the
-/// mode but don't remove it: once its window is cut, the seed holds two or
-/// three copies while the viewers it dropped find relays, and on about a
-/// third of seeds that takes long enough to show. At this seed frames lag
-/// about 0.2 s at p99 before the halving and 2.8 s after.
+/// late pushes for their parent, pacing answers, frames of about a chunk
+/// (little waits below the runner when the uplink halves) and bounding
+/// relays' capacity readings by what they wrote ease the mode but don't
+/// remove it: once its window is cut, the seed holds two or
+/// three copies while the viewers it dropped find relays, and on some seeds
+/// that takes long enough to show. At this seed frames lag about 0.2 s at
+/// p99 before the halving and 2.1 s after.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_halving_lock_in() {
     let mut c = collapse_case(7, 10, 70);
     c.seed_up_steps = vec![(30.0, 5.0)];
-    collapse_sweep("collapse_halving_lock_in", 2, &c, |r| {
+    collapse_sweep("collapse_halving_lock_in", 6, &c, |r| {
         let (_, start) = collapse_seed(r);
         let before = r.lag_between(0, start + secs(20), start + secs(30)).p99;
         let after = r.lag_between(0, start + secs(40), start + secs(70)).p99;
@@ -2209,6 +2210,34 @@ fn collapse_halving_lock_in() {
             Err(format!(
                 "p99 lag {before} ms before the halving, {after} ms after"
             ))
+        }
+    });
+}
+
+/// **Thin relays.** Viewers whose uplinks carry little more than a copy
+/// of the stream relay it as well as they can, so most copies cross two or
+/// three of them. Below the runner, each link's buffers take writes at
+/// once, so a relay's busy time reads next to nothing while its uplink is
+/// full, and its capacity reading runs to twenty times what it writes. On
+/// that, relays took children for twice their uplinks before their links
+/// showed a queue: the children pruned them, re-parented onto others that
+/// did the same, and pulled from the seed meanwhile. Behind a 10 Mbit seed,
+/// 15 viewers on 3 Mbit uplinks never formed trees and lagged 1.5-2 s at
+/// p50. A relay's reading now grows a few times what it wrote at most, and
+/// no more once a queue forms. Checks that frames written from 20 s on lag
+/// under 2 s at p99.
+#[test]
+#[ignore = "a collapse mode's case; run in release with --include-ignored"]
+fn collapse_thin_relays() {
+    let mut c = collapse_case(15, 10, 60);
+    c.viewer_up_mbit = 3;
+    collapse_sweep("collapse_thin_relays", 1, &c, |r| {
+        let (_, start) = collapse_seed(r);
+        let late = r.lag_between(0, start + secs(20), start + secs(60)).p99;
+        if late < 2000 {
+            Ok(())
+        } else {
+            Err(format!("frames from 20 s on lag {late} ms at p99"))
         }
     });
 }

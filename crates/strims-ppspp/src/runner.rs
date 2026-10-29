@@ -177,6 +177,9 @@ struct UploadMeter {
     drained: Option<(f64, Time)>,
     /// ... and whether one stood at the last tick.
     standing: bool,
+    /// The largest write rate since it was set, and when: a newer one, or
+    /// any once it is [`PEAK_SPAN`] old, replaces it.
+    written_peak: Option<(f64, Time)>,
 }
 
 /// While a queue stands below the runner the uplink delivers all it can:
@@ -188,6 +191,9 @@ const DRAIN_QUEUE: Duration = Duration::from_millis(50);
 /// probes for more bandwidth, until a queue stands again.
 const DRAIN_PROBE: f64 = 0.25;
 const DRAIN_PROBE_PERIOD: Duration = Duration::from_secs(10);
+/// How long the meter holds its largest write rate
+/// ([`UploadInfo::written_peak`]).
+const PEAK_SPAN: Duration = Duration::from_secs(10);
 
 impl UploadMeter {
     fn new() -> UploadMeter {
@@ -204,6 +210,7 @@ impl UploadMeter {
             excesses: Vec::new(),
             drained: None,
             standing: false,
+            written_peak: None,
         }
     }
 
@@ -251,8 +258,14 @@ impl UploadMeter {
         let busy = self.busy.rate(Duration::SECOND, now) as f64 / 1e9;
         let busy_recent = self.busy_recent.rate(Duration::SECOND, now) as f64 / 1e9;
         let push_busy_recent = self.push_busy_recent.rate(Duration::SECOND, now) as f64 / 1e9;
+        let rate = self.bytes.rate(Duration::SECOND, now);
+        match self.written_peak {
+            Some((peak, at)) if now - at <= PEAK_SPAN && peak > rate as f64 => {}
+            _ => self.written_peak = Some((rate as f64, now)),
+        }
         UploadInfo {
-            rate: self.bytes.rate(Duration::SECOND, now),
+            written_peak: self.written_peak.map_or(0.0, |(peak, _)| peak),
+            rate,
             busy: busy.clamp(0.0, 1.0),
             busy_recent: busy_recent.clamp(0.0, 1.0),
             push_busy_recent: push_busy_recent.clamp(0.0, 1.0),

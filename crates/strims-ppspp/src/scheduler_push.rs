@@ -270,6 +270,20 @@ pub const PUSH_OVERHEAD: f64 = 1.25;
 /// The busy fraction below which the upload measurement can't tell the
 /// capacity apart from more: the capacity estimate uses at least this.
 const MIN_BUSY: f64 = 0.05;
+/// A relay's capacity reading runs at most this many times the most it
+/// wrote lately ([`UploadInfo::written_peak`], at least [`RELAY_FLOOR`])
+/// while its links show no queue ...
+pub const RELAY_GROWTH: f64 = 4.0;
+/// ... this many once their latest round trips stand [`QUEUE_FORMING`]
+/// above their bases ...
+pub const RELAY_GROWTH_FORMING: f64 = 1.5;
+pub const QUEUE_FORMING: Duration = Duration::from_millis(10);
+/// ... and no more than it wrote from [`QUEUE_FORMED`].
+pub const QUEUE_FORMED: Duration = Duration::from_millis(25);
+/// The write rate a relay's bound starts from while it has written less,
+/// in bytes per second: a relay that has carried nothing yet still reads
+/// enough for its first children.
+pub const RELAY_FLOOR: f64 = 32_000.0;
 /// The busy fraction from which the measurement shows a saturated uplink:
 /// below it a known capacity stands, since a link that isn't saturated
 /// shows only a lower bound.
@@ -320,6 +334,9 @@ pub(crate) struct UploadInfo {
     pub(crate) drained: Option<f64>,
     /// ... and whether one stands now.
     pub(crate) draining: bool,
+    /// The largest write rate of the last few seconds, in bytes per
+    /// second (held while it's newer than the meter's peak span).
+    pub(crate) written_peak: f64,
 }
 
 impl UploadInfo {
@@ -329,7 +346,46 @@ impl UploadInfo {
     /// link that is rarely busy has at least `rate / MIN_BUSY`. `None`
     /// before anything was sent and without a hint.
     fn capacity(&self) -> Option<f64> {
-        let measured = (self.rate > 0).then(|| self.rate as f64 / self.busy.max(MIN_BUSY));
+        self.capacity_within(f64::INFINITY)
+    }
+
+    /// The capacity a relay admits and sheds subscribers on:
+    /// [`capacity`](Self::capacity), with the busy time's reading at most
+    /// [`RELAY_GROWTH`] times the most it wrote lately, less once its links
+    /// show a queue forming.
+    ///
+    /// Buffers below the runner (vnic's link buffers, socket buffers, a
+    /// data channel's buffered amount) take writes at once, a few hundred
+    /// kilobytes across a relay's links, so its busy time reads next to
+    /// nothing while its uplink is full and the reading runs to
+    /// `rate / MIN_BUSY`, twenty times what it writes. A relay on a thin
+    /// uplink took children for twice its uplink on that before its links
+    /// showed a queue, and its trees fell apart. Bounding the reading by
+    /// what the relay has carried lets it grow a few times per round of
+    /// admissions, as slow start does, and stop once a queue forms: the
+    /// links' latest round trips show one within a probe interval. A
+    /// relay that has carried nothing yet starts from [`RELAY_FLOOR`].
+    /// The driver's hint stands as it is, and so does the delivered rate
+    /// under a standing queue. The seed's budget has its own ramp and
+    /// window validation and takes the unbounded reading.
+    fn relay_capacity(&self) -> Option<f64> {
+        let queue = self.latest_delay.unwrap_or(Duration::ZERO);
+        let growth = if queue < QUEUE_FORMING {
+            RELAY_GROWTH
+        } else if queue < QUEUE_FORMED {
+            RELAY_GROWTH_FORMING
+        } else {
+            1.0
+        };
+        let wrote = self.written_peak.max(self.rate as f64).max(RELAY_FLOOR);
+        self.capacity_within(growth * wrote)
+    }
+
+    /// [`capacity`](Self::capacity) with the busy time's reading at most
+    /// `bound`.
+    fn capacity_within(&self, bound: f64) -> Option<f64> {
+        let measured =
+            (self.rate > 0).then(|| (self.rate as f64 / self.busy.max(MIN_BUSY)).min(bound));
         match (measured, self.hint.map(|h| h as f64)) {
             (Some(m), Some(h)) if self.busy >= SATURATED_BUSY => Some(m.min(h)),
             (_, Some(h)) => Some(h),
@@ -988,7 +1044,7 @@ impl PeerSwarmScheduler {
         let sample = Upload {
             rate: u.rate,
             busy: (u.busy * 1000.0) as u64,
-            capacity: u.capacity().map(|c| c as u64),
+            capacity: u.relay_capacity().map(|c| c as u64),
             hint: u.hint,
             others: u.others as u64,
             committed: committed as u64,
@@ -1395,7 +1451,7 @@ impl PeerSwarmScheduler {
         let (ok, rule) = if already {
             (true, AdmitRule::Subscribed)
         } else {
-            match (pinned.or(granted.map(|g| g.ok)), p.upload.capacity()) {
+            match (pinned.or(granted.map(|g| g.ok)), p.upload.relay_capacity()) {
                 (Some(ok), _) => (
                     ok,
                     match (pinned, granted) {
@@ -1423,7 +1479,7 @@ impl PeerSwarmScheduler {
             committed: (children as f64 * rate + p.upload.others) as u64,
             others: p.upload.others as u64,
             stream_rate: rate as u64,
-            capacity: p.upload.capacity().map(|c| c as u64),
+            capacity: p.upload.relay_capacity().map(|c| c as u64),
             target_permille: (target * 1000.0) as u64,
             stream_children: stream_children as u64,
             holders: granted.map_or(0, |g| g.holders as u64),
@@ -2013,7 +2069,7 @@ impl PeerSwarmScheduler {
         {
             return;
         }
-        let Some(cap) = p.upload.capacity() else {
+        let Some(cap) = p.upload.relay_capacity() else {
             return;
         };
         // Pull answers don't count: closing a subscriber turns its pushes
@@ -2190,7 +2246,7 @@ impl PeerSwarmScheduler {
                 .collect();
             out.upload_rate = p.upload.rate;
             out.upload_busy_permille = (p.upload.busy * 1000.0) as u32;
-            out.upload_capacity = p.upload.capacity().map_or(0, |c| c as u64);
+            out.upload_capacity = p.upload.relay_capacity().map_or(0, |c| c as u64);
             out.upload_queue_delay = p.upload.queue_delay;
             out.interior = if s.is_seed { None } else { p.interior };
             out.expected = c.expected;
@@ -2283,6 +2339,67 @@ mod tests {
         };
         assert_eq!(idle.capacity(), Some(1000.0 / MIN_BUSY));
         assert_eq!(UploadInfo::default().capacity(), None);
+    }
+
+    #[test]
+    fn a_relay_reads_at_most_a_few_times_what_it_wrote() {
+        let idle = UploadInfo {
+            rate: 50_000,
+            busy: 0.0,
+            written_peak: 60_000.0,
+            ..Default::default()
+        };
+        assert_eq!(idle.capacity(), Some(50_000.0 / MIN_BUSY));
+        assert_eq!(idle.relay_capacity(), Some(RELAY_GROWTH * 60_000.0));
+        // Less once a queue forms, and what it wrote once one stands.
+        let forming = UploadInfo {
+            latest_delay: Some(QUEUE_FORMING),
+            ..idle
+        };
+        assert_eq!(
+            forming.relay_capacity(),
+            Some(RELAY_GROWTH_FORMING * 60_000.0)
+        );
+        let formed = UploadInfo {
+            latest_delay: Some(QUEUE_FORMED),
+            ..idle
+        };
+        assert_eq!(formed.relay_capacity(), Some(60_000.0));
+        // A relay that has carried nothing yet starts from the floor, which
+        // bounds the reading without raising it.
+        let new = UploadInfo {
+            rate: 10_000,
+            busy: 0.0,
+            ..Default::default()
+        };
+        assert_eq!(new.relay_capacity(), Some(RELAY_GROWTH * RELAY_FLOOR));
+        let quiet = UploadInfo { rate: 1000, ..new };
+        assert_eq!(quiet.relay_capacity(), Some(1000.0 / MIN_BUSY));
+        // A reading the busy time backs stands.
+        let busy = UploadInfo { busy: 0.8, ..idle };
+        assert_eq!(busy.relay_capacity(), Some(50_000.0 / 0.8));
+    }
+
+    #[test]
+    fn a_relay_keeps_the_hint_and_the_drained_rate() {
+        let idle = UploadInfo {
+            rate: 50_000,
+            busy: 0.0,
+            written_peak: 50_000.0,
+            ..Default::default()
+        };
+        let hinted = UploadInfo {
+            hint: Some(5_000_000),
+            ..idle
+        };
+        assert_eq!(hinted.relay_capacity(), Some(5_000_000.0));
+        let draining = UploadInfo {
+            drained: Some(400_000.0),
+            draining: true,
+            latest_delay: Some(QUEUE_FORMED),
+            ..idle
+        };
+        assert_eq!(draining.relay_capacity(), Some(400_000.0));
     }
 
     #[test]
