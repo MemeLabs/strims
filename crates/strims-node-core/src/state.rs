@@ -82,6 +82,33 @@ const PUMP_ROUNDS: usize = 8;
 /// The weight of the transfer (ppspp) QoS class under vnic's root.
 const TRANSFER_QOS_WEIGHT: u64 = 1;
 
+/// The most a ppspp frame body holds, unless its swarms' chunks need more
+/// ([`ppspp_frame`]): about one 4 KiB chunk with its integrity and the
+/// channels' control messages.
+///
+/// vnic frames a writer's data while its link has an MTU free and keeps
+/// what it framed in send order: under `TCP_NOTSENT_LOWAT` a link's buffer
+/// is one MTU plus one write, so a 64 KiB frame would leave up to 80 KiB
+/// per link below the runner. There a push can no longer be dropped when
+/// its deadline passes or go behind a fresher one, and the runner's busy
+/// time, which the upload meter reads, doesn't see it: when the uplink
+/// falls, every link's backlog drains at the new rate before anything new
+/// goes. A frame is also how long QoS keeps every other peer waiting:
+/// 13 ms at 5 Mbit/s for this size, 100 ms for a full frame.
+const PPSPP_FRAME: usize = 8 * 1024;
+
+/// The most a ppspp frame body holds: [`PPSPP_FRAME`], or room for two of
+/// the largest chunks the runner's swarms send, so a chunk always fits
+/// with its integrity.
+fn ppspp_frame(runner: &Runner) -> usize {
+    let chunk = runner
+        .swarms()
+        .map(|(_, s)| s.options().chunk_size)
+        .max()
+        .unwrap_or(0);
+    PPSPP_FRAME.max(chunk.saturating_mul(2))
+}
+
 slotmap::new_key_type! {
     /// A dial in progress.
     pub struct DialId;
@@ -731,9 +758,11 @@ impl State {
             vnic.poll_egress(now, &mut |f| match f.tag {
                 Tag::Vpn(net) => vpn.fill_egress(net, f.peer, f.body),
                 Tag::Ppspp(pp) => {
+                    let room = ppspp_frame(runner).min(f.body.len());
+                    let (body, _) = f.body.split_at_mut(room);
                     let len = match capture.as_mut() {
-                        Some(c) => c.poll_transmit(runner, pp, now, f.body),
-                        None => runner.poll_transmit(pp, now, f.body),
+                        Some(c) => c.poll_transmit(runner, pp, now, body),
+                        None => runner.poll_transmit(pp, now, body),
                     };
                     Fill {
                         len,
