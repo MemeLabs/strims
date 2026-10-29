@@ -6,9 +6,10 @@
   hack/sim-farm/farm.py build  MATRIX...
   hack/sim-farm/farm.py run    MATRIX... [--max-vcpus N] [--families F,...]
                                [--regions R,...] [--max-region-vcpus N]
-                               [--max-instance-cores N] [--hours H]
-                               [--verify N] [--job-timeout MIN] [--keep]
-                               [--local [--slots N]]
+                               [--max-instance-cores N] [--work-per-boot K]
+                               [--hours H] [--verify N] [--job-timeout MIN]
+                               [--keep] [--local [--slots N]]
+  hack/sim-farm/farm.py estimate MATRIX... [run's options]
   hack/sim-farm/farm.py status [MATRIX] [--regions R,...]
   hack/sim-farm/farm.py down   [MATRIX] [--regions R,...]
   hack/sim-farm/farm.py report MATRIX [--where KEY=VALUE ...] [--group KEY,...]
@@ -56,19 +57,34 @@ never from the working tree.
 run builds what's missing, then keeps spot instances busy until every job
 has a row. A matrix's state is target/sim-farm/<matrix>/: rows.jsonl (a
 row per finished job, with its arm, commit, environment, host and its
-zone, CPU time and peak RSS), failures.jsonl, mismatches.jsonl and
-farm.log. A job's id hashes its arm's source and its environment, so a
-rerun skips the jobs that have rows, and an arm whose source changed runs
-again.
+zone, wall and CPU time and peak RSS), failures.jsonl, mismatches.jsonl
+and farm.log. A job's id hashes its arm's source and its environment, so
+a rerun skips the jobs that have rows, and an arm whose source changed
+runs again.
 
-run takes several matrices at once: one queue holds their jobs, matrix by
-matrix in the order given, and one set of instances runs them. A job two
-matrices share (the same source and environment) runs once, and its row
-goes to each under that matrix's arm; a row one of them already has is
-copied into the others. The run is named for its matrices, their names
-sorted and joined with "+", and keeps its own files (the canary's trace,
-SSH host keys, --local's worker) in target/sim-farm/<run>/, which for one
+run takes several matrices at once: one queue holds their jobs, and one
+set of instances runs them. A job two matrices share (the same source and
+environment) runs once, and its row goes to each under that matrix's arm;
+a row one of them already has is copied into the others. The run is named
+for its matrices, their names sorted and joined with "+" (past EC2's
+256-character tag value, the first's, "+<n>more-" and a hash of them all),
+and keeps its own files (the list of its matrices, the canary's trace, SSH
+host keys, --local's worker) in target/sim-farm/<run>/, which for one
 matrix is that matrix's state. Each matrix's farm.log gets the whole log.
+
+A test job is expected to take the mean wall of the latest 64 earlier
+rows of its test and environment, seeds aside, here in any matrix
+(another arm's too; code and instance types change what a job takes);
+else of its matrix's cell, the rows whose environment is the matrix's
+[env] but for its axes and what [[derive]] sets (another value of an
+axis), else whose environment has the matrix's [env] among other
+variables (a knob it doesn't name); else, once some have run, the mean of
+its matrix's jobs this run; else a minute. target/sim-farm/walls.jsonl
+holds every test row's test, environment, wall and time, and each run
+first takes in what the matrices' rows.jsonl have added since
+(walls-read.json keeps how far). The queue runs the longest jobs first,
+and before them those no earlier row times, which may be long, so a run
+ends on short jobs; jobs expected alike keep their matrices' order.
 
 - Test jobs' instances run one job per physical core, fewer if memory
   binds (the largest slot_mem_gib of the run's matrices each, and 4 GiB
@@ -80,6 +96,17 @@ matrix is that matrix's state. Each matrix's farm.log gets the whole log.
   (an SMT core costs two): the cheapest pools anywhere fill first, and a
   run goes on to dearer ones, in its region or another, only as the
   cheaper ones are full or out of capacity.
+- A run launches slots for its work, not its jobs. An instance's boot
+  (launch to its canary passed, a minute or more: this run's mean, else
+  that of the last runs in costs.jsonl) is billed and runs nothing, so a
+  slot is worth launching only for enough work. With B the boot and k
+  --work-per-boot (2), the run wants as many new slots as the work left
+  (the queued and waiting jobs' expected walls, and half theirs for the
+  jobs out), less what its instances will have done (1 + k)B from now (a
+  booting one's slots from when it should be ready), would keep busy for
+  kB each: a new instance spends at most 1/(1 + k) of its time booting.
+  It launches no more slots than jobs, and no instance of twice the slots
+  it wants or more unless it has none.
 - Each region has a spot quota of its own. A region's budget is its quota
   less the spot vCPUs it counts there outside this run's instances (those
   shutting down count too), at most --max-region-vcpus; the run's
@@ -88,7 +115,8 @@ matrix is that matrix's state. Each matrix's farm.log gets the whole log.
   budget is read again every 2 minutes while the run wants more
   instances; a quota error there holds it at what the run has in it until
   then, and the run launches in the others meanwhile. A pool out of
-  capacity is skipped for 10 minutes.
+  capacity, or that took an instance back (a spot interruption), is
+  skipped for 10 minutes.
 - Instances are one-time spot instances, tagged strims-sim-farm=<run>,
   that terminate when they shut down. Each shuts itself down after
   --hours (6), and its worker powers it off after --idle-minutes (15) with
@@ -100,9 +128,15 @@ matrix is that matrix's state. Each matrix's farm.log gets the whole log.
   matrix's first job that waits on none, with its [canary] overrides, also
   run here. A different trace means the binaries don't reproduce across
   hosts, and the run stops.
-- Every 15 s the controller syncs each instance over SSH (worker.py sync):
-  it tops the instance's queue up to its slots plus a quarter, stores the
-  rows that came back (fsync), and acks them on the next sync.
+- An instance logs its boot's steps when it's ready: listed running, SSH
+  answering, its worker started, its canary passed, each after its launch.
+- Every 15 s the controller syncs each instance over SSH (worker.py
+  sync), and at once again each one with room once the jobs it finished
+  are taken off. A sync tops the instance's queue up to its slots plus a
+  quarter, and with short jobs to 45 s of expected work per slot (three
+  syncs' worth), but to no more work than the instance's share of what's
+  left; it stores the rows that came back (fsync), and acks them on the
+  next sync.
 - An instance that is gone, has a spot interruption notice, or fails SSH
   for 3 minutes is terminated, and its jobs go back to the head of the
   queue. Runs are deterministic, so a reissued job must print the same
@@ -126,6 +160,22 @@ matrix is that matrix's state. Each matrix's farm.log gets the whole log.
 --local runs the jobs here instead, --slots at a time (default half the
 cores), with no AWS: for small matrices and for measuring one job.
 Testbed jobs run here one at a time.
+
+What a run costs is its instances' spot prices, plus each one's public
+IPv4 address and root volume, from its launch call to its terminate call,
+a minute at least, as EC2 bills them. A test run logs its estimate before
+it launches: its jobs and expected work, the instances it would launch
+for that in the cheapest pools if each had capacity, and its wall time
+and cost: the model's (a boot, then the work over their slots or the
+longest job, whichever is longer, and two syncs, for those instances),
+times the median of what the last 5 runs took over their model's, which
+covers what it leaves out (the syncs' latency, waves of jobs, the end).
+`estimate` prints that for a run's matrices and options without building
+or launching anything: run it with --regions and without to see what
+more regions buy. Once it's done a run logs what it took (launch to
+finish), what it cost, per 1,000 jobs and as instances booting, running
+jobs (their walls) and idle, and each region's mean boot, and adds that
+and its estimate as a line of target/sim-farm/costs.jsonl.
 
 A testbed matrix (kind = "testbed") runs hack/testbed/run.sh as a black
 box: `run.sh <out dir>` with the job's environment, real nodes in Docker
@@ -236,6 +286,7 @@ import concurrent.futures as cf
 import contextlib
 import dataclasses
 import datetime
+import fcntl
 import hashlib
 import itertools
 import json
@@ -274,6 +325,28 @@ POOL_BACKOFF = 600
 PRICE_REFRESH = 600
 BUDGET_REFRESH = 120
 SYSTEM_GIB = 4
+# What a job is taken to need, in seconds of its slot, when no row says,
+# and an instance's boot (launch to its canary passed) before any is
+# measured.
+DEFAULT_JOB_S = 60
+DEFAULT_BOOT_S = 75
+# The work, in seconds per slot, an instance's queue holds: short jobs
+# enough to last three syncs.
+PREFETCH_S = 3 * TICK
+# The rows a job's expected wall averages, the latest: code and instance
+# types change what a job takes.
+RECENT_ROWS = 64
+# EC2 bills a minute at least, and an instance's public IPv4 address
+# ($0.005/h) and 16 GiB gp3 root volume ($0.08/GiB-month) on top of its
+# spot price.
+MIN_BILLED_S = 60
+INSTANCE_EXTRA_HOURLY = 0.005 + 16 * 0.08 / 730
+# Every test row's test, environment, wall and time (index_walls), how far
+# each matrix's rows.jsonl has been read into it, and a line per finished
+# run.
+WALLS = FARM / "walls.jsonl"
+WALLS_READ = FARM / "walls-read.json"
+COSTS = FARM / "costs.jsonl"
 # The seed knobs, which reports don't group by.
 SEED_KEYS = {"SIM_SEED", "STRIMS_SIM_SEED"}
 # What a test binary is built from: commits that change none of it share
@@ -592,37 +665,182 @@ class Matrix:
 
 def run_name(matrices: list[Matrix]) -> str:
     """The matrices' names, sorted and joined with "+": the run's tag, so a
-    rerun of the same matrices adopts its instances."""
+    rerun of the same matrices adopts its instances. EC2 tag values take
+    256 characters, and the Name tag is sim-farm-<run>: a longer name gives
+    way to the first matrix's, the count of the others and a hash of all of
+    them, and the run's state lists them (run_matrices)."""
     names = sorted(m.name for m in matrices)
     if len(set(names)) < len(names):
         sys.exit(f"two matrices share a name: {names}")
     if len(names) > 1 and any("+" in n for n in names):
         sys.exit(f"a matrix run with others can't have a + in its name: {names}")
     name = "+".join(names)
-    # EC2 tag values take 256 characters, and the Name tag is sim-farm-<run>.
     if len(f"sim-farm-{name}") > 256:
-        sys.exit("too many matrices for one run: its name passes EC2's 256-character tag limit")
+        h = hashlib.sha1(name.encode()).hexdigest()[:8]
+        name = f"{names[0]}+{len(names) - 1}more-{h}"
+        if len(f"sim-farm-{name}") > 256:
+            sys.exit(f"{names[0]}: the name is too long for EC2's 256-character tag limit")
     return name
 
 
+def past_boot_s(kind: str) -> float:
+    """The mean boot of the last few runs of this kind (costs.jsonl), else
+    DEFAULT_BOOT_S."""
+    got = [r["boot_s"] for r in read_jsonl(COSTS) if r.get("kind") == kind and r.get("boot_s")][-5:]
+    return statistics.fmean(got) if got else DEFAULT_BOOT_S
+
+
+def past_ratios() -> tuple[float, float, int]:
+    """What the last few finished test runs took over their model's wall
+    time and cost (costs.jsonl), the medians, and how many runs: what the
+    model leaves out (the syncs' latency, the waves of jobs, the end)."""
+    past = [
+        r for r in read_jsonl(COSTS)
+        if r.get("kind") == "test" and not r.get("interrupted") and r.get("wall_s") and r.get("cost")
+        and (r.get("estimate") or {}).get("model_wall_s", (r.get("estimate") or {}).get("wall_s"))
+    ][-5:]
+    if not past:
+        return 1.0, 1.0, 0
+    model = [(r["estimate"].get("model_wall_s", r["estimate"]["wall_s"]),
+              r["estimate"].get("model_cost", r["estimate"]["cost"])) for r in past]
+    return (
+        statistics.median(r["wall_s"] / w for r, (w, _) in zip(past, model)),
+        statistics.median(r["cost"] / c for r, (_, c) in zip(past, model)),
+        len(past),
+    )
+
+
+def run_matrices(run: str) -> list[str]:
+    """The matrices of a run, as its state lists them."""
+    if not run or "/" in run or run.startswith("."):
+        return []
+    try:
+        return (FARM / run / "matrices").read_text().split()
+    except OSError:
+        return []
+
+
 def read_jsonl(path: Path) -> list[dict]:
+    """A JSON-lines file's records; a last line without its newline is one
+    another process is still appending, and is left for the next read."""
     if not path.exists():
         return []
+    text = path.read_text()
     out = []
-    for line in path.read_text().splitlines():
+    for line in text[: text.rfind("\n") + 1].splitlines():
         if line.strip():
             out.append(json.loads(line))
     return out
 
 
 def append_jsonl(path: Path, recs: list[dict]) -> None:
+    """Appends the records in one write, holding an exclusive flock on the
+    file: runs at once share walls.jsonl and costs.jsonl."""
     if not recs:
         return
     with path.open("a") as f:
-        for r in recs:
-            f.write(json.dumps(r) + "\n")
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.write("".join(json.dumps(r) + "\n" for r in recs))
         f.flush()
         os.fsync(f.fileno())
+
+
+# --- job times ----------------------------------------------------------
+
+
+def row_head(line: bytes) -> dict | None:
+    """A rows.jsonl line's fields but its `row`, which comes last and can
+    be large."""
+    i = line.find(b', "row": ')
+    for text in ([line[:i] + b"}"] if i > 0 else []) + [line]:
+        try:
+            return json.loads(text)
+        except ValueError:
+            pass
+    return None
+
+
+def index_walls() -> list[dict]:
+    """Every test row's test, environment, wall and time here: walls.jsonl,
+    after it takes in what each matrix's rows.jsonl has added since it was
+    last read (all of it the first time)."""
+    FARM.mkdir(parents=True, exist_ok=True)
+    with (FARM / "walls.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            read = json.loads(WALLS_READ.read_text())
+        except (OSError, ValueError):
+            read = {}
+        new = []
+        for path in sorted(FARM.glob("*/rows.jsonl")):
+            key = path.parent.name
+            at = read.get(key, 0)
+            if at > path.stat().st_size:
+                at = 0  # rewritten
+            with path.open("rb") as f:
+                f.seek(at)
+                for line in f:
+                    if not line.endswith(b"\n"):
+                        break  # still being written
+                    at += len(line)
+                    rec = row_head(line)
+                    if rec and rec.get("kind", "test") == "test" and rec.get("wall_s"):
+                        new.append({
+                            "test": rec.get("test"), "env": rec.get("env", {}),
+                            "wall_s": rec["wall_s"], "at": rec.get("at", ""),
+                        })
+            read[key] = at
+        append_jsonl(WALLS, new)
+        tmp = WALLS_READ.with_suffix(".tmp")
+        tmp.write_text(json.dumps(read))
+        os.replace(tmp, WALLS_READ)
+        return read_jsonl(WALLS)
+
+
+def env_key(env: dict[str, str], drop: set[str]) -> tuple:
+    return tuple(sorted((k, v) for k, v in env.items() if k not in drop))
+
+
+def recent_mean(walls: list[tuple[str, float]]) -> float:
+    """The mean wall of the latest RECENT_ROWS of (time, wall)."""
+    return statistics.fmean(w for _, w in sorted(walls)[-RECENT_ROWS:])
+
+
+def priors(owners: dict[str, list[tuple["Matrix", "Job"]]]) -> dict[str, float]:
+    """Each job's expected wall, from past rows (index_walls), if any: the
+    mean of the latest RECENT_ROWS rows of its test and environment, seeds
+    aside, else of its matrix's cell, the rows of its test whose environment
+    is the matrix's [env] but for the axes and what [[derive]] sets (another
+    value of an axis), else whose environment has the matrix's [env] among
+    other variables (a knob the matrix doesn't name)."""
+    recs = index_walls()
+    exact = collections.defaultdict(list)
+    for r in recs:
+        exact[(r["test"], env_key(r["env"], SEED_KEYS))].append((r.get("at", ""), r["wall_s"]))
+    out = {}
+    missed = collections.defaultdict(list)
+    for jid, own in owners.items():
+        m, j = own[0]
+        walls = exact.get((j.test, env_key(dict(j.env), SEED_KEYS)))
+        if walls:
+            out[jid] = recent_mean(walls)
+        else:
+            missed[m].append(j)
+    for m, jobs in missed.items():
+        drop = SEED_KEYS | set(m.axes) | {k for d in m.derives for k, _ in d.set}
+        fixed = {k: v for k, v in m.env.items() if k not in drop}
+        cell, loose = collections.defaultdict(list), collections.defaultdict(list)
+        for r in recs:
+            e = r["env"]
+            if r["test"] in m.tests and all(e.get(k) == v for k, v in fixed.items()):
+                loose[r["test"]].append((r.get("at", ""), r["wall_s"]))
+                if all(k in fixed or k in drop for k in e):
+                    cell[r["test"]].append(loose[r["test"]][-1])
+        means = {t: recent_mean(cell[t] or w) for t, w in loose.items()}
+        for j in jobs:
+            if j.test in means:
+                out[j.id] = means[j.test]
+    return out
 
 
 # --- build --------------------------------------------------------------
@@ -807,7 +1025,7 @@ def tag_of(inst: dict, key: str) -> str | None:
 def in_run(inst: dict, matrix: str) -> bool:
     """Whether the instance is a run's that includes the matrix."""
     run = tag_of(inst, TAG) or ""
-    return matrix == run or matrix in run.split("+")
+    return matrix == run or matrix in run.split("+") or matrix in run_matrices(run)
 
 
 def farm_instances(region: str, run: str | None) -> list[dict]:
@@ -1009,6 +1227,52 @@ def pool_order(p: Pool) -> tuple:
     return (p.per_slot, p.spec.vcpus / p.spec.slots, p.type, p.zone)
 
 
+def cheapest(pools: list[Pool], rooms: dict[str, float], caps: dict[str, float],
+             per_pool: collections.Counter, deficit: float, pinned: str | None = None) -> Pool | None:
+    """The pool to launch in for `deficit` slots: of those with space in
+    their region's room and under their cap (vCPUs; one instance always
+    fits the cap), the one whose price per slot it would fill is least, in
+    any region, then whose quota's vCPUs per slot: as the queue drains,
+    smaller types. A testbed run's first type comes first, so its hosts are
+    alike."""
+    return min(
+        (
+            p for p in pools
+            if p.spec.vcpus <= rooms[p.region]
+            and per_pool[p.key] + p.spec.vcpus <= max(caps[p.region], p.spec.vcpus)
+        ),
+        key=lambda p: (
+            pinned is not None and p.type != pinned,
+            p.price / min(p.spec.slots, deficit), p.spec.vcpus / p.spec.slots,
+        ),
+        default=None,
+    )
+
+
+def plan_fleet(pools: list[Pool], budgets: dict[str, int], max_vcpus: int | None,
+               want: float) -> list[Pool]:
+    """The instances a run launches for `want` slots, as Run.scale picks
+    them, if every pool had capacity."""
+    used: collections.Counter = collections.Counter()
+    per_pool: collections.Counter = collections.Counter()
+    out = []
+    while want > 0:
+        total = sum(used.values())
+        rooms = {
+            r: b - used[r] if max_vcpus is None else min(b - used[r], max_vcpus - total)
+            for r, b in budgets.items()
+        }
+        caps = {r: (b if max_vcpus is None else min(b, max_vcpus)) / 2 for r, b in budgets.items()}
+        p = cheapest(pools, rooms, caps, per_pool, want)
+        if p is None or (out and want < p.spec.slots / 2):
+            break
+        out.append(p)
+        used[p.region] += p.spec.vcpus
+        per_pool[p.key] += p.spec.vcpus
+        want -= p.spec.slots
+    return out
+
+
 def pools(region: str, slot_mem_gib: float, families: list[str], max_cores: int,
           zones: dict[str, str], testbed: Testbed | None = None) -> list[Pool]:
     if testbed is not None:
@@ -1086,13 +1350,37 @@ class Host:
     ended: float | None = None
     note: str | None = None  # why its worker waits, as it last said
     region: str = ""
+    # Its boot's steps: first listed running, SSH answering, the worker
+    # started, and ready (its canary passed).
+    running_at: float | None = None
+    ssh_at: float | None = None
+    up_at: float | None = None
+    ready_at: float | None = None
+    busy_s: float = 0.0  # its jobs' walls, summed
+    adopted: bool = False
 
     @property
     def slots(self) -> int:
         return self.spec.slots
 
+    @property
+    def hourly(self) -> float:
+        return self.price + INSTANCE_EXTRA_HOURLY
+
     def cost(self, now: float) -> float:
-        return self.price * ((self.ended or now) - self.launched) / 3600
+        return self.hourly * max(MIN_BILLED_S, (self.ended or now) - self.launched) / 3600
+
+    def boot_s(self) -> float | None:
+        """Launch to ready, for an instance this run launched."""
+        return None if self.ready_at is None or self.adopted else self.ready_at - self.launched
+
+    def steps(self) -> str:
+        """Its boot's steps, in seconds after its launch."""
+        marks = [
+            ("running", self.running_at), ("SSH", self.ssh_at),
+            ("started", self.up_at), ("ready", self.ready_at),
+        ]
+        return ", ".join(f"{name} +{t - self.launched:.0f} s" for name, t in marks if t is not None)
 
 
 class Ssh:
@@ -1180,7 +1468,11 @@ class Run:
         self.verified = 0
         self.mismatches = 0
         self.failed = 0
-        self.walls: list[float] = []
+        self.seen: dict[str, list[float]] = collections.defaultdict(list)  # matrix -> walls this run
+        self.ran = 0  # rows this run stored, verify copies too
+        self.peak_slots = 0
+        self.estimated: dict | None = None
+        self.boot_prior = past_boot_s("testbed" if matrices[0].kind == "testbed" else "test")
         self.boot_failures = 0
         self.stopping = threading.Event()
         kinds = {m.kind for m in matrices}
@@ -1226,6 +1518,16 @@ class Run:
                     add(item, counts[j.id] >= 2)
         firsts = [own[0][1] for own in self.owners.values()]
         self.bins = sorted({j.bin for j in firsts} | {name for j in firsts for _, name in j.files})
+        # job id -> its expected wall, from past rows. Test jobs run longest
+        # first, and before them those no row says, which may be long, so
+        # the last to finish are short (a stable sort: otherwise matrix by
+        # matrix).
+        self.prior: dict[str, float] = {}
+        if self.testbed is None:
+            self.prior = priors(self.owners)
+            self.queue = collections.deque(sorted(
+                self.queue, key=lambda i: (i.job.id in self.prior, -self.prior.get(i.job.id, 0))
+            ))
 
     # -- results
 
@@ -1286,6 +1588,7 @@ class Run:
         if jid in self.rows:
             log(f"job {jid} ran again on {host.id}; keeping its first run")
             return
+        self.ran += 1
         at = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
         for m, j in self.owners[jid]:
             self.share_run(jid, m)
@@ -1309,7 +1612,7 @@ class Run:
             append_jsonl(m.state / "rows.jsonl", [rec])
             self.rows.setdefault(jid, rec)
         if res.get("wall_s"):
-            self.walls.append(res["wall_s"])
+            self.seen[self.owners[jid][0][0].name].append(res["wall_s"])
         self.release(jid)
 
     def store(self, host: Host, item: Item, res: dict) -> None:
@@ -1338,8 +1641,9 @@ class Run:
             append_jsonl(m.state / "rows.jsonl", [rec])
             recs.append((m, rec))
         self.done.add(item.wid)
+        self.ran += 1
         if res.get("wall_s"):
-            self.walls.append(res["wall_s"])
+            self.seen[self.owners[item.job.id][0][0].name].append(res["wall_s"])
         rec = recs[0][1]
         first = self.rows.setdefault(item.job.id, rec)
         self.release(item.job.id)
@@ -1410,9 +1714,15 @@ class Run:
         others = sum(1 for h in self.hosts if h is not host and h.state != "lost")
         if self.testbed is not None:
             return self.take_group(host, others)
-        want = host.slots + max(1, host.slots // 4) - len(host.assigned)
+        # Its slots and a quarter, and as many more as hold PREFETCH_S of
+        # work per slot, but no more work than its slots' share of what's
+        # left: no instance holds jobs others could run sooner.
+        least = host.slots + max(1, host.slots // 4)
+        ready = sum(h.slots for h in self.hosts if h.state == "ready")
+        goal = min(host.slots * PREFETCH_S, self.work_left() * host.slots / max(ready, 1))
+        have = sum(self.expected(i) for i in host.assigned.values() if i.copy != "canary")
         out, skipped = [], []
-        while want > 0 and self.queue:
+        while self.queue and (len(host.assigned) < least or have < goal):
             item = self.queue.popleft()
             if item.wid in self.done or item.wid in host.assigned:
                 continue
@@ -1422,7 +1732,7 @@ class Run:
             out.append(item)
             host.assigned[item.wid] = item
             self.took[item.job.id].add(host.id)
-            want -= 1
+            have += self.expected(item)
         self.queue.extendleft(reversed(skipped))
         return out
 
@@ -1512,6 +1822,8 @@ class Run:
                 item = self.items.get(wid)
                 if item is None or wid in self.done:
                     continue
+            if item.copy != "canary":
+                host.busy_s += res.get("wall_s") or 0
             if item.copy == "canary":
                 self.check_canary(host, res)
             elif res.get("row") is not None:
@@ -1544,7 +1856,11 @@ class Run:
             log(f"{host.id} lost track of {len(back)} jobs; requeued")
             self.queue.extendleft(reversed(back))
         if reply.get("interrupting"):
-            self.lose(host, "spot interruption notice")
+            # A pool AWS takes instances back from is one to stay out of.
+            if not self.local:
+                self.backoff[(host.type, host.zone)] = time.time() + POOL_BACKOFF
+            self.lose(host, f"spot interruption notice; skipping {host.type} in {host.zone} "
+                      f"for {POOL_BACKOFF // 60} min")
         elif not reply.get("serving") and host.assigned:
             log(f"{host.id}: the worker isn't running; restarting it")
             if self.local:
@@ -1580,8 +1896,9 @@ class Run:
     def check_canary(self, host: Host, res: dict) -> None:
         trace = (res.get("row") or {}).get("trace")
         if trace == self.canary_trace:
-            log(f"{host.id} ({host.type} in {host.zone}) passed the canary; {host.slots} slots")
-            host.state = "ready"
+            host.state, host.ready_at = "ready", time.time()
+            log(f"{host.id} ({host.type} in {host.zone}) passed the canary; {host.slots} slots; "
+                f"{host.steps()}")
             return
         why = res.get("error") or f"trace {trace}, here {self.canary_trace}"
         log(f"CANARY FAILED on {host.id} ({host.type}): {why}\n{res.get('log_tail', '')}")
@@ -1636,9 +1953,11 @@ class Run:
             if time.time() - start > 600:
                 raise RuntimeError(f"no SSH after 10 minutes: {why}")
             time.sleep(5)
+        host.ssh_at = time.time()
         self.ssh.put(host, [HERE / "worker.py"], "farm/")
         self.ssh.put(host, [BIN / b for b in self.bins], "farm/bin/")
         self.start_worker(host)
+        host.up_at = time.time()
 
     def refresh(self, now: float) -> None:
         """Each live host's state, from its region; a region that can't be
@@ -1663,6 +1982,8 @@ class Run:
                 self.lose(h, reason)
                 continue
             h.ip = inst.get("PublicIpAddress")
+            if st == "running" and h.running_at is None:
+                h.running_at = now
             if h.boot is None and st == "running" and h.ip:
                 h.boot = self.pool.submit(self.bootstrap, h)
             elif h.boot is not None and h.boot.done() and h.state in ("booting", "adopting"):
@@ -1671,9 +1992,9 @@ class Run:
                     if h.state == "booting" and self.testbed is None:
                         h.state = "canary"
                     else:
-                        h.state = "ready"
+                        h.state, h.ready_at = "ready", time.time()
                         if self.testbed is not None:
-                            log(f"{h.id} ({h.type} in {h.zone}) is ready")
+                            log(f"{h.id} ({h.type} in {h.zone}) is ready; {h.steps()}")
                 except Exception as e:
                     self.lose(h, f"bootstrap failed: {e}")
                     self.boot_failures += 1
@@ -1735,30 +2056,169 @@ class Run:
             return r.budget / 2
         return min(r.budget, self.args.max_vcpus) / 2
 
-    def pick(self, deficit: int, now: float) -> Pool | None:
-        rooms = {name: self.room(r) for name, r in self.regions.items()}
+    def pick(self, deficit: float, now: float) -> Pool | None:
         per_pool = collections.Counter()
         for h in self.hosts:
             if h.state != "lost":
                 per_pool[(h.type, h.zone)] += h.spec.vcpus
-        cands = [
-            p for p in self.pools
-            if self.backoff.get(p.key, 0) <= now
-            and p.spec.vcpus <= rooms[p.region]
-            and per_pool[p.key] + p.spec.vcpus
-            <= max(self.pool_cap(self.regions[p.region]), p.spec.vcpus)
-        ]
-        # The price per slot it can fill, in any region: as the queue
-        # drains, smaller types. A testbed run's first type comes first, so
-        # its hosts are alike.
-        return min(
-            cands,
-            key=lambda p: (
-                self.pinned is not None and p.type != self.pinned,
-                p.price / min(p.spec.slots, deficit), p.spec.vcpus / p.spec.slots,
-            ),
-            default=None,
+        return cheapest(
+            [p for p in self.pools if self.backoff.get(p.key, 0) <= now],
+            {name: self.room(r) for name, r in self.regions.items()},
+            {name: self.pool_cap(r) for name, r in self.regions.items()},
+            per_pool, deficit, self.pinned,
         )
+
+    # -- sizing
+
+    def expected(self, item: Item) -> float:
+        """What an item is expected to take, in seconds of its slot: its
+        prior, else the mean of what its matrix's jobs took this run, else
+        DEFAULT_JOB_S."""
+        e = self.prior.get(item.job.id)
+        if e is not None:
+            return e
+        seen = self.seen.get(self.owners[item.job.id][0][0].name)
+        return statistics.fmean(seen) if seen else DEFAULT_JOB_S
+
+    def work_left(self) -> float:
+        """The work left, in slot-seconds: the queued and waiting jobs'
+        expected walls, and half theirs for the jobs out."""
+        w = sum(self.expected(i) for i in self.queue if i.wid not in self.done)
+        w += sum(self.expected(i) for items in self.waiting.values() for i in items)
+        w += sum(
+            self.expected(i) / 2
+            for h in self.hosts if h.state != "lost"
+            for i in h.assigned.values() if i.copy != "canary"
+        )
+        return w
+
+    def boot_s(self) -> float:
+        """An instance's boot, launch to ready: the mean of this run's, else
+        of the last runs'."""
+        got = [b for h in self.hosts if (b := h.boot_s()) is not None]
+        return statistics.fmean(got) if got else self.boot_prior
+
+    def wanted(self, now: float) -> float:
+        """The slots worth launching: with B the boot and k --work-per-boot,
+        the work the live instances won't have done (1 + k)B from now, over
+        the kB each new slot would then have done. A booting instance's
+        slots count from when it should be ready."""
+        k, b = self.args.work_per_boot, self.boot_s()
+        d = (1 + k) * b
+        can = 0.0
+        for h in self.hosts:
+            if h.state == "ready":
+                can += h.slots * d
+            elif h.state != "lost":
+                can += h.slots * max(0.0, d - max(0.0, h.launched + b - now))
+        return (self.work_left() - can) / (k * b)
+
+    def estimate(self) -> dict:
+        """What the run should take, before it launches: its work, the
+        instances Run.scale would launch for it if every pool had capacity,
+        and the model's wall time, a boot then the work over their slots (or
+        the longest job, if longer) and two syncs, and their cost for that
+        long; then both times what the last runs took over their model's
+        (past_ratios)."""
+        work = self.work_left()
+        items = [i for i in self.queue if i.wid not in self.done]
+        items += [i for w in self.waiting.values() for i in w]
+        k, b = self.args.work_per_boot, self.boot_s()
+        budgets = {n: r.budget - self.live_vcpus(n) for n, r in self.regions.items()}
+        fleet = plan_fleet(self.pools, budgets, self.args.max_vcpus, work / (k * b))
+        slots = sum(p.spec.slots for p in fleet)
+        longest = max((self.expected(i) for i in items), default=0.0)
+        wall = b + max(work / slots, longest) + 2 * TICK if slots else None
+        cost = sum(p.price + INSTANCE_EXTRA_HOURLY for p in fleet) * wall / 3600 if slots else None
+        wall_x, cost_x, runs = past_ratios()
+        by_region = collections.Counter()
+        for p in fleet:
+            by_region[p.region] += p.spec.slots
+        return {
+            "jobs": len(items),
+            "timed": sum(1 for i in items if i.job.id in self.prior),
+            "work_slot_h": round(work / 3600, 2),
+            "boot_s": round(b),
+            "instances": len(fleet),
+            "slots": slots,
+            "slots_by_region": dict(by_region),
+            "model_wall_s": round(wall) if wall else None,
+            "model_cost": round(cost, 3) if wall else None,
+            "past_runs": runs,
+            "wall_s": round(wall * wall_x) if wall else None,
+            "cost": round(cost * cost_x, 2) if wall else None,
+        }
+
+    def say_estimate(self, est: dict) -> str:
+        timed = f"{est['timed'] / est['jobs']:.0%}" if est["jobs"] else "-"
+        head = (
+            f"{est['jobs']} jobs, {est['work_slot_h']:.1f} slot-h of work ({timed} of the jobs timed by "
+            f"earlier rows), a boot of {est['boot_s']} s, --work-per-boot {self.args.work_per_boot:g}: "
+        )
+        if not est["slots"]:
+            return head + "no pool fits the budget"
+        where = ", ".join(f"{n} {r}" for r, n in sorted(est["slots_by_region"].items()))
+        out = (
+            f"{est['instances']} instances with {est['slots']} slots ({where}), about "
+            f"{est['wall_s'] / 60:.1f} min and ${est['cost']:.2f}"
+        )
+        if est["past_runs"]:
+            out += (
+                f" (the model's {est['model_wall_s'] / 60:.1f} min and ${est['model_cost']:.2f}, scaled as "
+                f"the last {est['past_runs']} runs took over theirs)"
+            )
+        return head + out
+
+    def account(self, now: float, interrupted: bool) -> None:
+        """The run's cost, split into boots (launch to ready), jobs (their
+        walls) and idle slots, in the log and as a line of costs.jsonl."""
+        if self.local or not self.hosts:
+            return
+        mine = [h for h in self.hosts if not h.adopted]
+        start = min((h.launched for h in mine), default=min(h.launched for h in self.hosts))
+        cost = sum(h.cost(now) for h in self.hosts)
+        boot = sum(h.hourly * (min(h.ready_at or now, h.ended or now) - h.launched) / 3600 for h in mine)
+        busy = sum(h.hourly / h.slots * h.busy_s / 3600 for h in self.hosts)
+        idle = max(0.0, cost - boot - busy)
+        boots = collections.defaultdict(list)
+        for h in mine:
+            if (b := h.boot_s()) is not None:
+                boots[h.region].append(b)
+        allboots = [b for v in boots.values() for b in v]
+        rec = {
+            "run": self.name,
+            "kind": "testbed" if self.testbed is not None else "test",
+            "at": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
+            "regions": sorted(self.regions),
+            "interrupted": interrupted,
+            "jobs": self.ran,
+            "wall_s": round(now - start),
+            "instances": len(self.hosts),
+            "peak_slots": self.peak_slots,
+            "cost": round(cost, 4),
+            "boot_cost": round(boot, 4),
+            "busy_cost": round(busy, 4),
+            "idle_cost": round(idle, 4),
+            "busy_slot_h": round(sum(h.busy_s for h in self.hosts) / 3600, 2),
+            "boot_s": round(statistics.fmean(allboots)) if allboots else None,
+            "boot_s_by_region": {r: round(statistics.fmean(v)) for r, v in sorted(boots.items())},
+            "work_per_boot": self.args.work_per_boot,
+            "estimate": self.estimated,
+        }
+        append_jsonl(COSTS, [rec])
+        msg = (
+            f"{self.ran} jobs in {rec['wall_s'] / 60:.1f} min on {len(self.hosts)} instances "
+            f"({self.peak_slots} slots at most): ${cost:.2f}"
+        )
+        if self.ran:
+            msg += f", ${cost / self.ran * 1000:.2f} per 1,000 jobs"
+        msg += f"; boots ${boot:.2f}, jobs ${busy:.2f} ({rec['busy_slot_h']:.1f} slot-h), idle ${idle:.2f}"
+        if boots:
+            msg += "; boot " + ", ".join(f"{r} {s} s" for r, s in rec["boot_s_by_region"].items())
+        est = self.estimated
+        if est and est.get("wall_s"):
+            msg += f"; estimated {est['wall_s'] / 60:.1f} min, ${est['cost']:.2f}"
+        log(msg)
 
     @contextlib.contextmanager
     def held(self):
@@ -1782,9 +2242,11 @@ class Run:
             groups = {i.job.group for i in self.queue if i.wid not in self.done}
             deficit = len(groups) - sum(1 for h in live if not h.assigned)
         else:
+            # A slot per job at most, and only the slots whose work pays for
+            # their boot (wanted).
             waiting = sum(len(w) for w in self.waiting.values())
             demand = len(self.queue) + waiting + sum(len(h.assigned) for h in live)
-            deficit = demand - sum(h.slots for h in live)
+            deficit = min(demand - sum(h.slots for h in live), self.wanted(now))
         if deficit > 0:
             self.read_budgets(now)
         launched = 0
@@ -1794,6 +2256,10 @@ class Run:
                 if not live and not launched and now - self.last_stuck > 60:
                     self.last_stuck = now
                     log("no pool fits the budget or has capacity; waiting")
+                return
+            # An instance of twice the slots wanted or more waits, unless the
+            # run has none.
+            if self.testbed is None and deficit < pool.spec.slots / 2 and (live or launched):
                 return
             r = self.regions[pool.region]
             record_region(r.name)
@@ -1934,7 +2400,7 @@ class Run:
                 launched = datetime.datetime.fromisoformat(i["LaunchTime"]).timestamp()
                 h = Host(
                     i["InstanceId"], i["InstanceType"], zone, spec, price, launched,
-                    state="adopting", region=r,
+                    state="adopting", region=r, adopted=True,
                 )
                 self.hosts.append(h)
                 if self.testbed is not None and self.pinned is None:
@@ -1945,6 +2411,28 @@ class Run:
             f"{p.type}@{self.where(p.zone)} {p.spec.slots} slots ${p.per_slot * 1000:.1f}m/slot-h"
             for p in self.pools[:5]
         ))
+        if self.testbed is None:
+            self.estimated = self.estimate()
+            log("estimate: " + self.say_estimate(self.estimated))
+
+    def estimate_only(self) -> int:
+        """`estimate`: the run's estimate, with nothing changed in AWS (no
+        key pair, security group or launch)."""
+        if self.testbed is not None:
+            sys.exit("estimate takes test matrices")
+
+        def setup(name: str) -> Region:
+            _, zones = network(name)
+            return Region(name, "", zones, "", ("", ""))
+
+        self.regions = dict(in_regions_or_exit(setup, self.args.regions))
+        self.families = self.args.families.split(",")
+        self.find_pools()
+        if not self.pools:
+            sys.exit("no instance type fits (families, sizes, slot_mem_gib, regions)")
+        self.read_budgets(time.time())
+        print(self.say_estimate(self.estimate()))
+        return 0
 
     def where(self, zone: str) -> str:
         """A zone as the log shows it: its letter, or all of it when the
@@ -2002,10 +2490,8 @@ class Run:
         kinds = collections.Counter(f"{h.type}@{self.where(h.zone)}:{h.state}" for h in live)
         eta = ""
         slots = sum(h.slots for h in live if h.state == "ready")
-        if self.walls and slots:
-            left = len(self.queue) + out
-            mins = statistics.fmean(self.walls) * left / slots / 60
-            eta = f", about {mins:.0f} min left"
+        if slots and (self.prior or any(self.seen.values())):
+            eta = f", about {self.work_left() / slots / 60:.0f} min left"
         waiting = sum(len(w) for w in self.waiting.values())
         log(
             f"{ndone}/{total} done ({self.failed} failed, {self.verified} verified, "
@@ -2035,9 +2521,31 @@ class Run:
             sent = batches[h.id][1]
             h.acks = h.acks[len(sent):]
             self.absorb(h, reply)
+        if self.testbed is None:
+            self.refill([h for h in ready if h.state == "ready"])
         if not self.local:
             self.retire_idle()
             self.scale(now)
+            self.peak_slots = max(self.peak_slots, sum(h.slots for h in self.hosts if h.state != "lost"))
+
+    def refill(self, hosts: list[Host]) -> None:
+        """A second sync for each instance with room once the first has told
+        what finished, which the first's jobs were picked without: short
+        jobs would otherwise wait a tick for slots that came free. One that
+        fails gives its jobs back to the queue."""
+        more = {h.id: (h, self.take(h)) for h in hosts if self.queue}
+        futs = {hid: self.pool.submit(self.exchange, h, jobs, []) for hid, (h, jobs) in more.items() if jobs}
+        for hid, fut in futs.items():
+            h, jobs = more[hid]
+            try:
+                reply = fut.result()
+            except Exception:
+                for item in jobs:
+                    h.assigned.pop(item.wid, None)
+                    self.took[item.job.id].discard(h.id)
+                self.queue.extendleft(reversed(jobs))
+                continue
+            self.absorb(h, reply)
 
     def finished(self) -> bool:
         return not self.queue and not self.waiting and not any(
@@ -2046,6 +2554,7 @@ class Run:
 
     def run(self) -> int:
         self.state.mkdir(parents=True, exist_ok=True)
+        (self.state / "matrices").write_text("".join(f"{m.name}\n" for m in self.ms))
         for m in self.ms:
             log.open(m.state / "farm.log")
         to_run = sum(1 for i in self.items.values() if i.wid not in self.done)
@@ -2124,6 +2633,7 @@ class Run:
             if not self.local and self.hosts:
                 used = collections.Counter(f"{h.type} in {h.zone}" for h in self.hosts)
                 log("instances: " + ", ".join(f"{k} x{n}" for k, n in sorted(used.items())))
+            self.account(time.time(), interrupted)
         if interrupted:
             return 130
         for m in self.ms:
@@ -2358,29 +2868,32 @@ def main() -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build")
     b.add_argument("matrices", nargs="+")
-    r = sub.add_parser("run")
-    r.add_argument("matrices", nargs="+")
-    r.add_argument("--max-vcpus", type=int)
-    r.add_argument("--max-region-vcpus", type=int)
-    r.add_argument("--regions", help="R1,R2,...: the regions to launch in")
-    r.add_argument("--families", default=FAMILIES)
-    r.add_argument("--max-instance-cores", type=int, default=64)
-    r.add_argument("--hours", type=float, default=6)
-    r.add_argument("--verify", type=int, default=2)
-    r.add_argument("--job-timeout", type=float, default=60, help="minutes")
-    r.add_argument("--idle-minutes", type=float, default=15)
-    r.add_argument("--keep", action="store_true")
-    r.add_argument("--local", action="store_true")
-    r.add_argument("--slots", type=int)
-    r.add_argument(
-        "--ssh-key",
-        default=os.environ.get("STRIMS_FARM_SSH_KEY") or cfg.get("ssh_key") or "~/.ssh/id_rsa",
-    )
+    # estimate takes run's options, and so its [run] defaults.
     defaults = cfg.get("run", {})
-    known = {a.dest for a in r._actions} - {"help", "matrices", "ssh_key", "regions"}
-    if set(defaults) - known:
-        sys.exit(f"{CONFIG}: unknown [run] settings {sorted(set(defaults) - known)}")
-    r.set_defaults(**defaults)
+    for cmd in ("run", "estimate"):
+        r = sub.add_parser(cmd)
+        r.add_argument("matrices", nargs="+")
+        r.add_argument("--max-vcpus", type=int)
+        r.add_argument("--max-region-vcpus", type=int)
+        r.add_argument("--regions", help="R1,R2,...: the regions to launch in")
+        r.add_argument("--families", default=FAMILIES)
+        r.add_argument("--max-instance-cores", type=int, default=64)
+        r.add_argument("--work-per-boot", type=float, default=2)
+        r.add_argument("--hours", type=float, default=6)
+        r.add_argument("--verify", type=int, default=2)
+        r.add_argument("--job-timeout", type=float, default=60, help="minutes")
+        r.add_argument("--idle-minutes", type=float, default=15)
+        r.add_argument("--keep", action="store_true")
+        r.add_argument("--local", action="store_true")
+        r.add_argument("--slots", type=int)
+        r.add_argument(
+            "--ssh-key",
+            default=os.environ.get("STRIMS_FARM_SSH_KEY") or cfg.get("ssh_key") or "~/.ssh/id_rsa",
+        )
+        known = {a.dest for a in r._actions} - {"help", "matrices", "ssh_key", "regions"}
+        if set(defaults) - known:
+            sys.exit(f"{CONFIG}: unknown [run] settings {sorted(set(defaults) - known)}")
+        r.set_defaults(**defaults)
     s = sub.add_parser("status")
     s.add_argument("matrix", nargs="?")
     s.add_argument("--regions")
@@ -2399,9 +2912,16 @@ def main() -> int:
     if args.cmd == "build":
         for m in args.matrices:
             build(Matrix(m))
-    elif args.cmd == "run":
+    elif args.cmd in ("run", "estimate"):
+        if args.work_per_boot <= 0:
+            sys.exit("--work-per-boot is more than 0")
         ms = [Matrix(m) for m in args.matrices]
         run_name(ms)  # its checks, before the builds
+        if args.cmd == "estimate":
+            args.regions = regions_of(args.regions, cfg)
+            for m in ms:
+                m.resolve()
+            return Run(ms, args).estimate_only()
         if not args.local:
             args.regions = regions_of(args.regions, cfg)
         for m in ms:

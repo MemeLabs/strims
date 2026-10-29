@@ -82,10 +82,12 @@ runs in a worktree). The farm builds commits, never the working tree, so
 it runs one commit (`--ref`, default HEAD) with a matrix per cell whose
 axes are the seeds (`--seeds` of them from `--first-seed`, every cell
 alike) and the knob (the first of `--knob` for the ppspp sim, the second
-for strims-sim) at `off` and at each set. Each set is scored against
-`off`, which stands for the base: with its flags off the commit must
-reproduce the base's traces. It prints each set's collapses and lag p99
-by cell, then its scorecard, against `off` or the set `--against` names.
+for strims-sim) at `off` and at each set, the tier's matrices in one
+farm run (one boot of its instances, one tail). Each set is scored
+against `off`, which stands for the base: with its flags off the commit
+must reproduce the base's traces. It prints each set's collapses and lag
+p99 by cell, then its scorecard, against `off` or the set `--against`
+names.
 With `--refs` the arms are commits instead (the matrices' arms, no knob
 axis), scored against the first.
 """
@@ -798,10 +800,6 @@ def run_cells(cells, runs, slots, mem_gib):
 
 # --- farm -------------------------------------------------------------------
 
-# Matrices per farm.py run: their names (s-hash-NN, joined) stay inside an
-# EC2 tag.
-FARM_GROUP = 20
-
 
 def farm_root():
     """The main checkout, whose hack/sim-farm keeps the farm's config and
@@ -880,12 +878,8 @@ def farm(a, cells):
     farm_py = farm_root() / "hack" / "sim-farm" / "farm.py"
     if not a.no_run:
         print(f"farm run {name}: {len(cells)} matrices, {len(values)} arms x {len(seeds)} seeds", file=sys.stderr)
-        # A run's EC2 tag joins its matrices' names, at most 256
-        # characters: a tier past FARM_GROUP matrices runs in groups, one
-        # after another.
-        for i in range(0, len(paths), FARM_GROUP):
-            group = paths[i: i + FARM_GROUP]
-            subprocess.run([sys.executable, str(farm_py), "run", *map(str, group), *shlex.split(a.farm_args)])
+        # One run for the tier: one boot of its instances, and one tail.
+        subprocess.run([sys.executable, str(farm_py), "run", *map(str, paths), *shlex.split(a.farm_args)])
     rows = {v: {} for v in values}
     for i, c in enumerate(cells):
         seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"

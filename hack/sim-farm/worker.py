@@ -502,7 +502,8 @@ def serve(args: argparse.Namespace) -> None:
                 if args.poweroff:
                     subprocess.run(["sudo", "poweroff"], check=False)
                 break
-        time.sleep(1)
+        # A short job's slot shouldn't wait long for the next.
+        time.sleep(0.2 if running or queued else 1)
 
     for r in running.values():
         try:
