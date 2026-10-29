@@ -58,6 +58,8 @@
 #                          target/release/examples/testbed_node), built by
 #                          `cargo build --release -p strims-sim --example
 #                          testbed_node`
+#   RATE=<bytes/s>         the stream's rate, at every node (default
+#                          strims-testbed's RATE, 256 KiB/s)
 #   NODE_ARGS=<args>       more flags for every native node
 #   CAPTURE=1              ppspp captures in <out dir>/capture, one dump
 #                          per node (native and browser), named by host id
@@ -110,6 +112,7 @@ slow=${SLOW_DOWN_KBIT:-}
 steps=${SEED_UP_STEPS:-}
 compete=${COMPETE:-}
 node_args=${NODE_ARGS:-}
+rate_arg=${RATE:+--rate $RATE}
 bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
 browser_bin=${BROWSER_BIN:-$root/target/release/examples/testbed_browser}
 web=${WEB_BUNDLE:-$root/dist/wasm-testbed}
@@ -173,7 +176,7 @@ docker network inspect "$net" >/dev/null 2>&1 \
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|NODE_ARGS|TOPOLOGY|CAPTURE|KINDS|BROWSER_LINKS)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|KINDS|BROWSER_LINKS)=' \
   > "$out/settings" || true
 
 # The containers start one after another before the stream does, and
@@ -234,7 +237,7 @@ $shape
 tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
-exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join_at $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join_at $rate_arg $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   else
     # The browser runs as the image's unprivileged user, after root has
     # shaped the link. Its profile, in /tmp, stays in memory, so its
@@ -248,7 +251,7 @@ $shape
 tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
-exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join_at $hosts $capture > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join_at $rate_arg $hosts $capture > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   fi
 done
 
