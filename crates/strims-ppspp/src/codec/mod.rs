@@ -11,10 +11,11 @@
 //!
 //! Contracts:
 //!
-//! - Encodings must stay byte-identical to the v2 encoding pinned by
-//!   `golden/vectors.txt`, quirks included: non-minimal varints decode,
-//!   timestamps wrap, a [`Data`] payload may be shorter than its bin, and
-//!   an option list may lack its end marker.
+//! - Encodings must stay byte-identical to the encoding pinned by
+//!   `golden/vectors.txt`: v2's, with a [`SignedIntegrity`] that carries
+//!   its unit's count of chunks with data. Quirks included: non-minimal
+//!   varints decode, timestamps wrap, a [`Data`] payload may be shorter
+//!   than its bin, and an option list may lack its end marker.
 //! - Decoding never panics and allocates nothing: [`Reader`] is an iterator
 //!   of [`Message`] views whose byte strings (data, hashes, signatures,
 //!   swarm ids, handshake options, ANNOUNCE entries) borrow from the input,

@@ -4722,7 +4722,8 @@ fn sim_ledbat_constrained_downlink() {
         "{}",
         node.max_queue_delay
     );
-    // Its windows stay sane and it isn't drowning in timeouts.
+    // Its windows stay sane and it isn't drowning in timeouts. A greedy
+    // viewer answers no request, so each one asked of it is cancelled.
     for (&remote, &l) in &node.links {
         let s = node
             .runner
@@ -4730,10 +4731,12 @@ fn sim_ledbat_constrained_downlink() {
             .unwrap();
         assert!(s.scheduler.cwnd >= 2 * 1024, "{remote}: {s:?}");
         assert!(s.scheduler.flight_size >= 0);
-        assert!(
-            s.outbound.cancel * 10 <= s.outbound.request.max(10),
-            "{remote}: {s:?}"
-        );
+        if !matches!(sim.nodes[remote].role, Role::Greedy(_)) {
+            assert!(
+                s.outbound.cancel * 10 <= s.outbound.request.max(10),
+                "{remote}: {s:?}"
+            );
+        }
     }
 }
 

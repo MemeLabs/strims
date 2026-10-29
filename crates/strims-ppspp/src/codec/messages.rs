@@ -403,10 +403,15 @@ pub struct Integrity<'a> {
 }
 
 /// A signed Merkle root, or a sign-all chunk signature.
+///
+/// `dataless` is how many of the unit's last chunks are data-less: for a
+/// munro, below its chunks; for a sign-all chunk, 0. The signature covers
+/// it with the bin ([`crate::integrity`], Signatures).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SignedIntegrity<'a> {
     pub bin: Bin,
     pub timestamp: Time,
+    pub dataless: u64,
     pub signature: &'a [u8],
 }
 
@@ -749,7 +754,10 @@ impl<'a> Message<'a> {
             Message::Have(Have { bin }) | Message::Cancel(Cancel { bin }) => uvarint_len(bin.0),
             Message::Integrity(m) => uvarint_len(m.bin.0) + m.hash.len(),
             Message::SignedIntegrity(m) => {
-                uvarint_len(m.bin.0) + varint_len(time_to_wire(m.timestamp)) + m.signature.len()
+                uvarint_len(m.bin.0)
+                    + varint_len(time_to_wire(m.timestamp))
+                    + uvarint_len(m.dataless)
+                    + m.signature.len()
             }
             Message::Request(m) => uvarint_len(m.bin.0) + varint_len(time_to_wire(m.timestamp)),
             Message::Ping(_) => 8,
@@ -798,6 +806,7 @@ impl<'a> Message<'a> {
             Message::SignedIntegrity(m) => {
                 e.uvarint(m.bin.0)?;
                 e.varint(time_to_wire(m.timestamp))?;
+                e.uvarint(m.dataless)?;
                 e.bytes(m.signature)?;
             }
             Message::Request(m) => {
@@ -864,9 +873,11 @@ impl<'a> Message<'a> {
             MessageType::SignedIntegrity => {
                 let bin = Bin(d.uvarint()?);
                 let timestamp = time_from_wire(d.varint()?);
+                let dataless = d.uvarint()?;
                 Message::SignedIntegrity(SignedIntegrity {
                     bin,
                     timestamp,
+                    dataless,
                     signature: d.bytes(config.integrity_signature_size)?,
                 })
             }

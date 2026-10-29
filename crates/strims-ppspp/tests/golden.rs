@@ -231,6 +231,16 @@ fn codec_messages() {
             Message::SignedIntegrity(SignedIntegrity {
                 bin: Bin(15),
                 timestamp: ms(1_700_000_000_456),
+                dataless: 5,
+                signature: &sig64,
+            }),
+        ),
+        (
+            "signed_integrity_wide",
+            Message::SignedIntegrity(SignedIntegrity {
+                bin: Bin((1 << 40) - 1),
+                timestamp: ms(-1),
+                dataless: 1 << 39,
                 signature: &sig64,
             }),
         ),

@@ -559,9 +559,13 @@ fn handle_payload(
                 }
             }
             Message::Integrity(i) => swarm.handle_integrity(&mut ch.verifier, i.bin, i.hash),
-            Message::SignedIntegrity(i) => {
-                swarm.handle_signed_integrity(&mut ch.verifier, i.bin, i.timestamp, i.signature)
-            }
+            Message::SignedIntegrity(i) => swarm.handle_signed_integrity(
+                &mut ch.verifier,
+                i.bin,
+                i.timestamp,
+                i.dataless,
+                i.signature,
+            ),
             // Ignored: a request counts as answered when its data arrives.
             Message::Ack(_) => {}
             Message::Have(h) => {

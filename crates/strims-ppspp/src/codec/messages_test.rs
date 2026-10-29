@@ -118,6 +118,7 @@ fn message_marshal_unmarshal() {
         Message::SignedIntegrity(SignedIntegrity {
             bin: Bin(22),
             timestamp: ms(1234),
+            dataless: 300,
             signature: &FF16,
         }),
         Message::Ping(Ping { nonce: 1234 }),

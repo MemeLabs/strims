@@ -17,12 +17,23 @@
 //!
 //! # Signatures
 //!
-//! A live signature covers the big-endian `u64` timestamp in nanoseconds
-//! followed by the payload, in the payload's domain: a munro's root digest
-//! ([`Domain::PpsppMunroRoot`], Merkle), a chunk's data
-//! ([`Domain::PpsppChunk`], sign-all), or nothing ([`Domain::PpsppEpoch`]).
-//! Neither payload covers the bin, so a valid munro or chunk can be replayed
-//! at another position.
+//! A live signature covers the big-endian `u64` timestamp in nanoseconds,
+//! then for an integrity unit its [`Position`] (bin and count of
+//! data-less chunks, big-endian `u64`s), then the payload, in the
+//! payload's domain: a munro's root digest ([`Domain::PpsppMunroRoot`],
+//! Merkle), a chunk's data ([`Domain::PpsppChunk`], sign-all, whose count
+//! is always 0), or nothing ([`Domain::PpsppEpoch`], which has no
+//! position). A unit verifies only at its own bin, with the count its
+//! writer signed.
+//!
+//! # Data-less chunks
+//!
+//! A munro signed with fewer chunks than it spans ends in data-less chunks:
+//! all-zero chunks that peers never send. Its tree takes the digest of an
+//! all-zero chunk for each of them (and the digests those make above them),
+//! so a receiver checks the signed root with zero leaves there, whatever a
+//! peer sent for those subtrees, and refuses data for them. Only the
+//! writer's signed count makes a chunk data-less.
 //!
 //! # Peer input
 //!
@@ -75,6 +86,12 @@ pub enum Error {
     /// A chunk signature that doesn't verify.
     #[error("invalid chunk signature")]
     InvalidChunkSignature,
+    /// A signed count of chunks with data outside 1 to the unit's chunks.
+    #[error("chunk count outside the unit")]
+    InvalidChunkCount,
+    /// Data for a chunk its unit's signed count makes data-less.
+    #[error("data for a data-less chunk")]
+    DataLess,
     /// Data that isn't exactly the bin's chunks.
     #[error("data length does not match bin")]
     DataLength,
@@ -291,6 +308,34 @@ impl core::fmt::Debug for Signature {
     }
 }
 
+/// Where a live signature puts an integrity unit: its bin, and how many of
+/// its last chunks are data-less (0 for a whole unit). A unit's signature
+/// verifies only at its position.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Position {
+    pub bin: Bin,
+    pub dataless: u64,
+}
+
+impl Position {
+    /// The position of unit `bin` whose first `chunks` chunks hold data.
+    pub(crate) fn with_data(bin: Bin, chunks: u64) -> Position {
+        Position {
+            bin,
+            dataless: bin.base_length().saturating_sub(chunks),
+        }
+    }
+
+    /// The signed bytes: `bin (u64 BE) ‖ dataless (u64 BE)`.
+    fn bytes(self) -> [u8; 16] {
+        let mut b = [0; 16];
+        let (bin, dataless) = b.split_at_mut(8);
+        bin.copy_from_slice(&self.bin.0.to_be_bytes());
+        dataless.copy_from_slice(&self.dataless.to_be_bytes());
+        b
+    }
+}
+
 /// Signs live data.
 // One per writer; boxing the key would only add an indirection.
 #[allow(clippy::large_enum_variant)]
@@ -305,7 +350,15 @@ impl SignatureSigner {
     pub fn sign(&self, domain: Domain, t: Time, p: &[u8]) -> Signature {
         match self {
             SignatureSigner::None => Signature::EMPTY,
-            SignatureSigner::Ed25519(s) => s.sign(domain, t, p),
+            SignatureSigner::Ed25519(s) => s.sign(domain, t, [&[], p]),
+        }
+    }
+
+    /// Signs `t ‖ at ‖ p` in `domain`: an integrity unit at `at`.
+    pub fn sign_unit(&self, domain: Domain, t: Time, at: Position, p: &[u8]) -> Signature {
+        match self {
+            SignatureSigner::None => Signature::EMPTY,
+            SignatureSigner::Ed25519(s) => s.sign(domain, t, [&at.bytes(), p]),
         }
     }
 
@@ -332,7 +385,16 @@ impl SignatureVerifier {
     pub fn verify(&self, domain: Domain, t: Time, p: &[u8], sig: &[u8]) -> bool {
         match self {
             SignatureVerifier::None => true,
-            SignatureVerifier::Ed25519(v) => v.verify(domain, t, p, sig),
+            SignatureVerifier::Ed25519(v) => v.verify(domain, t, [&[], p], sig),
+        }
+    }
+
+    /// Checks `sig` over `t ‖ at ‖ p` in `domain`: an integrity unit at
+    /// `at`.
+    pub fn verify_unit(&self, domain: Domain, t: Time, at: Position, p: &[u8], sig: &[u8]) -> bool {
+        match self {
+            SignatureVerifier::None => true,
+            SignatureVerifier::Ed25519(v) => v.verify(domain, t, [&at.bytes(), p], sig),
         }
     }
 
@@ -478,12 +540,13 @@ impl ChannelVerifier {
 pub struct ChunkVerifier<'c>(&'c mut ChannelVerifier);
 
 impl ChunkVerifier<'_> {
-    /// A signed munro root (Merkle) or chunk signature (sign-all).
-    pub fn set_signed_integrity(&mut self, b: Bin, t: Time, sig: &[u8]) {
+    /// A signed munro root (Merkle) or chunk signature (sign-all), with its
+    /// unit's count of data-less chunks.
+    pub fn set_signed_integrity(&mut self, b: Bin, t: Time, dataless: u64, sig: &[u8]) {
         match self.0 {
             ChannelVerifier::None => {}
-            ChannelVerifier::Merkle(v) => v.set_signed_integrity(t, sig),
-            ChannelVerifier::SignAll(v) => v.set_signed_integrity(b, t, sig),
+            ChannelVerifier::Merkle(v) => v.set_signed_integrity(t, dataless, sig),
+            ChannelVerifier::SignAll(v) => v.set_signed_integrity(b, t, dataless, sig),
         }
     }
 

@@ -3,9 +3,9 @@
 
 //! Ed25519 live signatures.
 //!
-//! A live signature signs `timestamp (u64 BE ns) ‖ payload` in the payload's
-//! [`Domain`]: a munro's root digest, a chunk, or nothing for the epoch.
-//! Keys are parsed once, when the signer or verifier is created.
+//! A live signature signs `timestamp (u64 BE ns) ‖ parts` in the payload's
+//! [`Domain`] (see the [module docs](super), Signatures). Keys are parsed
+//! once, when the signer or verifier is created.
 
 use strims_base::time::Time;
 use strims_crypto::{Domain, Signer, Verifier};
@@ -30,10 +30,10 @@ impl Ed25519Signer {
         Ok(Ed25519Signer { signer })
     }
 
-    /// Signs `t ‖ p` in `domain`.
-    pub fn sign(&self, domain: Domain, t: Time, p: &[u8]) -> Signature {
+    /// Signs `t ‖ parts` in `domain`.
+    pub fn sign(&self, domain: Domain, t: Time, [a, b]: [&[u8]; 2]) -> Signature {
         let ts = timestamp(t);
-        let sig = self.signer.sign(domain, &[&ts, p]);
+        let sig = self.signer.sign(domain, &[&ts, a, b]);
         Signature::from_slice(&sig).unwrap_or(Signature::EMPTY)
     }
 }
@@ -52,10 +52,10 @@ impl Ed25519Verifier {
         Ok(Ed25519Verifier { verifier })
     }
 
-    /// Checks `sig` over `t ‖ p` in `domain`.
-    pub fn verify(&self, domain: Domain, t: Time, p: &[u8], sig: &[u8]) -> bool {
+    /// Checks `sig` over `t ‖ parts` in `domain`.
+    pub fn verify(&self, domain: Domain, t: Time, [a, b]: [&[u8]; 2], sig: &[u8]) -> bool {
         let ts = timestamp(t);
-        self.verifier.verify(domain, &[&ts, p], sig)
+        self.verifier.verify(domain, &[&ts, a, b], sig)
     }
 }
 

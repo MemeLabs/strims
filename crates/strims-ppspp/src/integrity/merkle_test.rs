@@ -17,7 +17,8 @@ use crate::codec::{self, Message};
 /// Records integrity messages.
 #[derive(Default)]
 pub(super) struct TestWriter {
-    pub signed: Vec<(Bin, Time, Vec<u8>)>,
+    /// Bin, timestamp, signature and count of data-less chunks.
+    pub signed: Vec<(Bin, Time, Vec<u8>, u64)>,
     pub integrity: Vec<(Bin, Vec<u8>)>,
 }
 
@@ -25,7 +26,8 @@ impl MessageWriter for TestWriter {
     fn write(&mut self, m: &Message<'_>) -> Result<usize, codec::Error> {
         match m {
             Message::SignedIntegrity(m) => {
-                self.signed.push((m.bin, m.timestamp, m.signature.to_vec()))
+                self.signed
+                    .push((m.bin, m.timestamp, m.signature.to_vec(), m.dataless))
             }
             Message::Integrity(m) => self.integrity.push((m.bin, m.hash.to_vec())),
             _ => panic!("unexpected message {m:?}"),
@@ -77,6 +79,7 @@ fn write_all(
             Time::from_unix_millis(1_700_000_000_000 + i as i64),
             i as u64,
             munro,
+            cps as u64,
         )
         .unwrap();
     }
@@ -131,8 +134,8 @@ fn merkle_verifier() {
                 .unwrap_or_else(|e| panic!("failed to write integrity messages bin {b}: {e}"));
 
             let mut v = cv.chunk_verifier(b);
-            let (_, ts, sig) = &w.signed[0];
-            v.set_signed_integrity(b, *ts, sig);
+            let (_, ts, sig, dataless) = &w.signed[0];
+            v.set_signed_integrity(b, *ts, *dataless, sig);
             for (ib, hash) in &w.integrity {
                 v.set_integrity(*ib, hash);
             }
@@ -154,8 +157,8 @@ fn sent_integrity(src: &SwarmVerifier, b: Bin, have: &Map) -> TestWriter {
 
 fn apply(cv: &mut ChannelVerifier, b: Bin, w: &TestWriter) {
     let mut v = cv.chunk_verifier(b);
-    for (sb, ts, sig) in &w.signed {
-        v.set_signed_integrity(*sb, *ts, sig);
+    for (sb, ts, sig, dataless) in &w.signed {
+        v.set_signed_integrity(*sb, *ts, *dataless, sig);
     }
     for (ib, hash) in &w.integrity {
         v.set_integrity(*ib, hash);
@@ -340,7 +343,7 @@ fn peer_bins_are_bounds_checked() {
             "{b}"
         );
         let mut v = cv.chunk_verifier(b);
-        v.set_signed_integrity(b, Time::EPOCH, &[0; 64]);
+        v.set_signed_integrity(b, Time::EPOCH, 1, &[0; 64]);
         v.set_integrity(b, &[0; 32]);
         let r = v.verify(&mut f.dst, b, &[0; CS]);
         assert!(r.is_err(), "{b}");
@@ -376,10 +379,16 @@ fn ring_jump_is_bounded() {
     let signer = LiveSignatureAlgorithm::ED25519
         .signer(&key.private)
         .unwrap();
-    dst.write_munro(&signer, Time::EPOCH, 0, &f.data[..CPS * CS])
+    dst.write_munro(&signer, Time::EPOCH, 0, &f.data[..CPS * CS], CPS as u64)
         .unwrap();
-    dst.write_munro(&signer, Time::EPOCH, 1 << 50, &f.data[..CPS * CS])
-        .unwrap();
+    dst.write_munro(
+        &signer,
+        Time::EPOCH,
+        1 << 50,
+        &f.data[..CPS * CS],
+        CPS as u64,
+    )
+    .unwrap();
     assert_eq!(dst.ring.head, (1 << 50) + 1);
     assert_eq!(dst.ring.tail, (1 << 50) + 1 - dst.ring.size);
     assert_eq!(dst.ring.segments.iter().filter(|s| s.occupied).count(), 1);
@@ -491,4 +500,294 @@ fn unsupported_options() {
         .verifier(&[0xff; 32])
         .unwrap();
     assert!(!bad.verify(Domain::PpsppMunroRoot, Time::EPOCH, b"x", &[0; 64]));
+}
+
+/// A source whose munro `i` holds data in its first `counts[i]` chunks and
+/// zeros after them, signed with that count.
+fn early_fixture(counts: &[u64]) -> Fixture {
+    let key = test_key(9);
+    let mut src = verifier(&key, WINDOW, CPS, CS, MerkleHashTreeFunction::BLAKE3);
+    let signer = LiveSignatureAlgorithm::ED25519
+        .signer(&key.private)
+        .unwrap();
+    let mut data = random(counts.len() * CPS * CS, 9);
+    for (i, &c) in counts.iter().enumerate() {
+        let munro = &mut data[i * CPS * CS..(i + 1) * CPS * CS];
+        munro[c as usize * CS..].fill(0);
+        let t = Time::from_unix_millis(1_700_000_000_000 + i as i64);
+        src.write_munro(&signer, t, i as u64, munro, c).unwrap();
+    }
+    let dst = verifier(&key, WINDOW, CPS, CS, MerkleHashTreeFunction::BLAKE3);
+    Fixture {
+        key,
+        src: SwarmVerifier::Merkle(src),
+        dst: SwarmVerifier::Merkle(dst),
+        data,
+    }
+}
+
+/// The chunk at offset `o` of munro `m`.
+fn munro_chunk(m: u64, o: u64) -> Bin {
+    Bin(2 * (m * CPS as u64 + o))
+}
+
+/// A munro signed with fewer chunks verifies from any of its data chunks,
+/// its count carried with the signature: the uncles of data-less subtrees
+/// aren't sent, the receiver stores the count, and serves it on.
+#[test]
+fn an_early_signed_munro_verifies_from_any_data_chunk() {
+    let counts = [1, 3, 5, 7, 8];
+    for (m, &c) in counts.iter().enumerate() {
+        let m = m as u64;
+        for o in 0..c {
+            let mut f = early_fixture(&counts);
+            let mut cv = f.dst.channel_verifier();
+            let b = munro_chunk(m, o);
+            let w = sent_integrity(&f.src, b, &Map::new());
+            assert_eq!(w.signed.len(), 1);
+            assert_eq!(w.signed[0].3, CPS as u64 - c, "munro {m}");
+            let root = Bin::new(3, m);
+            for (u, _) in &w.integrity {
+                let first = u.base_offset() - root.base_offset();
+                assert!(first < c, "munro {m} chunk {o}: data-less uncle {u} sent");
+            }
+            apply(&mut cv, b, &w);
+            cv.chunk_verifier(b)
+                .verify(&mut f.dst, b, chunk(&f.data, b))
+                .unwrap_or_else(|e| panic!("munro {m} chunk {o}: {e}"));
+
+            // The receiver now holds the munro with its count and serves the
+            // chunk on to a third verifier, and the munro's other data
+            // chunks verify against what it stored.
+            let mut third = SwarmVerifier::Merkle(verifier(
+                &f.key,
+                WINDOW,
+                CPS,
+                CS,
+                MerkleHashTreeFunction::BLAKE3,
+            ));
+            let mut tcv = third.channel_verifier();
+            let w = sent_integrity(&f.dst, b, &Map::new());
+            assert_eq!(w.signed[0].3, CPS as u64 - c);
+            apply(&mut tcv, b, &w);
+            tcv.chunk_verifier(b)
+                .verify(&mut third, b, chunk(&f.data, b))
+                .unwrap();
+            let mut have = Map::new();
+            have.set(b);
+            for x in (0..c).map(|x| munro_chunk(m, x)).filter(|&x| x != b) {
+                let w = sent_integrity(&f.src, x, &have);
+                assert!(w.signed.is_empty());
+                apply(&mut cv, x, &w);
+                cv.chunk_verifier(x)
+                    .verify(&mut f.dst, x, chunk(&f.data, x))
+                    .unwrap_or_else(|e| panic!("munro {m} chunk {o} then {x}: {e}"));
+                have.set(x);
+            }
+        }
+    }
+}
+
+/// Whatever a peer sends for a data-less subtree, the receiver checks the
+/// root with zero digests there.
+#[test]
+fn zero_leaves_override_peer_digests_for_dataless_subtrees() {
+    let mut f = early_fixture(&[3]);
+    let mut cv = f.dst.channel_verifier();
+    let b = munro_chunk(0, 0);
+    let mut w = sent_integrity(&f.src, b, &Map::new());
+    // chunk 3 and chunks 4-7 are data-less: bogus digests for them
+    w.integrity.push((Bin(6), vec![0xaa; 32]));
+    w.integrity.push((Bin(11), vec![0xbb; 32]));
+    apply(&mut cv, b, &w);
+    cv.chunk_verifier(b)
+        .verify(&mut f.dst, b, chunk(&f.data, b))
+        .unwrap();
+}
+
+/// Data for a chunk its munro's signed count makes data-less is refused,
+/// before and after the munro is stored, and no integrity is written for
+/// it.
+#[test]
+fn data_for_a_dataless_chunk_is_refused() {
+    let mut f = early_fixture(&[3]);
+    let zeros = vec![0u8; CS];
+    let mut cv = f.dst.channel_verifier();
+    // before: the count comes with the signature
+    let w = sent_integrity(&f.src, munro_chunk(0, 0), &Map::new());
+    let x = munro_chunk(0, 5);
+    apply(&mut cv, x, &w);
+    assert_eq!(
+        cv.chunk_verifier(x).verify(&mut f.dst, x, &zeros),
+        Err(Error::DataLess)
+    );
+    // a bin reaching into the data-less chunks
+    let wide = Bin::new(2, 0);
+    apply(&mut cv, wide, &w);
+    assert_eq!(
+        cv.chunk_verifier(wide)
+            .verify(&mut f.dst, wide, chunk(&f.data, wide)),
+        Err(Error::DataLess)
+    );
+    assert_eq!(
+        f.src
+            .write_integrity(x, &Map::new(), &mut TestWriter::default()),
+        Err(Error::DataLess)
+    );
+    // after: the stored munro's count
+    let b = munro_chunk(0, 1);
+    apply(&mut cv, b, &sent_integrity(&f.src, b, &Map::new()));
+    cv.chunk_verifier(b)
+        .verify(&mut f.dst, b, chunk(&f.data, b))
+        .unwrap();
+    assert_eq!(
+        cv.chunk_verifier(x).verify(&mut f.dst, x, &zeros),
+        Err(Error::DataLess)
+    );
+}
+
+/// A signed count of data-less chunks that leaves the munro no chunk of
+/// data verifies nothing, and a munro of no data, or of more than it
+/// holds, can't be signed.
+#[test]
+fn counts_outside_the_munro_are_refused() {
+    let mut f = early_fixture(&[8]);
+    let b = munro_chunk(0, 0);
+    for c in [CPS as u64, CPS as u64 + 1, u64::MAX] {
+        let mut cv = f.dst.channel_verifier();
+        let mut w = sent_integrity(&f.src, b, &Map::new());
+        w.signed[0].3 = c;
+        apply(&mut cv, b, &w);
+        assert_eq!(
+            cv.chunk_verifier(b)
+                .verify(&mut f.dst, b, chunk(&f.data, b)),
+            Err(Error::InvalidChunkCount),
+            "{c}"
+        );
+    }
+    let SwarmVerifier::Merkle(src) = &mut f.src else {
+        unreachable!()
+    };
+    let signer = LiveSignatureAlgorithm::ED25519
+        .signer(&f.key.private)
+        .unwrap();
+    for c in [0, CPS as u64 + 1] {
+        assert_eq!(
+            src.write_munro(&signer, Time::EPOCH, 1, &f.data, c),
+            Err(Error::InvalidChunkCount)
+        );
+    }
+}
+
+/// A munro's signature holds only at its own bin with its own count: one
+/// replayed at another munro's position, or with its count changed, fails.
+#[test]
+fn a_munro_verifies_only_at_its_bin_and_count() {
+    let mut f = early_fixture(&[8, 8, 5]);
+    let SwarmVerifier::Merkle(src) = &f.src else {
+        unreachable!()
+    };
+    // munro 1's data and integrity, presented as munro 3's
+    let w = sent_integrity(&f.src, munro_chunk(1, 2), &Map::new());
+    let at = munro_chunk(3, 2);
+    let shift = |b: Bin| Bin(b.0 + 2 * 2 * CPS as u64);
+    let mut moved = TestWriter::default();
+    for (b, t, sig, c) in &w.signed {
+        moved.signed.push((shift(*b), *t, sig.clone(), *c));
+    }
+    for (b, h) in &w.integrity {
+        moved.integrity.push((shift(*b), h.clone()));
+    }
+    let mut cv = f.dst.channel_verifier();
+    apply(&mut cv, at, &moved);
+    assert_eq!(
+        cv.chunk_verifier(at)
+            .verify(&mut f.dst, at, chunk(&f.data, munro_chunk(1, 2))),
+        Err(Error::InvalidSignature)
+    );
+    let _ = src;
+
+    // munro 2 (5 chunks of data, 3 data-less) with its count raised or
+    // lowered
+    let b = munro_chunk(2, 1);
+    for c in [4, 2, 0] {
+        let mut w = sent_integrity(&f.src, b, &Map::new());
+        w.signed[0].3 = c;
+        let mut cv = f.dst.channel_verifier();
+        apply(&mut cv, b, &w);
+        assert_eq!(
+            cv.chunk_verifier(b)
+                .verify(&mut f.dst, b, chunk(&f.data, b)),
+            Err(Error::InvalidSignature),
+            "{c}"
+        );
+    }
+}
+
+/// A cache covers munros with data throughout: its export stops at the
+/// first early-signed munro, and the import takes those it covers.
+#[test]
+fn cache_export_stops_before_an_early_signed_munro() {
+    let f = early_fixture(&[8, 8, 3, 8]);
+    let SwarmVerifier::Merkle(src) = &f.src else {
+        unreachable!()
+    };
+    let e = src.export_cache();
+    assert_eq!(e.merkle_integrity.as_ref().unwrap().timestamps.len(), 2);
+    let c = Cache {
+        integrity: Some(e),
+        data: f.data.clone(),
+        ..Default::default()
+    };
+    let mut dst = verifier(&f.key, WINDOW, CPS, CS, MerkleHashTreeFunction::BLAKE3);
+    assert_eq!(dst.import_cache(&c), Ok(2 * CPS * CS));
+}
+
+/// A cache signed under another layout (the root alone, without its bin
+/// and count) is refused whole, so it is dropped, never misread.
+#[test]
+fn a_cache_signed_under_another_layout_is_refused() {
+    let f = fixture();
+    let SwarmVerifier::Merkle(src) = &f.src else {
+        unreachable!()
+    };
+    let signer = LiveSignatureAlgorithm::ED25519
+        .signer(&f.key.private)
+        .unwrap();
+    let mut c = Cache {
+        integrity: Some(src.export_cache()),
+        data: f.data.clone(),
+        ..Default::default()
+    };
+    let m = c
+        .integrity
+        .as_mut()
+        .and_then(|i| i.merkle_integrity.as_mut())
+        .unwrap();
+    let h = MerkleHashTreeFunction::SHA256;
+    for (i, sig) in m.signatures.iter_mut().enumerate() {
+        let b = Bin::new(3, i as u64);
+        let mut t = crate::merkle::Tree::new(b, CS, 32);
+        t.fill(
+            &mut h.hasher().unwrap(),
+            b,
+            &f.data[i * CPS * CS..(i + 1) * CPS * CS],
+        )
+        .unwrap();
+        let ts = Time::from_unix_nanos(m.timestamps[i]);
+        *sig = signer
+            .sign(Domain::PpsppMunroRoot, ts, t.root_digest())
+            .as_slice()
+            .to_vec();
+    }
+    let mut dst = verifier(&f.key, WINDOW, CPS, CS, h);
+    assert_eq!(dst.import_cache(&c), Err(Error::InvalidSignature));
+    assert_eq!(
+        dst.export_cache()
+            .merkle_integrity
+            .unwrap()
+            .timestamps
+            .len(),
+        0
+    );
 }

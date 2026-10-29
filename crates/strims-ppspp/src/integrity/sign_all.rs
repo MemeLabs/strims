@@ -3,7 +3,8 @@
 
 //! Per-chunk signatures.
 //!
-//! Every chunk is signed on its own (timestamp ‖ chunk data). The swarm
+//! Every chunk is signed on its own (timestamp ‖ its bin and a count of 1
+//! ‖ chunk data). The swarm
 //! verifier keeps a ring of a live window of timestamps and signatures,
 //! indexed by chunk; peers send one `SignedIntegrity` per chunk ahead of
 //! the data.
@@ -19,7 +20,7 @@ use strims_binmap::Bin;
 use strims_crypto::Domain;
 use strims_proto::types::{Cache, cache};
 
-use super::{Error, SignatureSigner, SignatureVerifier, ring_size};
+use super::{Error, Position, SignatureSigner, SignatureVerifier, ring_size};
 use crate::codec::{Message, MessageWriter, SignedIntegrity};
 
 /// The settings of a [`SignAllSwarmVerifier`].
@@ -92,6 +93,7 @@ impl SignAllSwarmVerifier {
             n += w.write(&Message::SignedIntegrity(SignedIntegrity {
                 bin: l,
                 timestamp: self.timestamps.get(i).copied().unwrap_or(Time::EPOCH),
+                dataless: 0,
                 signature: self.signature(i),
             }))?;
             l += 2;
@@ -126,7 +128,7 @@ impl SignAllSwarmVerifier {
     /// Signs and stores the chunk at `b` from local data. Publishing the
     /// chunk is the caller's job.
     pub(crate) fn write_chunk(&mut self, signer: &SignatureSigner, ts: Time, b: Bin, chunk: &[u8]) {
-        let sig = signer.sign(Domain::PpsppChunk, ts, chunk);
+        let sig = signer.sign_unit(Domain::PpsppChunk, ts, chunk_position(b), chunk);
         self.store_signature(b, ts, sig.as_slice());
     }
 
@@ -145,6 +147,11 @@ impl SignAllSwarmVerifier {
     /// Loads and verifies a cache. The head moves past the imported chunks,
     /// so their signatures can be sent. Returns how many bytes of the data
     /// the imported signatures cover.
+    ///
+    /// Each chunk's signature is checked under the current signed layout,
+    /// its bin included: a cache signed under another layout, or altered,
+    /// is refused whole, so a stale cache is dropped and made again, never
+    /// misread.
     pub fn import_cache(&mut self, c: &Cache) -> Result<usize, Error> {
         let ic = c
             .integrity
@@ -170,9 +177,10 @@ impl SignAllSwarmVerifier {
                 .signatures
                 .get(i * ss..(i + 1) * ss)
                 .ok_or(Error::IntegrityCacheIncomplete)?;
-            if !self.signature_verifier.verify(
+            if !self.signature_verifier.verify_unit(
                 Domain::PpsppChunk,
                 Time::from_unix_nanos(t),
+                chunk_position(Bin(2 * i as u64)),
                 chunk,
                 sig,
             ) {
@@ -245,9 +253,9 @@ impl SignAllChannelVerifier {
 
     /// Appends a chunk signature to the pending run. A signature that
     /// doesn't continue the run, or would grow it past a window, starts a
-    /// new one.
-    pub(crate) fn set_signed_integrity(&mut self, b: Bin, ts: Time, sig: &[u8]) {
-        if !b.is_base() || b.0 >= Bin::ALL.0 || sig.len() != self.sig_size {
+    /// new one; one with a data-less count other than 0 clears it.
+    pub(crate) fn set_signed_integrity(&mut self, b: Bin, ts: Time, dataless: u64, sig: &[u8]) {
+        if !b.is_base() || b.0 >= Bin::ALL.0 || dataless != 0 || sig.len() != self.sig_size {
             self.clear();
             return;
         }
@@ -306,14 +314,26 @@ impl SignAllChannelVerifier {
                 .signatures
                 .get((off + i) * ss..(off + i + 1) * ss)
                 .unwrap_or_default();
-            if !sv
-                .signature_verifier
-                .verify(Domain::PpsppChunk, ts, chunk, sig)
-            {
+            let at = bl + 2 * i as u64;
+            if !sv.signature_verifier.verify_unit(
+                Domain::PpsppChunk,
+                ts,
+                chunk_position(at),
+                chunk,
+                sig,
+            ) {
                 return Err(Error::InvalidChunkSignature);
             }
-            sv.store_signature(bl + 2 * i as u64, ts, sig);
+            sv.store_signature(at, ts, sig);
         }
         Ok(())
+    }
+}
+
+/// The signed position of the chunk at base bin `b`: its own, with data.
+fn chunk_position(b: Bin) -> Position {
+    Position {
+        bin: b,
+        dataless: 0,
     }
 }

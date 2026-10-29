@@ -4,11 +4,19 @@
 //! Merkle tree integrity.
 //!
 //! The stream is cut into munros of `chunks_per_signature` chunks. The
-//! seeder signs each munro's root hash with a timestamp. A peer sending a
-//! chunk sends the signed root (unless the receiver already has part of
-//! the munro) and the uncle hashes the receiver lacks; the receiver
-//! recomputes the path and checks it against a root it verified before or
-//! against the signature.
+//! seeder signs each munro's root hash with a timestamp, at the munro's bin
+//! with its count of chunks with data. A peer sending a chunk sends the
+//! signed root (unless the receiver already has part of the munro) and the
+//! uncle hashes the receiver lacks; the receiver recomputes the path and
+//! checks it against a root it verified before or against the signature.
+//!
+//! A munro signed with fewer chunks than it spans ends in data-less
+//! chunks, all zero. Their subtrees' digests are the zero digests (the
+//! digest of an all-zero chunk, and of two zero digests above it, layer by
+//! layer), which every verifier computes once: senders leave the uncles
+//! wholly inside the data-less chunks out, and receivers put the zero
+//! digests there whatever a peer sent. A stored munro keeps its count and
+//! has those subtrees verified.
 //!
 //! [`MerkleSwarmVerifier`] keeps the verified trees of the last
 //! `live_window / chunks_per_signature` munros in a ring. Each slot keeps
@@ -25,7 +33,8 @@ use strims_crypto::Domain;
 use strims_proto::types::{Cache, cache};
 
 use super::{
-    Error, MerkleHashTreeFunction, Signature, SignatureSigner, SignatureVerifier, ring_size,
+    Error, MerkleHashTreeFunction, Position, Signature, SignatureSigner, SignatureVerifier,
+    ring_size,
 };
 use crate::codec::{Integrity, Message, MessageWriter, SignedIntegrity};
 use crate::merkle::{Hasher, Tree};
@@ -46,6 +55,8 @@ pub(super) struct Segment {
     pub(super) occupied: bool,
     timestamp: Time,
     signature: Signature,
+    /// The munro's chunks with data, as signed; the rest are data-less.
+    pub(super) chunks: u64,
     /// Kept when the slot is freed, so a reused slot doesn't allocate.
     tree: Option<Tree>,
 }
@@ -76,10 +87,10 @@ impl SegmentRing {
         (s.occupied && tree.root_bin().contains(b)).then_some(s)
     }
 
-    /// Stores a verified tree: swaps it into an empty slot (handing the
-    /// slot's old allocation back through `tree`) or merges it into the
-    /// munro's existing tree.
-    fn store(&mut self, ts: Time, tree: &mut Tree, sig: Signature) {
+    /// Stores a verified tree, signed with `chunks` chunks with data: swaps
+    /// it into an empty slot (handing the slot's old allocation back through
+    /// `tree`) or merges it into the munro's existing tree.
+    fn store(&mut self, ts: Time, tree: &mut Tree, sig: Signature, chunks: u64) {
         let i = tree.root_bin().0 >> self.tree_height;
         if i < self.tail {
             return;
@@ -117,6 +128,7 @@ impl SegmentRing {
         slot.occupied = true;
         slot.timestamp = ts;
         slot.signature = sig;
+        slot.chunks = chunks;
         match &mut slot.tree {
             Some(t) => mem::swap(t, tree),
             None => {
@@ -135,12 +147,41 @@ impl SegmentRing {
     }
 }
 
+/// The largest subtrees of munro `root` that hold none of its first
+/// `chunks` chunks: the subtrees of its data-less chunks, at most one per
+/// layer, left to right.
+pub(crate) fn dataless_subtrees(root: Bin, chunks: u64) -> impl Iterator<Item = Bin> {
+    let n = root.base_length();
+    let base = root.base_offset();
+    let mut x = chunks;
+    core::iter::from_fn(move || {
+        if x >= n {
+            return None;
+        }
+        // `n` is a power of two above `x`, so the run of `x`'s lowest set
+        // bit from `x` stays inside the munro.
+        let size = if x == 0 { n } else { 1 << x.trailing_zeros() };
+        let b = Bin::new(u64::from(size.trailing_zeros()), (base + x) / size);
+        x += size;
+        Some(b)
+    })
+}
+
+/// Whether every chunk of `b`, inside munro `root`, is past its first
+/// `chunks`.
+fn dataless(root: Bin, chunks: u64, b: Bin) -> bool {
+    b.base_offset().saturating_sub(root.base_offset()) >= chunks
+}
+
 /// A Merkle swarm's verified munros. See the module docs.
 #[derive(Debug)]
 pub struct MerkleSwarmVerifier {
     pub(super) ring: SegmentRing,
     hash: MerkleHashTreeFunction,
     hasher: Hasher,
+    /// The zero digest of each layer of a munro, from the chunks up: the
+    /// digests of data-less subtrees.
+    zeros: Box<[u8]>,
     /// The tree the writer and cache import fill before storing it.
     spare: Tree,
     signature_verifier: SignatureVerifier,
@@ -156,7 +197,7 @@ impl MerkleSwarmVerifier {
         if cps > window || o.chunk_size == 0 {
             return Err(Error::InvalidOptions);
         }
-        let hasher = o.hash.hasher().ok_or(Error::UnsupportedHashTreeFunction)?;
+        let mut hasher = o.hash.hasher().ok_or(Error::UnsupportedHashTreeFunction)?;
         let hash_size = hasher.size();
         let size = window / cps;
         let tree_height = u64::from(cps.trailing_zeros()) + 1;
@@ -165,9 +206,11 @@ impl MerkleSwarmVerifier {
                 occupied: false,
                 timestamp: Time::EPOCH,
                 signature: Signature::EMPTY,
+                chunks: 0,
                 tree: None,
             })
             .collect();
+        let zeros = zero_digests(&mut hasher, o.chunk_size, tree_height);
         Ok(MerkleSwarmVerifier {
             ring: SegmentRing {
                 tree_height,
@@ -181,6 +224,7 @@ impl MerkleSwarmVerifier {
             },
             hash: o.hash,
             hasher,
+            zeros,
             spare: Tree::new(Bin::new(tree_height - 1, 0), o.chunk_size, hash_size),
             signature_verifier: o.verifier.clone(),
             live_window: window,
@@ -191,10 +235,23 @@ impl MerkleSwarmVerifier {
         self.ring.tree_height - 1
     }
 
+    /// The digest of an all-zero subtree at `layer`.
+    fn zero(&self, layer: u64) -> &[u8] {
+        let (hs, l) = (
+            self.ring.hash_size,
+            usize::try_from(layer).unwrap_or(usize::MAX),
+        );
+        self.zeros
+            .get(l.saturating_mul(hs)..l.saturating_add(1).saturating_mul(hs))
+            .unwrap_or_default()
+    }
+
     /// The integrity messages for sending `b` to a peer whose have map is
     /// `m`: the signed root if the peer has none of the munro, then the
     /// uncle hashes from `b` up, stopping below the first ancestor the peer
-    /// has data under. The golden vectors pin this output.
+    /// has data under, less those of data-less subtrees, which the peer
+    /// derives. A `b` with data-less chunks has no integrity to send. The
+    /// golden vectors pin this output.
     pub fn write_integrity(
         &self,
         b: Bin,
@@ -204,12 +261,16 @@ impl MerkleSwarmVerifier {
         let s = self.ring.segment(b).ok_or(Error::MissingHashSubtree)?;
         let tree = s.tree.as_ref().ok_or(Error::MissingHashSubtree)?;
         let root = tree.root_bin();
+        if dataless(root, s.chunks, b.base_right()) {
+            return Err(Error::DataLess);
+        }
 
         let mut n = 0;
         if m.empty_at(root) {
             n += w.write(&Message::SignedIntegrity(SignedIntegrity {
                 bin: root,
                 timestamp: s.timestamp,
+                dataless: Position::with_data(root, s.chunks).dataless,
                 signature: s.signature.as_slice(),
             }))?;
         }
@@ -221,10 +282,12 @@ impl MerkleSwarmVerifier {
                 return Ok(n);
             }
             b = b.sibling();
-            n += w.write(&Message::Integrity(Integrity {
-                bin: b,
-                hash: tree.get(b).unwrap_or_default(),
-            }))?;
+            if !dataless(root, s.chunks, b) {
+                n += w.write(&Message::Integrity(Integrity {
+                    bin: b,
+                    hash: tree.get(b).unwrap_or_default(),
+                }))?;
+            }
             b = p;
         }
 
@@ -244,30 +307,43 @@ impl MerkleSwarmVerifier {
             hasher: self.hasher.clone(),
             timestamp: Time::EPOCH,
             signature: Some(Signature::EMPTY),
+            dataless: None,
             chunk_size: self.ring.chunk_size,
         }
     }
 
-    /// Hashes, signs and stores munro `index` from local data. Publishing
-    /// the chunks is the caller's job.
+    /// Hashes, signs and stores munro `index` from local data, whose first
+    /// `chunks` chunks hold data: the rest of `data` must be zero.
+    /// Publishing the chunks is the caller's job.
     pub(crate) fn write_munro(
         &mut self,
         signer: &SignatureSigner,
         ts: Time,
         index: u64,
         data: &[u8],
+        chunks: u64,
     ) -> Result<(), Error> {
         let b = Bin::new(self.munro_layer(), index);
+        if chunks == 0 || chunks > b.base_length() {
+            return Err(Error::InvalidChunkCount);
+        }
         self.spare.reset(b)?;
         self.spare.fill(&mut self.hasher, b, data)?;
-        let sig = signer.sign(Domain::PpsppMunroRoot, ts, self.spare.root_digest());
-        self.ring.store(ts, &mut self.spare, sig);
+        let at = Position::with_data(b, chunks);
+        let sig = signer.sign_unit(Domain::PpsppMunroRoot, ts, at, self.spare.root_digest());
+        self.ring.store(ts, &mut self.spare, sig, chunks);
         Ok(())
     }
 
     /// Loads and verifies a cache. The data must start at chunk 0 and the
-    /// cache may hold at most a live window of munros. Returns how many
+    /// cache may hold at most a live window of munros, each with data in
+    /// every chunk ([`export_cache`](Self::export_cache)). Returns how many
     /// bytes of the data the imported signatures cover.
+    ///
+    /// Each munro's signature is checked under the current signed layout,
+    /// its bin and count included: a cache signed under another layout, or
+    /// altered, is refused whole, so a stale cache is dropped and made
+    /// again, never misread.
     pub fn import_cache(&mut self, c: &Cache) -> Result<usize, Error> {
         let ic = c
             .integrity
@@ -291,6 +367,7 @@ impl MerkleSwarmVerifier {
         }
 
         let sig_size = self.signature_verifier.size();
+        let chunks = 1u64 << self.munro_layer();
         for (i, (&t, sig)) in ic.timestamps.iter().zip(&ic.signatures).enumerate() {
             let ts = Time::from_unix_nanos(t);
             let b = Bin::new(self.munro_layer(), i as u64);
@@ -302,9 +379,13 @@ impl MerkleSwarmVerifier {
             self.spare.fill(&mut self.hasher, b, data)?;
 
             if sig.len() != sig_size
-                || !self.signature_verifier.verify(
+                || !self.signature_verifier.verify_unit(
                     Domain::PpsppMunroRoot,
                     ts,
+                    Position {
+                        bin: b,
+                        dataless: 0,
+                    },
                     self.spare.root_digest(),
                     sig,
                 )
@@ -312,17 +393,19 @@ impl MerkleSwarmVerifier {
                 return Err(Error::InvalidSignature);
             }
             let sig = Signature::from_slice(sig).ok_or(Error::InvalidSignature)?;
-            self.ring.store(ts, &mut self.spare, sig);
+            self.ring.store(ts, &mut self.spare, sig, chunks);
         }
         Ok(n * munro_bytes)
     }
 
     /// The timestamps and signatures of the munros from slot 0 up to the
-    /// first empty slot.
+    /// first empty slot or the first munro with data-less chunks: a cache
+    /// carries no counts, so every munro in it holds data throughout.
     pub fn export_cache(&self) -> cache::Integrity {
         let mut c = cache::MerkleIntegrity::default();
+        let chunks = 1u64 << self.munro_layer();
         for s in self.ring.segments.iter() {
-            if !s.occupied {
+            if !s.occupied || s.chunks != chunks {
                 break;
             }
             c.timestamps.push(s.timestamp.unix_nanos());
@@ -371,6 +454,9 @@ pub struct MerkleChannelVerifier {
     timestamp: Time,
     /// `None` if the peer's signature was longer than any we support.
     signature: Option<Signature>,
+    /// The munro's count of data-less chunks the peer sent with its
+    /// signature, if it sent one.
+    dataless: Option<u64>,
     chunk_size: usize,
 }
 
@@ -389,11 +475,13 @@ impl MerkleChannelVerifier {
             Err(_) => Bin::NONE,
         };
         self.signature = Some(Signature::EMPTY);
+        self.dataless = None;
     }
 
-    /// The munro's signed root.
-    pub(crate) fn set_signed_integrity(&mut self, ts: Time, sig: &[u8]) {
+    /// The munro's signed root and its count of data-less chunks.
+    pub(crate) fn set_signed_integrity(&mut self, ts: Time, dataless: u64, sig: &[u8]) {
         self.timestamp = ts;
+        self.dataless = Some(dataless);
         self.signature = Signature::from_slice(sig);
     }
 
@@ -405,7 +493,7 @@ impl MerkleChannelVerifier {
     }
 
     /// Checks `d` at `b`; on success the tree is stored in the swarm
-    /// verifier.
+    /// verifier, its data-less subtrees verified as zero.
     /// Either way the next message starts a new munro.
     pub(crate) fn verify(
         &mut self,
@@ -414,18 +502,26 @@ impl MerkleChannelVerifier {
         d: &[u8],
     ) -> Result<(), Error> {
         let r = self.verify_inner(sv, b, d);
-        if r.is_ok() {
+        if let Ok(chunks) = r {
+            let root = self.bin;
+            for z in dataless_subtrees(root, chunks) {
+                self.tree.set(z, sv.zero(z.layer()));
+                self.tree.set_verified(z);
+            }
             sv.ring.store(
                 self.timestamp,
                 &mut self.tree,
                 self.signature.unwrap_or(Signature::EMPTY),
+                chunks,
             );
         }
         self.bin = Bin::NONE;
-        r
+        r.map(|_| ())
     }
 
-    fn verify_inner(&mut self, sv: &MerkleSwarmVerifier, b: Bin, d: &[u8]) -> Result<(), Error> {
+    /// Checks `d` at `b` and returns the munro's count of chunks with data:
+    /// the stored munro's, or else the one the peer signed.
+    fn verify_inner(&mut self, sv: &MerkleSwarmVerifier, b: Bin, d: &[u8]) -> Result<u64, Error> {
         if !self.bin.contains(b) {
             return Err(Error::BinOutOfBounds);
         }
@@ -437,23 +533,66 @@ impl MerkleChannelVerifier {
             return Err(Error::DataLength);
         }
 
-        let reference = sv.ring.segment(b).and_then(|s| s.tree.as_ref());
+        let root = self.bin;
+        let segment = sv.ring.segment(b);
+        let chunks = match (segment, self.dataless) {
+            (Some(s), _) => s.chunks,
+            // Without a stored munro only a signature can verify it.
+            (None, None) => return Err(Error::SignatureTooShort),
+            (None, Some(z)) if z >= root.base_length() => {
+                return Err(Error::InvalidChunkCount);
+            }
+            (None, Some(z)) => root.base_length() - z,
+        };
+        if dataless(root, chunks, b.base_right()) {
+            return Err(Error::DataLess);
+        }
+        // Data-less subtrees are zero whatever the peer sent for them.
+        for z in dataless_subtrees(root, chunks) {
+            self.tree.set(z, sv.zero(z.layer()));
+        }
+
+        let reference = segment.and_then(|s| s.tree.as_ref());
         if self.tree.verify(&mut self.hasher, b, d, reference)? {
-            return Ok(());
+            return Ok(chunks);
         }
 
         let sig = self
             .signature
             .filter(|s| s.as_slice().len() == sv.signature_verifier.size())
             .ok_or(Error::SignatureTooShort)?;
-        if !sv.signature_verifier.verify(
+        if !sv.signature_verifier.verify_unit(
             Domain::PpsppMunroRoot,
             self.timestamp,
+            Position::with_data(root, chunks),
             self.tree.root_digest(),
             sig.as_slice(),
         ) {
             return Err(Error::InvalidSignature);
         }
-        Ok(())
+        Ok(chunks)
     }
+}
+
+/// The zero digests of a munro of `layers` layers: the digest of an
+/// all-zero chunk of `chunk_size` bytes, then each layer's digest of two
+/// of the layer below's, laid out a digest per layer from the chunks up.
+fn zero_digests(h: &mut Hasher, chunk_size: usize, layers: u64) -> Box<[u8]> {
+    let hs = h.size();
+    let layers = usize::try_from(layers).unwrap_or(0);
+    let mut z = vec![0u8; layers.saturating_mul(hs)];
+    h.update(&vec![0; chunk_size]);
+    if let Some(d) = z.get_mut(..hs) {
+        h.finish_into(d);
+    }
+    for k in 1..layers {
+        let (below, here) = z.split_at_mut(k * hs);
+        let prev = below.get((k - 1) * hs..).unwrap_or_default();
+        h.update(prev);
+        h.update(prev);
+        if let Some(d) = here.get_mut(..hs) {
+            h.finish_into(d);
+        }
+    }
+    z.into_boxed_slice()
 }

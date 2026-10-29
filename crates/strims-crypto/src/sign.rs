@@ -41,9 +41,11 @@ pub enum Domain {
     CertificateRequest,
     /// A directory listing snippet: its encoded `ListingSnippetBody`.
     DirectoryListingSnippet,
-    /// A ppspp Merkle munro's root, live: `timestamp (u64 BE ns) ‖ root`.
+    /// A ppspp Merkle munro's root, live: `timestamp (u64 BE ns) ‖ bin
+    /// (u64 BE) ‖ data-less chunks (u64 BE) ‖ root`.
     PpsppMunroRoot,
-    /// A ppspp chunk, live: `timestamp (u64 BE ns) ‖ chunk`.
+    /// A ppspp chunk, live: `timestamp (u64 BE ns) ‖ bin (u64 BE) ‖ 0
+    /// (u64 BE) ‖ chunk`.
     PpsppChunk,
     /// A ppspp swarm epoch: `timestamp (u64 BE ns)`.
     PpsppEpoch,

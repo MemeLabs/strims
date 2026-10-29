@@ -198,7 +198,7 @@ enum Msg {
     Ack(Bin, i64),
     Data(Bin, Time, Vec<u8>),
     Integrity(Bin, Vec<u8>),
-    Signed(Bin, Time, Vec<u8>),
+    Signed(Bin, Time, u64, Vec<u8>),
     Ping(u64),
     Pong(u64),
     StreamRequest(u16, Bin),
@@ -230,8 +230,13 @@ fn msg() -> impl Strategy<Value = Msg> {
         2 => (bin(), time(), prop::collection::vec(any::<u8>(), 0..300))
             .prop_map(|(b, t, d)| Msg::Data(b, t, d)),
         1 => (bin(), prop::collection::vec(any::<u8>(), 32)).prop_map(|(b, h)| Msg::Integrity(b, h)),
-        1 => (bin(), time(), prop::collection::vec(any::<u8>(), 64))
-            .prop_map(|(b, t, s)| Msg::Signed(b, t, s)),
+        1 => (
+            bin(),
+            time(),
+            prop_oneof![Just(1u64), 0..20u64, any::<u64>()],
+            prop::collection::vec(any::<u8>(), 64)
+        )
+            .prop_map(|(b, t, c, s)| Msg::Signed(b, t, c, s)),
         1 => prop_oneof![Just(0u64), any::<u64>()].prop_map(Msg::Ping),
         1 => prop_oneof![Just(0u64), any::<u64>()].prop_map(Msg::Pong),
         2 => (stream(), bin()).prop_map(|(s, b)| Msg::StreamRequest(s, b)),
@@ -271,9 +276,10 @@ fn encode(msgs: &[Msg], channel: u64) -> Vec<u8> {
                 data: d,
             }),
             Msg::Integrity(b, h) => Message::Integrity(Integrity { bin: *b, hash: h }),
-            Msg::Signed(b, t, s) => Message::SignedIntegrity(SignedIntegrity {
+            Msg::Signed(b, t, c, s) => Message::SignedIntegrity(SignedIntegrity {
                 bin: *b,
                 timestamp: *t,
+                dataless: *c,
                 signature: s,
             }),
             Msg::Ping(n) => Message::Ping(Ping { nonce: *n }),

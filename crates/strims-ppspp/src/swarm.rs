@@ -371,8 +371,15 @@ impl Swarm {
     }
 
     /// A `SignedIntegrity` message from a peer.
-    pub fn handle_signed_integrity(&self, cv: &mut ChannelVerifier, b: Bin, t: Time, sig: &[u8]) {
-        cv.chunk_verifier(b).set_signed_integrity(b, t, sig);
+    pub fn handle_signed_integrity(
+        &self,
+        cv: &mut ChannelVerifier,
+        b: Bin,
+        t: Time,
+        chunks: u64,
+        sig: &[u8],
+    ) {
+        cv.chunk_verifier(b).set_signed_integrity(b, t, chunks, sig);
     }
 
     /// A `Data` message from a peer that the scheduler expected: verifies

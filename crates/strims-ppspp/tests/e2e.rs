@@ -179,6 +179,7 @@ impl Peer {
                         &mut self.verifier,
                         i.bin,
                         i.timestamp,
+                        i.dataless,
                         i.signature,
                     ),
                     Message::Data(d) => {
@@ -535,7 +536,7 @@ fn huge_bins_are_refused() {
     exchange(&mut seeder, &mut peer, &hs);
     for b in [Bin::new(40, 0), Bin::ALL, Bin::NONE, strims_ppspp::MAX_BIN] {
         peer.swarm
-            .handle_signed_integrity(&mut peer.verifier, b, t(0), &[0; 64]);
+            .handle_signed_integrity(&mut peer.verifier, b, t(0), 1, &[0; 64]);
         assert!(
             peer.swarm
                 .handle_data(&mut peer.verifier, b, &[0; 128])
@@ -965,16 +966,28 @@ fn a_late_viewer_rewinds_a_gop_and_the_others_keep_their_lag() {
         assert_eq!(r, Ok(at), "{mode:?}");
         assert_eq!(j.wrong, 0, "{mode:?}");
         assert_eq!(j.gaps, 0, "{mode:?}: reads go on from the chunk");
-        // it caught up with the live edge, as it does without the rewind
-        let behind = mesh::RATE / 2;
-        assert!(j.next_read.unwrap() + behind >= m.written, "{mode:?}");
         assert_eq!(control.nodes[7].first_read, Some(first), "{mode:?}");
+        // it caught up with the live edge, as it does without the rewind:
+        // where a pulling reader stands at one instant swings by its lag
+        let (mut late, mut late_without) = (
+            m.lags(7, t(15_000), t(19_000)),
+            control.lags(7, t(15_000), t(19_000)),
+        );
+        assert_eq!(late.len(), late_without.len(), "{mode:?}");
+        let (l99, lc99) = (
+            mesh::quantile(&mut late, 0.99),
+            mesh::quantile(&mut late_without, 0.99),
+        );
+        assert!(
+            ms(l99) <= ms(lc99) * 1.25 + 20.0,
+            "{mode:?}: the joiner's late p99 {l99:?} against {lc99:?}"
+        );
         for i in 1..7 {
             let n = &m.nodes[i];
             assert_eq!((n.gaps, n.wrong), (0, 0), "{mode:?} viewer {i}");
-            let read = n.read_at.len();
-            let want = control.nodes[i].read_at.len();
-            assert!(read + 8 >= want, "{mode:?} viewer {i}: {read} of {want}");
+            let read = m.lags(i, t(5_000), t(19_000)).len();
+            let want = control.lags(i, t(5_000), t(19_000)).len();
+            assert_eq!(read, want, "{mode:?} viewer {i}");
         }
         let (mut with, mut without) = (others_lags(&m), others_lags(&control));
         let (p50, p99) = (

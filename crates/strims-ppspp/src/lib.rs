@@ -64,9 +64,11 @@
 //! # Compatibility
 //!
 //! The wire format, signed messages, Merkle digests, swarm ids and URIs
-//! must stay byte-identical to protocol v2 plus ANNOUNCE (message type
-//! 18, the reports an adaptive seed asks for); `tests/golden.rs` pins
-//! them.
+//! are protocol v2's plus ANNOUNCE (message type 18, the reports an
+//! adaptive seed asks for), with live signatures that bind each integrity
+//! unit's bin and its count of chunks with data, which `SIGNED_INTEGRITY`
+//! carries ([`integrity`], Signatures); `tests/golden.rs` pins them
+//! byte for byte.
 //! Local options ([`PushMode`], the delivery and scheduling methods) never
 //! reach the wire, so nodes with different local options interoperate.
 

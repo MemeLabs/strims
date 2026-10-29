@@ -136,7 +136,7 @@ fn feed(s: &mut Swarm, cv: &mut ChannelVerifier, m: &Message<'_>) {
         }
         Message::Integrity(i) => s.handle_integrity(cv, i.bin, i.hash),
         Message::SignedIntegrity(i) => {
-            s.handle_signed_integrity(cv, i.bin, i.timestamp, i.signature)
+            s.handle_signed_integrity(cv, i.bin, i.timestamp, i.dataless, i.signature)
         }
         Message::Data(d) => {
             let _ = s.handle_data(cv, d.bin, d.data);

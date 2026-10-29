@@ -36,8 +36,8 @@ fn write_all(v: &mut SignAllSwarmVerifier, signer: &SignatureSigner, cs: usize, 
 
 fn apply(cv: &mut ChannelVerifier, b: Bin, w: &TestWriter) {
     let mut v = cv.chunk_verifier(b);
-    for (sb, ts, sig) in &w.signed {
-        v.set_signed_integrity(*sb, *ts, sig);
+    for (sb, ts, sig, chunks) in &w.signed {
+        v.set_signed_integrity(*sb, *ts, *chunks, sig);
     }
 }
 
@@ -227,12 +227,12 @@ fn pending_signatures_are_bounded() {
         unreachable!()
     };
     for i in 0..10 * WINDOW as u64 {
-        v.set_signed_integrity(Bin(2 * i), Time::EPOCH, &[0; 64]);
+        v.set_signed_integrity(Bin(2 * i), Time::EPOCH, 1, &[0; 64]);
         assert!(v.timestamps.len() <= WINDOW);
     }
     // huge and sentinel bins are rejected before they are stored
     for b in [Bin::NONE, Bin::ALL, Bin(1)] {
-        v.set_signed_integrity(b, Time::EPOCH, &[0; 64]);
+        v.set_signed_integrity(b, Time::EPOCH, 1, &[0; 64]);
         assert!(v.timestamps.is_empty());
     }
     let mut dst = f.dst;
@@ -328,4 +328,65 @@ fn cache_round_trip_sets_head() {
             .len(),
         0
     );
+}
+
+/// A chunk's signature holds only at its own bin: a chunk replayed at
+/// another position fails, and a signature that names a count other than 1
+/// clears the pending run.
+#[test]
+fn a_chunk_verifies_only_at_its_bin() {
+    let mut f = fixture();
+    let mut cv = f.dst.channel_verifier();
+    let w = sent(&f.src, Bin(6));
+    let mut moved = TestWriter::default();
+    for (_, t, sig, c) in &w.signed {
+        moved.signed.push((Bin(10), *t, sig.clone(), *c));
+    }
+    apply(&mut cv, Bin(10), &moved);
+    assert_eq!(
+        cv.chunk_verifier(Bin(10))
+            .verify(&mut f.dst, Bin(10), chunks(&f.data, Bin(6))),
+        Err(Error::InvalidChunkSignature)
+    );
+
+    let mut w = sent(&f.src, Bin(4));
+    w.signed[0].3 = 2;
+    apply(&mut cv, Bin(4), &w);
+    assert_eq!(
+        cv.chunk_verifier(Bin(4))
+            .verify(&mut f.dst, Bin(4), chunks(&f.data, Bin(4))),
+        Err(Error::MissingChunkSignature)
+    );
+}
+
+/// A cache signed under another layout (the chunk alone, without its bin)
+/// is refused whole.
+#[test]
+fn a_cache_signed_under_another_layout_is_refused() {
+    let f = fixture();
+    let SwarmVerifier::SignAll(src) = &f.src else {
+        unreachable!()
+    };
+    let signer = LiveSignatureAlgorithm::ED25519
+        .signer(&f.key.private)
+        .unwrap();
+    let mut c = Cache {
+        integrity: Some(src.export_cache()),
+        data: f.data.clone(),
+        ..Default::default()
+    };
+    let s = c
+        .integrity
+        .as_mut()
+        .and_then(|i| i.sign_all_integrity.as_mut())
+        .unwrap();
+    let mut sigs = Vec::new();
+    for (i, &t) in s.timestamps.iter().enumerate() {
+        let chunk = &f.data[i * CS..(i + 1) * CS];
+        let sig = signer.sign(Domain::PpsppChunk, Time::from_unix_nanos(t), chunk);
+        sigs.extend_from_slice(sig.as_slice());
+    }
+    s.signatures = sigs;
+    let mut dst = SwarmVerifier::SignAll(verifier(&f.key, WINDOW, CS));
+    assert_eq!(dst.import_cache(&c), Err(Error::InvalidChunkSignature));
 }

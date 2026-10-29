@@ -217,7 +217,8 @@ impl Writer {
                 let SwarmVerifier::Merkle(v) = &mut swarm.verifier else {
                     return Err(integrity::Error::VerifierMismatch.into());
                 };
-                v.write_munro(&self.signer, now, *n, data)?;
+                let chunks = data.len().div_ceil(self.chunk_size) as u64;
+                v.write_munro(&self.signer, now, *n, data, chunks)?;
                 *n += 1;
                 for chunk in data.chunks(self.chunk_size) {
                     swarm.publish(self.chunks.next_bin(), chunk)?;
