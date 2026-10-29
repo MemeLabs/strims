@@ -20,7 +20,7 @@ use strims_ppspp::{DeliveryMode, PushMode, RequestControllerKind, SeedPolicy};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
     Binding, Competing, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SendBuffer,
-    SwarmSpec, Transport, VpnProbes, knob, stream_minutes, sweep, sweep_n,
+    SwarmSpec, Transport, VpnProbes, knob, stream_minutes, sweep, sweep_at, sweep_n,
 };
 use strims_vpn::Routing;
 use strims_wan::sample::{pick, unit};
@@ -2165,9 +2165,14 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
     }
 }
 
-/// Runs collapse case `c` as test `name` for one seed and its replay.
-fn collapse_sweep(name: &str, c: &Calibration, check: impl Fn(&Report) -> Result<(), String>) {
-    sweep_n(name, 1, |s| calibration_star_scenario(s, c), check);
+/// Runs collapse case `c` as test `name` at `seed` and its replay.
+fn collapse_sweep(
+    name: &str,
+    seed: u64,
+    c: &Calibration,
+    check: impl Fn(&Report) -> Result<(), String>,
+) {
+    sweep_at(name, seed, |s| calibration_star_scenario(s, c), check);
 }
 
 /// The seed's host and its stream's start.
@@ -2195,6 +2200,7 @@ fn collapse_seed(r: &Report) -> (HostIx, Duration) {
 fn collapse_first_wave_overshoot() {
     collapse_sweep(
         "collapse_first_wave_overshoot",
+        1,
         &collapse_case(15, 10, 30),
         |r| {
             let (seed, _) = collapse_seed(r);
@@ -2283,7 +2289,7 @@ fn collapse_meter_oscillation() {
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_pull_lock_in() {
-    collapse_sweep("collapse_pull_lock_in", &collapse_case(15, 5, 60), |r| {
+    collapse_sweep("collapse_pull_lock_in", 1, &collapse_case(15, 5, 60), |r| {
         let (seed, start) = collapse_seed(r);
         let (sent, pushed) = r.hosts[seed]
             .transfers
@@ -2311,15 +2317,18 @@ fn collapse_pull_lock_in() {
 /// frames written in the 10 s before the halving lag under 2 s at p99, and
 /// those written from 10 s after it over 2 s: healthy before, not after.
 /// Holding answers below pushes, routing by expected delivery, holding
-/// late pushes for their parent and pacing answers ease the mode (to about
-/// 2.3 s) but don't remove it: once its window is cut, the seed holds two
-/// or three copies while the viewers it dropped find relays.
+/// late pushes for their parent, pacing answers and frames of about a
+/// chunk (little waits below the runner when the uplink halves) ease the
+/// mode but don't remove it: once its window is cut, the seed holds two or
+/// three copies while the viewers it dropped find relays, and on about a
+/// third of seeds that takes long enough to show. At this seed frames lag
+/// about 0.2 s at p99 before the halving and 2.8 s after.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_halving_lock_in() {
     let mut c = collapse_case(7, 10, 70);
     c.seed_up_steps = vec![(30.0, 5.0)];
-    collapse_sweep("collapse_halving_lock_in", &c, |r| {
+    collapse_sweep("collapse_halving_lock_in", 2, &c, |r| {
         let (_, start) = collapse_seed(r);
         let before = r.lag_between(0, start + secs(20), start + secs(30)).p99;
         let after = r.lag_between(0, start + secs(40), start + secs(70)).p99;

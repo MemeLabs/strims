@@ -209,6 +209,20 @@ pub fn sweep_n(
     sweep_seeds(test, seeds_or(n), build, check)
 }
 
+/// [`sweep`] at `seed` alone unless `STRIMS_SIM_SEED` names another: a
+/// case that reproduces a mode, at a seed it shows on.
+pub fn sweep_at(
+    test: &str,
+    seed: u64,
+    build: impl Fn(u64) -> Scenario + Sync,
+    check: impl Fn(&Report) -> Result<(), String>,
+) -> Vec<Report> {
+    let seed = env("STRIMS_SIM_SEED")
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(seed);
+    sweep_seeds(test, vec![seed], build, check)
+}
+
 fn sweep_seeds(
     test: &str,
     seeds: Vec<u64>,

@@ -132,7 +132,7 @@ pub use spec::{
     SendBuffer, SwarmSpec, Transport, VpnProbes,
 };
 pub use stats::{Peaks, PeerTransfer, RunnerReport, SwarmCounters, TransferSample};
-pub use sweep::{knob, seeds, stream_minutes, sweep, sweep_n};
+pub use sweep::{knob, seeds, stream_minutes, sweep, sweep_at, sweep_n};
 
 /// The TCP listener port of every host.
 pub const TCP_PORT: u16 = 7000;
