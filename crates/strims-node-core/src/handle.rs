@@ -19,7 +19,7 @@ use strims_base::time::Time;
 use strims_kademlia::ID;
 use strims_ppspp::{SwarmId, SwarmKey, SwarmOptions, WriterOptions};
 use strims_proto::types::{Cache, Certificate, Key};
-use strims_transfer::{ReadFailure, SwarmRead, SwarmWrite};
+use strims_transfer::{ReadFailure, RewindFailure, SwarmRead, SwarmWrite};
 use strims_vpn::{
     HashTableGetOptions, HashTablePublisherId, HostAddr, M_BROADCAST, M_STD_FLAGS, NetworkId,
     PeerIndexHost, PeerIndexPublisherId,
@@ -31,7 +31,7 @@ use crate::driver::{Call, Command, Interfaces};
 use crate::error::{NodeError, ReadError};
 use crate::event::{NodeEvent, NodeMetrics, PeerInfo};
 use crate::rpc::{PeerRpc, RpcChannel};
-use crate::state::{PublisherId, ReadReply, ReaderId, State, WriteOp, WriteReply};
+use crate::state::{PublisherId, ReadReply, ReaderId, RewindReply, State, WriteOp, WriteReply};
 use crate::vpn_port::VpnPort;
 
 /// Results buffered per hash table get or peer index search.
@@ -641,14 +641,17 @@ impl Node {
     /// A reader of the swarm's stream from its read offset.
     pub async fn open_reader(&self, swarm: SwarmKey) -> Result<SwarmReader, NodeError> {
         let (reply_tx, reply) = mpsc::channel(1);
+        let (rewind_tx, rewind_reply) = mpsc::channel(1);
         let reader = self
-            .call(move |s, _| s.open_reader(swarm, reply_tx))
+            .call(move |s, _| s.open_reader(swarm, reply_tx, rewind_tx))
             .await??;
         Ok(SwarmReader {
             tx: self.tx.clone(),
             reader,
             buf: Some(vec![0; SWARM_IO_BUFFER]),
             reply,
+            rewind_reply,
+            rewinding: false,
         })
     }
 }
@@ -746,6 +749,24 @@ pub struct SwarmReader {
     reader: ReaderId,
     buf: Option<Vec<u8>>,
     reply: mpsc::Receiver<ReadReply>,
+    rewind_reply: mpsc::Receiver<RewindReply>,
+    /// A rewind's answer is still to come: its future was dropped.
+    rewinding: bool,
+}
+
+/// Cancels a waiting rewind when its future is dropped.
+struct CancelRewind {
+    tx: mpsc::Sender<Command>,
+    reader: ReaderId,
+    armed: bool,
+}
+
+impl Drop for CancelRewind {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = self.tx.try_send(Command::CancelRewind(self.reader));
+        }
+    }
 }
 
 impl SwarmReader {
@@ -789,6 +810,48 @@ impl SwarmReader {
         Ok(self.read_at(out).await?.1)
     }
 
+    /// Moves the reader back to stream offset `offset`, at or before its
+    /// next byte and within the live window, and returns the offset its
+    /// next read starts at: the start of `offset`'s chunk. Reads from there
+    /// return the stream in order, the bytes read before included; no other
+    /// reader of the swarm moves. It may be called any number of times,
+    /// before the first read too, which waits for the swarm's first read
+    /// position ([`strims_ppspp::Runner::rewind`]).
+    ///
+    /// Chunks before the window's tail come from peers first: this waits
+    /// until all of them are stored. [`ReadError::Refused`] leaves the
+    /// reader where it was: the offset is past it, outside the window, no
+    /// peer can serve the chunks, or a discontinuity is waiting for the next
+    /// read (`RewindError::Read`).
+    ///
+    /// A rewind stays pending while the chunks' only holders don't answer,
+    /// for as long as the chunks stay in the window, so bound it with a
+    /// deadline of your own and drop the future: that cancels it. One that
+    /// finished as it was dropped has still moved the reader, which the
+    /// next read's offset shows.
+    pub async fn rewind(&mut self, offset: u64) -> Result<u64, ReadError> {
+        if self.rewinding {
+            // the dropped rewind's answer, sent before or at its cancel
+            let _ = self.rewind_reply.recv().await;
+            self.rewinding = false;
+        }
+        let cmd = Command::Rewind {
+            reader: self.reader,
+            offset,
+        };
+        self.tx.send(cmd).await.map_err(|_| ReadError::Stopped)?;
+        self.rewinding = true;
+        let mut cancel = CancelRewind {
+            tx: self.tx.clone(),
+            reader: self.reader,
+            armed: true,
+        };
+        let r = self.rewind_reply.recv().await.ok_or(ReadError::Stopped)?;
+        cancel.armed = false;
+        self.rewinding = false;
+        r.result
+    }
+
     /// Reads until `out` is full. Underruns and resets are errors.
     pub async fn read_exact(&mut self, out: &mut [u8]) -> Result<(), ReadError> {
         let mut off = 0;
@@ -816,8 +879,18 @@ impl SwarmRead for SwarmReader {
         SwarmReader::read_at(self, out).await.map_err(|e| match e {
             ReadError::Underrun { .. } | ReadError::Reset => ReadFailure::Discontinuity,
             ReadError::Closed | ReadError::Stopped => ReadFailure::Closed,
-            e @ ReadError::Store(_) => ReadFailure::Failed(e),
+            e @ (ReadError::Store(_) | ReadError::Refused(_)) => ReadFailure::Failed(e),
         })
+    }
+
+    async fn rewind(&mut self, offset: u64) -> Result<u64, RewindFailure<ReadError>> {
+        SwarmReader::rewind(self, offset)
+            .await
+            .map_err(|e| match e {
+                ReadError::Refused(e) => RewindFailure::Refused(e),
+                ReadError::Closed | ReadError::Stopped => RewindFailure::Closed,
+                e => RewindFailure::Failed(e),
+            })
     }
 }
 

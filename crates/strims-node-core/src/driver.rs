@@ -88,6 +88,13 @@ pub(crate) enum Command {
         op: WriteOp,
         buf: Vec<u8>,
     },
+    /// Move the reader back to the offset; answered on its rewind channel.
+    Rewind {
+        reader: ReaderId,
+        offset: u64,
+    },
+    /// Give up the reader's waiting rewind (its future was dropped).
+    CancelRewind(ReaderId),
     CloseReader(ReaderId),
     ClosePublisher(PublisherId),
     Shutdown(oneshot::Sender<()>),
@@ -572,7 +579,9 @@ impl<I: NodeIo> NodeTask<I> {
             Command::Call(f) => f(&mut self.state, now),
             Command::Read { reader, buf, max } => self.state.read(reader, buf, max, now),
             Command::Write { publisher, op, buf } => self.state.write(publisher, op, buf, now),
-            Command::CloseReader(r) => self.state.close_reader(r),
+            Command::Rewind { reader, offset } => self.state.rewind(reader, offset, now),
+            Command::CancelRewind(r) => self.state.cancel_rewind(r, now),
+            Command::CloseReader(r) => self.state.close_reader(r, now),
             Command::ClosePublisher(p) => self.state.close_publisher(p),
             Command::Shutdown(done) => {
                 self.shutdown = Some(done);
@@ -738,6 +747,7 @@ mod tests {
     use strims_vpn::ExchangeId;
 
     use super::*;
+    use crate::error::ReadError;
     use crate::event::{DriverMetrics, NodeEvent, PeerInfo};
     use crate::exchange::CandidateState;
     use crate::rtc::{RtcCloseReason, RtcEndpoint, RtcEvent};
@@ -1032,5 +1042,223 @@ mod tests {
                 .start_dial("wss://a.example:443/x", None)
                 .is_ok()
         );
+    }
+
+    /// A remote seed's runner, wired by hand to a node's: the node runs the
+    /// swarm with it as a peer.
+    struct Remote {
+        runner: strims_ppspp::Runner,
+        swarm: strims_ppspp::SwarmKey,
+        peer: strims_ppspp::PeerKey,
+        writer: strims_ppspp::Writer,
+        node_peer: strims_ppspp::PeerKey,
+        node_swarm: strims_ppspp::SwarmKey,
+        now: Time,
+        written: u64,
+    }
+
+    fn stream_byte(o: u64) -> u8 {
+        (o.wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 56) as u8
+    }
+
+    impl Remote {
+        fn new(s: &mut State) -> Remote {
+            let now = epoch();
+            let key = key_from_seed(&[9; 32]);
+            let options = strims_ppspp::SwarmOptions {
+                live_window: 1024,
+                ..Default::default()
+            };
+            let (writer, swarm) = strims_ppspp::Writer::new(
+                strims_ppspp::WriterOptions {
+                    swarm_options: options.clone(),
+                    key: key.clone(),
+                },
+                now,
+            )
+            .unwrap();
+            let mut runner = strims_ppspp::Runner::new(strims_base::rng::det_rng(7));
+            let ss = runner.add_swarm(swarm);
+            let peer = runner.add_peer(b"node", now);
+            runner.run_swarm(peer, ss, 2, 1, now).unwrap();
+            let node_swarm = s
+                .add_swarm(strims_ppspp::SwarmId::new(&key.public), options)
+                .unwrap();
+            let node_peer = s.runner.add_peer(b"seed", now);
+            s.runner
+                .run_swarm(node_peer, node_swarm, 1, 2, now)
+                .unwrap();
+            Remote {
+                runner,
+                swarm: ss,
+                peer,
+                writer,
+                node_peer,
+                node_swarm,
+                now,
+                written: 0,
+            }
+        }
+
+        /// Writes `munros` 64 KiB munros.
+        fn write(&mut self, munros: u64) {
+            for _ in 0..munros {
+                let data: Vec<u8> = (self.written..self.written + 65536)
+                    .map(stream_byte)
+                    .collect();
+                self.runner
+                    .write(self.swarm, &mut self.writer, self.now, &data)
+                    .unwrap();
+                self.written += 65536;
+            }
+        }
+
+        /// Moves frames both ways until both are quiet, then ticks `ms`.
+        fn tick(&mut self, s: &mut State, ms: i64) {
+            let mut buf = vec![0u8; 16 * 1024];
+            loop {
+                let mut moved = false;
+                while self.runner.wants_transmit(self.peer) {
+                    let n = self.runner.poll_transmit(self.peer, self.now, &mut buf);
+                    if n == 0 {
+                        break;
+                    }
+                    moved = true;
+                    s.runner
+                        .handle_frame(self.node_peer, self.now, &buf[..n])
+                        .unwrap();
+                }
+                while s.runner.wants_transmit(self.node_peer) {
+                    let n = s.runner.poll_transmit(self.node_peer, self.now, &mut buf);
+                    if n == 0 {
+                        break;
+                    }
+                    moved = true;
+                    self.runner
+                        .handle_frame(self.peer, self.now, &buf[..n])
+                        .unwrap();
+                }
+                s.test_process_events(self.now);
+                while self.runner.poll_event().is_some() {}
+                if !moved {
+                    break;
+                }
+            }
+            self.now += Duration::from_millis(ms);
+            self.runner.handle_timeout(self.now);
+            s.runner.handle_timeout(self.now);
+            s.test_process_events(self.now);
+        }
+    }
+
+    struct TestReader {
+        id: ReaderId,
+        reads: mpsc::Receiver<crate::state::ReadReply>,
+        rewinds: mpsc::Receiver<crate::state::RewindReply>,
+    }
+
+    fn open(s: &mut State, swarm: strims_ppspp::SwarmKey) -> TestReader {
+        let (tx, reads) = mpsc::channel(1);
+        let (rtx, rewinds) = mpsc::channel(1);
+        TestReader {
+            id: s.open_reader(swarm, tx, rtx).unwrap(),
+            reads,
+            rewinds,
+        }
+    }
+
+    /// Reads what is there: the offset of the first byte and the bytes. The
+    /// last read waits in the node for data; a wake answers it, and the
+    /// next call takes that answer first.
+    fn read_all(s: &mut State, r: &mut TestReader, now: Time) -> (Option<u64>, Vec<u8>) {
+        let (mut first, mut out) = (None, vec![]);
+        loop {
+            let reply = match r.reads.try_recv() {
+                Ok(reply) => reply,
+                Err(_) => {
+                    s.read(r.id, vec![0; 64 * 1024], 64 * 1024, now);
+                    match r.reads.try_recv() {
+                        Ok(reply) => reply,
+                        Err(_) => return (first, out),
+                    }
+                }
+            };
+            let (off, n) = reply.result.unwrap();
+            assert!(first.is_none() || off == first.unwrap() + out.len() as u64);
+            first.get_or_insert(off);
+            out.extend_from_slice(&reply.buf[..n]);
+        }
+    }
+
+    /// A reader moves back two munros behind where it joined, waiting for
+    /// the chunks from the seed, and reads on from there; the other reader
+    /// stays. A refusal and a cancel answer at once; a removed swarm
+    /// closes a waiting rewind.
+    #[test]
+    fn a_reader_rewinds_alone_and_waits_for_the_chunks() {
+        let mut a = browser(1);
+        let s = &mut a.task.state;
+        let mut seed = Remote::new(s);
+        let swarm = seed.node_swarm;
+        let mut r1 = open(s, swarm);
+        let mut r2 = open(s, swarm);
+        seed.write(6);
+        for _ in 0..4 {
+            seed.tick(s, 50);
+        }
+        let (start, got) = read_all(s, &mut r1, seed.now);
+        let start = start.unwrap();
+        let pos = start + got.len() as u64;
+        assert!(start >= 4 * 65536, "{start}");
+        let (start2, got2) = read_all(s, &mut r2, seed.now);
+        let pos2 = start2.unwrap() + got2.len() as u64;
+
+        s.rewind(r1.id, pos + 1, seed.now);
+        assert!(matches!(
+            r1.rewinds.try_recv().unwrap().result,
+            Err(ReadError::Refused(strims_ppspp::RewindError::Ahead))
+        ));
+        let k = start - 2 * 65536 + 300;
+        s.rewind(r1.id, k, seed.now);
+        assert!(r1.rewinds.try_recv().is_err(), "waits for the chunks");
+        for _ in 0..40 {
+            seed.tick(s, 50);
+            if let Ok(r) = r1.rewinds.try_recv() {
+                assert_eq!(r.result.unwrap(), k - 300);
+                break;
+            }
+        }
+        seed.write(1);
+        for _ in 0..4 {
+            seed.tick(s, 50);
+        }
+        let (first, got) = read_all(s, &mut r1, seed.now);
+        assert_eq!(first, Some(k - 300));
+        assert_eq!(k - 300 + got.len() as u64, seed.written);
+        assert!(
+            got.iter()
+                .enumerate()
+                .all(|(i, &b)| b == stream_byte(k - 300 + i as u64))
+        );
+        let (first2, _) = read_all(s, &mut r2, seed.now);
+        assert_eq!(first2, Some(pos2), "the other reader stays");
+
+        // a cancelled rewind is answered, and its backlog goes
+        let k = k - 300 - 65536;
+        s.rewind(r1.id, k, seed.now);
+        assert!(r1.rewinds.try_recv().is_err());
+        assert!(s.runner.swarm(swarm).unwrap().store().backlog().is_some());
+        s.cancel_rewind(r1.id, seed.now);
+        assert!(r1.rewinds.try_recv().unwrap().result.is_err());
+        assert!(s.runner.swarm(swarm).unwrap().store().backlog().is_none());
+
+        // a removed swarm closes a waiting one
+        s.rewind(r1.id, k, seed.now);
+        assert!(r1.rewinds.try_recv().is_err());
+        s.remove_swarm(swarm).unwrap();
+        assert!(matches!(
+            r1.rewinds.try_recv().unwrap().result,
+            Err(ReadError::Closed)
+        ));
     }
 }

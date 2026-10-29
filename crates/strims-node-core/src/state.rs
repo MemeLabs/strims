@@ -37,7 +37,9 @@ use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::Time;
 use strims_kademlia::ID;
 use strims_ppspp::store::{self, BufferReader};
-use strims_ppspp::{Runner, RunnerError, SwarmId, SwarmKey, SwarmOptions, WriterOptions};
+use strims_ppspp::{
+    Rewind, RewindError, Runner, RunnerError, SwarmId, SwarmKey, SwarmOptions, WriterOptions,
+};
 use strims_proto::types::{Cache, Key};
 use strims_qos::ClassId;
 use strims_vnic::{
@@ -263,6 +265,13 @@ pub(crate) struct ReadReply {
     pub(crate) result: Result<(u64, usize), ReadError>,
 }
 
+/// A finished rewind, back to a [`crate::SwarmReader`]: the offset its
+/// next read starts at. Each rewind gets exactly one.
+#[derive(Debug)]
+pub(crate) struct RewindReply {
+    pub(crate) result: Result<u64, ReadError>,
+}
+
 #[derive(Debug)]
 struct ReaderSlot {
     swarm: SwarmKey,
@@ -270,6 +279,9 @@ struct ReaderSlot {
     /// A read waiting for data: the buffer and the most bytes to read.
     pending: Option<(Vec<u8>, usize)>,
     reply: mpsc::Sender<ReadReply>,
+    /// A rewind waiting for its swarm's backlog: its offset.
+    rewind: Option<u64>,
+    rewind_reply: mpsc::Sender<RewindReply>,
 }
 
 /// What a [`crate::SwarmWriter`] asks for.
@@ -1838,11 +1850,17 @@ impl State {
         self.swarms.remove(&swarm);
         self.publishers.retain(|_, p| p.swarm != swarm);
         for (_, r) in self.readers.iter_mut() {
-            if r.swarm == swarm
-                && let Some((buf, _)) = r.pending.take()
-            {
+            if r.swarm != swarm {
+                continue;
+            }
+            if let Some((buf, _)) = r.pending.take() {
                 let _ = r.reply.try_send(ReadReply {
                     buf,
+                    result: Err(ReadError::Closed),
+                });
+            }
+            if r.rewind.take().is_some() {
+                let _ = r.rewind_reply.try_send(RewindReply {
                     result: Err(ReadError::Closed),
                 });
             }
@@ -1888,6 +1906,7 @@ impl State {
         &mut self,
         swarm: SwarmKey,
         reply: mpsc::Sender<ReadReply>,
+        rewind_reply: mpsc::Sender<RewindReply>,
     ) -> Result<ReaderId, NodeError> {
         let reader = self
             .runner
@@ -1899,11 +1918,57 @@ impl State {
             reader,
             pending: None,
             reply,
+            rewind: None,
+            rewind_reply,
         }))
     }
 
-    pub(crate) fn close_reader(&mut self, id: ReaderId) {
-        self.readers.remove(id);
+    pub(crate) fn close_reader(&mut self, id: ReaderId, now: Time) {
+        if let Some(slot) = self.readers.remove(id)
+            && slot.rewind.is_some()
+        {
+            self.drop_backlog(slot.swarm, now);
+        }
+    }
+
+    /// Moves the reader back to `offset` ([`strims_ppspp::Runner::rewind`]),
+    /// or parks the rewind until the swarm's backlog is stored.
+    pub(crate) fn rewind(&mut self, id: ReaderId, offset: u64, now: Time) {
+        let State {
+            readers, runner, ..
+        } = self;
+        let Some(slot) = readers.get_mut(id) else {
+            return;
+        };
+        slot.rewind = Some(offset);
+        rewind_slot(runner, slot, now);
+    }
+
+    /// Gives up the reader's parked rewind, answering it as refused, and
+    /// the swarm's backlog once no other reader waits for it.
+    pub(crate) fn cancel_rewind(&mut self, id: ReaderId, now: Time) {
+        let Some(slot) = self.readers.get_mut(id) else {
+            return;
+        };
+        if slot.rewind.take().is_none() {
+            return;
+        }
+        let _ = slot.rewind_reply.try_send(RewindReply {
+            result: Err(ReadError::Refused(RewindError::Unavailable)),
+        });
+        let swarm = slot.swarm;
+        self.drop_backlog(swarm, now);
+    }
+
+    /// Stops the swarm's backlog unless a reader still waits for it.
+    fn drop_backlog(&mut self, swarm: SwarmKey, now: Time) {
+        let waiting = self
+            .readers
+            .values()
+            .any(|r| r.swarm == swarm && r.rewind.is_some());
+        if !waiting {
+            self.runner.cancel_rewind(swarm, now);
+        }
     }
 
     /// Reads into `buf[..max]`, or parks the buffer until the swarm is
@@ -1931,6 +1996,7 @@ impl State {
             if slot.swarm != swarm {
                 continue;
             }
+            rewind_slot(runner, slot, now);
             let Some((mut buf, max)) = slot.pending.take() else {
                 continue;
             };
@@ -2003,6 +2069,26 @@ impl State {
     pub(crate) fn test_link_count(&self) -> usize {
         self.links.len()
     }
+
+    /// Hands the runner's events to the readers, as a pass does.
+    pub(crate) fn test_process_events(&mut self, now: Time) {
+        self.process_events(now);
+    }
+}
+
+/// Tries the slot's parked rewind, and answers it unless it still waits.
+fn rewind_slot(runner: &mut Runner, slot: &mut ReaderSlot, now: Time) {
+    let Some(offset) = slot.rewind else {
+        return;
+    };
+    let result = match runner.rewind(slot.swarm, &mut slot.reader, offset, now) {
+        Ok(Rewind::Pending) => return,
+        Ok(Rewind::Done(at)) => Ok(at),
+        Err(RewindError::Read(store::Error::Closed)) => Err(ReadError::Closed),
+        Err(e) => Err(ReadError::Refused(e)),
+    };
+    slot.rewind = None;
+    let _ = slot.rewind_reply.try_send(RewindReply { result });
 }
 
 /// One non-blocking read. `None`: nothing to read yet.

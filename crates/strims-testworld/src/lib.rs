@@ -24,9 +24,14 @@
 //!   apart) shares one log in the world. A log keeps the last window of the
 //!   stream (the swarm's live window in bytes) and its epoch. Creating a
 //!   swarm, or resetting its writer, starts a new epoch at offset 0. A
-//!   reader starts at the window's tail, reads at absolute offsets, and
-//!   fails once with a discontinuity when the epoch changes or the window
-//!   passed it. Removing a swarm closes its readers and writer.
+//!   reader starts at the window's tail, or at the newest chunk once there
+//!   is one, as a live swarm reader joins
+//!   ([`FakeHost::open_readers_live`]). It reads at absolute offsets, moves
+//!   back to any chunk the log holds ([`SwarmRead::rewind`]), and fails
+//!   once with a discontinuity when the epoch changes or the window passed
+//!   it. Removing a swarm closes its readers and writer.
+//!
+//! [`SwarmRead::rewind`]: strims_transfer::SwarmRead::rewind
 //!
 //! Not modelled:
 //!
@@ -35,7 +40,8 @@
 //! - vpn routing, hops, encryption and signatures: a delivery carries no
 //!   hops and no verified signature;
 //! - transfers between nodes: swarms share their log, discovery finds no
-//!   one, and peer connections and swarm runs do nothing.
+//!   one, and peer connections and swarm runs do nothing. A rewind never
+//!   waits for peers.
 //!
 //! Tests run in [`run`]. An app crate's tests build their control from a
 //! [`Node`]'s parts (its host, store, profile, controls, timer and a

@@ -14,9 +14,9 @@ use std::task::{Context, Poll, Waker};
 use futures_core::Stream;
 use futures_sink::Sink;
 use strims_kademlia::ID;
-use strims_ppspp::SwarmId;
+use strims_ppspp::{RewindError, SwarmId, store};
 use strims_rpc::Timer;
-use strims_transfer::{ReadFailure, SwarmRead, SwarmWrite};
+use strims_transfer::{ReadFailure, RewindFailure, SwarmRead, SwarmWrite};
 use strims_vpn::{Delivery, HostAddr, M_ENCRYPT, NetworkId};
 use tokio::time::Instant;
 
@@ -39,6 +39,8 @@ pub struct LogState {
     pub data: VecDeque<u8>,
     pub tail: u64,
     pub window: usize,
+    /// The swarm's chunk size, which rewinds round down to.
+    pub chunk_size: u64,
     /// Bytes written in all epochs.
     pub written: u64,
     wakers: Vec<Waker>,
@@ -89,13 +91,14 @@ impl World {
         TokioTimer { base }
     }
 
-    pub(crate) fn log(&self, id: &SwarmId, label: &str, window: usize) -> Log {
+    pub(crate) fn log(&self, id: &SwarmId, label: &str, window: usize, chunk_size: u64) -> Log {
         let mut w = self.0.borrow_mut();
         w.logs
             .entry((id.clone(), label.to_owned()))
             .or_insert_with(|| {
                 Rc::new(RefCell::new(LogState {
                     window,
+                    chunk_size,
                     ..LogState::default()
                 }))
             })
@@ -314,6 +317,29 @@ pub struct FakeReader {
     pub(crate) closed: Rc<Cell<bool>>,
     pub(crate) epoch: u64,
     pub(crate) pos: u64,
+    /// Takes the newest chunk's start as its position once the log holds a
+    /// byte, as a low-latency swarm reader joins.
+    pub(crate) joining: bool,
+}
+
+impl FakeReader {
+    /// Joins if it is to and can: false while it waits for a first byte,
+    /// with `cx`'s waker queued.
+    fn join(&mut self, l: &mut LogState, cx: &mut Context<'_>) -> bool {
+        if !self.joining {
+            return true;
+        }
+        let end = l.tail + l.data.len() as u64;
+        if end == l.tail {
+            l.wakers.push(cx.waker().clone());
+            return false;
+        }
+        let last = end - 1;
+        self.pos = (last - last % l.chunk_size.max(1)).max(l.tail);
+        self.epoch = l.epoch;
+        self.joining = false;
+        true
+    }
 }
 
 impl SwarmRead for FakeReader {
@@ -324,7 +350,11 @@ impl SwarmRead for FakeReader {
             if self.closed.get() {
                 return Poll::Ready(Err(ReadFailure::Closed));
             }
-            let mut l = self.log.borrow_mut();
+            let log = self.log.clone();
+            let mut l = log.borrow_mut();
+            if !self.join(&mut l, cx) {
+                return Poll::Pending;
+            }
             if l.epoch != self.epoch || self.pos < l.tail {
                 self.epoch = l.epoch;
                 self.pos = l.tail;
@@ -343,6 +373,39 @@ impl SwarmRead for FakeReader {
             let at = self.pos;
             self.pos += n as u64;
             Poll::Ready(Ok((at, n)))
+        })
+        .await
+    }
+
+    /// Moves back within the log, which holds the whole window: refused
+    /// past the reader's position, below the log's tail, or with a
+    /// discontinuity the next read reports (left for it).
+    async fn rewind(&mut self, offset: u64) -> Result<u64, RewindFailure<Closed>> {
+        poll_fn(|cx| {
+            if self.closed.get() {
+                return Poll::Ready(Err(RewindFailure::Closed));
+            }
+            let log = self.log.clone();
+            let mut l = log.borrow_mut();
+            if !self.join(&mut l, cx) {
+                return Poll::Pending;
+            }
+            let refused = |e| Poll::Ready(Err(RewindFailure::Refused(e)));
+            if l.epoch != self.epoch {
+                return refused(RewindError::Read(store::Error::StreamReset));
+            }
+            if self.pos < l.tail {
+                return refused(RewindError::Read(store::Error::BufferUnderrun));
+            }
+            if offset > self.pos {
+                return refused(RewindError::Ahead);
+            }
+            let at = offset - offset % l.chunk_size.max(1);
+            if at < l.tail {
+                return refused(RewindError::OutsideWindow);
+            }
+            self.pos = at;
+            Poll::Ready(Ok(at))
         })
         .await
     }

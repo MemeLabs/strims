@@ -9,7 +9,7 @@ use std::future::Future;
 
 use prost::Message;
 use strims_chunkstream::{DecoderMetrics, RecordDecoder, RecordEncoder, SizeError};
-use strims_ppspp::{SwarmId, SwarmOptions, WriterOptions};
+use strims_ppspp::{RewindError, SwarmId, SwarmOptions, WriterOptions};
 use strims_proto::types::Cache;
 
 use crate::host::Host;
@@ -29,6 +29,23 @@ pub enum ReadFailure<E> {
     Closed,
     /// The read failed; the next read may go on.
     #[error("read failed: {0}")]
+    Failed(E),
+}
+
+/// Why a [`SwarmRead::rewind`] left the reader where it was.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum RewindFailure<E> {
+    /// The swarm can't deliver the bytes from the offset
+    /// ([`RewindError`]): reading goes on exactly where it was. A
+    /// discontinuity the reader has yet to report comes as
+    /// [`RewindError::Read`], and the next read reports it.
+    #[error("rewind refused: {0}")]
+    Refused(RewindError),
+    /// The swarm was removed or the reader closed; later calls fail too.
+    #[error("stream closed")]
+    Closed,
+    /// The rewind failed; the reader stays where it was.
+    #[error("rewind failed: {0}")]
     Failed(E),
 }
 
@@ -63,6 +80,38 @@ pub trait SwarmRead: 'static {
         &mut self,
         out: &mut [u8],
     ) -> impl Future<Output = Result<(u64, usize), ReadFailure<Self::Error>>>;
+
+    /// Moves the reader back to stream offset `offset`, at or before the
+    /// next byte it reads, within the swarm's live window, and resolves to
+    /// the offset the next read starts at: `offset`'s chunk start, at or
+    /// before `offset` (the start of its frame in
+    /// `strims_chunkstream::chunked`). Reads from there return the stream
+    /// in order, the bytes read before included. No other reader of the
+    /// swarm moves. It may be called any number of times, before the first
+    /// read too, which waits for the reader's position.
+    ///
+    /// Bytes from before the window's tail come from peers first, and the
+    /// rewind resolves once every one of them is stored, so reading from
+    /// there never stalls on them. A refusal ([`RewindFailure::Refused`])
+    /// leaves the reader exactly where it was: the offset is past the
+    /// reader, outside the live window, or no peer can serve the bytes.
+    /// Chunks lost later show as discontinuities, as they do without a
+    /// rewind.
+    ///
+    /// A rewind can stay pending for as long as the bytes stay in the live
+    /// window while their only holders don't answer, so bound it with a
+    /// deadline of your own and drop the future, which cancels it. A
+    /// rewind cancelled as it finished may still have moved the reader; the
+    /// next read's offset tells.
+    ///
+    /// The default refuses every rewind ([`RewindError::Unavailable`]).
+    fn rewind(
+        &mut self,
+        offset: u64,
+    ) -> impl Future<Output = Result<u64, RewindFailure<Self::Error>>> {
+        let _ = offset;
+        std::future::ready(Err(RewindFailure::Refused(RewindError::Unavailable)))
+    }
 }
 
 /// A writer of a swarm's stream.

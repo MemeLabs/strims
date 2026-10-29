@@ -41,6 +41,8 @@ pub struct NodeState {
     pub next_swarm: u32,
     /// Ports opened by number under another number.
     pub port_remap: BTreeMap<u16, u16>,
+    /// Readers opened from now start at the newest chunk ([`FakeHost::open_readers_live`]).
+    pub live_readers: bool,
 }
 
 #[derive(Clone)]
@@ -62,6 +64,15 @@ impl FakeHost {
 
     pub fn net(&self, key: &[u8]) -> Option<u32> {
         self.state.borrow().networks.get(key).copied()
+    }
+
+    /// With `live`, the readers this node opens from now start at the start
+    /// of the newest chunk, once the log holds a byte, as a low-latency
+    /// swarm reader joins a live stream (and can move back with
+    /// [`SwarmRead::rewind`](strims_transfer::SwarmRead::rewind)); without,
+    /// at the window's tail.
+    pub fn open_readers_live(&self, live: bool) {
+        self.state.borrow_mut().live_readers = live;
     }
 
     /// Opens `port` on the network, whatever `port_remap` says.
@@ -90,7 +101,11 @@ impl FakeHost {
         created: bool,
     ) -> (u32, Log, Rc<Cell<bool>>) {
         let window = options.live_window * options.chunk_size;
-        let log = self.world.log(&id, &options.label, window);
+        let chunk_size = options
+            .clone()
+            .assign_defaults(&SwarmOptions::default_options())
+            .chunk_size as u64;
+        let log = self.world.log(&id, &options.label, window, chunk_size);
         let closed = Rc::new(Cell::new(false));
         let mut s = self.state.borrow_mut();
         s.next_swarm += 1;
@@ -311,6 +326,7 @@ impl strims_transfer::SwarmHost for FakeHost {
             closed: e.closed.clone(),
             epoch: l.epoch,
             pos: l.tail,
+            joining: s.live_readers,
         })
     }
 }
@@ -334,12 +350,86 @@ impl strims_directory::Host for FakeHost {
 
 #[cfg(test)]
 mod tests {
-    //! The fake swarm writer's flush.
+    //! The fake swarm writer's flush, and the fake reader's live join and
+    //! rewind.
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
-    use strims_transfer::{SwarmHost, SwarmRead, SwarmWrite};
+    use strims_ppspp::{RewindError, store};
+    use strims_transfer::{ReadFailure, RewindFailure, SwarmHost, SwarmRead, SwarmWrite};
 
     use super::*;
+
+    fn host() -> FakeHost {
+        let world = World::default();
+        FakeHost {
+            id: ID::from_bytes(&[1; 32]),
+            state: Rc::default(),
+            world: world.clone(),
+            timer: world.timer(),
+        }
+    }
+
+    /// A live reader starts at the newest chunk once there is one, and
+    /// moves back to the start of any chunk the log holds, at or before
+    /// its position; a discontinuity stays for the next read.
+    #[test]
+    fn a_live_reader_joins_at_the_newest_chunk_and_rewinds() {
+        crate::exec::run(async {
+            let host = host();
+            let options = WriterOptions {
+                swarm_options: SwarmOptions {
+                    chunk_size: 64,
+                    chunks_per_signature: 1,
+                    live_window: 8,
+                    ..Default::default()
+                },
+                key: strims_crypto::key_from_seed(&[3; 32]),
+            };
+            let (h, _, mut w) = host.create_swarm(options).await.unwrap();
+            host.open_readers_live(true);
+            let mut r = host.open_reader(h).await.unwrap();
+            let stream: Vec<u8> = (0..1024u32).map(|i| (i % 251) as u8).collect();
+            w.write(&stream[..200]).await.unwrap();
+            let mut buf = [0u8; 1024];
+            let (off, n) = r.read_at(&mut buf).await.unwrap();
+            assert_eq!((off, n), (192, 8), "the newest chunk's start");
+            let refused = |r: Result<u64, RewindFailure<Closed>>| match r {
+                Err(RewindFailure::Refused(e)) => Some(e),
+                _ => None,
+            };
+            assert_eq!(refused(r.rewind(201).await), Some(RewindError::Ahead));
+            assert_eq!(r.rewind(70).await.ok(), Some(64));
+            let (off, n) = r.read_at(&mut buf).await.unwrap();
+            assert_eq!((off, &buf[..n]), (64, &stream[64..200]));
+
+            // past the window: the reader skipped to the tail
+            w.write(&stream[200..]).await.unwrap();
+            assert!(matches!(
+                r.read_at(&mut buf).await,
+                Err(ReadFailure::Discontinuity)
+            ));
+            let (off, _) = r.read_at(&mut buf).await.unwrap();
+            assert_eq!(off, 1024 - 512);
+            assert_eq!(
+                refused(r.rewind(511).await),
+                Some(RewindError::OutsideWindow)
+            );
+            assert_eq!(r.rewind(512).await.ok(), Some(512));
+
+            // a new epoch: the read reports it, not the rewind
+            w.reset().await.unwrap();
+            assert_eq!(
+                refused(r.rewind(512).await),
+                Some(RewindError::Read(store::Error::StreamReset))
+            );
+            assert!(matches!(
+                r.read_at(&mut buf).await,
+                Err(ReadFailure::Discontinuity)
+            ));
+            host.remove_swarm(h).await.unwrap();
+            assert!(matches!(r.rewind(0).await, Err(RewindFailure::Closed)));
+        });
+    }
 
     /// A flush pads the stream with zeros to the swarm's integrity unit and
     /// returns the offset where the next unit starts, where the next write
@@ -347,13 +437,7 @@ mod tests {
     #[test]
     fn flush_pads_to_the_unit() {
         crate::exec::run(async {
-            let world = World::default();
-            let host = FakeHost {
-                id: ID::from_bytes(&[1; 32]),
-                state: Rc::default(),
-                world: world.clone(),
-                timer: world.timer(),
-            };
+            let host = host();
             let options = WriterOptions {
                 swarm_options: SwarmOptions {
                     chunk_size: 64,

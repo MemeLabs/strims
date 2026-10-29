@@ -72,6 +72,8 @@
 //!   the last one ended is a discontinuity whether or not the swarm reader
 //!   reported one: the record reader reports it once and restarts its
 //!   decoder at the new offset.
+//! - A swarm reader can move back within the live window
+//!   ([`SwarmRead::rewind`]), to a record it learnt of from a later one.
 
 mod control;
 mod host;
@@ -87,8 +89,8 @@ pub use control::TransferControl;
 pub use host::Host;
 pub use id::TransferId;
 pub use stream::{
-    ReadFailure, ReaderMetrics, RecordReader, RecordWriter, SwarmHost, SwarmRead, SwarmWrite,
-    WriteFailure,
+    ReadFailure, ReaderMetrics, RecordReader, RecordWriter, RewindFailure, SwarmHost, SwarmRead,
+    SwarmWrite, WriteFailure,
 };
 
 /// How transfers run.
