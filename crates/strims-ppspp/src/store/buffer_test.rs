@@ -851,7 +851,7 @@ fn a_backlog_extends_and_completes_from_what_the_buffer_had() {
     assert_eq!(b.tail(), Bin::new(0, 14));
 }
 
-/// A backlog that no longer fits the ring, or whose window moved on, is
+/// A backlog that stops fitting the ring, or whose window moved on, is
 /// closed: its chunks count as before the window again and readers stay.
 #[test]
 fn a_backlog_that_stops_fitting_is_closed() {

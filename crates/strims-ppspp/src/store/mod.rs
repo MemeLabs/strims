@@ -62,8 +62,8 @@ pub enum Error {
     Codec(#[from] codec::Error),
 }
 
-/// Why a reader stays where it was instead of moving back
-/// ([`BufferReader::rewind`], [`crate::Runner::rewind`]).
+/// Why a rewind left the reader where it was ([`BufferReader::rewind`],
+/// [`crate::Runner::rewind`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RewindError {
     /// The offset is past the reader's next byte.

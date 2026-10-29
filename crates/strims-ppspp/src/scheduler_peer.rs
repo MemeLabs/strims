@@ -1627,7 +1627,7 @@ impl PeerSwarmScheduler {
         }
     }
 
-    /// Ends a pending backlog the store no longer waits for: complete, or
+    /// Ends a pending backlog the store stopped waiting for: complete, or
     /// closed because it stopped fitting. Closes it in the store when a
     /// chunk it lacks can't be requested any more
     /// ([`Self::backlog_servable`]) or its first munro left the verifier's

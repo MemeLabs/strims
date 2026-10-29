@@ -406,7 +406,7 @@ impl Buffer {
 
     fn set(&mut self, b: Bin, d: &[u8]) {
         let (l, r) = b.base();
-        // a chunk in the slot of a backlog chunk: the backlog no longer fits
+        // a chunk in the slot of a backlog chunk: the backlog stops fitting
         if let Some((from, _)) = self.backlog
             && r >= Bin(from.0.saturating_add(self.size.0))
         {

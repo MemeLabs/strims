@@ -1347,6 +1347,10 @@ fn a_rewind_fetches_the_chunks_before_the_tail() {
         }
         assert!(p.seed_heard(p.written - 1));
         assert_eq!(p.rewind(at), Ok(Rewind::Done(at)), "within the window");
+        if o.push_mode == PushMode::Hybrid {
+            let s = p.leech.runner.push_stats(p.leech.swarm).unwrap();
+            assert_eq!(s.unsolicited, 0, "backlog answers are answers");
+        }
     }
 }
 
