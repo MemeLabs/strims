@@ -3577,16 +3577,26 @@ impl Sim {
                 .collect(),
             // Over the viewers that never left: a place taken again misses
             // what was written while it stood empty. A media run counts the
-            // chunks that hold media.
+            // chunks that hold media from each viewer's first read on: where
+            // a viewer joins turns on the unit size, which the join's lag
+            // measures.
             delivery: {
-                let media = |c: usize| {
-                    self.media.is_none() || self.publish_times.get(c).is_some_and(|t| !t.is_nil())
+                let media = |n: &Node, c: usize| match &self.media {
+                    None => true,
+                    Some(_) => {
+                        let first = n.start.map_or(u64::MAX, |o| o / self.cfg.chunk_size as u64);
+                        c as u64 >= first && self.publish_times.get(c).is_some_and(|t| !t.is_nil())
+                    }
                 };
                 let (read, all) = peers
                     .clone()
                     .filter(|n| !n.churned)
                     .fold((0, 0), |(r, a), n| {
-                        let chunks = n.read_chunks.iter().enumerate().filter(|&(c, _)| media(c));
+                        let chunks = n
+                            .read_chunks
+                            .iter()
+                            .enumerate()
+                            .filter(|&(c, _)| media(n, c));
                         let (rn, an) =
                             chunks.fold((0, 0), |(r, a), (_, &x)| (r + usize::from(x), a + 1));
                         (r + rn, a + an)

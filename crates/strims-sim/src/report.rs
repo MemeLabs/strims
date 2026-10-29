@@ -388,14 +388,28 @@ impl Report {
     /// Delivered over written frames, summed over `swarm`'s viewers: each
     /// viewer is owed every frame the seed wrote during the run, including
     /// those written while the viewer was down.
+    /// A media swarm's viewer is owed the frames from its first one on:
+    /// where it joins turns on the unit size, which the startup lag
+    /// measures.
     pub fn delivery(&self, swarm: usize) -> f64 {
         let Some(w) = self.written.get(swarm) else {
             return 0.0;
         };
+        let media = self.media.get(swarm).is_some_and(Option::is_some);
         let (mut got, mut want) = (0, 0);
         for v in self.viewers.iter().filter(|v| v.swarm == swarm) {
-            want += w.len();
-            got += w.len() - w.missing_from(&v.stats.received, 0..w.bound());
+            let from = match media {
+                true => v
+                    .stats
+                    .joins
+                    .iter()
+                    .find_map(|j| j.first_seq)
+                    .unwrap_or(w.bound()),
+                false => 0,
+            };
+            let owed = w.count_in(from..w.bound());
+            want += owed;
+            got += owed - w.missing_from(&v.stats.received, from..w.bound());
         }
         ratio(got, want)
     }

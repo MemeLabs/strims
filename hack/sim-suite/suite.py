@@ -183,7 +183,10 @@ def robust_tier():
 # The streams the sign tiers run (strims_wan::live's encoders): audio alone
 # at 128 kbit/s, then audio and video, CBR and VBR, to 6 Mbit/s.
 SIGN_MEDIA = ["128c", "512c", "1500c", "1500v", "3000c", "6000c", "6000v"]
-SIGN_CONFIRM_MEDIA = ["128c", "1500c", "1500v", "6000c"]
+SIGN_CONFIRM_MEDIA = ["128c", "512c", "1500v", "3000c", "6000c"]
+SIGN_CONFIRM_SIM_MEDIA = ["128c", "1500v", "6000c"]
+# The sign tier's VBR streams at other keyframe ratios and scene spreads.
+SIGN_SENS_MEDIA = ["1500v:k3", "1500v:k12", "1500v:s0.35", "1500v:s1.2", "6000v:k12", "6000v:s1.2"]
 
 
 def media_cells(cells, media, knob):
@@ -211,14 +214,21 @@ def sign_tier():
 
 def sign_confirm_tier():
     """The sign tier's ppspp cells at SIGN_CONFIRM_MEDIA's streams, and the
-    real stack's (strims-sim, the knob STRIMS_SIM_SIGN): stars behind 10 and
-    20 Mbit/s seeds, a halving, a sparse mesh, residential and super-peer
-    seeds on steady and varying uplinks, mobile viewers, a starved seed and
-    viewers that crash."""
+    real stack's (strims-sim, the knob STRIMS_SIM_SIGN) at
+    SIGN_CONFIRM_SIM_MEDIA's: stars behind 10 and 20 Mbit/s seeds, a
+    halving, a sparse mesh, residential and super-peer seeds on steady and
+    varying uplinks, mobile viewers, a starved seed and viewers that crash."""
     peers = {c["name"]: c for c in TIERS["peers"]}
     robust = {c["name"]: c for c in TIERS["robust"]}
     return (media_cells([peers[n] for n in SIGN_PPSPP], SIGN_CONFIRM_MEDIA, "SIM_MEDIA")
-            + media_cells([robust[n] for n in SIGN_SIM], SIGN_CONFIRM_MEDIA, "STRIMS_SIM_MEDIA"))
+            + media_cells([robust[n] for n in SIGN_SIM], SIGN_CONFIRM_SIM_MEDIA, "STRIMS_SIM_MEDIA"))
+
+
+def sign_sens_tier():
+    """The sign tier's ppspp cells at SIGN_SENS_MEDIA's streams: how much a
+    policy's standing turns on the encoder model."""
+    peers = {c["name"]: c for c in TIERS["peers"]}
+    return media_cells([peers[n] for n in SIGN_PPSPP], SIGN_SENS_MEDIA, "SIM_MEDIA")
 
 
 TIERS = {
@@ -282,6 +292,7 @@ TIERS = {
 }
 TIERS["sign"] = sign_tier()
 TIERS["sign-confirm"] = sign_confirm_tier()
+TIERS["sign-sens"] = sign_sens_tier()
 
 # Metrics: (name, how to read it from a row, better: "lower", "higher" or
 # None, kind: "ratio" (geometric) or "diff" (absolute), tie band).
