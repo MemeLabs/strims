@@ -180,6 +180,47 @@ def robust_tier():
     return cells
 
 
+# The streams the sign tiers run (strims_wan::live's encoders): audio alone
+# at 128 kbit/s, then audio and video, CBR and VBR, to 6 Mbit/s.
+SIGN_MEDIA = ["128c", "512c", "1500c", "1500v", "3000c", "6000c", "6000v"]
+SIGN_CONFIRM_MEDIA = ["128c", "1500c", "1500v", "6000c"]
+
+
+def media_cells(cells, media, knob):
+    """Each of `cells` at each stream of `media`, set by `knob`."""
+    return [cell(f"{c['name']}@{m}", c["sim"], c["test"], {**c["env"], knob: m}, c["mem_gib"],
+                 f"{c['why']}, streaming {m}") for c in cells for m in media]
+
+
+SIGN_PPSPP = ["wan-global", "wan-mobile", "residential", "sparse-lossy", "overload", "churn"]
+SIGN_SIM = ["star-15-20", "star-15-10", "halve-15-20", "mesh6-31-10", "wan-residential-seed",
+            "wan-residential-seed-varying", "wan-super-peer-varying", "wan-mobile-viewers", "seed-starved",
+            "viewer-churn"]
+
+
+def sign_tier():
+    """How a live stream signs early, for a screen of sign policies (the
+    knob SIM_SIGN): the peers tier's ppspp cells on real-world uplinks
+    (wan-global, wan-mobile, residential; cable seeds of 100 viewers, steady
+    and churning), sparse-lossy's mesh, and 200 viewers at the higher rates,
+    each at each stream of SIGN_MEDIA."""
+    peers = {c["name"]: c for c in TIERS["peers"]}
+    cells = media_cells([peers[n] for n in SIGN_PPSPP], SIGN_MEDIA, "SIM_MEDIA")
+    return cells + media_cells([peers["large-4mbit"]], ["3000c", "6000c", "6000v"], "SIM_MEDIA")
+
+
+def sign_confirm_tier():
+    """The sign tier's ppspp cells at SIGN_CONFIRM_MEDIA's streams, and the
+    real stack's (strims-sim, the knob STRIMS_SIM_SIGN): stars behind 10 and
+    20 Mbit/s seeds, a halving, a sparse mesh, residential and super-peer
+    seeds on steady and varying uplinks, mobile viewers, a starved seed and
+    viewers that crash."""
+    peers = {c["name"]: c for c in TIERS["peers"]}
+    robust = {c["name"]: c for c in TIERS["robust"]}
+    return (media_cells([peers[n] for n in SIGN_PPSPP], SIGN_CONFIRM_MEDIA, "SIM_MEDIA")
+            + media_cells([robust[n] for n in SIGN_SIM], SIGN_CONFIRM_MEDIA, "STRIMS_SIM_MEDIA"))
+
+
 TIERS = {
     "smoke": [
         cell("large", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "200", "SIM_MBIT": "2", "SIM_SECS": "10"}, 2,
@@ -239,6 +280,8 @@ TIERS = {
     ],
     "robust": robust_tier(),
 }
+TIERS["sign"] = sign_tier()
+TIERS["sign-confirm"] = sign_confirm_tier()
 
 # Metrics: (name, how to read it from a row, better: "lower", "higher" or
 # None, kind: "ratio" (geometric) or "diff" (absolute), tie band).
@@ -296,6 +339,8 @@ METRICS = [
     ("join_p50_ms", lambda r: r.get("join_p50_ms"), LOWER, "ratio", 0.10),
     ("join_p90_ms", lambda r: r.get("join_p90_ms"), LOWER, "ratio", 0.10),
     ("startup_p99_ms", lambda r: r.get("startup_p99_ms"), LOWER, "ratio", 0.10),
+    ("signed_lag_p99_ms", lambda r: r.get("signed_lag_p99_ms"), LOWER, "ratio", 0.05),
+    ("wire/media", lambda r: r.get("wire_per_media"), LOWER, "ratio", 0.02),
     ("rss_mb", lambda r: r.get("_rss_mb"), LOWER, "diff", 100),
     ("wall_s", lambda r: r.get("_wall_s"), LOWER, "ratio", 0.20),
 ]

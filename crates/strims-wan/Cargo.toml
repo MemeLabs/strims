@@ -1,6 +1,6 @@
 [package]
 name = "strims-wan"
-description = "Real-world wide-area paths for the simulations: city-pair latency, access links, jitter, loss and bandwidth"
+description = "Real-world wide-area paths for the simulations: city-pair latency, access links, jitter, loss and bandwidth; and a live encoder's output"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

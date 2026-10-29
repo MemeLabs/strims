@@ -12,7 +12,8 @@
 //! same statistics.
 //!
 //! Every node's stores keep each chunk of a stream as its frames' sequence
-//! number and write time ([`FrameCodec`]), not its bytes.
+//! number and write time ([`FrameCodec`]), or a media chunk's
+//! ([`MediaCodec`]), not its bytes.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -22,7 +23,7 @@ use futures_util::stream::{Empty, empty};
 use strims_node::app::{NodeTimer, PeerHandler, PeerServices};
 use strims_node::{
     HostId, NetworkId, NetworkOptions, Node, NodeError, NodeEvent, NodeEvents, PeerInfo, ReadError,
-    SimClock, SwarmId, SwarmKey, SwarmWriter, WriterOptions,
+    SimClock, SwarmId, SwarmKey, SwarmReader, SwarmWriter, WriterOptions,
 };
 use strims_ppspp::SwarmOptions;
 use strims_ppspp::store::ChunkBytes;
@@ -32,21 +33,31 @@ use tokio::task::spawn_local;
 
 use crate::APP_PORT;
 use crate::net::SimNet;
-use crate::spec::{Binding, Fault, HostIx, LinkSpec, SwarmSpec};
-use crate::stream::{FRAME_LEN, FrameCodec, FrameParser, encode_frame};
+use crate::spec::{Binding, Fault, HostIx, LinkSpec, MediaSpec, SwarmSpec};
+use crate::stream::{
+    FRAME_LEN, FrameCodec, FrameParser, MEDIA_HEADER, MediaCodec, MediaParser, encode_frame,
+    fill_media, media_header,
+};
 use crate::world::{HASH_TABLE_SALT, PEER_INDEX_KEY, World, epoch, sim_now, sim_now_ms};
+use strims_wan::live::Signer;
 
 /// How long a dial may take before the supervisor gives up on it.
 const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Swarm `s`'s options at every node: its stores keep [`FrameCodec`]
-/// state, unless the scenario keeps the bytes
+/// state, or a media swarm's [`MediaCodec`] state, unless the scenario
+/// keeps the bytes
 /// ([`Scenario::stored_chunks`](crate::Scenario::stored_chunks)) or the
 /// chunks aren't whole frames.
 fn swarm_options(w: &World, s: usize, spec: &SwarmSpec) -> SwarmOptions {
     let mut o = spec.options.clone();
-    if !w.spec.stored_chunks && FrameCodec::fits(o.chunk_size) {
-        let swarm = u32::try_from(s).unwrap_or(u32::MAX);
+    let swarm = u32::try_from(s).unwrap_or(u32::MAX);
+    if w.spec.stored_chunks {
+        return o;
+    }
+    if spec.media.is_some() {
+        o.chunk_bytes = ChunkBytes::Codec(Arc::new(MediaCodec::new(w.seed, swarm)));
+    } else if FrameCodec::fits(o.chunk_size) {
         o.chunk_bytes = ChunkBytes::Codec(Arc::new(FrameCodec::new(w.seed, swarm)));
     }
     o
@@ -105,7 +116,10 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
                     key: key.clone(),
                 })
                 .await?;
-            spawn_local(writer_task(w.clone(), h, s, writer));
+            match spec.media {
+                Some(m) => spawn_local(media_writer_task(w.clone(), h, s, writer, m)),
+                None => spawn_local(writer_task(w.clone(), h, s, writer)),
+            };
             swarm
         } else if spec.member(h) {
             let swarm = node
@@ -433,6 +447,189 @@ async fn writer_task(w: Rc<World>, h: HostIx, s: usize, mut writer: SwarmWriter)
     std::future::pending::<()>().await;
 }
 
+/// Writes media swarm `s`'s access units ([`World::media_traces`]) from
+/// `start` to `stop`, each record as its access unit arrives, a
+/// [`MEDIA_HEADER`] first in each chunk it opens, and signs a unit in
+/// progress at its deadline ([`Signer`], `SwarmWriter::flush`). A
+/// restarted seed, or a writer reset, starts the units over at the stream's
+/// start with the next access unit; the chunks' sequence numbers go on.
+async fn media_writer_task(
+    w: Rc<World>,
+    h: HostIx,
+    s: usize,
+    mut writer: SwarmWriter,
+    m: MediaSpec,
+) {
+    let (Some(spec), Some(Some(trace))) = (w.spec.swarms.get(s).cloned(), w.media_traces.get(s))
+    else {
+        return;
+    };
+    let me = w.name(h).to_owned();
+    let chunk = spec.options.chunk_size;
+    let cps = spec.options.chunks_per_signature;
+    let new_signer = || Signer::new(m.sign.deadline, cps, chunk, MEDIA_HEADER);
+    w.media_log(s, |l| {
+        l.unit_chunks = cps as u64;
+        l.chunk = chunk as u64;
+    });
+    let mut st = MediaWriter {
+        signer: new_signer(),
+        chunk: chunk as u64,
+        open: None,
+        pending: Vec::new(),
+    };
+    let at = |d: strims_base::time::Duration| {
+        spec.start + Duration::from_millis(u64::try_from(d.as_millis()).unwrap_or(0))
+    };
+    let now = sim_now();
+    let mut buf = Vec::new();
+    for au in trace.iter().filter(|a| at(a.at) >= now) {
+        let when = at(au.at);
+        if when >= spec.stop {
+            break;
+        }
+        while let Some(due) = st.signer.due().map(at).filter(|&d| d <= when) {
+            tokio::time::sleep(due.saturating_sub(sim_now())).await;
+            if !st.flush(&w, s, &mut writer, &me).await {
+                return;
+            }
+        }
+        tokio::time::sleep(when.saturating_sub(sim_now())).await;
+        if w.take_writer_reset(s) {
+            match writer.reset().await {
+                Ok(()) => w.log(&me, format!("swarm {s} writer reset")),
+                Err(e) => w.log(&me, format!("swarm {s} writer reset failed: {e}")),
+            }
+            st = MediaWriter {
+                signer: new_signer(),
+                chunk: chunk as u64,
+                open: None,
+                pending: Vec::new(),
+            };
+        }
+        let placed = st.signer.record(au);
+        st.lay_out(&w, s, chunk, placed.offset, placed.len, &mut buf);
+        if let Err(e) = writer.write(&buf).await {
+            w.log(&me, format!("swarm {s} write failed: {e}"));
+            return;
+        }
+        let unit = st.signer.unit_bytes();
+        st.signed(
+            &w,
+            s,
+            (placed.offset + placed.len) / unit * unit / chunk as u64,
+        );
+        w.media_log(s, |l| {
+            l.media_bytes += u64::from(au.len);
+            l.stream_bytes += placed.len;
+            l.units += placed.signed;
+        });
+    }
+    if let Some(due) = st.signer.due() {
+        tokio::time::sleep(at(due).saturating_sub(sim_now())).await;
+        st.flush(&w, s, &mut writer, &me).await;
+    }
+    w.log(&me, format!("swarm {s} writer done"));
+    // Keep the publisher: dropping the writer closes it.
+    std::future::pending::<()>().await;
+}
+
+/// A media writer's state: the units, the chunk in progress (its sequence
+/// number and the stream offset where it starts), and the chunks not yet
+/// signed (index and first byte's time, ms).
+struct MediaWriter {
+    signer: Signer,
+    chunk: u64,
+    open: Option<(u64, u64)>,
+    pending: Vec<(u64, u64)>,
+}
+
+impl MediaWriter {
+    /// The bytes of the record at `offset`, `len` long, into `buf`: a
+    /// header at each chunk it opens, its chunks' payload elsewhere.
+    fn lay_out(
+        &mut self,
+        w: &World,
+        s: usize,
+        chunk: usize,
+        offset: u64,
+        len: u64,
+        buf: &mut Vec<u8>,
+    ) {
+        let size = chunk as u64;
+        let now = sim_now_ms();
+        buf.clear();
+        let mut p = offset;
+        let end = offset + len;
+        while p < end {
+            let at = usize::try_from(p % size).unwrap_or(0);
+            if at == 0 {
+                let seq = w.media_chunk(s, now);
+                self.open = Some((seq, p));
+                self.pending.push((p / size, now));
+                let h = media_header(seq, now);
+                let n = h.len().min(usize::try_from(end - p).unwrap_or(0));
+                buf.extend_from_slice(h.get(..n).unwrap_or_default());
+                p += n as u64;
+                continue;
+            }
+            let take = (size - p % size).min(end - p);
+            let take = usize::try_from(take).unwrap_or(0);
+            let from = buf.len();
+            buf.resize(from + take, 0);
+            let seq = self.open.map_or(0, |(seq, _)| seq);
+            if let Some(out) = buf.get_mut(from..) {
+                fill_media(w.seed, s as u32, seq, at, out);
+            }
+            p += take as u64;
+        }
+    }
+
+    /// The chunks before index `through` were signed now.
+    fn signed(&mut self, w: &World, s: usize, through: u64) {
+        let now = sim_now_ms();
+        let waits: Vec<u32> = self
+            .pending
+            .iter()
+            .filter(|&&(c, _)| c < through)
+            .map(|&(_, t)| u32::try_from(now.saturating_sub(t)).unwrap_or(u32::MAX))
+            .collect();
+        if !waits.is_empty() {
+            self.pending.retain(|&(c, _)| c >= through);
+            w.media_log(s, |l| l.sign_waits.extend(waits));
+        }
+    }
+
+    /// Signs the unit in progress through the writer; false once the
+    /// writer fails or pads where the signer doesn't.
+    async fn flush(&mut self, w: &World, s: usize, writer: &mut SwarmWriter, me: &str) -> bool {
+        let pad = self.signer.flush();
+        match writer.flush().await {
+            Ok(next) if next == pad.end => {}
+            Ok(next) => {
+                w.log(me, format!("swarm {s} flush to {next}, not {}", pad.end));
+                return false;
+            }
+            Err(e) => {
+                w.log(me, format!("swarm {s} flush failed: {e}"));
+                return false;
+            }
+        }
+        let size = self.chunk.max(1);
+        self.signed(w, s, pad.end / size);
+        let alone = pad.end / size - pad.start.div_ceil(size);
+        let now = sim_now_ms();
+        w.media_log(s, |l| {
+            l.units += 1;
+            l.stream_bytes += pad.end - pad.start;
+            if alone > 0 {
+                l.pad_chunks.push((now, alone));
+            }
+        });
+        true
+    }
+}
+
 async fn reader_task(w: Rc<World>, h: HostIx, s: usize, node: Node, swarm: SwarmKey) {
     let me = w.name(h).to_owned();
     let mut reader = match node.open_reader(swarm).await {
@@ -444,6 +641,10 @@ async fn reader_task(w: Rc<World>, h: HostIx, s: usize, node: Node, swarm: Swarm
     };
     w.viewer_start(s, h);
     let mut buf = vec![0u8; 64 * 1024];
+    if w.spec.swarms.get(s).is_some_and(|x| x.media.is_some()) {
+        media_reader(&w, h, s, &mut reader, &mut buf).await;
+        return;
+    }
     let mut parser = FrameParser::default();
     loop {
         while w.reading_paused(h) {
@@ -451,6 +652,35 @@ async fn reader_task(w: Rc<World>, h: HostIx, s: usize, node: Node, swarm: Swarm
         }
         match reader.read(&mut buf).await {
             Ok(n) => w.viewer_data(s, h, &mut parser, buf.get(..n).unwrap_or_default()),
+            Err(ReadError::Underrun { skipped }) => {
+                parser.resync();
+                w.viewer_underrun(s, h, skipped);
+            }
+            Err(ReadError::Reset) => {
+                parser.resync();
+                w.viewer_reset(s, h);
+            }
+            Err(e) => {
+                w.log(&me, format!("swarm {s} reader ended: {e}"));
+                return;
+            }
+        }
+    }
+}
+
+/// [`reader_task`]'s loop for a media swarm: reads at offsets, checked
+/// chunk by chunk ([`MediaParser`]).
+async fn media_reader(w: &World, h: HostIx, s: usize, reader: &mut SwarmReader, buf: &mut [u8]) {
+    let me = w.name(h).to_owned();
+    let mut parser = MediaParser::default();
+    loop {
+        while w.reading_paused(h) {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        match reader.read_at(buf).await {
+            Ok((offset, n)) => {
+                w.viewer_media(s, h, &mut parser, offset, buf.get(..n).unwrap_or_default());
+            }
             Err(ReadError::Underrun { skipped }) => {
                 parser.resync();
                 w.viewer_underrun(s, h, skipped);

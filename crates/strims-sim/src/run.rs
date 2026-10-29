@@ -325,6 +325,7 @@ fn report(
         .collect();
     let trace = std::mem::take(&mut st.trace);
     let written = std::mem::take(&mut st.written);
+    let media = std::mem::take(&mut st.media);
     let violations = std::mem::take(&mut st.violations);
     drop(st);
     if w.spec.probes.is_some() {
@@ -346,6 +347,7 @@ fn report(
         viewers,
         hosts,
         written,
+        media,
         vpn: w.spec.probes.is_some().then_some(vpn),
         memory,
         violations,

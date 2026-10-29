@@ -20,13 +20,14 @@ use strims_node::{
     WebRtcConfig,
 };
 use strims_proto::types::Key;
+use strims_wan::live::Au;
 
 use crate::memory::GroupCounters;
 use crate::net::SendBuffers;
-use crate::report::{HostReport, VpnReport};
+use crate::report::{HostReport, MediaLog, VpnReport};
 use crate::spec::{HostIx, Scenario, Transport};
 use crate::stats::{HostStats, TransferSample};
-use crate::stream::{FrameParser, Parsed, SeqSet, ViewerStats};
+use crate::stream::{FrameParser, MediaParser, Parsed, SeqSet, ViewerStats};
 use crate::wan::SharedWan;
 use crate::{EPOCH_MS, TCP_PORT, UDP_PORT, WS_PORT};
 
@@ -155,6 +156,8 @@ pub(crate) struct WorldState {
     pub viewers: BTreeMap<(usize, HostIx), ViewerStats>,
     /// Frames each swarm's seed wrote.
     pub written: Vec<SeqSet>,
+    /// What each media swarm's seed wrote.
+    pub media: Vec<Option<MediaLog>>,
     /// Swarms whose seed should reset its writer.
     pub reset_writer: BTreeSet<usize>,
     pub vpn: VpnReport,
@@ -183,6 +186,9 @@ pub(crate) struct World {
     pub send_buffers: Option<SendBuffers>,
     /// The WAN schedule, once the run made it.
     pub wan: SharedWan,
+    /// Each media swarm's access units, by arrival from its stream's
+    /// start.
+    pub media_traces: Vec<Option<Vec<Au>>>,
     pub st: RefCell<WorldState>,
 }
 
@@ -197,6 +203,18 @@ impl World {
         let network_keys = (0..spec.networks.len())
             .map(|i| derive_key(b'N', seed, i))
             .collect();
+        // The run's rng draws the media traces first, before any choice.
+        let mut rng = det_rng(seed ^ 0xc0_47_01);
+        let media_traces: Vec<Option<Vec<Au>>> = spec
+            .swarms
+            .iter()
+            .map(|s| {
+                let span = s.stop.saturating_sub(s.start).as_millis();
+                let span =
+                    strims_base::time::Duration::from_millis(i64::try_from(span).unwrap_or(0));
+                s.media.map(|m| m.encoder.trace(&mut rng, span))
+            })
+            .collect();
         let st = WorldState {
             trace: Vec::new(),
             hosts: (0..spec.hosts.len())
@@ -205,6 +223,11 @@ impl World {
             ids: BTreeMap::new(),
             viewers: BTreeMap::new(),
             written: vec![SeqSet::default(); spec.swarms.len()],
+            media: spec
+                .swarms
+                .iter()
+                .map(|s| s.media.map(|_| MediaLog::default()))
+                .collect(),
             reset_writer: BTreeSet::new(),
             vpn: VpnReport::default(),
             probes: BTreeMap::new(),
@@ -212,7 +235,7 @@ impl World {
             memory_samples: Vec::new(),
             violations: Vec::new(),
             progress: BTreeMap::new(),
-            rng: det_rng(seed ^ 0xc0_47_01),
+            rng,
         };
         let send_buffers = spec.wan.and(spec.send_buffer).map(SendBuffers::new);
         World {
@@ -224,6 +247,7 @@ impl World {
             memory,
             send_buffers,
             wan: SharedWan::default(),
+            media_traces,
             st: RefCell::new(st),
         }
     }
@@ -483,6 +507,66 @@ impl World {
             for s in seqs {
                 w.insert(s);
             }
+        }
+    }
+
+    /// A media chunk of `swarm` opened at `time_ms`: its sequence number,
+    /// next after every incarnation's.
+    pub fn media_chunk(&self, swarm: usize, time_ms: u64) -> u64 {
+        let mut st = self.st.borrow_mut();
+        let Some(Some(log)) = st.media.get_mut(swarm) else {
+            return 0;
+        };
+        let seq = log.times.len() as u64;
+        log.times.push(time_ms);
+        if let Some(w) = st.written.get_mut(swarm) {
+            w.insert(seq);
+        }
+        seq
+    }
+
+    /// Updates media swarm `swarm`'s log.
+    pub fn media_log(&self, swarm: usize, f: impl FnOnce(&mut MediaLog)) {
+        if let Some(Some(log)) = self.st.borrow_mut().media.get_mut(swarm) {
+            f(log);
+        }
+    }
+
+    /// Feeds bytes read at `offset` to a media viewer's parser and stats,
+    /// logging as [`World::viewer_data`] does.
+    pub fn viewer_media(
+        &self,
+        swarm: usize,
+        h: HostIx,
+        parser: &mut MediaParser,
+        offset: u64,
+        data: &[u8],
+    ) {
+        let now = sim_now_ms();
+        let Some(spec) = self.spec.swarms.get(swarm) else {
+            return;
+        };
+        let chunk = spec.options.chunk_size;
+        let every = (spec.rate() as u64 * 10 / chunk.max(1) as u64).max(1);
+        let mut lines = Vec::new();
+        {
+            let mut st = self.st.borrow_mut();
+            let v = st.viewers.entry((swarm, h)).or_default();
+            parser.push(self.seed, swarm as u32, chunk, offset, data, |p| {
+                let first = v.record(p, now);
+                match p {
+                    Parsed::Frame(f) if first || f.seq % every == 0 => {
+                        let lag = now.saturating_sub(f.time_ms);
+                        let what = if first { "first chunk" } else { "chunk" };
+                        lines.push(format!("swarm {swarm} {what} {} lag {lag}", f.seq));
+                    }
+                    Parsed::Bad => lines.push(format!("swarm {swarm} bad chunk")),
+                    Parsed::Frame(_) => {}
+                }
+            });
+        }
+        for l in lines {
+            self.log(self.name(h), l);
         }
     }
 

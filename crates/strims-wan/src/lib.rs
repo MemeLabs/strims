@@ -19,9 +19,13 @@
 //! [`Network`] holds that state for one run. Every draw comes from rngs
 //! derived from the one it is built with, so a seed replays exactly.
 //!
+//! [`live`] is what a live stream's seed writes: a live encoder's access
+//! units, and an ingest that signs them early.
+//!
 //! | module | role |
 //! |---|---|
 //! | [`city`] | cities and their RTT table |
+//! | [`live`] | a live encoder's access units and early signing |
 //! | [`access`] | access link profiles, sites and weighted mixes |
 //! | [`network`] | uplink and downlink FIFOs, paths, jitter, loss |
 //! | [`sample`] | seeded draws |
@@ -29,6 +33,7 @@
 
 pub mod access;
 pub mod city;
+pub mod live;
 pub mod network;
 pub mod sample;
 pub mod wire;

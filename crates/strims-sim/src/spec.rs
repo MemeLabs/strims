@@ -14,6 +14,7 @@ use strims_ppspp::{PushMode, SeedPolicy, SwarmOptions};
 use strims_testbed::shape::LiveShape;
 use strims_vpn::Routing;
 use strims_wan::Site;
+use strims_wan::live::{Encoder, Sign};
 
 use crate::stream::FRAME_LEN;
 
@@ -97,7 +98,8 @@ pub struct NetworkSpec {
 }
 
 /// A live stream: one seed writes self-checking frames at a fixed rate,
-/// viewers read and verify them, relays join without reading.
+/// or a live encoder's access units signed early ([`MediaSpec`]); viewers
+/// read and verify them, relays join without reading.
 #[derive(Clone, Debug)]
 pub struct SwarmSpec {
     pub seed: HostIx,
@@ -110,6 +112,20 @@ pub struct SwarmSpec {
     /// First and last write times.
     pub start: Duration,
     pub stop: Duration,
+    /// In place of the frames, the seed writes this live stream.
+    pub media: Option<MediaSpec>,
+}
+
+/// A live encoder's stream that its seed signs early
+/// ([`strims_wan::live`]): each access unit's record as it arrives, a
+/// unit signed when it fills or at `sign`'s deadline after its first
+/// byte, padded with zeros to its end. Chunks are self-checking
+/// ([`crate::stream::MediaCodec`]); a frame of the reports is a chunk that
+/// holds media, its time its first byte's.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MediaSpec {
+    pub encoder: Encoder,
+    pub sign: Sign,
 }
 
 impl SwarmSpec {
@@ -134,7 +150,26 @@ impl SwarmSpec {
             frames_per_write: shape.frames_per_write,
             start,
             stop,
+            media: None,
         }
+    }
+
+    /// The same swarm in `chunk`-byte chunks, its window holding as many
+    /// bytes. Its frame writes may then not fill whole chunks: for a swarm
+    /// that streams media ([`SwarmSpec::with_media`]).
+    pub fn with_chunk_size(mut self, chunk: usize) -> SwarmSpec {
+        let window = self.options.live_window * self.options.chunk_size;
+        self.options.chunk_size = chunk;
+        self.options.live_window = (window / chunk.max(1)).max(1);
+        self
+    }
+
+    /// The same swarm streaming `encoder`'s access units signed under
+    /// `sign`, its chunks per signature the policy's at the encoder's rate.
+    pub fn with_media(mut self, encoder: Encoder, sign: Sign) -> SwarmSpec {
+        self.options.chunks_per_signature = sign.chunks(encoder.rate(), self.options.chunk_size);
+        self.media = Some(MediaSpec { encoder, sign });
+        self
     }
 
     /// The same stream in `chunk`-byte chunks signed `munro` bytes at a
@@ -173,8 +208,11 @@ impl SwarmSpec {
         self
     }
 
-    /// The stream rate in bytes per second.
+    /// The stream rate in bytes per second: a media stream's encoder's.
     pub fn rate(&self) -> f64 {
+        if let Some(m) = self.media {
+            return m.encoder.rate() as f64;
+        }
         (self.frames_per_write * FRAME_LEN) as f64 / self.write_interval.as_secs_f64()
     }
 

@@ -23,6 +23,7 @@ use strims_sim::{
     SwarmSpec, Transport, VpnProbes, knob, stream_minutes, sweep, sweep_at, sweep_n,
 };
 use strims_vpn::Routing;
+use strims_wan::live::{Encoder, Sign};
 use strims_wan::sample::{pick, unit};
 use strims_wan::{Access, City, GLOBAL_AUDIENCE, RESIDENTIAL, Region, Site};
 
@@ -117,8 +118,7 @@ fn complete_swarm(
     from: Duration,
     to: Duration,
 ) -> Result<(), String> {
-    let spec = &r.scenario.swarms[sw];
-    let range = spec.frames_between(from, to);
+    let range = r.frames_between(sw, from, to);
     for &h in who {
         let v = r
             .viewer(sw, h)
@@ -129,12 +129,7 @@ fn complete_swarm(
                 .iter_in(range.clone())
                 .filter(|&s| !v.stats.received.contains(s))
                 .take(8)
-                .map(|s| {
-                    format!(
-                        "{s}@{}ms",
-                        ms(spec.start) + s / spec.frames_per_write as u64 * ms(spec.write_interval)
-                    )
-                })
+                .map(|s| format!("{s}@{}ms", ms(r.written_at(sw, s))))
                 .collect();
             return Err(format!(
                 "{} missed {missing} of swarm {sw}'s frames written {}–{} s, first {}",
@@ -218,6 +213,56 @@ fn live_mesh_hybrid() {
         "live_mesh_hybrid",
         |s| live_mesh(s, PushMode::Hybrid),
         check_live_mesh,
+    );
+}
+
+// --- 1b. a live encoder's stream signed early -------------------------------
+
+/// The live mesh's 8 viewers streaming `encoder`'s access units in 4 KiB
+/// chunks, signed under `sign`.
+fn media_mesh(seed: u64, encoder: &str, sign: &str) -> Scenario {
+    let mut m = streaming(
+        &format!("media_mesh {encoder} {sign}"),
+        seed,
+        8,
+        (2048 * KIB, 1024 * KIB),
+        PushMode::Hybrid,
+        (3, 23),
+    );
+    let encoder = Encoder::parse(encoder).unwrap();
+    let sign = Sign::parse(sign).unwrap().unwrap();
+    m.s.swarms = std::mem::take(&mut m.s.swarms)
+        .into_iter()
+        .map(|sw| {
+            sw.with_chunk_size(4096)
+                .with_stream_count(4)
+                .with_media(encoder, sign)
+        })
+        .collect();
+    m.s.invariants.progress = vec![(secs(8), secs(23))];
+    m.s
+}
+
+/// Every viewer reads every chunk that holds media, each checked whole,
+/// across units signed when full and early.
+#[test]
+fn media_signed_early_reaches_every_viewer() {
+    sweep(
+        "media_signed_early_reaches_every_viewer",
+        |s| media_mesh(s, "512v", "ur200,t100-500x1.5"),
+        |r| {
+            sound(r)?;
+            whole_stream(r)?;
+            let m = r.media[0].as_ref().ok_or("no media log")?;
+            let per = m.stream_bytes as f64 / m.media_bytes.max(1) as f64;
+            if m.units == 0 || !(1.0..1.5).contains(&per) {
+                return Err(format!(
+                    "{} units, {per:.2} stream bytes per media byte",
+                    m.units
+                ));
+            }
+            Ok(())
+        },
     );
 }
 

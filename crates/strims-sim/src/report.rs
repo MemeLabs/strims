@@ -24,6 +24,10 @@
 //! The runner counters behind the data share, duplicates and hit rate are
 //! described in [`crate::stats`].
 //!
+//! A media swarm's frames are its chunks that hold media, their times their
+//! first bytes' ([`crate::MediaSpec`]); [`Report::media`] keeps what its
+//! seed wrote.
+//!
 //! In WAN mode, [`Report::wan`] holds each host's site and access link
 //! counters, and [`Report::lag_by_region`] and [`Report::lag_by_access`]
 //! split the lag by the viewers' regions and access links.
@@ -34,6 +38,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::time::Duration;
 
 use strims_ppspp::scheduler_peer::push::PUSH_OVERHEAD;
 use strims_ppspp::scheduler_peer::push::seed::ALLOC_UTILIZATION;
@@ -276,6 +281,8 @@ pub struct Report {
     pub hosts: Vec<HostReport>,
     /// Frames each swarm's seed wrote.
     pub written: Vec<SeqSet>,
+    /// What each media swarm's seed wrote.
+    pub media: Vec<Option<MediaLog>>,
     pub vpn: Option<VpnReport>,
     pub memory: Option<MemoryReport>,
     /// `(ms, what)` for every invariant violation (see
@@ -283,6 +290,27 @@ pub struct Report {
     pub violations: Vec<(u64, String)>,
     /// The access links, in WAN mode.
     pub wan: Option<WanReport>,
+}
+
+/// What a media swarm's seed wrote ([`crate::MediaSpec`]), over its
+/// incarnations.
+#[derive(Clone, Debug, Default)]
+pub struct MediaLog {
+    /// Per media chunk, by sequence number: its first byte's time, in ms of
+    /// run time.
+    pub times: Vec<u64>,
+    /// Per media chunk signed: how long after its first byte (ms).
+    pub sign_waits: Vec<u32>,
+    /// Chunks of padding alone: per flush that made some, its time (ms) and
+    /// their number.
+    pub pad_chunks: Vec<(u64, u64)>,
+    /// Access unit bytes, stream bytes (padding included), and units signed.
+    pub media_bytes: u64,
+    pub stream_bytes: u64,
+    pub units: u64,
+    /// Chunks per unit and bytes per chunk.
+    pub unit_chunks: u64,
+    pub chunk: u64,
 }
 
 impl Report {
@@ -480,9 +508,59 @@ impl Report {
     }
 
     /// One line per seed for the sweep's log.
-    /// Swarm `swarm`'s data rate in bytes per second, as its seed writes.
-    fn swarm_rate(&self, swarm: usize) -> f64 {
-        self.scenario.swarms.get(swarm).map_or(0.0, |s| s.rate())
+    /// Swarm `swarm`'s data rate in bytes per second, as its seed writes:
+    /// a media swarm's padding included.
+    pub(crate) fn swarm_rate(&self, swarm: usize) -> f64 {
+        let Some(s) = self.scenario.swarms.get(swarm) else {
+            return 0.0;
+        };
+        match self.media.get(swarm).and_then(Option::as_ref) {
+            Some(m) => {
+                m.stream_bytes as f64 / s.stop.saturating_sub(s.start).as_secs_f64().max(1e-9)
+            }
+            None => s.rate(),
+        }
+    }
+
+    /// The sequence numbers of swarm `swarm`'s frames written in `[from,
+    /// to)` of run time: a media swarm's chunks by their first bytes' time.
+    pub fn frames_between(
+        &self,
+        swarm: usize,
+        from: Duration,
+        to: Duration,
+    ) -> std::ops::Range<u64> {
+        let Some(s) = self.scenario.swarms.get(swarm) else {
+            return 0..0;
+        };
+        match self.media.get(swarm).and_then(Option::as_ref) {
+            Some(m) => {
+                let ms = |t: Duration| u64::try_from(t.as_millis()).unwrap_or(u64::MAX);
+                let at = |t: Duration| m.times.partition_point(|&x| x < ms(t)) as u64;
+                at(from)..at(to)
+            }
+            None => s.frames_between(from, to),
+        }
+    }
+
+    /// When frame `seq` of swarm `swarm` was written, in run time.
+    pub fn written_at(&self, swarm: usize, seq: u64) -> Duration {
+        let Some(s) = self.scenario.swarms.get(swarm) else {
+            return Duration::ZERO;
+        };
+        match self.media.get(swarm).and_then(Option::as_ref) {
+            Some(m) => Duration::from_millis(
+                usize::try_from(seq)
+                    .ok()
+                    .and_then(|i| m.times.get(i))
+                    .copied()
+                    .unwrap_or(0),
+            ),
+            None => {
+                let fpw = s.frames_per_write.max(1) as u64;
+                s.start + s.write_interval * u32::try_from(seq / fpw).unwrap_or(u32::MAX)
+            }
+        }
     }
 
     /// The most host `h` can upload, in bytes per second: the smaller of

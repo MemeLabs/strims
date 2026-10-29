@@ -124,12 +124,13 @@ mod wan;
 mod world;
 
 pub use report::{
-    HostReport, LookupPhase, Percentiles, Report, ViewerReport, VpnReport, WanHostReport, WanReport,
+    HostReport, LookupPhase, MediaLog, Percentiles, Report, ViewerReport, VpnReport, WanHostReport,
+    WanReport,
 };
 pub use run::run;
 pub use spec::{
-    Binding, Competing, Fault, HostIx, HostSpec, Invariants, LinkSpec, NetworkSpec, Scenario,
-    SendBuffer, SwarmSpec, Transport, VpnProbes,
+    Binding, Competing, Fault, HostIx, HostSpec, Invariants, LinkSpec, MediaSpec, NetworkSpec,
+    Scenario, SendBuffer, SwarmSpec, Transport, VpnProbes,
 };
 pub use stats::{Peaks, PeerTransfer, RunnerReport, SwarmCounters, TransferSample};
 pub use sweep::{knob, seeds, stream_minutes, sweep, sweep_at, sweep_n};

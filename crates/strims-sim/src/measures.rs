@@ -143,12 +143,12 @@ impl Report {
     /// The lag of the frames of `swarm` written in any of `spans` of run
     /// time, over every viewer.
     pub fn lag_within(&self, swarm: usize, spans: &[(Duration, Duration)]) -> Percentiles {
-        let Some(s) = self.scenario.swarms.get(swarm) else {
+        if self.scenario.swarms.get(swarm).is_none() {
             return Percentiles::default();
-        };
+        }
         let ranges: Vec<_> = spans
             .iter()
-            .map(|&(from, to)| s.frames_between(from, to))
+            .map(|&(from, to)| self.frames_between(swarm, from, to))
             .collect();
         Percentiles::of(
             self.viewers
@@ -832,6 +832,7 @@ impl Report {
             .int("timeouts", c.timeouts)
             .num("sim_secs", self.sim_secs)
             .num("wall_secs", self.wall_secs);
+        self.media_cols(swarm, &mut j);
         if let Some(series) = self.series(swarm) {
             j.field("series", format_args!("{series}"));
         }
@@ -944,6 +945,7 @@ impl Report {
     /// | `capacity`, `busy`, `avail` | the seed's meter at its last reading in the second (capacity, busy in thousandths) and the upload it had then |
     /// | `copies` | the adaptive seed's copies |
     /// | `sent`, `pushed` | chunks the seed sent, and of them pushes |
+    /// | `written`, `chunks` | a media swarm's chunks published: those holding media, then with those of padding alone |
     ///
     /// [`Scenario::transfer_samples`]: crate::Scenario::transfer_samples
     pub fn series(&self, swarm: usize) -> Option<String> {
@@ -978,14 +980,12 @@ impl Report {
             let v: Vec<String> = v.iter().map(i64::to_string).collect();
             format!("[{}]", v.join(","))
         };
-        let fpw = spec.frames_per_write.max(1) as u64;
         let mut lags = Vec::new();
         let mut frames = Vec::new();
         for v in &viewers {
             let mut by: Vec<Vec<u32>> = vec![Vec::new(); n];
             for &(seq, lag) in &v.stats.lags {
-                let written =
-                    start + spec.write_interval * u32::try_from(seq / fpw).unwrap_or(u32::MAX);
+                let written = self.written_at(swarm, seq);
                 if let Some(k) = second(written + Duration::from_millis(u64::from(lag)))
                     && let Some(b) = by.get_mut(k)
                 {
@@ -1091,10 +1091,14 @@ impl Report {
             ));
         }
         let viewer_up: u64 = viewers.iter().filter_map(|v| self.upload_cap(v.host)).sum();
+        let media = self.media.get(swarm).and_then(Option::as_ref);
+        let frame = media.map_or(crate::stream::FRAME_LEN as u64, |_| {
+            spec.options.chunk_size as u64
+        });
         let mut j = JsonRow::default();
-        j.int("rate", spec.rate() as u64)
+        j.int("rate", self.swarm_rate(swarm) as u64)
             .int("chunk", spec.options.chunk_size as u64)
-            .int("frame", crate::stream::FRAME_LEN as u64)
+            .int("frame", frame)
             .int("secs", spec.stop.saturating_sub(start).as_secs())
             .field("seed_up", format_args!("[{}]", seed_up.join(",")))
             .int("viewer_up", viewer_up)
@@ -1111,7 +1115,64 @@ impl Report {
             .field("copies", format_args!("{}", ints(&copies)))
             .field("sent", format_args!("{}", ints(&sent)))
             .field("pushed", format_args!("{}", ints(&pushed)));
+        // A media swarm's chunks published each second: those holding
+        // media, by their first byte (`written`, what `frames` counts), and
+        // with the padding alone the flushes made (`chunks`).
+        if let Some(m) = media {
+            let (mut written, mut chunks) = (vec![0i64; n], vec![0i64; n]);
+            let mut add = |ms: u64, k: i64, both: bool| {
+                if let Some(i) = second(Duration::from_millis(ms)) {
+                    if both && let Some(w) = written.get_mut(i) {
+                        *w += k;
+                    }
+                    if let Some(c) = chunks.get_mut(i) {
+                        *c += k;
+                    }
+                }
+            };
+            for &t in &m.times {
+                add(t, 1, true);
+            }
+            for &(t, k) in &m.pad_chunks {
+                add(t, i64::try_from(k).unwrap_or(0), false);
+            }
+            j.field("written", format_args!("{}", ints(&written)))
+                .field("chunks", format_args!("{}", ints(&chunks)));
+        }
         Some(j.finish())
+    }
+
+    /// A media swarm's columns ([`crate::MediaSpec`]): its encoder and
+    /// policy, the chunks per unit, the media and stream rates, units
+    /// signed a second (each peer's signature verifications), each media
+    /// chunk's wait to be signed, and every host's upload per media byte
+    /// per viewer.
+    fn media_cols(&self, swarm: usize, j: &mut JsonRow) {
+        let (Some(spec), Some(Some(m))) = (self.scenario.swarms.get(swarm), self.media.get(swarm))
+        else {
+            return;
+        };
+        let Some(media) = spec.media else { return };
+        let secs = spec.stop.saturating_sub(spec.start).as_secs_f64().max(1e-9);
+        let waits = Percentiles::of(m.sign_waits.iter().copied());
+        let uploaded: u64 = self.hosts.iter().map(|h| h.uploaded).sum();
+        let viewers = spec.viewers.len().max(1) as f64;
+        j.str("media", &media.encoder.to_string())
+            .str("sign", &media.sign.to_string())
+            .int("unit", m.unit_chunks)
+            .num("media_kbit", m.media_bytes as f64 * 8e-3 / secs)
+            .num("sent_kbit", m.stream_bytes as f64 * 8e-3 / secs)
+            .num(
+                "stream_per_media",
+                m.stream_bytes as f64 / m.media_bytes.max(1) as f64,
+            )
+            .num("units_per_s", m.units as f64 / secs)
+            .int("sign_wait_p50_ms", u64::from(waits.p50))
+            .int("sign_wait_p99_ms", u64::from(waits.p99))
+            .num(
+                "wire_per_media",
+                uploaded as f64 / (m.media_bytes.max(1) as f64 * viewers),
+            );
     }
 }
 
@@ -1225,6 +1286,7 @@ mod tests {
             viewers: Vec::new(),
             hosts: vec![host, HostReport::default()],
             written: Vec::new(),
+            media: Vec::new(),
             vpn: None,
             memory: None,
             violations: Vec::new(),

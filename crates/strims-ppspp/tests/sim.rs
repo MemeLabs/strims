@@ -96,8 +96,9 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, BufWriter};
+use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use rand_core::Rng;
 use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter};
@@ -116,6 +117,7 @@ use strims_ppspp::{
     TapKind, TapLevel, Writer, WriterOptions,
 };
 use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
+use strims_wan::live::{self, Encoder, Op, Plan, Sign, Signer};
 use strims_wan::sample::pick;
 use strims_wan::wire::tcp_wire;
 use strims_wan::{
@@ -220,6 +222,37 @@ impl ChunkCodec for Head {
     fn decode(&self, offset: u64, state: &[u8], out: &mut [u8]) {
         self.0.fill(offset, out);
         out[..8].copy_from_slice(state);
+    }
+}
+
+/// The main stream of a media run ([`Media`]): [`stream_byte`], zero in
+/// the padding, which the run sets once it has planned the stream.
+#[derive(Debug, Default)]
+struct Padded(OnceLock<Vec<Range<u64>>>);
+
+impl Padded {
+    /// The stream from offset `o` on, into `dst`.
+    fn fill(&self, o: u64, dst: &mut [u8]) {
+        Content::Main.fill(o, dst);
+        let pads = self.0.get().map_or(&[][..], Vec::as_slice);
+        let end = o + dst.len() as u64;
+        let first = pads.partition_point(|p| p.end <= o);
+        for p in pads[first..].iter().take_while(|p| p.start < end) {
+            let (a, b) = (p.start.max(o) - o, p.end.min(end) - o);
+            dst[a as usize..b as usize].fill(0);
+        }
+    }
+}
+
+impl ChunkCodec for Padded {
+    fn state_len(&self) -> usize {
+        0
+    }
+
+    fn encode(&self, _: u64, _: &[u8], _: &mut [u8]) {}
+
+    fn decode(&self, offset: u64, _: &[u8], out: &mut [u8]) {
+        self.fill(offset, out);
     }
 }
 
@@ -506,6 +539,23 @@ struct Config {
     /// run ([`sim_chunk_codecs_change_no_trace`]), and only [`Keep::Bytes`]
     /// holds the stream at every node.
     keep: Keep,
+    /// A live encoder's stream signed early, in place of whole munros at
+    /// `stream_rate` (`SIM_MEDIA`, `SIM_SIGN`: [`media_knobs`]).
+    media: Option<Media>,
+}
+
+/// A media run: the seed writes `encoder`'s access units as they arrive,
+/// one record each ([`strims_wan::live`]), and signs a unit when it fills
+/// or when `sign`'s deadline after its first byte comes, padded with zeros
+/// to its end. The trace comes from the run's rng once the rest of the
+/// setup has drawn, so a seed's runs under every `sign` share it, and the
+/// mesh of a run without media. Lags count from each chunk's earliest
+/// media byte's arrival; chunks of padding alone count in neither lags nor
+/// delivery.
+#[derive(Clone, Copy, Debug)]
+struct Media {
+    encoder: Encoder,
+    sign: Sign,
 }
 
 /// Honest viewers leaving mid-stream, each place taken again a while later
@@ -591,6 +641,7 @@ impl Config {
             greedy_share: greedy_share_knob(),
             churn: churn_knob(),
             keep: Keep::Nothing,
+            media: None,
         }
     }
 }
@@ -632,6 +683,9 @@ struct Node {
     underruns: u64,
     resets: u64,
     lags: Vec<(Time, Duration)>,
+    /// In a media run, each media chunk's read time and its lag from its
+    /// unit's signing.
+    sign_lags: Vec<(Time, Duration)>,
     /// The chunks it read, by index.
     read_chunks: Vec<bool>,
     /// When each chunk's data first reached it from an honest node, by
@@ -813,6 +867,20 @@ struct Sim {
     options: SwarmOptions,
     /// With `SIM_LOOPS=1`, how push loops form.
     loops: Option<Loops>,
+    /// A media run's stream.
+    media: Option<MediaRun>,
+}
+
+/// A media run's stream ([`Media`]): its plan, the ops written, when the
+/// stream starts (the plan's times count from it), the main swarm's codec,
+/// and per chunk when its unit was signed.
+struct MediaRun {
+    media: Media,
+    plan: Plan,
+    done: usize,
+    start: Time,
+    padded: Arc<Padded>,
+    signed: Vec<Time>,
 }
 
 /// One second's sample for [`Sim::series`].
@@ -1049,6 +1117,9 @@ struct Report {
     lag_p50: Duration,
     lag_p99: Duration,
     lag_max: Duration,
+    /// In a media run, the lag from each media chunk's signing.
+    sign_lag_p50: Duration,
+    sign_lag_p99: Duration,
     /// Worst-stripe lag ([`Sim::munro_lags`]): p90 and p99.
     stripe_p90: Duration,
     stripe_p99: Duration,
@@ -1147,11 +1218,22 @@ impl Sim {
         );
         let mut rng = det_rng(cfg.seed);
         let key = strims_crypto::key_from_seed(&[9; 32]);
+        let padded = cfg.media.map(|_| Arc::new(Padded::default()));
+        let chunk_bytes = match (&padded, cfg.keep) {
+            (None, keep) => keep.chunk_bytes(Content::Main),
+            (Some(p), Keep::Nothing) => ChunkBytes::Codec(p.clone()),
+            (Some(_), Keep::Bytes) => ChunkBytes::Stored,
+            (Some(_), Keep::Head) => panic!("a media run keeps nothing or the bytes"),
+        };
+        assert!(
+            cfg.media.is_none() || cfg.cross.is_none(),
+            "a media run takes no cross traffic"
+        );
         let options = SwarmOptions {
             chunk_size: cfg.chunk_size,
             chunks_per_signature: cfg.munro_chunks,
             live_window: cfg.live_window,
-            chunk_bytes: cfg.keep.chunk_bytes(Content::Main),
+            chunk_bytes,
             delivery_mode: cfg.delivery_mode,
             stream_count: cfg.stream_count,
             push_mode: cfg.push_mode,
@@ -1260,6 +1342,7 @@ impl Sim {
                 underruns: 0,
                 resets: 0,
                 lags: vec![],
+                sign_lags: vec![],
                 read_chunks: vec![],
                 arrived: vec![],
                 max_queue_delay: Duration::ZERO,
@@ -1397,15 +1480,6 @@ impl Sim {
             }
         }
 
-        let munro = cfg.munro_chunks * cfg.chunk_size;
-        let munros = (cfg.stream_rate * cfg.stream_secs) as usize / munro;
-        for node in &mut nodes {
-            node.read_chunks = vec![false; munros * cfg.munro_chunks];
-            node.arrived = vec![Time::NIL; munros * cfg.munro_chunks];
-            if let Some(x) = node.cross.as_mut() {
-                x.read_chunks = vec![false; munros * cfg.munro_chunks];
-            }
-        }
         let rcfg = nodes[0]
             .runner
             .swarm(nodes[0].swarm)
@@ -1436,6 +1510,46 @@ impl Sim {
             }
             None => Vec::new(),
         };
+        let media = cfg.media.zip(padded).map(|(m, padded)| {
+            let span = Duration::from_secs(cfg.stream_secs as i64);
+            let trace = m.encoder.trace(&mut rng, span);
+            let signer = Signer::new(
+                m.sign.deadline,
+                cfg.munro_chunks,
+                cfg.chunk_size,
+                live::CHUNK_HEADER,
+            );
+            let plan = live::plan(&trace, signer);
+            padded.0.set(plan.pads.clone()).unwrap();
+            let start = t0() + Duration::SECOND;
+            MediaRun {
+                media: m,
+                signed: plan.signed_at.iter().map(|&d| start + d).collect(),
+                plan,
+                done: 0,
+                start,
+                padded,
+            }
+        });
+        let munro = cfg.munro_chunks * cfg.chunk_size;
+        let munros = match &media {
+            Some(m) => m.plan.units() as usize,
+            None => (cfg.stream_rate * cfg.stream_secs) as usize / munro,
+        };
+        for node in &mut nodes {
+            node.read_chunks = vec![false; munros * cfg.munro_chunks];
+            node.arrived = vec![Time::NIL; munros * cfg.munro_chunks];
+            if let Some(x) = node.cross.as_mut() {
+                x.read_chunks = vec![false; munros * cfg.munro_chunks];
+            }
+        }
+        let publish_times = media.as_ref().map_or_else(Vec::new, |m| {
+            m.plan
+                .media_at
+                .iter()
+                .map(|t| t.map_or(Time::NIL, |d| m.start + d))
+                .collect()
+        });
         Sim {
             cfg,
             nodes,
@@ -1444,7 +1558,7 @@ impl Sim {
             events: BTreeMap::new(),
             seq: 0,
             now: t0(),
-            publish_times: vec![],
+            publish_times,
             requested: BTreeMap::new(),
             grabs: BTreeMap::new(),
             withheld_opens: 0,
@@ -1484,6 +1598,7 @@ impl Sim {
             swarm_id: SwarmId::new(&key.public),
             options,
             loops,
+            media,
         }
     }
 
@@ -1494,7 +1609,7 @@ impl Sim {
 
     fn done(&self) -> bool {
         let total = (self.munros * self.munro) as u64;
-        self.written == self.munros
+        self.writes_done()
             && self
                 .nodes
                 .iter()
@@ -1514,8 +1629,8 @@ impl Sim {
         if let Some((&(et, _), _)) = self.events.first_key_value() {
             t = t.min(et);
         }
-        if self.written < self.munros {
-            t = t.min(self.next_write);
+        if !self.writes_done() {
+            t = t.min(self.next_write_at());
         }
         if let Some((secs, _)) = self.cfg.incident
             && self.incident.is_none()
@@ -1739,7 +1854,7 @@ impl Sim {
             }
         }
 
-        if self.written < self.munros && now >= self.next_write {
+        if !self.writes_done() && now >= self.next_write_at() {
             self.write();
             self.touch(0);
             if let Some(c) = self.cfg.cross {
@@ -1910,7 +2025,75 @@ impl Sim {
         self.touch(i);
     }
 
+    /// Whether the seed has written the whole stream.
+    fn writes_done(&self) -> bool {
+        match &self.media {
+            Some(m) => m.done == m.plan.ops.len(),
+            None => self.written == self.munros,
+        }
+    }
+
+    /// When the seed writes next.
+    fn next_write_at(&self) -> Time {
+        match &self.media {
+            Some(m) => m.plan.ops.get(m.done).map_or(Time::MAX, |op| {
+                m.start
+                    + match *op {
+                        Op::Write { at, .. } | Op::Flush { at, .. } => at,
+                    }
+            }),
+            None => self.next_write,
+        }
+    }
+
+    /// Chunks published a second, padding included.
+    fn chunk_rate(&self) -> f64 {
+        match &self.media {
+            Some(m) => {
+                m.plan.stream_bytes as f64
+                    / self.cfg.chunk_size as f64
+                    / self.cfg.stream_secs.max(1) as f64
+            }
+            None => self.cfg.stream_rate as f64 / self.cfg.chunk_size as f64,
+        }
+    }
+
+    /// A media run's ops due now: each record written as its access unit
+    /// arrives, and each unit in progress flushed at its deadline.
+    fn write_media(&mut self) {
+        let now = self.now;
+        let Sim { media, nodes, .. } = self;
+        let Some(m) = media.as_mut() else { return };
+        let seed = &mut nodes[0];
+        let mut w = seed.writer.take().unwrap();
+        while let Some(&op) = m.plan.ops.get(m.done) {
+            let at = match op {
+                Op::Write { at, .. } | Op::Flush { at, .. } => m.start + at,
+            };
+            if at > now {
+                break;
+            }
+            match op {
+                Op::Write { offset, len, .. } => {
+                    let mut data = vec![0; len as usize];
+                    m.padded.fill(offset, &mut data);
+                    seed.runner.write(seed.swarm, &mut w, now, &data).unwrap();
+                }
+                Op::Flush { next, .. } => {
+                    let got = seed.runner.flush_writer(seed.swarm, &mut w, now).unwrap();
+                    assert_eq!(got, next, "the flush's next unit");
+                }
+            }
+            m.done += 1;
+        }
+        seed.writer = Some(w);
+    }
+
     fn write(&mut self) {
+        if self.media.is_some() {
+            self.write_media();
+            return;
+        }
         let now = self.now;
         let munro = self.munro;
         let off = self.written * munro;
@@ -2191,7 +2374,11 @@ impl Sim {
         }
         let viewer_up: u64 = honest.iter().map(|v| v.up_bw).sum();
         let mut j = JsonRow::default();
-        j.int("rate", self.cfg.stream_rate)
+        let rate = match &self.media {
+            Some(m) => m.plan.stream_bytes / self.cfg.stream_secs.max(1),
+            None => self.cfg.stream_rate,
+        };
+        j.int("rate", rate)
             .int("chunk", self.cfg.chunk_size as u64)
             .int("frame", self.cfg.chunk_size as u64)
             .int("secs", self.cfg.stream_secs)
@@ -2213,6 +2400,26 @@ impl Sim {
             .field("copies", format_args!("{}", seed(2)))
             .field("sent", format_args!("{}", seed_delta(3)))
             .field("pushed", format_args!("{}", seed_delta(4)));
+        // A media run's chunks signed each second: those holding media
+        // (`written`, what `frames` counts) and all of them (`chunks`).
+        if let Some(m) = &self.media {
+            let (mut written, mut chunks) = (vec![0i64; n], vec![0i64; n]);
+            for (c, &t) in m.signed.iter().enumerate() {
+                let Some(k) = (t >= start).then(|| ((t - start).as_millis() / 1000) as usize)
+                else {
+                    continue;
+                };
+                if let (Some(w), Some(a)) = (written.get_mut(k), chunks.get_mut(k)) {
+                    *a += 1;
+                    *w += i64::from(!self.publish_times[c].is_nil());
+                }
+            }
+            j.field(
+                "written",
+                format_args!("{}", ints(&mut written.into_iter())),
+            )
+            .field("chunks", format_args!("{}", ints(&mut chunks.into_iter())));
+        }
         Some(j.finish())
     }
 
@@ -2905,16 +3112,33 @@ impl Sim {
             }
             match swarm.read(&mut node.reader, &mut self.read_buf) {
                 Ok(n) => {
-                    for (k, &b) in self.read_buf[..n].iter().enumerate() {
-                        if b != stream_byte(node.pos + k as u64) {
-                            node.mismatches += 1;
+                    if let Some(m) = &self.media {
+                        let mut want = vec![0; n];
+                        m.padded.fill(node.pos, &mut want);
+                        node.mismatches += want
+                            .iter()
+                            .zip(&self.read_buf[..n])
+                            .filter(|(a, b)| a != b)
+                            .count() as u64;
+                    } else {
+                        for (k, &b) in self.read_buf[..n].iter().enumerate() {
+                            if b != stream_byte(node.pos + k as u64) {
+                                node.mismatches += 1;
+                            }
                         }
                     }
                     let first = node.pos.div_ceil(self.cfg.chunk_size as u64);
                     let end = (node.pos + n as u64) / self.cfg.chunk_size as u64;
                     for c in first..end {
-                        if let Some(&pt) = self.publish_times.get(c as usize) {
+                        if let Some(&pt) = self.publish_times.get(c as usize)
+                            && !pt.is_nil()
+                        {
                             node.lags.push((now, now - pt));
+                            if let Some(&st) =
+                                self.media.as_ref().and_then(|m| m.signed.get(c as usize))
+                            {
+                                node.sign_lags.push((now, now - st));
+                            }
                         }
                         if let Some(r) = node.read_chunks.get_mut(c as usize) {
                             *r = true;
@@ -3187,7 +3411,7 @@ impl Sim {
     /// both, its on-time pushes between them over the chunks the stream
     /// published in that time.
     fn holder_copies(&self, warm: Time) -> (f64, f64) {
-        let per_sec = self.cfg.stream_rate as f64 / self.cfg.chunk_size as f64;
+        let per_sec = self.chunk_rate();
         let mut shares = Vec::new();
         for w in self.alloc.windows(2) {
             let [a, b] = w else { continue };
@@ -3225,6 +3449,18 @@ impl Sim {
                 .copied()
                 .unwrap_or_default()
         };
+        let mut sign_lags: Vec<Duration> = self
+            .nodes
+            .iter()
+            .filter(|n| n.role == Role::Peer)
+            .flat_map(|n| {
+                n.sign_lags
+                    .iter()
+                    .filter(|(t, _)| *t > warm)
+                    .map(|&(_, l)| l)
+            })
+            .collect();
+        sign_lags.sort();
         let peers = self.nodes.iter().filter(|n| n.role == Role::Peer);
         let data_bytes: u64 = (0..self.nodes.len()).map(|i| self.uploaded(i)).sum();
         let seed_share = self.uploaded(0) as f64 / data_bytes.max(1) as f64;
@@ -3340,16 +3576,20 @@ impl Sim {
                 .map(|n| (n.start.unwrap_or(u64::MAX), n.pos))
                 .collect(),
             // Over the viewers that never left: a place taken again misses
-            // what was written while it stood empty.
+            // what was written while it stood empty. A media run counts the
+            // chunks that hold media.
             delivery: {
+                let media = |c: usize| {
+                    self.media.is_none() || self.publish_times.get(c).is_some_and(|t| !t.is_nil())
+                };
                 let (read, all) = peers
                     .clone()
                     .filter(|n| !n.churned)
                     .fold((0, 0), |(r, a), n| {
-                        (
-                            r + n.read_chunks.iter().filter(|&&x| x).count(),
-                            a + n.read_chunks.len(),
-                        )
+                        let chunks = n.read_chunks.iter().enumerate().filter(|&(c, _)| media(c));
+                        let (rn, an) =
+                            chunks.fold((0, 0), |(r, a), (_, &x)| (r + usize::from(x), a + 1));
+                        (r + rn, a + an)
                     });
                 read as f64 / all.max(1) as f64
             },
@@ -3359,6 +3599,8 @@ impl Sim {
             lag_p50: pct(50),
             lag_p99: pct(99),
             lag_max: lags.last().copied().unwrap_or_default(),
+            sign_lag_p50: percentile(&sign_lags, 50),
+            sign_lag_p99: percentile(&sign_lags, 99),
             stripe_p90: percentile(&stripe, 90),
             stripe_p99: percentile(&stripe, 99),
             regions: self.region_p99(),
@@ -4336,6 +4578,123 @@ fn sim_chunk_codecs_change_no_trace() {
     }
 }
 
+/// A media run of `encoder` signed under `sign`: 8 viewers in a full mesh,
+/// 4 KiB chunks, Hybrid on 4 streams, 6 s.
+fn media_config(seed: u64, encoder: &str, sign: &str) -> Config {
+    let mut cfg = Config::new(seed, 8);
+    cfg.stream_secs = 6;
+    cfg.chunk_size = 4096;
+    cfg.live_window = 1 << 10;
+    cfg.push_mode = PushMode::Hybrid;
+    cfg.stream_count = 4;
+    let encoder = Encoder::parse(encoder).unwrap();
+    let sign = Sign::parse(sign).unwrap().unwrap();
+    cfg.stream_rate = encoder.rate();
+    cfg.munro_chunks = sign.chunks(encoder.rate(), cfg.chunk_size);
+    cfg.media = Some(Media { encoder, sign });
+    cfg
+}
+
+/// A media run replays its trace, and its padding codec makes the bytes a
+/// store keeping them holds: the same frames go out.
+#[test]
+fn sim_media_runs_replay_and_pad_like_stored_bytes() {
+    for (encoder, sign) in [
+        ("1500v", "u8,t200"),
+        ("128c", "u2,t100"),
+        ("512c", "u1,t250"),
+    ] {
+        let mut cfg = media_config(4, encoder, sign);
+        let a = Sim::new(cfg.clone()).run();
+        let b = Sim::new(cfg.clone()).run();
+        assert_eq!((a.trace, a.frames, a.bytes), (b.trace, b.frames, b.bytes));
+        assert_eq!(a.mismatches, 0, "{encoder} {sign}: {a:?}");
+        cfg.keep = Keep::Bytes;
+        let stored = Sim::new(cfg).run();
+        assert_eq!(
+            (stored.trace, stored.frames, stored.bytes),
+            (a.trace, a.frames, a.bytes),
+            "{encoder} {sign}"
+        );
+    }
+}
+
+/// Every honest viewer of a healthy media run reads the stream from its
+/// first two units to its end, each media chunk no sooner than its unit
+/// was signed.
+#[test]
+fn sim_media_viewers_read_the_whole_stream() {
+    for (encoder, sign) in [("3000c", "ur200,t300"), ("128c", "u4,t100-500x1.5")] {
+        let mut sim = Sim::new(media_config(5, encoder, sign));
+        let r = sim.run();
+        check_delivery(&r, 2 * sim.munro as u64);
+        assert!(
+            r.lag_p50 >= r.sign_lag_p50 && r.lag_p99 >= r.sign_lag_p99,
+            "{r:?}"
+        );
+        let m = sim.media.as_ref().unwrap();
+        assert_eq!(m.done, m.plan.ops.len());
+        for n in sim.nodes.iter().filter(|n| n.role == Role::Peer) {
+            assert!(n.sign_lags.iter().all(|&(_, l)| l >= Duration::ZERO));
+        }
+    }
+}
+
+/// The streams and policies [`sign_costs`] tabulates by default.
+const COST_MEDIA: &str = "128c,512c,1500c,1500v,3000c,6000c,6000v";
+const COST_SIGNS: &str = "u1,t100;u1,t200;u1,t300;u1,t500;u2,t100;u2,t200;u2,t300;u2,t500;\
+    u4,t100;u4,t200;u4,t300;u4,t500;u8,t100;u8,t200;u8,t300;u8,t500;\
+    u16,t100;u16,t200;u16,t300;u16,t500;ur150,t100-500x1.5;ur200,t100-500x1.5";
+
+/// What signing costs the writer alone, no swarm: per stream
+/// (`SIM_MEDIAS`, comma-separated) and policy (`SIM_SIGNS`,
+/// semicolon-separated), over `SIM_SEEDS` (8) traces of `SIM_SECS` (60) s
+/// in 4 KiB chunks, the means of the units signed a second (each peer's
+/// verifications), stream bytes per media byte, and each media chunk's
+/// wait to be signed (p50, p99).
+#[test]
+#[ignore = "a table; run in release with --ignored --nocapture"]
+fn sign_costs() {
+    let medias = knob::<String>("SIM_MEDIAS").unwrap_or_else(|| COST_MEDIA.into());
+    let signs = knob::<String>("SIM_SIGNS").unwrap_or_else(|| COST_SIGNS.into());
+    let seeds: u64 = knob("SIM_SEEDS").unwrap_or(8);
+    let span = Duration::from_secs(knob("SIM_SECS").unwrap_or(60));
+    println!(
+        "| media | sign | unit | units/s | bytes/media | sent kbit/s | wait p50 ms | wait p99 ms |"
+    );
+    println!("|---|---|---|---|---|---|---|---|");
+    for media in medias.split(',') {
+        let encoder = Encoder::parse(media).unwrap();
+        for sign in signs.split(';') {
+            let sign = Sign::parse(sign).unwrap().unwrap();
+            let chunks = sign.chunks(encoder.rate(), 4096);
+            let mut sums = [0.0; 5];
+            for seed in 1..=seeds {
+                let trace = encoder.trace(&mut det_rng(seed), span);
+                let p = live::plan(
+                    &trace,
+                    Signer::new(sign.deadline, chunks, 4096, live::CHUNK_HEADER),
+                );
+                let w = p.sign_waits();
+                let secs = span.as_secs_f64();
+                for (s, x) in sums.iter_mut().zip([
+                    p.units() as f64 / secs,
+                    p.stream_bytes as f64 / p.media_bytes as f64,
+                    p.stream_bytes as f64 * 8e-3 / secs,
+                    ms(percentile(&w, 50)) as f64,
+                    ms(percentile(&w, 99)) as f64,
+                ]) {
+                    *s += x / seeds as f64;
+                }
+            }
+            let [u, b, k, w50, w99] = sums;
+            println!(
+                "| {media} | {sign} | {chunks} | {u:.1} | {b:.3} | {k:.0} | {w50:.0} | {w99:.0} |"
+            );
+        }
+    }
+}
+
 #[test]
 fn sim_ledbat_constrained_downlink() {
     // One peer's downlink is 1.5x the stream rate; everyone else would
@@ -4546,7 +4905,8 @@ impl Scenario {
 
 /// An environment knob for the ignored evaluation and debugging tests only
 /// (`SIM_SCENARIO`, `SIM_STREAMS`, `SIM_SECS`, `SIM_WARM`, `SIM_SEED_POLICY`,
-/// `SIM_TRACE_NODE`, `SIM_VERBOSE`, `SIM_CROSS_UP_X10`);
+/// `SIM_TRACE_NODE`, `SIM_VERBOSE`, `SIM_CROSS_UP_X10`, and
+/// [`media_knobs`]' `SIM_MEDIA` and `SIM_SIGN`);
 /// the asserting tests use fixed configs, so the determinism guardrail
 /// holds for them. `SIM_CAPTURE=<dir>` captures any run into
 /// `<dir>/<run tag>/` (`SIM_CAPTURE_TAP=0` leaves out the decisions):
@@ -4583,6 +4943,29 @@ fn size_knobs(cfg: &mut Config) {
     cfg.chunk_size = chunk;
     cfg.munro_chunks = munro / chunk;
     cfg.live_window = (window / chunk).max(1);
+}
+
+/// `SIM_MEDIA=<encoder>` ([`Encoder::parse`]: `1500v`, `6000c:k10`)
+/// streams at that encoder's bitrate. With `SIM_SIGN=<policy>`
+/// ([`Sign::parse`]: `u8,t200`, `ur200,t100-500x1.5`) the run is a media
+/// run ([`Media`]) at the policy's chunks per signature; `SIM_SIGN=off`, or
+/// none, writes whole munros.
+fn media_knobs(cfg: &mut Config) {
+    let encoder = knob::<String>("SIM_MEDIA")
+        .map(|s| Encoder::parse(&s).unwrap_or_else(|e| panic!("SIM_MEDIA={e}")));
+    let sign = knob::<String>("SIM_SIGN")
+        .and_then(|s| Sign::parse(&s).unwrap_or_else(|e| panic!("SIM_SIGN={e}")));
+    if let Some(e) = encoder {
+        cfg.stream_rate = e.rate();
+    }
+    match (encoder, sign) {
+        (Some(encoder), Some(sign)) => {
+            cfg.munro_chunks = sign.chunks(encoder.rate(), cfg.chunk_size);
+            cfg.media = Some(Media { encoder, sign });
+        }
+        (None, Some(_)) => panic!("SIM_SIGN takes SIM_MEDIA"),
+        _ => {}
+    }
 }
 
 /// `SIM_STREAMS` streams, default `cfg`'s.
@@ -6271,13 +6654,13 @@ fn wan_cable_seed() {
 /// from `SIM_SLOTS`: the `seed_slots` of the `Admission` job's row, rounded,
 /// which a matrix's `[[derive]]` table gives it. `SIM_SEED` (1) is the sim
 /// seed. With `SIM_SERIES=1` the row carries the run second by second
-/// (`series`, [`Sim::series`]).
+/// (`series`, [`Sim::series`]). [`media_knobs`] apply to either.
 #[test]
 #[ignore = "one sim farm job; run in release with --ignored --nocapture"]
 fn sim_job() {
     let seed = knob("SIM_SEED").unwrap_or(1);
     let scenario = knob::<String>("SIM_SCENARIO").unwrap_or_else(|| "cable-seed".into());
-    let (scenario, case, cfg) = if scenario == "cable-seed" {
+    let (scenario, case, mut cfg) = if scenario == "cable-seed" {
         let policy = match knob::<String>("SIM_SEED_POLICY").as_deref() {
             None | Some("adaptive") => ADAPTIVE_QOS,
             Some("admission") => SeedPolicy::ADMISSION,
@@ -6310,6 +6693,7 @@ fn sim_job() {
             alloc_config(sc, seed, case, slots),
         )
     };
+    media_knobs(&mut cfg);
     let mut sim = Sim::new(cfg);
     let r = sim.run();
     println!("ROW {}", job_row(&scenario, &case, &sim, &r));
@@ -6645,10 +7029,42 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             }
         }
     }
+    if let Some(m) = &sim.media {
+        media_cols(&mut row, sim, m, r);
+    }
     if let Some(series) = sim.series() {
         row.field("series", format_args!("{series}"));
     }
     row.finish()
+}
+
+/// A media run's columns: its encoder and policy, the chunks per unit, the
+/// media and stream rates, units signed a second (each peer's signature
+/// verifications), each media chunk's wait to be signed, the lag from the
+/// signing, and every node's wire bytes per media byte per viewer.
+fn media_cols(row: &mut JsonRow, sim: &Sim, m: &MediaRun, r: &Report) {
+    let p = &m.plan;
+    let secs = sim.cfg.stream_secs.max(1) as f64;
+    let waits = p.sign_waits();
+    let wire: u64 = sim.nodes.iter().map(|n| n.wire.up_bytes).sum();
+    row.str("media", &m.media.encoder.to_string())
+        .str("sign", &m.media.sign.to_string())
+        .int("unit", p.unit_chunks)
+        .num("media_kbit", p.media_bytes as f64 * 8e-3 / secs)
+        .num("sent_kbit", p.stream_bytes as f64 * 8e-3 / secs)
+        .num(
+            "stream_per_media",
+            p.stream_bytes as f64 / p.media_bytes.max(1) as f64,
+        )
+        .num("units_per_s", p.units() as f64 / secs)
+        .int("sign_wait_p50_ms", ms(percentile(&waits, 50)) as u64)
+        .int("sign_wait_p99_ms", ms(percentile(&waits, 99)) as u64)
+        .int("signed_lag_p50_ms", ms(r.sign_lag_p50) as u64)
+        .int("signed_lag_p99_ms", ms(r.sign_lag_p99) as u64)
+        .num(
+            "wire_per_media",
+            wire as f64 / (p.media_bytes.max(1) as f64 * sim.cfg.peers.max(1) as f64),
+        );
 }
 
 /// A flat JSON object, field by field: numbers and plain tokens.

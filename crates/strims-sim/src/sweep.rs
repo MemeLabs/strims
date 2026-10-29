@@ -31,6 +31,13 @@
 //!   ([`with_chunks`](crate::SwarmSpec::with_chunks)): a media swarm's 4096
 //!   and 32768 against the scenarios' 1 KiB frames. Either alone keeps the
 //!   other's bytes.
+//! - `STRIMS_SIM_MEDIA=<encoder>` and `STRIMS_SIM_SIGN=<policy>` make
+//!   every swarm a live encoder's stream signed early
+//!   ([`with_media`](crate::SwarmSpec::with_media); the forms of
+//!   `strims_wan::live::Encoder::parse` and `Sign::parse`, `1500v` and
+//!   `u8,t200`), in chunks of `STRIMS_SIM_CHUNK` bytes ([`MEDIA_CHUNK`]
+//!   without it), the policy setting the chunks per signature.
+//!   `STRIMS_SIM_SIGN=off`, or either alone, changes nothing.
 //! - `STRIMS_SIM_STREAM_SECS=<s>` streams every swarm for `s` seconds from
 //!   its start, the run ending 10 s after the last stops: the WAN cases'
 //!   minute, longer. A scenario's faults, steps and competing uploads keep
@@ -61,9 +68,14 @@ use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::thread;
 use std::time::Duration;
 
+use strims_wan::live::{Encoder, Sign};
+
 use crate::report::Report;
 use crate::run::run;
 use crate::spec::{HostIx, Scenario, SendBuffer};
+
+/// A media swarm's chunk size without `STRIMS_SIM_CHUNK`: a video swarm's.
+pub const MEDIA_CHUNK: usize = 4096;
 
 /// Seeds per sweep when `STRIMS_SIM_SEEDS` isn't set.
 pub const DEFAULT_SEEDS: u64 = 8;
@@ -176,6 +188,17 @@ pub fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
     }
 }
 
+/// `STRIMS_SIM_MEDIA` and `STRIMS_SIM_SIGN`, when both are set and the
+/// policy isn't `off`.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn media_knobs() -> Option<(Encoder, Sign)> {
+    let encoder = env("STRIMS_SIM_MEDIA")
+        .map(|s| Encoder::parse(s.trim()).unwrap_or_else(|e| panic!("STRIMS_SIM_MEDIA={e}")));
+    let sign = env("STRIMS_SIM_SIGN")
+        .and_then(|s| Sign::parse(s.trim()).unwrap_or_else(|e| panic!("STRIMS_SIM_SIGN={e}")));
+    encoder.zip(sign)
+}
+
 /// The stream length of a scenario that takes it from the run's settings:
 /// `STRIMS_SIM_MINUTES=<m>`, else `default` minutes.
 pub fn stream_minutes(default: u64) -> u64 {
@@ -244,6 +267,7 @@ fn sweep_seeds(
     let munro: Option<usize> = knob("STRIMS_SIM_MUNRO");
     let stream_secs: Option<u64> = knob("STRIMS_SIM_STREAM_SECS");
     let segment: Option<usize> = knob("STRIMS_SIM_TCP_SEGMENT");
+    let media = media_knobs();
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -271,7 +295,13 @@ fn sweep_seeds(
                 spec.duration = stop + Duration::from_secs(10);
             }
         }
-        if chunk.is_some() || munro.is_some() {
+        if let Some((encoder, sign)) = media {
+            let c = chunk.unwrap_or(MEDIA_CHUNK);
+            spec.swarms = std::mem::take(&mut spec.swarms)
+                .into_iter()
+                .map(|s| s.with_chunk_size(c).with_media(encoder, sign))
+                .collect();
+        } else if chunk.is_some() || munro.is_some() {
             spec.swarms = std::mem::take(&mut spec.swarms)
                 .into_iter()
                 .map(|s| {
