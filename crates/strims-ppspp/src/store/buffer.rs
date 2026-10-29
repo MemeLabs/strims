@@ -704,6 +704,15 @@ impl Buffer {
         b
     }
 
+    /// The stored chunks in the window that hold data. Allocates a copy.
+    pub(crate) fn data_bins(&self) -> Map {
+        let mut b = self.bins();
+        for x in self.dataless.iterate_filled() {
+            b.reset(x);
+        }
+        b
+    }
+
     fn index(&self, b: Bin) -> usize {
         ((b.base_offset() & self.mask) * self.chunk_size) as usize
     }

@@ -202,9 +202,10 @@
 //! [`SeedAllocationStats`] gives, per neighbour, its HAVE lag per stream
 //! after publishing, whether it is barred, and its reporters and their
 //! verdict at the latest check. A seed samples each stream once per
-//! signature unit, at the unit's last chunk of it: a unit is published at
-//! once, so that chunk tells when the neighbour had the unit's share of
-//! the stream whole.
+//! signature unit, at the unit's last chunk of it with data (a unit signed
+//! early ends in data-less chunks, which nobody announces): a unit is
+//! published at once, so that chunk tells when the neighbour had the
+//! unit's share of the stream whole.
 //!
 //! # Bounds
 //!

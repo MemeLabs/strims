@@ -57,6 +57,27 @@ pub(crate) fn subtract_filled(dst: &mut Map, src: &Map, within: Bin) {
     }
 }
 
+/// Fills in `m`, from `lo` up to `hi`, the base bins from the end of each of
+/// its filled runs to the end of the run's unit of `1 << layer` base bins.
+/// O(filled runs of `m` in the range).
+pub(crate) fn fill_to_unit_ends(m: &mut Map, layer: u64, lo: Bin, hi: Bin) {
+    let unit = 1u64 << layer.min(u64::from(MAX_LAYER));
+    let hi_o = hi.base_left().base_offset();
+    let mut ends = Vec::new();
+    for r in aligned(lo, hi) {
+        ends.extend(
+            m.iterate_filled_at(r)
+                .map(|f| f.base_right().base_offset() + 1),
+        );
+    }
+    for o in ends {
+        let end = o.next_multiple_of(unit).min(hi_o);
+        for b in aligned(Bin(o.saturating_mul(2)), Bin(end.saturating_mul(2))) {
+            m.set(b);
+        }
+    }
+}
+
 /// True if every base bin from `lo` up to `hi` that `m` has empty is
 /// filled in `cover`.
 pub(crate) fn empty_covered(m: &Map, cover: &Map, lo: Bin, hi: Bin) -> bool {
@@ -75,6 +96,22 @@ mod tests {
             (l.base_offset()..=r.base_offset()).collect::<Vec<_>>()
         })
         .collect()
+    }
+
+    /// Each filled run reaches to the end of its unit, within the range.
+    #[test]
+    fn runs_fill_to_their_unit_ends() {
+        let mut m = Map::new();
+        for o in [1, 2, 9, 17, 18, 19, 20, 30] {
+            m.set(Bin(o * 2));
+        }
+        fill_to_unit_ends(&mut m, 3, Bin(0), Bin(31 * 2));
+        let got: Vec<u64> = (0..40).filter(|&o| m.filled_at(Bin(o * 2))).collect();
+        let want: Vec<u64> = [1..8, 9..16, 17..24, 30..31]
+            .into_iter()
+            .flatten()
+            .collect();
+        assert_eq!(got, want);
     }
 
     /// A run's bins are aligned, in order, and cover it exactly.

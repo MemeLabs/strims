@@ -53,13 +53,29 @@
 //!   counted in the hybrid's store rate, so no peer sees anything but the
 //!   requests. The backlog ends when the store holds it all, or when a
 //!   chunk it lacks is announced by no channel whose request floor is at
-//!   or before it.
+//!   or before it, nor follows one so announced in its munro (a munro's
+//!   data-less chunks come with its chunks of data).
 //!
 //! In [`PushMode::EagerHave`] and [`PushMode::Hybrid`], HAVEs go out as soon
 //! as chunks are stored and requests as soon as a HAVE makes chunks
 //! requestable; in [`PushMode::Off`] both wait for the next tick. Every
 //! chunk of a frame lands in the HAVE map before the driver polls, so an
 //! eager channel writes once per frame handled, not once per chunk.
+//!
+//! # Data-less chunks
+//!
+//! A unit signed early ends in data-less chunks ([`crate::integrity`]),
+//! which the swarm stores with the unit or with the first of its chunks
+//! to verify. We hold them as any other chunk: the have and request maps,
+//! the live window, pull, push and the hybrid count them as arrived. But
+//! they are never sent: no push, no answer, and no HAVE claims one, since a
+//! peer that lacks their unit can't know them data-less and would ask for
+//! them. A peer that gets any chunk of the unit holds them too. A REQUEST
+//! for data-less chunks only is refused, and a wider one is answered with
+//! its chunks of data. The hybrid's store rate counts them as stored: a
+//! stream signed early is planned on its units' cadence, so the quiet
+//! scenes of a stream whose bitrate swings don't open subscriptions its
+//! loud ones can't carry.
 //!
 //! # Streams and push
 //!
@@ -300,6 +316,9 @@ pub(crate) struct SwarmState {
 
     /// The chunks we have. Bound: pruned one window behind the store's.
     pub(crate) have_bins: Map,
+    /// The chunks our HAVEs may claim: `have_bins` less the data-less
+    /// ones. Bound: as `have_bins`.
+    pub(crate) announce_bins: Map,
     pub(crate) have_bin_max: Bin,
     pub(crate) wasted_chunks: u64,
     /// Requests that timed out unanswered.
@@ -492,10 +511,10 @@ impl SwarmState {
             .is_some_and(|bl| b.base_left() >= bl.from && b.base_left() < bl.to)
     }
 
-    /// The have map without the backlog chunks: what the HAVEs we send
-    /// cover.
+    /// The have map without the backlog and data-less chunks: what the
+    /// HAVEs we send cover.
     fn announced(&self) -> Map {
-        let mut m = self.have_bins.clone();
+        let mut m = self.announce_bins.clone();
         if !self.unannounced.is_empty() {
             let all = self.unannounced.root_bin();
             crate::bin_range::subtract_filled(&mut m, &self.unannounced, all);
@@ -902,7 +921,7 @@ impl PeerChannelScheduler {
                 }
             }
             while x <= s.have_bin_max.0 {
-                if s.have_bins.filled_at(Bin(x))
+                if s.announce_bins.filled_at(Bin(x))
                     && s.unannounced.empty_at(Bin(x))
                     && !q.push_data(self.peer, s.key, Bin(x), queued, PeerPriority::High)
                 {
@@ -1286,6 +1305,7 @@ impl PeerSwarmScheduler {
         };
         let stream_count = u16::try_from(o.stream_count).unwrap_or(u16::MAX).max(1);
         let have_bins = swarm.store().bins();
+        let announce_bins = swarm.store().data_bins();
         let mut request_order: Vec<u8> = (0..REQUEST_GROUP as u8).collect();
         shuffle(&mut request_order, rng);
         let window = o.live_window as u64;
@@ -1303,6 +1323,7 @@ impl PeerSwarmScheduler {
                 request_bins: have_bins.clone(),
                 source_bins: Map::new(),
                 have_bins,
+                announce_bins,
                 have_bin_max: Bin(0),
                 wasted_chunks: 0,
                 requests_timed_out: 0,
@@ -1447,6 +1468,7 @@ impl PeerSwarmScheduler {
         s.bin_times_max = Bin::NONE;
         s.peer_have_chunk_rate = Sma::new(15, Duration::SECOND, now);
         s.have_bins = Map::new();
+        s.announce_bins = Map::new();
         s.have_bin_max = Bin(0);
         s.request_bins = Map::new();
         s.source_bins = Map::new();
@@ -1469,7 +1491,8 @@ impl PeerSwarmScheduler {
 
     /// Chunks were stored: push them to subscribers, queue their HAVEs and
     /// mark them requested. A backlog's chunks are only marked: they are
-    /// for local readers.
+    /// for local readers. Data-less chunks are held and marked, but
+    /// neither pushed nor announced.
     pub(crate) fn consume(
         &mut self,
         bin: Bin,
@@ -1479,6 +1502,8 @@ impl PeerSwarmScheduler {
     ) {
         let s = &mut self.s;
         s.set_bin_time(bin, now);
+        let store = swarm.store();
+        let mixed = store.has_dataless(bin);
 
         // Hybrid pushes carry the time they were queued, so stale ones can
         // be dropped.
@@ -1491,6 +1516,9 @@ impl PeerSwarmScheduler {
                 wasted = wasted.saturating_sub(1);
                 if s.in_backlog(x) {
                     backlog_new += 1;
+                    continue;
+                }
+                if mixed && store.is_dataless(x) {
                     continue;
                 }
                 if let Some(stream) = s.streams.get(usize::from(s.bin_stream(x))) {
@@ -1516,11 +1544,7 @@ impl PeerSwarmScheduler {
         s.have_bins.set(bin);
         // Keep one window of history behind the store's window: the HAVEs
         // we send never claim more.
-        let prune = Bin(swarm
-            .store()
-            .window_start()
-            .0
-            .saturating_sub(s.live_window.0));
+        let prune = Bin(store.window_start().0.saturating_sub(s.live_window.0));
         s.have_bins.reset_before(prune);
         let mut hidden = false;
         if let Some(bl) = s.backlog {
@@ -1540,15 +1564,45 @@ impl PeerSwarmScheduler {
         if !s.unannounced.is_empty() {
             s.unannounced.reset_before(prune);
         }
-        let mut hb = s.have_bins.cover(bin);
-        if hb.is_all() {
-            hb = s.have_bins.root_bin();
+        let mut covers = [Bin::NONE; 1];
+        let mut more = Vec::new();
+        if mixed {
+            // Each run of chunks with data is announced by its own cover.
+            let (mut x, r) = bin.base();
+            while x <= r {
+                if !store.is_dataless(x) {
+                    s.announce_bins.set(x);
+                }
+                x += 2;
+            }
+            s.announce_bins.reset_before(prune);
+            let (mut x, mut last) = (bin.base_left(), Bin::NONE);
+            while x <= r {
+                if !store.is_dataless(x) {
+                    let hb = s.announce_bins.cover(x);
+                    if hb != last {
+                        more.push(hb);
+                        last = hb;
+                    }
+                }
+                x += 2;
+            }
+        } else {
+            s.announce_bins.set(bin);
+            s.announce_bins.reset_before(prune);
+            let mut hb = s.announce_bins.cover(bin);
+            if hb.is_all() {
+                hb = s.announce_bins.root_bin();
+            }
+            covers[0] = hb;
         }
         for c in self.channels.values_mut() {
             if !hidden {
-                c.have_bins.set(hb);
-                if !s.unannounced.is_empty() {
-                    crate::bin_range::subtract_filled(&mut c.have_bins, &s.unannounced, hb);
+                for &hb in covers.iter().filter(|b| !b.is_none()).chain(&more) {
+                    c.have_bins.set(hb);
+                    if !s.unannounced.is_empty() {
+                        crate::bin_range::subtract_filled(&mut c.have_bins, &s.unannounced, hb);
+                    }
                 }
             }
             // Eager modes write the HAVEs (and the pushes) at once, `Off` at
@@ -1581,8 +1635,10 @@ impl PeerSwarmScheduler {
 
     /// True if every chunk of `[from, to)` we lack is announced by a
     /// channel that can request it: one with a handshake whose request
-    /// floor is at or before the chunk. A rewind waits for no one else.
-    /// O(channels × announced runs in the range).
+    /// floor is at or before the chunk. A munro's chunks after one so
+    /// announced count too: those past its signed count are announced by
+    /// no one, and come with its chunks of data. A rewind waits for no one
+    /// else. O(channels × announced runs in the range).
     pub(crate) fn backlog_servable(&mut self, from: Bin, to: Bin, now: Time) -> bool {
         let s = &mut self.s;
         let rate = s.peer_have_chunk_rate.rate(Duration::SECOND, now);
@@ -1593,6 +1649,9 @@ impl PeerSwarmScheduler {
             }
             let lo = c.request_floor(s, rate).max(from);
             crate::bin_range::copy_filled(&mut held, &c.peer_have_bins, lo, to);
+        }
+        if s.signature_layer > 0 {
+            crate::bin_range::fill_to_unit_ends(&mut held, s.signature_layer, from, to);
         }
         crate::bin_range::empty_covered(&s.have_bins, &held, from, to)
     }
@@ -1943,12 +2002,19 @@ impl PeerSwarmScheduler {
             let unit = 1u64 << s.signature_layer;
             let last = unit.saturating_sub(u64::from(s.stream_count));
             if s.push.is_some() {
+                // A unit signed early ends each stream's share at its last
+                // chunk of data: a chunk is its stream's last in the unit when
+                // the stream's next chunk is past the unit or data-less.
+                let unit_last = |x: Bin| {
+                    let y = Bin(x.0 + 2 * u64::from(s.stream_count));
+                    x.base_offset() % unit >= last
+                        || (s.have_bins.filled_at(y) && s.announce_bins.empty_at(y))
+                };
                 while let Some(x) = next {
                     // A bin with no time (pruned, or never published by a
                     // seed) gives no sample.
                     let t = s.bin_time(x);
-                    let unit_last = x.base_offset() % unit >= last;
-                    if t != Time::EPOCH && (!s.is_seed || unit_last) {
+                    if t != Time::EPOCH && (!s.is_seed || unit_last(x)) {
                         let stream = usize::from(s.bin_stream(x));
                         Self::push_have_lag(&mut c.push, stream, now - t, now);
                     }
@@ -2022,6 +2088,10 @@ impl PeerSwarmScheduler {
             return true;
         }
         if !crate::peer_bin_ok(b, s.window) {
+            return false;
+        }
+        // Data-less chunks only: nothing to send.
+        if s.have_bins.filled_at(b) && s.announce_bins.empty_at(b) {
             return false;
         }
         if q.push_data(peer, s.key, b, now, s.answer_priority()) {
@@ -2355,6 +2425,18 @@ impl PeerSwarmScheduler {
         };
         let mut b = b;
         loop {
+            // Data-less chunks are never sent: a bin with some is sent in
+            // parts, and its parts without data are dropped.
+            if swarm.store().has_dataless(b) {
+                if b.is_base() || swarm.store().is_dataless(b) {
+                    s.tap
+                        .emit(s.key, Some(peer), || TapKind::DataDropped { bin: b, push });
+                    return Err(WriteDataError::Dropped);
+                }
+                q.push_front_data(peer, s.key, b.right(), t, pri);
+                b = b.left();
+                continue;
+            }
             // The chunks are a lower bound on what `b` takes. The integrity
             // depends on what the peer has, so writing it is what tells
             // whether `b` fits; a write that runs out of space is discarded.

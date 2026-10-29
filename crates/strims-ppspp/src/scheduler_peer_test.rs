@@ -162,6 +162,7 @@ fn stream_subscription_marks_its_bins_requested() {
     f.sched.channels[&p].peer_have_bins.set(peer_have_bin);
     f.sched.s.request_bins.set(request_bin);
     f.sched.s.have_bins.set(have_bin);
+    f.sched.s.announce_bins.set(have_bin);
     f.sched.s.peer_max_have_bin = peer_have_bin.base_right();
     f.sched.s.have_bin_max = have_bin.base_right();
 
@@ -482,6 +483,7 @@ fn stream_request_pushes_stream_bins() {
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
     f.sched.s.have_bins.set(Bin::new(5, 0));
+    f.sched.s.announce_bins.set(Bin::new(5, 0));
     f.sched.s.have_bin_max = Bin::new(5, 0).base_right();
     assert_eq!(
         f.sched
@@ -548,6 +550,7 @@ fn stream_requests_walk_at_most_a_window_without_a_read_offset() {
     let p = ready_channel(&mut f, &mut q);
     let far = Bin::new(0, 1 << 40);
     f.sched.s.have_bins.set(Bin::new(10, (1 << 40) >> 10));
+    f.sched.s.announce_bins.set(Bin::new(10, (1 << 40) >> 10));
     f.sched.s.have_bin_max = far;
     assert_eq!(
         f.sched
@@ -3261,6 +3264,17 @@ fn drain(f: &mut Fixture, q: &mut MockQueue) {
     }
 }
 
+// --- data-less chunks ---------------------------------------------------------
+
+/// Hands the swarm's queued chunks to the scheduler, as the runner does.
+fn drain_published(f: &mut Fixture, q: &mut MockQueue, t: Time) {
+    while let Some(e) = f.swarm.poll_event() {
+        if let crate::SwarmEvent::Published(b) = e {
+            f.sched.consume(b, t, &f.swarm, q);
+        }
+    }
+}
+
 /// Live chunks are requested first; the room they leave goes to the
 /// backlog's oldest group, and nothing below it.
 #[test]
@@ -3377,4 +3391,112 @@ fn a_reopened_backlog_asks_only_from_its_start() {
             .all(|b| (448..512).contains(&b.base_offset())),
         "{requests:?}"
     );
+}
+
+/// A unit signed early ends in data-less chunks: the scheduler holds and
+/// marks them, but pushes and announces only the chunks with data, refuses
+/// a request for data-less chunks alone, and answers a wider one with its
+/// chunks of data.
+#[test]
+fn dataless_chunks_are_held_but_never_pushed_announced_or_sent() {
+    let options = SwarmOptions {
+        chunks_per_signature: 8,
+        ..eight_streams()
+    };
+    let (mut w, swarm) = crate::Writer::new(
+        crate::WriterOptions {
+            swarm_options: options,
+            key: strims_crypto::key_from_seed(&[6; 32]),
+        },
+        now(),
+    )
+    .unwrap();
+    let mut f = fixture_with(swarm);
+    let mut q = MockQueue::default();
+    while f.swarm.poll_event().is_some() {}
+    let p = ready_channel(&mut f, &mut q);
+    for stream in 0..8 {
+        f.sched
+            .handle_stream_request(p, stream, Bin(0), Bin(0), now(), &mut q)
+            .unwrap();
+    }
+    next_messages(&mut f, p, now());
+    q.pushed.clear();
+
+    // a chunk and a half, signed early: chunks 0-1 with data, 2-7 data-less
+    w.write(&mut f.swarm, now(), &[7; 1536]).unwrap();
+    assert_eq!(w.flush(&mut f.swarm, now()), Ok(8 * 1024));
+    drain_published(&mut f, &mut q, now());
+    let unit = Bin::new(3, 0);
+    assert!(f.sched.s.have_bins.filled_at(unit));
+    assert!(f.sched.s.request_bins.filled_at(unit));
+    assert_eq!(f.sched.s.have_bin_max, Bin(14));
+    let pushed: Vec<Bin> = q.pushed.iter().map(|&(_, b, _)| b).collect();
+    assert_eq!(pushed, vec![Bin(0), Bin(2)]);
+    let haves: Vec<Bin> = next_messages(&mut f, p, now())
+        .into_iter()
+        .filter_map(|m| match m {
+            Message::Have(h) => Some(h.bin),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(haves, vec![Bin(1)]);
+
+    // requests: data-less chunks alone are refused, a wider bin is sent in
+    // parts whose data-less ones are dropped
+    q.pushed.clear();
+    assert!(!f.sched.handle_request(p, Bin(4), now(), &mut q));
+    assert!(!f.sched.handle_request(p, Bin::new(2, 1), now(), &mut q));
+    assert!(q.pushed.is_empty());
+    assert!(f.sched.handle_request(p, unit, now(), &mut q));
+    let cfg = f.swarm.reader_config();
+    let (sched, swarm) = (&mut f.sched, &f.swarm);
+    let sent = written(
+        |cw| {
+            let r = sched.write_data(
+                p,
+                unit,
+                now(),
+                PeerPriority::Low,
+                now(),
+                swarm,
+                cw,
+                true,
+                &mut q,
+            );
+            assert_eq!(r, Ok(()));
+        },
+        cfg,
+    );
+    let data: Vec<Bin> = sent
+        .iter()
+        .filter_map(|m| match m {
+            Message::Data(d) => Some(d.bin),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(data, vec![Bin(1)]);
+    let front: Vec<Bin> = q.pushed_front.iter().map(|&(_, b, _)| b).collect();
+    assert_eq!(front, vec![Bin::new(2, 1), Bin::new(1, 1)]);
+    for b in front {
+        let (sched, swarm) = (&mut f.sched, &f.swarm);
+        let sent = written(
+            |cw| {
+                let r = sched.write_data(
+                    p,
+                    b,
+                    now(),
+                    PeerPriority::Low,
+                    now(),
+                    swarm,
+                    cw,
+                    true,
+                    &mut q,
+                );
+                assert_eq!(r, Err(WriteDataError::Dropped));
+            },
+            cfg,
+        );
+        assert!(sent.is_empty(), "{sent:?}");
+    }
 }

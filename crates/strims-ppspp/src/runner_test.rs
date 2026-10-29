@@ -1354,6 +1354,77 @@ fn a_rewind_fetches_the_chunks_before_the_tail() {
     }
 }
 
+impl Pair {
+    /// Writes `n` bytes, less than a munro, and signs the munro early: its
+    /// chunks past the data are data-less. Returns the offset after the
+    /// data.
+    fn write_early(&mut self, n: u64) -> u64 {
+        let data: Vec<u8> = (self.written..self.written + n).map(byte).collect();
+        let end = self.written + n;
+        let s = &mut self.seed;
+        s.runner
+            .write(s.swarm, &mut self.writer, self.now, &data)
+            .unwrap();
+        self.written = s
+            .runner
+            .flush_writer(s.swarm, &mut self.writer, self.now)
+            .unwrap();
+        end
+    }
+}
+
+/// A leech moves back into munros signed early, to a chunk with data and
+/// to a data-less one, which no peer sends or announces: that backlog
+/// starts at the chunk's munro, whose chunks of data bring the rest. The
+/// reader reads the stream from the chunk on, zeros past each munro's
+/// data.
+#[test]
+fn a_rewind_into_early_signed_munros_reads_their_dataless_chunks_as_zeros() {
+    for o in [options(), hybrid()] {
+        for dataless in [false, true] {
+            let mut p = Pair::with(o.clone(), o.clone());
+            let ends: Vec<u64> = (0..8).map(|_| p.write_early(10 * 1024 + 100)).collect();
+            for _ in 0..4 {
+                p.tick(50);
+            }
+            assert!(!p.read().unwrap().is_empty());
+            let tail = p.leech_tail();
+            let m = tail / MUNRO as u64 - 3;
+            let base = m * MUNRO as u64;
+            let k = base
+                + if dataless {
+                    30 * 1024 + 7
+                } else {
+                    5 * 1024 + 100
+                };
+            let at = k - k % 1024;
+            let case = format!("{:?} data-less {dataless}", o.push_mode);
+            let mut done = None;
+            for _ in 0..40 {
+                if let Rewind::Done(r) = p.rewind(k).unwrap() {
+                    done = Some(r);
+                    break;
+                }
+                p.tick(50);
+            }
+            assert_eq!(done, Some(at), "{case}");
+            assert_eq!(p.leech_tail(), if dataless { base } else { at }, "{case}");
+            let got = p.read().unwrap();
+            assert_eq!(got.len() as u64, p.written - at, "{case}");
+            let want = |o: u64| {
+                let end = ends[(o / MUNRO as u64) as usize];
+                if o < end { byte(o) } else { 0 }
+            };
+            assert!(
+                got.iter()
+                    .enumerate()
+                    .all(|(i, &b)| b == want(at + i as u64)),
+                "{case}: the stream from the chunk on"
+            );
+        }
+    }
+}
+
 /// A rewind further back than the window reaches, or past the reader's
 /// position, is refused, and reading goes on as before.
 #[test]
