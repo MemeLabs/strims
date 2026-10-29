@@ -127,6 +127,18 @@ the budget at one or two copies, and trees deepened: at 16 local seeds
 star-3-10's lag p99 went ×2.06, halve-7-10 collapsed 12 times against 7
 and halve-15-10 9 against 5; only halve-7-20 gained (×0.42).
 
+**Admitting by count until the uplink saturates.** (`idle-count`,
+`idle-count-all`, against 5d81aaf6) An idle relay reads twenty times its
+control traffic, short of one subscriber. Until its meter had seen
+saturation (busy half the time, a standing queue, or the links' latest
+excess at 25 ms), a node also took subscribers while its committed push
+stayed within two past its upload rate: of its interior stream, or of any.
+Since the relay floor the case is rare (star-15-10: 2 of 180 interior
+decisions), and taking those children didn't help. At 32 fresh seeds the
+robust tier collapsed 176 → 182 (interior) and 178 (any), the peers tier
+67 → 71 and 77, and lag p99 stayed ×1.00. star-3-10, the cell it aimed
+at, went ×1.13 [1.00, 1.27] with the interior stream alone.
+
 ## Request control
 
 **A BBR-like request controller.** (`BbrLike`, retired in 3c40ec37) It
