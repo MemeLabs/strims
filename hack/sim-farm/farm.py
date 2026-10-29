@@ -5,11 +5,12 @@
 
   hack/sim-farm/farm.py build  MATRIX...
   hack/sim-farm/farm.py run    MATRIX... [--max-vcpus N] [--families F,...]
+                               [--regions R,...] [--max-region-vcpus N]
                                [--max-instance-cores N] [--hours H]
                                [--verify N] [--job-timeout MIN] [--keep]
                                [--local [--slots N]]
-  hack/sim-farm/farm.py status [MATRIX]
-  hack/sim-farm/farm.py down   [MATRIX]
+  hack/sim-farm/farm.py status [MATRIX] [--regions R,...]
+  hack/sim-farm/farm.py down   [MATRIX] [--regions R,...]
   hack/sim-farm/farm.py report MATRIX [--where KEY=VALUE ...] [--group KEY,...]
 
 A matrix (matrices/*.toml) names tests that run one config from their
@@ -54,10 +55,11 @@ never from the working tree.
 
 run builds what's missing, then keeps spot instances busy until every job
 has a row. A matrix's state is target/sim-farm/<matrix>/: rows.jsonl (a
-row per finished job, with its arm, commit, environment, host, CPU time
-and peak RSS), failures.jsonl, mismatches.jsonl and farm.log. A job's id
-hashes its arm's source and its environment, so a rerun skips the jobs
-that have rows, and an arm whose source changed runs again.
+row per finished job, with its arm, commit, environment, host and its
+zone, CPU time and peak RSS), failures.jsonl, mismatches.jsonl and
+farm.log. A job's id hashes its arm's source and its environment, so a
+rerun skips the jobs that have rows, and an arm whose source changed runs
+again.
 
 run takes several matrices at once: one queue holds their jobs, matrix by
 matrix in the order given, and one set of instances runs them. A job two
@@ -71,21 +73,29 @@ matrix is that matrix's state. Each matrix's farm.log gets the whole log.
 - Test jobs' instances run one job per physical core, fewer if memory
   binds (the largest slot_mem_gib of the run's matrices each, and 4 GiB
   for the system). The candidates are the x86 types of --families from
-  8xlarge up to --max-instance-cores (64) cores, in the zones the VPC's
-  public subnets cover, ranked by spot price per slot it would fill, then
-  by the quota's vCPUs per slot (an SMT core costs two).
-  No pool (a type in a zone) takes more than half of the vCPU budget: the
-  spot quota less the spot vCPUs it counts outside this run's instances
-  (those shutting down count too), at most --max-vcpus. The budget is read
-  again every 2 minutes while the run wants more instances; a quota error
-  holds it at what the run has until then. A pool out of capacity is
-  skipped for 10 minutes.
+  8xlarge up to --max-instance-cores (64) cores, in each of the run's
+  regions (AWS, below) in the zones its VPC's public subnets cover. A pool
+  is a type in a zone, and the pools of every region are ranked as one,
+  by spot price per slot it would fill, then by the quota's vCPUs per slot
+  (an SMT core costs two): the cheapest pools anywhere fill first, and a
+  run goes on to dearer ones, in its region or another, only as the
+  cheaper ones are full or out of capacity.
+- Each region has a spot quota of its own. A region's budget is its quota
+  less the spot vCPUs it counts there outside this run's instances (those
+  shutting down count too), at most --max-region-vcpus; the run's
+  instances in every region together have at most --max-vcpus. No pool
+  takes more than half of what the run may have in its region. A region's
+  budget is read again every 2 minutes while the run wants more
+  instances; a quota error there holds it at what the run has in it until
+  then, and the run launches in the others meanwhile. A pool out of
+  capacity is skipped for 10 minutes.
 - Instances are one-time spot instances, tagged strims-sim-farm=<run>,
   that terminate when they shut down. Each shuts itself down after
   --hours (6), and its worker powers it off after --idle-minutes (15) with
   nothing to do and no word from the controller, so a controller that
   dies costs little. `down` terminates them; `status` and `down` given a
-  matrix act on every run that includes it.
+  matrix act on every run that includes it. Both look in every region the
+  run could have used (AWS, below).
 - Each new instance of test jobs first runs the canary: the first
   matrix's first job that waits on none, with its [canary] overrides, also
   run here. A different trace means the binaries don't reproduce across
@@ -103,10 +113,15 @@ matrix is that matrix's state. Each matrix's farm.log gets the whole log.
   on has a row, and fails for good when that job does. Waiting jobs count
   towards the instances the run wants, and keep them from being retired.
 - Once the queue is empty, instances with nothing left to run are
-  terminated; until then they take the next matrix's jobs. On ^C (or
-  SIGTERM or SIGHUP) the run's instances are terminated unless --keep; a
-  rerun of the same matrices, in any order, finds its instances by tag
-  and adopts their jobs.
+  terminated; until then they take the next matrix's jobs. However the run
+  ends (done, ^C, SIGTERM or SIGHUP, or an error), it terminates the
+  instances it has, each in its region, then finds its tag in every region
+  it could have used and terminates what that turns up: an instance whose
+  launch never answered. A signal during a launch waits for the launch to
+  answer, so its instance is tracked, and a second signal doesn't cut the
+  cleanup short. With --keep an interrupted run leaves its instances; a
+  rerun of the same matrices, in any order, finds them by tag in those
+  regions and adopts their jobs.
 
 --local runs the jobs here instead, --slots at a time (default half the
 cores), with no AWS: for small matrices and for measuring one job.
@@ -146,11 +161,11 @@ Testbed runs are real time, so nothing checks that they reproduce: no
 canary, no --verify, and a reissued job just runs again (a job's second
 result is dropped). Instances are the --families types with host_cores
 cores, one job at a time each, and of one type where it has capacity:
-the type of the run's first launch comes first in every zone. Docker and
-the qdisc modules are set up at boot, and shaping is tried on a dummy
-device; a host that fails is dropped with its log, as one that fails to
-boot. A host runs a testbed job once no container named tb-* (run.sh's)
-is running.
+the type of the run's first launch comes first in every zone of every
+region. Docker and the qdisc modules are set up at boot, and shaping is
+tried on a dummy device; a host that fails is dropped with its log, as
+one that fails to boot. A host runs a testbed job once no container named
+tb-* (run.sh's) is running.
 
 With `paired`, the jobs of one environment and repeat, one per arm, go to
 one instance together and run there one after another, the arms' order
@@ -179,8 +194,17 @@ instances don't add up against it; one that comes with an address over
 the limit fails its builds, and its jobs go to other instances, failing
 for good the second time.
 
-AWS: the aws CLI's credentials and region (its default profile, or the
-config file's). The user needs
+AWS: the aws CLI's credentials (its default profile, or the config
+file's). A run launches in the regions --regions names, else the config
+file's aws_regions, else the aws CLI's one region ($AWS_REGION, or the
+profile's), and every call names its region. In each, the farm needs
+subnets that map public IPs on launch; on first use there it imports the
+key pair and creates the security group, and each run finds that
+region's Ubuntu image and spot quota. target/sim-farm/regions lists
+every region the farm has launched in from this checkout: status, down,
+and a run's adoption and cleanup look in those too, so an instance in a
+region since dropped from the config isn't missed. report reads only
+local files. The user needs, in each region,
 ec2:RunInstances (spot, with tags on launch), ec2:TerminateInstances on
 tagged instances, ec2:ImportKeyPair, ec2:CreateSecurityGroup,
 ec2:AuthorizeSecurityGroupIngress, the Describe calls for instances,
@@ -189,8 +213,9 @@ offerings and spot prices, and servicequotas:GetServiceQuota. SSH uses
 --ssh-key ($STRIMS_FARM_SSH_KEY, the config file's ssh_key, or
 ~/.ssh/id_rsa), whose .pub is imported as the key pair
 strims-sim-farm-<file name>; it must work without a prompt (no
-passphrase, or loaded into ssh-agent). The security group strims-sim-farm
-admits SSH from this host's public address.
+passphrase, or loaded into ssh-agent). The security group strims-sim-farm,
+in the VPC of each region's public subnets, admits SSH from this host's
+public address.
 
 What's particular to the person running the farm goes in
 hack/sim-farm/config.toml, which git ignores; flags and the environment
@@ -199,6 +224,7 @@ override it:
   ssh_key = "~/.ssh/id_rsa-me"
   aws_profile = "farm"          # else $AWS_PROFILE, or the CLI's default
   aws_region = "us-west-2"      # else $AWS_REGION, or the profile's
+  aws_regions = ["us-west-2", "us-east-2"]  # several, instead
   [run]                         # defaults for run's options
   max_vcpus = 128
   hours = 4
@@ -234,6 +260,9 @@ CONFIG = HERE / "config.toml"
 ROOT = HERE.parent.parent
 FARM = ROOT / "target" / "sim-farm"
 BIN = FARM / "bin"
+# Every region this checkout's farm has launched in, a line each: status,
+# down and a run's adoption and cleanup look there too.
+REGIONS = FARM / "regions"
 TAG = "strims-sim-farm"
 UBUNTU_OWNER = "099720109477"
 UBUNTU_IMAGE = "ubuntu/images/hvm-ssd-gp3/ubuntu-resolute-26.04-amd64-server-*"
@@ -276,7 +305,10 @@ class Log:
     def __call__(self, msg: str) -> None:
         line = f"[{time.strftime('%H:%M:%S')}] {msg}"
         with self.lock:
-            print(line, flush=True)
+            try:
+                print(line, flush=True)
+            except OSError:
+                pass  # the terminal is gone (SIGHUP); the files have it
             for f in self.files:
                 f.write(line + "\n")
                 f.flush()
@@ -706,12 +738,66 @@ class AwsError(Exception):
         self.code = code
 
 
-def aws(*args: str) -> dict:
-    p = subprocess.run(["aws", *args, "--output", "json"], capture_output=True, text=True)
+def aws(region: str, *args: str) -> dict:
+    """An aws CLI call in `region`. It runs in a session of its own, so a ^C
+    at the terminal reaches the controller alone, which lets a launch
+    finish (Run.held) and terminates the run's instances before it exits."""
+    p = subprocess.run(
+        ["aws", *args, "--region", region, "--output", "json"],
+        capture_output=True, text=True, start_new_session=True,
+    )
     if p.returncode:
         m = re.search(r"An error occurred \(([^)]+)\)", p.stderr)
         raise AwsError(m.group(1) if m else "", p.stderr.strip())
     return json.loads(p.stdout) if p.stdout.strip() else {}
+
+
+def cli_region() -> str:
+    """The aws CLI's own region: $AWS_REGION, $AWS_DEFAULT_REGION, or the
+    profile's."""
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+    if not region:
+        p = subprocess.run(["aws", "configure", "get", "region"], capture_output=True, text=True)
+        region = p.stdout.strip()
+    if not region:
+        sys.exit(f"no AWS region: aws_regions or aws_region in {CONFIG}, $AWS_REGION, or the profile's")
+    return region
+
+
+def recorded_regions() -> set[str]:
+    """Every region this checkout's farm has launched in (REGIONS)."""
+    try:
+        return set(REGIONS.read_text().split())
+    except FileNotFoundError:
+        return set()
+
+
+def record_region(region: str) -> None:
+    if region not in recorded_regions():
+        REGIONS.parent.mkdir(parents=True, exist_ok=True)
+        with REGIONS.open("a") as f:
+            f.write(region + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+
+
+def in_regions(fn, regions: list[str]) -> dict[str, object]:
+    """fn(region) in each region at once: what it returned, or the
+    exception it raised."""
+    with cf.ThreadPoolExecutor(max_workers=max(1, len(regions))) as ex:
+        futs = {r: ex.submit(fn, r) for r in regions}
+    return {r: f.exception() or f.result() for r, f in futs.items()}
+
+
+def in_regions_or_exit(fn, regions: list[str]) -> dict[str, object]:
+    """in_regions, raising the first region's error."""
+    out = in_regions(fn, regions)
+    for r, v in out.items():
+        if isinstance(v, BaseException):
+            if isinstance(v, (SystemExit, KeyboardInterrupt)):
+                raise v
+            sys.exit(f"{r}: {v}")
+    return out
 
 
 def tag_of(inst: dict, key: str) -> str | None:
@@ -724,39 +810,42 @@ def in_run(inst: dict, matrix: str) -> bool:
     return matrix == run or matrix in run.split("+")
 
 
-def farm_instances(run: str | None) -> list[dict]:
+def farm_instances(region: str, run: str | None) -> list[dict]:
     flt = f"Name=tag:{TAG},Values={run}" if run else f"Name=tag-key,Values={TAG}"
     r = aws(
-        "ec2", "describe-instances", "--filters", flt,
+        region, "ec2", "describe-instances", "--filters", flt,
         "Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down",
     )
     return [i for res in r["Reservations"] for i in res["Instances"]]
 
 
-def terminate(ids: list[str]) -> None:
+def terminate(region: str, ids: list[str]) -> None:
     if ids:
-        aws("ec2", "terminate-instances", "--instance-ids", *ids)
+        aws(region, "ec2", "terminate-instances", "--instance-ids", *ids)
 
 
-def ensure_key(key: Path) -> str:
+def ensure_key(region: str, key: Path) -> str:
     name = f"{TAG}-{key.name}"
     try:
-        aws("ec2", "describe-key-pairs", "--key-names", name)
+        aws(region, "ec2", "describe-key-pairs", "--key-names", name)
     except AwsError as e:
         if e.code != "InvalidKeyPair.NotFound":
             raise
-        aws("ec2", "import-key-pair", "--key-name", name, "--public-key-material", f"fileb://{key}.pub")
-        log(f"imported {key}.pub as the key pair {name}")
+        aws(
+            region, "ec2", "import-key-pair", "--key-name", name,
+            "--public-key-material", f"fileb://{key}.pub",
+        )
+        log(f"{region}: imported {key}.pub as the key pair {name}")
     return name
 
 
-def network() -> tuple[str, dict[str, str]]:
-    """The VPC of the public subnets, and a subnet per zone."""
+def network(region: str) -> tuple[str, dict[str, str]]:
+    """The VPC of the region's public subnets, and a subnet per zone."""
     subnets = aws(
-        "ec2", "describe-subnets", "--filters", "Name=map-public-ip-on-launch,Values=true"
+        region, "ec2", "describe-subnets", "--filters", "Name=map-public-ip-on-launch,Values=true"
     )["Subnets"]
     if not subnets:
-        sys.exit("no subnet maps public IPs on launch")
+        sys.exit(f"{region}: no subnet maps public IPs on launch")
     vpc = sorted(s["VpcId"] for s in subnets)[0]
     zones: dict[str, str] = {}
     for s in sorted(subnets, key=lambda s: s["SubnetId"]):
@@ -765,63 +854,69 @@ def network() -> tuple[str, dict[str, str]]:
     return vpc, zones
 
 
-def ensure_sg(vpc: str) -> str:
+def public_cidr() -> str:
+    ip = urllib.request.urlopen("https://checkip.amazonaws.com", timeout=10).read().decode().strip()
+    return f"{ip}/32"
+
+
+def ensure_sg(region: str, vpc: str, cidr: str) -> str:
     groups = aws(
-        "ec2", "describe-security-groups", "--filters",
+        region, "ec2", "describe-security-groups", "--filters",
         f"Name=group-name,Values={TAG}", f"Name=vpc-id,Values={vpc}",
     )["SecurityGroups"]
     if groups:
         sg, perms = groups[0]["GroupId"], groups[0]["IpPermissions"]
     else:
         sg = aws(
-            "ec2", "create-security-group", "--group-name", TAG,
+            region, "ec2", "create-security-group", "--group-name", TAG,
             "--description", "sim farm: SSH from the controller", "--vpc-id", vpc,
         )["GroupId"]
         perms = []
-        log(f"created the security group {TAG} ({sg})")
-    ip = urllib.request.urlopen("https://checkip.amazonaws.com", timeout=10).read().decode().strip()
-    cidr = f"{ip}/32"
+        log(f"{region}: created the security group {TAG} ({sg})")
     if not any(
         p.get("FromPort") == 22 and any(r["CidrIp"] == cidr for r in p.get("IpRanges", []))
         for p in perms
     ):
         try:
             aws(
-                "ec2", "authorize-security-group-ingress", "--group-id", sg,
+                region, "ec2", "authorize-security-group-ingress", "--group-id", sg,
                 "--protocol", "tcp", "--port", "22", "--cidr", cidr,
             )
-            log(f"{TAG} admits SSH from {cidr}")
+            log(f"{region}: {TAG} admits SSH from {cidr}")
         except AwsError as e:
             if e.code != "InvalidPermission.Duplicate":
                 raise
     return sg
 
 
-def image() -> tuple[str, str]:
+def image(region: str) -> tuple[str, str]:
     imgs = aws(
-        "ec2", "describe-images", "--owners", UBUNTU_OWNER, "--filters",
+        region, "ec2", "describe-images", "--owners", UBUNTU_OWNER, "--filters",
         f"Name=name,Values={UBUNTU_IMAGE}", "Name=state,Values=available",
         "Name=architecture,Values=x86_64",
     )["Images"]
     if not imgs:
-        sys.exit(f"no image matches {UBUNTU_IMAGE}")
+        sys.exit(f"{region}: no image matches {UBUNTU_IMAGE}")
     img = max(imgs, key=lambda i: i["CreationDate"])
     return img["ImageId"], img["RootDeviceName"]
 
 
-def spot_quota() -> int | None:
+def spot_quota(region: str) -> int | None:
     try:
-        q = aws("service-quotas", "get-service-quota", "--service-code", "ec2", "--quota-code", SPOT_QUOTA)
+        q = aws(
+            region, "service-quotas", "get-service-quota", "--service-code", "ec2",
+            "--quota-code", SPOT_QUOTA,
+        )
         return int(q["Quota"]["Value"])
     except AwsError:
         return None
 
 
-def spot_vcpus_outside(mine: set[str]) -> int:
-    """The spot vCPUs the quota counts, but for the instances `mine`.
-    Instances shutting down still count."""
+def spot_vcpus_outside(region: str, mine: set[str]) -> int:
+    """The spot vCPUs the region's quota counts, but for the instances
+    `mine`. Instances shutting down still count."""
     r = aws(
-        "ec2", "describe-instances", "--filters", "Name=instance-lifecycle,Values=spot",
+        region, "ec2", "describe-instances", "--filters", "Name=instance-lifecycle,Values=spot",
         "Name=instance-state-name,Values=pending,running,shutting-down",
     )
     total = 0
@@ -848,6 +943,7 @@ class Pool:
     subnet: str
     spec: Spec
     price: float
+    region: str
 
     @property
     def per_slot(self) -> float:
@@ -858,6 +954,21 @@ class Pool:
         return (self.type, self.zone)
 
 
+@dataclasses.dataclass(eq=False)
+class Region:
+    """A region the run launches in: what its instances launch with, its
+    pools, and its share of its spot quota (None until read)."""
+
+    name: str
+    key_name: str
+    zones: dict[str, str]  # zone -> subnet
+    sg: str
+    ami: tuple[str, str]
+    pools: list[Pool] = dataclasses.field(default_factory=list)
+    budget: int | None = None
+    next_budget: float = 0.0
+
+
 @dataclasses.dataclass(frozen=True)
 class Testbed:
     """A testbed run's hosts: one slot each, of exactly `cores` cores."""
@@ -866,8 +977,8 @@ class Testbed:
     mem_gib: float
 
 
-def specs(slot_mem_gib: float, types: list[str] | None = None, families: list[str] = (),
-          min_vcpus: int = 0, max_cores: int = 1 << 30,
+def specs(region: str, slot_mem_gib: float, types: list[str] | None = None,
+          families: list[str] = (), min_vcpus: int = 0, max_cores: int = 1 << 30,
           testbed: Testbed | None = None) -> dict[str, Spec]:
     if types is not None:
         flt = ["Name=instance-type,Values=" + ",".join(types)]
@@ -878,7 +989,7 @@ def specs(slot_mem_gib: float, types: list[str] | None = None, families: list[st
             "Name=bare-metal,Values=false",
         ]
     out = {}
-    for t in aws("ec2", "describe-instance-types", "--filters", *flt)["InstanceTypes"]:
+    for t in aws(region, "ec2", "describe-instance-types", "--filters", *flt)["InstanceTypes"]:
         v = t["VCpuInfo"]["DefaultVCpus"]
         c = t["VCpuInfo"].get("DefaultCores", v)
         mem = t["MemoryInfo"]["SizeInMiB"] / 1024
@@ -894,19 +1005,23 @@ def specs(slot_mem_gib: float, types: list[str] | None = None, families: list[st
     return out
 
 
-def pools(slot_mem_gib: float, families: list[str], max_cores: int, zones: dict[str, str],
-          testbed: Testbed | None = None) -> list[Pool]:
+def pool_order(p: Pool) -> tuple:
+    return (p.per_slot, p.spec.vcpus / p.spec.slots, p.type, p.zone)
+
+
+def pools(region: str, slot_mem_gib: float, families: list[str], max_cores: int,
+          zones: dict[str, str], testbed: Testbed | None = None) -> list[Pool]:
     if testbed is not None:
-        sp = specs(0, families=families, testbed=testbed)
+        sp = specs(region, 0, families=families, testbed=testbed)
     else:
-        sp = specs(slot_mem_gib, families=families, min_vcpus=32, max_cores=max_cores)
+        sp = specs(region, slot_mem_gib, families=families, min_vcpus=32, max_cores=max_cores)
     if not sp:
         return []
     names = sorted(sp)
     offered = {
         (o["InstanceType"], o["Location"])
         for o in aws(
-            "ec2", "describe-instance-type-offerings", "--location-type", "availability-zone",
+            region, "ec2", "describe-instance-type-offerings", "--location-type", "availability-zone",
             "--filters", "Name=instance-type,Values=" + ",".join(names),
             "Name=location,Values=" + ",".join(zones),
         )["InstanceTypeOfferings"]
@@ -914,30 +1029,32 @@ def pools(slot_mem_gib: float, families: list[str], max_cores: int, zones: dict[
     now = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%S")
     prices: dict[tuple[str, str], float] = {}
     for r in aws(
-        "ec2", "describe-spot-price-history", "--product-descriptions", "Linux/UNIX",
+        region, "ec2", "describe-spot-price-history", "--product-descriptions", "Linux/UNIX",
         "--start-time", now, "--instance-types", *names,
         "--filters", "Name=availability-zone,Values=" + ",".join(zones),
     )["SpotPriceHistory"]:
         prices.setdefault((r["InstanceType"], r["AvailabilityZone"]), float(r["SpotPrice"]))
-    out = [Pool(t, z, zones[z], sp[t], prices[(t, z)]) for (t, z) in offered if (t, z) in prices]
-    out.sort(key=lambda p: (p.per_slot, p.spec.vcpus / p.spec.slots, p.type, p.zone))
+    out = [
+        Pool(t, z, zones[z], sp[t], prices[(t, z)], region)
+        for (t, z) in offered if (t, z) in prices
+    ]
+    out.sort(key=pool_order)
     return out
 
 
-def launch(run: str, pool: Pool, ami: tuple[str, str], sg: str, key_name: str,
-           user_data: Path) -> str:
+def launch(run: str, pool: Pool, region: Region, user_data: Path) -> str:
     tags = f"{{Key={TAG},Value={run}}},{{Key=Name,Value=sim-farm-{run}}}"
     r = aws(
-        "ec2", "run-instances", "--count", "1",
-        "--image-id", ami[0], "--instance-type", pool.type, "--subnet-id", pool.subnet,
-        "--security-group-ids", sg, "--key-name", key_name,
+        region.name, "ec2", "run-instances", "--count", "1",
+        "--image-id", region.ami[0], "--instance-type", pool.type, "--subnet-id", pool.subnet,
+        "--security-group-ids", region.sg, "--key-name", region.key_name,
         "--instance-market-options", json.dumps({
             "MarketType": "spot",
             "SpotOptions": {"SpotInstanceType": "one-time", "InstanceInterruptionBehavior": "terminate"},
         }),
         "--instance-initiated-shutdown-behavior", "terminate",
         "--block-device-mappings", json.dumps([{
-            "DeviceName": ami[1],
+            "DeviceName": region.ami[1],
             "Ebs": {"VolumeSize": 16, "VolumeType": "gp3", "DeleteOnTermination": True},
         }]),
         "--metadata-options", "HttpTokens=required,HttpEndpoint=enabled",
@@ -968,6 +1085,7 @@ class Host:
     failing_since: float | None = None
     ended: float | None = None
     note: str | None = None  # why its worker waits, as it last said
+    region: str = ""
 
     @property
     def slots(self) -> int:
@@ -1050,7 +1168,15 @@ class Run:
         self.derived: dict[str, dict[str, str]] = {}  # job id -> what it took from the row
         self.hosts: list[Host] = []
         self.pool = cf.ThreadPoolExecutor(max_workers=16)
-        self.budget: int | None = None
+        self.regions: dict[str, Region] = {}
+        self.pools: list[Pool] = []  # every region's, in one ranking
+        self.priced = 0.0
+        # The regions to look for the run's instances in: its own, and
+        # every region the farm has launched in.
+        self.sweep: list[str] = []
+        # A ^C that came during a launch (held).
+        self.holding = False
+        self.deferred = False
         self.verified = 0
         self.mismatches = 0
         self.failed = 0
@@ -1202,6 +1328,7 @@ class Run:
                 "copy": item.copy,
                 "host": host.id,
                 "type": host.type,
+                "zone": host.zone,
                 "wall_s": res.get("wall_s"),
                 "cpu_s": res.get("cpu_s"),
                 "max_rss_mb": res.get("max_rss_mb"),
@@ -1265,7 +1392,7 @@ class Run:
         host.ended = time.time()
         if not self.local:
             try:
-                terminate([host.id])
+                terminate(host.region, [host.id])
             except AwsError as e:
                 log(f"terminating {host.id}: {e}")
 
@@ -1514,9 +1641,18 @@ class Run:
         self.start_worker(host)
 
     def refresh(self, now: float) -> None:
-        by_id = {i["InstanceId"]: i for i in farm_instances(self.name)}
+        """Each live host's state, from its region; a region that can't be
+        listed this time leaves its hosts as they were."""
+        regions = sorted({h.region for h in self.hosts if h.state != "lost"})
+        by_id, unlisted = {}, set()
+        for r, got in in_regions(lambda r: farm_instances(r, self.name), regions).items():
+            if isinstance(got, BaseException):
+                log(f"{r}: listing the run's instances: {got}")
+                unlisted.add(r)
+            else:
+                by_id.update((i["InstanceId"], i) for i in got)
         for h in self.hosts:
-            if h.state == "lost":
+            if h.state == "lost" or h.region in unlisted:
                 continue
             inst = by_id.get(h.id)
             if inst is None and now - h.launched < 120:
@@ -1544,27 +1680,63 @@ class Run:
                     if self.boot_failures >= 3:
                         raise SystemExit("instances keep failing to bootstrap; stopping")
 
-    def read_budget(self, now: float) -> None:
-        """The spot quota less what else counts against it, or --max-vcpus."""
-        self.next_budget = now + BUDGET_REFRESH
-        quota = spot_quota()
-        if quota is None and self.args.max_vcpus is None:
-            if self.budget is None:
-                sys.exit("can't read the spot vCPU quota; pass --max-vcpus")
+    def read_budgets(self, now: float) -> None:
+        """The budgets of the regions whose reading is due: each region's
+        spot quota less what else counts against it there (or, if the quota
+        can't be read, --max-region-vcpus or --max-vcpus), at most
+        --max-region-vcpus."""
+        due = [r for r in self.regions.values() if now >= r.next_budget]
+        if not due:
             return
-        outside = spot_vcpus_outside({h.id for h in self.hosts if h.state != "lost"})
-        cap = quota - outside if quota is not None else self.args.max_vcpus
-        budget = min(cap, self.args.max_vcpus or cap)
-        if budget != self.budget:
-            log(f"budget {budget} vCPUs (quota {quota}, {outside} in other spot instances)")
-        self.budget = budget
+        mine = {h.id for h in self.hosts if h.state != "lost"}
+        got = in_regions(lambda r: (spot_quota(r), spot_vcpus_outside(r, mine)), [r.name for r in due])
+        cap = self.args.max_region_vcpus
+        for r in due:
+            r.next_budget = now + BUDGET_REFRESH
+            res = got[r.name]
+            if isinstance(res, BaseException):
+                if r.budget is None:
+                    sys.exit(f"{r.name}: reading the spot budget: {res}")
+                log(f"{r.name}: reading the spot budget: {res}; it stays {r.budget} vCPUs")
+                continue
+            quota, outside = res
+            if quota is not None:
+                budget = quota - outside
+            elif cap is not None or self.args.max_vcpus is not None:
+                budget = cap if cap is not None else self.args.max_vcpus
+            elif r.budget is None:
+                sys.exit(f"{r.name}: can't read the spot vCPU quota; pass --max-vcpus or --max-region-vcpus")
+            else:
+                continue
+            if cap is not None:
+                budget = min(budget, cap)
+            if budget != r.budget:
+                log(f"{r.name}: budget {budget} vCPUs (quota {quota}, {outside} in other spot instances)")
+            r.budget = budget
 
-    def budget_room(self) -> int:
-        live = sum(h.spec.vcpus for h in self.hosts if h.state != "lost")
-        return self.budget - live
+    def live_vcpus(self, region: str | None = None) -> int:
+        return sum(
+            h.spec.vcpus for h in self.hosts
+            if h.state != "lost" and (region is None or h.region == region)
+        )
+
+    def room(self, r: Region) -> int:
+        """The vCPUs the run can still launch in the region: what its budget
+        leaves there, and --max-vcpus over every region."""
+        room = r.budget - self.live_vcpus(r.name)
+        if self.args.max_vcpus is not None:
+            room = min(room, self.args.max_vcpus - self.live_vcpus())
+        return room
+
+    def pool_cap(self, r: Region) -> float:
+        """The vCPUs a pool of the region may take: half of what the run may
+        have there."""
+        if self.args.max_vcpus is None:
+            return r.budget / 2
+        return min(r.budget, self.args.max_vcpus) / 2
 
     def pick(self, deficit: int, now: float) -> Pool | None:
-        room = self.budget_room()
+        rooms = {name: self.room(r) for name, r in self.regions.items()}
         per_pool = collections.Counter()
         for h in self.hosts:
             if h.state != "lost":
@@ -1572,11 +1744,13 @@ class Run:
         cands = [
             p for p in self.pools
             if self.backoff.get(p.key, 0) <= now
-            and p.spec.vcpus <= room
-            and per_pool[p.key] + p.spec.vcpus <= max(self.budget / 2, p.spec.vcpus)
+            and p.spec.vcpus <= rooms[p.region]
+            and per_pool[p.key] + p.spec.vcpus
+            <= max(self.pool_cap(self.regions[p.region]), p.spec.vcpus)
         ]
-        # The price per slot it can fill: as the queue drains, smaller types.
-        # A testbed run's first type comes first, so its hosts are alike.
+        # The price per slot it can fill, in any region: as the queue
+        # drains, smaller types. A testbed run's first type comes first, so
+        # its hosts are alike.
         return min(
             cands,
             key=lambda p: (
@@ -1585,6 +1759,21 @@ class Run:
             ),
             default=None,
         )
+
+    @contextlib.contextmanager
+    def held(self):
+        """Holds a ^C (or SIGTERM, SIGHUP) back until the block is done: an
+        instance being launched is tracked before the run stops, and so
+        terminated."""
+        self.holding = True
+        try:
+            yield
+        finally:
+            self.holding = False
+            if self.deferred:
+                self.deferred = False
+                log("a signal came during a launch, which has answered; stopping")
+                raise KeyboardInterrupt
 
     def scale(self, now: float) -> None:
         live = [h for h in self.hosts if h.state != "lost"]
@@ -1596,8 +1785,8 @@ class Run:
             waiting = sum(len(w) for w in self.waiting.values())
             demand = len(self.queue) + waiting + sum(len(h.assigned) for h in live)
             deficit = demand - sum(h.slots for h in live)
-        if deficit > 0 and now >= self.next_budget:
-            self.read_budget(now)
+        if deficit > 0:
+            self.read_budgets(now)
         launched = 0
         while deficit > 0 and launched < 3:
             pool = self.pick(deficit, now)
@@ -1606,20 +1795,28 @@ class Run:
                     self.last_stuck = now
                     log("no pool fits the budget or has capacity; waiting")
                 return
+            r = self.regions[pool.region]
+            record_region(r.name)
             try:
-                hid = launch(self.name, pool, self.ami, self.sg, self.key_name, self.user_data)
+                with self.held():
+                    hid = launch(self.name, pool, r, self.user_data)
+                    self.hosts.append(
+                        Host(hid, pool.type, pool.zone, pool.spec, pool.price, now, region=r.name)
+                    )
+                    log(f"launched {hid}: {pool.type} in {pool.zone}, {pool.spec.slots} slots, "
+                        f"${pool.price:.3f}/h")
             except AwsError as e:
                 if e.code in CAPACITY_ERRORS:
                     log(f"{pool.type} in {pool.zone}: {e.code}; skipping it for {POOL_BACKOFF // 60} min")
                     self.backoff[pool.key] = now + POOL_BACKOFF
                     continue
                 if e.code in QUOTA_ERRORS:
-                    # Until the quota is read again: what counts against it
-                    # can lag what's running.
-                    self.budget = self.budget - self.budget_room()
-                    self.next_budget = now + BUDGET_REFRESH
-                    log(f"{e.code}: the budget is {self.budget} vCPUs for {BUDGET_REFRESH // 60} min")
-                    return
+                    # The region takes no more until its quota is read again:
+                    # what counts against it can lag what's running.
+                    r.budget = self.live_vcpus(r.name)
+                    r.next_budget = now + BUDGET_REFRESH
+                    log(f"{r.name}: {e.code}: its budget is {r.budget} vCPUs for {BUDGET_REFRESH // 60} min")
+                    continue
                 if e.code == "AuthFailure.ServiceLinkedRoleCreationNotPermitted":
                     raise SystemExit(
                         "the account's first spot instance needs the Spot service-linked role; an "
@@ -1627,11 +1824,8 @@ class Run:
                         "--aws-service-name spot.amazonaws.com"
                     )
                 raise
-            h = Host(hid, pool.type, pool.zone, pool.spec, pool.price, now)
-            self.hosts.append(h)
             if self.testbed is not None and self.pinned is None:
                 self.pinned = pool.type
-            log(f"launched {hid}: {pool.type} in {pool.zone}, {pool.spec.slots} slots, ${pool.price:.3f}/h")
             deficit -= pool.spec.slots
             launched += 1
 
@@ -1644,9 +1838,50 @@ class Run:
                 h.state = "lost"
                 h.ended = time.time()
                 try:
-                    terminate([h.id])
+                    terminate(h.region, [h.id])
                 except AwsError as e:
                     log(f"terminating {h.id}: {e}")
+
+    def terminate_all(self) -> None:
+        """Terminates the run's instances: those it tracks, each in its
+        region, then any its tag finds in a region it may have used (one
+        whose launch never answered)."""
+        live = [h for h in self.hosts if h.state != "lost"]
+        if live:
+            log(f"terminating {len(live)} instances")
+        by_region = collections.defaultdict(list)
+        for h in live:
+            by_region[h.region].append(h.id)
+        gone = set()
+        for r, ids in sorted(by_region.items()):
+            try:
+                terminate(r, ids)
+                gone.update(ids)
+            except AwsError as e:
+                log(f"{r}: terminating {', '.join(ids)}: {e}")
+        for h in live:
+            h.state, h.ended = "lost", time.time()
+        # What the tag finds still up is terminated (again): a terminate
+        # that failed, one the listing doesn't show yet, or an instance the
+        # run never tracked, which is the one worth a word.
+        known = {h.id for h in self.hosts}
+        for r, got in in_regions(lambda r: farm_instances(r, self.name), self.sweep).items():
+            if isinstance(got, BaseException):
+                log(f"{r}: CAN'T LIST the run's instances ({got}); "
+                    f"`farm.py down {self.name}` terminates any left")
+                continue
+            left = [
+                i["InstanceId"] for i in got
+                if i["State"]["Name"] != "shutting-down" and i["InstanceId"] not in gone
+            ]
+            untracked = [i for i in left if i not in known]
+            if untracked:
+                log(f"{r}: terminating {len(untracked)} instances of the run it didn't track: "
+                    f"{', '.join(untracked)}")
+            try:
+                terminate(r, left)
+            except AwsError as e:
+                log(f"{r}: terminating {', '.join(left)}: {e}")
 
     # -- the loop
 
@@ -1655,14 +1890,19 @@ class Run:
         if not key.exists() or not Path(f"{key}.pub").exists():
             sys.exit(f"{key} or its .pub is missing (--ssh-key, $STRIMS_FARM_SSH_KEY, ssh_key in {CONFIG})")
         self.ssh = Ssh(key, self.state)
-        self.key_name = ensure_key(key)
-        vpc, self.zones = network()
-        self.sg = ensure_sg(vpc)
-        self.ami = image()
+        names = self.args.regions
+        self.sweep = sorted(set(names) | recorded_regions())
+        cidr = public_cidr()
+
+        def setup(name: str) -> Region:
+            vpc, zones = network(name)
+            return Region(name, ensure_key(name, key), zones, ensure_sg(name, vpc, cidr), image(name))
+
+        self.regions = dict(in_regions_or_exit(setup, names))
         self.families = self.args.families.split(",")
         self.find_pools()
         if not self.pools:
-            sys.exit("no instance type fits (families, sizes, slot_mem_gib or host_cores, zones)")
+            sys.exit("no instance type fits (families, sizes, slot_mem_gib or host_cores, regions)")
         self.backoff: dict[tuple[str, str], float] = {}
         self.last_stuck = 0.0
         minutes = int(self.args.hours * 60)
@@ -1676,31 +1916,58 @@ class Run:
             self.canary_item = Item(canary, "canary")
             self.items[self.canary_item.wid] = self.canary_item
             self.canary_trace = self.local_canary()
-        # Instances a previous controller left running.
-        found = [i for i in farm_instances(self.name) if i["State"]["Name"] in ("pending", "running")]
-        if found:
-            sp = specs(self.slot_mem_gib, types=sorted({i["InstanceType"] for i in found}), testbed=self.testbed)
-            for i in found:
-                spec = sp.get(i["InstanceType"])
+        # Instances a previous controller left running, in any region.
+        def adoptable(r: str) -> list[tuple[dict, Spec | None]]:
+            found = [i for i in farm_instances(r, self.name) if i["State"]["Name"] in ("pending", "running")]
+            if not found:
+                return []
+            types = sorted({i["InstanceType"] for i in found})
+            sp = specs(r, self.slot_mem_gib, types=types, testbed=self.testbed)
+            return [(i, sp.get(i["InstanceType"])) for i in found]
+
+        for r, found in in_regions_or_exit(adoptable, self.sweep).items():
+            for i, spec in found:
                 if spec is None:
                     continue
-                price = next((p.price for p in self.pools if p.key == (i["InstanceType"], i["Placement"]["AvailabilityZone"])), 0.0)
+                zone = i["Placement"]["AvailabilityZone"]
+                price = next((p.price for p in self.pools if p.key == (i["InstanceType"], zone)), 0.0)
                 launched = datetime.datetime.fromisoformat(i["LaunchTime"]).timestamp()
-                h = Host(i["InstanceId"], i["InstanceType"], i["Placement"]["AvailabilityZone"], spec, price, launched, state="adopting")
+                h = Host(
+                    i["InstanceId"], i["InstanceType"], zone, spec, price, launched,
+                    state="adopting", region=r,
+                )
                 self.hosts.append(h)
                 if self.testbed is not None and self.pinned is None:
                     self.pinned = h.type
                 log(f"adopting {h.id} ({h.type} in {h.zone})")
-        self.read_budget(time.time())
+        self.read_budgets(time.time())
         log("best pools: " + ", ".join(
-            f"{p.type}@{p.zone[-1]} {p.spec.slots} slots ${p.per_slot * 1000:.1f}m/slot-h"
+            f"{p.type}@{self.where(p.zone)} {p.spec.slots} slots ${p.per_slot * 1000:.1f}m/slot-h"
             for p in self.pools[:5]
         ))
 
+    def where(self, zone: str) -> str:
+        """A zone as the log shows it: its letter, or all of it when the
+        run spans regions."""
+        return zone if len(self.regions) > 1 else zone[-1]
+
     def find_pools(self) -> None:
-        self.pools = pools(
-            self.slot_mem_gib, self.families, self.args.max_instance_cores, self.zones, self.testbed
-        )
+        """Every region's pools, in one ranking; a region whose prices
+        can't be read again keeps the pools it had."""
+        def find(r: str) -> list[Pool]:
+            return pools(
+                r, self.slot_mem_gib, self.families, self.args.max_instance_cores,
+                self.regions[r].zones, self.testbed,
+            )
+
+        for r, got in in_regions(find, list(self.regions)).items():
+            if isinstance(got, BaseException):
+                if not self.priced:
+                    sys.exit(f"{r}: finding its pools: {got}")
+                log(f"{r}: finding its pools: {got}; keeping the last")
+            else:
+                self.regions[r].pools = got
+        self.pools = sorted((p for r in self.regions.values() for p in r.pools), key=pool_order)
         self.priced = time.time()
 
     def setup_local(self) -> None:
@@ -1715,13 +1982,13 @@ class Run:
         else:
             slots = self.args.slots or max(1, (os.cpu_count() or 2) // 2)
         self.hosts.append(Host("local", "local", "-", Spec(slots, slots, 0, slots), 0.0, time.time(), state="ready"))
-        self.budget = slots
+        self.local_slots = slots
         self.start_local()
 
     def start_local(self) -> None:
         self.serve = subprocess.Popen(
             [sys.executable, str(HERE / "worker.py"), "serve", "--dir", str(self.local_dir),
-             "--slots", str(self.budget), "--job-timeout", str(self.args.job_timeout),
+             "--slots", str(self.local_slots), "--job-timeout", str(self.args.job_timeout),
              "--idle-minutes", "5"],
             stdin=subprocess.DEVNULL,
         )
@@ -1732,7 +1999,7 @@ class Run:
         live = [h for h in self.hosts if h.state != "lost"]
         out = sum(len(h.assigned) for h in live)
         spend = sum(h.cost(now) for h in self.hosts)
-        kinds = collections.Counter(f"{h.type}@{h.zone[-1]}:{h.state}" for h in live)
+        kinds = collections.Counter(f"{h.type}@{self.where(h.zone)}:{h.state}" for h in live)
         eta = ""
         slots = sum(h.slots for h in live if h.state == "ready")
         if self.walls and slots:
@@ -1801,7 +2068,16 @@ class Run:
         interrupted = False
         last_progress = 0.0
 
+        # No log() here: the handler runs on the main thread, which may hold
+        # its lock.
         def interrupt(*_):
+            if self.stopping.is_set():
+                with contextlib.suppress(OSError):
+                    os.write(2, b"stopping already; cleaning up first\n")
+                return
+            if self.holding:
+                self.deferred = True
+                return
             raise KeyboardInterrupt
 
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
@@ -1837,15 +2113,12 @@ class Run:
                 self.serve.terminate()
                 self.serve.wait()
             elif not (interrupted and self.args.keep):
-                live = [h for h in self.hosts if h.state != "lost"]
-                if live:
-                    log(f"terminating {len(live)} instances")
-                    try:
-                        terminate([h.id for h in live])
-                    except AwsError as e:
-                        log(f"terminating: {e}")
-                    for h in live:
-                        h.state, h.ended = "lost", time.time()
+                self.terminate_all()
+            else:
+                kept = collections.Counter(h.region for h in self.hosts if h.state != "lost")
+                if kept:
+                    log("keeping " + ", ".join(f"{n} in {r}" for r, n in sorted(kept.items()))
+                        + f"; `farm.py down {self.name}` terminates them")
             self.pool.shutdown(wait=False, cancel_futures=True)
             self.progress(time.time())
             if not self.local and self.hosts:
@@ -1992,32 +2265,55 @@ def matrix_at(arg: str) -> Matrix:
     return Matrix(arg if path.exists() else str(HERE / "matrices" / f"{arg}.toml"))
 
 
-def status(arg: str | None) -> None:
+def sweep_regions(regions: list[str]) -> list[str]:
+    """The regions status and down look in: the configured ones, and every
+    one the farm has launched in."""
+    return sorted(set(regions) | recorded_regions())
+
+
+def status(arg: str | None, regions: list[str]) -> int:
     m = matrix_at(arg) if arg else None
     now = time.time()
-    for i in farm_instances(None):
-        if m and not in_run(i, m.name):
+    failed = 0
+    for r, got in in_regions(lambda r: farm_instances(r, None), sweep_regions(regions)).items():
+        if isinstance(got, BaseException):
+            print(f"{r}: CAN'T LIST instances: {got}")
+            failed += 1
             continue
-        launched = datetime.datetime.fromisoformat(i["LaunchTime"]).timestamp()
-        print(
-            f"{i['InstanceId']}  {tag_of(i, TAG):20} {i['InstanceType']:14} "
-            f"{i['Placement']['AvailabilityZone']:11} {i['State']['Name']:13} "
-            f"up {(now - launched) / 60:5.0f} min  {i.get('PublicIpAddress', '-')}"
-        )
+        for i in got:
+            if m and not in_run(i, m.name):
+                continue
+            launched = datetime.datetime.fromisoformat(i["LaunchTime"]).timestamp()
+            print(
+                f"{i['InstanceId']}  {tag_of(i, TAG):20} {i['InstanceType']:14} "
+                f"{i['Placement']['AvailabilityZone']:14} {i['State']['Name']:13} "
+                f"up {(now - launched) / 60:5.0f} min  {i.get('PublicIpAddress', '-')}"
+            )
     if m:
         m.resolve()
         ids = {j.id for j in m.jobs()}
         have = {r["id"] for r in read_jsonl(m.state / "rows.jsonl")} & ids
         print(f"{m.name}: {len(have)}/{len(ids)} jobs have rows")
+    return 1 if failed else 0
 
 
-def down(name: str | None) -> None:
-    ids = [
-        i["InstanceId"] for i in farm_instances(None)
-        if i["State"]["Name"] != "shutting-down" and (name is None or in_run(i, name))
-    ]
-    terminate(ids)
-    print(f"terminating {len(ids)} instances" if ids else "no instances")
+def down(name: str | None, regions: list[str]) -> int:
+    def one(r: str) -> int:
+        ids = [
+            i["InstanceId"] for i in farm_instances(r, None)
+            if i["State"]["Name"] != "shutting-down" and (name is None or in_run(i, name))
+        ]
+        terminate(r, ids)
+        return len(ids)
+
+    failed = 0
+    for r, got in in_regions(one, sweep_regions(regions)).items():
+        if isinstance(got, BaseException):
+            print(f"{r}: FAILED: {got}")
+            failed += 1
+        else:
+            print(f"{r}: " + (f"terminating {got} instances" if got else "no instances"))
+    return 1 if failed else 0
 
 
 def config() -> dict:
@@ -2026,14 +2322,32 @@ def config() -> dict:
     if not CONFIG.exists():
         return {}
     cfg = tomllib.loads(CONFIG.read_text())
-    unknown = set(cfg) - {"ssh_key", "aws_profile", "aws_region", "run"}
+    unknown = set(cfg) - {"ssh_key", "aws_profile", "aws_region", "aws_regions", "run"}
     if unknown:
         sys.exit(f"{CONFIG}: unknown settings {sorted(unknown)}")
+    if "aws_region" in cfg and "aws_regions" in cfg:
+        sys.exit(f"{CONFIG}: aws_region or aws_regions, not both")
+    if "aws_regions" in cfg:
+        regions = cfg["aws_regions"]
+        if not isinstance(regions, list) or not regions or not all(isinstance(r, str) and r for r in regions):
+            sys.exit(f"{CONFIG}: aws_regions is a list of region names")
     if "aws_profile" in cfg:
         os.environ.setdefault("AWS_PROFILE", cfg["aws_profile"])
     if "aws_region" in cfg:
         os.environ.setdefault("AWS_REGION", cfg["aws_region"])
     return cfg
+
+
+def regions_of(flag: str | None, cfg: dict) -> list[str]:
+    """The regions a run launches in: --regions, the config's aws_regions,
+    or the aws CLI's one region."""
+    if flag:
+        names = [r.strip() for r in flag.split(",") if r.strip()]
+    elif "aws_regions" in cfg:
+        names = list(cfg["aws_regions"])
+    else:
+        names = [cli_region()]
+    return list(dict.fromkeys(names))
 
 
 def main() -> int:
@@ -2047,6 +2361,8 @@ def main() -> int:
     r = sub.add_parser("run")
     r.add_argument("matrices", nargs="+")
     r.add_argument("--max-vcpus", type=int)
+    r.add_argument("--max-region-vcpus", type=int)
+    r.add_argument("--regions", help="R1,R2,...: the regions to launch in")
     r.add_argument("--families", default=FAMILIES)
     r.add_argument("--max-instance-cores", type=int, default=64)
     r.add_argument("--hours", type=float, default=6)
@@ -2061,14 +2377,16 @@ def main() -> int:
         default=os.environ.get("STRIMS_FARM_SSH_KEY") or cfg.get("ssh_key") or "~/.ssh/id_rsa",
     )
     defaults = cfg.get("run", {})
-    known = {a.dest for a in r._actions} - {"help", "matrices", "ssh_key"}
+    known = {a.dest for a in r._actions} - {"help", "matrices", "ssh_key", "regions"}
     if set(defaults) - known:
         sys.exit(f"{CONFIG}: unknown [run] settings {sorted(set(defaults) - known)}")
     r.set_defaults(**defaults)
     s = sub.add_parser("status")
     s.add_argument("matrix", nargs="?")
+    s.add_argument("--regions")
     d = sub.add_parser("down")
     d.add_argument("matrix", nargs="?")
+    d.add_argument("--regions")
     rp = sub.add_parser("report")
     rp.add_argument("matrix")
     rp.add_argument("--where", action="append", default=[])
@@ -2084,13 +2402,15 @@ def main() -> int:
     elif args.cmd == "run":
         ms = [Matrix(m) for m in args.matrices]
         run_name(ms)  # its checks, before the builds
+        if not args.local:
+            args.regions = regions_of(args.regions, cfg)
         for m in ms:
             build(m)
         return Run(ms, args).run()
     elif args.cmd == "status":
-        status(args.matrix)
+        return status(args.matrix, regions_of(args.regions, cfg))
     elif args.cmd == "down":
-        down(name(args.matrix))
+        return down(name(args.matrix), regions_of(args.regions, cfg))
     elif args.cmd == "report":
         report(Matrix(args.matrix), args.where, args.group)
     return 0
