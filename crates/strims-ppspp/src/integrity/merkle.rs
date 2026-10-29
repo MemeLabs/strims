@@ -231,8 +231,16 @@ impl MerkleSwarmVerifier {
         })
     }
 
-    fn munro_layer(&self) -> u64 {
+    pub(crate) fn munro_layer(&self) -> u64 {
         self.ring.tree_height - 1
+    }
+
+    /// The stored munro holding `b`, and its count of chunks with data, if
+    /// it ends in data-less chunks.
+    pub(crate) fn dataless(&self, b: Bin) -> Option<(Bin, u64)> {
+        let s = self.ring.segment(b)?;
+        let root = s.tree.as_ref()?.root_bin();
+        (s.chunks < root.base_length()).then_some((root, s.chunks))
     }
 
     /// The digest of an all-zero subtree at `layer`.

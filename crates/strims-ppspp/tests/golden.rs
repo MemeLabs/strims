@@ -8,10 +8,11 @@
 //!   back byte for byte;
 //! - Merkle digests of every bin for each supported hash function;
 //! - writer scenarios for Merkle (all hash functions, ed25519 and no
-//!   signatures), sign-all and no integrity: the `Writer` replays the
-//!   scenario's writes at their times, and its epochs, `Data` messages,
-//!   integrity messages (with several peer have maps) and swarm caches are
-//!   pinned; each cache must import and export again unchanged;
+//!   signatures, units signed early), sign-all and no integrity: the
+//!   `Writer` replays the scenario's writes and flushes at their times, and
+//!   its epochs, `Data` messages, integrity messages (with several peer
+//!   have maps) and swarm caches are pinned; each cache must import and
+//!   export again unchanged;
 //! - swarm id and URI strings and parsing.
 //!
 //! `STRIMS_GOLDEN=update` rewrites the epoch signatures, integrity messages
@@ -465,12 +466,14 @@ fn scenarios(g: &Golden) -> Vec<Vec<usize>> {
 
 /// Replays each writer scenario through the `Writer`. A `write len=<n>
 /// ts=<t>` entry writes the next `n` stream bytes at `t` Unix nanoseconds,
-/// or at the previous write's time when `t` isn't a number.
+/// or at the previous write's time when `t` isn't a number, and a
+/// `flush ts=<t> off=<n>` entry flushes then, which must return offset `n`.
+/// A `cache` entry's `len`, if any, is how many stream bytes it holds.
 #[test]
 fn writer_matches_vectors() {
     let mut g = open();
     let scenarios = scenarios(&g);
-    assert_eq!(scenarios.len(), 12);
+    assert_eq!(scenarios.len(), 13);
     let mut checked = BTreeMap::<&str, usize>::new();
 
     for sc in &scenarios {
@@ -521,6 +524,12 @@ fn writer_matches_vectors() {
                     assert_eq!(w.write(&mut s, now, &d), Ok(d.len()));
                     off += n;
                 }
+                "flush" => {
+                    if let Ok(t) = g.str(l, "ts").parse::<i64>() {
+                        now = Time::from_unix_nanos(t);
+                    }
+                    assert_eq!(w.flush(&mut s, now), Ok(num(&g, l, "off")), "{name}: flush");
+                }
                 "phase" => {
                     assert_eq!(s.store().tail(), Bin(num(&g, l, "tail")), "{name}: tail");
                     assert_eq!(s.store().next(), Bin(num(&g, l, "next")), "{name}: next");
@@ -567,7 +576,16 @@ fn writer_matches_vectors() {
                         (Ok(c), true) => {
                             let c = c.encode_to_vec();
                             g.check(l, "hex", hx(&c));
-                            reimport_cache(name, &key, &options, &c, off, salt);
+                            let unit = match options.integrity.protection_method {
+                                ProtectionMethod::MERKLE_TREE => {
+                                    options.chunk_size * options.chunks_per_signature
+                                }
+                                _ => options.chunk_size,
+                            } as u64;
+                            let held = g
+                                .opt(l, "len")
+                                .map_or(off / unit * unit, |n| n.parse().unwrap());
+                            reimport_cache(name, &key, &options, &c, held, salt);
                         }
                         (Err(err), false) => assert_pinned_err(g.str(l, "err"), &err, name),
                         (r, _) => panic!("{name}: cache: got {r:?}, pinned {:?}", g.opt(l, "err")),
@@ -582,11 +600,11 @@ fn writer_matches_vectors() {
     for kind in ["data", "integrity", "cache"] {
         assert_eq!(checked[kind], g.all(kind).len(), "{kind}");
     }
-    assert_eq!(checked["cache"], 16);
+    assert_eq!(checked["cache"], 17);
 }
 
 /// Imports an exported cache into a fresh swarm, exports it again and
-/// reads the stream back.
+/// reads the `len` stream bytes it holds back.
 fn reimport_cache(
     name: &str,
     key: &strims_proto::types::Key,
@@ -612,13 +630,7 @@ fn reimport_cache(
             Err(e) => panic!("{name}: read: {e}"),
         }
     }
-    // the cache holds whole integrity units; the rest is still staged
-    let unit = if options.integrity.protection_method == ProtectionMethod::MERKLE_TREE {
-        options.chunk_size * options.chunks_per_signature
-    } else {
-        options.chunk_size
-    } as u64;
-    assert_eq!(n as u64, len / unit * unit, "{name}: cached bytes");
+    assert_eq!(n as u64, len, "{name}: cached bytes");
     assert_eq!(
         out[..n],
         stream_data(0, n as u64, salt),

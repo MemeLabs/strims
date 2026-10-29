@@ -8,6 +8,16 @@
 //! is signed, split into chunks and published. The one staging buffer of one
 //! unit is allocated when the writer is created.
 //!
+//! # Early signing
+//!
+//! [`Writer::flush`] signs the staged partial unit at once. The chunk in
+//! progress is padded with zeros and sent; for Merkle, the unit's chunks
+//! after it are data-less: the signature counts them out, peers never
+//! request or send them, and every reader reads them as zeros
+//! ([`crate::integrity`], Data-less chunks). The next write starts the
+//! next unit, at the stream offset `flush` returns. The writer's owner
+//! decides when to flush, by the time it runs from a unit's first byte.
+//!
 //! Times are truncated to milliseconds before signing: the wire carries
 //! milliseconds and the signature covers nanoseconds, so a finer time would
 //! not verify at the peer.
@@ -128,13 +138,14 @@ impl Writer {
         self.check(swarm)?;
         let now = now.truncate(Time::PRECISION);
         let unit = self.staging.len();
+        let chunks = unit.div_ceil(self.chunk_size) as u64;
         let mut p = p;
         let mut nn = 0;
 
         while self.staged + p.len() >= unit {
             if self.staged == 0 {
                 let (u, rest) = p.split_at(unit);
-                self.process(swarm, now, u)?;
+                self.process(swarm, now, u, chunks)?;
                 nn += unit;
                 p = rest;
             } else {
@@ -145,7 +156,7 @@ impl Writer {
                 }
                 self.staged = 0;
                 let staging = mem::take(&mut self.staging);
-                let r = self.process(swarm, now, &staging);
+                let r = self.process(swarm, now, &staging, chunks);
                 self.staging = staging;
                 r?;
                 nn += n;
@@ -160,23 +171,27 @@ impl Writer {
         Ok(nn + p.len())
     }
 
-    /// Publishes a partial unit, padded with zeros to a whole unit, so the
-    /// units written after it stay aligned with their signatures. The zeros
-    /// are signed and sent like any data.
+    /// Signs the staged partial unit with `now` and publishes it (see
+    /// Early signing in the module docs): with `s` bytes staged, its first
+    /// `ceil(s / chunk_size)` chunks hold data, zero after the `s` bytes,
+    /// and with Merkle the rest are data-less.
     ///
     /// Returns the stream offset, in bytes from the epoch's first, at which
-    /// the next unit starts: the bytes written so far plus the padding. The
-    /// next byte written lands there. With nothing staged it publishes
-    /// nothing and returns the current offset, always a unit boundary.
+    /// the next unit starts: the bytes written so far, plus the padding and
+    /// data-less chunks the flush adds. The next byte written lands there.
+    /// With nothing staged it publishes nothing and returns the current
+    /// offset, always a unit boundary. Fails only on another writer's swarm
+    /// ([`SwarmError::WrongSwarm`]) or a fault in this one's.
     pub fn flush(&mut self, swarm: &mut Swarm, now: Time) -> Result<u64, SwarmError> {
         self.check(swarm)?;
         if self.staged > 0 {
+            let chunks = self.staged.div_ceil(self.chunk_size) as u64;
             if let Some(pad) = self.staging.get_mut(self.staged..) {
                 pad.fill(0);
             }
             self.staged = 0;
             let staging = mem::take(&mut self.staging);
-            let r = self.process(swarm, now.truncate(Time::PRECISION), &staging);
+            let r = self.process(swarm, now.truncate(Time::PRECISION), &staging, chunks);
             self.staging = staging;
             r?;
         }
@@ -210,19 +225,29 @@ impl Writer {
         Ok(())
     }
 
-    /// Signs one unit and publishes its chunks.
-    fn process(&mut self, swarm: &mut Swarm, now: Time, data: &[u8]) -> Result<(), SwarmError> {
+    /// Signs one unit, whose first `chunks` chunks hold data, and
+    /// publishes its chunks, the rest of a munro's as data-less.
+    fn process(
+        &mut self,
+        swarm: &mut Swarm,
+        now: Time,
+        data: &[u8],
+        chunks: u64,
+    ) -> Result<(), SwarmError> {
         match &mut self.unit {
             Unit::Merkle(n) => {
                 let SwarmVerifier::Merkle(v) = &mut swarm.verifier else {
                     return Err(integrity::Error::VerifierMismatch.into());
                 };
-                let chunks = data.len().div_ceil(self.chunk_size) as u64;
                 v.write_munro(&self.signer, now, *n, data, chunks)?;
+                let root = Bin::new(v.munro_layer(), *n);
                 *n += 1;
-                for chunk in data.chunks(self.chunk_size) {
+                let with_data = usize::try_from(chunks).unwrap_or(usize::MAX);
+                for chunk in data.chunks(self.chunk_size).take(with_data) {
                     swarm.publish(self.chunks.next_bin(), chunk)?;
                 }
+                self.chunks.skip(root.base_length().saturating_sub(chunks));
+                swarm.publish_dataless(root, chunks)?;
             }
             Unit::SignAll => {
                 let SwarmVerifier::SignAll(v) = &mut swarm.verifier else {

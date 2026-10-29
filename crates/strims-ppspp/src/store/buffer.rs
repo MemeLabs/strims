@@ -15,6 +15,11 @@
 //! the window collapses into one filled prefix, so the map tracks at most a
 //! window of gaps.
 //!
+//! A data-less chunk ([`Buffer::consume_dataless`]: one its integrity unit
+//! was signed without) is stored like any other and reads, exports and
+//! decodes as zeros, but is never written to a peer
+//! ([`Buffer::write_data`] refuses it).
+//!
 //! With a [`ChunkCodec`] ([`ChunkBytes::Codec`]) the buffer keeps no bytes,
 //! only a ring of the codec's few bytes of state per chunk beside the bin
 //! map (nothing at all when the state is empty): a chunk's bytes are made
@@ -139,6 +144,10 @@ pub struct Buffer {
     /// Bound: chunks before the window are collapsed into one filled
     /// prefix, so the map tracks at most a window of gaps.
     pub(super) bins: Map,
+    /// The stored chunks that are data-less. Bound: two windows; emptied a
+    /// window before the window as the head advances, which a backlog that
+    /// fits the ring never reaches past.
+    dataless: Map,
     /// Bound: `window * chunk_size` bytes; empty with a codec.
     pub(super) buf: Vec<u8>,
     bytes: ChunkBytes,
@@ -213,6 +222,7 @@ impl Buffer {
             size,
             head: size,
             bins: Map::new(),
+            dataless: Map::new(),
             buf,
             bytes,
             states,
@@ -354,6 +364,7 @@ impl Buffer {
 
         self.head = self.size;
         self.bins = Map::new();
+        self.dataless = Map::new();
         self.next = Bin(0);
         self.sem += 1;
         self.ready = false;
@@ -372,8 +383,38 @@ impl Buffer {
         if d.len() as u64 != len {
             return Err(Error::DataLength);
         }
-        self.set(b, d);
+        self.set(b, Some(d));
         Ok(())
+    }
+
+    /// Stores the chunks of `b` as data-less: all zeros, never sent.
+    /// Chunks before the window are ignored; `b` must fit in the window.
+    pub fn consume_dataless(&mut self, b: Bin) -> Result<(), Error> {
+        if !crate::peer_bin_ok(b, self.window()) {
+            return Err(Error::BinOutOfBounds);
+        }
+        self.set(b, None);
+        Ok(())
+    }
+
+    /// True if every chunk of `b` is data-less.
+    pub fn is_dataless(&self, b: Bin) -> bool {
+        self.dataless.filled_at(b)
+    }
+
+    /// True if any chunk of `b` is data-less.
+    pub fn has_dataless(&self, b: Bin) -> bool {
+        !self.dataless.empty_at(b)
+    }
+
+    /// Collapses the bin map before the window, and empties the data-less
+    /// map a window before that: chunks stored before the window still
+    /// count as stored for a backlog ([`Buffer::open_backlog`]).
+    fn prune(&mut self) {
+        let start = self.window_start();
+        self.bins.fill_before(start);
+        self.dataless
+            .reset_before(Bin(start.0.saturating_sub(self.size.0)));
     }
 
     /// Closes the buffer: readers get [`Error::Closed`].
@@ -404,7 +445,8 @@ impl Buffer {
         self.readable_seq += 1;
     }
 
-    fn set(&mut self, b: Bin, d: &[u8]) {
+    /// Stores `d` at `b`, or zeros for data-less chunks with `None`.
+    fn set(&mut self, b: Bin, d: Option<&[u8]>) {
         let (l, r) = b.base();
         // a chunk in the slot of a backlog chunk: the backlog stops fitting
         if let Some((from, _)) = self.backlog
@@ -429,19 +471,35 @@ impl Buffer {
         }
         if self.head < r + 2 {
             self.head = r + 2;
-            self.bins.fill_before(self.window_start());
+            self.prune();
         }
 
-        if self.bytes == ChunkBytes::Stored {
-            let i = self.index(b);
-            if let Some(dst) = self.buf.get_mut(i..) {
-                let n = dst.len().min(d.len());
-                if let (Some(dst), Some(src)) = (dst.get_mut(..n), d.get(..n)) {
-                    dst.copy_from_slice(src);
+        match (d, self.bytes == ChunkBytes::Stored) {
+            (Some(d), true) => {
+                let i = self.index(b);
+                if let Some(dst) = self.buf.get_mut(i..) {
+                    let n = dst.len().min(d.len());
+                    if let (Some(dst), Some(src)) = (dst.get_mut(..n), d.get(..n)) {
+                        dst.copy_from_slice(src);
+                    }
                 }
+                self.dataless.reset(b);
             }
-        } else {
-            self.encode(b.base_offset(), d);
+            (Some(d), false) => {
+                self.encode(b.base_offset(), d);
+                self.dataless.reset(b);
+            }
+            (None, stored) => {
+                if stored {
+                    let i = self.index(b);
+                    let n = usize::try_from(b.base_length().saturating_mul(self.chunk_size))
+                        .unwrap_or(usize::MAX);
+                    if let Some(dst) = self.buf.get_mut(i..i.saturating_add(n)) {
+                        dst.fill(0);
+                    }
+                }
+                self.dataless.set(b);
+            }
         }
         self.bins.set(b);
         if self.backlog.is_some_and(|(_, to)| l < to) {
@@ -506,7 +564,7 @@ impl Buffer {
 
     /// Makes the bytes from offset `off` on into `out` with `codec`, a
     /// chunk at a time; a chunk `out` takes only part of is made whole
-    /// first. Every chunk must be stored.
+    /// first, and a data-less one is zeros. Every chunk must be stored.
     fn decode(&self, codec: &dyn ChunkCodec, off: u64, out: &mut [u8]) {
         let cs = self.chunk_size;
         let mut whole = Vec::new();
@@ -517,7 +575,9 @@ impl Buffer {
             let Some(dst) = out.get_mut(done..done + take) else {
                 return;
             };
-            if take == cs as usize {
+            if self.dataless.filled_at(Bin(o.wrapping_mul(2))) {
+                dst.fill(0);
+            } else if take == cs as usize {
                 codec.decode(o * cs, self.state(o), dst);
             } else {
                 whole.resize(cs as usize, 0);
@@ -541,11 +601,14 @@ impl Buffer {
         next
     }
 
-    /// Writes a `Data` message for `b`, which must be stored and in the
-    /// window.
+    /// Writes a `Data` message for `b`, which must be stored, in the
+    /// window, and hold no data-less chunk.
     pub fn write_data(&self, b: Bin, t: Time, w: &mut impl MessageWriter) -> Result<usize, Error> {
         if !self.contains(b) {
             return Err(Error::BinDataNotSet);
+        }
+        if self.has_dataless(b) {
+            return Err(Error::DataLess);
         }
         let n =
             usize::try_from(b.base_length() * self.chunk_size).map_err(|_| Error::BinDataNotSet)?;
@@ -597,7 +660,7 @@ impl Buffer {
 
         self.next = next;
         self.head = prev + self.size.0;
-        self.bins.fill_before(prev);
+        self.prune();
         self.set_ready();
     }
 
@@ -616,7 +679,7 @@ impl Buffer {
         // the window moves on past any backlog
         self.backlog = None;
         self.head = next + self.size.0;
-        self.bins.fill_before(next);
+        self.prune();
         self.next = self.find_empty_after(next);
 
         self.sem += 1;

@@ -893,3 +893,120 @@ fn a_backlog_that_stops_fitting_is_closed() {
         assert_eq!(b.backlog(), None, "{end}");
     }
 }
+
+/// Data-less chunks are held and read as zeros, whatever the buffer keeps
+/// of chunks, after data written into their slots before; they are never
+/// written to a peer, and they leave the map a window after the window.
+#[test]
+fn dataless_chunks_read_as_zeros_and_are_never_sent() {
+    let cs = 16;
+    let makers: [fn(usize) -> Buffer; 3] = [
+        |cs| Buffer::new(8, cs).unwrap(),
+        |cs| {
+            Buffer::with_chunk_bytes(
+                8,
+                cs,
+                BufferLayout::CIRCULAR,
+                ChunkBytes::Codec(Arc::new(OffsetCodec(cs))),
+            )
+            .unwrap()
+        },
+        |cs| {
+            Buffer::with_chunk_bytes(
+                8,
+                cs,
+                BufferLayout::CIRCULAR,
+                ChunkBytes::Codec(Arc::new(HeadCodec(cs))),
+            )
+            .unwrap()
+        },
+    ];
+    for make in makers {
+        let mut b = make(cs);
+        b.set_offset(Bin(0));
+        let mut r = BufferReader::new(&b);
+        // chunks 0-7, then 8-15 over the ring: chunk 8 with data, 9-15
+        // data-less, in the slots chunks 1-7 filled
+        b.consume(Bin::new(3, 0), &stream(Bin::new(3, 0), cs))
+            .unwrap();
+        assert_eq!(read_n(&mut r, &b, 8 * cs), stream(Bin::new(3, 0), cs));
+        b.consume(Bin(16), &stream(Bin(16), cs)).unwrap();
+        b.consume_dataless(Bin(18)).unwrap();
+        b.consume_dataless(Bin::new(1, 5)).unwrap();
+        b.consume_dataless(Bin::new(2, 3)).unwrap();
+        let got = read_n(&mut r, &b, 8 * cs);
+        let mut want = stream(Bin(16), cs);
+        want.resize(8 * cs, 0);
+        assert_eq!(got, want);
+        assert!(b.is_dataless(Bin::new(2, 3)) && b.is_dataless(Bin(18)));
+        assert!(!b.is_dataless(Bin::new(1, 4)) && b.has_dataless(Bin::new(1, 4)));
+        assert!(!b.has_dataless(Bin(16)));
+
+        let mut w = DataRecorder::default();
+        assert_eq!(
+            b.write_data(Bin(18), Time::EPOCH, &mut w),
+            Err(Error::DataLess)
+        );
+        assert_eq!(
+            b.write_data(Bin::new(3, 1), Time::EPOCH, &mut w),
+            Err(Error::DataLess)
+        );
+        b.write_data(Bin(16), Time::EPOCH, &mut w).unwrap();
+        assert_eq!(w.0, vec![(Bin(16), stream(Bin(16), cs))]);
+
+        // the window moves on: the data-less chunks behind it stay for a
+        // window, as a backlog may take them, then go
+        b.consume(Bin::new(3, 2), &stream(Bin::new(3, 2), cs))
+            .unwrap();
+        assert!(b.is_dataless(Bin::new(2, 3)));
+        b.consume(Bin::new(3, 3), &stream(Bin::new(3, 3), cs))
+            .unwrap();
+        assert!(!b.has_dataless(Bin::new(4, 0)));
+    }
+}
+
+/// A data-less chunk stored before the read offset stays data-less in a
+/// backlog that takes it as had: a codec's buffer, which keeps no bytes,
+/// reads it as zeros after the rewind and never sends it.
+#[test]
+fn a_backlog_keeps_its_dataless_chunks() {
+    let cs = 16;
+    let mut b = Buffer::with_chunk_bytes(
+        16,
+        cs,
+        BufferLayout::CIRCULAR,
+        ChunkBytes::Codec(Arc::new(OffsetCodec(cs))),
+    )
+    .unwrap();
+    let mut had = Map::new();
+    b.consume_dataless(Bin::new(0, 13)).unwrap();
+    had.set(Bin::new(0, 13));
+    for o in 20..24 {
+        b.consume(Bin::new(0, o), &stream(Bin::new(0, o), cs))
+            .unwrap();
+        had.set(Bin::new(0, o));
+    }
+    b.set_offset(Bin::new(0, 23));
+    assert_eq!(b.tail(), Bin::new(0, 20));
+    let mut r = BufferReader::new(&b);
+    read_n(&mut r, &b, 10_000);
+
+    b.open_backlog(Bin::new(0, 12), &had).unwrap();
+    for o in [12].into_iter().chain(14..20) {
+        b.consume(Bin::new(0, o), &stream(Bin::new(0, o), cs))
+            .unwrap();
+    }
+    assert_eq!(b.backlog(), None);
+    assert!(b.is_dataless(Bin::new(0, 13)));
+    assert_eq!(r.rewind(&b, 12 * cs as u64), Ok(12 * cs as u64));
+    let mut want = stream(Bin::new(0, 12), cs);
+    want.resize(2 * cs, 0);
+    for o in 14..24 {
+        want.extend(stream(Bin::new(0, o), cs));
+    }
+    assert_eq!(read_n(&mut r, &b, 10_000), want);
+    assert_eq!(
+        b.write_data(Bin::new(0, 13), Time::EPOCH, &mut DataRecorder::default()),
+        Err(Error::DataLess)
+    );
+}

@@ -61,6 +61,7 @@ use strims_proto::types::{Cache, cache};
 use crate::codec::{self, MessageWriter};
 
 pub use ed25519::{ED25519_SIGNATURE_SIZE, Ed25519Signer, Ed25519Verifier};
+pub(crate) use merkle::dataless_subtrees;
 pub use merkle::{MerkleChannelVerifier, MerkleOptions, MerkleSwarmVerifier};
 pub use none::NONE_SIGNATURE_SIZE;
 pub use sign_all::{SignAllChannelVerifier, SignAllOptions, SignAllSwarmVerifier};
@@ -452,6 +453,15 @@ impl SwarmVerifier {
         match self {
             SwarmVerifier::Merkle(v) => v.verifiable_from(),
             SwarmVerifier::None | SwarmVerifier::SignAll(_) => Bin(0),
+        }
+    }
+
+    /// The verified integrity unit holding `b`, and its count of chunks
+    /// with data, if it ends in data-less chunks: only a Merkle munro can.
+    pub(crate) fn dataless(&self, b: Bin) -> Option<(Bin, u64)> {
+        match self {
+            SwarmVerifier::Merkle(v) => v.dataless(b),
+            SwarmVerifier::None | SwarmVerifier::SignAll(_) => None,
         }
     }
 

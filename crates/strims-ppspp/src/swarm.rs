@@ -12,6 +12,12 @@
 //!   the [`Writer`](crate::Writer) publishes local chunks directly.
 //!   Publishing stores the chunk and returns [`Published`], which says
 //!   whether it was new.
+//! - An integrity unit signed early ends in data-less chunks
+//!   ([`crate::integrity`], Data-less chunks). The writer publishes them
+//!   with the unit; a peer's swarm publishes them the first time one of
+//!   the unit's chunks verifies, from the count its writer signed. They
+//!   are stored as zeros, published like the others, and never sent
+//!   ([`store::Buffer::is_dataless`]).
 //! - Every published bin is also queued for the scheduler, and
 //!   [`Swarm::reset`] queues a reset. [`Swarm::poll_event`] yields
 //!   [`SwarmEvent::Reset`] first, then [`SwarmEvent::Published`] in
@@ -37,7 +43,7 @@ use crate::codec::{
     EpochOption, Handshake, MessageWriter, ProtocolOption, ProtocolOptions, ReaderConfig,
 };
 use crate::epoch::{Epoch, EpochError};
-use crate::integrity::{self, ChannelVerifier, SwarmVerifier};
+use crate::integrity::{self, ChannelVerifier, ProtectionMethod, SwarmVerifier};
 use crate::options::SwarmOptions;
 use crate::store::{self, Buffer, BufferReader, RewindError};
 use crate::swarm_id::SwarmId;
@@ -283,6 +289,20 @@ impl Swarm {
         r.rewind(&self.store, offset)
     }
 
+    /// The first base bin of the integrity unit holding base bin `b`: a
+    /// munro's, or `b` itself without Merkle trees. Only a chunk of a munro
+    /// with data shows which of its chunks are data-less.
+    pub(crate) fn unit_start(&self, b: Bin) -> Bin {
+        let o = &self.options;
+        if o.integrity.protection_method != ProtectionMethod::MERKLE_TREE {
+            return b.base_left();
+        }
+        let cps = (o.chunks_per_signature as u64).max(1);
+        Bin((b.base_offset() / cps)
+            .saturating_mul(cps)
+            .saturating_mul(2))
+    }
+
     /// Whether a backlog from `from` fits the store
     /// ([`Buffer::backlog_fits`]) and the verifier: a munro behind its ring
     /// can't be verified again.
@@ -329,12 +349,20 @@ impl Swarm {
     }
 
     /// The swarm as a cache. Fails once the window has moved past chunk 0.
+    /// A Merkle cache holds the munros up to the first one signed early
+    /// (see [`integrity::MerkleSwarmVerifier::export_cache`]), and its data
+    /// stops with them.
     pub fn export_cache(&self) -> Result<Cache, SwarmError> {
-        let data = self.store.export_cache()?;
+        let mut data = self.store.export_cache()?;
+        let integrity = self.verifier.export_cache();
+        if let Some(m) = &integrity.merkle_integrity {
+            let unit = self.options.chunk_size * self.options.chunks_per_signature;
+            data.truncate(m.timestamps.len().saturating_mul(unit));
+        }
         Ok(Cache {
             uri: self.uri().to_string(),
             epoch: Some(self.epoch.export_cache()),
-            integrity: Some(self.verifier.export_cache()),
+            integrity: Some(integrity),
             data,
             ..Default::default()
         })
@@ -383,9 +411,9 @@ impl Swarm {
     }
 
     /// A `Data` message from a peer that the scheduler expected: verifies
-    /// it against the integrity messages that preceded it and publishes it.
-    /// An error means the data was invalid; the caller tells the scheduler
-    /// either way.
+    /// it against the integrity messages that preceded it and publishes it,
+    /// with its unit's data-less chunks the first time. An error means the
+    /// data was invalid; the caller tells the scheduler either way.
     pub fn handle_data(
         &mut self,
         cv: &mut ChannelVerifier,
@@ -393,7 +421,11 @@ impl Swarm {
         data: &[u8],
     ) -> Result<Published, SwarmError> {
         cv.chunk_verifier(b).verify(&mut self.verifier, b, data)?;
-        self.publish(b, data)
+        let published = self.publish(b, data)?;
+        if let Some((root, chunks)) = self.verifier.dataless(b) {
+            self.publish_dataless(root, chunks)?;
+        }
+        Ok(published)
     }
 
     /// The integrity messages for sending `b` to a peer that has
@@ -426,6 +458,21 @@ impl Swarm {
         Ok(Published { bin: b, new })
     }
 
+    /// Stores the data-less chunks of integrity unit `root`, those past its
+    /// first `chunks`, unless stored already, and queues them for the
+    /// scheduler. At most one bin per layer of the unit.
+    pub(crate) fn publish_dataless(&mut self, root: Bin, chunks: u64) -> Result<(), SwarmError> {
+        for z in integrity::dataless_subtrees(root, chunks) {
+            if self.store.bins_filled_at(z) {
+                continue;
+            }
+            self.store.consume_dataless(z)?;
+            self.events.published.set(z);
+        }
+        self.events.published.reset_before(self.store.store_from());
+        Ok(())
+    }
+
     /// The next notification for the runner: resets first, then published
     /// bins in ascending order, then readability. See the module docs.
     pub fn poll_event(&mut self) -> Option<SwarmEvent> {
@@ -453,7 +500,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
     use super::*;
-    use crate::integrity::{LiveSignatureAlgorithm, ProtectionMethod, VerifierOptions};
+    use crate::integrity::{LiveSignatureAlgorithm, VerifierOptions};
     use crate::writer::{Writer, WriterOptions};
     use rand_core::Rng;
     use strims_base::rng::det_rng;
@@ -623,10 +670,88 @@ mod tests {
         assert_eq!(drain(&mut s)[0], SwarmEvent::Published(Bin(0)));
     }
 
-    /// A flush pads the partial unit with zeros to a whole one and
-    /// publishes it, and returns the offset of the next unit: the bytes
-    /// written so far plus the padding, where the next write lands. With
-    /// nothing staged it publishes nothing and returns the same offset.
+    fn merkle_writer(seed: u8, cps: usize) -> (Writer, Swarm) {
+        Writer::new(
+            WriterOptions {
+                swarm_options: SwarmOptions {
+                    chunk_size: 64,
+                    chunks_per_signature: cps,
+                    live_window: 64,
+                    ..Default::default()
+                },
+                key: strims_crypto::key_from_seed(&[seed; 32]),
+            },
+            now(),
+        )
+        .unwrap()
+    }
+
+    /// A flush signs the staged partial unit: the chunk in progress padded
+    /// with zeros, the unit's other chunks data-less. It returns the offset
+    /// of the next unit, the bytes written so far plus the padding and the
+    /// data-less chunks, where the next write lands; with nothing staged it
+    /// publishes nothing.
+    #[test]
+    fn flush_signs_the_partial_unit_early() {
+        let (mut w, mut s) = merkle_writer(14, 8);
+        drain(&mut s);
+        let mut r = s.reader();
+
+        // a unit and a half, then a flush
+        let first: Vec<u8> = (0..8 * 64 + 96).map(|i| (i % 251 + 1) as u8).collect();
+        assert_eq!(w.write(&mut s, now(), &first), Ok(first.len()));
+        assert_eq!(drain(&mut s)[0], SwarmEvent::Published(Bin(7)));
+        let next = w.flush(&mut s, now()).unwrap();
+        assert_eq!(next, 16 * 64);
+        assert_eq!(next, first.len() as u64 + (64 - 32) + 6 * 64);
+        assert_eq!(
+            drain(&mut s),
+            vec![SwarmEvent::Published(Bin::new(3, 1)), SwarmEvent::Readable]
+        );
+        let mut want = first.clone();
+        want.resize(16 * 64, 0);
+        assert_eq!(read_all(&s, &mut r, 10_000), want);
+
+        // the data-less chunks are never sent, nor is integrity for them
+        for (b, dataless) in [
+            (Bin(16), false),
+            (Bin(18), false),
+            (Bin(20), true),
+            (Bin(30), true),
+            (Bin::new(1, 4), false),
+            (Bin::new(2, 2), true),
+            (Bin::new(2, 3), true),
+        ] {
+            assert_eq!(s.store().has_dataless(b), dataless, "{b}");
+            let mut buf = vec![0u8; 4096];
+            let mut e = crate::codec::Writer::new(&mut buf);
+            assert_eq!(s.write_data(b, now(), &mut e).is_err(), dataless, "{b}");
+            assert_eq!(
+                s.write_integrity(b, &Map::new(), &mut e).is_err(),
+                dataless,
+                "{b}"
+            );
+        }
+
+        // nothing staged: nothing published, the same offset
+        assert_eq!(w.flush(&mut s, now()), Ok(next));
+        assert_eq!(drain(&mut s), vec![]);
+
+        // the next write lands at the offset, as the start of a unit
+        let more: Vec<u8> = (0..64).map(|i| (i + 7) as u8).collect();
+        w.write(&mut s, now(), &more).unwrap();
+        assert_eq!(w.flush(&mut s, now()), Ok(next + 8 * 64));
+        let got = read_all(&s, &mut r, 10_000);
+        assert_eq!(&got[..64], &more[..]);
+        assert!(got[64..].iter().all(|&x| x == 0));
+        assert_eq!(got.len(), 8 * 64);
+        assert_eq!(s.store().next(), Bin(48));
+    }
+
+    /// Under every protection method a flush ends the partial unit, which
+    /// reads as zeros to its end, and returns the offset of the next unit,
+    /// where the next write lands. With nothing staged it publishes
+    /// nothing and returns the same offset.
     #[test]
     fn flush_returns_where_the_next_unit_starts() {
         let units = [
@@ -678,15 +803,45 @@ mod tests {
         }
     }
 
+    /// Without Merkle trees a unit is a chunk: a flush pads it and sends
+    /// it, and the next unit starts at the next chunk.
+    #[test]
+    fn flush_pads_a_one_chunk_unit() {
+        for pm in [ProtectionMethod::SIGN_ALL, ProtectionMethod::NONE] {
+            let (mut w, mut s) = Writer::new(
+                WriterOptions {
+                    swarm_options: SwarmOptions {
+                        chunk_size: 64,
+                        live_window: 64,
+                        integrity: VerifierOptions {
+                            protection_method: pm,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    key: strims_crypto::key_from_seed(&[15; 32]),
+                },
+                now(),
+            )
+            .unwrap();
+            w.write(&mut s, now(), &[9; 100]).unwrap();
+            assert_eq!(w.flush(&mut s, now()), Ok(128));
+            let mut r = s.reader();
+            let got = read_all(&s, &mut r, 1000);
+            assert_eq!(got.len(), 128);
+            assert!(got[..100].iter().all(|&x| x == 9) && got[100..].iter().all(|&x| x == 0));
+            assert!(!s.store().has_dataless(Bin::new(1, 0)));
+            let mut buf = vec![0u8; 4096];
+            let mut e = crate::codec::Writer::new(&mut buf);
+            s.write_data(Bin(2), now(), &mut e).unwrap();
+        }
+    }
+
     /// A flush takes only its own writer's swarm.
     #[test]
     fn flush_refuses_another_swarm() {
-        let options = |seed| WriterOptions {
-            swarm_options: SwarmOptions::default(),
-            key: strims_crypto::key_from_seed(&[seed; 32]),
-        };
-        let (mut w, _) = Writer::new(options(16), now()).unwrap();
-        let (_, mut other) = Writer::new(options(17), now()).unwrap();
+        let (mut w, _) = merkle_writer(16, 8);
+        let (_, mut other) = merkle_writer(17, 8);
         assert_eq!(w.flush(&mut other, now()), Err(SwarmError::WrongSwarm));
     }
 

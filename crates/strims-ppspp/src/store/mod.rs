@@ -58,6 +58,9 @@ pub enum Error {
     /// Data that isn't exactly the bin's chunks.
     #[error("data length does not match bin")]
     DataLength,
+    /// The bin holds data-less chunks, which are never sent.
+    #[error("bin holds data-less chunks")]
+    DataLess,
     #[error(transparent)]
     Codec(#[from] codec::Error),
 }

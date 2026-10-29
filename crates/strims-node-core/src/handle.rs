@@ -726,8 +726,9 @@ impl SwarmWriter {
         Ok(())
     }
 
-    /// Publishes the partial unit, zero-padded (`strims_ppspp::Writer::flush`),
-    /// and returns the stream offset at which the next unit starts.
+    /// Signs and publishes the partial unit early
+    /// (`strims_ppspp::Writer::flush`), and returns the stream offset at
+    /// which the next unit starts.
     pub async fn flush(&mut self) -> Result<u64, NodeError> {
         let buf = self.buf.take().ok_or(NodeError::Closed)?;
         self.op(WriteOp::Flush, buf).await

@@ -1570,6 +1570,15 @@ impl PeerSwarmScheduler {
         s.request_bins.set(bin);
     }
 
+    /// True if we hold base bin `b` or a channel announced it.
+    pub(crate) fn held_or_announced(&self, b: Bin) -> bool {
+        self.s.have_bins.filled_at(b)
+            || self
+                .channels
+                .values()
+                .any(|c| c.peer_have_bins.filled_at(b))
+    }
+
     /// True if every chunk of `[from, to)` we lack is announced by a
     /// channel that can request it: one with a handshake whose request
     /// floor is at or before the chunk. A rewind waits for no one else.

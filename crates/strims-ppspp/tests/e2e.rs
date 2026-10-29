@@ -313,19 +313,111 @@ fn transfer(pm: ProtectionMethod, sa: LiveSignatureAlgorithm) {
         assert_eq!(a.0, c.0, "data for {b}");
     }
 
-    // flushing pads the last unit; the peer gets the rest of the stream
+    // flushing signs the last unit early; the peer gets the rest of the
+    // stream from its chunks with data
     seeder.writer.flush(&mut seeder.swarm, t(200)).unwrap();
     while seeder.swarm.poll_event().is_some() {}
     let next = Bin::new(0, 40);
     let end = seeder.swarm.store().next();
     let mut b = next;
     while b < end {
-        send(&mut seeder, &mut peer, b, t(201));
+        if !seeder.swarm.store().is_dataless(b) {
+            send(&mut seeder, &mut peer, b, t(201));
+        }
         b += 2;
     }
     peer.read();
+    assert_eq!(peer.received.len() as u64, end.base_offset() * cs as u64);
     assert_eq!(peer.received[..data.len()], data);
     assert!(peer.received[data.len()..].iter().all(|&x| x == 0));
+}
+
+/// Units signed early at every size, sent as the scheduler sends them:
+/// only their chunks with data cross the wire, with no integrity for the
+/// rest. The peer verifies each unit from whichever chunk comes first,
+/// holds its data-less chunks from then on, reads them as zeros, refuses
+/// data for them, and serves the same integrity on.
+#[test]
+fn merkle_early_signed_units() {
+    let (mut seeder, mut peer) = setup(
+        ProtectionMethod::MERKLE_TREE,
+        LiveSignatureAlgorithm::ED25519,
+    );
+    let (cs, unit) = (128usize, 128 * 8);
+    let hs = seeder.handshake_frame();
+    exchange(&mut seeder, &mut peer, &hs);
+
+    // a full unit, then one flushed after each of these many bytes
+    let sizes = [1, 127, 128, 129, 300, 640, 1000, 1023];
+    let mut expected = vec![];
+    let mut off = 0u64;
+    let mut sent = 0;
+    for (i, &n) in sizes.iter().enumerate() {
+        let d = stream(n + unit);
+        let now = t(10 + i as i64);
+        seeder.writer.write(&mut seeder.swarm, now, &d).unwrap();
+        let next = seeder.writer.flush(&mut seeder.swarm, now).unwrap();
+        off += 2 * unit as u64;
+        assert_eq!(next, off, "after {n} bytes");
+        assert_eq!(seeder.swarm.store().next(), Bin(2 * off / cs as u64));
+        expected.extend_from_slice(&d);
+        expected.resize(off as usize, 0);
+        while seeder.swarm.poll_event().is_some() {}
+
+        // each unit's chunks with data, last chunk first, the rest in order
+        for m in [2 * i as u64, 2 * i as u64 + 1] {
+            let chunks: Vec<Bin> = (0..8)
+                .map(|o| Bin::new(0, m * 8 + o))
+                .filter(|&b| !seeder.swarm.store().is_dataless(b))
+                .collect();
+            assert_eq!(chunks.len(), if m % 2 == 0 { 8 } else { n.div_ceil(cs) });
+            let mut order = chunks.clone();
+            order.rotate_right(1);
+            for b in order {
+                let f = seeder.data_frame(b, t(100)).unwrap();
+                for c in FrameReader::new(&f) {
+                    for msg in Reader::new(seeder.swarm.reader_config(), c.unwrap().1) {
+                        if let Message::Integrity(x) = msg.unwrap() {
+                            let first = x.bin.base_offset() - m * 8;
+                            assert!(first < chunks.len() as u64, "{b}: integrity for {}", x.bin);
+                        }
+                    }
+                }
+                exchange(&mut seeder, &mut peer, &f);
+                sent += 1;
+            }
+            if chunks.len() == 8 {
+                continue;
+            }
+            // data for a data-less chunk is refused, and none is sent
+            let b = Bin::new(0, m * 8 + 7);
+            assert!(peer.swarm.store().is_dataless(b));
+            assert!(
+                peer.swarm
+                    .handle_data(&mut peer.verifier, b, &[0; 128])
+                    .is_err()
+            );
+            let mut r = Recorded::default();
+            assert!(peer.swarm.write_data(b, t(0), &mut r).is_err());
+            assert!(seeder.swarm.write_data(b, t(0), &mut r).is_err());
+
+            // the peer serves the unit's integrity as the seeder does
+            for b in chunks {
+                let mut a = Recorded::default();
+                let mut c = Recorded::default();
+                seeder
+                    .swarm
+                    .write_integrity(b, &Map::new(), &mut a)
+                    .unwrap();
+                peer.swarm.write_integrity(b, &Map::new(), &mut c).unwrap();
+                assert_eq!(a.0, c.0, "integrity for {b}");
+            }
+        }
+    }
+    assert!(peer.rejected.is_empty(), "{:?}", peer.rejected);
+    assert!(sent < 2 * sizes.len() * 8);
+    peer.read();
+    assert_eq!(peer.received, expected);
 }
 
 #[derive(Default)]

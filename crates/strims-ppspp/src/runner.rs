@@ -871,8 +871,9 @@ impl Runner {
         Ok(writer.write(&mut s, now, data)?)
     }
 
-    /// [`Writer::flush`] through the runner: returns the stream offset at
-    /// which the next unit starts.
+    /// [`Writer::flush`] through the runner: signs the staged partial unit
+    /// early and returns the stream offset of the next unit. Its chunks
+    /// reach the scheduler before it returns.
     pub fn flush_writer(
         &mut self,
         key: SwarmKey,
@@ -904,9 +905,10 @@ impl Runner {
     /// position is stored. While chunks before the store's window must come
     /// from peers, [`Rewind::Pending`]: the swarm fetches them as a
     /// backlog, after its live chunks, from the channels that announced
-    /// them, and stores them for local readers alone (they are never
-    /// announced, pushed or counted in the store rate). Call again at the
-    /// swarm's next [`Event::Readable`]. So too before the swarm's first
+    /// them (from the start of its munro for a chunk none announced), and
+    /// stores them for local readers alone (they are never announced,
+    /// pushed or counted in the store rate). Call again at the swarm's
+    /// next [`Event::Readable`]. So too before the swarm's first
     /// read position. Readers asking for chunks one backlog holds share it;
     /// an earlier chunk extends it.
     ///
@@ -954,7 +956,14 @@ impl Runner {
             swarm, scheduler, ..
         } = rs;
         let cs = swarm.store().chunk_size().max(1) as u64;
-        let from = Bin((offset / cs).saturating_mul(2));
+        let chunk = Bin((offset / cs).saturating_mul(2));
+        // a chunk past its munro's signed count comes from no peer, and
+        // only the munro's chunks of data show which it is: a chunk nobody
+        // holds takes its munro
+        let from = match scheduler.as_ref() {
+            Some(sched) if !sched.held_or_announced(chunk) => swarm.unit_start(chunk),
+            _ => chunk,
+        };
         let (backlog, tail) = (swarm.store().backlog(), swarm.store().tail());
         if backlog.is_some_and(|(f, _)| f <= from) {
             return Ok(Rewind::Pending);

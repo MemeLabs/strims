@@ -289,7 +289,7 @@ impl SwarmWrite for FakeWriter {
     }
 
     /// Pads the stream with zeros to the next unit boundary, as a swarm
-    /// writer's flush does, and returns its offset.
+    /// writer's padding and data-less chunks read, and returns its offset.
     async fn flush(&mut self) -> Result<u64, Closed> {
         if self.closed.get() {
             return Err(Closed);

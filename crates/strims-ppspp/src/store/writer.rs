@@ -28,6 +28,11 @@ impl Writer {
         self.bin
     }
 
+    /// Skips `n` chunks: data-less ones, published without data.
+    pub fn skip(&mut self, n: u64) {
+        self.bin += n.saturating_mul(2);
+    }
+
     /// Restarts at bin 0. Resetting the swarm is the caller's job.
     pub fn reset(&mut self) {
         self.bin = Bin(0);
