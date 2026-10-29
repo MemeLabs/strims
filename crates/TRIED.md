@@ -7,10 +7,10 @@ entry with the new result, or delete it if it wins.
 
 An entry gives what was built, the mechanism that sank it and the numbers
 that decided it, in a few lines, with the commit it was measured against
-(or that recorded it) and its branch if one is kept. Ideas never built, work in progress, what
-landed, run logs and per-cell tables don't belong here. Delete an entry
-once the code it measured is gone. Keep the file short enough to read in
-one sitting.
+(or that recorded it) and its branch if one is kept. Ideas never built,
+work in progress, what landed, run logs and per-cell tables don't belong
+here. Delete an entry once the code it measured is gone. Keep the file
+short enough to read in one sitting.
 
 ## Push trees
 
