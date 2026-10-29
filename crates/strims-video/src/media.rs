@@ -82,7 +82,7 @@ pub struct AccessUnit<'a> {
     /// Decoding can start at this unit.
     pub keyframe: bool,
     pub payload: &'a [u8],
-    /// When the source received the unit.
+    /// When the source received the unit, on the writer's Unix clock.
     pub published: Time,
 }
 

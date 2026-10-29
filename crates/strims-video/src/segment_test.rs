@@ -13,6 +13,8 @@ use strims_chunkstream::packed::{DEFAULT_SIZE, FrameHasEnd, PackedDecoder};
 use super::*;
 use crate::fmp4::parse::{InitInfo, media_duration, parse_init, split_record};
 use crate::fmp4::test_dump::{MediaDump, dump_media};
+use crate::fmp4::{self, ntp_timestamp};
+use crate::media::CodecParams;
 use crate::record::{PackedSink, VecSink};
 use crate::test_util::{SpsSpec, avcc, avcc_720p};
 
@@ -70,6 +72,17 @@ fn rule(min_media_bytes: usize) -> CutRule {
     }
 }
 
+/// A fragment per unit, per 100 ms, and per record.
+const SPANS: [Duration; 3] = [Duration::ZERO, Duration::from_millis(100), Duration::MAX];
+
+fn spanned(min_media_bytes: usize, fragment_duration: Duration) -> CutRule {
+    CutRule {
+        min_media_bytes,
+        fragment_duration,
+        ..CutRule::default()
+    }
+}
+
 /// Payload bytes identifying a unit: its track, then its DTS.
 fn payload(track: TrackId, dts: i64, size: usize) -> Vec<u8> {
     let seed = (track.0 as u8) ^ (dts / 7) as u8;
@@ -91,8 +104,13 @@ fn push<S: RecordSink>(
         pts,
         keyframe,
         payload: &data,
-        published: Time::EPOCH,
+        published: stamp(track, dts),
     })
+}
+
+/// The publish time of a unit at `dts` of `track`.
+fn stamp(track: TrackId, dts: i64) -> Time {
+    Time::from_unix_millis(1_700_000_000_000 + i64::from(track.0) * 1_000_000 + dts)
 }
 
 fn video<S: RecordSink>(s: &mut Segmenter<S>, dts: i64, keyframe: bool, size: usize) {
@@ -329,8 +347,8 @@ fn a_forced_cut_pads_a_blocked_end_with_free() {
     assert_eq!(tee.decoded(), tee.whole.records);
     let r = parse(&tee.whole.records[1]);
     let boxes: Vec<&str> = r.media.boxes.iter().map(|(t, _)| t.as_str()).collect();
-    assert_eq!(boxes, ["moof", "mdat", "free"]);
-    assert_eq!(r.media.boxes[2].1, infos[1].padding);
+    assert_eq!(boxes, ["prft", "moof", "mdat", "free"]);
+    assert_eq!(r.media.boxes[3].1, infos[1].padding);
     assert_eq!(tee.whole.records[1].len(), infos[1].bytes);
     // Its media time is still the samples': the cut ends the last at the
     // keyframe.
@@ -340,7 +358,7 @@ fn a_forced_cut_pads_a_blocked_end_with_free() {
     );
     let small = parse(&tee.whole.records[2]);
     let mut init = Vec::new();
-    write_init(&[video_config_small()], &mut init).unwrap();
+    write_init(&[video_config_small()], Duration::ZERO, &mut init).unwrap();
     assert_eq!(small.init, init);
     // finish pads the last record too when its end is blocked.
     assert!(infos[2].padding > 0);
@@ -383,6 +401,7 @@ fn a_record_over_the_bound_is_refused() {
         CutRule {
             min_media_bytes: 1 << 20,
             max_record_bytes: limit,
+            ..CutRule::default()
         },
         VecSink::new(),
     );
@@ -416,6 +435,7 @@ fn the_record_bound_is_at_most_the_limit() {
         CutRule {
             min_media_bytes: 0,
             max_record_bytes: usize::MAX,
+            ..CutRule::default()
         },
         VecSink::new(),
     );
@@ -652,6 +672,226 @@ fn the_segmenter_continues_after_finish() {
     assert_eq!(s.metrics().dropped_before_start, 1);
 }
 
+/// Video at 30 fps with B-frames from `start` s on, a keyframe every
+/// `gop`, and 48 kHz audio up to each frame.
+fn b_frame_stream<S: RecordSink>(s: &mut Segmenter<S>, start: i64, frames: i64, gop: i64) {
+    let first = start * 30;
+    let mut n = start * 48_000 / 1024;
+    for k in first..first + frames {
+        let key = (k - first) % gop == 0;
+        // Shown in the order I B P B P …, two frames after decoding
+        // starts: a keyframe two frames late, a P three and a B one.
+        let cto = if key {
+            2 * FRAME
+        } else if (k - first) % 2 == 1 {
+            3 * FRAME
+        } else {
+            FRAME
+        };
+        push(
+            s,
+            VIDEO,
+            k * FRAME,
+            k * FRAME + cto,
+            key,
+            if key { 400 } else { 100 },
+        )
+        .unwrap();
+        while n * 1024 * 90_000 / 48_000 <= k * FRAME {
+            audio(s, n * 1024, 30);
+            n += 1;
+        }
+    }
+}
+
+fn av_segmenter(rule: CutRule) -> Segmenter<VecSink> {
+    let mut s = Segmenter::new(rule, VecSink::new());
+    s.set_config(&video_config()).unwrap();
+    s.set_config(&audio_config()).unwrap();
+    s
+}
+
+#[test]
+fn a_fragment_per_unit_writes_each_unit_once_its_next_times_it() {
+    let mut s = av_segmenter(spanned(2000, Duration::ZERO));
+    b_frame_stream(&mut s, 10, 60, 15);
+    s.finish().unwrap();
+    let records = records(&s);
+    assert!(records.len() >= 3);
+    let mut sequence = 1;
+    for r in &records {
+        let last = r.media.moofs.len() - 1;
+        for (i, m) in r.media.moofs.iter().enumerate() {
+            assert_eq!(m.sequence, sequence);
+            sequence += 1;
+            let samples: usize = m.trafs.iter().map(|t| t.samples.len()).sum();
+            // The first fragment holds the keyframe and the audio timed
+            // while it waited; the last, each track's last sample.
+            if i > 0 && i < last {
+                assert_eq!(samples, 1, "fragment {i}");
+            }
+        }
+        for track in [1, 2] {
+            for pair in r.media.trafs(track).windows(2) {
+                assert_eq!(
+                    pair[0].tfdt + pair[0].duration(),
+                    pair[1].tfdt,
+                    "track {track}"
+                );
+            }
+        }
+        let first = &r.media.moofs[0].trafs[0];
+        assert_eq!(
+            (first.track, first.samples[0].flags),
+            (1, Some(fmp4::SYNC_SAMPLE_FLAGS))
+        );
+        assert_eq!(r.media.moofs[last].trafs.len(), 2);
+    }
+}
+
+#[test]
+fn records_hold_the_same_samples_whatever_their_fragments() {
+    let mut by_span = Vec::new();
+    for span in SPANS {
+        let mut s = av_segmenter(spanned(2000, span));
+        b_frame_stream(&mut s, 10, 90, 15);
+        s.finish().unwrap();
+        let infos = infos(&mut s);
+        let records: Vec<_> = records(&s)
+            .into_iter()
+            .map(|r| {
+                (
+                    r.init,
+                    r.media.traf(1),
+                    r.media.traf(2),
+                    r.duration,
+                    r.media.moofs.len(),
+                )
+            })
+            .collect();
+        by_span.push((infos, records));
+    }
+    let (infos, whole) = &by_span[2];
+    assert!(whole.iter().all(|r| r.4 == 1));
+    for (span, (other_infos, records)) in SPANS.iter().zip(&by_span) {
+        assert_eq!(records.len(), whole.len(), "{span}");
+        for (r, w) in records.iter().zip(whole) {
+            assert_eq!((&r.0, &r.1, &r.2, r.3), (&w.0, &w.1, &w.2, w.3), "{span}");
+        }
+        for (a, b) in other_infos.iter().zip(infos) {
+            assert_eq!(
+                (a.duration, a.video_samples, a.audio_samples, a.new_init),
+                (b.duration, b.video_samples, b.audio_samples, b.new_init)
+            );
+        }
+    }
+    // A fragment per unit makes the most fragments.
+    assert!(
+        by_span[0]
+            .1
+            .iter()
+            .zip(&by_span[1].1)
+            .all(|(u, g)| u.4 > g.4)
+    );
+}
+
+#[test]
+fn a_stream_decoding_from_zero_writes_its_first_gop_as_one_fragment() {
+    let mut s = av_segmenter(spanned(2000, Duration::ZERO));
+    b_frame_stream(&mut s, 0, 45, 15);
+    s.finish().unwrap();
+    let r = records(&s);
+    // The first GOP decodes from before the two-frame edit.
+    assert_eq!(r[0].media.moofs.len(), 1);
+    assert_eq!(r[0].media.traf(1).samples.len(), 15);
+    assert!(r[1].media.moofs.len() > 15);
+}
+
+#[test]
+fn fragments_reach_the_sink_before_their_record_ends() {
+    let mut s = av_segmenter(spanned(1_000_000, Duration::from_millis(100)));
+    b_frame_stream(&mut s, 10, 30, 30);
+    // No record has ended, but its fragments are written.
+    assert!(s.sink().records.is_empty());
+    let current = s.sink().current().to_vec();
+    let (init, media) = split_record(&current).unwrap();
+    let d = dump_media(media);
+    assert!(d.moofs.len() >= 8, "{}", d.moofs.len());
+    // Only the samples a fragment hasn't timed or reached the span with
+    // are held.
+    let info = parse_init(init).unwrap();
+    let written = media_duration(&info, media).unwrap();
+    assert!(written >= Duration::from_millis(866), "{written}");
+}
+
+#[test]
+fn each_fragment_carries_its_first_units_publish_time() {
+    let mut s = av_segmenter(spanned(2000, Duration::ZERO));
+    b_frame_stream(&mut s, 0, 30, 15);
+    s.finish().unwrap();
+    for r in records(&s) {
+        assert_eq!(r.media.prfts.len(), r.media.moofs.len());
+        for (prft, moof) in r.media.prfts.iter().zip(&r.media.moofs) {
+            let prft = prft.unwrap();
+            let traf = &moof.trafs[0];
+            let dts = traf.tfdt as i64;
+            let pts = dts + i64::from(traf.samples[0].composition_offset.unwrap_or(0));
+            assert_eq!((prft.version, prft.flags), (1, 1));
+            assert_eq!(prft.track, traf.track);
+            assert_eq!(prft.media_time, pts as u64);
+            assert_eq!(prft.ntp, ntp_timestamp(stamp(TrackId(traf.track), dts)));
+        }
+    }
+}
+
+/// The `elst` media time of each `trak` in `init`, if it has one.
+fn edit_media_times(init: &[u8]) -> Vec<Option<i32>> {
+    let mut out = Vec::new();
+    let mut at = 0;
+    while let Some(i) = init[at..].windows(4).position(|w| w == b"trak") {
+        let trak = at + i - 4;
+        let len = u32::from_be_bytes(init[trak..trak + 4].try_into().unwrap()) as usize;
+        let body = &init[trak..trak + len];
+        out.push(body.windows(4).position(|w| w == b"elst").map(|e| {
+            // After the header: version and flags, entry_count,
+            // segment_duration.
+            let t = e + 4 + 12;
+            i32::from_be_bytes(body[t..t + 4].try_into().unwrap())
+        }));
+        at = trak + len;
+    }
+    out
+}
+
+#[test]
+fn the_composition_delay_is_the_starting_keyframes_and_stays_with_the_configs() {
+    let mut s = av_segmenter(rule(0));
+    // The first keyframe shows two frames late; a later one, three.
+    push(&mut s, VIDEO, 0, 2 * FRAME, true, 10).unwrap();
+    audio(&mut s, 0, 10);
+    push(&mut s, VIDEO, FRAME, 4 * FRAME, true, 10).unwrap();
+    audio(&mut s, 1024, 10);
+    s.set_config(&video_config_small()).unwrap();
+    push(&mut s, VIDEO, 2 * FRAME, 3 * FRAME, true, 10).unwrap();
+    // Without B-frames, no edit list.
+    s.set_config(&video_config()).unwrap();
+    push(&mut s, VIDEO, 3 * FRAME, 3 * FRAME, true, 10).unwrap();
+    s.finish().unwrap();
+    let r = records(&s);
+    let edits: Vec<Vec<Option<i32>>> = r.iter().map(|r| edit_media_times(&r.init)).collect();
+    assert_eq!(
+        edits,
+        [
+            vec![Some(6000), Some(3200)],
+            vec![Some(6000), Some(3200)],
+            vec![Some(3000), Some(1600)],
+            vec![None, None],
+        ]
+    );
+    let new: Vec<bool> = infos(&mut s).iter().map(|i| i.new_init).collect();
+    assert_eq!(new, [true, false, true, true]);
+}
+
 #[derive(Debug, Clone)]
 enum Op {
     Config(u8),
@@ -741,25 +981,32 @@ proptest! {
 
     #[test]
     fn arbitrary_unit_sequences_make_valid_records(ops in proptest::collection::vec(op(), 0..300)) {
-        let small = CutRule { min_media_bytes: 2000, max_record_bytes: 40_000 };
-        let mut s = Segmenter::new(small, VecSink::new());
-        run(&mut s, &ops);
-        for record in &s.sink().records {
-            let r = parse(record);
-            prop_assert!(!r.media.moofs.is_empty());
-            let first = &r.media.moofs[0].trafs[0];
-            prop_assert_eq!(first.samples[0].flags, Some(fmp4::SYNC_SAMPLE_FLAGS));
-            prop_assert!(record.len() <= small.max_record_bytes);
-        }
+        for fragment_duration in SPANS {
+            let small = CutRule {
+                min_media_bytes: 2000,
+                max_record_bytes: 40_000,
+                fragment_duration,
+            };
+            let mut s = Segmenter::new(small, VecSink::new());
+            run(&mut s, &ops);
+            for record in &s.sink().records {
+                let r = parse(record);
+                prop_assert!(!r.media.moofs.is_empty());
+                let first = &r.media.moofs[0].trafs[0];
+                prop_assert_eq!(first.samples[0].flags, Some(fmp4::SYNC_SAMPLE_FLAGS));
+                prop_assert!(record.len() <= small.max_record_bytes);
+                prop_assert!(r.media.prfts.iter().all(Option::is_some));
+            }
 
-        // Small frames block most ends.
-        let mut s = Segmenter::new(small, Tee::new(700));
-        run(&mut s, &ops);
-        let tee = s.sink_mut();
-        tee.assert_one_end_per_frame();
-        prop_assert_eq!(tee.decoded(), tee.whole.records.clone());
-        for record in &tee.whole.records {
-            parse(record);
+            // Small frames block most ends.
+            let mut s = Segmenter::new(small, Tee::new(700));
+            run(&mut s, &ops);
+            let tee = s.sink_mut();
+            tee.assert_one_end_per_frame();
+            prop_assert_eq!(tee.decoded(), tee.whole.records.clone());
+            for record in &tee.whole.records {
+                parse(record);
+            }
         }
     }
 }

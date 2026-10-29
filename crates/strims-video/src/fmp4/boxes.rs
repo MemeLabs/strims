@@ -49,6 +49,10 @@ pub(crate) fn u64(out: &mut Vec<u8>, v: u64) {
     out.extend_from_slice(&v.to_be_bytes());
 }
 
+pub(crate) fn i64(out: &mut Vec<u8>, v: i64) {
+    out.extend_from_slice(&v.to_be_bytes());
+}
+
 pub(crate) fn zeros(out: &mut Vec<u8>, n: usize) {
     out.resize(out.len().saturating_add(n), 0);
 }

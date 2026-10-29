@@ -8,7 +8,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
 use super::*;
-use crate::fmp4::{Sample, TrackRun, write_fragment, write_init};
+use crate::fmp4::{ProducerTime, Sample, TrackRun, write_fragment, write_init, write_prft};
 use crate::media::{CodecParams, DecoderConfig, TrackId};
 
 fn bx(fourcc: &[u8; 4], content: &[u8]) -> Vec<u8> {
@@ -55,7 +55,7 @@ fn audio_config(track: u32, rate: u32) -> DecoderConfig {
 
 fn init(configs: &[DecoderConfig]) -> Vec<u8> {
     let mut out = Vec::new();
-    write_init(configs, &mut out).unwrap();
+    write_init(configs, Duration::ZERO, &mut out).unwrap();
     out
 }
 
@@ -242,6 +242,30 @@ fn media_duration_sums_the_video_track() {
 fn media_duration_sums_every_moof() {
     let info = av_info();
     let media = [fragment(1, 3, 1), fragment(2, 6, 1), fragment(3, 21, 0)].concat();
+    assert_eq!(media_duration(&info, &media).unwrap(), Duration::SECOND);
+}
+
+#[test]
+fn media_duration_sums_fragments_after_prft_boxes_and_padding() {
+    // An init with edit lists declares the same tracks.
+    let mut init = Vec::new();
+    let configs = [video_config(), audio_config(2, 48_000)];
+    write_init(&configs, Duration::from_millis(66), &mut init).unwrap();
+    let info = parse_init(&init).unwrap();
+    assert_eq!(info, av_info());
+    let mut media = Vec::new();
+    for sequence in 1..=30 {
+        write_prft(
+            &ProducerTime {
+                track: TrackId(1),
+                media_time: 0,
+                published: strims_base::time::Time::EPOCH,
+            },
+            &mut media,
+        );
+        media.extend_from_slice(&fragment(sequence, 1, 1));
+    }
+    media.extend_from_slice(&bx(b"free", &[0; 40]));
     assert_eq!(media_duration(&info, &media).unwrap(), Duration::SECOND);
 }
 

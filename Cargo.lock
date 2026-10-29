@@ -2679,6 +2679,7 @@ dependencies = [
  "strims-crypto",
  "strims-dao",
  "strims-directory",
+ "strims-golden",
  "strims-kv",
  "strims-network",
  "strims-ppspp",

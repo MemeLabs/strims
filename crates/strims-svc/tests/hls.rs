@@ -47,7 +47,8 @@ use strims_video::amf0::Value;
 use strims_video::fmp4::{media_duration, parse_init, split_record};
 use strims_video::synth::publisher::{Publisher, PublisherConfig};
 use strims_video::synth::script::{
-    MetaValue, Script, ScriptConfig, Tag, TagKind, expected_records,
+    MetaValue, Script, ScriptConfig, Tag, TagKind, expected_records, media_without_publish_times,
+    without_publish_times,
 };
 use strims_video::{CutRule, ingress_options};
 use support::video::*;
@@ -325,12 +326,14 @@ fn hls_serves_an_rtmp_stream_to_players() {
                 r.check(&s.uri, "video/iso.segment", "max-age=31536000, immutable");
                 assert_eq!(r.content_length(), r.body.len());
                 assert_eq!(s.extinf, extinf(&init.body, &r.body), "{}", s.uri);
-                media.push(r.body);
+                media.push(media_without_publish_times(&r.body));
             }
 
             // The segments are the parts of a contiguous run of the
-            // script's records.
+            // script's records, compared without their publish times,
+            // which are the ingest's own.
             let expected = expected_records(&script, CutRule::default());
+            let expected: Vec<_> = expected.iter().map(|r| without_publish_times(r)).collect();
             let parts: Vec<(&[u8], &[u8])> =
                 expected.iter().map(|r| split_record(r).unwrap()).collect();
             let start = parts

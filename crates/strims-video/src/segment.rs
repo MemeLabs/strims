@@ -8,8 +8,9 @@
 //!
 //! A record is `[u16 BE init length][init segment][media segment]` (see
 //! [`crate::fmp4`]). Its media starts at a keyframe of the cut track: the
-//! video track with the lowest id. Its init declares the segment's
-//! tracks, video first, each kind in track id order.
+//! video track with the lowest id. Its first fragment holds that
+//! keyframe. Its init declares the segment's tracks, video first, each
+//! kind in track id order.
 //!
 //! # Cut rule
 //!
@@ -19,21 +20,21 @@
 //! - At a later keyframe of the cut track, the segment ends and the
 //!   keyframe starts the next one when the segment holds at least
 //!   [`CutRule::min_media_bytes`] of samples and the sink can end the
-//!   record after its fragment. When it can't
+//!   record after its last fragment. When it can't
 //!   ([`RecordSink::end_blocked_after`]), the keyframe's group joins the
 //!   segment and the next keyframe decides again
 //!   ([`SegmenterMetrics::blocked_cuts`]).
 //! - A changed config (new codec parameters for a track, or a new track)
 //!   ends the segment at the next keyframe of the cut track whatever its
 //!   size. When the sink can't end the record there, a top-level `free`
-//!   box after the `mdat` pads the record to
+//!   box after the last `mdat` pads the record to
 //!   [`RecordSink::unblocking_len`]. The next segment's init declares the
 //!   new configs. Until then, units of the changed or new tracks are
 //!   dropped ([`SegmenterMetrics::dropped_pending_config`]): the segment's
 //!   init doesn't describe them.
-//! - A record longer than [`CutRule::max_record_bytes`] is
-//!   [`SegmentError::RecordTooLarge`]: no keyframe came within the bound.
-//!   The segmenter stops; every later call returns
+//! - A record that a unit could take past [`CutRule::max_record_bytes`]
+//!   is [`SegmentError::RecordTooLarge`]: no keyframe came within the
+//!   bound. The segmenter stops; every later call returns
 //!   [`SegmentError::Closed`].
 //! - [`Muxer::finish`] writes and ends the segment in progress, padded as
 //!   for a changed config when the sink can't end it. The next segment
@@ -41,46 +42,43 @@
 //!
 //! # Timing
 //!
-//! - A sample lasts from its DTS to the next sample's in its track; a
-//!   decreasing DTS gives 0.
-//! - At a cut, the cut track's last sample lasts until the keyframe that
-//!   starts the next segment. An audio track's last sample lasts its
-//!   frame's samples. Any other last sample, and the cut track's at
-//!   [`Muxer::finish`], repeats its track's previous duration, or lasts
-//!   1/30 s without one.
-//! - The composition offset is PTS less DTS, signed and saturated to 32
-//!   bits. A track's `tfdt` is its first DTS in the segment, 0 when
-//!   negative.
+//! Samples are timed as [`FragmentWriter`] times them. At a cut, the cut
+//! track's last sample lasts until the keyframe that starts the next
+//! segment; at [`Muxer::finish`], the writer's flush rules time every
+//! track's last.
+//!
+//! An init's edit list moves every track back by its composition delay:
+//! the starting keyframe's PTS less DTS (none when not positive), taken
+//! when the segment that declares new configs starts. Later segments of
+//! the same configs keep it, so their inits stay the same.
 //!
 //! # Writing
 //!
-//! A record is written in three steps: the length prefix and init when
-//! its segment starts, the fragment (`moof` and `mdat`) at the cut, and
-//! the end. The samples in between are buffered. A fragment per access
-//! unit, or per small group, is a change to when fragments are flushed
-//! within the record: the cut rule and the end gate apply to the record
-//! as they do here, each fragment's `tfdt` starts where the previous one
-//! left off, and the `mfhd` sequence numbers count fragments.
+//! A record is written as it goes: the length prefix and init when its
+//! segment starts, each fragment once [`FragmentWriter`] has it due
+//! ([`CutRule::fragment_duration`] of samples timed, or a stream's first
+//! GOP whole when it decodes from before the edit list), and the last
+//! fragment and the end at the cut. The cut rule and the end gate apply
+//! to the record: only its last fragment is unwritten when the gate is
+//! asked. Each fragment's `tfdt` follows on from the previous one's, and
+//! the `mfhd` sequence numbers count fragments over the segmenter's life.
 //!
 //! # Bounds
 //!
-//! A segment's buffered samples are part of its record, so they stay
-//! within [`CutRule::max_record_bytes`]: at most that many bytes of
-//! payload, and, since each sample adds at least 8 bytes of `trun`
-//! entry, at most an eighth as many samples of 16 bytes of state. A
-//! segment has at most [`MAX_TRACKS`] tracks. The buffers are reused from
-//! one segment to the next. [`Segmenter::take_segment`] holds the
-//! [`MAX_PENDING_SEGMENTS`] latest segments.
+//! A segment's held samples are part of its record, so they stay within
+//! [`CutRule::max_record_bytes`]. A segment has at most [`MAX_TRACKS`]
+//! tracks. The buffers are reused from one segment to the next.
+//! [`Segmenter::take_segment`] holds the [`MAX_PENDING_SEGMENTS`] latest
+//! segments.
 
 use std::collections::{BTreeMap, VecDeque};
 
 use strims_base::time::Duration;
 
 use crate::fmp4::{
-    self, EMPTY_FRAGMENT_LEN, FREE_HEADER_LEN, InitError, MAX_TRACKS, Sample, TrackRun, traf_len,
-    write_fragment_head, write_free, write_init,
+    FREE_HEADER_LEN, FragmentWriter, InitError, MAX_TRACKS, Written, write_free, write_init,
 };
-use crate::media::{AccessUnit, CodecParams, DecoderConfig, Muxer, TrackId, TrackKind};
+use crate::media::{AccessUnit, DecoderConfig, Muxer, TrackId, TrackKind};
 use crate::record::RecordSink;
 
 /// The longest init segment: the record prefix holds its length in 16
@@ -94,10 +92,9 @@ pub const MAX_RECORD_LIMIT: usize = i32::MAX as usize;
 pub const MAX_PENDING_SEGMENTS: usize = 16;
 /// Bytes of the record's init length prefix.
 const PREFIX_LEN: usize = 2;
-/// The frame rate of a video sample's duration when nothing times it.
-const FALLBACK_FRAME_RATE: u32 = 30;
 
-/// When the segmenter ends a segment.
+/// When the segmenter ends a segment, and how it writes the fragments
+/// within one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CutRule {
     /// The least sample payload a segment holds before a keyframe can end
@@ -105,12 +102,22 @@ pub struct CutRule {
     pub min_media_bytes: usize,
     /// The longest record, prefix, init and padding included.
     pub max_record_bytes: usize,
+    /// The media a fragment holds before it is written: its timed samples
+    /// of some track last at least this long ([`FragmentWriter`]'s span).
+    /// Zero writes a fragment per unit; [`Duration::MAX`] one per record,
+    /// at the cut.
+    pub fragment_duration: Duration,
 }
 
 impl CutRule {
     pub const DEFAULT_MIN_MEDIA_BYTES: usize = 32 * 1024;
     /// Half the ingress swarm writer's 16 MiB window.
     pub const DEFAULT_MAX_RECORD_BYTES: usize = 8 * 1024 * 1024;
+    /// A few video frames and their audio a fragment. A packed frame is
+    /// output once it fills, about 100 ms of a 5 Mbit/s stream and longer
+    /// below, so smaller fragments reach the swarm little sooner and
+    /// cost more bytes.
+    pub const DEFAULT_FRAGMENT_DURATION: Duration = Duration::from_millis(100);
 }
 
 impl Default for CutRule {
@@ -118,6 +125,7 @@ impl Default for CutRule {
         CutRule {
             min_media_bytes: Self::DEFAULT_MIN_MEDIA_BYTES,
             max_record_bytes: Self::DEFAULT_MAX_RECORD_BYTES,
+            fragment_duration: Self::DEFAULT_FRAGMENT_DURATION,
         }
     }
 }
@@ -132,7 +140,7 @@ pub struct SegmentInfo {
     pub audio_samples: u32,
     /// The record's length, prefix and padding included.
     pub bytes: usize,
-    /// Bytes of `free` padding after the `mdat`.
+    /// Bytes of `free` padding after the last `mdat`.
     pub padding: usize,
     /// Its init differs from the previous record's; true for the first.
     pub new_init: bool,
@@ -176,56 +184,6 @@ pub enum SegmentError {
     Closed,
 }
 
-/// A track of the segment in progress.
-#[derive(Debug)]
-struct SegTrack {
-    track: TrackId,
-    kind: TrackKind,
-    timescale: u32,
-    /// Audio samples per frame; 0 for video.
-    frame_samples: u32,
-    /// The current config differs from the one the segment declares.
-    stale: bool,
-    base_dts: i64,
-    last_dts: i64,
-    /// The latest duration timed by a following sample, kept across
-    /// segments.
-    prev_duration: Option<u32>,
-    samples: Vec<Sample>,
-    data: Vec<u8>,
-}
-
-impl SegTrack {
-    fn new(config: &DecoderConfig, reuse: Option<SegTrack>) -> Self {
-        let frame_samples = match config.params {
-            CodecParams::Aac { frame_samples, .. } => frame_samples,
-            CodecParams::Avc { .. } => 0,
-        };
-        let (prev_duration, samples, data) = match reuse {
-            Some(t) if t.timescale == config.timescale => (t.prev_duration, t.samples, t.data),
-            Some(t) => (None, t.samples, t.data),
-            None => (None, Vec::new(), Vec::new()),
-        };
-        SegTrack {
-            track: config.track,
-            kind: config.kind,
-            timescale: config.timescale,
-            frame_samples,
-            stale: false,
-            base_dts: 0,
-            last_dts: 0,
-            prev_duration,
-            samples,
-            data,
-        }
-    }
-
-    fn fallback_duration(&self) -> u32 {
-        self.prev_duration
-            .unwrap_or(self.timescale / FALLBACK_FRAME_RATE)
-    }
-}
-
 /// Cuts access units into segments, one record each (see the
 /// [module docs](self)).
 #[derive(Debug)]
@@ -235,24 +193,24 @@ pub struct Segmenter<S: RecordSink> {
     /// The current configs, at most [`MAX_TRACKS`].
     configs: BTreeMap<TrackId, DecoderConfig>,
     /// The configs the segment in progress (or the last one) declares, in
-    /// init order; `tracks` follows it.
+    /// init order; the writer's tracks.
     segment_configs: Vec<DecoderConfig>,
-    tracks: Vec<SegTrack>,
+    /// Per segment config: the current config differs from it.
+    stale: [bool; MAX_TRACKS],
     /// The init of `segment_configs`.
     init: Vec<u8>,
-    /// Reused for inits being checked, fragment heads and padding.
+    /// Reused for inits being checked, fragments and padding.
     scratch: Vec<u8>,
+    writer: FragmentWriter,
     started: bool,
     /// The configs differ from the segment's: the next keyframe cuts.
     changed: bool,
     /// The segment in progress has another init than the last record.
     new_init: bool,
-    /// Bytes of the segment's fragment so far.
-    fragment_len: usize,
+    /// Bytes of the record in progress written to the sink.
+    written: usize,
     /// Bytes of the segment's sample payload.
     media_bytes: usize,
-    /// The next fragment's `mfhd` sequence number.
-    sequence: u32,
     infos: VecDeque<SegmentInfo>,
     metrics: SegmenterMetrics,
     closed: bool,
@@ -268,15 +226,15 @@ impl<S: RecordSink> Segmenter<S> {
             sink,
             configs: BTreeMap::new(),
             segment_configs: Vec::new(),
-            tracks: Vec::new(),
+            stale: [false; MAX_TRACKS],
             init: Vec::new(),
             scratch: Vec::new(),
+            writer: FragmentWriter::new(rule.fragment_duration),
             started: false,
             changed: false,
             new_init: false,
-            fragment_len: EMPTY_FRAGMENT_LEN,
+            written: 0,
             media_bytes: 0,
-            sequence: 1,
             infos: VecDeque::new(),
             metrics: SegmenterMetrics::default(),
             closed: false,
@@ -335,23 +293,30 @@ impl<S: RecordSink> Segmenter<S> {
             .map(|c| c.track)
     }
 
+    /// The length of the record in progress if it ended now.
     fn record_len(&self) -> usize {
-        PREFIX_LEN + self.init.len() + self.fragment_len
+        self.written + self.writer.flush_len()
     }
 
     /// Marks the segment's tracks whose configs changed, and whether any
     /// config differs from the segment's.
     fn update_changed(&mut self) {
-        for (config, track) in self.segment_configs.iter().zip(self.tracks.iter_mut()) {
-            track.stale = self.configs.get(&config.track) != Some(config);
+        for (config, stale) in self.segment_configs.iter().zip(self.stale.iter_mut()) {
+            *stale = self.configs.get(&config.track) != Some(config);
         }
         self.changed =
-            self.tracks.iter().any(|t| t.stale) || self.configs.len() != self.segment_configs.len();
+            self.stale.iter().any(|s| *s) || self.configs.len() != self.segment_configs.len();
     }
 
-    /// Starts a segment: declares the current configs and writes the
-    /// record's prefix and init.
-    fn start_segment(&mut self) -> Result<(), SegmentError> {
+    /// Writes `self.scratch` to the sink, counting it in the record.
+    fn write_scratch(&mut self) {
+        self.sink.write(&self.scratch);
+        self.written += self.scratch.len();
+    }
+
+    /// Starts a segment at `keyframe`: declares the current configs and
+    /// writes the record's prefix and init.
+    fn start_segment(&mut self, keyframe: &AccessUnit<'_>) -> Result<(), SegmentError> {
         let same = self.configs.len() == self.segment_configs.len()
             && ordered(&self.configs)
                 .zip(&self.segment_configs)
@@ -360,83 +325,52 @@ impl<S: RecordSink> Segmenter<S> {
             self.new_init = false;
         } else {
             let configs: Vec<DecoderConfig> = ordered(&self.configs).cloned().collect();
+            let delay = composition_delay(keyframe, &self.configs);
             self.scratch.clear();
-            write_init(&configs, &mut self.scratch)?;
+            write_init(&configs, delay, &mut self.scratch)?;
             if self.scratch.len() > MAX_INIT_LEN {
                 return Err(SegmentError::InitTooLong);
             }
+            self.writer.set_tracks(&configs, delay)?;
             self.new_init = self.scratch != self.init;
             std::mem::swap(&mut self.init, &mut self.scratch);
-            let mut old = std::mem::take(&mut self.tracks);
-            self.tracks = configs
-                .iter()
-                .map(|c| {
-                    let reuse = old
-                        .iter()
-                        .position(|t| t.track == c.track)
-                        .map(|i| old.swap_remove(i));
-                    SegTrack::new(c, reuse)
-                })
-                .collect();
             self.segment_configs = configs;
         }
-        for t in &mut self.tracks {
-            t.samples.clear();
-            t.data.clear();
-            t.stale = false;
-        }
+        self.stale = [false; MAX_TRACKS];
         self.changed = false;
         // The length fits: inits are checked against MAX_INIT_LEN.
         let len = u16::try_from(self.init.len()).unwrap_or(u16::MAX);
         self.sink.write(&len.to_be_bytes());
         self.sink.write(&self.init);
-        self.fragment_len = EMPTY_FRAGMENT_LEN;
+        self.written = PREFIX_LEN + self.init.len();
         self.media_bytes = 0;
         self.started = true;
         Ok(())
     }
 
-    /// Adds a unit to the segment in progress; drops it when its track's
-    /// config isn't the segment's.
+    /// Adds a unit to the segment in progress, writing the fragment then
+    /// due; drops it when its track's config isn't the segment's.
     fn add(&mut self, unit: &AccessUnit<'_>) -> Result<(), SegmentError> {
-        let Some(t) = self
-            .tracks
-            .iter_mut()
-            .find(|t| t.track == unit.track && !t.stale)
-        else {
+        let declared = self
+            .segment_configs
+            .iter()
+            .zip(&self.stale)
+            .any(|(c, stale)| c.track == unit.track && !stale);
+        if !declared {
             self.metrics.dropped_pending_config += 1;
             return Ok(());
-        };
+        }
         let size = unit.payload.len();
-        let n = t.samples.len();
-        let grow = traf_len(t.kind, n + 1) - traf_len(t.kind, n) + size;
+        let grow = self.writer.max_push_growth(unit.track, size);
         let limit = self.rule.max_record_bytes;
-        if PREFIX_LEN + self.init.len() + self.fragment_len + grow > limit {
+        if self.record_len().saturating_add(grow) > limit {
             return self.fail(SegmentError::RecordTooLarge { limit });
         }
-        match t.samples.last_mut() {
-            Some(last) => {
-                let d = duration(unit.dts.saturating_sub(t.last_dts));
-                last.duration = d;
-                t.prev_duration = Some(d);
-            }
-            None => t.base_dts = unit.dts,
+        self.scratch.clear();
+        if self.writer.push(unit, &mut self.scratch).is_err() {
+            return Err(SegmentError::UnknownTrack(unit.track.0));
         }
-        let cto = unit.pts.saturating_sub(unit.dts);
-        t.samples.push(Sample {
-            duration: 0,
-            // Below the record bound.
-            size: u32::try_from(size).unwrap_or(u32::MAX),
-            keyframe: unit.keyframe,
-            composition_offset: i32::try_from(cto).unwrap_or(if cto < 0 {
-                i32::MIN
-            } else {
-                i32::MAX
-            }),
-        });
-        t.data.extend_from_slice(unit.payload);
-        t.last_dts = unit.dts;
-        self.fragment_len += grow;
+        self.write_scratch();
         self.media_bytes += size;
         Ok(())
     }
@@ -446,23 +380,7 @@ impl<S: RecordSink> Segmenter<S> {
     /// is padded when `forced`, and otherwise leaves the segment going:
     /// returns whether the record ended.
     fn cut(&mut self, cut_dts: Option<i64>, forced: bool) -> Result<bool, SegmentError> {
-        let cut_track = self.cut_track();
-        for t in &mut self.tracks {
-            let fallback = t.fallback_duration();
-            let Some(last) = t.samples.last_mut() else {
-                continue;
-            };
-            last.duration = match (t.kind, cut_dts) {
-                (TrackKind::Video, Some(dts)) if cut_track == Some(t.track) => {
-                    let d = duration(dts.saturating_sub(t.last_dts));
-                    t.prev_duration = Some(d);
-                    d
-                }
-                (TrackKind::Audio, _) if t.frame_samples > 0 => t.frame_samples,
-                _ => fallback,
-            };
-        }
-        let len = self.fragment_len;
+        let len = self.writer.flush_len();
         let padding = if !self.sink.end_blocked_after(len) {
             0
         } else if forced {
@@ -478,43 +396,29 @@ impl<S: RecordSink> Segmenter<S> {
         if self.record_len().saturating_add(padding) > limit {
             return self.fail(SegmentError::RecordTooLarge { limit });
         }
-        self.write_record(padding)?;
+        let next = cut_dts.and_then(|dts| self.cut_track().map(|t| (t, dts)));
+        self.write_record(next, padding)?;
         Ok(true)
     }
 
-    /// Writes the segment's fragment and `padding` bytes of `free`, and
-    /// ends the record.
-    fn write_record(&mut self, padding: usize) -> Result<(), SegmentError> {
-        let mut runs = [TrackRun::default(); MAX_TRACKS];
-        let mut n = 0;
-        for (t, run) in self.tracks.iter().zip(runs.iter_mut()) {
-            *run = TrackRun {
-                track: t.track,
-                kind: t.kind,
-                base_decode_time: u64::try_from(t.base_dts).unwrap_or(0),
-                samples: &t.samples,
-                data: &t.data,
-            };
-            n += 1;
-        }
-        let runs = runs.get(..n).unwrap_or_default();
-        debug_assert_eq!(fmp4::fragment_len(runs), self.fragment_len);
+    /// Writes the segment's last fragment, its last samples timed by
+    /// `next`, and `padding` bytes of `free`, and ends the record.
+    fn write_record(
+        &mut self,
+        next: Option<(TrackId, i64)>,
+        padding: usize,
+    ) -> Result<(), SegmentError> {
         self.scratch.clear();
-        write_fragment_head(self.sequence, runs, &mut self.scratch);
-        self.sink.write(&self.scratch);
-        for run in runs {
-            self.sink.write(run.data);
-        }
+        self.writer.flush(next, &mut self.scratch);
         if padding > 0 {
-            self.scratch.clear();
             write_free(padding, &mut self.scratch);
-            self.sink.write(&self.scratch);
         }
-        let info = segment_info(&self.tracks);
+        self.write_scratch();
+        let info = segment_info(&self.writer.take_written());
         if self.sink.end_record().is_err() {
             return self.fail(SegmentError::EndRefused);
         }
-        let bytes = self.record_len() + padding;
+        let bytes = self.written;
         if self.infos.len() >= MAX_PENDING_SEGMENTS {
             self.infos.pop_front();
             self.metrics.dropped_infos += 1;
@@ -531,7 +435,6 @@ impl<S: RecordSink> Segmenter<S> {
             self.metrics.padded_records += 1;
             self.metrics.padding_bytes += padding as u64;
         }
-        self.sequence = self.sequence.checked_add(1).unwrap_or(1);
         self.started = false;
         Ok(())
     }
@@ -541,8 +444,10 @@ impl<S: RecordSink> Muxer for Segmenter<S> {
     type Error = SegmentError;
 
     /// Sets a track's config. Refused, changing nothing, when the configs
-    /// can't be declared together ([`fmp4::check_configs`]) or their init
-    /// would be longer than [`MAX_INIT_LEN`].
+    /// can't be declared together ([`fmp4::check_configs`]) or their init,
+    /// with the longest edit lists, would be longer than [`MAX_INIT_LEN`].
+    ///
+    /// [`fmp4::check_configs`]: crate::fmp4::check_configs
     fn set_config(&mut self, config: &DecoderConfig) -> Result<(), SegmentError> {
         self.check_open()?;
         if self.configs.get(&config.track) == Some(config) {
@@ -552,7 +457,8 @@ impl<S: RecordSink> Muxer for Segmenter<S> {
         configs.insert(config.track, config.clone());
         let list: Vec<DecoderConfig> = ordered(&configs).cloned().collect();
         self.scratch.clear();
-        write_init(&list, &mut self.scratch)?;
+        // The longest delay writes 64-bit edit lists, the longest there are.
+        write_init(&list, Duration::MAX, &mut self.scratch)?;
         if self.scratch.len() > MAX_INIT_LEN {
             return Err(SegmentError::InitTooLong);
         }
@@ -578,7 +484,7 @@ impl<S: RecordSink> Muxer for Segmenter<S> {
             self.metrics.dropped_before_start += 1;
             return Ok(());
         }
-        self.start_segment()?;
+        self.start_segment(unit)?;
         self.add(unit)
     }
 
@@ -599,34 +505,43 @@ fn ordered(
     of(TrackKind::Video).chain(of(TrackKind::Audio))
 }
 
-/// A sample duration from a DTS difference: 0 when negative, saturated
-/// to 32 bits.
-fn duration(d: i64) -> u32 {
-    u32::try_from(d.max(0)).unwrap_or(u32::MAX)
+/// The composition delay a segment starting at `keyframe` declares: its
+/// PTS less DTS in its track's timescale, zero when not positive.
+fn composition_delay(
+    keyframe: &AccessUnit<'_>,
+    configs: &BTreeMap<TrackId, DecoderConfig>,
+) -> Duration {
+    let units = keyframe.pts.saturating_sub(keyframe.dts);
+    match configs.get(&keyframe.track) {
+        Some(c) if units > 0 && c.timescale > 0 => {
+            let nanos = i128::from(units) * 1_000_000_000 / i128::from(c.timescale);
+            Duration::from_nanos(i64::try_from(nanos).unwrap_or(i64::MAX))
+        }
+        _ => Duration::ZERO,
+    }
 }
 
-/// The counts and media time of the segment in `tracks`: its first video
-/// track's time, or its longest track's.
-fn segment_info(tracks: &[SegTrack]) -> SegmentInfo {
-    let time = |t: &SegTrack| {
-        let units: u64 = t.samples.iter().map(|s| u64::from(s.duration)).sum();
-        if t.timescale == 0 {
+/// The counts and media time of a segment's written samples: its first
+/// video track's time, or its longest track's.
+fn segment_info(written: &[Written]) -> SegmentInfo {
+    let time = |w: &Written| {
+        if w.timescale == 0 {
             return Duration::ZERO;
         }
-        let nanos = i128::from(units) * 1_000_000_000 / i128::from(t.timescale);
+        let nanos = i128::from(w.units) * 1_000_000_000 / i128::from(w.timescale);
         Duration::from_nanos(i64::try_from(nanos).unwrap_or(i64::MAX))
     };
     let count = |kind| {
-        let n: usize = tracks
+        let n: u64 = written
             .iter()
-            .filter(|t| t.kind == kind)
-            .map(|t| t.samples.len())
+            .filter(|w| w.kind == Some(kind))
+            .map(|w| w.samples)
             .sum();
         u32::try_from(n).unwrap_or(u32::MAX)
     };
-    let duration = match tracks.iter().find(|t| t.kind == TrackKind::Video) {
-        Some(t) => time(t),
-        None => tracks.iter().map(time).max().unwrap_or(Duration::ZERO),
+    let duration = match written.iter().find(|w| w.kind == Some(TrackKind::Video)) {
+        Some(w) => time(w),
+        None => written.iter().map(time).max().unwrap_or(Duration::ZERO),
     };
     SegmentInfo {
         duration,

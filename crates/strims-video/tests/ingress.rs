@@ -34,7 +34,9 @@ use strims_rpc::{Router, Timer};
 use strims_testworld::*;
 use strims_transfer::TransferId;
 use strims_video::hls::HlsRoutes;
-use strims_video::synth::script::{Script, ScriptConfig, TagKind, expected_records};
+use strims_video::synth::script::{
+    Script, ScriptConfig, TagKind, expected_records, without_publish_times,
+};
 use strims_video::{
     Config, CutRule, DecoderConfig, EgressPiece, EgressStream, FlvSource, IngressSettings,
     NoVideoHost, SourceEvent, SwarmKind, VideoControl, VideoEvent, VideoHost, bind_frontend,
@@ -169,8 +171,18 @@ async fn ended(events: &mut Subscription<VideoEvent>) -> (u64, String) {
     }
 }
 
-/// The next `n` records of a stream, each with whether a discontinuity
-/// came before it.
+/// The records of `script`, as [`read`] reads them: without their units'
+/// publish times, which are the ingest's own.
+fn script_records(script: &Script) -> Vec<Vec<u8>> {
+    expected_records(script, CutRule::default())
+        .iter()
+        .map(|r| without_publish_times(r))
+        .collect()
+}
+
+/// The next `n` records of a stream without their publish times
+/// ([`without_publish_times`]), each with whether a discontinuity came
+/// before it.
 async fn read<V: VideoHost>(s: &mut Stream<V>, n: usize) -> Vec<(Vec<u8>, bool)> {
     let mut out = Vec::new();
     let mut rec = Vec::new();
@@ -183,7 +195,8 @@ async fn read<V: VideoHost>(s: &mut Stream<V>, n: usize) -> Vec<(Vec<u8>, bool)>
         match piece {
             EgressPiece::Data(d) => rec.extend_from_slice(d),
             EgressPiece::RecordEnd => {
-                out.push((std::mem::take(&mut rec), std::mem::take(&mut flagged)));
+                let r = without_publish_times(&std::mem::take(&mut rec));
+                out.push((r, std::mem::take(&mut flagged)));
             }
             EgressPiece::Discontinuity => {
                 rec.clear();
@@ -331,7 +344,7 @@ fn a_published_stream_is_listed_and_read_by_another_node() {
         );
 
         let script = Script::new(&ScriptConfig::default());
-        let expected = expected_records(&script, CutRule::default());
+        let expected = script_records(&script);
         assert!(expected.len() >= 4);
         let third = script.tags.len() / 3;
         p.send_tags(&script.tags[..third], &script).await;
@@ -534,7 +547,7 @@ fn a_second_publish_replaces_the_first() {
             duration_secs: 6,
             ..ScriptConfig::default()
         });
-        let old_records = expected_records(&old, CutRule::default());
+        let old_records = script_records(&old);
         first.send_tags(&old.tags, &old).await;
         let before: Vec<Vec<u8>> = read(&mut stream, 2)
             .await
@@ -562,7 +575,7 @@ fn a_second_publish_replaces_the_first() {
             video_bitrate: 800_000,
             ..ScriptConfig::default()
         });
-        let new_records = expected_records(&new, CutRule::default());
+        let new_records = script_records(&new);
         second.send_tags(&new.tags, &new).await;
 
         // Records of the first session may come before the discontinuity.

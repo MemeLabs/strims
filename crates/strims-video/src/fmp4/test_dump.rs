@@ -44,20 +44,53 @@ pub(crate) struct MoofDump {
     pub(crate) trafs: Vec<TrafDump>,
 }
 
+/// A `prft`'s fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PrftDump {
+    pub(crate) version: u8,
+    pub(crate) flags: u32,
+    pub(crate) track: u32,
+    pub(crate) ntp: u64,
+    pub(crate) media_time: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct MediaDump {
     /// Top-level boxes: type and size.
     pub(crate) boxes: Vec<(String, usize)>,
     pub(crate) moofs: Vec<MoofDump>,
+    /// Each `moof`'s `prft`, the box right before it, if any.
+    pub(crate) prfts: Vec<Option<PrftDump>>,
 }
 
 impl MediaDump {
-    pub(crate) fn traf(&self, track: u32) -> &TrafDump {
+    /// A track's samples over every fragment, as one `traf`: the first
+    /// `traf`'s header fields, every `trun` entry and every sample's
+    /// bytes.
+    pub(crate) fn traf(&self, track: u32) -> TrafDump {
+        let mut trafs = self
+            .moofs
+            .iter()
+            .flat_map(|m| &m.trafs)
+            .filter(|t| t.track == track);
+        let mut merged = trafs
+            .next()
+            .unwrap_or_else(|| panic!("no traf of track {track}"))
+            .clone();
+        for t in trafs {
+            merged.samples.extend_from_slice(&t.samples);
+            merged.data.extend_from_slice(&t.data);
+        }
+        merged
+    }
+
+    /// Each fragment's `traf`s of `track`.
+    pub(crate) fn trafs(&self, track: u32) -> Vec<&TrafDump> {
         self.moofs
             .iter()
             .flat_map(|m| &m.trafs)
-            .find(|t| t.track == track)
-            .unwrap_or_else(|| panic!("no traf of track {track}"))
+            .filter(|t| t.track == track)
+            .collect()
     }
 
     pub(crate) fn has_traf(&self, track: u32) -> bool {
@@ -81,17 +114,37 @@ fn fourcc(f: FourCc) -> String {
 pub(crate) fn dump_media(media: &[u8]) -> MediaDump {
     let mut boxes = Vec::new();
     let mut moofs = Vec::new();
+    let mut prfts = Vec::new();
+    let mut prft = None;
     let mut at = 0;
     for b in Boxes::new(media) {
         let (t, content) = b.unwrap();
         let size = content.len() + 8;
         boxes.push((fourcc(t), size));
-        if t.0 == *b"moof" {
-            moofs.push(dump_moof(media, at, content));
+        match &t.0 {
+            b"moof" => {
+                moofs.push(dump_moof(media, at, content));
+                prfts.push(prft.take());
+            }
+            b"prft" => {
+                assert_eq!(size, 32, "prft size");
+                prft = Some(PrftDump {
+                    version: content[0],
+                    flags: be32(content, 0) & 0xff_ffff,
+                    track: be32(content, 4),
+                    ntp: u64::from_be_bytes(content[8..16].try_into().unwrap()),
+                    media_time: u64::from_be_bytes(content[16..24].try_into().unwrap()),
+                });
+            }
+            _ => prft = None,
         }
         at += size;
     }
-    MediaDump { boxes, moofs }
+    MediaDump {
+        boxes,
+        moofs,
+        prfts,
+    }
 }
 
 fn dump_moof(media: &[u8], moof_at: usize, moof: &[u8]) -> MoofDump {

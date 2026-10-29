@@ -4,6 +4,8 @@
 //! The init segment: `ftyp` and a `moov` declaring one track per decoder
 //! config, with `mvex` for fragments.
 
+use strims_base::time::Duration;
+
 use crate::aac::{self, AacError};
 use crate::fmp4::boxes::{self, end, start, start_full};
 use crate::media::{CodecParams, DecoderConfig, TrackKind};
@@ -27,6 +29,8 @@ const DEPTH_COLOUR: u16 = 0x0018;
 /// The channel count written when the AudioSpecificConfig leaves the
 /// layout to a program config element.
 const FALLBACK_CHANNELS: u16 = 2;
+/// `elst` media rate 1.0: integer part 1, fraction 0.
+const MEDIA_RATE_ONE: u32 = 0x0001_0000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -79,17 +83,27 @@ pub fn check_configs(configs: &[DecoderConfig]) -> Result<(), InitError> {
 }
 
 /// Appends the init segment declaring `configs`, one `trak` each in the
-/// order given, track id = config track.
+/// order given, track id = config track, with every track's presentation
+/// moved back by `composition_delay`.
 ///
 /// - `ftyp`: major brand `iso5`, minor version 512, compatible `iso5`,
 ///   `iso6`, `mp41`.
 /// - `moov`: `mvhd` (timescale 1000, no duration), the `trak`s, then
 ///   `mvex` with a `trex` per track (sample description 1, no defaults).
 /// - Each `trak` has `tkhd` (enabled, in movie; the picture size for
-///   video, full volume for audio) and `mdia`: `mdhd` with the config's
+///   video, full volume for audio), an `edts` when `composition_delay` is
+///   positive, and `mdia`: `mdhd` with the config's
 ///   timescale and language `und`, `hdlr` (`vide` or `soun`), and `minf`
 ///   with `vmhd` or `smhd`, a self-contained `dref` and an `stbl` of one
 ///   sample entry and empty sample tables.
+/// - The `edts` holds an `elst` of one edit: segment duration 0 (to the
+///   end of the fragmented movie), media time the delay in the track's
+///   timescale rounded to the nearest unit, rate 1.0. It is version 0,
+///   or version 1 when the media time exceeds 32 bits. A sample then
+///   presents at its composition time less the delay. Moving every track
+///   by the same time keeps them in sync; a stream's B-frame reordering
+///   delay, its first keyframe's composition offset, makes that keyframe
+///   present at its decode time.
 /// - Video's sample entry is `avc1` holding the avcC record as received.
 /// - Audio's is `mp4a` holding an `esds` with the AudioSpecificConfig. Its
 ///   16.16 sample rate field holds 16 bits: a rate above 65535 Hz is
@@ -99,17 +113,25 @@ pub fn check_configs(configs: &[DecoderConfig]) -> Result<(), InitError> {
 ///   element) is written as 2.
 ///
 /// On error `out` is unchanged.
-pub fn write_init(configs: &[DecoderConfig], out: &mut Vec<u8>) -> Result<(), InitError> {
+pub fn write_init(
+    configs: &[DecoderConfig],
+    composition_delay: Duration,
+    out: &mut Vec<u8>,
+) -> Result<(), InitError> {
     check_configs(configs)?;
     let from = out.len();
-    let written = write_checked(configs, out);
+    let written = write_checked(configs, composition_delay, out);
     if written.is_err() {
         out.truncate(from);
     }
     written
 }
 
-fn write_checked(configs: &[DecoderConfig], out: &mut Vec<u8>) -> Result<(), InitError> {
+fn write_checked(
+    configs: &[DecoderConfig],
+    composition_delay: Duration,
+    out: &mut Vec<u8>,
+) -> Result<(), InitError> {
     let ftyp = start(out, b"ftyp");
     out.extend_from_slice(b"iso5");
     boxes::u32(out, 512);
@@ -119,7 +141,7 @@ fn write_checked(configs: &[DecoderConfig], out: &mut Vec<u8>) -> Result<(), Ini
     let moov = start(out, b"moov");
     write_mvhd(configs, out);
     for c in configs {
-        write_trak(c, out)?;
+        write_trak(c, composition_delay, out)?;
     }
     let mvex = start(out, b"mvex");
     for c in configs {
@@ -160,7 +182,7 @@ fn write_mvhd(configs: &[DecoderConfig], out: &mut Vec<u8>) {
     end(out, mvhd);
 }
 
-fn write_trak(c: &DecoderConfig, out: &mut Vec<u8>) -> Result<(), InitError> {
+fn write_trak(c: &DecoderConfig, delay: Duration, out: &mut Vec<u8>) -> Result<(), InitError> {
     let trak = start(out, b"trak");
     let (width, height) = match c.params {
         CodecParams::Avc { width, height, .. } => (width, height),
@@ -186,6 +208,9 @@ fn write_trak(c: &DecoderConfig, out: &mut Vec<u8>) -> Result<(), InitError> {
     boxes::u32(out, u32::from(width) << 16);
     boxes::u32(out, u32::from(height) << 16);
     end(out, tkhd);
+    if delay > Duration::ZERO {
+        write_edts(delay_units(delay, c.timescale), out);
+    }
 
     let mdia = start(out, b"mdia");
     let mdhd = start_full(out, b"mdhd", 0, 0);
@@ -314,6 +339,41 @@ fn write_sample_entry(c: &DecoderConfig, out: &mut Vec<u8>) -> Result<(), InitEr
         }
     }
     Ok(())
+}
+
+/// An `edts` with one edit starting at `media_time` and lasting to the
+/// end.
+fn write_edts(media_time: i64, out: &mut Vec<u8>) {
+    let edts = start(out, b"edts");
+    match i32::try_from(media_time) {
+        Ok(t) => {
+            let elst = start_full(out, b"elst", 0, 0);
+            boxes::u32(out, 1);
+            // segment_duration
+            boxes::u32(out, 0);
+            boxes::i32(out, t);
+            boxes::u32(out, MEDIA_RATE_ONE);
+            end(out, elst);
+        }
+        Err(_) => {
+            let elst = start_full(out, b"elst", 1, 0);
+            boxes::u32(out, 1);
+            // segment_duration
+            boxes::u64(out, 0);
+            boxes::i64(out, media_time);
+            boxes::u32(out, MEDIA_RATE_ONE);
+            end(out, elst);
+        }
+    }
+    end(out, edts);
+}
+
+/// `delay` in units of `timescale`, rounded to the nearest and saturated:
+/// the media time of the edit [`write_init`] writes for it.
+pub(crate) fn delay_units(delay: Duration, timescale: u32) -> i64 {
+    let units =
+        (i128::from(delay.as_nanos()) * i128::from(timescale) + 500_000_000) / 1_000_000_000;
+    i64::try_from(units).unwrap_or(i64::MAX)
 }
 
 /// SampleEntry: reserved[6], data_reference_index 1.

@@ -279,3 +279,41 @@ fn aac_configs_signal_the_rate() {
     assert_eq!(asc.len(), 5);
     assert_eq!(crate::aac::parse_asc(&asc).unwrap().sample_rate, 50_000);
 }
+
+#[test]
+fn records_without_publish_times_differ_only_in_when_units_arrived() {
+    let script = Script::new(&ScriptConfig {
+        duration_secs: 4,
+        b_frames: true,
+        ..ScriptConfig::default()
+    });
+    let records = expected_records(&script, CutRule::default());
+    // The same units, received a minute later.
+    let mut source = FlvSource::new();
+    let mut s = Segmenter::new(CutRule::default(), VecSink::new());
+    for tag in &script.tags {
+        let late = Time::from_unix_millis(60_000 + i64::from(tag.timestamp));
+        let event = match tag.kind {
+            TagKind::Video => source.video(tag.timestamp, &tag.body, late),
+            TagKind::Audio => source.audio(tag.timestamp, &tag.body, late),
+            TagKind::Metadata => continue,
+        };
+        match event.unwrap() {
+            Some(SourceEvent::Config(c)) => s.set_config(&c).unwrap(),
+            Some(SourceEvent::Unit(u)) => s.push(&u).unwrap(),
+            None => {}
+        }
+    }
+    s.finish().unwrap();
+    let late = &s.sink().records;
+    assert_eq!(late.len(), records.len());
+    for (a, b) in records.iter().zip(late) {
+        assert_ne!(a, b);
+        assert_eq!(a.len(), b.len());
+        let masked = without_publish_times(a);
+        assert_eq!(masked, without_publish_times(b));
+        let differing = a.iter().zip(&masked).filter(|(x, y)| x != y).count();
+        assert!(differing > 0);
+    }
+    assert_eq!(without_publish_times(b"\x00"), b"\x00");
+}

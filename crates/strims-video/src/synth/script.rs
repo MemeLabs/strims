@@ -32,6 +32,7 @@ use strims_chunkstream::Frag;
 use strims_chunkstream::packed::{DEFAULT_SIZE, PackedDecoder};
 
 use crate::flv::{FlvSource, SourceEvent};
+use crate::fmp4::parse::{Boxes, split_record};
 use crate::media::Muxer;
 use crate::record::PackedSink;
 use crate::segment::{CutRule, Segmenter};
@@ -400,6 +401,39 @@ pub fn decode_records(stream: &[u8]) -> Vec<Vec<u8>> {
             None => return records,
         }
     }
+}
+
+/// `record` with the NTP timestamp of each of its media's `prft` boxes
+/// zeroed: the record as any writer of the same units writes it,
+/// whenever it received them. Bytes that aren't an fMP4 record come back
+/// as they are.
+pub fn without_publish_times(record: &[u8]) -> Vec<u8> {
+    let Ok((init, media)) = split_record(record) else {
+        return record.to_vec();
+    };
+    let mut out = record.to_vec();
+    out.truncate(2 + init.len());
+    out.extend_from_slice(&media_without_publish_times(media));
+    out
+}
+
+/// A media segment with the NTP timestamp of each of its `prft` boxes
+/// zeroed (see [`without_publish_times`]).
+pub fn media_without_publish_times(media: &[u8]) -> Vec<u8> {
+    let mut out = media.to_vec();
+    for b in Boxes::new(media) {
+        let Ok((fourcc, content)) = b else {
+            break;
+        };
+        // Version and flags and reference_track_ID, then ntp_timestamp.
+        let at = content.as_ptr().addr() - media.as_ptr().addr();
+        if fourcc.0 == *b"prft"
+            && let Some(ntp) = out.get_mut(at + 8..at + 16)
+        {
+            ntp.fill(0);
+        }
+    }
+    out
 }
 
 #[cfg(test)]

@@ -171,7 +171,7 @@ fn parse_trak(trak: &[u8]) -> Result<TrackInfo, ParseError> {
 /// sample durations over every `moof`, or with no video track, the
 /// longest track's. Durations come from the `trun` entries, else the
 /// `tfhd` default, else the `trex` default. Boxes other than `moof`
-/// (`styp`, `sidx`, `mdat`, `free`, `skip` and others) are skipped, as
+/// (`styp`, `sidx`, `prft`, `mdat`, `free`, `skip` and others) are skipped, as
 /// are `traf`s of tracks `info` doesn't declare.
 pub fn media_duration(info: &InitInfo, media: &[u8]) -> Result<Duration, ParseError> {
     let mut sums = [0u64; MAX_TRACKS];

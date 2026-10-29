@@ -32,6 +32,7 @@ rand_core.workspace = true
 
 [dev-dependencies]
 hex.workspace = true
+strims-golden.workspace = true
 proptest.workspace = true
 # integration tests only: unit tests build this crate a second time, and the
 # fake world's types come from the first build

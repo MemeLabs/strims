@@ -9,6 +9,7 @@ use strims_directory::KeeperConfig;
 use strims_proto::video::v1::{HlsEgressConfig, VideoIngressConfig};
 
 use crate::ingress::IngressMetrics;
+use crate::segment::CutRule;
 
 /// The longest ingress listen address, ingress public address or HLS
 /// public address, in bytes.
@@ -57,6 +58,9 @@ pub struct IngressSettings {
     /// half the ingress swarm's 16 MiB window, so a viewer holds a whole
     /// record.
     pub max_record_bytes: usize,
+    /// The media a fragment within a record holds before it is written
+    /// ([`CutRule::fragment_duration`](crate::CutRule::fragment_duration)).
+    pub fragment_duration: Duration,
     pub rtmp: RtmpSettings,
     /// How long a closing connection has to take its last output, such as
     /// the status that tells a publisher why.
@@ -75,6 +79,7 @@ impl Default for IngressSettings {
             bind_retry: Duration::from_secs(30),
             min_segment_media_bytes: 32 * 1024,
             max_record_bytes: 8 * 1024 * 1024,
+            fragment_duration: CutRule::DEFAULT_FRAGMENT_DURATION,
             rtmp: RtmpSettings::default(),
             close_timeout: Duration::from_secs(5),
         }

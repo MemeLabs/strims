@@ -72,7 +72,7 @@ use strims_video::amf0::Value;
 use strims_video::hls::HlsRoutes;
 use strims_video::synth::publisher::{Publisher, PublisherConfig};
 use strims_video::synth::script::{
-    MetaValue, Script, ScriptConfig, Tag, TagKind, expected_records,
+    MetaValue, Script, ScriptConfig, Tag, TagKind, expected_records, without_publish_times,
 };
 use strims_video::{
     CutRule, DecoderConfig, EgressPiece, EgressStream, FlvSource, SourceEvent, SwarmKind,
@@ -143,7 +143,9 @@ impl World {
             duration_secs: 10,
             ..ScriptConfig::default()
         });
+        // Publish times are the ingest's own: records compare without them.
         let expected = expected_records(&script, CutRule::default());
+        let expected = expected.iter().map(|r| without_publish_times(r)).collect();
         World {
             seed,
             trace: Rc::default(),
@@ -541,7 +543,9 @@ impl Started {
                 .expect("a piece");
             match piece {
                 EgressPiece::Data(d) => record.extend_from_slice(d),
-                EgressPiece::RecordEnd => got.push(std::mem::take(&mut record)),
+                EgressPiece::RecordEnd => {
+                    got.push(without_publish_times(&std::mem::take(&mut record)))
+                }
                 EgressPiece::Discontinuity => panic!("a discontinuity after {} records", got.len()),
             }
         }

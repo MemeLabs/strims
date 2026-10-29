@@ -82,8 +82,13 @@
 //! [`PackedSink`], cut under the rule of
 //! [`IngressSettings::min_segment_media_bytes`](crate::IngressSettings::min_segment_media_bytes)
 //! and
-//! [`IngressSettings::max_record_bytes`](crate::IngressSettings::max_record_bytes).
-//! The packed stream's bytes go into the swarm as they become final.
+//! [`IngressSettings::max_record_bytes`](crate::IngressSettings::max_record_bytes),
+//! with a fragment per
+//! [`IngressSettings::fragment_duration`](crate::IngressSettings::fragment_duration)
+//! of media within each record. A unit's publish time, in its fragment's
+//! `prft`, is when the connection took its message from the RTMP server,
+//! on the node's clock. The packed stream's bytes go into the swarm as
+//! they become final: a frame at a time, or up to a record's end.
 //! The swarm writer is never flushed, which would pad a partial integrity
 //! unit with zeros a reader takes for record bytes. A codec or tag the
 //! source refuses, or a record over its bound, ends the session; the
@@ -853,6 +858,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         let rule = CutRule {
             min_media_bytes: self.config.ingress.min_segment_media_bytes,
             max_record_bytes: self.config.ingress.max_record_bytes,
+            fragment_duration: self.config.ingress.fragment_duration,
         };
         let uri = Uri::new(
             publication.swarm_id.clone(),

@@ -406,11 +406,16 @@ fn ffmpeg_publishes_and_plays_back_over_hls() {
                 std::env::temp_dir().join(format!("strims-ffmpeg-{}.mp4", std::process::id()));
             std::fs::write(&file, [init.body, media.body].concat()).unwrap();
             let file_arg = file.to_str().unwrap().to_owned();
+            // Counted past the init's edit list: under it, the audio a
+            // file starts with falls within the composition delay and
+            // decodes to nothing.
             let (ok, out, err) = tool(
                 "ffprobe",
                 &[
                     "-v",
                     "error",
+                    "-ignore_editlist",
+                    "1",
                     "-count_frames",
                     "-show_entries",
                     "stream=codec_name,nb_read_frames",

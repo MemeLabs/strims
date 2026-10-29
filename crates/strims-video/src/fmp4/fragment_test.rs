@@ -116,3 +116,43 @@ fn head_and_data_make_the_fragment() {
     write_fragment(3, &runs(), &mut whole);
     assert_eq!(head, whole);
 }
+
+#[test]
+fn prft_layout() {
+    let mut out = Vec::new();
+    write_prft(
+        &ProducerTime {
+            track: TrackId(2),
+            media_time: 0x1_0000_0003,
+            // 2026-10-29T12:00:00.250Z.
+            published: Time::from_unix_millis(1_793_275_200_250),
+        },
+        &mut out,
+    );
+    #[rustfmt::skip]
+    let expected: &[&[u8]] = &[
+        // prft, 32: version 1, flags 1; reference_track_ID 2
+        &[0, 0, 0, 0x20], b"prft", &[1, 0, 0, 1], &[0, 0, 0, 2],
+        //   ntp_timestamp: 4_002_264_000 s since 1900, a quarter second
+        &4_002_264_000u32.to_be_bytes(), &[0x40, 0, 0, 0],
+        //   media_time
+        &[0, 0, 0, 1, 0, 0, 0, 3],
+    ];
+    assert_eq!(out, expected.concat());
+    assert_eq!(out.len(), PRFT_LEN);
+}
+
+#[test]
+fn ntp_timestamps_count_from_1900_and_wrap_with_their_era() {
+    assert_eq!(ntp_timestamp(Time::EPOCH), 2_208_988_800 << 32);
+    // A millisecond is 2^32 / 1000 of a second, rounded down.
+    assert_eq!(
+        ntp_timestamp(Time::from_unix_millis(1)),
+        (2_208_988_800 << 32) | 4_294_967
+    );
+    // 2036-02-07T06:28:16Z starts NTP era 1.
+    let era1 = Time::from_unix(4_294_967_296 - 2_208_988_800, 0);
+    assert_eq!(ntp_timestamp(era1), 0);
+    assert_eq!(ntp_timestamp(Time::from_unix(-2_208_988_801, 0)), 0);
+    assert_eq!(ntp_timestamp(Time::NIL), 0);
+}

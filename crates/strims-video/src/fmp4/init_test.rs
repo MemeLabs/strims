@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
 use super::*;
-use crate::fmp4::parse_init;
+use crate::fmp4::parse::{Boxes, parse_init};
 use crate::media::TrackId;
 
 const MATRIX: [u8; 36] = [
@@ -60,7 +60,12 @@ fn find_box<'a>(data: &'a [u8], fourcc: &[u8; 4]) -> &'a [u8] {
 #[test]
 fn video_init_layout() {
     let mut out = Vec::new();
-    write_init(&[video(1, &[1, 0x64, 0, 0x1f], 320, 240)], &mut out).unwrap();
+    write_init(
+        &[video(1, &[1, 0x64, 0, 0x1f], 320, 240)],
+        Duration::ZERO,
+        &mut out,
+    )
+    .unwrap();
     #[rustfmt::skip]
     let expected: &[&[u8]] = &[
         // ftyp, 28 bytes: major brand, minor version 512, compatible brands
@@ -125,10 +130,91 @@ fn video_init_layout() {
     assert_eq!(out, expected.concat());
 }
 
+/// The boxes of each `trak` in `init`, in order.
+fn trak_boxes(init: &[u8]) -> Vec<Vec<(String, Vec<u8>)>> {
+    let (_, moov) = Boxes::new(init)
+        .map(Result::unwrap)
+        .find(|(t, _)| t.0 == *b"moov")
+        .unwrap();
+    Boxes::new(moov)
+        .map(Result::unwrap)
+        .filter(|(t, _)| t.0 == *b"trak")
+        .map(|(_, trak)| {
+            Boxes::new(trak)
+                .map(Result::unwrap)
+                .map(|(t, c)| (t.to_string(), c.to_vec()))
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn an_edit_list_moves_every_track_back_by_the_composition_delay() {
+    let configs = [video(1, &[1, 0x64, 0, 0x1f], 320, 240), audio(2, 48_000, 2)];
+    // Two frames at 30 fps, as nanoseconds rounded down.
+    let delay = Duration::from_nanos(66_666_666);
+    let mut out = Vec::new();
+    write_init(&configs, delay, &mut out).unwrap();
+    let edit = |media_time: u32| -> Vec<u8> {
+        #[rustfmt::skip]
+        let elst: &[&[u8]] = &[
+            // elst, 28: version 0; entry_count 1; segment_duration 0 (to the
+            // end); media_time; media_rate 1.0
+            &[0, 0, 0, 0x1c], b"elst", &[0; 4], &[0, 0, 0, 1], &[0; 4],
+            &media_time.to_be_bytes(), &[0, 1, 0, 0],
+        ];
+        elst.concat()
+    };
+    let traks = trak_boxes(&out);
+    // The delay in each track's timescale, rounded to the nearest unit.
+    for (trak, media_time) in traks.iter().zip([6000, 3200]) {
+        let names: Vec<&str> = trak.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(names, ["tkhd", "edts", "mdia"]);
+        assert_eq!(trak[1].1, edit(media_time));
+    }
+    let mut plain = Vec::new();
+    write_init(&configs, Duration::ZERO, &mut plain).unwrap();
+    assert_eq!(out.len(), plain.len() + 2 * 36);
+    assert_eq!(parse_init(&out).unwrap(), parse_init(&plain).unwrap());
+}
+
+#[test]
+fn no_edit_list_without_a_positive_delay() {
+    let configs = [video(1, &[1, 0x64, 0, 0x1f], 320, 240), audio(2, 48_000, 2)];
+    let mut zero = Vec::new();
+    write_init(&configs, Duration::ZERO, &mut zero).unwrap();
+    let mut negative = Vec::new();
+    write_init(&configs, Duration::from_millis(-40), &mut negative).unwrap();
+    assert_eq!(zero, negative);
+    for trak in trak_boxes(&zero) {
+        assert!(trak.iter().all(|(t, _)| t != "edts"));
+    }
+}
+
+#[test]
+fn a_media_time_past_32_bits_writes_a_version_1_edit() {
+    let mut out = Vec::new();
+    // 30,000 s at 90 kHz is 2.7e9 units.
+    write_init(
+        &[video(1, &[1], 16, 16)],
+        Duration::from_secs(30_000),
+        &mut out,
+    )
+    .unwrap();
+    #[rustfmt::skip]
+    let elst: &[&[u8]] = &[
+        // elst, 36: version 1; entry_count 1; 64-bit segment_duration 0 and
+        // media_time; media_rate 1.0
+        &[0, 0, 0, 0x24], b"elst", &[1, 0, 0, 0], &[0, 0, 0, 1], &[0; 8],
+        &2_700_000_000i64.to_be_bytes(), &[0, 1, 0, 0],
+    ];
+    assert_eq!(trak_boxes(&out)[0][1].1, elst.concat());
+}
+
 #[test]
 fn audio_sample_entry_layout() {
     let mut out = Vec::new();
-    write_init(&[audio(2, 48_000, 2)], &mut out).unwrap();
+    write_init(&[audio(2, 48_000, 2)], Duration::ZERO, &mut out).unwrap();
     #[rustfmt::skip]
     let expected: &[&[u8]] = &[
         // mp4a, 75: reserved[6]; data_reference_index 1; reserved[2];
@@ -159,7 +245,7 @@ fn audio_sample_entry_layout() {
 #[test]
 fn audio_rate_above_16_bits_is_halved_and_mdhd_keeps_it() {
     let mut out = Vec::new();
-    write_init(&[audio(2, 96_000, 2)], &mut out).unwrap();
+    write_init(&[audio(2, 96_000, 2)], Duration::ZERO, &mut out).unwrap();
     let mp4a = find_box(&out, b"mp4a");
     assert_eq!(mp4a[32..36], [0xbb, 0x80, 0, 0]);
     assert_eq!(&find_box(&out, b"mdhd")[20..24], 96_000u32.to_be_bytes());
@@ -168,7 +254,7 @@ fn audio_rate_above_16_bits_is_halved_and_mdhd_keeps_it() {
 #[test]
 fn audio_without_channel_count_declares_stereo() {
     let mut out = Vec::new();
-    write_init(&[audio(2, 44_100, 0)], &mut out).unwrap();
+    write_init(&[audio(2, 44_100, 0)], Duration::ZERO, &mut out).unwrap();
     assert_eq!(find_box(&out, b"mp4a")[24..26], [0, 2]);
 }
 
@@ -176,7 +262,7 @@ fn audio_without_channel_count_declares_stereo() {
 fn tracks_follow_config_order_and_next_track_id_follows_the_highest() {
     let mut out = Vec::new();
     let configs = [video(3, &[1, 2, 3], 16, 16), audio(7, 48_000, 2)];
-    write_init(&configs, &mut out).unwrap();
+    write_init(&configs, Duration::ZERO, &mut out).unwrap();
     let info = parse_init(&out).unwrap();
     let ids: Vec<u32> = info.tracks().iter().map(|t| t.id).collect();
     assert_eq!(ids, [3, 7]);
@@ -219,7 +305,7 @@ fn invalid_config_sets_are_refused_and_leave_the_buffer() {
         ),
     ];
     for (configs, error) in cases {
-        assert_eq!(write_init(&configs, &mut out), Err(error));
+        assert_eq!(write_init(&configs, Duration::ZERO, &mut out), Err(error));
         assert_eq!(out, [0xaa]);
     }
     let long = DecoderConfig {
@@ -232,7 +318,7 @@ fn invalid_config_sets_are_refused_and_leave_the_buffer() {
         ..audio(2, 48_000, 2)
     };
     assert!(matches!(
-        write_init(&[v, long], &mut out),
+        write_init(&[v, long], Duration::ZERO, &mut out),
         Err(InitError::Aac { track: 2, .. })
     ));
     assert_eq!(out, [0xaa]);

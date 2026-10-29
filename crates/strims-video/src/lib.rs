@@ -19,10 +19,11 @@
 //!   H.264 with AAC and refuses other codecs.
 //! - [`amf0`]: the AMF0 values RTMP commands and metadata carry.
 //! - [`rtmp`]: the RTMP server a publisher streams FLV tags to.
-//! - [`fmp4`]: fragmented MP4 init segments and fragments, and the reading
-//!   of records.
+//! - [`fmp4`]: fragmented MP4 init segments and fragments, each with its
+//!   `prft`, the [`fmp4::FragmentWriter`] that turns access units into
+//!   fragments, and the reading of records.
 //! - [`segment`]: the muxer cutting access units into fMP4 segments, one
-//!   record each, under a [`CutRule`].
+//!   record each written fragment by fragment, under a [`CutRule`].
 //! - [`record`]: where records go: packed into a video swarm's frames
 //!   ([`PackedSink`]) or collected whole ([`VecSink`]).
 //! - `synth` (feature `test-support`): deterministic FLV tag scripts, the
