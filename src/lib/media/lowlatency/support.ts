@@ -40,7 +40,10 @@ export interface RendererCaps {
 // The renderer a player uses by default: a VideoTrackGenerator where
 // workers have one; else the window's MediaStreamTrackGenerator; else a
 // window canvas whose stream the video plays. Each gives the player a
-// native video.
+// native video, whose fullscreen, picture-in-picture and text tracks the
+// UI keeps. A canvas the worker draws on spares the window's main thread,
+// but its stream presents pictures less evenly and drops some while that
+// thread is busy (Chromium), or it can't feed a video at all (Firefox).
 export const defaultRenderer = (caps: RendererCaps): Renderer => {
   if (caps.videoTrackGenerator) return Renderer.VideoTrackGenerator;
   if (caps.mediaStreamTrackGenerator) return Renderer.MediaStreamTrackGenerator;
