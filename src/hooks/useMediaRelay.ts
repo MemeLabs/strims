@@ -42,6 +42,7 @@ const useMediaRelay = ({ networkKey, swarmUri, mimeType, videoRef }: MediaRelayP
     const clientEvents = client.videoEgress.openStream({
       swarmUri,
       networkKeys: [Base64.toUint8Array(networkKey)],
+      mimeType,
     });
     clientEvents.on("data", ({ body }) => {
       switch (body.case) {

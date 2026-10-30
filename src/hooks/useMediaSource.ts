@@ -10,8 +10,8 @@ import * as fmp4 from "../lib/media/fmp4";
 import * as webm from "../lib/media/webm";
 
 const decoders = {
-  "video/mp4": fmp4.Decoder,
-  "video/webm": webm.Decoder,
+  "video/mp4": (mimeType: string) => new fmp4.Decoder(mimeType),
+  "video/webm": () => new webm.Decoder(),
 };
 
 export type MimeType = keyof typeof decoders;
@@ -35,8 +35,7 @@ const useMediaSource = ({
 
   useEffect(() => {
     const [fileFormat] = mimeType.split(";", 1) as [MimeType];
-    const Decoder = decoders[fileFormat];
-    const decoder = new Decoder();
+    const decoder = decoders[fileFormat](mimeType);
     let started = false;
 
     setMediaSource(decoder.source.getMediaSource());
@@ -51,6 +50,7 @@ const useMediaSource = ({
     const clientEvents = client.videoEgress.openStream({
       swarmUri,
       networkKeys: [Base64.toUint8Array(networkKey)],
+      mimeType,
     });
     clientEvents.on("data", ({ body }) => {
       switch (body.case) {
