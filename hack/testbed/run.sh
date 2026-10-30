@@ -45,6 +45,8 @@
 #   VIEWER_DELAY_MS=<ms>   each viewer's (default 10)
 #   SECS=<s>               the stream's length (default 180)
 #   JOIN_AT=<s>            when viewers dial in, after the start (default 0)
+#   JOINS="<i>:<s> ..."    node i dials in <s> seconds after the start, in
+#                          place of JOIN_AT
 #   SLOW_DOWN_KBIT=<k>     viewer 1's downlink, if set
 #   SEED_UP_STEPS="<s>:<m> ..."  the seed's uplink becomes <m> Mbit/s <s>
 #                          seconds after the stream starts (tc qdisc change;
@@ -60,6 +62,17 @@
 #                          testbed_node`
 #   RATE=<bytes/s>         the stream's rate, at every node (default
 #                          strims-testbed's RATE, 256 KiB/s)
+#   MEDIA=<flv file>       the seed streams the file's H.264 and AAC in the
+#                          unit format (strims-testbed's media module), in
+#                          place of the self-checking frames at RATE; it
+#                          must be native. Browser viewers play it through
+#                          the baseline player
+#   UNITS_CPS=<n>          with MEDIA, the swarm's chunks per signature,
+#                          the file's signing as ingest chooses it
+#                          (default 8)
+#   RECORD="<i> ..."       with MEDIA, these native viewers record the Data
+#                          messages they read in record-<i>.bin
+#                          (testbed_node's --record)
 #   NODE_ARGS=<args>       more flags for every native node
 #   CAPTURE=1              ppspp captures in <out dir>/capture, one dump
 #                          per node (native and browser), named by host id
@@ -84,7 +97,9 @@
 # steps.log (when each of SEED_UP_STEPS applied, ms since the epoch, and
 # its rate), compete-<s>.json (each upload's iperf3 report) and
 # compete.log (when each started), and settings. With a browser node also
-# node-relay.err, cpu-relay.log and hosts/ (each node's host id).
+# node-relay.err, cpu-relay.log and hosts/ (each node's host id). With
+# MEDIA, each browser viewer's player-<i>.jsonl (its player's line a
+# second, testbed_browser's --player), and RECORD's record-<i>.bin.
 #
 # Images: strims-testbed (Dockerfile) for native nodes, the relay and the
 # sink, and strims-testbed-browser (browser.Dockerfile) for browser nodes,
@@ -117,6 +132,15 @@ bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
 browser_bin=${BROWSER_BIN:-$root/target/release/examples/testbed_browser}
 web=${WEB_BUNDLE:-$root/dist/wasm-testbed}
 read -r -a kinds <<< "${KINDS:-}"
+read -r -a joins <<< "${JOINS:-}"
+read -r -a records <<< "${RECORD:-}"
+media=${MEDIA:-}
+units_arg=""
+if [ -n "$media" ]; then
+  [ -f "$media" ] || { echo "no media file at $media" >&2; exit 1; }
+  media=$(cd "$(dirname "$media")" && pwd)/$(basename "$media")
+  units_arg="--units ${UNITS_CPS:-8}"
+fi
 browser_links=${BROWSER_LINKS:-ws}
 image=strims-testbed
 browser_image=strims-testbed-browser
@@ -126,8 +150,18 @@ relay=$subnet.5
 
 n=$((viewers + 1))
 kind_of() { echo "${kinds[$1]:-native}"; }
+join_of() {
+  local j
+  for j in "${joins[@]}"; do
+    if [ "${j%%:*}" = "$1" ]; then echo "${j#*:}"; return; fi
+  done
+  echo "$join_at"
+}
 browsers=0
 nbrowsers=0
+if [ -n "$media" ] && [ "$(kind_of 0)" != native ]; then
+  echo "MEDIA needs a native seed" >&2; exit 1
+fi
 for i in $(seq 0 $((n - 1))); do
   case $(kind_of "$i") in
     native) ;;
@@ -176,7 +210,7 @@ docker network inspect "$net" >/dev/null 2>&1 \
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|KINDS|BROWSER_LINKS)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|KINDS|BROWSER_LINKS|MEDIA|UNITS_CPS|RECORD)=' \
   > "$out/settings" || true
 
 # The containers start one after another before the stream does, and
@@ -226,18 +260,36 @@ tc qdisc add dev ifb0 root tbf rate ${slow}kbit burst 3028 limit $((slow * queue
   fi
   capture=""
   if [ "${CAPTURE:-0}" = 1 ]; then capture="--capture /out/capture"; fi
+  join=$(join_of "$i")
+  media_mount=()
+  media_arg=""
+  if [ -n "$media" ] && [ "$i" -eq 0 ]; then
+    media_mount=(-v "$media:/media.flv:ro")
+    media_arg="--media /media.flv"
+  fi
+  record_arg=""
+  for r in "${records[@]}"; do
+    if [ "$r" = "$i" ] && [ -n "$media" ]; then record_arg="--record /out/record-$i.bin"; fi
+  done
+  player_arg=""
+  if [ -n "$media" ] && [ "$(kind_of "$i")" != native ]; then
+    # Written by the browser's unprivileged user.
+    : > "$out/player-$i.jsonl"
+    chmod 666 "$out/player-$i.jsonl"
+    player_arg="--player /out/player-$i.jsonl"
+  fi
   name=tb-$i
   names+=("$name")
   docker rm -f "$name" >/dev/null 2>&1 || true
   if [ "$(kind_of "$i")" = native ]; then
     docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" \
-      --cap-add NET_ADMIN -v "$bin:/testbed_node:ro" -v "$out:/out" "$image" \
+      --cap-add NET_ADMIN -v "$bin:/testbed_node:ro" -v "$out:/out" "${media_mount[@]}" "$image" \
       bash -c "set -e
 $shape
 tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
-exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join_at $rate_arg $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join $rate_arg $units_arg $media_arg $record_arg $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   else
     # The browser runs as the image's unprivileged user, after root has
     # shaped the link. Its profile, in /tmp, stays in memory, so its
@@ -251,7 +303,7 @@ $shape
 tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
-exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join_at $rate_arg $hosts $capture > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join $rate_arg $units_arg $hosts $capture $player_arg > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   fi
 done
 

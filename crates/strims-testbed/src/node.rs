@@ -3,13 +3,17 @@
 
 //! The testbed node's swarm, on a started node of either driver.
 //!
-//! [`run`] streams (node 0) or reads the testbed's swarm
-//! ([`LiveShape::testbed`]). It runs the swarm with every peer that has a
-//! testbed index, whoever made the link; the relay has none. The seed
-//! writes from [`Settings::start_ms`] for [`Settings::secs`], stamping each
-//! frame with the wall clock, and a viewer measures each frame's lag
+//! [`run`] streams (node 0) or reads the testbed's swarm. It runs the swarm
+//! with every peer that has a testbed index, whoever made the link; the
+//! relay has none. The seed writes from [`Settings::start_ms`] for
+//! [`Settings::secs`], and a viewer measures the lag of what it reads
 //! against the wall clock when it reads it: the testbed's containers share
 //! the host's clock. It ends 5 s after the stream does.
+//!
+//! The stream ([`Stream`]) is the self-checking frames of [`LiveShape::testbed`],
+//! each stamped with the wall clock as it is written, or an FLV file's
+//! media in the unit format ([`media`](crate::media)), each access unit
+//! with its publish time.
 //!
 //! Every second from 5 s before the start, the node emits one JSON line
 //! ([`Runtime::emit`]); a second it missed has none:
@@ -22,7 +26,7 @@
 //! | `upload_rate`, `busy_permille`, `capacity`, `queue_delay_ms` | the upload meter |
 //! | `path_delay_ms`, `path_queued_ms`, `path_latest_ms` | the queueing delay from vnic's path measure ([`strims_base::path::node_delays`]): the links' excess round trips, and their queued bytes over their delivery rates; and their latest round trips' excess ([`strims_base::path::latest_excess`]) |
 //! | `children`, `seed_budget`, `seed_window`, `seed_copies`, `seed_first_wave` | the push scheduler |
-//! | `frames`, `lag_p50_ms`, `lag_p99_ms`, `lag_max_ms` | at a viewer, the frames read in that second and their lag |
+//! | `frames`, `lag_p50_ms`, `lag_p99_ms`, `lag_max_ms` | at a viewer, the frames read in that second and their lag; of a media stream, the unit records read whole and their lag from their publish times |
 //! | `rtt_mean_ms` | the swarm's channels' round trips |
 //! | `cpu_ms` | the driver's CPU time so far, `null` when it can't tell |
 //! | `transfers` | [`TransferSample`], peers by index |
@@ -30,6 +34,7 @@
 //! | `tick_late_ms` | how late the timer of this line fired |
 //! | `write_late_ms` | at the seed, the latest of that second's writes past its time; `null` without writes |
 //! | `wakeups` | passes of the node's loop since the last line (`null` on the first): it follows traffic, so it shows load only next to a native node's |
+//! | `media` | of a media stream, `null` otherwise: at the seed, [`SeedStats`]: the unit writer's `records`, `units`, `gops`, `bytes` and `padding`, `early_signs` and `dropped` units; at a viewer, [`ViewerStats`]: `units` and `keyframes` read whole, Data `messages` and their `bytes`, `first_message_ms`, the egress reader's `discontinuities`, `corrupt_frames`, `losses`, `records` and `rewinds`/`refused_rewinds`, and the join: `first_read_ms`, the first rewind's `rewind_start_ms`, `rewind_end_ms`, outcome (`granted`, `refused`, `timed_out`) and bytes back from the reader's position, `rewind_back`. Times are Unix ms. |
 //!
 //! `tick_late_ms` and `write_late_ms` show a throttled timer or an
 //! overloaded host.
@@ -40,10 +45,12 @@ use std::future::Future;
 use strims_base::path;
 use strims_base::time::{Duration, Time};
 use strims_node_core::{
-    HostId, LinkKind, Node, NodeMetrics, PeerInfo, ReadError, SwarmId, SwarmKey, WriterOptions,
+    HostId, LinkKind, Node, NodeMetrics, PeerInfo, ReadError, SwarmId, SwarmKey, SwarmReader,
+    SwarmWriter, WriterOptions,
 };
 use tokio::sync::mpsc;
 
+use crate::media::{self, FlvFile, SeedStats, TagKind, ViewerStats};
 use crate::shape::LiveShape;
 use crate::stream::{FRAME_LEN, FrameParser, Parsed, encode_frame};
 use crate::topology::{index_of, swarm_key};
@@ -64,6 +71,22 @@ pub trait Runtime {
     fn emit(&self, line: String);
     /// Reports something that went wrong; the node runs on.
     fn error(&self, message: String);
+    /// Takes a viewer's Data message of a media stream (see
+    /// [`media::DataMessages`]); a player plays them.
+    fn media(&self, data: &[u8], segment_end: bool, discontinuity: bool) {
+        let _ = (data, segment_end, discontinuity);
+    }
+}
+
+/// What the seed streams.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Stream {
+    /// The self-checking frames, at [`Settings::rate`].
+    #[default]
+    Frames,
+    /// An FLV file's media in the unit format, in a swarm of
+    /// `chunks_per_signature` chunks per integrity unit.
+    Units { chunks_per_signature: usize },
 }
 
 /// What one node does in the run.
@@ -78,28 +101,59 @@ pub struct Settings {
     /// The stream rate in bytes per second.
     pub rate: u64,
     /// The chunk size and munro in bytes ([`LiveShape::with_chunks`]);
-    /// `None` keeps [`LiveShape::testbed`]'s.
+    /// `None` keeps [`LiveShape::testbed`]'s. Frames only.
     pub chunks: Option<(usize, usize)>,
+    pub stream: Stream,
 }
 
 /// Runs the node's part (see the [module docs](self)), taking the node's
-/// peers from `peers` as they're added.
-pub async fn run(
+/// peers from `peers` as they're added. The seed of a media stream writes
+/// `file`.
+pub async fn run<R: Runtime + Clone + 'static>(
     node: &Node,
     mut peers: mpsc::UnboundedReceiver<PeerInfo>,
     s: Settings,
-    rt: &impl Runtime,
+    file: Option<&FlvFile>,
+    rt: &R,
 ) -> Result<(), String> {
-    let mut shape = LiveShape::testbed(s.rate);
-    if let Some((chunk, munro)) = s.chunks {
-        shape = shape.with_chunks(chunk, munro)?;
-    }
-    let key = swarm_key();
     let seed = s.index == 0;
+    let mut shape = LiveShape::testbed(s.rate);
+    let (options, signing) = match s.stream {
+        Stream::Frames => {
+            if let Some((chunk, munro)) = s.chunks {
+                shape = shape.with_chunks(chunk, munro)?;
+            }
+            (shape.options.clone(), None)
+        }
+        Stream::Units { .. } if s.chunks.is_some() => {
+            return Err("a media stream takes ingest's chunks".to_owned());
+        }
+        Stream::Units {
+            chunks_per_signature: cps,
+        } if seed => {
+            let file = file.ok_or("the seed of a media stream needs its file")?;
+            let signing = media::signing_of(
+                file.metadata().as_ref(),
+                file.has(TagKind::Video),
+                file.has(TagKind::Audio),
+            );
+            if signing.chunks_per_signature != cps {
+                return Err(format!(
+                    "the file's stream signs {} chunks at a time, not {cps}",
+                    signing.chunks_per_signature
+                ));
+            }
+            (media::seed_options(cps)?, Some(signing))
+        }
+        Stream::Units {
+            chunks_per_signature: cps,
+        } => (media::viewer_options(cps)?, None),
+    };
+    let key = swarm_key();
     let (swarm, writer) = if seed {
         let (swarm, _, writer) = node
             .create_swarm(WriterOptions {
-                swarm_options: shape.options.clone(),
+                swarm_options: options.clone(),
                 key: key.clone(),
             })
             .await
@@ -107,7 +161,7 @@ pub async fn run(
         (swarm, Some(writer))
     } else {
         let swarm = node
-            .add_swarm(SwarmId::new(&key.public), shape.options.clone())
+            .add_swarm(SwarmId::new(&key.public), options.clone())
             .await
             .map_err(|e| format!("add swarm: {e}"))?;
         (swarm, None)
@@ -129,30 +183,32 @@ pub async fn run(
     let end_ms = s.start_ms + s.secs * 1000;
     let lags = RefCell::new(Vec::<u64>::new());
     let write_late = Cell::new(None::<u64>);
+    let seed_stats = Cell::new(SeedStats::default());
+    let viewer_stats = RefCell::new(ViewerStats::default());
     let write = async {
         let Some(mut writer) = writer else {
             return;
         };
-        let fpw = shape.frames_per_write as u64;
-        let step = shape.write_interval.as_millis() as u64;
-        let mut buf = vec![0u8; shape.frames_per_write * FRAME_LEN];
-        for k in 0.. {
-            let at = s.start_ms + k * step;
-            if at >= end_ms {
-                break;
+        let written = match (signing, file) {
+            (Some(signing), Some(file)) => {
+                media::write(
+                    &mut writer,
+                    options.chunk_size,
+                    signing,
+                    file,
+                    s.start_ms,
+                    end_ms,
+                    rt,
+                    &write_late,
+                    &seed_stats,
+                )
+                .await
             }
-            rt.sleep_until_ms(at).await;
-            let t = rt.now_ms();
-            write_late.set(Some(
-                write_late.get().unwrap_or(0).max(t.saturating_sub(at)),
-            ));
-            for (j, f) in buf.chunks_mut(FRAME_LEN).enumerate() {
-                encode_frame(RUN_SEED, 0, k * fpw + j as u64, t, f);
-            }
-            if let Err(e) = writer.write(&buf).await {
-                rt.error(format!("write: {e}"));
-                return;
-            }
+            _ => write_frames(&mut writer, &shape, s.start_ms, end_ms, rt, &write_late).await,
+        };
+        if let Err(e) = written {
+            rt.error(e);
+            return;
         }
         // Dropping the writer would close the swarm.
         std::future::pending::<()>().await;
@@ -161,33 +217,21 @@ pub async fn run(
         if seed {
             return;
         }
-        let mut reader = match node.open_reader(swarm).await {
+        let reader = match node.open_reader(swarm).await {
             Ok(r) => r,
             Err(e) => {
                 rt.error(format!("open reader: {e}"));
                 return;
             }
         };
-        let mut buf = vec![0u8; 64 * 1024];
-        let mut parser = FrameParser::default();
-        loop {
-            match reader.read(&mut buf).await {
-                Ok(n) => {
-                    let now = rt.now_ms();
-                    parser.push(RUN_SEED, 0, buf.get(..n).unwrap_or_default(), |p| {
-                        if let Parsed::Frame(f) = p {
-                            lags.borrow_mut().push(now.saturating_sub(f.time_ms));
-                        }
-                    });
-                }
-                Err(ReadError::Underrun { .. } | ReadError::Reset) => {
-                    parser.resync();
-                }
-                Err(e) => {
-                    rt.error(format!("read: {e}"));
-                    return;
-                }
+        let read = match s.stream {
+            Stream::Frames => read_frames(reader, rt, &lags).await,
+            Stream::Units { .. } => {
+                media::read(reader, options.chunk_size, rt, &lags, &viewer_stats).await
             }
+        };
+        if let Err(e) = read {
+            rt.error(e);
         }
     };
     let sample = async {
@@ -209,6 +253,11 @@ pub async fn run(
             lag.sort_unstable();
             let wakeups = loops.map(|l| m.driver.loop_iterations.saturating_sub(l));
             loops = Some(m.driver.loop_iterations);
+            let media = match s.stream {
+                Stream::Frames => None,
+                Stream::Units { .. } if seed => Some(seed_stats.get().json()),
+                Stream::Units { .. } => Some(viewer_stats.borrow().json()),
+            };
             let line = Line {
                 t_ms: t,
                 s: &s,
@@ -221,6 +270,7 @@ pub async fn run(
                 tick_late,
                 write_late: write_late.take(),
                 wakeups,
+                media,
                 now: Time::from_unix_millis(i64::try_from(t).unwrap_or(i64::MAX)),
             };
             rt.emit(line.json());
@@ -237,6 +287,64 @@ pub async fn run(
     Ok(())
 }
 
+/// Writes the self-checking frames of `shape` from `start_ms` until
+/// `end_ms`, the latest write past its time in `late`.
+async fn write_frames(
+    writer: &mut SwarmWriter,
+    shape: &LiveShape,
+    start_ms: u64,
+    end_ms: u64,
+    rt: &impl Runtime,
+    late: &Cell<Option<u64>>,
+) -> Result<(), String> {
+    let fpw = shape.frames_per_write as u64;
+    let step = shape.write_interval.as_millis() as u64;
+    let mut buf = vec![0u8; shape.frames_per_write * FRAME_LEN];
+    for k in 0.. {
+        let at = start_ms + k * step;
+        if at >= end_ms {
+            break;
+        }
+        rt.sleep_until_ms(at).await;
+        let t = rt.now_ms();
+        late.set(Some(late.get().unwrap_or(0).max(t.saturating_sub(at))));
+        for (j, f) in buf.chunks_mut(FRAME_LEN).enumerate() {
+            encode_frame(RUN_SEED, 0, k * fpw + j as u64, t, f);
+        }
+        writer
+            .write(&buf)
+            .await
+            .map_err(|e| format!("write: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Reads the self-checking frames, each one's lag into `lags`.
+async fn read_frames(
+    mut reader: SwarmReader,
+    rt: &impl Runtime,
+    lags: &RefCell<Vec<u64>>,
+) -> Result<(), String> {
+    let mut buf = vec![0u8; 64 * 1024];
+    let mut parser = FrameParser::default();
+    loop {
+        match reader.read(&mut buf).await {
+            Ok(n) => {
+                let now = rt.now_ms();
+                parser.push(RUN_SEED, 0, buf.get(..n).unwrap_or_default(), |p| {
+                    if let Parsed::Frame(f) = p {
+                        lags.borrow_mut().push(now.saturating_sub(f.time_ms));
+                    }
+                });
+            }
+            Err(ReadError::Underrun { .. } | ReadError::Reset) => {
+                parser.resync();
+            }
+            Err(e) => return Err(format!("read: {e}")),
+        }
+    }
+}
+
 /// One second's line.
 struct Line<'a> {
     t_ms: u64,
@@ -251,6 +359,8 @@ struct Line<'a> {
     tick_late: u64,
     write_late: Option<u64>,
     wakeups: Option<u64>,
+    /// The media stream's stats, as JSON.
+    media: Option<String>,
     /// When the metrics were read.
     now: Time,
 }
@@ -311,7 +421,7 @@ impl Line<'_> {
         );
         let lag = self.lag;
         format!(
-            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{}}}",
+            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{},\"media\":{}}}",
             self.t_ms,
             self.t_ms as i64 - self.s.start_ms as i64,
             self.s.index,
@@ -339,6 +449,7 @@ impl Line<'_> {
             self.tick_late,
             opt(self.write_late),
             opt(self.wakeups),
+            self.media.as_deref().unwrap_or("null"),
         )
     }
 }

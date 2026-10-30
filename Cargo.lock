@@ -2628,6 +2628,8 @@ dependencies = [
  "strims-node-core",
  "strims-ppspp",
  "strims-proto",
+ "strims-transfer",
+ "strims-video",
  "tokio",
  "tokio-tungstenite",
 ]

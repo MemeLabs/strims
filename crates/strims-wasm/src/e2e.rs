@@ -27,7 +27,7 @@
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
 //! | `stats` | | Reports `stats`. |
-//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, and optionally `rate`, and `chunk` with `munro` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. Only the first `testbed` runs. |
+//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, and optionally `rate`, `chunk` with `munro`, and `units` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. With `units`, the stream is media in the unit format in a swarm of `units` chunks per signature ([`strims_testbed::media`]), which the node reads as a viewer, sending the page its Data messages (see below). Only the first `testbed` runs. |
 //!
 //! Events, from the node:
 //!
@@ -49,6 +49,11 @@
 //! then the file's index as a LEB128 varint, then the bytes that follow
 //! in that file. The node sends them each time the capture flushes, which
 //! is between records, about once a second.
+//!
+//! A media stream's Data messages come as binary messages for the page,
+//! which plays them and doesn't relay them: `0x02`, then a flags byte
+//! (bit 0 the message completes a record, bit 1 a discontinuity came
+//! before it), then the message's bytes of records.
 //!
 //! Every vpn message on `echoPort` goes back to its sender's port,
 //! unchanged and from `echoPort`, in the order the messages arrived; it
@@ -72,7 +77,7 @@ use strims_node_core::{
     HostId, NetworkId, NetworkOptions, Node, NodeEvent, NodeEvents, PeerInfo, PpsppCapture,
 };
 use strims_proto::types::Key;
-use strims_testbed::node::{Runtime, Settings, kind_name};
+use strims_testbed::node::{Runtime, Settings, Stream, kind_name};
 use strims_testbed::shape::RATE;
 use tokio::sync::mpsc;
 use wasm_bindgen::JsCast;
@@ -282,6 +287,12 @@ impl Control {
                     v if v.is_undefined() => None,
                     _ => Some((size("chunk")?, size("munro")?)),
                 };
+                let stream = match property(cmd, "units") {
+                    v if v.is_undefined() => Stream::Frames,
+                    _ => Stream::Units {
+                        chunks_per_signature: size("units")?,
+                    },
+                };
                 let settings = Settings {
                     index: size("index")?,
                     nodes: size("nodes")?,
@@ -289,12 +300,15 @@ impl Control {
                     secs: int(cmd, "secs")?,
                     rate,
                     chunks,
+                    stream,
                 };
                 let out = self.out.clone();
                 // Detached: it ends 5 s after the stream does.
                 drop(runtime::spawn(async move {
                     let rt = Testbed(out.clone());
-                    if let Err(e) = strims_testbed::node::run(&r.node, peers, settings, &rt).await {
+                    if let Err(e) =
+                        strims_testbed::node::run(&r.node, peers, settings, None, &rt).await
+                    {
                         out.error("testbed", &e);
                     }
                 }));
@@ -463,6 +477,11 @@ async fn post_capture(out: Out, mut chunks: mpsc::UnboundedReceiver<Chunk>) {
 /// The first byte of a binary message of capture bytes; a JSON message's
 /// is `{`.
 pub const CAPTURE_BYTES: u8 = 0x01;
+/// The first byte of a binary message of a media stream's Data message,
+/// and its flags.
+pub const MEDIA_BYTES: u8 = 0x02;
+const MEDIA_SEGMENT_END: u8 = 0x01;
+const MEDIA_DISCONTINUITY: u8 = 0x02;
 
 /// Reports the node's events, hands added peers to `peers` for the
 /// testbed, and echoes the messages on the echo port, until the node
@@ -520,7 +539,9 @@ async fn watch(
     }
 }
 
-/// The testbed's side of the worker: its lines go out as `sample` events.
+/// The testbed's side of the worker: its lines go out as `sample` events,
+/// and a media stream's Data messages to the page.
+#[derive(Clone)]
 struct Testbed(Out);
 
 impl Runtime for Testbed {
@@ -547,6 +568,21 @@ impl Runtime for Testbed {
 
     fn error(&self, message: String) {
         self.0.error("testbed", &message);
+    }
+
+    fn media(&self, data: &[u8], segment_end: bool, discontinuity: bool) {
+        let mut msg = Vec::with_capacity(data.len() + 2);
+        msg.push(MEDIA_BYTES);
+        msg.push(
+            if segment_end { MEDIA_SEGMENT_END } else { 0 }
+                | if discontinuity {
+                    MEDIA_DISCONTINUITY
+                } else {
+                    0
+                },
+        );
+        msg.extend_from_slice(data);
+        self.0.post_bytes(&msg);
     }
 }
 

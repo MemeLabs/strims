@@ -13,6 +13,10 @@ strims-crypto.workspace = true
 strims-node-core.workspace = true
 strims-ppspp.workspace = true
 strims-proto.workspace = true
+# The media stream: ingest's source, unit writer and signing, and the
+# egress reader.
+strims-transfer.workspace = true
+strims-video.workspace = true
 hex.workspace = true
 # `select!`, `join!` and channels, which need no runtime and build on wasm32.
 tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
@@ -26,6 +30,7 @@ tokio-tungstenite.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 futures-util = { workspace = true, features = ["sink", "std"] }
 serde_json.workspace = true
+strims-video = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

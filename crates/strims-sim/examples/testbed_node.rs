@@ -10,7 +10,9 @@
 //! ```text
 //! testbed_node --index <i> --topology <file> [--secs <s>] [--start <unix ms>]
 //!              [--rate <bytes/s>] [--chunk <bytes> --munro <bytes>]
-//!              [--join-at <s>] [--hosts <dir>] [--capture <dir>]
+//!              [--units <chunks per signature> [--media <flv file>]]
+//!              [--record <file>] [--join-at <s>] [--hosts <dir>]
+//!              [--capture <dir>]
 //! testbed_node --relay-only --topology <file> [--secs <s>] [--start <unix ms>]
 //! ```
 //!
@@ -26,8 +28,16 @@
 //! after the start. `--chunk` and `--munro` size the swarm's chunks and
 //! signatures
 //! ([`with_chunks`](strims_testbed::shape::LiveShape::with_chunks)); every
-//! node must take the same. Each node prints its line per second on
-//! stdout, with the process's CPU time as `cpu_ms`.
+//! node must take the same. With `--units`, the stream is media in the
+//! unit format in a swarm of that many chunks per signature
+//! ([`strims_testbed::media`]), every node taking the same, and the seed
+//! replays the FLV file `--media` names. A viewer of it with `--record`
+//! writes the Data messages it reads to that file, for players to replay
+//! at the times they came: each is its arrival time in Unix milliseconds
+//! (u64, big-endian), a flags byte (bit 0 the message completes a record,
+//! bit 1 a discontinuity came before it), its length (u32, big-endian) and
+//! its bytes. Each node prints its line per second on stdout, with the
+//! process's CPU time as `cpu_ms`.
 //!
 //! `--relay-only` runs the relay: it listens where the topology's `relay`
 //! line says, joins the testbed network, runs no swarm, and stops 5 s
@@ -35,14 +45,19 @@
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+use std::cell::RefCell;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::Duration;
 
 use strims_node::{
     CaptureConfig, NetworkOptions, Node, NodeConfig, NodeEvent, SystemClock, TokioNet, WebRtcConfig,
 };
+use strims_testbed::media::FlvFile;
 use strims_testbed::native::{now_ms, self_cpu_ms, write_host};
-use strims_testbed::node::{Runtime, Settings};
+use strims_testbed::node::{Runtime, Settings, Stream};
 use strims_testbed::shape::RATE;
 use strims_testbed::topology::{
     BIND_PORT, BrowserLinks, Link, Topology, key_of, network_key, relay_key,
@@ -57,6 +72,9 @@ struct Args {
     rate: u64,
     chunk: Option<usize>,
     munro: Option<usize>,
+    units: Option<usize>,
+    media: Option<String>,
+    record: Option<String>,
     join_at: u64,
     hosts: Option<PathBuf>,
     capture: Option<String>,
@@ -75,6 +93,9 @@ fn args() -> Result<Args, String> {
         rate: RATE,
         chunk: None,
         munro: None,
+        units: None,
+        media: None,
+        record: None,
         join_at: 0,
         hosts: None,
         capture: None,
@@ -91,6 +112,9 @@ fn args() -> Result<Args, String> {
             "--rate" => a.rate = num(value()?)?,
             "--chunk" => a.chunk = Some(num(value()?)? as usize),
             "--munro" => a.munro = Some(num(value()?)? as usize),
+            "--units" => a.units = Some(num(value()?)? as usize),
+            "--media" => a.media = Some(value()?),
+            "--record" => a.record = Some(value()?),
             "--join-at" => a.join_at = num(value()?)?,
             "--hosts" => a.hosts = Some(value()?.into()),
             "--capture" => a.capture = Some(value()?),
@@ -103,11 +127,18 @@ fn args() -> Result<Args, String> {
     if a.chunk.is_some() != a.munro.is_some() {
         return Err("--chunk and --munro go together".to_owned());
     }
+    if a.media.is_some() && a.units.is_none() {
+        return Err("--media needs --units".to_owned());
+    }
     Ok(a)
 }
 
-/// The tokio driver's side of the node.
-struct Native;
+/// The tokio driver's side of the node, and the file a viewer records its
+/// Data messages in.
+#[derive(Clone, Default)]
+struct Native {
+    record: Option<Rc<RefCell<BufWriter<File>>>>,
+}
 
 impl Runtime for Native {
     fn now_ms(&self) -> u64 {
@@ -128,6 +159,23 @@ impl Runtime for Native {
 
     fn error(&self, message: String) {
         eprintln!("{message}");
+    }
+
+    fn media(&self, data: &[u8], segment_end: bool, discontinuity: bool) {
+        let Some(f) = &self.record else {
+            return;
+        };
+        let flags = u8::from(segment_end) | u8::from(discontinuity) << 1;
+        let len = u32::try_from(data.len()).unwrap_or(u32::MAX);
+        let mut f = f.borrow_mut();
+        let written = f
+            .write_all(&now_ms().to_be_bytes())
+            .and_then(|()| f.write_all(&[flags]))
+            .and_then(|()| f.write_all(&len.to_be_bytes()))
+            .and_then(|()| f.write_all(data));
+        if let Err(e) = written {
+            eprintln!("record: {e}");
+        }
     }
 }
 
@@ -174,6 +222,13 @@ async fn run() -> Result<(), String> {
         .node(a.index)
         .ok_or("this node isn't in the topology")?
         .clone();
+    let file = match &a.media {
+        Some(path) => {
+            let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+            Some(FlvFile::parse(bytes).map_err(|e| format!("{path}: {e}"))?)
+        }
+        None => None,
+    };
     let mut config = NodeConfig::new(key_of(a.index), a.index as u64 + 1);
     config.label = format!("testbed-{}", a.index);
     config.tcp_listen = Some(me.addr.to_string());
@@ -224,7 +279,9 @@ async fn run() -> Result<(), String> {
             }
         }
         if a.start_ms.is_some() {
-            Native.sleep_until_ms(start_ms + a.join_at * 1000).await;
+            Native::default()
+                .sleep_until_ms(start_ms + a.join_at * 1000)
+                .await;
         }
         for link in topo.plan(a.index) {
             match link {
@@ -241,13 +298,29 @@ async fn run() -> Result<(), String> {
         secs: a.secs,
         rate: a.rate,
         chunks: a.chunk.zip(a.munro),
+        stream: a.units.map_or(Stream::Frames, |cps| Stream::Units {
+            chunks_per_signature: cps,
+        }),
+    };
+    let rt = Native {
+        record: match &a.record {
+            Some(path) => Some(Rc::new(RefCell::new(BufWriter::new(
+                File::create(path).map_err(|e| format!("{path}: {e}"))?,
+            )))),
+            None => None,
+        },
     };
     let ran = tokio::select! {
         biased;
-        r = strims_testbed::node::run(&node, peers, settings, &Native) => r,
+        r = strims_testbed::node::run(&node, peers, settings, file.as_ref(), &rt) => r,
         () = async { tokio::join!(forward, links); } => Ok(()),
     };
     let _ = node.shutdown().await;
+    if let Some(f) = &rt.record
+        && let Err(e) = f.borrow_mut().flush()
+    {
+        eprintln!("record: {e}");
+    }
     ran
 }
 
@@ -271,8 +344,9 @@ async fn relay(topo: &Topology, end_ms: u64) -> Result<(), String> {
             }
         }
     };
+    let rt = Native::default();
     tokio::select! {
-        () = Native.sleep_until_ms(end_ms) => {}
+        () = rt.sleep_until_ms(end_ms) => {}
         () = log => {}
     }
     let _ = node.shutdown().await;

@@ -14,8 +14,9 @@
 //! - **Chromium** runs headless with [`CHROMIUM_FLAGS`].
 //!
 //! Both browsers keep ICE host candidates as addresses, so pages link over
-//! WebRTC without resolving each other's mDNS names, and put the pages'
-//! console on their output.
+//! WebRTC without resolving each other's mDNS names, put the pages'
+//! console on their output, and let pages play media with sound on their
+//! own.
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -217,6 +218,8 @@ pub const FIREFOX_PREFS: &str = concat!(
     // opened before, in a hidden browser.
     "user_pref(\"browser.sessionstore.resume_from_crash\", false);\n",
     "user_pref(\"browser.pagethumbnails.capturing_disabled\", true);\n",
+    // Media plays, with sound, without a user's gesture.
+    "user_pref(\"media.autoplay.default\", 0);\n",
 );
 
 /// Chromium's flags for the pages, besides `--user-data-dir`.
@@ -232,6 +235,8 @@ pub const CHROMIUM_FLAGS: &[&str] = &[
     "--no-default-browser-check",
     // The pages' console, on stderr.
     "--enable-logging=stderr",
+    // Media plays, with sound, without a user's gesture.
+    "--autoplay-policy=no-user-gesture-required",
 ];
 
 /// Writes [`FIREFOX_PREFS`] into the Firefox profile `dir`.

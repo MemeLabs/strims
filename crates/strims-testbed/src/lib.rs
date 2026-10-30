@@ -6,10 +6,12 @@
 //! browser node of strims-wasm's `e2e` feature. strims-sim's scenarios
 //! write and check the same stream ([`stream`]) and sample the same
 //! transfers ([`transfer`]), so a testbed run compares with a simulated
-//! one line for line.
+//! one line for line. A run can stream real media instead ([`media`]),
+//! which browser viewers play.
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod browser;
+pub mod media;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;
 pub mod node;

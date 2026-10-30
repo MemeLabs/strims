@@ -8,8 +8,9 @@
 //! ```text
 //! testbed_browser --index <i> --topology <file> --web <dir>
 //!                 [--browser-bin <path>] [--secs <s>] [--start <unix ms>]
-//!                 [--rate <bytes/s>] [--join-at <s>] [--hosts <dir>]
-//!                 [--capture <dir>]
+//!                 [--rate <bytes/s>] [--units <chunks per signature>]
+//!                 [--join-at <s>] [--hosts <dir>] [--capture <dir>]
+//!                 [--player <file>]
 //! ```
 //!
 //! The node's kind (`firefox` or `chromium`) comes from the topology
@@ -36,6 +37,13 @@
 //! container's agree when `host_t_ms` stays a few ms past `post_ms`. Everything else (the browser's output, the node's errors and
 //! peers) goes to stderr. The harness ends 5 s after the stream does,
 //! like `testbed_node`, and kills the browser.
+//!
+//! With `--units`, the stream is media in the unit format
+//! ([`strims_testbed::media`]): the page plays what the node reads through
+//! the baseline player, and its `player` events, a JSON object a second of
+//! the player's stats and the video's events, go to `--player`, one line
+//! each with `rel_ms` (the page's `postMs` less the start) and `host_t_ms`
+//! added.
 //!
 //! With `--capture`, the node captures its ppspp traffic as a native
 //! node's `--capture` does, and the harness writes what the page sends of
@@ -90,6 +98,8 @@ struct Args {
     join_at: u64,
     hosts: Option<PathBuf>,
     capture: Option<PathBuf>,
+    units: Option<u64>,
+    player: Option<PathBuf>,
 }
 
 fn args() -> Result<Args, String> {
@@ -107,6 +117,8 @@ fn args() -> Result<Args, String> {
         join_at: 0,
         hosts: None,
         capture: None,
+        units: None,
+        player: None,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -122,6 +134,8 @@ fn args() -> Result<Args, String> {
             "--join-at" => a.join_at = num(value()?)?,
             "--hosts" => a.hosts = Some(value()?.into()),
             "--capture" => a.capture = Some(value()?.into()),
+            "--units" => a.units = Some(num(value()?)?),
+            "--player" => a.player = Some(value()?.into()),
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -346,6 +360,12 @@ async fn run() -> Result<(), String> {
         }
     };
     let mut capture = a.capture.clone().map(CaptureFiles::new).transpose()?;
+    let mut player = match &a.player {
+        Some(p) => Some(BufWriter::new(
+            File::create(p).map_err(|e| format!("{}: {e}", p.display()))?,
+        )),
+        None => None,
+    };
     let (mut sink, mut stream) = ws.split();
     let (commands, mut queued) = mpsc::unbounded_channel::<Value>();
     let (events, _) = broadcast::channel(1024);
@@ -367,6 +387,7 @@ async fn run() -> Result<(), String> {
     let receive = {
         let events = control.events.clone();
         let capture = &mut capture;
+        let player = &mut player;
         async move {
             let mut until = None;
             loop {
@@ -417,6 +438,22 @@ async fn run() -> Result<(), String> {
                     }
                     continue;
                 }
+                if e["type"] == "player" {
+                    if let (Some(f), Value::Object(mut o)) = (player.as_mut(), e) {
+                        let t = now_ms();
+                        let rel = o
+                            .get("postMs")
+                            .and_then(Value::as_u64)
+                            .map(|p| p as i64 - start_ms as i64);
+                        o.insert("index".to_owned(), json!(a.index));
+                        o.insert("rel_ms".to_owned(), json!(rel));
+                        o.insert("host_t_ms".to_owned(), json!(t));
+                        if let Err(e) = writeln!(f, "{}", Value::Object(o)) {
+                            eprintln!("player file: {e}");
+                        }
+                    }
+                    continue;
+                }
                 if e["type"] == "captureOpen" {
                     if let (Some(c), Some(node), Some(file)) =
                         (capture.as_mut(), e["node"].as_str(), e["file"].as_u64())
@@ -459,7 +496,7 @@ async fn run() -> Result<(), String> {
             eprintln!("the node didn't start");
             return;
         };
-        let testbed = json!({
+        let mut testbed = json!({
             "type": "testbed",
             "index": a.index,
             "nodes": topo.nodes.len(),
@@ -467,6 +504,9 @@ async fn run() -> Result<(), String> {
             "secs": a.secs,
             "rate": a.rate,
         });
+        if let Some(cps) = a.units {
+            testbed["units"] = json!(cps);
+        }
         let _ = control.commands.send(testbed);
         if let Some(uri) = topo.relay_uri(a.index) {
             control.dial(&uri).await;
@@ -513,6 +553,11 @@ async fn run() -> Result<(), String> {
     }
     if let Some(c) = capture.as_mut() {
         c.flush();
+    }
+    if let Some(f) = player.as_mut()
+        && let Err(e) = f.flush()
+    {
+        eprintln!("player file: {e}");
     }
     let _ = std::fs::remove_dir_all(&profile);
     Ok(())

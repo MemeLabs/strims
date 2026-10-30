@@ -9,6 +9,7 @@
 # - Firefox is Mozilla's release .deb, pinned above Ubuntu's snap
 #   transitional package. The node hands WebRTC data channels to a worker,
 #   which Firefox can from 144.
+# - Firefox decodes H.264 with the system's FFmpeg (libavcodec).
 # - Chromium is Chrome for Testing, Google's pinned Chromium build, with
 #   the libraries its deb.deps lists (chrome-deps.sh). It runs as
 #   `chromium`.
@@ -26,7 +27,7 @@ RUN apt-get update \
  && printf 'Package: *\nPin: origin packages.mozilla.org\nPin-Priority: 1000\n' \
       > /etc/apt/preferences.d/mozilla \
  && apt-get update \
- && apt-get install -y --no-install-recommends "firefox=$FIREFOX_VERSION" \
+ && apt-get install -y --no-install-recommends "firefox=$FIREFOX_VERSION" libavcodec62 \
  && rm -rf /var/lib/apt/lists/*
 COPY chrome-deps.sh /tmp/chrome-deps.sh
 RUN curl -fsSL -o /tmp/chrome.zip \
