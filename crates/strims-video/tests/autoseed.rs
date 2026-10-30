@@ -141,6 +141,7 @@ impl Ui {
             }),
             network_keys: vec![key.to_vec()],
             bitrate: 2_000_000,
+            video: true,
         };
         let id = self.capture.open(&req).await.unwrap().id;
         let config = CaptureConfig {

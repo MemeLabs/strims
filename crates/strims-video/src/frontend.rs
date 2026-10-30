@@ -112,6 +112,7 @@ use strims_rpc::{Router, Timer};
 use strims_transfer::TransferId;
 
 use crate::egress::{EgressPiece, EgressStream, StreamFormat};
+use crate::units::UnitSigning;
 use crate::{VideoControl, VideoError, VideoHost};
 
 fn rpc(e: VideoError) -> RpcError {
@@ -570,7 +571,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> CaptureService for CaptureFrontend<
             .open_capture(
                 req.network_keys,
                 req.directory_snippet.unwrap_or_default(),
-                req.bitrate,
+                UnitSigning::for_stream(Some(req.bitrate), !req.video),
             )
             .await
             .map_err(rpc)?;

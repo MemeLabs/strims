@@ -74,6 +74,7 @@ const BroadcastPage: React.FC = () => {
           networkKeys: networks.map((n) => certificateRoot(n.certificate).key),
           directorySnippet: SNIPPET,
           bitrate: BigInt(captureBitrate(mediaStream)),
+          video: mediaStream.getVideoTracks().length > 0,
         });
         setBroadcastState({ id, mediaStream, audioContext });
       } catch (e) {

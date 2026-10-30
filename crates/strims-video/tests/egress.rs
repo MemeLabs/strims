@@ -32,7 +32,7 @@ use strims_testworld::*;
 use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
 use strims_video::hls::HlsRoutes;
 use strims_video::synth::script::avcc;
-use strims_video::units::UnitReader;
+use strims_video::units::{UnitReader, UnitSigning};
 use strims_video::{
     Config, EgressSettings, NoVideoHost, SwarmKind, VideoControl, bind_frontend, capture_options,
 };
@@ -403,7 +403,7 @@ fn a_local_captures_swarm_is_read_where_it_is() {
             .open_capture(
                 vec![net.public.clone()],
                 ListingSnippet::default(),
-                2_000_000,
+                UnitSigning::LARGE,
             )
             .await
             .unwrap();

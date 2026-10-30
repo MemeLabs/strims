@@ -10,17 +10,20 @@ export type ICaptureOpenRequest = {
   directorySnippet?: strims_network_v1_directory_IListingSnippet;
   networkKeys?: Uint8Array[];
   bitrate?: bigint;
+  video?: boolean;
 }
 
 export class CaptureOpenRequest {
   directorySnippet: strims_network_v1_directory_ListingSnippet | undefined;
   networkKeys: Uint8Array[];
   bitrate: bigint;
+  video: boolean;
 
   constructor(v?: ICaptureOpenRequest) {
     this.directorySnippet = v?.directorySnippet && new strims_network_v1_directory_ListingSnippet(v.directorySnippet);
     this.networkKeys = v?.networkKeys ? v.networkKeys : [];
     this.bitrate = v?.bitrate || BigInt(0);
+    this.video = v?.video || false;
   }
 
   static encode(m: CaptureOpenRequest, w?: Writer): Writer {
@@ -28,6 +31,7 @@ export class CaptureOpenRequest {
     if (m.directorySnippet) strims_network_v1_directory_ListingSnippet.encode(m.directorySnippet, w.uint32(10).fork()).ldelim();
     for (const v of m.networkKeys) w.uint32(18).bytes(v);
     if (m.bitrate) w.uint32(24).uint64(m.bitrate);
+    if (m.video) w.uint32(32).bool(m.video);
     return w;
   }
 
@@ -46,6 +50,9 @@ export class CaptureOpenRequest {
         break;
         case 3:
         m.bitrate = r.uint64();
+        break;
+        case 4:
+        m.video = r.bool();
         break;
         default:
         r.skipType(tag & 7);

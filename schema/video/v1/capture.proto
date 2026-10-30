@@ -15,8 +15,10 @@ message CaptureOpenRequest {
   strims.network.v1.directory.ListingSnippet directory_snippet = 1;
   repeated bytes network_keys = 2;
   // The capture's nominal bitrate, its encoders' configured bitrates
-  // together, in bits per second. It sizes the swarm's integrity units.
+  // together, in bits per second, and whether it has a video track: they
+  // pick how the swarm signs.
   uint64 bitrate = 3;
+  bool video = 4;
 }
 
 message CaptureOpenResponse {

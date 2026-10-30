@@ -5,11 +5,12 @@
 //! the unit format ([`units`](crate::units)) and listed on its networks.
 //!
 //! [`VideoControl::open_capture`] creates a swarm under a fresh ed25519
-//! key ([`capture_options_for`] the capture's nominal bitrate: 4 KiB
-//! chunks, 16 streams, an 8 Ki-chunk window, Merkle/BLAKE3/Ed25519, and
-//! integrity units of 8 chunks, or of 1 chunk below
-//! [`LOW_RATE_BITRATE`]), adds its transfer under the empty salt and publishes it on the capture's networks the node has
-//! joined, and on the rest as it joins them. It serves the capture's
+//! key, signing as the capture's nominal bitrate and tracks have it
+//! ([`UnitSigning::for_stream`]), with [`capture_options_for`] that
+//! signing: 4 KiB chunks, 16 streams, an 8 Ki-chunk window,
+//! Merkle/BLAKE3/Ed25519, and its integrity unit size. It adds the swarm's
+//! transfer under the empty salt and publishes it on the capture's networks
+//! the node has joined, and on the rest as it joins them. It serves the capture's
 //! snippet, signed with the capture key. Once the capture's first record
 //! is written, it keeps a media listing on each network's directory of
 //! the stream's MIME type ([`units_mime`] of its configs) and the swarm
@@ -69,11 +70,8 @@
 //!
 //! The units go through a [`UnitWriter`] in frames of the swarm's chunk
 //! size into the swarm, as each append is written. A partial integrity
-//! unit is signed
-//! [`CaptureSettings::sign_interval`](crate::CaptureSettings::sign_interval)
-//! after its first byte, or
-//! [`CaptureSettings::low_rate_sign_interval`](crate::CaptureSettings::low_rate_sign_interval)
-//! for 1-chunk units ([`SignTimer`]): the writer ends its frame, the
+//! unit is signed its signing's interval after its first byte
+//! ([`UnitSigning::timer`]): the writer ends its frame, the
 //! swarm writer is flushed, which pads the unit with zeros that read as
 //! padding frames, and the writer goes on where the next unit starts. A
 //! swarm write that fails ends the capture's writing: every later append
@@ -102,9 +100,6 @@ use strims_base::time::{Duration, Time};
 use strims_crypto::{Signer, generate_key};
 use strims_directory::{Host, ListingKeeper, SignedSnippet, snippet};
 use strims_kv::Kv;
-use strims_ppspp::integrity::{
-    LiveSignatureAlgorithm, MerkleHashTreeFunction, ProtectionMethod, VerifierOptions,
-};
 use strims_ppspp::{SwarmId, SwarmOptions, Uri, WriterOptions};
 use strims_proto::network::v1::directory::listing::{Content, Media};
 use strims_proto::network::v1::directory::{Listing, ListingSnippet};
@@ -117,11 +112,14 @@ use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
 use crate::channels::check_network;
 use crate::control::{Shared, Slot, Swarm};
 use crate::fmp4::check_configs;
+use crate::ingress::unit_ingress_options;
 use crate::media::{AccessUnit, DecoderConfig, Muxer, TrackId, units_mime};
 use crate::opus;
 use crate::registry::SwarmKind;
 use crate::units::record::{SAMPLE_ENTRY_AVC, SAMPLE_ENTRY_OPUS};
-use crate::units::{ConfigEntry, MAX_RECORD_LEN, SignTimer, UnitWriter, UnitWriterMetrics};
+use crate::units::{
+    ConfigEntry, MAX_RECORD_LEN, SignTimer, UnitSigning, UnitWriter, UnitWriterMetrics,
+};
 use crate::{VideoControl, VideoError, VideoHost};
 
 /// The timescale of a capture's H.264 tracks.
@@ -140,42 +138,23 @@ pub const MAX_UNIT_HEAD_LEN: usize = 64;
 /// have the swarm sign its last partial unit.
 pub const CLOSE_FLUSH_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// The nominal bitrate, in bits a second, below which a capture's
-/// integrity units are 1 chunk. A unit signed early is padded to its end
-/// and the padding is sent, so below about this rate 8-chunk units would
-/// send more padding than media, while 1-chunk units cost a signature a
-/// chunk; video captures, at 1 Mbit/s or more, take 8-chunk units.
-pub const LOW_RATE_BITRATE: u64 = 750_000;
+/// A capture swarm's live window, in chunks: 32 MiB.
+const LIVE_WINDOW: usize = 8 * 1024;
 
-/// The options of a capture's swarm at a nominal `bitrate` in bits a
-/// second; its URI carries every one but the window. An ingest session's
-/// sizes ([`ingress_options`]), with an 8 Ki-chunk (32 MiB) window, and
-/// integrity units of 8 chunks, or of 1 chunk below [`LOW_RATE_BITRATE`].
-///
-/// [`ingress_options`]: crate::ingress::ingress_options
-pub fn capture_options_for(bitrate: u64) -> SwarmOptions {
+/// The options of a capture's swarm signing with `signing`; its URI
+/// carries every one but the window. A unit-format ingest session's
+/// ([`unit_ingress_options`]), with an 8 Ki-chunk (32 MiB) window.
+pub fn capture_options_for(signing: &UnitSigning) -> SwarmOptions {
     SwarmOptions {
-        chunks_per_signature: if bitrate < LOW_RATE_BITRATE { 1 } else { 8 },
-        ..capture_options()
+        live_window: LIVE_WINDOW,
+        ..unit_ingress_options(signing)
     }
 }
 
-/// The options of a capture's swarm at [`LOW_RATE_BITRATE`] or more:
-/// [`capture_options_for`] a capture with video.
+/// The options of a capture's swarm signing with [`UnitSigning::LARGE`],
+/// as a capture with video does.
 pub fn capture_options() -> SwarmOptions {
-    SwarmOptions {
-        chunk_size: 4096,
-        chunks_per_signature: 8,
-        stream_count: 16,
-        live_window: 8 * 1024,
-        integrity: VerifierOptions {
-            protection_method: ProtectionMethod::MERKLE_TREE,
-            merkle_hash_tree_function: MerkleHashTreeFunction::BLAKE3,
-            live_signature_algorithm: LiveSignatureAlgorithm::ED25519,
-        },
-        ..SwarmOptions::default()
-    }
-    .assign_defaults(&SwarmOptions::default_options())
+    capture_options_for(&UnitSigning::LARGE)
 }
 
 /// A capture the node runs.
@@ -189,6 +168,8 @@ pub struct CaptureInfo {
     /// Each of its networks' keys, and the id of its listing on that
     /// network's directory once published.
     pub listings: Vec<(Vec<u8>, Option<u64>)>,
+    /// How its swarm signs.
+    pub signing: UnitSigning,
     /// What its writer has written, as of its last append.
     pub writer: UnitWriterMetrics,
     /// Partial integrity units signed before they filled.
@@ -255,6 +236,7 @@ pub(crate) struct Capture<H: Host> {
     mime_type: Option<String>,
     appends: Rc<Appends>,
     rate: Bucket,
+    signing: UnitSigning,
     writer: UnitWriterMetrics,
     early_signs: u64,
     /// Set once the writer is done.
@@ -598,11 +580,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         key: Key,
         network_keys: Vec<Vec<u8>>,
         snippet: ListingSnippet,
-        bitrate: u64,
+        signing: UnitSigning,
         reply: Weak<Slot<Result<TransferId, VideoError>>>,
     ) {
         let res = self
-            .start_capture(key, network_keys, snippet, bitrate)
+            .start_capture(key, network_keys, snippet, signing)
             .await;
         drop(opening);
         match reply.upgrade() {
@@ -622,9 +604,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         key: Key,
         network_keys: Vec<Vec<u8>>,
         snippet: ListingSnippet,
-        bitrate: u64,
+        signing: UnitSigning,
     ) -> Result<TransferId, VideoError> {
-        let options = capture_options_for(bitrate);
+        let options = capture_options_for(&signing);
         let (swarm, swarm_id, writer) = self
             .host
             .create_swarm(WriterOptions {
@@ -676,21 +658,13 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         let appends = Rc::new(Appends::default());
         let done = Slot::new();
         let config = &self.config.capture;
-        let unit = options
-            .chunk_size
-            .saturating_mul(options.chunks_per_signature);
         // invariant: the capture swarm's chunk size is a valid frame size.
         #[allow(clippy::expect_used)]
         let units =
             UnitWriter::new(options.chunk_size).expect("the capture chunk size is a frame size");
-        let interval = if options.chunks_per_signature == 1 {
-            config.low_rate_sign_interval
-        } else {
-            config.sign_interval
-        };
         let media = MediaWriter {
             units,
-            sign: SignTimer::new(unit as u64, interval),
+            sign: signing.timer(options.chunk_size),
             last: BTreeMap::new(),
             dropped: 0,
             early_signs: 0,
@@ -715,6 +689,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                     tokens: config.max_burst,
                     at: self.timer.now(),
                 },
+                signing,
                 writer: UnitWriterMetrics::default(),
                 early_signs: 0,
                 done,
@@ -943,8 +918,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
     /// Opens a capture listed with `snippet` on the networks
-    /// `network_keys` names, at a nominal `bitrate` in bits a second: its
-    /// id. See the [module docs](self).
+    /// `network_keys` names, its swarm signing with `signing`: its id. See
+    /// the [module docs](self).
     ///
     /// # Errors
     ///
@@ -954,7 +929,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         &self,
         network_keys: Vec<Vec<u8>>,
         snippet: ListingSnippet,
-        bitrate: u64,
+        signing: UnitSigning,
     ) -> Result<TransferId, VideoError> {
         let s = &self.shared;
         let c = &s.config.capture;
@@ -985,7 +960,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
             key,
             keys,
             snippet,
-            bitrate,
+            signing,
             Rc::downgrade(&reply.reply),
         );
         s.spawn(task.boxed_local());
@@ -1100,6 +1075,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                         )
                     })
                     .collect(),
+                signing: c.signing,
                 writer: c.writer,
                 early_signs: c.early_signs,
             })

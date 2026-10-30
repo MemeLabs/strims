@@ -27,8 +27,8 @@ export interface CaptureOptions {
 }
 
 // The nominal bitrate a capture of `stream` encodes at, in bits a second: its
-// video's target at its size and its audio's. The node sizes the capture's
-// integrity units by it.
+// video's target at its size and its audio's. With whether it has video, it
+// picks how the capture's swarm signs.
 export const captureBitrate = (stream: MediaStream): number => {
   let bitrate = 0;
   const [video] = stream.getVideoTracks();

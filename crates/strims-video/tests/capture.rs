@@ -36,14 +36,13 @@ use strims_proto::video::v1::{
 use strims_rpc::{Client, ClientStream, Router, Timer, connect};
 use strims_testworld::*;
 use strims_transfer::TransferId;
-use strims_video::capture::LOW_RATE_BITRATE;
 use strims_video::fmp4::{FragmentWriter, parse_init, write_init};
 use strims_video::hls::HlsRoutes;
 use strims_video::synth::script::avcc;
-use strims_video::units::{MIME_TYPE, ReaderEvent, UnitReader};
+use strims_video::units::{MIME_TYPE, ReaderEvent, UnitReader, UnitSigning};
 use strims_video::{
     CaptureSettings, CodecParams, Config, DecoderConfig, NoVideoHost, SwarmKind, TrackId,
-    VideoControl, bind_frontend, capture_options, capture_options_for,
+    VideoControl, bind_frontend, capture_options,
 };
 use tokio::task::{JoinHandle, spawn_local};
 
@@ -190,7 +189,7 @@ fn media_units(from_ms: i64, secs: i64) -> Vec<CaptureUnit> {
 
 impl Ui {
     async fn open(&self, keys: &[Vec<u8>], title: &str) -> Result<Vec<u8>, CallError> {
-        self.open_with(keys, snippet(title), BITRATE).await
+        self.open_with(keys, snippet(title), BITRATE, true).await
     }
 
     async fn open_with(
@@ -198,11 +197,13 @@ impl Ui {
         keys: &[Vec<u8>],
         s: ListingSnippet,
         bitrate: u64,
+        video: bool,
     ) -> Result<Vec<u8>, CallError> {
         let req = CaptureOpenRequest {
             directory_snippet: Some(s),
             network_keys: keys.to_vec(),
             bitrate,
+            video,
         };
         Ok(self.capture.open(&req).await?.id)
     }
@@ -624,7 +625,6 @@ fn captures_are_checked_and_bounded() {
                 max_queued_bytes: 8_000,
                 max_rate: 10_000,
                 max_burst: 20_000,
-                ..CaptureSettings::default()
             },
             ..Config::default()
         };
@@ -647,7 +647,7 @@ fn captures_are_checked_and_bounded() {
         let large = snippet(&"t".repeat(9 * 1024));
         assert_eq!(
             refusal(
-                ua.open_with(std::slice::from_ref(&key), large, BITRATE)
+                ua.open_with(std::slice::from_ref(&key), large, BITRATE, true)
                     .await
             ),
             "snippet too large"
@@ -702,9 +702,9 @@ fn captures_are_checked_and_bounded() {
     });
 }
 
-/// A capture's partial integrity unit of 8 chunks is signed
-/// `sign_interval` after its first byte, padded to the unit's end, and the
-/// next unit's bytes start where the padding ends.
+/// A capture with video signs `UnitSigning::LARGE`: its partial integrity
+/// unit of 8 chunks is signed 300 ms after its first byte, padded to the
+/// unit's end, and the next unit's bytes start where the padding ends.
 #[test]
 fn a_partial_unit_is_signed_at_the_sign_interval() {
     run(async {
@@ -718,6 +718,7 @@ fn a_partial_unit_is_signed_at_the_sign_interval() {
             .await
             .unwrap();
         let swarm = Uri::parse(&va.captures()[0].swarm_uri).unwrap().id;
+        assert_eq!(va.captures()[0].signing, UnitSigning::LARGE);
         let label = capture_options().label;
         let unit_bytes = 8 * 4096;
         ua.begin(&id).await;
@@ -748,9 +749,9 @@ fn a_partial_unit_is_signed_at_the_sign_interval() {
     });
 }
 
-/// A capture below `LOW_RATE_BITRATE`, such as one of audio alone, takes
-/// 1-chunk integrity units, signed `low_rate_sign_interval` after their
-/// first byte.
+/// A capture of audio alone, below 750 kbit/s, signs `UnitSigning::SMALL`:
+/// 1-chunk integrity units, a partial one signed 200 ms after its first
+/// byte. Without a nominal bitrate, the tracks pick.
 #[test]
 fn a_low_rate_capture_takes_one_chunk_units() {
     run(async {
@@ -759,17 +760,28 @@ fn a_low_rate_capture_takes_one_chunk_units() {
         let (net, _) = owned_network(&a, &[], 10).await;
         let va = start(&a, Config::default());
         let ua = connect_ui(&va);
+        let keys = std::slice::from_ref(&net.public);
         let id = ua
-            .open_with(std::slice::from_ref(&net.public), snippet("radio"), 128_000)
+            .open_with(keys, snippet("radio"), 128_000, false)
             .await
             .unwrap();
         let uri = va.captures()[0].swarm_uri.clone();
         assert!(uri.ends_with("&x.cs=4096&x.ps=1&x.sc=16"), "{uri}");
-        assert_eq!(capture_options_for(128_000).chunks_per_signature, 1);
-        assert_eq!(
-            capture_options_for(LOW_RATE_BITRATE).chunks_per_signature,
-            8
-        );
+        assert_eq!(va.captures()[0].signing, UnitSigning::SMALL);
+        for (bitrate, video, signing) in [
+            (0, false, UnitSigning::SMALL),
+            (0, true, UnitSigning::LARGE),
+            (128_000, true, UnitSigning::SMALL),
+        ] {
+            let other = ua
+                .open_with(keys, snippet("other"), bitrate, video)
+                .await
+                .unwrap();
+            let tid = TransferId::from_bytes(&other).unwrap();
+            let c = va.captures().into_iter().find(|c| c.id == tid).unwrap();
+            assert_eq!(c.signing, signing, "{bitrate} {video}");
+            ua.close(&other).await.unwrap();
+        }
         let swarm = Uri::parse(&uri).unwrap().id;
         let label = capture_options().label;
         ua.append(&id, &[opus()], &[unit(AUDIO, 0, true, 160)])
@@ -795,14 +807,7 @@ fn closing_signs_the_last_partial_unit() {
         let world = World::default();
         let a = node_in(&world, 1).await;
         let (net, _) = owned_network(&a, &[], 10).await;
-        let config = Config {
-            capture: CaptureSettings {
-                sign_interval: strims_base::time::Duration::MAX,
-                ..CaptureSettings::default()
-            },
-            ..Config::default()
-        };
-        let va = start(&a, config);
+        let va = start(&a, Config::default());
         let ua = connect_ui(&va);
         let id = ua
             .open(std::slice::from_ref(&net.public), "last")
@@ -810,10 +815,11 @@ fn closing_signs_the_last_partial_unit() {
             .unwrap();
         let swarm = Uri::parse(&va.captures()[0].swarm_uri).unwrap().id;
         let label = capture_options().label;
+        // Closed before the partial unit's 300 ms are up.
         ua.begin(&id).await;
-        settle().await;
         let written = world.written(&swarm, &label);
         assert!(written % (8 * 4096) != 0, "{written}");
+        assert_eq!(va.captures()[0].early_signs, 0);
         ua.close(&id).await.unwrap();
         assert_eq!(world.written(&swarm, &label), 8 * 4096);
     });

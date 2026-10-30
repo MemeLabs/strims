@@ -171,14 +171,6 @@ pub struct CaptureSettings {
     /// The bytes a capture takes at once beyond its rate: two of the
     /// largest keyframes.
     pub max_burst: u64,
-    /// How long a capture's partial integrity unit waits after its first
-    /// byte before it is signed ([`SignTimer`](crate::units::SignTimer)),
-    /// for a capture of 8-chunk units.
-    pub sign_interval: Duration,
-    /// The same, for a capture of 1-chunk units: one whose nominal
-    /// bitrate is below
-    /// [`LOW_RATE_BITRATE`](crate::capture::LOW_RATE_BITRATE).
-    pub low_rate_sign_interval: Duration,
 }
 
 impl Default for CaptureSettings {
@@ -190,8 +182,6 @@ impl Default for CaptureSettings {
             max_queued_bytes: 16 * 1024 * 1024,
             max_rate: 4 * 1024 * 1024,
             max_burst: 2 * crate::units::MAX_RECORD_LEN as u64,
-            sign_interval: Duration::from_millis(300),
-            low_rate_sign_interval: Duration::from_millis(200),
         }
     }
 }
