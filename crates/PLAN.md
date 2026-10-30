@@ -377,6 +377,19 @@ in `TRIED.md`.
 - Require monotonic sign-all timestamps until live signatures bind the
   bin (see Wire changes).
 - Remove the unused `add_stream_close`.
+- A channel's LEDBAT window can collapse below one chunk with nothing in
+  flight, and the channel then never requests again. Seen on a video
+  swarm of 4 KiB chunks whose reader fetched a backlog behind the live
+  edge over a 2 Mbit/s uplink. Eight requests timed out, and `cwnd`
+  settled at 2048 bytes with no flight and no pending requests. The
+  hybrid parent shed the viewer and closed its stream, and the live
+  stream stopped for good, even after the backlog was cancelled. The same
+  run without the backlog kept delivering. Reproduce with
+  `a_late_joiner_on_a_slow_uplink_starts_at_the_next_keyframe` in
+  `strims-node/tests/turmoil_video.rs` on branch `video/join-tests`
+  (seed 7; seeds 12 and 13 too, joining at 6.3 s). Find why the window
+  can go below a chunk, and how a channel with nothing in flight starts
+  requesting again.
 
 ### strims-chat defects
 - A whisper whose state write fails stays ENQUEUED outside the delivery
