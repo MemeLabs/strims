@@ -43,10 +43,11 @@ module.exports = (env, argv) => {
 
   const scriptModuleRule = scriptRule(!isProduction);
 
-  // The worker imports crates/strims-wasm/Cargo.toml, which the loader turns
-  // into the crate's wasm-bindgen glue.
-  const strimsWasmRule = (features) => ({
-    test: /crates\/strims-wasm\/Cargo\.toml$/,
+  // A worker imports a wasm crate's Cargo.toml (crates/strims-wasm, the node;
+  // crates/strims-player, the player), which the loader turns into the
+  // crate's wasm-bindgen glue.
+  const wasmCrateRule = (crate, features) => ({
+    test: new RegExp(`crates/${crate}/Cargo\\.toml$`),
     type: "javascript/auto",
     loader: path.resolve(__dirname, "vendor_modules", "strims-wasm-loader", "index.js"),
     options: {
@@ -55,7 +56,7 @@ module.exports = (env, argv) => {
     },
   });
 
-  // The glue fetches its module from new URL("strims_wasm_bg.wasm", import.meta.url).
+  // The glue fetches its module from new URL("<lib>_bg.wasm", import.meta.url).
   const wasmAssetRule = {
     test: /\.wasm$/,
     type: "asset/resource",
@@ -322,7 +323,12 @@ module.exports = (env, argv) => {
             clean: true,
           },
           module: {
-            rules: [strimsWasmRule(["e2e"]), wasmAssetRule, scriptRule(false)],
+            rules: [
+              wasmCrateRule("strims-wasm", ["e2e"]),
+              wasmCrateRule("strims-player", []),
+              wasmAssetRule,
+              scriptRule(false),
+            ],
           },
           resolve,
           optimization,
@@ -352,7 +358,12 @@ module.exports = (env, argv) => {
             clean: true,
           },
           module: {
-            rules: [strimsWasmRule(["e2e"]), wasmAssetRule, scriptRule(false)],
+            rules: [
+              wasmCrateRule("strims-wasm", ["e2e"]),
+              wasmCrateRule("strims-player", []),
+              wasmAssetRule,
+              scriptRule(false),
+            ],
           },
           resolve,
           optimization,
@@ -415,7 +426,12 @@ module.exports = (env, argv) => {
             ],
           },
           module: {
-            rules: [strimsWasmRule([]), wasmAssetRule, ...sharedRules],
+            rules: [
+              wasmCrateRule("strims-wasm", []),
+              wasmCrateRule("strims-player", []),
+              wasmAssetRule,
+              ...sharedRules,
+            ],
           },
           resolve,
           optimization,
