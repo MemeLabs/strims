@@ -187,3 +187,13 @@ fn dops_carries_the_header_big_endian_at_version_0() {
     assert_eq!(write_dops(b"OpusTags", &mut out), Err(OpusError::Truncated));
     assert_eq!(out, [1]);
 }
+
+#[test]
+fn dops_declares_48_khz_input_whatever_the_encoder_took() {
+    let mut h = STEREO;
+    h[12..16].copy_from_slice(&44_100u32.to_le_bytes());
+    assert_eq!(parse_opus_head(&h).unwrap().input_sample_rate, 44_100);
+    let mut out = Vec::new();
+    write_dops(&h, &mut out).unwrap();
+    assert_eq!(out[4..8], 48_000u32.to_be_bytes());
+}

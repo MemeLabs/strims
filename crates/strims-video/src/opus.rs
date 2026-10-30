@@ -154,13 +154,15 @@ pub fn parse_opus_head(data: &[u8]) -> Result<OpusHead<'_>, OpusError> {
 /// Appends the payload of a `dOps` box (everything after its 8-byte
 /// header) for the OpusHead `head`: version 0, then the header's fields
 /// big-endian, with the stream counts and mapping table when the mapping
-/// family isn't 0.
+/// family isn't 0. Its InputSampleRate is [`SAMPLE_RATE`], whatever the
+/// header's: MP4 parsers hold it to the sample entry's 48 kHz, and the
+/// encoder's input rate doesn't change how the stream decodes.
 pub fn write_dops(head: &[u8], out: &mut Vec<u8>) -> Result<(), OpusError> {
     let h = parse_opus_head(head)?;
     out.push(0);
     out.push(h.channels);
     out.extend_from_slice(&h.pre_skip.to_be_bytes());
-    out.extend_from_slice(&h.input_sample_rate.to_be_bytes());
+    out.extend_from_slice(&SAMPLE_RATE.to_be_bytes());
     out.extend_from_slice(&h.output_gain.to_be_bytes());
     out.push(h.mapping_family);
     if h.mapping_family != 0 {
