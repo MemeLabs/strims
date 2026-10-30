@@ -32,8 +32,10 @@
 //!   it has and egress rewinds it to the GOP's sync record, through the
 //!   swarm's backlog from o, so m's records start at that CONFIGS record
 //!   and the GOP's keyframe, and its units are a contiguous run of the
-//!   script's. m logs how long its join took and how far behind the head
-//!   it started.
+//!   script's. On an uplink too slow for the GOP's bytes to come within
+//!   egress's rewind timeout, the rewind is dropped and m's units start at
+//!   the next keyframe. m logs how long its join took and how far behind
+//!   the head it started.
 //!
 //! Every host appends what it sees, stamped with simulated time, to one
 //! trace. The same seed must give the same trace, and another seed a
@@ -119,6 +121,8 @@ struct Leg {
     /// The unit format's: the media time p sends up to before m opens its
     /// stream, half way through a GOP.
     join_ms: u32,
+    /// o's upload cap, in bytes per second.
+    uplink: Option<u64>,
 }
 
 const FMP4: Leg = Leg {
@@ -127,6 +131,7 @@ const FMP4: Leg = Leg {
     gop_frames: 30,
     duration_secs: 10,
     join_ms: 0,
+    uplink: None,
 };
 
 impl Leg {
@@ -731,7 +736,7 @@ impl Started {
     /// Checks where m's stream of the unit format, opened at `opened`,
     /// started, and logs how long its join took and how far behind the
     /// head it started. A rewind brings it to the sync record of the GOP
-    /// live at the open or after.
+    /// live at the open; on a slow uplink, to the next GOP's.
     fn check_join(&self, run: &UnitRun, opened: Time) {
         let start = run.first_configs();
         let key = run.keyframe(start + 1);
@@ -764,18 +769,35 @@ impl Started {
             "record {start}: {:?}",
             run.record(start)
         );
-        // It starts behind the head, at a GOP live at the open or
-        // after: its reader starts once the swarm has chunks.
-        assert_eq!(start, 0);
-        assert!(
-            key.published <= run.first_piece,
-            "a keyframe after the first piece"
-        );
-        assert!(
-            opened < next.published,
-            "a GOP before the one live at the open"
-        );
-        assert_eq!(rewinds, (1, 0, 0));
+        if self.world.leg.uplink.is_some() {
+            // Over an uplink this slow, the GOP's backlog may or may not
+            // arrive within the rewind's deadline. Either way the stream
+            // starts at a sync record and its units run on.
+            match rewinds {
+                (1, 0, 0) => assert_eq!(start, 0),
+                (0, 1, 0) => {
+                    // The stream yields from the record it read first, and
+                    // the unit reader waits for the next keyframe.
+                    assert!(start > 0);
+                    assert!(matches!(run.record(0), Record::Unit { gop_back, .. } if gop_back > 0));
+                    assert!(key.published > opened, "a keyframe from before the open");
+                }
+                other => panic!("rewinds {other:?}"),
+            }
+        } else {
+            // It starts behind the head, at a GOP live at the open or
+            // after: its reader starts once the swarm has chunks.
+            assert_eq!(start, 0);
+            assert!(
+                key.published <= run.first_piece,
+                "a keyframe after the first piece"
+            );
+            assert!(
+                opened < next.published,
+                "a GOP before the one live at the open"
+            );
+            assert_eq!(rewinds, (1, 0, 0));
+        }
     }
 
     /// The next `n` whole records of `stream`, logged with their place
@@ -809,6 +831,10 @@ impl Started {
 
 async fn owner(w: World) -> turmoil::Result {
     let h = start(&w, "o", 1).await;
+    if let Some(cap) = w.leg.uplink {
+        h.node.set_rate_limit(cap).await.unwrap();
+        h.log(format!("uploads at most {cap} B/s"));
+    }
     h.frontend
         .create_server(
             &Context::default(),
@@ -1316,6 +1342,7 @@ const fn units(test: &'static str, gop_secs: u32, duration_secs: u32, join_ms: u
         gop_frames: gop_secs * 30,
         duration_secs,
         join_ms,
+        uplink: None,
     }
 }
 
@@ -1337,4 +1364,19 @@ fn a_late_joiner_starts_at_its_gops_keyframe_with_4s_gops() {
         16,
         6000,
     ));
+}
+
+/// At 2 Mbit/s, under twice the stream's rate, o can't send the 3 s of a
+/// 4-second GOP m joins late in within egress's rewind timeout.
+#[test]
+fn a_late_joiner_on_a_slow_uplink_starts_at_a_keyframe_and_reads_on() {
+    check(Leg {
+        uplink: Some(250_000),
+        ..units(
+            "a_late_joiner_on_a_slow_uplink_starts_at_a_keyframe_and_reads_on",
+            4,
+            16,
+            6300,
+        )
+    });
 }
