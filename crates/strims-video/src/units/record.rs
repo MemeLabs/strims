@@ -13,6 +13,7 @@ use super::{MAX_RECORD_LEN, MAX_TRACKS};
 use crate::aac::{AacError, parse_asc};
 use crate::avc::{AvcError, parse_avcc};
 use crate::media::{CodecParams, DecoderConfig, MAX_CONFIG_LEN, TrackId, TrackKind};
+use crate::opus::{self, OpusError, parse_opus_head};
 
 /// The kind of a CONFIGS record.
 pub const KIND_CONFIGS: u8 = 1;
@@ -25,6 +26,8 @@ pub const SAMPLE_ENTRY_AVC: [u8; 4] = *b"avc1";
 /// The sample entry of an AAC track, whose config is an
 /// AudioSpecificConfig.
 pub const SAMPLE_ENTRY_AAC: [u8; 4] = *b"mp4a";
+/// The sample entry of an Opus track, whose config is an OpusHead.
+pub const SAMPLE_ENTRY_OPUS: [u8; 4] = *b"Opus";
 /// The bytes of a record that hold its kind and `gop_back`: a record's
 /// first `GOP_HEAD_LEN` bytes, or all of a shorter one, are enough for
 /// [`gop_back`].
@@ -59,7 +62,10 @@ pub enum RecordError {
     Avc { track: u32, error: AvcError },
     #[error("track {track}: {error}")]
     Aac { track: u32, error: AacError },
-    /// An AAC track's timescale isn't its output sample rate.
+    #[error("track {track}: {error}")]
+    Opus { track: u32, error: OpusError },
+    /// An AAC track's timescale isn't its output sample rate, or an Opus
+    /// track's isn't 48 kHz.
     #[error("track {0}'s timescale is not its sample rate")]
     Timescale(u32),
 }
@@ -99,6 +105,7 @@ impl<'a> ConfigEntry<'a> {
         let (sample_entry, bytes) = match &config.params {
             CodecParams::Avc { avcc, .. } => (SAMPLE_ENTRY_AVC, avcc.as_slice()),
             CodecParams::Aac { asc, .. } => (SAMPLE_ENTRY_AAC, asc.as_slice()),
+            CodecParams::Opus { head, .. } => (SAMPLE_ENTRY_OPUS, head.as_slice()),
         };
         ConfigEntry {
             track: config.track,
@@ -114,7 +121,7 @@ impl<'a> ConfigEntry<'a> {
     ///
     /// [`decoder_config`]: ConfigEntry::decoder_config
     pub fn is_known(&self) -> bool {
-        [SAMPLE_ENTRY_AVC, SAMPLE_ENTRY_AAC].contains(&self.sample_entry)
+        [SAMPLE_ENTRY_AVC, SAMPLE_ENTRY_AAC, SAMPLE_ENTRY_OPUS].contains(&self.sample_entry)
     }
 
     /// Whether `config` is the decoder config this entry describes,
@@ -161,6 +168,24 @@ impl<'a> ConfigEntry<'a> {
                             sample_rate: p.sample_rate,
                             channels: p.channels,
                             frame_samples: p.frame_samples,
+                        },
+                    })
+                }),
+            SAMPLE_ENTRY_OPUS => parse_opus_head(self.config)
+                .map_err(|error| RecordError::Opus { track, error })
+                .and_then(|h| {
+                    if self.timescale != opus::SAMPLE_RATE {
+                        return Err(RecordError::Timescale(track));
+                    }
+                    Ok(DecoderConfig {
+                        track: self.track,
+                        kind: TrackKind::Audio,
+                        codec: opus::CODEC.into(),
+                        timescale: self.timescale,
+                        params: CodecParams::Opus {
+                            head: self.config.to_vec(),
+                            channels: h.channels,
+                            pre_skip: h.pre_skip,
                         },
                     })
                 }),

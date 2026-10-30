@@ -9,6 +9,7 @@ use strims_base::time::Duration;
 use crate::aac::{self, AacError};
 use crate::fmp4::boxes::{self, end, start, start_full};
 use crate::media::{CodecParams, DecoderConfig, TrackKind};
+use crate::opus::{self, OpusError};
 
 /// The most tracks an init segment declares.
 pub const MAX_TRACKS: usize = 8;
@@ -48,6 +49,8 @@ pub enum InitError {
     KindMismatch { track: u32, kind: TrackKind },
     #[error("track {track}: {error}")]
     Aac { track: u32, error: AacError },
+    #[error("track {track}: {error}")]
+    Opus { track: u32, error: OpusError },
 }
 
 /// Checks that `configs` can be declared together: at most
@@ -70,7 +73,7 @@ pub fn check_configs(configs: &[DecoderConfig]) -> Result<(), InitError> {
         }
         let params_kind = match c.params {
             CodecParams::Avc { .. } => TrackKind::Video,
-            CodecParams::Aac { .. } => TrackKind::Audio,
+            CodecParams::Aac { .. } | CodecParams::Opus { .. } => TrackKind::Audio,
         };
         if params_kind != c.kind {
             return Err(InitError::KindMismatch {
@@ -105,12 +108,16 @@ pub fn check_configs(configs: &[DecoderConfig]) -> Result<(), InitError> {
 ///   delay, its first keyframe's composition offset, makes that keyframe
 ///   present at its decode time.
 /// - Video's sample entry is `avc1` holding the avcC record as received.
-/// - Audio's is `mp4a` holding an `esds` with the AudioSpecificConfig. Its
+/// - AAC's is `mp4a` holding an `esds` with the AudioSpecificConfig. Its
 ///   16.16 sample rate field holds 16 bits: a rate above 65535 Hz is
 ///   halved until it fits. Decoders take the rate from the
 ///   AudioSpecificConfig, and `mdhd` carries the true rate as the
 ///   timescale. A channel count of 0 (a layout from a program config
 ///   element) is written as 2.
+/// - Opus's is `Opus` holding a `dOps` with the OpusHead's fields
+///   ([`opus::write_dops`]), its channel count the output channels and its
+///   sample rate 48 kHz. Its pre-skip is the `dOps`'s alone: no edit
+///   trims it, so every track keeps the same edit.
 ///
 /// On error `out` is unchanged.
 pub fn write_init(
@@ -186,7 +193,7 @@ fn write_trak(c: &DecoderConfig, delay: Duration, out: &mut Vec<u8>) -> Result<(
     let trak = start(out, b"trak");
     let (width, height) = match c.params {
         CodecParams::Avc { width, height, .. } => (width, height),
-        CodecParams::Aac { .. } => (0, 0),
+        CodecParams::Aac { .. } | CodecParams::Opus { .. } => (0, 0),
     };
     let tkhd = start_full(out, b"tkhd", 0, TKHD_ENABLED_IN_MOVIE);
     // creation_time, modification_time
@@ -336,6 +343,27 @@ fn write_sample_entry(c: &DecoderConfig, out: &mut Vec<u8>) -> Result<(), InitEr
             })?;
             end(out, esds);
             end(out, mp4a);
+        }
+        CodecParams::Opus { head, .. } => {
+            let failed = |error| InitError::Opus {
+                track: c.track.0,
+                error,
+            };
+            let channels = opus::parse_opus_head(head).map_err(failed)?.channels;
+            let entry = start(out, b"Opus");
+            sample_entry_header(out);
+            // reserved[2]
+            boxes::zeros(out, 8);
+            boxes::u16(out, u16::from(channels));
+            // samplesize
+            boxes::u16(out, 16);
+            // pre_defined, reserved
+            boxes::zeros(out, 4);
+            boxes::u32(out, sample_rate_field(opus::SAMPLE_RATE));
+            let dops = start(out, b"dOps");
+            opus::write_dops(head, out).map_err(failed)?;
+            end(out, dops);
+            end(out, entry);
         }
     }
     Ok(())

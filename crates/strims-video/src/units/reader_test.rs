@@ -332,7 +332,7 @@ fn records_the_reader_can_not_use_are_counted() {
         0,
         [
             ConfigEntry {
-                sample_entry: *b"Opus",
+                sample_entry: *b"fLaC",
                 ..ConfigEntry::of(&audio(3), 0, 0)
             },
             ConfigEntry::of(&audio(2), 0, 0),

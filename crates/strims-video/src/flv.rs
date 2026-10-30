@@ -576,6 +576,7 @@ fn config_bytes(config: &DecoderConfig) -> &[u8] {
     match &config.params {
         CodecParams::Avc { avcc, .. } => avcc,
         CodecParams::Aac { asc, .. } => asc,
+        CodecParams::Opus { head, .. } => head,
     }
 }
 

@@ -58,7 +58,7 @@
 //! track         uvarint  the track id, nonzero and distinct, at most u32::MAX
 //! version       uvarint  the config's version: 0 for the track's first, then +1 at each change
 //! next_seq      uvarint  the seq of the track's next unit
-//! sample_entry  4 bytes  avc1 (an avcC record) or mp4a (an AudioSpecificConfig)
+//! sample_entry  4 bytes  avc1 (an avcC record), mp4a (an AudioSpecificConfig) or Opus (an OpusHead)
 //! timescale     uvarint  units per second of the track's timestamps, nonzero, at most u32::MAX
 //! config_len    uvarint  at most MAX_CONFIG_LEN
 //! config        config_len bytes
@@ -67,8 +67,9 @@
 //! An entry's bytes after its config are skipped, and a reader skips an
 //! entry of a sample entry it doesn't know: that track is unknown to it.
 //! A reader derives what else a [`DecoderConfig`](crate::DecoderConfig)
-//! holds (its codec string, picture size or sample rate) from the config
-//! bytes, and an AAC track's timescale is its output sample rate.
+//! holds (its codec string, picture size, sample rate or channels) from
+//! the config bytes. An AAC track's timescale is its output sample rate,
+//! and an Opus track's is 48 kHz.
 //!
 //! # Groups of pictures
 //!

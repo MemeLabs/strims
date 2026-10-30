@@ -280,6 +280,7 @@ impl Muxer for UnitWriter {
         let bytes = match &config.params {
             CodecParams::Avc { avcc, .. } => avcc.len(),
             CodecParams::Aac { asc, .. } => asc.len(),
+            CodecParams::Opus { head, .. } => head.len(),
         };
         if bytes > MAX_CONFIG_LEN {
             return Err(UnitWriteError::ConfigTooLong);

@@ -15,6 +15,8 @@
 //!   trait and the MIME types of the fMP4 and unit formats.
 //! - [`avc`]: H.264 avcC records and the picture size from their SPS.
 //! - [`aac`]: AAC AudioSpecificConfig and the `esds` box.
+//! - [`opus`]: the Opus identification header, OpusHead, and the `dOps`
+//!   box.
 //! - [`flv`]: the source over FLV tags, legacy and Enhanced RTMP. It takes
 //!   H.264 with AAC and refuses other codecs.
 //! - [`amf0`]: the AMF0 values RTMP commands and metadata carry.
@@ -187,6 +189,7 @@ pub mod hls_egress;
 pub mod host;
 pub mod ingress;
 pub mod media;
+pub mod opus;
 pub mod record;
 mod registry;
 pub mod rtmp;

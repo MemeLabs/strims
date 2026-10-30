@@ -43,6 +43,23 @@ fn audio(track: u32, sample_rate: u32, channels: u8) -> DecoderConfig {
     }
 }
 
+/// The OpusHead of a stereo WebCodecs encoder: pre-skip 312, 48 kHz.
+const OPUS_HEAD: [u8; 19] = *b"OpusHead\x01\x02\x38\x01\x80\xbb\0\0\0\0\0";
+
+fn opus(track: u32, head: &[u8]) -> DecoderConfig {
+    DecoderConfig {
+        track: TrackId(track),
+        kind: TrackKind::Audio,
+        codec: "Opus".into(),
+        timescale: 48_000,
+        params: CodecParams::Opus {
+            head: head.to_vec(),
+            channels: 2,
+            pre_skip: 312,
+        },
+    }
+}
+
 fn find(haystack: &[u8], needle: &[u8]) -> usize {
     haystack
         .windows(needle.len())
@@ -321,5 +338,59 @@ fn invalid_config_sets_are_refused_and_leave_the_buffer() {
         write_init(&[v, long], Duration::ZERO, &mut out),
         Err(InitError::Aac { track: 2, .. })
     ));
+    assert_eq!(out, [0xaa]);
+}
+
+#[test]
+fn opus_sample_entry_layout() {
+    let mut out = Vec::new();
+    write_init(&[opus(2, &OPUS_HEAD)], Duration::ZERO, &mut out).unwrap();
+    #[rustfmt::skip]
+    let expected: &[&[u8]] = &[
+        // Opus, 55: reserved[6]; data_reference_index 1; reserved[2];
+        // channelcount 2; samplesize 16; pre_defined, reserved; samplerate 48000.0
+        &[0, 0, 0, 0x37], b"Opus", &[0; 6], &[0, 1], &[0; 8], &[0, 2], &[0, 0x10], &[0; 4],
+        &[0xbb, 0x80, 0, 0],
+        //   dOps, 19: version 0; channels 2; pre-skip 312; input rate 48000;
+        //   gain 0; family 0
+        &[0, 0, 0, 0x13], b"dOps", &[0, 2, 0x01, 0x38, 0, 0, 0xbb, 0x80, 0, 0, 0],
+    ];
+    assert_eq!(find_box(&out, b"Opus"), expected.concat());
+    assert_eq!(&find_box(&out, b"hdlr")[16..20], b"soun");
+    assert_eq!(&find_box(&out, b"mdhd")[20..24], 48_000u32.to_be_bytes());
+    assert!(!out.windows(4).any(|w| w == b"edts"));
+}
+
+#[test]
+fn opus_channel_count_is_the_headers() {
+    let mut mono = OPUS_HEAD;
+    mono[9] = 1;
+    let mut out = Vec::new();
+    write_init(&[opus(2, &mono)], Duration::ZERO, &mut out).unwrap();
+    assert_eq!(find_box(&out, b"Opus")[24..26], [0, 1]);
+    assert_eq!(find_box(&out, b"dOps")[9], 1);
+}
+
+#[test]
+fn a_malformed_opus_head_is_refused_and_leaves_the_buffer() {
+    let mut out = vec![0xaa];
+    assert_eq!(
+        write_init(&[opus(3, b"OpusHead")], Duration::ZERO, &mut out),
+        Err(InitError::Opus {
+            track: 3,
+            error: crate::opus::OpusError::Truncated
+        })
+    );
+    let video_kind = DecoderConfig {
+        kind: TrackKind::Video,
+        ..opus(1, &OPUS_HEAD)
+    };
+    assert_eq!(
+        write_init(&[video_kind], Duration::ZERO, &mut out),
+        Err(InitError::KindMismatch {
+            track: 1,
+            kind: TrackKind::Video
+        })
+    );
     assert_eq!(out, [0xaa]);
 }

@@ -8,7 +8,7 @@ use std::fmt;
 
 use strims_base::time::Time;
 
-/// The largest avcC record or AudioSpecificConfig accepted.
+/// The largest avcC record, AudioSpecificConfig or OpusHead accepted.
 pub const MAX_CONFIG_LEN: usize = 64 * 1024;
 
 /// A track of a stream; the fMP4 track id.
@@ -36,7 +36,8 @@ impl fmt::Display for TrackKind {
 pub struct DecoderConfig {
     pub track: TrackId,
     pub kind: TrackKind,
-    /// The RFC 6381 codec string, such as `avc1.64001f` or `mp4a.40.2`.
+    /// The RFC 6381 codec string, such as `avc1.64001f`, `mp4a.40.2` or
+    /// `Opus`.
     pub codec: String,
     /// Timestamp units per second.
     pub timescale: u32,
@@ -68,6 +69,16 @@ pub enum CodecParams {
         channels: u8,
         /// Output samples per frame.
         frame_samples: u32,
+    },
+    /// Opus, at [`opus::SAMPLE_RATE`](crate::opus::SAMPLE_RATE), the
+    /// track's timescale.
+    Opus {
+        /// The OpusHead identification header as received.
+        head: Vec<u8>,
+        /// The output channel count.
+        channels: u8,
+        /// 48 kHz samples the decoder's output drops when it starts.
+        pre_skip: u16,
     },
 }
 
@@ -203,6 +214,18 @@ mod tests {
             r#"video/x.strims-units;codecs="avc1.64001f,mp4a.40.2""#
         );
         assert_eq!(units_mime(&[]), "video/x.strims-units");
+    }
+
+    #[test]
+    fn opus_keeps_its_sample_entry_case() {
+        let configs = [
+            config(2, TrackKind::Audio, crate::opus::CODEC),
+            config(1, TrackKind::Video, "avc1.640c1f"),
+        ];
+        assert_eq!(
+            units_mime(&configs),
+            r#"video/x.strims-units;codecs="avc1.640c1f,Opus""#
+        );
     }
 
     #[test]

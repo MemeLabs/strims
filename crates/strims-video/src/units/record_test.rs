@@ -47,6 +47,23 @@ fn audio() -> DecoderConfig {
     .unwrap()
 }
 
+/// A stereo OpusHead as WebCodecs encoders give it.
+const OPUS_HEAD: [u8; 19] = *b"OpusHead\x01\x02\x38\x01\x80\xbb\0\0\0\0\0";
+
+fn opus() -> DecoderConfig {
+    ConfigEntry {
+        track: TrackId(3),
+        version: 0,
+        next_seq: 0,
+        sample_entry: SAMPLE_ENTRY_OPUS,
+        timescale: 48_000,
+        config: &OPUS_HEAD,
+    }
+    .decoder_config()
+    .unwrap()
+    .unwrap()
+}
+
 fn header() -> UnitHeader {
     UnitHeader {
         track: TrackId(1),
@@ -120,6 +137,54 @@ fn configs_read_back_as_written_and_derive_their_configs() {
 }
 
 #[test]
+fn an_opus_entry_carries_its_opus_head_at_48_khz() {
+    let o = opus();
+    assert_eq!(
+        o,
+        DecoderConfig {
+            track: TrackId(3),
+            kind: TrackKind::Audio,
+            codec: "Opus".into(),
+            timescale: 48_000,
+            params: CodecParams::Opus {
+                head: OPUS_HEAD.to_vec(),
+                channels: 2,
+                pre_skip: 312,
+            },
+        }
+    );
+    let e = ConfigEntry::of(&o, 1, 7);
+    assert_eq!((e.sample_entry, e.config), (*b"Opus", &OPUS_HEAD[..]));
+    assert!(e.is_known() && e.describes(&o));
+    let mut r = Vec::new();
+    write_configs(0, [ConfigEntry::of(&video(), 0, 0), e], &mut r);
+    let Record::Configs { entries, .. } = parse_record(&r).unwrap() else {
+        panic!("not configs");
+    };
+    let read: Vec<ConfigEntry<'_>> = entries.collect();
+    assert_eq!(read[1].decoder_config().unwrap().unwrap(), o);
+    assert_eq!(
+        ConfigEntry {
+            timescale: 44_100,
+            ..e
+        }
+        .decoder_config(),
+        Some(Err(RecordError::Timescale(3)))
+    );
+    assert_eq!(
+        ConfigEntry {
+            config: b"OpusTags",
+            ..e
+        }
+        .decoder_config(),
+        Some(Err(RecordError::Opus {
+            track: 3,
+            error: crate::opus::OpusError::Truncated
+        }))
+    );
+}
+
+#[test]
 fn readers_skip_header_fields_and_entry_bytes_they_dont_know() {
     // A header with a field after the known ones.
     let h = header();
@@ -152,22 +217,22 @@ fn readers_skip_header_fields_and_entry_bytes_they_dont_know() {
     let mut r = vec![KIND_CONFIGS, 0, 0, len as u8 + 1];
     r.extend_from_slice(&c[4..]);
     r.push(0xee);
-    let opus = ConfigEntry {
+    let flac = ConfigEntry {
         track: TrackId(3),
         version: 0,
         next_seq: 0,
-        sample_entry: *b"Opus",
+        sample_entry: *b"fLaC",
         timescale: 48_000,
-        config: b"OpusHead",
+        config: b"dfLa",
     };
     let mut o = Vec::new();
-    write_configs(0, [opus], &mut o);
+    write_configs(0, [flac], &mut o);
     r.extend_from_slice(&o[3..]);
     let Record::Configs { entries, .. } = parse_record(&r).unwrap() else {
         panic!("not configs");
     };
     let entries: Vec<ConfigEntry<'_>> = entries.collect();
-    assert_eq!(entries, [ConfigEntry::of(&v, 0, 0), opus]);
+    assert_eq!(entries, [ConfigEntry::of(&v, 0, 0), flac]);
     assert!(entries[0].is_known() && !entries[1].is_known());
     assert!(entries[1].decoder_config().is_none());
 }

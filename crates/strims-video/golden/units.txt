@@ -3,23 +3,28 @@
 # named here. STRIMS_GOLDEN=update rewrites the outputs.
 #
 # tracks: the configs of track 1 (H.264 avcC, 640x360, 90 kHz) and track
-# 2 (AAC LC AudioSpecificConfig, stereo, 48 kHz).
-tracks avcc=0164001fffe1000b6764001facd940a02ff95001000468ce3c80 asc=1190
+# 2 (AAC LC AudioSpecificConfig, stereo, 48 kHz; or an Opus OpusHead,
+# stereo, pre-skip 312).
+tracks avcc=0164001fffe1000b6764001facd940a02ff95001000468ce3c80 asc=1190 opus_head=4f707573486561640102380180bb0000000000
 #
 # unit: a UNIT record of the header fields, gop_back and payload.
 unit track=1 key=1 seq=0 config=0 dts=0 pts=6000 unix_ms=1793275200000 gop_back=60 payload=00010203 hex=023c0d0101000000e05d8088c0f8b06800010203
 unit track=1 key=0 seq=301 config=2 dts=903000 pts=900000 unix_ms=1793275210033 gop_back=70000 payload=1011 hex=02f0a204100100ad0202b09d6eef2ee2a4c1f8b0681011
 unit track=2 key=1 seq=47 config=0 dts=48128 pts=48128 unix_ms=1793275201003 gop_back=1234 payload=a0a1a2 hex=02d2090e02012f0080f00500d697c0f8b068a0a1a2
 #
-# configs: a CONFIGS record of tracks v, a or va, each with its version
-# and next seq; gop_back 0 is a GOP's sync record.
+# configs: a CONFIGS record of tracks v, a, o, va or vo, each with its
+# version and next seq; gop_back 0 is a GOP's sync record.
 configs tracks=va versions=0,0 next=0,0 gop_back=0 hex=010000250100006176633190bf051a0164001fffe1000b6764001facd940a02ff95001000468ce3c800d0200006d70346180f702021190
 configs tracks=va versions=3,1 next=300,470 gop_back=2048 hex=01801000260103ac026176633190bf051a0164001fffe1000b6764001facd940a02ff95001000468ce3c800e0201d6036d70346180f702021190
 configs tracks=a versions=0 next=94 gop_back=0 hex=0100000d02005e6d70346180f702021190
+configs tracks=vo versions=0,0 next=0,0 gop_back=0 hex=010000250100006176633190bf051a0164001fffe1000b6764001facd940a02ff95001000468ce3c801e0200004f70757380f702134f707573486561640102380180bb0000000000
+configs tracks=o versions=2 next=50 gop_back=4096 hex=018020001e0202324f70757380f702134f707573486561640102380180bb0000000000
 #
 # mime: the MIME type of a stream of the tracks.
 mime tracks=va value=video/x.strims-units;codecs="avc1.64001f,mp4a.40.2"
 mime tracks=v value=video/x.strims-units;codecs="avc1.64001f"
+mime tracks=vo value=video/x.strims-units;codecs="avc1.64001f,Opus"
+mime tracks=o value=video/x.strims-units;codecs="Opus"
 #
 # stream: the script through a UnitWriter of frame-byte frames, signed
 # early after unit sign_after into units of unit_frames frames.

@@ -58,12 +58,28 @@ fn audio_config() -> DecoderConfig {
     }
 }
 
+/// A stereo Opus track 2, of the OpusHead WebCodecs encoders give.
+fn opus_config() -> DecoderConfig {
+    DecoderConfig {
+        track: AUDIO,
+        kind: TrackKind::Audio,
+        codec: "Opus".into(),
+        timescale: 48_000,
+        params: CodecParams::Opus {
+            head: b"OpusHead\x01\x02\x38\x01\x80\xbb\0\0\0\0\0".to_vec(),
+            channels: 2,
+            pre_skip: 312,
+        },
+    }
+}
+
 fn configs(tracks: &str) -> Vec<DecoderConfig> {
     tracks
         .chars()
         .map(|c| match c {
             'v' => video_config(),
             'a' => audio_config(),
+            'o' => opus_config(),
             other => panic!("track kind {other}"),
         })
         .collect()

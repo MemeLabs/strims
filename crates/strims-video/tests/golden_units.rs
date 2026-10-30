@@ -30,9 +30,9 @@ fn open() -> Golden {
     Golden::open(concat!(env!("CARGO_MANIFEST_DIR"), "/golden/units.txt"))
 }
 
-/// The configs of the file's `tracks` entry: an H.264 track 1 at 90 kHz
-/// and an AAC track 2 at 48 kHz.
-fn configs(g: &Golden) -> (DecoderConfig, DecoderConfig) {
+/// The configs of the file's `tracks` entry: an H.264 track 1 at 90 kHz,
+/// and an AAC or an Opus track 2 at 48 kHz.
+fn configs(g: &Golden) -> (DecoderConfig, DecoderConfig, DecoderConfig) {
     let e = g.all("tracks")[0];
     let entry = |track, sample_entry, timescale, config: &[u8]| {
         ConfigEntry {
@@ -50,15 +50,17 @@ fn configs(g: &Golden) -> (DecoderConfig, DecoderConfig) {
     (
         entry(VIDEO, *b"avc1", 90_000, &g.bytes(e, "avcc")),
         entry(AUDIO, *b"mp4a", 48_000, &g.bytes(e, "asc")),
+        entry(AUDIO, *b"Opus", 48_000, &g.bytes(e, "opus_head")),
     )
 }
 
 fn tracks(g: &Golden, list: &str) -> Vec<DecoderConfig> {
-    let (v, a) = configs(g);
+    let (v, a, o) = configs(g);
     list.chars()
         .map(|c| match c {
             'v' => v.clone(),
             'a' => a.clone(),
+            'o' => o.clone(),
             other => panic!("track kind {other}"),
         })
         .collect()
@@ -173,7 +175,7 @@ fn unit((track, dts, keyframe, payload): &(TrackId, i64, bool, Vec<u8>)) -> Acce
 #[test]
 fn streams() {
     let mut g = open();
-    let (v, a) = configs(&g);
+    let (v, a, _) = configs(&g);
     let units = script();
     for e in g.all("stream") {
         let frame: usize = g.str(e, "frame").parse().unwrap();

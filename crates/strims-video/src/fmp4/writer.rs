@@ -35,7 +35,8 @@ struct Track {
     track: TrackId,
     kind: TrackKind,
     timescale: u32,
-    /// Audio samples per frame; 0 for video.
+    /// Audio samples per frame; 0 for video, and for Opus, whose packets
+    /// last from 2.5 to 120 ms.
     frame_samples: u32,
     /// The latest duration timed by a following sample, kept across runs.
     prev_duration: Option<u32>,
@@ -63,7 +64,7 @@ impl Track {
     fn new(config: &DecoderConfig, delay: Duration, reuse: Option<Track>) -> Self {
         let frame_samples = match config.params {
             CodecParams::Aac { frame_samples, .. } => frame_samples,
-            CodecParams::Avc { .. } => 0,
+            CodecParams::Avc { .. } | CodecParams::Opus { .. } => 0,
         };
         let (prev_duration, mut samples, mut data) = match reuse {
             Some(t) if t.timescale == config.timescale => (t.prev_duration, t.samples, t.data),
