@@ -320,6 +320,24 @@ pub struct FakeReader {
     /// Takes the newest chunk's start as its position once the log holds a
     /// byte, as a low-latency swarm reader joins.
     pub(crate) joining: bool,
+    /// How long a rewind waits before it answers.
+    pub(crate) rewind_delay: std::time::Duration,
+    /// Counts the rewinds dropped before they answered.
+    pub(crate) cancelled_rewinds: Rc<Cell<u64>>,
+}
+
+/// Counts a rewind dropped while armed.
+struct CancelCount {
+    count: Rc<Cell<u64>>,
+    armed: bool,
+}
+
+impl Drop for CancelCount {
+    fn drop(&mut self) {
+        if self.armed {
+            self.count.set(self.count.get() + 1);
+        }
+    }
 }
 
 impl FakeReader {
@@ -379,9 +397,20 @@ impl SwarmRead for FakeReader {
 
     /// Moves back within the log, which holds the whole window: refused
     /// past the reader's position, below the log's tail, or with a
-    /// discontinuity the next read reports (left for it).
+    /// discontinuity the next read reports (left for it). It answers after
+    /// the node's rewind delay ([`FakeHost::delay_rewinds`]), for the
+    /// reader and the log as they are then.
+    ///
+    /// [`FakeHost::delay_rewinds`]: crate::FakeHost::delay_rewinds
     async fn rewind(&mut self, offset: u64) -> Result<u64, RewindFailure<Closed>> {
-        poll_fn(|cx| {
+        let mut cancel = CancelCount {
+            count: self.cancelled_rewinds.clone(),
+            armed: true,
+        };
+        if !self.rewind_delay.is_zero() {
+            tokio::time::sleep(self.rewind_delay).await;
+        }
+        let answer = poll_fn(|cx| {
             if self.closed.get() {
                 return Poll::Ready(Err(RewindFailure::Closed));
             }
@@ -407,6 +436,8 @@ impl SwarmRead for FakeReader {
             self.pos = at;
             Poll::Ready(Ok(at))
         })
-        .await
+        .await;
+        cancel.armed = false;
+        answer
     }
 }

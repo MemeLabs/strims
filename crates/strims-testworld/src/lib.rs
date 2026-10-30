@@ -27,9 +27,10 @@
 //!   reader starts at the window's tail, or at the newest chunk once there
 //!   is one, as a live swarm reader joins
 //!   ([`FakeHost::open_readers_live`]). It reads at absolute offsets, moves
-//!   back to any chunk the log holds ([`SwarmRead::rewind`]), and fails
-//!   once with a discontinuity when the epoch changes or the window passed
-//!   it. Removing a swarm closes its readers and writer.
+//!   back to any chunk the log holds ([`SwarmRead::rewind`]), after a delay
+//!   a node can set ([`FakeHost::delay_rewinds`]), and fails once with a
+//!   discontinuity when the epoch changes or the window passed it.
+//!   Removing a swarm closes its readers and writer.
 //!
 //! [`SwarmRead::rewind`]: strims_transfer::SwarmRead::rewind
 //!
@@ -40,8 +41,8 @@
 //! - vpn routing, hops, encryption and signatures: a delivery carries no
 //!   hops and no verified signature;
 //! - transfers between nodes: swarms share their log, discovery finds no
-//!   one, and peer connections and swarm runs do nothing. A rewind never
-//!   waits for peers.
+//!   one, and peer connections and swarm runs do nothing. A rewind waits
+//!   for no peers, only for its node's rewind delay.
 //!
 //! Tests run in [`run`]. An app crate's tests build their control from a
 //! [`Node`]'s parts (its host, store, profile, controls, timer and a

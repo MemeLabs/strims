@@ -7,6 +7,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::time::Duration;
 
 use strims_kademlia::ID;
 use strims_ppspp::integrity::ProtectionMethod;
@@ -43,6 +44,11 @@ pub struct NodeState {
     pub port_remap: BTreeMap<u16, u16>,
     /// Readers opened from now start at the newest chunk ([`FakeHost::open_readers_live`]).
     pub live_readers: bool,
+    /// How long the rewinds of readers opened from now wait before they
+    /// answer ([`FakeHost::delay_rewinds`]).
+    pub rewind_delay: Duration,
+    /// Rewinds of this node's readers dropped before they answered.
+    pub cancelled_rewinds: Rc<Cell<u64>>,
 }
 
 #[derive(Clone)]
@@ -73,6 +79,20 @@ impl FakeHost {
     /// at the window's tail.
     pub fn open_readers_live(&self, live: bool) {
         self.state.borrow_mut().live_readers = live;
+    }
+
+    /// The rewinds of the readers this node opens from now wait `delay`
+    /// before they answer, and answer for the reader and the log as they
+    /// are then, as a rewind waits while the chunks before a swarm's tail
+    /// are fetched; zero answers at once.
+    pub fn delay_rewinds(&self, delay: Duration) {
+        self.state.borrow_mut().rewind_delay = delay;
+    }
+
+    /// The rewinds of this node's readers dropped before they answered, as
+    /// a caller's deadline drops a late one.
+    pub fn cancelled_rewinds(&self) -> u64 {
+        self.state.borrow().cancelled_rewinds.get()
     }
 
     /// Opens `port` on the network, whatever `port_remap` says.
@@ -327,6 +347,8 @@ impl strims_transfer::SwarmHost for FakeHost {
             epoch: l.epoch,
             pos: l.tail,
             joining: s.live_readers,
+            rewind_delay: s.rewind_delay,
+            cancelled_rewinds: s.cancelled_rewinds.clone(),
         })
     }
 }
@@ -428,6 +450,62 @@ mod tests {
             ));
             host.remove_swarm(h).await.unwrap();
             assert!(matches!(r.rewind(0).await, Err(RewindFailure::Closed)));
+        });
+    }
+
+    /// A delayed rewind answers once its delay passed, for the reader as it
+    /// is then; one dropped before it answered is counted and leaves the
+    /// reader where it was.
+    #[test]
+    fn a_delayed_rewind_answers_late_and_counts_when_dropped() {
+        crate::exec::run(async {
+            let host = host();
+            let options = WriterOptions {
+                swarm_options: SwarmOptions {
+                    chunk_size: 64,
+                    chunks_per_signature: 1,
+                    live_window: 8,
+                    ..Default::default()
+                },
+                key: strims_crypto::key_from_seed(&[4; 32]),
+            };
+            let (h, _, mut w) = host.create_swarm(options).await.unwrap();
+            let mut early = host.open_reader(h).await.unwrap();
+            host.delay_rewinds(Duration::from_secs(3));
+            let mut r = host.open_reader(h).await.unwrap();
+            let stream: Vec<u8> = (0..650u32).map(|i| (i % 251) as u8).collect();
+            w.write(&stream[..200]).await.unwrap();
+            let mut buf = [0u8; 1024];
+            assert_eq!(r.read_at(&mut buf).await.unwrap(), (0, 200));
+            assert_eq!(early.read_at(&mut buf).await.unwrap(), (0, 200));
+
+            // readers opened before the delay was set answer at once
+            let start = tokio::time::Instant::now();
+            assert_eq!(early.rewind(70).await.ok(), Some(64));
+            assert_eq!(start.elapsed(), Duration::ZERO);
+            assert_eq!(r.rewind(130).await.ok(), Some(128));
+            assert_eq!(start.elapsed(), Duration::from_secs(3));
+            assert_eq!(host.cancelled_rewinds(), 0);
+
+            let late = tokio::time::timeout(Duration::from_secs(2), r.rewind(0)).await;
+            assert!(late.is_err());
+            assert_eq!(host.cancelled_rewinds(), 1);
+            let (off, n) = r.read_at(&mut buf).await.unwrap();
+            assert_eq!((off, &buf[..n]), (128, &stream[128..200]));
+
+            // the answer is for the log as it is once the delay passed: the
+            // window moved past offset 0 meanwhile
+            let rewind = r.rewind(0);
+            let more = async {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                w.write(&stream[200..]).await.unwrap();
+            };
+            let (answer, ()) = futures_util::future::join(rewind, more).await;
+            assert!(matches!(
+                answer,
+                Err(RewindFailure::Refused(RewindError::OutsideWindow))
+            ));
+            assert_eq!(host.cancelled_rewinds(), 1);
         });
     }
 
