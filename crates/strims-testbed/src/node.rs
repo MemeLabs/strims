@@ -12,7 +12,7 @@
 //!
 //! The stream ([`Stream`]) is the self-checking frames of [`LiveShape::testbed`],
 //! each stamped with the wall clock as it is written, or an FLV file's
-//! media in the unit format ([`media`](crate::media)), each access unit
+//! media in the unit format ([`media`]), each access unit
 //! with its publish time.
 //!
 //! Every second from 5 s before the start, the node emits one JSON line

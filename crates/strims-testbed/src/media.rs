@@ -5,7 +5,7 @@
 //! seed in the unit format and read by viewers as the UI's egress reads
 //! it, so browser viewers can play it through the baseline player.
 //!
-//! - **The seed** ([`write`]) replays the file's tags at their tag times
+//! - **The seed** ([`write()`]) replays the file's tags at their tag times
 //!   from the stream's start: each goes through strims-video's
 //!   [`FlvSource`] into a [`UnitWriter`] in the swarm's chunk size, its
 //!   publish time the wall clock as the tag is taken, and the output goes
@@ -13,7 +13,7 @@
 //!   signing's interval after its first byte ([`SignTimer`]), and the last
 //!   one when the stream ends. Its swarm has the options of a unit-format
 //!   ingest session ([`seed_options`]).
-//! - **A viewer** ([`read`]) adds the swarm with an egress stream's
+//! - **A viewer** ([`read()`]) adds the swarm with an egress stream's
 //!   options ([`viewer_options`]) and reads it through a
 //!   [`ChunkedReader`], which joins at a GOP by rewinding the swarm reader
 //!   within [`EgressSettings::rewind_timeout`]. The records' pieces go out
