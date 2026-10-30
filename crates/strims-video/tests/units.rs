@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! A unit-format ingest on fake nodes (see `strims_testworld`), read back
-//! through egress: by another node's stream from the start, and by
-//! egress's reader over the ingest swarm's stream, joining mid-stream and
-//! losing a chunk.
+//! through egress: by another node's stream from the start; by streams
+//! that join it live, at their swarm reader's newest chunk, and rewind to
+//! their GOP's sync record, or start at the next keyframe when the rewind
+//! is refused or late; and by egress's reader over the ingest swarm's
+//! stream, joining mid-stream and losing a chunk.
 
 #![allow(
     clippy::unwrap_used,
@@ -20,6 +22,7 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::time::Duration;
 
+use futures_util::FutureExt;
 use strims_base::time::Time;
 use strims_chunkstream::chunked::{ChunkedRecordDecoder, Item};
 use strims_kv::MemoryKv;
@@ -35,11 +38,12 @@ use strims_video::synth::script::{Script, ScriptConfig, TagKind};
 use strims_video::units::record::{Record, parse_record};
 use strims_video::units::{MAX_RECORD_LEN, ReaderEvent, UnitReader};
 use strims_video::{
-    AccessUnit, ChunkedReader, Config, DecoderConfig, EgressPiece, EgressStream, FlvSource,
-    IngestFormat, IngressSettings, NoVideoHost, Rewind, SourceEvent, StreamFormat, TrackId,
-    VideoControl, VideoError, VideoHost, units_mime,
+    AccessUnit, ChunkedReader, Config, DecoderConfig, EgressPiece, EgressSettings, EgressStream,
+    FlvSource, IngestFormat, IngressSettings, NoVideoHost, Rewind, SourceEvent, StreamFormat,
+    TrackId, VideoControl, VideoError, VideoHost, units_mime,
 };
 use support::{FakeVideo, TestPublisher};
+use tokio::task::JoinHandle;
 
 type Control<V> = VideoControl<MemoryKv, FakeHost, V, TokioTimer>;
 type Stream<V> = EgressStream<MemoryKv, FakeHost, V, TokioTimer>;
@@ -376,7 +380,9 @@ fn read_snapshot(snapshot: Snapshot) -> (Read, strims_video::ReaderMetrics) {
     let mut read = Read::default();
     let mut rec = Vec::new();
     loop {
-        let piece = futures_util::FutureExt::now_or_never(c.next(32 * 1024))
+        let piece = c
+            .next(32 * 1024)
+            .now_or_never()
             .expect("a snapshot never waits");
         match piece {
             Ok(EgressPiece::Data(d)) => rec.extend_from_slice(d),
@@ -391,27 +397,33 @@ fn read_snapshot(snapshot: Snapshot) -> (Read, strims_video::ReaderMetrics) {
     }
 }
 
-/// The stream offset of each UNIT record of `stream`, by track and DTS,
-/// and the offsets of every record, in order.
-fn unit_offsets(stream: &[u8]) -> (BTreeMap<(TrackId, i64), u64>, Vec<u64>) {
+/// The records of a unit-format stream with their offsets, in order.
+fn records_of(stream: &[u8]) -> Vec<(u64, Vec<u8>)> {
     let mut d = ChunkedRecordDecoder::new(CHUNK, MAX_RECORD_LEN).unwrap();
-    let mut units = BTreeMap::new();
-    let mut all = Vec::new();
+    let mut records = Vec::new();
     let mut at = 0;
     loop {
         let (n, item) = d.decode(&stream[at..]);
         at += n;
         match item {
-            Some(Item::Record { offset, payload }) => {
-                all.push(offset);
-                if let Record::Unit { header, .. } = parse_record(payload).unwrap() {
-                    units.insert((header.track, header.dts), offset);
-                }
-            }
+            Some(Item::Record { offset, payload }) => records.push((offset, payload.to_vec())),
             Some(Item::Lost) => panic!("lost records"),
-            None => return (units, all),
+            None => return records,
         }
     }
+}
+
+/// The stream offset of each UNIT record of `stream`, by track and DTS,
+/// and the offsets of every record, in order.
+fn unit_offsets(stream: &[u8]) -> (BTreeMap<(TrackId, i64), u64>, Vec<u64>) {
+    let records = records_of(stream);
+    let mut units = BTreeMap::new();
+    for (offset, r) in &records {
+        if let Record::Unit { header, .. } = parse_record(r).unwrap() {
+            units.insert((header.track, header.dts), *offset);
+        }
+    }
+    (units, records.iter().map(|(o, _)| *o).collect())
 }
 
 /// A finished unit-format ingest of the default script, sent in parts:
@@ -543,4 +555,390 @@ fn a_lost_chunk_costs_its_units_and_the_video_to_the_next_keyframe() {
     assert_eq!(missing, crossed);
     assert!(crossed[&VIDEO] >= 1);
     assert_eq!(m.discontinuities, 1);
+}
+
+/// Pictures per GOP in the default script: 2 s at 30 fps.
+const GOP: usize = 60;
+
+/// What a stream yielded: its records whole, and what a unit reader made
+/// of them.
+#[derive(Default)]
+struct Got {
+    records: Vec<Vec<u8>>,
+    record: Vec<u8>,
+    reader: UnitReader,
+    read: Read,
+}
+
+impl Got {
+    fn take(&mut self, piece: Result<EgressPiece<'_>, VideoError>) {
+        match piece {
+            Ok(EgressPiece::Data(d)) => self.record.extend_from_slice(d),
+            Ok(EgressPiece::RecordEnd) => {
+                let r = std::mem::take(&mut self.record);
+                self.read.record(&mut self.reader, &r);
+                self.records.push(r);
+            }
+            Ok(EgressPiece::Discontinuity) => {
+                panic!("a discontinuity after {} records", self.records.len())
+            }
+            Err(e) => panic!("{e}"),
+        }
+    }
+
+    /// Record `i`, parsed.
+    fn record(&self, i: usize) -> Record<'_> {
+        parse_record(&self.records[i]).unwrap()
+    }
+
+    /// The index of the first CONFIGS record.
+    fn first_configs(&self) -> usize {
+        (0..self.records.len())
+            .find(|&i| matches!(self.record(i), Record::Configs { .. }))
+            .expect("a CONFIGS record")
+    }
+
+    /// Asserts that record `i` is a GOP's sync record and the next is its
+    /// keyframe, `key`.
+    fn assert_gop_start(&self, i: usize, key: &Unit) {
+        assert!(
+            matches!(self.record(i), Record::Configs { gop_back: 0, .. }),
+            "record {i}: {:?}",
+            self.record(i)
+        );
+        let Record::Unit { header, .. } = self.record(i + 1) else {
+            panic!("record {}: {:?}", i + 1, self.record(i + 1));
+        };
+        assert_eq!(
+            (header.track, header.keyframe, header.dts),
+            (key.0, true, key.1)
+        );
+    }
+}
+
+/// A viewer's stream on b.
+struct Viewer {
+    stream: Stream<NoVideoHost>,
+    got: Got,
+}
+
+impl Viewer {
+    /// Takes the stream's first piece, which comes once it joined: how long
+    /// that took.
+    async fn join(&mut self) -> Duration {
+        let start = tokio::time::Instant::now();
+        let piece = tokio::time::timeout(Duration::from_secs(10), self.stream.next(usize::MAX))
+            .await
+            .expect("a first piece in time");
+        self.got.take(piece);
+        start.elapsed()
+    }
+
+    /// Reads until the unit reader returned `last`.
+    async fn until(&mut self, last: &Unit) {
+        while self.got.read.units.last() != Some(last) {
+            let piece = tokio::time::timeout(Duration::from_secs(10), self.stream.next(usize::MAX))
+                .await
+                .expect("a piece in time");
+            self.got.take(piece);
+        }
+    }
+
+    /// Reads what the stream holds now.
+    fn catch_up(&mut self) {
+        while let Some(piece) = self.stream.next(usize::MAX).now_or_never() {
+            self.got.take(piece);
+        }
+    }
+
+    /// The reader's rewinds, refused rewinds and discontinuities.
+    fn rewinds(&self) -> (u64, u64, u64) {
+        let m = self.stream.metrics();
+        (m.rewinds, m.refused_rewinds, m.discontinuities)
+    }
+}
+
+/// A unit-format ingest of the default script, sent in steps, and viewed
+/// from b, whose readers start at a stream's newest chunk as live joins do.
+struct Live {
+    s: Ingest,
+    vb: Control<NoVideoHost>,
+    /// `None` while a task sends.
+    p: Option<TestPublisher>,
+    script: Rc<Script>,
+    configs: Vec<DecoderConfig>,
+    units: Vec<Unit>,
+    media: Media,
+    /// The tags sent so far.
+    sent: usize,
+}
+
+impl Live {
+    /// The ingest, sent through its first GOP and listed on b.
+    async fn new() -> Live {
+        let s = Ingest::new().await;
+        s.b.host.open_readers_live(true);
+        let vb = start(&s.b, NoVideoHost, Config::default());
+        let p = s.publish().await;
+        let script = Script::new(&ScriptConfig::default());
+        let (configs, units) = script_units(&script);
+        let mut live = Live {
+            s,
+            vb,
+            p: Some(p),
+            script: Rc::new(script),
+            configs,
+            units,
+            media: Media::default(),
+            sent: 0,
+        };
+        live.send_to(live.after_picture(0, GOP - 1)).await;
+        wait_for(10, "the listing", || !media(&live.s.b).is_empty()).await;
+        live.media = media(&live.s.b).remove(0);
+        live
+    }
+
+    /// The index just past the tag of picture `picture` of GOP `gop`.
+    fn after_picture(&self, gop: usize, picture: usize) -> usize {
+        // The first video tag is the sequence header.
+        let (i, _) = self
+            .script
+            .tags
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.kind == TagKind::Video)
+            .nth(1 + gop * GOP + picture)
+            .unwrap();
+        i + 1
+    }
+
+    fn all(&self) -> usize {
+        self.script.tags.len()
+    }
+
+    fn last(&self) -> Unit {
+        self.units.last().unwrap().clone()
+    }
+
+    /// The index in the script's units of GOP `gop`'s keyframe.
+    fn keyframe(&self, gop: usize) -> usize {
+        keyframe(&self.units, gop)
+    }
+
+    /// Sends the tags from the last one sent to `to` in a task of its own,
+    /// while the test reads.
+    fn sending(&mut self, to: usize) -> JoinHandle<TestPublisher> {
+        let mut p = self.p.take().expect("the publisher");
+        let (from, script) = (self.sent, self.script.clone());
+        self.sent = to;
+        tokio::task::spawn_local(async move {
+            p.send_tags(&script.tags[from..to], &script).await;
+            p
+        })
+    }
+
+    async fn sent(&mut self, task: JoinHandle<TestPublisher>) {
+        self.p = Some(task.await.unwrap());
+    }
+
+    async fn send_to(&mut self, to: usize) {
+        let task = self.sending(to);
+        self.sent(task).await;
+    }
+
+    /// A stream of the listing on b.
+    async fn open(&self) -> Viewer {
+        let stream = self
+            .vb
+            .open_stream(
+                &self.media.swarm_uri,
+                std::slice::from_ref(&self.s.net.public),
+                StreamFormat::from_mime(&self.media.mime_type),
+            )
+            .await
+            .unwrap();
+        Viewer {
+            stream,
+            got: Got::default(),
+        }
+    }
+
+    /// The start of the stream's newest chunk, where a live reader that
+    /// reads first now starts.
+    fn newest_chunk(&self) -> u64 {
+        (self.s.written() - 1) / CHUNK as u64 * CHUNK as u64
+    }
+
+    /// Narrows the swarm's live window, its log's, to `bytes`.
+    fn narrow_window(&self, bytes: usize) {
+        let w = self.s.world.0.borrow();
+        let log = w.logs.get(&(self.s.swarm_id(), String::new())).unwrap();
+        log.borrow_mut().window = bytes;
+    }
+}
+
+/// Where a live reader starting at chunk offset `newest` joins: the first
+/// record at or after it, and its GOP's sync record.
+fn join_point(records: &[(u64, Vec<u8>)], newest: u64) -> (u64, u64) {
+    let (first, r) = records.iter().find(|(o, _)| *o >= newest).unwrap();
+    (*first, first - parse_record(r).unwrap().gop_back())
+}
+
+/// The records from offset `from` on.
+fn records_from(records: &[(u64, Vec<u8>)], from: u64) -> Vec<Vec<u8>> {
+    records
+        .iter()
+        .filter(|(o, _)| *o >= from)
+        .map(|(_, r)| r.clone())
+        .collect()
+}
+
+/// A stream opened half way through a GOP rewinds its swarm reader to the
+/// GOP's sync record: it yields that CONFIGS record first, then the GOP's
+/// keyframe, then every record after them in order, whether the rewind
+/// answers at once or late but within the timeout.
+#[test]
+fn a_viewer_joining_mid_gop_starts_at_its_gops_sync_record() {
+    for delay in [Duration::ZERO, Duration::from_millis(1500)] {
+        run(async move {
+            let mut live = Live::new().await;
+            live.s.b.host.delay_rewinds(delay);
+            live.send_to(live.after_picture(2, 45)).await;
+            let mut v = live.open().await;
+            let newest = live.newest_chunk();
+            let rest = live.sending(live.all());
+            let took = v.join().await;
+            v.until(&live.last()).await;
+            live.sent(rest).await;
+
+            let records = records_of(&live.s.stream());
+            let (first, k) = join_point(&records, newest);
+            assert!(k < first, "{delay:?}: joined at a sync record");
+            assert_eq!(v.got.records, records_from(&records, k), "{delay:?}");
+            v.got.assert_gop_start(0, &live.units[live.keyframe(2)]);
+            assert_eq!(v.got.read.units, live.units[live.keyframe(2)..]);
+            assert_eq!(v.got.read.configs, live.configs);
+            assert!(v.got.read.gaps.is_empty());
+            assert_eq!(v.rewinds(), (1, 0, 0), "{delay:?}");
+            assert!(took >= delay, "{delay:?}: joined after {took:?}");
+            assert_eq!(live.s.b.host.cancelled_rewinds(), 0);
+        });
+    }
+}
+
+/// The live window, narrowed for this viewer to less than a GOP.
+const NARROW_WINDOW: usize = 128 * 1024;
+
+/// A stream opened half way through a GOP whose sync record left the live
+/// window can't rewind: it yields from the record it read first, and the
+/// unit reader starts at the next GOP's sync record and keyframe.
+#[test]
+fn a_viewer_whose_gop_left_the_window_starts_at_the_next_keyframe() {
+    run(async {
+        let mut live = Live::new().await;
+        live.narrow_window(NARROW_WINDOW);
+        live.send_to(live.after_picture(2, 45)).await;
+        let mut v = live.open().await;
+        // The window is narrow: the stream is read while the rest is sent.
+        let rest = live.sending(live.all());
+        v.join().await;
+        v.until(&live.last()).await;
+        live.sent(rest).await;
+
+        // The first record's sync record is further back than the window.
+        let Record::Unit { gop_back, .. } = v.got.record(0) else {
+            panic!("{:?}", v.got.record(0));
+        };
+        assert!(gop_back > NARROW_WINDOW as u64, "gop_back {gop_back}");
+        let next = v.got.first_configs();
+        assert!(next > 0);
+        v.got.assert_gop_start(next, &live.units[live.keyframe(3)]);
+        assert_eq!(v.got.read.units, live.units[live.keyframe(3)..]);
+        assert_eq!(v.got.read.configs, live.configs);
+        assert!(v.got.read.gaps.is_empty());
+        assert_eq!(v.rewinds(), (0, 1, 0));
+        assert_eq!(live.s.b.host.cancelled_rewinds(), 0);
+    });
+}
+
+/// A stream whose rewind doesn't answer within the egress's timeout drops
+/// it, which cancels it, and yields from the record it read first: the unit
+/// reader starts at the next GOP's sync record and keyframe.
+#[test]
+fn a_viewer_whose_rewind_answers_late_starts_at_the_next_keyframe_and_cancels_it() {
+    run(async {
+        let mut live = Live::new().await;
+        let late = Duration::from_secs(5);
+        live.s.b.host.delay_rewinds(late);
+        live.send_to(live.after_picture(2, 45)).await;
+        let mut v = live.open().await;
+        let newest = live.newest_chunk();
+        let rest = live.sending(live.all());
+        let took = v.join().await;
+        let timeout = EgressSettings::default().rewind_timeout.to_std().unwrap();
+        assert!(took >= timeout && took < late, "joined after {took:?}");
+        assert_eq!(live.s.b.host.cancelled_rewinds(), 1);
+        v.until(&live.last()).await;
+        live.sent(rest).await;
+
+        let records = records_of(&live.s.stream());
+        let (first, k) = join_point(&records, newest);
+        assert!(k < first, "joined at a sync record");
+        assert_eq!(v.got.records, records_from(&records, first));
+        let next = v.got.first_configs();
+        assert!(next > 0);
+        v.got.assert_gop_start(next, &live.units[live.keyframe(3)]);
+        assert_eq!(v.got.read.units, live.units[live.keyframe(3)..]);
+        assert_eq!(v.got.read.configs, live.configs);
+        assert_eq!(v.rewinds(), (0, 1, 0));
+        assert_eq!(live.s.b.host.cancelled_rewinds(), 1);
+    });
+}
+
+/// Two streams of one swarm on a node each have their own swarm reader: a
+/// stream that joins later and rewinds to its GOP's sync record leaves the
+/// first stream, which read past that record, where it was.
+#[test]
+fn a_second_stream_rewinding_leaves_the_first_where_it_was() {
+    run(async {
+        let mut live = Live::new().await;
+        live.send_to(live.after_picture(1, 30)).await;
+        let mut first = live.open().await;
+        let newest_first = live.newest_chunk();
+        let more = live.sending(live.after_picture(3, 30));
+        first.join().await;
+        live.sent(more).await;
+        first.catch_up();
+        let read_first = first.got.records.len();
+
+        let mut second = live.open().await;
+        let newest_second = live.newest_chunk();
+        let rest = live.sending(live.all());
+        second.join().await;
+        let swarms = live.vb.video_swarms();
+        assert_eq!(swarms.len(), 1);
+        assert_eq!(swarms[0].streams, 2);
+        first.until(&live.last()).await;
+        second.until(&live.last()).await;
+        live.sent(rest).await;
+
+        let records = records_of(&live.s.stream());
+        let (_, k_first) = join_point(&records, newest_first);
+        let (at_second, k_second) = join_point(&records, newest_second);
+        assert!(k_second < at_second, "joined at a sync record");
+        // The first stream had read past the second's sync record.
+        let (last_read, _) = records
+            .iter()
+            .filter(|(o, _)| *o >= k_first)
+            .nth(read_first - 1)
+            .unwrap();
+        assert!(*last_read > k_second, "{last_read} <= {k_second}");
+
+        assert_eq!(first.got.records, records_from(&records, k_first));
+        assert_eq!(second.got.records, records_from(&records, k_second));
+        assert_eq!(first.got.read.units, live.units[live.keyframe(1)..]);
+        assert_eq!(second.got.read.units, live.units[live.keyframe(3)..]);
+        assert_eq!(first.rewinds(), (1, 0, 0));
+        assert_eq!(second.rewinds(), (1, 0, 0));
+    });
 }
