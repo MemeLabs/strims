@@ -40,9 +40,8 @@
 //!   lasting the media's time, or, when that would round above the target
 //!   ([`fits_target`]), runs of its fragments within the target, which
 //!   after the first start mid-GOP. A record that isn't fMP4 with media
-//!   time, such as WebM, is skipped, as is one with a fragment
-//!   longer than the target, from that fragment on; one over the bound is
-//!   dropped.
+//!   time is skipped, as is one with a fragment longer than the target,
+//!   from that fragment on; one over the bound is dropped.
 //! - **The unit format** ([`StreamFormat::Units`]). Each whole record of
 //!   at most [`units::MAX_RECORD_LEN`] goes through a [`UnitReader`] into
 //!   an [`HlsMuxer`], whose segments the playlist lists (see

@@ -150,8 +150,8 @@
 //!   [`HlsSettings::target_duration`] for its life, and every segment
 //!   rounds to at most it. A whole fMP4 record ([`fmp4::split_record`]) is
 //!   a segment lasting its media time ([`fmp4::media_duration`]), or runs
-//!   of its fragments when it lasts longer; other records, such as WebM,
-//!   are skipped. A unit-format stream's access units are cut into
+//!   of its fragments when it lasts longer; other records are skipped. A
+//!   unit-format stream's access units are cut into
 //!   segments at its keyframes, and mid-GOP when a GOP outlasts the target
 //!   ([`hls::HlsMuxer`]). Segments are served with their inits on the
 //!   driver's [`hls::HlsRoutes`]. A skipped record, a discontinuity of an

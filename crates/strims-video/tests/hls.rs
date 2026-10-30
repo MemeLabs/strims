@@ -793,8 +793,8 @@ fn disabling_hls_closes_every_stream() {
     });
 }
 
-/// Records that aren't fMP4, such as WebM, are skipped and counted; the
-/// fMP4 records after them are served.
+/// Records that aren't fMP4 are skipped and counted; the fMP4 records
+/// after them are served.
 #[test]
 fn records_that_are_not_fmp4_are_skipped() {
     run(async {
@@ -806,9 +806,10 @@ fn records_that_are_not_fmp4_are_skipped() {
         let mut p = Publisher::new(&n, 7).await;
         let url = v.open_hls(&p.uri, &[], StreamFormat::Packed).await.unwrap();
         for i in 0..3u8 {
-            let mut webm = vec![0x1a, 0x45, 0xdf, 0xa3];
-            webm.resize(70_000, i);
-            p.record(&webm).await;
+            // A 16-byte init that doesn't parse.
+            let mut junk = vec![0x00, 0x10];
+            junk.resize(70_000, i);
+            p.record(&junk).await;
         }
         wait_for(10, "the records to be skipped", || {
             v.metrics().hls_skipped_records == 3

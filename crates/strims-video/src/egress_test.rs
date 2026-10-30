@@ -647,11 +647,7 @@ fn stream_formats_follow_the_listings_mime_type() {
         StreamFormat::from_mime("Video/X.Strims-Units"),
         StreamFormat::Units
     );
-    for packed in [
-        "",
-        r#"video/mp4;codecs="avc1.64001f""#,
-        "video/webm;codecs=vp9,opus",
-    ] {
+    for packed in ["", r#"video/mp4;codecs="avc1.64001f""#] {
         assert_eq!(
             StreamFormat::from_mime(packed),
             StreamFormat::Packed,

@@ -362,17 +362,17 @@ fn records_that_are_not_fmp4_are_skipped() {
     let s = served();
     let rs = records(&ScriptConfig::default());
     let mut feed = record_feed(16 << 20);
-    // A WebM record: an EBML header, then clusters.
-    let mut webm = vec![0x1a, 0x45, 0xdf, 0xa3];
-    webm.resize(70_000, 0x42);
-    assert_eq!(feed_record(&mut feed, &s, &webm, true), SKIPPED);
+    // A record whose 16-byte init doesn't parse.
+    let mut junk = vec![0x00, 0x10];
+    junk.resize(70_000, 0x42);
+    assert_eq!(feed_record(&mut feed, &s, &junk, true), SKIPPED);
     assert_eq!(feed_record(&mut feed, &s, &[0x00], true), SKIPPED);
     assert_eq!(feed_record(&mut feed, &s, &[], true), SKIPPED);
     assert_eq!(tags(&s.playlist()), Vec::<&str>::new());
 
     // Before any segment, a skip is no discontinuity; after one, it is.
     feed_record(&mut feed, &s, &rs[0], true);
-    assert_eq!(feed_record(&mut feed, &s, &webm, true), SKIPPED);
+    assert_eq!(feed_record(&mut feed, &s, &junk, true), SKIPPED);
     // An init alone has no media time.
     let (init, _) = split_record(&rs[1]).unwrap();
     let mut init_only = (init.len() as u16).to_be_bytes().to_vec();

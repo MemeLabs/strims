@@ -30,8 +30,8 @@
 //! ([`StreamFormat`], from the listing's MIME type) and yields the bytes
 //! and ends of its records ([`EgressPiece`]):
 //!
-//! - **Packed** ([`PackedReader`]): the fMP4 format and a capture's
-//!   records, in the packed chunkstream layout
+//! - **Packed** ([`PackedReader`]): the fMP4 format's records, in the
+//!   packed chunkstream layout
 //!   ([`strims_chunkstream::packed`], [`DEFAULT_SIZE`] byte frames). Unless
 //!   it starts at offset 0, it drops the bytes up to the first record end.
 //! - **Units** ([`ChunkedReader`]): the [unit format](crate::units), in the
@@ -328,7 +328,7 @@ impl<R: SwarmRead> PackedReader<R> {
 /// names.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum StreamFormat {
-    /// Records in the packed layout: the fMP4 format, and a capture's.
+    /// Records in the packed layout: the fMP4 format's.
     #[default]
     Packed,
     /// The [unit format](crate::units): records in the chunked layout, in

@@ -326,7 +326,7 @@ fn a_seed_follows_the_listing_of_its_swarm() {
         settle().await;
         assert_eq!(p.b.host.swarms_of(&swarm), (0, 0));
 
-        d.publish(&p.key, listing(&swarm, "video/webm"))
+        d.publish(&p.key, listing(&swarm, strims_video::units::MIME_TYPE))
             .await
             .unwrap();
         p.wait_seeding(&swarm).await;
