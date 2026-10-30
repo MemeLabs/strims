@@ -7,11 +7,9 @@ import { MutableRefObject, useEffect, useState } from "react";
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
 import { useClient } from "../contexts/FrontendApi";
 import * as fmp4 from "../lib/media/fmp4";
-import * as mpegts from "../lib/media/mpegts";
 
 const relays = {
   "video/mp4": fmp4.Relay,
-  "video/mpeg-ts": mpegts.Relay,
 };
 
 export type MimeType = keyof typeof relays;

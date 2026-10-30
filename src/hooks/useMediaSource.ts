@@ -7,12 +7,10 @@ import { MutableRefObject, useEffect, useState } from "react";
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
 import { useClient } from "../contexts/FrontendApi";
 import * as fmp4 from "../lib/media/fmp4";
-import * as mpegts from "../lib/media/mpegts";
 import * as webm from "../lib/media/webm";
 
 const decoders = {
   "video/mp4": fmp4.Decoder,
-  "video/mpeg-ts": mpegts.Decoder,
   "video/webm": webm.Decoder,
 };
 
