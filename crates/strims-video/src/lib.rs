@@ -89,12 +89,15 @@
 //! ([`strims_chunkstream::chunked`]).
 //!
 //! - **Ingest** ([`ingress`]): a broadcaster's RTMP stream to a channel.
-//!   Its session's swarm is under the channel key, with
-//!   [`ingress_options`], so the swarm id is the channel's public key.
-//!   Its records are fMP4 segments, each starting at a keyframe and cut
-//!   by a [`Segmenter`] into a [`PackedSink`], or with
+//!   Its session's swarm is under the channel key, so the swarm id is
+//!   the channel's public key. Its records are fMP4 segments, each
+//!   starting at a keyframe and cut by a [`Segmenter`] into a
+//!   [`PackedSink`], in a swarm of [`ingress_options`]; or with
 //!   [`IngestFormat::Units`] the unit format's, written by a
-//!   [`UnitWriter`] and signed early; a record over its bound, or a codec
+//!   [`UnitWriter`] and signed early, in a swarm whose unit size and
+//!   signing interval the stream's nominal bitrate or tracks pick
+//!   ([`units::UnitSigning`]) once its metadata or decoder configs come,
+//!   after the publish's accept; a record over its bound, or a codec
 //!   the [`FlvSource`] refuses, ends the session with the reason. The session serves the channel's snippet, live from the
 //!   publish's start time and signed with the channel key, and keeps a
 //!   listing of the records' MIME type and swarm URI on the channel's
@@ -211,7 +214,7 @@ pub use events::VideoEvent;
 pub use frontend::{CaptureFrontend, VideoFrontend, bind_frontend};
 pub use hls_egress::{HlsCloseReason, HlsStreamInfo};
 pub use host::{Accepted, NoVideoHost, VideoHost};
-pub use ingress::{IngressMetrics, ingress_options};
+pub use ingress::{IngressMetrics, ingress_options, unit_ingress_options};
 pub use registry::{SwarmKind, VideoSwarm};
 
 pub use flv::{FlvError, FlvMetrics, FlvSource, SourceEvent, Unsupported};

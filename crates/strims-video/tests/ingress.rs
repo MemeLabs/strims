@@ -4,7 +4,9 @@
 //! The RTMP ingress on fake nodes (see `strims_testworld`), with a fake
 //! listener (`support`): a published stream's records, listing and
 //! snippet on another node, refusals, replacement, channel changes, the
-//! listener's lifecycle, deadlines, caps and `ListStreams`.
+//! listener's lifecycle, deadlines, caps and `ListStreams`; and the signing
+//! a unit-format session's swarm takes from its stream's metadata and
+//! tracks.
 
 #![allow(
     clippy::unwrap_used,
@@ -22,7 +24,7 @@ use strims_base::time::Time;
 use strims_dao::schema::video::{VideoChannels, format_stream_key, new_channel};
 use strims_dao::{Recv, Subscription, Table};
 use strims_kv::MemoryKv;
-use strims_ppspp::SwarmId;
+use strims_ppspp::{SwarmId, Uri};
 use strims_proto::network::v1::directory::ListingSnippet;
 use strims_proto::network::v1::directory::listing::{Content, Media};
 use strims_proto::types::Key;
@@ -34,13 +36,15 @@ use strims_rpc::{Router, Timer};
 use strims_testworld::*;
 use strims_transfer::TransferId;
 use strims_video::hls::HlsRoutes;
+use strims_video::ingress::unit_ingress_options;
 use strims_video::synth::script::{
-    Script, ScriptConfig, TagKind, expected_records, without_publish_times,
+    Script, ScriptConfig, Tag, TagKind, expected_records, without_publish_times,
 };
+use strims_video::units::{ReaderEvent, UnitReader, UnitSigning};
 use strims_video::{
-    Config, CutRule, DecoderConfig, EgressPiece, EgressStream, FlvSource, IngressSettings,
-    NoVideoHost, SourceEvent, StreamFormat, SwarmKind, VideoControl, VideoEvent, VideoHost,
-    bind_frontend, fmp4_mime,
+    AccessUnit, Config, CutRule, DecoderConfig, EgressPiece, EgressStream, FlvSource, IngestFormat,
+    IngressSettings, NoVideoHost, SourceEvent, StreamFormat, SwarmKind, TrackId, VideoControl,
+    VideoEvent, VideoHost, VideoSwarm, bind_frontend, fmp4_mime, units_mime,
 };
 use support::{FakeVideo, TestPublisher};
 
@@ -51,6 +55,10 @@ const ADDR: &str = "127.0.0.1:1935";
 const BAD_NAME: &str = "NetStream.Publish.BadName";
 const FAILED: &str = "NetStream.Publish.Failed";
 const HEVC: &str = "HEVC (hvc1) is not supported; send H.264 with AAC";
+const REPLACED: &str = "replaced by a new publish to the channel";
+/// The ingest swarm's chunk, and its integrity unit of 8 chunks.
+const CHUNK: u64 = 4096;
+const LARGE_UNIT: u64 = 8 * CHUNK;
 
 fn start<V: VideoHost>(n: &Node, video: V, config: Config) -> Control<V> {
     let control = VideoControl::new(
@@ -238,6 +246,7 @@ fn run_of(got: &[Vec<u8>], expected: &[Vec<u8>]) -> usize {
 
 /// A node with network 10, a channel on it, and the ingress listening.
 struct Ingest {
+    world: World,
     a: Node,
     b: Option<Node>,
     net: Key,
@@ -272,6 +281,7 @@ impl Ingest {
         .await;
         let key = va.channel_url(channel.id).await.unwrap().stream_key;
         Ingest {
+            world,
             a,
             b,
             net,
@@ -303,6 +313,19 @@ impl Ingest {
 
     fn transfer_id(&self) -> TransferId {
         TransferId::new(&swarm_id(&self.channel), b"")
+    }
+
+    /// The bytes written into the channel's swarm, in all its sessions.
+    fn written(&self) -> u64 {
+        self.world.written(&swarm_id(&self.channel), "")
+    }
+
+    /// The node's ingest swarm, once added.
+    fn ingest_swarm(&self) -> Option<VideoSwarm> {
+        self.va
+            .video_swarms()
+            .into_iter()
+            .find(|w| w.kind == SwarmKind::Ingest && w.added)
     }
 }
 
@@ -866,5 +889,495 @@ fn list_streams_reports_live_sessions() {
         p.unpublish().await;
         ended(&mut events).await;
         assert!(list().await.is_empty());
+    });
+}
+
+fn units_config() -> Config {
+    Config {
+        ingress: IngressSettings {
+            format: IngestFormat::Units,
+            ..IngressSettings::default()
+        },
+        ..Config::default()
+    }
+}
+
+/// The URI of a channel's swarm of the unit format, signing with
+/// `signing`.
+fn units_uri(c: &VideoChannel, signing: &UnitSigning) -> String {
+    Uri::new(swarm_id(c), unit_ingress_options(signing).uri_options()).to_string()
+}
+
+/// A unit as the source made it, without its publish time: track, DTS,
+/// PTS, keyframe and payload.
+type Unit = (TrackId, i64, i64, bool, Vec<u8>);
+
+fn owned(u: &AccessUnit<'_>) -> Unit {
+    (u.track, u.dts, u.pts, u.keyframe, u.payload.to_vec())
+}
+
+/// The decoder configs and units the source makes of `script`, in order.
+fn script_units(script: &Script) -> (Vec<DecoderConfig>, Vec<Unit>) {
+    let mut source = FlvSource::new();
+    let (mut configs, mut units) = (Vec::new(), Vec::new());
+    let at = Time::from_unix_millis(0);
+    for tag in &script.tags {
+        let e = match tag.kind {
+            TagKind::Video => source.video(tag.timestamp, &tag.body, at),
+            TagKind::Audio => source.audio(tag.timestamp, &tag.body, at),
+            TagKind::Metadata => continue,
+        };
+        match e.unwrap() {
+            Some(SourceEvent::Config(c)) => configs.push(c),
+            Some(SourceEvent::Unit(u)) => units.push(owned(&u)),
+            None => {}
+        }
+    }
+    (configs, units)
+}
+
+/// The default script's audio alone, without its metadata.
+fn audio_only() -> Script {
+    let mut script = Script::new(&ScriptConfig::default());
+    script.tags.retain(|t| t.kind == TagKind::Audio);
+    script
+}
+
+/// An `onMetaData` tag: a publisher sends a script's metadata for it.
+fn metadata_tag() -> Tag {
+    Tag {
+        kind: TagKind::Metadata,
+        timestamp: 0,
+        body: Vec::new(),
+    }
+}
+
+/// The script of a stream of 400 kbit/s video and 96 kbit/s audio.
+fn low_bitrate(duration_secs: u32) -> Script {
+    Script::new(&ScriptConfig {
+        video_bitrate: 400_000,
+        audio_bitrate: 96_000,
+        duration_secs,
+        ..ScriptConfig::default()
+    })
+}
+
+/// A stream of the unit format read through a unit reader.
+struct UnitViewer<V: VideoHost> {
+    stream: Stream<V>,
+    reader: UnitReader,
+    record: Vec<u8>,
+    flagged: bool,
+    /// The units read, each with whether a discontinuity came before it.
+    units: Vec<(Unit, bool)>,
+    /// The units the reader's gaps counted.
+    missing: u64,
+}
+
+impl<V: VideoHost> UnitViewer<V> {
+    fn new(stream: Stream<V>) -> UnitViewer<V> {
+        UnitViewer {
+            stream,
+            reader: UnitReader::new(),
+            record: Vec::new(),
+            flagged: false,
+            units: Vec::new(),
+            missing: 0,
+        }
+    }
+
+    /// Reads until `done` holds of the units read.
+    async fn until(&mut self, done: impl Fn(&[(Unit, bool)]) -> bool) {
+        while !done(&self.units) {
+            let piece = tokio::time::timeout(Duration::from_secs(10), self.stream.next(usize::MAX))
+                .await
+                .expect("a piece in time")
+                .expect("a piece");
+            match piece {
+                EgressPiece::Data(d) => self.record.extend_from_slice(d),
+                EgressPiece::RecordEnd => {
+                    let r = std::mem::take(&mut self.record);
+                    if let Some(u) = self.reader.read(&r) {
+                        self.units
+                            .push((owned(&u), std::mem::take(&mut self.flagged)));
+                    }
+                    while let Some(e) = self.reader.poll_event() {
+                        if let ReaderEvent::Gap { missing, .. } = e {
+                            self.missing += missing;
+                        }
+                    }
+                }
+                EgressPiece::Discontinuity => {
+                    self.record.clear();
+                    self.reader.lost();
+                    self.flagged = true;
+                }
+            }
+        }
+    }
+
+    /// Reads until the unit read last is `last`.
+    async fn until_unit(&mut self, last: &Unit) {
+        self.until(|u| u.last().is_some_and(|(u, _)| u == last))
+            .await;
+    }
+
+    /// The units read.
+    fn units(&self) -> Vec<Unit> {
+        self.units.iter().map(|(u, _)| u.clone()).collect()
+    }
+
+    fn discontinuities(&self) -> usize {
+        self.units.iter().filter(|(_, f)| *f).count()
+    }
+}
+
+/// The media listing of network 10 on `n`, once it has the swarm URI
+/// `uri`.
+async fn listed_at(n: &Node, uri: &str) -> Media {
+    wait_for(10, "the listing", || {
+        media(n, 10)
+            .first()
+            .is_some_and(|(_, m, _)| m.swarm_uri == uri)
+    })
+    .await;
+    media(n, 10).remove(0).1
+}
+
+/// A unit-format stream whose metadata states a bitrate of 750 kbit/s or
+/// more has its swarm, of 8-chunk units, created on that metadata ahead
+/// of any media, and a partial unit is signed 300 ms after its first
+/// byte.
+#[test]
+fn a_stream_stating_a_high_bitrate_signs_eight_chunk_units() {
+    run(async {
+        let s = Ingest::new(true, units_config()).await;
+        let b = s.b.as_ref().unwrap();
+        let mut p = s.publish("10.0.0.1:1").await;
+        assert!(s.va.video_swarms().is_empty());
+        let script = Script::new(&ScriptConfig::default());
+        assert_eq!(script.tags[0].kind, TagKind::Metadata);
+        p.send_tags(&script.tags[..1], &script).await;
+        let swarm = s.ingest_swarm().expect("the swarm, on the metadata");
+        let large = units_uri(&s.channel, &UnitSigning::LARGE);
+        assert_eq!(swarm.swarm_uri, large);
+        assert_eq!(large, channel_uri(&s.channel));
+        assert!(
+            s.a.transfers
+                .is_published(s.transfer_id(), s.a.net(&s.net.public))
+        );
+        assert_eq!(s.written(), 0);
+
+        let third = script.tags.len() / 3;
+        p.send_tags(&script.tags[1..third], &script).await;
+        let before = s.va.metrics().ingress.early_signs;
+        assert_ne!(s.written() % LARGE_UNIT, 0);
+        tokio::time::sleep(Duration::from_millis(280)).await;
+        assert_eq!(s.va.metrics().ingress.early_signs, before);
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(s.va.metrics().ingress.early_signs, before + 1);
+        assert_eq!(s.written() % LARGE_UNIT, 0);
+
+        let m = listed_at(b, &large).await;
+        assert_eq!(m.mime_type, units_mime(&script_configs(&script)));
+        p.send_tags(&script.tags[third..], &script).await;
+        p.unpublish().await;
+        wait_for(10, "the session's end", || {
+            s.va.ingress_streams().is_empty()
+        })
+        .await;
+        let m = s.va.metrics().ingress;
+        assert_eq!((m.metadata, m.bytes), (1, s.written()));
+        assert_eq!(s.written() % LARGE_UNIT, 0);
+    });
+}
+
+/// A unit-format stream whose metadata states a bitrate below 750 kbit/s
+/// signs 1-chunk units, a partial one 200 ms after its first byte, and
+/// reaches another node's stream whole.
+#[test]
+fn a_stream_stating_a_low_bitrate_signs_single_chunk_units() {
+    run(async {
+        let s = Ingest::new(true, units_config()).await;
+        let b = s.b.as_ref().unwrap();
+        let vb = start(b, NoVideoHost, Config::default());
+        let mut p = s.publish("10.0.0.1:1").await;
+        let script = low_bitrate(6);
+        let (configs, units) = script_units(&script);
+        let third = script.tags.len() / 3;
+        p.send_tags(&script.tags[..third], &script).await;
+        let small = units_uri(&s.channel, &UnitSigning::SMALL);
+        assert_eq!(s.ingest_swarm().unwrap().swarm_uri, small);
+
+        let before = s.va.metrics().ingress.early_signs;
+        assert_ne!(s.written() % CHUNK, 0);
+        tokio::time::sleep(Duration::from_millis(180)).await;
+        assert_eq!(s.va.metrics().ingress.early_signs, before);
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(s.va.metrics().ingress.early_signs, before + 1);
+        assert_eq!(s.written() % CHUNK, 0);
+
+        let m = listed_at(b, &small).await;
+        assert_eq!(m.mime_type, units_mime(&configs));
+        let mut v = UnitViewer::new(
+            vb.open_stream(
+                &m.swarm_uri,
+                std::slice::from_ref(&s.net.public),
+                StreamFormat::from_mime(&m.mime_type),
+            )
+            .await
+            .unwrap(),
+        );
+        p.send_tags(&script.tags[third..], &script).await;
+        p.unpublish().await;
+        v.until_unit(units.last().unwrap()).await;
+        assert_eq!(v.units(), units);
+        assert_eq!((v.discontinuities(), v.missing), (0, 0));
+        assert_eq!(v.reader.configs(), configs);
+
+        wait_for(10, "the session's end", || {
+            s.va.ingress_streams().is_empty()
+        })
+        .await;
+        let m = s.va.metrics().ingress;
+        assert_eq!(m.bytes, s.written());
+        assert_eq!(s.written() % CHUNK, 0);
+        assert_eq!((m.dropped_units, m.media_errors, m.write_errors), (0, 0, 0));
+    });
+}
+
+/// A unit-format stream with video and without metadata signs 8-chunk
+/// units, its swarm created on its video config ahead of any unit.
+#[test]
+fn a_stream_with_video_and_no_metadata_signs_eight_chunk_units() {
+    run(async {
+        let s = Ingest::new(false, units_config()).await;
+        let mut p = s.publish("10.0.0.1:1").await;
+        let mut script = Script::new(&ScriptConfig::default());
+        script.tags.retain(|t| t.kind != TagKind::Metadata);
+        // The video config.
+        p.send_tags(&script.tags[..1], &script).await;
+        let swarm = s.ingest_swarm().expect("the swarm, on the video config");
+        assert_eq!(swarm.swarm_uri, units_uri(&s.channel, &UnitSigning::LARGE));
+        assert_eq!(s.written(), 0);
+        p.send_tags(&script.tags[1..], &script).await;
+        p.unpublish().await;
+        wait_for(10, "the session's end", || {
+            s.va.ingress_streams().is_empty()
+        })
+        .await;
+        let m = s.va.metrics().ingress;
+        assert_eq!((m.metadata, m.bytes), (0, s.written()));
+        assert_eq!(s.written() % LARGE_UNIT, 0);
+        assert_eq!((m.dropped_units, m.media_errors, m.write_errors), (0, 0, 0));
+    });
+}
+
+/// Audio alone without metadata waits from its first unit for
+/// `signing_wait`, its units held meanwhile, then signs 1-chunk units, and
+/// every unit reaches another node's stream.
+#[test]
+fn audio_alone_without_metadata_signs_single_chunk_units_at_the_deadline() {
+    run(async {
+        let s = Ingest::new(true, units_config()).await;
+        let b = s.b.as_ref().unwrap();
+        let vb = start(b, NoVideoHost, Config::default());
+        let mut p = s.publish("10.0.0.1:1").await;
+        let script = audio_only();
+        let (configs, units) = script_units(&script);
+        p.send_tags(&script.tags[..16], &script).await;
+        let wait = IngressSettings::default().signing_wait.to_std().unwrap();
+        tokio::time::sleep(wait - Duration::from_millis(100)).await;
+        assert!(s.va.video_swarms().is_empty());
+        assert_eq!((s.written(), s.va.metrics().ingress.bytes), (0, 0));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let swarm = s.ingest_swarm().expect("the swarm, at the deadline");
+        let small = units_uri(&s.channel, &UnitSigning::SMALL);
+        assert_eq!(swarm.swarm_uri, small);
+        assert!(s.written() > 0);
+
+        let m = listed_at(b, &small).await;
+        assert_eq!(m.mime_type, r#"video/x.strims-units;codecs="mp4a.40.2""#);
+        assert_eq!(m.mime_type, units_mime(&configs));
+        let mut v = UnitViewer::new(
+            vb.open_stream(
+                &m.swarm_uri,
+                std::slice::from_ref(&s.net.public),
+                StreamFormat::from_mime(&m.mime_type),
+            )
+            .await
+            .unwrap(),
+        );
+        p.send_tags(&script.tags[16..], &script).await;
+        p.unpublish().await;
+        v.until_unit(units.last().unwrap()).await;
+        assert_eq!(v.units(), units);
+        assert_eq!((v.discontinuities(), v.missing), (0, 0));
+        wait_for(10, "the session's end", || {
+            s.va.ingress_streams().is_empty()
+        })
+        .await;
+        let m = s.va.metrics().ingress;
+        assert_eq!((m.metadata, m.bytes), (0, s.written()));
+        assert_eq!((m.dropped_units, m.media_errors, m.write_errors), (0, 0, 0));
+    });
+}
+
+/// Metadata that comes while audio alone waits settles the signing then:
+/// here it states video and audio over 750 kbit/s, so 8-chunk units,
+/// before the deadline.
+#[test]
+fn metadata_within_the_wait_settles_the_signing() {
+    run(async {
+        let s = Ingest::new(false, units_config()).await;
+        let mut p = s.publish("10.0.0.1:1").await;
+        let script = audio_only();
+        p.send_tags(&script.tags[..16], &script).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(s.va.video_swarms().is_empty());
+        let stated = Script::new(&ScriptConfig::default());
+        p.send_tags(&[metadata_tag()], &stated).await;
+        let swarm = s.ingest_swarm().expect("the swarm, on the metadata");
+        assert_eq!(swarm.swarm_uri, units_uri(&s.channel, &UnitSigning::LARGE));
+        assert!(s.written() > 0);
+        p.send_tags(&script.tags[16..], &script).await;
+        p.unpublish().await;
+        wait_for(10, "the session's end", || {
+            s.va.ingress_streams().is_empty()
+        })
+        .await;
+        let m = s.va.metrics().ingress;
+        assert_eq!((m.metadata, m.bytes), (1, s.written()));
+        assert_eq!(s.written() % LARGE_UNIT, 0);
+    });
+}
+
+/// Metadata after the wait changes nothing: the swarm, and the listing,
+/// keep the signing the deadline settled.
+#[test]
+fn metadata_after_the_wait_changes_nothing() {
+    run(async {
+        let s = Ingest::new(true, units_config()).await;
+        let b = s.b.as_ref().unwrap();
+        let mut p = s.publish("10.0.0.1:1").await;
+        let script = audio_only();
+        p.send_tags(&script.tags[..16], &script).await;
+        let wait = IngressSettings::default().signing_wait.to_std().unwrap();
+        tokio::time::sleep(wait + Duration::from_millis(100)).await;
+        let small = units_uri(&s.channel, &UnitSigning::SMALL);
+        assert_eq!(s.ingest_swarm().unwrap().swarm_uri, small);
+
+        let stated = Script::new(&ScriptConfig {
+            video_bitrate: 6_000_000,
+            ..ScriptConfig::default()
+        });
+        p.send_tags(&[metadata_tag()], &stated).await;
+        p.send_tags(&script.tags[16..], &script).await;
+        let swarms = s.va.video_swarms();
+        assert_eq!(swarms.len(), 1);
+        assert_eq!(swarms[0].swarm_uri, small);
+        listed_at(b, &small).await;
+        assert_eq!(s.va.metrics().ingress.metadata, 1);
+        p.unpublish().await;
+        wait_for(10, "the session's end", || {
+            s.va.ingress_streams().is_empty()
+        })
+        .await;
+        assert_eq!(s.va.metrics().ingress.bytes, s.written());
+    });
+}
+
+/// A unit-format session replacing another signs as its own stream does:
+/// the slot takes its swarm with its options, the listing its URI, and
+/// the node's stream of the channel goes on after a discontinuity with
+/// its units.
+#[test]
+fn a_session_replacing_another_signs_as_its_own_stream() {
+    run(async {
+        let s = Ingest::new(true, units_config()).await;
+        let b = s.b.as_ref().unwrap();
+        let mut events = s.va.subscribe();
+        let mut first = s.publish("10.0.0.1:1").await;
+        let old = Script::new(&ScriptConfig {
+            duration_secs: 6,
+            ..ScriptConfig::default()
+        });
+        let (_, old_units) = script_units(&old);
+        first.send_tags(&old.tags[..old.tags.len() / 2], &old).await;
+        let large = units_uri(&s.channel, &UnitSigning::LARGE);
+        assert_eq!(s.ingest_swarm().unwrap().swarm_uri, large);
+        listed_at(b, &large).await;
+        let mut v = UnitViewer::new(
+            s.va.open_stream(
+                &large,
+                std::slice::from_ref(&s.net.public),
+                StreamFormat::Units,
+            )
+            .await
+            .unwrap(),
+        );
+        v.until(|u| u.len() >= 10).await;
+        assert_eq!(v.units(), old_units[..v.units.len()]);
+
+        let mut second = s.publish("10.0.0.1:2").await;
+        assert_eq!(first.refusal().await, refusal(FAILED, REPLACED));
+        assert_eq!(
+            ended(&mut events).await,
+            (s.channel.id, REPLACED.to_owned())
+        );
+        let new = low_bitrate(4);
+        let (_, new_units) = script_units(&new);
+        second.send_tags(&new.tags, &new).await;
+        let small = units_uri(&s.channel, &UnitSigning::SMALL);
+        let swarms = s.va.video_swarms();
+        assert_eq!(swarms.len(), 1);
+        assert_eq!(
+            (swarms[0].kind, &swarms[0].swarm_uri, swarms[0].streams),
+            (SwarmKind::Ingest, &small, 1)
+        );
+
+        // Units of the first session may come before the discontinuity.
+        v.until(|u| {
+            u.iter()
+                .position(|(_, f)| *f)
+                .is_some_and(|i| u.len() >= i + 20)
+        })
+        .await;
+        let at = v.units.iter().position(|(_, f)| *f).unwrap();
+        let before = v.units();
+        assert_eq!(before[..at], old_units[..at]);
+        assert_eq!(before[at..], new_units[..before.len() - at]);
+        assert_eq!(v.discontinuities(), 1);
+        listed_at(b, &small).await;
+        assert!(s.va.metrics().reopens >= 1);
+        let m = s.va.metrics().ingress;
+        assert_eq!((m.sessions, m.replaced), (2, 1));
+        assert_eq!(s.a.host.swarms_of(&swarm_id(&s.channel)), (1, 0));
+        assert!(!second.closed);
+    });
+}
+
+/// A unit-format session that ends before its signing settles, never
+/// listed, writes nothing and leaves no swarm, slot or transfer.
+#[test]
+fn a_session_ending_before_its_swarm_leaves_nothing() {
+    run(async {
+        let s = Ingest::new(false, units_config()).await;
+        let mut events = s.va.subscribe();
+        let mut p = s.publish("10.0.0.1:1").await;
+        let script = audio_only();
+        p.send_tags(&script.tags[..16], &script).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        p.unpublish().await;
+        assert_eq!(
+            ended(&mut events).await,
+            (s.channel.id, "the publisher ended the stream".to_owned())
+        );
+        assert!(s.va.video_swarms().is_empty());
+        assert_eq!(s.a.host.swarms_of(&swarm_id(&s.channel)), (0, 0));
+        assert!(!s.a.transfers.list().contains(&s.transfer_id()));
+        assert_eq!(s.written(), 0);
+        let m = s.va.metrics().ingress;
+        assert_eq!((m.sessions, m.segments, m.bytes), (1, 0, 0));
     });
 }

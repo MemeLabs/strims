@@ -65,14 +65,15 @@ pub struct IngressSettings {
     /// format's; the unit format's records are bounded by
     /// [`units::MAX_RECORD_LEN`](crate::units::MAX_RECORD_LEN).
     pub format: IngestFormat,
-    /// How long a unit-format stream's partial integrity unit waits after
-    /// its first byte before it is signed, padded to its end
-    /// ([`SignTimer`](crate::units::SignTimer)). The padding is sent, so a
-    /// stream below the unit size over this interval is sent at about that
-    /// rate: 1 Mbit/s for the ingest swarm's 32 KiB units at 250 ms, below
-    /// the bitrates live streams are usually sent at, whose units fill
-    /// sooner. No byte waits longer than this for its signature.
-    pub sign_interval: Duration,
+    /// How long a unit-format session's access units wait, from its
+    /// first, for what settles its swarm's signing
+    /// ([`UnitSigning`](crate::units::UnitSigning)): the stream's
+    /// `onMetaData` or a video config. Past it, the session creates its
+    /// swarm with the signing of what it knows (see
+    /// [`ingress`](crate::ingress#media)). Audio alone without metadata
+    /// waits it out at the start; a stream whose video config comes after
+    /// its first audio frames waits for that config within it.
+    pub signing_wait: Duration,
     pub rtmp: RtmpSettings,
     /// How long a closing connection has to take its last output, such as
     /// the status that tells a publisher why.
@@ -93,7 +94,7 @@ impl Default for IngressSettings {
             max_record_bytes: 8 * 1024 * 1024,
             fragment_duration: CutRule::DEFAULT_FRAGMENT_DURATION,
             format: IngestFormat::default(),
-            sign_interval: Duration::from_millis(250),
+            signing_wait: Duration::from_secs(1),
             rtmp: RtmpSettings::default(),
             close_timeout: Duration::from_secs(5),
         }

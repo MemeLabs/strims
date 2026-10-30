@@ -55,10 +55,13 @@
 //!
 //! An accepted publish starts the channel's session:
 //!
-//! - **The swarm.** The channel's swarm is created under the channel key
-//!   with [`ingress_options`], so its id is the channel's public key. Its
-//!   transfer, under the empty salt, is published on the channel's
-//!   network.
+//! - **The swarm.** The channel's swarm is created under the channel key,
+//!   so its id is the channel's public key: with [`ingress_options`]
+//!   before an fMP4 publish is accepted, and with [`unit_ingress_options`]
+//!   of its signing once a unit-format session's signing settles, after
+//!   the accept (see [Media](#media)). Its transfer, under the empty salt,
+//!   is published on the channel's network. A unit-format swarm that
+//!   can't be created ends its session, the publisher hearing why.
 //! - **The snippet.** The channel's snippet, with `start_time` the
 //!   publish's unix time and `live` set, signed with the channel key, is
 //!   served for the swarm. A changed channel record is signed and served
@@ -72,9 +75,13 @@
 //! A publish to a channel that streams replaces its session: the old
 //! connection closes, and the new session takes over the old one's
 //! listing, if on the same network, and its slot among the node's video
-//! swarms. The slot's swarm is replaced, so the node's streams of the
-//! channel go on after a discontinuity. A deleted channel, or one moved
-//! to another network, ends its session.
+//! swarms. The slot's swarm goes with the publish, and the slot takes the
+//! new session's swarm, with that session's options, once it is created,
+//! so the node's streams of the channel go on after a discontinuity. A
+//! unit-format session's signing is its own stream's: when the session it
+//! replaced signed otherwise, its swarm URI, and so its listing's, is
+//! another. A deleted channel, or one moved to another network, ends its
+//! session.
 //!
 //! # Media
 //!
@@ -83,8 +90,8 @@
 //! names. A unit's publish time is when the connection took its message
 //! from the RTMP server, on the node's clock. A codec or tag the source
 //! refuses, or a record over its bound, ends the session; the publisher
-//! gets the reason in an error status. Metadata is counted and otherwise
-//! ignored.
+//! gets the reason in an error status. Metadata is counted, and a
+//! unit-format session reads its bitrates and tracks.
 //!
 //! **fMP4**, the default: a [`Segmenter`] over a [`PackedSink`], cut under
 //! the rule of
@@ -101,12 +108,35 @@
 //! is never published.
 //!
 //! **Units**: a [`UnitWriter`] in frames of the swarm's chunk size, whose
-//! records go into the swarm as each unit arrives. A partial integrity
-//! unit is signed
-//! [`IngressSettings::sign_interval`](crate::IngressSettings::sign_interval)
-//! after its first byte ([`SignTimer`]): the writer ends its frame, the
-//! swarm writer is flushed, which pads the unit with zeros that read as
-//! padding frames, and the writer goes on where the next unit starts.
+//! records go into the swarm as each unit arrives. The swarm's signing, its
+//! unit size and interval ([`UnitSigning`]), is the stream's, so the
+//! session creates the swarm once it knows enough of the stream:
+//!
+//! - **What it reads.** The bitrates `onMetaData` states,
+//!   `videodatarate` and `audiodatarate` in kbit/s, each counted when
+//!   finite and positive, and the tracks it names: video by any of
+//!   `width`, `height`, `framerate`, `videocodecid` and `videodatarate`,
+//!   audio by any of `audiocodecid`, `audiosamplerate` and `audiodatarate`.
+//!   The decoder configs name tracks too. The rates are the stream's
+//!   nominal bitrate when they reach
+//!   [`UnitSigning::SMALL_BELOW_BPS`] or every track named has one;
+//!   otherwise the stream has none. [`UnitSigning::for_stream`] picks
+//!   from that, and from whether the stream is audio alone.
+//! - **When.** At the first of: metadata that names a track; a video
+//!   config; [`IngressSettings::signing_wait`](crate::IngressSettings::signing_wait)
+//!   after the first access unit; and 256 KiB of output held.
+//!   The last two settle on what is known: a stream of no named track
+//!   takes [`UnitSigning::LARGE`]. Encoders send metadata and decoder
+//!   configs ahead of their media, so a stream with either has its swarm
+//!   before its first unit; audio alone without metadata waits at its
+//!   start. Metadata after the settling changes nothing.
+//! - **Meanwhile** the writer holds its output, which goes into the swarm
+//!   once it exists, so no unit is lost.
+//!
+//! A partial integrity unit is signed the signing's interval after its
+//! first byte ([`SignTimer`]): the writer ends its frame, the swarm writer
+//! is flushed, which pads the unit with zeros that read as padding frames,
+//! and the writer goes on where the next unit starts.
 //!
 //! # Teardown
 //!
@@ -116,7 +146,8 @@
 //! the control stops. Its end:
 //!
 //! 1. ends the record in progress and writes it, and has a unit-format
-//!    stream's last partial integrity unit signed;
+//!    stream's last partial integrity unit signed; a unit-format session
+//!    without its swarm yet, never listed, writes nothing;
 //! 2. stops the listing keeper, which unpublishes the listing, waiting at
 //!    most the listing settings'
 //!    [`unpublish_timeout`](crate::ListingSettings::unpublish_timeout);
@@ -160,16 +191,17 @@ use strims_proto::video::v1::{VideoChannel, VideoIngressConfig, VideoIngressStre
 use strims_rpc::Timer;
 use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
 
+use crate::amf0::Metadata;
 use crate::config::{IngestFormat, RtmpSettings, check_ingress_config};
 use crate::control::{Shared, Slot, Swarm};
 use crate::flv::{FlvSource, SourceEvent};
 use crate::host::{Accepted, VideoHost};
-use crate::media::{Muxer, fmp4_mime, units_mime};
+use crate::media::{Muxer, TrackKind, fmp4_mime, units_mime};
 use crate::record::PackedSink;
 use crate::registry::{Added, SwarmKind};
 use crate::rtmp::{Phase, RtmpConfig, RtmpError, RtmpEvent, RtmpServer};
 use crate::segment::{CutRule, Segmenter};
-use crate::units::{SignTimer, UnitWriter, UnitWriterMetrics};
+use crate::units::{SignTimer, UnitSigning, UnitWriter, UnitWriterMetrics};
 use crate::{VideoError, VideoEvent};
 
 /// The app a publish names.
@@ -188,11 +220,12 @@ const DISABLED: &str = "the ingress was disabled";
 const CHANNEL_DELETED: &str = "the channel was deleted";
 const CHANNEL_MOVED: &str = "the channel moved to another network";
 
-/// The options of an ingest session's swarm; its URI carries every one
-/// but the window. 4 KiB chunks, 8 per signature (32 KiB integrity units),
-/// 16 streams, a 4 Ki-chunk (16 MiB) window, Merkle/BLAKE3/Ed25519.
-/// Below 4 KiB, HAVEs, requests and hashes take a large share of the wire,
-/// and a larger integrity unit holds a chunk back until the unit is signed.
+/// The options of an fMP4 session's swarm, and of a unit-format session's
+/// signing [`UnitSigning::LARGE`]; its URI carries every one but the
+/// window. 4 KiB chunks, 8 per signature (32 KiB integrity units), 16
+/// streams, a 4 Ki-chunk (16 MiB) window, Merkle/BLAKE3/Ed25519. Below
+/// 4 KiB, HAVEs, requests and hashes take a large share of the wire, and a
+/// larger integrity unit holds a chunk back until the unit is signed.
 pub fn ingress_options() -> SwarmOptions {
     SwarmOptions {
         chunk_size: 4096,
@@ -207,6 +240,133 @@ pub fn ingress_options() -> SwarmOptions {
         ..SwarmOptions::default()
     }
     .assign_defaults(&SwarmOptions::default_options())
+}
+
+/// The options of a unit-format session's swarm signing with `signing`:
+/// [`ingress_options`] with its chunks per signature.
+pub fn unit_ingress_options(signing: &UnitSigning) -> SwarmOptions {
+    SwarmOptions {
+        chunks_per_signature: signing.chunks_per_signature,
+        ..ingress_options()
+    }
+}
+
+/// The output a unit-format session holds before its swarm exists, past
+/// which its signing settles on what it knows. Units held are audio: a
+/// video config settles the signing before any video unit. 256 KiB is
+/// about two seconds of 1 Mbit/s audio.
+const MAX_HELD: usize = 256 * 1024;
+
+/// What a stream's `onMetaData` says of it: the tracks it names, and
+/// their bitrates in bits a second, each set when finite and positive.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Declared {
+    video: bool,
+    audio: bool,
+    video_bps: Option<u64>,
+    audio_bps: Option<u64>,
+}
+
+impl Declared {
+    fn of(m: &Metadata) -> Declared {
+        // A float to integer cast saturates.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let bps = |kbps: Option<f64>| {
+            kbps.filter(|r| r.is_finite() && *r > 0.0)
+                .map(|r| (r * 1000.0) as u64)
+                .filter(|&b| b > 0)
+        };
+        Declared {
+            video: [
+                m.width,
+                m.height,
+                m.framerate,
+                m.videocodecid,
+                m.videodatarate,
+            ]
+            .iter()
+            .any(Option::is_some),
+            audio: [m.audiocodecid, m.audiosamplerate, m.audiodatarate]
+                .iter()
+                .any(Option::is_some),
+            video_bps: bps(m.videodatarate),
+            audio_bps: bps(m.audiodatarate),
+        }
+    }
+}
+
+/// What a unit-format session knows of its stream before its swarm
+/// exists, and when that settles the swarm's signing; see the
+/// [module docs](self#media).
+#[derive(Clone, Debug)]
+struct SignChoice {
+    /// [`IngressSettings::signing_wait`](crate::IngressSettings::signing_wait).
+    wait: Duration,
+    /// The latest metadata.
+    metadata: Option<Declared>,
+    /// A decoder config of the kind came.
+    video: bool,
+    audio: bool,
+    /// When the first access unit came.
+    first_unit: Option<Time>,
+}
+
+impl SignChoice {
+    fn new(wait: Duration) -> SignChoice {
+        SignChoice {
+            wait,
+            metadata: None,
+            video: false,
+            audio: false,
+            first_unit: None,
+        }
+    }
+
+    /// The stream's `onMetaData`, in place of any before.
+    fn metadata(&mut self, m: &Metadata) {
+        self.metadata = Some(Declared::of(m));
+    }
+
+    /// A decoder config of a track of `kind`.
+    fn config(&mut self, kind: TrackKind) {
+        match kind {
+            TrackKind::Video => self.video = true,
+            TrackKind::Audio => self.audio = true,
+        }
+    }
+
+    /// An access unit at `now`.
+    fn unit(&mut self, now: Time) {
+        self.first_unit.get_or_insert(now);
+    }
+
+    /// When the wait ends: `wait` after the first access unit.
+    fn deadline(&self) -> Option<Time> {
+        self.first_unit.map(|t| t + self.wait)
+    }
+
+    /// The swarm's signing once it is settled at `now`, with `held` bytes
+    /// of output waiting for the swarm.
+    fn settled(&self, now: Time, held: usize) -> Option<UnitSigning> {
+        let named = self.metadata.is_some_and(|m| m.video || m.audio);
+        let waited = self.deadline().is_some_and(|d| now >= d) || held >= MAX_HELD;
+        (named || self.video || waited).then(|| self.choose())
+    }
+
+    /// The signing of what is known now.
+    fn choose(&self) -> UnitSigning {
+        let m = self.metadata.unwrap_or_default();
+        let video = self.video || m.video;
+        let audio = self.audio || m.audio;
+        let sum = m
+            .video_bps
+            .unwrap_or(0)
+            .saturating_add(m.audio_bps.unwrap_or(0));
+        // Missing rates only add to the sum.
+        let whole = (!video || m.video_bps.is_some()) && (!audio || m.audio_bps.is_some());
+        let nominal = (whole || sum >= UnitSigning::SMALL_BELOW_BPS).then_some(sum);
+        UnitSigning::for_stream(nominal, audio && !video)
+    }
 }
 
 /// The RTMP server's config under `s`.
@@ -263,8 +423,8 @@ pub struct IngressMetrics {
     pub segments: u64,
     pub bytes: u64,
     /// Integrity units of unit-format streams signed before they filled:
-    /// at [`IngressSettings::sign_interval`](crate::IngressSettings::sign_interval),
-    /// and at a session's end.
+    /// at the interval of the stream's [`UnitSigning`], and at a session's
+    /// end.
     pub early_signs: u64,
     /// Units dropped: before their track's config, before the first
     /// keyframe, or of a changed config the record in progress doesn't
@@ -840,9 +1000,17 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             slot: None,
             armed: true,
         };
-        let writer = self
-            .open_ingest_swarm(&mut publication, key, network_key.clone())
-            .await?;
+        self.take_ingest_slot(&mut publication, &network_key).await;
+        let format = self.config.ingress.format;
+        let swarm = match format {
+            IngestFormat::Fmp4 => {
+                let options = ingress_options();
+                let uri = Uri::new(publication.swarm_id.clone(), options.uri_options()).to_string();
+                let writer = self.create_ingest_swarm(&mut publication, options).await?;
+                Some(IngestSwarm { writer, uri })
+            }
+            IngestFormat::Units => None,
+        };
 
         let pushed = {
             let ing = self.ingress.borrow();
@@ -881,35 +1049,23 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             max_record_bytes: self.config.ingress.max_record_bytes,
             fragment_duration: self.config.ingress.fragment_duration,
         };
-        let uri = Uri::new(
-            publication.swarm_id.clone(),
-            ingress_options().uri_options(),
-        )
-        .to_string();
-        let options = ingress_options();
-        let media = match self.config.ingress.format {
+        let media = match format {
             IngestFormat::Fmp4 => Mux::Fmp4(Segmenter::new(rule, PackedSink::new())),
-            IngestFormat::Units => {
-                let unit = options
-                    .chunk_size
-                    .saturating_mul(options.chunks_per_signature);
-                Mux::Units {
-                    // invariant: the ingest swarm's chunk size is a valid
-                    // frame size.
-                    #[allow(clippy::expect_used)]
-                    writer: UnitWriter::new(options.chunk_size)
-                        .expect("the ingest chunk size is a frame size"),
-                    sign: SignTimer::new(unit as u64, self.config.ingress.sign_interval),
-                    counted: UnitWriterMetrics::default(),
-                }
-            }
+            IngestFormat::Units => Mux::Units {
+                // invariant: the ingest swarm's chunk size is a valid frame
+                // size.
+                #[allow(clippy::expect_used)]
+                writer: UnitWriter::new(ingress_options().chunk_size)
+                    .expect("the ingest chunk size is a frame size"),
+                sign: Sign::Choosing(SignChoice::new(self.config.ingress.signing_wait)),
+                counted: UnitWriterMetrics::default(),
+            },
         };
         Ok(Live {
             publication,
             source: FlvSource::new(),
             media,
-            writer,
-            uri,
+            swarm,
             mime: None,
             last_media: now,
             dropped: 0,
@@ -970,26 +1126,19 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         Ok(id)
     }
 
-    /// Creates the swarm of `p`'s session and makes it the one of its
-    /// slot among the node's video swarms: the slot of a session it
-    /// replaced or of streams of the channel, or a new one. Adds and
-    /// publishes its transfer. Returns its writer.
-    async fn open_ingest_swarm(
-        &self,
-        p: &mut Publication<K, H, V, T>,
-        key: Key,
-        network_key: Vec<u8>,
-    ) -> Result<<H as SwarmHost>::Writer, Refusal> {
-        let options = ingress_options();
-        let networks = BTreeSet::from([network_key]);
+    /// Takes the slot of `p`'s channel among the node's video swarms for
+    /// the session's swarm to come, if there is one: the slot of a session
+    /// it replaced or of streams of the channel. The slot's swarm and its
+    /// transfer go.
+    async fn take_ingest_slot(&self, p: &mut Publication<K, H, V, T>, network_key: &[u8]) {
         let t = p.t;
         let taken = self.with_swarms(|r| {
             r.replace(
                 &t,
                 p.swarm_id.clone(),
-                options.clone(),
+                ingress_options(),
                 SwarmKind::Ingest,
-                networks.clone(),
+                BTreeSet::from([network_key.to_vec()]),
             )
         });
         if let Some((slot, old)) = taken {
@@ -999,6 +1148,30 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 self.remove_host_swarm(old).await;
             }
         }
+    }
+
+    /// Creates the swarm of `p`'s session, of `options`, and makes it the
+    /// one of its slot among the node's video swarms: the slot it took
+    /// ([`take_ingest_slot`](Self::take_ingest_slot)), which takes
+    /// `options`, the slot of streams of the channel that appeared since,
+    /// or a new one. Adds and publishes its transfer. Returns its writer.
+    async fn create_ingest_swarm(
+        &self,
+        p: &mut Publication<K, H, V, T>,
+        options: SwarmOptions,
+    ) -> Result<<H as SwarmHost>::Writer, Refusal> {
+        let entry = {
+            let ing = self.ingress.borrow();
+            ing.sessions
+                .get(&p.channel_id)
+                .filter(|s| s.id == p.session)
+                .map(|s| (s.key.clone(), s.network_key.clone()))
+        };
+        let Some((key, network_key)) = entry else {
+            return Err(failed(REPLACED));
+        };
+        let networks = BTreeSet::from([network_key]);
+        let t = p.t;
         let created = self
             .host
             .create_swarm(WriterOptions {
@@ -1020,9 +1193,14 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         // A slot that appeared while the swarm was created is a stream's.
         let stale = self.with_swarms(|r| {
             if let Some(slot) = p.slot
-                && r.set_swarm(&t, slot, swarm) == Added::Kept
+                && let Some(e) = r
+                    .get_mut(&t)
+                    .filter(|e| e.slot == slot && e.swarm.is_none())
             {
-                return None;
+                e.options = options.clone();
+                if r.set_swarm(&t, slot, swarm) == Added::Kept {
+                    return None;
+                }
             }
             match r.replace(
                 &t,
@@ -1209,9 +1387,23 @@ enum Mux {
     /// metrics hold of the writer's.
     Units {
         writer: UnitWriter,
-        sign: SignTimer,
+        sign: Sign,
         counted: UnitWriterMetrics,
     },
+}
+
+/// A unit-format session's early signs.
+enum Sign {
+    /// The swarm's signing isn't settled, so the swarm doesn't exist yet.
+    Choosing(SignChoice),
+    /// The swarm signs as its signing has it.
+    Timer(SignTimer),
+}
+
+/// A session's swarm, once it is created.
+struct IngestSwarm<W> {
+    writer: W,
+    uri: String,
 }
 
 /// A publishing session's media path.
@@ -1219,8 +1411,9 @@ struct Live<K: Kv, H: Host, V: VideoHost, T: Timer> {
     publication: Publication<K, H, V, T>,
     source: FlvSource,
     media: Mux,
-    writer: <H as SwarmHost>::Writer,
-    uri: String,
+    /// From the publish for fMP4, and once its signing settles for the
+    /// unit format.
+    swarm: Option<IngestSwarm<<H as SwarmHost>::Writer>>,
     /// The MIME type listed.
     mime: Option<String>,
     last_media: Time,
@@ -1244,11 +1437,18 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
             (Ok(Some(SourceEvent::Config(c))), Mux::Fmp4(s)) => {
                 s.set_config(&c).map_err(|e| media(&e))
             }
-            (Ok(Some(SourceEvent::Config(c))), Mux::Units { writer, .. }) => {
-                writer.set_config(&c).map_err(|e| media(&e))
+            (Ok(Some(SourceEvent::Config(c))), Mux::Units { writer, sign, .. }) => {
+                let res = writer.set_config(&c).map_err(|e| media(&e));
+                if let Sign::Choosing(choice) = sign {
+                    choice.config(c.kind);
+                }
+                res
             }
             (Ok(Some(SourceEvent::Unit(u))), Mux::Fmp4(s)) => s.push(&u).map_err(|e| media(&e)),
-            (Ok(Some(SourceEvent::Unit(u))), Mux::Units { writer, .. }) => {
+            (Ok(Some(SourceEvent::Unit(u))), Mux::Units { writer, sign, .. }) => {
+                if let Sign::Choosing(choice) = sign {
+                    choice.unit(now);
+                }
                 writer.push(&u).map_err(|e| media(&e))
             }
         };
@@ -1268,8 +1468,55 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
         res
     }
 
-    /// Writes the stream's final bytes into the swarm at `now`.
+    /// Takes the stream's `onMetaData`.
+    fn metadata(&mut self, m: &Metadata) {
+        if let Mux::Units {
+            sign: Sign::Choosing(choice),
+            ..
+        } = &mut self.media
+        {
+            choice.metadata(m);
+        }
+    }
+
+    /// Creates a unit-format session's swarm once its signing settles at
+    /// `now`; see the [module docs](self#media).
+    async fn settle(&mut self, now: Time) -> Result<(), End> {
+        let Mux::Units {
+            writer,
+            sign: Sign::Choosing(choice),
+            ..
+        } = &self.media
+        else {
+            return Ok(());
+        };
+        let Some(signing) = choice.settled(now, writer.output().len()) else {
+            return Ok(());
+        };
+        let options = unit_ingress_options(&signing);
+        let uri = Uri::new(self.publication.swarm_id.clone(), options.uri_options()).to_string();
+        let s = self.publication.shared.clone();
+        let created = s.create_ingest_swarm(&mut self.publication, options).await;
+        let writer = created.map_err(|r| End::Stopped(r.description))?;
+        if let Mux::Units { writer, sign, .. } = &mut self.media {
+            *sign = Sign::Timer(signing.timer(writer.frame_size()));
+        }
+        self.swarm = Some(IngestSwarm { writer, uri });
+        tracing::debug!(
+            channel = self.publication.channel_id,
+            chunks_per_signature = signing.chunks_per_signature,
+            interval_ms = signing.interval.as_millis(),
+            "unit-format stream's signing settled"
+        );
+        Ok(())
+    }
+
+    /// Writes the stream's final bytes into the swarm at `now`, once it
+    /// exists.
     async fn write_output(&mut self, now: Time) -> Result<(), End> {
+        let Some(swarm) = &mut self.swarm else {
+            return Ok(());
+        };
         let out = match &mut self.media {
             Mux::Fmp4(s) => s.sink_mut().take_output(),
             Mux::Units { writer, .. } => writer.take_output(),
@@ -1277,14 +1524,14 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
         let res = if out.is_empty() {
             Ok(())
         } else {
-            self.writer.write(&out).await
+            swarm.writer.write(&out).await
         };
         match &mut self.media {
             Mux::Fmp4(s) => s.sink_mut().restore(out),
             Mux::Units { writer, sign, .. } => {
                 writer.restore(out);
-                if res.is_ok() {
-                    sign.written(writer.offset(), now);
+                if let (Ok(()), Sign::Timer(t)) = (&res, sign) {
+                    t.written(writer.offset(), now);
                 }
             }
         }
@@ -1298,16 +1545,33 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
     /// signing.
     fn sign_due(&self) -> Option<Time> {
         match &self.media {
-            Mux::Fmp4(_) => None,
-            Mux::Units { sign, .. } => sign.due(),
+            Mux::Units {
+                sign: Sign::Timer(t),
+                ..
+            } => t.due(),
+            _ => None,
+        }
+    }
+
+    /// When the unit-format stream's wait for its signing ends.
+    fn settle_due(&self) -> Option<Time> {
+        match &self.media {
+            Mux::Units {
+                sign: Sign::Choosing(c),
+                ..
+            } => c.deadline(),
+            _ => None,
         }
     }
 
     /// The unit-format stream has a partial integrity unit.
     fn partial(&self) -> bool {
         match &self.media {
-            Mux::Fmp4(_) => false,
-            Mux::Units { sign, .. } => sign.is_partial(),
+            Mux::Units {
+                sign: Sign::Timer(t),
+                ..
+            } => t.is_partial(),
+            _ => false,
         }
     }
 
@@ -1321,12 +1585,20 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
         };
         writer.end_frame();
         self.write_output(now).await?;
-        let flushed = self.writer.flush().await;
+        let Some(swarm) = &mut self.swarm else {
+            return Ok(());
+        };
+        let flushed = swarm.writer.flush().await;
         let next = flushed.map_err(|e| {
             self.publication.shared.count(|m| m.write_errors += 1);
             End::Write(e.to_string())
         })?;
-        let Mux::Units { writer, sign, .. } = &mut self.media else {
+        let Mux::Units {
+            writer,
+            sign: Sign::Timer(sign),
+            ..
+        } = &mut self.media
+        else {
             return Ok(());
         };
         let padding = next.saturating_sub(writer.offset());
@@ -1341,8 +1613,25 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
         Ok(())
     }
 
+    /// Does what is due at `now`: creates a unit-format session's swarm
+    /// once its wait ends, writing what the session held, and has a
+    /// partial integrity unit signed at its interval.
+    async fn timer(&mut self, now: Time) -> Result<(), End> {
+        self.settle(now).await?;
+        self.write_output(now).await?;
+        if self.sign_due().is_some_and(|t| now >= t) {
+            self.sign(now).await?;
+        }
+        self.take_segments(now, true);
+        Ok(())
+    }
+
     /// Counts the records written, and keeps their listing if `list`.
+    /// Records wait in the session until its swarm exists.
     fn take_segments(&mut self, now: Time, list: bool) {
+        let Some(swarm) = &self.swarm else {
+            return;
+        };
         let (written, mime) = match &mut self.media {
             Mux::Fmp4(s) => {
                 let mut written = false;
@@ -1378,7 +1667,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
             Listing {
                 content: Some(Content::Media(Media {
                     mime_type: mime,
-                    swarm_uri: self.uri.clone(),
+                    swarm_uri: swarm.uri.clone(),
                 })),
             }
         });
@@ -1453,12 +1742,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
                 Woke::Deadline => {
                     let now = s.timer.now();
                     if let Some(l) = &mut self.live
-                        && l.sign_due().is_some_and(|t| now >= t)
+                        && let Err(end) = l.timer(now).await
                     {
-                        if let Err(end) = l.sign(now).await {
-                            break end;
-                        }
-                        l.take_segments(now, true);
+                        break end;
                     }
                     let (due, which) = self.due();
                     if now >= due {
@@ -1496,14 +1782,18 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
         }
     }
 
-    /// When the connection's task wakes: at its deadline, or when a
-    /// unit-format stream's partial integrity unit is due for signing.
+    /// When the connection's task wakes: at its deadline, when a
+    /// unit-format stream's partial integrity unit is due for signing, or
+    /// when its wait for its signing ends.
     fn wake_at(&self) -> Time {
         let (due, _) = self.due();
-        match self.live.as_ref().and_then(|l| l.sign_due()) {
-            Some(sign) => sign.min(due),
-            None => due,
-        }
+        let Some(l) = &self.live else {
+            return due;
+        };
+        [l.sign_due(), l.settle_due()]
+            .into_iter()
+            .flatten()
+            .fold(due, Time::min)
     }
 
     /// The deadline the connection is under, and when it passes.
@@ -1547,8 +1837,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
                         }
                         None
                     }
-                    Some(RtmpEvent::Metadata(_)) => {
-                        self.shared.count(|m| m.metadata += 1);
+                    Some(RtmpEvent::Metadata(m)) => {
+                        self.shared.count(|c| c.metadata += 1);
+                        if let Some(l) = &mut self.live {
+                            l.metadata(&m);
+                        }
                         None
                     }
                     Some(RtmpEvent::Unpublish) => return Err(End::Unpublished),
@@ -1558,6 +1851,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
                     self.publish(&app, &name).await;
                 }
                 if let Some(l) = &mut self.live {
+                    l.settle(now).await?;
                     l.write_output(now).await?;
                     l.take_segments(now, true);
                 }

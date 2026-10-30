@@ -885,7 +885,14 @@ async fn owner(w: World) -> turmoil::Result {
     assert_eq!(live.len(), 1, "{live:?}");
     *w.start_time.borrow_mut() = Some(live[0].created_at);
     let t = TransferId::new(&SwarmId::new(&channel.key), b"");
-    let swarms = h.video.video_swarms();
+    // A unit-format session creates its swarm once the stream's metadata
+    // settles its signing, after the publish's start.
+    let swarms = w
+        .wait("the ingest swarm", 60, || {
+            let swarms = h.video.video_swarms();
+            swarms.iter().any(|s| s.added).then_some(swarms)
+        })
+        .await;
     assert_eq!(swarms.len(), 1);
     assert_eq!(
         (swarms[0].kind, swarms[0].transfer_id, &swarms[0].swarm_uri),

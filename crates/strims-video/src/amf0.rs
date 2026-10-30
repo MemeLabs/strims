@@ -355,6 +355,9 @@ pub struct Metadata {
     pub width: Option<f64>,
     pub height: Option<f64>,
     pub framerate: Option<f64>,
+    /// The video and audio bitrates the encoder states, in kbit/s.
+    pub videodatarate: Option<f64>,
+    pub audiodatarate: Option<f64>,
     /// An FLV codec id, or an Enhanced RTMP FourCC as a number.
     pub videocodecid: Option<f64>,
     /// An FLV sound format, or an Enhanced RTMP FourCC as a number.
@@ -373,6 +376,8 @@ impl Metadata {
             width: number("width"),
             height: number("height"),
             framerate: number("framerate"),
+            videodatarate: number("videodatarate"),
+            audiodatarate: number("audiodatarate"),
             videocodecid: number("videocodecid"),
             audiocodecid: number("audiocodecid"),
             audiosamplerate: number("audiosamplerate"),

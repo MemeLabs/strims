@@ -13,6 +13,8 @@
 //! - [`UnitWriter`]: the [`Muxer`](crate::Muxer) writing access units as
 //!   records into a swarm's stream, and [`SignTimer`], which says when the
 //!   writer's partial integrity unit is due for signing.
+//! - [`UnitSigning`]: the unit size and signing interval a stream's swarm
+//!   takes from the stream's nominal bitrate.
 //! - [`UnitReader`]: records in, decoder configs and access units out. It
 //!   builds for wasm32.
 //!
@@ -93,10 +95,12 @@
 
 mod reader;
 pub mod record;
+mod signing;
 mod writer;
 
 pub use reader::{ReaderEvent, UnitReader, UnitReaderMetrics};
 pub use record::{ConfigEntry, Record, RecordError, UnitHeader};
+pub use signing::UnitSigning;
 pub use writer::{SignTimer, UnitWriteError, UnitWriter, UnitWriterMetrics};
 
 use strims_base::time::Duration;

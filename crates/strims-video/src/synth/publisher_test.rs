@@ -80,6 +80,7 @@ fn session(config: PublisherConfig, seed: u64) {
         audiocodecid: Some(10.0),
         audiosamplerate: Some(48000.0),
         encoder: Some("synth".to_owned()),
+        ..Metadata::default()
     })];
     let mut events = Vec::new();
     for (video, ts, body) in script() {
