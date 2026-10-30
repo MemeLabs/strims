@@ -1,21 +1,22 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Browser captures: the UI's recording, written into a video swarm and
-//! listed on its networks.
+//! Browser captures: the UI's encoded media, written into a video swarm in
+//! the unit format ([`units`](crate::units)) and listed on its networks.
 //!
 //! [`VideoControl::open_capture`] creates a swarm under a fresh ed25519
-//! key ([`capture_options`]: 4 KiB chunks, 8 per signature, 16 streams, an
-//! 8 Ki-chunk window, Merkle/BLAKE3/Ed25519), adds its transfer under
-//! the empty salt and publishes it on the capture's networks the node has
+//! key ([`capture_options_for`] the capture's nominal bitrate: 4 KiB
+//! chunks, 16 streams, an 8 Ki-chunk window, Merkle/BLAKE3/Ed25519, and
+//! integrity units of 8 chunks, or of 1 chunk below
+//! [`LOW_RATE_BITRATE`]), adds its transfer under the empty salt and publishes it on the capture's networks the node has
 //! joined, and on the rest as it joins them. It serves the capture's
-//! snippet, signed with the capture key, and keeps a media listing of the
-//! capture's MIME type and swarm URI on each network's directory. The
+//! snippet, signed with the capture key. Once the capture's first record
+//! is written, it keeps a media listing on each network's directory of
+//! the stream's MIME type ([`units_mime`] of its configs) and the swarm
+//! URI; a record of other codecs lists the new MIME type in its place. The
 //! capture's id is its transfer id.
 //!
-//! A capture's MIME type is 1 to
-//! [`CaptureSettings::max_mime_bytes`](crate::CaptureSettings::max_mime_bytes)
-//! bytes of printable ASCII. Its 1 to
+//! A capture's 1 to
 //! [`CaptureSettings::max_network_keys`](crate::CaptureSettings::max_network_keys)
 //! network keys each name a network in the profile's store; a network the
 //! node hasn't joined lists and carries the capture once it does. Its
@@ -23,32 +24,81 @@
 //! most [`CaptureSettings::max_captures`](crate::CaptureSettings::max_captures)
 //! captures.
 //!
-//! # Records
+//! # Media
 //!
-//! [`VideoControl::append_capture`] writes bytes of the record in
-//! progress, and ends the record when asked: records are opaque to the
-//! node (the UI's WebM). They go into the swarm in the packed chunkstream
-//! layout ([`strims_chunkstream::packed`]) as frames fill or records end;
-//! the swarm writer is never flushed, so no padding lands in a record. A
-//! frame holds one record end, so a record that would end in the frame of
-//! the record before it is dropped: the append fails with
-//! [`VideoError::RecordDropped`], and the capture goes on with the next
-//! record. Each capture's appends are written one at a time, in the order
-//! they were made, by a task of its own: an append whose caller gives up
-//! before its turn is dropped, and one under way finishes.
+//! [`VideoControl::append_capture`] takes decoder configs and access units,
+//! as the UI's encoders gave them:
 //!
-//! [`VideoControl::close_capture`] stops the listing keepers (each
-//! unpublishes its listing), stops serving the snippet, and removes the
-//! transfer, then the swarm.
+//! - A config names its track, nonzero, and its codec's configuration
+//!   record: an AVCDecoderConfigurationRecord for H.264, timed at
+//!   [`VIDEO_TIMESCALE`], or an OpusHead for Opus, timed at
+//!   [`opus::SAMPLE_RATE`]. What else the track's [`DecoderConfig`] holds,
+//!   its kind, codec string and picture size or channels, comes from the
+//!   record, as a unit reader derives it
+//!   ([`ConfigEntry::decoder_config`]). The capture's configs together are
+//!   at most [`MAX_TRACKS`](crate::fmp4::MAX_TRACKS)
+//!   ([`check_configs`](crate::fmp4::check_configs)), and an append names
+//!   a track at most once.
+//! - A unit names a track whose config is set, and carries its payload,
+//!   its keyframe flag and its presentation time in microseconds on the
+//!   capture's clock, at most [`MAX_TIMESTAMP_US`] from 0. Its decode time
+//!   is its presentation time: a capture's tracks have no reordered
+//!   pictures. Rounded to its track's timescale, the time is after the
+//!   track's last unit's. A record holds the payload with its head, so the
+//!   payload is at most [`MAX_RECORD_LEN`] less [`MAX_UNIT_HEAD_LEN`].
+//! - An append's configs apply from its units on, and it holds at most
+//!   [`CaptureSettings::max_units_per_append`](crate::CaptureSettings::max_units_per_append)
+//!   units.
+//! - A unit's publish time is when the capture's writer took its append,
+//!   on the node's clock.
+//!
+//! An append that breaks these rules is refused whole with
+//! [`VideoError::CaptureMedia`], and the capture goes on as before it.
+//! Appends are written one at a time, in the order they were made, by a
+//! task of the capture's own: an append whose caller gives up before its
+//! turn is dropped, and one under way finishes. An append is refused
+//! before it waits when the capture's waiting appends hold
+//! [`CaptureSettings::max_queued_bytes`](crate::CaptureSettings::max_queued_bytes)
+//! ([`VideoError::CaptureBusy`]), or when it would take the capture past
+//! its rate ([`VideoError::CaptureRate`]): a token bucket of
+//! [`CaptureSettings::max_burst`](crate::CaptureSettings::max_burst)
+//! bytes filling at
+//! [`CaptureSettings::max_rate`](crate::CaptureSettings::max_rate), from
+//! which an append takes its configs' and payloads' bytes and
+//! [`ITEM_COST`] for each config and unit.
+//!
+//! The units go through a [`UnitWriter`] in frames of the swarm's chunk
+//! size into the swarm, as each append is written. A partial integrity
+//! unit is signed
+//! [`CaptureSettings::sign_interval`](crate::CaptureSettings::sign_interval)
+//! after its first byte, or
+//! [`CaptureSettings::low_rate_sign_interval`](crate::CaptureSettings::low_rate_sign_interval)
+//! for 1-chunk units ([`SignTimer`]): the writer ends its frame, the
+//! swarm writer is flushed, which pads the unit with zeros that read as
+//! padding frames, and the writer goes on where the next unit starts. A
+//! swarm write that fails ends the capture's writing: every later append
+//! fails with [`VideoError::StreamWrite`].
+//!
+//! # Teardown
+//!
+//! [`VideoControl::close_capture`] takes the capture out of the node, so
+//! its appends fail with [`VideoError::CaptureNotFound`], stops the listing
+//! keepers (each unpublishes its listing), and stops serving the snippet.
+//! The writer then writes its last appends' output and has the swarm sign
+//! the last partial integrity unit, for at most [`CLOSE_FLUSH_TIMEOUT`],
+//! and the transfer and then the swarm are removed. A frontend connection
+//! that ends closes its captures alike.
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::future::poll_fn;
+use std::pin::pin;
 use std::rc::{Rc, Weak};
 use std::task::{Poll, Waker};
 
 use futures_util::FutureExt;
-use strims_chunkstream::packed::{DEFAULT_SIZE, PackedEncoder};
+use futures_util::future::{Either, select};
+use strims_base::time::{Duration, Time};
 use strims_crypto::{Signer, generate_key};
 use strims_directory::{Host, ListingKeeper, SignedSnippet, snippet};
 use strims_kv::Kv;
@@ -59,19 +109,59 @@ use strims_ppspp::{SwarmId, SwarmOptions, Uri, WriterOptions};
 use strims_proto::network::v1::directory::listing::{Content, Media};
 use strims_proto::network::v1::directory::{Listing, ListingSnippet};
 use strims_proto::types::Key;
+use strims_proto::video::v1::capture_config::Codec;
+use strims_proto::video::v1::{CaptureConfig, CaptureUnit};
 use strims_rpc::Timer;
 use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
 
 use crate::channels::check_network;
 use crate::control::{Shared, Slot, Swarm};
+use crate::fmp4::check_configs;
+use crate::media::{AccessUnit, DecoderConfig, Muxer, TrackId, units_mime};
+use crate::opus;
 use crate::registry::SwarmKind;
+use crate::units::record::{SAMPLE_ENTRY_AVC, SAMPLE_ENTRY_OPUS};
+use crate::units::{ConfigEntry, MAX_RECORD_LEN, SignTimer, UnitWriter, UnitWriterMetrics};
 use crate::{VideoControl, VideoError, VideoHost};
 
-/// The options of a capture's swarm; its URI carries every one but the
-/// window. An ingest session's sizes ([`ingress_options`]), with an 8
-/// Ki-chunk (32 MiB) window.
+/// The timescale of a capture's H.264 tracks.
+pub const VIDEO_TIMESCALE: u32 = 90_000;
+/// The farthest a unit's timestamp is from 0, in microseconds: every such
+/// value is exact in a JavaScript number, and none overflows in any
+/// timescale.
+pub const MAX_TIMESTAMP_US: i64 = 1 << 53;
+/// What a config or unit costs against its capture's rate beyond its
+/// bytes, so a flood of small units is bounded too.
+pub const ITEM_COST: u64 = 64;
+/// The longest UNIT record head: kind, `gop_back`, header length and the
+/// header ([`units`](crate::units#records)).
+pub const MAX_UNIT_HEAD_LEN: usize = 64;
+/// How long a closing capture's writer has to write its last output and
+/// have the swarm sign its last partial unit.
+pub const CLOSE_FLUSH_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The nominal bitrate, in bits a second, below which a capture's
+/// integrity units are 1 chunk. A unit signed early is padded to its end
+/// and the padding is sent, so below about this rate 8-chunk units would
+/// send more padding than media, while 1-chunk units cost a signature a
+/// chunk; video captures, at 1 Mbit/s or more, take 8-chunk units.
+pub const LOW_RATE_BITRATE: u64 = 750_000;
+
+/// The options of a capture's swarm at a nominal `bitrate` in bits a
+/// second; its URI carries every one but the window. An ingest session's
+/// sizes ([`ingress_options`]), with an 8 Ki-chunk (32 MiB) window, and
+/// integrity units of 8 chunks, or of 1 chunk below [`LOW_RATE_BITRATE`].
 ///
 /// [`ingress_options`]: crate::ingress::ingress_options
+pub fn capture_options_for(bitrate: u64) -> SwarmOptions {
+    SwarmOptions {
+        chunks_per_signature: if bitrate < LOW_RATE_BITRATE { 1 } else { 8 },
+        ..capture_options()
+    }
+}
+
+/// The options of a capture's swarm at [`LOW_RATE_BITRATE`] or more:
+/// [`capture_options_for`] a capture with video.
 pub fn capture_options() -> SwarmOptions {
     SwarmOptions {
         chunk_size: 4096,
@@ -94,10 +184,61 @@ pub struct CaptureInfo {
     /// Its transfer id.
     pub id: TransferId,
     pub swarm_uri: String,
-    pub mime_type: String,
+    /// The MIME type listed, once a record is written.
+    pub mime_type: Option<String>,
     /// Each of its networks' keys, and the id of its listing on that
     /// network's directory once published.
     pub listings: Vec<(Vec<u8>, Option<u64>)>,
+    /// What its writer has written, as of its last append.
+    pub writer: UnitWriterMetrics,
+    /// Partial integrity units signed before they filled.
+    pub early_signs: u64,
+}
+
+/// The decoder config of a capture's config: see the
+/// [module docs](self#media).
+///
+/// # Errors
+///
+/// [`VideoError::CaptureMedia`] for an unknown codec or a record that
+/// doesn't parse.
+pub fn decoder_config(c: &CaptureConfig) -> Result<DecoderConfig, VideoError> {
+    let track = c.track;
+    let (sample_entry, timescale) = match Codec::try_from(c.codec) {
+        Ok(Codec::H264) => (SAMPLE_ENTRY_AVC, VIDEO_TIMESCALE),
+        Ok(Codec::Opus) => (SAMPLE_ENTRY_OPUS, opus::SAMPLE_RATE),
+        _ => {
+            return Err(media(format!(
+                "track {track}: codec {} is not supported",
+                c.codec
+            )));
+        }
+    };
+    let entry = ConfigEntry {
+        track: TrackId(track),
+        version: 0,
+        next_seq: 0,
+        sample_entry,
+        timescale,
+        config: &c.config,
+    };
+    match entry.decoder_config() {
+        Some(Ok(config)) => Ok(config),
+        Some(Err(e)) => Err(media(e.to_string())),
+        None => Err(media(format!("track {track}: no decoder config"))),
+    }
+}
+
+fn media(reason: String) -> VideoError {
+    VideoError::CaptureMedia(reason)
+}
+
+/// `us` microseconds in units of `timescale`, rounded to the nearest; `us`
+/// is at most [`MAX_TIMESTAMP_US`] from 0.
+fn ticks(us: i64, timescale: u32) -> i64 {
+    let scaled = i128::from(us) * i128::from(timescale);
+    let units = (scaled + 500_000).div_euclid(1_000_000);
+    i64::try_from(units).unwrap_or(i64::MAX)
 }
 
 /// A capture: its swarm, key and listings, and its appends.
@@ -106,10 +247,18 @@ pub(crate) struct Capture<H: Host> {
     swarm_id: SwarmId,
     key: Key,
     swarm_uri: String,
-    mime_type: String,
-    /// A keeper per network key. Bound: the capture's network keys.
+    /// Bound: the capture's network keys.
+    network_keys: Vec<Vec<u8>>,
+    /// A keeper per network key once a record is written. Bound: the
+    /// capture's network keys.
     keepers: Vec<(Vec<u8>, ListingKeeper)>,
+    mime_type: Option<String>,
     appends: Rc<Appends>,
+    rate: Bucket,
+    writer: UnitWriterMetrics,
+    early_signs: u64,
+    /// Set once the writer is done.
+    done: Rc<Slot<()>>,
 }
 
 impl<H: Host> Capture<H> {
@@ -118,18 +267,47 @@ impl<H: Host> Capture<H> {
     }
 }
 
+/// A token bucket of bytes.
+#[derive(Debug, Clone, Copy)]
+struct Bucket {
+    tokens: u64,
+    at: Time,
+}
+
+impl Bucket {
+    /// Takes `cost` tokens at `now` if the bucket, filled at `rate` a
+    /// second up to `burst` since it last took, holds them.
+    fn take(&mut self, now: Time, cost: u64, rate: u64, burst: u64) -> bool {
+        let elapsed = u64::try_from((now - self.at).as_nanos()).unwrap_or(0);
+        let filled = u128::from(elapsed) * u128::from(rate) / 1_000_000_000;
+        let filled = u64::try_from(filled).unwrap_or(u64::MAX);
+        self.tokens = self.tokens.saturating_add(filled).min(burst);
+        self.at = self.at.max(now);
+        if cost > self.tokens {
+            return false;
+        }
+        self.tokens -= cost;
+        true
+    }
+}
+
 /// An append waiting for its capture's writer.
 struct Append {
     id: u64,
-    data: Vec<u8>,
-    end: bool,
+    configs: Vec<CaptureConfig>,
+    units: Vec<CaptureUnit>,
+    bytes: usize,
     reply: Rc<Slot<Result<(), VideoError>>>,
 }
 
 #[derive(Default)]
 struct AppendState {
-    /// In order. Bound: the appends whose callers wait for them.
+    /// In order. Bound: [`CaptureSettings::max_queued_bytes`] of appends.
+    ///
+    /// [`CaptureSettings::max_queued_bytes`]: crate::CaptureSettings::max_queued_bytes
     queue: VecDeque<Append>,
+    /// The bytes of the appends in the queue.
+    queued: usize,
     next_id: u64,
     /// Wakes the writer.
     waker: Option<Waker>,
@@ -143,24 +321,32 @@ struct Appends {
 }
 
 impl Appends {
-    /// Queues an append: its id, or `None` once the capture closed.
+    /// Queues an append of `bytes` bytes: its id. Refused once the
+    /// capture closed, or when the queue would hold more than `max` bytes.
     fn push(
         &self,
-        data: Vec<u8>,
-        end: bool,
+        configs: Vec<CaptureConfig>,
+        units: Vec<CaptureUnit>,
+        bytes: usize,
+        max: usize,
         reply: Rc<Slot<Result<(), VideoError>>>,
-    ) -> Option<u64> {
+    ) -> Result<u64, VideoError> {
         let (id, waker) = {
             let mut s = self.state.borrow_mut();
             if s.closed {
-                return None;
+                return Err(VideoError::CaptureNotFound);
+            }
+            if s.queued.saturating_add(bytes) > max {
+                return Err(VideoError::CaptureBusy);
             }
             let id = s.next_id;
             s.next_id += 1;
+            s.queued += bytes;
             s.queue.push_back(Append {
                 id,
-                data,
-                end,
+                configs,
+                units,
+                bytes,
                 reply,
             });
             (id, s.waker.take())
@@ -168,7 +354,7 @@ impl Appends {
         if let Some(w) = waker {
             w.wake();
         }
-        Some(id)
+        Ok(id)
     }
 
     /// Drops append `id` if it still waits.
@@ -176,7 +362,11 @@ impl Appends {
         let dropped = {
             let mut s = self.state.borrow_mut();
             let at = s.queue.iter().position(|a| a.id == id);
-            at.and_then(|at| s.queue.remove(at))
+            let a = at.and_then(|at| s.queue.remove(at));
+            if let Some(a) = &a {
+                s.queued = s.queued.saturating_sub(a.bytes);
+            }
+            a
         };
         drop(dropped);
     }
@@ -186,6 +376,7 @@ impl Appends {
         poll_fn(|cx| {
             let mut s = self.state.borrow_mut();
             if let Some(a) = s.queue.pop_front() {
+                s.queued = s.queued.saturating_sub(a.bytes);
                 return Poll::Ready(Some(a));
             }
             if s.closed {
@@ -197,11 +388,12 @@ impl Appends {
         .await
     }
 
-    /// Ends the appends: those waiting fail, and the writer stops.
+    /// Ends the appends: those waiting fail, and the writer finishes.
     fn close(&self) {
         let (queued, waker) = {
             let mut s = self.state.borrow_mut();
             s.closed = true;
+            s.queued = 0;
             (std::mem::take(&mut s.queue), s.waker.take())
         };
         for a in queued {
@@ -222,6 +414,126 @@ struct Queued<'a> {
 impl Drop for Queued<'_> {
     fn drop(&mut self) {
         self.appends.cancel(self.id);
+    }
+}
+
+/// Sets its slot when dropped: the writer is done, whether it finished or
+/// its task was dropped.
+struct Done(Rc<Slot<()>>);
+
+impl Drop for Done {
+    fn drop(&mut self) {
+        self.0.set(());
+    }
+}
+
+/// A capture's writer state: the unit-format writer and what the next
+/// append is checked against.
+struct MediaWriter {
+    units: UnitWriter,
+    sign: SignTimer,
+    /// The decode time of each track's last unit. Bound: the tracks with
+    /// configs, at most `MAX_TRACKS`.
+    last: BTreeMap<TrackId, i64>,
+    /// Units dropped so far, as counted.
+    dropped: u64,
+    early_signs: u64,
+}
+
+/// An append, checked: its configs and its units' decode times.
+struct Checked {
+    configs: Vec<DecoderConfig>,
+    times: Vec<i64>,
+}
+
+impl MediaWriter {
+    /// Checks an append against the writer; see the
+    /// [module docs](self#media).
+    fn check(
+        &self,
+        configs: &[CaptureConfig],
+        units: &[CaptureUnit],
+    ) -> Result<Checked, VideoError> {
+        let mut merged = self.units.configs().to_vec();
+        let mut new = Vec::with_capacity(configs.len());
+        for c in configs {
+            if configs.iter().filter(|o| o.track == c.track).count() > 1 {
+                return Err(media(format!("track {} is configured twice", c.track)));
+            }
+            let config = decoder_config(c)?;
+            merged.retain(|m| m.track != config.track);
+            merged.push(config.clone());
+            new.push(config);
+        }
+        merged.sort_by_key(|c| c.track);
+        check_configs(&merged).map_err(|e| media(e.to_string()))?;
+        let mut last = self.last.clone();
+        let mut times = Vec::with_capacity(units.len());
+        for u in units {
+            let track = TrackId(u.track);
+            let Some(config) = merged.iter().find(|c| c.track == track) else {
+                return Err(media(format!("track {} has no decoder config", u.track)));
+            };
+            if u.data.is_empty() {
+                return Err(media(format!("track {}: a unit has no data", u.track)));
+            }
+            if u.data.len() > MAX_RECORD_LEN - MAX_UNIT_HEAD_LEN {
+                return Err(media(format!(
+                    "track {}: a {}-byte unit is over the record bound",
+                    u.track,
+                    u.data.len()
+                )));
+            }
+            if u.timestamp_us.unsigned_abs() > MAX_TIMESTAMP_US.unsigned_abs() {
+                return Err(media(format!(
+                    "track {}: timestamp {} us is out of range",
+                    u.track, u.timestamp_us
+                )));
+            }
+            let t = ticks(u.timestamp_us, config.timescale);
+            if last.get(&track).is_some_and(|&l| t <= l) {
+                return Err(media(format!(
+                    "track {}: timestamp {} us is not after the track's last unit",
+                    u.track, u.timestamp_us
+                )));
+            }
+            last.insert(track, t);
+            times.push(t);
+        }
+        Ok(Checked {
+            configs: new,
+            times,
+        })
+    }
+
+    /// Writes a checked append's configs and units, published at `now`.
+    fn apply(
+        &mut self,
+        checked: Checked,
+        units: &[CaptureUnit],
+        now: Time,
+    ) -> Result<(), VideoError> {
+        let failed = |e: crate::units::UnitWriteError| VideoError::StreamWrite(e.to_string());
+        for c in &checked.configs {
+            self.units.set_config(c).map_err(failed)?;
+        }
+        let tracks: Vec<TrackId> = self.units.configs().iter().map(|c| c.track).collect();
+        self.last.retain(|t, _| tracks.contains(t));
+        for (u, &t) in units.iter().zip(&checked.times) {
+            let track = TrackId(u.track);
+            self.units
+                .push(&AccessUnit {
+                    track,
+                    dts: t,
+                    pts: t,
+                    keyframe: u.keyframe,
+                    payload: &u.data,
+                    published: now,
+                })
+                .map_err(failed)?;
+            self.last.insert(track, t);
+        }
+        Ok(())
     }
 }
 
@@ -269,13 +581,12 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Drop for OpenReply<K, H, V, T> {
     }
 }
 
-/// Checks a capture's MIME type; see the [module docs](self).
-fn check_mime(mime: &str, max: usize) -> Result<(), VideoError> {
-    let printable = mime.bytes().all(|b| (0x20..0x7f).contains(&b));
-    if mime.is_empty() || mime.len() > max || !printable {
-        return Err(VideoError::MimeType);
-    }
-    Ok(())
+/// A capture taken out of the node, whose writer, transfer and swarm are
+/// still to go.
+pub(crate) struct Ended<H: Host> {
+    id: TransferId,
+    swarm: Swarm<H>,
+    done: Rc<Slot<()>>,
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
@@ -285,22 +596,22 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         self: Rc<Self>,
         opening: Opening<K, H, V, T>,
         key: Key,
-        mime_type: String,
         network_keys: Vec<Vec<u8>>,
         snippet: ListingSnippet,
+        bitrate: u64,
         reply: Weak<Slot<Result<TransferId, VideoError>>>,
     ) {
         let res = self
-            .start_capture(key, mime_type, network_keys, snippet)
+            .start_capture(key, network_keys, snippet, bitrate)
             .await;
         drop(opening);
         match reply.upgrade() {
             Some(reply) => reply.set(res),
             None => {
                 if let Ok(id) = res
-                    && let Some(swarm) = self.end_capture(&id)
+                    && let Some(ended) = self.end_capture(&id)
                 {
-                    self.remove_host_swarm(swarm).await;
+                    self.finish_capture(ended).await;
                 }
             }
         }
@@ -309,11 +620,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
     async fn start_capture(
         self: &Rc<Self>,
         key: Key,
-        mime_type: String,
         network_keys: Vec<Vec<u8>>,
         snippet: ListingSnippet,
+        bitrate: u64,
     ) -> Result<TransferId, VideoError> {
-        let options = capture_options();
+        let options = capture_options_for(bitrate);
         let (swarm, swarm_id, writer) = self
             .host
             .create_swarm(WriterOptions {
@@ -362,26 +673,31 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         }
 
         let swarm_uri = Uri::new(swarm_id.clone(), options.uri_options()).to_string();
-        let listing = Listing {
-            content: Some(Content::Media(Media {
-                mime_type: mime_type.clone(),
-                swarm_uri: swarm_uri.clone(),
-            })),
-        };
-        let config = self.config.listing.keeper_config();
-        let keepers = network_keys
-            .into_iter()
-            .map(|k| {
-                let keeper = ListingKeeper::new(k.clone(), listing.clone());
-                let (run, directory) = (keeper.clone(), self.directory.clone());
-                self.spawn(async move { run.run(&directory, config, |_| {}).await }.boxed_local());
-                (k, keeper)
-            })
-            .collect();
         let appends = Rc::new(Appends::default());
+        let done = Slot::new();
+        let config = &self.config.capture;
+        let unit = options
+            .chunk_size
+            .saturating_mul(options.chunks_per_signature);
+        // invariant: the capture swarm's chunk size is a valid frame size.
+        #[allow(clippy::expect_used)]
+        let units =
+            UnitWriter::new(options.chunk_size).expect("the capture chunk size is a frame size");
+        let interval = if options.chunks_per_signature == 1 {
+            config.low_rate_sign_interval
+        } else {
+            config.sign_interval
+        };
+        let media = MediaWriter {
+            units,
+            sign: SignTimer::new(unit as u64, interval),
+            last: BTreeMap::new(),
+            dropped: 0,
+            early_signs: 0,
+        };
         self.spawn(
             self.clone()
-                .write_capture(appends.clone(), writer)
+                .write_capture(t, appends.clone(), media, writer, Done(done.clone()))
                 .boxed_local(),
         );
         let prev = self.captures.borrow_mut().insert(
@@ -391,126 +707,257 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 swarm_id,
                 key,
                 swarm_uri,
-                mime_type,
-                keepers,
+                network_keys,
+                keepers: Vec::new(),
+                mime_type: None,
                 appends,
+                rate: Bucket {
+                    tokens: config.max_burst,
+                    at: self.timer.now(),
+                },
+                writer: UnitWriterMetrics::default(),
+                early_signs: 0,
+                done,
             },
         );
         drop(prev);
         Ok(t)
     }
 
-    /// Writes a capture's appends into its swarm until it closes.
+    /// Writes capture `id`'s appends into its swarm until it closes, then
+    /// its last output; see the [module docs](self#media).
     async fn write_capture(
         self: Rc<Self>,
+        id: TransferId,
         appends: Rc<Appends>,
+        mut media: MediaWriter,
         mut writer: <H as SwarmHost>::Writer,
+        done: Done,
     ) {
-        // invariant: DEFAULT_SIZE is a valid frame size.
-        #[allow(clippy::expect_used)]
-        let mut encoder = PackedEncoder::new(DEFAULT_SIZE).expect("the default frame size");
-        // Bound: two frames.
-        let mut out = Vec::with_capacity(2 * DEFAULT_SIZE);
         let mut failed: Option<String> = None;
-        while let Some(a) = appends.next().await {
+        loop {
+            let next = pin!(appends.next());
+            let a = match media.sign.due().filter(|_| failed.is_none()) {
+                Some(due) => match select(next, pin!(self.timer.sleep_until(due))).await {
+                    Either::Left((a, _)) => a,
+                    Either::Right(((), _)) => {
+                        if let Err(e) = self.sign_capture(&mut media, &mut writer).await {
+                            failed = Some(self.capture_failed(&e));
+                        }
+                        self.capture_written(&id, &mut media, None);
+                        continue;
+                    }
+                },
+                None => next.await,
+            };
+            let Some(a) = a else {
+                break;
+            };
             let res = match &failed {
                 Some(e) => Err(VideoError::StreamWrite(e.clone())),
                 None => {
-                    let res =
-                        write_append(&mut encoder, &mut writer, &mut out, &a.data, a.end).await;
-                    match res {
-                        Ok(true) => Ok(()),
-                        Ok(false) => {
-                            self.metrics.borrow_mut().dropped_records += 1;
-                            Err(VideoError::RecordDropped)
-                        }
-                        Err(e) => {
-                            self.metrics.borrow_mut().write_errors += 1;
-                            tracing::warn!(error = %e, "writing a capture failed");
-                            failed = Some(e.to_string());
-                            Err(VideoError::StreamWrite(e.to_string()))
-                        }
+                    let res = self
+                        .write_append(&mut media, &mut writer, &a.configs, &a.units)
+                        .await;
+                    if let Err(VideoError::StreamWrite(e)) = &res {
+                        failed = Some(e.clone());
                     }
+                    let mime = units_mime(media.units.configs());
+                    let listed = media.units.metrics().records > 0;
+                    self.capture_written(&id, &mut media, listed.then_some(mime));
+                    res
                 }
             };
             a.reply.set(res);
         }
+        if failed.is_none() {
+            let _ = media.units.finish();
+            let now = self.timer.now();
+            if self
+                .write_output(&mut media, &mut writer, now)
+                .await
+                .is_ok()
+                && media.sign.is_partial()
+            {
+                let _ = self.sign_capture(&mut media, &mut writer).await;
+            }
+        }
+        drop(done);
     }
 
-    /// Takes a capture out of the node, but for its swarm, which it
-    /// returns for the caller to remove; see the [module docs](self).
-    pub(crate) fn end_capture(&self, id: &TransferId) -> Option<Swarm<H>> {
+    /// Checks an append and writes it into the swarm.
+    async fn write_append(
+        &self,
+        media: &mut MediaWriter,
+        writer: &mut <H as SwarmHost>::Writer,
+        configs: &[CaptureConfig],
+        units: &[CaptureUnit],
+    ) -> Result<(), VideoError> {
+        let checked = media.check(configs, units)?;
+        let now = self.timer.now();
+        media.apply(checked, units, now)?;
+        self.write_output(media, writer, now).await.map_err(|e| {
+            let e = self.capture_failed(&e);
+            VideoError::StreamWrite(e)
+        })
+    }
+
+    /// Writes the writer's output into the swarm at `now`.
+    async fn write_output(
+        &self,
+        media: &mut MediaWriter,
+        writer: &mut <H as SwarmHost>::Writer,
+        now: Time,
+    ) -> Result<(), String> {
+        let out = media.units.take_output();
+        let res = if out.is_empty() {
+            Ok(())
+        } else {
+            writer.write(&out).await.map_err(|e| e.to_string())
+        };
+        media.units.restore(out);
+        if res.is_ok() {
+            media.sign.written(media.units.offset(), now);
+        }
+        res
+    }
+
+    /// Has the swarm sign the partial integrity unit: ends the frame in
+    /// progress, writes it, flushes the swarm writer and goes on where the
+    /// next unit starts.
+    async fn sign_capture(
+        &self,
+        media: &mut MediaWriter,
+        writer: &mut <H as SwarmHost>::Writer,
+    ) -> Result<(), String> {
+        media.units.end_frame();
+        self.write_output(media, writer, self.timer.now()).await?;
+        let next = writer.flush().await.map_err(|e| e.to_string())?;
+        media.units.continue_at(next).map_err(|e| e.to_string())?;
+        media.sign.flushed(next);
+        media.early_signs += 1;
+        Ok(())
+    }
+
+    /// Counts a failed swarm write; the reason.
+    fn capture_failed(&self, e: &str) -> String {
+        self.metrics.borrow_mut().write_errors += 1;
+        tracing::warn!(error = %e, "writing a capture failed");
+        e.to_owned()
+    }
+
+    /// Takes capture `id`'s writer metrics after a write, and keeps its
+    /// listings of `mime` if set and new.
+    fn capture_written(
+        self: &Rc<Self>,
+        id: &TransferId,
+        media: &mut MediaWriter,
+        mime: Option<String>,
+    ) {
+        let m = media.units.metrics();
+        let dropped = m.dropped_before_start.saturating_sub(media.dropped);
+        media.dropped = m.dropped_before_start;
+        self.metrics.borrow_mut().dropped_records += dropped;
+        let (keepers, listing, start) = {
+            let mut captures = self.captures.borrow_mut();
+            let Some(c) = captures.get_mut(id) else {
+                return;
+            };
+            c.writer = m;
+            c.early_signs = media.early_signs;
+            let Some(mime) = mime.filter(|m| c.mime_type.as_ref() != Some(m)) else {
+                return;
+            };
+            c.mime_type = Some(mime.clone());
+            let listing = Listing {
+                content: Some(Content::Media(Media {
+                    mime_type: mime,
+                    swarm_uri: c.swarm_uri.clone(),
+                })),
+            };
+            let start = c.keepers.is_empty();
+            if start {
+                c.keepers = c
+                    .network_keys
+                    .iter()
+                    .map(|k| (k.clone(), ListingKeeper::new(k.clone(), listing.clone())))
+                    .collect();
+            }
+            let keepers: Vec<ListingKeeper> = c.keepers().cloned().collect();
+            (keepers, listing, start)
+        };
+        let config = self.config.listing.keeper_config();
+        for keeper in keepers {
+            if start {
+                let directory = self.directory.clone();
+                self.spawn(
+                    async move { keeper.run(&directory, config, |_| {}).await }.boxed_local(),
+                );
+            } else {
+                keeper.set_listing(listing.clone());
+            }
+        }
+    }
+
+    /// Takes a capture out of the node: stops its listings, its snippet
+    /// and its appends. What's left goes in [`finish_capture`]; see the
+    /// [teardown](self#teardown).
+    ///
+    /// [`finish_capture`]: Shared::finish_capture
+    pub(crate) fn end_capture(&self, id: &TransferId) -> Option<Ended<H>> {
         let c = self.captures.borrow_mut().remove(id)?;
         for k in c.keepers() {
             k.stop();
         }
         self.directory.delete_snippet(&c.swarm_id);
-        self.transfers.remove(*id);
         c.appends.close();
-        self.with_swarms(|r| r.remove(id));
-        Some(c.swarm)
+        Some(Ended {
+            id: *id,
+            swarm: c.swarm,
+            done: c.done,
+        })
     }
 
-    /// Closes capture `id`, removing its swarm in a task.
+    /// Waits for an ended capture's writer, then removes its transfer and
+    /// swarm.
+    pub(crate) async fn finish_capture(&self, ended: Ended<H>) {
+        let deadline = self.timer.now() + CLOSE_FLUSH_TIMEOUT;
+        let _ = select(
+            pin!(ended.done.take()),
+            pin!(self.timer.sleep_until(deadline)),
+        )
+        .await;
+        self.transfers.remove(ended.id);
+        self.with_swarms(|r| r.remove(&ended.id));
+        self.remove_host_swarm(ended.swarm).await;
+    }
+
+    /// Closes capture `id`, finishing it in a task.
     pub(crate) fn queue_close_capture(self: &Rc<Self>, id: &TransferId) {
-        if let Some(swarm) = self.end_capture(id) {
+        if let Some(ended) = self.end_capture(id) {
             let s = self.clone();
-            self.spawn(async move { s.remove_host_swarm(swarm).await }.boxed_local());
+            self.spawn(async move { s.finish_capture(ended).await }.boxed_local());
         }
     }
-}
-
-/// Writes `data` of the record in progress through `encoder` into
-/// `writer`, and ends the record if `end`. Returns false if the end was
-/// refused and the record dropped.
-async fn write_append<W: SwarmWrite>(
-    encoder: &mut PackedEncoder,
-    writer: &mut W,
-    out: &mut Vec<u8>,
-    data: &[u8],
-    end: bool,
-) -> Result<bool, W::Error> {
-    for piece in data.chunks(DEFAULT_SIZE) {
-        encoder.write(piece, out);
-        if out.len() >= DEFAULT_SIZE {
-            let res = writer.write(out).await;
-            out.clear();
-            res?;
-        }
-    }
-    let mut ended = true;
-    if end && encoder.end_record(out).is_err() {
-        // A refused end leaves a record begun in this frame, none of whose
-        // bytes are out, so it drops whole.
-        encoder.abandon_record();
-        ended = false;
-    }
-    if !out.is_empty() {
-        let res = writer.write(out).await;
-        out.clear();
-        res?;
-    }
-    Ok(ended)
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
-    /// Opens a capture of `mime_type`, listed with `snippet` on the
-    /// networks `network_keys` names: its id. See the
-    /// [module docs](self).
+    /// Opens a capture listed with `snippet` on the networks
+    /// `network_keys` names, at a nominal `bitrate` in bits a second: its
+    /// id. See the [module docs](self).
     ///
     /// # Errors
     ///
-    /// The MIME type, network keys or snippet are refused, the node runs
-    /// its most captures, or a node call failed.
+    /// The network keys or snippet are refused, the node runs its most
+    /// captures, or a node call failed.
     pub async fn open_capture(
         &self,
-        mime_type: &str,
         network_keys: Vec<Vec<u8>>,
         snippet: ListingSnippet,
+        bitrate: u64,
     ) -> Result<TransferId, VideoError> {
         let s = &self.shared;
         let c = &s.config.capture;
-        check_mime(mime_type, c.max_mime_bytes)?;
         if network_keys.is_empty() || network_keys.len() > c.max_network_keys {
             return Err(VideoError::NetworkKeyCount);
         }
@@ -536,9 +983,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         let task = s.clone().create_capture(
             opening,
             key,
-            mime_type.to_owned(),
             keys,
             snippet,
+            bitrate,
             Rc::downgrade(&reply.reply),
         );
         s.spawn(task.boxed_local());
@@ -568,33 +1015,55 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         Ok(())
     }
 
-    /// Appends `data` to capture `id`'s record in progress, and ends the
-    /// record if `segment_end`. Resolves once written; see the
-    /// [module docs](self).
+    /// Writes `configs` and then `units` into capture `id`. Resolves once
+    /// written; see the [module docs](self#media).
     ///
     /// # Errors
     ///
     /// There's no capture `id` (or it closed first),
-    /// [`VideoError::RecordDropped`] when the record's end is refused and
-    /// the record dropped, or [`VideoError::StreamWrite`] once a swarm
-    /// write failed.
+    /// [`VideoError::CaptureMedia`] when the append breaks the capture's
+    /// rules, [`VideoError::CaptureBusy`] or [`VideoError::CaptureRate`]
+    /// over its bounds, or [`VideoError::StreamWrite`] once a swarm write
+    /// failed.
     pub async fn append_capture(
         &self,
         id: &TransferId,
-        data: Vec<u8>,
-        segment_end: bool,
+        configs: Vec<CaptureConfig>,
+        units: Vec<CaptureUnit>,
     ) -> Result<(), VideoError> {
-        let appends = self
-            .shared
-            .captures
-            .borrow()
-            .get(id)
-            .map(|c| c.appends.clone())
-            .ok_or(VideoError::CaptureNotFound)?;
+        let s = &self.shared;
+        let settings = &s.config.capture;
+        if units.len() > settings.max_units_per_append {
+            return Err(media(format!(
+                "{} units are more than an append's {}",
+                units.len(),
+                settings.max_units_per_append
+            )));
+        }
+        let bytes = configs.iter().map(|c| c.config.len()).sum::<usize>()
+            + units.iter().map(|u| u.data.len()).sum::<usize>();
+        let items = (configs.len() + units.len()) as u64;
+        let cost = (bytes as u64).saturating_add(items.saturating_mul(ITEM_COST));
+        let now = s.timer.now();
+        let appends = {
+            let mut captures = s.captures.borrow_mut();
+            let c = captures.get_mut(id).ok_or(VideoError::CaptureNotFound)?;
+            if !c
+                .rate
+                .take(now, cost, settings.max_rate, settings.max_burst)
+            {
+                return Err(VideoError::CaptureRate);
+            }
+            c.appends.clone()
+        };
         let reply = Slot::new();
-        let id = appends
-            .push(data, segment_end, reply.clone())
-            .ok_or(VideoError::CaptureNotFound)?;
+        let id = appends.push(
+            configs,
+            units,
+            bytes,
+            settings.max_queued_bytes,
+            reply.clone(),
+        )?;
         let _queued = Queued {
             appends: &appends,
             id,
@@ -602,11 +1071,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         reply.take().await
     }
 
-    /// Closes capture `id`; see the [module docs](self).
+    /// Closes capture `id`; see the [teardown](self#teardown).
     pub async fn close_capture(&self, id: &TransferId) -> Result<(), VideoError> {
         let s = &self.shared;
-        let swarm = s.end_capture(id).ok_or(VideoError::CaptureNotFound)?;
-        s.remove_host_swarm(swarm).await;
+        let ended = s.end_capture(id).ok_or(VideoError::CaptureNotFound)?;
+        s.finish_capture(ended).await;
         Ok(())
     }
 
@@ -621,37 +1090,23 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 swarm_uri: c.swarm_uri.clone(),
                 mime_type: c.mime_type.clone(),
                 listings: c
-                    .keepers
+                    .network_keys
                     .iter()
-                    .map(|(k, keeper)| (k.clone(), keeper.listing_id()))
+                    .map(|k| {
+                        let keeper = c.keepers.iter().find(|(key, _)| key == k);
+                        (
+                            k.clone(),
+                            keeper.and_then(|(_, keeper)| keeper.listing_id()),
+                        )
+                    })
                     .collect(),
+                writer: c.writer,
+                early_signs: c.early_signs,
             })
             .collect()
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_capture_uri_carries_its_options() {
-        let o = capture_options();
-        let uri = Uri::new(SwarmId::new(&[0; 32]), o.uri_options()).to_string();
-        assert!(
-            uri.ends_with("&x.im=2&x.hf=7&x.sa=2&x.cs=4096&x.ps=8&x.sc=16"),
-            "{uri}"
-        );
-        assert_eq!(o.live_window, 8 * 1024);
-    }
-
-    #[test]
-    fn mime_types_are_short_printable_ascii() {
-        for ok in ["video/webm;codecs=vp9,opus", "a", &"x".repeat(256)] {
-            assert_eq!(check_mime(ok, 256), Ok(()), "{ok}");
-        }
-        for bad in ["", "video/webm\n", "vidéo", "a\u{7f}", &"x".repeat(257)] {
-            assert_eq!(check_mime(bad, 256), Err(VideoError::MimeType), "{bad}");
-        }
-    }
-}
+#[path = "capture_test.rs"]
+mod tests;

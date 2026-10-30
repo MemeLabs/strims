@@ -70,7 +70,8 @@
 //! to the connection: `Update`, `Append` and `Close` take only the
 //! connection's own captures, answering "capture not found" for any other
 //! id, and the connection's end closes them. `Append` answers once its
-//! bytes are written.
+//! configs and units are written, or with the reason they were refused
+//! ([`capture`](crate::capture#media)).
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -567,9 +568,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> CaptureService for CaptureFrontend<
         let id = self
             .control
             .open_capture(
-                &req.mime_type,
                 req.network_keys,
                 req.directory_snippet.unwrap_or_default(),
+                req.bitrate,
             )
             .await
             .map_err(rpc)?;
@@ -600,7 +601,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> CaptureService for CaptureFrontend<
     ) -> Result<CaptureAppendResponse, RpcError> {
         let id = self.owned(&req.id)?;
         self.control
-            .append_capture(&id, req.data, req.segment_end)
+            .append_capture(&id, req.configs, req.units)
             .await
             .map_err(rpc)?;
         Ok(CaptureAppendResponse {})

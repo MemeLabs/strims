@@ -13,8 +13,10 @@ import "network/v1/directory/directory.proto";
 
 message CaptureOpenRequest {
   strims.network.v1.directory.ListingSnippet directory_snippet = 1;
-  string mime_type = 2;
-  repeated bytes network_keys = 3;
+  repeated bytes network_keys = 2;
+  // The capture's nominal bitrate, its encoders' configured bitrates
+  // together, in bits per second. It sizes the swarm's integrity units.
+  uint64 bitrate = 3;
 }
 
 message CaptureOpenResponse {
@@ -28,10 +30,40 @@ message CaptureUpdateRequest {
 
 message CaptureUpdateResponse {}
 
+// A track's decoder config, as its encoder gave it.
+message CaptureConfig {
+  enum Codec {
+    CODEC_UNSPECIFIED = 0;
+    // config is an AVCDecoderConfigurationRecord; units are NAL units
+    // with the record's length prefixes. Timed at 90 kHz.
+    CODEC_H264 = 1;
+    // config is an OpusHead (RFC 7845 5.1); units are Opus packets. Timed
+    // at 48 kHz.
+    CODEC_OPUS = 2;
+  }
+
+  // Nonzero.
+  uint32 track = 1;
+  Codec codec = 2;
+  bytes config = 3;
+}
+
+// An access unit. A track's units come in decode order, which is their
+// presentation order.
+message CaptureUnit {
+  uint32 track = 1;
+  // Presentation time in microseconds on the capture's clock, after the
+  // track's last unit's.
+  int64 timestamp_us = 2;
+  bool keyframe = 3;
+  bytes data = 4;
+}
+
+// Configs apply from the request's units on.
 message CaptureAppendRequest {
   bytes id = 1;
-  bytes data = 2;
-  bool segment_end = 3;
+  repeated CaptureConfig configs = 2;
+  repeated CaptureUnit units = 3;
 }
 
 message CaptureAppendResponse {}

@@ -5,47 +5,82 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { ImageType } from "../apis/strims/type/image";
 import { useClient } from "../contexts/FrontendApi";
+import {
+  Capture,
+  CaptureSender,
+  MAX_FRAME_RATE,
+  MAX_HEIGHT,
+  MAX_WIDTH,
+  captureBitrate,
+} from "../lib/capture";
 import { certificateRoot } from "../lib/certificate";
-import * as webm from "../lib/media/webm";
 
-const BroadcastPage: React.FC = () => {
-  const client = useClient();
-  const videoRef = useRef<HTMLVideoElement>();
+type Source = "screen" | "camera";
 
-  const [broadcastState, setBroadcastState] =
-    useState<{ id: Uint8Array; mediaStream: MediaStream }>(null);
+interface BroadcastState {
+  id: Uint8Array;
+  mediaStream: MediaStream;
+  audioContext: AudioContext;
+}
 
-  const handleStartBroadcastClick = async () => {
-    const { networks } = await client.network.list();
-    const [{ id }, mediaStream] = await Promise.all([
-      client.videoCapture.open({
-        mimeType: webm.MIME_TYPE,
-        networkKeys: networks.map((n) => certificateRoot(n.certificate).key),
-        directorySnippet: {
-          title: "test broadcast",
-          description: "broadcast from getDisplayMedia",
-        },
-      }),
+const SNIPPET = {
+  title: "test broadcast",
+  description: "broadcast from the browser",
+};
 
-      navigator.mediaDevices.getDisplayMedia({
+const openMedia = (source: Source): Promise<MediaStream> =>
+  source === "screen"
+    ? navigator.mediaDevices.getDisplayMedia({
         video: {
-          frameRate: 30,
+          width: { max: MAX_WIDTH },
+          height: { max: MAX_HEIGHT },
+          frameRate: { max: MAX_FRAME_RATE },
         },
         audio: {
           autoGainControl: false,
           echoCancellation: false,
           noiseSuppression: false,
           suppressLocalAudioPlayback: false,
-
-          // googEchoCancellation: false,
-          // googAutoGainControl: false,
-          // googNoiseSuppression: false,
-          // googHighpassFilter: false,
         },
-      }),
-    ]);
+      })
+    : navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { max: MAX_FRAME_RATE },
+        },
+        audio: true,
+      });
 
-    setBroadcastState({ id, mediaStream });
+const canShareScreen = (): boolean => !!navigator.mediaDevices?.getDisplayMedia;
+
+const BroadcastPage: React.FC = () => {
+  const client = useClient();
+  const videoRef = useRef<HTMLVideoElement>();
+
+  const [broadcastState, setBroadcastState] = useState<BroadcastState>(null);
+  const [error, setError] = useState<string>(null);
+
+  const handleStartBroadcastClick = (source: Source) => {
+    setError(null);
+    // Made in the click: an engine may run audio only in a context made in
+    // a user gesture.
+    const audioContext = new AudioContext({ sampleRate: 48000 });
+    void (async () => {
+      try {
+        const mediaStream = await openMedia(source);
+        const { networks } = await client.network.list();
+        const { id } = await client.videoCapture.open({
+          networkKeys: networks.map((n) => certificateRoot(n.certificate).key),
+          directorySnippet: SNIPPET,
+          bitrate: BigInt(captureBitrate(mediaStream)),
+        });
+        setBroadcastState({ id, mediaStream, audioContext });
+      } catch (e) {
+        void audioContext.close();
+        setError(String(e));
+      }
+    })();
   };
 
   const handleStopBroadcastClick = () => setBroadcastState(null);
@@ -55,14 +90,30 @@ const BroadcastPage: React.FC = () => {
       return;
     }
 
-    const { id, mediaStream } = broadcastState;
-    const encoder = new webm.Encoder(mediaStream);
-
+    const { id, mediaStream, audioContext } = broadcastState;
     videoRef.current.srcObject = mediaStream;
     videoRef.current.muted = true;
 
-    encoder.ondata = (data) => void client.videoCapture.append({ id, data });
-    encoder.onend = (data) => void client.videoCapture.append({ id, data, segmentEnd: true });
+    const fail = (e: unknown) => setError(String(e));
+    let capture: Capture | null = null;
+    const sender = new CaptureSender(
+      id,
+      (req) => client.videoCapture.append(req),
+      fail,
+      () => capture?.requestKeyframe()
+    );
+    const started = (async (): Promise<Capture | null> => {
+      try {
+        capture = await Capture.start(mediaStream, sender, { audioContext, onerror: fail });
+        return capture;
+      } catch (e) {
+        fail(e);
+        return null;
+      }
+    })();
+    // Sharing stopped from the browser's own controls.
+    const [videoTrack] = mediaStream.getVideoTracks();
+    videoTrack?.addEventListener("ended", () => setBroadcastState(null));
 
     const generateThumbnail = async () => {
       const { videoHeight, videoWidth } = videoRef.current;
@@ -91,8 +142,7 @@ const BroadcastPage: React.FC = () => {
       await client.videoCapture.update({
         id,
         directorySnippet: {
-          title: "test broadcast",
-          description: "broadcast from getDisplayMedia",
+          ...SNIPPET,
           thumbnail: {
             sourceOneof: {
               image: {
@@ -105,14 +155,19 @@ const BroadcastPage: React.FC = () => {
       });
     };
 
-    videoRef.current.addEventListener("playing", generateThumbnail, { once: true });
-    const ivl = setInterval(generateThumbnail, 30 * 1000);
+    videoRef.current.addEventListener("playing", () => void generateThumbnail(), { once: true });
+    const ivl = setInterval(() => void generateThumbnail(), 30 * 1000);
 
     return () => {
-      encoder.stop();
-      void client.videoCapture.close({ id });
-      mediaStream.getTracks().forEach((t) => t.stop());
       clearInterval(ivl);
+      void (async () => {
+        const c = await started;
+        await c?.stop();
+        mediaStream.getTracks().forEach((t) => t.stop());
+        await sender.drain();
+        await client.videoCapture.close({ id });
+        await audioContext.close();
+      })().catch(() => undefined);
     };
   }, [videoRef.current, broadcastState]);
 
@@ -126,10 +181,24 @@ const BroadcastPage: React.FC = () => {
               stop broadcast
             </button>
           ) : (
-            <button className="input input_button" onClick={handleStartBroadcastClick}>
-              start broadcast
-            </button>
+            <>
+              {canShareScreen() && (
+                <button
+                  className="input input_button"
+                  onClick={() => handleStartBroadcastClick("screen")}
+                >
+                  share screen
+                </button>
+              )}
+              <button
+                className="input input_button"
+                onClick={() => handleStartBroadcastClick("camera")}
+              >
+                use camera
+              </button>
+            </>
           )}
+          {error && <p>{error}</p>}
         </div>
         <video
           className="home_page__main__video__video"
@@ -137,6 +206,7 @@ const BroadcastPage: React.FC = () => {
           width="320"
           controls
           autoPlay
+          playsInline
           ref={videoRef}
         />
       </section>

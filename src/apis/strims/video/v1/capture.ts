@@ -8,26 +8,26 @@ import {
 
 export type ICaptureOpenRequest = {
   directorySnippet?: strims_network_v1_directory_IListingSnippet;
-  mimeType?: string;
   networkKeys?: Uint8Array[];
+  bitrate?: bigint;
 }
 
 export class CaptureOpenRequest {
   directorySnippet: strims_network_v1_directory_ListingSnippet | undefined;
-  mimeType: string;
   networkKeys: Uint8Array[];
+  bitrate: bigint;
 
   constructor(v?: ICaptureOpenRequest) {
     this.directorySnippet = v?.directorySnippet && new strims_network_v1_directory_ListingSnippet(v.directorySnippet);
-    this.mimeType = v?.mimeType || "";
     this.networkKeys = v?.networkKeys ? v.networkKeys : [];
+    this.bitrate = v?.bitrate || BigInt(0);
   }
 
   static encode(m: CaptureOpenRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.directorySnippet) strims_network_v1_directory_ListingSnippet.encode(m.directorySnippet, w.uint32(10).fork()).ldelim();
-    if (m.mimeType.length) w.uint32(18).string(m.mimeType);
-    for (const v of m.networkKeys) w.uint32(26).bytes(v);
+    for (const v of m.networkKeys) w.uint32(18).bytes(v);
+    if (m.bitrate) w.uint32(24).uint64(m.bitrate);
     return w;
   }
 
@@ -42,10 +42,10 @@ export class CaptureOpenRequest {
         m.directorySnippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
         break;
         case 2:
-        m.mimeType = r.string();
+        m.networkKeys.push(r.bytes())
         break;
         case 3:
-        m.networkKeys.push(r.bytes())
+        m.bitrate = r.uint64();
         break;
         default:
         r.skipType(tag & 7);
@@ -154,28 +154,143 @@ export class CaptureUpdateResponse {
   }
 }
 
+export type ICaptureConfig = {
+  track?: number;
+  codec?: strims_video_v1_CaptureConfig_Codec;
+  config?: Uint8Array;
+}
+
+export class CaptureConfig {
+  track: number;
+  codec: strims_video_v1_CaptureConfig_Codec;
+  config: Uint8Array;
+
+  constructor(v?: ICaptureConfig) {
+    this.track = v?.track || 0;
+    this.codec = v?.codec || 0;
+    this.config = v?.config || new Uint8Array();
+  }
+
+  static encode(m: CaptureConfig, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.track) w.uint32(8).uint32(m.track);
+    if (m.codec) w.uint32(16).uint32(m.codec);
+    if (m.config.length) w.uint32(26).bytes(m.config);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): CaptureConfig {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new CaptureConfig();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.track = r.uint32();
+        break;
+        case 2:
+        m.codec = r.uint32();
+        break;
+        case 3:
+        m.config = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace CaptureConfig {
+  export enum Codec {
+    CODEC_UNSPECIFIED = 0,
+    CODEC_H264 = 1,
+    CODEC_OPUS = 2,
+  }
+}
+
+export type ICaptureUnit = {
+  track?: number;
+  timestampUs?: bigint;
+  keyframe?: boolean;
+  data?: Uint8Array;
+}
+
+export class CaptureUnit {
+  track: number;
+  timestampUs: bigint;
+  keyframe: boolean;
+  data: Uint8Array;
+
+  constructor(v?: ICaptureUnit) {
+    this.track = v?.track || 0;
+    this.timestampUs = v?.timestampUs || BigInt(0);
+    this.keyframe = v?.keyframe || false;
+    this.data = v?.data || new Uint8Array();
+  }
+
+  static encode(m: CaptureUnit, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.track) w.uint32(8).uint32(m.track);
+    if (m.timestampUs) w.uint32(16).int64(m.timestampUs);
+    if (m.keyframe) w.uint32(24).bool(m.keyframe);
+    if (m.data.length) w.uint32(34).bytes(m.data);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): CaptureUnit {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new CaptureUnit();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.track = r.uint32();
+        break;
+        case 2:
+        m.timestampUs = r.int64();
+        break;
+        case 3:
+        m.keyframe = r.bool();
+        break;
+        case 4:
+        m.data = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type ICaptureAppendRequest = {
   id?: Uint8Array;
-  data?: Uint8Array;
-  segmentEnd?: boolean;
+  configs?: strims_video_v1_ICaptureConfig[];
+  units?: strims_video_v1_ICaptureUnit[];
 }
 
 export class CaptureAppendRequest {
   id: Uint8Array;
-  data: Uint8Array;
-  segmentEnd: boolean;
+  configs: strims_video_v1_CaptureConfig[];
+  units: strims_video_v1_CaptureUnit[];
 
   constructor(v?: ICaptureAppendRequest) {
     this.id = v?.id || new Uint8Array();
-    this.data = v?.data || new Uint8Array();
-    this.segmentEnd = v?.segmentEnd || false;
+    this.configs = v?.configs ? v.configs.map(v => new strims_video_v1_CaptureConfig(v)) : [];
+    this.units = v?.units ? v.units.map(v => new strims_video_v1_CaptureUnit(v)) : [];
   }
 
   static encode(m: CaptureAppendRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id.length) w.uint32(10).bytes(m.id);
-    if (m.data.length) w.uint32(18).bytes(m.data);
-    if (m.segmentEnd) w.uint32(24).bool(m.segmentEnd);
+    for (const v of m.configs) strims_video_v1_CaptureConfig.encode(v, w.uint32(18).fork()).ldelim();
+    for (const v of m.units) strims_video_v1_CaptureUnit.encode(v, w.uint32(26).fork()).ldelim();
     return w;
   }
 
@@ -190,10 +305,10 @@ export class CaptureAppendRequest {
         m.id = r.bytes();
         break;
         case 2:
-        m.data = r.bytes();
+        m.configs.push(strims_video_v1_CaptureConfig.decode(r, r.uint32()));
         break;
         case 3:
-        m.segmentEnd = r.bool();
+        m.units.push(strims_video_v1_CaptureUnit.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -303,6 +418,18 @@ export type strims_video_v1_CaptureUpdateResponse = CaptureUpdateResponse;
 /* @internal */
 export type strims_video_v1_ICaptureUpdateResponse = ICaptureUpdateResponse;
 /* @internal */
+export const strims_video_v1_CaptureConfig = CaptureConfig;
+/* @internal */
+export type strims_video_v1_CaptureConfig = CaptureConfig;
+/* @internal */
+export type strims_video_v1_ICaptureConfig = ICaptureConfig;
+/* @internal */
+export const strims_video_v1_CaptureUnit = CaptureUnit;
+/* @internal */
+export type strims_video_v1_CaptureUnit = CaptureUnit;
+/* @internal */
+export type strims_video_v1_ICaptureUnit = ICaptureUnit;
+/* @internal */
 export const strims_video_v1_CaptureAppendRequest = CaptureAppendRequest;
 /* @internal */
 export type strims_video_v1_CaptureAppendRequest = CaptureAppendRequest;
@@ -326,3 +453,7 @@ export const strims_video_v1_CaptureCloseResponse = CaptureCloseResponse;
 export type strims_video_v1_CaptureCloseResponse = CaptureCloseResponse;
 /* @internal */
 export type strims_video_v1_ICaptureCloseResponse = ICaptureCloseResponse;
+/* @internal */
+export const strims_video_v1_CaptureConfig_Codec = CaptureConfig.Codec;
+/* @internal */
+export type strims_video_v1_CaptureConfig_Codec = CaptureConfig.Codec;

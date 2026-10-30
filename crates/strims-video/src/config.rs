@@ -152,7 +152,7 @@ impl Default for RtmpSettings {
     }
 }
 
-/// The UI's captures. An append's data is bounded by the frontend
+/// The UI's captures. An append's bytes are bounded by the frontend
 /// connection's message size.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CaptureSettings {
@@ -160,8 +160,25 @@ pub struct CaptureSettings {
     pub max_captures: usize,
     /// Networks one capture is listed on.
     pub max_network_keys: usize,
-    /// The longest MIME type, in bytes of printable ASCII.
-    pub max_mime_bytes: usize,
+    /// Access units one append carries.
+    pub max_units_per_append: usize,
+    /// The bytes of one capture's appends waiting for its writer.
+    pub max_queued_bytes: usize,
+    /// The bytes a second a capture takes over time, its configs' and
+    /// units' with [`ITEM_COST`](crate::capture::ITEM_COST) for
+    /// each: about 34 Mbit/s, several times a capture's encoders' rate.
+    pub max_rate: u64,
+    /// The bytes a capture takes at once beyond its rate: two of the
+    /// largest keyframes.
+    pub max_burst: u64,
+    /// How long a capture's partial integrity unit waits after its first
+    /// byte before it is signed ([`SignTimer`](crate::units::SignTimer)),
+    /// for a capture of 8-chunk units.
+    pub sign_interval: Duration,
+    /// The same, for a capture of 1-chunk units: one whose nominal
+    /// bitrate is below
+    /// [`LOW_RATE_BITRATE`](crate::capture::LOW_RATE_BITRATE).
+    pub low_rate_sign_interval: Duration,
 }
 
 impl Default for CaptureSettings {
@@ -169,7 +186,12 @@ impl Default for CaptureSettings {
         CaptureSettings {
             max_captures: 2,
             max_network_keys: 16,
-            max_mime_bytes: 256,
+            max_units_per_append: 512,
+            max_queued_bytes: 16 * 1024 * 1024,
+            max_rate: 4 * 1024 * 1024,
+            max_burst: 2 * crate::units::MAX_RECORD_LEN as u64,
+            sign_interval: Duration::from_millis(300),
+            low_rate_sign_interval: Duration::from_millis(200),
         }
     }
 }
@@ -367,8 +389,8 @@ pub struct Metrics {
     /// Node calls that failed: creating, adding or removing a swarm, or
     /// opening its reader.
     pub host_errors: u64,
-    /// Capture records dropped because they ended in a frame that held
-    /// the end of the record before them.
+    /// Capture units the writer dropped: those before a capture's first
+    /// keyframe.
     pub dropped_records: u64,
     /// Capture writes into a swarm that failed.
     pub write_errors: u64,

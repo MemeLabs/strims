@@ -29,15 +29,18 @@ use strims_proto::autoseed::v1::{
 use strims_proto::network::v1::directory::listing::{Content, Media};
 use strims_proto::network::v1::directory::{Listing, ListingSnippet};
 use strims_proto::service::CallError;
+use strims_proto::video::v1::capture_config::Codec;
 use strims_proto::video::v1::egress_open_stream_response::Body;
 use strims_proto::video::v1::{
-    CaptureAppendRequest, CaptureClient, CaptureOpenRequest, EgressClient, EgressOpenStreamRequest,
-    EgressOpenStreamResponse,
+    CaptureAppendRequest, CaptureClient, CaptureConfig, CaptureOpenRequest, CaptureUnit,
+    EgressClient, EgressOpenStreamRequest, EgressOpenStreamResponse,
 };
 use strims_rpc::{Client, ClientStream, Router, Timer};
 use strims_testworld::*;
 use strims_transfer::{SwarmHost, TransferId};
 use strims_video::hls::HlsRoutes;
+use strims_video::synth::script::avcc;
+use strims_video::units::UnitReader;
 use strims_video::{
     AutoseedSettings, Config, NoVideoHost, SwarmKind, VideoControl, VideoSwarm, bind_frontend,
 };
@@ -127,7 +130,8 @@ impl Ui {
             .rules
     }
 
-    /// Opens a capture listed on `key`: its id and swarm.
+    /// Opens a capture listed on `key` and writes its first picture,
+    /// [`first_picture`], so it is listed: its id and swarm.
     async fn open_capture(&self, video: &Control, key: &[u8], title: &str) -> (Vec<u8>, SwarmId) {
         let req = CaptureOpenRequest {
             directory_snippet: Some(ListingSnippet {
@@ -135,20 +139,45 @@ impl Ui {
                 live: true,
                 ..Default::default()
             }),
-            mime_type: "video/webm".into(),
             network_keys: vec![key.to_vec()],
+            bitrate: 2_000_000,
         };
         let id = self.capture.open(&req).await.unwrap().id;
+        let config = CaptureConfig {
+            track: 1,
+            codec: Codec::H264 as i32,
+            config: avcc(640, 360),
+        };
+        self.append_unit(&id, vec![config], 0, true, &first_picture())
+            .await;
         let tid = TransferId::from_bytes(&id).unwrap();
         let c = video.captures().into_iter().find(|c| c.id == tid).unwrap();
         (id, Uri::parse(&c.swarm_uri).unwrap().id)
     }
 
-    async fn append(&self, id: &[u8], data: &[u8]) {
+    /// Appends a picture at `timestamp_us` to capture `id`.
+    async fn append(&self, id: &[u8], timestamp_us: i64, data: &[u8]) {
+        self.append_unit(id, Vec::new(), timestamp_us, false, data)
+            .await;
+    }
+
+    async fn append_unit(
+        &self,
+        id: &[u8],
+        configs: Vec<CaptureConfig>,
+        timestamp_us: i64,
+        keyframe: bool,
+        data: &[u8],
+    ) {
         let req = CaptureAppendRequest {
             id: id.to_vec(),
-            data: data.to_vec(),
-            segment_end: true,
+            configs,
+            units: vec![CaptureUnit {
+                track: 1,
+                timestamp_us,
+                keyframe,
+                data: data.to_vec(),
+            }],
         };
         self.capture.append(&req).await.unwrap();
     }
@@ -379,6 +408,21 @@ fn record(i: u8, n: usize) -> Vec<u8> {
         .collect()
 }
 
+/// The keyframe a capture of [`Ui::open_capture`] starts with.
+fn first_picture() -> Vec<u8> {
+    record(0, 2_000)
+}
+
+/// The payload of the next unit a unit-format stream's records carry.
+async fn read_unit(s: &mut Responses, reader: &mut UnitReader) -> Vec<u8> {
+    loop {
+        let rec = read_record(s).await;
+        if let Some(u) = reader.read(&rec) {
+            return u.payload.to_vec();
+        }
+    }
+}
+
 /// A stream reads a seeded swarm where it is, and goes on reading it
 /// once the seed ends; the swarm goes with the stream.
 #[test]
@@ -390,13 +434,13 @@ fn a_stream_on_a_seeded_swarm_survives_deleting_the_rule() {
         let r = p.ub.create(rule(&p.key, &swarm, b"")).await.unwrap();
         p.wait_seeding(&swarm).await;
 
-        let uri = media(&p.b, 10).remove(0).swarm_uri;
+        let listed = media(&p.b, 10).remove(0);
         let mut s =
             p.ub.egress
                 .open_stream(&EgressOpenStreamRequest {
-                    swarm_uri: uri,
+                    swarm_uri: listed.swarm_uri,
                     network_keys: vec![p.key.clone()],
-                    mime_type: String::new(),
+                    mime_type: listed.mime_type,
                 })
                 .await
                 .unwrap();
@@ -406,9 +450,11 @@ fn a_stream_on_a_seeded_swarm_survives_deleting_the_rule() {
         let v = video_swarm(&p.vb, &swarm).unwrap();
         assert_eq!((v.kind, v.seeds, v.streams), (SwarmKind::Seed, 1, 1));
         assert_eq!(p.b.host.swarms_of(&swarm), (0, 1));
+        let mut reader = UnitReader::new();
+        assert_eq!(read_unit(&mut s, &mut reader).await, first_picture());
         let first = record(1, 70_000);
-        p.ua.append(&id, &first).await;
-        assert_eq!(read_record(&mut s).await, first);
+        p.ua.append(&id, 33_333, &first).await;
+        assert_eq!(read_unit(&mut s, &mut reader).await, first);
 
         p.ub.delete(r.id).await;
         wait_for(10, "the seed to end", || {
@@ -418,8 +464,8 @@ fn a_stream_on_a_seeded_swarm_survives_deleting_the_rule() {
         let v = video_swarm(&p.vb, &swarm).unwrap();
         assert_eq!((v.seeds, v.streams), (0, 1));
         let second = record(2, 80_000);
-        p.ua.append(&id, &second).await;
-        assert_eq!(read_record(&mut s).await, second);
+        p.ua.append(&id, 66_667, &second).await;
+        assert_eq!(read_unit(&mut s, &mut reader).await, second);
 
         drop(s);
         wait_for(10, "the stream's swarm to go", || {

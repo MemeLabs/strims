@@ -40,11 +40,6 @@ pub enum VideoError {
     /// The store failed.
     #[error(transparent)]
     Store(#[from] strims_dao::Error),
-    /// A capture's MIME type is empty, over
-    /// [`CaptureSettings::max_mime_bytes`](crate::CaptureSettings::max_mime_bytes),
-    /// or not printable ASCII.
-    #[error("invalid mime type")]
-    MimeType,
     /// A capture names no networks, or a capture or stream more than its
     /// bound.
     #[error("wrong number of network keys")]
@@ -61,10 +56,19 @@ pub enum VideoError {
     /// id.
     #[error("capture not found")]
     CaptureNotFound,
-    /// A capture record ended in a frame that holds the end of the record
-    /// before it, so it was dropped. The capture goes on.
-    #[error("record dropped: it ended too soon after the one before it")]
-    RecordDropped,
+    /// A capture's decoder config or access unit is malformed or breaks
+    /// the capture's rules ([`capture`](crate::capture#media)). The append
+    /// wrote nothing, and the capture goes on.
+    #[error("invalid capture media: {0}")]
+    CaptureMedia(String),
+    /// A capture's append would take it over
+    /// [`CaptureSettings::max_rate`](crate::CaptureSettings::max_rate).
+    #[error("capture over its rate")]
+    CaptureRate,
+    /// A capture's waiting appends hold
+    /// [`CaptureSettings::max_queued_bytes`](crate::CaptureSettings::max_queued_bytes).
+    #[error("capture busy")]
+    CaptureBusy,
     /// The swarm URI is over
     /// [`EgressSettings::max_uri_bytes`](crate::EgressSettings::max_uri_bytes).
     #[error("swarm uri too long")]

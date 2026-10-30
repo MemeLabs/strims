@@ -22,12 +22,17 @@ use strims_kv::MemoryKv;
 use strims_ppspp::{SwarmId, SwarmOptions, Uri, WriterOptions};
 use strims_proto::network::v1::directory::ListingSnippet;
 use strims_proto::service::CallError;
+use strims_proto::video::v1::capture_config::Codec;
 use strims_proto::video::v1::egress_open_stream_response::Body;
-use strims_proto::video::v1::{EgressClient, EgressOpenStreamRequest, EgressOpenStreamResponse};
+use strims_proto::video::v1::{
+    CaptureConfig, CaptureUnit, EgressClient, EgressOpenStreamRequest, EgressOpenStreamResponse,
+};
 use strims_rpc::{Client, ClientStream, Router};
 use strims_testworld::*;
 use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
 use strims_video::hls::HlsRoutes;
+use strims_video::synth::script::avcc;
+use strims_video::units::UnitReader;
 use strims_video::{
     Config, EgressSettings, NoVideoHost, SwarmKind, VideoControl, bind_frontend, capture_options,
 };
@@ -143,11 +148,21 @@ async fn open(
     uri: &str,
     keys: &[Vec<u8>],
 ) -> Result<(Responses, Vec<u8>), String> {
+    open_as(e, uri, keys, "").await
+}
+
+/// [`open`] of a stream of the format `mime` names.
+async fn open_as(
+    e: &EgressClient<Client>,
+    uri: &str,
+    keys: &[Vec<u8>],
+    mime: &str,
+) -> Result<(Responses, Vec<u8>), String> {
     let mut s = e
         .open_stream(&EgressOpenStreamRequest {
             swarm_uri: uri.into(),
             network_keys: keys.to_vec(),
-            mime_type: String::new(),
+            mime_type: mime.into(),
         })
         .await
         .unwrap();
@@ -386,13 +401,42 @@ fn a_local_captures_swarm_is_read_where_it_is() {
         let video = start(&a, config);
         let id = video
             .open_capture(
-                "video/webm",
                 vec![net.public.clone()],
                 ListingSnippet::default(),
+                2_000_000,
             )
             .await
             .unwrap();
         let uri = video.captures()[0].swarm_uri.clone();
+        let mime = r#"video/x.strims-units;codecs="avc1.64001f""#;
+        let configs = || {
+            vec![CaptureConfig {
+                track: 1,
+                codec: Codec::H264 as i32,
+                config: avcc(640, 360),
+            }]
+        };
+        // Pictures over a frame each, the first a keyframe.
+        let units = |from: u8, n: u8| -> Vec<CaptureUnit> {
+            (from..from + n)
+                .map(|i| CaptureUnit {
+                    track: 1,
+                    timestamp_us: i64::from(i) * 33_333,
+                    keyframe: i == 0,
+                    data: record(i, 6_000),
+                })
+                .collect()
+        };
+        // The payloads of the units in records `rs`.
+        let payloads = |rs: Vec<(Vec<u8>, bool)>| -> Vec<Vec<u8>> {
+            let mut reader = UnitReader::new();
+            rs.iter()
+                .filter_map(|(r, flagged)| {
+                    assert!(!flagged);
+                    reader.read(r).map(|u| u.payload.to_vec())
+                })
+                .collect()
+        };
         let swarm = Uri::parse(&uri).unwrap().id;
         let e = egress(&video);
 
@@ -400,25 +444,32 @@ fn a_local_captures_swarm_is_read_where_it_is() {
         let other = Publisher::new(&a, 9, capture_options()).await;
         let (_other_stream, _) = open(&e, &other.uri, &[]).await.unwrap();
 
-        let (mut s, tid) = open(&e, &uri, &[]).await.unwrap();
+        let (mut s, tid) = open_as(&e, &uri, &[], mime).await.unwrap();
         assert_eq!(tid, id.as_bytes().to_vec());
         assert_eq!(a.host.swarms_of(&swarm), (1, 0));
-        let r = records(0, 2);
-        for x in &r {
-            video.append_capture(&id, x.clone(), true).await.unwrap();
-        }
-        assert_eq!(read(&mut s, 2).await, unflagged(&r));
+        let first = units(0, 2);
+        video
+            .append_capture(&id, configs(), first.clone())
+            .await
+            .unwrap();
+        // The GOP's sync record, then a record per unit.
+        let data = |us: &[CaptureUnit]| us.iter().map(|u| u.data.clone()).collect::<Vec<_>>();
+        assert_eq!(payloads(read(&mut s, 3).await), data(&first));
         drop(s);
         settle().await;
         assert_eq!(a.host.swarms_of(&swarm), (1, 0));
         assert!(a.transfers.list().contains(&id));
-        video.append_capture(&id, r[0].clone(), true).await.unwrap();
+        let more = units(2, 1);
+        video
+            .append_capture(&id, Vec::new(), more.clone())
+            .await
+            .unwrap();
         assert_eq!(video.captures().len(), 1);
 
-        let (mut s, _) = open(&e, &uri, &[]).await.unwrap();
+        let (mut s, _) = open_as(&e, &uri, &[], mime).await.unwrap();
         assert_eq!(
-            read(&mut s, 3).await,
-            unflagged(&[&r[..], &r[..1]].concat())
+            payloads(read(&mut s, 4).await),
+            data(&[&first[..], &more[..]].concat())
         );
         video.close_capture(&id).await.unwrap();
         match next(&mut s).await.unwrap() {

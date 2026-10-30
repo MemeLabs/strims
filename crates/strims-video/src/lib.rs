@@ -109,14 +109,16 @@
 //!   integrity unit signed), then takes the listing, snippet, transfer, slot
 //!   and swarm down; a session that replaces it keeps the slot, so the
 //!   node's streams of the channel go on after a discontinuity.
-//! - **Captures** ([`capture`]): the UI's recording. A capture has a
-//!   fresh key, a swarm of [`capture_options`], its snippet signed with
-//!   its key, and a listing of its MIME type and swarm URI on each of its
-//!   networks. Its records are appended in order; one that would end in
-//!   the frame of the record before it is dropped, and the capture goes
+//! - **Captures** ([`capture`]): the UI's encoded media. A capture has a
+//!   fresh key, a swarm of [`capture_options_for`] its nominal bitrate,
+//!   its snippet signed with its key, and, from its first record, a
+//!   listing of its unit-format MIME type and swarm URI on each of its
+//!   networks. Its decoder configs and access units are checked and
+//!   written in order through a [`UnitWriter`](units::UnitWriter); an
+//!   append that breaks its rules is refused whole, and the capture goes
 //!   on. A capture closes when asked or with the frontend connection that
-//!   opened it, taking its listings, snippet, transfer and swarm with it.
-//!   Bounds: [`CaptureSettings`].
+//!   opened it, signing its last partial unit and taking its listings,
+//!   snippet, transfer and swarm with it. Bounds: [`CaptureSettings`].
 //! - **Streams** ([`egress`]): a viewer's read of the swarm a magnet URI
 //!   names, in the layout of its [`StreamFormat`], as [`EgressPiece`]s:
 //!   data, record ends, and a discontinuity before the next whole record
@@ -201,7 +203,7 @@ pub mod synth;
 mod test_util;
 pub mod units;
 
-pub use capture::{CaptureInfo, capture_options};
+pub use capture::{CaptureInfo, capture_options, capture_options_for};
 pub use channels::{ChannelUrl, MAX_CHANNELS};
 pub use config::{
     AutoseedSettings, CaptureSettings, Config, ConfigError, EgressSettings, HlsSettings,
