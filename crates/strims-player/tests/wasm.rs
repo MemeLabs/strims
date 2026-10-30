@@ -13,7 +13,7 @@
 use js_sys::{Array, Object, Reflect, Uint8Array};
 use strims_base::time::Time;
 use strims_chunkstream::chunked::{ChunkedRecordDecoder, Item};
-use strims_player::wasm::JsRemuxer;
+use strims_player::wasm::{JsDemuxer, JsRemuxer};
 use strims_video::synth::script::{Script, ScriptConfig, TagKind};
 use strims_video::units::MAX_RECORD_LEN;
 use strims_video::units::record::{Record, parse_record};
@@ -223,4 +223,109 @@ fn hostile_bytes_answer_without_throwing() {
     }
     let _ = r.finish();
     assert!(number(&r.metrics(), "messages") == 200.0);
+}
+
+#[wasm_bindgen_test]
+fn demuxed_configs_and_units_have_their_declared_shapes() {
+    let mut d = JsDemuxer::new();
+    let mut out = Vec::new();
+    for rec in records(&config()) {
+        out.extend(d.push(&rec, true, false).iter());
+    }
+    let configs = &out[0];
+    assert_eq!(get(configs, "type").as_string().unwrap(), "configs");
+    assert_keys(configs, &["type", "tracks"]);
+    let tracks: Array = get(configs, "tracks").dyn_into().unwrap();
+    assert_eq!(tracks.length(), 2);
+    let video = tracks.get(0);
+    assert_keys(
+        &video,
+        &[
+            "id",
+            "kind",
+            "codec",
+            "description",
+            "timescale",
+            "width",
+            "height",
+        ],
+    );
+    assert_eq!(get(&video, "codec").as_string().unwrap(), "avc1.64001f");
+    let avcc: Uint8Array = get(&video, "description").dyn_into().unwrap();
+    assert_eq!(avcc.byte_offset(), 0);
+    assert_eq!(avcc.buffer().byte_length(), avcc.length());
+    // An avcC record starts with its version, 1.
+    assert_eq!(avcc.get_index(0), 1);
+    let audio = tracks.get(1);
+    assert_keys(
+        &audio,
+        &[
+            "id",
+            "kind",
+            "codec",
+            "description",
+            "timescale",
+            "sampleRate",
+            "numberOfChannels",
+            "preSkip",
+        ],
+    );
+    assert_eq!(get(&audio, "codec").as_string().unwrap(), "mp4a.40.2");
+    assert_eq!(number(&audio, "numberOfChannels"), 2.0);
+    assert_eq!(number(&audio, "preSkip"), 0.0);
+
+    let mut units = 0;
+    for u in &out[1..] {
+        assert_eq!(get(u, "type").as_string().unwrap(), "unit");
+        assert_keys(
+            u,
+            &[
+                "type",
+                "track",
+                "kind",
+                "keyframe",
+                "timestamp",
+                "decodeTimestamp",
+                "duration",
+                "published",
+                "data",
+            ],
+        );
+        assert_owned_bytes(u);
+        // Whole microseconds.
+        for key in ["timestamp", "decodeTimestamp", "duration"] {
+            assert_eq!(number(u, key).fract(), 0.0);
+        }
+        let audio = get(u, "kind").as_string().unwrap() == "audio";
+        // An AAC frame of 1024 samples at 48 kHz.
+        assert_eq!(number(u, "duration"), if audio { 21_333.0 } else { 0.0 });
+        assert!(number(u, "published") > 1.7e12);
+        units += 1;
+    }
+    let m = d.metrics();
+    assert_eq!(number(&m, "units"), f64::from(units));
+    assert!(number(&m, "memoryBytes") > 0.0);
+    assert_eq!(number(&get(&m, "reader"), "malformed"), 0.0);
+}
+
+#[wasm_bindgen_test]
+fn hostile_bytes_answer_the_demuxer_without_throwing() {
+    let mut d = JsDemuxer::new();
+    let mut x: u32 = 0x85eb_ca6b;
+    for i in 0..200 {
+        let len = (x % 3000) as usize;
+        let data: Vec<u8> = (0..len)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 17;
+                x ^= x << 5;
+                x as u8
+            })
+            .collect();
+        for o in d.push(&data, i % 3 == 0, i % 17 == 0).iter() {
+            let t = get(&o, "type").as_string().unwrap();
+            assert!(["configs", "unit", "gap", "discontinuity", "restart"].contains(&t.as_str()));
+        }
+    }
+    assert!(number(&d.metrics(), "messages") == 200.0);
 }

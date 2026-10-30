@@ -6,7 +6,7 @@
 // crate's Cargo.toml. crates/strims-player/tests/wasm.rs checks the objects'
 // shapes.
 declare module "*/strims-player/Cargo.toml" {
-  /** Fetches and instantiates the module, once per worker, before any Remuxer is made. */
+  /** Fetches and instantiates the module, once per worker, before any Remuxer or Demuxer is made. */
   export default function init(): Promise<unknown>;
 
   /**
@@ -155,6 +155,123 @@ declare module "*/strims-player/Cargo.toml" {
   export interface RestartOutput {
     type: "restart";
     offset: number;
+  }
+
+  /**
+   * Demuxes one `video/x.strims-units` stream, as the Egress RPC's `Data`
+   * messages carry it, for WebCodecs decoders: the tracks' decoder configs
+   * whenever they change, then each access unit with its timestamps, publish
+   * time and payload, in stream order.
+   *
+   * A video track's units start at a keyframe after its config and after
+   * every gap, so a decoder fed them in order never sees a unit whose
+   * references went missing. A writer session that starts its timestamps
+   * over is moved to present right after the output so far (a `restart`
+   * output), so presentation times never go back across sessions.
+   */
+  export class Demuxer {
+    constructor();
+    /**
+     * Takes one `Data` message, as `Remuxer.push` does, and answers the
+     * outputs it completed, in order. No input throws; a throw is the module
+     * trapping, after which the worker should be discarded.
+     */
+    push(data: Uint8Array, segmentEnd: boolean, discontinuity: boolean): DemuxerOutput[];
+    metrics(): DemuxerMetrics;
+    /** Frees its memory now (garbage collection also does); later calls throw. */
+    free(): void;
+  }
+
+  export type DemuxerOutput =
+    | ConfigsOutput
+    | DemuxedUnitOutput
+    | GapOutput
+    | DiscontinuityOutput
+    | RestartOutput;
+
+  /**
+   * The tracks' decoder configs changed: every track's, in track id order.
+   * Units after it decode with them; a video track whose config changed
+   * resumes at a keyframe.
+   */
+  export interface ConfigsOutput {
+    type: "configs";
+    tracks: DecoderTrack[];
+  }
+
+  export type DecoderTrack = VideoDecoderTrack | AudioDecoderTrack;
+
+  /** A `VideoDecoderConfig`'s makings. */
+  export interface VideoDecoderTrack {
+    id: number;
+    kind: "video";
+    /** The WebCodecs codec string, e.g. `avc1.64001f`. */
+    codec: string;
+    /**
+     * The avcC record: chunks are length-prefixed NAL units. A new
+     * ArrayBuffer of exactly these bytes.
+     */
+    description: Uint8Array<ArrayBuffer>;
+    timescale: number;
+    /** The picture size after cropping, in pixels. */
+    width: number;
+    height: number;
+  }
+
+  /** An `AudioDecoderConfig`'s makings. */
+  export interface AudioDecoderTrack {
+    id: number;
+    kind: "audio";
+    /** The WebCodecs codec string: `mp4a.40.2` and the like, or `opus`. */
+    codec: string;
+    /**
+     * The AudioSpecificConfig (chunks are raw AAC frames) or the OpusHead. A
+     * new ArrayBuffer of exactly these bytes.
+     */
+    description: Uint8Array<ArrayBuffer>;
+    timescale: number;
+    /** The output sample rate (48 kHz for Opus), and the channel count (0: a program config element sets it). */
+    sampleRate: number;
+    numberOfChannels: number;
+    /** Opus: 48 kHz samples a decoder drops at its start (decoders given the OpusHead drop them). 0 for AAC. */
+    preSkip: number;
+  }
+
+  /** One access unit, as an EncodedVideoChunk or EncodedAudioChunk takes it. */
+  export interface DemuxedUnitOutput {
+    type: "unit";
+    track: number;
+    kind: "video" | "audio";
+    /** Decoding can start at it: a "key" chunk. */
+    keyframe: boolean;
+    /** Its presentation time in whole microseconds, moved past any restart. */
+    timestamp: number;
+    /** Its decode time in whole microseconds. */
+    decodeTimestamp: number;
+    /** How long it lasts in microseconds where its payload says (AAC, Opus); 0 for video. */
+    duration: number;
+    /** Its publish time on the writer's Unix clock, in milliseconds. */
+    published: number;
+    /** The payload: a new ArrayBuffer of exactly these bytes, transferable. */
+    data: Uint8Array<ArrayBuffer>;
+  }
+
+  /** Counts since the Demuxer was made. */
+  export interface DemuxerMetrics {
+    messages: number;
+    bytes: number;
+    records: number;
+    oversizeRecords: number;
+    partialRecords: number;
+    discontinuities: number;
+    /** Units output. */
+    units: number;
+    /** Units dropped for decoding before their track's last within a writer session. */
+    droppedBackwards: number;
+    restarts: number;
+    /** The module's linear memory, in bytes; it only grows. */
+    memoryBytes: number;
+    reader: RemuxerMetrics["reader"];
   }
 
   /** Counts since the Remuxer was made, and what it holds now. */

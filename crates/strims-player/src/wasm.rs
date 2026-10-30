@@ -1,23 +1,28 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The module's API: the `Remuxer` class the player worker calls, as
-//! `src/web/strims-player.d.ts` declares it.
+//! The module's API: the `Remuxer` and `Demuxer` classes the player
+//! workers call, as `src/web/strims-player.d.ts` declares them.
 //!
 //! Outputs are plain objects, which a worker can post on (Firefox's
-//! MediaSource lives in the window). Every `data` is a new `Uint8Array`
-//! over an `ArrayBuffer` of exactly its bytes, copied out of the module's
-//! memory, so the caller owns it and can transfer it. Times are numbers:
-//! presentation times in seconds, publish times in Unix milliseconds,
-//! offsets in seconds. No input throws; a call throws only when the
-//! module traps (its memory can't grow), after which it is unusable.
+//! MediaSource lives in the window). Every `data` and `description` is a
+//! new `Uint8Array` over an `ArrayBuffer` of exactly its bytes, copied out
+//! of the module's memory, so the caller owns it and can transfer it.
+//! Times are numbers: the remuxer's presentation times in seconds, the
+//! demuxer's unit times in whole microseconds (as WebCodecs chunks take
+//! them), publish times in Unix milliseconds, offsets in seconds. No input
+//! throws; a call throws only when the module traps (its memory can't
+//! grow), after which it is unusable.
 
 use js_sys::{Array, Object, Reflect, Uint8Array};
+use strims_base::time::Duration;
 use strims_video::{CodecParams, DecoderConfig, TrackKind, units::UnitReaderMetrics};
 use wasm_bindgen::prelude::*;
 
+use crate::demux::{DemuxOutput, DemuxedUnit, Demuxer, DemuxerMetrics};
 use crate::mime::mse_codec;
 use crate::remux::{Output, Remuxer, RemuxerMetrics, UnitInfo};
+use crate::webcodecs;
 
 /// Bytes of a wasm memory page.
 const PAGE_BYTES: f64 = 65_536.0;
@@ -68,6 +73,44 @@ impl JsRemuxer {
             outputs.push(&output_object(&output));
         }
         outputs
+    }
+}
+
+/// A [`Demuxer`] for JS: `new Demuxer()`, then `push` per Egress `Data`
+/// message, each answering the outputs completed, in order.
+#[wasm_bindgen(js_name = Demuxer)]
+pub struct JsDemuxer {
+    inner: Demuxer,
+}
+
+impl Default for JsDemuxer {
+    fn default() -> Self {
+        JsDemuxer::new()
+    }
+}
+
+#[wasm_bindgen(js_class = Demuxer)]
+impl JsDemuxer {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> JsDemuxer {
+        JsDemuxer {
+            inner: Demuxer::new(),
+        }
+    }
+
+    /// One `Data` message: its bytes, `segmentEnd` and `discontinuity`.
+    /// The bytes are copied during the call.
+    pub fn push(&mut self, data: &[u8], segment_end: bool, discontinuity: bool) -> Array {
+        self.inner.message(data, segment_end, discontinuity);
+        let outputs = Array::new();
+        while let Some(output) = self.inner.poll_output() {
+            outputs.push(&demux_object(&output));
+        }
+        outputs
+    }
+
+    pub fn metrics(&self) -> Object {
+        demuxer_metrics(&self.inner.metrics())
     }
 }
 
@@ -177,6 +220,112 @@ fn unit_object(unit: &UnitInfo) -> Object {
     set_bool(&o, "keyframe", unit.keyframe);
     set_num(&o, "pts", unit.pts.as_secs_f64());
     set_num(&o, "published", unit.published.unix_millis() as f64);
+    o
+}
+
+fn demux_object(output: &DemuxOutput<'_>) -> Object {
+    let o = Object::new();
+    match output {
+        DemuxOutput::Configs { tracks } => {
+            set_str(&o, "type", "configs");
+            let list = Array::new();
+            for track in *tracks {
+                list.push(&decoder_track_object(track));
+            }
+            set(&o, "tracks", &list);
+        }
+        DemuxOutput::Unit(unit) => demuxed_unit(&o, unit),
+        DemuxOutput::Gap {
+            track,
+            kind,
+            missing,
+        } => {
+            set_str(&o, "type", "gap");
+            set_num(&o, "track", f64::from(track.0));
+            set_str(&o, "kind", kind_name(*kind));
+            set_num(&o, "missing", *missing as f64);
+        }
+        DemuxOutput::Discontinuity => set_str(&o, "type", "discontinuity"),
+        DemuxOutput::Restart { offset } => {
+            set_str(&o, "type", "restart");
+            set_num(&o, "offset", offset.as_secs_f64());
+        }
+    }
+    o
+}
+
+/// `d` in whole microseconds, rounded to the nearest.
+fn micros(d: Duration) -> f64 {
+    (i128::from(d.as_nanos()) + 500).div_euclid(1000) as f64
+}
+
+fn demuxed_unit(o: &Object, unit: &DemuxedUnit<'_>) {
+    set_str(o, "type", "unit");
+    set_num(o, "track", f64::from(unit.track.0));
+    set_str(o, "kind", kind_name(unit.kind));
+    set_bool(o, "keyframe", unit.keyframe);
+    set_num(o, "timestamp", micros(unit.pts));
+    set_num(o, "decodeTimestamp", micros(unit.dts));
+    set_num(o, "duration", micros(unit.duration));
+    set_num(o, "published", unit.published.unix_millis() as f64);
+    set(o, "data", &Uint8Array::from(unit.data));
+}
+
+fn decoder_track_object(config: &DecoderConfig) -> Object {
+    let o = Object::new();
+    set_num(&o, "id", f64::from(config.track.0));
+    set_str(&o, "kind", kind_name(config.kind));
+    set_str(&o, "codec", webcodecs::codec(config));
+    set(
+        &o,
+        "description",
+        &Uint8Array::from(webcodecs::description(config)),
+    );
+    set_num(&o, "timescale", f64::from(config.timescale));
+    match &config.params {
+        CodecParams::Avc { width, height, .. } => {
+            set_num(&o, "width", f64::from(*width));
+            set_num(&o, "height", f64::from(*height));
+        }
+        CodecParams::Aac {
+            sample_rate,
+            channels,
+            ..
+        } => {
+            set_num(&o, "sampleRate", f64::from(*sample_rate));
+            set_num(&o, "numberOfChannels", f64::from(*channels));
+            set_num(&o, "preSkip", 0.0);
+        }
+        CodecParams::Opus {
+            channels, pre_skip, ..
+        } => {
+            set_num(&o, "sampleRate", f64::from(strims_video::opus::SAMPLE_RATE));
+            set_num(&o, "numberOfChannels", f64::from(*channels));
+            set_num(&o, "preSkip", f64::from(*pre_skip));
+        }
+        _ => {}
+    }
+    o
+}
+
+fn demuxer_metrics(m: &DemuxerMetrics) -> Object {
+    let o = Object::new();
+    for (key, value) in [
+        ("messages", m.messages),
+        ("bytes", m.bytes),
+        ("records", m.records),
+        ("oversizeRecords", m.oversize_records),
+        ("partialRecords", m.partial_records),
+        ("discontinuities", m.discontinuities),
+        ("units", m.units),
+        ("droppedBackwards", m.dropped_backwards),
+        ("restarts", m.restarts),
+    ] {
+        set_num(&o, key, value as f64);
+    }
+    let memory = core::arch::wasm32::memory_size::<0>() as f64 * PAGE_BYTES;
+    set_num(&o, "memoryBytes", memory);
+    set(&o, "reader", &reader_metrics(&m.reader));
     o
 }
 

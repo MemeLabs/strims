@@ -2,18 +2,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The browser players' core: a unit-format stream remuxed into the fMP4
-//! a MediaSource (or iOS's ManagedMediaSource) SourceBuffer appends.
+//! a MediaSource (or iOS's ManagedMediaSource) SourceBuffer appends, for
+//! the baseline player, or demuxed into the decoder configs and access
+//! units WebCodecs decoders take, for the low-latency player.
 //!
-//! It runs in the UI's player worker, built for wasm32 with wasm-bindgen
-//! (`--target web`); the [`Remuxer`] is sans-IO, so it builds and tests
-//! natively too. The unit reader and the fMP4 writers are strims-video's
-//! ([`strims_video::units::UnitReader`], [`strims_video::fmp4`]), so the
-//! wire format has one implementation.
+//! It runs in the UI's player workers, built for wasm32 with wasm-bindgen
+//! (`--target web`); the [`Remuxer`] and the [`Demuxer`] are sans-IO, so
+//! they build and test natively too. The unit reader and the fMP4 writers
+//! are strims-video's ([`strims_video::units::UnitReader`],
+//! [`strims_video::fmp4`]), so the wire format has one implementation.
 //!
 //! - [`remux`]: the [`Remuxer`] and its outputs.
+//! - [`demux`]: the [`Demuxer`] and its outputs.
 //! - [`mime`]: the SourceBuffer type of an init's tracks.
-//! - `wasm` (wasm32 only): the module's API, the `Remuxer` class that
-//!   `src/web/strims-player.d.ts` declares.
+//! - [`webcodecs`]: the codec strings and descriptions WebCodecs decoders
+//!   take, and the durations audio payloads carry.
+//! - `wasm` (wasm32 only): the module's API, the `Remuxer` and `Demuxer`
+//!   classes that `src/web/strims-player.d.ts` declares.
 //!
 //! # Input
 //!
@@ -24,9 +29,10 @@
 //! ([`strims_video::frontend`]). Any source of the same pieces
 //! ([`strims_video::EgressPiece`]) feeds it alike.
 //!
-//! # Output
+//! # Remuxed output
 //!
-//! The outputs ([`Output`]) come in the order a SourceBuffer appends them:
+//! The remuxer's outputs ([`Output`]) come in the order a SourceBuffer
+//! appends them:
 //!
 //! - **Inits.** An init segment declares the reader's configs (video
 //!   first, then audio, each by track id), and comes at the next keyframe
@@ -67,11 +73,25 @@
 //! and starts with an init. The same remuxer goes on across a reopened
 //! Egress stream when the new stream's first message is passed as a
 //! discontinuity.
+//!
+//! # Demuxed output
+//!
+//! The [`Demuxer`] takes the same input and gives, in stream order, the
+//! tracks' configs whenever they change, each unit the reader returns
+//! with its timestamps, duration, publish time and payload, and the same
+//! gaps, discontinuities and restarts. It writes nothing out ahead of a
+//! decoder: holding the picture over a loss, A/V sync and the playout
+//! clock are the player's. A writer's restart moves the new session to
+//! follow the presentation so far, so the output's presentation times
+//! never go back across sessions.
 
+pub mod demux;
 pub mod mime;
 pub mod remux;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
+pub mod webcodecs;
 
+pub use demux::{DemuxOutput, DemuxedUnit, Demuxer, DemuxerMetrics};
 pub use mime::{mse_codec, mse_type};
 pub use remux::{MAX_HELD_BYTES, MAX_HELD_UNITS, Output, Remuxer, RemuxerMetrics, UnitInfo};
