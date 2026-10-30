@@ -13,7 +13,6 @@ describe("streamFormat", () => {
     );
     assert.strictEqual(streamFormat(" Video/X.Strims-Units "), StreamFormat.Units);
     assert.strictEqual(streamFormat('video/mp4;codecs="avc1.64001f"'), StreamFormat.Fmp4);
-    assert.strictEqual(streamFormat("video/webm;codecs=vp9,opus"), StreamFormat.Webm);
     assert.strictEqual(streamFormat("video/mp2t"), StreamFormat.Unknown);
     assert.strictEqual(streamFormat(undefined), StreamFormat.Unknown);
   });

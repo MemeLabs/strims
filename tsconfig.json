@@ -17,7 +17,7 @@
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "lib": ["dom", "es6", "es2020", "esnext.asynciterable", "webworker"],
-    "types": ["node", "mocha", "webpack-env", "dom-mediacapture-record"],
+    "types": ["node", "mocha", "webpack-env"],
     "paths": {
       // swiper 8's package.json exports have no types condition
       "swiper": ["./node_modules/swiper/swiper.d.ts"]

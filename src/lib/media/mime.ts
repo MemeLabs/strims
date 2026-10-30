@@ -10,8 +10,6 @@ export const enum StreamFormat {
   Units = "units",
   /** A record per fMP4 segment, `[u16 init length][init][media]`. */
   Fmp4 = "fmp4",
-  /** MediaRecorder's WebM clusters. */
-  Webm = "webm",
   Unknown = "unknown",
 }
 
@@ -25,8 +23,6 @@ export const streamFormat = (mime: string): StreamFormat => {
       return StreamFormat.Units;
     case "video/mp4":
       return StreamFormat.Fmp4;
-    case "video/webm":
-      return StreamFormat.Webm;
     default:
       return StreamFormat.Unknown;
   }

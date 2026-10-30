@@ -81,7 +81,7 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
   return null;
 };
 
-// An fMP4 or WebM record stream, appended to a MediaSource in the window.
+// An fMP4 record stream, appended to a MediaSource in the window.
 export const MediaSourceMedia: React.FC<SwarmMediaProps> = ({
   networkKey,
   swarmUri,

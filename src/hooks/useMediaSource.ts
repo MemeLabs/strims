@@ -7,14 +7,7 @@ import { MutableRefObject, useEffect, useState } from "react";
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
 import { useClient } from "../contexts/FrontendApi";
 import * as fmp4 from "../lib/media/fmp4";
-import * as webm from "../lib/media/webm";
-
-const decoders = {
-  "video/mp4": (mimeType: string) => new fmp4.Decoder(mimeType),
-  "video/webm": () => new webm.Decoder(),
-};
-
-export type MimeType = keyof typeof decoders;
+import { StreamFormat, streamFormat } from "../lib/media/mime";
 
 export interface MediaSourceProps {
   networkKey: string;
@@ -34,8 +27,16 @@ const useMediaSource = ({
   const [mediaSource, setMediaSource] = useState<MediaSource>(null);
 
   useEffect(() => {
-    const [fileFormat] = mimeType.split(";", 1) as [MimeType];
-    const decoder = decoders[fileFormat](mimeType);
+    // Only fMP4 records play through a window MediaSource; a stream of any
+    // other format gets none.
+    if (streamFormat(mimeType) !== StreamFormat.Fmp4) {
+      // eslint-disable-next-line no-console
+      console.warn("the stream can't play: no MediaSource path for", mimeType);
+      setMediaSource(null);
+      return;
+    }
+
+    const decoder = new fmp4.Decoder(mimeType);
     let started = false;
 
     setMediaSource(decoder.source.getMediaSource());
