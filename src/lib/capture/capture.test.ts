@@ -4,7 +4,7 @@
 import assert from "assert";
 
 import { ICaptureAppendRequest } from "../../apis/strims/video/v1/capture";
-import { TrackClock } from "./clock";
+import { Slew, TrackClock } from "./clock";
 import {
   PROFILES,
   avcConfig,
@@ -104,6 +104,16 @@ describe("capture clock", () => {
     // Never back, nor closer than a millisecond.
     assert.equal(c.output(933_000_000_000), 39_333);
     assert.equal(c.output(933_000_033_900), 40_333);
+  });
+});
+
+describe("capture slew", () => {
+  it("follows its target a step at a time", () => {
+    const s = new Slew(50);
+    s.target = 120;
+    assert.deepEqual([s.step(), s.step(), s.step(), s.step()], [50, 100, 120, 120]);
+    s.target = -30;
+    assert.deepEqual([s.step(), s.step(), s.step(), s.step()], [70, 20, -30, -30]);
   });
 });
 

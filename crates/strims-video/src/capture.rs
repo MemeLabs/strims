@@ -9,13 +9,13 @@
 //! ([`UnitSigning::for_stream`]), with [`capture_options_for`] that
 //! signing: 4 KiB chunks, 16 streams, an 8 Ki-chunk window,
 //! Merkle/BLAKE3/Ed25519, and its integrity unit size. It adds the swarm's
-//! transfer under the empty salt and publishes it on the capture's networks
-//! the node has joined, and on the rest as it joins them. It serves the capture's
-//! snippet, signed with the capture key. Once the capture's first record
-//! is written, it keeps a media listing on each network's directory of
-//! the stream's MIME type ([`units_mime`] of its configs) and the swarm
-//! URI; a record of other codecs lists the new MIME type in its place. The
-//! capture's id is its transfer id.
+//! transfer under the empty salt and publishes it on the capture's
+//! networks the node has joined, and on the rest as it joins them. It
+//! serves the capture's snippet, signed with the capture key. Once the
+//! capture's first record is written, it keeps a media listing on each
+//! network's directory of the stream's MIME type ([`units_mime`] of its
+//! configs) and the swarm URI; a record of other codecs lists the new MIME
+//! type in its place. The capture's id is its transfer id.
 //!
 //! A capture's 1 to
 //! [`CaptureSettings::max_network_keys`](crate::CaptureSettings::max_network_keys)
@@ -37,9 +37,8 @@
 //!   its kind, codec string and picture size or channels, comes from the
 //!   record, as a unit reader derives it
 //!   ([`ConfigEntry::decoder_config`]). The capture's configs together are
-//!   at most [`MAX_TRACKS`](crate::fmp4::MAX_TRACKS)
-//!   ([`check_configs`](crate::fmp4::check_configs)), and an append names
-//!   a track at most once.
+//!   at most [`MAX_TRACKS`](crate::fmp4::MAX_TRACKS) ([`check_configs`]),
+//!   and an append names a track at most once.
 //! - A unit names a track whose config is set, and carries its payload,
 //!   its keyframe flag and its presentation time in microseconds on the
 //!   capture's clock, at most [`MAX_TIMESTAMP_US`] from 0. Its decode time
@@ -71,11 +70,11 @@
 //! The units go through a [`UnitWriter`] in frames of the swarm's chunk
 //! size into the swarm, as each append is written. A partial integrity
 //! unit is signed its signing's interval after its first byte
-//! ([`UnitSigning::timer`]): the writer ends its frame, the
-//! swarm writer is flushed, which pads the unit with zeros that read as
-//! padding frames, and the writer goes on where the next unit starts. A
-//! swarm write that fails ends the capture's writing: every later append
-//! fails with [`VideoError::StreamWrite`].
+//! ([`UnitSigning::timer`]): the writer ends its frame, the swarm writer
+//! is flushed, which pads the unit with zeros that read as padding frames,
+//! and the writer goes on where the next unit starts. A swarm write that
+//! fails ends the capture's writing: every later append fails with
+//! [`VideoError::StreamWrite`].
 //!
 //! # Teardown
 //!

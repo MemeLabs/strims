@@ -114,7 +114,7 @@
 //!   its snippet signed with its key, and, from its first record, a
 //!   listing of its unit-format MIME type and swarm URI on each of its
 //!   networks. Its decoder configs and access units are checked and
-//!   written in order through a [`UnitWriter`](units::UnitWriter); an
+//!   written in order through a [`UnitWriter`]; an
 //!   append that breaks its rules is refused whole, and the capture goes
 //!   on. A capture closes when asked or with the frontend connection that
 //!   opened it, signing its last partial unit and taking its listings,

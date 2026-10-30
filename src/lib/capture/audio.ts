@@ -5,7 +5,7 @@
 // or an AudioWorklet where the engine has none there (a worker's processor
 // may take video only), encoded as Opus with WebCodecs.
 
-import { TrackClock, nowUs } from "./clock";
+import { Slew, TrackClock, nowUs } from "./clock";
 import { encoderConfig, opusConfig } from "./opus";
 import { AUDIO_TRACK, CaptureSink } from "./sink";
 import { bytesOf } from "./video";
@@ -95,11 +95,29 @@ interface WorkletBlock {
   data: Float32Array<ArrayBuffer>;
 }
 
+/** Blocks a drift estimate takes its least arrival delay over: 5 s. */
+const DRIFT_WINDOW = 250;
+/** The most the drift estimate moves a window, in microseconds: clocks
+ * drift a few hundred microseconds in a window, while a busy main thread
+ * or an audio dropout moves arrivals by tens of milliseconds at once.
+ */
+const MAX_DRIFT_STEP_US = 2000;
+/** The most a block's stamp moves toward the drift estimate, in
+ * microseconds: a quarter of a percent of the block, far below what
+ * players hear, and well above audio clocks' drift from the system clock
+ * (30 to 50 ppm on the devices measured, 0.1 to 0.2 s an hour).
+ */
+const MAX_SLEW_US = 50;
+
 /**
  * Blocks from an AudioWorklet, stamped by their context frame: the first
  * block's start maps to its arrival less its length, and the rest keep the
- * audio clock's spacing. `driftUs` follows how far arrivals have moved
- * from that mapping since.
+ * audio clock's spacing. The audio clock drifts from the capture's, which
+ * stamps video, so `driftUs` follows how far arrivals have moved from that
+ * mapping, as the least delay of each window's blocks, by at most
+ * MAX_DRIFT_STEP_US a window, and the stamps slew toward it. The context's
+ * own mapping of its time to the page's (getOutputTimestamp) doesn't show
+ * the drift on every engine, and jumps on some.
  */
 class WorkletSamples implements SampleSource {
   public readonly kind = "worklet";
@@ -108,12 +126,13 @@ class WorkletSamples implements SampleSource {
   private closed = false;
   private frame0: number | null = null;
   private at0 = 0;
-  /** The least arrival delay of the blocks in the window so far, less the
-   * first block's.
+  /** How far the audio clock has moved from the capture's since the first
+   * block, as of the last window.
    */
   public driftUs = 0;
   private windowMin = Infinity;
   private windowBlocks = 0;
+  private readonly slew = new Slew(MAX_SLEW_US);
 
   private constructor(
     private readonly context: AudioContext,
@@ -162,8 +181,10 @@ class WorkletSamples implements SampleSource {
     }
     const t = this.at0 + ((frame - this.frame0) * 1e6) / rate;
     this.windowMin = Math.min(this.windowMin, now - length - t);
-    if (++this.windowBlocks === 250) {
-      this.driftUs = Math.round(this.windowMin);
+    if (++this.windowBlocks === DRIFT_WINDOW) {
+      const step = this.windowMin - this.driftUs;
+      this.driftUs += Math.round(Math.max(-MAX_DRIFT_STEP_US, Math.min(MAX_DRIFT_STEP_US, step)));
+      this.slew.target = this.driftUs;
       this.windowMin = Infinity;
       this.windowBlocks = 0;
     }
@@ -172,7 +193,7 @@ class WorkletSamples implements SampleSource {
       sampleRate: rate,
       numberOfFrames: WORKLET_BLOCK,
       numberOfChannels: this.channels,
-      timestamp: Math.round(t),
+      timestamp: Math.round(t + this.slew.step()),
       data,
     });
     const w = this.waiting;

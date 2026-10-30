@@ -46,3 +46,18 @@ export class TrackClock {
     return t;
   }
 }
+
+/** An offset that follows its target by at most a step at a time. */
+export class Slew {
+  public target = 0;
+  private value = 0;
+
+  public constructor(private readonly maxStep: number) {}
+
+  // Moves the offset toward the target, and returns it.
+  public step(): number {
+    const d = this.target - this.value;
+    this.value += Math.max(-this.maxStep, Math.min(this.maxStep, d));
+    return this.value;
+  }
+}
