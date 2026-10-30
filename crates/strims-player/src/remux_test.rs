@@ -1,0 +1,966 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! Unit-format streams written by the real writer, read back through the
+//! remuxer, against what the segmenter writes for the same units.
+
+// Test code: a panic or out-of-range index is a test failure.
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
+
+use std::collections::BTreeMap;
+
+use proptest::prelude::*;
+use proptest::test_runner::{Config, RngSeed};
+use strims_chunkstream::chunked::{ChunkedRecordDecoder, Item};
+use strims_video::fmp4::{media_duration, ntp_timestamp, parse_init, split_record};
+use strims_video::synth::script::{Script, ScriptConfig, TagKind, aac_lc_asc, avcc};
+use strims_video::units::record::{Record, parse_record};
+use strims_video::{CutRule, FlvSource, Muxer, Segmenter, SourceEvent, UnitWriter, VecSink};
+
+use super::*;
+
+/// The swarm's chunk size: the chunked layout's frame.
+const FRAME: usize = 4096;
+/// The Egress RPC's largest `Data` message.
+const MAX_DATA: usize = 32 * 1024;
+/// The writer's clock when a script starts.
+const EPOCH_MS: i64 = 1_793_275_200_000;
+
+/// An access unit that owns its payload.
+#[derive(Debug, Clone)]
+struct Unit {
+    track: TrackId,
+    dts: i64,
+    pts: i64,
+    keyframe: bool,
+    payload: Vec<u8>,
+    published: Time,
+}
+
+impl Unit {
+    fn unit(&self) -> AccessUnit<'_> {
+        AccessUnit {
+            track: self.track,
+            dts: self.dts,
+            pts: self.pts,
+            keyframe: self.keyframe,
+            payload: &self.payload,
+            published: self.published,
+        }
+    }
+}
+
+/// What a source gives its muxers.
+#[derive(Debug, Clone)]
+enum Event {
+    Config(DecoderConfig),
+    Unit(Unit),
+}
+
+/// A script's tags through the FLV source, received at their tag times.
+fn source_events(script: &Script) -> Vec<Event> {
+    let mut source = FlvSource::new();
+    let mut out = Vec::new();
+    for tag in &script.tags {
+        let at = Time::from_unix_millis(EPOCH_MS + i64::from(tag.timestamp));
+        let event = match tag.kind {
+            TagKind::Video => source.video(tag.timestamp, &tag.body, at),
+            TagKind::Audio => source.audio(tag.timestamp, &tag.body, at),
+            TagKind::Metadata => continue,
+        };
+        match event.unwrap() {
+            Some(SourceEvent::Config(c)) => out.push(Event::Config(c)),
+            Some(SourceEvent::Unit(u)) => out.push(Event::Unit(Unit {
+                track: u.track,
+                dts: u.dts,
+                pts: u.pts,
+                keyframe: u.keyframe,
+                payload: u.payload.to_vec(),
+                published: u.published,
+            })),
+            None => {}
+        }
+    }
+    out
+}
+
+fn script(config: ScriptConfig) -> Vec<Event> {
+    source_events(&Script::new(&config))
+}
+
+fn feed<M: Muxer>(muxer: &mut M, events: &[Event])
+where
+    M::Error: std::fmt::Debug,
+{
+    for e in events {
+        match e {
+            Event::Config(c) => muxer.set_config(c).unwrap(),
+            Event::Unit(u) => muxer.push(&u.unit()).unwrap(),
+        }
+    }
+    muxer.finish().unwrap();
+}
+
+/// The unit-format records a writer session makes of `events`.
+fn unit_records(events: &[Event]) -> Vec<Vec<u8>> {
+    let mut w = UnitWriter::new(FRAME).unwrap();
+    feed(&mut w, events);
+    let stream = w.output();
+    let mut d = ChunkedRecordDecoder::new(FRAME, MAX_RECORD_LEN).unwrap();
+    let mut out = Vec::new();
+    let mut at = 0;
+    loop {
+        let (n, item) = d.decode(&stream[at..]);
+        at += n;
+        match item {
+            Some(Item::Record { payload, .. }) => out.push(payload.to_vec()),
+            Some(Item::Lost) => panic!("lost records at {at}"),
+            None => return out,
+        }
+    }
+}
+
+/// The segmenter's records of `events`, a fragment per unit and a record
+/// per set of configs.
+fn segmenter_records(events: &[Event]) -> Vec<Vec<u8>> {
+    let rule = CutRule {
+        min_media_bytes: usize::MAX,
+        max_record_bytes: usize::MAX,
+        fragment_duration: Duration::ZERO,
+    };
+    let mut s = Segmenter::new(rule, VecSink::new());
+    feed(&mut s, events);
+    s.into_sink().records
+}
+
+/// An output, owned.
+#[derive(Debug, Clone, PartialEq)]
+enum Out {
+    Init {
+        data: Vec<u8>,
+        mime: String,
+        tracks: Vec<DecoderConfig>,
+        compatible: bool,
+    },
+    Media {
+        data: Vec<u8>,
+        units: Vec<UnitInfo>,
+    },
+    Gap {
+        track: TrackId,
+        kind: TrackKind,
+        missing: u64,
+    },
+    Discontinuity,
+    Restart(Duration),
+}
+
+fn drain(r: &mut Remuxer, out: &mut Vec<Out>) {
+    while let Some(o) = r.poll_output() {
+        out.push(match o {
+            Output::Init {
+                data,
+                mime,
+                tracks,
+                compatible,
+            } => Out::Init {
+                data: data.to_vec(),
+                mime: mime.into(),
+                tracks: tracks.to_vec(),
+                compatible,
+            },
+            Output::Media { data, units } => Out::Media {
+                data: data.to_vec(),
+                units: units.to_vec(),
+            },
+            Output::Gap {
+                track,
+                kind,
+                missing,
+            } => Out::Gap {
+                track,
+                kind,
+                missing,
+            },
+            Output::Discontinuity => Out::Discontinuity,
+            Output::Restart { offset } => Out::Restart(offset),
+        });
+    }
+}
+
+/// Passes `record` as the Egress RPC sends it: `Data` messages of at most
+/// `MAX_DATA` bytes, the last with `segment_end`, the first with
+/// `discontinuity` when it follows a skip.
+fn send(r: &mut Remuxer, record: &[u8], discontinuity: bool, out: &mut Vec<Out>) {
+    let chunks: Vec<&[u8]> = if record.is_empty() {
+        vec![record]
+    } else {
+        record.chunks(MAX_DATA).collect()
+    };
+    let n = chunks.len();
+    for (i, chunk) in chunks.into_iter().enumerate() {
+        r.message(chunk, i + 1 == n, discontinuity && i == 0);
+        drain(r, out);
+    }
+}
+
+fn remux(records: &[Vec<u8>]) -> (Vec<Out>, Remuxer) {
+    let mut r = Remuxer::new();
+    let mut out = Vec::new();
+    for rec in records {
+        send(&mut r, rec, false, &mut out);
+    }
+    r.finish();
+    drain(&mut r, &mut out);
+    (out, r)
+}
+
+/// The inits and the media after each, concatenated.
+fn segments(out: &[Out]) -> Vec<(Vec<u8>, Vec<u8>)> {
+    let mut segs: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+    for o in out {
+        match o {
+            Out::Init { data, .. } => segs.push((data.clone(), Vec::new())),
+            Out::Media { data, .. } => segs.last_mut().unwrap().1.extend_from_slice(data),
+            _ => {}
+        }
+    }
+    segs
+}
+
+/// A fragment's track run: its track, base decode time, and per sample
+/// its duration and composition offset.
+#[derive(Debug, Clone, PartialEq)]
+struct Run {
+    track: u32,
+    base: u64,
+    samples: Vec<(u32, i32)>,
+}
+
+fn be32(b: &[u8], at: usize) -> u32 {
+    u32::from_be_bytes(b[at..at + 4].try_into().unwrap())
+}
+
+/// The boxes of `data`, each its type and content; the writers write
+/// 32-bit sizes.
+fn boxes(data: &[u8]) -> Vec<([u8; 4], &[u8])> {
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at + 8 <= data.len() {
+        let size = be32(data, at) as usize;
+        out.push((
+            data[at + 4..at + 8].try_into().unwrap(),
+            &data[at + 8..at + size],
+        ));
+        at += size;
+    }
+    out
+}
+
+/// The runs of a fragment's `moof`, in `traf` order, and its `prft`'s
+/// track, NTP timestamp and media time.
+fn runs(fragment: &[u8]) -> (Vec<Run>, (u32, u64, u64)) {
+    let mut runs = Vec::new();
+    let mut prft = None;
+    for (fourcc, content) in boxes(fragment) {
+        match &fourcc {
+            b"prft" => {
+                let ntp = u64::from_be_bytes(content[8..16].try_into().unwrap());
+                let media = u64::from_be_bytes(content[16..24].try_into().unwrap());
+                prft = Some((be32(content, 4), ntp, media));
+            }
+            b"moof" => {
+                for (fourcc, traf) in boxes(content) {
+                    if fourcc != *b"traf" {
+                        continue;
+                    }
+                    let mut run = Run {
+                        track: 0,
+                        base: 0,
+                        samples: Vec::new(),
+                    };
+                    for (fourcc, c) in boxes(traf) {
+                        match &fourcc {
+                            b"tfhd" => run.track = be32(c, 4),
+                            b"tfdt" => run.base = u64::from_be_bytes(c[4..12].try_into().unwrap()),
+                            b"trun" => {
+                                let flags = be32(c, 0) & 0xff_ffff;
+                                let count = be32(c, 4) as usize;
+                                let mut at = 8 + if flags & 1 != 0 { 4 } else { 0 };
+                                for _ in 0..count {
+                                    let duration = be32(c, at);
+                                    at += 8;
+                                    let mut cto = 0;
+                                    if flags & 0x400 != 0 {
+                                        at += 4;
+                                    }
+                                    if flags & 0x800 != 0 {
+                                        cto = be32(c, at) as i32;
+                                        at += 4;
+                                    }
+                                    run.samples.push((duration, cto));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    runs.push(run);
+                }
+            }
+            _ => {}
+        }
+    }
+    (runs, prft.unwrap())
+}
+
+/// Every written sample of `track`: its decode time and duration.
+fn samples(out: &[Out], track: u32) -> Vec<(i64, i64)> {
+    let mut all = Vec::new();
+    for o in out {
+        if let Out::Media { data, .. } = o {
+            for run in runs(data).0.into_iter().filter(|r| r.track == track) {
+                let mut dts = run.base as i64;
+                for (d, _) in run.samples {
+                    all.push((dts, i64::from(d)));
+                    dts += i64::from(d);
+                }
+            }
+        }
+    }
+    all
+}
+
+/// Samples that each start where the one before ended.
+fn assert_contiguous(samples: &[(i64, i64)]) {
+    for w in samples.windows(2) {
+        assert_eq!(
+            w[0].0 + w[0].1,
+            w[1].0,
+            "a hole or overlap after {:?}",
+            w[0]
+        );
+    }
+}
+
+fn b_frames() -> ScriptConfig {
+    ScriptConfig {
+        b_frames: true,
+        duration_secs: 8,
+        ..ScriptConfig::default()
+    }
+}
+
+#[test]
+fn output_equals_the_segmenters_records_for_one_session() {
+    for config in [
+        b_frames(),
+        ScriptConfig {
+            resize_at_gop: Some(2),
+            ..b_frames()
+        },
+        ScriptConfig {
+            start_ms: 3_600_000,
+            gop_frames: 25,
+            fps: 25,
+            ..ScriptConfig::default()
+        },
+        ScriptConfig {
+            audio: false,
+            ..b_frames()
+        },
+    ] {
+        let events = script(config.clone());
+        let (out, r) = remux(&unit_records(&events));
+        let expected: Vec<(Vec<u8>, Vec<u8>)> = segmenter_records(&events)
+            .iter()
+            .map(|rec| {
+                let (init, media) = split_record(rec).unwrap();
+                (init.to_vec(), media.to_vec())
+            })
+            .collect();
+        let got = segments(&out);
+        assert_eq!(got.len(), expected.len(), "{config:?}");
+        for (i, (g, e)) in got.iter().zip(&expected).enumerate() {
+            assert!(g.0 == e.0, "init {i} differs for {config:?}");
+            assert!(g.1 == e.1, "media {i} differs for {config:?}");
+            let info = parse_init(&g.0).unwrap();
+            assert!(media_duration(&info, &g.1).unwrap() > Duration::ZERO);
+        }
+        let m = r.metrics();
+        assert_eq!(m.inits, expected.len() as u64);
+        assert_eq!(m.dropped_backwards + m.restarts + m.held_flushes, 0);
+        assert_eq!(m.held_bytes, 0);
+    }
+}
+
+#[test]
+fn a_resize_is_a_compatible_init_at_its_keyframe() {
+    let events = script(ScriptConfig {
+        resize_at_gop: Some(2),
+        ..b_frames()
+    });
+    let (out, _) = remux(&unit_records(&events));
+    let inits: Vec<_> = out
+        .iter()
+        .filter_map(|o| match o {
+            Out::Init {
+                mime,
+                tracks,
+                compatible,
+                ..
+            } => Some((mime.clone(), tracks.clone(), *compatible)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(inits.len(), 2);
+    assert_eq!(inits[0].0, r#"video/mp4;codecs="avc1.64001f,mp4a.40.2""#);
+    assert!(!inits[0].2);
+    assert!(inits[1].2);
+    assert_eq!(inits[1].1[0].kind, TrackKind::Video);
+    // The first media after the second init holds the GOP's keyframe.
+    let at = out
+        .iter()
+        .rposition(|o| matches!(o, Out::Init { .. }))
+        .unwrap();
+    let Some(Out::Media { units, .. }) = out.get(at + 1) else {
+        panic!("no media after the init");
+    };
+    assert!(units[0].keyframe && units[0].kind == TrackKind::Video);
+}
+
+#[test]
+fn media_lists_the_units_each_fragment_holds() {
+    let events = script(b_frames());
+    let (out, r) = remux(&unit_records(&events));
+    let mut timescales = BTreeMap::new();
+    let mut listed = 0;
+    for o in &out {
+        match o {
+            Out::Init { data, tracks, .. } => {
+                // The edit list's media time: the keyframe's composition delay.
+                let info = parse_init(data).unwrap();
+                for t in tracks {
+                    timescales.insert(t.track.0, info.track(t.track.0).unwrap().timescale);
+                }
+            }
+            Out::Media { data, units } => {
+                let (runs, (prft_track, ntp, media_time)) = runs(data);
+                let mut at = 0;
+                for run in &runs {
+                    let timescale = timescales[&run.track];
+                    let mut dts = run.base as i64;
+                    for &(d, cto) in &run.samples {
+                        let u = units[at];
+                        assert_eq!(u.track.0, run.track);
+                        let pts = to_duration(dts + i64::from(cto), timescale);
+                        // Every track presents a composition delay earlier.
+                        let delay = pts - u.pts;
+                        assert!(delay >= Duration::ZERO && delay < Duration::from_millis(100));
+                        dts += i64::from(d);
+                        at += 1;
+                    }
+                }
+                assert_eq!(at, units.len(), "units listed past the fragment's samples");
+                assert_eq!(prft_track, units[0].track.0);
+                assert_eq!(ntp, ntp_timestamp(units[0].published));
+                let first = to_duration(media_time as i64, timescales[&prft_track]);
+                assert!(first >= units[0].pts);
+                listed += units.len();
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(listed as u64, r.metrics().units);
+}
+
+/// `records` with the units of `track` decoding in `[from, to)` (in its
+/// timescale) left out, keyframes too unless `keep_keys`; the first record
+/// after them is marked as following a skip.
+fn without(
+    records: &[Vec<u8>],
+    track: u32,
+    from: i64,
+    to: i64,
+    keep_keys: bool,
+) -> Vec<(Vec<u8>, bool)> {
+    let mut out: Vec<(Vec<u8>, bool)> = Vec::new();
+    let mut skipped = false;
+    for rec in records {
+        if let Ok(Record::Unit { header, .. }) = parse_record(rec)
+            && header.track.0 == track
+            && (from..to).contains(&header.dts)
+            && !(keep_keys && header.keyframe)
+        {
+            skipped = true;
+            continue;
+        }
+        out.push((rec.clone(), std::mem::take(&mut skipped)));
+    }
+    out
+}
+
+fn remux_marked(records: &[(Vec<u8>, bool)]) -> (Vec<Out>, Remuxer) {
+    let mut r = Remuxer::new();
+    let mut out = Vec::new();
+    for (rec, skip) in records {
+        send(&mut r, rec, *skip, &mut out);
+    }
+    r.finish();
+    drain(&mut r, &mut out);
+    (out, r)
+}
+
+#[test]
+fn a_lost_picture_holds_the_last_one_until_the_next_keyframe() {
+    // GOPs of 60 frames at 30 fps: keyframes every 180_000 at 90 kHz.
+    let events = script(b_frames());
+    let records = unit_records(&events);
+    let (out, r) = remux_marked(&without(&records, 1, 200_000, 230_000, true));
+    assert!(out.contains(&Out::Discontinuity));
+    assert!(out.iter().any(|o| matches!(
+        o,
+        Out::Gap {
+            track: TrackId(1),
+            kind: TrackKind::Video,
+            ..
+        }
+    )));
+    let video = samples(&out, 1);
+    assert_contiguous(&video);
+    // The picture before the loss lasts until the keyframe at 360_000.
+    let held = video
+        .iter()
+        .find(|(dts, d)| *dts < 200_000 && dts + d == 360_000);
+    assert!(held.is_some(), "no picture held across the loss: {video:?}");
+    assert_contiguous(&samples(&out, 2));
+    let m = r.metrics();
+    assert!(m.discontinuities >= 1);
+    assert!(m.reader.awaiting_keyframe > 0);
+}
+
+#[test]
+fn lost_audio_lasts_its_last_frame_until_the_next() {
+    let events = script(b_frames());
+    let records = unit_records(&events);
+    // About 0.2 s of AAC at 48 kHz from 3 s on.
+    let (out, _) = remux_marked(&without(&records, 2, 144_000, 153_600, false));
+    assert!(out.iter().any(|o| matches!(
+        o,
+        Out::Gap {
+            track: TrackId(2),
+            kind: TrackKind::Audio,
+            ..
+        }
+    )));
+    let audio = samples(&out, 2);
+    assert_contiguous(&audio);
+    assert!(audio.iter().any(|(_, d)| *d > 9 * 1024));
+    // Video loses nothing and goes on frame by frame (FLV's millisecond
+    // tag times make frames of 33 or 34 ms).
+    let video = samples(&out, 1);
+    assert_contiguous(&video);
+    assert!(video.iter().all(|(_, d)| *d <= 3060));
+}
+
+#[test]
+fn a_restarted_session_follows_the_output() {
+    let first = script(b_frames());
+    for second in [
+        b_frames(),
+        ScriptConfig {
+            width: 640,
+            height: 360,
+            ..b_frames()
+        },
+    ] {
+        let mut marked: Vec<(Vec<u8>, bool)> = unit_records(&first)
+            .into_iter()
+            .map(|r| (r, false))
+            .collect();
+        let b = unit_records(&script(second.clone()));
+        marked.extend(b.into_iter().enumerate().map(|(i, r)| (r, i == 0)));
+        let (out, r) = remux_marked(&marked);
+        let restarts: Vec<_> = out
+            .iter()
+            .filter_map(|o| match o {
+                Out::Restart(offset) => Some(*offset),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(restarts.len(), 1, "{second:?}");
+        // The second session starts where the first ended, 8 s in.
+        assert!((restarts[0] - Duration::from_secs(8)).abs() < Duration::from_millis(50));
+        let inits = out.iter().filter(|o| matches!(o, Out::Init { .. })).count();
+        let resized = second.width != b_frames().width;
+        assert_eq!(inits, if resized { 2 } else { 1 });
+        if resized {
+            let at = out
+                .iter()
+                .position(|o| matches!(o, Out::Restart(_)))
+                .unwrap();
+            assert!(out[at..].iter().any(|o| matches!(
+                o,
+                Out::Init {
+                    compatible: true,
+                    ..
+                }
+            )));
+        }
+        for track in [1, 2] {
+            let s = samples(&out, track);
+            for w in s.windows(2) {
+                assert!(w[1].0 >= w[0].0, "track {track} goes back at {w:?}");
+            }
+        }
+        if !resized {
+            // One run across the sessions: the last units of the first
+            // last until the second's first.
+            assert_contiguous(&samples(&out, 1));
+            assert_contiguous(&samples(&out, 2));
+        }
+        // Presentation times keep going.
+        let pts: Vec<Duration> = out
+            .iter()
+            .filter_map(|o| match o {
+                Out::Media { units, .. } => Some(units.clone()),
+                _ => None,
+            })
+            .flatten()
+            .filter(|u| u.kind == TrackKind::Audio)
+            .map(|u| u.pts)
+            .collect();
+        assert!(pts.windows(2).all(|w| w[1] > w[0]));
+        assert!(*pts.last().unwrap() > Duration::from_secs(15));
+        assert_eq!(r.metrics().restarts, 1);
+    }
+}
+
+/// An H.264 track of `width` by `height` at 90 kHz.
+fn video(track: u32, width: u16, height: u16) -> DecoderConfig {
+    DecoderConfig {
+        track: TrackId(track),
+        kind: TrackKind::Video,
+        codec: "avc1.64001f".into(),
+        timescale: 90_000,
+        params: CodecParams::Avc {
+            avcc: avcc(width, height),
+            width,
+            height,
+        },
+    }
+}
+
+/// An AAC LC stereo track at `rate`.
+fn audio(track: u32, rate: u32) -> DecoderConfig {
+    DecoderConfig {
+        track: TrackId(track),
+        kind: TrackKind::Audio,
+        codec: "mp4a.40.2".into(),
+        timescale: rate,
+        params: CodecParams::Aac {
+            asc: aac_lc_asc(rate),
+            sample_rate: rate,
+            channels: 2,
+            frame_samples: 1024,
+        },
+    }
+}
+
+fn unit(track: u32, dts: i64, cto: i64, keyframe: bool, len: usize) -> Event {
+    Event::Unit(Unit {
+        track: TrackId(track),
+        dts,
+        pts: dts + cto,
+        keyframe,
+        payload: vec![track as u8; len],
+        published: Time::from_unix_millis(EPOCH_MS + dts / 90),
+    })
+}
+
+/// Video at 30 fps from `from` (a keyframe every `gop`) and AAC frames at
+/// `rate` between, `frames` pictures long, with a new audio config at
+/// picture `change`.
+fn av(frames: i64, gop: i64, rate: u32, change: Option<(i64, u32)>) -> Vec<Event> {
+    let mut out = vec![
+        Event::Config(video(1, 640, 360)),
+        Event::Config(audio(2, rate)),
+    ];
+    let (mut rate, mut a, mut a_base) = (rate, 0i64, 0i64);
+    for k in 0..frames {
+        if let Some((at, to)) = change
+            && at == k
+        {
+            out.push(Event::Config(audio(2, to)));
+            // The new track's timestamps continue in its own timescale.
+            a_base = k * 3000 * i64::from(to) / 90_000;
+            a = 0;
+            rate = to;
+        }
+        out.push(unit(1, k * 3000, 0, k % gop == 0, 200));
+        while (a_base + a * 1024) * 90_000 < (k + 1) * 3000 * i64::from(rate) {
+            let dts = a_base + a * 1024;
+            out.push(Event::Unit(Unit {
+                track: TrackId(2),
+                dts,
+                pts: dts,
+                keyframe: true,
+                payload: vec![2; 40],
+                published: Time::from_unix_millis(EPOCH_MS + dts * 1000 / i64::from(rate)),
+            }));
+            a += 1;
+        }
+    }
+    out
+}
+
+#[test]
+fn a_config_changed_mid_gop_waits_for_the_cut_tracks_keyframe() {
+    let events = av(150, 60, 48_000, Some((75, 44_100)));
+    let (out, r) = remux(&unit_records(&events));
+    let inits: Vec<_> = out
+        .iter()
+        .filter_map(|o| match o {
+            Out::Init {
+                tracks, compatible, ..
+            } => Some((tracks.clone(), *compatible)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(inits.len(), 2);
+    assert!(inits[1].1);
+    assert_eq!(inits[1].0[1].timescale, 44_100);
+    // The new audio waits for the keyframe at picture 120; video goes on.
+    assert!(r.metrics().dropped_pending_config > 0);
+    let video = samples(&out, 1);
+    assert_eq!(video.len(), 150);
+    assert_contiguous(&video);
+    let at = out
+        .iter()
+        .rposition(|o| matches!(o, Out::Init { .. }))
+        .unwrap();
+    let Some(Out::Media { units, .. }) = out.get(at + 1) else {
+        panic!("no media after the init");
+    };
+    assert!(units[0].keyframe && units[0].pts == Duration::from_secs(4));
+}
+
+#[test]
+fn audio_only_streams_start_at_their_first_frame() {
+    let mut events = vec![Event::Config(audio(2, 48_000))];
+    for n in 0..200 {
+        events.push(Event::Unit(Unit {
+            track: TrackId(2),
+            dts: n * 1024,
+            pts: n * 1024,
+            keyframe: true,
+            payload: vec![2; 50],
+            published: Time::from_unix_millis(EPOCH_MS + n * 1024 / 48),
+        }));
+    }
+    let (out, _) = remux(&unit_records(&events));
+    let Some(Out::Init { mime, tracks, .. }) = out.first() else {
+        panic!("no init first: {:?}", out.first());
+    };
+    assert_eq!(mime, r#"audio/mp4;codecs="mp4a.40.2""#);
+    assert_eq!(tracks.len(), 1);
+    let audio = samples(&out, 2);
+    assert_eq!(audio.len(), 200);
+    assert_contiguous(&audio);
+}
+
+#[test]
+fn a_join_at_a_sync_record_starts_with_its_init_and_a_join_elsewhere_waits() {
+    let events = script(b_frames());
+    let records = unit_records(&events);
+    let syncs: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| matches!(parse_record(r), Ok(Record::Configs { gop_back: 0, .. })))
+        .map(|(i, _)| i)
+        .collect();
+    assert!(syncs.len() >= 3);
+    let (out, r) = remux(&records[syncs[1]..]);
+    let Some(Out::Init { .. }) = out.first() else {
+        panic!("no init first");
+    };
+    let Some(Out::Media { units, .. }) = out.get(1) else {
+        panic!("no media after the init");
+    };
+    assert!(units[0].keyframe && units[0].pts == Duration::from_secs(2));
+    assert_eq!(r.metrics().dropped_before_init, 0);
+
+    // Joined mid-GOP, nothing comes until the next GOP's sync record.
+    let (out, r) = remux(&records[syncs[1] + 5..]);
+    let Some(Out::Media { units, .. }) = out.get(1) else {
+        panic!("no media after the init");
+    };
+    assert!(units[0].pts == Duration::from_secs(4));
+    assert!(r.metrics().reader.unknown_tracks > 0);
+}
+
+#[test]
+fn a_discontinuity_drops_the_record_in_progress() {
+    let records = unit_records(&script(b_frames()));
+    let mut r = Remuxer::new();
+    let mut out = Vec::new();
+    for rec in &records[..40] {
+        send(&mut r, rec, false, &mut out);
+    }
+    r.message(&records[40][..records[40].len() / 2], false, false);
+    for (i, rec) in records[41..].iter().enumerate() {
+        send(&mut r, rec, i == 0, &mut out);
+    }
+    let m = r.metrics();
+    assert_eq!((m.partial_records, m.discontinuities), (1, 1));
+    assert_eq!(m.reader.malformed, 0);
+}
+
+#[test]
+fn records_over_the_bound_are_dropped_as_lost() {
+    let mut r = Remuxer::new();
+    let chunk = vec![0x02; MAX_DATA];
+    for _ in 0..=MAX_RECORD_LEN / MAX_DATA {
+        r.message(&chunk, false, false);
+    }
+    r.message(&chunk, true, false);
+    assert!(r.poll_output().is_none());
+    assert!(r.record.capacity() <= MAX_RECORD_LEN + MAX_DATA);
+    let records = unit_records(&script(b_frames()));
+    let mut out = Vec::new();
+    for rec in &records {
+        send(&mut r, rec, false, &mut out);
+    }
+    let m = r.metrics();
+    assert_eq!(
+        (m.oversize_records, m.reader.lost, m.reader.malformed),
+        (1, 1, 0)
+    );
+    assert!(m.fragments > 100);
+}
+
+#[test]
+fn held_units_are_bounded() {
+    // A first GOP decoding before its edit list is held whole.
+    let mut events = vec![Event::Config(video(1, 640, 360))];
+    events.push(unit(1, 0, 6000, true, 10));
+    for k in 1..2 * MAX_HELD_UNITS as i64 {
+        events.push(unit(1, k * 3000, 3000, false, 10));
+    }
+    let records = unit_records(&events);
+    let mut r = Remuxer::new();
+    let mut out = Vec::new();
+    for rec in &records {
+        send(&mut r, rec, false, &mut out);
+        assert!(r.held.len() <= MAX_HELD_UNITS);
+    }
+    r.finish();
+    drain(&mut r, &mut out);
+    assert!(r.metrics().held_flushes >= 1);
+    assert_eq!(samples(&out, 1).len(), 2 * MAX_HELD_UNITS);
+}
+
+#[test]
+fn outputs_wait_until_taken() {
+    let records = unit_records(&script(ScriptConfig::default()));
+    let mut r = Remuxer::new();
+    for rec in &records[..60] {
+        r.message(rec, true, false);
+    }
+    let mut out = Vec::new();
+    drain(&mut r, &mut out);
+    let (all, _) = remux(&records[..60]);
+    assert_eq!(out, all[..out.len()].to_vec());
+    assert!(out.len() > 10);
+}
+
+fn proptest_config() -> Config {
+    Config {
+        cases: 64,
+        rng_seed: RngSeed::Fixed(0x5e1a_7e00),
+        failure_persistence: None,
+        ..Config::default()
+    }
+}
+
+/// Every output parses: inits as init segments, media against the init
+/// before it.
+fn check_outputs(r: &mut Remuxer, info: &mut Option<strims_video::fmp4::InitInfo>) -> usize {
+    let mut n = 0;
+    while let Some(o) = r.poll_output() {
+        n += 1;
+        match o {
+            Output::Init { data, .. } => *info = Some(parse_init(data).unwrap()),
+            Output::Media { data, units } => {
+                media_duration(info.as_ref().unwrap(), data).unwrap();
+                assert!(units.len() <= MAX_HELD_UNITS);
+            }
+            _ => {}
+        }
+    }
+    n
+}
+
+proptest! {
+    #![proptest_config(proptest_config())]
+
+    #[test]
+    fn hostile_messages_never_panic(
+        messages in prop::collection::vec(
+            (prop::collection::vec(any::<u8>(), 0..512), any::<bool>(), prop::bool::weighted(0.1)),
+            0..64,
+        ),
+    ) {
+        let mut r = Remuxer::new();
+        let mut info = None;
+        for (data, end, skip) in &messages {
+            r.message(data, *end, *skip);
+            prop_assert!(check_outputs(&mut r, &mut info) <= 2 * MAX_TRACKS + 4);
+        }
+        r.finish();
+        check_outputs(&mut r, &mut info);
+    }
+
+    #[test]
+    fn damaged_streams_never_panic_and_their_output_parses(
+        flips in prop::collection::vec((any::<prop::sample::Index>(), any::<prop::sample::Index>(), 1u8..), 0..24),
+        dropped in prop::collection::btree_set(0usize..400, 0..16),
+        skips in prop::collection::btree_set(0usize..400, 0..8),
+        cut in any::<prop::sample::Index>(),
+    ) {
+        let mut records = damaged_base().to_vec();
+        for (rec, byte, xor) in &flips {
+            let i = rec.index(records.len());
+            if !records[i].is_empty() {
+                let at = byte.index(records[i].len());
+                records[i][at] ^= xor;
+            }
+        }
+        let mut r = Remuxer::new();
+        let mut info = None;
+        let start = cut.index(records.len() / 2);
+        for (i, rec) in records.iter().enumerate().skip(start) {
+            if dropped.contains(&i) {
+                continue;
+            }
+            r.message(rec, true, skips.contains(&i));
+            check_outputs(&mut r, &mut info);
+        }
+        r.finish();
+        check_outputs(&mut r, &mut info);
+        prop_assert!(r.metrics().held_bytes <= MAX_HELD_BYTES as u64);
+    }
+}
+
+/// A short stream's records, with B-frames and a resize.
+fn damaged_base() -> &'static [Vec<u8>] {
+    static BASE: std::sync::OnceLock<Vec<Vec<u8>>> = std::sync::OnceLock::new();
+    BASE.get_or_init(|| {
+        unit_records(&script(ScriptConfig {
+            duration_secs: 4,
+            gop_frames: 30,
+            resize_at_gop: Some(2),
+            video_bitrate: 200_000,
+            ..b_frames()
+        }))
+    })
+}

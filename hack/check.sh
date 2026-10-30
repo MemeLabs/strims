@@ -138,7 +138,7 @@ wasm_check() {
     --target wasm32-unknown-unknown
 }
 wasm_clippy() {
-  CARGO_TARGET_DIR=target/lint cargo clippy --locked -p strims-node-core -p strims-wasm \
+  CARGO_TARGET_DIR=target/lint cargo clippy --locked -p strims-node-core -p strims-wasm -p strims-player \
     --target wasm32-unknown-unknown --all-targets --features strims-wasm/e2e -- -D warnings
 }
 

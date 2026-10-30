@@ -1,0 +1,38 @@
+[package]
+name = "strims-player"
+description = "The browser players' core: unit-format streams remuxed into fMP4 for MediaSource, built for wasm32"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+strims-base.workspace = true
+strims-video.workspace = true
+
+# The bindings the player worker calls. The wasm-bindgen family comes from
+# strims-wasm's release, and the `=` pin must match the installed
+# wasm-bindgen-cli, which the web build checks.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "=0.2.129"
+js-sys = "=0.3.106"
+
+[dev-dependencies]
+strims-chunkstream.workspace = true
+# synth scripts, and the segmenter the remuxer's output is checked against
+strims-video = { workspace = true, features = ["test-support"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+proptest.workspace = true
+
+# The bindings' tests run in a headless browser worker
+# (wasm-bindgen-test-runner, which .cargo/config.toml names as the runner).
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "=0.3.79"
+
+[lints]
+workspace = true

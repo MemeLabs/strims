@@ -2427,6 +2427,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "strims-player"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "proptest",
+ "strims-base",
+ "strims-chunkstream",
+ "strims-video",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+]
+
+[[package]]
 name = "strims-ppspp"
 version = "0.1.0"
 dependencies = [

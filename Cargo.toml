@@ -24,6 +24,7 @@ members = [
   "crates/strims-directory",
   "crates/strims-chat",
   "crates/strims-video",
+  "crates/strims-player",
   "crates/strims-debug",
   "crates/strims-session",
   "crates/strims-testworld",
@@ -83,6 +84,7 @@ strims-network = { path = "crates/strims-network" }
 strims-directory = { path = "crates/strims-directory" }
 strims-chat = { path = "crates/strims-chat" }
 strims-video = { path = "crates/strims-video" }
+strims-player = { path = "crates/strims-player" }
 strims-debug = { path = "crates/strims-debug" }
 strims-session = { path = "crates/strims-session" }
 strims-testworld = { path = "crates/strims-testworld" }
