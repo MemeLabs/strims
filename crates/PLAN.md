@@ -223,7 +223,17 @@ in `TRIED.md`.
      the node busy: its parent sheds subscribers and an adaptive seed's
      budget falls to that link's rate. Count busy only while every peer
      that had data queued still has (judge it in
-     `wan_slow_viewer_adaptive_uncapped` with `STRIMS_SIM_TCP`).
+     `wan_slow_viewer_adaptive_uncapped` with `STRIMS_SIM_TCP`). The
+     Docker testbed's media runs (branch `video-target`; outputs in
+     `target/video/evidence/testbed-viewers-runs/`) show it on the real
+     stack: one viewer on a 4.5 Mbit/s downlink in a five-node mesh at
+     3 Mbit/s took the seed's children from 32 to 1 and put every viewer
+     4-13 s behind for 30 s (runs `slow-a` and `slow-b`).
+   - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
+     five-node mesh grows its push children from 16 to 50 every 15-20 s
+     and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s
+     late (up to 2.1 s): most of that mesh's stalls. Reproduce it in the
+     sim before choosing a fix (runs `mesh-b` and `mesh-margin`).
    - Pushes queue toward a peer whose connection is backed up past one
      window, to ppspp's cap, and are dropped as stale only when written;
      and a viewer that falls a window behind sends its neighbours messages
@@ -249,6 +259,11 @@ in `TRIED.md`.
      count of what it sent; a viewer's requests to a peer whose answers
      lag (its own measurement) yield to peers that announce the chunk,
      and queued ones are cancelled; gate pull from the seed by deadline.
+   - **Joins' backlogs.** On the Docker testbed, while a viewer joining
+     fetches its first GOP's backlog (130-600 KB), the others' live
+     arrivals run up to 1-1.5 s late (runs `mesh-a` at 23-26 s, `mesh-b`
+     at 26 s). Find whether the seed's uplink or the joiner's requests
+     take the time, and whether backlog answers should yield to pushes.
    - **Holders' shares under pull.** `SeedQos::ByAllocation` gives a lone
      holder 1000 / (1000 + 50 × the other neighbours) of the uplink,
      which with 32 neighbours is barely what a 6 Mbit/s copy needs. A
