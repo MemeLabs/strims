@@ -161,6 +161,10 @@ fn track_object(config: &DecoderConfig) -> Object {
             set_num(&o, "sampleRate", f64::from(*sample_rate));
             set_num(&o, "channels", f64::from(*channels));
         }
+        CodecParams::Opus { channels, .. } => {
+            set_num(&o, "sampleRate", f64::from(strims_video::opus::SAMPLE_RATE));
+            set_num(&o, "channels", f64::from(*channels));
+        }
         _ => {}
     }
     o
