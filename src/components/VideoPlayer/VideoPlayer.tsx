@@ -4,7 +4,7 @@
 import "./VideoPlayer.scss";
 
 import clsx from "clsx";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { MdLoop } from "react-icons/md";
 import useFullscreen from "use-fullscreen";
 
@@ -12,9 +12,11 @@ import { useLayout } from "../../contexts/Layout";
 import useIdleTimeout from "../../hooks/useIdleTimeout";
 import { MediaSourceProps } from "../../hooks/useMediaSource";
 import useVideo from "../../hooks/useVideo";
-import { StreamFormat, streamFormat } from "../../lib/media/mime";
+import { lowLatencySupport } from "../../lib/media/lowlatency/support";
+import { streamFormat } from "../../lib/media/mime";
+import { PlayerKind, choosePlayer, preferredPlayer } from "../../lib/media/players";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
-import { MediaRelayMedia, MediaSourceMedia, UnitsMedia } from "./SwarmMedia";
+import { MediaRelayMedia, MediaSourceMedia, SwarmMediaProps, UnitsMedia } from "./SwarmMedia";
 import VideoControls from "./VideoControls";
 
 interface SwarmPlayerProps extends Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mimeType"> {
@@ -24,6 +26,24 @@ interface SwarmPlayerProps extends Pick<MediaSourceProps, "networkKey" | "swarmU
   handleClose: () => void;
   className?: string;
 }
+
+// The component that plays each kind of stream; none for a format this UI can't play.
+const swarmMedia: Record<PlayerKind, React.FC<SwarmMediaProps> | null> = {
+  [PlayerKind.LowLatency]: UnitsMedia,
+  [PlayerKind.Units]: UnitsMedia,
+  [PlayerKind.MediaSource]: MediaSourceMedia,
+  [PlayerKind.Relay]: MediaRelayMedia,
+  [PlayerKind.None]: null,
+};
+
+// The page's local storage, or none where the page may not use it.
+const storage = (): Storage | null => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+};
 
 const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   networkKey,
@@ -42,16 +62,30 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>();
   const [videoState, videoProps, videoControls] = useVideo(videoRef);
 
-  // Unit-format streams play through the player worker everywhere; record
-  // streams through a window MediaSource, or the service worker's HLS relay
-  // where the window has none (iOS).
+  // Unit-format streams play through a player worker everywhere, the
+  // low-latency player's when the viewer asks for it (?player=lowlatency,
+  // or the "player" local storage setting) and the browser has what it
+  // needs; fMP4 record streams through a window MediaSource, or the service
+  // worker's HLS relay where the window has none (iOS); other formats not
+  // at all.
   const format = streamFormat(mimeType);
-  const SwarmMedia =
-    format === StreamFormat.Units
-      ? UnitsMedia
-      : window.MediaSource
-      ? MediaSourceMedia
-      : MediaRelayMedia;
+  const kind = useMemo(
+    () =>
+      choosePlayer({
+        format,
+        preference: preferredPlayer(location.search, storage()),
+        lowLatency: lowLatencySupport(),
+        windowMediaSource: !!window.MediaSource,
+      }),
+    [format]
+  );
+  const SwarmMedia = swarmMedia[kind];
+  useEffect(() => {
+    if (kind === PlayerKind.None) {
+      // eslint-disable-next-line no-console
+      console.warn("this stream's format can't play here:", mimeType);
+    }
+  }, [kind, mimeType]);
 
   useEffect(() => {
     console.log(">>>", videoState.error);
@@ -104,14 +138,17 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         playsInline
         {...videoProps}
       />
-      <SwarmMedia
-        key={`${format}:${networkKey}:${swarmUri}`}
-        networkKey={networkKey}
-        swarmUri={swarmUri}
-        mimeType={mimeType}
-        videoRef={videoRef}
-        videoControls={videoControls}
-      />
+      {SwarmMedia && (
+        <SwarmMedia
+          key={`${kind}:${networkKey}:${swarmUri}`}
+          networkKey={networkKey}
+          swarmUri={swarmUri}
+          mimeType={mimeType}
+          videoRef={videoRef}
+          videoControls={videoControls}
+          lowLatency={kind === PlayerKind.LowLatency}
+        />
+      )}
       <div
         className={clsx({
           "video_player__waiting_spinner": true,
