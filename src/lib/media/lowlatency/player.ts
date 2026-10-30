@@ -437,7 +437,9 @@ export class LowLatencyPlayer {
   private onMessage(m: WorkerMessage): void {
     switch (m.type) {
       case "hello":
-        void this.open(m.videoTrackGenerator);
+        this.open(m.videoTrackGenerator).catch((e) =>
+          this.fail(`the renderer failed: ${String(e)}`, true)
+        );
         return;
       case "track":
         this.stream = new MediaStream([m.track]);
