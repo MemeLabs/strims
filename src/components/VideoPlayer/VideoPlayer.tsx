@@ -10,11 +10,11 @@ import useFullscreen from "use-fullscreen";
 
 import { useLayout } from "../../contexts/Layout";
 import useIdleTimeout from "../../hooks/useIdleTimeout";
-import useMediaRelay from "../../hooks/useMediaRelay";
-import useMediaSource, { MediaSourceProps } from "../../hooks/useMediaSource";
-import useReady from "../../hooks/useReady";
+import { MediaSourceProps } from "../../hooks/useMediaSource";
 import useVideo from "../../hooks/useVideo";
-import { DEVICE_TYPE, DeviceType, OS } from "../../lib/userAgent";
+import { StreamFormat, streamFormat } from "../../lib/media/mime";
+import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
+import { MediaRelayMedia, MediaSourceMedia, UnitsMedia } from "./SwarmMedia";
 import VideoControls from "./VideoControls";
 
 interface SwarmPlayerProps extends Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mimeType"> {
@@ -42,27 +42,16 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>();
   const [videoState, videoProps, videoControls] = useVideo(videoRef);
 
-  if (window.MediaSource) {
-    const mediaSource = useMediaSource({ networkKey, swarmUri, mimeType, videoRef });
-
-    useReady(() => {
-      const src = URL.createObjectURL(mediaSource);
-      videoControls.setSrc(src);
-      return () => URL.revokeObjectURL(src);
-    }, [mediaSource]);
-  } else {
-    const src = useMediaRelay({ networkKey, swarmUri, mimeType, videoRef });
-    useReady(() => videoControls.setSrc(src), [src]);
-
-    // const client = useClient();
-    // useEffect(() => {
-    //   void client.hlsEgress
-    //     .openStream({ swarmUri, networkKeys: [Base64.toUint8Array(networkKey)] })
-    //     .then(({ playlistUrl }) => {
-    //       videoRef.current.src = playlistUrl;
-    //     });
-    // }, [networkKey, swarmUri]);
-  }
+  // Unit-format streams play through the player worker everywhere; record
+  // streams through a window MediaSource, or the service worker's HLS relay
+  // where the window has none (iOS).
+  const format = streamFormat(mimeType);
+  const SwarmMedia =
+    format === StreamFormat.Units
+      ? UnitsMedia
+      : window.MediaSource
+      ? MediaSourceMedia
+      : MediaRelayMedia;
 
   useEffect(() => {
     console.log(">>>", videoState.error);
@@ -114,6 +103,14 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         autoPlay
         playsInline
         {...videoProps}
+      />
+      <SwarmMedia
+        key={`${format}:${networkKey}:${swarmUri}`}
+        networkKey={networkKey}
+        swarmUri={swarmUri}
+        mimeType={mimeType}
+        videoRef={videoRef}
+        videoControls={videoControls}
       />
       <div
         className={clsx({
