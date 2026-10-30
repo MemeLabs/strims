@@ -64,8 +64,8 @@ Pipeline:
   within a segment's record. Check that the current player accepts that
   before relying on it.
 - Each access unit keeps its publish time next to its media timestamps.
-  The deadline-aware request scheduler and the players' playout clocks
-  both need it.
+  The players' playout clocks and the request deadlines that follow them
+  (Swarm, group 4) both need it.
 
 Wire formats:
 - The listing's MIME type names the format, and readers dispatch on it. A
@@ -316,17 +316,24 @@ in `TRIED.md`.
      copy should go to a neighbour the reports show serving as a relay.
 4. **Pull on lossy, sparse and mobile paths.** The worst scenarios after
    a constrained seed, where pull does the most repair.
-   - **A deadline-aware request scheduler.** Each chunk's deadline is its
-     publish time plus the target lag. A peer's expected arrival time is
-     its backlog ÷ rate + min RTT. Assign each chunk to the earliest peer
-     that meets its deadline, and skip chunks no peer can meet.
-     `RequestController` already exposes the rate, min RTT and answer
-     delay this needs. It is the general form of the pull candidates for
-     liars and a constrained seed above.
+   - **The silence after a timeout.** LEDBAT's 2 KiB minimum, under a
+     4 KiB chunk, leaves a channel asking for nothing for
+     `FLOOR_LOSS_HOLD` after a timeout. The ppspp sim's pull-heavy cells
+     lose up to a fifth of p99 to that silence, and the real stack's busy
+     stars lose as much without it (tried: TRIED.md). Find what it buys
+     there, likely a congested peer left to its pushes, and keep the
+     silence for that alone.
+   - **Deadlines from the player.** Readers read chunks as soon as they
+     arrive and never skip, so a deadline taken from first sight has no
+     slack to spend and only moves repairs earlier (tried: TRIED.md).
+     Once players keep playout clocks (Video), a chunk's deadline is its
+     publish time plus the player's target lag: wait longer for pushes
+     while pull can still meet it, and skip chunks no peer can meet.
    - **Request decorrelation.** LEDBAT keeps viewers' requests apart
      with a cwnd floor and randomized 64-chunk request groups, which cost
      about 70 ms of p99 in well-provisioned meshes; scheduler-level
-     decorrelation (rarest-first) could replace the groups.
+     decorrelation (rarest-first) could replace the groups. Plain oldest
+     first tied (TRIED.md).
    - Convergence on sparse meshes.
 5. **Push-tree refinements.** Smaller or narrower costs.
    - Slow parents are detected late, so `sim_push_slow_parent`'s p99 can

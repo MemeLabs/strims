@@ -171,3 +171,5 @@ tier, 32 seeds: large-4mbit and overload ×0.81, wan-mobile ×0.93), the
 real stack's busy stars lost (robust tier: star-31-10 and mesh6-31-10
 ×1.20, star-15-5 and thin-15-10 ×1.15 with timeouts ×1.12–1.28; lock-in
 ×1.16): there a peer that timed out is better left alone for the hold.
+A minimum of two chunks (`deadline`'s `min2`) ends the silence too, and
+scored the same in the ppspp sim (48 seeds).
