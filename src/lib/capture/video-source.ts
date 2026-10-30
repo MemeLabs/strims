@@ -9,7 +9,7 @@ import { nowUs } from "./clock";
 
 /** A video track's frames. */
 export interface FrameSource {
-  readonly kind: "processor" | "worker" | "element";
+  readonly kind: "processor" | "worker" | "element" | "upright";
   // The next frame, which the caller closes, or null once the track ended or
   // the source closed.
   next(): Promise<VideoFrame | null>;
@@ -135,15 +135,25 @@ class WorkerFrames implements FrameSource {
  * frames, so a worker's ticks take one while none comes.
  */
 class ElementFrames implements FrameSource {
-  public readonly kind = "element";
+  public readonly kind: "element" | "upright";
   private video: HTMLVideoElement;
+  /** Where an upright source draws the element's picture. */
+  private canvas: HTMLCanvasElement | null = null;
   private queued: VideoFrame | null = null;
   private waiting: ((f: VideoFrame | null) => void) | null = null;
   private closed = false;
   private lastAt = 0;
   private stopTicks: () => void;
 
-  public constructor(track: MediaStreamTrack, private readonly frameIntervalMs: number) {
+  // An upright source draws each picture as the element presents it, turned
+  // as the track's settings have it, and stops `track` when it closes.
+  public constructor(
+    private readonly track: MediaStreamTrack,
+    private readonly frameIntervalMs: number,
+    upright = false
+  ) {
+    this.kind = upright ? "upright" : "element";
+    if (upright) this.canvas = document.createElement("canvas");
     const video = document.createElement("video");
     video.muted = true;
     video.playsInline = true;
@@ -185,7 +195,7 @@ class ElementFrames implements FrameSource {
     }
     let frame: VideoFrame;
     try {
-      frame = new VideoFrame(this.video, { timestamp: nowUs() });
+      frame = new VideoFrame(this.picture(), { timestamp: nowUs() });
     } catch {
       return;
     }
@@ -198,6 +208,20 @@ class ElementFrames implements FrameSource {
     }
     this.queued?.close();
     this.queued = frame;
+  }
+
+  // The element's picture, drawn upright on the canvas for an upright source:
+  // a frame made from the element itself keeps the camera's own orientation.
+  private picture(): HTMLVideoElement | HTMLCanvasElement {
+    const c = this.canvas;
+    if (!c) return this.video;
+    const { videoWidth: w, videoHeight: h } = this.video;
+    if (c.width !== w || c.height !== h) {
+      c.width = w;
+      c.height = h;
+    }
+    c.getContext("2d").drawImage(this.video, 0, 0, w, h);
+    return c;
   }
 
   public next(): Promise<VideoFrame | null> {
@@ -218,6 +242,7 @@ class ElementFrames implements FrameSource {
     this.waiting = null;
     this.video.srcObject = null;
     this.video.remove();
+    if (this.canvas) this.track.stop();
   }
 }
 
@@ -245,6 +270,28 @@ export const openFrameSource = async (
   }
   return new ElementFrames(track, 1000 / frameRate);
 };
+
+// Whether a track's frames come turned from the way the track's settings and
+// its <video> show them: they carry a rotation, or they are landscape where
+// the settings are portrait or the other way round. A camera held in
+// portrait can give frames of the sensor's landscape with no rotation set.
+export const framesTurned = (
+  frame: { displayWidth: number; displayHeight: number; rotation?: number },
+  settings: { width?: number; height?: number }
+): boolean => {
+  if (frame.rotation && frame.rotation % 360 !== 0) return true;
+  const { width, height } = settings;
+  if (!width || !height || width === height || frame.displayWidth === frame.displayHeight) {
+    return false;
+  }
+  return width > height !== frame.displayWidth > frame.displayHeight;
+};
+
+// Frames of `track` drawn upright from a <video> element, which presents
+// them as the track's settings have them. The source stops `track` when it
+// closes: pass a clone.
+export const openUprightFrameSource = (track: MediaStreamTrack, frameRate: number): FrameSource =>
+  new ElementFrames(track, 1000 / frameRate, true);
 
 // Makes the frames worker, built with the app.
 export const createFramesWorker = (): Worker =>

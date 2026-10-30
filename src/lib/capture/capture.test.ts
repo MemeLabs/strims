@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import assert from "assert";
+import vm from "vm";
 
 import { ICaptureAppendRequest } from "../../apis/strims/video/v1/capture";
 import { Slew, TrackClock } from "./clock";
@@ -17,6 +18,8 @@ import {
 import { opusConfig, opusHead } from "./opus";
 import { CaptureSender } from "./sender";
 import { AUDIO_TRACK, VIDEO_TRACK } from "./sink";
+import { framesTurned } from "./video-source";
+import { WORKLET_SOURCE, WorkletBlock } from "./worklet";
 
 const hex = (s: string): Uint8Array => Uint8Array.from(s.match(/../g).map((b) => parseInt(b, 16)));
 const toHex = (b: Uint8Array): string =>
@@ -104,6 +107,63 @@ describe("capture clock", () => {
     // Never back, nor closer than a millisecond.
     assert.equal(c.output(933_000_000_000), 39_333);
     assert.equal(c.output(933_000_033_900), 40_333);
+    // Another source's clock anchors again, after the last.
+    c.restart();
+    c.anchor(70_000, 70_000);
+    assert.equal(c.output(70_000), 70_000);
+    assert.equal(c.output(103_333), 103_333);
+  });
+});
+
+describe("capture frames", () => {
+  it("are turned when they carry a rotation or their orientation isn't the track's", () => {
+    const frame = (displayWidth: number, displayHeight: number, rotation?: number) => ({
+      displayWidth,
+      displayHeight,
+      rotation,
+    });
+    // An iPhone's camera held in portrait: landscape frames, portrait settings.
+    assert.ok(framesTurned(frame(1280, 720), { width: 720, height: 1280 }));
+    assert.ok(framesTurned(frame(720, 1280), { width: 1280, height: 720 }));
+    assert.ok(framesTurned(frame(1280, 720, 90), { width: 1280, height: 720 }));
+    assert.ok(!framesTurned(frame(1280, 720, 0), { width: 1280, height: 720 }));
+    assert.ok(!framesTurned(frame(1280, 720, 360), { width: 1920, height: 1080 }));
+    assert.ok(!framesTurned(frame(720, 1280), { width: 720, height: 1280 }));
+    // Settings without a size, or square pictures, say nothing.
+    assert.ok(!framesTurned(frame(1280, 720), {}));
+    assert.ok(!framesTurned(frame(720, 720), { width: 720, height: 1280 }));
+  });
+});
+
+describe("capture worklet", () => {
+  it("numbers its blocks by its own sample count, whatever currentFrame says", () => {
+    const posted: WorkletBlock[] = [];
+    let Processor: new (o: unknown) => { process(inputs: Float32Array[][]): boolean } = null;
+    const context = vm.createContext({
+      currentFrame: 0,
+      Float32Array,
+      AudioWorkletProcessor: class {
+        public port = { postMessage: (m: WorkletBlock) => posted.push(m), onmessage: null };
+      },
+      registerProcessor: (_: string, p: typeof Processor) => (Processor = p),
+    });
+    vm.runInContext(WORKLET_SOURCE, context);
+    const p = new Processor({ processorOptions: { channels: 2, frames: 960 } });
+    // The first render quantum says frame 0, the next the context's age.
+    for (let q = 0; q < 16; q++) {
+      context.currentFrame = q === 0 ? 0 : 555_275_904 + q * 128;
+      const left = new Float32Array(128).fill(q);
+      const right = new Float32Array(128).fill(-q);
+      assert.ok(p.process([[left, right]]));
+    }
+    assert.deepEqual(
+      posted.map((b) => b.sample),
+      [0, 960]
+    );
+    // Planar: the left channel's 960 samples, then the right's.
+    const first = posted[0].data;
+    assert.equal(first.length, 1920);
+    assert.deepEqual([first[0], first[959], first[960], first[1919]], [0, 7, -0, -7]);
   });
 });
 

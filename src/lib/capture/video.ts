@@ -15,7 +15,13 @@ import {
   sameBytes,
 } from "./h264";
 import { CaptureSink, VIDEO_TRACK } from "./sink";
-import { FrameSource, openFrameSource, ticker } from "./video-source";
+import {
+  FrameSource,
+  framesTurned,
+  openFrameSource,
+  openUprightFrameSource,
+  ticker,
+} from "./video-source";
 
 /**
  * The longest a GOP runs: the capture asks for a keyframe once its last is
@@ -34,6 +40,8 @@ export const KEYFRAME_INTERVAL_US = 2_000_000;
  * out of the live window.
  */
 export const STILL_REPEAT_MS = 250;
+/** Frames between checks that the source's frames aren't turned. */
+const TURN_CHECK_FRAMES = 30;
 /** Frames the encoder may hold before new ones are dropped. */
 const MAX_ENCODE_QUEUE = 3;
 /** How long a new source size holds before the encoder takes it; frames
@@ -53,6 +61,10 @@ export interface VideoCaptureInfo {
    * Constrained Baseline.
    */
   reorderFallbacks: number;
+  /** Whether the source's frames came turned, and the capture draws them
+   * upright.
+   */
+  turned: boolean;
   framesIn: number;
   framesDropped: number;
   stillRepeats: number;
@@ -96,7 +108,8 @@ export class VideoCapture {
   private stopTicks: () => void = () => undefined;
 
   private constructor(
-    private readonly source: FrameSource,
+    private readonly track: MediaStreamTrack,
+    private source: FrameSource,
     private readonly sink: CaptureSink,
     private readonly frameRate: number,
     private readonly onerror: (e: unknown) => void
@@ -110,6 +123,7 @@ export class VideoCapture {
       bitrate: 0,
       frameRate,
       reorderFallbacks: 0,
+      turned: false,
       framesIn: 0,
       framesDropped: 0,
       stillRepeats: 0,
@@ -126,7 +140,7 @@ export class VideoCapture {
   ): Promise<VideoCapture> {
     const frameRate = Math.min(track.getSettings().frameRate || MAX_FRAME_RATE, MAX_FRAME_RATE);
     const source = await openFrameSource(track, frameRate, options.createFramesWorker);
-    const v = new VideoCapture(source, sink, frameRate, options.onerror);
+    const v = new VideoCapture(track, source, sink, frameRate, options.onerror);
     v.loop = v.run();
     v.stopTicks = ticker(50, () => v.repeatStill());
     return v;
@@ -139,8 +153,12 @@ export class VideoCapture {
 
   private async run(): Promise<void> {
     while (!this.stopped) {
-      const frame = await this.source.next();
-      if (!frame) break;
+      const source = this.source;
+      const frame = await source.next();
+      if (!frame) {
+        if (source !== this.source) continue;
+        break;
+      }
       try {
         await this.take(frame);
       } catch (e) {
@@ -153,6 +171,14 @@ export class VideoCapture {
 
   private async take(frame: VideoFrame): Promise<void> {
     this.info.framesIn++;
+    if (
+      this.source.kind !== "upright" &&
+      this.info.framesIn % TURN_CHECK_FRAMES === 1 &&
+      framesTurned(frame, this.track.getSettings())
+    ) {
+      this.turnUpright();
+      return;
+    }
     this.clock.anchor(frame.timestamp);
     // A source may stamp every frame alike: a frame whose time doesn't move
     // on takes its arrival's.
@@ -176,6 +202,20 @@ export class VideoCapture {
       this.pending = null;
     }
     this.encode(frame, sourceUs);
+  }
+
+  // Moves to frames drawn upright: the source's come turned from the track's
+  // settings, and an encoder doesn't turn them.
+  private turnUpright(): void {
+    const old = this.source;
+    this.source = openUprightFrameSource(this.track.clone(), this.frameRate);
+    this.info.source = this.source.kind;
+    this.info.turned = true;
+    this.clock.restart();
+    this.lastSourceUs = -Infinity;
+    this.held?.close();
+    this.held = null;
+    old.close();
   }
 
   // Encodes the held frame again when the source sent none for a while.

@@ -29,6 +29,12 @@ export class TrackClock {
     }
   }
 
+  // Anchors the track again at its next sample, on another source's clock,
+  // its output still after its last.
+  public restart(): void {
+    this.source0 = null;
+  }
+
   // Whether the track has its first sample.
   public get anchored(): boolean {
     return this.source0 !== null;

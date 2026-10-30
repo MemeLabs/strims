@@ -9,6 +9,7 @@ import { Slew, TrackClock, nowUs } from "./clock";
 import { encoderConfig, opusConfig } from "./opus";
 import { AUDIO_TRACK, CaptureSink } from "./sink";
 import { bytesOf } from "./video";
+import { WORKLET_SOURCE, WorkletBlock } from "./worklet";
 
 /** Samples per block the worklet hands over: 20 ms at 48 kHz, an Opus
  * frame, so encoders stamp each packet with its own block's time.
@@ -48,53 +49,6 @@ class ProcessorSamples implements SampleSource {
   }
 }
 
-/** The worklet: gathers each input channel into blocks of `frames` and
- * posts them with the context frame of their first sample.
- */
-const WORKLET_SOURCE = `
-registerProcessor("strims-capture", class extends AudioWorkletProcessor {
-  constructor(options) {
-    super();
-    const { channels, frames } = options.processorOptions;
-    this.channels = channels;
-    this.frames = frames;
-    this.buf = Array.from({ length: channels }, () => new Float32Array(frames));
-    this.fill = 0;
-    this.start = 0;
-    this.stopped = false;
-    this.port.onmessage = () => (this.stopped = true);
-  }
-  process(inputs) {
-    if (this.stopped) return false;
-    const input = inputs[0] || [];
-    const n = input[0] ? input[0].length : 128;
-    for (let i = 0; i < n; ) {
-      if (this.fill === 0) this.start = currentFrame + i;
-      const take = Math.min(n - i, this.frames - this.fill);
-      for (let c = 0; c < this.channels; c++) {
-        const src = input[Math.min(c, input.length - 1)];
-        if (src) this.buf[c].set(src.subarray(i, i + take), this.fill);
-        else this.buf[c].fill(0, this.fill, this.fill + take);
-      }
-      this.fill += take;
-      i += take;
-      if (this.fill === this.frames) {
-        const data = new Float32Array(this.frames * this.channels);
-        this.buf.forEach((b, c) => data.set(b, c * this.frames));
-        this.port.postMessage({ frame: this.start, data }, [data.buffer]);
-        this.fill = 0;
-      }
-    }
-    return true;
-  }
-});
-`;
-
-interface WorkletBlock {
-  frame: number;
-  data: Float32Array<ArrayBuffer>;
-}
-
 /** Blocks a drift estimate takes its least arrival delay over: 5 s. */
 const DRIFT_WINDOW = 250;
 /** The most the drift estimate moves a window, in microseconds: clocks
@@ -110,9 +64,9 @@ const MAX_DRIFT_STEP_US = 2000;
 const MAX_SLEW_US = 50;
 
 /**
- * Blocks from an AudioWorklet, stamped by their context frame: the first
- * block's start maps to its arrival less its length, and the rest keep the
- * audio clock's spacing. The audio clock drifts from the capture's, which
+ * Blocks from an AudioWorklet, stamped by their first sample's index: the
+ * first block's start maps to its arrival less its length, and the rest
+ * keep the audio clock's spacing. The audio clock drifts from the capture's, which
  * stamps video, so `driftUs` follows how far arrivals have moved from that
  * mapping, as the least delay of each window's blocks, by at most
  * MAX_DRIFT_STEP_US a window, and the stamps slew toward it. The context's
@@ -124,7 +78,7 @@ class WorkletSamples implements SampleSource {
   private queue: AudioData[] = [];
   private waiting: ((d: AudioData | null) => void) | null = null;
   private closed = false;
-  private frame0: number | null = null;
+  private started = false;
   private at0 = 0;
   /** How far the audio clock has moved from the capture's since the first
    * block, as of the last window.
@@ -170,16 +124,16 @@ class WorkletSamples implements SampleSource {
     return new WorkletSamples(ctx, ownsContext, node, input, channels);
   }
 
-  private block({ frame, data }: WorkletBlock): void {
+  private block({ sample, data }: WorkletBlock): void {
     if (this.closed) return;
     const rate = this.context.sampleRate;
     const now = nowUs();
     const length = (WORKLET_BLOCK * 1e6) / rate;
-    if (this.frame0 === null) {
-      this.frame0 = frame;
+    if (!this.started) {
+      this.started = true;
       this.at0 = now - length;
     }
-    const t = this.at0 + ((frame - this.frame0) * 1e6) / rate;
+    const t = this.at0 + (sample * 1e6) / rate;
     this.windowMin = Math.min(this.windowMin, now - length - t);
     if (++this.windowBlocks === DRIFT_WINDOW) {
       const step = this.windowMin - this.driftUs;
