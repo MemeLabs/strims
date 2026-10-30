@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The RTMP ingress: a broadcaster's stream to one of the profile's
-//! channels, written into the channel's live video swarm as fMP4 records
-//! or in the unit format.
+//! channels, written into the channel's live video swarm in the unit
+//! format or as fMP4 records.
 //!
 //! # Listener
 //!
@@ -93,7 +93,7 @@
 //! gets the reason in an error status. Metadata is counted, and a
 //! unit-format session reads its bitrates and tracks.
 //!
-//! **fMP4**, the default: a [`Segmenter`] over a [`PackedSink`], cut under
+//! **fMP4**: a [`Segmenter`] over a [`PackedSink`], cut under
 //! the rule of
 //! [`IngressSettings::min_segment_media_bytes`](crate::IngressSettings::min_segment_media_bytes)
 //! and
@@ -107,10 +107,11 @@
 //! zeros a reader takes for record bytes, so a stream's last partial unit
 //! is never published.
 //!
-//! **Units**: a [`UnitWriter`] in frames of the swarm's chunk size, whose
-//! records go into the swarm as each unit arrives. The swarm's signing, its
-//! unit size and interval ([`UnitSigning`]), is the stream's, so the
-//! session creates the swarm once it knows enough of the stream:
+//! **Units**, the default: a [`UnitWriter`] in frames of the swarm's
+//! chunk size, whose records go into the swarm as each unit arrives. The
+//! swarm's signing, its unit size and interval ([`UnitSigning`]), is the
+//! stream's, so the session creates the swarm once it knows enough of the
+//! stream:
 //!
 //! - **What it reads.** The bitrates `onMetaData` states,
 //!   `videodatarate` and `audiodatarate` in kbit/s, each counted when

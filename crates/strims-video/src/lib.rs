@@ -92,15 +92,15 @@
 //!
 //! - **Ingest** ([`ingress`]): a broadcaster's RTMP stream to a channel.
 //!   Its session's swarm is under the channel key, so the swarm id is
-//!   the channel's public key. Its records are fMP4 segments, each
-//!   starting at a keyframe and cut by a [`Segmenter`] into a
-//!   [`PackedSink`], in a swarm of [`ingress_options`]; or with
-//!   [`IngestFormat::Units`] the unit format's, written by a
-//!   [`UnitWriter`] and signed early, in a swarm whose unit size and
-//!   signing interval the stream's nominal bitrate or tracks pick
-//!   ([`units::UnitSigning`]) once its metadata or decoder configs come,
-//!   after the publish's accept; a record over its bound, or a codec
-//!   the [`FlvSource`] refuses, ends the session with the reason. The session serves the channel's snippet, live from the
+//!   the channel's public key. Its records are the unit format's,
+//!   written by a [`UnitWriter`] and signed early, in a swarm whose unit
+//!   size and signing interval the stream's nominal bitrate or tracks
+//!   pick ([`units::UnitSigning`]) once its metadata or decoder configs
+//!   come, after the publish's accept; or with [`IngestFormat::Fmp4`]
+//!   fMP4 segments, each starting at a keyframe and cut by a
+//!   [`Segmenter`] into a [`PackedSink`], in a swarm of
+//!   [`ingress_options`]; a record over its bound, or a codec the
+//!   [`FlvSource`] refuses, ends the session with the reason. The session serves the channel's snippet, live from the
 //!   publish's start time and signed with the channel key, and keeps a
 //!   listing of the records' MIME type and swarm URI on the channel's
 //!   network from its first record. A changed channel serves the snippet

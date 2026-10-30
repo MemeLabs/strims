@@ -7,15 +7,15 @@
 //! requests are raw HTTP.
 //!
 //! A profile signs up, creates a network and a video channel on it, and
-//! enables the RTMP ingress on a free port. A synthetic publisher streams
-//! 1-second GOPs to the channel's stream key, paced in real time. The
-//! profile enables HLS and opens an HLS stream of the channel's swarm; the
-//! player polls its playlist until it lists two segments, then fetches
-//! the init and every listed segment. They are the parts of a contiguous
-//! run of the records the script produces, each EXTINF is its segment's
-//! media time, and the playlist keeps RFC 8216's rules under a 4 s
-//! target. Unknown streams answer 404, other methods 405, a
-//! HEAD has no body, and every answer allows any origin.
+//! enables the RTMP ingress, writing fMP4 records, on a free port. A
+//! synthetic publisher streams 1-second GOPs to the channel's stream key,
+//! paced in real time. The profile enables HLS and opens an HLS stream of
+//! the channel's swarm; the player polls its playlist until it lists two
+//! segments, then fetches the init and every listed segment. They are the
+//! parts of a contiguous run of the records the script produces, each
+//! EXTINF is its segment's media time, and the playlist keeps RFC 8216's
+//! rules under a 4 s target. Unknown streams answer 404, other methods
+//! 405, a HEAD has no body, and every answer allows any origin.
 //!
 //! A service without an HLS listener doesn't support HLS egress, and one
 //! whose HLS address is taken doesn't start.
@@ -51,7 +51,7 @@ use strims_video::synth::script::{
     MetaValue, Script, ScriptConfig, Tag, TagKind, expected_records, media_without_publish_times,
     without_publish_times,
 };
-use strims_video::{CutRule, ingress_options};
+use strims_video::{CutRule, IngestFormat, ingress_options};
 use support::video::*;
 use support::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -177,11 +177,12 @@ fn hls_serves_an_rtmp_stream_to_players() {
     run(async {
         tokio::time::timeout(StdDuration::from_secs(300), async {
             let mut steps = Steps(Instant::now());
-            let alice = Profile::sign_up(Config {
+            let mut config = Config {
                 hls_listen: Some("127.0.0.1:0".into()),
                 ..local_config()
-            })
-            .await;
+            };
+            config.app.video.ingress.format = IngestFormat::Fmp4;
+            let alice = Profile::sign_up(config).await;
             let hls_addr = alice.svc.hls_addr().unwrap();
             assert_eq!(alice.svc.hls_base_url(), format!("http://{hls_addr}"));
             assert!(alice.hls_supported().await);

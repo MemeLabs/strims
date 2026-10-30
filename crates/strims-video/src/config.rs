@@ -106,10 +106,10 @@ impl Default for IngressSettings {
 pub enum IngestFormat {
     /// fMP4 records, one per segment, in the packed layout; listed as
     /// [`fmp4_mime`](crate::fmp4_mime).
-    #[default]
     Fmp4,
     /// The [unit format](crate::units): a record per access unit, in the
     /// chunked layout; listed as [`units_mime`](crate::units_mime).
+    #[default]
     Units,
 }
 

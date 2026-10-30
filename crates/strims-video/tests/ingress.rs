@@ -341,7 +341,7 @@ fn refusal(code: &str, description: &str) -> (String, String) {
 #[test]
 fn a_published_stream_is_listed_and_read_by_another_node() {
     run(async {
-        let s = Ingest::new(true, Config::default()).await;
+        let s = Ingest::new(true, fmp4_config()).await;
         let b = s.b.as_ref().unwrap();
         let vb = start(b, NoVideoHost, Config::default());
         let mut events = s.va.subscribe();
@@ -445,6 +445,7 @@ fn publishes_are_refused_with_their_reasons() {
         let config = Config {
             ingress: IngressSettings {
                 max_sessions: 1,
+                format: IngestFormat::Fmp4,
                 ..IngressSettings::default()
             },
             ..Config::default()
@@ -532,6 +533,7 @@ fn a_record_past_its_bound_ends_the_session() {
         let config = Config {
             ingress: IngressSettings {
                 max_record_bytes: 256 * 1024,
+                format: IngestFormat::Fmp4,
                 ..IngressSettings::default()
             },
             ..Config::default()
@@ -557,7 +559,7 @@ fn a_record_past_its_bound_ends_the_session() {
 #[test]
 fn a_second_publish_replaces_the_first() {
     run(async {
-        let s = Ingest::new(false, Config::default()).await;
+        let s = Ingest::new(false, fmp4_config()).await;
         let mut events = s.va.subscribe();
         let mut first = s.publish("10.0.0.1:1").await;
         let mut stream =
@@ -890,6 +892,17 @@ fn list_streams_reports_live_sessions() {
         ended(&mut events).await;
         assert!(list().await.is_empty());
     });
+}
+
+/// A node whose ingest writes fMP4 records.
+fn fmp4_config() -> Config {
+    Config {
+        ingress: IngressSettings {
+            format: IngestFormat::Fmp4,
+            ..IngressSettings::default()
+        },
+        ..Config::default()
+    }
 }
 
 fn units_config() -> Config {
