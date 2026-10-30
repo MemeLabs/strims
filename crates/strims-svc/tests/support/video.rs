@@ -178,3 +178,106 @@ pub fn listed(playlist: &str) -> Vec<Listed> {
     }
     out
 }
+
+/// A playlist's listed segment with what RFC 8216 rules on: its number,
+/// its EXTINF in milliseconds, and whether a discontinuity precedes it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Entry {
+    pub seq: u64,
+    pub millis: u64,
+    pub discontinuity: bool,
+    pub listed: Listed,
+}
+
+/// Checks the reloads of a live media playlist against RFC 8216: each
+/// one's structure, and what may change between them.
+#[derive(Debug, Default)]
+pub struct PlaylistRules {
+    /// The target duration of the first reload.
+    pub target: Option<u64>,
+    media_sequence: u64,
+    discontinuity_sequence: u64,
+    /// Segments that left the listing, so it must hold three targets.
+    pub slid: bool,
+    /// Every segment listed so far, by number.
+    pub seen: std::collections::BTreeMap<u64, Entry>,
+}
+
+impl PlaylistRules {
+    /// Checks a reload: the version-7 header, a target duration that never
+    /// changes and that every EXTINF rounds to at most, consecutive segment
+    /// numbers from the media sequence, sequences that never go back, no
+    /// `EXT-X-INDEPENDENT-SEGMENTS`, three targets listed once segments
+    /// slid out, and listed segments that keep their duration. Its
+    /// segments.
+    pub fn check(&mut self, playlist: &str) -> Vec<Entry> {
+        let mut lines = playlist.lines();
+        assert_eq!(lines.next(), Some("#EXTM3U"), "{playlist}");
+        assert_eq!(lines.next(), Some("#EXT-X-VERSION:7"), "{playlist}");
+        assert!(
+            !playlist.contains("#EXT-X-INDEPENDENT-SEGMENTS"),
+            "{playlist}"
+        );
+        let tag = |line: Option<&str>, name: &str| -> u64 {
+            line.and_then(|l| l.strip_prefix(name))
+                .unwrap_or_else(|| panic!("no {name}: {playlist}"))
+                .parse()
+                .unwrap()
+        };
+        let target = tag(lines.next(), "#EXT-X-TARGETDURATION:");
+        let media_sequence = tag(lines.next(), "#EXT-X-MEDIA-SEQUENCE:");
+        let discontinuity_sequence = tag(lines.next(), "#EXT-X-DISCONTINUITY-SEQUENCE:");
+        assert_eq!(*self.target.get_or_insert(target), target, "{playlist}");
+        assert!(media_sequence >= self.media_sequence, "{playlist}");
+        assert!(
+            discontinuity_sequence >= self.discontinuity_sequence,
+            "{playlist}"
+        );
+        if self.media_sequence > 0 && media_sequence > self.media_sequence {
+            self.slid = true;
+        }
+        self.media_sequence = media_sequence;
+        self.discontinuity_sequence = discontinuity_sequence;
+
+        let mut discontinuity = false;
+        let mut entries: Vec<Entry> = Vec::new();
+        let listed = listed(playlist);
+        for line in playlist.lines() {
+            if line == "#EXT-X-DISCONTINUITY" {
+                discontinuity = true;
+            } else if line.starts_with("#EXTINF:") {
+                let l = &listed[entries.len()];
+                let x = line
+                    .strip_prefix("#EXTINF:")
+                    .and_then(|x| x.strip_suffix(','))
+                    .unwrap();
+                let (secs, frac) = x.split_once('.').unwrap();
+                assert_eq!(frac.len(), 3, "{playlist}");
+                let millis = secs.parse::<u64>().unwrap() * 1000 + frac.parse::<u64>().unwrap();
+                assert!(
+                    (millis + 500) / 1000 <= target,
+                    "a segment over the target: {playlist}"
+                );
+                let seq = l.uri.strip_suffix(".m4s").unwrap().parse().unwrap();
+                assert_eq!(seq, media_sequence + entries.len() as u64, "{playlist}");
+                entries.push(Entry {
+                    seq,
+                    millis,
+                    discontinuity: std::mem::take(&mut discontinuity),
+                    listed: l.clone(),
+                });
+            }
+        }
+        assert_eq!(entries.len(), listed.len(), "{playlist}");
+        if self.slid {
+            let total: u64 = entries.iter().map(|e| e.millis).sum();
+            assert!(total >= 3000 * target, "under three targets: {playlist}");
+        }
+        for e in &entries {
+            let first = self.seen.entry(e.seq).or_insert_with(|| e.clone());
+            assert_eq!(first.millis, e.millis, "{playlist}");
+            assert_eq!(first.listed, e.listed, "{playlist}");
+        }
+        entries
+    }
+}

@@ -12,8 +12,9 @@
 //! profile enables HLS and opens an HLS stream of the channel's swarm; the
 //! player polls its playlist until it lists two segments, then fetches
 //! the init and every listed segment. They are the parts of a contiguous
-//! run of the records the script produces, and each EXTINF is its
-//! segment's media time. Unknown streams answer 404, other methods 405, a
+//! run of the records the script produces, each EXTINF is its segment's
+//! media time, and the playlist keeps RFC 8216's rules under a 4 s
+//! target. Unknown streams answer 404, other methods 405, a
 //! HEAD has no body, and every answer allows any origin.
 //!
 //! A service without an HLS listener doesn't support HLS egress, and one
@@ -312,6 +313,9 @@ fn hls_serves_an_rtmp_stream_to_players() {
                 playlist.starts_with("#EXTM3U\n#EXT-X-VERSION:7\n"),
                 "{playlist}"
             );
+            let rules = &mut PlaylistRules::default();
+            rules.check(&playlist);
+            assert_eq!(rules.target, Some(4));
             steps.done("the playlist lists two segments");
 
             let init_uri = &segments[0].init;
