@@ -187,7 +187,8 @@ impl ChunkCodec for MediaCodec {
     }
 
     /// Panics if `chunk` isn't a media chunk of the swarm, or zeros: a
-    /// stream the codec would change fails its run rather than mislead it.
+    /// stream the codec would change fails its run, so no run reports
+    /// bytes the codec altered.
     #[allow(clippy::panic)]
     fn encode(&self, offset: u64, chunk: &[u8], state: &mut [u8]) {
         let (info, n) = media_state(chunk).unwrap_or((FrameInfo { seq: 0, time_ms: 0 }, 0));
