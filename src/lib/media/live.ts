@@ -12,10 +12,12 @@ export const INITIAL_TARGET = 1;
 export const MIN_TARGET = 0.5;
 export const MAX_TARGET = 3;
 /**
- * Lag added to the arrival jitter the target covers: appending, decoding
- * and the remuxer holding each track's last unit.
+ * Lag added to the arrival jitter the target covers: appending, decoding,
+ * the remuxer holding each track's last unit, and the media an engine
+ * still holds when it stops for more (Chromium waits with about 0.1 s
+ * buffered).
  */
-export const TARGET_MARGIN = 0.2;
+export const TARGET_MARGIN = 0.3;
 /** The quantile of arrival lateness the target covers. */
 export const JITTER_QUANTILE = 0.98;
 /** Seconds of arrivals the jitter quantile is taken over. */
