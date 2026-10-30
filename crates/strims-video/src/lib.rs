@@ -28,8 +28,8 @@
 //!   ([`PackedSink`]) or collected whole ([`VecSink`]).
 //! - `synth` (feature `test-support`): deterministic FLV tag scripts, the
 //!   records they produce, and an RTMP publisher client.
-//! - [`hls`]: HLS playlists of fMP4 segments, and the routes a driver
-//!   serves them on.
+//! - [`hls`]: HLS playlists of fMP4 segments, the muxer that cuts access
+//!   units into them, and the routes a driver serves them on.
 //! - [`units`]: the unit format, a record per access unit in the chunked
 //!   chunkstream layout: its records, the [`UnitWriter`] muxer and the
 //!   [`UnitReader`], which builds for wasm32.
@@ -136,15 +136,20 @@
 //! Where the driver serves HLS over HTTP ([`HlsSettings::serve`]), the
 //! node serves video swarms to external players as HLS streams
 //! ([`hls_egress`]). [`VideoControl::open_hls`] reads a swarm as a
-//! stream, counted among the [`EgressSettings`] bounds, and answers its
-//! playlist URL.
+//! stream in the format the listing's MIME type names, counted among the
+//! [`EgressSettings`] bounds, and answers its playlist URL.
 //!
-//! - **Contract.** Each whole record of the swarm that is an fMP4 record
-//!   ([`fmp4::split_record`]) is a segment of the playlist, lasting its
-//!   media time ([`fmp4::media_duration`]) and served with its init on the
-//!   driver's [`hls::HlsRoutes`]. Other records, such as a capture's
-//!   WebM, are skipped. A skipped record, or a discontinuity of the
-//!   stream, marks the next segment discontinuous.
+//! - **Contract.** A playlist's target duration is
+//!   [`HlsSettings::target_duration`] for its life, and every segment
+//!   rounds to at most it. A whole fMP4 record ([`fmp4::split_record`]) is
+//!   a segment lasting its media time ([`fmp4::media_duration`]), or runs
+//!   of its fragments when it lasts longer; other records, such as WebM,
+//!   are skipped. A unit-format stream's access units are cut into
+//!   segments at its keyframes, and mid-GOP when a GOP outlasts the target
+//!   ([`hls::HlsMuxer`]). Segments are served with their inits on the
+//!   driver's [`hls::HlsRoutes`]. A skipped record, a discontinuity of an
+//!   fMP4 stream, or units lost from a unit-format one mark the next
+//!   segment discontinuous.
 //! - **URL.** The HLS config's public server address, or else the
 //!   driver's [`HlsSettings::base_url`], followed by
 //!   [`hls::playlist_path`] of the profile's key and the swarm's transfer

@@ -55,7 +55,9 @@
 //! # HLS egress
 //!
 //! `OpenStream` answers the playlist URL of the swarm's HLS stream, the
-//! one the node serves or a new one, or an error when it doesn't open.
+//! one the node serves or a new one, or an error when it doesn't open. A
+//! new stream reads the swarm in the format its request's MIME type, the
+//! listing's, names, as `Egress` does.
 //! The stream isn't the connection's: it lasts past the call and the
 //! connection, until `CloseStream` with its transfer id closes it, it
 //! goes idle or HLS is disabled ([`hls_egress`](crate::hls_egress)).
@@ -321,7 +323,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> HlsEgressService for VideoFrontend<
     ) -> Result<HlsEgressOpenStreamResponse, RpcError> {
         let playlist_url = self
             .control
-            .open_hls(&req.swarm_uri, &req.network_keys)
+            .open_hls(
+                &req.swarm_uri,
+                &req.network_keys,
+                StreamFormat::from_mime(&req.mime_type),
+            )
             .await
             .map_err(rpc)?;
         Ok(HlsEgressOpenStreamResponse { playlist_url })

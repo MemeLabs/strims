@@ -572,7 +572,7 @@ fn configs_are_checked_and_round_trip() {
         assert!(streams.await.unwrap().streams.is_empty());
         let open = s.hls.open_stream(&HlsEgressOpenStreamRequest {
             swarm_uri: "magnet:?xt=urn:ppspp:x".into(),
-            network_keys: Vec::new(),
+            ..Default::default()
         });
         assert_eq!(refusal(open.await), "HLS egress is not supported");
         let close = s.hls.close_stream(&HlsEgressCloseStreamRequest {

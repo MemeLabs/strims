@@ -340,6 +340,7 @@ fn ffmpeg_publishes_and_plays_back_over_hls() {
                 .open_stream(&HlsEgressOpenStreamRequest {
                     swarm_uri: ch.swarm_uri(),
                     network_keys: vec![ch.network_key.clone()],
+                    mime_type: mime.clone(),
                 })
                 .await
                 .unwrap()

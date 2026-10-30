@@ -1,14 +1,60 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! HLS media playlists over fMP4 segments, and the routes that serve them.
+//! HLS media playlists over fMP4 segments, the muxer that cuts access
+//! units into them, and the routes that serve them.
 //!
 //! A [`Playlist`] takes finished segments from a source, each an init
 //! (`ftyp`+`moov`), its media (`moof`+`mdat`…) and its duration. It keeps
-//! the newest few, serves them by number, and renders a live media
-//! playlist (RFC 8216, version 7) listing the newest of those. Segments
-//! that slid out of the listing stay fetchable for a while, for players
-//! that read an earlier playlist.
+//! the newest, serves them by number, and renders a live media playlist
+//! (RFC 8216, version 7) listing the newest of those. Segments that slid
+//! out of the listing stay fetchable for a while, for players that read
+//! an earlier playlist.
+//!
+//! # Target duration
+//!
+//! A playlist's `EXT-X-TARGETDURATION` is fixed for its life
+//! ([`PlaylistConfig::target`]): a live playlist's target may never
+//! change. Every segment's duration, as listed in milliseconds and
+//! rounded to the nearest second, must be at most the target; the
+//! segment sources keep theirs within it ([`fits_target`]). The listing
+//! holds at least three targets of media, which players start at least
+//! that far from the end of.
+//!
+//! A playlist never declares `EXT-X-INDEPENDENT-SEGMENTS`. A live
+//! playlist can't drop a tag it declared, and a stream whose GOP outlasts
+//! the target has segments that start mid-GOP.
+//!
+//! # Segments
+//!
+//! [`HlsMuxer`] cuts a stream's access units into segments of at most the
+//! target, each a run of fragments ([`FragmentWriter`]) after an init:
+//!
+//! - The first segment starts at the first keyframe of the cut track (the
+//!   video track with the lowest id). A stream without video has none,
+//!   and no segments.
+//! - A keyframe of the cut track ends the segment once it has lasted
+//!   [`KEYFRAME_CUT_FLOOR`], and starts the next.
+//! - A unit of the cut track that, with a frame a quarter longer than the
+//!   longer of its last two, would take the segment past the target ends
+//!   it mid-GOP, and starts the next segment. So only a GOP that rounds
+//!   above the target, or comes within a quarter frame of it, is split;
+//!   the margin covers timestamps rounded to milliseconds. While the cut
+//!   track sends nothing for two of its frames, a unit of another track
+//!   ends the segment the same way, and the cut track's last sample ends
+//!   at the cut.
+//! - Changed configs end the segment at the next keyframe of the cut
+//!   track, whose segment's init declares them; until then, units of the
+//!   changed tracks are dropped.
+//! - A gap ([`HlsMuxer::gap`]) ends the segment, and units are dropped up
+//!   to the next keyframe of the cut track, whose segment follows a
+//!   discontinuity.
+//!
+//! Within a segment, a fragment ends before each keyframe of the cut
+//! track, and before the cut track's next unit once the fragment holds
+//! [`HlsMuxerConfig::fragment_duration`] of media.
+//!
+//! # Routes
 //!
 //! [`HlsRoutes`] maps request paths to the playlists of registered
 //! profiles and their streams:
@@ -21,9 +67,10 @@
 //! Registrations are handles, [`HlsProfile`] and [`HlsStream`], whose drop
 //! removes them.
 //!
-//! Every collection is bounded: segments and their bytes by
-//! [`PlaylistConfig`], profiles by [`MAX_PROFILES`], streams by
-//! [`MAX_STREAMS`], and request paths by [`MAX_PATH_LEN`].
+//! Every collection is bounded: segments by [`MAX_SEGMENTS`] and their
+//! bytes by [`PlaylistConfig`], a muxer's segment by
+//! [`HlsMuxerConfig::max_segment_bytes`], profiles by [`MAX_PROFILES`],
+//! streams by [`MAX_STREAMS`], and request paths by [`MAX_PATH_LEN`].
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
@@ -33,13 +80,26 @@ use std::rc::{Rc, Weak};
 
 use strims_base::time::{Duration, Time};
 
-/// How many segments a [`Playlist`] lists and keeps.
+use crate::fmp4::{FragmentWriter, InitError, MAX_TRACKS, Written, write_init};
+use crate::media::{AccessUnit, DecoderConfig, Muxer, TrackId, TrackKind};
+use crate::segment::{MAX_INIT_LEN, composition_delay, ordered};
+
+/// The most segments a [`Playlist`] keeps, listed or not.
+pub const MAX_SEGMENTS: usize = 256;
+
+/// How long a [`Playlist`]'s segments last, and how many it lists and
+/// keeps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PlaylistConfig {
-    /// Segments listed, newest last. At most `retained` are.
-    pub listed: usize,
-    /// Segments kept for fetching, the listed ones among them.
-    pub retained: usize,
+    /// `EXT-X-TARGETDURATION`, in whole seconds; 0 counts as 1.
+    pub target: u64,
+    /// The least media time listed: the newest segments whose durations
+    /// add up to it, and to three targets at least.
+    pub listed: Duration,
+    /// The least media time kept for fetching, the listed segments among
+    /// it: the newest segments whose durations add up to it, and to the
+    /// listed time at least.
+    pub retained: Duration,
     /// The most bytes of kept segments and inits.
     pub max_retained_bytes: usize,
 }
@@ -47,11 +107,44 @@ pub struct PlaylistConfig {
 impl Default for PlaylistConfig {
     fn default() -> Self {
         PlaylistConfig {
-            listed: 6,
-            retained: 8,
+            target: 4,
+            listed: Duration::from_secs(16),
+            retained: Duration::from_secs(40),
             max_retained_bytes: 64 << 20,
         }
     }
+}
+
+impl PlaylistConfig {
+    /// The target, at least 1.
+    fn target_at_least_one(&self) -> u64 {
+        self.target.max(1)
+    }
+
+    /// The least listed media time, in milliseconds.
+    fn listed_millis(&self) -> u64 {
+        duration_millis(self.listed).max(self.target_at_least_one().saturating_mul(3000))
+    }
+
+    /// The least kept media time, in milliseconds.
+    fn retained_millis(&self) -> u64 {
+        duration_millis(self.retained).max(self.listed_millis())
+    }
+}
+
+/// `d` as a target duration: whole seconds, rounded up, at least 1.
+pub fn target_secs(d: Duration) -> u64 {
+    let secs = u64::try_from(d.as_nanos())
+        .unwrap_or(0)
+        .div_ceil(1_000_000_000);
+    secs.max(1)
+}
+
+/// Whether a segment lasting `d` can be listed under target duration
+/// `target`: in milliseconds, rounded to the nearest second, it is at
+/// most the target.
+pub fn fits_target(d: Duration, target: u64) -> bool {
+    rounded_secs(duration_millis(d)) <= target.max(1)
 }
 
 struct Segment {
@@ -75,7 +168,7 @@ struct Init {
 /// ids count up from the same start, one per distinct init. Kept segments
 /// hold consecutive numbers, and the playlist lists the newest of them.
 ///
-/// Bounds: at most [`PlaylistConfig::retained`] segments, and at most
+/// Bounds: at most [`MAX_SEGMENTS`] segments, and at most
 /// [`PlaylistConfig::max_retained_bytes`] of them and the inits they
 /// reference, oldest dropped first. An init is kept while a kept segment
 /// references it, so there are no more inits than segments.
@@ -86,6 +179,8 @@ pub struct Playlist {
     /// The inits the kept segments reference, oldest first.
     inits: VecDeque<Init>,
     retained_bytes: usize,
+    /// The kept segments' durations, in milliseconds.
+    retained_millis: u64,
     next_seq: u64,
     next_init: u64,
     /// Some segment was pushed.
@@ -94,8 +189,6 @@ pub struct Playlist {
     pending_discontinuity: bool,
     /// Segments ever pushed after a discontinuity.
     discontinuities: u64,
-    /// The largest rounded duration pushed, in seconds.
-    max_duration: u64,
 }
 
 impl Playlist {
@@ -111,12 +204,12 @@ impl Playlist {
             segments: VecDeque::new(),
             inits: VecDeque::new(),
             retained_bytes: 0,
+            retained_millis: 0,
             next_seq: first,
             next_init: first,
             pushed: false,
             pending_discontinuity: false,
             discontinuities: 0,
-            max_duration: 0,
         }
     }
 
@@ -125,7 +218,8 @@ impl Playlist {
     }
 
     /// Appends a segment: `media` decodes with `init` and lasts `duration`
-    /// (negative counts as zero). It takes the next segment number.
+    /// (negative counts as zero), which [`fits_target`] the playlist's
+    /// target. It takes the next segment number.
     ///
     /// An init identical to the newest kept segment's is shared. Any
     /// other gets the next init id, and a discontinuity precedes the
@@ -151,12 +245,12 @@ impl Playlist {
         };
 
         let millis = duration_millis(duration);
-        self.max_duration = self.max_duration.max(rounded_secs(millis));
         let discontinuity = mem::take(&mut self.pending_discontinuity);
         if discontinuity {
             self.discontinuities = self.discontinuities.saturating_add(1);
         }
         self.retained_bytes = self.retained_bytes.saturating_add(media.len());
+        self.retained_millis = self.retained_millis.saturating_add(millis);
         self.segments.push_back(Segment {
             seq: self.next_seq,
             init: init_id,
@@ -176,15 +270,23 @@ impl Playlist {
     }
 
     /// Drops the oldest segments, and the inits only they referenced,
-    /// until the bounds hold.
+    /// until the bounds hold and the segments after the oldest would last
+    /// less than the kept media time.
     fn trim(&mut self) {
-        while self.segments.len() > self.config.retained
-            || self.retained_bytes > self.config.max_retained_bytes
-        {
+        let keep = self.config.retained_millis();
+        while let Some(front) = self.segments.front() {
+            let rest = self.retained_millis.saturating_sub(front.millis);
+            let over = self.segments.len() > MAX_SEGMENTS
+                || self.retained_bytes > self.config.max_retained_bytes
+                || rest >= keep;
+            if !over {
+                break;
+            }
             let Some(dropped) = self.segments.pop_front() else {
                 break;
             };
             self.retained_bytes = self.retained_bytes.saturating_sub(dropped.media.len());
+            self.retained_millis = self.retained_millis.saturating_sub(dropped.millis);
             let oldest = self.segments.front().map(|s| s.init);
             while let Some(init) = self.inits.front() {
                 if oldest.is_some_and(|o| init.id >= o) {
@@ -196,9 +298,19 @@ impl Playlist {
         }
     }
 
-    /// The listed segments, oldest first.
+    /// The listed segments, oldest first: the fewest newest segments that
+    /// last the listed media time, or every kept one.
     fn listed(&self) -> impl Iterator<Item = &Segment> {
-        let n = self.config.listed.min(self.segments.len());
+        let want = self.config.listed_millis();
+        let mut n = 0;
+        let mut millis = 0u64;
+        for s in self.segments.iter().rev() {
+            if millis >= want {
+                break;
+            }
+            millis = millis.saturating_add(s.millis);
+            n += 1;
+        }
         self.segments.iter().skip(self.segments.len() - n)
     }
 
@@ -208,7 +320,7 @@ impl Playlist {
     /// the one before it carry an `EXT-X-MAP` naming their init. The
     /// playlist is live: it never ends.
     pub fn render(&self) -> String {
-        let mut out = String::with_capacity(160 + 64 * self.config.listed.min(self.segments.len()));
+        let mut out = String::with_capacity(160 + 64 * self.segments.len());
         // Writing to a String can't fail.
         let _ = write!(
             out,
@@ -259,14 +371,9 @@ impl Playlist {
             .map(|s| Rc::clone(&s.media))
     }
 
-    /// `EXT-X-TARGETDURATION`: the largest segment duration pushed, rounded
-    /// to whole seconds, and at least 1.
-    ///
-    /// Every listed duration must round to at most the target, and a live
-    /// playlist learns durations as segments arrive. So the target is the
-    /// largest seen, and it only grows.
+    /// `EXT-X-TARGETDURATION`: the configured target, at least 1.
     pub fn target_duration(&self) -> u64 {
-        self.max_duration.max(1)
+        self.config.target_at_least_one()
     }
 
     /// `EXT-X-MEDIA-SEQUENCE`: the first listed segment's number, or the
@@ -298,6 +405,11 @@ impl Playlist {
         self.segments.len()
     }
 
+    /// The number of listed segments.
+    pub fn listed_segments(&self) -> usize {
+        self.listed().count()
+    }
+
     /// The bytes of kept segments and inits.
     pub fn retained_bytes(&self) -> usize {
         self.retained_bytes
@@ -325,6 +437,553 @@ fn duration_millis(d: Duration) -> u64 {
 /// Milliseconds in whole seconds, rounded half up.
 fn rounded_secs(millis: u64) -> u64 {
     millis.saturating_add(500) / 1000
+}
+
+/// The least a segment lasts before a keyframe of its cut track ends it.
+///
+/// It stays under half a second, so a segment that holds less than it
+/// and then a GOP rounding to at most the target rounds to at most the
+/// target too: a keyframe it didn't end at never makes the next GOP split.
+pub const KEYFRAME_CUT_FLOOR: Duration = Duration::from_millis(400);
+
+/// The most finished segments an [`HlsMuxer`] holds for
+/// [`HlsMuxer::take_segment`]; older ones are dropped.
+pub const MAX_PENDING_SEGMENTS: usize = 4;
+
+/// How an [`HlsMuxer`] cuts segments and fragments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HlsMuxerConfig {
+    /// The playlist's target duration in whole seconds
+    /// ([`PlaylistConfig::target`]); 0 counts as 1.
+    pub target: u64,
+    /// The media a fragment holds before the cut track's next unit ends
+    /// it.
+    pub fragment_duration: Duration,
+    /// The most bytes of a segment's media, its held samples included.
+    pub max_segment_bytes: usize,
+}
+
+impl Default for HlsMuxerConfig {
+    fn default() -> Self {
+        HlsMuxerConfig {
+            target: 4,
+            fragment_duration: Duration::from_millis(100),
+            max_segment_bytes: 16 << 20,
+        }
+    }
+}
+
+/// A segment an [`HlsMuxer`] finished.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HlsSegment {
+    /// The init its media decodes with, shared by the segments of the
+    /// same configs.
+    pub init: Rc<[u8]>,
+    /// Its fragments, back to back.
+    pub media: Vec<u8>,
+    /// From its first unit to the unit that ended it; at a gap or the
+    /// stream's end, its cut track's samples, or its longest track's
+    /// without them.
+    pub duration: Duration,
+    /// It starts at a keyframe of the cut track; it starts mid-GOP when
+    /// not.
+    pub keyframe: bool,
+    /// A gap came before it: its timestamps don't follow on from the
+    /// segment before.
+    pub discontinuity: bool,
+}
+
+/// What an [`HlsMuxer`] has made and dropped.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HlsMuxerMetrics {
+    pub segments: u64,
+    /// Segments that start mid-GOP.
+    pub mid_gop_segments: u64,
+    /// Segments that don't [`fit`](fits_target) the target: a sample
+    /// lasted past it with no unit to cut at.
+    pub overlong_segments: u64,
+    /// Units dropped while no segment was open: before the cut track's
+    /// first keyframe, and after a gap up to its next.
+    pub dropped_awaiting_keyframe: u64,
+    /// Units of a changed or new track before the segment that declares
+    /// its config.
+    pub dropped_pending_config: u64,
+    /// Units a segment couldn't hold within
+    /// [`HlsMuxerConfig::max_segment_bytes`] even alone; units are then
+    /// dropped up to the next keyframe.
+    pub dropped_oversized: u64,
+    /// Finished segments dropped untaken.
+    pub dropped_segments: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum HlsMuxerError {
+    #[error("invalid decoder config: {0}")]
+    Config(#[from] InitError),
+    #[error("the init segment is longer than {MAX_INIT_LEN} bytes")]
+    InitTooLong,
+    #[error("track {0} has no decoder config")]
+    UnknownTrack(u32),
+}
+
+/// A track's latest unit time, and the times between its last three
+/// units.
+#[derive(Debug, Clone, Copy)]
+struct Timing {
+    track: TrackId,
+    last: Duration,
+    step: Duration,
+    previous: Duration,
+}
+
+impl Timing {
+    /// The longer of the last two steps.
+    fn longest_step(&self) -> Duration {
+        self.step.max(self.previous)
+    }
+}
+
+/// The segment in progress.
+#[derive(Debug)]
+struct Open {
+    /// Its first unit's decode time.
+    start: Duration,
+    keyframe: bool,
+    discontinuity: bool,
+    /// The fragments written so far.
+    media: Vec<u8>,
+    /// The decode time of the first unit the writer holds; `None` while
+    /// it holds none.
+    fragment_start: Option<Duration>,
+}
+
+/// What a unit does to the segment in progress.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Step {
+    /// No segment is open and the unit can't start one.
+    Drop,
+    /// The unit starts a segment, at a keyframe or not.
+    Start(bool),
+    /// The unit ends the segment in progress and starts the next, at a
+    /// keyframe or not.
+    Cut(bool),
+    /// The unit ends the fragment in progress.
+    Fragment,
+    Add,
+}
+
+/// Cuts access units into HLS segments; see the
+/// [module docs](self#segments).
+///
+/// It is a [`Muxer`]: its output is the segments it finishes, which
+/// [`take_segment`](Self::take_segment) hands out.
+///
+/// # Bounds
+///
+/// A segment's fragments and held samples stay within
+/// [`HlsMuxerConfig::max_segment_bytes`]: a unit that would take them past
+/// it ends the segment, and one that can't fit even alone is dropped with
+/// the units after it up to the next keyframe. It holds at most
+/// [`MAX_TRACKS`] configs and [`MAX_PENDING_SEGMENTS`] finished segments,
+/// and reuses its buffers but for each segment's media.
+#[derive(Debug)]
+pub struct HlsMuxer {
+    config: HlsMuxerConfig,
+    /// The current configs, at most [`MAX_TRACKS`].
+    configs: BTreeMap<TrackId, DecoderConfig>,
+    /// The configs the init declares, in init order: the writer's tracks.
+    declared: Vec<DecoderConfig>,
+    /// The configs differ from the declared ones.
+    changed: bool,
+    init: Rc<[u8]>,
+    /// Writes fragments only when flushed.
+    writer: FragmentWriter,
+    scratch: Vec<u8>,
+    segment: Option<Open>,
+    /// Per track that had units; at most [`MAX_TRACKS`].
+    timing: Vec<Timing>,
+    /// A discontinuity precedes the next segment.
+    pending_discontinuity: bool,
+    /// A segment was finished, so a gap after it is a discontinuity.
+    finished: bool,
+    out: VecDeque<HlsSegment>,
+    metrics: HlsMuxerMetrics,
+}
+
+impl HlsMuxer {
+    pub fn new(config: HlsMuxerConfig) -> Self {
+        HlsMuxer {
+            config,
+            configs: BTreeMap::new(),
+            declared: Vec::new(),
+            changed: false,
+            init: Rc::from(&[][..]),
+            writer: FragmentWriter::new(Duration::MAX),
+            scratch: Vec::new(),
+            segment: None,
+            timing: Vec::new(),
+            pending_discontinuity: false,
+            finished: false,
+            out: VecDeque::new(),
+            metrics: HlsMuxerMetrics::default(),
+        }
+    }
+
+    pub fn config(&self) -> HlsMuxerConfig {
+        self.config
+    }
+
+    pub fn metrics(&self) -> HlsMuxerMetrics {
+        self.metrics
+    }
+
+    /// The oldest finished segment not yet taken.
+    pub fn take_segment(&mut self) -> Option<HlsSegment> {
+        self.out.pop_front()
+    }
+
+    /// Units went missing here: ends the segment in progress, and drops
+    /// units up to the cut track's next keyframe, whose segment follows a
+    /// discontinuity.
+    pub fn gap(&mut self) {
+        self.end(None, None);
+        self.pending_discontinuity |= self.finished;
+    }
+
+    /// The stream starts over with configs set anew: a [`gap`](Self::gap),
+    /// and every config is forgotten, so tracks the new configs leave out
+    /// are gone.
+    pub fn reset(&mut self) {
+        self.gap();
+        self.configs.clear();
+        self.declared.clear();
+        self.changed = false;
+        self.timing.clear();
+    }
+
+    /// The track whose keyframes start segments.
+    fn cut_track(&self) -> Option<&DecoderConfig> {
+        self.configs.values().find(|c| c.kind == TrackKind::Video)
+    }
+
+    /// Whether the current configs are the declared ones.
+    fn declares_current(&self) -> bool {
+        self.configs.len() == self.declared.len()
+            && ordered(&self.configs)
+                .zip(&self.declared)
+                .all(|(a, b)| a == b)
+    }
+
+    /// Whether `track`'s units go into the segment: the init declares its
+    /// current config.
+    fn declares(&self, track: TrackId) -> bool {
+        self.declared
+            .iter()
+            .any(|c| c.track == track && self.configs.get(&track) == Some(c))
+    }
+
+    fn timing(&self, track: TrackId) -> Option<&Timing> {
+        self.timing.iter().find(|t| t.track == track)
+    }
+
+    /// Records a unit of `track` at `t`: the longer of the times between
+    /// its last three units, zero before it has two after one another.
+    fn note(&mut self, track: TrackId, t: Duration) -> Duration {
+        match self.timing.iter_mut().find(|x| x.track == track) {
+            Some(x) => {
+                if t > x.last {
+                    x.previous = x.step;
+                    x.step = t - x.last;
+                }
+                x.last = x.last.max(t);
+                x.longest_step()
+            }
+            None => {
+                if self.timing.len() < MAX_TRACKS {
+                    self.timing.push(Timing {
+                        track,
+                        last: t,
+                        step: Duration::ZERO,
+                        previous: Duration::ZERO,
+                    });
+                }
+                Duration::ZERO
+            }
+        }
+    }
+
+    /// The cut track sent nothing for two of its frames before `t`.
+    fn cut_track_late(&self, t: Duration) -> bool {
+        let Some(c) = self.cut_track() else {
+            return false;
+        };
+        self.timing(c.track)
+            .is_some_and(|x| x.step > Duration::ZERO && t > x.last + x.step + x.step)
+    }
+
+    /// What the unit of `track` at `t` does, the longer of its track's last
+    /// two steps `step`.
+    fn step_of(&self, u: &AccessUnit<'_>, t: Duration, step: Duration) -> Step {
+        let cut = self.cut_track().is_some_and(|c| c.track == u.track);
+        let key = cut && u.keyframe;
+        let Some(open) = &self.segment else {
+            return if key { Step::Start(true) } else { Step::Drop };
+        };
+        let d = t - open.start;
+        if key && (self.changed || d >= KEYFRAME_CUT_FLOOR) {
+            return Step::Cut(true);
+        }
+        if !self.declares(u.track) {
+            // Dropped: it shapes no fragment or segment.
+            return Step::Add;
+        }
+        let held = !open.media.is_empty() || open.fragment_start.is_some();
+        if (cut || self.cut_track_late(t))
+            && held
+            && d > Duration::ZERO
+            && !fits_target(d + step + step / 4, self.config.target)
+        {
+            return Step::Cut(false);
+        }
+        let fragment_due = open
+            .fragment_start
+            .is_some_and(|f| key || t - f >= self.config.fragment_duration);
+        if cut && fragment_due {
+            return Step::Fragment;
+        }
+        Step::Add
+    }
+
+    /// The decode time `next` a cut before the unit of `track` at `t`
+    /// names: the unit's own, or `t` in the cut track's timescale.
+    fn cut_at(&self, u: &AccessUnit<'_>, t: Duration) -> Option<(TrackId, i64)> {
+        let c = self.cut_track()?;
+        if c.track == u.track {
+            return Some((u.track, u.dts));
+        }
+        Some((c.track, timescale_units(t, c.timescale)))
+    }
+
+    /// Starts a segment at the unit at `t`. A keyframe of changed configs
+    /// declares them in a new init.
+    fn start(
+        &mut self,
+        u: &AccessUnit<'_>,
+        t: Duration,
+        keyframe: bool,
+    ) -> Result<(), HlsMuxerError> {
+        if keyframe && (self.changed || self.declared.is_empty()) {
+            let configs: Vec<DecoderConfig> = ordered(&self.configs).cloned().collect();
+            let delay = composition_delay(u, &self.configs);
+            self.scratch.clear();
+            write_init(&configs, delay, &mut self.scratch)?;
+            if self.scratch.len() > MAX_INIT_LEN {
+                return Err(HlsMuxerError::InitTooLong);
+            }
+            self.writer.set_tracks(&configs, delay)?;
+            self.init = Rc::from(&self.scratch[..]);
+            self.declared = configs;
+            self.changed = false;
+        }
+        if !keyframe {
+            self.metrics.mid_gop_segments += 1;
+        }
+        self.segment = Some(Open {
+            start: t,
+            keyframe,
+            discontinuity: mem::take(&mut self.pending_discontinuity),
+            media: Vec::new(),
+            fragment_start: None,
+        });
+        Ok(())
+    }
+
+    /// Writes the fragment of the held samples, each track's last timed
+    /// by `next`.
+    fn flush_fragment(&mut self, next: Option<(TrackId, i64)>) {
+        let Some(open) = self.segment.as_mut() else {
+            return;
+        };
+        self.scratch.clear();
+        self.writer.flush(next, &mut self.scratch);
+        open.media.extend_from_slice(&self.scratch);
+        open.fragment_start = None;
+    }
+
+    /// Ends the segment in progress: its last fragment's samples timed by
+    /// `next`, and lasting to `end` (or its samples' time without one).
+    /// A segment holding nothing passes its discontinuity on.
+    fn end(&mut self, next: Option<(TrackId, i64)>, end: Option<Duration>) {
+        self.flush_fragment(next);
+        let written = self.writer.take_written();
+        let Some(open) = self.segment.take() else {
+            return;
+        };
+        if open.media.is_empty() {
+            self.pending_discontinuity |= open.discontinuity;
+            return;
+        }
+        let duration = match end {
+            Some(end) => end - open.start,
+            None => samples_time(&written),
+        };
+        if !fits_target(duration, self.config.target) {
+            self.metrics.overlong_segments += 1;
+        }
+        if self.out.len() >= MAX_PENDING_SEGMENTS {
+            self.out.pop_front();
+            self.metrics.dropped_segments += 1;
+        }
+        self.out.push_back(HlsSegment {
+            init: Rc::clone(&self.init),
+            media: open.media,
+            duration,
+            keyframe: open.keyframe,
+            discontinuity: open.discontinuity,
+        });
+        self.metrics.segments += 1;
+        self.finished = true;
+    }
+
+    /// Whether the segment in progress can take `growth` more bytes.
+    fn room_for(&self, growth: usize) -> bool {
+        self.segment.as_ref().is_some_and(|o| {
+            o.media
+                .len()
+                .saturating_add(self.writer.flush_len())
+                .saturating_add(growth)
+                <= self.config.max_segment_bytes
+        })
+    }
+
+    /// Adds the unit at `t` to the segment in progress, ending the segment
+    /// first when it can't hold the unit.
+    fn add(&mut self, u: &AccessUnit<'_>, t: Duration) -> Result<(), HlsMuxerError> {
+        if self.segment.is_none() {
+            return Ok(());
+        }
+        if !self.declares(u.track) {
+            self.metrics.dropped_pending_config += 1;
+            return Ok(());
+        }
+        let growth = self.writer.max_push_growth(u.track, u.payload.len());
+        if !self.room_for(growth) {
+            let held = self
+                .segment
+                .as_ref()
+                .is_some_and(|o| !o.media.is_empty() || o.fragment_start.is_some());
+            if held {
+                let key = u.keyframe && self.cut_track().is_some_and(|c| c.track == u.track);
+                let next = self.cut_at(u, t);
+                self.end(next, Some(t));
+                self.start(u, t, key)?;
+            }
+            if !self.room_for(growth) {
+                self.segment = None;
+                self.pending_discontinuity |= self.finished;
+                self.metrics.dropped_oversized += 1;
+                return Ok(());
+            }
+        }
+        self.scratch.clear();
+        self.writer
+            .push(u, &mut self.scratch)
+            .map_err(|_| HlsMuxerError::UnknownTrack(u.track.0))?;
+        if let Some(open) = self.segment.as_mut() {
+            // A writer of an unbounded span writes only when flushed.
+            open.media.extend_from_slice(&self.scratch);
+            open.fragment_start.get_or_insert(t);
+        }
+        Ok(())
+    }
+}
+
+impl Muxer for HlsMuxer {
+    type Error = HlsMuxerError;
+
+    /// Sets a track's config. Refused, changing nothing, when the configs
+    /// can't be declared together or their init, with the longest edit
+    /// lists, would be longer than [`MAX_INIT_LEN`].
+    fn set_config(&mut self, config: &DecoderConfig) -> Result<(), HlsMuxerError> {
+        if self.configs.get(&config.track) == Some(config) {
+            return Ok(());
+        }
+        let mut configs = self.configs.clone();
+        configs.insert(config.track, config.clone());
+        let list: Vec<DecoderConfig> = ordered(&configs).cloned().collect();
+        self.scratch.clear();
+        // The longest delay writes 64-bit edit lists, the longest there are.
+        write_init(&list, Duration::MAX, &mut self.scratch)?;
+        if self.scratch.len() > MAX_INIT_LEN {
+            return Err(HlsMuxerError::InitTooLong);
+        }
+        self.configs = configs;
+        self.changed = !self.declares_current();
+        Ok(())
+    }
+
+    fn push(&mut self, u: &AccessUnit<'_>) -> Result<(), HlsMuxerError> {
+        let Some(timescale) = self.configs.get(&u.track).map(|c| c.timescale) else {
+            return Err(HlsMuxerError::UnknownTrack(u.track.0));
+        };
+        let t = media_time(u.dts, timescale);
+        let step = self.note(u.track, t);
+        match self.step_of(u, t, step) {
+            Step::Drop => {
+                self.metrics.dropped_awaiting_keyframe += 1;
+                return Ok(());
+            }
+            Step::Start(key) => self.start(u, t, key)?,
+            Step::Cut(key) => {
+                let next = self.cut_at(u, t);
+                self.end(next, Some(t));
+                self.start(u, t, key)?;
+            }
+            Step::Fragment => self.flush_fragment(Some((u.track, u.dts))),
+            Step::Add => {}
+        }
+        self.add(u, t)
+    }
+
+    /// Ends the segment in progress; the next starts at the cut track's
+    /// next keyframe.
+    fn finish(&mut self) -> Result<(), HlsMuxerError> {
+        self.end(None, None);
+        Ok(())
+    }
+}
+
+/// `units` of a `timescale` as a time; zero for timescale 0.
+fn media_time(units: i64, timescale: u32) -> Duration {
+    if timescale == 0 {
+        return Duration::ZERO;
+    }
+    let nanos = i128::from(units) * 1_000_000_000 / i128::from(timescale);
+    Duration::from_nanos(i64::try_from(nanos).unwrap_or(if nanos < 0 {
+        i64::MIN
+    } else {
+        i64::MAX
+    }))
+}
+
+/// `t` in units of `timescale`, rounded down.
+fn timescale_units(t: Duration, timescale: u32) -> i64 {
+    let units = i128::from(t.as_nanos()) * i128::from(timescale) / 1_000_000_000;
+    i64::try_from(units).unwrap_or(if units < 0 { i64::MIN } else { i64::MAX })
+}
+
+/// The media time of written samples: the first video track's, or the
+/// longest track's without video samples.
+fn samples_time(written: &[Written]) -> Duration {
+    let time = |w: &Written| media_time(i64::try_from(w.units).unwrap_or(i64::MAX), w.timescale);
+    let video = written
+        .iter()
+        .find(|w| w.kind == Some(TrackKind::Video) && w.samples > 0);
+    match video {
+        Some(w) => time(w),
+        None => written.iter().map(time).max().unwrap_or(Duration::ZERO),
+    }
 }
 
 /// The length of profile keys and transfer ids in paths.
@@ -754,3 +1413,7 @@ fn hex_digit(c: u8) -> Option<u8> {
 #[cfg(test)]
 #[path = "hls_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "hls_muxer_test.rs"]
+mod muxer_tests;

@@ -21,10 +21,13 @@ fn at(ms: i64) -> Time {
     Time::from_unix_millis(ms)
 }
 
-fn config(listed: usize, retained: usize, max_retained_bytes: usize) -> PlaylistConfig {
+/// A playlist config of target `target`, listing `listed` and keeping
+/// `retained` milliseconds of segments within `max_retained_bytes`.
+fn config(target: u64, listed: i64, retained: i64, max_retained_bytes: usize) -> PlaylistConfig {
     PlaylistConfig {
-        listed,
-        retained,
+        target,
+        listed: ms(listed),
+        retained: ms(retained),
         max_retained_bytes,
     }
 }
@@ -47,14 +50,17 @@ fn map(id: u64) -> String {
 const DISCONTINUITY: &str = "#EXT-X-DISCONTINUITY\n";
 
 #[test]
-fn default_config_lists_six_and_keeps_eight_segments_within_64_mib() {
-    assert_eq!(PlaylistConfig::default(), config(6, 8, 64 << 20));
+fn default_config_targets_4_s_lists_16_s_and_keeps_40_s_within_64_mib() {
+    assert_eq!(
+        PlaylistConfig::default(),
+        config(4, 16_000, 40_000, 64 << 20)
+    );
 }
 
 #[test]
 fn renders_an_empty_playlist() {
     let p = Playlist::new(PlaylistConfig::default());
-    assert_eq!(p.render(), header(1, 0, 0));
+    assert_eq!(p.render(), header(4, 0, 0));
     assert_eq!(p.init_id(), None);
     assert_eq!(p.segment(0), None);
 }
@@ -68,7 +74,7 @@ fn renders_segments_sharing_an_init() {
     p.push_segment(b"init", b"m3", Duration::from_nanos(999_999_999));
     p.push_segment(b"init", b"m4", Duration::from_nanos(1_499_999));
     let want = [
-        header(3, 0, 0),
+        header(4, 0, 0),
         map(0),
         entry("2.002", 0),
         entry("1.500", 1),
@@ -78,14 +84,22 @@ fn renders_segments_sharing_an_init() {
     ]
     .concat();
     assert_eq!(p.render(), want);
-    assert_eq!(p.target_duration(), 3);
+    assert_eq!(p.target_duration(), 4);
     assert_eq!(p.segment(2).as_deref(), Some(&b"m2"[..]));
     assert_eq!(p.init(0).as_deref(), Some(&b"init"[..]));
 }
 
 #[test]
+fn the_playlist_never_declares_independent_segments() {
+    let mut p = Playlist::new(PlaylistConfig::default());
+    assert!(!p.render().contains("INDEPENDENT"));
+    p.push_segment(b"init", b"m0", ms(1000));
+    assert!(!p.render().contains("INDEPENDENT"));
+}
+
+#[test]
 fn sliding_window_advances_the_media_sequence() {
-    let mut p = Playlist::new(config(3, 4, 1 << 20));
+    let mut p = Playlist::new(config(1, 3000, 4000, 1 << 20));
     for i in 0..6u8 {
         p.push_segment(b"init", &[i], ms(1000));
     }
@@ -100,7 +114,7 @@ fn sliding_window_advances_the_media_sequence() {
     assert_eq!(p.render(), want);
     assert_eq!(p.media_sequence(), 3);
     assert_eq!(p.next_sequence(), 6);
-    assert_eq!(p.retained_segments(), 4);
+    assert_eq!((p.listed_segments(), p.retained_segments()), (3, 4));
     // Kept but no longer listed.
     assert_eq!(p.segment(2).as_deref(), Some(&[2u8][..]));
     assert_eq!(p.segment(1), None);
@@ -108,40 +122,65 @@ fn sliding_window_advances_the_media_sequence() {
 }
 
 #[test]
+fn the_listing_holds_three_targets_of_short_segments() {
+    // Listing 1 s asks for less than three 2 s targets.
+    let mut p = Playlist::new(config(2, 1000, 1000, 1 << 20));
+    for i in 0..20u8 {
+        p.push_segment(b"init", &[i], ms(500));
+    }
+    assert_eq!((p.listed_segments(), p.retained_segments()), (12, 12));
+    assert_eq!(p.media_sequence(), 8);
+
+    // The fewest newest segments that last three targets.
+    let mut p = Playlist::new(config(2, 0, 0, 1 << 20));
+    for _ in 0..4 {
+        p.push_segment(b"init", b"m", ms(2000));
+    }
+    assert_eq!((p.listed_segments(), p.retained_segments()), (3, 3));
+    p.push_segment(b"init", b"m", ms(1));
+    assert_eq!((p.listed_segments(), p.retained_segments()), (4, 4));
+}
+
+#[test]
 fn discontinuity_flags_the_next_segment_and_counts_once_it_slides_out() {
-    let mut p = Playlist::new(config(2, 3, 1 << 20));
+    let mut p = Playlist::new(config(1, 3000, 3000, 1 << 20));
     p.push_segment(b"init", b"m0", ms(1000));
-    p.discontinuity();
-    p.discontinuity();
     p.push_segment(b"init", b"m1", ms(1000));
+    p.discontinuity();
+    p.discontinuity();
+    p.push_segment(b"init", b"m2", ms(1000));
     let want = [
         header(1, 0, 0),
         map(0),
         entry("1.000", 0),
-        DISCONTINUITY.to_owned(),
         entry("1.000", 1),
+        DISCONTINUITY.to_owned(),
+        entry("1.000", 2),
     ]
     .concat();
     assert_eq!(p.render(), want);
 
     // The flagged segment is listed first; its tag stays with it.
-    p.push_segment(b"init", b"m2", ms(1000));
+    p.push_segment(b"init", b"m3", ms(1000));
+    p.push_segment(b"init", b"m4", ms(1000));
     let want = [
-        header(1, 1, 0),
+        header(1, 2, 0),
         DISCONTINUITY.to_owned(),
         map(0),
-        entry("1.000", 1),
         entry("1.000", 2),
+        entry("1.000", 3),
+        entry("1.000", 4),
     ]
     .concat();
     assert_eq!(p.render(), want);
 
-    p.push_segment(b"init", b"m3", ms(1000));
+    p.push_segment(b"init", b"m5", ms(1000));
     let want = [
-        header(1, 2, 1),
+        header(1, 3, 1),
         map(0),
-        entry("1.000", 2),
         entry("1.000", 3),
+        entry("1.000", 4),
+        entry("1.000", 5),
     ]
     .concat();
     assert_eq!(p.render(), want);
@@ -158,7 +197,7 @@ fn changed_init_starts_a_discontinuity_with_a_new_map() {
     // A return to an earlier init is another change.
     p.push_segment(b"init a", b"m4", ms(1000));
     let want = [
-        header(1, 0, 0),
+        header(4, 0, 0),
         map(0),
         entry("1.000", 0),
         entry("1.000", 1),
@@ -181,7 +220,7 @@ fn changed_init_starts_a_discontinuity_with_a_new_map() {
 
 #[test]
 fn init_change_and_flagged_discontinuity_share_one_tag() {
-    let mut p = Playlist::new(config(2, 2, 1 << 20));
+    let mut p = Playlist::new(config(1, 3000, 3000, 1 << 20));
     p.push_segment(b"a", b"m0", ms(1000));
     p.discontinuity();
     p.push_segment(b"b", b"m1", ms(1000));
@@ -195,8 +234,9 @@ fn init_change_and_flagged_discontinuity_share_one_tag() {
     ]
     .concat();
     assert_eq!(p.render(), want);
-    p.push_segment(b"b", b"m2", ms(1000));
-    p.push_segment(b"b", b"m3", ms(1000));
+    for _ in 0..3 {
+        p.push_segment(b"b", b"m", ms(1000));
+    }
     assert_eq!(p.discontinuity_sequence(), 1);
 }
 
@@ -214,46 +254,55 @@ fn identical_init_is_shared() {
 }
 
 #[test]
-fn target_duration_only_grows() {
+fn the_target_duration_is_the_configs_whatever_is_pushed() {
     let mut p = Playlist::new(PlaylistConfig::default());
-    p.push_segment(b"i", b"m", ms(400));
-    assert_eq!(p.target_duration(), 1);
-    p.push_segment(b"i", b"m", ms(4000));
-    assert_eq!(p.target_duration(), 4);
-    p.push_segment(b"i", b"m", ms(1000));
-    assert_eq!(p.target_duration(), 4);
-    p.push_segment(b"i", b"m", ms(4499));
-    assert_eq!(p.target_duration(), 4);
-    p.push_segment(b"i", b"m", ms(4500));
-    assert_eq!(p.target_duration(), 5);
-    // Every segment holding the target slides out; it stays.
-    for _ in 0..8 {
-        p.push_segment(b"i", b"m", ms(400));
+    for d in [400, 4000, 4499, 4500, 9000, 100] {
+        p.push_segment(b"i", b"m", ms(d));
+        assert_eq!(p.target_duration(), 4);
+        assert!(p.render().contains("#EXT-X-TARGETDURATION:4\n"));
     }
-    assert_eq!(p.target_duration(), 5);
-    assert!(p.render().contains("#EXT-X-TARGETDURATION:5\n"));
+    let p = Playlist::new(config(0, 0, 0, 0));
+    assert_eq!(p.target_duration(), 1);
+    assert!(p.render().contains("#EXT-X-TARGETDURATION:1\n"));
+}
+
+#[test]
+fn segments_fit_a_target_when_they_round_to_at_most_it() {
+    assert!(fits_target(ms(4499), 4));
+    assert!(fits_target(Duration::from_nanos(4_499_499_999), 4));
+    // 4.4995 s is listed as 4.500, which rounds to 5.
+    assert!(!fits_target(Duration::from_nanos(4_499_500_000), 4));
+    assert!(!fits_target(ms(4500), 4));
+    assert!(fits_target(ms(-5), 4));
+    assert!(fits_target(ms(1499), 0));
+    assert!(!fits_target(Duration::MAX, 1_000_000));
+    assert!(fits_target(Duration::MAX, u64::MAX));
+    assert_eq!(target_secs(ms(4000)), 4);
+    assert_eq!(target_secs(ms(4001)), 5);
+    assert_eq!(target_secs(ms(0)), 1);
+    assert_eq!(target_secs(ms(-3000)), 1);
 }
 
 #[test]
 fn out_of_range_durations_render() {
     let mut p = Playlist::new(PlaylistConfig::default());
-    p.push_segment(b"i", b"m0", Duration::from_nanos(-5));
-    p.push_segment(b"i", b"m1", Duration::MIN);
-    p.push_segment(b"i", b"m2", Duration::MAX);
+    p.push_segment(b"i", b"m0", Duration::MAX);
+    p.push_segment(b"i", b"m1", Duration::from_nanos(-5));
+    p.push_segment(b"i", b"m2", Duration::MIN);
     let want = [
-        header(9_223_372_037, 0, 0),
+        header(4, 0, 0),
         map(0),
-        entry("0.000", 0),
+        entry("9223372036.855", 0),
         entry("0.000", 1),
-        entry("9223372036.855", 2),
+        entry("0.000", 2),
     ]
     .concat();
     assert_eq!(p.render(), want);
 }
 
 #[test]
-fn retention_by_count_frees_unreferenced_inits() {
-    let mut p = Playlist::new(config(2, 3, 1 << 20));
+fn retention_by_duration_frees_unreferenced_inits() {
+    let mut p = Playlist::new(config(1, 3000, 3000, 1 << 20));
     p.push_segment(b"aa", b"m0", ms(1000));
     p.push_segment(b"bbb", b"m1", ms(1000));
     p.push_segment(b"cccc", b"m2", ms(1000));
@@ -264,15 +313,28 @@ fn retention_by_count_frees_unreferenced_inits() {
     assert_eq!(p.init(1).as_deref(), Some(&b"bbb"[..]));
     assert_eq!(p.retained_bytes(), 3 + 4 + 2 * 3);
 
-    p.push_segment(b"cccc", b"m4", ms(1000));
+    // A segment lasting the whole kept time keeps no other.
+    p.push_segment(b"cccc", b"m4", ms(3000));
+    assert_eq!(p.retained_segments(), 1);
     assert_eq!(p.init(1), None);
     assert_eq!(p.init(2).as_deref(), Some(&b"cccc"[..]));
-    assert_eq!(p.retained_bytes(), 4 + 2 * 3);
+    assert_eq!(p.retained_bytes(), 4 + 2);
+}
+
+#[test]
+fn retention_is_bounded_by_count_whatever_the_durations() {
+    let mut p = Playlist::new(PlaylistConfig::default());
+    for i in 0..(MAX_SEGMENTS + 10) {
+        p.push_segment(b"i", &[i as u8], Duration::ZERO);
+    }
+    assert_eq!(p.retained_segments(), MAX_SEGMENTS);
+    assert_eq!(p.listed_segments(), MAX_SEGMENTS);
+    assert_eq!(p.media_sequence(), 10);
 }
 
 #[test]
 fn retention_by_bytes_drops_the_oldest_and_frees_inits() {
-    let mut p = Playlist::new(config(6, 8, 100));
+    let mut p = Playlist::new(config(1, 6000, 8000, 100));
     let a = [b'a'; 10];
     let b = [b'b'; 10];
     let media = [0u8; 30];
@@ -302,7 +364,7 @@ fn retention_by_bytes_drops_the_oldest_and_frees_inits() {
 
 #[test]
 fn oversized_segment_is_dropped_and_the_next_starts_a_new_init() {
-    let mut p = Playlist::new(config(6, 8, 50));
+    let mut p = Playlist::new(config(1, 6000, 8000, 50));
     p.push_segment(b"init", b"m0", ms(1000));
     p.push_segment(b"init", &[0; 100], ms(1000));
     assert_eq!((p.retained_segments(), p.retained_bytes()), (0, 0));
@@ -321,18 +383,13 @@ fn oversized_segment_is_dropped_and_the_next_starts_a_new_init() {
 }
 
 #[test]
-fn degenerate_configs_keep_or_list_nothing() {
-    let mut p = Playlist::new(config(6, 0, 1 << 20));
+fn a_config_keeping_no_bytes_keeps_nothing() {
+    let mut p = Playlist::new(config(1, 0, 0, 0));
     for i in 0..3u8 {
         p.push_segment(&[i], &[i], ms(1000));
     }
     assert_eq!((p.retained_segments(), p.retained_bytes()), (0, 0));
     assert_eq!(p.render(), header(1, 3, 2));
-
-    let mut p = Playlist::new(config(0, 2, 1 << 20));
-    p.push_segment(b"i", b"m0", ms(1000));
-    assert_eq!(p.render(), header(1, 1, 0));
-    assert_eq!(p.segment(0).as_deref(), Some(&b"m0"[..]));
 }
 
 #[test]
@@ -372,6 +429,7 @@ fn tag<'a>(line: Option<&'a str>, name: &str) -> &'a str {
 
 fn parse(text: &str) -> Parsed {
     assert!(text.starts_with(HEAD), "{text}");
+    assert!(!text.contains("#EXT-X-INDEPENDENT-SEGMENTS"), "{text}");
     let mut lines = text.lines().skip(2);
     let target = tag(lines.next(), "#EXT-X-TARGETDURATION:").parse().unwrap();
     let media_sequence = tag(lines.next(), "#EXT-X-MEDIA-SEQUENCE:").parse().unwrap();
@@ -431,9 +489,10 @@ enum Op {
     Discontinuity,
 }
 
+/// Pushes of segments that fit a 4 s target, and discontinuities.
 fn op() -> impl Strategy<Value = Op> {
     prop_oneof![
-        4 => (0u8..3, 0usize..64, -100i64..10_000).prop_map(|(init, media_len, millis)| Op::Push {
+        4 => (0u8..3, 0usize..64, -100i64..4_500).prop_map(|(init, media_len, millis)| Op::Push {
             init,
             media_len,
             millis,
@@ -449,6 +508,21 @@ struct Pushed {
     media: Vec<u8>,
     millis: u64,
     discontinuity: bool,
+}
+
+/// The fewest of the newest of `durations` that add up to `want`, or all
+/// of them.
+fn newest_lasting(durations: &[u64], want: u64) -> usize {
+    let mut sum = 0;
+    let mut n = 0;
+    for d in durations.iter().rev() {
+        if sum >= want {
+            break;
+        }
+        sum += d;
+        n += 1;
+    }
+    n
 }
 
 fn proptest_config() -> Config {
@@ -489,15 +563,19 @@ proptest! {
 
     #[test]
     fn playlists_stay_bounded_and_consistent(
-        listed in 0usize..5,
-        retained in 0usize..6,
+        target in 4u64..6,
+        listed in 0i64..20_000,
+        retained in 0i64..30_000,
         max_retained_bytes in 0usize..300,
-        ops in proptest::collection::vec(op(), 0..40),
+        ops in proptest::collection::vec(op(), 0..60),
     ) {
-        let mut p = Playlist::new(config(listed, retained, max_retained_bytes));
+        let config = config(target, listed, retained, max_retained_bytes);
+        let mut p = Playlist::new(config);
         let mut pushed: Vec<Pushed> = Vec::new();
         let (mut next_init, mut pending) = (0u64, false);
-        let (mut target, mut media_sequence, mut discontinuity_sequence) = (1, 0, 0);
+        let (mut media_sequence, mut discontinuity_sequence) = (0, 0);
+        let listed_millis = (listed as u64).max(3000 * target);
+        let retained_millis = (retained as u64).max(listed_millis);
         let mut numbers = BTreeMap::new();
         for op in ops {
             match op {
@@ -529,10 +607,13 @@ proptest! {
                 }
             }
 
-            prop_assert!(p.retained_segments() <= retained);
+            prop_assert!(p.retained_segments() <= MAX_SEGMENTS);
             prop_assert!(p.retained_bytes() <= max_retained_bytes);
             let n = p.retained_segments();
             let kept = &pushed[pushed.len() - n..];
+            // No kept segment is kept beyond the kept media time.
+            let millis: Vec<u64> = kept.iter().map(|s| s.millis).collect();
+            prop_assert!(n <= newest_lasting(&millis, retained_millis));
             let mut inits = BTreeMap::new();
             for (i, s) in kept.iter().enumerate() {
                 let seq = (pushed.len() - n + i) as u64;
@@ -554,12 +635,12 @@ proptest! {
             }
 
             let parsed = parse(&p.render());
-            prop_assert_eq!(parsed.entries.len(), listed.min(n));
-            prop_assert!(parsed.target >= target);
+            prop_assert_eq!(parsed.target, target);
+            prop_assert_eq!(parsed.entries.len(), newest_lasting(&millis, listed_millis));
             prop_assert!(parsed.media_sequence >= media_sequence);
             prop_assert!(parsed.discontinuity_sequence >= discontinuity_sequence);
-            (target, media_sequence, discontinuity_sequence) =
-                (parsed.target, parsed.media_sequence, parsed.discontinuity_sequence);
+            (media_sequence, discontinuity_sequence) =
+                (parsed.media_sequence, parsed.discontinuity_sequence);
             prop_assert_eq!(
                 parsed.media_sequence + parsed.entries.len() as u64,
                 pushed.len() as u64
@@ -632,7 +713,7 @@ fn serves_the_playlist_its_inits_and_segments() {
         (200, "application/vnd.apple.mpegurl", "no-cache")
     );
     let want = [
-        header(2, 0, 0),
+        header(4, 0, 0),
         map(0),
         entry("2.000", 0),
         entry("2.000", 1),
@@ -726,10 +807,11 @@ fn missing_resources_are_not_found() {
     let routes = HlsRoutes::new();
     let profile = routes.profile(&PROFILE).unwrap();
     let stream = profile
-        .open_stream(Time::EPOCH, TRANSFER, config(1, 1, 1 << 20))
+        .open_stream(Time::EPOCH, TRANSFER, config(1, 3000, 3000, 1 << 20))
         .unwrap();
     stream.push_segment(b"a", b"m0", ms(1000));
-    stream.push_segment(b"b", b"m1", ms(1000));
+    // It lasts the kept time: the segment before it expires.
+    stream.push_segment(b"b", b"m1", ms(3000));
     let (p, t) = (hex(&PROFILE), hex(&TRANSFER));
     let base = dir(&PROFILE, &TRANSFER);
     let paths = [

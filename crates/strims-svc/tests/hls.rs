@@ -278,6 +278,7 @@ fn hls_serves_an_rtmp_stream_to_players() {
                 .open_stream(&HlsEgressOpenStreamRequest {
                     swarm_uri: uri.to_string(),
                     network_keys: vec![net.clone()],
+                    ..Default::default()
                 })
                 .await
                 .unwrap()
@@ -400,7 +401,7 @@ fn a_service_without_an_hls_listener_supports_no_hls_egress() {
             .hls()
             .open_stream(&HlsEgressOpenStreamRequest {
                 swarm_uri: uri.to_string(),
-                network_keys: Vec::new(),
+                ..Default::default()
             })
             .await
             .unwrap_err();

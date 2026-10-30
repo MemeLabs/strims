@@ -498,7 +498,7 @@ impl<S: RecordSink> Muxer for Segmenter<S> {
 }
 
 /// The configs in init order: video, then audio, each by track id.
-fn ordered(
+pub(crate) fn ordered(
     configs: &BTreeMap<TrackId, DecoderConfig>,
 ) -> impl Iterator<Item = &DecoderConfig> + Clone {
     let of = move |kind| configs.values().filter(move |c| c.kind == kind);
@@ -507,7 +507,7 @@ fn ordered(
 
 /// The composition delay a segment starting at `keyframe` declares: its
 /// PTS less DTS in its track's timescale, zero when not positive.
-fn composition_delay(
+pub(crate) fn composition_delay(
     keyframe: &AccessUnit<'_>,
     configs: &BTreeMap<TrackId, DecoderConfig>,
 ) -> Duration {

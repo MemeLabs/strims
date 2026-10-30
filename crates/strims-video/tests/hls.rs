@@ -1,11 +1,13 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! HLS egress on fake nodes (see `strims_testworld`): a capture's fMP4
-//! records served as a playlist, its init and segments, on the node's
-//! routes; the playlist URL; the refusals, the stream a swarm shares, the
-//! cap; streams closing when asked, when idle and when HLS is disabled;
-//! records that aren't fMP4; and the UI's `HLSEgress` calls.
+//! HLS egress on fake nodes (see `strims_testworld`): a packed swarm's
+//! fMP4 records served as a playlist, its init and segments, on the
+//! node's routes; a unit-format ingest served as segments within the
+//! target, its long GOPs split; the playlist URL; the refusals, the
+//! stream a swarm shares, the cap; streams closing when asked, when idle,
+//! when HLS is disabled and when their swarm closes; records that aren't
+//! fMP4; and the UI's `HLSEgress` calls.
 
 #![allow(
     clippy::unwrap_used,
@@ -14,32 +16,41 @@
     clippy::indexing_slicing
 )]
 
+mod support;
+
 use std::fmt::Debug;
 use std::mem;
+use std::time::Duration;
 
+use strims_chunkstream::packed::{DEFAULT_SIZE, PackedEncoder};
+use strims_crypto::key_from_seed;
 use strims_dao::Subscription;
 use strims_kv::MemoryKv;
-use strims_ppspp::{SwarmId, Uri};
+use strims_ppspp::{SwarmId, Uri, WriterOptions};
 use strims_proto::network::v1::directory::ListingSnippet;
+use strims_proto::network::v1::directory::listing::{Content, Media};
 use strims_proto::profile::v1::Profile;
 use strims_proto::service::CallError;
+use strims_proto::types::Key;
 use strims_proto::video::v1::{
     HlsEgressClient, HlsEgressCloseStreamRequest, HlsEgressConfig, HlsEgressIsSupportedRequest,
-    HlsEgressOpenStreamRequest,
+    HlsEgressOpenStreamRequest, VideoChannel, VideoIngressConfig,
 };
 use strims_rpc::{Router, Timer, connect};
 use strims_testworld::*;
-use strims_transfer::TransferId;
+use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
 use strims_video::fmp4::{media_duration, parse_init, split_record};
 use strims_video::hls::{HlsResponse, HlsRoutes, playlist_path};
 use strims_video::synth::script::{Script, ScriptConfig, expected_records};
 use strims_video::{
-    Config, CutRule, HlsCloseReason, HlsSettings, NoVideoHost, VideoControl, VideoError,
-    VideoEvent, bind_frontend,
+    Config, CutRule, HlsCloseReason, HlsSettings, IngestFormat, IngressSettings, NoVideoHost,
+    StreamFormat, VideoControl, VideoError, VideoEvent, VideoHost, bind_frontend, capture_options,
 };
+use support::{FakeVideo, TestPublisher};
 use tokio::task::spawn_local;
 
 type Control = VideoControl<MemoryKv, FakeHost, NoVideoHost, TokioTimer>;
+type IngestControl = VideoControl<MemoryKv, FakeHost, FakeVideo, TokioTimer>;
 
 const BASE: &str = "http://127.0.0.1:8082";
 
@@ -60,9 +71,19 @@ fn start(n: &Node, routes: &HlsRoutes, config: Config) -> Control {
 }
 
 fn start_as(n: &Node, profile: Profile, routes: &HlsRoutes, config: Config) -> Control {
+    start_with(n, profile, NoVideoHost, routes, config)
+}
+
+fn start_with<V: VideoHost>(
+    n: &Node,
+    profile: Profile,
+    host: V,
+    routes: &HlsRoutes,
+    config: Config,
+) -> VideoControl<MemoryKv, FakeHost, V, TokioTimer> {
     let video = VideoControl::new(
         n.host.clone(),
-        NoVideoHost,
+        host,
         n.store.clone(),
         profile,
         n.network.clone(),
@@ -78,7 +99,11 @@ fn start_as(n: &Node, profile: Profile, routes: &HlsRoutes, config: Config) -> C
     video
 }
 
-async fn set_hls(v: &Control, enabled: bool, public_server_addr: &str) {
+async fn set_hls<V: VideoHost>(
+    v: &VideoControl<MemoryKv, FakeHost, V, TokioTimer>,
+    enabled: bool,
+    public_server_addr: &str,
+) {
     let c = HlsEgressConfig {
         enabled,
         public_server_addr: public_server_addr.into(),
@@ -196,30 +221,207 @@ fn closed(t: TransferId, reason: HlsCloseReason) -> VideoEvent {
     }
 }
 
-/// A capture's fMP4 records reach another node's HLS stream: its playlist
-/// lists each as a segment lasting its media time, served with its init
-/// and media.
+/// A swarm written on a node outside the controls, in the packed layout.
+struct Publisher {
+    id: SwarmId,
+    uri: String,
+    encoder: PackedEncoder,
+    writer: FakeWriter,
+    out: Vec<u8>,
+}
+
+impl Publisher {
+    async fn new(n: &Node, seed: u8) -> Publisher {
+        let options = capture_options();
+        let (_, id, writer) = n
+            .host
+            .create_swarm(WriterOptions {
+                swarm_options: options.clone(),
+                key: key_from_seed(&[seed; 32]),
+            })
+            .await
+            .unwrap();
+        let uri = Uri::new(id.clone(), options.uri_options()).to_string();
+        Publisher {
+            id,
+            uri,
+            encoder: PackedEncoder::new(DEFAULT_SIZE).unwrap(),
+            writer,
+            out: Vec::new(),
+        }
+    }
+
+    fn transfer_id(&self) -> TransferId {
+        TransferId::new(&self.id, b"")
+    }
+
+    /// Writes `data` as a record, in pieces with a pause after each.
+    async fn record(&mut self, data: &[u8]) {
+        for piece in data.chunks(16 * 1024) {
+            self.encoder.write(piece, &mut self.out);
+            self.flush().await;
+        }
+        self.encoder.end_record(&mut self.out).unwrap();
+        self.flush().await;
+    }
+
+    async fn flush(&mut self) {
+        if !self.out.is_empty() {
+            self.writer.write(&self.out).await.unwrap();
+            self.out.clear();
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+}
+
+const INGEST_ADDR: &str = "127.0.0.1:1935";
+
+/// Creates a channel on network `net` and enables the ingress: the
+/// channel's stream key.
+async fn open_ingest(v: &IngestControl, video: &FakeVideo, net: &Key) -> String {
+    let snippet = ListingSnippet {
+        title: "hls".into(),
+        ..Default::default()
+    };
+    let channel: VideoChannel = v.create_channel(&net.public, snippet).await.unwrap();
+    v.set_ingress_config(VideoIngressConfig {
+        enabled: true,
+        server_addr: INGEST_ADDR.into(),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    wait_for(10, "the listener", || {
+        video.listening().as_deref() == Some(INGEST_ADDR)
+    })
+    .await;
+    v.channel_url(channel.id).await.unwrap().stream_key
+}
+
+/// An RTMP publisher of stream key `key`, publishing.
+async fn publish(n: &Node, video: &FakeVideo, key: &str) -> TestPublisher {
+    let mut p = TestPublisher::connect(video, "10.0.0.1:1", "live", key, &mut n.rng());
+    p.answered().await;
+    assert!(p.publisher.publish_accepted());
+    p
+}
+
+/// The media listings of network 10's view on `n`.
+fn media(n: &Node) -> Vec<Media> {
+    n.directory
+        .listings(10)
+        .into_iter()
+        .filter_map(|l| match l.listing.content {
+            Some(Content::Media(m)) => Some(m),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A config ingesting in the unit format.
+fn units_ingest() -> Config {
+    Config {
+        ingress: IngressSettings {
+            format: IngestFormat::Units,
+            ..IngressSettings::default()
+        },
+        ..Config::default()
+    }
+}
+
+/// The milliseconds of a listed segment's EXTINF.
+fn extinf_millis(extinf: &str) -> u64 {
+    let x = extinf
+        .strip_prefix("#EXTINF:")
+        .unwrap()
+        .trim_end_matches(',');
+    let (s, f) = x.split_once('.').unwrap();
+    s.parse::<u64>().unwrap() * 1000 + f.parse::<u64>().unwrap()
+}
+
+/// A unit-format ingest's HLS stream on another node.
+struct UnitsHls {
+    /// The viewing node, its routes and the playlist's path.
+    b: Node,
+    routes: HlsRoutes,
+    path: String,
+    _keep: (Vec<Pipe>, IngestControl, Control),
+}
+
+/// A unit-format ingest on one node, its HLS stream opened on another
+/// through the UI's `HLSEgress` with the listing's MIME type, and the
+/// script published until the playlist lists `segments`.
+async fn units_hls(world: &World, script: &Script, segments: usize) -> UnitsHls {
+    let a = node_in(world, 1).await;
+    let b = node_in(world, 2).await;
+    let (net, pipes) = owned_network(&a, &[&b], 10).await;
+    let video = FakeVideo::default();
+    let va = start_with(
+        &a,
+        a.profile.clone(),
+        video.clone(),
+        &HlsRoutes::new(),
+        units_ingest(),
+    );
+    let routes = HlsRoutes::new();
+    let vb = start(&b, &routes, serving());
+    set_hls(&vb, true, "").await;
+    let key = open_ingest(&va, &video, &net).await;
+    let mut p = publish(&a, &video, &key).await;
+    p.send_tags(&script.tags[..16], script).await;
+    wait_for(10, "the listing", || !media(&b).is_empty()).await;
+    let m = media(&b).remove(0);
+    assert_eq!(StreamFormat::from_mime(&m.mime_type), StreamFormat::Units);
+
+    let router = Router::new();
+    bind_frontend(&router, &vb);
+    let hls = HlsEgressClient::new(frontend_client(router));
+    let url = hls
+        .open_stream(&HlsEgressOpenStreamRequest {
+            swarm_uri: m.swarm_uri.clone(),
+            network_keys: vec![net.public.clone()],
+            mime_type: m.mime_type.clone(),
+        })
+        .await
+        .unwrap()
+        .playlist_url;
+    p.send_tags(&script.tags[16..], script).await;
+    let path = path(&url).to_owned();
+    wait_for(30, "the segments", || {
+        listed(&playlist(&b, &routes, &path)).len() >= segments
+    })
+    .await;
+    UnitsHls {
+        b,
+        routes,
+        path,
+        _keep: (pipes, va, vb),
+    }
+}
+
+/// A packed swarm's fMP4 records reach another node's HLS stream: its
+/// playlist lists each as a segment lasting its media time, served with
+/// its init and media.
 #[test]
-fn a_captures_records_are_served_as_hls_on_another_node() {
+fn a_packed_swarms_records_are_served_as_hls_on_another_node() {
     run(async {
         let world = World::default();
         let a = node_in(&world, 1).await;
         let b = node_in(&world, 2).await;
         let (net, _pipes) = owned_network(&a, &[&b], 10).await;
         let keys = vec![net.public.clone()];
-        let va = start(&a, &HlsRoutes::new(), Config::default());
         let routes = HlsRoutes::new();
         let vb = start(&b, &routes, serving());
         assert!(vb.hls_supported());
         set_hls(&vb, true, "").await;
-        let id = va
-            .open_capture("video/mp4", keys.clone(), ListingSnippet::default())
-            .await
-            .unwrap();
-        let uri = va.captures()[0].swarm_uri.clone();
+        let mut p = Publisher::new(&a, 7).await;
+        let id = p.transfer_id();
         let mut events = vb.subscribe();
 
-        let url = vb.open_hls(&uri, &keys).await.unwrap();
+        let url = vb
+            .open_hls(&p.uri, &keys, StreamFormat::Packed)
+            .await
+            .unwrap();
         let key = &b.profile_key().public;
         assert_eq!(
             url,
@@ -246,7 +448,7 @@ fn a_captures_records_are_served_as_hls_on_another_node() {
         let records = records();
         assert!((4..=6).contains(&records.len()), "{}", records.len());
         for r in &records {
-            va.append_capture(&id, r.clone(), true).await.unwrap();
+            p.record(r).await;
         }
         wait_for(30, "every segment", || {
             listed(&playlist(&b, &routes, path(&url))).len() == records.len()
@@ -277,9 +479,12 @@ fn a_swarm_has_one_hls_stream_under_the_configs_address() {
         let t = transfer_id(&uri);
         let p = playlist_path(&n.profile_key().public, t.as_bytes());
 
-        let url = v.open_hls(&uri, &[]).await.unwrap();
+        let url = v.open_hls(&uri, &[], StreamFormat::Packed).await.unwrap();
         assert_eq!(url, format!("https://cdn.example.com/media{p}"));
-        assert_eq!(v.open_hls(&uri, &[]).await.unwrap(), url);
+        assert_eq!(
+            v.open_hls(&uri, &[], StreamFormat::Packed).await.unwrap(),
+            url
+        );
         assert_eq!(v.hls_streams().len(), 1);
         assert_eq!(v.metrics().hls_streams, 1);
         let swarms = v.video_swarms();
@@ -288,7 +493,10 @@ fn a_swarm_has_one_hls_stream_under_the_configs_address() {
 
         set_hls(&v, true, "").await;
         settle().await;
-        assert_eq!(v.open_hls(&uri, &[]).await.unwrap(), format!("{BASE}{p}"));
+        assert_eq!(
+            v.open_hls(&uri, &[], StreamFormat::Packed).await.unwrap(),
+            format!("{BASE}{p}")
+        );
         assert_eq!(v.hls_streams().len(), 1);
         assert_eq!(v.metrics().hls_streams, 1);
         assert!(playlist(&n, &routes, &p).starts_with("#EXTM3U\n"));
@@ -310,7 +518,7 @@ fn hls_streams_open_only_where_served_enabled_and_addressed() {
         set_hls(&v, true, "https://cdn.example.com").await;
         assert!(!v.hls_supported());
         assert_eq!(
-            refusal(v.open_hls(&uri, &[]).await),
+            refusal(v.open_hls(&uri, &[], StreamFormat::Packed).await),
             "HLS egress is not supported"
         );
 
@@ -318,12 +526,15 @@ fn hls_streams_open_only_where_served_enabled_and_addressed() {
         let routes = HlsRoutes::new();
         let v = start(&n, &routes, serving());
         assert_eq!(
-            refusal(v.open_hls(&uri, &[]).await),
+            refusal(v.open_hls(&uri, &[], StreamFormat::Packed).await),
             "HLS egress is disabled"
         );
         set_hls(&v, true, "").await;
         assert_eq!(
-            refusal(v.open_hls("magnet:?xt=urn:ppspp:%%", &[]).await),
+            refusal(
+                v.open_hls("magnet:?xt=urn:ppspp:%%", &[], StreamFormat::Packed)
+                    .await
+            ),
             "invalid swarm uri: invalid uri"
         );
         assert!(v.hls_streams().is_empty());
@@ -340,12 +551,12 @@ fn hls_streams_open_only_where_served_enabled_and_addressed() {
         let v = start(&n, &HlsRoutes::new(), config);
         set_hls(&v, true, "").await;
         assert_eq!(
-            refusal(v.open_hls(&uri, &[]).await),
+            refusal(v.open_hls(&uri, &[], StreamFormat::Packed).await),
             "HLS egress has no server address"
         );
         set_hls(&v, true, "http://hls.example.com").await;
         assert!(
-            v.open_hls(&uri, &[])
+            v.open_hls(&uri, &[], StreamFormat::Packed)
                 .await
                 .unwrap()
                 .starts_with("http://hls.example.com/hls/")
@@ -360,7 +571,7 @@ fn hls_streams_open_only_where_served_enabled_and_addressed() {
         assert!(!v.hls_supported());
         assert_eq!(routes.profiles(), 0);
         assert_eq!(
-            refusal(v.open_hls(&uri, &[]).await),
+            refusal(v.open_hls(&uri, &[], StreamFormat::Packed).await),
             "HLS egress is unavailable: HLS profile keys are 32 bytes"
         );
     });
@@ -377,15 +588,27 @@ fn hls_streams_are_bounded() {
         config.hls.max_streams = 2;
         let v = start(&n, &HlsRoutes::new(), config);
         set_hls(&v, true, "").await;
-        let first = v.open_hls(&swarm_uri(1), &[]).await.unwrap();
-        v.open_hls(&swarm_uri(2), &[]).await.unwrap();
+        let first = v
+            .open_hls(&swarm_uri(1), &[], StreamFormat::Packed)
+            .await
+            .unwrap();
+        v.open_hls(&swarm_uri(2), &[], StreamFormat::Packed)
+            .await
+            .unwrap();
         assert_eq!(
-            v.open_hls(&swarm_uri(3), &[]).await,
+            v.open_hls(&swarm_uri(3), &[], StreamFormat::Packed).await,
             Err(VideoError::TooManyHlsStreams)
         );
-        assert_eq!(v.open_hls(&swarm_uri(1), &[]).await.unwrap(), first);
+        assert_eq!(
+            v.open_hls(&swarm_uri(1), &[], StreamFormat::Packed)
+                .await
+                .unwrap(),
+            first
+        );
         v.close_hls(&transfer_id(&swarm_uri(1))).unwrap();
-        v.open_hls(&swarm_uri(3), &[]).await.unwrap();
+        v.open_hls(&swarm_uri(3), &[], StreamFormat::Packed)
+            .await
+            .unwrap();
         let open: Vec<TransferId> = v.hls_streams().iter().map(|s| s.transfer_id).collect();
         let mut expected = [transfer_id(&swarm_uri(2)), transfer_id(&swarm_uri(3))];
         expected.sort();
@@ -396,29 +619,21 @@ fn hls_streams_are_bounded() {
 }
 
 /// Closing a stream unregisters its routes, so its GETs answer 404, and
-/// releases its swarm; a capture it read goes on.
+/// releases its swarm; the swarm's writer goes on.
 #[test]
 fn a_closed_stream_answers_404_and_releases_its_swarm() {
     run(async {
         let world = World::default();
         let n = node_in(&world, 1).await;
-        let (net, _) = owned_network(&n, &[], 10).await;
         let routes = HlsRoutes::new();
         let v = start(&n, &routes, serving());
         set_hls(&v, true, "").await;
-        let id = v
-            .open_capture(
-                "video/mp4",
-                vec![net.public.clone()],
-                ListingSnippet::default(),
-            )
-            .await
-            .unwrap();
-        let uri = v.captures()[0].swarm_uri.clone();
-        let url = v.open_hls(&uri, &[]).await.unwrap();
+        let mut p = Publisher::new(&n, 7).await;
+        let id = p.transfer_id();
+        let url = v.open_hls(&p.uri, &[], StreamFormat::Packed).await.unwrap();
         let records = records();
         for r in &records[..2] {
-            v.append_capture(&id, r.clone(), true).await.unwrap();
+            p.record(r).await;
         }
         wait_for(10, "the segments", || {
             listed(&playlist(&n, &routes, path(&url))).len() == 2
@@ -445,44 +660,43 @@ fn a_closed_stream_answers_404_and_releases_its_swarm() {
         );
         assert_eq!(v.close_hls(&id), Err(VideoError::HlsStreamNotFound));
         settle().await;
-        assert_eq!(v.video_swarms()[0].streams, 0);
-        assert_eq!(v.captures().len(), 1);
-        v.append_capture(&id, records[2].clone(), true)
-            .await
-            .unwrap();
+        assert!(v.video_swarms().is_empty());
+        p.record(&records[2]).await;
     });
 }
 
-/// A stream whose swarm closes, here a capture on the node, ends with its
-/// stream's error.
+/// A stream whose swarm closes, here an ingest session's on the node,
+/// ends with its stream's error.
 #[test]
 fn a_stream_ends_when_its_swarm_closes() {
     run(async {
         let world = World::default();
         let n = node_in(&world, 1).await;
-        let (net, _) = owned_network(&n, &[], 10).await;
+        let (net, _pipes) = owned_network(&n, &[], 10).await;
+        let video = FakeVideo::default();
         let routes = HlsRoutes::new();
-        let v = start(&n, &routes, serving());
+        let v = start_with(&n, n.profile.clone(), video.clone(), &routes, serving());
         set_hls(&v, true, "").await;
-        let id = v
-            .open_capture(
-                "video/mp4",
-                vec![net.public.clone()],
-                ListingSnippet::default(),
-            )
+        let key = open_ingest(&v, &video, &net).await;
+        let mut p = publish(&n, &video, &key).await;
+        let script = Script::new(&ScriptConfig::default());
+        let half = script.tags.len() / 2;
+        p.send_tags(&script.tags[..half], &script).await;
+        wait_for(10, "the listing", || !media(&n).is_empty()).await;
+        let m = media(&n).remove(0);
+        let id = transfer_id(&m.swarm_uri);
+        let url = v
+            .open_hls(&m.swarm_uri, &[], StreamFormat::from_mime(&m.mime_type))
             .await
             .unwrap();
-        let url = v.open_hls(&v.captures()[0].swarm_uri, &[]).await.unwrap();
-        v.append_capture(&id, records().remove(0), true)
-            .await
-            .unwrap();
-        wait_for(10, "the segment", || {
-            listed(&playlist(&n, &routes, path(&url))).len() == 1
+        p.send_tags(&script.tags[half..], &script).await;
+        wait_for(10, "a segment", || {
+            !listed(&playlist(&n, &routes, path(&url))).is_empty()
         })
         .await;
         let mut events = v.subscribe();
 
-        v.close_capture(&id).await.unwrap();
+        p.unpublish().await;
         wait_for(10, "the stream to end", || v.hls_streams().is_empty()).await;
         assert_eq!(get(&n, &routes, path(&url)).status, 404);
         assert_eq!(
@@ -504,7 +718,7 @@ fn an_idle_stream_closes() {
         set_hls(&v, true, "").await;
         let uri = swarm_uri(7);
         let t = transfer_id(&uri);
-        let url = v.open_hls(&uri, &[]).await.unwrap();
+        let url = v.open_hls(&uri, &[], StreamFormat::Packed).await.unwrap();
         let mut events = v.subscribe();
 
         for _ in 0..4 {
@@ -536,8 +750,12 @@ fn disabling_hls_closes_every_stream() {
         let v = start(&n, &routes, serving());
         set_hls(&v, true, "").await;
         let urls = [
-            v.open_hls(&swarm_uri(1), &[]).await.unwrap(),
-            v.open_hls(&swarm_uri(2), &[]).await.unwrap(),
+            v.open_hls(&swarm_uri(1), &[], StreamFormat::Packed)
+                .await
+                .unwrap(),
+            v.open_hls(&swarm_uri(2), &[], StreamFormat::Packed)
+                .await
+                .unwrap(),
         ];
         let mut events = v.subscribe();
 
@@ -559,41 +777,38 @@ fn disabling_hls_closes_every_stream() {
         expected.sort_by_key(order);
         assert_eq!(got, expected);
         assert_eq!(
-            v.open_hls(&swarm_uri(1), &[]).await,
+            v.open_hls(&swarm_uri(1), &[], StreamFormat::Packed).await,
             Err(VideoError::HlsDisabled)
         );
         settle().await;
         assert!(v.video_swarms().is_empty());
 
         set_hls(&v, true, "").await;
-        assert_eq!(v.open_hls(&swarm_uri(1), &[]).await.unwrap(), urls[0]);
+        assert_eq!(
+            v.open_hls(&swarm_uri(1), &[], StreamFormat::Packed)
+                .await
+                .unwrap(),
+            urls[0]
+        );
     });
 }
 
-/// Records that aren't fMP4, such as a capture's WebM, are skipped and
-/// counted; the fMP4 records after them are served.
+/// Records that aren't fMP4, such as WebM, are skipped and counted; the
+/// fMP4 records after them are served.
 #[test]
 fn records_that_are_not_fmp4_are_skipped() {
     run(async {
         let world = World::default();
         let n = node_in(&world, 1).await;
-        let (net, _) = owned_network(&n, &[], 10).await;
         let routes = HlsRoutes::new();
         let v = start(&n, &routes, serving());
         set_hls(&v, true, "").await;
-        let id = v
-            .open_capture(
-                "video/webm",
-                vec![net.public.clone()],
-                ListingSnippet::default(),
-            )
-            .await
-            .unwrap();
-        let url = v.open_hls(&v.captures()[0].swarm_uri, &[]).await.unwrap();
+        let mut p = Publisher::new(&n, 7).await;
+        let url = v.open_hls(&p.uri, &[], StreamFormat::Packed).await.unwrap();
         for i in 0..3u8 {
             let mut webm = vec![0x1a, 0x45, 0xdf, 0xa3];
             webm.resize(70_000, i);
-            v.append_capture(&id, webm, true).await.unwrap();
+            p.record(&webm).await;
         }
         wait_for(10, "the records to be skipped", || {
             v.metrics().hls_skipped_records == 3
@@ -603,7 +818,7 @@ fn records_that_are_not_fmp4_are_skipped() {
 
         let records = records();
         for r in &records[..2] {
-            v.append_capture(&id, r.clone(), true).await.unwrap();
+            p.record(r).await;
         }
         wait_for(10, "the segments", || {
             listed(&playlist(&n, &routes, path(&url))).len() == 2
@@ -612,6 +827,74 @@ fn records_that_are_not_fmp4_are_skipped() {
         assert_served(&n, &routes, path(&url), &records[..2]);
         let m = v.metrics();
         assert_eq!((m.hls_segments, m.hls_skipped_records), (2, 3));
+    });
+}
+
+/// A unit-format ingest's access units are muxed into segments cut at
+/// its keyframes, each lasting its GOP, under a fixed target, with an
+/// init declaring both tracks.
+#[test]
+fn a_unit_format_ingest_is_served_as_segments_cut_at_its_keyframes() {
+    run(async {
+        let world = World::default();
+        // 2 s GOPs over 12 s.
+        let script = Script::new(&ScriptConfig {
+            duration_secs: 12,
+            ..ScriptConfig::default()
+        });
+        let UnitsHls {
+            b, routes, path, ..
+        } = units_hls(&world, &script, 5).await;
+        let text = playlist(&b, &routes, &path);
+        assert!(text.contains("#EXT-X-TARGETDURATION:4\n"), "{text}");
+        assert!(!text.contains("INDEPENDENT"), "{text}");
+        let segments = listed(&text);
+        assert!(segments.len() >= 5, "{text}");
+        let dir = path.strip_suffix("index.m3u8").unwrap();
+        let init = get(&b, &routes, &format!("{dir}{}", segments[0].init)).body;
+        let info = parse_init(&init).unwrap();
+        assert_eq!(info.tracks().len(), 2);
+        for s in &segments {
+            assert_eq!(s.extinf, "#EXTINF:2.000,", "{text}");
+            assert!(!s.discontinuity, "{text}");
+            let media = get(&b, &routes, &format!("{dir}{}", s.uri)).body;
+            assert_eq!(
+                media_duration(&info, &media).unwrap(),
+                strims_base::time::Duration::from_secs(2)
+            );
+        }
+    });
+}
+
+/// A unit-format ingest's 10 s GOPs are split into segments that round
+/// to at most the 4 s target.
+#[test]
+fn a_unit_format_ingests_long_gops_are_split_within_the_target() {
+    run(async {
+        let world = World::default();
+        let script = Script::new(&ScriptConfig {
+            gop_frames: 300,
+            duration_secs: 24,
+            ..ScriptConfig::default()
+        });
+        let UnitsHls {
+            b, routes, path, ..
+        } = units_hls(&world, &script, 5).await;
+        let text = playlist(&b, &routes, &path);
+        let millis: Vec<u64> = listed(&text)
+            .iter()
+            .map(|s| extinf_millis(&s.extinf))
+            .collect();
+        assert!(millis.len() >= 5, "{text}");
+        assert!(millis.iter().all(|&m| (m + 500) / 1000 <= 4), "{text}");
+        // Each 10 s GOP: two segments of 134 frames and the rest.
+        assert!(
+            millis[..2].iter().all(|m| (4450..4480).contains(m)),
+            "{text}"
+        );
+        assert_eq!(millis[..3].iter().sum::<u64>(), 10_000, "{text}");
+        assert!(text.contains("#EXT-X-TARGETDURATION:4\n"));
+        assert!(!text.contains("INDEPENDENT"));
     });
 }
 
@@ -660,6 +943,7 @@ fn the_frontend_opens_and_closes_streams() {
         let open = |swarm_uri: &str| HlsEgressOpenStreamRequest {
             swarm_uri: swarm_uri.into(),
             network_keys: Vec::new(),
+            mime_type: "video/mp4".into(),
         };
         let url = hls.open_stream(&open(&uri)).await.unwrap().playlist_url;
         let t = transfer_id(&uri);

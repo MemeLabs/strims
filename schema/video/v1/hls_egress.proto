@@ -37,6 +37,8 @@ message HLSEgressSetConfigResponse {
 message HLSEgressOpenStreamRequest {
   string swarm_uri = 1;
   repeated bytes network_keys = 2;
+  // The MIME type of the stream's listing, which names its format.
+  string mime_type = 3;
 }
 
 message HLSEgressOpenStreamResponse {

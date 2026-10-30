@@ -243,13 +243,31 @@ pub struct HlsSettings {
     /// streams are looked for.
     pub idle_timeout: Duration,
     pub sweep_interval: Duration,
-    /// Segments a playlist lists, and segments a stream keeps.
-    pub listed_segments: usize,
-    pub retained_segments: usize,
+    /// A playlist's `EXT-X-TARGETDURATION`, fixed for its life, in whole
+    /// seconds (a fraction rounds up): every segment rounds to at most it.
+    /// GOPs that round to at most it stay whole: those of keyframes every
+    /// 1 to 4 seconds, as encoders are usually set to, and those of
+    /// 250-frame GOPs at 60 frames a second. Longer GOPs, from scene-cut
+    /// keyframes of CRF or VBR streams, are split into segments that start
+    /// mid-GOP. Players that don't load parts start about three targets
+    /// behind the live edge.
+    pub target_duration: Duration,
+    /// The least media time a playlist lists, three targets at least, and
+    /// that a stream keeps for fetching. A segment that left the listing
+    /// stays fetchable for its own time and a playlist's, the longest a
+    /// player may still read a playlist that listed it: the default keeps
+    /// the 16 s listed and 24 s more, a playlist's 20 s with the segment
+    /// past its listing, and a segment's 4.
+    pub listed_duration: Duration,
+    pub retained_duration: Duration,
     /// The bytes of segments a stream keeps.
     pub max_retained_bytes: usize,
-    /// The largest record a stream reads.
+    /// The largest record a stream reads in the fMP4 format, and the
+    /// largest segment of a unit-format stream.
     pub max_record_bytes: usize,
+    /// The media a fragment of a unit-format stream's segment holds
+    /// ([`HlsMuxerConfig::fragment_duration`](crate::hls::HlsMuxerConfig::fragment_duration)).
+    pub fragment_duration: Duration,
     /// The longest request path.
     pub max_path_bytes: usize,
     /// The largest HTTP request head, and how long a connection has to
@@ -268,10 +286,12 @@ impl Default for HlsSettings {
             max_streams: 4,
             idle_timeout: Duration::from_secs(60),
             sweep_interval: Duration::from_secs(10),
-            listed_segments: 6,
-            retained_segments: 8,
+            target_duration: Duration::from_secs(4),
+            listed_duration: Duration::from_secs(16),
+            retained_duration: Duration::from_secs(40),
             max_retained_bytes: 64 * 1024 * 1024,
             max_record_bytes: 16 * 1024 * 1024,
+            fragment_duration: CutRule::DEFAULT_FRAGMENT_DURATION,
             max_path_bytes: 256,
             max_request_head_bytes: 8 * 1024,
             request_head_timeout: Duration::from_secs(10),
@@ -357,9 +377,11 @@ pub struct Metrics {
     pub hls_streams: u64,
     /// Segments HLS streams served.
     pub hls_segments: u64,
-    /// Records HLS streams skipped: over
-    /// [`HlsSettings::max_record_bytes`], or not fMP4 records with media
-    /// time.
+    /// Records HLS streams skipped: fMP4 records over
+    /// [`HlsSettings::max_record_bytes`], not fMP4 records with media time
+    /// or with a fragment longer than the target, and unit-format records
+    /// over [`units::MAX_RECORD_LEN`](crate::units::MAX_RECORD_LEN) or
+    /// whose unit the muxer refused.
     pub hls_skipped_records: u64,
     /// Times an autoseed rule found its swarm held by another: a
     /// capture's or an ingest session's, or another component's transfer

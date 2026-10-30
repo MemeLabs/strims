@@ -24,16 +24,36 @@
 //! URL. The node serves at most
 //! [`HlsSettings::max_streams`](crate::HlsSettings::max_streams) streams.
 //!
-//! # Records
+//! # Formats
 //!
-//! Each whole record ([`EgressPiece::RecordEnd`]) is an fMP4 record
-//! ([`split_record`]): its init and media become an HLS segment lasting the
-//! media's time ([`media_duration`]). A record of at most
-//! [`HlsSettings::max_record_bytes`](crate::HlsSettings::max_record_bytes)
-//! is held while it arrives. A record that isn't fMP4 with media time,
-//! such as a capture's WebM, is skipped, and one over the bound is dropped.
-//! Once a segment was served, a skipped or dropped record, or a
-//! discontinuity of the stream, marks the next segment discontinuous.
+//! A stream reads its swarm in the format its open names
+//! ([`StreamFormat`], from the listing's MIME type), and its playlist's
+//! target duration is
+//! [`HlsSettings::target_duration`](crate::HlsSettings::target_duration)
+//! for its life:
+//!
+//! - **fMP4 records** ([`StreamFormat::Packed`]). A record of at most
+//!   [`HlsSettings::max_record_bytes`](crate::HlsSettings::max_record_bytes)
+//!   is held while it arrives, and once whole ([`EgressPiece::RecordEnd`]),
+//!   if it is an fMP4 record ([`split_record`]) with media time
+//!   ([`media_duration`]), its init and media become segments: one
+//!   lasting the media's time, or, when that would round above the target
+//!   ([`fits_target`]), runs of its fragments within the target, which
+//!   after the first start mid-GOP. A record that isn't fMP4 with media
+//!   time, such as WebM, is skipped, as is one with a fragment
+//!   longer than the target, from that fragment on; one over the bound is
+//!   dropped.
+//! - **The unit format** ([`StreamFormat::Units`]). Each whole record of
+//!   at most [`units::MAX_RECORD_LEN`] goes through a [`UnitReader`] into
+//!   an [`HlsMuxer`], whose segments the playlist lists (see
+//!   [`hls`](crate::hls#segments)). The reader's gaps are the muxer's, so
+//!   a lost chunk costs the units up to the next keyframe. New configs,
+//!   which also come when a writer starts the stream over, reset the
+//!   muxer. A record over the bound is dropped.
+//!
+//! Once a segment was served, a skipped or dropped fMP4 record, a
+//! discontinuity of an fMP4 stream, or a gap or reset of a unit-format
+//! stream marks the next segment discontinuous.
 //! [`Metrics`](crate::Metrics) counts the segments and skipped records.
 //!
 //! # Lifetime
@@ -51,6 +71,7 @@
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::mem;
+use std::ops::Range;
 use std::pin::Pin;
 use std::rc::{Rc, Weak};
 use std::task::{Context, Poll};
@@ -68,8 +89,13 @@ use strims_transfer::TransferId;
 use crate::control::Shared;
 use crate::egress::{EgressPiece, EgressStream, StreamFormat, check_stream};
 use crate::fmp4::{InitInfo, media_duration, parse_init, split_record};
-use crate::hls::{HlsProfile, HlsRoutes, HlsStream, PlaylistConfig, RouteError, playlist_path};
-use crate::{VideoControl, VideoError, VideoEvent, VideoHost};
+use crate::hls::{
+    HlsMuxer, HlsMuxerConfig, HlsProfile, HlsRoutes, HlsStream, PlaylistConfig, RouteError,
+    fits_target, playlist_path, target_secs,
+};
+use crate::media::Muxer;
+use crate::units::{self, ReaderEvent, UnitReader};
+use crate::{HlsSettings, VideoControl, VideoError, VideoEvent, VideoHost};
 
 /// Why an HLS stream closed.
 #[derive(Clone, Debug, PartialEq)]
@@ -160,37 +186,115 @@ impl HlsEgress {
 /// there are streams.
 pub(crate) type HlsSweep<T> = Option<Pin<Box<<T as Timer>::Sleep>>>;
 
-/// What a piece did to an HLS stream ([`RecordFeed::feed`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Fed {
-    Nothing,
-    /// A segment was pushed.
-    Segment,
-    /// A record was skipped or dropped.
-    Skipped,
+/// What a piece did to an HLS stream ([`StreamFeed::feed`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Fed {
+    /// Segments pushed.
+    pub(crate) segments: u64,
+    /// Records skipped or dropped.
+    pub(crate) skipped: u64,
 }
 
-/// Turns a stream's pieces into the segments of an [`HlsStream`]; see the
-/// [module docs](self#records).
-pub(crate) struct RecordFeed {
-    /// The record in progress. Bound: `max_record_bytes`, also of its
-    /// capacity, which is kept from record to record.
+/// Turns a stream's pieces into the segments of an [`HlsStream`], in its
+/// format; see the [module docs](self#formats).
+pub(crate) enum StreamFeed {
+    Records(Box<RecordFeed>),
+    Units(Box<UnitFeed>),
+}
+
+impl StreamFeed {
+    /// A feed of a stream of `format` under `settings`.
+    pub(crate) fn new(format: StreamFormat, settings: &HlsSettings) -> StreamFeed {
+        let target = target_secs(settings.target_duration);
+        match format {
+            StreamFormat::Packed => {
+                StreamFeed::Records(Box::new(RecordFeed::new(settings.max_record_bytes, target)))
+            }
+            StreamFormat::Units => StreamFeed::Units(Box::new(UnitFeed::new(HlsMuxerConfig {
+                target,
+                fragment_duration: settings.fragment_duration,
+                max_segment_bytes: settings.max_record_bytes,
+            }))),
+        }
+    }
+
+    /// Takes the stream's next piece into `stream`.
+    pub(crate) fn feed(&mut self, piece: EgressPiece<'_>, stream: &HlsStream) -> Fed {
+        match self {
+            StreamFeed::Records(f) => f.feed(piece, stream),
+            StreamFeed::Units(f) => f.feed(piece, stream),
+        }
+    }
+}
+
+/// A record held while it arrives, up to a bound.
+struct Held {
+    /// Bound: `max`, also of its capacity, which is kept from record to
+    /// record.
     record: Vec<u8>,
-    max_record_bytes: usize,
+    max: usize,
     /// The record in progress went over the bound, so its bytes up to its
     /// end are dropped.
     dropping: bool,
+}
+
+impl Held {
+    fn new(max: usize) -> Held {
+        Held {
+            record: Vec::new(),
+            max,
+            dropping: false,
+        }
+    }
+
+    /// Appends `d` to the record: false when that takes it over the bound,
+    /// which drops it.
+    fn data(&mut self, d: &[u8]) -> bool {
+        if self.dropping {
+            return true;
+        }
+        let need = self.record.len().saturating_add(d.len());
+        if need > self.max {
+            self.record.clear();
+            self.dropping = true;
+            return false;
+        }
+        if need > self.record.capacity() {
+            let grown = self.record.capacity().saturating_mul(2);
+            let target = need.max(grown).min(self.max);
+            self.record.reserve_exact(target - self.record.len());
+        }
+        self.record.extend_from_slice(d);
+        true
+    }
+
+    /// The record ended: whether it is whole, not dropped.
+    fn end(&mut self) -> bool {
+        !mem::take(&mut self.dropping)
+    }
+
+    fn clear(&mut self) {
+        self.record.clear();
+        self.dropping = false;
+    }
+}
+
+/// Turns an fMP4 stream's records into segments; see the
+/// [module docs](self#formats).
+pub(crate) struct RecordFeed {
+    held: Held,
+    /// The playlist's target duration, in whole seconds.
+    target: u64,
     init: InitCache,
     /// A segment was pushed, so a gap after it is a discontinuity.
     pushed: bool,
 }
 
 impl RecordFeed {
-    pub(crate) fn new(max_record_bytes: usize) -> RecordFeed {
+    pub(crate) fn new(max_record_bytes: usize, target: u64) -> RecordFeed {
         RecordFeed {
-            record: Vec::new(),
-            max_record_bytes,
-            dropping: false,
+            held: Held::new(max_record_bytes),
+            target,
             init: InitCache::default(),
             pushed: false,
         }
@@ -199,53 +303,55 @@ impl RecordFeed {
     /// Takes the stream's next piece into `stream`.
     pub(crate) fn feed(&mut self, piece: EgressPiece<'_>, stream: &HlsStream) -> Fed {
         match piece {
-            EgressPiece::Data(d) => self.data(d, stream),
-            EgressPiece::RecordEnd => self.end(stream),
+            EgressPiece::Data(d) => {
+                if self.held.data(d) {
+                    return Fed::default();
+                }
+                self.gap(stream);
+                Fed {
+                    segments: 0,
+                    skipped: 1,
+                }
+            }
+            EgressPiece::RecordEnd => {
+                if !self.held.end() {
+                    return Fed::default();
+                }
+                let fed = self.record(stream);
+                self.held.record.clear();
+                fed
+            }
             EgressPiece::Discontinuity => {
-                self.record.clear();
-                self.dropping = false;
+                self.held.clear();
                 self.gap(stream);
-                Fed::Nothing
+                Fed::default()
             }
         }
     }
 
-    fn data(&mut self, d: &[u8], stream: &HlsStream) -> Fed {
-        if self.dropping {
-            return Fed::Nothing;
-        }
-        let need = self.record.len().saturating_add(d.len());
-        if need > self.max_record_bytes {
-            self.record.clear();
-            self.dropping = true;
+    /// Pushes the segments of the whole record held.
+    fn record(&mut self, stream: &HlsStream) -> Fed {
+        let mut fed = Fed::default();
+        let Some(pieces) = segments(&self.held.record, &mut self.init, self.target) else {
             self.gap(stream);
-            return Fed::Skipped;
-        }
-        if need > self.record.capacity() {
-            let grown = self.record.capacity().saturating_mul(2);
-            let target = need.max(grown).min(self.max_record_bytes);
-            self.record.reserve_exact(target - self.record.len());
-        }
-        self.record.extend_from_slice(d);
-        Fed::Nothing
-    }
-
-    fn end(&mut self, stream: &HlsStream) -> Fed {
-        if mem::take(&mut self.dropping) {
-            return Fed::Nothing;
-        }
-        let fed = match segment(&self.record, &mut self.init) {
-            Some((init, media, duration)) => {
-                stream.push_segment(init, media, duration);
-                self.pushed = true;
-                Fed::Segment
-            }
-            None => {
-                self.gap(stream);
-                Fed::Skipped
-            }
+            fed.skipped = 1;
+            return fed;
         };
-        self.record.clear();
+        if let Ok((init, media)) = split_record(&self.held.record) {
+            for p in &pieces.segments {
+                stream.push_segment(
+                    init,
+                    media.get(p.bytes.clone()).unwrap_or_default(),
+                    p.duration,
+                );
+                fed.segments += 1;
+            }
+        }
+        self.pushed |= fed.segments > 0;
+        if pieces.cut_short {
+            self.gap(stream);
+            fed.skipped = 1;
+        }
         fed
     }
 
@@ -280,13 +386,168 @@ impl InitCache {
     }
 }
 
-/// A record's init, media and media time, if it is an fMP4 record whose
-/// media lasts.
-fn segment<'a>(record: &'a [u8], cache: &mut InitCache) -> Option<(&'a [u8], &'a [u8], Duration)> {
+/// A segment cut from a record: its bytes within the record's media, and
+/// its media time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Piece {
+    bytes: Range<usize>,
+    duration: Duration,
+}
+
+/// The segments of an fMP4 record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Pieces {
+    segments: Vec<Piece>,
+    /// A fragment longer than the target ended them: the record's media
+    /// from it on is skipped.
+    cut_short: bool,
+}
+
+/// The segments of `record` under target `target`, if it is an fMP4
+/// record whose media lasts and whose first fragment fits the target:
+/// its media whole when that fits, or else runs of its fragments, each
+/// as long as fits.
+fn segments(record: &[u8], cache: &mut InitCache, target: u64) -> Option<Pieces> {
     let (init, media) = split_record(record).ok()?;
     let info = cache.info(init)?;
-    let duration = media_duration(&info, media).ok()?;
-    (duration > Duration::ZERO).then_some((init, media, duration))
+    let mut pieces = Pieces {
+        segments: Vec::new(),
+        cut_short: false,
+    };
+    let mut current: Option<Piece> = None;
+    let mut total = Duration::ZERO;
+    for range in fragments(media)? {
+        let duration = media_duration(&info, media.get(range.clone())?).ok()?;
+        if !fits_target(duration, target) {
+            pieces.cut_short = true;
+            break;
+        }
+        total += duration;
+        match &mut current {
+            Some(p) if fits_target(p.duration + duration, target) => {
+                p.bytes.end = range.end;
+                p.duration += duration;
+            }
+            _ => {
+                pieces.segments.extend(current.take());
+                current = Some(Piece {
+                    bytes: range,
+                    duration,
+                });
+            }
+        }
+    }
+    pieces.segments.extend(current);
+    // A segment that isn't the record's last ends at its fragment's end;
+    // the record's last takes the boxes after its last fragment too.
+    if !pieces.cut_short
+        && let Some(last) = pieces.segments.last_mut()
+    {
+        last.bytes.end = media.len();
+    }
+    (total > Duration::ZERO && !pieces.segments.is_empty()).then_some(pieces)
+}
+
+/// The byte ranges of `media`'s fragments: its top-level boxes up to and
+/// including each `mdat`, the boxes after the last `mdat` with it. `None`
+/// when a box header is malformed or past the end, or no box is an `mdat`.
+fn fragments(media: &[u8]) -> Option<Vec<Range<usize>>> {
+    let mut out: Vec<Range<usize>> = Vec::new();
+    let (mut at, mut start) = (0usize, 0usize);
+    while at < media.len() {
+        let rest = media.get(at..)?;
+        let size = u32::from_be_bytes(rest.get(..4)?.try_into().ok()?);
+        let len = match size {
+            0 => rest.len(),
+            1 => usize::try_from(u64::from_be_bytes(rest.get(8..16)?.try_into().ok()?)).ok()?,
+            n => usize::try_from(n).ok()?,
+        };
+        let header = if size == 1 { 16 } else { 8 };
+        if len < header || len > rest.len() {
+            return None;
+        }
+        let mdat = rest.get(4..8)? == b"mdat";
+        at += len;
+        if mdat {
+            out.push(start..at);
+            start = at;
+        }
+    }
+    let last = out.last_mut()?;
+    last.end = media.len();
+    Some(out)
+}
+
+/// Turns a unit-format stream's records into segments; see the
+/// [module docs](self#formats).
+pub(crate) struct UnitFeed {
+    held: Held,
+    reader: UnitReader,
+    muxer: HlsMuxer,
+}
+
+impl UnitFeed {
+    pub(crate) fn new(config: HlsMuxerConfig) -> UnitFeed {
+        UnitFeed {
+            held: Held::new(units::MAX_RECORD_LEN),
+            reader: UnitReader::new(),
+            muxer: HlsMuxer::new(config),
+        }
+    }
+
+    /// Takes the stream's next piece into `stream`.
+    pub(crate) fn feed(&mut self, piece: EgressPiece<'_>, stream: &HlsStream) -> Fed {
+        let mut fed = Fed::default();
+        match piece {
+            EgressPiece::Data(d) => {
+                if !self.held.data(d) {
+                    self.reader.lost();
+                    fed.skipped = 1;
+                }
+            }
+            EgressPiece::RecordEnd => {
+                if self.held.end() {
+                    fed.skipped = self.record();
+                    self.held.record.clear();
+                }
+            }
+            EgressPiece::Discontinuity => {
+                self.held.clear();
+                self.reader.lost();
+            }
+        }
+        while let Some(s) = self.muxer.take_segment() {
+            if s.discontinuity {
+                stream.discontinuity();
+            }
+            stream.push_segment(&s.init, &s.media, s.duration);
+            fed.segments += 1;
+        }
+        fed
+    }
+
+    /// Reads the whole record held into the muxer: 1 if the muxer refused
+    /// its unit, 0 otherwise.
+    fn record(&mut self) -> u64 {
+        let unit = self.reader.read(&self.held.record);
+        while let Some(e) = self.reader.poll_event() {
+            match e {
+                ReaderEvent::Configs => {
+                    self.muxer.reset();
+                    for c in self.reader.configs() {
+                        // A refused config leaves its track out: its units
+                        // are refused.
+                        let _ = self.muxer.set_config(c);
+                    }
+                }
+                ReaderEvent::Gap { .. } => self.muxer.gap(),
+            }
+        }
+        match unit.map(|u| self.muxer.push(&u)) {
+            Some(Err(_)) => 1,
+            _ => 0,
+        }
+    }
 }
 
 /// An open's entry, removed if the open doesn't finish.
@@ -377,16 +638,17 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         }
     }
 
-    /// Feeds the pieces of `egress` into `stream` until the stream fails,
-    /// then closes entry `id` of `t`.
+    /// Feeds the pieces of `egress`, a stream of `format`, into `stream`
+    /// until the stream fails, then closes entry `id` of `t`.
     async fn read_hls(
         self: Rc<Self>,
         t: TransferId,
         id: u64,
         mut egress: EgressStream<K, H, V, T>,
+        format: StreamFormat,
         stream: Weak<HlsStream>,
     ) {
-        let mut feed = RecordFeed::new(self.config.hls.max_record_bytes);
+        let mut feed = StreamFeed::new(format, &self.config.hls);
         let error = loop {
             let piece = match egress.next(usize::MAX).await {
                 Ok(piece) => piece,
@@ -395,10 +657,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             let Some(stream) = stream.upgrade() else {
                 return;
             };
-            match feed.feed(piece, &stream) {
-                Fed::Nothing => {}
-                Fed::Segment => self.metrics.borrow_mut().hls_segments += 1,
-                Fed::Skipped => self.metrics.borrow_mut().hls_skipped_records += 1,
+            let fed = feed.feed(piece, &stream);
+            if fed != Fed::default() {
+                let mut m = self.metrics.borrow_mut();
+                m.hls_segments += fed.segments;
+                m.hls_skipped_records += fed.skipped;
             }
         };
         let e = self.hls.borrow_mut().take(&t, id);
@@ -410,8 +673,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
     /// Serves the swarm `swarm_uri` names, read on the networks
-    /// `network_keys` names, as an HLS stream: its playlist URL. See the
-    /// [module docs](self).
+    /// `network_keys` names in `format`, as an HLS stream: its playlist
+    /// URL. See the [module docs](self). A transfer already served answers
+    /// its stream's URL, read in the format its first open named.
     ///
     /// # Errors
     ///
@@ -424,6 +688,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         &self,
         swarm_uri: &str,
         network_keys: &[Vec<u8>],
+        format: StreamFormat,
     ) -> Result<String, VideoError> {
         let s = &self.shared;
         let settings = &s.config.hls;
@@ -465,8 +730,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 return Err(VideoError::TooManyHlsStreams);
             }
             let playlist = PlaylistConfig {
-                listed: settings.listed_segments,
-                retained: settings.retained_segments,
+                target: target_secs(settings.target_duration),
+                listed: settings.listed_duration,
+                retained: settings.retained_duration,
                 max_retained_bytes: settings.max_retained_bytes,
             };
             let stream = h
@@ -493,9 +759,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
             id,
             done: false,
         };
-        let egress = self
-            .open_stream(swarm_uri, network_keys, StreamFormat::Packed)
-            .await?;
+        let egress = self.open_stream(swarm_uri, network_keys, format).await?;
         let task = {
             let mut h = s.hls.borrow_mut();
             let entry = h
@@ -504,7 +768,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 .filter(|e| e.id == id)
                 .ok_or(VideoError::StreamClosed)?;
             let stream = Rc::downgrade(&entry.stream);
-            let (task, abort) = abortable(s.clone().read_hls(t, id, egress, stream));
+            let (task, abort) = abortable(s.clone().read_hls(t, id, egress, format, stream));
             entry.reader = Some(abort);
             task
         };
