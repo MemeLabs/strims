@@ -141,9 +141,10 @@
 //!   such a publish ends with the reason. A stream whose video codec
 //!   changes ends.
 //! - **Swarms.** Each rendition is a swarm of its own under a key the
-//!   channel key derives for its id ([`renditions::KEY_LABEL`]), so its
-//!   swarm id is the same in every session of the channel: `source`, or a
-//!   rung's shorter side and frame rate, such as `480p30`. A
+//!   channel key derives for its id (the HMAC-SHA256 of
+//!   `strims-video-rendition:` and the id), so its swarm id is the same in
+//!   every session of the channel: `source`, or a rung's shorter side and
+//!   frame rate, such as `480p30`. A
 //!   [`UnitWriter`] writes it, and it is signed early as its bitrate has
 //!   it. It is created once its first config comes, and published on the
 //!   channel's network. A session that replaces another takes the slots

@@ -44,9 +44,9 @@ pub enum Av1Error {
 pub struct Av1Config {
     /// seq_profile.
     pub profile: u8,
-    /// seq_level_idx[0].
+    /// `seq_level_idx[0]`.
     pub level: u8,
-    /// seq_tier[0]: the High tier.
+    /// `seq_tier[0]`: the High tier.
     pub high_tier: bool,
     /// 8, 10 or 12.
     pub bit_depth: u8,
