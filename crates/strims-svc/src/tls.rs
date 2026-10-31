@@ -426,4 +426,42 @@ mod tests {
         assert!(matches!(tls.reload(), Some(Err(TlsError::Key { .. }))));
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// A Kubernetes secret volume: the files are symlinks through `..data`,
+    /// which kubelet points at a new directory of the renewed pair with one
+    /// rename. The paths never change; what they resolve to does.
+    #[cfg(unix)]
+    #[test]
+    fn a_secret_volume_whose_data_link_moves_loads_the_renewed_pair() {
+        use std::os::unix::fs::symlink;
+
+        let dir = dir("secret-volume");
+        let version = |name: &str, cert: &str, key: &str| {
+            let v = dir.join(name);
+            std::fs::create_dir(&v).unwrap();
+            std::fs::write(v.join("tls.crt"), cert).unwrap();
+            std::fs::write(v.join("tls.key"), key).unwrap();
+        };
+        let (cert, key, _) = self_signed(&["a.example"]);
+        version("..2026_10_31_00_00_00.1", &cert, &key);
+        symlink("..2026_10_31_00_00_00.1", dir.join("..data")).unwrap();
+        symlink("..data/tls.crt", dir.join("tls.crt")).unwrap();
+        symlink("..data/tls.key", dir.join("tls.key")).unwrap();
+        let (cert_path, key_path) = (dir.join("tls.crt"), dir.join("tls.key"));
+        let (tls, _) = Tls::load(&TlsConfig::new(&cert_path, &key_path)).unwrap();
+        assert!(tls.reload().is_none());
+
+        // The renewed certificate names one more host, so its length
+        // differs even where file times don't move this close together.
+        let (renewed, renewed_key, _) = self_signed(&["b.example", "a.example"]);
+        version("..2026_12_01_00_00_00.2", &renewed, &renewed_key);
+        symlink("..2026_12_01_00_00_00.2", dir.join("..data_tmp")).unwrap();
+        std::fs::rename(dir.join("..data_tmp"), dir.join("..data")).unwrap();
+        std::fs::remove_dir_all(dir.join("..2026_10_31_00_00_00.1")).unwrap();
+
+        let cert = tls.reload().unwrap().unwrap();
+        assert_eq!(cert.dns_names(), ["b.example", "a.example"]);
+        assert!(tls.reload().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
