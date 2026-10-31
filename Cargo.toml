@@ -158,6 +158,9 @@ turmoil = "0.7"
 tokio-tungstenite = "0.30"
 # HTTP/1 heads: strims-svc's HLS requests, strims-node's HTTPS responses
 httparse = "1.10"
+# HTTP/2: strims-svc's HLS over TLS
+h2 = "0.4"
+http = "1"
 # TLS on the ring provider, for native HTTPS clients and strims-svc's
 # listeners
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }

@@ -4,8 +4,15 @@
 //! HLS over HTTP: the running profile's HLS streams, answered from the
 //! node factory's [`HlsRoutes`] for external players.
 //!
-//! The server speaks HTTP/1.1, over TLS when it has a certificate, and
-//! answers one request per connection:
+//! The server speaks HTTP/1.1, and over TLS when it has a certificate,
+//! HTTP/2 to the clients whose handshake picks it (see [`http2`]).
+//! Either way, `GET` and `HEAD` are answered from the routes, at the
+//! node's clock; any other method answers 405, and a path (its query
+//! included) over [`HlsSettings::max_path_bytes`] 414. Every response
+//! carries a content type, a cache control, a content length and
+//! `Access-Control-Allow-Origin: *`; a HEAD's has no body.
+//!
+//! HTTP/1.1 answers one request per connection:
 //!
 //! - From its accept, a connection has
 //!   [`HlsSettings::request_head_timeout`] to finish its TLS handshake and
@@ -13,12 +20,7 @@
 //!   [`HlsSettings::max_request_head_bytes`]. It closes at the deadline,
 //!   or when its handshake fails; a longer head answers 431, and one that
 //!   doesn't parse 400.
-//! - `GET` and `HEAD` are answered from the routes, at the node's clock;
-//!   any other method answers 405. A path over
-//!   [`HlsSettings::max_path_bytes`] answers 414.
-//! - Every response carries `Content-Type`, `Cache-Control`,
-//!   `Content-Length`, `Access-Control-Allow-Origin: *` and
-//!   `Connection: close`. A HEAD's has no body.
+//! - Every response carries `Connection: close`.
 //! - A response has [`RESPONSE_TIMEOUT`] to be sent. The connection then
 //!   ends its sending side (after TLS's `close_notify`) and takes what the
 //!   client still sends, for at most [`LINGER`], before it closes: closing
@@ -44,10 +46,13 @@ use tokio::task::{AbortHandle, spawn_local};
 use tokio::time::{Instant, timeout, timeout_at};
 
 use crate::SvcTimer;
-use crate::tls::Tls;
+use crate::http2;
+use crate::tls::{self, Tls};
 
 /// How long a response may take to send.
 const RESPONSE_TIMEOUT: StdDuration = StdDuration::from_secs(60);
+/// How long an HTTP/2 connection stays open with no request in progress.
+const IDLE_TIMEOUT: StdDuration = StdDuration::from_secs(30);
 /// How long a connection that answered takes the client's input before it
 /// closes.
 const LINGER: StdDuration = StdDuration::from_secs(1);
@@ -68,6 +73,10 @@ pub(crate) struct Limits {
     pub(crate) max_head_bytes: usize,
     pub(crate) head_timeout: StdDuration,
     pub(crate) max_connections: usize,
+    /// [`RESPONSE_TIMEOUT`].
+    pub(crate) response_timeout: StdDuration,
+    /// [`IDLE_TIMEOUT`].
+    pub(crate) idle_timeout: StdDuration,
 }
 
 impl Limits {
@@ -77,6 +86,8 @@ impl Limits {
             max_head_bytes: s.max_request_head_bytes,
             head_timeout: s.request_head_timeout.to_std().unwrap_or_default(),
             max_connections: s.max_connections,
+            response_timeout: RESPONSE_TIMEOUT,
+            idle_timeout: IDLE_TIMEOUT,
         }
     }
 }
@@ -85,7 +96,7 @@ impl Limits {
 pub(crate) struct Http {
     routes: HlsRoutes,
     timer: SvcTimer,
-    limits: Limits,
+    pub(crate) limits: Limits,
     /// The certificate connections' handshakes take, if served over TLS.
     tls: Option<Rc<Tls>>,
     /// The connections being served. Bound: `limits.max_connections`.
@@ -95,10 +106,10 @@ pub(crate) struct Http {
 
 /// A response, and whether its body is sent.
 #[derive(Debug)]
-struct Answer {
-    response: HlsResponse,
+pub(crate) struct Answer {
+    pub(crate) response: HlsResponse,
     /// False for a HEAD.
-    body: bool,
+    pub(crate) body: bool,
 }
 
 impl Answer {
@@ -178,6 +189,12 @@ impl Http {
         }
     }
 
+    /// Whether no connection is being served.
+    #[cfg(test)]
+    pub(crate) fn connections_empty(&self) -> bool {
+        self.connections.borrow().is_empty()
+    }
+
     /// Stops serving every connection.
     pub(crate) fn close(&self) {
         let connections = std::mem::take(&mut *self.connections.borrow_mut());
@@ -200,18 +217,23 @@ impl Http {
         let (Some(method), Some(path)) = (req.method, req.path) else {
             return Some(Answer::error(400));
         };
+        Some(self.route(method, path))
+    }
+
+    /// The answer to a request of `method` and `path`, its query included.
+    pub(crate) fn route(&self, method: &str, path: &str) -> Answer {
         let body = match method {
             "GET" => true,
             "HEAD" => false,
-            _ => return Some(Answer::error(405)),
+            _ => return Answer::error(405),
         };
         if path.len() > self.limits.max_path_bytes {
-            return Some(Answer::error(414));
+            return Answer::error(414);
         }
-        Some(Answer {
+        Answer {
             response: self.routes.get(self.timer.now(), path),
             body,
-        })
+        }
     }
 
     /// Reads a request head by `deadline` and answers it; `None` when the
@@ -259,7 +281,7 @@ impl Http {
         let Some(answer) = self.read_request(&mut stream, addr, deadline).await else {
             return;
         };
-        match timeout(RESPONSE_TIMEOUT, respond(&mut stream, &answer)).await {
+        match timeout(self.limits.response_timeout, respond(&mut stream, &answer)).await {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
                 tracing::debug!(%addr, error = %e, "sending an HLS response failed");
@@ -324,6 +346,9 @@ async fn serve(served: Served, stream: TcpStream, addr: SocketAddr) {
     match &http.tls {
         None => http.exchange(stream, addr, deadline).await,
         Some(tls) => match timeout_at(deadline, tls.hls().accept(stream)).await {
+            Ok(Ok(stream)) if stream.get_ref().1.alpn_protocol() == Some(tls::H2) => {
+                http2::serve(&http, stream, addr, deadline).await;
+            }
             Ok(Ok(stream)) => http.exchange(stream, addr, deadline).await,
             Ok(Err(e)) => tracing::debug!(%addr, error = %e, "an HLS TLS handshake failed"),
             Err(_) => tracing::debug!(%addr, "an HLS TLS handshake timed out"),

@@ -1,10 +1,10 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! A service on localhost with the operator's certificate: HLS over HTTPS
-//! at an `https://` base URL, the API over `wss://`, a renewal served to
-//! new connections without a restart, and certificates that don't load
-//! refused at the start.
+//! A service on localhost with the operator's certificate: HLS over HTTPS,
+//! HTTP/1.1 or HTTP/2, at an `https://` base URL, the API over `wss://`, a
+//! renewal served to new connections without a restart, and certificates
+//! that don't load refused at the start.
 
 #![allow(
     clippy::unwrap_used,
@@ -139,6 +139,26 @@ fn hls_and_the_api_serve_with_the_operator_certificate() {
         }
         let r = request(&client, hls_addr, "localhost", "GET", "/nope").await;
         assert_eq!(r.status, 404);
+
+        // A client that offers HTTP/2 takes it, for any number of requests
+        // on one connection.
+        let h2 = cert.client(&[b"h2", b"http/1.1"]);
+        let replies = request_h2(&h2, hls_addr, "localhost", &[path, path, "/nope"]).await;
+        let playlist = request(&client, hls_addr, "localhost", "GET", path).await;
+        for r in &replies[..2] {
+            assert_eq!(r.status, 200, "{}", r.text());
+            for name in [
+                "content-type",
+                "cache-control",
+                "access-control-allow-origin",
+            ] {
+                assert_eq!(r.header(name), playlist.header(name), "{name}");
+            }
+            assert_eq!(r.header("connection"), None);
+            assert_eq!(r.content_length(), r.body.len());
+            assert_eq!(r.text(), playlist.text());
+        }
+        assert_eq!(replies[2].status, 404);
         assert!(
             connect(&other.client(&[]), hls_addr, "localhost")
                 .await

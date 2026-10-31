@@ -48,7 +48,8 @@
 //!
 //! # TLS
 //!
-//! With [`Config::tls`], the HLS listener serves HTTPS, and with
+//! With [`Config::tls`], the HLS listener serves HTTPS, HTTP/2 to the
+//! players whose handshake offers it and HTTP/1.1 to the others, and with
 //! [`TlsConfig::api`] the API takes `wss://` connections, with the
 //! operator's certificate: a PEM file of its chain, the service's own
 //! certificate first, and one of its private key. The service doesn't
@@ -59,9 +60,10 @@
 //! checked, and a renewed pair serves the connections accepted after it
 //! loads.
 //!
-//! A player makes a TLS handshake for each HTTP/1.1 request, since a
-//! connection carries one answer: two each target duration, a playlist's
-//! and a segment's, a known cost to a phone's battery.
+//! An HTTP/2 player makes one TLS handshake for all its requests. One that
+//! speaks only HTTP/1.1 makes one for each, since an HTTP/1.1 connection
+//! carries one answer: two each target duration, a playlist's and a
+//! segment's, a known cost to a phone's battery.
 //!
 //! A certificate players accept chains to a root their device trusts and
 //! names the playlist URL's host: one that is self-signed plays nowhere,
@@ -92,6 +94,7 @@
 
 mod api;
 mod http;
+mod http2;
 mod tls;
 
 use std::net::{IpAddr, SocketAddr};

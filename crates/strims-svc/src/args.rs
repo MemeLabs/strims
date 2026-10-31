@@ -48,8 +48,9 @@ options:
                             address, the public IP or hostname at its port;
                             with --tls-cert, https:// and the first of those
                             the certificate names, else its DNS name)
-  --tls-cert <path>         serve HLS over HTTPS with the certificate chain
-                            in this PEM file, the service's own first
+  --tls-cert <path>         serve HLS over HTTPS (HTTP/2 or HTTP/1.1) with
+                            the certificate chain in this PEM file, the
+                            service's own first
   --tls-key <path>          the PEM file of the certificate's private key
   --api-tls                 the API takes wss:// connections, with the
                             --tls-cert certificate

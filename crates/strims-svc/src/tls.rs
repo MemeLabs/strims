@@ -31,8 +31,11 @@ use tokio_rustls::TlsAcceptor;
 
 use crate::TlsConfig;
 
-/// The ALPN protocols the HLS listener speaks; none negotiates HTTP/1.1.
-const HLS_ALPN: &[&[u8]] = &[];
+/// HTTP/2's ALPN protocol id.
+pub(crate) const H2: &[u8] = b"h2";
+/// The ALPN protocols the HLS listener speaks, by preference. A client
+/// that offers none takes HTTP/1.1.
+const HLS_ALPN: &[&[u8]] = &[H2, b"http/1.1"];
 /// The sessions kept for resumption, across both listeners.
 const SESSION_CACHE: usize = 256;
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Certificates for a service's TLS, and clients that trust them: HTTPS
-//! requests and the UI's `wss://` connections.
+//! requests over HTTP/1.1 and HTTP/2, and the UI's `wss://` connections.
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -128,6 +128,51 @@ pub async fn request(
             .collect(),
         body: raw[len..].to_vec(),
     }
+}
+
+/// Sends requests of `paths` over one HTTP/2 connection to `addr`, as
+/// `name`, all at once: their answers, in order.
+pub async fn request_h2(
+    client: &TlsConnector,
+    addr: SocketAddr,
+    name: &str,
+    paths: &[&str],
+) -> Vec<Reply> {
+    let tls = connect(client, addr, name).await.unwrap();
+    assert_eq!(tls.get_ref().1.alpn_protocol(), Some(&b"h2"[..]));
+    let (send, conn) = h2::client::handshake(tls).await.unwrap();
+    let driving = tokio::task::spawn_local(conn);
+    let fetches = paths.iter().map(|path| {
+        let send = send.clone();
+        async move {
+            let req = http::Request::get(format!("https://{name}{path}"))
+                .body(())
+                .unwrap();
+            let mut send = send.ready().await.unwrap();
+            let (response, _) = send.send_request(req, true).unwrap();
+            let (head, mut body) = response.await.unwrap().into_parts();
+            let mut out = Vec::new();
+            while let Some(chunk) = body.data().await {
+                let chunk = chunk.unwrap();
+                body.flow_control().release_capacity(chunk.len()).unwrap();
+                out.extend_from_slice(&chunk);
+            }
+            Reply {
+                status: head.status.as_u16(),
+                headers: head
+                    .headers
+                    .iter()
+                    .map(|(n, v)| (n.as_str().to_owned(), v.to_str().unwrap().to_owned()))
+                    .collect(),
+                body: out,
+            }
+        }
+    });
+    let replies = tokio::time::timeout(STEP, futures_util::future::join_all(fetches))
+        .await
+        .expect("the HTTP/2 answers");
+    driving.abort();
+    replies
 }
 
 /// Connects to `svc`'s API over `wss://` as `name`.
