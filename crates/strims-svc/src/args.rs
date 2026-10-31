@@ -6,6 +6,7 @@
 use std::net::IpAddr;
 use std::path::PathBuf;
 
+use strims_base::time::Duration;
 use strims_node::CaptureConfig;
 use strims_node::app::PsiMode;
 use strims_node::codec::FfmpegConfig;
@@ -48,6 +49,9 @@ options:
                             address, the public IP or hostname at its port;
                             with --tls-cert, https:// and the first of those
                             the certificate names, else its DNS name)
+  --hls-part-target <secs>  the most a low-latency HLS part lasts, from 0.1
+                            to the 4 s segment target; 0 serves whole
+                            segments alone (default 1)
   --tls-cert <path>         serve HLS over HTTPS (HTTP/2 or HTTP/1.1) with
                             the certificate chain in this PEM file, the
                             service's own first
@@ -187,6 +191,14 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
                 }
                 app.video.hls.base_url = url;
             }
+            "--hls-part-target" => {
+                let v = value()?;
+                let secs: f64 = number(&flag, &v)?;
+                if !(secs == 0.0 || (0.1..=4.0).contains(&secs)) {
+                    return Err(format!("--hls-part-target must be 0 or 0.1 to 4: {v}"));
+                }
+                app.video.hls.part_target = Duration::from_secs_f64(secs);
+            }
             "--tls-cert" => tls_cert = Some(PathBuf::from(value()?)),
             "--tls-key" => tls_key = Some(PathBuf::from(value()?)),
             "--api-tls" => api_tls = true,
@@ -300,6 +312,7 @@ mod tests {
             "--hls-listen",
             "0.0.0.0:8082",
             "--hls-public-url=https://media.example",
+            "--hls-part-target=0.5",
             "--ppspp-capture",
             "/tmp/cap",
             "--ppspp-capture-max=16",
@@ -337,6 +350,7 @@ mod tests {
         assert_eq!(c.max_connections, 8);
         assert_eq!(c.hls_listen.as_deref(), Some("0.0.0.0:8082"));
         assert_eq!(c.app.video.hls.base_url, "https://media.example");
+        assert_eq!(c.app.video.hls.part_target, Duration::from_millis(500));
         assert_eq!(
             c.app.ppspp_capture,
             Some(CaptureConfig {
@@ -365,7 +379,16 @@ mod tests {
         assert_eq!(c.app.psi, PsiMode::Thread);
         assert_eq!(c.hls_listen, None);
         assert_eq!(c.app.video.hls.base_url, "");
+        assert_eq!(c.app.video.hls.part_target, Duration::from_secs(1));
         assert_eq!(c.app.ppspp_capture, None);
+        let off = run(&["--db-memory", "--hls-part-target", "0"]).unwrap();
+        assert_eq!(off.app.video.hls.part_target, Duration::ZERO);
+        for bad in ["0.05", "5", "-1", "x"] {
+            let err = run(&["--db-memory", "--hls-part-target", bad])
+                .err()
+                .unwrap();
+            assert!(err.contains("--hls-part-target"), "{bad}: {err}");
+        }
         assert_eq!(c.tls, None);
         let c = run(&[
             "--db-memory",

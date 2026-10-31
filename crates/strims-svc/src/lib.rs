@@ -37,6 +37,13 @@
 //! the device's HLS config names no public server address. Without the
 //! listener, HLS egress is unsupported.
 //!
+//! The playlists are low-latency HLS with parts of
+//! [`HlsSettings::part_target`](strims_video::HlsSettings::part_target)
+//! (1 s by default, `--hls-part-target`): a player that loads parts holds
+//! a blocking reload and the hinted part open, each answered as its part
+//! comes, over HTTP/2 on one connection. Safari plays parts at low
+//! latency only over HTTP/2, so only with [`Config::tls`].
+//!
 //! An empty base URL becomes one at the listener's port. Without TLS, it
 //! is `http://` and the listener's IP, or for an unspecified address
 //! [`AppConfig::public_ip`], else [`AppConfig::ws_public_hostname`]. Over

@@ -156,6 +156,26 @@
 //! from a writer's clock that stepped back, becomes that end, so each
 //! date maps to one segment.
 //!
+//! # Blocking
+//!
+//! A low-latency media playlist offers blocking reloads
+//! (`CAN-BLOCK-RELOAD=YES`), and its subtitles' playlist offers them by
+//! segment. A reload of either with an `_HLS_msn` delivery directive, and
+//! of the media playlist with an `_HLS_part` too, waits
+//! ([`HlsRoutes::request`], [`HlsBlock`]) until the playlist lists that
+//! segment whole, or that part of it, or something later: a part past a
+//! segment's last is the next segment's first. A request of the hinted
+//! part waits for it. A reload of an ended playlist, or of one without
+//! parts, answers at once. One that asks for a segment more than two past
+//! the next, a part more than the Advance Part Limit past the newest
+//! (three part targets' worth, three at least), or a part without a
+//! segment answers 400.
+//!
+//! A blocked request waits at most three targets
+//! ([`HlsBlock::timeout`]), after which its caller answers 503, and
+//! answers 404 once its stream goes. At most [`MAX_BLOCKED_REQUESTS`] wait
+//! on a stream; a request past them answers 503.
+//!
 //! # Routes
 //!
 //! [`HlsRoutes`] maps request paths to the playlists of registered
@@ -178,15 +198,19 @@
 //! removes them.
 //!
 //! Every collection is bounded: segments by [`MAX_SEGMENTS`], their parts
-//! by [`MAX_SEGMENT_PARTS`] and their bytes by [`PlaylistConfig`], a muxer's segment by
+//! by [`MAX_SEGMENT_PARTS`] and their bytes by [`PlaylistConfig`], blocked
+//! requests by [`MAX_BLOCKED_REQUESTS`], a muxer's segment by
 //! [`HlsMuxerConfig::max_segment_bytes`], profiles by [`MAX_PROFILES`],
 //! streams by [`MAX_STREAMS`], and request paths by [`MAX_PATH_LEN`].
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::{self, Write as _};
+use std::future::Future;
 use std::mem;
+use std::pin::Pin;
 use std::rc::{Rc, Weak};
+use std::task::{Context, Poll, Waker};
 
 use strims_base::time::{Duration, Time};
 
@@ -718,13 +742,17 @@ impl Playlist {
             self.target_duration(),
         );
         let parts = self.config.parts();
-        if let Some(target) = parts.filter(|_| media) {
-            let target = duration_millis(target);
-            out.push_str("#EXT-X-SERVER-CONTROL:PART-HOLD-BACK=");
-            push_millis(&mut out, target.saturating_mul(3));
-            out.push_str("\n#EXT-X-PART-INF:PART-TARGET=");
-            push_millis(&mut out, target);
-            out.push('\n');
+        match parts {
+            Some(target) if media => {
+                let target = duration_millis(target);
+                out.push_str("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=");
+                push_millis(&mut out, target.saturating_mul(3));
+                out.push_str("\n#EXT-X-PART-INF:PART-TARGET=");
+                push_millis(&mut out, target);
+                out.push('\n');
+            }
+            Some(_) => out.push_str("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES\n"),
+            None => {}
         }
         let _ = write!(
             out,
@@ -938,6 +966,63 @@ impl Playlist {
         self.next_part
     }
 
+    /// What a reload of the playlist asking for segment `msn`, or part
+    /// `part` of it, gets: see [Blocking](self#blocking).
+    fn reload(&self, msn: u64, part: Option<u64>) -> Reload {
+        let Some(target) = self.config.parts() else {
+            return Reload::Now;
+        };
+        if self.ended {
+            return Reload::Now;
+        }
+        if msn > self.next_seq.saturating_add(2) {
+            return Reload::Refuse;
+        }
+        let limit = advance_part_limit(target);
+        let finished = self.segments.back().is_some_and(|s| s.seq >= msn);
+        let Some(part) = part else {
+            return if finished { Reload::Now } else { Reload::Wait };
+        };
+        if let Some(open) = self.open.as_ref().filter(|o| o.seq == msn) {
+            let listed = u64::try_from(open.parts.len()).unwrap_or(u64::MAX);
+            return match part.checked_sub(listed) {
+                None => Reload::Now,
+                Some(ahead) if ahead >= limit => Reload::Refuse,
+                Some(_) => Reload::Wait,
+            };
+        }
+        if finished {
+            // A part past a segment's last is the next segment's first.
+            let parts = self.kept(msn).map_or(0, |s| s.parts.len());
+            let past_last = usize::try_from(part).map_or(true, |p| p >= parts);
+            let next = msn.saturating_add(1);
+            let next_listed = self.segments.back().is_some_and(|s| s.seq >= next)
+                || self.open.as_ref().is_some_and(|o| o.seq == next);
+            return if !past_last || next_listed || self.kept(msn).is_none() {
+                Reload::Now
+            } else {
+                Reload::Wait
+            };
+        }
+        if part >= limit {
+            Reload::Refuse
+        } else {
+            Reload::Wait
+        }
+    }
+
+    /// Whether a request of part `number` waits for it: it is the part a
+    /// live playlist hints at.
+    fn hints(&self, number: u64) -> bool {
+        self.config.parts().is_some() && !self.ended && number == self.next_part
+    }
+
+    /// How long a blocked request waits: three targets.
+    fn block_timeout(&self) -> Duration {
+        let target = i64::try_from(self.target_duration()).unwrap_or(i64::MAX);
+        Duration::from_secs(target.saturating_mul(3))
+    }
+
     /// The bytes of a kept part, its segment open or kept.
     pub fn part(&self, number: u64) -> Option<Rc<[u8]>> {
         let in_segment = |s: &Segment| {
@@ -1022,6 +1107,22 @@ fn render_parts(out: &mut String, s: &Segment) {
         }
         out.push('\n');
     }
+}
+
+/// RFC 8216bis's Advance Part Limit: how many parts past the playlist's
+/// last a blocking reload may ask for, three part targets' worth.
+fn advance_part_limit(target: Duration) -> u64 {
+    let millis = duration_millis(target).max(1);
+    3000u64.div_ceil(millis).clamp(1, 3000).max(3)
+}
+
+/// What a blocking playlist reload gets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reload {
+    Now,
+    Wait,
+    /// 400: it asks too far ahead.
+    Refuse,
 }
 
 /// Appends `millis` as decimal seconds to the millisecond.
@@ -2363,6 +2464,10 @@ pub const MAX_STREAMS: usize = 16;
 /// most 164 bytes.
 pub const MAX_PATH_LEN: usize = 256;
 
+/// The most requests blocked on a stream at once ([`HlsBlock`]); past it,
+/// a request that would block answers 503.
+pub const MAX_BLOCKED_REQUESTS: usize = 64;
+
 const PLAYLIST_TYPE: &str = "application/vnd.apple.mpegurl";
 const INIT_TYPE: &str = "video/mp4";
 const SEGMENT_TYPE: &str = "video/iso.segment";
@@ -2387,7 +2492,9 @@ pub enum RouteError {
 /// The answer to a GET.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HlsResponse {
-    /// 200; 400 for a malformed path; 404 for a missing resource.
+    /// 200; 400 for a malformed path or delivery directive; 404 for a
+    /// missing resource; 503 for a request that can't block, or blocked
+    /// past its timeout.
     pub status: u16,
     pub content_type: &'static str,
     pub cache_control: &'static str,
@@ -2404,9 +2511,16 @@ impl HlsResponse {
         }
     }
 
+    /// The answer to a blocked request whose wait ran out
+    /// ([`HlsBlock::timeout`]).
+    pub fn unavailable() -> Self {
+        HlsResponse::error(503)
+    }
+
     fn error(status: u16) -> Self {
         let body: &[u8] = match status {
             400 => b"bad request\n",
+            503 => b"service unavailable\n",
             _ => b"not found\n",
         };
         HlsResponse {
@@ -2457,6 +2571,161 @@ struct ProfileState {
 struct StreamState {
     playlist: RefCell<Playlist>,
     last_access: Cell<Time>,
+    /// The requests blocked on the playlist, by id, and their wakers.
+    /// Bound: [`MAX_BLOCKED_REQUESTS`].
+    waiters: RefCell<Vec<(u64, Option<Waker>)>>,
+    next_waiter: Cell<u64>,
+}
+
+impl StreamState {
+    fn new(playlist: Playlist, now: Time) -> Self {
+        StreamState {
+            playlist: RefCell::new(playlist),
+            last_access: Cell::new(now),
+            waiters: RefCell::new(Vec::new()),
+            next_waiter: Cell::new(0),
+        }
+    }
+
+    fn touch(&self, now: Time) {
+        self.last_access.set(self.last_access.get().max(now));
+    }
+
+    /// Wakes the blocked requests: the playlist changed, or the stream
+    /// went.
+    fn changed(&self) {
+        let wakers: Vec<Waker> = self
+            .waiters
+            .borrow_mut()
+            .iter_mut()
+            .filter_map(|(_, w)| w.take())
+            .collect();
+        for w in wakers {
+            w.wake();
+        }
+    }
+
+    /// The answer to a request of `route` now, or that it waits.
+    fn answer(&self, route: &Route) -> Result<HlsResponse, Waiting> {
+        let playlist = self.playlist.borrow();
+        let text = |t: String| Rc::from(t.into_bytes());
+        let response = match route.file {
+            File::Multivariant => Some(HlsResponse::ok(
+                PLAYLIST_TYPE,
+                NO_CACHE,
+                text(playlist.render_multivariant()),
+            )),
+            File::Playlist | File::Subtitles => {
+                let media = route.file == File::Playlist;
+                let reload = match route.directives {
+                    Some((msn, part)) => playlist.reload(msn, part.filter(|_| media)),
+                    None => Reload::Now,
+                };
+                match reload {
+                    Reload::Refuse => return Ok(HlsResponse::error(400)),
+                    Reload::Wait => return Err(Waiting),
+                    Reload::Now => {}
+                }
+                let body = if media {
+                    playlist.render()
+                } else {
+                    playlist.render_subtitles()
+                };
+                Some(HlsResponse::ok(PLAYLIST_TYPE, NO_CACHE, text(body)))
+            }
+            File::Vtt(seq) => playlist
+                .vtt(seq)
+                .map(|body| HlsResponse::ok(VTT_TYPE, IMMUTABLE, body)),
+            File::Init(id) => playlist
+                .init(id)
+                .map(|body| HlsResponse::ok(INIT_TYPE, IMMUTABLE, body)),
+            File::Segment(seq) => playlist
+                .segment(seq)
+                .map(|body| HlsResponse::ok(SEGMENT_TYPE, IMMUTABLE, body)),
+            File::Part(number) => match playlist.part(number) {
+                Some(body) => Some(HlsResponse::ok(SEGMENT_TYPE, IMMUTABLE, body)),
+                None if playlist.hints(number) => return Err(Waiting),
+                None => None,
+            },
+        };
+        Ok(response.unwrap_or_else(|| HlsResponse::error(404)))
+    }
+}
+
+/// A request waits for its stream's playlist to change.
+#[derive(Debug, Clone, Copy)]
+struct Waiting;
+
+/// What a request answers: now, or once its stream holds what it asks
+/// for ([Blocking](self#blocking)).
+#[derive(Debug)]
+pub enum HlsAnswer {
+    Ready(HlsResponse),
+    Blocked(HlsBlock),
+}
+
+/// A request blocked on its stream: a future of its answer, once the
+/// stream holds what it asks for, or 404 once the stream goes. It waits
+/// as long as its caller polls it, which [`timeout`](Self::timeout) bounds:
+/// past it, the caller drops it and answers
+/// [`HlsResponse::unavailable`]. Dropping it frees its place among the
+/// stream's [`MAX_BLOCKED_REQUESTS`].
+#[must_use = "a blocked request answers when polled"]
+pub struct HlsBlock {
+    stream: Weak<StreamState>,
+    route: Route,
+    waiter: u64,
+    timeout: Duration,
+}
+
+impl HlsBlock {
+    /// How long the request may wait: three target durations, after which
+    /// RFC 8216bis has it answer 503.
+    pub fn timeout(&self) -> Duration {
+        self.timeout
+    }
+}
+
+impl Future for HlsBlock {
+    type Output = HlsResponse;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<HlsResponse> {
+        let Some(stream) = self.stream.upgrade() else {
+            return Poll::Ready(HlsResponse::error(404));
+        };
+        match stream.answer(&self.route) {
+            Ok(response) => Poll::Ready(response),
+            Err(Waiting) => {
+                let mut waiters = stream.waiters.borrow_mut();
+                if let Some((_, w)) = waiters.iter_mut().find(|(id, _)| *id == self.waiter) {
+                    match w {
+                        Some(w) if w.will_wake(cx.waker()) => {}
+                        _ => *w = Some(cx.waker().clone()),
+                    }
+                }
+                Poll::Pending
+            }
+        }
+    }
+}
+
+impl Drop for HlsBlock {
+    fn drop(&mut self) {
+        if let Some(stream) = self.stream.upgrade() {
+            stream
+                .waiters
+                .borrow_mut()
+                .retain(|(id, _)| *id != self.waiter);
+        }
+    }
+}
+
+impl fmt::Debug for HlsBlock {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HlsBlock")
+            .field("timeout", &self.timeout)
+            .finish_non_exhaustive()
+    }
 }
 
 /// The HLS streams of every registered profile, by path.
@@ -2501,65 +2770,72 @@ impl HlsRoutes {
         self.profiles.borrow().len()
     }
 
-    /// Answers a GET of `path` at `now`. A query string is ignored.
-    ///
-    /// A 200 records `now` as the stream's last access. Playlists can't be
-    /// cached; inits and segments can, since their paths never name other
-    /// bytes: numbers start at the stream's open time (see
-    /// [`HlsProfile::open_stream`]).
+    /// Answers a GET of `path` at `now`, as [`request`](Self::request)
+    /// does, at once: a request that would block answers 503.
     pub fn get(&self, now: Time, path: &str) -> HlsResponse {
+        match self.request(now, path) {
+            HlsAnswer::Ready(response) => response,
+            HlsAnswer::Blocked(_) => HlsResponse::unavailable(),
+        }
+    }
+
+    /// Answers a GET of `path` at `now`, or blocks it until its stream
+    /// holds what it asks for ([Blocking](self#blocking)). Of a query
+    /// string, only a playlist's delivery directives are read.
+    ///
+    /// A 200, and a request that blocks, record `now` as the stream's last
+    /// access. Playlists can't be cached; inits, segments, parts and
+    /// subtitles can, since their paths never name other bytes: numbers
+    /// start at the stream's open time (see [`HlsProfile::open_stream`]).
+    pub fn request(&self, now: Time, path: &str) -> HlsAnswer {
         let route = match parse_path(path) {
             Ok(route) => route,
-            Err(status) => return HlsResponse::error(status),
+            Err(status) => return HlsAnswer::Ready(HlsResponse::error(status)),
         };
         let profile = self.profiles.borrow().get(&route.profile).cloned();
         let Some(profile) = profile else {
-            return HlsResponse::error(404);
+            return HlsAnswer::Ready(HlsResponse::error(404));
         };
         let stream = profile.streams.borrow().get(&route.stream).cloned();
         let Some(stream) = stream else {
-            return HlsResponse::error(404);
+            return HlsAnswer::Ready(HlsResponse::error(404));
         };
-        let response = {
-            let playlist = stream.playlist.borrow();
-            let text = |t: String| Rc::from(t.into_bytes());
-            match route.file {
-                File::Multivariant => Some(HlsResponse::ok(
-                    PLAYLIST_TYPE,
-                    NO_CACHE,
-                    text(playlist.render_multivariant()),
-                )),
-                File::Playlist => Some(HlsResponse::ok(
-                    PLAYLIST_TYPE,
-                    NO_CACHE,
-                    text(playlist.render()),
-                )),
-                File::Subtitles => Some(HlsResponse::ok(
-                    PLAYLIST_TYPE,
-                    NO_CACHE,
-                    text(playlist.render_subtitles()),
-                )),
-                File::Vtt(seq) => playlist
-                    .vtt(seq)
-                    .map(|body| HlsResponse::ok(VTT_TYPE, IMMUTABLE, body)),
-                File::Init(id) => playlist
-                    .init(id)
-                    .map(|body| HlsResponse::ok(INIT_TYPE, IMMUTABLE, body)),
-                File::Segment(seq) => playlist
-                    .segment(seq)
-                    .map(|body| HlsResponse::ok(SEGMENT_TYPE, IMMUTABLE, body)),
-                File::Part(number) => playlist
-                    .part(number)
-                    .map(|body| HlsResponse::ok(SEGMENT_TYPE, IMMUTABLE, body)),
+        match stream.answer(&route) {
+            Ok(response) => {
+                if response.status == 200 {
+                    stream.touch(now);
+                }
+                HlsAnswer::Ready(response)
             }
-        };
-        match response {
-            Some(response) => {
-                stream.last_access.set(stream.last_access.get().max(now));
-                response
+            Err(Waiting) => {
+                stream.touch(now);
+                let waiter = {
+                    let mut waiters = stream.waiters.borrow_mut();
+                    if waiters.len() >= MAX_BLOCKED_REQUESTS {
+                        return HlsAnswer::Ready(HlsResponse::unavailable());
+                    }
+                    let id = stream.next_waiter.get();
+                    stream.next_waiter.set(id.wrapping_add(1));
+                    waiters.push((id, None));
+                    id
+                };
+                let timeout = stream.playlist.borrow().block_timeout();
+                HlsAnswer::Blocked(HlsBlock {
+                    stream: Rc::downgrade(&stream),
+                    route,
+                    waiter,
+                    timeout,
+                })
             }
-            None => HlsResponse::error(404),
         }
+    }
+
+    /// The requests blocked on the stream of `transfer_id` under the
+    /// profile of `profile_key`.
+    pub fn blocked(&self, profile_key: &[u8; KEY_LEN], transfer_id: &[u8; KEY_LEN]) -> usize {
+        let profile = self.profiles.borrow().get(profile_key).cloned();
+        let stream = profile.and_then(|p| p.streams.borrow().get(transfer_id).cloned());
+        stream.map_or(0, |s| s.waiters.borrow().len())
     }
 }
 
@@ -2599,10 +2875,7 @@ impl HlsProfile {
         config: PlaylistConfig,
     ) -> Result<HlsStream, RouteError> {
         let first = u64::try_from(now.unix_millis()).unwrap_or(0);
-        let state = Rc::new(StreamState {
-            playlist: RefCell::new(Playlist::starting_at(config, first)),
-            last_access: Cell::new(now),
-        });
+        let state = Rc::new(StreamState::new(Playlist::starting_at(config, first), now));
         let replaced = {
             let mut streams = self.state.streams.borrow_mut();
             if streams.len() >= MAX_STREAMS && !streams.contains_key(&transfer_id) {
@@ -2678,9 +2951,7 @@ impl HlsStream {
     /// Records a request of the stream at `now`, as a GET that answers
     /// does ([`HlsRoutes::get`]).
     pub fn touch(&self, now: Time) {
-        self.state
-            .last_access
-            .set(self.state.last_access.get().max(now));
+        self.state.touch(now);
     }
 
     /// See [`Playlist::push_segment`].
@@ -2689,16 +2960,19 @@ impl HlsStream {
             .playlist
             .borrow_mut()
             .push_segment(init, media, duration);
+        self.state.changed();
     }
 
     /// See [`Playlist::push`].
     pub fn push(&self, segment: &HlsSegment) {
         self.state.playlist.borrow_mut().push(segment);
+        self.state.changed();
     }
 
     /// See [`Playlist::push_part`].
     pub fn push_part(&self, part: &HlsPart) {
         self.state.playlist.borrow_mut().push_part(part);
+        self.state.changed();
     }
 
     /// The number of segments the playlist lists.
@@ -2714,6 +2988,7 @@ impl HlsStream {
     /// See [`Playlist::end`].
     pub fn end(&self) {
         self.state.playlist.borrow_mut().end();
+        self.state.changed();
     }
 
     /// The bytes the playlist keeps; see [`Playlist::retained_bytes`].
@@ -2724,6 +2999,8 @@ impl HlsStream {
 
 impl Drop for HlsStream {
     fn drop(&mut self) {
+        // Its blocked requests answer 404 once it is gone.
+        self.state.changed();
         let Some(profile) = self.profile.upgrade() else {
             return;
         };
@@ -2763,6 +3040,9 @@ struct Route {
     profile: [u8; KEY_LEN],
     stream: [u8; KEY_LEN],
     file: File,
+    /// A playlist's delivery directives: the segment, and the part of it,
+    /// a blocking reload asks for.
+    directives: Option<(u64, Option<u64>)>,
 }
 
 /// A request path's route, or the status of its refusal: 404 outside
@@ -2771,7 +3051,7 @@ fn parse_path(path: &str) -> Result<Route, u16> {
     if path.len() > MAX_PATH_LEN {
         return Err(400);
     }
-    let path = path.split_once('?').map_or(path, |(path, _)| path);
+    let (path, query) = path.split_once('?').unwrap_or((path, ""));
     let rest = path.strip_prefix("/hls/").ok_or(404u16)?;
     let mut parts = rest.split('/');
     let (Some(profile), Some(stream), Some(file), None) =
@@ -2779,11 +3059,41 @@ fn parse_path(path: &str) -> Result<Route, u16> {
     else {
         return Err(400);
     };
+    let file = parse_file(file)?;
+    let directives = match file {
+        File::Playlist | File::Subtitles => parse_directives(query)?,
+        _ => None,
+    };
     Ok(Route {
         profile: decode_key(profile).ok_or(400u16)?,
         stream: decode_key(stream).ok_or(400u16)?,
-        file: parse_file(file)?,
+        file,
+        directives,
     })
+}
+
+/// A playlist query's `_HLS_msn` and `_HLS_part`, or 400 for one that
+/// isn't a number, comes twice, or a part without a segment. Other
+/// parameters, `_HLS_skip` among them, are ignored.
+fn parse_directives(query: &str) -> Result<Option<(u64, Option<u64>)>, u16> {
+    let (mut msn, mut part) = (None, None);
+    for pair in query.split('&') {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        let slot = match key {
+            "_HLS_msn" => &mut msn,
+            "_HLS_part" => &mut part,
+            _ => continue,
+        };
+        if slot.is_some() {
+            return Err(400);
+        }
+        *slot = Some(parse_number(value).ok_or(400u16)?);
+    }
+    match (msn, part) {
+        (None, Some(_)) => Err(400),
+        (None, None) => Ok(None),
+        (Some(msn), part) => Ok(Some((msn, part))),
+    }
 }
 
 fn parse_file(name: &str) -> Result<File, u16> {

@@ -15,7 +15,8 @@
 //! contiguous run of the segments an HLS muxer cuts of the script's units,
 //! one a GOP, but for their publish times and fragment numbers; each
 //! EXTINF is its segment's media time, and the playlist keeps RFC 8216's
-//! rules under a 4 s target. Unknown streams answer 404, other methods
+//! rules under a 4 s target and 1 s parts. The hinted part, and a blocking
+//! reload asking for the part after it, answer once the parts come. Unknown streams answer 404, other methods
 //! 405, a HEAD has no body, and every answer allows any origin.
 //!
 //! A service without an HLS listener doesn't support HLS egress, and one
@@ -80,7 +81,7 @@ fn script_segments(script: &Script) -> (Vec<u8>, Vec<Vec<u8>>) {
         target: target_secs(s.target_duration),
         fragment_duration: s.fragment_duration,
         max_segment_bytes: s.max_segment_bytes,
-        ..HlsMuxerConfig::default()
+        part_target: s.part_target,
     });
     let mut source = FlvSource::new();
     let (mut init, mut media) = (Vec::new(), Vec::new());
@@ -406,6 +407,37 @@ fn hls_serves_an_rtmp_stream_to_players() {
                     .join(" ")
             );
             steps.done("the init and segments are the script's");
+
+            // Low-latency HLS: the hinted part, and a reload asking for the
+            // part after the newest listed, wait for them.
+            let fresh = request(hls_addr, "GET", path).await.text();
+            let hint: u64 = fresh
+                .lines()
+                .find_map(|l| l.strip_prefix("#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part-"))
+                .and_then(|l| l.strip_suffix(".m4s\""))
+                .unwrap_or_else(|| panic!("no hint: {fresh}"))
+                .parse()
+                .unwrap();
+            let open = rules.check(&fresh).last().map_or(0, |e| e.seq + 1);
+            let open_parts = fresh
+                .rsplit_once("#EXTINF:")
+                .map_or(fresh.as_str(), |(_, tail)| tail)
+                .matches("#EXT-X-PART:")
+                .count();
+            let started = Instant::now();
+            let part = request(hls_addr, "GET", &format!("{dir}part-{hint}.m4s")).await;
+            assert_eq!(part.status, 200);
+            part.check("a part", "video/iso.segment", "max-age=31536000, immutable");
+            let reload = format!("{path}?_HLS_msn={open}&_HLS_part={}", open_parts + 1);
+            let r = request(hls_addr, "GET", &reload).await;
+            assert_eq!(r.status, 200, "{}", r.text());
+            let waited = started.elapsed();
+            assert!(waited < StdDuration::from_secs(4), "{waited:?}");
+            let text = r.text();
+            assert!(text.contains(&format!("URI=\"part-{hint}.m4s\"")), "{text}");
+            rules.check(&text);
+            eprintln!("the hinted part and the next came in {waited:?}");
+            steps.done("blocking reloads and the hinted part");
 
             // A HEAD answers a GET's headers without its body.
             let last = &segments[segments.len() - 1].uri;

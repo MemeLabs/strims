@@ -12,6 +12,14 @@
 //! carries a content type, a cache control, a content length and
 //! `Access-Control-Allow-Origin: *`; a HEAD's has no body.
 //!
+//! A low-latency playlist's blocking reloads and hinted parts
+//! ([`hls`](strims_video::hls#blocking)) wait for their stream within the
+//! routes' bounds, for at most their timeout, after which they answer
+//! 503. A request stops waiting when its client goes: an HTTP/1.1
+//! connection's closing, or an HTTP/2 stream's reset. At most half of
+//! [`HlsSettings::max_connections`] HTTP/1.1 requests wait at once; past
+//! them, one that would wait answers 503.
+//!
 //! HTTP/1.1 answers one request per connection:
 //!
 //! - From its accept, a connection has
@@ -39,7 +47,7 @@ use std::time::Duration as StdDuration;
 
 use strims_rpc::Timer;
 use strims_video::HlsSettings;
-use strims_video::hls::{HlsResponse, HlsRoutes};
+use strims_video::hls::{HlsAnswer, HlsResponse, HlsRoutes};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::{AbortHandle, spawn_local};
@@ -102,6 +110,26 @@ pub(crate) struct Http {
     /// The connections being served. Bound: `limits.max_connections`.
     connections: RefCell<BTreeMap<u64, AbortHandle>>,
     next_id: Cell<u64>,
+    /// HTTP/1.1 requests waiting on their stream. Bound: half of
+    /// `limits.max_connections`.
+    waiting: Cell<usize>,
+}
+
+/// A request head's method and path, or the answer to a head that isn't
+/// one.
+#[derive(Debug)]
+pub(crate) enum Head {
+    Request { method: String, path: String },
+    Error(Answer),
+}
+
+/// Over HTTP/1.1, a request counted among those waiting while it lasts.
+struct Waiting<'a>(&'a Cell<usize>);
+
+impl Drop for Waiting<'_> {
+    fn drop(&mut self) {
+        self.0.set(self.0.get().saturating_sub(1));
+    }
 }
 
 /// A response, and whether its body is sent.
@@ -168,6 +196,7 @@ fn reason(status: u16) -> &'static str {
         405 => "Method Not Allowed",
         414 => "URI Too Long",
         431 => "Request Header Fields Too Large",
+        503 => "Service Unavailable",
         _ => "",
     }
 }
@@ -186,6 +215,7 @@ impl Http {
             tls,
             connections: RefCell::new(BTreeMap::new()),
             next_id: Cell::new(0),
+            waiting: Cell::new(0),
         }
     }
 
@@ -203,25 +233,31 @@ impl Http {
         }
     }
 
-    /// The answer to the request head `head` begins, or `None` while more
-    /// bytes may complete it.
-    fn answer(&self, head: &[u8]) -> Option<Answer> {
+    /// The request the head `head` begins, or `None` while more bytes may
+    /// complete it.
+    fn parse_head(head: &[u8]) -> Option<Head> {
         let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
         let mut req = httparse::Request::new(&mut headers);
         match req.parse(head) {
             Ok(httparse::Status::Complete(_)) => {}
             Ok(httparse::Status::Partial) => return None,
-            Err(httparse::Error::TooManyHeaders) => return Some(Answer::error(431)),
-            Err(_) => return Some(Answer::error(400)),
+            Err(httparse::Error::TooManyHeaders) => return Some(Head::Error(Answer::error(431))),
+            Err(_) => return Some(Head::Error(Answer::error(400))),
         }
         let (Some(method), Some(path)) = (req.method, req.path) else {
-            return Some(Answer::error(400));
+            return Some(Head::Error(Answer::error(400)));
         };
-        Some(self.route(method, path))
+        Some(Head::Request {
+            method: method.to_owned(),
+            path: path.to_owned(),
+        })
     }
 
-    /// The answer to a request of `method` and `path`, its query included.
-    pub(crate) fn route(&self, method: &str, path: &str) -> Answer {
+    /// The answer to a request of `method` and `path`, its query included,
+    /// once it has one: a request that blocks waits for its stream, up to
+    /// its timeout. Over HTTP/1.1 (`http1`), one past the waiting bound
+    /// answers 503 at once.
+    pub(crate) async fn route(&self, method: &str, path: &str, http1: bool) -> Answer {
         let body = match method {
             "GET" => true,
             "HEAD" => false,
@@ -230,25 +266,43 @@ impl Http {
         if path.len() > self.limits.max_path_bytes {
             return Answer::error(414);
         }
-        Answer {
-            response: self.routes.get(self.timer.now(), path),
-            body,
-        }
+        let response = match self.routes.request(self.timer.now(), path) {
+            HlsAnswer::Ready(response) => response,
+            HlsAnswer::Blocked(block) => {
+                let _waiting = if http1 {
+                    if self.waiting.get() >= self.limits.max_connections / 2 {
+                        return Answer {
+                            response: HlsResponse::unavailable(),
+                            body,
+                        };
+                    }
+                    self.waiting.set(self.waiting.get() + 1);
+                    Some(Waiting(&self.waiting))
+                } else {
+                    None
+                };
+                let wait = block.timeout().to_std().unwrap_or_default();
+                timeout(wait, block)
+                    .await
+                    .unwrap_or_else(|_| HlsResponse::unavailable())
+            }
+        };
+        Answer { response, body }
     }
 
-    /// Reads a request head by `deadline` and answers it; `None` when the
-    /// connection closes, fails or runs out of time first.
+    /// Reads a request head by `deadline`; `None` when the connection
+    /// closes, fails or runs out of time first.
     async fn read_request<S: AsyncRead + Unpin>(
         &self,
         stream: &mut S,
         addr: SocketAddr,
         deadline: Instant,
-    ) -> Option<Answer> {
+    ) -> Option<Head> {
         let mut head = vec![0u8; self.limits.max_head_bytes];
         let mut len = 0;
         loop {
             let Some(free) = head.get_mut(len..).filter(|f| !f.is_empty()) else {
-                return Some(Answer::error(431));
+                return Some(Head::Error(Answer::error(431)));
             };
             let n = match timeout_at(deadline, stream.read(free)).await {
                 Ok(Ok(0)) => return None,
@@ -264,22 +318,39 @@ impl Http {
             };
             // `n` is at most `free.len()`, so `len` stays within `head`.
             len += n;
-            if let Some(answer) = self.answer(head.get(..len).unwrap_or_default()) {
-                return Some(answer);
+            if let Some(head) = Http::parse_head(head.get(..len).unwrap_or_default()) {
+                return Some(head);
             }
         }
     }
 
     /// Reads a request on `stream` by `deadline`, answers it, and ends
-    /// the connection.
+    /// the connection. A client that closes the connection while its
+    /// request waits gets no answer.
     async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(
         &self,
         mut stream: S,
         addr: SocketAddr,
         deadline: Instant,
     ) {
-        let Some(answer) = self.read_request(&mut stream, addr, deadline).await else {
+        let Some(head) = self.read_request(&mut stream, addr, deadline).await else {
             return;
+        };
+        let answer = match head {
+            Head::Error(answer) => answer,
+            Head::Request { method, path } => {
+                tokio::select! {
+                    biased;
+                    answer = self.route(&method, &path, true) => {
+                        tracing::trace!(%addr, %path, status = answer.response.status, "HLS request");
+                        answer
+                    }
+                    () = drain(&mut stream) => {
+                        tracing::debug!(%addr, "an HLS client left while its request waited");
+                        return;
+                    }
+                }
+            }
         };
         match timeout(self.limits.response_timeout, respond(&mut stream, &answer)).await {
             Ok(Ok(())) => {}
@@ -386,12 +457,13 @@ mod tests {
         clippy::indexing_slicing
     )]
 
+    use futures_util::FutureExt;
     use rand_core::Rng;
     use strims_base::rng::det_rng;
     use strims_base::time::Duration;
     use strims_node::SystemClock;
     use strims_node::app::NodeTimer;
-    use strims_video::hls::{HlsProfile, HlsStream, PlaylistConfig};
+    use strims_video::hls::{HlsPart, HlsProfile, HlsStream, PlaylistConfig};
     use tokio::task::LocalSet;
     use tokio_rustls::TlsConnector;
 
@@ -433,11 +505,20 @@ mod tests {
         format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n").into_bytes()
     }
 
+    /// The answer to the request head `head` begins, when it is whole and
+    /// its request doesn't wait.
+    fn answer(h: &Http, head: &[u8]) -> Option<Answer> {
+        match Http::parse_head(head)? {
+            Head::Error(answer) => Some(answer),
+            Head::Request { method, path } => h.route(&method, &path, true).now_or_never(),
+        }
+    }
+
     #[test]
     fn gets_and_heads_answer_from_the_routes() {
         let f = fixture();
         let h = http(&f.routes, limits());
-        let a = h.answer(&get(f.stream.path())).unwrap();
+        let a = answer(&h, &get(f.stream.path())).unwrap();
         assert_eq!(a.response.status, 200);
         assert!(a.body);
         assert_eq!(a.response.content_type, "application/vnd.apple.mpegurl");
@@ -456,12 +537,12 @@ mod tests {
         assert!(head.ends_with("Connection: close\r\n\r\n"), "{head}");
 
         let req = format!("HEAD {} HTTP/1.0\r\n\r\n", f.stream.path());
-        let a = h.answer(req.as_bytes()).unwrap();
+        let a = answer(&h, req.as_bytes()).unwrap();
         assert_eq!(a.response.status, 200);
         assert!(!a.body);
         let other = f.stream.path().replace(&"02".repeat(32), &"03".repeat(32));
         for (path, status) in [("/nope", 404), (other.as_str(), 404), ("/hls/x", 400)] {
-            let a = h.answer(&get(path)).unwrap();
+            let a = answer(&h, &get(path)).unwrap();
             assert_eq!(a.response.status, status, "{path}");
             assert!(a.head().contains("Access-Control-Allow-Origin: *\r\n"));
         }
@@ -471,7 +552,7 @@ mod tests {
     fn requests_other_than_gets_and_heads_are_refused() {
         let f = fixture();
         let h = http(&f.routes, limits());
-        let status = |req: &[u8]| h.answer(req).map(|a| a.response.status);
+        let status = |req: &[u8]| answer(&h, req).map(|a| a.response.status);
         let post = format!("POST {} HTTP/1.1\r\n\r\n", f.stream.path());
         assert_eq!(status(post.as_bytes()), Some(405));
         assert!(Answer::error(405).head().contains("Allow: GET, HEAD\r\n"));
@@ -510,7 +591,7 @@ mod tests {
                 }
                 input.truncate((rng.next_u32() as usize) % (input.len() + 1));
             }
-            let _ = h.answer(&input);
+            let _ = answer(&h, &input);
         }
     }
 
@@ -579,6 +660,149 @@ mod tests {
             );
             assert!(text.ends_with("Connection: close\r\n\r\n"), "{text}");
             assert!(h.connections.borrow().len() <= 1);
+        });
+    }
+
+    /// Routes holding a low-latency stream of 1 s targets, so a blocked
+    /// request times out after 3 s, and 100 ms parts, its first part
+    /// pushed; the stream's path's directory and its first number.
+    fn ll_fixture() -> (Fixture, String, u64) {
+        let routes = HlsRoutes::new();
+        let profile = routes.profile(&[1; 32]).unwrap();
+        let now = NodeTimer(SystemClock).now();
+        let config = PlaylistConfig {
+            target: 1,
+            part_target: Duration::from_millis(100),
+            ..PlaylistConfig::default()
+        };
+        let stream = profile.open_stream(now, [2; 32], config).unwrap();
+        stream.push_part(&part(0, b"p0"));
+        let dir = stream.path().strip_suffix("index.m3u8").unwrap().to_owned();
+        let first = u64::try_from(now.unix_millis()).unwrap();
+        let f = Fixture {
+            routes,
+            _profile: profile,
+            stream,
+        };
+        (f, dir, first)
+    }
+
+    /// Part `index` of the stream's first segment.
+    fn part(index: u32, media: &[u8]) -> HlsPart {
+        HlsPart {
+            media: Rc::from(media),
+            duration: Duration::from_millis(100),
+            independent: index == 0,
+            index,
+            init: Rc::from(&b"init"[..]),
+            discontinuity: false,
+            published: NodeTimer(SystemClock).now(),
+        }
+    }
+
+    #[test]
+    fn a_blocking_reload_answers_once_its_part_comes() {
+        run(async {
+            let (f, dir, first) = ll_fixture();
+            let (_h, addr) = serving(&f.routes, limits()).await;
+            let reload = get(&format!("{dir}index.m3u8?_HLS_msn={first}&_HLS_part=1"));
+            let hinted = get(&format!("{dir}part-{}.m4s", first + 1));
+            let waits =
+                [reload, hinted].map(|r| spawn_local(async move { exchange(addr, &r).await }));
+            while f.routes.blocked(&[1; 32], &[2; 32]) < 2 {
+                tokio::time::sleep(StdDuration::from_millis(5)).await;
+            }
+            assert!(waits.iter().all(|w| !w.is_finished()));
+            f.stream.push_part(&part(1, b"p1"));
+            let [reload, hinted] = waits;
+            let text = String::from_utf8(reload.await.unwrap()).unwrap();
+            assert!(text.starts_with("HTTP/1.1 200 OK\r\n"), "{text}");
+            assert!(
+                text.contains(&format!("URI=\"part-{}.m4s\"\n", first + 1)),
+                "{text}"
+            );
+            let part = hinted.await.unwrap();
+            assert!(
+                part.ends_with(b"\r\n\r\np1"),
+                "{}",
+                String::from_utf8_lossy(&part)
+            );
+        });
+    }
+
+    #[test]
+    fn a_blocked_request_answers_503_past_its_timeout() {
+        run(async {
+            let (f, dir, first) = ll_fixture();
+            let (_h, addr) = serving(&f.routes, limits()).await;
+            let started = Instant::now();
+            let out = exchange(addr, &get(&format!("{dir}part-{}.m4s", first + 1))).await;
+            let text = String::from_utf8_lossy(&out);
+            assert!(
+                text.starts_with("HTTP/1.1 503 Service Unavailable\r\n"),
+                "{text}"
+            );
+            assert!(text.contains("Cache-Control: no-store\r\n"), "{text}");
+            let waited = started.elapsed();
+            assert!(waited >= StdDuration::from_millis(2900), "{waited:?}");
+            assert_eq!(f.routes.blocked(&[1; 32], &[2; 32]), 0);
+        });
+    }
+
+    #[test]
+    fn a_client_that_leaves_ends_its_wait() {
+        run(async {
+            let (f, dir, first) = ll_fixture();
+            let (h, addr) = serving(&f.routes, limits()).await;
+            let mut s = TcpStream::connect(addr).await.unwrap();
+            let reload = get(&format!("{dir}index.m3u8?_HLS_msn={first}&_HLS_part=1"));
+            s.write_all(&reload).await.unwrap();
+            while f.routes.blocked(&[1; 32], &[2; 32]) < 1 {
+                tokio::time::sleep(StdDuration::from_millis(5)).await;
+            }
+            drop(s);
+            let started = Instant::now();
+            while f.routes.blocked(&[1; 32], &[2; 32]) > 0 || !h.connections_empty() {
+                assert!(started.elapsed() < StdDuration::from_secs(2));
+                tokio::time::sleep(StdDuration::from_millis(5)).await;
+            }
+        });
+    }
+
+    #[test]
+    fn at_most_half_the_connections_wait() {
+        run(async {
+            let (f, dir, first) = ll_fixture();
+            let limits = Limits {
+                max_connections: 4,
+                ..limits()
+            };
+            let (_h, addr) = serving(&f.routes, limits).await;
+            let reload = get(&format!("{dir}index.m3u8?_HLS_msn={first}&_HLS_part=1"));
+            let mut waiting = Vec::new();
+            for _ in 0..2 {
+                let mut s = TcpStream::connect(addr).await.unwrap();
+                s.write_all(&reload).await.unwrap();
+                waiting.push(s);
+            }
+            while f.routes.blocked(&[1; 32], &[2; 32]) < 2 {
+                tokio::time::sleep(StdDuration::from_millis(5)).await;
+            }
+            let out = exchange(addr, &reload).await;
+            assert!(
+                out.starts_with(b"HTTP/1.1 503 "),
+                "{}",
+                String::from_utf8_lossy(&out)
+            );
+            // A request that doesn't wait is answered.
+            let out = exchange(addr, &get(&format!("{dir}index.m3u8"))).await;
+            assert!(out.starts_with(b"HTTP/1.1 200 OK\r\n"));
+            f.stream.push_part(&part(1, b"p1"));
+            for mut s in waiting {
+                let mut out = Vec::new();
+                s.read_to_end(&mut out).await.unwrap();
+                assert!(out.starts_with(b"HTTP/1.1 200 OK\r\n"));
+            }
         });
     }
 

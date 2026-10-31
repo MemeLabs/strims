@@ -194,7 +194,7 @@ fn segments(tags: &[Tag]) -> Vec<HlsSegment> {
         target: target_secs(s.target_duration),
         fragment_duration: s.fragment_duration,
         max_segment_bytes: s.max_segment_bytes,
-        ..HlsMuxerConfig::default()
+        part_target: s.part_target,
     });
     let mut source = FlvSource::new();
     let mut out = Vec::new();
@@ -974,7 +974,16 @@ fn a_unit_format_ingest_is_served_as_segments_cut_at_its_keyframes() {
         } = units_hls(&world, &script, 5).await;
         let text = playlist(&b, &routes, &path);
         assert!(text.contains("#EXT-X-TARGETDURATION:4\n"), "{text}");
-        assert!(!text.contains("INDEPENDENT"), "{text}");
+        assert!(!text.contains("#EXT-X-INDEPENDENT-SEGMENTS"), "{text}");
+        // Low-latency HLS by default: 1 s parts, the next one hinted.
+        assert!(
+            text.contains("#EXT-X-PART-INF:PART-TARGET=1.000\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part-"),
+            "{text}"
+        );
         let segments = listed(&text);
         assert!(segments.len() >= 5, "{text}");
         let dir = path.strip_suffix("index.m3u8").unwrap();
@@ -1021,7 +1030,7 @@ fn a_unit_format_ingests_long_gops_are_split_within_the_target() {
         );
         assert_eq!(millis[..3].iter().sum::<u64>(), 10_000, "{text}");
         assert!(text.contains("#EXT-X-TARGETDURATION:4\n"));
-        assert!(!text.contains("INDEPENDENT"));
+        assert!(!text.contains("#EXT-X-INDEPENDENT-SEGMENTS"));
     });
 }
 

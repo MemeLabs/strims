@@ -19,6 +19,8 @@
 //!   most `MAX_STREAMS * SEND_BUFFER` of answers unsent.
 //! - A response has the HTTP/1.1 one's time to be sent; then its stream is
 //!   reset.
+//! - A request that waits for its stream stops when the client resets its
+//!   stream.
 //! - A connection with no request open for the idle timeout is sent a
 //!   GOAWAY, and closes.
 
@@ -100,10 +102,22 @@ async fn answer(
     mut respond: SendResponse<Bytes>,
     addr: SocketAddr,
 ) {
-    let path = req.uri().path_and_query().map_or("", |p| p.as_str());
-    let answer = http.route(req.method().as_str(), path);
+    let path = req
+        .uri()
+        .path_and_query()
+        .map_or_else(String::new, |p| p.as_str().to_owned());
+    let method = req.method().as_str().to_owned();
     // A request's body is never read.
     drop(req);
+    let answer = tokio::select! {
+        biased;
+        answer = http.route(&method, &path, false) => answer,
+        _ = poll_fn(|cx| respond.poll_reset(cx)) => {
+            tracing::debug!(%addr, "an HLS HTTP/2 request was reset while it waited");
+            return;
+        }
+    };
+    tracing::trace!(%addr, %path, status = answer.response.status, "HLS request");
     let body = &answer.response.body;
     let end = !answer.body || body.is_empty();
     let mut send = match respond.send_response(head(&answer), end) {
@@ -187,7 +201,7 @@ mod tests {
     use strims_node::app::NodeTimer;
     use strims_rpc::Timer;
     use strims_video::HlsSettings;
-    use strims_video::hls::{HlsProfile, HlsRoutes, HlsStream, PlaylistConfig};
+    use strims_video::hls::{HlsPart, HlsProfile, HlsRoutes, HlsStream, PlaylistConfig};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use tokio::task::{JoinHandle, LocalSet, spawn_local};
@@ -350,6 +364,79 @@ mod tests {
             assert_eq!(fetch(&client, "GET", &long).await.0, 414);
             let query = format!("{}?_HLS_msn=1", f.stream.path());
             assert_eq!(fetch(&client, "GET", &query).await.0, 200);
+        });
+    }
+
+    #[test]
+    fn a_blocked_reload_answers_once_its_part_comes_and_a_reset_ends_its_wait() {
+        run(async {
+            let routes = HlsRoutes::new();
+            let profile = routes.profile(&[1; 32]).unwrap();
+            let now = NodeTimer(SystemClock).now();
+            let config = PlaylistConfig {
+                target: 1,
+                part_target: Duration::from_millis(100),
+                ..PlaylistConfig::default()
+            };
+            let stream = profile.open_stream(now, [2; 32], config).unwrap();
+            let part = |index: u32| HlsPart {
+                media: Rc::from(&b"part"[..]),
+                duration: Duration::from_millis(100),
+                independent: index == 0,
+                index,
+                init: Rc::from(&b"init"[..]),
+                discontinuity: false,
+                published: now,
+            };
+            stream.push_part(&part(0));
+            let f = Fixture {
+                routes,
+                _profile: profile,
+                stream,
+                media: Vec::new(),
+            };
+            let blocked = || f.routes.blocked(&[1; 32], &[2; 32]);
+            let first = u64::try_from(now.unix_millis()).unwrap();
+            let dir = f
+                .stream
+                .path()
+                .strip_suffix("index.m3u8")
+                .unwrap()
+                .to_owned();
+            let (_h, addr, c) = serving(&f, limits(), "blocking", &[b"h2"]).await;
+            let (client, _conn) = h2_client(addr, &c).await;
+
+            // The hinted part's request, reset while it waits.
+            let req = Request::get(format!("https://localhost{dir}part-{}.m4s", first + 1))
+                .body(())
+                .unwrap();
+            let mut ready = client.clone().ready().await.unwrap();
+            let (response, mut send) = ready.send_request(req, true).unwrap();
+            while blocked() < 1 {
+                tokio::time::sleep(StdDuration::from_millis(5)).await;
+            }
+            send.send_reset(Reason::CANCEL);
+            drop(response);
+            while blocked() > 0 {
+                tokio::time::sleep(StdDuration::from_millis(5)).await;
+            }
+
+            // A reload answered once the part it asks for comes.
+            let reload = format!("{dir}index.m3u8?_HLS_msn={first}&_HLS_part=1");
+            let c2 = client.clone();
+            let wait = spawn_local(async move { fetch(&c2, "GET", &reload).await });
+            while blocked() < 1 {
+                tokio::time::sleep(StdDuration::from_millis(5)).await;
+            }
+            assert!(!wait.is_finished());
+            f.stream.push_part(&part(1));
+            let (status, _, body) = wait.await.unwrap();
+            assert_eq!(status, 200);
+            let text = String::from_utf8(body).unwrap();
+            assert!(
+                text.contains(&format!("URI=\"part-{}.m4s\"\n", first + 1)),
+                "{text}"
+            );
         });
     }
 

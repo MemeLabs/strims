@@ -195,6 +195,8 @@ pub struct Entry {
 pub struct PlaylistRules {
     /// The target duration of the first reload.
     pub target: Option<u64>,
+    /// Its part target in milliseconds, for a low-latency playlist.
+    pub part_target: Option<u64>,
     media_sequence: u64,
     discontinuity_sequence: u64,
     /// Segments that left the listing, so it must hold three targets.
@@ -205,7 +207,9 @@ pub struct PlaylistRules {
 
 impl PlaylistRules {
     /// Checks a reload: the version-7 header, a target duration that never
-    /// changes and that every EXTINF rounds to at most, consecutive segment
+    /// changes and that every EXTINF rounds to at most, a low-latency
+    /// playlist's part target that never changes, under blocking reloads
+    /// and a hold-back of three part targets, consecutive segment
     /// numbers from the media sequence, sequences that never go back, no
     /// `EXT-X-INDEPENDENT-SEGMENTS`, three targets listed once segments
     /// slid out, and listed segments that keep their duration. Its
@@ -225,7 +229,32 @@ impl PlaylistRules {
                 .unwrap()
         };
         let target = tag(lines.next(), "#EXT-X-TARGETDURATION:");
-        let media_sequence = tag(lines.next(), "#EXT-X-MEDIA-SEQUENCE:");
+        let mut next = lines.next();
+        if let Some(control) = next.and_then(|l| l.strip_prefix("#EXT-X-SERVER-CONTROL:")) {
+            let part = lines
+                .next()
+                .and_then(|l| l.strip_prefix("#EXT-X-PART-INF:PART-TARGET="))
+                .unwrap_or_else(|| panic!("no part target: {playlist}"));
+            let (secs, frac) = part.split_once('.').unwrap();
+            let millis = secs.parse::<u64>().unwrap() * 1000 + frac.parse::<u64>().unwrap();
+            let hold_back = 3 * millis;
+            assert_eq!(
+                control,
+                format!(
+                    "CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK={}.{:03}",
+                    hold_back / 1000,
+                    hold_back % 1000
+                ),
+                "{playlist}"
+            );
+            assert_eq!(
+                *self.part_target.get_or_insert(millis),
+                millis,
+                "{playlist}"
+            );
+            next = lines.next();
+        }
+        let media_sequence = tag(next, "#EXT-X-MEDIA-SEQUENCE:");
         let discontinuity_sequence = tag(lines.next(), "#EXT-X-DISCONTINUITY-SEQUENCE:");
         assert_eq!(*self.target.get_or_insert(target), target, "{playlist}");
         assert!(media_sequence >= self.media_sequence, "{playlist}");

@@ -61,7 +61,8 @@ fn segment(media: &[u8], millis: i64, published: i64, vtt: Option<&str>) -> HlsS
 }
 
 const LL_HEAD: &str = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:4\n\
-    #EXT-X-SERVER-CONTROL:PART-HOLD-BACK=3.000\n#EXT-X-PART-INF:PART-TARGET=1.000\n";
+    #EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=3.000\n\
+    #EXT-X-PART-INF:PART-TARGET=1.000\n";
 
 #[test]
 fn a_segments_parts_are_listed_while_it_is_open_and_after() {
@@ -328,9 +329,17 @@ fn part_files_are_routed_by_number() {
         (200, "video/iso.segment", &b"part"[..])
     );
     assert_eq!(r.cache_control, "max-age=31536000, immutable");
+    // The hinted part blocks, so answering at once is 503; one past it is
+    // missing.
     assert_eq!(
         routes
             .get(now, &path(&format!("part-{}.m4s", first + 1)))
+            .status,
+        503
+    );
+    assert_eq!(
+        routes
+            .get(now, &path(&format!("part-{}.m4s", first + 2)))
             .status,
         404
     );
@@ -373,7 +382,9 @@ fn check(p: &Playlist) {
     while let Some(l) = lines.next() {
         if let Some(v) = l.strip_prefix("#EXT-X-PART-INF:PART-TARGET=") {
             target = Some(millis_of(v));
-        } else if let Some(v) = l.strip_prefix("#EXT-X-SERVER-CONTROL:PART-HOLD-BACK=") {
+        } else if let Some(v) =
+            l.strip_prefix("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=")
+        {
             hold_back = Some(millis_of(v));
         } else if l == "#EXT-X-DISCONTINUITY" || l.starts_with("#EXT-X-MAP:") {
             assert!(current.parts.is_empty(), "{l} after a part:\n{text}");
@@ -518,4 +529,262 @@ fn a_muxed_stream_keeps_the_rules_at_every_step() {
     p.end();
     check(&p);
     assert_eq!(m.metrics().dropped_parts, 0);
+}
+
+/// A waker that counts its wakes.
+struct Wakes(std::sync::atomic::AtomicUsize);
+
+impl std::task::Wake for Wakes {
+    fn wake(self: std::sync::Arc<Self>) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Polls a blocked request once: its answer, or `None` while it waits.
+fn poll(block: &mut HlsBlock, wakes: &std::sync::Arc<Wakes>) -> Option<HlsResponse> {
+    let waker = Waker::from(wakes.clone());
+    let mut cx = Context::from_waker(&waker);
+    match Pin::new(block).poll(&mut cx) {
+        Poll::Ready(r) => Some(r),
+        Poll::Pending => None,
+    }
+}
+
+fn woken(wakes: &std::sync::Arc<Wakes>) -> usize {
+    wakes.0.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Routes holding a low-latency stream opened at noon: its segments and
+/// parts number from noon's milliseconds.
+struct Ll {
+    routes: HlsRoutes,
+    _profile: HlsProfile,
+    stream: Option<HlsStream>,
+    first: u64,
+}
+
+impl Ll {
+    fn new(part_target: Duration) -> Ll {
+        let routes = HlsRoutes::new();
+        let profile = routes.profile(&[1; 32]).unwrap();
+        let config = PlaylistConfig {
+            part_target,
+            ..PlaylistConfig::default()
+        };
+        let stream = profile.open_stream(at(NOON), [2; 32], config).unwrap();
+        Ll {
+            routes,
+            _profile: profile,
+            stream: Some(stream),
+            first: u64::try_from(NOON).unwrap(),
+        }
+    }
+
+    fn stream(&self) -> &HlsStream {
+        self.stream.as_ref().unwrap()
+    }
+
+    fn path(&self, file: &str) -> String {
+        format!(
+            "{}{file}",
+            self.stream().path().strip_suffix("index.m3u8").unwrap()
+        )
+    }
+
+    fn request(&self, file: &str) -> HlsAnswer {
+        self.routes.request(at(NOON), &self.path(file))
+    }
+
+    fn blocked(&self, file: &str) -> HlsBlock {
+        match self.request(file) {
+            HlsAnswer::Blocked(b) => b,
+            HlsAnswer::Ready(r) => panic!("{file}: answered {}", r.status),
+        }
+    }
+
+    fn status(&self, file: &str) -> u16 {
+        match self.request(file) {
+            HlsAnswer::Ready(r) => r.status,
+            HlsAnswer::Blocked(_) => panic!("{file} blocks"),
+        }
+    }
+
+    /// A reload of the media playlist asking for segment `seq` (counted
+    /// from the first), or part `part` of it.
+    fn reload(&self, seq: u64, part: Option<u64>) -> String {
+        let msn = self.first + seq;
+        match part {
+            Some(p) => format!("index.m3u8?_HLS_msn={msn}&_HLS_part={p}"),
+            None => format!("index.m3u8?_HLS_msn={msn}"),
+        }
+    }
+}
+
+fn at(ms: i64) -> Time {
+    Time::from_unix_millis(ms)
+}
+
+#[test]
+fn a_reload_blocks_until_the_playlist_lists_what_it_asks_for() {
+    let ll = Ll::new(ms(1000));
+    let wakes = std::sync::Arc::new(Wakes(Default::default()));
+    ll.stream().push_part(&part(0, 1000, true, b"a", NOON));
+    assert_eq!(ll.status(&ll.reload(0, Some(0))), 200);
+
+    // The next part.
+    let mut next = ll.blocked(&ll.reload(0, Some(1)));
+    assert_eq!(next.timeout(), ms(12_000));
+    assert!(poll(&mut next, &wakes).is_none());
+    assert_eq!(ll.routes.blocked(&[1; 32], &[2; 32]), 1);
+    ll.stream().push_part(&part(1, 1000, false, b"b", NOON));
+    assert_eq!(woken(&wakes), 1);
+    let r = poll(&mut next, &wakes).unwrap();
+    assert_eq!(r.status, 200);
+    let text = String::from_utf8(r.body.to_vec()).unwrap();
+    assert!(
+        text.contains(&format!("part-{}.m4s\"\n#EXT-X-PRELOAD", ll.first + 1)),
+        "{text}"
+    );
+    drop(next);
+    assert_eq!(ll.routes.blocked(&[1; 32], &[2; 32]), 0);
+
+    // The whole segment, and a part past its last: the next one's first.
+    let mut whole = ll.blocked(&ll.reload(0, None));
+    let mut past = ll.blocked(&ll.reload(0, Some(2)));
+    assert!(poll(&mut whole, &wakes).is_none());
+    assert!(poll(&mut past, &wakes).is_none());
+    ll.stream().push(&segment(b"ab", 2000, NOON, None));
+    assert_eq!(poll(&mut whole, &wakes).unwrap().status, 200);
+    assert!(poll(&mut past, &wakes).is_none());
+    ll.stream()
+        .push_part(&part(0, 1000, true, b"c", NOON + 2000));
+    assert_eq!(poll(&mut past, &wakes).unwrap().status, 200);
+    // Asked again, both answer at once.
+    assert_eq!(ll.status(&ll.reload(0, Some(2))), 200);
+    assert_eq!(ll.status(&ll.reload(1, Some(0))), 200);
+    // The next segment, and a part of the one after.
+    drop(ll.blocked(&ll.reload(1, None)));
+    drop(ll.blocked(&ll.reload(2, Some(2))));
+}
+
+#[test]
+fn the_hinted_part_blocks_until_it_comes() {
+    let ll = Ll::new(ms(1000));
+    let wakes = std::sync::Arc::new(Wakes(Default::default()));
+    let first = ll.first;
+    let mut hinted = ll.blocked(&format!("part-{first}.m4s"));
+    assert_eq!(ll.status(&format!("part-{}.m4s", first + 1)), 404);
+    assert!(poll(&mut hinted, &wakes).is_none());
+    ll.stream().push_part(&part(0, 1000, true, b"part", NOON));
+    let r = poll(&mut hinted, &wakes).unwrap();
+    assert_eq!((r.status, &*r.body), (200, &b"part"[..]));
+    // Once the stream ends, no part is hinted.
+    ll.stream().push(&segment(b"part", 1000, NOON, None));
+    ll.stream().end();
+    assert_eq!(ll.status(&format!("part-{}.m4s", first + 1)), 404);
+}
+
+#[test]
+fn reloads_too_far_ahead_or_malformed_are_refused() {
+    let ll = Ll::new(ms(1000));
+    ll.stream().push_part(&part(0, 1000, true, b"a", NOON));
+    let msn = ll.first;
+    for (query, why) in [
+        (format!("_HLS_msn={}", msn + 3), "three segments ahead"),
+        (
+            format!("_HLS_msn={msn}&_HLS_part=4"),
+            "past the advance part limit",
+        ),
+        (
+            format!("_HLS_msn={}&_HLS_part=3", msn + 1),
+            "past it in the next",
+        ),
+        ("_HLS_part=1".to_owned(), "a part without a segment"),
+        ("_HLS_msn=x".to_owned(), "not a number"),
+        ("_HLS_msn=".to_owned(), "empty"),
+        (format!("_HLS_msn={msn}&_HLS_msn={msn}"), "twice"),
+    ] {
+        assert_eq!(ll.status(&format!("index.m3u8?{query}")), 400, "{why}");
+    }
+    // Within the limit, they block; other parameters are left alone.
+    drop(ll.blocked(&format!("index.m3u8?_HLS_msn={msn}&_HLS_part=3")));
+    drop(ll.blocked(&format!("index.m3u8?_HLS_msn={}", msn + 2)));
+    drop(ll.blocked(&format!("index.m3u8?x=1&_HLS_msn={msn}&_HLS_skip=YES")));
+    assert_eq!(ll.status("index.m3u8?x=1&_HLS_skip=YES"), 200);
+    // Queries of other files are ignored.
+    assert_eq!(ll.status("multivariant.m3u8?_HLS_part=1"), 200);
+    // Shorter parts take a longer limit: three seconds' worth.
+    let short = Ll::new(ms(500));
+    short.stream().push_part(&part(0, 500, true, b"a", NOON));
+    drop(short.blocked(&format!("index.m3u8?_HLS_msn={msn}&_HLS_part=6")));
+    assert_eq!(
+        short.status(&format!("index.m3u8?_HLS_msn={msn}&_HLS_part=7")),
+        400
+    );
+}
+
+#[test]
+fn an_ended_playlist_and_one_without_parts_answer_reloads_at_once() {
+    let ll = Ll::new(ms(1000));
+    ll.stream().push_part(&part(0, 1000, true, b"a", NOON));
+    ll.stream().end();
+    assert_eq!(ll.status(&ll.reload(5, Some(1))), 200);
+    let plain = Ll::new(Duration::ZERO);
+    plain.stream().push_segment(b"init", b"a", ms(1000));
+    let text = String::from_utf8(
+        plain
+            .routes
+            .get(at(NOON), plain.stream().path())
+            .body
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(!text.contains("SERVER-CONTROL"), "{text}");
+    assert_eq!(plain.status(&plain.reload(1, None)), 200);
+}
+
+#[test]
+fn the_subtitles_playlist_blocks_by_segment() {
+    let ll = Ll::new(ms(1000));
+    let wakes = std::sync::Arc::new(Wakes(Default::default()));
+    ll.stream().push_part(&part(0, 1000, true, b"a", NOON));
+    let msn = ll.first;
+    let mut reload = ll.blocked(&format!("subtitles.m3u8?_HLS_msn={msn}&_HLS_part=0"));
+    assert!(poll(&mut reload, &wakes).is_none());
+    ll.stream()
+        .push(&segment(b"a", 1000, NOON, Some("WEBVTT\n")));
+    let r = poll(&mut reload, &wakes).unwrap();
+    let text = String::from_utf8(r.body.to_vec()).unwrap();
+    assert!(
+        text.contains("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES\n"),
+        "{text}"
+    );
+    assert!(!text.contains("#EXT-X-PART"), "{text}");
+}
+
+#[test]
+fn blocked_requests_answer_404_once_their_stream_goes() {
+    let mut ll = Ll::new(ms(1000));
+    let wakes = std::sync::Arc::new(Wakes(Default::default()));
+    let mut reload = ll.blocked(&ll.reload(0, Some(0)));
+    assert!(poll(&mut reload, &wakes).is_none());
+    drop(ll.stream.take());
+    assert_eq!(woken(&wakes), 1);
+    assert_eq!(poll(&mut reload, &wakes).unwrap().status, 404);
+}
+
+#[test]
+fn blocked_requests_are_bounded_per_stream() {
+    let ll = Ll::new(ms(1000));
+    let mut blocked: Vec<HlsBlock> = (0..MAX_BLOCKED_REQUESTS)
+        .map(|_| ll.blocked(&ll.reload(0, Some(0))))
+        .collect();
+    assert_eq!(ll.status(&ll.reload(0, Some(0))), 503);
+    assert_eq!(ll.status(&format!("part-{}.m4s", ll.first)), 503);
+    // Requests that answer at once still do.
+    assert_eq!(ll.status("index.m3u8"), 200);
+    blocked.pop();
+    drop(ll.blocked(&ll.reload(0, Some(0))));
+    drop(blocked);
+    assert_eq!(ll.routes.blocked(&[1; 32], &[2; 32]), 0);
 }

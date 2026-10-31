@@ -452,7 +452,7 @@ impl Default for HlsSettings {
             max_retained_bytes: 64 * 1024 * 1024,
             max_segment_bytes: 16 * 1024 * 1024,
             fragment_duration: crate::hls::DEFAULT_FRAGMENT_DURATION,
-            part_target: Duration::ZERO,
+            part_target: Duration::from_secs(1),
             max_path_bytes: 256,
             max_request_head_bytes: 8 * 1024,
             request_head_timeout: Duration::from_secs(10),
