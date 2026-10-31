@@ -26,8 +26,27 @@ const QUANTUM = 128;
 const STEP = QUANTUM / RATE;
 const FPS = 30;
 const AAC_US = (1024 * 1e6) / RATE;
+/** An Opus packet: 20 ms, of which a decoder's first output drops the pre-skip. */
+const OPUS_US = 20_000;
+const OPUS_FRAMES = 960;
+const PRE_SKIP = 312;
+/** What a decoder's output holds in place of its pre-skip, when it keeps it. */
+const PRIMING = -1;
+/** A unit's publish time, Unix ms, at presentation time 0. */
+const PUBLISHED_AT_0 = 1_793_275_200_000;
 
-const tracks = (audio: boolean): DecoderTrack[] => [
+const OPUS_TRACK: DecoderTrack = {
+  id: 2,
+  kind: "audio",
+  codec: "opus",
+  description: new Uint8Array([0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64, 1, 2, 0x38, 1]),
+  timescale: RATE,
+  sampleRate: RATE,
+  numberOfChannels: 2,
+  preSkip: PRE_SKIP,
+};
+
+const tracks = (audio: boolean, opus = false): DecoderTrack[] => [
   {
     id: 1,
     kind: "video",
@@ -37,7 +56,8 @@ const tracks = (audio: boolean): DecoderTrack[] => [
     width: 640,
     height: 360,
   },
-  ...(audio
+  ...(opus ? [OPUS_TRACK] : []),
+  ...(audio && !opus
     ? [
         {
           id: 2,
@@ -60,6 +80,10 @@ interface Arrival {
 
 interface StreamOptions {
   audio?: boolean;
+  /** The audio is Opus. */
+  opus?: boolean;
+  /** The audio starts this many seconds after the video. */
+  audioFrom?: number;
   /** Seconds of media. */
   seconds: number;
   /** Seconds between keyframes. */
@@ -89,7 +113,7 @@ const unit = (
   timestamp: Math.round(pts * 1e6),
   decodeTimestamp: Math.round(pts * 1e6),
   duration: kind === "audio" ? Math.round(AAC_US) : 0,
-  published: 1_793_275_200_000 + pts * 1000,
+  published: PUBLISHED_AT_0 + pts * 1000,
   data: new Uint8Array(kind === "audio" ? 300 : 3000),
 });
 
@@ -109,14 +133,18 @@ const stream = (o: StreamOptions): Arrival[] => {
     if (!(o.lose && pts >= o.lose[0] && pts < resume - 1e-9)) {
       units.push(unit(1, "video", pts, key));
     }
-    while (o.audio && (a * AAC_US) / 1e6 < (k + 1) / FPS) {
-      units.push(unit(2, "audio", (a * AAC_US) / 1e6, true));
+    const audioUs = o.opus ? OPUS_US : AAC_US;
+    const from = (o.audioFrom ?? 0) * 1e6;
+    while ((o.audio || o.opus) && (from + a * audioUs) / 1e6 < (k + 1) / FPS) {
+      const u = unit(2, "audio", (from + a * audioUs) / 1e6, true);
+      if (o.opus) u.duration = OPUS_US;
+      units.push(u);
       a++;
     }
   }
   const gopStart = Math.floor(join / gop) * gop;
   const arrivals: Arrival[] = [
-    { at: 0, outputs: [{ type: "configs", tracks: tracks(!!o.audio) }] },
+    { at: 0, outputs: [{ type: "configs", tracks: tracks(!!o.audio, !!o.opus) }] },
   ];
   for (const u of units) {
     const pts = u.timestamp / 1e6;
@@ -176,9 +204,23 @@ class FakeVideo implements DecoderLike<VideoDecoderConfig> {
   }
 }
 
+/**
+ * How an Opus decoder given the OpusHead treats the pre-skip at its start:
+ * - `shifts`: drops it and moves its output's timestamp past it (Chromium);
+ * - `keeps-time`: drops it and keeps the timestamp (Firefox, Safari);
+ * - `keeps`: outputs it, and the player drops it.
+ */
+type OpusDecoder = "shifts" | "keeps-time" | "keeps";
+
+/** Decoded audio whose samples hold the media time they present at. */
+interface FakeAudioData extends AudioDataLike {
+  values?: Float32Array;
+}
+
 class FakeAudio implements DecoderLike<AudioDecoderConfig> {
   state = "unconfigured";
   pending: number[] = [];
+  private outputs = 0;
   constructor(private readonly world: World, private readonly output: (d: AudioDataLike) => void) {}
   get decodeQueueSize() {
     return this.pending.length;
@@ -190,12 +232,34 @@ class FakeAudio implements DecoderLike<AudioDecoderConfig> {
     this.pending.push(u.timestamp);
     this.world.later(() => {
       if (this.state === "closed") return;
-      this.output({
-        timestamp: this.pending.shift(),
-        numberOfFrames: 1024,
+      const ts = this.pending.shift();
+      const opus = this.world.opus;
+      if (!opus) {
+        this.output({
+          timestamp: ts,
+          numberOfFrames: 1024,
+          sampleRate: RATE,
+          close: () => undefined,
+        });
+        return;
+      }
+      // A packet's samples present from its timestamp on; the decoder's
+      // first output starts with the pre-skip.
+      const first = this.outputs++ === 0;
+      const drop = first && opus !== "keeps" ? PRE_SKIP : 0;
+      const values = new Float32Array(OPUS_FRAMES - drop);
+      for (let i = 0; i < values.length; i++) {
+        values[i] =
+          first && opus === "keeps" && i < PRE_SKIP ? PRIMING : ts / 1e6 + (drop + i) / RATE;
+      }
+      const d: FakeAudioData = {
+        timestamp: opus === "shifts" ? ts + (drop * 1e6) / RATE : ts,
+        numberOfFrames: values.length,
         sampleRate: RATE,
         close: () => undefined,
-      });
+        values,
+      };
+      this.output(d);
     });
   }
   close() {
@@ -216,8 +280,20 @@ class World implements CoreEnv {
   decodedKeys: boolean[] = [];
   videoDecoders = 0;
   failure: string | null = null;
-  // The worklet.
+  /** The audio is Opus, from decoders of this kind. */
+  opus: OpusDecoder | null = null;
+  // The worklet: its queued blocks' frames left and samples, and what each
+  // sample it played held, by sample number.
   queue: number[] = [];
+  pcm: Float32Array[] = [];
+  played: number[] = [];
+  /**
+   * The number of the sample heard now, and how far the media it held was
+   * from the playout position at most, in seconds, over how many steps.
+   */
+  private heardIndex = 0;
+  maxSyncError = 0;
+  syncChecks = 0;
   consumed = 0;
   frame = 0;
   starved = 0;
@@ -246,8 +322,9 @@ class World implements CoreEnv {
   supported() {
     return Promise.resolve(true);
   }
-  planes(d: AudioDataLike) {
-    return [new Float32Array(d.numberOfFrames), new Float32Array(d.numberOfFrames)];
+  planes(d: FakeAudioData) {
+    const values = d.values ?? new Float32Array(d.numberOfFrames);
+    return [values, values.slice()];
   }
   render(f: FrameLike) {
     this.rendered.push({ pts: f.timestamp / 1e6, at: this.t });
@@ -256,8 +333,10 @@ class World implements CoreEnv {
   worklet(m: WorkletInput) {
     if (m.type === "pcm") {
       this.queue.push(m.frames);
+      this.pcm.push(m.channels[0]);
     } else {
       this.queue = [];
+      this.pcm = [];
       this.consumed = m.index;
     }
   }
@@ -286,21 +365,44 @@ class World implements CoreEnv {
         this.tickAt = Infinity;
         this.core.tick();
       }
+      if (this.opus && running) this.checkSync();
       this.t += STEP;
     }
     return arrivals.slice(i);
   }
 
+  // While the clock follows the audio, the sample heard now holds the media
+  // time the playout is at: the one rendered the output's latency ago.
+  private checkSync() {
+    if (this.core.stats().clock !== "audio") return;
+    const c = this.core.clock();
+    if (c.published === null) return;
+    const at = (c.published - PUBLISHED_AT_0) / 1000;
+    const heard = this.played[Math.round(this.heardIndex)];
+    // Silence fills a hole in the audio.
+    if (heard === undefined || heard === 0) return;
+    this.syncChecks++;
+    this.maxSyncError = Math.max(this.maxSyncError, Math.abs(heard - at));
+  }
+
   private playQuantum(q: number) {
     const at = this.consumed;
+    // The quantum renders now; the sample heard now rendered the latency ago.
+    this.heardIndex = at - AUDIO.latency * RATE;
     const queued = this.queue.reduce((a, b) => a + b, 0);
     let need = QUANTUM;
     while (need > 0 && this.queue.length) {
       const take = Math.min(need, this.queue[0]);
+      const block = this.pcm[0];
+      const from = block.length - this.queue[0];
+      for (let i = 0; i < take; i++) this.played[this.consumed + i] = block[from + i];
       this.queue[0] -= take;
       need -= take;
       this.consumed += take;
-      if (this.queue[0] === 0) this.queue.shift();
+      if (this.queue[0] === 0) {
+        this.queue.shift();
+        this.pcm.shift();
+      }
     }
     if (need > 0 && need < QUANTUM) this.starved++;
     if (q % 4 === 0) {
@@ -524,6 +626,45 @@ describe("PlayerCore", () => {
     w.run([], 14);
     assert.strictEqual(w.core.stats().stallTime, s.stallTime);
   });
+
+  for (const opus of ["shifts", "keeps-time", "keeps"] as OpusDecoder[]) {
+    const how = {
+      shifts: "drops the pre-skip and moves its timestamp past it",
+      "keeps-time": "drops the pre-skip and keeps its timestamp",
+      keeps: "keeps the pre-skip",
+    }[opus];
+
+    it(`plays Opus in time from a decoder that ${how}: a stream's first packet, after a join, and from a rebuilt decoder`, () => {
+      // Joined at the stream's start, whose audio starts later: its first
+      // packet's decoded samples play.
+      const start = new World(AUDIO);
+      start.opus = opus;
+      start.run(stream({ opus: true, seconds: 8, audioFrom: 1.5 }), 6);
+      // Joined mid-GOP, and paused and played, which rebuilds the decoder.
+      const join = new World(AUDIO);
+      join.opus = opus;
+      const arrivals = stream({ opus: true, seconds: 20, join: 5.5 });
+      join.run(arrivals, 9);
+      join.core.setPaused(true);
+      const rest = join.run(
+        arrivals.filter((a) => a.at > 9),
+        10
+      );
+      join.core.setPaused(false);
+      join.run(rest, 14);
+      for (const w of [start, join]) {
+        assert.ok(w.core.stats().joined);
+        assert.ok(w.syncChecks > 500, `${w.syncChecks}`);
+        // Within a sample of where the playout is.
+        assert.ok(w.maxSyncError < 2 / RATE, `${w.maxSyncError}`);
+        assert.ok(!w.played.includes(PRIMING), "the pre-skip played");
+      }
+      // The audio's first packet played: a sample of it past its pre-skip
+      // and the silence before it.
+      const sample = 1.5 + PRE_SKIP / RATE + 0.001;
+      assert.ok(start.played.some((v) => Math.abs(v - sample) < 1 / RATE));
+    });
+  }
 
   it("publish times follow the presented media", () => {
     const w = new World(AUDIO);
