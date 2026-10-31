@@ -1,0 +1,4 @@
+# The lab's CA and server keys and certificates, made per machine by
+# mkcert.sh, and the server's event log.
+/tls/
+/events.jsonl

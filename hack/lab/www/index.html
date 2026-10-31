@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!-- Copyright 2026 Strims contributors
+     SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Strims device lab</title>
+    <style>
+      :root {
+        --bg: #f6f6f4;
+        --fg: #1d1d1b;
+        --muted: #6b6b66;
+        --ok: #1f7a3f;
+        --bad: #b3261e;
+        --btn: #1d1d1b;
+        --btn-fg: #fff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #141413;
+          --fg: #ececea;
+          --muted: #9a9a94;
+          --ok: #6fcf8f;
+          --bad: #f28b82;
+          --btn: #ececea;
+          --btn-fg: #141413;
+        }
+      }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.4 -apple-system, system-ui, sans-serif;
+        margin: 0;
+        padding: 16px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 12px;
+      }
+      #status {
+        font-weight: 600;
+      }
+      .ok {
+        color: var(--ok);
+      }
+      .bad {
+        color: var(--bad);
+      }
+      button {
+        background: var(--btn);
+        color: var(--btn-fg);
+        border: 0;
+        border-radius: 10px;
+        font-size: 18px;
+        padding: 14px 18px;
+        width: 100%;
+        margin: 12px 0;
+      }
+      button.held {
+        background: var(--ok);
+      }
+      #log {
+        font: 12px/1.35 ui-monospace, monospace;
+        color: var(--muted);
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 50vh;
+        overflow: auto;
+      }
+      video {
+        width: 100%;
+        max-height: 30vh;
+        background: #000;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Strims device lab</h1>
+    <div>Control: <span id="status">connecting…</span></div>
+    <div>Secure context: <span id="secure"></span></div>
+    <button id="unlock">Tap once to unlock audio and video</button>
+    <button id="wake">Tap to keep the screen awake</button>
+    <div id="log"></div>
+    <script src="probe.js"></script>
+    <script src="agent.js"></script>
+  </body>
+</html>
