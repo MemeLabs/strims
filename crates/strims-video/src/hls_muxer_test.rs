@@ -409,6 +409,260 @@ fn finished_segments_left_untaken_are_bounded() {
 
 /// A unit of a random stream: track, decode-time step after the last
 /// unit of its track, keyframe, payload size; or a gap.
+/// An audio sample of a segment: its decode time, duration and size.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Sample {
+    dts: i64,
+    duration: i64,
+    size: usize,
+}
+
+/// The samples of `track` in `media`, from each `traf`'s `tfdt` and the
+/// durations and sizes its `trun` lists.
+fn samples_of(media: &[u8], track: u32) -> Vec<Sample> {
+    fn children(data: &[u8]) -> Vec<([u8; 4], &[u8])> {
+        let mut out = Vec::new();
+        let mut at = 0;
+        while at + 8 <= data.len() {
+            let size = u32::from_be_bytes(data[at..at + 4].try_into().unwrap()) as usize;
+            out.push((
+                data[at + 4..at + 8].try_into().unwrap(),
+                &data[at + 8..at + size],
+            ));
+            at += size;
+        }
+        out
+    }
+    let be32 = |b: &[u8], at: usize| u32::from_be_bytes(b[at..at + 4].try_into().unwrap());
+    let mut out = Vec::new();
+    for (kind, moof) in children(media) {
+        if kind != *b"moof" {
+            continue;
+        }
+        for (kind, traf) in children(moof) {
+            if kind != *b"traf" {
+                continue;
+            }
+            let boxes = children(traf);
+            let tfhd = boxes.iter().find(|(k, _)| k == b"tfhd").unwrap().1;
+            if be32(tfhd, 4) != track {
+                continue;
+            }
+            let tfdt = boxes.iter().find(|(k, _)| k == b"tfdt").unwrap().1;
+            let mut dts = if tfdt[0] == 1 {
+                i64::from_be_bytes(tfdt[4..12].try_into().unwrap())
+            } else {
+                i64::from(be32(tfdt, 4))
+            };
+            for (_, trun) in boxes.iter().filter(|(k, _)| k == b"trun") {
+                let flags = be32(trun, 0) & 0x00ff_ffff;
+                assert!(flags & 0x300 == 0x300, "durations and sizes listed");
+                let count = be32(trun, 4) as usize;
+                let mut at = 8
+                    + if flags & 0x01 != 0 { 4 } else { 0 }
+                    + if flags & 0x04 != 0 { 4 } else { 0 };
+                let entry = 4 * (flags & 0xf00).count_ones() as usize;
+                for _ in 0..count {
+                    let duration = i64::from(be32(trun, at));
+                    let size = be32(trun, at + 4) as usize;
+                    out.push(Sample {
+                        dts,
+                        duration,
+                        size,
+                    });
+                    dts += duration;
+                    at += entry;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Whether each sample starts where the one before ends.
+fn contiguous(samples: &[Sample]) -> bool {
+    samples
+        .windows(2)
+        .all(|w| w[0].dts + w[0].duration == w[1].dts)
+}
+
+/// An AAC stream of `frames` video frames with keyframes every second,
+/// its audio missing from `from` to `to` (48 kHz samples).
+fn av_without_audio(frames: i64, from: i64, to: i64) -> Vec<AccessUnit<'static>> {
+    let keyframes: Vec<i64> = (0..frames).step_by(30).collect();
+    av(frames, &keyframes, true)
+        .into_iter()
+        .filter(|u| u.track.0 != AUDIO || !(from..to).contains(&u.dts))
+        .collect()
+}
+
+/// A stereo AAC-LC frame of no spectrum: the silence of the default
+/// audio config.
+const SILENT_AAC: usize = 7;
+
+#[test]
+fn a_hole_in_an_audio_track_is_filled_with_silent_frames() {
+    // Frames 20 to 29 of the first second's audio are missing.
+    let units = av_without_audio(90, 20 * AAC_FRAME, 30 * AAC_FRAME);
+    let (segments, m) = mux(&units);
+    assert_eq!(segments.len(), 3);
+    assert_eq!(
+        (m.silence_fills, m.silence_units, m.audio_holes),
+        (1, 10, 0)
+    );
+    let audio = samples_of(&segments[0].media, AUDIO);
+    assert!(contiguous(&audio), "{audio:?}");
+    let silent: Vec<i64> = audio
+        .iter()
+        .filter(|s| s.size == SILENT_AAC)
+        .map(|s| s.dts / AAC_FRAME)
+        .collect();
+    assert_eq!(silent, (20..30).collect::<Vec<_>>());
+    assert!(audio.iter().all(|s| s.duration == AAC_FRAME));
+    for s in &segments {
+        assert!(!s.discontinuity);
+        assert_eq!(media_time_of(s), s.duration);
+    }
+}
+
+#[test]
+fn opus_holes_are_filled_with_silent_celt_frames() {
+    let mut m = muxer(HlsMuxerConfig::default(), false);
+    m.set_config(&opus_config()).unwrap();
+    // 20 ms packets, 0.3 s of them missing from 0.5 s.
+    static PACKET: [u8; 40] = {
+        let mut p = [0u8; 40];
+        p[0] = 0xfc;
+        p
+    };
+    let video: Vec<AccessUnit<'static>> = av(60, &[0, 30], false);
+    let audio: Vec<AccessUnit<'static>> = (0..100)
+        .map(|i| i * 960)
+        .filter(|t| !(24_000..38_400).contains(t))
+        .map(|t| AccessUnit {
+            payload: &PACKET,
+            ..unit(AUDIO, t, true, 0)
+        })
+        .collect();
+    let segments = run(&mut m, &merge(video, audio));
+    let met = m.metrics();
+    assert_eq!((met.silence_fills, met.silence_units), (1, 15), "{met:?}");
+    let audio = samples_of(&segments[0].media, AUDIO);
+    assert!(contiguous(&audio), "{audio:?}");
+    let silent: Vec<&Sample> = audio.iter().filter(|s| s.size == 3).collect();
+    assert_eq!(silent.len(), 15);
+    assert!(silent.iter().all(|s| s.duration == 960));
+    assert_eq!(silent[0].dts, 24_000);
+}
+
+#[test]
+fn a_hole_across_a_cut_is_filled_at_the_start_of_the_next_segment() {
+    // The audio from 0.9 s to 1.1 s is missing; a keyframe cuts at 1 s.
+    let units = av_without_audio(90, 43 * AAC_FRAME, 52 * AAC_FRAME);
+    let (segments, m) = mux(&units);
+    assert_eq!((m.silence_fills, m.silence_units), (1, 9));
+    let first = samples_of(&segments[0].media, AUDIO);
+    let second = samples_of(&segments[1].media, AUDIO);
+    // The first segment's audio ends at its last frame's own end.
+    assert_eq!(first.last().unwrap().dts + AAC_FRAME, 43 * AAC_FRAME);
+    assert_eq!(first.last().unwrap().duration, AAC_FRAME);
+    // The second's starts with the silence from there, before its video.
+    assert_eq!(second[0].dts, 43 * AAC_FRAME);
+    assert!(second[..9].iter().all(|s| s.size == SILENT_AAC));
+    assert!(contiguous(&second));
+    let video = samples_of(&segments[1].media, VIDEO);
+    assert_eq!(video[0].dts, 30 * FRAME);
+}
+
+#[test]
+fn a_hole_past_max_silence_is_left_and_the_unit_before_lasts_its_frame() {
+    // 3.5 s of audio missing from 1 s, inside a 6 s GOP.
+    let from = 47 * AAC_FRAME;
+    let to = from + 164 * AAC_FRAME;
+    let units: Vec<AccessUnit<'static>> = av(240, &[0, 180], true)
+        .into_iter()
+        .filter(|u| u.track.0 != AUDIO || !(from..to).contains(&u.dts))
+        .collect();
+    let (segments, m) = mux(&units);
+    assert_eq!((m.silence_fills, m.audio_holes), (0, 1), "{m:?}");
+    let audio: Vec<Sample> = segments
+        .iter()
+        .flat_map(|s| samples_of(&s.media, AUDIO))
+        .collect();
+    let before = audio.iter().find(|s| s.dts == from - AAC_FRAME).unwrap();
+    assert_eq!(before.duration, AAC_FRAME);
+    assert!(audio.iter().any(|s| s.dts == to));
+    assert!(audio.iter().all(|s| s.size != SILENT_AAC));
+}
+
+#[test]
+fn a_hole_in_a_track_without_silent_frames_is_left() {
+    let mut m = HlsMuxer::new(HlsMuxerConfig::default());
+    m.set_config(&video(VIDEO)).unwrap();
+    let mut he = audio(AUDIO);
+    // Explicit SBR: a 24 kHz core under 48 kHz out.
+    if let CodecParams::Aac { asc, .. } = &mut he.params {
+        *asc = vec![0x2b, 0x11, 0x88, 0x00];
+    }
+    he.codec = "mp4a.40.5".into();
+    m.set_config(&he).unwrap();
+    let units = av_without_audio(60, 20 * AAC_FRAME, 30 * AAC_FRAME);
+    let segments = run(&mut m, &units);
+    let met = m.metrics();
+    assert_eq!((met.silence_fills, met.audio_holes), (0, 1), "{met:?}");
+    let audio = samples_of(&segments[0].media, AUDIO);
+    let before = audio.iter().find(|s| s.dts == 19 * AAC_FRAME).unwrap();
+    assert_eq!(before.duration, AAC_FRAME);
+    assert!(audio.iter().any(|s| s.dts == 30 * AAC_FRAME));
+}
+
+#[test]
+fn no_hole_is_filled_across_a_gap() {
+    let units = av(120, &[0, 30, 60, 90], true);
+    let mut m = muxer(HlsMuxerConfig::default(), true);
+    let mut segments = Vec::new();
+    let lost = 40 * FRAME..60 * FRAME;
+    let lost_audio = 40 * FRAME * 48_000 / 90_000..70 * FRAME * 48_000 / 90_000;
+    let mut gapped = false;
+    for u in &units {
+        let missing = if u.track.0 == VIDEO {
+            lost.contains(&u.dts)
+        } else {
+            lost_audio.contains(&u.dts)
+        };
+        if missing {
+            if !gapped {
+                m.gap();
+                gapped = true;
+            }
+            continue;
+        }
+        m.push(u).unwrap();
+        segments.extend(std::iter::from_fn(|| m.take_segment()));
+    }
+    m.finish().unwrap();
+    segments.extend(std::iter::from_fn(|| m.take_segment()));
+    assert_eq!(m.metrics().silence_fills, 0);
+    let after = segments.iter().position(|s| s.discontinuity).unwrap();
+    let audio = samples_of(&segments[after].media, AUDIO);
+    assert!(audio[0].dts >= lost_audio.end, "{audio:?}");
+}
+
+/// An Opus stereo config on track [`AUDIO`].
+fn opus_config() -> DecoderConfig {
+    DecoderConfig {
+        track: TrackId(AUDIO),
+        kind: TrackKind::Audio,
+        codec: "Opus".into(),
+        timescale: 48_000,
+        params: CodecParams::Opus {
+            head: b"OpusHead\x01\x02\x38\x01\x80\xbb\0\0\0\0\0".to_vec(),
+            channels: 2,
+            pre_skip: 312,
+        },
+    }
+}
+
 #[derive(Debug, Clone)]
 enum Op {
     Unit {

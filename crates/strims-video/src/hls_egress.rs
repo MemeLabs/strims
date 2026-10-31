@@ -21,7 +21,8 @@
 //! without one, less a trailing `/`, followed by the playlist path. The
 //! URL is made at each open, so a changed address names the same streams.
 //! A transfer has one HLS stream: opening it again answers that stream's
-//! URL. The node serves at most
+//! URL, and counts as a request of it for its idle timeout. The node
+//! serves at most
 //! [`HlsSettings::max_streams`](crate::HlsSettings::max_streams) streams.
 //!
 //! # Segments
@@ -33,11 +34,13 @@
 //! for its life. Each whole record of at most [`units::MAX_RECORD_LEN`]
 //! goes through a [`UnitReader`] into an [`HlsMuxer`], whose segments the
 //! playlist lists (see [`hls`](crate::hls#segments)). The reader's gaps
-//! are the muxer's, so a lost chunk costs the units up to the next
-//! keyframe. New configs, which also come when a writer starts the stream
-//! over, reset the muxer. An END record ends the segment in progress and
-//! the playlist (`EXT-X-ENDLIST`); a later session's segment takes the end
-//! back off (see [`Playlist::push_segment`](crate::hls::Playlist::push_segment)).
+//! in a video track are the muxer's, so a lost chunk costs the units up
+//! to the next keyframe, and the muxer fills the holes that lost units
+//! leave in an audio track alone with silence. New configs, which also
+//! come when a writer starts the stream over, reset the muxer. An END
+//! record ends the segment in progress and the playlist
+//! (`EXT-X-ENDLIST`); a later session's segment takes the end back off
+//! (see [`Playlist::push_segment`](crate::hls::Playlist::push_segment)).
 //! A record over the bound is dropped.
 //!
 //! A gap or reset marks the next segment discontinuous.
@@ -50,10 +53,23 @@
 //! it for [`HlsSettings::idle_timeout`](crate::HlsSettings::idle_timeout)
 //! (looked for every
 //! [`HlsSettings::sweep_interval`](crate::HlsSettings::sweep_interval) by
-//! [`VideoControl::run`]), the HLS config is disabled, or its stream fails.
-//! Closing unregisters its routes, so requests of it answer 404, and
-//! releases its swarm. [`VideoEvent::HlsStreamOpened`] and
+//! [`VideoControl::run`]), or the HLS config is disabled. Closing
+//! unregisters its routes, so requests of it answer 404, and releases its
+//! swarm. [`VideoEvent::HlsStreamOpened`] and
 //! [`VideoEvent::HlsStreamClosed`] report each stream.
+//!
+//! # Recovery
+//!
+//! A stream outlasts the failures of what it reads. After a failed read
+//! it reads on, and when its egress stream ends (its swarm gone with none
+//! in its place, as when the node's ingest session of it ends) it opens
+//! one again, as [`VideoControl::open_stream`] does. Each waits
+//! [`HlsSettings::reopen_interval`](crate::HlsSettings::reopen_interval)
+//! first, twice as long after each failure in a row up to
+//! [`HlsSettings::max_reopen_interval`](crate::HlsSettings::max_reopen_interval),
+//! and the first piece read sets the wait back. Meanwhile the playlist
+//! stays as it was, ended or live, and the records read after the stream
+//! opened again follow a discontinuity.
 
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -78,7 +94,7 @@ use crate::hls::{
     HlsMuxer, HlsMuxerConfig, HlsProfile, HlsRoutes, HlsStream, PlaylistConfig, RouteError,
     playlist_path, target_secs,
 };
-use crate::media::Muxer;
+use crate::media::{Muxer, TrackKind};
 use crate::units::{self, ReaderEvent, UnitReader};
 use crate::{HlsSettings, VideoControl, VideoError, VideoEvent, VideoHost};
 
@@ -93,8 +109,6 @@ pub enum HlsCloseReason {
     Idle,
     /// The HLS config was disabled.
     Disabled,
-    /// Its stream failed.
-    Failed(VideoError),
 }
 
 /// An HLS stream of the node, as [`VideoControl::hls_streams`] lists it.
@@ -108,6 +122,8 @@ pub struct HlsStreamInfo {
     pub last_access: Time,
     /// Its records are being read: false while its swarm is opened.
     pub reading: bool,
+    /// Times its egress stream ended and was opened again.
+    pub reopens: u64,
 }
 
 /// The control's HLS streams, and the profile's registration they go
@@ -131,6 +147,7 @@ struct HlsEntry {
     stream: Rc<HlsStream>,
     /// Stops its reader task; `None` while its swarm is opened.
     reader: Option<AbortHandle>,
+    reopens: u64,
 }
 
 impl HlsEgress {
@@ -310,7 +327,19 @@ impl UnitFeed {
                         let _ = self.muxer.set_config(c);
                     }
                 }
-                ReaderEvent::Gap { .. } => self.muxer.gap(),
+                ReaderEvent::Gap { track, .. } => {
+                    // The muxer fills an audio track's hole when the unit
+                    // after it comes; a lost video unit costs the units up
+                    // to the next keyframe.
+                    let audio = self
+                        .reader
+                        .configs()
+                        .iter()
+                        .any(|c| c.track == track && c.kind == TrackKind::Audio);
+                    if !audio {
+                        self.muxer.gap();
+                    }
+                }
                 ReaderEvent::End => {
                     // Ending a segment can't fail.
                     let _ = self.muxer.finish();
@@ -413,34 +442,208 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         }
     }
 
-    /// Feeds the pieces of `egress` into `stream` until the stream fails,
-    /// then closes entry `id` of `t`.
+    /// Feeds the pieces of `egress`, and of the streams `open` opens once
+    /// it ends, into the playlist of entry `id` of `t` while it lasts; see
+    /// the [module docs](self#recovery).
     async fn read_hls(
         self: Rc<Self>,
         t: TransferId,
         id: u64,
-        mut egress: EgressStream<K, H, V, T>,
+        egress: EgressStream<K, H, V, T>,
+        open: OpenArgs,
         stream: Weak<HlsStream>,
     ) {
-        let mut feed = UnitFeed::of(&self.config.hls);
-        let error = loop {
-            let piece = match egress.next(usize::MAX).await {
-                Ok(piece) => piece,
-                Err(e) => break e,
-            };
-            let Some(stream) = stream.upgrade() else {
-                return;
-            };
-            let fed = feed.feed(piece, &stream);
-            if fed != Fed::default() {
-                let mut m = self.metrics.borrow_mut();
-                m.hls_segments += fed.segments;
-                m.hls_skipped_records += fed.skipped;
-            }
+        let settings = &self.config.hls;
+        let backoff = Backoff::new(settings.reopen_interval, settings.max_reopen_interval);
+        let mut feed = UnitFeed::of(settings);
+        let mut source = HostSource {
+            control: VideoControl {
+                shared: self.clone(),
+            },
+            open,
         };
-        let e = self.hls.borrow_mut().take(&t, id);
-        if let Some(e) = e {
-            self.end_hls(t, e, HlsCloseReason::Failed(error));
+        serve(
+            &mut source,
+            Some(egress),
+            &mut feed,
+            &stream,
+            backoff,
+            |e| match e {
+                ServeEvent::Fed(fed) => {
+                    let mut m = self.metrics.borrow_mut();
+                    m.hls_segments += fed.segments;
+                    m.hls_skipped_records += fed.skipped;
+                }
+                ServeEvent::Reopened => {
+                    tracing::debug!(transfer = %t, "HLS stream opened again");
+                    let mut h = self.hls.borrow_mut();
+                    if let Some(e) = h.streams.get_mut(&t).filter(|e| e.id == id) {
+                        e.reopens += 1;
+                    }
+                }
+                ServeEvent::Failed(error) => {
+                    tracing::debug!(transfer = %t, %error, "HLS stream read failed");
+                }
+            },
+        )
+        .await;
+    }
+}
+
+/// What an HLS stream's egress stream opens with again.
+pub(crate) struct OpenArgs {
+    swarm_uri: String,
+    network_keys: Vec<Vec<u8>>,
+    mime_type: String,
+}
+
+/// Where an HLS stream's pieces come from: an egress stream, opened again
+/// when it ends.
+pub(crate) trait PieceSource {
+    type Stream;
+
+    /// Opens the stream again.
+    async fn open(&mut self) -> Result<Self::Stream, VideoError>;
+
+    /// The stream's next piece.
+    async fn next<'a>(
+        &mut self,
+        stream: &'a mut Self::Stream,
+    ) -> Result<EgressPiece<'a>, VideoError>;
+
+    /// Resolves after `d`.
+    async fn wait(&mut self, d: Duration);
+}
+
+/// The node's egress stream of a swarm.
+struct HostSource<K: Kv, H: Host, V: VideoHost, T: Timer> {
+    control: VideoControl<K, H, V, T>,
+    open: OpenArgs,
+}
+
+impl<K: Kv, H: Host, V: VideoHost, T: Timer> PieceSource for HostSource<K, H, V, T> {
+    type Stream = EgressStream<K, H, V, T>;
+
+    async fn open(&mut self) -> Result<Self::Stream, VideoError> {
+        let o = &self.open;
+        self.control
+            .open_stream(&o.swarm_uri, &o.network_keys, &o.mime_type)
+            .await
+    }
+
+    async fn next<'a>(
+        &mut self,
+        stream: &'a mut Self::Stream,
+    ) -> Result<EgressPiece<'a>, VideoError> {
+        stream.next(usize::MAX).await
+    }
+
+    async fn wait(&mut self, d: Duration) {
+        let timer = &self.control.shared.timer;
+        timer.sleep_until(timer.now() + d).await;
+    }
+}
+
+/// The waits of a stream that fails: from the least, doubling after each
+/// to the most.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Backoff {
+    least: Duration,
+    most: Duration,
+    next: Duration,
+}
+
+impl Backoff {
+    pub(crate) fn new(least: Duration, most: Duration) -> Backoff {
+        let least = least.max(Duration::MILLISECOND);
+        Backoff {
+            least,
+            most: most.max(least),
+            next: least,
+        }
+    }
+
+    /// The next wait, doubling the one after.
+    fn take(&mut self) -> Duration {
+        let d = self.next;
+        self.next = (d + d).min(self.most);
+        d
+    }
+
+    fn reset(&mut self) {
+        self.next = self.least;
+    }
+}
+
+/// What [`serve`] did.
+#[derive(Debug)]
+pub(crate) enum ServeEvent {
+    Fed(Fed),
+    /// The stream ended and was opened again.
+    Reopened,
+    /// A read or an open failed.
+    Failed(VideoError),
+}
+
+/// What a read came to, without its piece's borrow.
+enum Read {
+    Piece,
+    Failed(VideoError),
+    Ended(VideoError),
+}
+
+/// Feeds the pieces of `current`, and of the streams `source` opens again
+/// once it ends, into `stream`'s playlist until `stream` is dropped: see
+/// the [module docs](self#recovery). Each piece, reopen and failure goes
+/// to `on`.
+pub(crate) async fn serve<P: PieceSource>(
+    source: &mut P,
+    mut current: Option<P::Stream>,
+    feed: &mut UnitFeed,
+    stream: &Weak<HlsStream>,
+    mut backoff: Backoff,
+    mut on: impl FnMut(ServeEvent),
+) {
+    loop {
+        let Some(s) = current.as_mut() else {
+            source.wait(backoff.take()).await;
+            if stream.strong_count() == 0 {
+                return;
+            }
+            match source.open().await {
+                Ok(s) => {
+                    current = Some(s);
+                    if let Some(h) = stream.upgrade() {
+                        feed.feed(EgressPiece::Discontinuity, &h);
+                    }
+                    on(ServeEvent::Reopened);
+                }
+                Err(e) => on(ServeEvent::Failed(e)),
+            }
+            continue;
+        };
+        let read = match source.next(s).await {
+            Ok(piece) => {
+                let Some(h) = stream.upgrade() else {
+                    return;
+                };
+                on(ServeEvent::Fed(feed.feed(piece, &h)));
+                Read::Piece
+            }
+            // The egress stream reads on after a discontinuity.
+            Err(e @ VideoError::StreamRead(_)) => Read::Failed(e),
+            Err(e) => Read::Ended(e),
+        };
+        match read {
+            Read::Piece => backoff.reset(),
+            Read::Failed(e) => {
+                on(ServeEvent::Failed(e));
+                source.wait(backoff.take()).await;
+            }
+            Read::Ended(e) => {
+                on(ServeEvent::Failed(e));
+                current = None;
+            }
         }
     }
 }
@@ -500,7 +703,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
 
         let id = {
             let mut h = s.hls.borrow_mut();
-            if h.streams.contains_key(&t) {
+            if let Some(e) = h.streams.get(&t) {
+                e.stream.touch(s.timer.now());
                 return Ok(url);
             }
             if h.streams.len() >= settings.max_streams {
@@ -526,6 +730,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                     id,
                     stream: Rc::new(stream),
                     reader: None,
+                    reopens: 0,
                 },
             );
             id
@@ -545,7 +750,12 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 .filter(|e| e.id == id)
                 .ok_or(VideoError::StreamClosed)?;
             let stream = Rc::downgrade(&entry.stream);
-            let (task, abort) = abortable(s.clone().read_hls(t, id, egress, stream));
+            let open = OpenArgs {
+                swarm_uri: swarm_uri.to_owned(),
+                network_keys: network_keys.to_vec(),
+                mime_type: mime_type.to_owned(),
+            };
+            let (task, abort) = abortable(s.clone().read_hls(t, id, egress, open, stream));
             entry.reader = Some(abort);
             task
         };
@@ -587,6 +797,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 path: e.stream.path().to_owned(),
                 last_access: e.stream.last_access(),
                 reading: e.reader.is_some(),
+                reopens: e.reopens,
             })
             .collect()
     }

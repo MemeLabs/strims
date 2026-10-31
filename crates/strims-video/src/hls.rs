@@ -51,6 +51,16 @@
 //!   to the next keyframe of the cut track, whose segment follows a
 //!   discontinuity.
 //!
+//! An audio unit that starts past the end of its track's unit before, by
+//! half a silent frame or more, follows a hole. Silent frames
+//! ([`silence`](crate::silence)) fill a hole of up to [`MAX_SILENCE`],
+//! in the segment of the unit after it: a hole across a cut is filled at
+//! the start of the next segment, ahead of its cut track's first sample.
+//! A longer hole, or one in a track without silent frames (HE-AAC, AAC
+//! channels a program config element defines), is left, the unit before
+//! it lasting its own length. No hole is filled across a gap, a reset, the
+//! stream's end or a new init.
+//!
 //! Within a segment, a fragment ends before each keyframe of the cut
 //! track, and before the cut track's next unit once the fragment holds
 //! [`HlsMuxerConfig::fragment_duration`] of media.
@@ -82,7 +92,9 @@ use std::rc::{Rc, Weak};
 use strims_base::time::{Duration, Time};
 
 use crate::fmp4::{FragmentWriter, InitError, MAX_TRACKS, Written, write_init};
-use crate::media::{AccessUnit, DecoderConfig, Muxer, TrackId, TrackKind};
+use crate::media::{AccessUnit, CodecParams, DecoderConfig, Muxer, TrackId, TrackKind};
+use crate::opus;
+use crate::silence::Silence;
 
 /// The most segments a [`Playlist`] keeps, listed or not.
 pub const MAX_SEGMENTS: usize = 256;
@@ -479,6 +491,12 @@ pub const MAX_PENDING_SEGMENTS: usize = 4;
 /// would be longer are refused ([`HlsMuxerError::InitTooLong`]).
 pub const MAX_INIT_LEN: usize = u16::MAX as usize;
 
+/// The longest hole in an audio track an [`HlsMuxer`] fills with silence:
+/// it bounds the frames a unit writes, about 150 of Opus or 141 of AAC at
+/// 48 kHz. A hole longer than it is audio that stopped, not a lost or late
+/// frame.
+pub const MAX_SILENCE: Duration = Duration::from_secs(3);
+
 /// The media a segment's fragment holds by default
 /// ([`HlsMuxerConfig::fragment_duration`]): a few video frames and their
 /// audio, so a fragment's `prft`, `moof` and `mdat` headers stay a small
@@ -549,6 +567,13 @@ pub struct HlsMuxerMetrics {
     pub dropped_oversized: u64,
     /// Finished segments dropped untaken.
     pub dropped_segments: u64,
+    /// Holes in audio tracks filled with silence, and the silent frames
+    /// that filled them.
+    pub silence_fills: u64,
+    pub silence_units: u64,
+    /// Holes in audio tracks left: longer than [`MAX_SILENCE`], of a
+    /// track without silent frames, or without room in the segment.
+    pub audio_holes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -577,6 +602,86 @@ impl Timing {
     fn longest_step(&self) -> Duration {
         self.step.max(self.previous)
     }
+}
+
+/// An audio track the init declares: its silent frames, and where its
+/// units end.
+#[derive(Debug)]
+struct AudioTrack {
+    track: TrackId,
+    timescale: u32,
+    /// `None` for a config without them.
+    silence: Option<Silence>,
+    /// An AAC frame's samples; 0 for Opus, whose packets carry theirs.
+    frame_samples: u32,
+    /// The decode time the track's last unit ends at; `None` before its
+    /// first unit after the init, a gap, a reset or the stream's end.
+    end: Option<i64>,
+    /// The samples of its last unit, for a packet that doesn't carry its
+    /// own.
+    last: i64,
+}
+
+impl AudioTrack {
+    fn new(config: &DecoderConfig) -> AudioTrack {
+        let frame_samples = match config.params {
+            CodecParams::Aac { frame_samples, .. } => frame_samples,
+            _ => 0,
+        };
+        AudioTrack {
+            track: config.track,
+            timescale: config.timescale,
+            silence: Silence::for_config(config),
+            frame_samples,
+            end: None,
+            last: 0,
+        }
+    }
+
+    /// The samples a unit of `payload` lasts: an AAC frame's, an Opus
+    /// packet's, or the unit's before.
+    fn samples(&self, payload: &[u8]) -> i64 {
+        if self.frame_samples > 0 {
+            return i64::from(self.frame_samples);
+        }
+        opus::packet_samples(payload).map_or(self.last, i64::from)
+    }
+
+    /// What comes before a unit at `dts`: nothing, silence from the
+    /// track's end, or a hole left.
+    fn hole_before(&self, dts: i64) -> Hole {
+        let Some(end) = self.end else {
+            return Hole::None;
+        };
+        let gap = dts.saturating_sub(end);
+        let step = self
+            .silence
+            .as_ref()
+            .map_or(self.last, |s| i64::from(s.step()))
+            .max(1);
+        if gap.saturating_add(gap) < step {
+            return Hole::None;
+        }
+        if self.silence.is_none() || gap > timescale_units(MAX_SILENCE, self.timescale) {
+            return Hole::Left { end };
+        }
+        Hole::Fill { from: end }
+    }
+}
+
+/// The hole before an audio unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Hole {
+    None,
+    /// Silent frames fill it, from the track's end at `from`.
+    Fill {
+        from: i64,
+    },
+    /// It is left, the unit before it lasting until the track's end at
+    /// `end`.
+    Left {
+        end: i64,
+    },
 }
 
 /// The segment in progress.
@@ -638,6 +743,8 @@ pub struct HlsMuxer {
     segment: Option<Open>,
     /// Per track that had units; at most [`MAX_TRACKS`].
     timing: Vec<Timing>,
+    /// The declared audio tracks; at most [`MAX_TRACKS`].
+    audio: Vec<AudioTrack>,
     /// A discontinuity precedes the next segment.
     pending_discontinuity: bool,
     /// A segment was finished, so a gap after it is a discontinuity.
@@ -658,6 +765,7 @@ impl HlsMuxer {
             scratch: Vec::new(),
             segment: None,
             timing: Vec::new(),
+            audio: Vec::new(),
             pending_discontinuity: false,
             finished: false,
             out: VecDeque::new(),
@@ -683,6 +791,7 @@ impl HlsMuxer {
     /// discontinuity.
     pub fn gap(&mut self) {
         self.end(None, None);
+        self.forget_audio_ends();
         self.pending_discontinuity |= self.finished;
     }
 
@@ -695,6 +804,14 @@ impl HlsMuxer {
         self.declared.clear();
         self.changed = false;
         self.timing.clear();
+        self.audio.clear();
+    }
+
+    /// No hole is filled from where the audio tracks' units ended so far.
+    fn forget_audio_ends(&mut self) {
+        for a in &mut self.audio {
+            a.end = None;
+        }
     }
 
     /// The track whose keyframes start segments.
@@ -818,6 +935,11 @@ impl HlsMuxer {
             }
             self.writer.set_tracks(&configs, delay)?;
             self.init = Rc::from(&self.scratch[..]);
+            self.audio = configs
+                .iter()
+                .filter(|c| c.kind == TrackKind::Audio)
+                .map(AudioTrack::new)
+                .collect();
             self.declared = configs;
             self.changed = false;
         }
@@ -902,8 +1024,16 @@ impl HlsMuxer {
             self.metrics.dropped_pending_config += 1;
             return Ok(());
         }
+        let audio = self.audio.iter().position(|a| a.track == u.track);
+        let hole = audio
+            .and_then(|i| self.audio.get(i))
+            .map_or(Hole::None, |a| a.hole_before(u.dts));
         let growth = self.writer.max_push_growth(u.track, u.payload.len());
-        if !self.room_for(growth) {
+        let silence = match hole {
+            Hole::Fill { from } => self.silence_growth(u, from),
+            _ => 0,
+        };
+        if !self.room_for(growth.saturating_add(silence)) {
             let held = self
                 .segment
                 .as_ref()
@@ -922,15 +1052,88 @@ impl HlsMuxer {
             }
         }
         self.scratch.clear();
+        match hole {
+            Hole::None => {}
+            Hole::Fill { from } if self.room_for(growth.saturating_add(silence)) => {
+                self.write_silence(u, from);
+            }
+            Hole::Fill { from: end } | Hole::Left { end } => {
+                self.metrics.audio_holes += 1;
+                // The track is declared, so ending its units can't fail.
+                let _ = self.writer.end_track(u.track, end, &mut self.scratch);
+            }
+        }
         self.writer
             .push(u, &mut self.scratch)
             .map_err(|_| HlsMuxerError::UnknownTrack(u.track.0))?;
+        if let Some(a) = audio.and_then(|i| self.audio.get_mut(i)) {
+            let samples = a.samples(u.payload);
+            a.last = samples;
+            a.end = Some(u.dts.saturating_add(samples));
+        }
         if let Some(open) = self.segment.as_mut() {
-            // A writer of an unbounded span writes only when flushed.
+            // A writer of an unbounded span writes only when flushed or
+            // when a track's units end at a hole.
             open.media.extend_from_slice(&self.scratch);
             open.fragment_start.get_or_insert(t);
         }
         Ok(())
+    }
+
+    /// The most bytes the silence filling an audio track from `from` to
+    /// the unit `u` adds to the segment.
+    fn silence_growth(&self, u: &AccessUnit<'_>, from: i64) -> usize {
+        let Some(silence) = self
+            .audio
+            .iter()
+            .find(|a| a.track == u.track)
+            .and_then(|a| a.silence.as_ref())
+        else {
+            return 0;
+        };
+        silence
+            .cover(u.dts.saturating_sub(from))
+            .map(|(payload, _)| self.writer.max_push_growth(u.track, payload.len()))
+            .fold(0usize, usize::saturating_add)
+    }
+
+    /// Holds the silent frames that fill an audio track from `from` up to
+    /// the unit `u`, each a keyframe published as long before `u` as it
+    /// decodes before it.
+    fn write_silence(&mut self, u: &AccessUnit<'_>, from: i64) {
+        let HlsMuxer {
+            audio,
+            writer,
+            metrics,
+            ..
+        } = self;
+        let Some(a) = audio.iter().find(|a| a.track == u.track) else {
+            return;
+        };
+        let Some(silence) = a.silence.as_ref() else {
+            return;
+        };
+        let mut dts = from;
+        let mut count = 0u64;
+        for (payload, samples) in silence.cover(u.dts.saturating_sub(from)) {
+            let unit = AccessUnit {
+                track: u.track,
+                dts,
+                pts: dts,
+                keyframe: true,
+                payload,
+                published: u.published - media_time(u.dts.saturating_sub(dts), a.timescale),
+            };
+            if writer.hold(&unit).is_err() {
+                break;
+            }
+            dts = dts.saturating_add(i64::from(samples));
+            count += 1;
+        }
+        if count > 0 {
+            metrics.silence_fills += 1;
+            metrics.silence_units += count;
+        }
     }
 }
 
@@ -985,6 +1188,7 @@ impl Muxer for HlsMuxer {
     /// next keyframe.
     fn finish(&mut self) -> Result<(), HlsMuxerError> {
         self.end(None, None);
+        self.forget_audio_ends();
         Ok(())
     }
 }
@@ -1340,6 +1544,14 @@ impl HlsStream {
     /// time before any.
     pub fn last_access(&self) -> Time {
         self.state.last_access.get()
+    }
+
+    /// Records a request of the stream at `now`, as a GET that answers
+    /// does ([`HlsRoutes::get`]).
+    pub fn touch(&self, now: Time) {
+        self.state
+            .last_access
+            .set(self.state.last_access.get().max(now));
     }
 
     /// See [`Playlist::push_segment`].

@@ -5,9 +5,9 @@
 //! swarm's units served as a playlist, its inits and segments, on the
 //! node's routes; a unit-format ingest served as segments within the
 //! target, its long GOPs split; the playlist URL; the refusals, the
-//! stream a swarm shares, the cap; streams closing when asked, when idle,
-//! when HLS is disabled and when their swarm closes; and the UI's
-//! `HLSEgress` calls.
+//! stream a swarm shares, the cap; streams closing when asked, when idle
+//! and when HLS is disabled, and opening their swarm again when it
+//! closes; and the UI's `HLSEgress` calls.
 
 #![allow(
     clippy::unwrap_used,
@@ -677,9 +677,11 @@ fn a_closed_stream_answers_404_and_releases_its_swarm() {
 }
 
 /// A stream whose swarm closes, here an ingest session's on the node,
-/// ends with its stream's error.
+/// stays served: its playlist ends with the session, it opens the swarm
+/// again, and the channel's next session plays on in it after a
+/// discontinuity.
 #[test]
-fn a_stream_ends_when_its_swarm_closes() {
+fn a_stream_whose_swarm_closes_opens_it_again() {
     run(async {
         let world = World::default();
         let n = node_in(&world, 1).await;
@@ -695,7 +697,6 @@ fn a_stream_ends_when_its_swarm_closes() {
         p.send_tags(&script.tags[..half], &script).await;
         wait_for(10, "the listing", || !media(&n).is_empty()).await;
         let m = media(&n).remove(0);
-        let id = transfer_id(&m.swarm_uri);
         let url = v.open_hls(&m.swarm_uri, &[], &m.mime_type).await.unwrap();
         p.send_tags(&script.tags[half..], &script).await;
         wait_for(10, "a segment", || {
@@ -705,12 +706,46 @@ fn a_stream_ends_when_its_swarm_closes() {
         let mut events = v.subscribe();
 
         p.unpublish().await;
-        wait_for(10, "the stream to end", || v.hls_streams().is_empty()).await;
-        assert_eq!(get(&n, &routes, path(&url)).status, 404);
-        assert_eq!(
-            hls_events(&mut events),
-            [closed(id, HlsCloseReason::Failed(VideoError::StreamClosed))]
-        );
+        wait_for(10, "the playlist to end", || {
+            playlist(&n, &routes, path(&url)).contains("#EXT-X-ENDLIST\n")
+        })
+        .await;
+        wait_for(10, "the swarm to open again", || {
+            v.hls_streams().first().is_some_and(|s| s.reopens >= 1)
+        })
+        .await;
+        assert_eq!(v.hls_streams().len(), 1);
+
+        let mut p = publish(&n, &video, &key).await;
+        p.send_tags(&script.tags, &script).await;
+        wait_for(10, "the next session's segments", || {
+            let text = playlist(&n, &routes, path(&url));
+            !text.contains("ENDLIST") && listed(&text).iter().any(|s| s.discontinuity)
+        })
+        .await;
+        assert_eq!(hls_events(&mut events), []);
+    });
+}
+
+/// Opening a served stream again counts as a request of it.
+#[test]
+fn opening_a_served_stream_again_keeps_it_open() {
+    run(async {
+        let world = World::default();
+        let n = node_in(&world, 1).await;
+        let routes = HlsRoutes::new();
+        let v = start(&n, &routes, serving());
+        set_hls(&v, true, "").await;
+        let uri = swarm_uri(7);
+        let url = v.open_hls(&uri, &[], units::MIME_TYPE).await.unwrap();
+        for _ in 0..3 {
+            sleep_secs(45).await;
+            assert_eq!(v.open_hls(&uri, &[], units::MIME_TYPE).await.unwrap(), url);
+        }
+        assert_eq!(v.hls_streams().len(), 1);
+        assert_eq!(v.hls_streams()[0].last_access, n.timer.now());
+        sleep_secs(75).await;
+        assert!(v.hls_streams().is_empty());
     });
 }
 

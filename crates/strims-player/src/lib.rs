@@ -117,7 +117,6 @@
 pub mod demux;
 pub mod mime;
 pub mod remux;
-mod silence;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 pub mod webcodecs;

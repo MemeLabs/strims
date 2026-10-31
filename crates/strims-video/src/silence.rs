@@ -12,9 +12,9 @@
 //!   every stream but the last in self-delimiting framing (RFC 6716
 //!   appendix B).
 
-use strims_video::aac::{AOT_PS, AOT_SBR, parse_asc};
-use strims_video::opus::parse_opus_head;
-use strims_video::{CodecParams, DecoderConfig};
+use crate::aac::{AOT_PS, AOT_SBR, parse_asc};
+use crate::media::{CodecParams, DecoderConfig};
+use crate::opus::parse_opus_head;
 
 /// A CELT frame with the silence flag set (RFC 6716 4.3, Table 56).
 const CELT_SILENCE: [u8; 2] = [0xff, 0xfe];
@@ -25,7 +25,7 @@ const CELT_FRAMES: [(u8, u32); 4] = [(31, 960), (30, 480), (29, 240), (28, 120)]
 /// The silent frames of a track's config, each with the samples it lasts
 /// in the track's timescale.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Silence {
+pub struct Silence {
     /// Longest first; each lasts a whole number of the last's samples.
     frames: Vec<(Vec<u8>, u32)>,
 }
@@ -34,7 +34,7 @@ impl Silence {
     /// The silent frames of `config`; `None` for video and for an audio
     /// config they aren't known for (HE-AAC, AAC channels a program config
     /// element defines, an OpusHead that doesn't parse).
-    pub(crate) fn for_config(config: &DecoderConfig) -> Option<Silence> {
+    pub fn for_config(config: &DecoderConfig) -> Option<Silence> {
         match &config.params {
             CodecParams::Aac { asc, .. } => aac(asc),
             CodecParams::Opus { head, .. } => opus(head),
@@ -43,7 +43,7 @@ impl Silence {
     }
 
     /// The samples of the shortest frame: covers are multiples of it.
-    pub(crate) fn step(&self) -> u32 {
+    pub fn step(&self) -> u32 {
         self.frames.last().map_or(0, |f| f.1)
     }
 
@@ -51,7 +51,7 @@ impl Silence {
     /// shortest first: payloads and the samples each lasts. The last is a
     /// longest one when the cover holds one, so a writer that times an
     /// untimed last sample by the one before gives it its own length.
-    pub(crate) fn cover(&self, samples: i64) -> impl Iterator<Item = (&[u8], u32)> {
+    pub fn cover(&self, samples: i64) -> impl Iterator<Item = (&[u8], u32)> {
         let step = i64::from(self.step().max(1));
         let mut steps = samples.saturating_add(step / 2).max(0) / step;
         let counts: Vec<usize> = self

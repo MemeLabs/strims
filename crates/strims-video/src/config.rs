@@ -254,6 +254,11 @@ pub struct HlsSettings {
     /// streams are looked for.
     pub idle_timeout: Duration,
     pub sweep_interval: Duration,
+    /// How long a stream whose read failed or whose swarm is gone waits
+    /// before it reads on or opens its swarm again, doubling up to the
+    /// most while it fails.
+    pub reopen_interval: Duration,
+    pub max_reopen_interval: Duration,
     /// A playlist's `EXT-X-TARGETDURATION`, fixed for its life, in whole
     /// seconds (a fraction rounds up): every segment rounds to at most it.
     /// GOPs that round to at most it stay whole: those of keyframes every
@@ -297,6 +302,8 @@ impl Default for HlsSettings {
             max_streams: 4,
             idle_timeout: Duration::from_secs(60),
             sweep_interval: Duration::from_secs(10),
+            reopen_interval: Duration::from_secs(1),
+            max_reopen_interval: Duration::from_secs(30),
             target_duration: Duration::from_secs(4),
             listed_duration: Duration::from_secs(16),
             retained_duration: Duration::from_secs(40),

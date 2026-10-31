@@ -4,7 +4,7 @@
 // Test code: a panic or out-of-range index is a test failure.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
-use strims_video::{TrackId, TrackKind};
+use crate::media::{TrackId, TrackKind};
 
 use super::*;
 
@@ -110,10 +110,7 @@ fn opus_packets_hold_a_silent_celt_frame_per_stream() {
     let surround = Silence::for_config(&opus_config(6)).unwrap();
     assert_eq!(hex(&surround.frames[0].0), "fc02fffefc02fffef802fffef8fffe");
     for (packet, samples) in &surround.frames {
-        assert_eq!(
-            crate::webcodecs::opus_packet_samples(packet),
-            Some(*samples)
-        );
+        assert_eq!(crate::opus::packet_samples(packet), Some(*samples));
     }
     let mut broken = opus_config(2);
     if let CodecParams::Opus { head, .. } = &mut broken.params {

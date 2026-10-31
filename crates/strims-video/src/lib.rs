@@ -145,8 +145,8 @@
 //!   rounds to at most it. A stream's access units are cut into segments
 //!   at its keyframes, and mid-GOP when a GOP outlasts the target
 //!   ([`hls::HlsMuxer`]). Segments are served with their inits on the
-//!   driver's [`hls::HlsRoutes`]. Units lost from a stream mark the next
-//!   segment discontinuous.
+//!   driver's [`hls::HlsRoutes`]. Video units lost from a stream mark the
+//!   next segment discontinuous; silence fills the holes in its audio.
 //! - **URL.** The HLS config's public server address, or else the
 //!   driver's [`HlsSettings::base_url`], followed by
 //!   [`hls::playlist_path`] of the profile's key and the swarm's transfer
@@ -154,9 +154,11 @@
 //! - **Lifetime.** A stream is the node's, whoever opened it, and a swarm
 //!   has one: opening it again answers the same stream. It lasts until
 //!   [`VideoControl::close_hls`] (the UI's `CloseStream`) closes it, no
-//!   request reaches it for [`HlsSettings::idle_timeout`], the HLS config
-//!   is disabled, or its stream fails. Then its routes answer 404 and its
-//!   swarm is released.
+//!   request reaches it for [`HlsSettings::idle_timeout`], or the HLS
+//!   config is disabled. Then its routes answer 404 and its swarm is
+//!   released. A failed read, or the end of its swarm, doesn't end it: it
+//!   reads on, or opens the swarm again
+//!   ([`hls_egress`](crate::hls_egress#recovery)).
 //! - **Bounds.** [`HlsSettings`]: the streams the node serves, the segment
 //!   a stream's muxer holds, and the segments and bytes each playlist
 //!   keeps.
@@ -184,6 +186,7 @@ pub mod media;
 pub mod opus;
 mod registry;
 pub mod rtmp;
+pub mod silence;
 #[cfg(any(test, feature = "test-support"))]
 pub mod synth;
 #[cfg(any(test, feature = "test-support"))]

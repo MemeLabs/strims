@@ -9,11 +9,11 @@ use std::ops::Range;
 
 use strims_base::time::{Duration, Time};
 use strims_video::fmp4::{FragmentWriter, MAX_TRACKS, write_init};
+use strims_video::silence::Silence;
 use strims_video::units::{MAX_RECORD_LEN, ReaderEvent, UnitReader, UnitReaderMetrics};
 use strims_video::{AccessUnit, CodecParams, DecoderConfig, TrackId, TrackKind};
 
 use crate::mime::mse_type;
-use crate::silence::Silence;
 use crate::webcodecs::opus_packet_samples;
 
 /// The most payload bytes of units held unwritten. A unit that would pass

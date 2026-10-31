@@ -56,9 +56,10 @@
 //! # HLS egress
 //!
 //! `OpenStream` answers the playlist URL of the swarm's HLS stream, the
-//! one the node serves or a new one, or an error when it doesn't open. A
-//! new stream reads the swarm in the unit format, which its request's MIME
-//! type must name, as `Egress` does.
+//! one the node serves, for which it counts as a request, or a new one,
+//! or an error when it doesn't open. A new stream reads the swarm in the
+//! unit format, which its request's MIME type must name, as `Egress`
+//! does.
 //! The stream isn't the connection's: it lasts past the call and the
 //! connection, until `CloseStream` with its transfer id closes it, it
 //! goes idle or HLS is disabled ([`hls_egress`](crate::hls_egress)).

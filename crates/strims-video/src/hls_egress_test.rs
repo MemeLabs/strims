@@ -244,6 +244,36 @@ fn a_gap_in_the_units_marks_the_segment_at_the_next_keyframe_discontinuous() {
     assert_eq!(feed.reader.metrics().gaps, 1);
 }
 
+/// Whether unit-format record `r` is an audio unit of a frame in
+/// `frames`.
+fn audio_frame_in(r: &[u8], frames: std::ops::Range<i64>) -> bool {
+    match parse_record(r).unwrap() {
+        Record::Unit { header, .. } => header.track.0 == 2 && frames.contains(&(header.dts / 1024)),
+        _ => false,
+    }
+}
+
+#[test]
+fn lost_audio_units_are_filled_with_silence_and_the_segment_goes_on() {
+    let s = served();
+    let keyframes: Vec<i64> = (0..5).map(|g| g * 30).collect();
+    let (_, recs) = units_stream(150, &keyframes);
+    let mut feed = unit_feed();
+    // AAC frames 60 to 64 are lost, the video around them not.
+    for (_, r) in &recs {
+        if audio_frame_in(r, 60..65) {
+            feed.feed(EgressPiece::Discontinuity, &s.stream);
+            continue;
+        }
+        feed_units(&mut feed, &s, &[r]);
+    }
+    assert_eq!(listed(&s.playlist()), vec![(1000, false); 4]);
+    let m = feed.muxer.metrics();
+    assert_eq!((m.silence_fills, m.silence_units), (1, 5), "{m:?}");
+    assert_eq!(m.dropped_awaiting_keyframe, 0, "{m:?}");
+    assert_eq!(feed.reader.metrics().gaps, 1);
+}
+
 #[test]
 fn a_writer_starting_over_resets_the_muxer_after_a_discontinuity() {
     let s = served();
@@ -419,4 +449,153 @@ fn a_join_mid_gop_starts_at_the_next_keyframe_when_it_can_not_rewind() {
     assert!(got.iter().all(|&(ms, d)| ms == 1000 && !d), "{got:?}");
     // The join dropped the units before the next GOP's sync record.
     assert_eq!(feed.reader.metrics().unknown_tracks, 0);
+}
+
+/// A piece a [`Scripted`] stream yields.
+enum Step {
+    Record(Vec<u8>),
+    Fail(VideoError),
+}
+
+/// A stream of scripted steps; it ends when they run out. The record a
+/// step holds is yielded as one data piece, then its end.
+#[derive(Default)]
+struct ScriptedStream {
+    steps: VecDeque<Step>,
+    /// The record whose data was yielded, and whose end comes next.
+    record: Option<Vec<u8>>,
+}
+
+/// A piece source of scripted streams, whose opens fail or succeed in
+/// turn; once they run out, it keeps the playlist's text and drops its
+/// stream, which ends the serving.
+struct Scripted {
+    opens: VecDeque<Result<ScriptedStream, VideoError>>,
+    waits: Vec<Duration>,
+    routes: HlsRoutes,
+    served: Option<Rc<HlsStream>>,
+    playlist: String,
+}
+
+impl PieceSource for Scripted {
+    type Stream = ScriptedStream;
+
+    async fn open(&mut self) -> Result<ScriptedStream, VideoError> {
+        self.opens.pop_front().unwrap_or_else(|| {
+            if let Some(s) = self.served.take() {
+                let body = self.routes.get(T, s.path()).body;
+                self.playlist = String::from_utf8(body.to_vec()).unwrap();
+            }
+            Err(VideoError::StreamClosed)
+        })
+    }
+
+    async fn next<'a>(&mut self, s: &'a mut ScriptedStream) -> Result<EgressPiece<'a>, VideoError> {
+        if s.record.take().is_some() {
+            return Ok(EgressPiece::RecordEnd);
+        }
+        match s.steps.pop_front() {
+            Some(Step::Record(r)) => Ok(EgressPiece::Data(s.record.insert(r))),
+            Some(Step::Fail(e)) => Err(e),
+            None => Err(VideoError::StreamClosed),
+        }
+    }
+
+    async fn wait(&mut self, d: Duration) {
+        self.waits.push(d);
+    }
+}
+
+/// A scripted stream of `records`, with a failed read after the first
+/// `fail_after` when given.
+fn scripted(records: &[(u64, Vec<u8>)], fail_after: Option<usize>) -> ScriptedStream {
+    let mut steps: VecDeque<Step> = records
+        .iter()
+        .map(|(_, r)| Step::Record(r.clone()))
+        .collect();
+    if let Some(n) = fail_after {
+        steps.insert(n, Step::Fail(VideoError::StreamRead("store".into())));
+    }
+    ScriptedStream {
+        steps,
+        record: None,
+    }
+}
+
+#[test]
+fn a_stream_reads_on_after_failures_and_opens_again_once_it_ends() {
+    let routes = HlsRoutes::new();
+    let profile = routes.profile(&[1; 32]).unwrap();
+    let served = Rc::new(
+        profile
+            .open_stream(T, [2; 32], PlaylistConfig::default())
+            .unwrap(),
+    );
+    let keyframes: Vec<i64> = (0..3).map(|g| g * 30).collect();
+    let (_, recs) = units_stream(90, &keyframes);
+    let half = recs.len() / 2;
+    let mut source = Scripted {
+        opens: VecDeque::from([
+            Err(VideoError::TooManyStreams),
+            // A later session: its configs start the muxer over.
+            Ok(scripted(&recs, None)),
+        ]),
+        waits: Vec::new(),
+        routes: routes.clone(),
+        served: Some(served.clone()),
+        playlist: String::new(),
+    };
+    let weak = Rc::downgrade(&served);
+    drop(served);
+    let mut feed = unit_feed();
+    let mut events = Vec::new();
+    let mut segments = 0;
+    let backoff = Backoff::new(Duration::from_secs(1), Duration::from_secs(3));
+    let first = scripted(&recs, Some(half));
+    serve(&mut source, Some(first), &mut feed, &weak, backoff, |e| {
+        events.push(match e {
+            ServeEvent::Fed(fed) => {
+                segments += fed.segments;
+                return;
+            }
+            ServeEvent::Reopened => "reopened".to_owned(),
+            ServeEvent::Failed(e) => e.to_string(),
+        })
+    })
+    .now_or_never()
+    .expect("the script never waits");
+    let secs: Vec<i64> = source
+        .waits
+        .iter()
+        .map(|d| d.as_nanos() / 1_000_000_000)
+        .collect();
+    // The failed read, the end, the refused open, the second end and the
+    // end of the script.
+    assert_eq!(secs, [1, 1, 2, 1, 2]);
+    assert_eq!(
+        events,
+        [
+            "reading the stream failed: store",
+            "stream closed",
+            "too many streams",
+            "reopened",
+            "stream closed",
+            "stream closed",
+        ]
+    );
+    assert!(weak.upgrade().is_none());
+    // Each run's two whole GOPs, and the first run's last, which the later
+    // session's configs end.
+    assert_eq!(segments, 5);
+    let got = listed(&source.playlist);
+    assert_eq!(
+        got,
+        [
+            (1000, false),
+            (1000, false),
+            (1000, false),
+            (1000, true),
+            (1000, false)
+        ]
+    );
 }

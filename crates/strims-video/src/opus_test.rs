@@ -286,3 +286,27 @@ proptest! {
         check_head(&data)?;
     }
 }
+
+#[test]
+fn opus_packets_last_their_frames() {
+    // CELT fullband 20 ms, one frame: libopus's default.
+    assert_eq!(packet_samples(&[0xfc, 0xff]), Some(960));
+    // CELT 2.5 ms, two equal frames.
+    assert_eq!(packet_samples(&[(16 << 3) | 1]), Some(240));
+    // SILK 60 ms, two frames of different sizes.
+    assert_eq!(packet_samples(&[(3 << 3) | 2, 1, 2]), Some(5760));
+    // Hybrid 10 ms, code 3 with six frames.
+    assert_eq!(packet_samples(&[(12 << 3) | 3, 6]), Some(2880));
+    // SILK 40 ms, code 3 with three frames: 120 ms, the most.
+    assert_eq!(packet_samples(&[(2 << 3) | 3, 0x83]), Some(5760));
+}
+
+#[test]
+fn malformed_opus_packets_have_no_duration() {
+    assert_eq!(packet_samples(&[]), None);
+    // Code 3 without its frame count, or with none.
+    assert_eq!(packet_samples(&[0xff]), None);
+    assert_eq!(packet_samples(&[0xff, 0x00]), None);
+    // Four 60 ms frames: past 120 ms.
+    assert_eq!(packet_samples(&[(3 << 3) | 3, 4]), None);
+}
