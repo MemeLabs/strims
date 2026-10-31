@@ -742,3 +742,167 @@ proptest! {
         prop_assert!(mid as u64 <= met.mid_gop_segments);
     }
 }
+
+// --- subtitles and captions ---------------------------------------------------
+
+const TEXT: u32 = 3;
+
+/// A cue unit of the text track at `ms`, lasting `duration` ms.
+fn cue_payload(duration: u64, text: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    crate::text::write_cue(
+        &crate::text::Cue {
+            continues: false,
+            duration,
+            text,
+        },
+        &mut out,
+    );
+    out
+}
+
+fn cue_unit(ms: i64, payload: &[u8]) -> AccessUnit<'_> {
+    AccessUnit {
+        track: TrackId(TEXT),
+        dts: ms,
+        pts: ms,
+        keyframe: true,
+        payload,
+        published: Time::from_unix_millis(ms),
+    }
+}
+
+/// Two-second GOPs of 30 fps video, frames from `from`, with `cues` (ms,
+/// duration, text) each sent before the first frame at or after it.
+fn with_cues(frames: i64, cues: &[(i64, u64, &str)]) -> Vec<HlsSegment> {
+    let mut m = muxer(HlsMuxerConfig::default(), false);
+    m.set_config(&crate::text::config(TrackId(TEXT))).unwrap();
+    let payloads: Vec<Vec<u8>> = cues.iter().map(|c| cue_payload(c.1, c.2)).collect();
+    let mut next = 0;
+    let mut out = Vec::new();
+    for f in 0..frames {
+        let ms = f * 1000 / 30;
+        while let Some(c) = cues.get(next).filter(|c| c.0 <= ms) {
+            m.push(&cue_unit(c.0, &payloads[next])).unwrap();
+            next += 1;
+        }
+        m.push(&unit(VIDEO, f * FRAME, f % 60 == 0, 100)).unwrap();
+        out.extend(std::iter::from_fn(|| m.take_segment()));
+    }
+    m.finish().unwrap();
+    out.extend(std::iter::from_fn(|| m.take_segment()));
+    out
+}
+
+fn vtt(s: &HlsSegment) -> String {
+    String::from_utf8(s.vtt.clone().unwrap()).unwrap()
+}
+
+#[test]
+fn a_streams_cues_are_its_segments_webvtt_clipped_to_each_and_repeated_across() {
+    let segments = with_cues(
+        240,
+        &[
+            (500, 1000, "one"),
+            (1500, 3000, "across & <b>"),
+            (2500, 0, ""),
+        ],
+    );
+    assert_eq!(segments.len(), 4);
+    assert_eq!(
+        vtt(&segments[0]),
+        "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000\n\n\
+         00:00:00.500 --> 00:00:01.500\none\n\n\
+         00:00:01.500 --> 00:00:02.000\nacross &amp; &lt;b&gt;\n\n"
+    );
+    // The empty cue ends it at 2.5 s, in the second segment.
+    assert_eq!(
+        vtt(&segments[1]),
+        "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000\n\n\
+         00:00:02.000 --> 00:00:02.500\nacross &amp; &lt;b&gt;\n\n"
+    );
+    assert_eq!(
+        vtt(&segments[2]),
+        "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000\n\n"
+    );
+    for s in &segments {
+        assert_eq!(&*s.codecs, "avc1.64001f");
+        assert_eq!(s.resolution, Some((640, 360)));
+        assert!(!s.captions);
+    }
+}
+
+#[test]
+fn close_cues_show_stacked_in_one_segment() {
+    let segments = with_cues(120, &[(100, 100, "Hi"), (400, 2000, "there")]);
+    assert_eq!(
+        vtt(&segments[0]),
+        "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000\n\n\
+         00:00:00.100 --> 00:00:00.900\nHi\n\n\
+         00:00:00.400 --> 00:00:02.000\nthere\n\n"
+    );
+}
+
+#[test]
+fn a_stream_without_a_text_track_has_no_subtitles() {
+    let (segments, _) = mux(&av(120, &[0, 60], true));
+    assert!(segments.iter().all(|s| s.vtt.is_none()));
+    assert_eq!(&*segments[0].codecs, "avc1.64001f,mp4a.40.2");
+}
+
+#[test]
+fn cue_times_follow_the_inits_composition_delay() {
+    // B-frames: each frame presents two frames after it decodes.
+    let mut m = muxer(HlsMuxerConfig::default(), false);
+    m.set_config(&crate::text::config(TrackId(TEXT))).unwrap();
+    let payload = cue_payload(1000, "late");
+    let mut out = Vec::new();
+    for f in 0..121 {
+        if f == 30 {
+            m.push(&cue_unit(1000, &payload)).unwrap();
+        }
+        let u = AccessUnit {
+            pts: (f + 2) * FRAME,
+            ..unit(VIDEO, f * FRAME, f % 60 == 0, 100)
+        };
+        m.push(&u).unwrap();
+        out.extend(std::iter::from_fn(|| m.take_segment()));
+    }
+    // Presented at 1 s, a frame of 2/30 s presents 2/30 s early after the
+    // edit: the cue too.
+    assert_eq!(
+        vtt(&out[0]),
+        "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000\n\n\
+         00:00:00.933 --> 00:00:01.933\nlate\n\n"
+    );
+}
+
+#[test]
+fn a_segment_whose_video_carries_608_says_so() {
+    use crate::captions::NalFormat;
+    use crate::synth::captions::{field1, pair};
+    let mut m = muxer(HlsMuxerConfig::default(), false);
+    let idr = [0, 0, 0, 4, 0x65, 0x88, 0x84, 0x00];
+    let mut with_cc = Vec::new();
+    NalFormat::avc(4)
+        .with_cc_sei(&idr, &[field1(pair(0x14, 0x2c))], &mut with_cc)
+        .unwrap();
+    let mut out = Vec::new();
+    for f in 0..181 {
+        let payload: &[u8] = if (60..120).contains(&f) && f == 90 {
+            &with_cc
+        } else {
+            &idr
+        };
+        let u = AccessUnit {
+            payload,
+            ..unit(VIDEO, f * FRAME, f % 60 == 0, 0)
+        };
+        m.push(&u).unwrap();
+        out.extend(std::iter::from_fn(|| m.take_segment()));
+    }
+    assert_eq!(
+        out.iter().map(|s| s.captions).collect::<Vec<_>>(),
+        [false, true, false]
+    );
+}

@@ -6,9 +6,11 @@
 //! [`VideoControl::open_hls`] reads the swarm a magnet URI names as an
 //! [`EgressStream`], counted among the egress bounds
 //! ([`EgressSettings`](crate::EgressSettings)), and serves its records on
-//! the driver's [`HlsRoutes`] under the profile's public key: the playlist
-//! at [`playlist_path`]`(profile key, transfer id)`, with its inits and
-//! segments beside it. The control registers the profile when it is
+//! the driver's [`HlsRoutes`] under the profile's public key: the
+//! multivariant playlist at [`multivariant_path`]`(profile key, transfer
+//! id)`, the media playlist at [`playlist_path`](crate::hls::playlist_path)
+//! beside it, and its inits,
+//! segments and subtitles. The control registers the profile when it is
 //! built; a profile whose key isn't [`KEY_LEN`](crate::hls::KEY_LEN)
 //! bytes has no HLS egress.
 //!
@@ -16,12 +18,16 @@
 //!
 //! A stream opens only while the driver serves HLS
 //! ([`HlsSettings::serve`](crate::HlsSettings::serve)) and the device's
-//! HLS config is enabled. Its playlist URL is the config's public server
-//! address, or [`HlsSettings::base_url`](crate::HlsSettings::base_url)
-//! without one, less a trailing `/`, followed by the playlist path. The
-//! URL is made at each open, so a changed address names the same streams.
-//! A transfer has one HLS stream: opening it again answers that stream's
-//! URL, and counts as a request of it for its idle timeout. An open whose
+//! HLS config is enabled. Its URL is the config's public server address,
+//! or [`HlsSettings::base_url`](crate::HlsSettings::base_url) without
+//! one, less a trailing `/`, followed by the multivariant playlist's
+//! path. The URL is made at each open, so a changed address names the
+//! same streams. The open of a new stream answers once the stream lists
+//! its first segment, or after
+//! [`HlsSettings::open_wait`](crate::HlsSettings::open_wait), so a player
+//! given the URL finds media to play. A transfer has one HLS stream:
+//! opening it again answers that stream's URL at once, and counts as a
+//! request of it for its idle timeout. An open whose
 //! URI names other swarm options than the stream reads with, or than the
 //! swarm's listing does, opens the swarm as [`VideoControl::open_stream`]
 //! does ([`egress`](crate::egress#options)), which refuses what the
@@ -38,7 +44,9 @@
 //! [`HlsSettings::target_duration`](crate::HlsSettings::target_duration)
 //! for its life. Each whole record of at most [`units::MAX_RECORD_LEN`]
 //! goes through a [`UnitReader`] into an [`HlsMuxer`], whose segments the
-//! playlist lists (see [`hls`](crate::hls#segments)). The reader's gaps
+//! playlist lists (see [`hls`](crate::hls#segments)), its text tracks
+//! among its configs, whose cues are the segments' subtitles
+//! ([`hls`](crate::hls#subtitles)). The reader's gaps
 //! in a video track are the muxer's, so a lost chunk costs the units up
 //! to the next keyframe, and the muxer fills the holes that lost units
 //! leave in an audio track alone with silence. New configs, which also
@@ -100,12 +108,15 @@ use crate::control::Shared;
 use crate::egress::{EgressPiece, EgressStream, check_format, check_stream};
 use crate::hls::{
     HlsMuxer, HlsMuxerConfig, HlsProfile, HlsRoutes, HlsStream, PlaylistConfig, RouteError,
-    playlist_path, target_secs,
+    multivariant_path, target_secs,
 };
 use crate::media::{Muxer, TrackKind};
 use crate::registry::same_options;
 use crate::units::{self, ReaderEvent, UnitReader};
 use crate::{HlsSettings, VideoControl, VideoError, VideoEvent, VideoHost};
+
+/// How often an open looks for its new stream's first segment.
+const FIRST_SEGMENT_POLL: Duration = Duration::from_millis(50);
 
 /// Why an HLS stream closed.
 #[derive(Clone, Debug, PartialEq)]
@@ -125,7 +136,8 @@ pub enum HlsCloseReason {
 pub struct HlsStreamInfo {
     /// The transfer it reads: its swarm id under the empty salt.
     pub transfer_id: TransferId,
-    /// Its playlist's path on the HLS routes ([`playlist_path`]).
+    /// Its media playlist's path on the HLS routes
+    /// ([`playlist_path`](crate::hls::playlist_path)).
     pub path: String,
     /// The time of its latest successful request, or its open time.
     pub last_access: Time,
@@ -315,7 +327,7 @@ impl UnitFeed {
             if s.discontinuity {
                 stream.discontinuity();
             }
-            stream.push_segment(&s.init, &s.media, s.duration);
+            stream.push(&s);
             fed.segments += 1;
         }
         if std::mem::take(&mut self.ended) {
@@ -337,6 +349,10 @@ impl UnitFeed {
                         // are refused.
                         let _ = self.muxer.set_config(c);
                     }
+                    self.muxer.set_text_configs(self.reader.text_configs());
+                }
+                ReaderEvent::TextConfigs => {
+                    self.muxer.set_text_configs(self.reader.text_configs());
                 }
                 ReaderEvent::Gap { track, .. } => {
                     // The muxer fills an audio track's hole when the unit
@@ -351,7 +367,6 @@ impl UnitFeed {
                         self.muxer.gap();
                     }
                 }
-                ReaderEvent::TextConfigs => {}
                 ReaderEvent::End => {
                     // Ending a segment can't fail.
                     let _ = self.muxer.finish();
@@ -388,6 +403,30 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Drop for Opening<'_, K, H, V, T> {
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
+    /// Waits for the first segment of the new stream `id` of `t`, up to
+    /// [`HlsSettings::open_wait`], or for the stream to close.
+    async fn first_segment(&self, t: TransferId, id: u64) {
+        let deadline = self.timer.now() + self.config.hls.open_wait;
+        loop {
+            let listed = self
+                .hls
+                .borrow()
+                .streams
+                .get(&t)
+                .filter(|e| e.id == id)
+                .map(|e| e.stream.listed_segments() > 0);
+            if listed != Some(false) {
+                return;
+            }
+            let now = self.timer.now();
+            if now >= deadline {
+                return;
+            }
+            let poll = (now + FIRST_SEGMENT_POLL).min(deadline);
+            self.timer.sleep_until(poll).await;
+        }
+    }
+
     /// Takes in a write of the HLS config: disabling it closes every
     /// stream.
     pub(crate) fn hls_config_written(&self, c: &HlsEgressConfig) {
@@ -769,7 +808,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         }
         let (uri, options) = check_stream(&s.config.egress, swarm_uri, network_keys)?;
         let t = TransferId::new(&uri.id, b"");
-        let url = format!("{base}{}", playlist_path(&profile_key, t.as_bytes()));
+        let url = format!("{base}{}", multivariant_path(&profile_key, t.as_bytes()));
         let open = || OpenArgs {
             swarm_uri: swarm_uri.to_owned(),
             options: options.clone(),
@@ -860,6 +899,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
             transfer_id: t,
             playlist_url: url.clone(),
         }]);
+        s.first_segment(t, id).await;
         Ok(url)
     }
 

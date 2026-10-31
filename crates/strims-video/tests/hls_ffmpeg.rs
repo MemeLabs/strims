@@ -14,8 +14,14 @@
 //! as the video, and it is silent where it was missing and plays the tone
 //! elsewhere.
 //!
-//! Each stream's playlist and files stay in `CARGO_TARGET_TMPDIR`
-//! (`hls-ffmpeg-aac`, `hls-ffmpeg-opus`), for other players to try.
+//! A stream with a text track's cues and CEA-608 captions in its video:
+//! ffmpeg reads the multivariant playlist's subtitles, from the WebVTT
+//! files, with the cues' texts at their times on the video's timeline,
+//! and decodes the captions from the video at theirs.
+//!
+//! Each stream's playlists and files stay in `CARGO_TARGET_TMPDIR`
+//! (`hls-ffmpeg-aac`, `hls-ffmpeg-opus`, `hls-ffmpeg-subtitles`), for
+//! other players to try.
 
 #![allow(
     clippy::unwrap_used,
@@ -308,7 +314,7 @@ fn write_hls(events: &[Event], dir: &Path) -> Playlist {
             if s.discontinuity {
                 playlist.discontinuity();
             }
-            playlist.push_segment(&s.init, &s.media, s.duration);
+            playlist.push(&s);
         }
     };
     for e in events {
@@ -360,6 +366,19 @@ fn write_hls(events: &[Event], dir: &Path) -> Playlist {
         }
     }
     std::fs::write(dir.join("index.m3u8"), &text).unwrap();
+    let subtitles = playlist.render_subtitles();
+    for line in subtitles.lines() {
+        if let Some(seq) = line.strip_suffix(".vtt") {
+            let seq: u64 = seq.parse().unwrap();
+            std::fs::write(dir.join(line), &*playlist.vtt(seq).unwrap()).unwrap();
+        }
+    }
+    std::fs::write(dir.join("subtitles.m3u8"), &subtitles).unwrap();
+    std::fs::write(
+        dir.join("multivariant.m3u8"),
+        playlist.render_multivariant(),
+    )
+    .unwrap();
     playlist
 }
 
@@ -465,4 +484,232 @@ fn opus_hls_with_holes_decodes_in_ffmpeg() {
     }
     let flv = flv();
     check("hls-ffmpeg-opus", "opus", &stream(&flv, Some(opus())));
+}
+
+/// The subtitled stream's cues: their times in milliseconds from the
+/// video's first frame, and texts.
+const CUES: [(i64, &str); 3] = [
+    (500, "first cue"),
+    (2200, "two lines across\nthe cut at three seconds"),
+    (4600, "last & cue"),
+];
+/// Its CEA-608 pop-on captions, and the frames from its first that start
+/// each, a pair a frame in presentation order.
+const CAPTIONS: [(usize, &str); 2] = [(15, "CAPTION ONE"), (90, "CAPTION TWO")];
+
+/// The test pattern's video and audio, with a text track of [`CUES`] and
+/// [`CAPTIONS`] in its video.
+fn subtitled(flv: &[u8]) -> Vec<Event> {
+    use strims_video::captions::NalFormat;
+    use strims_video::synth::captions::{field1, pair, pop_on};
+    use strims_video::text;
+
+    let mut events = flv_events(flv);
+    let video = events
+        .iter()
+        .position(|e| matches!(e, Event::Config(c) if c.kind == TrackKind::Video))
+        .unwrap();
+    let Event::Config(v) = events[video].clone() else {
+        unreachable!()
+    };
+    let nals = NalFormat::of(&v.params).unwrap();
+    let mut frames: Vec<usize> = (0..events.len())
+        .filter(|&i| matches!(&events[i], Event::Unit { config, .. } if *config == 0))
+        .collect();
+    frames.sort_by_key(|&i| match &events[i] {
+        Event::Unit { pts, .. } => *pts,
+        Event::Config(_) => 0,
+    });
+    let first_pts = match &events[frames[0]] {
+        Event::Unit { pts, .. } => *pts,
+        Event::Config(_) => 0,
+    };
+    let mut pairs = Vec::new();
+    for (at, text) in CAPTIONS {
+        pairs.resize(at, None);
+        pairs.extend(pop_on(text).into_iter().map(Some));
+    }
+    pairs.extend([Some(pair(0x14, 0x2c)), Some(pair(0x14, 0x2c))]);
+    for (&i, p) in frames.iter().zip(&pairs) {
+        if let (Some(p), Event::Unit { payload, .. }) = (p, &mut events[i]) {
+            let mut out = Vec::new();
+            nals.with_cc_sei(payload, &[field1(*p)], &mut out).unwrap();
+            *payload = out;
+        }
+    }
+
+    // Configs: video's and audio's at 0 and 1 in the source's order, the
+    // text track's after them.
+    let configs = events
+        .iter()
+        .filter(|e| matches!(e, Event::Config(_)))
+        .count();
+    let mut out = Vec::new();
+    let mut cues = CUES.iter().peekable();
+    let mut config_seen = 0;
+    for e in events {
+        if let Event::Unit { config, dts, .. } = &e
+            && *config == 0
+        {
+            while let Some((ms, t)) = cues.next_if(|(ms, _)| first_pts + ms * 90 <= *dts) {
+                let mut payload = Vec::new();
+                text::write_cue(
+                    &text::Cue {
+                        continues: false,
+                        duration: text::estimate(t).as_millis() as u64,
+                        text: t,
+                    },
+                    &mut payload,
+                );
+                let at = first_pts / 90 + ms;
+                out.push(Event::Unit {
+                    config: configs,
+                    dts: at,
+                    pts: at,
+                    keyframe: true,
+                    payload,
+                });
+            }
+        }
+        let is_config = matches!(e, Event::Config(_));
+        out.push(e);
+        if is_config {
+            config_seen += 1;
+            if config_seen == configs {
+                out.push(Event::Config(text::config(strims_video::flv::TEXT_TRACK)));
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn subtitles_and_captions_of_hls_play_in_ffmpeg() {
+    if !tools_with("libx264") {
+        return;
+    }
+    let events = subtitled(&flv());
+    let dir: PathBuf = [env!("CARGO_TARGET_TMPDIR"), "hls-ffmpeg-subtitles"]
+        .iter()
+        .collect();
+    let playlist = write_hls(&events, &dir);
+    let multivariant = playlist.render_multivariant();
+    assert!(
+        multivariant.contains("SUBTITLES=\"subs\""),
+        "{multivariant}"
+    );
+    assert!(
+        multivariant.contains("CLOSED-CAPTIONS=\"cc\""),
+        "{multivariant}"
+    );
+    let file = |name: &str| dir.join(name).to_str().unwrap().to_owned();
+
+    let streams = run(
+        "ffprobe",
+        &[
+            "-show_entries",
+            "stream=codec_name",
+            "-of",
+            "csv=p=0",
+            &file("multivariant.m3u8"),
+        ],
+    );
+    let streams = String::from_utf8(streams).unwrap();
+    let mut streams: Vec<&str> = streams
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    streams.sort_unstable();
+    streams.dedup();
+    assert_eq!(streams, ["aac", "h264", "webvtt"]);
+
+    // Each cue's pieces, one a segment it shows in, joined: from its start
+    // to the next cue's, down to the floor, or for its reading time.
+    let mut cues = Vec::new();
+    for (start, end, text) in srt(&run(
+        "ffmpeg",
+        &[
+            "-copyts",
+            "-i",
+            &file("subtitles.m3u8"),
+            "-f",
+            "srt",
+            "pipe:1",
+        ],
+    )) {
+        match cues.last_mut() {
+            Some((_, e, t)) if *e == start && *t == text => *e = end,
+            _ => cues.push((start, end, text)),
+        }
+    }
+    let floor = strims_video::text::MIN_CUE.as_millis();
+    let want: Vec<(i64, i64, String)> = CUES
+        .iter()
+        .enumerate()
+        .map(|(i, (start, text))| {
+            let mut end = start + strims_video::text::estimate(text).as_millis();
+            if let Some((next, _)) = CUES.get(i + 1) {
+                end = end.min(*next).max(start + floor);
+            }
+            (*start, end, text.to_string())
+        })
+        .collect();
+    assert_eq!(cues, want);
+
+    // The captions decode from the video at the frames their end of
+    // caption and erasure come in.
+    let captions = srt(&run(
+        "ffmpeg",
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            &format!("movie={}[out0+subcc]", file("multivariant.m3u8")),
+            "-map",
+            "0:1",
+            "-f",
+            "srt",
+            "pipe:1",
+        ],
+    ));
+    let frame = |n: i64| (n * 1000 + 15) / 30;
+    assert_eq!(
+        captions,
+        [
+            (frame(15 + 12), frame(90 + 12), "CAPTION ONE".to_owned()),
+            (frame(90 + 12), frame(90 + 14), "CAPTION TWO".to_owned()),
+        ]
+    );
+}
+
+/// The cues of an SRT file: start and end in milliseconds and text,
+/// without markup.
+fn srt(file: &[u8]) -> Vec<(i64, i64, String)> {
+    let ms = |t: &str| {
+        let (hms, millis) = t.trim().split_once(',').unwrap();
+        let s = hms
+            .split(':')
+            .fold(0i64, |a, p| a * 60 + p.parse::<i64>().unwrap());
+        s * 1000 + millis.parse::<i64>().unwrap()
+    };
+    String::from_utf8_lossy(file)
+        .split("\n\n")
+        .filter_map(|block| {
+            let mut lines = block.lines().skip(1);
+            let (start, end) = lines.next()?.split_once(" --> ")?;
+            let mut text = String::new();
+            let mut markup = None;
+            for c in lines.collect::<Vec<_>>().join("\n").chars() {
+                match (markup, c) {
+                    (None, '<') => markup = Some('>'),
+                    (None, '{') => markup = Some('}'),
+                    (Some(end), c) if c == end => markup = None,
+                    (None, c) => text.push(c),
+                    (Some(_), _) => {}
+                }
+            }
+            Some((ms(start), ms(end), text.trim().to_owned()))
+        })
+        .collect()
 }

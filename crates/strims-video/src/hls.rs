@@ -1,16 +1,20 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! HLS media playlists over fMP4 segments, the muxer that cuts access
-//! units into them, and the routes that serve them.
+//! HLS playlists over fMP4 segments and their WebVTT subtitles, the
+//! muxer that cuts access units into them, and the routes that serve
+//! them.
 //!
 //! A [`Playlist`] takes finished segments from a source, each an init
-//! (`ftyp`+`moov`), its media (`moof`+`mdat`…) and its duration. It keeps
-//! the newest, serves them by number, and renders a live media playlist
-//! (RFC 8216, version 7) listing the newest of those, which ends with
-//! `EXT-X-ENDLIST` once the stream ended. Segments that slid out of the
-//! listing stay fetchable for a while, for players that read an earlier
-//! playlist.
+//! (`ftyp`+`moov`), its media (`moof`+`mdat`…), its duration, and from a
+//! muxer its subtitles. It keeps the newest, serves them by number, and
+//! renders a live media playlist (RFC 8216, version 7) listing the newest
+//! of those, which ends with `EXT-X-ENDLIST` once the stream ended, the
+//! subtitles' playlist of the same listing, and the multivariant playlist
+//! players open, of one variant
+//! ([`render_multivariant`](Playlist::render_multivariant)). Segments
+//! that slid out of the listing stay fetchable for a while, for players
+//! that read an earlier playlist.
 //!
 //! # Target duration
 //!
@@ -65,14 +69,42 @@
 //! track, and before the cut track's next unit once the fragment holds
 //! [`HlsMuxerConfig::fragment_duration`] of media.
 //!
+//! # Subtitles
+//!
+//! A stream's text tracks stay out of its inits. Their cues
+//! ([`text`](crate::text)) are the subtitles of the segments they show
+//! in: once a stream had a text track, each segment carries a WebVTT
+//! file of the cues that show from its start for its duration, each cut
+//! to the segment, so a cue across a cut is in both segments. Cues that
+//! show at once are listed as they are, and players stack them. A cue's
+//! text has `&`, `<` and `>` escaped and no blank line.
+//!
+//! A cue's times are the media's: the stream's presentation times less
+//! the init's composition delay, as its frames' are after the init's
+//! edit. Every file's `X-TIMESTAMP-MAP` maps cue time 0 to media time 0,
+//! `MPEGTS:0,LOCAL:00:00:00.000`, so a player that applies the map, one
+//! that adds `MPEGTS` alone and one that reads the times as they are all
+//! show a cue at its frames. Each cue, the header among them, ends with a
+//! blank line, so the files read as one when joined.
+//!
+//! A segment whose video carries CEA-608 captions
+//! ([`captions`](crate::captions)) says so, and the multivariant playlist
+//! declares CC1 from then on: players decode the captions from the video.
+//!
 //! # Routes
 //!
 //! [`HlsRoutes`] maps request paths to the playlists of registered
 //! profiles and their streams:
 //!
-//! - `/hls/<profile key>/<transfer id>/index.m3u8`: the playlist;
+//! - `/hls/<profile key>/<transfer id>/multivariant.m3u8`: the
+//!   multivariant playlist;
+//! - `/hls/<profile key>/<transfer id>/index.m3u8`: the media playlist;
+//! - `/hls/<profile key>/<transfer id>/subtitles.m3u8`: the subtitles'
+//!   playlist;
 //! - `/hls/<profile key>/<transfer id>/init-<id>.mp4`: an init;
-//! - `/hls/<profile key>/<transfer id>/<seq>.m4s`: a media segment.
+//! - `/hls/<profile key>/<transfer id>/<seq>.m4s`: a media segment;
+//! - `/hls/<profile key>/<transfer id>/<seq>.vtt`: a segment's subtitles,
+//!   a WebVTT file without cues for a segment that has none.
 //!
 //! Keys are 32 bytes in hex, and the playlist's URIs are relative to it.
 //! Registrations are handles, [`HlsProfile`] and [`HlsStream`], whose drop
@@ -91,13 +123,25 @@ use std::rc::{Rc, Weak};
 
 use strims_base::time::{Duration, Time};
 
+use crate::captions::NalFormat;
 use crate::fmp4::{FragmentWriter, InitError, MAX_TRACKS, Written, write_init};
 use crate::media::{AccessUnit, CodecParams, DecoderConfig, Muxer, TrackId, TrackKind};
 use crate::opus;
 use crate::silence::Silence;
+use crate::text::{CueEvent, CueReader};
 
 /// The most segments a [`Playlist`] keeps, listed or not.
 pub const MAX_SEGMENTS: usize = 256;
+
+/// The bitrate a multivariant playlist declares before any segment, in
+/// bit/s.
+pub const DEFAULT_BANDWIDTH: u64 = 1_000_000;
+
+/// A WebVTT file's header, which maps its cues' times to the media's
+/// ([module docs](self#subtitles)).
+const VTT_HEADER: &str = "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000\n\n";
+/// A WebVTT file without cues.
+const EMPTY_VTT: &str = VTT_HEADER;
 
 /// How long a [`Playlist`]'s segments last, and how many it lists and
 /// keeps.
@@ -163,10 +207,26 @@ struct Segment {
     seq: u64,
     init: u64,
     media: Rc<[u8]>,
+    /// Its subtitles, as a WebVTT file.
+    vtt: Option<Rc<[u8]>>,
     /// The duration in milliseconds, as listed.
     millis: u64,
     /// A discontinuity precedes the segment.
     discontinuity: bool,
+}
+
+/// What a multivariant playlist declares of a stream's variant, from its
+/// segments.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct Variant {
+    /// The newest segment's RFC 6381 codecs, comma-separated.
+    codecs: Option<Rc<str>>,
+    /// The newest segment's picture size.
+    resolution: Option<(u16, u16)>,
+    /// A segment had subtitles: the stream has a text track.
+    subtitles: bool,
+    /// A segment's video carried CEA-608 captions.
+    captions: bool,
 }
 
 struct Init {
@@ -203,6 +263,7 @@ pub struct Playlist {
     discontinuities: u64,
     /// The stream ended: the playlist lists `EXT-X-ENDLIST`.
     ended: bool,
+    variant: Variant,
 }
 
 impl Playlist {
@@ -225,6 +286,7 @@ impl Playlist {
             pending_discontinuity: false,
             discontinuities: 0,
             ended: false,
+            variant: Variant::default(),
         }
     }
 
@@ -247,6 +309,24 @@ impl Playlist {
     /// session's, takes the end back off, so the playlist is live again,
     /// and follows a discontinuity.
     pub fn push_segment(&mut self, init: &[u8], media: &[u8], duration: Duration) {
+        self.append(init, media, None, duration);
+    }
+
+    /// Appends a muxer's segment, as [`push_segment`](Self::push_segment)
+    /// does, with its subtitles; what it says of its codecs, picture size,
+    /// subtitles and captions is what the multivariant playlist declares
+    /// ([`render_multivariant`](Self::render_multivariant)).
+    pub fn push(&mut self, segment: &HlsSegment) {
+        let vtt = segment.vtt.as_deref().map(Rc::from);
+        self.append(&segment.init, &segment.media, vtt, segment.duration);
+        let v = &mut self.variant;
+        v.codecs = Some(Rc::clone(&segment.codecs));
+        v.resolution = segment.resolution;
+        v.subtitles |= segment.vtt.is_some();
+        v.captions |= segment.captions;
+    }
+
+    fn append(&mut self, init: &[u8], media: &[u8], vtt: Option<Rc<[u8]>>, duration: Duration) {
         if mem::take(&mut self.ended) {
             self.pending_discontinuity |= self.pushed;
         }
@@ -271,12 +351,14 @@ impl Playlist {
         if discontinuity {
             self.discontinuities = self.discontinuities.saturating_add(1);
         }
-        self.retained_bytes = self.retained_bytes.saturating_add(media.len());
+        let bytes = media.len() + vtt.as_ref().map_or(0, |v| v.len());
+        self.retained_bytes = self.retained_bytes.saturating_add(bytes);
         self.retained_millis = self.retained_millis.saturating_add(millis);
         self.segments.push_back(Segment {
             seq: self.next_seq,
             init: init_id,
             media: Rc::from(media),
+            vtt,
             millis,
             discontinuity,
         });
@@ -318,7 +400,8 @@ impl Playlist {
             let Some(dropped) = self.segments.pop_front() else {
                 break;
             };
-            self.retained_bytes = self.retained_bytes.saturating_sub(dropped.media.len());
+            let bytes = dropped.media.len() + dropped.vtt.as_ref().map_or(0, |v| v.len());
+            self.retained_bytes = self.retained_bytes.saturating_sub(bytes);
             self.retained_millis = self.retained_millis.saturating_sub(dropped.millis);
             let oldest = self.segments.front().map(|s| s.init);
             while let Some(init) = self.inits.front() {
@@ -354,6 +437,16 @@ impl Playlist {
     /// playlist lists no end; an [ended](Self::end) one ends with
     /// `EXT-X-ENDLIST`.
     pub fn render(&self) -> String {
+        self.render_listing(true)
+    }
+
+    /// The subtitles' media playlist: the media playlist's listing, each
+    /// segment's WebVTT file in place of its media and no inits.
+    pub fn render_subtitles(&self) -> String {
+        self.render_listing(false)
+    }
+
+    fn render_listing(&self, media: bool) -> String {
         let mut out = String::with_capacity(160 + 64 * self.segments.len());
         // Writing to a String can't fail.
         let _ = write!(
@@ -372,22 +465,94 @@ impl Playlist {
             if s.discontinuity {
                 out.push_str("#EXT-X-DISCONTINUITY\n");
             }
-            if init != Some(s.init) {
+            if media && init != Some(s.init) {
                 let _ = writeln!(out, "#EXT-X-MAP:URI=\"init-{}.mp4\"", s.init);
                 init = Some(s.init);
             }
             let _ = write!(
                 out,
-                "#EXTINF:{}.{:03},\n{}.m4s\n",
+                "#EXTINF:{}.{:03},\n{}.{}\n",
                 s.millis / 1000,
                 s.millis % 1000,
-                s.seq
+                s.seq,
+                if media { "m4s" } else { "vtt" }
             );
         }
         if self.ended {
             out.push_str("#EXT-X-ENDLIST\n");
         }
         out
+    }
+
+    /// The multivariant playlist of the stream: one variant, the media
+    /// playlist, of the newest segment's codecs and picture size and the
+    /// peak bitrate of the listed segments ([`DEFAULT_BANDWIDTH`] before
+    /// any). Once a segment had subtitles, it names the subtitles'
+    /// playlist as a `SUBTITLES` rendition; once a segment's video carried
+    /// CEA-608 captions, it declares CC1 as a `CLOSED-CAPTIONS` rendition.
+    /// Neither is declared default.
+    pub fn render_multivariant(&self) -> String {
+        let v = &self.variant;
+        let mut out = String::from("#EXTM3U\n#EXT-X-VERSION:7\n");
+        if v.subtitles {
+            out.push_str(
+                "#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"Subtitles\",\
+                 DEFAULT=NO,AUTOSELECT=YES,FORCED=NO,URI=\"subtitles.m3u8\"\n",
+            );
+        }
+        if v.captions {
+            out.push_str(
+                "#EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS,GROUP-ID=\"cc\",NAME=\"Captions\",\
+                 DEFAULT=NO,AUTOSELECT=YES,INSTREAM-ID=\"CC1\"\n",
+            );
+        }
+        let _ = write!(out, "#EXT-X-STREAM-INF:BANDWIDTH={}", self.peak_bandwidth());
+        if let Some(codecs) = &v.codecs {
+            let _ = write!(out, ",CODECS=\"{codecs}\"");
+        }
+        if let Some((w, h)) = v.resolution {
+            let _ = write!(out, ",RESOLUTION={w}x{h}");
+        }
+        if v.subtitles {
+            out.push_str(",SUBTITLES=\"subs\"");
+        }
+        if v.captions {
+            out.push_str(",CLOSED-CAPTIONS=\"cc\"");
+        }
+        out.push_str("\nindex.m3u8\n");
+        out
+    }
+
+    /// The highest bitrate of a listed segment, in bit/s; the default
+    /// before any.
+    fn peak_bandwidth(&self) -> u64 {
+        self.listed()
+            .filter(|s| s.millis > 0)
+            .map(|s| {
+                let bits = u64::try_from(s.media.len())
+                    .unwrap_or(u64::MAX)
+                    .saturating_mul(8000);
+                bits / s.millis
+            })
+            .max()
+            .unwrap_or(DEFAULT_BANDWIDTH)
+    }
+
+    /// A kept segment's subtitles: its WebVTT file, or one without cues
+    /// for a segment that had none.
+    pub fn vtt(&self, seq: u64) -> Option<Rc<[u8]>> {
+        let s = self.kept(seq)?;
+        Some(
+            s.vtt
+                .clone()
+                .unwrap_or_else(|| Rc::from(EMPTY_VTT.as_bytes())),
+        )
+    }
+
+    fn kept(&self, seq: u64) -> Option<&Segment> {
+        let front = self.segments.front()?;
+        let index = usize::try_from(seq.checked_sub(front.seq)?).ok()?;
+        self.segments.get(index).filter(|s| s.seq == seq)
     }
 
     /// The bytes of a kept init.
@@ -400,12 +565,7 @@ impl Playlist {
 
     /// The media of a kept segment.
     pub fn segment(&self, seq: u64) -> Option<Rc<[u8]>> {
-        let front = self.segments.front()?;
-        let index = usize::try_from(seq.checked_sub(front.seq)?).ok()?;
-        self.segments
-            .get(index)
-            .filter(|s| s.seq == seq)
-            .map(|s| Rc::clone(&s.media))
+        self.kept(seq).map(|s| Rc::clone(&s.media))
     }
 
     /// `EXT-X-TARGETDURATION`: the configured target, at least 1.
@@ -544,6 +704,15 @@ pub struct HlsSegment {
     /// A gap came before it: its timestamps don't follow on from the
     /// segment before.
     pub discontinuity: bool,
+    /// Its subtitles, the text tracks' cues that show during it, as a
+    /// WebVTT file; `None` for a stream that never had a text track.
+    pub vtt: Option<Vec<u8>>,
+    /// Its init's RFC 6381 codecs, comma-separated, video first.
+    pub codecs: Rc<str>,
+    /// Its video's picture size.
+    pub resolution: Option<(u16, u16)>,
+    /// Its video carried CEA-608 captions.
+    pub captions: bool,
 }
 
 /// What an [`HlsMuxer`] has made and dropped.
@@ -696,7 +865,22 @@ struct Open {
     /// The decode time of the first unit the writer holds; `None` while
     /// it holds none.
     fragment_start: Option<Duration>,
+    /// Its video carried captions.
+    captions: bool,
 }
+
+/// A cue a segment's subtitles may hold, on the stream's timeline.
+#[derive(Debug, Clone)]
+struct VttCue {
+    id: u64,
+    start: Duration,
+    end: Duration,
+    text: String,
+}
+
+/// The most cues an [`HlsMuxer`] holds for the segments to come; past it
+/// the oldest goes.
+const MAX_VTT_CUES: usize = 64;
 
 /// What a unit does to the segment in progress.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -717,7 +901,9 @@ enum Step {
 /// [module docs](self#segments).
 ///
 /// It is a [`Muxer`]: its output is the segments it finishes, which
-/// [`take_segment`](Self::take_segment) hands out.
+/// [`take_segment`](Self::take_segment) hands out. A text track's config
+/// and units go into the segments' subtitles
+/// ([module docs](self#subtitles)).
 ///
 /// # Bounds
 ///
@@ -725,8 +911,10 @@ enum Step {
 /// [`HlsMuxerConfig::max_segment_bytes`]: a unit that would take them past
 /// it ends the segment, and one that can't fit even alone is dropped with
 /// the units after it up to the next keyframe. It holds at most
-/// [`MAX_TRACKS`] configs and [`MAX_PENDING_SEGMENTS`] finished segments,
-/// and reuses its buffers but for each segment's media.
+/// [`MAX_TRACKS`] media and text configs, [`MAX_PENDING_SEGMENTS`]
+/// finished segments, a cue reader of its text tracks and 64 cues for the
+/// segments to come, and reuses its buffers but for each segment's media
+/// and subtitles.
 #[derive(Debug)]
 pub struct HlsMuxer {
     config: HlsMuxerConfig,
@@ -750,6 +938,20 @@ pub struct HlsMuxer {
     /// A segment was finished, so a gap after it is a discontinuity.
     finished: bool,
     out: VecDeque<HlsSegment>,
+    /// The text tracks' configs, which the init leaves out. Bound:
+    /// [`MAX_TRACKS`].
+    text: BTreeMap<TrackId, DecoderConfig>,
+    /// The stream had a text track: its segments carry subtitles.
+    subtitles: bool,
+    cues: CueReader,
+    /// Bound: `MAX_VTT_CUES`.
+    vtt_cues: VecDeque<VttCue>,
+    /// The init's codecs, picture size and composition delay, and its cut
+    /// track's NAL format, whose units may carry captions.
+    codecs: Rc<str>,
+    resolution: Option<(u16, u16)>,
+    delay: Duration,
+    nals: Option<NalFormat>,
     metrics: HlsMuxerMetrics,
 }
 
@@ -769,8 +971,83 @@ impl HlsMuxer {
             pending_discontinuity: false,
             finished: false,
             out: VecDeque::new(),
+            text: BTreeMap::new(),
+            subtitles: false,
+            cues: CueReader::new(),
+            vtt_cues: VecDeque::new(),
+            codecs: Rc::from(""),
+            resolution: None,
+            delay: Duration::ZERO,
+            nals: None,
             metrics: HlsMuxerMetrics::default(),
         }
+    }
+
+    /// Sets the text tracks to `configs`, those of another kind left out:
+    /// a track not among them goes.
+    pub fn set_text_configs(&mut self, configs: &[DecoderConfig]) {
+        self.text = configs
+            .iter()
+            .filter(|c| c.kind == TrackKind::Text)
+            .take(MAX_TRACKS)
+            .map(|c| (c.track, c.clone()))
+            .collect();
+        self.subtitles |= !self.text.is_empty();
+        let text: Vec<DecoderConfig> = self.text.values().cloned().collect();
+        self.cues.set_configs(&text);
+    }
+
+    /// Takes the cue reader's events into the cues held.
+    fn take_cues(&mut self) {
+        while let Some(e) = self.cues.poll_event() {
+            match e {
+                CueEvent::Show {
+                    id,
+                    start,
+                    end,
+                    text,
+                    ..
+                } => {
+                    if self.vtt_cues.len() >= MAX_VTT_CUES {
+                        self.vtt_cues.pop_front();
+                    }
+                    self.vtt_cues.push_back(VttCue {
+                        id,
+                        start,
+                        end,
+                        text,
+                    });
+                }
+                CueEvent::End { id, end } => {
+                    if let Some(c) = self.vtt_cues.iter_mut().find(|c| c.id == id) {
+                        c.end = end;
+                    }
+                }
+            }
+        }
+    }
+
+    /// The WebVTT file of the cues that show in a segment presented from
+    /// `start` for `duration`, the init's composition delay before the
+    /// stream's presentation times; see the
+    /// [module docs](self#subtitles).
+    fn vtt(&self, start: Duration, duration: Duration) -> Vec<u8> {
+        let from = start + self.delay;
+        let to = from + duration;
+        let mut out = String::from(VTT_HEADER);
+        for c in &self.vtt_cues {
+            let (s, e) = (c.start.max(from), c.end.min(to));
+            if e <= s {
+                continue;
+            }
+            push_vtt_time(&mut out, s - self.delay);
+            out.push_str(" --> ");
+            push_vtt_time(&mut out, e - self.delay);
+            out.push('\n');
+            push_vtt_text(&mut out, &c.text);
+            out.push_str("\n\n");
+        }
+        out.into_bytes()
     }
 
     pub fn config(&self) -> HlsMuxerConfig {
@@ -805,6 +1082,9 @@ impl HlsMuxer {
         self.changed = false;
         self.timing.clear();
         self.audio.clear();
+        self.text.clear();
+        self.cues = CueReader::new();
+        self.vtt_cues.clear();
     }
 
     /// No hole is filled from where the audio tracks' units ended so far.
@@ -935,6 +1215,12 @@ impl HlsMuxer {
             }
             self.writer.set_tracks(&configs, delay)?;
             self.init = Rc::from(&self.scratch[..]);
+            let codecs: Vec<&str> = configs.iter().map(|c| c.codec.as_str()).collect();
+            self.codecs = Rc::from(codecs.join(","));
+            let cut = configs.iter().find(|c| c.kind == TrackKind::Video);
+            self.resolution = cut.and_then(|c| c.params.picture_size());
+            self.nals = cut.and_then(|c| NalFormat::of(&c.params));
+            self.delay = delay;
             self.audio = configs
                 .iter()
                 .filter(|c| c.kind == TrackKind::Audio)
@@ -952,6 +1238,7 @@ impl HlsMuxer {
             discontinuity: mem::take(&mut self.pending_discontinuity),
             media: Vec::new(),
             fragment_start: None,
+            captions: false,
         });
         Ok(())
     }
@@ -992,12 +1279,19 @@ impl HlsMuxer {
             self.out.pop_front();
             self.metrics.dropped_segments += 1;
         }
+        let vtt = self.subtitles.then(|| self.vtt(open.start, duration));
+        let shown_to = open.start + self.delay + duration;
+        self.vtt_cues.retain(|c| c.end > shown_to);
         self.out.push_back(HlsSegment {
             init: Rc::clone(&self.init),
             media: open.media,
             duration,
             keyframe: open.keyframe,
             discontinuity: open.discontinuity,
+            vtt,
+            codecs: Rc::clone(&self.codecs),
+            resolution: self.resolution,
+            captions: open.captions,
         });
         self.metrics.segments += 1;
         self.finished = true;
@@ -1071,11 +1365,15 @@ impl HlsMuxer {
             a.last = samples;
             a.end = Some(u.dts.saturating_add(samples));
         }
+        let captions = self.nals.is_some_and(|n| {
+            self.cut_track().is_some_and(|c| c.track == u.track) && n.has_captions(u.payload)
+        });
         if let Some(open) = self.segment.as_mut() {
             // A writer of an unbounded span writes only when flushed or
             // when a track's units end at a hole.
             open.media.extend_from_slice(&self.scratch);
             open.fragment_start.get_or_insert(t);
+            open.captions |= captions;
         }
         Ok(())
     }
@@ -1144,6 +1442,20 @@ impl Muxer for HlsMuxer {
     /// can't be declared together or their init, with the longest edit
     /// lists, would be longer than [`MAX_INIT_LEN`].
     fn set_config(&mut self, config: &DecoderConfig) -> Result<(), HlsMuxerError> {
+        if config.kind == TrackKind::Text {
+            if self.text.len() >= MAX_TRACKS && !self.text.contains_key(&config.track) {
+                return Err(InitError::TooManyTracks.into());
+            }
+            let mut text: Vec<DecoderConfig> = self
+                .text
+                .values()
+                .filter(|c| c.track != config.track)
+                .cloned()
+                .collect();
+            text.push(config.clone());
+            self.set_text_configs(&text);
+            return Ok(());
+        }
         if self.configs.get(&config.track) == Some(config) {
             return Ok(());
         }
@@ -1161,7 +1473,14 @@ impl Muxer for HlsMuxer {
         Ok(())
     }
 
+    /// Takes a unit: a text track's cue goes into the subtitles of the
+    /// segments it shows in.
     fn push(&mut self, u: &AccessUnit<'_>) -> Result<(), HlsMuxerError> {
+        if self.text.contains_key(&u.track) {
+            self.cues.push(u);
+            self.take_cues();
+            return Ok(());
+        }
         let Some(timescale) = self.configs.get(&u.track).map(|c| c.timescale) else {
             return Err(HlsMuxerError::UnknownTrack(u.track.0));
         };
@@ -1249,6 +1568,39 @@ fn composition_delay(
     }
 }
 
+/// Appends `t` as a WebVTT timestamp, `hh:mm:ss.ttt`; zero when negative.
+fn push_vtt_time(out: &mut String, t: Duration) {
+    let ms = t.as_millis().max(0);
+    let _ = write!(
+        out,
+        "{:02}:{:02}:{:02}.{:03}",
+        ms / 3_600_000,
+        ms / 60_000 % 60,
+        ms / 1000 % 60,
+        ms % 1000
+    );
+}
+
+/// Appends a cue's text as WebVTT cue text: `&`, `<` and `>` escaped, and
+/// its lines without blank ones, which would end the cue.
+fn push_vtt_text(out: &mut String, text: &str) {
+    let mut first = true;
+    for line in text.lines().filter(|l| !l.trim().is_empty()) {
+        if !first {
+            out.push('\n');
+        }
+        first = false;
+        for c in line.chars() {
+            match c {
+                '&' => out.push_str("&amp;"),
+                '<' => out.push_str("&lt;"),
+                '>' => out.push_str("&gt;"),
+                c => out.push(c),
+            }
+        }
+    }
+}
+
 /// The length of profile keys and transfer ids in paths.
 pub const KEY_LEN: usize = 32;
 
@@ -1267,6 +1619,7 @@ pub const MAX_PATH_LEN: usize = 256;
 const PLAYLIST_TYPE: &str = "application/vnd.apple.mpegurl";
 const INIT_TYPE: &str = "video/mp4";
 const SEGMENT_TYPE: &str = "video/iso.segment";
+const VTT_TYPE: &str = "text/vtt";
 const ERROR_TYPE: &str = "text/plain; charset=utf-8";
 const NO_CACHE: &str = "no-cache";
 const IMMUTABLE: &str = "max-age=31536000, immutable";
@@ -1318,14 +1671,26 @@ impl HlsResponse {
     }
 }
 
-/// The path of a stream's playlist, from the root of the HLS server.
+/// The path of a stream's media playlist, from the root of the HLS
+/// server.
 pub fn playlist_path(profile_key: &[u8], transfer_id: &[u8; KEY_LEN]) -> String {
-    let mut path = String::with_capacity(16 + 2 * (profile_key.len() + KEY_LEN));
+    stream_path(profile_key, transfer_id, "index.m3u8")
+}
+
+/// The path of a stream's multivariant playlist, from the root of the HLS
+/// server: what players open.
+pub fn multivariant_path(profile_key: &[u8], transfer_id: &[u8; KEY_LEN]) -> String {
+    stream_path(profile_key, transfer_id, "multivariant.m3u8")
+}
+
+fn stream_path(profile_key: &[u8], transfer_id: &[u8; KEY_LEN], file: &str) -> String {
+    let mut path = String::with_capacity(24 + 2 * (profile_key.len() + KEY_LEN));
     path.push_str("/hls/");
     push_hex(&mut path, profile_key);
     path.push('/');
     push_hex(&mut path, transfer_id);
-    path.push_str("/index.m3u8");
+    path.push('/');
+    path.push_str(file);
     path
 }
 
@@ -1410,12 +1775,26 @@ impl HlsRoutes {
         };
         let response = {
             let playlist = stream.playlist.borrow();
+            let text = |t: String| Rc::from(t.into_bytes());
             match route.file {
+                File::Multivariant => Some(HlsResponse::ok(
+                    PLAYLIST_TYPE,
+                    NO_CACHE,
+                    text(playlist.render_multivariant()),
+                )),
                 File::Playlist => Some(HlsResponse::ok(
                     PLAYLIST_TYPE,
                     NO_CACHE,
-                    Rc::from(playlist.render().into_bytes()),
+                    text(playlist.render()),
                 )),
+                File::Subtitles => Some(HlsResponse::ok(
+                    PLAYLIST_TYPE,
+                    NO_CACHE,
+                    text(playlist.render_subtitles()),
+                )),
+                File::Vtt(seq) => playlist
+                    .vtt(seq)
+                    .map(|body| HlsResponse::ok(VTT_TYPE, IMMUTABLE, body)),
                 File::Init(id) => playlist
                     .init(id)
                     .map(|body| HlsResponse::ok(INIT_TYPE, IMMUTABLE, body)),
@@ -1562,6 +1941,16 @@ impl HlsStream {
             .push_segment(init, media, duration);
     }
 
+    /// See [`Playlist::push`].
+    pub fn push(&self, segment: &HlsSegment) {
+        self.state.playlist.borrow_mut().push(segment);
+    }
+
+    /// The number of segments the playlist lists.
+    pub fn listed_segments(&self) -> usize {
+        self.state.playlist.borrow().listed_segments()
+    }
+
     /// See [`Playlist::discontinuity`].
     pub fn discontinuity(&self) {
         self.state.playlist.borrow_mut().discontinuity();
@@ -1605,9 +1994,12 @@ impl fmt::Debug for HlsStream {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum File {
+    Multivariant,
     Playlist,
+    Subtitles,
     Init(u64),
     Segment(u64),
+    Vtt(u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1639,11 +2031,17 @@ fn parse_path(path: &str) -> Result<Route, u16> {
 }
 
 fn parse_file(name: &str) -> Result<File, u16> {
-    if name == "index.m3u8" {
-        return Ok(File::Playlist);
+    match name {
+        "multivariant.m3u8" => return Ok(File::Multivariant),
+        "index.m3u8" => return Ok(File::Playlist),
+        "subtitles.m3u8" => return Ok(File::Subtitles),
+        _ => {}
     }
     if let Some(seq) = name.strip_suffix(".m4s") {
         return parse_number(seq).map(File::Segment).ok_or(400);
+    }
+    if let Some(seq) = name.strip_suffix(".vtt") {
+        return parse_number(seq).map(File::Vtt).ok_or(400);
     }
     if let Some(id) = name
         .strip_prefix("init-")

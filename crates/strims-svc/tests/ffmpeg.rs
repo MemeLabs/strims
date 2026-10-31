@@ -449,7 +449,7 @@ impl Live {
         let path = playlist_url
             .strip_prefix(&format!("http://{hls_addr}"))
             .unwrap()
-            .to_owned();
+            .replace("multivariant.m3u8", "index.m3u8");
         let dir = path.strip_suffix("index.m3u8").unwrap().to_owned();
         Live {
             ch,

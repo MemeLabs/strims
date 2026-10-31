@@ -38,11 +38,14 @@ use strims_proto::video::v1::{
 use strims_rpc::{Router, Timer, connect};
 use strims_testworld::*;
 use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
+use strims_video::Muxer;
 use strims_video::fmp4::{media_duration, parse_init};
 use strims_video::hls::{
-    HlsMuxer, HlsMuxerConfig, HlsResponse, HlsRoutes, HlsSegment, playlist_path, target_secs,
+    HlsMuxer, HlsMuxerConfig, HlsResponse, HlsRoutes, HlsSegment, multivariant_path, playlist_path,
+    target_secs,
 };
 use strims_video::synth::script::{Script, ScriptConfig, Tag, TagKind, mux_tags};
+use strims_video::text;
 use strims_video::{
     Config, FlvSource, HlsCloseReason, HlsSettings, NoVideoHost, UnitWriter, VideoControl,
     VideoError, VideoEvent, VideoHost, bind_frontend, capture_options, check_format, units,
@@ -122,8 +125,15 @@ fn transfer_id(uri: &str) -> TransferId {
 }
 
 /// The path of a playlist URL at [`BASE`].
-fn path(url: &str) -> &str {
-    url.strip_prefix(BASE).unwrap()
+/// The media playlist's path of a stream whose multivariant playlist is
+/// at `url`.
+fn path(url: &str) -> String {
+    url.strip_prefix(BASE)
+        .unwrap()
+        .strip_suffix("multivariant.m3u8")
+        .unwrap()
+        .to_owned()
+        + "index.m3u8"
 }
 
 /// The routes' answer to a GET of `path` now.
@@ -279,6 +289,24 @@ impl Publisher {
         TransferId::new(&self.id, b"")
     }
 
+    /// Writes the cues `cues` (ms, text) of text track 3, each before the
+    /// first tag of `tags` at or after it, and the units of `tags`.
+    async fn tags_with_cues(&mut self, tags: &[Tag], cues: &[(u32, &str)]) {
+        self.units
+            .set_config(&text::config(strims_video::flv::TEXT_TRACK))
+            .unwrap();
+        let mut cues = cues.iter().peekable();
+        for tag in tags {
+            while let Some((at, t)) = cues.next_if(|(at, _)| *at <= tag.timestamp) {
+                let u = self
+                    .source
+                    .text(*at, t, strims_base::time::Time::from_unix_millis(0));
+                self.units.push(&u).unwrap();
+            }
+            self.tags(std::slice::from_ref(tag)).await;
+        }
+    }
+
     /// Writes the units of `tags`, a script's, as each tag comes, with a
     /// pause after each.
     async fn tags(&mut self, tags: &[Tag]) {
@@ -432,7 +460,7 @@ fn a_unit_format_swarm_is_served_as_hls_on_another_node() {
         assert_eq!(
             url,
             format!(
-                "{BASE}/hls/{}/{}/index.m3u8",
+                "{BASE}/hls/{}/{}/multivariant.m3u8",
                 hex::encode(key),
                 hex::encode(id.as_bytes())
             )
@@ -445,7 +473,7 @@ fn a_unit_format_swarm_is_served_as_hls_on_another_node() {
                 playlist_url: url.clone(),
             }]
         );
-        assert!(listed(&playlist(&b, &routes, path(&url))).is_empty());
+        assert!(listed(&playlist(&b, &routes, &path(&url))).is_empty());
         let info = vb.hls_streams();
         assert_eq!(info.len(), 1);
         assert_eq!((info[0].transfer_id, info[0].reading), (id, true));
@@ -457,10 +485,10 @@ fn a_unit_format_swarm_is_served_as_hls_on_another_node() {
         assert_eq!(expected.len(), 4);
         p.tags(&script.tags).await;
         wait_for(30, "every segment", || {
-            listed(&playlist(&b, &routes, path(&url))).len() == expected.len()
+            listed(&playlist(&b, &routes, &path(&url))).len() == expected.len()
         })
         .await;
-        assert_served(&b, &routes, path(&url), &expected);
+        assert_served(&b, &routes, &path(&url), &expected);
         let m = vb.metrics();
         assert_eq!(
             (m.hls_streams, m.hls_segments, m.hls_skipped_records),
@@ -506,7 +534,7 @@ fn an_hls_stream_takes_its_listings_options() {
         let half = script.tags.len() / 2;
         p.tags(&script.tags[..half]).await;
         wait_for(30, "a segment", || {
-            !listed(&playlist(&b, &routes, path(&url))).is_empty()
+            !listed(&playlist(&b, &routes, &path(&url))).is_empty()
         })
         .await;
         assert_eq!(chunks_per_signature(&vb, id), 8);
@@ -552,7 +580,7 @@ fn an_hls_stream_takes_its_listings_options() {
 
         p.tags(&script.tags[half..]).await;
         wait_for(30, "segments after the move", || {
-            listed(&playlist(&b, &routes, path(&url)))
+            listed(&playlist(&b, &routes, &path(&url)))
                 .iter()
                 .any(|s| s.discontinuity)
         })
@@ -574,7 +602,7 @@ fn a_swarm_has_one_hls_stream_under_the_configs_address() {
         set_hls(&v, true, "https://cdn.example.com/media/").await;
         let uri = swarm_uri(7);
         let t = transfer_id(&uri);
-        let p = playlist_path(&n.profile_key().public, t.as_bytes());
+        let p = multivariant_path(&n.profile_key().public, t.as_bytes());
 
         let url = v.open_hls(&uri, &[], units::MIME_TYPE).await.unwrap();
         assert_eq!(url, format!("https://cdn.example.com/media{p}"));
@@ -738,12 +766,13 @@ fn a_closed_stream_answers_404_and_releases_its_swarm() {
         assert_eq!(expected.len(), 2);
         p.tags(first).await;
         wait_for(10, "the segments", || {
-            listed(&playlist(&n, &routes, path(&url))).len() == 2
+            listed(&playlist(&n, &routes, &path(&url))).len() == 2
         })
         .await;
-        assert_served(&n, &routes, path(&url), &expected);
-        let segment = listed(&playlist(&n, &routes, path(&url))).remove(0);
-        let dir = path(&url).strip_suffix("index.m3u8").unwrap();
+        assert_served(&n, &routes, &path(&url), &expected);
+        let segment = listed(&playlist(&n, &routes, &path(&url))).remove(0);
+        let media = path(&url);
+        let dir = media.strip_suffix("index.m3u8").unwrap();
         assert_eq!(v.video_swarms()[0].streams, 1);
         let mut events = v.subscribe();
 
@@ -791,14 +820,14 @@ fn a_stream_whose_swarm_closes_opens_it_again() {
         let url = v.open_hls(&m.swarm_uri, &[], &m.mime_type).await.unwrap();
         p.send_tags(&script.tags[half..], &script).await;
         wait_for(10, "a segment", || {
-            !listed(&playlist(&n, &routes, path(&url))).is_empty()
+            !listed(&playlist(&n, &routes, &path(&url))).is_empty()
         })
         .await;
         let mut events = v.subscribe();
 
         p.unpublish().await;
         wait_for(10, "the playlist to end", || {
-            playlist(&n, &routes, path(&url)).contains("#EXT-X-ENDLIST\n")
+            playlist(&n, &routes, &path(&url)).contains("#EXT-X-ENDLIST\n")
         })
         .await;
         wait_for(10, "the swarm to open again", || {
@@ -810,7 +839,7 @@ fn a_stream_whose_swarm_closes_opens_it_again() {
         let mut p = publish(&n, &video, &key).await;
         p.send_tags(&script.tags, &script).await;
         wait_for(10, "the next session's segments", || {
-            let text = playlist(&n, &routes, path(&url));
+            let text = playlist(&n, &routes, &path(&url));
             !text.contains("ENDLIST") && listed(&text).iter().any(|s| s.discontinuity)
         })
         .await;
@@ -857,7 +886,7 @@ fn an_idle_stream_closes() {
 
         for _ in 0..4 {
             sleep_secs(45).await;
-            playlist(&n, &routes, path(&url));
+            playlist(&n, &routes, &path(&url));
         }
         assert_eq!(v.hls_streams().len(), 1);
         let last = n.timer.now();
@@ -866,7 +895,7 @@ fn an_idle_stream_closes() {
         assert_eq!(v.hls_streams().len(), 1);
         sleep_secs(16).await;
         assert!(v.hls_streams().is_empty());
-        assert_eq!(get(&n, &routes, path(&url)).status, 404);
+        assert_eq!(get(&n, &routes, &path(&url)).status, 404);
         assert_eq!(hls_events(&mut events), [closed(t, HlsCloseReason::Idle)]);
         settle().await;
         assert!(v.video_swarms().is_empty());
@@ -896,7 +925,7 @@ fn disabling_hls_closes_every_stream() {
         set_hls(&v, false, "").await;
         wait_for(10, "the streams to close", || v.hls_streams().is_empty()).await;
         for url in &urls {
-            assert_eq!(get(&n, &routes, path(url)).status, 404);
+            assert_eq!(get(&n, &routes, &path(url)).status, 404);
         }
         let mut expected = [
             closed(transfer_id(&swarm_uri(1)), HlsCloseReason::Disabled),
@@ -1048,10 +1077,10 @@ fn the_frontend_opens_and_closes_streams() {
             url,
             format!(
                 "{BASE}{}",
-                playlist_path(&n.profile_key().public, t.as_bytes())
+                multivariant_path(&n.profile_key().public, t.as_bytes())
             )
         );
-        assert_eq!(get(&n, &routes, path(&url)).status, 200);
+        assert_eq!(get(&n, &routes, &path(&url)).status, 200);
         assert_eq!(
             remote(hls.open_stream(&open("not a uri")).await),
             "invalid swarm uri: invalid uri"
@@ -1068,7 +1097,7 @@ fn the_frontend_opens_and_closes_streams() {
             transfer_id: id.to_vec(),
         };
         hls.close_stream(&close(t.as_bytes())).await.unwrap();
-        assert_eq!(get(&n, &routes, path(&url)).status, 404);
+        assert_eq!(get(&n, &routes, &path(&url)).status, 404);
         assert!(v.hls_streams().is_empty());
         let not_found = "HLS stream not found";
         assert_eq!(
@@ -1082,6 +1111,91 @@ fn the_frontend_opens_and_closes_streams() {
         let _ = server.await;
         settle().await;
         assert_eq!(v.hls_streams().len(), 1);
-        assert_eq!(get(&n, &routes, path(&url)).status, 200);
+        assert_eq!(get(&n, &routes, &path(&url)).status, 200);
+    });
+}
+
+/// A stream with a text track is served with subtitles: the multivariant
+/// playlist names the subtitles' playlist, which lists every segment's
+/// WebVTT file of the cues that show in it. The open of the new stream
+/// answers once its first segment is listed; opening it again answers at
+/// once.
+#[test]
+fn a_streams_cues_are_served_as_webvtt_subtitles() {
+    run(async {
+        let world = World::default();
+        let n = node_in(&world, 1).await;
+        let routes = HlsRoutes::new();
+        let v = start(&n, &routes, serving());
+        set_hls(&v, true, "").await;
+        let mut p = Publisher::new(&n, 7).await;
+        let script = Script::new(&ScriptConfig::default());
+        let first = tags_to(&script, 4000);
+        // The second shows across the second segment's end, cut there.
+        let cues = [(1000, "one"), (3500, "two & <three>")];
+        let uri = p.uri.clone();
+        let (url, ()) = futures_util::future::join(
+            async { v.open_hls(&uri, &[], units::MIME_TYPE).await.unwrap() },
+            p.tags_with_cues(first, &cues),
+        )
+        .await;
+        let media = path(&url);
+        assert!(
+            !listed(&playlist(&n, &routes, &media)).is_empty(),
+            "the open answered with a segment listed"
+        );
+        let dir = media.strip_suffix("index.m3u8").unwrap().to_owned();
+        let before = n.timer.now();
+        assert_eq!(
+            v.open_hls(&p.uri, &[], units::MIME_TYPE).await.unwrap(),
+            url
+        );
+        assert_eq!(n.timer.now(), before, "a served stream opens at once");
+        wait_for(10, "the segments", || {
+            listed(&playlist(&n, &routes, &media)).len() == 2
+        })
+        .await;
+        let multivariant = String::from_utf8(
+            get(&n, &routes, &format!("{dir}multivariant.m3u8"))
+                .body
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(
+            multivariant.contains("TYPE=SUBTITLES,GROUP-ID=\"subs\"")
+                && multivariant.contains(",SUBTITLES=\"subs\"")
+                && !multivariant.contains("CLOSED-CAPTIONS"),
+            "{multivariant}"
+        );
+        let subtitles = listed(&playlist(&n, &routes, &format!("{dir}subtitles.m3u8")));
+        let segments = listed(&playlist(&n, &routes, &media));
+        assert_eq!(subtitles.len(), segments.len());
+        let mut cue_lines = Vec::new();
+        for (sub, seg) in subtitles.iter().zip(&segments) {
+            assert_eq!(sub.extinf, seg.extinf);
+            assert_eq!(sub.uri, seg.uri.replace(".m4s", ".vtt"));
+            let r = get(&n, &routes, &format!("{dir}{}", sub.uri));
+            assert_eq!(r.content_type, "text/vtt");
+            let vtt = String::from_utf8(r.body.to_vec()).unwrap();
+            assert!(
+                vtt.starts_with("WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000\n\n"),
+                "{vtt}"
+            );
+            assert!(vtt.ends_with("\n\n"), "{vtt}");
+            cue_lines.extend(
+                vtt.lines()
+                    .filter(|l| !l.is_empty() && !l.starts_with("WEBVTT") && !l.starts_with("X-"))
+                    .map(str::to_owned),
+            );
+        }
+        assert_eq!(
+            cue_lines,
+            [
+                "00:00:01.000 --> 00:00:01.800",
+                "one",
+                "00:00:03.500 --> 00:00:04.000",
+                "two &amp; &lt;three&gt;",
+            ]
+        );
     });
 }

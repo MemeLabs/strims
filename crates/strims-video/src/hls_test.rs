@@ -1026,3 +1026,106 @@ fn handles_outlive_the_routes() {
     drop(stream);
     drop(other);
 }
+
+/// A muxer's segment of `media` lasting `millis`, with `vtt` and
+/// `captions`.
+fn muxed(media: &[u8], millis: i64, vtt: Option<&str>, captions: bool) -> HlsSegment {
+    HlsSegment {
+        init: Rc::from(&b"init"[..]),
+        media: media.to_vec(),
+        duration: ms(millis),
+        keyframe: true,
+        discontinuity: false,
+        vtt: vtt.map(|v| v.as_bytes().to_vec()),
+        codecs: Rc::from("avc1.64001f,mp4a.40.2"),
+        resolution: Some((1280, 720)),
+        captions,
+    }
+}
+
+#[test]
+fn the_multivariant_playlist_declares_the_variant_its_segments_describe() {
+    let mut p = Playlist::new(PlaylistConfig::default());
+    assert_eq!(
+        p.render_multivariant(),
+        "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-STREAM-INF:BANDWIDTH=1000000\nindex.m3u8\n"
+    );
+    // 250 KB over 2 s and 100 KB over 1 s: the first's 1 Mbit/s is the
+    // peak.
+    p.push(&muxed(&[0; 250_000], 2000, None, false));
+    p.push(&muxed(&[0; 100_000], 1000, None, false));
+    assert_eq!(
+        p.render_multivariant(),
+        "#EXTM3U\n#EXT-X-VERSION:7\n\
+         #EXT-X-STREAM-INF:BANDWIDTH=1000000,CODECS=\"avc1.64001f,mp4a.40.2\",RESOLUTION=1280x720\n\
+         index.m3u8\n"
+    );
+    // Subtitles and captions, once seen, stay declared.
+    p.push(&muxed(b"m", 1000, Some("WEBVTT\n"), true));
+    p.push(&muxed(b"m", 1000, Some("WEBVTT\n"), false));
+    let want = "#EXTM3U\n#EXT-X-VERSION:7\n\
+         #EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"Subtitles\",DEFAULT=NO,AUTOSELECT=YES,FORCED=NO,URI=\"subtitles.m3u8\"\n\
+         #EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS,GROUP-ID=\"cc\",NAME=\"Captions\",DEFAULT=NO,AUTOSELECT=YES,INSTREAM-ID=\"CC1\"\n\
+         #EXT-X-STREAM-INF:BANDWIDTH=1000000,CODECS=\"avc1.64001f,mp4a.40.2\",RESOLUTION=1280x720,SUBTITLES=\"subs\",CLOSED-CAPTIONS=\"cc\"\n\
+         index.m3u8\n";
+    assert_eq!(p.render_multivariant(), want);
+}
+
+#[test]
+fn the_subtitles_playlist_lists_each_segments_webvtt() {
+    let mut p = Playlist::new(config(4, 0, 0, 1 << 20));
+    p.push_segment(b"init", b"before", ms(2000));
+    p.push(&muxed(b"m", 2000, Some("WEBVTT\ncue"), false));
+    p.discontinuity();
+    p.push(&muxed(b"m", 1500, Some("WEBVTT\n"), false));
+    p.end();
+    let want = [
+        header(4, 0, 0),
+        "#EXTINF:2.000,\n0.vtt\n".to_owned(),
+        "#EXTINF:2.000,\n1.vtt\n".to_owned(),
+        "#EXT-X-DISCONTINUITY\n".to_owned(),
+        "#EXTINF:1.500,\n2.vtt\n".to_owned(),
+        "#EXT-X-ENDLIST\n".to_owned(),
+    ]
+    .concat();
+    assert_eq!(p.render_subtitles(), want);
+    assert_eq!(&*p.vtt(1).unwrap(), b"WEBVTT\ncue");
+    // A segment from before the text track has none.
+    assert_eq!(
+        &*p.vtt(0).unwrap(),
+        b"WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000\n\n"
+    );
+    assert_eq!(p.vtt(3), None);
+    assert_eq!(p.retained_bytes(), 4 + 6 + 1 + 10 + 1 + 7);
+}
+
+#[test]
+fn serves_the_multivariant_and_subtitles_playlists_and_webvtt() {
+    let (routes, _profile, stream) = served();
+    stream.push(&muxed(b"m", 2000, Some("WEBVTT\nX"), false));
+    let base = dir(&PROFILE, &TRANSFER);
+    assert_eq!(
+        multivariant_path(&PROFILE, &TRANSFER),
+        format!("{base}multivariant.m3u8")
+    );
+    for (file, kind) in [
+        ("multivariant.m3u8", "application/vnd.apple.mpegurl"),
+        ("subtitles.m3u8", "application/vnd.apple.mpegurl"),
+    ] {
+        let r = routes.get(at(1), &format!("{base}{file}"));
+        assert_eq!(
+            (r.status, r.content_type, r.cache_control),
+            (200, kind, "no-cache")
+        );
+    }
+    let r = routes.get(at(1), &format!("{base}2.vtt"));
+    assert_eq!(
+        (r.status, r.content_type, r.cache_control),
+        (200, "text/vtt", "max-age=31536000, immutable")
+    );
+    assert_eq!(&*r.body, b"WEBVTT\nX");
+    assert_eq!(routes.get(at(1), &format!("{base}9.vtt")).status, 404);
+    assert_eq!(routes.get(at(1), &format!("{base}x.vtt")).status, 400);
+    assert_eq!(routes.get(at(1), &format!("{base}.vtt")).status, 400);
+    assert_eq!(stream.listed_segments(), 3);
+}

@@ -381,6 +381,10 @@ pub struct HlsSettings {
     pub base_url: String,
     /// Streams open at once.
     pub max_streams: usize,
+    /// How long the open of a new stream waits for its first segment
+    /// before it answers: a player given the URL of an empty playlist may
+    /// give up on it.
+    pub open_wait: Duration,
     /// How long a stream lasts without a request, and how often idle
     /// streams are looked for.
     pub idle_timeout: Duration,
@@ -431,6 +435,7 @@ impl Default for HlsSettings {
             serve: false,
             base_url: String::new(),
             max_streams: 4,
+            open_wait: Duration::from_secs(6),
             idle_timeout: Duration::from_secs(60),
             sweep_interval: Duration::from_secs(10),
             reopen_interval: Duration::from_secs(1),

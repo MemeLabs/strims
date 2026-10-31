@@ -326,10 +326,14 @@ fn hls_serves_an_rtmp_stream_to_players() {
                 .await
                 .unwrap()
                 .playlist_url;
-            // http://<HLS address>/hls/<profile key>/<transfer id>/index.m3u8
-            let path = playlist_url
+            // http://<HLS address>/hls/<profile key>/<transfer id>/multivariant.m3u8,
+            // the media playlist index.m3u8 beside it
+            let media = playlist_url
                 .strip_prefix(&format!("http://{hls_addr}"))
-                .unwrap();
+                .and_then(|p| p.strip_suffix("multivariant.m3u8"))
+                .map(|dir| format!("{dir}index.m3u8"))
+                .unwrap_or_else(|| panic!("{playlist_url}"));
+            let path = media.as_str();
             let profile_dir = format!("/hls/{}/", data_encoding::HEXLOWER.encode(&alice.key));
             let transfer = path
                 .strip_prefix(&profile_dir)
