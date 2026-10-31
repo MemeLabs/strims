@@ -194,6 +194,7 @@ fn segments(tags: &[Tag]) -> Vec<HlsSegment> {
         target: target_secs(s.target_duration),
         fragment_duration: s.fragment_duration,
         max_segment_bytes: s.max_segment_bytes,
+        ..HlsMuxerConfig::default()
     });
     let mut source = FlvSource::new();
     let mut out = Vec::new();

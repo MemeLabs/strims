@@ -91,6 +91,47 @@
 //! ([`captions`](crate::captions)) says so, and the multivariant playlist
 //! declares CC1 from then on: players decode the captions from the video.
 //!
+//! # Parts
+//!
+//! With a part target ([`HlsMuxerConfig::part_target`]), each segment also
+//! comes out as parts ([`HlsPart`]) for low-latency HLS: runs of its
+//! fragments that, back to back, are its media, and whose durations add up
+//! to its own. A part lasts from its first unit to the next part's first,
+//! and ends:
+//!
+//! - with its segment;
+//! - before a unit of the cut track that comes more than the target after
+//!   the part's start: the part ends where the unit before it, the cut
+//!   track's held one, starts, so it lasts at most the target and at least
+//!   the target less a frame. Only a frame longer than the target alone
+//!   makes a longer part;
+//! - while the cut track sends nothing for two of its frames, or its
+//!   units wait for a new init, before a unit of another track that comes
+//!   more than the target after the part's start: the part ends at the
+//!   cut track's held unit when that came after the part's start, else at
+//!   another track's. So audio goes on in parts while the video stalls,
+//!   and video that comes behind its audio keeps its timeline.
+//!
+//! Every sample a part holds is timed by the unit after it: the held unit
+//! a part ends at goes into the next part, with each other track's held
+//! one. A part whose first sample of the cut track is a keyframe is
+//! independent. Keyframes end no part of their own: past
+//! [`KEYFRAME_CUT_FLOOR`] they cut the segment.
+//!
+//! A segment that ends at a gap or the stream's end has no unit after it
+//! to time its held samples, which last their own lengths: its last part
+//! ends before the cut track's held unit when that unit, lasting the
+//! longer of its track's last two steps, would take the part past the
+//! target.
+//!
+//! A frame interval over 15% of the target (under 7 frames a second at a
+//! 1 s target) makes parts shorter than 85% of it, the least RFC 8216bis
+//! allows a part that neither is independent nor ends its segment.
+//!
+//! Parts come only as units do: while none arrive, no part finishes, so a
+//! playlist goes without the new part RFC 8216bis asks for within each
+//! part target.
+//!
 //! # Routes
 //!
 //! [`HlsRoutes`] maps request paths to the playlists of registered
@@ -663,7 +704,15 @@ pub const MAX_SILENCE: Duration = Duration::from_secs(3);
 /// share of its bytes.
 pub const DEFAULT_FRAGMENT_DURATION: Duration = Duration::from_millis(100);
 
-/// How an [`HlsMuxer`] cuts segments and fragments.
+/// The shortest part target an [`HlsMuxer`] cuts parts to: a shorter
+/// [`HlsMuxerConfig::part_target`] counts as it.
+pub const MIN_PART_TARGET: Duration = Duration::from_millis(100);
+
+/// The most finished parts an [`HlsMuxer`] holds for
+/// [`HlsMuxer::take_part`]; older ones are dropped.
+pub const MAX_PENDING_PARTS: usize = 16;
+
+/// How an [`HlsMuxer`] cuts segments, fragments and parts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HlsMuxerConfig {
     /// The playlist's target duration in whole seconds
@@ -674,6 +723,9 @@ pub struct HlsMuxerConfig {
     pub fragment_duration: Duration,
     /// The most bytes of a segment's media, its held samples included.
     pub max_segment_bytes: usize,
+    /// The most media a part lasts (see [Parts](self#parts)), from
+    /// [`MIN_PART_TARGET`] to the target; zero cuts no parts.
+    pub part_target: Duration,
 }
 
 impl Default for HlsMuxerConfig {
@@ -682,7 +734,20 @@ impl Default for HlsMuxerConfig {
             target: 4,
             fragment_duration: DEFAULT_FRAGMENT_DURATION,
             max_segment_bytes: 16 << 20,
+            part_target: Duration::ZERO,
         }
+    }
+}
+
+impl HlsMuxerConfig {
+    /// The part target parts are cut to, within its bounds; `None` cuts
+    /// none.
+    fn parts(&self) -> Option<Duration> {
+        if self.part_target <= Duration::ZERO {
+            return None;
+        }
+        let most = Duration::from_secs(i64::try_from(self.target.max(1)).unwrap_or(i64::MAX));
+        Some(self.part_target.clamp(MIN_PART_TARGET, most))
     }
 }
 
@@ -713,6 +778,31 @@ pub struct HlsSegment {
     pub resolution: Option<(u16, u16)>,
     /// Its video carried CEA-608 captions.
     pub captions: bool,
+    /// When the source received its first unit (that unit's
+    /// [`published`](AccessUnit::published) time): the date of its start.
+    pub published: Time,
+}
+
+/// A part of a segment an [`HlsMuxer`] finished: the next run of the
+/// segment's fragments. See [Parts](self#parts).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HlsPart {
+    /// Its fragments: the next bytes of its segment's media. A segment's
+    /// parts, back to back, are its media.
+    pub media: Rc<[u8]>,
+    /// From its first unit to the next part's first; a segment's last
+    /// part lasts to the segment's end, so a segment's parts add up to
+    /// its duration.
+    pub duration: Duration,
+    /// Its first sample of the cut track is a keyframe.
+    pub independent: bool,
+    /// Its place in its segment, from 0.
+    pub index: u32,
+    /// Its segment's init, discontinuity and publish time, as the
+    /// segment's [`HlsSegment`] has them.
+    pub init: Rc<[u8]>,
+    pub discontinuity: bool,
+    pub published: Time,
 }
 
 /// What an [`HlsMuxer`] has made and dropped.
@@ -743,6 +833,13 @@ pub struct HlsMuxerMetrics {
     /// Holes in audio tracks left: longer than [`MAX_SILENCE`], of a
     /// track without silent frames, or without room in the segment.
     pub audio_holes: u64,
+    pub parts: u64,
+    /// Parts that last past the part target: a frame alone lasted past
+    /// it, or a segment's held samples, timed by their own lengths at a
+    /// gap or the end, ran past it.
+    pub overlong_parts: u64,
+    /// Finished parts dropped untaken.
+    pub dropped_parts: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -867,6 +964,67 @@ struct Open {
     fragment_start: Option<Duration>,
     /// Its video carried captions.
     captions: bool,
+    /// When the source received its first unit.
+    published: Time,
+    /// The part in progress, with a part target.
+    part: OpenPart,
+}
+
+/// The part in progress of a segment.
+#[derive(Debug, Clone, Copy)]
+struct OpenPart {
+    index: u32,
+    /// The time of its first unit.
+    start: Duration,
+    /// Where its bytes start in the segment's media.
+    from: usize,
+    /// The durations of the segment's parts before it.
+    before: Duration,
+    /// Whether its first unit of the cut track is a keyframe, once it
+    /// holds one.
+    first_cut: Option<bool>,
+    /// Its units of the cut track: the writer's held one it started
+    /// with, and those added since.
+    cut_units: u32,
+}
+
+impl OpenPart {
+    /// The part that starts at `start`, at byte `from` of its segment's
+    /// media, after parts lasting `before`; it starts with the writer's
+    /// held unit of the cut track, a keyframe or not, if any.
+    fn new(
+        index: u32,
+        start: Duration,
+        from: usize,
+        before: Duration,
+        held_cut: Option<bool>,
+    ) -> Self {
+        OpenPart {
+            index,
+            start,
+            from,
+            before,
+            first_cut: held_cut,
+            cut_units: u32::from(held_cut.is_some()),
+        }
+    }
+
+    /// Whether it starts at a keyframe of the cut track, `held` of its
+    /// units of the cut track staying held past its end.
+    fn independent(&self, held: u32) -> bool {
+        self.cut_units > held && self.first_cut == Some(true)
+    }
+}
+
+/// Where a part ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PartEnd {
+    /// At the held unit at this time: the timed samples are written, and
+    /// each track's last stays held.
+    Held(Duration),
+    /// Before the cut track's unit at `at`, of decode time `next`: every
+    /// held sample is written.
+    Before { next: (TrackId, i64), at: Duration },
 }
 
 /// A cue a segment's subtitles may hold, on the stream's timeline.
@@ -901,8 +1059,9 @@ enum Step {
 /// [module docs](self#segments).
 ///
 /// It is a [`Muxer`]: its output is the segments it finishes, which
-/// [`take_segment`](Self::take_segment) hands out. A text track's config
-/// and units go into the segments' subtitles
+/// [`take_segment`](Self::take_segment) hands out, and with a part target
+/// their parts, which [`take_part`](Self::take_part) hands out. A text
+/// track's config and units go into the segments' subtitles
 /// ([module docs](self#subtitles)).
 ///
 /// # Bounds
@@ -912,9 +1071,10 @@ enum Step {
 /// it ends the segment, and one that can't fit even alone is dropped with
 /// the units after it up to the next keyframe. It holds at most
 /// [`MAX_TRACKS`] media and text configs, [`MAX_PENDING_SEGMENTS`]
-/// finished segments, a cue reader of its text tracks and 64 cues for the
-/// segments to come, and reuses its buffers but for each segment's media
-/// and subtitles.
+/// finished segments, [`MAX_PENDING_PARTS`] finished parts, a cue reader
+/// of its text tracks and 64 cues for the segments to come, and reuses
+/// its buffers but for each segment's and part's media and each
+/// segment's subtitles.
 #[derive(Debug)]
 pub struct HlsMuxer {
     config: HlsMuxerConfig,
@@ -937,6 +1097,12 @@ pub struct HlsMuxer {
     pending_discontinuity: bool,
     /// A segment was finished, so a gap after it is a discontinuity.
     finished: bool,
+    /// Where the segment the last cut ended ends, so the next starts no
+    /// earlier.
+    cut_end: Option<Duration>,
+    /// The time of the cut track's unit the writer holds, and whether it
+    /// is a keyframe; `None` while it holds none.
+    held_cut: Option<(Duration, bool)>,
     out: VecDeque<HlsSegment>,
     /// The text tracks' configs, which the init leaves out. Bound:
     /// [`MAX_TRACKS`].
@@ -952,6 +1118,7 @@ pub struct HlsMuxer {
     resolution: Option<(u16, u16)>,
     delay: Duration,
     nals: Option<NalFormat>,
+    parts: VecDeque<HlsPart>,
     metrics: HlsMuxerMetrics,
 }
 
@@ -970,6 +1137,8 @@ impl HlsMuxer {
             audio: Vec::new(),
             pending_discontinuity: false,
             finished: false,
+            cut_end: None,
+            held_cut: None,
             out: VecDeque::new(),
             text: BTreeMap::new(),
             subtitles: false,
@@ -979,6 +1148,7 @@ impl HlsMuxer {
             resolution: None,
             delay: Duration::ZERO,
             nals: None,
+            parts: VecDeque::new(),
             metrics: HlsMuxerMetrics::default(),
         }
     }
@@ -1061,6 +1231,14 @@ impl HlsMuxer {
     /// The oldest finished segment not yet taken.
     pub fn take_segment(&mut self) -> Option<HlsSegment> {
         self.out.pop_front()
+    }
+
+    /// The oldest finished part not yet taken. The call that finishes a
+    /// segment finishes its last part too, so a caller that takes every
+    /// part, then every segment, after each call takes a segment's parts
+    /// before it.
+    pub fn take_part(&mut self) -> Option<HlsPart> {
+        self.parts.pop_front()
     }
 
     /// Units went missing here: ends the segment in progress, and drops
@@ -1214,6 +1392,7 @@ impl HlsMuxer {
                 return Err(HlsMuxerError::InitTooLong);
             }
             self.writer.set_tracks(&configs, delay)?;
+            self.held_cut = None;
             self.init = Rc::from(&self.scratch[..]);
             let codecs: Vec<&str> = configs.iter().map(|c| c.codec.as_str()).collect();
             self.codecs = Rc::from(codecs.join(","));
@@ -1232,13 +1411,19 @@ impl HlsMuxer {
         if !keyframe {
             self.metrics.mid_gop_segments += 1;
         }
+        // The units of a segment's tracks interleave out of time order, so
+        // its parts can end past the unit that cuts it: the next segment
+        // starts where they end.
+        let start = self.cut_end.take().filter(|end| *end > t).unwrap_or(t);
         self.segment = Some(Open {
-            start: t,
+            start,
             keyframe,
             discontinuity: mem::take(&mut self.pending_discontinuity),
             media: Vec::new(),
             fragment_start: None,
             captions: false,
+            published: u.published,
+            part: OpenPart::new(0, start, 0, Duration::ZERO, self.held_keyframe()),
         });
         Ok(())
     }
@@ -1251,16 +1436,170 @@ impl HlsMuxer {
         };
         self.scratch.clear();
         self.writer.flush(next, &mut self.scratch);
+        self.held_cut = None;
         open.media.extend_from_slice(&self.scratch);
         open.fragment_start = None;
+    }
+
+    /// Writes the fragment of the timed held samples, each track's last
+    /// staying held, the first of those at `held`.
+    fn write_timed(&mut self, held: Duration) {
+        let Some(open) = self.segment.as_mut() else {
+            return;
+        };
+        self.scratch.clear();
+        self.writer.write_timed(&mut self.scratch);
+        open.media.extend_from_slice(&self.scratch);
+        open.fragment_start = Some(held);
+    }
+
+    /// Whether the cut track's unit the writer holds is a keyframe; `None`
+    /// while it holds none.
+    fn held_keyframe(&self) -> Option<bool> {
+        self.held_cut.map(|(_, key)| key)
+    }
+
+    /// Where the part in progress ends before the unit `u` at `t`, whose
+    /// track's unit before it came at `prev`; `None` while it goes on. See
+    /// [Parts](self#parts).
+    fn part_due(&self, u: &AccessUnit<'_>, t: Duration, prev: Option<Duration>) -> Option<PartEnd> {
+        let target = self.config.parts()?;
+        let open = self.segment.as_ref()?;
+        let start = open.part.start;
+        if !self.declares(u.track) || t - start <= target {
+            return None;
+        }
+        let cut = self.cut_track()?;
+        let own = cut.track == u.track;
+        // The cut track is late while it sends nothing, or while its units
+        // wait for a new init.
+        if !own && !self.cut_track_late(t) && self.declares(cut.track) {
+            return None;
+        }
+        // The held units the part can end at: the cut track's, then the
+        // unit's own track's, then the latest of the others'.
+        let others = self
+            .timing
+            .iter()
+            .filter(|x| x.track != cut.track && x.track != u.track)
+            .map(|x| x.last)
+            .max();
+        let held = [
+            self.held_cut.map(|(at, _)| at),
+            prev.filter(|_| !own),
+            others,
+        ];
+        if let Some(at) = held.into_iter().flatten().find(|at| *at > start) {
+            return Some(PartEnd::Held(at));
+        }
+        let holds = open.media.len() > open.part.from || open.fragment_start.is_some();
+        (own && holds).then_some(PartEnd::Before {
+            next: (u.track, u.dts),
+            at: t,
+        })
+    }
+
+    /// Ends the part in progress at `end`, and starts the next there.
+    fn end_part(&mut self, end: PartEnd) {
+        let (at, held) = match end {
+            PartEnd::Held(at) => {
+                self.write_timed(at);
+                (at, u32::from(self.held_cut.is_some()))
+            }
+            PartEnd::Before { next, at } => {
+                self.flush_fragment(Some(next));
+                (at, 0)
+            }
+        };
+        let held_keyframe = self.held_keyframe();
+        let Some(open) = self.segment.as_mut() else {
+            return;
+        };
+        let p = open.part;
+        let Some(media) = open.media.get(p.from..).filter(|m| !m.is_empty()) else {
+            return;
+        };
+        let duration = (at - p.start).max(Duration::ZERO);
+        let part = HlsPart {
+            media: Rc::from(media),
+            duration,
+            independent: p.independent(held),
+            index: p.index,
+            init: Rc::clone(&self.init),
+            discontinuity: open.discontinuity,
+            published: open.published,
+        };
+        open.part = OpenPart::new(
+            p.index.saturating_add(1),
+            at,
+            open.media.len(),
+            p.before + duration,
+            held_keyframe,
+        );
+        self.emit_part(part);
+    }
+
+    /// Ends the part in progress at the cut track's held unit when that
+    /// unit, lasting the longer of its track's last two steps, would take
+    /// the part past the target: the samples of a segment that ends with
+    /// no unit after it are timed by their own lengths.
+    fn end_part_before_held(&mut self) {
+        let (Some(target), Some(open), Some((at, _))) =
+            (self.config.parts(), self.segment.as_ref(), self.held_cut)
+        else {
+            return;
+        };
+        let step = self
+            .cut_track()
+            .and_then(|c| self.timing(c.track))
+            .map_or(Duration::ZERO, Timing::longest_step);
+        if at > open.part.start && at + step - open.part.start > target {
+            self.end_part(PartEnd::Held(at));
+        }
+    }
+
+    /// Hands out the last part of the finished segment `open`, which
+    /// lasts `duration`: returns the segment's duration, its parts' sum.
+    fn end_last_part(&mut self, open: &Open, duration: Duration) -> Duration {
+        let p = open.part;
+        let Some(media) = open.media.get(p.from..).filter(|m| !m.is_empty()) else {
+            return p.before;
+        };
+        let last = (duration - p.before).max(Duration::ZERO);
+        self.emit_part(HlsPart {
+            media: Rc::from(media),
+            duration: last,
+            independent: p.independent(0),
+            index: p.index,
+            init: Rc::clone(&self.init),
+            discontinuity: open.discontinuity,
+            published: open.published,
+        });
+        p.before + last
+    }
+
+    fn emit_part(&mut self, part: HlsPart) {
+        if self.config.parts().is_some_and(|t| part.duration > t) {
+            self.metrics.overlong_parts += 1;
+        }
+        if self.parts.len() >= MAX_PENDING_PARTS {
+            self.parts.pop_front();
+            self.metrics.dropped_parts += 1;
+        }
+        self.parts.push_back(part);
+        self.metrics.parts += 1;
     }
 
     /// Ends the segment in progress: its last fragment's samples timed by
     /// `next`, and lasting to `end` (or its samples' time without one).
     /// A segment holding nothing passes its discontinuity on.
     fn end(&mut self, next: Option<(TrackId, i64)>, end: Option<Duration>) {
+        if end.is_none() {
+            self.end_part_before_held();
+        }
         self.flush_fragment(next);
         let written = self.writer.take_written();
+        self.cut_end = None;
         let Some(open) = self.segment.take() else {
             return;
         };
@@ -1268,10 +1607,16 @@ impl HlsMuxer {
             self.pending_discontinuity |= open.discontinuity;
             return;
         }
-        let duration = match end {
+        let mut duration = match end {
             Some(end) => end - open.start,
             None => samples_time(&written),
         };
+        if self.config.parts().is_some() {
+            duration = self.end_last_part(&open, duration);
+        }
+        if end.is_some() {
+            self.cut_end = Some(open.start + duration);
+        }
         if !fits_target(duration, self.config.target) {
             self.metrics.overlong_segments += 1;
         }
@@ -1292,6 +1637,7 @@ impl HlsMuxer {
             codecs: Rc::clone(&self.codecs),
             resolution: self.resolution,
             captions: open.captions,
+            published: open.published,
         });
         self.metrics.segments += 1;
         self.finished = true;
@@ -1368,12 +1714,20 @@ impl HlsMuxer {
         let captions = self.nals.is_some_and(|n| {
             self.cut_track().is_some_and(|c| c.track == u.track) && n.has_captions(u.payload)
         });
+        let cut = self.cut_track().is_some_and(|c| c.track == u.track);
+        if cut {
+            self.held_cut = Some((t, u.keyframe));
+        }
         if let Some(open) = self.segment.as_mut() {
             // A writer of an unbounded span writes only when flushed or
             // when a track's units end at a hole.
             open.media.extend_from_slice(&self.scratch);
             open.fragment_start.get_or_insert(t);
             open.captions |= captions;
+            if cut {
+                open.part.first_cut.get_or_insert(u.keyframe);
+                open.part.cut_units = open.part.cut_units.saturating_add(1);
+            }
         }
         Ok(())
     }
@@ -1485,7 +1839,11 @@ impl Muxer for HlsMuxer {
             return Err(HlsMuxerError::UnknownTrack(u.track.0));
         };
         let t = media_time(u.dts, timescale);
+        let prev = self.timing(u.track).map(|x| x.last);
         let step = self.note(u.track, t);
+        if let Some(end) = self.part_due(u, t, prev) {
+            self.end_part(end);
+        }
         match self.step_of(u, t, step) {
             Step::Drop => {
                 self.metrics.dropped_awaiting_keyframe += 1;
@@ -2091,3 +2449,7 @@ mod tests;
 #[cfg(test)]
 #[path = "hls_muxer_test.rs"]
 mod muxer_tests;
+
+#[cfg(test)]
+#[path = "hls_parts_test.rs"]
+mod parts_tests;

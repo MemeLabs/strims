@@ -1040,6 +1040,7 @@ fn muxed(media: &[u8], millis: i64, vtt: Option<&str>, captions: bool) -> HlsSeg
         codecs: Rc::from("avc1.64001f,mp4a.40.2"),
         resolution: Some((1280, 720)),
         captions,
+        published: Time::from_unix_millis(1_793_275_200_000),
     }
 }
 

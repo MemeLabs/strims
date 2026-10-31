@@ -80,6 +80,7 @@ fn script_segments(script: &Script) -> (Vec<u8>, Vec<Vec<u8>>) {
         target: target_secs(s.target_duration),
         fragment_duration: s.fragment_duration,
         max_segment_bytes: s.max_segment_bytes,
+        ..HlsMuxerConfig::default()
     });
     let mut source = FlvSource::new();
     let (mut init, mut media) = (Vec::new(), Vec::new());

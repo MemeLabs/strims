@@ -447,9 +447,11 @@ impl FragmentWriter {
             .any(|t| t.timed() > 0 && units_to_duration(t.timed_units, t.timescale) >= self.span)
     }
 
-    /// Appends the fragment of the timed samples, keeping each track's
-    /// last.
-    fn write_timed(&mut self, out: &mut Vec<u8>) -> usize {
+    /// Appends the fragment of the timed samples, each track's last
+    /// staying held, and goes on with the run: each track's next fragment
+    /// follows on from this one. Returns its bytes, 0 when no sample is
+    /// timed.
+    pub(crate) fn write_timed(&mut self, out: &mut Vec<u8>) -> usize {
         self.write(out, |_| false)
     }
 

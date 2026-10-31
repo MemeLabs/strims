@@ -290,6 +290,7 @@ impl UnitFeed {
             target: target_secs(settings.target_duration),
             fragment_duration: settings.fragment_duration,
             max_segment_bytes: settings.max_segment_bytes,
+            ..HlsMuxerConfig::default()
         })
     }
 
