@@ -98,6 +98,16 @@
 //! rendition carry the track; the transcode doesn't take it. A cue the
 //! writer refuses is dropped, and cues don't keep a session from idling.
 //!
+//! What a publisher sends decides what arrives. With ffmpeg, an input's
+//! subtitle streams (SRT, ASS, mov_text) reach the ingress only when one
+//! is mapped and encoded as text (`-map 0:v -map 0:a -map 0:s:0 -c:s
+//! text`), each cue then an `onTextData` without its styling or end time.
+//! CEA-608 captions in the video arrive only when the publisher's encoder
+//! keeps them: libx264 by default at an unchanged frame rate, libx265 with
+//! `-a53cc 1`; a frame-rate change in the publisher's ffmpeg garbles or
+//! drops them, while the session's renditions keep them at any rate.
+//! ffmpeg turns neither into the other.
+//!
 //! The swarm's signing, its unit size and interval ([`UnitSigning`]), is
 //! the stream's, so the session creates the swarm once it knows enough of
 //! the stream:

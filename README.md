@@ -118,6 +118,19 @@ deployment tooling, which is written in Go.
 This stream is looped back through the headless service's frontend api. Continue
 to connect a remote peer and watch the stream via p2p.
 
+### subtitles and captions
+
+- **Subtitles.** ffmpeg leaves an input's subtitle streams (SRT, ASS,
+  mov_text) out of FLV and RTMP output unless you map one and encode it as
+  text: `-map 0:v -map 0:a -map 0:s:0 -c:s text`. Each cue then arrives as
+  `onTextData`, without its styling or end time; the node estimates how long
+  it shows.
+- **Closed captions** (CEA-608 in the video) reach the node only if your
+  encoder keeps them: libx264 does by default at an unchanged frame rate,
+  libx265 only with `-a53cc 1`. Changing the frame rate in your ffmpeg
+  garbles or drops them. The node's own renditions keep them at any rate.
+- ffmpeg doesn't turn captions into `onTextData` subtitles, or the reverse.
+
 ## connecting remote peers
 
 1. In the web ui while logged into your headless service open the networks
