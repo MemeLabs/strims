@@ -19,7 +19,9 @@
 //! - [`WasmSpawn`] runs the app's tasks on the worker's executor
 //!   ([`crate::runtime`]).
 //! - [`WasmFactory`] is the [`SessionFactory`] that runs a signed-in
-//!   profile on a `WasmPlatform`, one profile per worker.
+//!   profile on a `WasmPlatform`, one profile per worker. While the
+//!   profile runs, the window's feeds port, if it passed one, serves
+//!   players its streams ([`crate::feed`]).
 
 use std::future::{Future, ready};
 use std::rc::Rc;
@@ -41,6 +43,7 @@ use strims_video::hls::HlsRoutes;
 use web_sys::MessagePort;
 
 use crate::clock::WasmClock;
+use crate::feed::{self, FeedServer};
 use crate::fetch::BrowserFetch;
 use crate::options::Options;
 use crate::psi::WorkerPsi;
@@ -49,6 +52,20 @@ use crate::runtime;
 /// A running profile on a [`WasmPlatform`]: its node and the controls its
 /// frontends serve. Dropping it stops the controls' tasks and the node.
 pub type WasmRuntime<K> = ProfileRuntime<K, WasmClock, NoVideoHost, WasmSpawn>;
+
+/// A running profile and the feeds server on the window's feeds port.
+/// Dropping it closes the feeds, then stops the profile.
+pub struct WasmProfile<K: Kv> {
+    _feeds: Option<FeedServer>,
+    runtime: WasmRuntime<K>,
+}
+
+impl<K: Kv> WasmProfile<K> {
+    /// The profile's node and controls.
+    pub fn runtime(&self) -> &WasmRuntime<K> {
+        &self.runtime
+    }
+}
 
 /// Runs the app's tasks as local tasks on the worker ([`runtime::spawn`]).
 #[derive(Clone, Copy, Debug, Default)]
@@ -79,19 +96,28 @@ pub struct WasmPlatform {
     /// The engine on the port to the PSI worker, if the window started
     /// one. Every profile's sessions share it.
     psi: Option<WorkerPsi>,
+    /// The window's feeds port, which the running profile serves.
+    feeds: Option<MessagePort>,
 }
 
 impl WasmPlatform {
     /// A platform of nodes configured by `options`, signalling WebRTC
-    /// with the window over `signal`, and computing PSI in the PSI worker
-    /// at the other end of `psi`, if there is one.
-    pub fn new(options: &Options, signal: MessagePort, psi: Option<MessagePort>) -> WasmPlatform {
+    /// with the window over `signal`, computing PSI in the PSI worker at
+    /// the other end of `psi`, if there is one, and feeding players on
+    /// `feeds`, if the window passed it.
+    pub fn new(
+        options: &Options,
+        signal: MessagePort,
+        psi: Option<MessagePort>,
+        feeds: Option<MessagePort>,
+    ) -> WasmPlatform {
         WasmPlatform {
             allow_insecure_ws: options.allow_insecure_ws,
             ice_servers: options.ice_servers.clone(),
             signal,
             hls: HlsRoutes::new(),
             psi: psi.map(WorkerPsi::new),
+            feeds,
         }
     }
 }
@@ -168,8 +194,9 @@ impl AppPlatform for WasmPlatform {
 }
 
 /// The [`SessionFactory`] that runs a signed-in profile's node and
-/// services on a [`WasmPlatform`] ([`ProfileSlot::start`]). A worker runs
-/// one profile's node at a time, since the nodes share the signal port:
+/// services on a [`WasmPlatform`] ([`ProfileSlot::start`]), and serves the
+/// window's feeds from its streams ([`feed::serve`]). A worker runs one
+/// profile's node at a time, since the nodes share the signal port:
 /// starting another profile's session fails with
 /// [`StartError::ProfileRunning`].
 pub struct WasmFactory {
@@ -179,11 +206,17 @@ pub struct WasmFactory {
 
 impl WasmFactory {
     /// A factory of nodes configured by `options`, signalling WebRTC with
-    /// the window over `signal`, and computing PSI in the PSI worker at
-    /// the other end of `psi`, if there is one ([`WasmPlatform::new`]).
-    pub fn new(options: &Options, signal: MessagePort, psi: Option<MessagePort>) -> WasmFactory {
+    /// the window over `signal`, computing PSI in the PSI worker at the
+    /// other end of `psi`, if there is one, and feeding players on
+    /// `feeds`, if the window passed it ([`WasmPlatform::new`]).
+    pub fn new(
+        options: &Options,
+        signal: MessagePort,
+        psi: Option<MessagePort>,
+        feeds: Option<MessagePort>,
+    ) -> WasmFactory {
         WasmFactory {
-            platform: WasmPlatform::new(options, signal, psi),
+            platform: WasmPlatform::new(options, signal, psi, feeds),
             slot: ProfileSlot::new(),
         }
     }
@@ -200,14 +233,23 @@ impl WasmFactory {
 }
 
 impl<K: Kv> SessionFactory<K> for WasmFactory {
-    type Runtime = WasmRuntime<K>;
+    type Runtime = WasmProfile<K>;
     type Error = StartError;
 
-    async fn start(&self, session: &Rc<Session<K>>) -> Result<WasmRuntime<K>, StartError> {
-        self.slot.start(&self.platform, session).await
+    async fn start(&self, session: &Rc<Session<K>>) -> Result<WasmProfile<K>, StartError> {
+        let runtime = self.slot.start(&self.platform, session).await?;
+        let feeds = self
+            .platform
+            .feeds
+            .as_ref()
+            .map(|port| feed::serve(runtime.video().clone(), port.clone()));
+        Ok(WasmProfile {
+            _feeds: feeds,
+            runtime,
+        })
     }
 
-    fn bind(&self, runtime: &WasmRuntime<K>, session: &Rc<Session<K>>, router: &Router) {
-        bind_profile(runtime, session, router);
+    fn bind(&self, profile: &WasmProfile<K>, session: &Rc<Session<K>>, router: &Router) {
+        bind_profile(&profile.runtime, session, router);
     }
 }

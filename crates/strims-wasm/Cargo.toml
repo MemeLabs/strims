@@ -108,6 +108,8 @@ web-sys = { version = "=0.3.106", features = [
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 strims-crypto.workspace = true
 strims-kv = { workspace = true, features = ["conformance"] }
+# the feed test's capture media
+strims-video = { workspace = true, features = ["test-support"] }
 wasm-bindgen-test = "=0.3.79"
 
 # The browser harness (`tests/support`) and the `--ignored` browser tests,

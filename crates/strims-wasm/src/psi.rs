@@ -503,12 +503,12 @@ mod tests {
 
         let (client, server) = channel();
         serve(&server);
-        let platform = WasmPlatform::new(&Options::default(), signal(), Some(client));
+        let platform = WasmPlatform::new(&Options::default(), signal(), Some(client), None);
         let mut pair = Pair::start(&*platform.psi(), &*platform.psi(), keys());
         assert_eq!(pair.finish().await, inline);
         assert!(pair.notified.get() > 0, "the sessions never answered later");
 
-        let platform = WasmPlatform::new(&Options::default(), signal(), None);
+        let platform = WasmPlatform::new(&Options::default(), signal(), None, None);
         let mut pair = Pair::start(&*platform.psi(), &*platform.psi(), keys());
         assert_eq!(pair.finish().await, inline);
         assert_eq!(

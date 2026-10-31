@@ -334,6 +334,12 @@ impl<K: Kv, T: Timer, V: VideoHost, S: Spawn> ProfileRuntime<K, T, V, S> {
     pub fn node(&self) -> &Node {
         &self.node
     }
+
+    /// The profile's video control, which its frontends serve. A driver
+    /// that feeds players on channels of its own reads streams through it.
+    pub fn video(&self) -> &VideoControl<K, NodeHost, V, T> {
+        &self.video
+    }
 }
 
 impl<K: Kv, T: Timer, V: VideoHost, S: Spawn> Drop for ProfileRuntime<K, T, V, S> {

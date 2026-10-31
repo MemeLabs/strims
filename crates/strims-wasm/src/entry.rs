@@ -4,7 +4,7 @@
 //! The worker's entry point.
 //!
 //! The worker script runs `await init(); start(options, frontend, signal,
-//! psi)` with the ports the window transferred to it. Ports buffer their
+//! psi, feeds)` with the ports the window transferred to it. Ports buffer their
 //! messages until a handler is attached, so nothing sent before `start` is
 //! lost. A `start` that throws is reported to the window as `fatal` by the
 //! worker script.
@@ -44,14 +44,18 @@ pub type WasmManager = Manager<IdbKv, WasmFactory, WasmClock>;
 /// `signal` the WebRTC signalling with the window. `psi` is the port to
 /// the PSI worker, where the profiles' PSI sessions compute
 /// ([`crate::psi`]); without one (`undefined` or `null`) they compute in
-/// this worker. With the `e2e` feature, `options.e2e: true` hands
-/// `frontend` and `signal` to the browser link tests' bare node instead.
+/// this worker. `feeds` is the port players' feeds open on
+/// ([`crate::feed`]), served while a profile runs; without one, players
+/// read streams over the frontend RPC. With the `e2e` feature,
+/// `options.e2e: true` hands `frontend` and `signal` to the browser link
+/// tests' bare node instead.
 #[wasm_bindgen]
 pub fn start(
     options: JsValue,
     frontend: MessagePort,
     signal: MessagePort,
     psi: Option<MessagePort>,
+    feeds: Option<MessagePort>,
 ) -> Result<(), JsValue> {
     let (parsed, ignored) = Options::parse(&options);
     crate::log::init(parsed.log_level);
@@ -70,7 +74,7 @@ pub fn start(
         .map_err(|e| js_sys::Error::new(&format!("drawing a seed from entropy: {e}")))?;
     let manager = Rc::new(WasmManager::new(
         IdbKv::new(""),
-        WasmFactory::new(&parsed, signal, psi),
+        WasmFactory::new(&parsed, signal, psi, feeds),
         WasmClock,
         DEVICE_OS,
         DetRng::from_seed(seed),

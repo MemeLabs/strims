@@ -6,8 +6,8 @@
 //! The crate builds for `wasm32-unknown-unknown` and is empty on every
 //! other target. `wasm-bindgen --target web` turns it into an ES module
 //! that a module worker loads; the window starts the worker and hands it
-//! the frontend RPC port, the signalling port and the port to the PSI
-//! worker ([`entry::start`]). The PSI worker loads the same module and
+//! the frontend RPC port, the signalling port, the port to the PSI
+//! worker and the port players' feeds open on ([`entry::start`]). The PSI worker loads the same module and
 //! runs [`psi::start_psi`].
 //!
 //! # The worker contract
@@ -49,6 +49,8 @@
 //! - [`factory`]: the app layer on the browser driver: the platform and
 //!   session factory a profile runs on.
 //! - [`frontend`]: the UI's frontend RPC connection over a message port.
+//! - [`feed`]: players' feeds, a stream's records straight from the
+//!   swarm to a player worker over a port of its own.
 //! - [`options`]: the options the window starts the worker with.
 //! - [`psi`]: the PSI worker ([`psi::start_psi`]), and the node's engine
 //!   on it.
@@ -65,6 +67,7 @@ pub mod e2e;
 pub mod entropy;
 pub mod entry;
 pub mod factory;
+pub mod feed;
 pub mod fetch;
 pub mod frontend;
 mod idb;
