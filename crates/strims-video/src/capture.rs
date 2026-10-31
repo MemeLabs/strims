@@ -72,8 +72,8 @@
 //! unit is signed its signing's interval after its first byte
 //! ([`UnitSigning::timer`]): the writer ends its frame, the swarm writer
 //! is flushed, which pads the chunk in progress with zeros and leaves the
-//! unit's later chunks data-less (zeros no peer sends), all read as
-//! padding frames, and the writer goes on where the next unit starts. A
+//! unit's later chunks data-less, zeros no peer sends that read as padding
+//! frames, and the writer goes on where the next unit starts. A
 //! swarm write that fails ends the capture's writing: every later append
 //! fails with [`VideoError::StreamWrite`].
 //!

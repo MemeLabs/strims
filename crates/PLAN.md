@@ -68,11 +68,11 @@ read it.
     latency under `VideoTrackGenerator`.
   - `VideoControls`' `remoteButtons` slot holds the rendition menu too;
     name it for what it holds.
-- **Signing.** A unit signed early sends only its chunk in progress, so
-  8-chunk units at short intervals pad no more than 1-chunk ones:
-  re-choose `UnitSigning`'s intervals and `SMALL_BELOW_BPS` (the `sign`
-  tier with u1 and u8 at t100-t300, on both sides of 750 kbit/s; only 1-
-  and 8-chunk units).
+- **Signing.** A unit signed early sends no padding, so its interval
+  trades only signatures a second against sign waits: re-choose
+  `UnitSigning`'s intervals and `SMALL_BELOW_BPS` (the `sign` tier with u1
+  and u8 at t100-t300, on both sides of 750 kbit/s; only 1- and 8-chunk
+  units).
 - **Capture.** Turning the iPhone during a capture, and screen capture on
   real devices, are untested; a capture started upside down
   (landscape-secondary) isn't caught by the aspect check.

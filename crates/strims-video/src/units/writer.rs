@@ -563,8 +563,8 @@ fn rescale(t: i64, from: u32, to: u32) -> i64 {
 ///
 /// A swarm signs a unit when it fills, so a stream at a bitrate below
 /// `unit_bytes / interval` has its partial unit signed at the interval: its
-/// chunk in progress padded with zeros, which are sent, and its later
-/// chunks data-less, which no peer sends.
+/// chunk in progress goes as the bytes written, and its later chunks are
+/// data-less, which no peer sends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SignTimer {
     unit: u64,
