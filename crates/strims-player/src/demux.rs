@@ -9,6 +9,7 @@ use std::ops::Range;
 
 use strims_base::time::{Duration, Time};
 use strims_video::fmp4::MAX_TRACKS;
+use strims_video::text::{CueEvent, CueKind, CueReader, CueReaderMetrics};
 use strims_video::units::{MAX_RECORD_LEN, ReaderEvent, UnitReader, UnitReaderMetrics};
 use strims_video::{AccessUnit, CodecParams, DecoderConfig, TrackId, TrackKind};
 
@@ -73,6 +74,24 @@ pub enum DemuxOutput<'a> {
     /// it are a later session's, which follows the output so far whatever
     /// its timestamps, with a [`Restart`](Self::Restart) before its first.
     End,
+    /// A cue shows from `start` to `end` on the output timeline, as the
+    /// units' presentation times are, unless a [`CueEnd`](Self::CueEnd)
+    /// of it comes first: a text track's subtitle or a caption of the
+    /// video ([`strims_video::text`]).
+    Cue {
+        /// Unique among the demuxer's cues.
+        id: u64,
+        kind: CueKind,
+        start: Duration,
+        end: Duration,
+        /// Lines joined by LF.
+        text: &'a str,
+    },
+    /// Cue `id` ends at `end`, sooner than it said.
+    CueEnd {
+        id: u64,
+        end: Duration,
+    },
 }
 
 /// What a [`Demuxer`] has read and dropped.
@@ -98,6 +117,7 @@ pub struct DemuxerMetrics {
     /// Ends output: END records and [`Demuxer::finish`].
     pub ends: u64,
     pub reader: UnitReaderMetrics,
+    pub cues: CueReaderMetrics,
 }
 
 /// An output waiting to be taken; a unit's payload is a range of the
@@ -125,6 +145,17 @@ enum Queued {
         offset: Duration,
     },
     End,
+    Cue {
+        id: u64,
+        kind: CueKind,
+        start: Duration,
+        end: Duration,
+        text: String,
+    },
+    CueEnd {
+        id: u64,
+        end: Duration,
+    },
 }
 
 /// A track's place on the output timeline.
@@ -193,6 +224,7 @@ pub struct Demuxer {
     taken: Option<Queued>,
     /// The queued units' payloads.
     bytes: Vec<u8>,
+    cues: CueReader,
     metrics: DemuxerMetrics,
 }
 
@@ -216,6 +248,7 @@ impl Demuxer {
             queue: VecDeque::new(),
             taken: None,
             bytes: Vec::new(),
+            cues: CueReader::new(),
             metrics: DemuxerMetrics::default(),
         }
     }
@@ -223,6 +256,7 @@ impl Demuxer {
     pub fn metrics(&self) -> DemuxerMetrics {
         DemuxerMetrics {
             reader: self.reader.metrics(),
+            cues: self.cues.metrics(),
             ..self.metrics
         }
     }
@@ -281,6 +315,7 @@ impl Demuxer {
         self.record.clear();
         self.oversize = false;
         self.reader.lost();
+        self.cues.reset();
         self.metrics.discontinuities += 1;
         self.queue.push_back(Queued::Discontinuity);
     }
@@ -329,6 +364,20 @@ impl Demuxer {
             Queued::Discontinuity => DemuxOutput::Discontinuity,
             Queued::Restart { offset } => DemuxOutput::Restart { offset: *offset },
             Queued::End => DemuxOutput::End,
+            Queued::Cue {
+                id,
+                kind,
+                start,
+                end,
+                text,
+            } => DemuxOutput::Cue {
+                id: *id,
+                kind: *kind,
+                start: *start,
+                end: *end,
+                text,
+            },
+            Queued::CueEnd { id, end } => DemuxOutput::CueEnd { id: *id, end: *end },
         })
     }
 
@@ -349,6 +398,7 @@ impl Demuxer {
                     self.configs_changed = true;
                     self.queue
                         .push_back(Queued::Configs(self.reader.configs().to_vec()));
+                    self.cue_configs();
                 }
                 ReaderEvent::Gap { track, missing } => {
                     let kind = self
@@ -363,12 +413,48 @@ impl Demuxer {
                         missing,
                     });
                 }
-                ReaderEvent::TextConfigs => {}
+                ReaderEvent::TextConfigs => self.cue_configs(),
                 ReaderEvent::End => self.end(),
             }
         }
         if let Some(unit) = unit {
             self.unit(&unit);
+            // After the unit: a restart it starts moves its cues too.
+            self.cues.push(&unit);
+            self.take_cues();
+        }
+    }
+
+    /// The cue reader reads the reader's tracks, text and media.
+    fn cue_configs(&mut self) {
+        let mut configs = self.reader.configs().to_vec();
+        configs.extend_from_slice(self.reader.text_configs());
+        self.cues.set_configs(&configs);
+    }
+
+    /// Queues the cue reader's events, on the output timeline.
+    fn take_cues(&mut self) {
+        let offset = self.offset;
+        while let Some(e) = self.cues.poll_event() {
+            self.queue.push_back(match e {
+                CueEvent::Show {
+                    id,
+                    kind,
+                    start,
+                    end,
+                    text,
+                } => Queued::Cue {
+                    id,
+                    kind,
+                    start: start + offset,
+                    end: end + offset,
+                    text,
+                },
+                CueEvent::End { id, end } => Queued::CueEnd {
+                    id,
+                    end: end + offset,
+                },
+            });
         }
     }
 
@@ -381,6 +467,7 @@ impl Demuxer {
             self.queue.push_back(Queued::End);
         }
         self.after_end = !self.outs.is_empty();
+        self.cues.reset();
     }
 
     fn unit(&mut self, unit: &AccessUnit<'_>) {
@@ -418,6 +505,7 @@ impl Demuxer {
                 o.last_dts = None;
             }
             self.metrics.restarts += 1;
+            self.cues.reset();
             self.queue.push_back(Queued::Restart {
                 offset: self.offset,
             });

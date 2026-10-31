@@ -27,10 +27,25 @@ const FRAME: usize = 4096;
 
 /// The unit-format records of a writer session of `config`'s script.
 fn records(config: &ScriptConfig) -> Vec<Vec<u8>> {
+    records_with_cues(config, &[])
+}
+
+/// The unit-format records of a writer session of `config`'s script, with
+/// `cues` (tag time, text) of its source's text track, each sent before
+/// the first tag at or after it.
+fn records_with_cues(config: &ScriptConfig, cues: &[(u32, &str)]) -> Vec<Vec<u8>> {
     let mut source = FlvSource::new();
     let mut w = UnitWriter::new(FRAME).unwrap();
+    let mut cues = cues.iter().peekable();
+    if cues.peek().is_some() {
+        w.set_config(&source.text_config().unwrap()).unwrap();
+    }
     for tag in &Script::new(config).tags {
         let at = Time::from_unix_millis(1_793_275_200_000 + i64::from(tag.timestamp));
+        while let Some((ms, text)) = cues.next_if(|(ms, _)| *ms <= tag.timestamp) {
+            let u = source.text(*ms, text, at);
+            w.push(&u).unwrap();
+        }
         let event = match tag.kind {
             TagKind::Video => source.video(tag.timestamp, &tag.body, at),
             TagKind::Audio => source.audio(tag.timestamp, &tag.body, at),
@@ -345,4 +360,46 @@ fn hostile_bytes_answer_the_demuxer_without_throwing() {
     }
     let _ = d.finish();
     assert!(number(&d.metrics(), "messages") == 200.0);
+}
+
+#[wasm_bindgen_test]
+fn cues_have_their_declared_shapes() {
+    // The first reads for longer than the second waits: the second ends it.
+    let stream = records_with_cues(
+        &config(),
+        &[(500, "a longer first cue of text"), (1500, "two\nlines")],
+    );
+    let mut r = JsRemuxer::new();
+    let mut d = JsDemuxer::new();
+    let mut outs = Vec::new();
+    for rec in &stream {
+        outs.extend(r.push(rec, true, false).iter().map(|o| ("remuxer", o)));
+        outs.extend(d.push(rec, true, false).iter().map(|o| ("demuxer", o)));
+    }
+    let kind = |o: &JsValue| get(o, "type").as_string().unwrap();
+    for who in ["remuxer", "demuxer"] {
+        let cues: Vec<&JsValue> = outs
+            .iter()
+            .filter(|(w, o)| *w == who && kind(o) == "cue")
+            .map(|(_, o)| o)
+            .collect();
+        assert_eq!(cues.len(), 2, "{who}");
+        for c in &cues {
+            assert_keys(c, &["type", "id", "kind", "start", "end", "text"]);
+            assert_eq!(get(c, "kind").as_string().unwrap(), "subtitles");
+            assert!(number(c, "end") > number(c, "start"));
+        }
+        assert_eq!(get(cues[1], "text").as_string().unwrap(), "two\nlines");
+        let end = outs
+            .iter()
+            .find(|(w, o)| *w == who && kind(o) == "cueEnd")
+            .map(|(_, o)| o)
+            .unwrap();
+        assert_keys(end, &["type", "id", "end"]);
+        assert_eq!(number(end, "id"), number(cues[0], "id"));
+        assert!((number(end, "end") - number(cues[0], "start") - 1.0).abs() < 0.001);
+    }
+    let m = r.metrics();
+    assert_eq!(number(&get(&m, "cues"), "cues"), 2.0);
+    assert_eq!(number(&get(&m, "reader"), "missingCues"), 0.0);
 }

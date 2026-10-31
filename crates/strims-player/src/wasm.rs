@@ -10,12 +10,14 @@
 //! of the module's memory, so the caller owns it and can transfer it.
 //! Times are numbers: the remuxer's presentation times in seconds, the
 //! demuxer's unit times in whole microseconds (as WebCodecs chunks take
-//! them), publish times in Unix milliseconds, offsets in seconds. No input
+//! them), cue times in seconds on the output's timeline, publish times in
+//! Unix milliseconds, offsets in seconds. No input
 //! throws; a call throws only when the module traps (its memory can't
 //! grow), after which it is unusable.
 
 use js_sys::{Array, Object, Reflect, Uint8Array};
 use strims_base::time::Duration;
+use strims_video::text::{CueKind, CueReaderMetrics};
 use strims_video::{CodecParams, DecoderConfig, TrackKind, units::UnitReaderMetrics};
 use wasm_bindgen::prelude::*;
 
@@ -195,8 +197,41 @@ fn output_object(output: &Output<'_>) -> Object {
             set_num(&o, "offset", offset.as_secs_f64());
         }
         Output::End => set_str(&o, "type", "end"),
+        Output::Cue {
+            id,
+            kind,
+            start,
+            end,
+            text,
+        } => cue_object(&o, *id, *kind, *start, *end, text),
+        Output::CueEnd { id, end } => cue_end_object(&o, *id, *end),
     }
     o
+}
+
+/// A cue output: `{type: "cue", id, kind, start, end, text}`, its times in
+/// seconds.
+fn cue_object(o: &Object, id: u64, kind: CueKind, start: Duration, end: Duration, text: &str) {
+    set_str(o, "type", "cue");
+    set_num(o, "id", id as f64);
+    set_str(
+        o,
+        "kind",
+        match kind {
+            CueKind::Subtitles => "subtitles",
+            CueKind::Captions => "captions",
+        },
+    );
+    set_num(o, "start", start.as_secs_f64());
+    set_num(o, "end", end.as_secs_f64());
+    set_str(o, "text", text);
+}
+
+/// A cue's end: `{type: "cueEnd", id, end}`, in seconds.
+fn cue_end_object(o: &Object, id: u64, end: Duration) {
+    set_str(o, "type", "cueEnd");
+    set_num(o, "id", id as f64);
+    set_num(o, "end", end.as_secs_f64());
 }
 
 fn track_object(config: &DecoderConfig) -> Object {
@@ -267,6 +302,14 @@ fn demux_object(output: &DemuxOutput<'_>) -> Object {
             set_num(&o, "offset", offset.as_secs_f64());
         }
         DemuxOutput::End => set_str(&o, "type", "end"),
+        DemuxOutput::Cue {
+            id,
+            kind,
+            start,
+            end,
+            text,
+        } => cue_object(&o, *id, *kind, *start, *end, text),
+        DemuxOutput::CueEnd { id, end } => cue_end_object(&o, *id, *end),
     }
     o
 }
@@ -346,6 +389,7 @@ fn demuxer_metrics(m: &DemuxerMetrics) -> Object {
     let memory = core::arch::wasm32::memory_size::<0>() as f64 * PAGE_BYTES;
     set_num(&o, "memoryBytes", memory);
     set(&o, "reader", &reader_metrics(&m.reader));
+    set(&o, "cues", &cue_metrics(&m.cues));
     o
 }
 
@@ -380,6 +424,7 @@ fn metrics(m: &RemuxerMetrics) -> Object {
     let memory = core::arch::wasm32::memory_size::<0>() as f64 * PAGE_BYTES;
     set_num(&o, "memoryBytes", memory);
     set(&o, "reader", &reader_metrics(&m.reader));
+    set(&o, "cues", &cue_metrics(&m.cues));
     o
 }
 
@@ -401,6 +446,19 @@ fn reader_metrics(m: &UnitReaderMetrics) -> Object {
         ("ends", m.ends),
         ("unknownEntries", m.unknown_entries),
         ("lost", m.lost),
+        ("missingCues", m.missing_cues),
+    ] {
+        set_num(&o, key, value as f64);
+    }
+    o
+}
+
+fn cue_metrics(m: &CueReaderMetrics) -> Object {
+    let o = Object::new();
+    for (key, value) in [
+        ("cues", m.cues),
+        ("captions", m.captions),
+        ("malformed", m.malformed),
     ] {
         set_num(&o, key, value as f64);
     }

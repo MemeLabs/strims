@@ -55,7 +55,9 @@ declare module "*/strims-player/Cargo.toml" {
     | GapOutput
     | DiscontinuityOutput
     | RestartOutput
-    | EndOutput;
+    | EndOutput
+    | CueOutput
+    | CueEndOutput;
 
   /**
    * An init segment (ftyp, moov), for the media after it. It comes at a
@@ -175,6 +177,31 @@ declare module "*/strims-player/Cargo.toml" {
   }
 
   /**
+   * A cue shows from `start` to `end`, in seconds on the output's timeline
+   * (the SourceBuffer's for the Remuxer, the units' presentation times for
+   * the Demuxer), unless a `cueEnd` of it comes first: a text track's
+   * subtitle, or a CEA-608 caption of the video. Cues may overlap; they show
+   * stacked.
+   */
+  export interface CueOutput {
+    type: "cue";
+    /** Unique among the remuxer's or demuxer's cues. */
+    id: number;
+    kind: "subtitles" | "captions";
+    start: number;
+    end: number;
+    /** Plain text, lines joined by LF. */
+    text: string;
+  }
+
+  /** Cue `id` ends at `end` seconds, sooner than it said. */
+  export interface CueEndOutput {
+    type: "cueEnd";
+    id: number;
+    end: number;
+  }
+
+  /**
    * Demuxes one `video/x.strims-units` stream, as the Egress RPC's `Data`
    * messages carry it, for WebCodecs decoders: the tracks' decoder configs
    * whenever they change, then each access unit with its timestamps, publish
@@ -208,7 +235,9 @@ declare module "*/strims-player/Cargo.toml" {
     | GapOutput
     | DiscontinuityOutput
     | RestartOutput
-    | EndOutput;
+    | EndOutput
+    | CueOutput
+    | CueEndOutput;
 
   /**
    * The tracks' decoder configs changed: every track's, in track id order.
@@ -295,6 +324,7 @@ declare module "*/strims-player/Cargo.toml" {
     /** The module's linear memory, in bytes; it only grows. */
     memoryBytes: number;
     reader: RemuxerMetrics["reader"];
+    cues: RemuxerMetrics["cues"];
   }
 
   /** Counts since the Remuxer was made, and what it holds now. */
@@ -351,6 +381,14 @@ declare module "*/strims-player/Cargo.toml" {
       ends: number;
       unknownEntries: number;
       lost: number;
+      /** Text tracks' units that never arrived. */
+      missingCues: number;
+    };
+    /** The cue reader's counts: text tracks' cues and captions shown, cue units refused. */
+    cues: {
+      cues: number;
+      captions: number;
+      malformed: number;
     };
   }
 }

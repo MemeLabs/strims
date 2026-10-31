@@ -10,6 +10,7 @@ use std::ops::Range;
 use strims_base::time::{Duration, Time};
 use strims_video::fmp4::{FragmentWriter, MAX_TRACKS, write_init};
 use strims_video::silence::Silence;
+use strims_video::text::{CueEvent, CueKind, CueReader, CueReaderMetrics};
 use strims_video::units::{MAX_RECORD_LEN, ReaderEvent, UnitReader, UnitReaderMetrics};
 use strims_video::{AccessUnit, CodecParams, DecoderConfig, TrackId, TrackKind};
 
@@ -101,6 +102,21 @@ pub enum Output<'a> {
     /// track's last lasting to the end of the output. Media after it is a
     /// later writer session's, which follows a restart.
     End,
+    /// A cue shows from `start` to `end` on the SourceBuffer's timeline,
+    /// as the media's presentation times are, unless a
+    /// [`CueEnd`](Self::CueEnd) of it comes first: a text track's
+    /// subtitle or a caption of the video ([`strims_video::text`]).
+    Cue {
+        /// Unique among the remuxer's cues.
+        id: u64,
+        kind: CueKind,
+        start: Duration,
+        end: Duration,
+        /// Lines joined by LF.
+        text: &'a str,
+    },
+    /// Cue `id` ends at `end`, sooner than it said.
+    CueEnd { id: u64, end: Duration },
 }
 
 /// What a [`Remuxer`] has read, written and dropped.
@@ -145,6 +161,7 @@ pub struct RemuxerMetrics {
     /// Payload bytes held unwritten now.
     pub held_bytes: u64,
     pub reader: UnitReaderMetrics,
+    pub cues: CueReaderMetrics,
 }
 
 /// An output waiting to be taken: its bytes and units as ranges of the
@@ -171,6 +188,17 @@ enum Queued {
         offset: Duration,
     },
     End,
+    Cue {
+        id: u64,
+        kind: CueKind,
+        start: Duration,
+        end: Duration,
+        text: String,
+    },
+    CueEnd {
+        id: u64,
+        end: Duration,
+    },
 }
 
 /// The init the fragments follow.
@@ -351,6 +379,10 @@ pub struct Remuxer {
     /// The queued outputs' bytes and units.
     bytes: Vec<u8>,
     units: Vec<UnitInfo>,
+    cues: CueReader,
+    /// The init's composition delay, which its edit lists move the
+    /// presentation back by.
+    delay: Duration,
     metrics: RemuxerMetrics,
 }
 
@@ -382,6 +414,8 @@ impl Remuxer {
             taken: None,
             bytes: Vec::new(),
             units: Vec::new(),
+            cues: CueReader::new(),
+            delay: Duration::ZERO,
             metrics: RemuxerMetrics::default(),
         }
     }
@@ -390,6 +424,7 @@ impl Remuxer {
         RemuxerMetrics {
             held_bytes: self.writer.held_bytes() as u64,
             reader: self.reader.metrics(),
+            cues: self.cues.metrics(),
             ..self.metrics
         }
     }
@@ -450,6 +485,7 @@ impl Remuxer {
         self.record.clear();
         self.oversize = false;
         self.reader.lost();
+        self.cues.reset();
         self.metrics.discontinuities += 1;
         self.queue.push_back(Queued::Discontinuity);
     }
@@ -497,6 +533,20 @@ impl Remuxer {
             Queued::Discontinuity => Output::Discontinuity,
             Queued::Restart { offset } => Output::Restart { offset: *offset },
             Queued::End => Output::End,
+            Queued::Cue {
+                id,
+                kind,
+                start,
+                end,
+                text,
+            } => Output::Cue {
+                id: *id,
+                kind: *kind,
+                start: *start,
+                end: *end,
+                text,
+            },
+            Queued::CueEnd { id, end } => Output::CueEnd { id: *id, end: *end },
         })
     }
 
@@ -518,6 +568,7 @@ impl Remuxer {
                     self.configs_changed = true;
                     let configs = ordered(self.reader.configs());
                     self.pending = self.init.as_ref().is_none_or(|i| i.configs != configs);
+                    self.cue_configs();
                 }
                 ReaderEvent::Gap { track, missing } => {
                     let kind = self
@@ -532,12 +583,45 @@ impl Remuxer {
                         missing,
                     });
                 }
-                ReaderEvent::TextConfigs => {}
+                ReaderEvent::TextConfigs => self.cue_configs(),
                 ReaderEvent::End => self.end(),
             }
         }
         if let Some(unit) = unit {
             self.unit(&unit);
+            // After the unit: a restart it starts moves its cues too.
+            self.cues.push(&unit);
+            self.take_cues();
+        }
+    }
+
+    /// The cue reader reads the reader's tracks, text and media.
+    fn cue_configs(&mut self) {
+        let mut configs = self.reader.configs().to_vec();
+        configs.extend_from_slice(self.reader.text_configs());
+        self.cues.set_configs(&configs);
+    }
+
+    /// Queues the cue reader's events, on the SourceBuffer's timeline.
+    fn take_cues(&mut self) {
+        let at = |t: Duration| t + self.offset - self.delay;
+        while let Some(e) = self.cues.poll_event() {
+            self.queue.push_back(match e {
+                CueEvent::Show {
+                    id,
+                    kind,
+                    start,
+                    end,
+                    text,
+                } => Queued::Cue {
+                    id,
+                    kind,
+                    start: at(start),
+                    end: at(end),
+                    text,
+                },
+                CueEvent::End { id, end } => Queued::CueEnd { id, end: at(end) },
+            });
         }
     }
 
@@ -557,6 +641,7 @@ impl Remuxer {
             self.queue.push_back(Queued::End);
         }
         self.after_end = self.init.is_some();
+        self.cues.reset();
     }
 
     fn unit(&mut self, unit: &AccessUnit<'_>) {
@@ -583,6 +668,7 @@ impl Remuxer {
             }
             self.offset = self.output_end() - to_duration(unit.dts, timescale);
             self.metrics.restarts += 1;
+            self.cues.reset();
             self.queue.push_back(Queued::Restart {
                 offset: self.offset,
             });
@@ -849,6 +935,7 @@ impl Remuxer {
             .collect();
         self.outs = outs;
         self.run_start = to_duration(dts, timescale) - delay;
+        self.delay = delay;
         self.init = Some(CurrentInit { configs, bytes });
         self.pending = false;
     }

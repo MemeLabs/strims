@@ -16,6 +16,7 @@ use strims_video::{FlvSource, Muxer, SourceEvent, UnitWriter};
 
 use super::*;
 use crate::webcodecs;
+use strims_video::text::CueKind;
 
 /// The swarm's chunk size: the chunked layout's frame.
 const FRAME: usize = 4096;
@@ -66,6 +67,17 @@ enum Out {
     Discontinuity,
     Restart(Duration),
     End,
+    Cue {
+        id: u64,
+        kind: CueKind,
+        start: Duration,
+        end: Duration,
+        text: String,
+    },
+    CueEnd {
+        id: u64,
+        end: Duration,
+    },
 }
 
 /// A script's tags through the FLV source, received at their tag times.
@@ -163,6 +175,20 @@ fn drain(d: &mut Demuxer, out: &mut Vec<Out>) {
             DemuxOutput::Discontinuity => Out::Discontinuity,
             DemuxOutput::Restart { offset } => Out::Restart(offset),
             DemuxOutput::End => Out::End,
+            DemuxOutput::Cue {
+                id,
+                kind,
+                start,
+                end,
+                text,
+            } => Out::Cue {
+                id,
+                kind,
+                start,
+                end,
+                text: text.into(),
+            },
+            DemuxOutput::CueEnd { id, end } => Out::CueEnd { id, end },
         });
     }
 }
@@ -781,4 +807,82 @@ fn damaged_base() -> &'static [Vec<u8>] {
             ..ScriptConfig::default()
         }))
     })
+}
+
+// --- cues ---------------------------------------------------------------------
+
+/// `events` with a text track, track 3, and its cues (ms, text) each
+/// before the first video unit decoding at or after it.
+fn with_cues(events: &[Event], cues: &[(i64, &str)]) -> Vec<Event> {
+    let mut out = Vec::new();
+    let mut cues = cues.iter().peekable();
+    let mut declared = false;
+    for e in events {
+        if let Event::Unit(u) = e {
+            if !declared {
+                out.push(Event::Config(strims_video::text::config(TrackId(3))));
+                declared = true;
+            }
+            while let Some((ms, text)) =
+                cues.next_if(|(ms, _)| u.track == TrackId(1) && ms * 90 <= u.dts)
+            {
+                let mut payload = Vec::new();
+                strims_video::text::write_cue(
+                    &strims_video::text::Cue {
+                        continues: false,
+                        duration: 2000,
+                        text,
+                    },
+                    &mut payload,
+                );
+                out.push(Event::Unit(Unit {
+                    track: TrackId(3),
+                    dts: *ms,
+                    pts: *ms,
+                    keyframe: true,
+                    payload,
+                    published: Time::from_unix_millis(EPOCH_MS + ms),
+                }));
+            }
+        }
+        out.push(e.clone());
+    }
+    out
+}
+
+fn ms(n: i64) -> Duration {
+    Duration::from_millis(n)
+}
+
+/// A cue comes on the units' timeline, moved by a later session's restart
+/// as its units are, and the text track stays out of the configs.
+#[test]
+fn cues_come_on_the_units_timeline() {
+    let events = script(ScriptConfig {
+        duration_secs: 3,
+        ..b_frames()
+    });
+    let session = unit_records(&with_cues(&events, &[(500, "one")]));
+    let records: Vec<Vec<u8>> = session.iter().chain(&session).cloned().collect();
+    let (out, _) = demux(&records);
+    let restart = out
+        .iter()
+        .find_map(|o| match o {
+            Out::Restart(offset) => Some(*offset),
+            _ => None,
+        })
+        .unwrap();
+    let cues: Vec<Duration> = out
+        .iter()
+        .filter_map(|o| match o {
+            Out::Cue { start, .. } => Some(*start),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(cues, [ms(500), ms(500) + restart]);
+    for o in &out {
+        if let Out::Configs(tracks) = o {
+            assert!(tracks.iter().all(|t| t.kind != TrackKind::Text));
+        }
+    }
 }

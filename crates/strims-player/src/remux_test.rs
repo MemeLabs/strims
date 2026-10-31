@@ -19,6 +19,7 @@ use strims_video::units::record::{Record, parse_record};
 use strims_video::{FlvSource, Muxer, SourceEvent, UnitWriter};
 
 use super::*;
+use strims_video::text::CueKind;
 
 /// The swarm's chunk size: the chunked layout's frame.
 const FRAME: usize = 4096;
@@ -243,6 +244,17 @@ enum Out {
     Discontinuity,
     Restart(Duration),
     End,
+    Cue {
+        id: u64,
+        kind: CueKind,
+        start: Duration,
+        end: Duration,
+        text: String,
+    },
+    CueEnd {
+        id: u64,
+        end: Duration,
+    },
 }
 
 fn drain(r: &mut Remuxer, out: &mut Vec<Out>) {
@@ -275,6 +287,20 @@ fn drain(r: &mut Remuxer, out: &mut Vec<Out>) {
             Output::Discontinuity => Out::Discontinuity,
             Output::Restart { offset } => Out::Restart(offset),
             Output::End => Out::End,
+            Output::Cue {
+                id,
+                kind,
+                start,
+                end,
+                text,
+            } => Out::Cue {
+                id,
+                kind,
+                start,
+                end,
+                text: text.into(),
+            },
+            Output::CueEnd { id, end } => Out::CueEnd { id, end },
         });
     }
 }
@@ -1499,4 +1525,116 @@ fn damaged_base() -> &'static [Vec<u8>] {
             ..b_frames()
         }))
     })
+}
+
+// --- cues ---------------------------------------------------------------------
+
+/// `events` with a text track, track 3, and its cues (ms, text) each
+/// before the first video unit decoding at or after it.
+fn with_cues(events: &[Event], cues: &[(i64, &str)]) -> Vec<Event> {
+    let mut out = Vec::new();
+    let mut cues = cues.iter().peekable();
+    let mut declared = false;
+    for e in events {
+        if let Event::Unit(u) = e {
+            if !declared {
+                out.push(Event::Config(strims_video::text::config(TrackId(3))));
+                declared = true;
+            }
+            while let Some((ms, text)) =
+                cues.next_if(|(ms, _)| u.track == TrackId(1) && ms * 90 <= u.dts)
+            {
+                let mut payload = Vec::new();
+                strims_video::text::write_cue(
+                    &strims_video::text::Cue {
+                        continues: false,
+                        duration: 2000,
+                        text,
+                    },
+                    &mut payload,
+                );
+                out.push(Event::Unit(Unit {
+                    track: TrackId(3),
+                    dts: *ms,
+                    pts: *ms,
+                    keyframe: true,
+                    payload,
+                    published: Time::from_unix_millis(EPOCH_MS + ms),
+                }));
+            }
+        }
+        out.push(e.clone());
+    }
+    out
+}
+
+fn ms(n: i64) -> Duration {
+    Duration::from_millis(n)
+}
+
+/// A cue comes on the SourceBuffer's timeline, as the media does: moved
+/// by the init's edit and by a later session's restart.
+#[test]
+fn cues_come_on_the_sourcebuffers_timeline() {
+    let events = script(ScriptConfig {
+        b_frames: true,
+        duration_secs: 3,
+        ..ScriptConfig::default()
+    });
+    let session = unit_records(&with_cues(&events, &[(500, "one"), (1000, "two")]));
+    let records: Vec<Vec<u8>> = session.iter().chain(&session).cloned().collect();
+    let (out, r) = remux(&records);
+    // Each session's first keyframe, its raw PTS and where it presents.
+    let raw_key = events
+        .iter()
+        .find_map(|e| match e {
+            Event::Unit(u) if u.keyframe && u.track == TrackId(1) => Some(u.pts),
+            _ => None,
+        })
+        .unwrap();
+    let mut keys = Vec::new();
+    let mut cues = Vec::new();
+    let mut ended = None;
+    for o in &out {
+        match o {
+            Out::Media { units, .. } => {
+                if let Some(k) = units.iter().find(|u| u.keyframe && u.track == TrackId(1))
+                    && keys.len() < 2
+                    && (keys.is_empty() || ended.is_some())
+                {
+                    keys.push(k.pts);
+                    ended = None;
+                }
+            }
+            Out::End => ended = Some(()),
+            Out::Cue {
+                kind, start, text, ..
+            } => {
+                assert_eq!(*kind, CueKind::Subtitles);
+                cues.push((*start, text.clone()));
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(keys.len(), 2);
+    let at = |key: Duration, cue: i64| {
+        key + ms(cue) - Duration::from_nanos(raw_key * 1_000_000_000 / 90_000)
+    };
+    assert_eq!(
+        cues,
+        [
+            (at(keys[0], 500), "one".to_owned()),
+            (at(keys[0], 1000), "two".to_owned()),
+            (at(keys[1], 500), "one".to_owned()),
+            (at(keys[1], 1000), "two".to_owned()),
+        ]
+    );
+    assert!(out.iter().any(|o| matches!(o, Out::CueEnd { .. })));
+    assert_eq!(r.metrics().cues.cues, 4);
+    // The text track stays out of the inits.
+    for o in &out {
+        if let Out::Init { tracks, .. } = o {
+            assert!(tracks.iter().all(|t| t.kind != TrackKind::Text));
+        }
+    }
 }
