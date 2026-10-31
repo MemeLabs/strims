@@ -78,6 +78,9 @@ pub struct IngressSettings {
     /// How sessions use the node's codec stage
     /// ([`VideoHost::codec`](crate::VideoHost::codec)).
     pub transcode: TranscodeSettings,
+    /// When sessions make their snippets' thumbnails with the node's
+    /// codec stage.
+    pub thumbnails: ThumbnailSettings,
 }
 
 impl Default for IngressSettings {
@@ -95,6 +98,47 @@ impl Default for IngressSettings {
             close_timeout: Duration::from_secs(5),
             resume_grace: Duration::from_secs(30),
             transcode: TranscodeSettings::default(),
+            thumbnails: ThumbnailSettings::default(),
+        }
+    }
+}
+
+/// When a live session makes the thumbnail its snippet shows in place of
+/// its channel's, a JPEG of one of its stream's keyframes, where the node
+/// has a codec stage; see [`ingress`](crate::ingress#thumbnails).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ThumbnailSettings {
+    /// How long after the stream's first video unit the first thumbnail
+    /// is made, at the next keyframe: a stream's first pictures are often
+    /// black or a fade.
+    pub first_after: Duration,
+    /// How long after a thumbnail began the next is made, at the next
+    /// keyframe.
+    pub interval: Duration,
+    /// How long after a thumbnail failed the next is tried, at half the
+    /// width, down to [`MIN_THUMBNAIL_WIDTH`].
+    pub retry: Duration,
+    /// The box a thumbnail fits, at its stream's aspect ratio.
+    pub max_width: u16,
+    pub max_height: u16,
+    /// How long the codec stage has to make one.
+    pub timeout: Duration,
+}
+
+/// The narrowest thumbnail a retry makes.
+pub const MIN_THUMBNAIL_WIDTH: u16 = 160;
+
+impl Default for ThumbnailSettings {
+    /// The first 5 s in, then every 5 minutes, within 640x360, the box
+    /// of the thumbnails the UI's browser capture makes.
+    fn default() -> ThumbnailSettings {
+        ThumbnailSettings {
+            first_after: Duration::from_secs(5),
+            interval: Duration::from_secs(300),
+            retry: Duration::from_secs(30),
+            max_width: 640,
+            max_height: 360,
+            timeout: Duration::from_secs(10),
         }
     }
 }

@@ -172,6 +172,28 @@
 //! [`TranscodeMetrics`](crate::TranscodeMetrics) count what the
 //! transcodes did.
 //!
+//! # Thumbnails
+//!
+//! Where the node has a codec stage, a live session's snippet shows a
+//! thumbnail of its stream in place of its channel's, as
+//! [`ThumbnailSettings`](crate::ThumbnailSettings) have it:
+//!
+//! - **When.** The first is made of the first video keyframe to arrive
+//!   [`first_after`](crate::ThumbnailSettings::first_after) or more after
+//!   the stream's first video unit, and each later one of the first
+//!   keyframe [`interval`](crate::ThumbnailSettings::interval) or more
+//!   after the last began. One that fails, or that the codec stage doesn't
+//!   make within [`timeout`](crate::ThumbnailSettings::timeout), is tried
+//!   again [`retry`](crate::ThumbnailSettings::retry) later at half the
+//!   width. One is made at a time.
+//! - **What.** A JPEG of the keyframe in the stream's own encoding, at
+//!   its aspect ratio within the settings' box, of at most the snippet's
+//!   image bound ([`MAX_IMAGE_BYTES`](strims_directory::snippet::MAX_IMAGE_BYTES)).
+//! - **The snippet** with it is signed and served again, and keeps it
+//!   through the channel's changes. A session that replaces another shows
+//!   the other's until it makes its own; any other starts with its
+//!   channel's.
+//!
 //! # Teardown
 //!
 //! A session ends when its publisher unpublishes or disconnects, at a
@@ -236,7 +258,9 @@ use strims_ppspp::integrity::{
 };
 use strims_ppspp::{SwarmId, SwarmOptions, Uri, WriterOptions};
 use strims_proto::network::v1::directory::listing::{Content, Media};
-use strims_proto::network::v1::directory::{Listing, ListingRendition, ListingSnippet};
+use strims_proto::network::v1::directory::{
+    Listing, ListingRendition, ListingSnippet, ListingSnippetImage,
+};
 use strims_proto::types::Key;
 use strims_proto::video::v1::{VideoChannel, VideoIngressConfig, VideoIngressStream};
 use strims_rpc::Timer;
@@ -255,6 +279,8 @@ use crate::{VideoError, VideoEvent};
 
 #[path = "renditions.rs"]
 mod renditions;
+#[path = "thumbnails.rs"]
+mod thumbnails;
 
 /// The app a publish names.
 const LIVE_APP: &str = "live";
@@ -506,6 +532,9 @@ pub struct IngressMetrics {
     pub small_unit_swarms: u64,
     pub large_unit_swarms: u64,
     pub unrated_swarms: u64,
+    /// Thumbnails made, and those that failed or took too long.
+    pub thumbnails: u64,
+    pub thumbnail_failures: u64,
 }
 
 /// The ingress state of the control.
@@ -574,6 +603,9 @@ struct Session {
     renditions: BTreeMap<TransferId, u64>,
     /// The renditions the snippet lists.
     listed: Vec<ListingRendition>,
+    /// The thumbnail the snippet shows in place of the channel's: the
+    /// session's latest, or that of the session it replaced.
+    thumbnail: Option<ListingSnippetImage>,
 }
 
 /// A session's listing keeper, and the end of its run.
@@ -742,7 +774,8 @@ fn untranscoded(config: &DecoderConfig) -> Option<String> {
 }
 
 /// The live snippet of session `s`: its channel's, with its renditions,
-/// and the size of the channel swarm's picture.
+/// the size of the channel swarm's picture and its thumbnail, if it has
+/// one.
 fn session_snippet(s: &Session) -> ListingSnippet {
     let mut snippet = live_snippet(&s.channel, s.start_time);
     if let Some(main) = s.listed.first() {
@@ -750,6 +783,9 @@ fn session_snippet(s: &Session) -> ListingSnippet {
         snippet.video_height = main.height;
     }
     snippet.renditions = s.listed.clone();
+    if let Some(t) = &s.thumbnail {
+        snippet.thumbnail = Some(t.clone());
+    }
     snippet
 }
 
@@ -1169,6 +1205,10 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             main_bitrate: None,
             listed_main: None,
             renditions: None,
+            thumbnails: self
+                .video
+                .codec()
+                .map(|_| thumbnails::Thumbnails::new(&self.config.ingress.thumbnails)),
         })
     }
 
@@ -1204,6 +1244,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 .as_mut()
                 .map(|o| std::mem::take(&mut o.renditions))
                 .unwrap_or_default();
+            let thumbnail = old.as_mut().and_then(|o| o.thumbnail.take());
             ing.sessions.insert(
                 channel.id,
                 Session {
@@ -1221,6 +1262,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                     stop: stop.clone(),
                     renditions,
                     listed: Vec::new(),
+                    thumbnail,
                 },
             );
             (id, old.map(|o| o.stop))
@@ -1565,6 +1607,8 @@ struct Live<K: Kv, H: Host, V: VideoHost, T: Timer> {
     /// The snippet entry of the channel's swarm, once listed.
     listed_main: Option<ListingRendition>,
     renditions: Option<renditions::Renditions<V::Codec, <H as SwarmHost>::Writer>>,
+    /// Where the node has a codec stage.
+    thumbnails: Option<thumbnails::Thumbnails>,
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
@@ -1585,6 +1629,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
                 if let Some(r) = &mut self.renditions {
                     r.config(&c);
                 }
+                if let Some(t) = &mut self.thumbnails {
+                    t.config(&c);
+                }
                 let res = if self.main_from_source {
                     self.writer.set_config(&c).map_err(|e| media(&e))
                 } else {
@@ -1603,6 +1650,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
                     let s = self.publication.shared.clone();
                     r.unit(&u, now, &mut s.metrics.borrow_mut().transcode);
                 }
+                self.thumbnail(&u, now);
                 if self.main_from_source {
                     self.writer.push(&u).map_err(|e| media(&e))
                 } else {

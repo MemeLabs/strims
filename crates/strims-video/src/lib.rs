@@ -210,8 +210,8 @@ pub use channels::{ChannelUrl, MAX_CHANNELS};
 pub use config::{
     AutoseedSettings, CaptureSettings, Config, ConfigError, EgressSettings, HlsSettings,
     IngressSettings, ListingSettings, MAX_ADDR_BYTES, MAX_NETWORK_KEY_BYTES, MAX_SERVICE_NETWORKS,
-    Metrics, RtmpSettings, TranscodeMetrics, TranscodeSettings, check_hls_config,
-    check_ingress_config,
+    MIN_THUMBNAIL_WIDTH, Metrics, RtmpSettings, ThumbnailSettings, TranscodeMetrics,
+    TranscodeSettings, check_hls_config, check_ingress_config,
 };
 pub use control::VideoControl;
 pub use egress::{ChunkedReader, EgressPiece, EgressStream, ReaderMetrics, Rewind, check_format};

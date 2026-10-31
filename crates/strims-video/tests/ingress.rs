@@ -24,9 +24,10 @@ use strims_dao::schema::video::{VideoChannels, format_stream_key, new_channel};
 use strims_dao::{Recv, Subscription, Table};
 use strims_kv::MemoryKv;
 use strims_ppspp::{SwarmId, Uri};
-use strims_proto::network::v1::directory::ListingSnippet;
 use strims_proto::network::v1::directory::listing::{Content, Media};
-use strims_proto::types::Key;
+use strims_proto::network::v1::directory::listing_snippet_image::SourceOneof;
+use strims_proto::network::v1::directory::{ListingSnippet, ListingSnippetImage};
+use strims_proto::types::{Image, ImageType, Key};
 use strims_proto::video::v1::video_channel::{Local, Owner};
 use strims_proto::video::v1::{
     VideoChannel, VideoIngressClient, VideoIngressConfig, VideoIngressListStreamsRequest,
@@ -44,7 +45,7 @@ use strims_video::{
     IngressSettings, Muxer, NoVideoHost, SourceEvent, SwarmKind, TrackId, UnitWriter, VideoControl,
     VideoEvent, VideoHost, VideoSwarm, bind_frontend, units_mime,
 };
-use support::codec::FakeCodec;
+use support::codec::{FakeCodec, fake_jpeg};
 use support::{FakeVideo, TestPublisher};
 
 type Control<V> = VideoControl<MemoryKv, FakeHost, V, TokioTimer>;
@@ -1556,5 +1557,173 @@ fn a_failed_transcode_starts_again_at_the_next_keyframe() {
         let m = s.va.metrics().transcode;
         assert_eq!((m.failures, m.restarts, m.abandoned), (1, 1, 0));
         assert_eq!(codec.plans().len(), 2);
+    });
+}
+
+// --- thumbnails ---------------------------------------------------------------
+
+/// A snippet image of a JPEG without a frame header.
+fn jpeg_image(data: Vec<u8>) -> ListingSnippetImage {
+    ListingSnippetImage {
+        source_oneof: Some(SourceOneof::Image(Image {
+            r#type: ImageType::Jpeg as i32,
+            data,
+            ..Default::default()
+        })),
+    }
+}
+
+/// A channel snippet with a thumbnail of its own.
+fn with_thumbnail(title: &str) -> ListingSnippet {
+    ListingSnippet {
+        thumbnail: Some(ListingSnippetImage {
+            source_oneof: Some(SourceOneof::Url("https://example.com/channel.jpg".into())),
+        }),
+        ..snippet(title)
+    }
+}
+
+fn thumbnail_config(interval_secs: i64) -> Config {
+    let mut config = Config::default();
+    config.ingress.thumbnails.interval = strims_base::time::Duration::from_secs(interval_secs);
+    config
+}
+
+/// On a node with a codec stage, the live snippet shows its channel's
+/// thumbnail until the session's first, of a keyframe 5 s or more after
+/// the stream's first video unit, 640 wide for a 1280x720 stream; the next
+/// comes an interval later, and keeps through a channel change. A session
+/// that replaces it shows its thumbnail until it makes its own.
+#[test]
+fn a_live_snippet_shows_thumbnails_of_its_stream_in_place_of_its_channels() {
+    run(async {
+        let (video, codec) = codec_host();
+        let s = Ingest::with_host(true, thumbnail_config(20), video).await;
+        let b = s.b.as_ref().unwrap();
+        s.va.update_channel(s.channel.id, &s.net.public, with_thumbnail("first"))
+            .await
+            .unwrap();
+        let mut p = s.publish("10.0.0.1:1").await;
+        let script = Script::new(&ScriptConfig::default());
+        let third = script.tags.len() / 3;
+        p.send_tags(&script.tags[..third], &script).await;
+        wait_for(10, "the snippet", || shown_snippet(b).is_some()).await;
+        assert_eq!(
+            shown_snippet(b).unwrap().thumbnail,
+            with_thumbnail("first").thumbnail
+        );
+        assert_eq!(codec.0.borrow().thumbnails, 0);
+
+        sleep_secs(6).await;
+        p.send_tags(&script.tags[third..2 * third], &script).await;
+        wait_for(10, "the first thumbnail", || {
+            shown_snippet(b).and_then(|s| s.thumbnail) == Some(jpeg_image(fake_jpeg(0)))
+        })
+        .await;
+        assert_eq!(codec.0.borrow().thumbnail_widths, [640]);
+
+        sleep_secs(21).await;
+        p.send_tags(&script.tags[2 * third..], &script).await;
+        wait_for(10, "the second thumbnail", || {
+            shown_snippet(b).and_then(|s| s.thumbnail) == Some(jpeg_image(fake_jpeg(1)))
+        })
+        .await;
+        let m = s.va.metrics().ingress;
+        assert_eq!((m.thumbnails, m.thumbnail_failures), (2, 0));
+
+        s.va.update_channel(s.channel.id, &s.net.public, with_thumbnail("second"))
+            .await
+            .unwrap();
+        wait_for(10, "the changed snippet", || {
+            shown_snippet(b).is_some_and(|x| x.title == "second")
+        })
+        .await;
+        assert_eq!(
+            shown_snippet(b).unwrap().thumbnail,
+            Some(jpeg_image(fake_jpeg(1)))
+        );
+
+        let start = shown_snippet(b).unwrap().start_time;
+        sleep_secs(2).await;
+        let mut q = s.publish("10.0.0.1:2").await;
+        q.send_tags(&script.tags[..third], &script).await;
+        wait_for(10, "the replacing session's snippet", || {
+            shown_snippet(b).is_some_and(|x| x.start_time != start)
+        })
+        .await;
+        assert_eq!(
+            shown_snippet(b).unwrap().thumbnail,
+            Some(jpeg_image(fake_jpeg(1)))
+        );
+        assert_eq!(codec.0.borrow().thumbnails, 2);
+        drop(p);
+        q.unpublish().await;
+    });
+}
+
+/// A thumbnail that fails is tried again at half the width, at the first
+/// keyframe after the retry wait.
+#[test]
+fn a_failed_thumbnail_is_tried_again_at_half_the_width() {
+    run(async {
+        let (video, codec) = codec_host();
+        codec.0.borrow_mut().fail_thumbnails = 1;
+        let mut config = thumbnail_config(300);
+        config.ingress.thumbnails.retry = strims_base::time::Duration::from_secs(10);
+        let s = Ingest::with_host(true, config, video).await;
+        let b = s.b.as_ref().unwrap();
+        let mut p = s.publish("10.0.0.1:1").await;
+        let script = Script::new(&ScriptConfig {
+            duration_secs: 20,
+            ..Default::default()
+        });
+        let q = script.tags.len() / 4;
+        p.send_tags(&script.tags[..q], &script).await;
+        sleep_secs(6).await;
+        p.send_tags(&script.tags[q..2 * q], &script).await;
+        wait_for(10, "the failure", || {
+            s.va.metrics().ingress.thumbnail_failures == 1
+        })
+        .await;
+        sleep_secs(4).await;
+        p.send_tags(&script.tags[2 * q..3 * q], &script).await;
+        sleep_secs(1).await;
+        assert_eq!(codec.0.borrow().thumbnails, 1, "within the retry wait");
+        sleep_secs(6).await;
+        p.send_tags(&script.tags[3 * q..], &script).await;
+        wait_for(10, "the retried thumbnail", || {
+            shown_snippet(b).and_then(|s| s.thumbnail) == Some(jpeg_image(fake_jpeg(1)))
+        })
+        .await;
+        assert_eq!(codec.0.borrow().thumbnail_widths, [640, 320]);
+        let m = s.va.metrics().ingress;
+        assert_eq!((m.thumbnails, m.thumbnail_failures), (1, 1));
+        p.unpublish().await;
+    });
+}
+
+/// Without a codec stage, the live snippet shows its channel's thumbnail.
+#[test]
+fn a_node_without_a_codec_stage_shows_its_channels_thumbnail() {
+    run(async {
+        let s = Ingest::new(true, Config::default()).await;
+        let b = s.b.as_ref().unwrap();
+        s.va.update_channel(s.channel.id, &s.net.public, with_thumbnail("first"))
+            .await
+            .unwrap();
+        let mut p = s.publish("10.0.0.1:1").await;
+        let script = Script::new(&ScriptConfig::default());
+        let half = script.tags.len() / 2;
+        p.send_tags(&script.tags[..half], &script).await;
+        sleep_secs(6).await;
+        p.send_tags(&script.tags[half..], &script).await;
+        wait_for(10, "the snippet", || shown_snippet(b).is_some()).await;
+        sleep_secs(1).await;
+        assert_eq!(
+            shown_snippet(b).unwrap().thumbnail,
+            with_thumbnail("first").thumbnail
+        );
+        assert_eq!(s.va.metrics().ingress.thumbnails, 0);
+        p.unpublish().await;
     });
 }

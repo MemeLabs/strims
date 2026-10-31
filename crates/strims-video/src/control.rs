@@ -76,7 +76,8 @@ pub(crate) struct Shared<K: Kv, H: Host, V: VideoHost, T: Timer> {
     /// creation, its writer and a listing keeper per network; an add per
     /// egress or seed slot, and per salted transfer autoseed adds; a
     /// removal per removed swarm, each one node call; the RTMP listener, a
-    /// task per RTMP connection and a listing keeper per ingest session.
+    /// task per RTMP connection, and a listing keeper and a thumbnail per
+    /// ingest session.
     spawned: RefCell<Vec<LocalBoxFuture<'static, ()>>>,
     /// Wakes `run`.
     waker: RefCell<Option<Waker>>,

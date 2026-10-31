@@ -16,8 +16,14 @@ use strims_video::codec::{
 use strims_video::synth::script::avcc;
 use strims_video::{AccessUnit, CodecParams, DecoderConfig, TrackKind};
 
-/// A JPEG's first and last bytes, which the fake's thumbnails are.
-pub const FAKE_JPEG: &[u8] = b"\xff\xd8fake\xff\xd9";
+/// The fake's `n`th thumbnail, from 0: a JPEG's first and last bytes
+/// around its number.
+pub fn fake_jpeg(n: usize) -> Vec<u8> {
+    let mut jpeg = b"\xff\xd8fake".to_vec();
+    jpeg.extend_from_slice(n.to_string().as_bytes());
+    jpeg.extend_from_slice(b"\xff\xd9");
+    jpeg
+}
 
 #[derive(Default)]
 pub struct FakeCodecState {
@@ -29,8 +35,11 @@ pub struct FakeCodecState {
     pub end_next: bool,
     /// Transcodes that finished, their input ended.
     pub finished: usize,
-    /// Thumbnails made.
+    /// Thumbnails asked for, and the widths asked.
     pub thumbnails: usize,
+    pub thumbnail_widths: Vec<u16>,
+    /// Thumbnails to fail before the next is made.
+    pub fail_thumbnails: usize,
     waker: Option<Waker>,
 }
 
@@ -90,13 +99,18 @@ impl Codec for FakeCodec {
         &self,
         configs: &[DecoderConfig],
         keyframe: &AccessUnit<'_>,
-        _: u16,
+        width: u16,
         _: usize,
     ) -> Thumbnail<String> {
-        self.0.borrow_mut().thumbnails += 1;
-        let ok = keyframe.keyframe && configs.iter().any(|c| c.track == keyframe.track);
+        let mut s = self.0.borrow_mut();
+        let n = s.thumbnails;
+        s.thumbnails += 1;
+        s.thumbnail_widths.push(width);
+        let fail = s.fail_thumbnails > 0;
+        s.fail_thumbnails = s.fail_thumbnails.saturating_sub(1);
+        let ok = !fail && keyframe.keyframe && configs.iter().any(|c| c.track == keyframe.track);
         Box::pin(std::future::ready(if ok {
-            Ok(FAKE_JPEG.to_vec())
+            Ok(fake_jpeg(n))
         } else {
             Err("no picture".to_owned())
         }))

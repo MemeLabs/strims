@@ -1124,6 +1124,8 @@ fn ingress(m: strims_video::IngressMetrics) -> v1::IngressMetrics {
         small_unit_swarms,
         large_unit_swarms,
         unrated_swarms,
+        thumbnails,
+        thumbnail_failures,
     } = m;
     v1::IngressMetrics {
         listens,
@@ -1144,6 +1146,8 @@ fn ingress(m: strims_video::IngressMetrics) -> v1::IngressMetrics {
         small_unit_swarms,
         large_unit_swarms,
         unrated_swarms,
+        thumbnails,
+        thumbnail_failures,
     }
 }
 
