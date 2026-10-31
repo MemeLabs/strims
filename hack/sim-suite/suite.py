@@ -115,6 +115,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / "target" / "sim-suite"
 CARGO = WORK / "cargo"
+# Cargo takes a unit as fresh while its sources are older than its last
+# build, and a base's checkout rewrites only the files that differ from the
+# last base's: had the working tree built in between, a base would take its
+# units for every file it shares with the last base. The tree builds apart.
+TREE_CARGO = WORK / "cargo-tree"
 GiB = 1 << 30
 
 PPSPP = "ppspp"
@@ -375,10 +380,11 @@ def git(*args, cwd=ROOT):
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
 
-def build(src, sim, dest):
-    """Builds `sim`'s test binary at `src` and copies it into `dest`."""
+def build(src, sim, dest, cargo=CARGO):
+    """Builds `sim`'s test binary at `src` in target dir `cargo` and copies
+    it into `dest`."""
     dest.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, "CARGO_TARGET_DIR": str(CARGO), "CARGO_INCREMENTAL": "0"}
+    env = {**os.environ, "CARGO_TARGET_DIR": str(cargo), "CARGO_INCREMENTAL": "0"}
     package, target, _ = BINARIES[sim]
     out = subprocess.run(
         ["cargo", "test", "--release", "--locked", "-p", package, "--test", target, "--no-run",
@@ -458,7 +464,7 @@ def tree_binary(sim, base):
     dest = WORK / "bin" / label
     if not (dest / sim).exists():
         print(f"building working tree {sim} ({label})", file=sys.stderr)
-        build(ROOT, sim, dest)
+        build(ROOT, sim, dest, TREE_CARGO)
     return label, dest
 
 
