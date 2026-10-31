@@ -13,6 +13,9 @@
 //!   it was taken), or is interrupted, is skipped; any other failure is
 //!   yielded, and ends the listener for the control. Dropping it closes
 //!   the listening socket, and the connections it took stay open.
+//! - an accepted connection sets `TCP_NODELAY` ([`rtmp_tcp_options`]):
+//!   the server's replies are small, and none waits on Nagle's algorithm
+//!   for the acknowledgement of the one before.
 //! - a [`NetReader`] yields what the connection receives, at most
 //!   [`READ_BYTES`] per piece, and ends at the peer's end of the stream.
 //! - a [`NetWriter`] holds one piece at a time: [`Sink::poll_ready`] waits
@@ -31,13 +34,27 @@ use std::task::{Context, Poll, ready};
 
 use futures_util::stream::LocalBoxStream;
 use futures_util::{Sink, Stream, StreamExt};
+use strims_base::time::Duration;
 use strims_video::{Accepted, VideoHost};
+use strims_vnic::TcpOptions;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 
 use crate::Net;
 
 /// The most bytes a [`NetReader`] piece holds.
 pub const READ_BYTES: usize = 64 * 1024;
+
+/// The socket options of an accepted RTMP connection: `TCP_NODELAY` alone.
+/// The kernel tunes its buffers, which a set size would stop, and the
+/// ingress's own deadlines find a dead publisher well before a keepalive.
+pub fn rtmp_tcp_options() -> TcpOptions {
+    TcpOptions {
+        keep_alive_period: Duration::ZERO,
+        read_buffer_size: 0,
+        write_buffer_size: 0,
+        ..TcpOptions::default()
+    }
+}
 
 /// The TCP listeners of `N` as a [`VideoHost`]; see the
 /// [module docs](self).
@@ -79,7 +96,12 @@ impl<N: Net> NetListener<N> {
         let accepts = futures_util::stream::unfold((net, listener), |(net, listener)| async move {
             let accepted = loop {
                 match net.tcp_accept(&listener).await {
-                    Ok((stream, peer)) => break Ok(split::<N>(stream, peer.to_string())),
+                    Ok((stream, peer)) => {
+                        if let Err(e) = net.configure_tcp(&stream, &rtmp_tcp_options()) {
+                            tracing::debug!(error = %e, "an RTMP connection's socket options");
+                        }
+                        break Ok(split::<N>(stream, peer.to_string()));
+                    }
                     Err(e) if retry_accept(&e) => {
                         tracing::debug!(error = %e, "an accept failed for its connection");
                     }
@@ -299,6 +321,14 @@ mod tests {
         conn.writer.feed(b"bye".to_vec()).await.unwrap();
         conn.writer.close().await.unwrap();
         assert_eq!(read_to_end(&mut client).await, b"bye");
+    }
+
+    #[tokio::test]
+    async fn accepted_connections_send_without_delay() {
+        let mut l = listen().await;
+        let (_client, conn) = connect(&mut l).await;
+        let stream = conn.reader.half.unsplit(conn.writer.half);
+        assert!(stream.nodelay().unwrap());
     }
 
     #[tokio::test]
