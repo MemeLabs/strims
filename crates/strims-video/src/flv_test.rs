@@ -29,6 +29,26 @@ fn ex_video(frame_type: u8, packet_type: u8, fourcc: &[u8; 4], data: &[u8]) -> V
     body
 }
 
+/// An Enhanced RTMP multitrack video tag of one track, as ffmpeg muxes a
+/// second video stream: the multitrack packet type, then OneTrack and the
+/// packet type, the FourCC, the track id and the packet.
+fn multitrack_video(
+    frame_type: u8,
+    packet_type: u8,
+    fourcc: &[u8; 4],
+    track: u8,
+    data: &[u8],
+) -> Vec<u8> {
+    let mut body = vec![
+        VIDEO_EX_HEADER | (frame_type << 4) | VIDEO_MULTITRACK,
+        packet_type,
+    ];
+    body.extend_from_slice(fourcc);
+    body.push(track);
+    body.extend_from_slice(data);
+    body
+}
+
 fn legacy_audio(packet_type: u8, data: &[u8]) -> Vec<u8> {
     let mut body = vec![0xaf, packet_type];
     body.extend_from_slice(data);
@@ -275,6 +295,111 @@ fn frames_of_another_codec_than_the_config_are_dropped() {
     let u = unit(s.video(15, &hevc, NOW));
     assert_eq!(u.dts, 20 * 90);
     assert_eq!(s.metrics().dts_clamped, 1);
+}
+
+#[test]
+fn a_multitrack_source_takes_one_track_packets_of_its_tracks() {
+    let mut s = FlvSource::multitrack(3);
+    let small = crate::synth::script::avcc(640, 360);
+    let header = legacy_video(1, 0, 0, &avcc_720p());
+    let (track, e) = s.video_track(0, &header, NOW).unwrap().unwrap();
+    assert_eq!(track, 0);
+    assert!(matches!(e, SourceEvent::Config(c) if c.params.picture_size() == Some((1280, 720))));
+    let start = multitrack_video(1, VIDEO_SEQUENCE_START, b"avc1", 2, &small);
+    let (track, e) = s.video_track(0, &start, NOW).unwrap().unwrap();
+    assert_eq!(track, 2);
+    let SourceEvent::Config(c) = e else {
+        panic!("not a config");
+    };
+    assert_eq!(
+        (c.track, c.params.picture_size()),
+        (VIDEO_TRACK, Some((640, 360)))
+    );
+
+    // track 1 has no config: its frames are dropped
+    let none = multitrack_video(1, VIDEO_CODED_FRAMES_X, b"avc1", 1, b"x");
+    assert_eq!(s.video_track(10, &none, NOW), Ok(None));
+    assert_eq!(s.metrics().before_config, 1);
+
+    let mut coded = vec![0, 0, 66];
+    coded.extend_from_slice(b"key");
+    let tag = multitrack_video(1, VIDEO_CODED_FRAMES, b"avc1", 2, &coded);
+    let (track, e) = s.video_track(1_000, &tag, NOW).unwrap().unwrap();
+    let SourceEvent::Unit(u) = e else {
+        panic!("not a unit");
+    };
+    assert_eq!(
+        (track, u.track, u.dts, u.pts),
+        (2, VIDEO_TRACK, 1_000 * 90, 1_066 * 90)
+    );
+    assert_eq!((u.keyframe, u.payload), (true, &b"key"[..]));
+    let tag = multitrack_video(2, VIDEO_CODED_FRAMES_X, b"avc1", 2, b"p");
+    let (_, e) = s.video_track(1_033, &tag, NOW).unwrap().unwrap();
+    assert!(matches!(e, SourceEvent::Unit(u) if u.pts == u.dts && !u.keyframe));
+    // track 0 times its frames apart from track 2: no clamp
+    let u = unit(s.video(900, &legacy_video(1, 1, 0, b"t0"), NOW));
+    assert_eq!(u.dts, 900 * 90);
+    assert_eq!(s.metrics().dts_clamped, 0);
+}
+
+#[test]
+fn a_multitrack_source_refuses_tracks_past_its_count_and_packets_of_several() {
+    let mut s = FlvSource::multitrack(2);
+    let start = multitrack_video(1, VIDEO_SEQUENCE_START, b"avc1", 2, &avcc_720p());
+    assert_eq!(s.video_track(0, &start, NOW), Err(FlvError::VideoTrack(2)));
+    assert_eq!(
+        FlvError::VideoTrack(2).to_string(),
+        "video track 2 is out of range"
+    );
+    // ManyTracks: one FourCC, then tracks with their sizes
+    let mut many = start.clone();
+    many[1] = (1 << 4) | VIDEO_SEQUENCE_START;
+    many[6] = 1;
+    assert_eq!(
+        s.video_track(0, &many, NOW),
+        Err(FlvError::Unsupported(Unsupported::Multitrack(
+            TrackKind::Video
+        )))
+    );
+    let mut nested = start.clone();
+    nested[1] = VIDEO_MULTITRACK;
+    assert!(matches!(
+        s.video_track(0, &nested, NOW),
+        Err(FlvError::PacketType { packet_type: 6, .. })
+    ));
+    for n in 1..7 {
+        assert_eq!(
+            s.video_track(0, &start[..n], NOW),
+            Err(FlvError::Truncated(TrackKind::Video)),
+            "{n} bytes"
+        );
+    }
+    // a command frame of a track is skipped
+    let command = multitrack_video(FRAME_COMMAND, VIDEO_CODED_FRAMES, b"avc1", 1, &[0]);
+    assert_eq!(s.video_track(0, &command, NOW), Ok(None));
+    assert_eq!(FlvSource::multitrack(0).video.len(), 1);
+    assert_eq!(
+        FlvSource::multitrack(u8::MAX).video.len(),
+        usize::from(MAX_VIDEO_TRACKS)
+    );
+}
+
+/// Renditions an encoder muxes into one FLV come out of their encoders
+/// at their own pace: a track behind another isn't a clock restart.
+#[test]
+fn each_video_track_has_its_own_clock_steps() {
+    let mut s = FlvSource::multitrack(2);
+    config(s.video(0, &legacy_video(1, 0, 0, &avcc_720p()), NOW));
+    let start = multitrack_video(1, VIDEO_SEQUENCE_START, b"avc1", 1, &avcc_720p());
+    s.video_track(0, &start, NOW).unwrap();
+    for k in 0..100u32 {
+        let lead = unit(s.video(2_000 + k * 33, &legacy_video(2, 1, 0, b"a"), NOW));
+        assert_eq!(lead.dts, i64::from(2_000 + k * 33) * 90);
+        let tag = multitrack_video(2, VIDEO_CODED_FRAMES_X, b"avc1", 1, b"b");
+        let (_, e) = s.video_track(k * 33, &tag, NOW).unwrap().unwrap();
+        assert!(matches!(e, SourceEvent::Unit(u) if u.dts == i64::from(k * 33) * 90));
+    }
+    assert_eq!(s.metrics().clock_restarts, 0);
 }
 
 #[test]
@@ -819,6 +944,11 @@ fn tag() -> impl Strategy<Value = Tag> {
         vec![0x91, b'a', b'v', b'0', b'1', 0x12, 0x00],
         vec![0x93, b'a', b'v', b'0', b'1'],
         vec![0x95, b'a', b'v', b'0', b'1'],
+        multitrack_video(1, VIDEO_SEQUENCE_START, b"avc1", 1, &avcc_720p()),
+        multitrack_video(1, VIDEO_SEQUENCE_START, b"hvc1", 2, &hvcc_720p()),
+        vec![0x96, 0x01, b'a', b'v', b'c', b'1', 1],
+        vec![0xa6, 0x03, b'h', b'v', b'c', b'1', 2],
+        vec![0x96, 0x13, b'a', b'v', b'c', b'1'],
         vec![0x80],
     ];
     let audio = vec![
@@ -853,14 +983,21 @@ proptest! {
     // Each track's units come with non-decreasing DTS while its timescale
     // holds, and with a payload taken from the end of the tag's body.
     #[test]
-    fn arbitrary_tags_never_panic(tags in proptest::collection::vec(tag(), 1..64)) {
-        let mut s = FlvSource::new();
-        let mut last = [None::<i64>; 2];
-        let mut timescale = [0; 2];
+    fn arbitrary_tags_never_panic(
+        tags in proptest::collection::vec(tag(), 1..64),
+        video_tracks in 1u8..4,
+    ) {
+        let mut s = FlvSource::multitrack(video_tracks);
+        // the video tracks, then audio
+        let mut last = [None::<i64>; 4];
+        let mut timescale = [0; 4];
         for tag in &tags {
             let (track, body, result) = match tag {
-                Tag::Video(t, b) => (0, b, s.video(*t, b, NOW)),
-                Tag::Audio(t, b) => (1, b, s.audio(*t, b, NOW)),
+                Tag::Video(t, b) => match s.video_track(*t, b, NOW) {
+                    Ok(Some((track, e))) => (usize::from(track), b, Ok(Some(e))),
+                    other => (0, b, other.map(|_| None)),
+                },
+                Tag::Audio(t, b) => (3, b, s.audio(*t, b, NOW)),
             };
             match result {
                 Ok(Some(SourceEvent::Unit(u))) => {
@@ -888,7 +1025,7 @@ proptest! {
     fn an_encoder_restarting_its_clock_never_stalls_a_track(
         start: u32,
         frames in 2usize..240,
-        restarts in proptest::collection::vec((0usize..240, 2_000u32..u32::MAX / 2), 0..4),
+        restarts in proptest::collection::vec((1usize..240, 2_000u32..u32::MAX / 2), 0..4),
     ) {
         let mut s = source_at(start, &LC_48000);
         let mut t = start;

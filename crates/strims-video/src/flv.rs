@@ -22,8 +22,16 @@
 //!   Each frame starts a frame's samples after the one before; when that
 //!   count drifts from the tag time by more than a frame, it restarts at
 //!   the tag time.
-//! - Other codecs, Enhanced RTMP multitrack and ModEx packets are refused
-//!   with [`FlvError::Unsupported`], whose message tells the streamer what
+//! - A multitrack source ([`FlvSource::multitrack`]) also takes Enhanced
+//!   RTMP's multitrack video packets that each carry one track (OneTrack),
+//!   of track ids below its track count. Each track has a config, a DTS
+//!   clamp and clock steps of its own, and [`FlvSource::video_track`] says
+//!   which track an event is of; tags without a multitrack header are
+//!   track 0's.
+//! - Other codecs, Enhanced RTMP multitrack packets a source doesn't take
+//!   (any for a source of one video track, several tracks in one packet,
+//!   and audio) and ModEx packets are refused with
+//!   [`FlvError::Unsupported`], whose message tells the streamer what
 //!   to send. Command frames, sequence ends, Enhanced RTMP metadata, AV1's
 //!   MPEG-2 TS sequence starts and empty tags carry nothing and are
 //!   skipped.
@@ -69,6 +77,10 @@ const VIDEO_UNITS_PER_MS: i64 = VIDEO_TIMESCALE as i64 / 1000;
 pub const CLOCK_RESTART: i64 = 1000;
 /// A track's step before its second tag, in milliseconds.
 const DEFAULT_STEP: i64 = 1;
+/// The most video tracks a multitrack source takes.
+pub const MAX_VIDEO_TRACKS: u8 = 8;
+/// The Enhanced RTMP multitrack type of a packet carrying one track.
+const MULTITRACK_ONE_TRACK: u8 = 0;
 
 /// FLV video frame types.
 const FRAME_KEY: u8 = 1;
@@ -212,6 +224,10 @@ pub enum FlvError {
     Av1(Av1Error),
     #[error("invalid AAC sequence header: {0}")]
     Aac(AacError),
+    /// A multitrack packet of a video track id at or past the source's
+    /// track count.
+    #[error("video track {0} is out of range")]
+    VideoTrack(u8),
 }
 
 /// What a source has skipped, dropped and adjusted.
@@ -231,35 +247,60 @@ pub struct FlvMetrics {
     pub clock_restarts: u64,
 }
 
+/// A track the clock times.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Slot {
+    /// The video track of an Enhanced RTMP track id.
+    Video(u8),
+    Audio,
+}
+
 /// Turns 32-bit tag times into 64-bit ones, each the value nearest the
-/// previous, moved past the encoder's restarts.
-#[derive(Debug, Default)]
+/// previous tag's, moved past the encoder's restarts.
+#[derive(Debug)]
 struct Clock {
     /// The previous tag's raw and unwrapped times.
     last: Option<(u32, i64)>,
     /// What the restarts moved the unwrapped times by.
     offset: i64,
-    /// The latest time either track reached.
+    /// The latest time any track reached.
     latest: Option<i64>,
-    /// Each track's previous time and its step.
-    video: Option<(i64, i64)>,
+    /// Each track's previous frame's time and its step: the video tracks
+    /// by track id, then audio.
+    video: Vec<Option<(i64, i64)>>,
     audio: Option<(i64, i64)>,
 }
 
 impl Clock {
-    /// The time of a tag of `kind` sent at `ts`, and whether it started
-    /// the clock over.
-    fn time(&mut self, kind: TrackKind, ts: u32) -> (i64, bool) {
+    fn new(video_tracks: usize) -> Clock {
+        Clock {
+            last: None,
+            offset: 0,
+            latest: None,
+            video: vec![None; video_tracks],
+            audio: None,
+        }
+    }
+
+    /// The unwrapped time of a tag sent at `ts`.
+    fn unwrap(&mut self, ts: u32) -> i64 {
         let unwrapped = match self.last {
             None => i64::from(ts),
             // A wrapped difference read as signed: within 2^31 ms either way.
             Some((raw, ms)) => ms.saturating_add(i64::from(ts.wrapping_sub(raw) as i32)),
         };
         self.last = Some((ts, unwrapped));
+        unwrapped
+    }
+
+    /// The time of a frame of `slot` at `unwrapped`, and whether it started
+    /// the clock over.
+    fn place(&mut self, slot: Slot, unwrapped: i64) -> (i64, bool) {
         let mut ms = unwrapped.saturating_add(self.offset);
-        let track = match kind {
-            TrackKind::Video => &mut self.video,
-            TrackKind::Audio => &mut self.audio,
+        let mut none = None;
+        let track = match slot {
+            Slot::Video(id) => self.video.get_mut(usize::from(id)).unwrap_or(&mut none),
+            Slot::Audio => &mut self.audio,
         };
         let restart = match (*track, self.latest) {
             (Some((prev, step)), Some(latest)) if ms < prev.saturating_sub(CLOCK_RESTART) => {
@@ -303,6 +344,17 @@ impl VideoCodec {
     }
 }
 
+/// A video frame's place: its track, codec, unwrapped tag time,
+/// composition time and keyframe flag.
+#[derive(Debug, Clone, Copy)]
+struct Frame {
+    track: u8,
+    codec: VideoCodec,
+    ms: i64,
+    cts: i64,
+    keyframe: bool,
+}
+
 #[derive(Debug)]
 struct VideoTrack {
     config: DecoderConfig,
@@ -320,17 +372,39 @@ struct AudioTrack {
 
 /// The source state of one FLV stream: its clock and each track's config
 /// and last DTS.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct FlvSource {
     clock: Clock,
-    video: Option<VideoTrack>,
+    /// The video tracks, by Enhanced RTMP track id. Bound:
+    /// [`MAX_VIDEO_TRACKS`].
+    video: Vec<Option<VideoTrack>>,
     audio: Option<AudioTrack>,
     metrics: FlvMetrics,
 }
 
+impl Default for FlvSource {
+    fn default() -> Self {
+        FlvSource::multitrack(1)
+    }
+}
+
 impl FlvSource {
+    /// A source of one video track, which refuses multitrack packets.
     pub fn new() -> Self {
         FlvSource::default()
+    }
+
+    /// A source taking `video_tracks` video tracks, 1 to
+    /// [`MAX_VIDEO_TRACKS`] (clamped), of multitrack packets that each
+    /// carry one.
+    pub fn multitrack(video_tracks: u8) -> Self {
+        let n = usize::from(video_tracks.clamp(1, MAX_VIDEO_TRACKS));
+        FlvSource {
+            clock: Clock::new(n),
+            video: (0..n).map(|_| None).collect(),
+            audio: None,
+            metrics: FlvMetrics::default(),
+        }
     }
 
     pub fn metrics(&self) -> FlvMetrics {
@@ -344,7 +418,18 @@ impl FlvSource {
         body: &'a [u8],
         now: Time,
     ) -> Result<Option<SourceEvent<'a>>, FlvError> {
-        let ms = self.time(TrackKind::Video, ts_ms);
+        Ok(self.video_track(ts_ms, body, now)?.map(|(_, e)| e))
+    }
+
+    /// Takes the body of a video tag sent at `ts_ms`, received at `now`:
+    /// its event, and the track id of the video track it is of.
+    pub fn video_track<'a>(
+        &mut self,
+        ts_ms: u32,
+        body: &'a [u8],
+        now: Time,
+    ) -> Result<Option<(u8, SourceEvent<'a>)>, FlvError> {
+        let ms = self.clock.unwrap(ts_ms);
         let Some((&first, rest)) = body.split_first() else {
             return Ok(self.skip());
         };
@@ -365,12 +450,19 @@ impl FlvSource {
             AVC_END_OF_SEQUENCE => Ok(self.skip()),
             AVC_SEQUENCE_HEADER => {
                 let (_, avcc) = rest.split_first_chunk::<3>().ok_or(truncated)?;
-                self.video_config(VideoCodec::Avc, avcc)
+                self.video_config(0, VideoCodec::Avc, avcc)
             }
             AVC_NALU => {
                 let (cts, data) = rest.split_first_chunk::<3>().ok_or(truncated)?;
                 let key = frame_type == FRAME_KEY;
-                Ok(self.video_unit(VideoCodec::Avc, ms, si24(*cts), key, data, now))
+                let frame = Frame {
+                    track: 0,
+                    codec: VideoCodec::Avc,
+                    ms,
+                    cts: si24(*cts),
+                    keyframe: key,
+                };
+                Ok(self.video_unit(frame, data, now))
             }
             _ => Err(FlvError::PacketType {
                 kind: TrackKind::Video,
@@ -387,18 +479,14 @@ impl FlvSource {
         first: u8,
         rest: &'a [u8],
         now: Time,
-    ) -> Result<Option<SourceEvent<'a>>, FlvError> {
+    ) -> Result<Option<(u8, SourceEvent<'a>)>, FlvError> {
         let frame_type = (first >> 4) & 0x07;
         let packet_type = first & 0x0f;
         match packet_type {
             VIDEO_MOD_EX => {
                 return Err(FlvError::Unsupported(Unsupported::ModEx(TrackKind::Video)));
             }
-            VIDEO_MULTITRACK => {
-                return Err(FlvError::Unsupported(Unsupported::Multitrack(
-                    TrackKind::Video,
-                )));
-            }
+            VIDEO_MULTITRACK => return self.multitrack_video(ms, frame_type, rest, now),
             // A command frame holds a command and no FourCC.
             _ if frame_type == FRAME_COMMAND && packet_type != VIDEO_METADATA => {
                 return Ok(self.skip());
@@ -409,17 +497,76 @@ impl FlvSource {
         let (fourcc, rest) = rest.split_first_chunk::<4>().ok_or(truncated)?;
         let codec = VideoCodec::of(fourcc)
             .ok_or(FlvError::Unsupported(Unsupported::VideoFourCc(*fourcc)))?;
-        let key = frame_type == FRAME_KEY;
+        self.ex_packet(0, codec, frame_type, packet_type, ms, rest, now)
+    }
+
+    /// A multitrack video tag, after its first byte: the multitrack type
+    /// and packet type, the FourCC, the track id, and the track's packet.
+    fn multitrack_video<'a>(
+        &mut self,
+        ms: i64,
+        frame_type: u8,
+        rest: &'a [u8],
+        now: Time,
+    ) -> Result<Option<(u8, SourceEvent<'a>)>, FlvError> {
+        let refused = FlvError::Unsupported(Unsupported::Multitrack(TrackKind::Video));
+        if self.video.len() < 2 {
+            return Err(refused);
+        }
+        let truncated = FlvError::Truncated(TrackKind::Video);
+        let (&kinds, rest) = rest.split_first().ok_or(truncated)?;
+        if kinds >> 4 != MULTITRACK_ONE_TRACK {
+            return Err(refused);
+        }
+        let packet_type = kinds & 0x0f;
+        if matches!(packet_type, VIDEO_MULTITRACK | VIDEO_MOD_EX) {
+            return Err(FlvError::PacketType {
+                kind: TrackKind::Video,
+                packet_type,
+            });
+        }
+        let (fourcc, rest) = rest.split_first_chunk::<4>().ok_or(truncated)?;
+        let codec = VideoCodec::of(fourcc)
+            .ok_or(FlvError::Unsupported(Unsupported::VideoFourCc(*fourcc)))?;
+        let (&track, rest) = rest.split_first().ok_or(truncated)?;
+        if usize::from(track) >= self.video.len() {
+            return Err(FlvError::VideoTrack(track));
+        }
+        if frame_type == FRAME_COMMAND && packet_type != VIDEO_METADATA {
+            return Ok(self.skip());
+        }
+        self.ex_packet(track, codec, frame_type, packet_type, ms, rest, now)
+    }
+
+    /// The Enhanced RTMP packet of `packet_type` that `rest` holds, of
+    /// video track `track` in `codec`.
+    #[allow(clippy::too_many_arguments)]
+    fn ex_packet<'a>(
+        &mut self,
+        track: u8,
+        codec: VideoCodec,
+        frame_type: u8,
+        packet_type: u8,
+        ms: i64,
+        rest: &'a [u8],
+        now: Time,
+    ) -> Result<Option<(u8, SourceEvent<'a>)>, FlvError> {
+        let truncated = FlvError::Truncated(TrackKind::Video);
+        let frame = |cts| Frame {
+            track,
+            codec,
+            ms,
+            cts,
+            keyframe: frame_type == FRAME_KEY,
+        };
         match packet_type {
-            VIDEO_SEQUENCE_START => self.video_config(codec, rest),
+            VIDEO_SEQUENCE_START => self.video_config(track, codec, rest),
             // AV1's frames carry no composition time.
             VIDEO_CODED_FRAMES if codec != VideoCodec::Av1 => {
                 let (cts, data) = rest.split_first_chunk::<3>().ok_or(truncated)?;
-                Ok(self.video_unit(codec, ms, si24(*cts), key, data, now))
+                Ok(self.video_unit(frame(si24(*cts)), data, now))
             }
-            VIDEO_CODED_FRAMES | VIDEO_CODED_FRAMES_X => {
-                Ok(self.video_unit(codec, ms, 0, key, rest, now))
-            }
+            VIDEO_CODED_FRAMES | VIDEO_CODED_FRAMES_X => Ok(self.video_unit(frame(0), rest, now)),
             VIDEO_SEQUENCE_END | VIDEO_METADATA => Ok(self.skip()),
             VIDEO_MPEG2TS_SEQUENCE_START if codec == VideoCodec::Av1 => Ok(self.skip()),
             _ => Err(FlvError::PacketType {
@@ -431,11 +578,14 @@ impl FlvSource {
 
     fn video_config<'a>(
         &mut self,
+        track: u8,
         codec: VideoCodec,
         record: &[u8],
-    ) -> Result<Option<SourceEvent<'a>>, FlvError> {
-        if self
-            .video
+    ) -> Result<Option<(u8, SourceEvent<'a>)>, FlvError> {
+        let Some(slot) = self.video.get(usize::from(track)) else {
+            return Err(FlvError::VideoTrack(track));
+        };
+        if slot
             .as_ref()
             .is_some_and(|t| t.codec == codec && t.config.params.record() == record)
         {
@@ -477,29 +627,33 @@ impl FlvSource {
             timescale: VIDEO_TIMESCALE,
             params,
         };
-        let last_dts = self.video.as_ref().and_then(|t| t.last_dts);
-        self.video = Some(VideoTrack {
+        let Some(slot) = self.video.get_mut(usize::from(track)) else {
+            return Err(FlvError::VideoTrack(track));
+        };
+        let last_dts = slot.as_ref().and_then(|t| t.last_dts);
+        *slot = Some(VideoTrack {
             config: config.clone(),
             codec,
             last_dts,
         });
-        Ok(Some(SourceEvent::Config(config)))
+        Ok(Some((track, SourceEvent::Config(config))))
     }
 
     fn video_unit<'a>(
         &mut self,
-        codec: VideoCodec,
-        ms: i64,
-        cts: i64,
-        keyframe: bool,
+        frame: Frame,
         payload: &'a [u8],
         now: Time,
-    ) -> Option<SourceEvent<'a>> {
-        let Some(track) = self.video.as_mut().filter(|t| t.codec == codec) else {
+    ) -> Option<(u8, SourceEvent<'a>)> {
+        let Some(Some(track)) = self
+            .video
+            .get_mut(usize::from(frame.track))
+            .filter(|t| t.as_ref().is_some_and(|t| t.codec == frame.codec))
+        else {
             self.metrics.before_config += 1;
             return None;
         };
-        let payload = match codec {
+        let payload = match frame.codec {
             VideoCodec::Av1 => av1::strip_temporal_delimiters(payload),
             VideoCodec::Avc | VideoCodec::Hevc => payload,
         };
@@ -507,19 +661,26 @@ impl FlvSource {
             self.metrics.skipped += 1;
             return None;
         }
+        let (ms, restarted) = self.clock.place(Slot::Video(frame.track), frame.ms);
+        if restarted {
+            self.metrics.clock_restarts += 1;
+        }
         let dts = clamp(
             &mut track.last_dts,
             ms.saturating_mul(VIDEO_UNITS_PER_MS),
             &mut self.metrics,
         );
-        Some(SourceEvent::Unit(AccessUnit {
+        let unit = AccessUnit {
             track: VIDEO_TRACK,
             dts,
-            pts: ms.saturating_add(cts).saturating_mul(VIDEO_UNITS_PER_MS),
-            keyframe,
+            pts: ms
+                .saturating_add(frame.cts)
+                .saturating_mul(VIDEO_UNITS_PER_MS),
+            keyframe: frame.keyframe,
             payload,
             published: now,
-        }))
+        };
+        Some((frame.track, SourceEvent::Unit(unit)))
     }
 
     /// Takes the body of an audio tag sent at `ts_ms`, received at `now`.
@@ -529,7 +690,7 @@ impl FlvSource {
         body: &'a [u8],
         now: Time,
     ) -> Result<Option<SourceEvent<'a>>, FlvError> {
-        let ms = self.time(TrackKind::Audio, ts_ms);
+        let ms = self.clock.unwrap(ts_ms);
         let Some((&first, rest)) = body.split_first() else {
             return Ok(self.skip());
         };
@@ -638,6 +799,10 @@ impl FlvSource {
             self.metrics.skipped += 1;
             return None;
         }
+        let (ms, restarted) = self.clock.place(Slot::Audio, ms);
+        if restarted {
+            self.metrics.clock_restarts += 1;
+        }
         let at_tag_time = (i128::from(ms) * i128::from(track.sample_rate)).div_euclid(1000);
         let at_tag_time =
             i64::try_from(at_tag_time).unwrap_or(if ms < 0 { i64::MIN } else { i64::MAX });
@@ -665,17 +830,7 @@ impl FlvSource {
         }))
     }
 
-    /// The clock's time of a tag of `kind` sent at `ts`, counting a
-    /// restart.
-    fn time(&mut self, kind: TrackKind, ts: u32) -> i64 {
-        let (ms, restarted) = self.clock.time(kind, ts);
-        if restarted {
-            self.metrics.clock_restarts += 1;
-        }
-        ms
-    }
-
-    fn skip<'a>(&mut self) -> Option<SourceEvent<'a>> {
+    fn skip<T>(&mut self) -> Option<T> {
         self.metrics.skipped += 1;
         None
     }

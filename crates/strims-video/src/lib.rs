@@ -22,6 +22,8 @@
 //!   box.
 //! - [`flv`]: the source over FLV tags, legacy and Enhanced RTMP. It takes
 //!   H.264, H.265 and AV1 video and AAC audio, and refuses other codecs.
+//! - [`flv_file`]: FLV files' header and tag framing, read as their bytes
+//!   arrive and written from decoder configs and access units.
 //! - [`amf0`]: the AMF0 values RTMP commands and metadata carry.
 //! - [`rtmp`]: the RTMP server a publisher streams FLV tags to.
 //! - [`fmp4`]: fragmented MP4 init segments and fragments, each with its
@@ -180,6 +182,7 @@ pub mod egress;
 mod error;
 mod events;
 pub mod flv;
+pub mod flv_file;
 pub mod fmp4;
 pub mod frontend;
 pub mod hevc;
