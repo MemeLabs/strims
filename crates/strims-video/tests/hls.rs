@@ -25,9 +25,9 @@ use std::time::Duration;
 use strims_crypto::key_from_seed;
 use strims_dao::Subscription;
 use strims_kv::MemoryKv;
-use strims_ppspp::{SwarmId, Uri, WriterOptions};
-use strims_proto::network::v1::directory::ListingSnippet;
+use strims_ppspp::{SwarmId, SwarmOptions, Uri, WriterOptions};
 use strims_proto::network::v1::directory::listing::{Content, Media};
+use strims_proto::network::v1::directory::{Listing, ListingSnippet};
 use strims_proto::profile::v1::Profile;
 use strims_proto::service::CallError;
 use strims_proto::types::Key;
@@ -467,6 +467,97 @@ fn a_unit_format_swarm_is_served_as_hls_on_another_node() {
             (1, expected.len() as u64, 0)
         );
         assert!(b.transfers.is_published(id, b.net(&net.public)));
+    });
+}
+
+/// The chunks per signature of `v`'s swarm of transfer `id`.
+fn chunks_per_signature(v: &Control, id: TransferId) -> usize {
+    let s = v
+        .video_swarms()
+        .into_iter()
+        .find(|s| s.transfer_id == id)
+        .unwrap();
+    Uri::parse(&s.swarm_uri)
+        .unwrap()
+        .options
+        .swarm_options()
+        .chunks_per_signature
+}
+
+/// An HLS open of a served stream names the options the swarm's listing
+/// does: one of other options is refused, and one of the listed options
+/// moves the stream to the swarm of those, its playlist going on after a
+/// discontinuity.
+#[test]
+fn an_hls_stream_takes_its_listings_options() {
+    run(async {
+        let world = World::default();
+        let a = node_in(&world, 1).await;
+        let b = node_in(&world, 2).await;
+        let (net, _pipes) = owned_network(&a, &[&b], 10).await;
+        let keys = vec![net.public.clone()];
+        let routes = HlsRoutes::new();
+        let vb = start(&b, &routes, serving());
+        set_hls(&vb, true, "").await;
+        let mut p = Publisher::new(&a, 7).await;
+        let id = p.transfer_id();
+        let url = vb.open_hls(&p.uri, &keys, units::MIME_TYPE).await.unwrap();
+        let script = Script::new(&ScriptConfig::default());
+        let half = script.tags.len() / 2;
+        p.tags(&script.tags[..half]).await;
+        wait_for(30, "a segment", || {
+            !listed(&playlist(&b, &routes, path(&url))).is_empty()
+        })
+        .await;
+        assert_eq!(chunks_per_signature(&vb, id), 8);
+
+        let listed_uri = Uri::new(
+            p.id.clone(),
+            SwarmOptions {
+                chunks_per_signature: 1,
+                ..capture_options()
+            }
+            .uri_options(),
+        )
+        .to_string();
+        let listing = Listing {
+            content: Some(Content::Media(Media {
+                mime_type: units::MIME_TYPE.into(),
+                swarm_uri: listed_uri.clone(),
+            })),
+        };
+        a.directory.publish(&net.public, listing).await.unwrap();
+        wait_for(10, "the listing", || {
+            media(&b).iter().any(|m| m.swarm_uri == listed_uri)
+        })
+        .await;
+        assert_eq!(
+            vb.open_hls(&p.uri, &keys, units::MIME_TYPE).await,
+            Err(VideoError::ListingOptions)
+        );
+        assert_eq!(
+            vb.open_hls(&listed_uri, &keys, units::MIME_TYPE)
+                .await
+                .unwrap(),
+            url
+        );
+        assert_eq!(chunks_per_signature(&vb, id), 1);
+        assert_eq!(vb.hls_streams().len(), 1);
+        assert_eq!(
+            vb.open_hls(&listed_uri, &keys, units::MIME_TYPE)
+                .await
+                .unwrap(),
+            url
+        );
+
+        p.tags(&script.tags[half..]).await;
+        wait_for(30, "segments after the move", || {
+            listed(&playlist(&b, &routes, path(&url)))
+                .iter()
+                .any(|s| s.discontinuity)
+        })
+        .await;
+        assert_eq!(vb.hls_streams().len(), 1);
     });
 }
 

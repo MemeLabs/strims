@@ -21,7 +21,12 @@
 //! without one, less a trailing `/`, followed by the playlist path. The
 //! URL is made at each open, so a changed address names the same streams.
 //! A transfer has one HLS stream: opening it again answers that stream's
-//! URL, and counts as a request of it for its idle timeout. The node
+//! URL, and counts as a request of it for its idle timeout. An open whose
+//! URI names other swarm options than the stream reads with, or than the
+//! swarm's listing does, opens the swarm as [`VideoControl::open_stream`]
+//! does ([`egress`](crate::egress#options)), which refuses what the
+//! listing disagrees with; a stream that opens so with other options
+//! reads on from the swarm of those after a discontinuity. The node
 //! serves at most
 //! [`HlsSettings::max_streams`](crate::HlsSettings::max_streams) streams.
 //!
@@ -63,7 +68,8 @@
 //! A stream outlasts the failures of what it reads. After a failed read
 //! it reads on, and when its egress stream ends (its swarm gone with none
 //! in its place, as when the node's ingest session of it ends) it opens
-//! one again, as [`VideoControl::open_stream`] does. Each waits
+//! one again, as [`VideoControl::open_stream`] does, of the URI the
+//! swarm's listing names when the node has one. Each waits
 //! [`HlsSettings::reopen_interval`](crate::HlsSettings::reopen_interval)
 //! first, twice as long after each failure in a row up to
 //! [`HlsSettings::max_reopen_interval`](crate::HlsSettings::max_reopen_interval),
@@ -71,6 +77,7 @@
 //! stays as it was, ended or live, and the records read after the stream
 //! opened again follow a discontinuity.
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::mem;
@@ -83,6 +90,7 @@ use futures_util::future::{AbortHandle, abortable};
 use strims_base::time::{Duration, Time};
 use strims_directory::Host;
 use strims_kv::Kv;
+use strims_ppspp::{SwarmOptions, Uri};
 use strims_proto::profile::v1::Profile;
 use strims_proto::video::v1::HlsEgressConfig;
 use strims_rpc::Timer;
@@ -95,6 +103,7 @@ use crate::hls::{
     playlist_path, target_secs,
 };
 use crate::media::{Muxer, TrackKind};
+use crate::registry::same_options;
 use crate::units::{self, ReaderEvent, UnitReader};
 use crate::{HlsSettings, VideoControl, VideoError, VideoEvent, VideoHost};
 
@@ -147,6 +156,8 @@ struct HlsEntry {
     stream: Rc<HlsStream>,
     /// Stops its reader task; `None` while its swarm is opened.
     reader: Option<AbortHandle>,
+    /// What its reader opens its egress stream with, shared with the task.
+    open: Rc<RefCell<OpenArgs>>,
     reopens: u64,
 }
 
@@ -442,6 +453,41 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         }
     }
 
+    /// Has entry `id` of `t` read `egress`, of the swarm `open` names, in
+    /// place of what it read: the playlist goes on after a discontinuity.
+    fn reread_hls(
+        self: &Rc<Self>,
+        t: TransferId,
+        id: u64,
+        egress: EgressStream<K, H, V, T>,
+        open: OpenArgs,
+    ) -> Result<(), VideoError> {
+        let task = {
+            let mut h = self.hls.borrow_mut();
+            let entry = h
+                .streams
+                .get_mut(&t)
+                .filter(|e| e.id == id)
+                .ok_or(VideoError::StreamClosed)?;
+            if let Some(reader) = entry.reader.take() {
+                reader.abort();
+            }
+            *entry.open.borrow_mut() = open;
+            entry.stream.discontinuity();
+            let stream = Rc::downgrade(&entry.stream);
+            let (task, abort) =
+                abortable(
+                    self.clone()
+                        .read_hls(t, id, egress, entry.open.clone(), stream),
+                );
+            entry.reader = Some(abort);
+            task
+        };
+        self.spawn(task.map(drop).boxed_local());
+        tracing::debug!(transfer = %t, "HLS stream reads other swarm options");
+        Ok(())
+    }
+
     /// Feeds the pieces of `egress`, and of the streams `open` opens once
     /// it ends, into the playlist of entry `id` of `t` while it lasts; see
     /// the [module docs](self#recovery).
@@ -450,7 +496,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         t: TransferId,
         id: u64,
         egress: EgressStream<K, H, V, T>,
-        open: OpenArgs,
+        open: Rc<RefCell<OpenArgs>>,
         stream: Weak<HlsStream>,
     ) {
         let settings = &self.config.hls;
@@ -493,6 +539,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
 /// What an HLS stream's egress stream opens with again.
 pub(crate) struct OpenArgs {
     swarm_uri: String,
+    /// The options its URI names, as egress reads them.
+    options: SwarmOptions,
     network_keys: Vec<Vec<u8>>,
     mime_type: String,
 }
@@ -518,17 +566,38 @@ pub(crate) trait PieceSource {
 /// The node's egress stream of a swarm.
 struct HostSource<K: Kv, H: Host, V: VideoHost, T: Timer> {
     control: VideoControl<K, H, V, T>,
-    open: OpenArgs,
+    open: Rc<RefCell<OpenArgs>>,
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> PieceSource for HostSource<K, H, V, T> {
     type Stream = EgressStream<K, H, V, T>;
 
+    /// Opens the swarm of the URI its listing names, when the node has
+    /// one, else of the URI the stream last opened.
     async fn open(&mut self) -> Result<Self::Stream, VideoError> {
-        let o = &self.open;
-        self.control
-            .open_stream(&o.swarm_uri, &o.network_keys, &o.mime_type)
-            .await
+        let s = &self.control.shared;
+        let (uri, keys, mime) = {
+            let o = self.open.borrow();
+            (
+                o.swarm_uri.clone(),
+                o.network_keys.clone(),
+                o.mime_type.clone(),
+            )
+        };
+        let listed = Uri::parse(&uri)
+            .ok()
+            .and_then(|u| s.listed_swarm_uri(&u.id, &keys))
+            .filter(|l| *l != uri);
+        let uri = match listed.map(|l| (check_stream(&s.config.egress, &l, &keys), l)) {
+            Some((Ok((_, options)), listed)) => {
+                let mut o = self.open.borrow_mut();
+                o.swarm_uri = listed.clone();
+                o.options = options;
+                listed
+            }
+            _ => uri,
+        };
+        self.control.open_stream(&uri, &keys, &mime).await
     }
 
     async fn next<'a>(
@@ -697,16 +766,42 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         if base.is_empty() {
             return Err(VideoError::HlsNoServerAddr);
         }
-        let (uri, _) = check_stream(&s.config.egress, swarm_uri, network_keys)?;
+        let (uri, options) = check_stream(&s.config.egress, swarm_uri, network_keys)?;
         let t = TransferId::new(&uri.id, b"");
         let url = format!("{base}{}", playlist_path(&profile_key, t.as_bytes()));
+        let open = || OpenArgs {
+            swarm_uri: swarm_uri.to_owned(),
+            options: options.clone(),
+            network_keys: network_keys.to_vec(),
+            mime_type: mime_type.to_owned(),
+        };
+
+        // A stream served already: its entry, and whether it reads other
+        // options than the open names.
+        let served = s.hls.borrow().streams.get(&t).map(|e| {
+            e.stream.touch(s.timer.now());
+            let other = e.reader.is_some() && !same_options(&e.open.borrow().options, &options);
+            (e.id, other)
+        });
+        if let Some((id, other)) = served {
+            let listed = s
+                .listed_swarm_uri(&uri.id, network_keys)
+                .and_then(|l| check_stream(&s.config.egress, &l, network_keys).ok());
+            let disagrees = listed.is_some_and(|(_, l)| !same_options(&l, &options));
+            if !other && !disagrees {
+                return Ok(url);
+            }
+            // The open applies egress's rule of options, refusing what the
+            // listing disagrees with.
+            let egress = self.open_stream(swarm_uri, network_keys, mime_type).await?;
+            if other {
+                s.reread_hls(t, id, egress, open())?;
+            }
+            return Ok(url);
+        }
 
         let id = {
             let mut h = s.hls.borrow_mut();
-            if let Some(e) = h.streams.get(&t) {
-                e.stream.touch(s.timer.now());
-                return Ok(url);
-            }
             if h.streams.len() >= settings.max_streams {
                 return Err(VideoError::TooManyHlsStreams);
             }
@@ -730,6 +825,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                     id,
                     stream: Rc::new(stream),
                     reader: None,
+                    open: Rc::new(RefCell::new(open())),
                     reopens: 0,
                 },
             );
@@ -750,11 +846,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 .filter(|e| e.id == id)
                 .ok_or(VideoError::StreamClosed)?;
             let stream = Rc::downgrade(&entry.stream);
-            let open = OpenArgs {
-                swarm_uri: swarm_uri.to_owned(),
-                network_keys: network_keys.to_vec(),
-                mime_type: mime_type.to_owned(),
-            };
+            let open = entry.open.clone();
             let (task, abort) = abortable(s.clone().read_hls(t, id, egress, open, stream));
             entry.reader = Some(abort);
             task
