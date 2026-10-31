@@ -8,9 +8,10 @@
 //!
 //! - A swarm the node already runs, a capture's, a seed's or another
 //!   stream's, is read where it is: the stream holds its slot in the
-//!   control's swarm registry. Streams of a swarm the node adds also
-//!   publish its transfer on their networks the node runs, each once
-//!   joined.
+//!   control's swarm registry. Streams of a swarm the node adds, or
+//!   seeds, also publish its transfer on the networks they name, each
+//!   once the node joins it, those it joins later among them. A network
+//!   stays published while a stream or seed of the swarm names it.
 //! - Any other swarm is added with the URI's options and a live window of
 //!   [`EgressSettings::window_bytes`], its transfer added and published.
 //!   The last stream of it to close removes the transfer, then the swarm,
@@ -844,11 +845,18 @@ struct StreamHold<K: Kv, H: Host, V: VideoHost, T: Timer> {
     shared: Rc<Shared<K, H, V, T>>,
     transfer_id: TransferId,
     claim: Option<Claim>,
+    /// The networks the stream reads on, distinct. Bound:
+    /// [`EgressSettings::max_network_keys`].
+    networks: Vec<Vec<u8>>,
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> StreamHold<K, H, V, T> {
     /// Counts a stream of `transfer_id`, within the bound.
-    fn new(shared: &Rc<Shared<K, H, V, T>>, transfer_id: TransferId) -> Result<Self, VideoError> {
+    fn new(
+        shared: &Rc<Shared<K, H, V, T>>,
+        transfer_id: TransferId,
+        network_keys: &[Vec<u8>],
+    ) -> Result<Self, VideoError> {
         let max = shared.config.egress.max_streams;
         shared.with_swarms(|r| {
             if r.streams >= max {
@@ -857,10 +865,12 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> StreamHold<K, H, V, T> {
             r.streams += 1;
             Ok(())
         })?;
+        let networks: BTreeSet<Vec<u8>> = network_keys.iter().cloned().collect();
         Ok(StreamHold {
             shared: shared.clone(),
             transfer_id,
             claim: None,
+            networks: networks.into_iter().collect(),
         })
     }
 
@@ -870,7 +880,12 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> StreamHold<K, H, V, T> {
         let t = self.transfer_id;
         let shared = &self.shared;
         let claim = self.claim.as_mut()?;
-        poll_fn(|cx| shared.with_swarms(|r| r.poll_swarm(&t, claim, cx))).await
+        let networks = &self.networks;
+        let swarm =
+            poll_fn(|cx| shared.with_swarms(|r| r.poll_swarm(&t, claim, networks, cx))).await?;
+        // A claim that moved to another slot names its networks there.
+        shared.publish_joined(&t);
+        Some(swarm)
     }
 }
 
@@ -878,12 +893,13 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Drop for StreamHold<K, H, V, T> {
     fn drop(&mut self) {
         let t = self.transfer_id;
         let claim = self.claim;
-        let removed = self.shared.with_swarms(|r| {
+        let networks = &self.networks;
+        let released = self.shared.with_swarms(|r| {
             r.streams = r.streams.saturating_sub(1);
-            claim.and_then(|c| r.release(&t, c))
+            claim.map(|c| r.release(&t, c, networks))
         });
-        if let Some(e) = removed {
-            self.shared.drop_swarm(t, e);
+        if let Some(r) = released {
+            self.shared.released(t, r);
         }
     }
 }
@@ -971,44 +987,37 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         }
     }
 
-    /// Takes a stream's claim on the slot of `t`: the slot there is, or a
-    /// new egress slot whose swarm a task adds.
+    /// Takes a stream's claim on the slot of `t`, reading on the networks
+    /// `networks`: the slot there is, or a new egress slot whose swarm a
+    /// task adds.
     fn claim_stream(
         self: &Rc<Self>,
         t: TransferId,
         id: SwarmId,
         options: SwarmOptions,
-        network_keys: &[Vec<u8>],
+        networks: &[Vec<u8>],
     ) -> Result<Claim, VideoError> {
-        let networks: BTreeSet<Vec<u8>> = network_keys
-            .iter()
-            .filter(|k| self.network.network(k).is_some())
-            .cloned()
-            .collect();
         let max = self.config.egress.max_swarms;
         let (claim, added) = self.with_swarms(|r| {
-            if let Some(e) = r.get_mut(&t) {
-                if matches!(e.kind, SwarmKind::Egress | SwarmKind::Seed) {
-                    e.networks.extend(networks);
+            if r.get(&t).is_none() {
+                if r.count(SwarmKind::Egress) >= max {
+                    return Err(VideoError::TooManySwarms);
                 }
-                return r
-                    .claim(&t)
-                    .map(|c| (c, false))
-                    .ok_or(VideoError::StreamClosed);
+                r.insert(
+                    t,
+                    None,
+                    id.clone(),
+                    options.clone(),
+                    SwarmKind::Egress,
+                    BTreeSet::new(),
+                    0,
+                );
+                let c = r.claim(&t, networks).ok_or(VideoError::StreamClosed)?;
+                return Ok((c, true));
             }
-            if r.count(SwarmKind::Egress) >= max {
-                return Err(VideoError::TooManySwarms);
-            }
-            let c = r.insert(
-                t,
-                None,
-                id.clone(),
-                options.clone(),
-                SwarmKind::Egress,
-                networks,
-                1,
-            );
-            Ok((c, true))
+            r.claim(&t, networks)
+                .map(|c| (c, false))
+                .ok_or(VideoError::StreamClosed)
         })?;
         if added {
             self.spawn(
@@ -1070,8 +1079,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         check_format(mime_type)?;
         let (uri, options) = check_stream(&s.config.egress, swarm_uri, network_keys)?;
         let t = TransferId::new(&uri.id, b"");
-        let mut hold = StreamHold::new(s, t)?;
-        hold.claim = Some(s.claim_stream(t, uri.id, options.clone(), network_keys)?);
+        let mut hold = StreamHold::new(s, t, network_keys)?;
+        hold.claim = Some(s.claim_stream(t, uri.id, options.clone(), &hold.networks)?);
         let swarm = hold.next_swarm().await.ok_or(VideoError::StreamClosed)?;
         let reader = s
             .host

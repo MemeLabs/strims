@@ -476,6 +476,45 @@ fn a_stream_on_a_seeded_swarm_survives_deleting_the_rule() {
     });
 }
 
+/// A seed's end withdraws the swarm from its rule's network when no
+/// stream of it names that network, while the stream holds the swarm.
+#[test]
+fn a_seed_that_ends_withdraws_its_network_from_a_swarm_a_stream_holds() {
+    run(async {
+        let p = pair().await;
+        p.ub.enable(true).await;
+        let (_, swarm) = p.listed_capture("live").await;
+        let r = p.ub.create(rule(&p.key, &swarm, b"")).await.unwrap();
+        p.wait_seeding(&swarm).await;
+
+        let listed = media(&p.b, 10).remove(0);
+        let mut s =
+            p.ub.egress
+                .open_stream(&EgressOpenStreamRequest {
+                    swarm_uri: listed.swarm_uri,
+                    network_keys: Vec::new(),
+                    mime_type: listed.mime_type,
+                })
+                .await
+                .unwrap();
+        let Body::Open(_) = next(&mut s).await else {
+            panic!("not open first");
+        };
+        let t = TransferId::new(&swarm, b"");
+        assert!(p.b.transfers.is_published(t, p.b.net(&p.key)));
+
+        p.ub.delete(r.id).await;
+        wait_for(10, "the seed to end", || {
+            video_swarm(&p.vb, &swarm).is_some_and(|v| v.kind == SwarmKind::Egress)
+        })
+        .await;
+        assert!(!p.b.transfers.is_published(t, p.b.net(&p.key)));
+        let v = video_swarm(&p.vb, &swarm).unwrap();
+        assert_eq!((v.streams, v.network_keys.len()), (1, 0));
+        assert_eq!(p.b.host.swarms_of(&swarm), (0, 1));
+    });
+}
+
 /// A rule under a non-empty salt seeds a transfer of its own under that
 /// salt, and never another component's.
 #[test]

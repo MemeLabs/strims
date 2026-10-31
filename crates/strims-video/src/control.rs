@@ -39,7 +39,7 @@ use crate::config::{Config, Metrics, check_hls_config, check_ingress_config};
 use crate::hls::HlsRoutes;
 use crate::hls_egress::{HlsEgress, HlsSweep};
 use crate::ingress::Ingress;
-use crate::registry::{LocalSwarm, Registry, VideoSwarm};
+use crate::registry::{LocalSwarm, Registry, Released, VideoSwarm};
 use crate::{VideoError, VideoEvent, VideoHost};
 
 /// A swarm of the node.
@@ -346,10 +346,30 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         let networks: Vec<Vec<u8>> = self.with_swarms(|r| {
             r.get(t)
                 .filter(|e| e.swarm.is_some())
-                .map(|e| e.networks.iter().cloned().collect())
+                .map(|e| e.networks().into_iter().collect())
                 .unwrap_or_default()
         });
         self.publish_on_joined(t, networks);
+    }
+
+    /// Withdraws transfer `t` from each of the networks `keys` names that
+    /// the node has joined.
+    pub(crate) fn unpublish_on(&self, t: TransferId, keys: Vec<Vec<u8>>) {
+        for key in keys {
+            if let Some(net) = self.network.network(&key).and_then(|i| i.net) {
+                self.transfers.unpublish(t, net);
+            }
+        }
+    }
+
+    /// Takes down what a holder's end left: the slot, if it went with it,
+    /// or the transfer's publications on the networks no holder names any
+    /// more.
+    pub(crate) fn released(self: &Rc<Self>, t: TransferId, r: Released<Swarm<H>>) {
+        match r.gone {
+            Some(e) => self.drop_swarm(t, e),
+            None => self.unpublish_on(t, r.unnamed),
+        }
     }
 
     /// Publishes transfer `t` on each of the networks `keys` names that
@@ -380,7 +400,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 let ids: Vec<TransferId> = self.with_swarms(|r| {
                     r.ids()
                         .into_iter()
-                        .filter(|t| r.get(t).is_some_and(|e| e.networks.contains(&key)))
+                        .filter(|t| r.get(t).is_some_and(|e| e.publishes_on(&key)))
                         .collect()
                 });
                 for t in ids {

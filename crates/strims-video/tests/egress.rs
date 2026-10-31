@@ -18,8 +18,11 @@ use std::time::Duration;
 use futures_util::StreamExt;
 use strims_chunkstream::chunked::ChunkedEncoder;
 use strims_crypto::key_from_seed;
+use strims_dao::Table;
+use strims_dao::schema::network::Networks;
 use strims_kv::MemoryKv;
 use strims_ppspp::{SwarmId, SwarmOptions, Uri, WriterOptions};
+use strims_proto::network::v1::Network;
 use strims_proto::network::v1::directory::ListingSnippet;
 use strims_proto::service::CallError;
 use strims_proto::video::v1::capture_config::Codec;
@@ -27,7 +30,7 @@ use strims_proto::video::v1::egress_open_stream_response::Body;
 use strims_proto::video::v1::{
     CaptureConfig, CaptureUnit, EgressClient, EgressOpenStreamRequest, EgressOpenStreamResponse,
 };
-use strims_rpc::{Client, ClientStream, Router};
+use strims_rpc::{Client, ClientStream, Router, Timer};
 use strims_testworld::*;
 use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
 use strims_video::hls::HlsRoutes;
@@ -391,6 +394,77 @@ fn two_streams_share_one_transfer_until_the_last_closes() {
         let (mut s3, _) = open(&e1, &p.uri, &keys).await.unwrap();
         assert_eq!(b.host.swarms_of(&p.id), (0, 1));
         assert_eq!(read(&mut s3, 1).await, unflagged(&r[..1]));
+    });
+}
+
+/// A stream names its networks whether or not the node runs them yet, and
+/// its swarm goes on a network as the node joins it: a stream that opens
+/// before the node has read its networks is published once it has.
+#[test]
+fn a_stream_goes_on_a_network_the_node_joins_after_it_opens() {
+    run(async {
+        let world = World::default();
+        let a = node_in(&world, 1).await;
+        let b = node_in(&world, 2).await;
+        let (net, _pipes) = owned_network(&a, &[&b], 10).await;
+        let key = net.public.clone();
+        let record = b.read_network(10).await;
+        let mut tx = b.store.write(b.timer.now()).await.unwrap();
+        Networks::delete(&mut tx, 10).await.unwrap();
+        tx.commit().await.unwrap();
+        wait_for(10, "the network to stop", || b.host.net(&key).is_none()).await;
+
+        let mut p = Publisher::new(&a, 7, capture_options()).await;
+        let video = start(&b, Config::default());
+        let keys = [key.clone()];
+        let (mut s, _) = open(&egress(&video), &p.uri, &keys).await.unwrap();
+        assert_eq!(video.video_swarms()[0].network_keys, keys);
+
+        b.write_network(Network { id: 110, ..record }).await;
+        wait_for(120, "the stream's transfer published", || {
+            b.host
+                .net(&key)
+                .is_some_and(|n| b.transfers.is_published(p.transfer_id(), n))
+        })
+        .await;
+        let r = records(0, 2);
+        for x in &r {
+            p.record(x).await;
+        }
+        assert_eq!(read(&mut s, 2).await, unflagged(&r));
+    });
+}
+
+/// A stream that closes withdraws its swarm from the networks no other
+/// stream of it names, and the swarm stays on those another stream names.
+#[test]
+fn a_closed_stream_withdraws_its_swarm_from_the_networks_only_it_named() {
+    run(async {
+        let world = World::default();
+        let a = node_in(&world, 1).await;
+        let b = node_in(&world, 2).await;
+        let (n10, _p10) = owned_network(&a, &[&b], 10).await;
+        let (n11, _p11) = owned_network(&a, &[&b], 11).await;
+        let p = Publisher::new(&a, 7, capture_options()).await;
+        let video = start(&b, Config::default());
+        let (e1, e2) = (egress(&video), egress(&video));
+        let both = [n10.public.clone(), n11.public.clone()];
+        let (s1, _) = open(&e1, &p.uri, &both).await.unwrap();
+        let (_s2, _) = open(&e2, &p.uri, std::slice::from_ref(&n10.public))
+            .await
+            .unwrap();
+        let t = p.transfer_id();
+        let published = |key: &[u8]| b.transfers.is_published(t, b.net(key));
+        assert!(published(&n10.public) && published(&n11.public));
+
+        drop(s1);
+        settle().await;
+        assert!(published(&n10.public));
+        assert!(!published(&n11.public));
+        assert_eq!(
+            video.video_swarms()[0].network_keys,
+            std::slice::from_ref(&n10.public)
+        );
     });
 }
 

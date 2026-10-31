@@ -27,6 +27,14 @@
 //! it reads. When that swarm closes, the stream reads the slot's newer
 //! swarm, or a newer slot's, once there is one
 //! ([`Registry::poll_swarm`]).
+//!
+//! A slot's transfer is published on its networks, each once the node
+//! joins it: those of its writer, a capture's or an ingest session's, and
+//! those its holders name. A stream of an egress or seed slot names the
+//! networks it reads on, and a seed its rule's network. A holder's end
+//! drops its names, and a network no one names any more, and that isn't
+//! its writer's, is returned for the caller to withdraw the transfer from
+//! ([`Released`]).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::task::{Context, Poll, Waker};
@@ -71,12 +79,61 @@ pub struct VideoSwarm {
     pub network_keys: Vec<Vec<u8>>,
 }
 
-/// A stream's hold on a slot: the slot, and the generation of the swarm
-/// the stream reads there, 0 before it reads one.
+/// A stream's hold on a slot: the slot, the generation of the swarm the
+/// stream reads there, 0 before it reads one, and whether the stream names
+/// its networks on the slot, which it does on an egress or seed slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Claim {
     pub(crate) slot: u64,
     pub(crate) generation: u64,
+    named: bool,
+}
+
+/// What a holder's end left: the slot, if it went with it, and otherwise
+/// the networks the slot no longer publishes on.
+pub(crate) struct Released<S> {
+    /// The slot, gone from the registry, for the caller to take down.
+    pub(crate) gone: Option<LocalSwarm<S>>,
+    /// Networks no holder names any more, which aren't the writer's: the
+    /// caller withdraws the transfer from those the node joined.
+    pub(crate) unnamed: Vec<Vec<u8>>,
+}
+
+impl<S> Default for Released<S> {
+    fn default() -> Self {
+        Released {
+            gone: None,
+            unnamed: Vec::new(),
+        }
+    }
+}
+
+/// Counts one more holder naming each of `keys` in `names`.
+fn name(names: &mut BTreeMap<Vec<u8>, usize>, keys: &[Vec<u8>]) {
+    for k in keys {
+        *names.entry(k.clone()).or_default() += 1;
+    }
+}
+
+/// Counts one holder fewer naming each of `keys` in `names`: the keys no
+/// holder names there any more.
+fn unname(names: &mut BTreeMap<Vec<u8>, usize>, keys: &[Vec<u8>]) -> Vec<Vec<u8>> {
+    let mut dropped = Vec::new();
+    for k in keys {
+        if let Some(n) = names.get_mut(k) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                names.remove(k);
+                dropped.push(k.clone());
+            }
+        }
+    }
+    dropped
+}
+
+/// Whether a stream names its networks on a slot of `kind`.
+fn names_networks(kind: SwarmKind) -> bool {
+    matches!(kind, SwarmKind::Egress | SwarmKind::Seed)
 }
 
 /// A video swarm on this node.
@@ -94,11 +151,18 @@ pub(crate) struct LocalSwarm<S> {
     /// any other. Bound: the rules seeding at once
     /// ([`AutoseedSettings::max_seeds`](crate::AutoseedSettings::max_seeds)).
     pub(crate) seeds: usize,
-    /// The keys of the networks the transfer is published on, each once
-    /// the node joins it. Bound: a capture's network keys; an ingest
-    /// session's one; for an egress or seed slot, the networks the node
-    /// runs.
-    pub(crate) networks: BTreeSet<Vec<u8>>,
+    /// The keys of the networks its writer publishes it on: a capture's
+    /// network keys, an ingest session's one, and none for an egress or
+    /// seed slot.
+    pub(crate) own: BTreeSet<Vec<u8>>,
+    /// The networks the streams holding the slot name, with how many name
+    /// each. Bound:
+    /// [`EgressSettings::max_network_keys`](crate::EgressSettings::max_network_keys)
+    /// per stream.
+    streamed: BTreeMap<Vec<u8>, usize>,
+    /// The networks the seeds holding the slot name, with how many name
+    /// each. Bound: one per seed.
+    seeded: BTreeMap<Vec<u8>, usize>,
     pub(crate) slot: u64,
     pub(crate) generation: u64,
     /// Tasks waiting for the slot's swarm to change. Bound: one per task,
@@ -107,6 +171,28 @@ pub(crate) struct LocalSwarm<S> {
 }
 
 impl<S> LocalSwarm<S> {
+    /// The keys of the networks the transfer is published on, each once
+    /// the node joins it: its writer's and those its holders name.
+    pub(crate) fn networks(&self) -> BTreeSet<Vec<u8>> {
+        self.own
+            .iter()
+            .chain(self.streamed.keys())
+            .chain(self.seeded.keys())
+            .cloned()
+            .collect()
+    }
+
+    /// Whether the transfer is published on the network `key`, once the
+    /// node joins it.
+    pub(crate) fn publishes_on(&self, key: &[u8]) -> bool {
+        self.own.contains(key) || self.streamed.contains_key(key) || self.seeded.contains_key(key)
+    }
+
+    /// Of `keys`, those the slot no longer publishes on.
+    fn unnamed(&self, keys: impl IntoIterator<Item = Vec<u8>>) -> Vec<Vec<u8>> {
+        keys.into_iter().filter(|k| !self.publishes_on(k)).collect()
+    }
+
     fn wait(&mut self, cx: &Context<'_>) {
         if !self.waiters.iter().any(|w| w.will_wake(cx.waker())) {
             self.waiters.push(cx.waker().clone());
@@ -210,7 +296,7 @@ impl<S: Copy> Registry<S> {
                 added: e.swarm.is_some(),
                 streams: e.refs,
                 seeds: e.seeds,
-                network_keys: e.networks.iter().cloned().collect(),
+                network_keys: e.networks().into_iter().collect(),
             })
             .collect()
     }
@@ -227,7 +313,9 @@ impl<S: Copy> Registry<S> {
     }
 
     /// Makes a slot for `t`, with `refs` streams holding it, in place of
-    /// none: the claim of a stream holding it, before the stream reads.
+    /// none, published on its writer's networks `networks`: the claim of a
+    /// stream holding it, before the stream reads. Such a stream names no
+    /// networks: [`claim`](Self::claim) has a stream name them.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn insert(
         &mut self,
@@ -250,7 +338,9 @@ impl<S: Copy> Registry<S> {
                 kind,
                 refs,
                 seeds: 0,
-                networks,
+                own: networks,
+                streamed: BTreeMap::new(),
+                seeded: BTreeMap::new(),
                 slot,
                 generation,
                 waiters: Vec::new(),
@@ -262,42 +352,66 @@ impl<S: Copy> Registry<S> {
         Claim {
             slot,
             generation: 0,
+            named: false,
         }
     }
 
-    /// Has one more stream hold the slot of `t`: its claim, before it
-    /// reads.
-    pub(crate) fn claim(&mut self, t: &TransferId) -> Option<Claim> {
+    /// Has one more stream, reading on the networks `networks`, hold the
+    /// slot of `t`: its claim, before it reads. On an egress or seed slot
+    /// the stream names its networks.
+    pub(crate) fn claim(&mut self, t: &TransferId, networks: &[Vec<u8>]) -> Option<Claim> {
         let e = self.swarms.get_mut(t)?;
         e.refs += 1;
+        let named = names_networks(e.kind);
+        if named {
+            name(&mut e.streamed, networks);
+        }
         Some(Claim {
             slot: e.slot,
             generation: 0,
+            named,
         })
     }
 
-    /// Releases a stream's claim. Returns the egress slot the last of its
-    /// streams released, which is gone from the registry. A slot whose
-    /// swarm is being added stays until the add ends
+    /// Releases the claim of a stream that read on the networks
+    /// `networks`, as [`claim`](Self::claim) and
+    /// [`poll_swarm`](Self::poll_swarm) were given them. The egress slot
+    /// the last of its streams released is gone from the registry. A slot
+    /// whose swarm is being added stays until the add ends
     /// ([`set_swarm`](Self::set_swarm)), so adds in flight are bounded by
     /// the slots. A seed slot stays.
-    pub(crate) fn release(&mut self, t: &TransferId, claim: Claim) -> Option<LocalSwarm<S>> {
-        let e = self.swarms.get_mut(t)?;
-        if e.slot != claim.slot {
-            return None;
-        }
+    pub(crate) fn release(
+        &mut self,
+        t: &TransferId,
+        claim: Claim,
+        networks: &[Vec<u8>],
+    ) -> Released<S> {
+        let Some(e) = self.swarms.get_mut(t).filter(|e| e.slot == claim.slot) else {
+            return Released::default();
+        };
         e.refs = e.refs.saturating_sub(1);
+        let dropped = if claim.named {
+            unname(&mut e.streamed, networks)
+        } else {
+            Vec::new()
+        };
         if e.unheld() && e.swarm.is_some() {
-            return self.remove(t);
+            return Released {
+                gone: self.remove(t),
+                unnamed: Vec::new(),
+            };
         }
-        None
+        Released {
+            gone: None,
+            unnamed: e.unnamed(dropped),
+        }
     }
 
     /// Has one more seed, on network `network`, hold the slot of `t`: an
-    /// egress or seed slot becomes or stays a seed slot, and its transfer
-    /// goes on `network` too. With no slot, a new seed slot of the swarm
-    /// `id` with `options` holds it. A capture's or an ingest session's
-    /// slot takes no seed.
+    /// egress or seed slot becomes or stays a seed slot, and the seed names
+    /// `network`. With no slot, a new seed slot of the swarm `id` with
+    /// `options` holds it. A capture's or an ingest session's slot takes
+    /// no seed.
     pub(crate) fn seed(
         &mut self,
         t: TransferId,
@@ -311,36 +425,45 @@ impl<S: Copy> Registry<S> {
             }
             e.kind = SwarmKind::Seed;
             e.seeds += 1;
-            e.networks.insert(network);
+            name(&mut e.seeded, std::slice::from_ref(&network));
             return Seeded::Held(e.slot);
         }
-        let networks = BTreeSet::from([network]);
-        let claim = self.insert(t, None, id, options, SwarmKind::Seed, networks, 0);
+        let claim = self.insert(t, None, id, options, SwarmKind::Seed, BTreeSet::new(), 0);
         if let Some(e) = self.swarms.get_mut(&t) {
             e.seeds = 1;
+            name(&mut e.seeded, std::slice::from_ref(&network));
         }
         Seeded::Added(claim.slot)
     }
 
-    /// Ends a seed slot `slot` of `t` holds. The slot's last seed makes
-    /// it an egress slot again, which goes as the last stream's
-    /// [`release`](Self::release) has it; it is returned if it went. A
-    /// seed of a removed slot, or of a slot an ingest session took over,
-    /// ended with it.
-    pub(crate) fn unseed(&mut self, t: &TransferId, slot: u64) -> Option<LocalSwarm<S>> {
-        let e = self.swarms.get_mut(t)?;
-        if e.slot != slot || e.kind != SwarmKind::Seed {
-            return None;
-        }
+    /// Ends a seed on network `network` that slot `slot` of `t` holds. The
+    /// slot's last seed makes it an egress slot again, which goes as the
+    /// last stream's [`release`](Self::release) has it. A seed of a
+    /// removed slot, or of a slot an ingest session took over, ended with
+    /// it.
+    pub(crate) fn unseed(&mut self, t: &TransferId, slot: u64, network: &[u8]) -> Released<S> {
+        let Some(e) = self
+            .swarms
+            .get_mut(t)
+            .filter(|e| e.slot == slot && e.kind == SwarmKind::Seed)
+        else {
+            return Released::default();
+        };
         e.seeds = e.seeds.saturating_sub(1);
-        if e.seeds > 0 {
-            return None;
+        let dropped = unname(&mut e.seeded, &[network.to_vec()]);
+        if e.seeds == 0 {
+            e.kind = SwarmKind::Egress;
+            if e.unheld() && e.swarm.is_some() {
+                return Released {
+                    gone: self.remove(t),
+                    unnamed: Vec::new(),
+                };
+            }
         }
-        e.kind = SwarmKind::Egress;
-        if e.unheld() && e.swarm.is_some() {
-            return self.remove(t);
+        Released {
+            gone: None,
+            unnamed: e.unnamed(dropped),
         }
-        None
     }
 
     /// Whether slot `slot` of `t` is a seed slot.
@@ -366,11 +489,13 @@ impl<S: Copy> Registry<S> {
     }
 
     /// Takes the swarm out of the slot of `t` for a swarm of `kind` to
-    /// come: the slot keeps its streams, drops its seeds, takes `id`,
-    /// `options` and `networks`, and gets a new generation without a
-    /// swarm until [`set_swarm`](Self::set_swarm). Its streams read the
-    /// next swarm once theirs closes. Returns the slot and the swarm taken out, for
-    /// the caller to remove with its transfer; `None` without a slot.
+    /// come, written by its new writer: the slot keeps its streams, drops
+    /// its seeds and the networks its holders named, takes `id`, `options`
+    /// and its writer's networks `networks`, and gets a new generation
+    /// without a swarm until [`set_swarm`](Self::set_swarm). Its streams
+    /// read the next swarm once theirs closes. Returns the slot and the
+    /// swarm taken out, for the caller to remove with its transfer; `None`
+    /// without a slot.
     pub(crate) fn replace(
         &mut self,
         t: &TransferId,
@@ -386,7 +511,9 @@ impl<S: Copy> Registry<S> {
         e.options = options;
         e.kind = kind;
         e.seeds = 0;
-        e.networks = networks;
+        e.own = networks;
+        e.streamed.clear();
+        e.seeded.clear();
         e.generation = generation;
         Self::wake(&mut self.woken, e);
         Some((e.slot, old))
@@ -412,15 +539,17 @@ impl<S: Copy> Registry<S> {
         Added::Kept
     }
 
-    /// The swarm of `t` for a stream with `claim` to read: one of another
-    /// generation than the claim's. Waits while the slot has none. A
-    /// stream whose slot went takes a claim on the slot that replaced it.
-    /// `None` when there is no slot, or the swarm is the one the claim
+    /// The swarm of `t` for a stream with `claim`, reading on the networks
+    /// `networks`, to read: one of another generation than the claim's.
+    /// Waits while the slot has none. A stream whose slot went takes a
+    /// claim on the slot that replaced it, as [`claim`](Self::claim) has
+    /// it. `None` when there is no slot, or the swarm is the one the claim
     /// read: that one closed for good.
     pub(crate) fn poll_swarm(
         &mut self,
         t: &TransferId,
         claim: &mut Claim,
+        networks: &[Vec<u8>],
         cx: &Context<'_>,
     ) -> Poll<Option<S>> {
         let Some(e) = self.swarms.get_mut(t) else {
@@ -428,9 +557,14 @@ impl<S: Copy> Registry<S> {
         };
         if e.slot != claim.slot {
             e.refs += 1;
+            let named = names_networks(e.kind);
+            if named {
+                name(&mut e.streamed, networks);
+            }
             *claim = Claim {
                 slot: e.slot,
                 generation: 0,
+                named,
             };
         }
         if e.generation == claim.generation {
@@ -474,20 +608,20 @@ mod tests {
     }
 
     fn poll(r: &mut Registry<u32>, n: u8, c: &mut Claim) -> Poll<Option<u32>> {
-        r.poll_swarm(&tid(n), c, &Context::from_waker(Waker::noop()))
+        r.poll_swarm(&tid(n), c, &[], &Context::from_waker(Waker::noop()))
     }
 
     #[test]
     fn the_last_stream_removes_an_egress_slot_only() {
         let mut r = Registry::default();
         let a = insert(&mut r, 1, Some(7), SwarmKind::Egress);
-        let b = r.claim(&tid(1)).unwrap();
-        assert!(r.release(&tid(1), a).is_none());
-        assert_eq!(r.release(&tid(1), b).unwrap().swarm, Some(7));
+        let b = r.claim(&tid(1), &[]).unwrap();
+        assert!(r.release(&tid(1), a, &[]).gone.is_none());
+        assert_eq!(r.release(&tid(1), b, &[]).gone.unwrap().swarm, Some(7));
         assert!(r.get(&tid(1)).is_none());
 
         let c = insert(&mut r, 2, Some(8), SwarmKind::Capture);
-        assert!(r.release(&tid(2), c).is_none());
+        assert!(r.release(&tid(2), c, &[]).gone.is_none());
         assert_eq!(r.get(&tid(2)).unwrap().refs, 0);
     }
 
@@ -497,9 +631,9 @@ mod tests {
         let old = insert(&mut r, 1, Some(7), SwarmKind::Egress);
         r.remove(&tid(1));
         let new = insert(&mut r, 1, Some(9), SwarmKind::Egress);
-        assert!(r.release(&tid(1), old).is_none());
+        assert!(r.release(&tid(1), old, &[]).gone.is_none());
         assert_eq!(r.get(&tid(1)).unwrap().refs, 1);
-        assert!(r.release(&tid(1), new).is_some());
+        assert!(r.release(&tid(1), new, &[]).gone.is_some());
     }
 
     #[test]
@@ -518,10 +652,10 @@ mod tests {
     fn a_slot_released_while_its_swarm_is_added_goes_when_the_add_ends() {
         let mut r = Registry::default();
         let c = insert(&mut r, 1, None, SwarmKind::Egress);
-        assert!(r.release(&tid(1), c).is_none());
+        assert!(r.release(&tid(1), c, &[]).gone.is_none());
         assert_eq!(r.count(SwarmKind::Egress), 1);
-        let again = r.claim(&tid(1)).unwrap();
-        assert!(r.release(&tid(1), again).is_none());
+        let again = r.claim(&tid(1), &[]).unwrap();
+        assert!(r.release(&tid(1), again, &[]).gone.is_none());
         assert_eq!(r.set_swarm(&tid(1), c.slot, 7), Added::Unwanted);
         assert!(r.get(&tid(1)).is_none());
     }
@@ -535,7 +669,7 @@ mod tests {
         insert(&mut r, 1, Some(9), SwarmKind::Egress);
         assert_eq!(poll(&mut r, 1, &mut c), Poll::Ready(Some(9)));
         assert_eq!(r.get(&tid(1)).unwrap().refs, 2);
-        assert!(r.release(&tid(1), c).is_none());
+        assert!(r.release(&tid(1), c, &[]).gone.is_none());
         assert_eq!(r.get(&tid(1)).unwrap().refs, 1);
     }
 
@@ -558,7 +692,7 @@ mod tests {
         assert_eq!(r.set_swarm(&tid(1), slot, 8), Added::Kept);
         assert_eq!(poll(&mut r, 1, &mut c), Poll::Ready(Some(8)));
         // The last stream leaves an ingest slot in place.
-        assert!(r.release(&tid(1), c).is_none());
+        assert!(r.release(&tid(1), c, &[]).gone.is_none());
         assert_eq!(r.get(&tid(1)).unwrap().kind, SwarmKind::Ingest);
         assert!(
             r.replace(
@@ -588,16 +722,19 @@ mod tests {
         assert_eq!(seed(&mut r, 1, 10), Seeded::Held(c.slot));
         let e = r.get(&tid(1)).unwrap();
         assert_eq!((e.kind, e.seeds, e.refs), (SwarmKind::Seed, 1, 1));
-        assert!(e.networks.contains(&vec![10]));
-        assert!(r.release(&tid(1), c).is_none());
+        assert!(e.publishes_on(&[10]));
+        assert!(r.release(&tid(1), c, &[]).gone.is_none());
         assert_eq!(r.get(&tid(1)).unwrap().refs, 0);
         assert!(r.seeds_slot(&tid(1), c.slot));
 
         // A second seed holds the slot past the first's end.
         assert_eq!(seed(&mut r, 1, 11), Seeded::Held(c.slot));
-        assert!(r.unseed(&tid(1), c.slot).is_none());
+        assert!(r.unseed(&tid(1), c.slot, &[10]).gone.is_none());
         assert_eq!(r.get(&tid(1)).unwrap().seeds, 1);
-        assert_eq!(r.unseed(&tid(1), c.slot).unwrap().swarm, Some(7));
+        assert_eq!(
+            r.unseed(&tid(1), c.slot, &[10]).gone.unwrap().swarm,
+            Some(7)
+        );
         assert!(r.get(&tid(1)).is_none());
     }
 
@@ -609,12 +746,12 @@ mod tests {
         };
         assert_eq!(r.count(SwarmKind::Seed), 1);
         assert_eq!(r.set_swarm(&tid(1), slot, 7), Added::Kept);
-        let c = r.claim(&tid(1)).unwrap();
-        assert!(r.unseed(&tid(1), slot).is_none());
+        let c = r.claim(&tid(1), &[]).unwrap();
+        assert!(r.unseed(&tid(1), slot, &[10]).gone.is_none());
         let e = r.get(&tid(1)).unwrap();
         assert_eq!((e.kind, e.seeds, e.refs), (SwarmKind::Egress, 0, 1));
-        assert!(r.unseed(&tid(1), slot).is_none());
-        assert_eq!(r.release(&tid(1), c).unwrap().swarm, Some(7));
+        assert!(r.unseed(&tid(1), slot, &[10]).gone.is_none());
+        assert_eq!(r.release(&tid(1), c, &[]).gone.unwrap().swarm, Some(7));
     }
 
     #[test]
@@ -623,11 +760,11 @@ mod tests {
         let Seeded::Added(slot) = seed(&mut r, 1, 10) else {
             panic!("no seed slot");
         };
-        assert!(r.unseed(&tid(1), slot).is_none());
+        assert!(r.unseed(&tid(1), slot, &[10]).gone.is_none());
         assert_eq!(r.count(SwarmKind::Egress), 1);
         // Seeding it again takes the slot whose add is in flight.
         assert_eq!(seed(&mut r, 1, 10), Seeded::Held(slot));
-        assert!(r.unseed(&tid(1), slot).is_none());
+        assert!(r.unseed(&tid(1), slot, &[10]).gone.is_none());
         assert_eq!(r.set_swarm(&tid(1), slot, 7), Added::Unwanted);
         assert!(r.get(&tid(1)).is_none());
     }
@@ -639,7 +776,7 @@ mod tests {
             panic!("no seed slot");
         };
         r.set_swarm(&tid(1), slot, 7);
-        let c = r.claim(&tid(1)).unwrap();
+        let c = r.claim(&tid(1), &[]).unwrap();
         let (taken, old) = r
             .replace(
                 &tid(1),
@@ -653,9 +790,9 @@ mod tests {
         let e = r.get(&tid(1)).unwrap();
         assert_eq!((e.kind, e.seeds, e.refs), (SwarmKind::Ingest, 0, 1));
         assert!(!r.seeds_slot(&tid(1), slot));
-        assert!(r.unseed(&tid(1), slot).is_none());
+        assert!(r.unseed(&tid(1), slot, &[10]).gone.is_none());
         assert_eq!(r.get(&tid(1)).unwrap().kind, SwarmKind::Ingest);
-        assert!(r.release(&tid(1), c).is_none());
+        assert!(r.release(&tid(1), c, &[]).gone.is_none());
     }
 
     #[test]
@@ -666,7 +803,99 @@ mod tests {
         assert_eq!(seed(&mut r, 1, 10), Seeded::Refused);
         assert_eq!(seed(&mut r, 2, 10), Seeded::Refused);
         assert_eq!(r.get(&tid(1)).unwrap().seeds, 0);
-        assert!(r.get(&tid(2)).unwrap().networks.is_empty());
+        assert!(r.get(&tid(2)).unwrap().networks().is_empty());
+    }
+
+    fn keys(ks: &[u8]) -> Vec<Vec<u8>> {
+        ks.iter().map(|&k| vec![k]).collect()
+    }
+
+    #[test]
+    fn a_network_stays_published_while_a_holder_names_it() {
+        let mut r = Registry::default();
+        insert(&mut r, 1, Some(7), SwarmKind::Egress);
+        let t = tid(1);
+        // The insert's own claim names nothing; take two that do.
+        let first = r.claim(&t, &keys(&[1, 2])).unwrap();
+        let second = r.claim(&t, &keys(&[2])).unwrap();
+        assert_eq!(seed(&mut r, 1, 3), Seeded::Held(first.slot));
+        assert_eq!(
+            r.get(&t).unwrap().networks(),
+            BTreeSet::from([vec![1], vec![2], vec![3]])
+        );
+
+        let released = r.release(&t, first, &keys(&[1, 2]));
+        assert!(released.gone.is_none());
+        assert_eq!(released.unnamed, keys(&[1]));
+        let released = r.release(&t, second, &keys(&[2]));
+        assert_eq!(released.unnamed, keys(&[2]));
+        assert!(r.get(&t).unwrap().publishes_on(&[3]));
+        assert_eq!(r.list().remove(0).network_keys, keys(&[3]));
+
+        // A seed and a stream naming one network: it stays until both end.
+        let stream = r.claim(&t, &keys(&[3])).unwrap();
+        assert!(r.unseed(&t, first.slot, &[3]).unnamed.is_empty());
+        assert_eq!(r.get(&t).unwrap().kind, SwarmKind::Egress);
+        assert!(r.get(&t).unwrap().publishes_on(&[3]));
+        assert!(r.release(&t, stream, &keys(&[3])).gone.is_none());
+    }
+
+    #[test]
+    fn streams_of_a_writers_slot_name_no_networks() {
+        let mut r = Registry::default();
+        let t = tid(1);
+        r.insert(
+            t,
+            Some(7),
+            SwarmId::new(&[1; 32]),
+            SwarmOptions::default(),
+            SwarmKind::Capture,
+            BTreeSet::from([vec![1]]),
+            0,
+        );
+        let c = r.claim(&t, &keys(&[2])).unwrap();
+        assert_eq!(r.get(&t).unwrap().networks(), BTreeSet::from([vec![1]]));
+        let released = r.release(&t, c, &keys(&[2]));
+        assert!(released.gone.is_none() && released.unnamed.is_empty());
+    }
+
+    #[test]
+    fn a_claim_moved_to_a_replacing_slot_names_its_networks_there() {
+        let mut r = Registry::default();
+        let t = tid(1);
+        let mut c = insert(&mut r, 1, Some(7), SwarmKind::Capture);
+        assert_eq!(
+            r.poll_swarm(&t, &mut c, &keys(&[2]), &Context::from_waker(Waker::noop())),
+            Poll::Ready(Some(7))
+        );
+        r.remove(&t);
+        insert(&mut r, 1, Some(9), SwarmKind::Egress);
+        assert_eq!(
+            r.poll_swarm(&t, &mut c, &keys(&[2]), &Context::from_waker(Waker::noop())),
+            Poll::Ready(Some(9))
+        );
+        assert!(r.get(&t).unwrap().publishes_on(&[2]));
+        let released = r.release(&t, c, &keys(&[2]));
+        assert!(released.gone.is_none());
+        assert_eq!(released.unnamed, keys(&[2]));
+    }
+
+    #[test]
+    fn a_writer_taking_over_a_slot_publishes_on_its_networks_alone() {
+        let mut r = Registry::default();
+        let t = tid(1);
+        insert(&mut r, 1, Some(7), SwarmKind::Egress);
+        let c = r.claim(&t, &keys(&[2])).unwrap();
+        r.replace(
+            &t,
+            SwarmId::new(&[1; 32]),
+            SwarmOptions::default(),
+            SwarmKind::Ingest,
+            BTreeSet::from([vec![1]]),
+        );
+        assert_eq!(r.get(&t).unwrap().networks(), BTreeSet::from([vec![1]]));
+        let released = r.release(&t, c, &keys(&[2]));
+        assert!(released.gone.is_none() && released.unnamed.is_empty());
     }
 
     #[test]

@@ -127,7 +127,9 @@
 //!   swarms. Bounds: [`AutoseedSettings`].
 //!
 //! Each video swarm's transfer is published on its networks the node has
-//! joined, and on the others as it joins them.
+//! joined, and on the others as it joins them: its writer's, and those
+//! the streams and seeds holding it name. A network no holder names any
+//! more, and that isn't its writer's, is withdrawn.
 //!
 //! # HLS egress
 //!

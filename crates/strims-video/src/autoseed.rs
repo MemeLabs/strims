@@ -32,7 +32,8 @@
 //!   ([crate docs](crate#video-swarms)), and the seed holds its slot. A
 //!   swarm the node reads for streams is seeded where it is, and streams
 //!   read a seeded swarm where it is; it goes with the last of its seeds
-//!   and streams. A capture's or an ingest session's swarm takes no seed,
+//!   and streams. A seed's end withdraws the transfer from its rule's
+//!   network unless a stream or another seed names that network too. A capture's or an ingest session's swarm takes no seed,
 //!   and an ingest session that takes over a seeded swarm's slot ends its
 //!   seeds.
 //! - Under another salt, autoseed seeds only a transfer it added: while
@@ -536,9 +537,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         let t = seed.want.transfer_id();
         match seed.hold {
             Hold::Slot(slot) => {
-                if let Some(e) = self.with_swarms(|r| r.unseed(&t, slot)) {
-                    self.drop_swarm(t, e);
-                }
+                let network = &seed.want.network_key;
+                let released = self.with_swarms(|r| r.unseed(&t, slot, network));
+                self.released(t, released);
             }
             Hold::Salted(add) => {
                 let gone = {
