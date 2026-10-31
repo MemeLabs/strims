@@ -7,9 +7,6 @@ import React, { MutableRefObject, useEffect, useState } from "react";
 import { EgressOpenStreamResponse } from "../../apis/strims/video/v1/egress";
 import { useClient } from "../../contexts/FrontendApi";
 import { useSession } from "../../contexts/Session";
-import useMediaRelay from "../../hooks/useMediaRelay";
-import useMediaSource from "../../hooks/useMediaSource";
-import useReady from "../../hooks/useReady";
 import { VideoControls } from "../../hooks/useVideo";
 import { LowLatencyPlayer } from "../../lib/media/lowlatency/player";
 import { rendererParam } from "../../lib/media/lowlatency/support";
@@ -25,9 +22,8 @@ export interface SwarmMediaProps {
   lowLatency?: boolean;
 }
 
-// Each component puts one way of playing a swarm on the video, rendering
-// nothing. The player renders the one its stream's format takes, keyed by
-// it, so a stream of another format mounts its own.
+// Puts a swarm's stream on the video, rendering nothing. The player keys it
+// by the player kind it takes, so a change of player mounts it again.
 
 // A unit-format stream: decoded with WebCodecs by the low-latency player
 // when asked for, until it gives up on the stream, else remuxed for
@@ -126,46 +122,6 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
       videoControls.setSrc(null);
     };
   }, [networkKey, swarmUri, mimeType, lowLatency, fallback, feeds]);
-
-  return null;
-};
-
-// An fMP4 record stream, appended to a MediaSource in the window.
-export const MediaSourceMedia: React.FC<SwarmMediaProps> = ({
-  networkKey,
-  swarmUri,
-  mimeType,
-  videoRef,
-  videoControls,
-}) => {
-  const mediaSource = useMediaSource({ networkKey, swarmUri, mimeType, videoRef });
-
-  useReady(() => {
-    const src = URL.createObjectURL(mediaSource);
-    videoControls.setSrc(src);
-    return () => {
-      URL.revokeObjectURL(src);
-      videoControls.setSrc(null);
-    };
-  }, [mediaSource]);
-
-  return null;
-};
-
-// An fMP4 record stream, relayed as HLS through the service worker.
-export const MediaRelayMedia: React.FC<SwarmMediaProps> = ({
-  networkKey,
-  swarmUri,
-  mimeType,
-  videoRef,
-  videoControls,
-}) => {
-  const src = useMediaRelay({ networkKey, swarmUri, mimeType, videoRef });
-
-  useReady(() => {
-    videoControls.setSrc(src);
-    return () => videoControls.setSrc(null);
-  }, [src]);
 
   return null;
 };

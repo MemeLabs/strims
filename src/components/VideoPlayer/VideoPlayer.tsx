@@ -10,16 +10,15 @@ import useFullscreen from "use-fullscreen";
 
 import { useLayout } from "../../contexts/Layout";
 import useIdleTimeout from "../../hooks/useIdleTimeout";
-import { MediaSourceProps } from "../../hooks/useMediaSource";
 import useVideo from "../../hooks/useVideo";
 import { lowLatencySupport } from "../../lib/media/lowlatency/support";
 import { streamFormat } from "../../lib/media/mime";
 import { PlayerKind, choosePlayer, preferredPlayer } from "../../lib/media/players";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
-import { MediaRelayMedia, MediaSourceMedia, SwarmMediaProps, UnitsMedia } from "./SwarmMedia";
+import { SwarmMediaProps, UnitsMedia } from "./SwarmMedia";
 import VideoControls from "./VideoControls";
 
-interface SwarmPlayerProps extends Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mimeType"> {
+interface SwarmPlayerProps extends Pick<SwarmMediaProps, "networkKey" | "swarmUri" | "mimeType"> {
   defaultControlsVisible?: boolean;
   disableControls?: boolean;
   defaultAspectRatio?: string | number;
@@ -31,8 +30,6 @@ interface SwarmPlayerProps extends Pick<MediaSourceProps, "networkKey" | "swarmU
 const swarmMedia: Record<PlayerKind, React.FC<SwarmMediaProps> | null> = {
   [PlayerKind.LowLatency]: UnitsMedia,
   [PlayerKind.Units]: UnitsMedia,
-  [PlayerKind.MediaSource]: MediaSourceMedia,
-  [PlayerKind.Relay]: MediaRelayMedia,
   [PlayerKind.None]: null,
 };
 
@@ -65,9 +62,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   // Unit-format streams play through a player worker everywhere, the
   // low-latency player's when the viewer asks for it (?player=lowlatency,
   // or the "player" local storage setting) and the browser has what it
-  // needs; fMP4 record streams through a window MediaSource, or the service
-  // worker's HLS relay where the window has none (iOS); other formats not
-  // at all.
+  // needs; other formats not at all.
   const format = streamFormat(mimeType);
   const kind = useMemo(
     () =>
@@ -75,7 +70,6 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         format,
         preference: preferredPlayer(location.search, storage()),
         lowLatency: lowLatencySupport(),
-        windowMediaSource: !!window.MediaSource,
       }),
     [format]
   );

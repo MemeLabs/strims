@@ -24,7 +24,7 @@ describe("players", () => {
   });
 
   it("unit-format streams play low-latency only when preferred and supported", () => {
-    const units = { format: StreamFormat.Units, windowMediaSource: true };
+    const units = { format: StreamFormat.Units };
     assert.strictEqual(
       choosePlayer({ ...units, preference: "lowlatency", lowLatency: true }),
       PlayerKind.LowLatency
@@ -39,22 +39,17 @@ describe("players", () => {
     );
   });
 
-  it("only fMP4 record streams go to the record players", () => {
-    const fmp4 = { format: StreamFormat.Fmp4, preference: "lowlatency" as const, lowLatency: true };
-    assert.strictEqual(choosePlayer({ ...fmp4, windowMediaSource: true }), PlayerKind.MediaSource);
-    assert.strictEqual(choosePlayer({ ...fmp4, windowMediaSource: false }), PlayerKind.Relay);
-  });
-
   it("a stream of another format gets no player", () => {
-    for (const mime of ["video/webm;codecs=vp8", "application/octet-stream", "", undefined]) {
-      for (const windowMediaSource of [true, false]) {
+    for (const mime of [
+      'video/mp4;codecs="avc1.64001f,mp4a.40.2"',
+      "video/webm;codecs=vp8",
+      "application/octet-stream",
+      "",
+      undefined,
+    ]) {
+      for (const preference of ["baseline", "lowlatency"] as const) {
         assert.strictEqual(
-          choosePlayer({
-            format: streamFormat(mime),
-            preference: "baseline",
-            lowLatency: true,
-            windowMediaSource,
-          }),
+          choosePlayer({ format: streamFormat(mime), preference, lowLatency: true }),
           PlayerKind.None,
           `${mime}`
         );

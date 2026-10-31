@@ -8,25 +8,10 @@ import { Readable, Writable } from "stream";
 
 import React from "react";
 import { createRoot } from "react-dom/client";
-import registerServiceWorker, {
-  ServiceWorkerNoSupportError,
-} from "service-worker-loader!../web/sw";
 
 import { DevToolsClient } from "../apis/client";
 import { WSReadWriter } from "../lib/ws";
 import App from "./root/App";
-
-void registerServiceWorker({ scope: "/" })
-  .then((registration) => {
-    console.log("service worker registered", registration);
-  })
-  .catch((e) => {
-    if (e instanceof ServiceWorkerNoSupportError) {
-      console.log("service worker not supported");
-    } else {
-      console.log("some service worker bullshit", e);
-    }
-  });
 
 // (() => {
 //   console.log("installing beforeinstallprompt handler");

@@ -103,7 +103,7 @@ module.exports = (env, argv) => {
     scriptModuleRule,
     styleModuleRule,
     {
-      test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg|mp4|m4s|m3u8)$/i,
+      test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg)$/i,
       type: "asset/resource",
     },
     {

@@ -9,10 +9,6 @@ export const enum PlayerKind {
   LowLatency = "lowlatency",
   /** A unit-format stream remuxed for MediaSource: the baseline player. */
   Units = "units",
-  /** An fMP4 record stream on a window MediaSource. */
-  MediaSource = "mediasource",
-  /** An fMP4 record stream relayed as HLS through the service worker. */
-  Relay = "relay",
   /** A stream this UI can't play. */
   None = "none",
 }
@@ -49,25 +45,15 @@ export interface PlayerChoice {
   preference: PlayerPreference;
   /** The window can run the low-latency player. */
   lowLatency: boolean;
-  /** The window has a MediaSource for fMP4 records. */
-  windowMediaSource: boolean;
 }
 
 // The player for a stream: the low-latency player for a unit-format
-// stream when preferred and supported, else the baseline; a window
-// MediaSource for fMP4 records, or the HLS relay without one; and none for
-// a format this UI doesn't play.
-export const choosePlayer = ({
-  format,
-  preference,
-  lowLatency,
-  windowMediaSource,
-}: PlayerChoice): PlayerKind => {
+// stream when preferred and supported, else the baseline; none for a
+// format this UI doesn't play.
+export const choosePlayer = ({ format, preference, lowLatency }: PlayerChoice): PlayerKind => {
   switch (format) {
     case StreamFormat.Units:
       return preference === "lowlatency" && lowLatency ? PlayerKind.LowLatency : PlayerKind.Units;
-    case StreamFormat.Fmp4:
-      return windowMediaSource ? PlayerKind.MediaSource : PlayerKind.Relay;
     default:
       return PlayerKind.None;
   }
