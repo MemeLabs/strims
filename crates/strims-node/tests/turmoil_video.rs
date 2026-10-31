@@ -37,6 +37,10 @@
 //!   is dropped and m's records start at that sync record. m logs how long
 //!   its join took and how far behind the head it started.
 //!
+//! A leg whose m reads on to the stream's end ([`member_to_end`]) checks
+//! that the session's END record reaches m, after the script's last unit,
+//! before o's swarm goes.
+//!
 //! Every host appends what it sees, stamped with simulated time, to one
 //! trace. The same seed must give the same trace, and another seed a
 //! different one. `STRIMS_TURMOIL_SEED=<s>` runs seed `s` in place of 7.
@@ -51,6 +55,7 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::future::Future;
 use std::net::IpAddr;
 use std::rc::Rc;
 use std::time::Duration as StdDuration;
@@ -1134,6 +1139,129 @@ async fn member(w: World) -> turmoil::Result {
     Ok(())
 }
 
+/// m as [`member`] has it, but for its stream of the unit format, which it
+/// opens as `member` does and reads on to the stream's END: a contiguous
+/// run of the script's units up to its last, then the END.
+async fn member_to_end(w: World) -> turmoil::Result {
+    let h = start(&w, "m", 2).await;
+    let invitation = w
+        .wait("an invitation", 60, || w.invitation.borrow().clone())
+        .await;
+    h.frontend
+        .create_network_from_invitation(
+            &Context::default(),
+            CreateNetworkFromInvitationRequest {
+                alias: "milly".into(),
+                invitation: Some(InvitationField::InvitationBytes(invitation.encode_to_vec())),
+            },
+        )
+        .await
+        .unwrap();
+    h.node.dial(&w.uri("o")).await.unwrap();
+    w.wait("m to bind with o", 120, || {
+        (h.is_bound("o") && h.trusted()).then_some(())
+    })
+    .await;
+    h.log("renewed and bound with o");
+    w.set("m joined");
+    let (_, net) = h.network();
+    let (_, media, _) = w
+        .wait("the channel's listing", 120, || {
+            h.media()
+                .into_iter()
+                .find(|(_, _, s)| s.as_ref().is_some_and(|s| s.live))
+        })
+        .await;
+    assert_eq!(media.mime_type, units_mime(&script_configs(&w.script)));
+    w.set("m ready");
+    w.step("join", 60).await;
+    let mut stream = h
+        .video
+        .open_stream(
+            &media.swarm_uri,
+            std::slice::from_ref(&net),
+            StreamFormat::from_mime(&media.mime_type),
+        )
+        .await
+        .unwrap();
+    h.log("opened the stream");
+
+    let mut records = Vec::new();
+    let mut record = Vec::new();
+    loop {
+        let piece = tokio::time::timeout(StdDuration::from_secs(60), stream.next(usize::MAX))
+            .await
+            .expect("a piece in time")
+            .expect("a piece");
+        match piece {
+            EgressPiece::Data(d) => record.extend_from_slice(d),
+            EgressPiece::RecordEnd => {
+                let r = std::mem::take(&mut record);
+                let end = matches!(parse_record(&r).unwrap(), Record::End { .. });
+                records.push(r);
+                if end {
+                    break;
+                }
+            }
+            EgressPiece::Discontinuity => {
+                panic!("a discontinuity after {} records", records.len())
+            }
+        }
+    }
+    let ended = h.clock.now();
+    let units: Vec<Unit> = records
+        .iter()
+        .filter_map(|r| match parse_record(r).unwrap() {
+            Record::Unit {
+                header, payload, ..
+            } => Some((
+                header.track,
+                header.dts,
+                header.pts,
+                header.keyframe,
+                payload.to_vec(),
+            )),
+            _ => None,
+        })
+        .collect();
+    let script = &w.units;
+    let start = script
+        .iter()
+        .position(|u| *u == units[0])
+        .expect("the first unit is one of the script's");
+    assert!(
+        units == script[start..],
+        "units from {start} differ from the script's"
+    );
+    let m = stream.metrics();
+    h.log(format!(
+        "read units {start}..{} of {} and the END in {} records, rewinds {:?}",
+        script.len(),
+        script.len(),
+        records.len(),
+        (m.rewinds, m.refused_rewinds, m.discontinuities)
+    ));
+
+    h.log(format!(
+        "read the END at {} ms",
+        (ended - epoch()).as_millis()
+    ));
+    w.step("p done", 120).await;
+    w.wait("the listing to go", 60, || {
+        h.media().is_empty().then_some(())
+    })
+    .await;
+    h.log("the listing went");
+    drop(stream);
+    w.wait("the stream's swarm to go", 60, || {
+        h.video.video_swarms().is_empty().then_some(())
+    })
+    .await;
+    w.set("m done");
+    w.step("o done", 120).await;
+    Ok(())
+}
+
 /// p's RTMP connection and the publisher on it.
 struct Publish {
     w: World,
@@ -1353,6 +1481,62 @@ fn check(leg: Leg) {
     );
 }
 
+/// [`run`] with `m` in place of [`member`] as m's host.
+fn run_with<F: Future<Output = turmoil::Result> + 'static>(
+    seed: u64,
+    leg: Leg,
+    m: fn(World) -> F,
+) -> Vec<String> {
+    let w = World::new(seed, leg);
+    let mut sim = turmoil::Builder::new()
+        .rng_seed(seed)
+        .epoch(std::time::UNIX_EPOCH + StdDuration::from_secs(1_700_000_000))
+        .simulation_duration(StdDuration::from_secs(900))
+        .min_message_latency(StdDuration::from_millis(1))
+        .max_message_latency(StdDuration::from_millis(15))
+        .build();
+    sim.client("o", owner(w.clone()));
+    sim.client("m", m(w.clone()));
+    sim.client("p", publisher(w.clone()));
+    let res = sim.run();
+    let trace = w.trace.borrow().clone();
+    if let Err(e) = res {
+        for l in &trace {
+            eprintln!("{l}");
+        }
+        panic!("seed {seed}: {e}\n{}", replay(seed, leg));
+    }
+    trace
+}
+
+/// [`check`] with `m` in place of [`member`] as m's host.
+fn check_with<F: Future<Output = turmoil::Result> + 'static>(leg: Leg, m: fn(World) -> F) {
+    // a seed to replay, from the replay command
+    #[allow(clippy::disallowed_methods)]
+    let seed = std::env::var("STRIMS_TURMOIL_SEED")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(7);
+    let a = run_with(seed, leg, m);
+    for l in &a {
+        eprintln!("{l}");
+    }
+    eprintln!("seed {seed}: {} lines, {}", a.len(), digest(&a));
+    let b = run_with(seed, leg, m);
+    assert_eq!(
+        digest(&a),
+        digest(&b),
+        "same seed, different traces\n{}",
+        replay(seed, leg)
+    );
+    assert_ne!(
+        digest(&a),
+        digest(&run_with(seed + 1, leg, m)),
+        "different seeds, same trace\n{}",
+        replay(seed, leg)
+    );
+}
+
 #[test]
 fn an_rtmp_stream_reaches_a_member_on_whole_nodes() {
     check(FMP4);
@@ -1423,4 +1607,31 @@ fn a_joiner_whose_rewind_the_next_gop_overtakes_starts_there() {
             13000,
         )
     });
+}
+
+/// The session's END reaches m, a viewer on another node, after the last
+/// unit and before o's swarm goes.
+#[test]
+fn a_remote_viewer_reads_the_end_of_a_session() {
+    check_with(
+        units("a_remote_viewer_reads_the_end_of_a_session", 1, 10, 3500),
+        member_to_end,
+    );
+}
+
+/// On o's 2 Mbit/s uplink too, the END reaches m before o's swarm goes.
+#[test]
+fn a_remote_viewer_on_a_slow_uplink_reads_the_end_of_a_session() {
+    check_with(
+        Leg {
+            uplink: Some(250_000),
+            ..units(
+                "a_remote_viewer_on_a_slow_uplink_reads_the_end_of_a_session",
+                4,
+                16,
+                6300,
+            )
+        },
+        member_to_end,
+    );
 }
