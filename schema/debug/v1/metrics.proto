@@ -532,6 +532,19 @@ message VideoMetrics {
   uint64 hls_skipped_records = 9;
   uint64 autoseed_skipped = 10;
   IngressMetrics ingress = 11;
+  TranscodeMetrics transcode = 12;
+}
+
+message TranscodeMetrics {
+  uint64 starts = 1;
+  uint64 restarts = 2;
+  uint64 stalls = 3;
+  uint64 failures = 4;
+  uint64 abandoned = 5;
+  uint64 dropped_gops = 6;
+  uint64 over_cap = 7;
+  uint64 records = 8;
+  uint64 bytes = 9;
 }
 
 message IngressMetrics {

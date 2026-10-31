@@ -1061,6 +1061,7 @@ fn video(m: strims_video::Metrics) -> v1::VideoMetrics {
         hls_skipped_records,
         autoseed_skipped,
         ingress: i,
+        transcode: t,
     } = m;
     v1::VideoMetrics {
         store_lags,
@@ -1074,6 +1075,32 @@ fn video(m: strims_video::Metrics) -> v1::VideoMetrics {
         hls_skipped_records,
         autoseed_skipped,
         ingress: Some(ingress(i)),
+        transcode: Some(transcode(t)),
+    }
+}
+
+fn transcode(m: strims_video::TranscodeMetrics) -> v1::TranscodeMetrics {
+    let strims_video::TranscodeMetrics {
+        starts,
+        restarts,
+        stalls,
+        failures,
+        abandoned,
+        dropped_gops,
+        over_cap,
+        records,
+        bytes,
+    } = m;
+    v1::TranscodeMetrics {
+        starts,
+        restarts,
+        stalls,
+        failures,
+        abandoned,
+        dropped_gops,
+        over_cap,
+        records,
+        bytes,
     }
 }
 

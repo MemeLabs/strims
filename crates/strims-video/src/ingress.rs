@@ -122,6 +122,56 @@
 //! is flushed, which pads the unit with zeros that read as padding frames,
 //! and the writer goes on where the next unit starts.
 //!
+//! # Renditions
+//!
+//! Where the node has a codec stage ([`VideoHost::codec`]), a session
+//! plans its renditions at its stream's first video config, as
+//! [`TranscodeSettings`](crate::TranscodeSettings) have them:
+//!
+//! - **H.264.** The channel's swarm carries the stream as it came. Each
+//!   rung of the ladder whose shorter side is below the stream's is a
+//!   rendition.
+//! - **HEVC and AV1.** The channel's swarm carries the H.264 the
+//!   transcode makes of the stream: at its shorter side, scaled down to
+//!   the bitrate table's last, at the table's bitrate, and at most
+//!   `h264_max_frame_rate` frames a second. The stream as it came is the
+//!   `source` rendition, and the ladder's rungs below the H.264 follow it.
+//!   Without a codec stage, or past
+//!   [`max_sessions`](crate::TranscodeSettings::max_sessions) transcodes,
+//!   such a publish ends with the reason. A stream whose video codec
+//!   changes ends.
+//! - **Swarms.** Each rendition is a swarm of its own under a key the
+//!   channel key derives for its id ([`renditions::KEY_LABEL`]), so its
+//!   swarm id is the same in every session of the channel: `source`, or a
+//!   rung's shorter side and frame rate, such as `480p30`. A
+//!   [`UnitWriter`] writes it, and it is signed early as its bitrate has
+//!   it. It is created once its first config comes, and published on the
+//!   channel's network. A session that replaces another takes the slots
+//!   of the renditions it makes, so their streams go on; the others go
+//!   with it.
+//! - **The transcode** starts at the stream's first video keyframe. Input
+//!   past its queue's bound is dropped up to the next keyframe. A
+//!   transcode that holds input without output for
+//!   [`stall_timeout`](crate::TranscodeSettings::stall_timeout), fails or
+//!   ends starts again at the next keyframe, at most
+//!   [`max_restarts`](crate::TranscodeSettings::max_restarts) times in
+//!   its restart window; past that, an H.264 session's renditions write
+//!   their END and leave the snippet, and an HEVC or AV1 session ends.
+//! - **Listing.** The snippet lists every rendition once it wrote a
+//!   record (`ListingSnippet::renditions`): the channel's swarm first,
+//!   then the others, each with its MIME type, swarm URI, nominal
+//!   bitrate, picture size and frame rate, and its video size is the
+//!   channel swarm's. The snippet is signed with the channel key, which
+//!   binds the renditions to the stream.
+//! - **End.** A session's end ends the transcode's input and waits up to
+//!   [`finish_timeout`](crate::TranscodeSettings::finish_timeout) for its
+//!   last output. Then each rendition writes its END on a deliberate end
+//!   and has its last partial unit signed, and the renditions' swarms go
+//!   with the channel's.
+//!
+//! [`TranscodeMetrics`](crate::TranscodeMetrics) count what the
+//! transcodes did.
+//!
 //! # Teardown
 //!
 //! A session ends when its publisher unpublishes or disconnects, at a
@@ -164,7 +214,7 @@
 //! [`VideoEvent::IngressEnded`] reports the end of a session that
 //! started, with its reason.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::future::{Future, poll_fn};
@@ -186,7 +236,7 @@ use strims_ppspp::integrity::{
 };
 use strims_ppspp::{SwarmId, SwarmOptions, Uri, WriterOptions};
 use strims_proto::network::v1::directory::listing::{Content, Media};
-use strims_proto::network::v1::directory::{Listing, ListingSnippet};
+use strims_proto::network::v1::directory::{Listing, ListingRendition, ListingSnippet};
 use strims_proto::types::Key;
 use strims_proto::video::v1::{VideoChannel, VideoIngressConfig, VideoIngressStream};
 use strims_rpc::Timer;
@@ -202,6 +252,9 @@ use crate::registry::{Added, SwarmKind};
 use crate::rtmp::{Phase, RtmpConfig, RtmpError, RtmpEvent, RtmpServer};
 use crate::units::{END_LINGER, SignTimer, UnitSigning, UnitWriter, UnitWriterMetrics};
 use crate::{VideoError, VideoEvent};
+
+#[path = "renditions.rs"]
+mod renditions;
 
 /// The app a publish names.
 const LIVE_APP: &str = "live";
@@ -470,6 +523,9 @@ pub(crate) struct Ingress {
     /// The sessions, by channel id. Bound:
     /// [`IngressSettings::max_sessions`](crate::IngressSettings::max_sessions).
     sessions: BTreeMap<u64, Session>,
+    /// The transcodes running. Bound:
+    /// [`TranscodeSettings::max_sessions`](crate::TranscodeSettings::max_sessions).
+    transcodes: Rc<Cell<usize>>,
 }
 
 impl Ingress {
@@ -511,6 +567,13 @@ struct Session {
     keeper: Option<Keeper>,
     /// Ends the session's connection.
     stop: Rc<Stop>,
+    /// The slots of the channel's rendition swarms, by transfer: the
+    /// session's, and those of a session it replaced that it hasn't made
+    /// again. Bound: [`MAX_RENDITIONS`](crate::codec::MAX_RENDITIONS)
+    /// per session that held the channel.
+    renditions: BTreeMap<TransferId, u64>,
+    /// The renditions the snippet lists.
+    listed: Vec<ListingRendition>,
 }
 
 /// A session's listing keeper, and the end of its run.
@@ -656,6 +719,8 @@ impl fmt::Display for End {
 /// What woke a connection's task.
 enum Woke {
     Input(Vec<u8>),
+    /// The session's transcode's next event, or its end.
+    Transcoded(Option<Result<crate::codec::CodecEvent, String>>),
     Deadline,
     Stop(String),
     Closed,
@@ -674,6 +739,18 @@ fn untranscoded(config: &DecoderConfig) -> Option<String> {
     Some(format!(
         "{name} needs a node that transcodes it to H.264, and this one doesn't; send H.264 with AAC"
     ))
+}
+
+/// The live snippet of session `s`: its channel's, with its renditions,
+/// and the size of the channel swarm's picture.
+fn session_snippet(s: &Session) -> ListingSnippet {
+    let mut snippet = live_snippet(&s.channel, s.start_time);
+    if let Some(main) = s.listed.first() {
+        snippet.video_width = main.width;
+        snippet.video_height = main.height;
+    }
+    snippet.renditions = s.listed.clone();
+    snippet
 }
 
 /// The live snippet of `c`: its snippet, starting at `start_time`, live.
@@ -776,13 +853,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             } else {
                 let changed = c.directory_listing_snippet != s.channel.directory_listing_snippet;
                 s.channel = c.clone();
-                Ok((changed && s.live).then(|| {
-                    (
-                        live_snippet(c, s.start_time),
-                        s.key.clone(),
-                        s.swarm_id.clone(),
-                    )
-                }))
+                Ok((changed && s.live)
+                    .then(|| (session_snippet(s), s.key.clone(), s.swarm_id.clone())))
             }
         };
         match update {
@@ -1051,7 +1123,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             ing.sessions
                 .get(&channel.id)
                 .filter(|s| s.id == session)
-                .map(|s| (live_snippet(&s.channel, s.start_time), s.key.clone()))
+                .map(|s| (session_snippet(s), s.key.clone()))
         };
         let Some((snippet, key)) = pushed else {
             return Err(failed(REPLACED));
@@ -1091,6 +1163,12 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             mime: None,
             last_media: now,
             dropped: 0,
+            video_codec: None,
+            main_from_source: true,
+            frame_rate: 0.0,
+            main_bitrate: None,
+            listed_main: None,
+            renditions: None,
         })
     }
 
@@ -1122,6 +1200,10 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 k.keeper.stop();
                 None
             });
+            let renditions = old
+                .as_mut()
+                .map(|o| std::mem::take(&mut o.renditions))
+                .unwrap_or_default();
             ing.sessions.insert(
                 channel.id,
                 Session {
@@ -1137,6 +1219,8 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                     ending: false,
                     keeper,
                     stop: stop.clone(),
+                    renditions,
+                    listed: Vec::new(),
                 },
             );
             (id, old.map(|o| o.stop))
@@ -1325,8 +1409,13 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
 
     /// Takes `p`'s publication out of the node, if its session is its
     /// channel's: the session, its keeper (stopped), snippet, transfer and
-    /// slot. Returns the slot's swarm, for the caller to remove.
-    fn take_publication(&self, p: &Publication<K, H, V, T>) -> Option<Swarm<H>> {
+    /// slot. Returns the slot's swarm, for the caller to remove, and the
+    /// slots of the channel's rendition swarms, for the caller to take
+    /// out ([`remove_renditions`](Self::remove_renditions)).
+    fn take_publication(
+        &self,
+        p: &Publication<K, H, V, T>,
+    ) -> (Option<Swarm<H>>, Vec<(TransferId, u64)>) {
         let session = {
             let mut ing = self.ingress.borrow_mut();
             if !ing
@@ -1334,19 +1423,27 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 .get(&p.channel_id)
                 .is_some_and(|s| s.id == p.session)
             {
-                return None;
+                return (None, Vec::new());
             }
             ing.sessions.remove(&p.channel_id)
-        }?;
+        };
+        let Some(session) = session else {
+            return (None, Vec::new());
+        };
         if let Some(k) = &session.keeper {
             k.keeper.stop();
         }
+        let renditions = session.renditions.iter().map(|(t, s)| (*t, *s)).collect();
         drop(session);
         self.directory.delete_snippet(&p.swarm_id);
-        let slot = p.slot?;
+        let Some(slot) = p.slot else {
+            return (None, renditions);
+        };
         self.transfers.remove(p.t);
-        let e = self.with_swarms(|r| r.remove_slot(&p.t, slot))?;
-        e.swarm
+        let swarm = self
+            .with_swarms(|r| r.remove_slot(&p.t, slot))
+            .and_then(|e| e.swarm);
+        (swarm, renditions)
     }
 }
 
@@ -1395,9 +1492,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Publication<K, H, V, T> {
             select(sleep, replaced).await;
         }
         self.armed = false;
-        if let Some(swarm) = s.take_publication(&self) {
+        let (swarm, renditions) = s.take_publication(&self);
+        if let Some(swarm) = swarm {
             s.remove_host_swarm(swarm).await;
         }
+        s.remove_renditions(renditions).await;
     }
 }
 
@@ -1406,10 +1505,18 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Drop for Publication<K, H, V, T> {
         if !self.armed {
             return;
         }
-        if let Some(swarm) = self.shared.take_publication(self) {
+        let (swarm, renditions) = self.shared.take_publication(self);
+        if swarm.is_some() || !renditions.is_empty() {
             let s = self.shared.clone();
-            self.shared
-                .spawn(async move { s.remove_host_swarm(swarm).await }.boxed_local());
+            self.shared.spawn(
+                async move {
+                    if let Some(swarm) = swarm {
+                        s.remove_host_swarm(swarm).await;
+                    }
+                    s.remove_renditions(renditions).await;
+                }
+                .boxed_local(),
+            );
         }
     }
 }
@@ -1444,6 +1551,20 @@ struct Live<K: Kv, H: Host, V: VideoHost, T: Timer> {
     last_media: Time,
     /// Units dropped so far, as counted.
     dropped: u64,
+    /// The video codec the stream was planned for, once its first video
+    /// config came.
+    video_codec: Option<u8>,
+    /// The channel's swarm carries the stream as it came; otherwise, the
+    /// transcode's H.264.
+    main_from_source: bool,
+    /// The stream's frames a second, as its metadata states them; 0 when
+    /// unknown.
+    frame_rate: f64,
+    /// The channel swarm's nominal bitrate, for its snippet entry.
+    main_bitrate: Option<u64>,
+    /// The snippet entry of the channel's swarm, once listed.
+    listed_main: Option<ListingRendition>,
+    renditions: Option<renditions::Renditions<V::Codec, <H as SwarmHost>::Writer>>,
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
@@ -1460,10 +1581,15 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
             Err(e) => Err(media(&e)),
             Ok(None) => Ok(()),
             Ok(Some(SourceEvent::Config(c))) => {
-                if let Some(reason) = untranscoded(&c) {
-                    return Err(End::Media(reason));
+                self.plan_renditions(&c)?;
+                if let Some(r) = &mut self.renditions {
+                    r.config(&c);
                 }
-                let res = self.writer.set_config(&c).map_err(|e| media(&e));
+                let res = if self.main_from_source {
+                    self.writer.set_config(&c).map_err(|e| media(&e))
+                } else {
+                    Ok(())
+                };
                 if let Sign::Choosing(choice) = &mut self.sign {
                     choice.config(c.kind);
                 }
@@ -1473,7 +1599,15 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
                 if let Sign::Choosing(choice) = &mut self.sign {
                     choice.unit(now);
                 }
-                self.writer.push(&u).map_err(|e| media(&e))
+                if let Some(r) = &mut self.renditions {
+                    let s = self.publication.shared.clone();
+                    r.unit(&u, now, &mut s.metrics.borrow_mut().transcode);
+                }
+                if self.main_from_source {
+                    self.writer.push(&u).map_err(|e| media(&e))
+                } else {
+                    Ok(())
+                }
             }
         };
         let dropped =
@@ -1488,6 +1622,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
 
     /// Takes the stream's `onMetaData`.
     fn metadata(&mut self, m: &Metadata) {
+        if let Some(rate) = m.framerate.filter(|r| r.is_finite() && *r > 0.0) {
+            self.frame_rate = rate;
+        }
         if let Sign::Choosing(choice) = &mut self.sign {
             choice.metadata(m);
         }
@@ -1608,12 +1745,14 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
     /// wait ends, writing what the session held, and has a partial
     /// integrity unit signed at its interval.
     async fn timer(&mut self, now: Time) -> Result<(), End> {
+        self.renditions_timer(now)?;
         self.settle(now).await?;
         self.write_output(now).await?;
         if self.sign_due().is_some_and(|t| now >= t) {
             self.sign(now).await?;
         }
         self.take_records(now, true);
+        self.settle_renditions(now).await;
         Ok(())
     }
 
@@ -1653,6 +1792,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
     /// `end`, the stream's END goes first. When the END was written into
     /// the swarm and signed.
     async fn finish(&mut self, now: Time, end: bool) -> Option<Time> {
+        self.finish_renditions(end).await;
         let finished = !end || self.writer.finish().is_ok();
         let written = finished && self.write_output(now).await.is_ok();
         if written {
@@ -1749,6 +1889,22 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
                     self.input = b;
                     self.pos = 0;
                 }
+                Woke::Transcoded(e) => {
+                    let now = s.timer.now();
+                    if let Some(l) = &mut self.live {
+                        if let Err(end) = l.transcoded(e, now) {
+                            break end;
+                        }
+                        l.settle_renditions(now).await;
+                        if let Err(end) = l.settle(now).await {
+                            break end;
+                        }
+                        if let Err(end) = l.write_output(now).await {
+                            break end;
+                        }
+                        l.take_records(now, true);
+                    }
+                }
                 Woke::Deadline => {
                     let now = s.timer.now();
                     if let Some(l) = &mut self.live
@@ -1806,7 +1962,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
         let Some(l) = &self.live else {
             return due;
         };
-        [l.sign_due(), l.settle_due()]
+        [l.sign_due(), l.settle_due(), l.renditions_due()]
             .into_iter()
             .flatten()
             .fold(due, Time::min)
@@ -1870,6 +2026,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
                     l.settle(now).await?;
                     l.write_output(now).await?;
                     l.take_records(now, true);
+                    l.settle_renditions(now).await;
                 }
             }
             if self.server.phase() == Phase::Closed {
@@ -1915,6 +2072,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
             }
             if sleep.as_mut().poll(cx).is_ready() {
                 return Poll::Ready(Woke::Deadline);
+            }
+            if let Some(r) = self.live.as_mut().and_then(|l| l.renditions.as_mut())
+                && let Poll::Ready(e) = r.poll_event(cx)
+            {
+                return Poll::Ready(Woke::Transcoded(e));
             }
             match Pin::new(&mut self.reader).poll_next(cx) {
                 Poll::Ready(Some(Ok(b))) => Poll::Ready(Woke::Input(b)),

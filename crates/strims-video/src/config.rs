@@ -8,6 +8,7 @@ use strims_base::time::Duration;
 use strims_directory::KeeperConfig;
 use strims_proto::video::v1::{HlsEgressConfig, VideoIngressConfig};
 
+use crate::codec::RenditionPlan;
 use crate::ingress::IngressMetrics;
 
 /// The longest ingress listen address, ingress public address or HLS
@@ -74,6 +75,9 @@ pub struct IngressSettings {
     /// times as long again before each retry after that, so its first five
     /// retries come within 30 s.
     pub resume_grace: Duration,
+    /// How sessions use the node's codec stage
+    /// ([`VideoHost::codec`](crate::VideoHost::codec)).
+    pub transcode: TranscodeSettings,
 }
 
 impl Default for IngressSettings {
@@ -90,8 +94,91 @@ impl Default for IngressSettings {
             rtmp: RtmpSettings::default(),
             close_timeout: Duration::from_secs(5),
             resume_grace: Duration::from_secs(30),
+            transcode: TranscodeSettings::default(),
         }
     }
+}
+
+/// How the RTMP ingress transcodes its sessions' streams, where the node
+/// has a codec stage; see [`ingress`](crate::ingress#renditions).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TranscodeSettings {
+    /// The renditions made of every stream besides its own, each where its
+    /// shorter side is below the stream's; at most
+    /// [`MAX_RENDITIONS`](crate::codec::MAX_RENDITIONS) less one. None by
+    /// default: a node transcodes only HEVC and AV1, into the H.264 every
+    /// viewer can play.
+    ///
+    /// Each rendition is another swarm the ingest node seeds, which splits
+    /// the stream's viewers between swarms. For example, 720p of up to 60
+    /// frames a second at 3 Mbit/s and 480p30 at 1.2 Mbit/s:
+    ///
+    /// ```
+    /// # use strims_video::codec::RenditionPlan;
+    /// let ladder = vec![
+    ///     RenditionPlan { short_side: 720, max_frame_rate: 60, bitrate: 3_000_000 },
+    ///     RenditionPlan { short_side: 480, max_frame_rate: 30, bitrate: 1_200_000 },
+    /// ];
+    /// ```
+    ///
+    /// takes the seed upload of a 6 Mbit/s 1080p stream to about 10.2
+    /// Mbit/s, before any copies.
+    pub ladder: Vec<RenditionPlan>,
+    /// The bitrates of the H.264 made of an HEVC or AV1 stream, by its
+    /// shorter side, ascending: the first entry at least the stream's
+    /// side. A side past the last is scaled down to it.
+    pub h264_bitrates: Vec<(u16, u64)>,
+    /// The most frames a second the H.264 made of an HEVC or AV1 stream
+    /// keeps.
+    pub h264_max_frame_rate: u32,
+    /// Sessions transcoded at once. A session past it makes no renditions,
+    /// and an HEVC or AV1 publish past it is refused.
+    pub max_sessions: usize,
+    /// How long a transcode may hold input without output before it is
+    /// taken as stalled and started again.
+    pub stall_timeout: Duration,
+    /// Starts of a session's transcode after its first within
+    /// `restart_window`, past which the session drops its renditions.
+    pub max_restarts: usize,
+    pub restart_window: Duration,
+    /// How long a session's end waits for its transcode's last output.
+    pub finish_timeout: Duration,
+}
+
+impl Default for TranscodeSettings {
+    fn default() -> TranscodeSettings {
+        TranscodeSettings {
+            ladder: Vec::new(),
+            h264_bitrates: vec![(480, 1_500_000), (720, 4_000_000), (1080, 6_000_000)],
+            h264_max_frame_rate: 60,
+            max_sessions: 2,
+            stall_timeout: Duration::from_secs(5),
+            max_restarts: 3,
+            restart_window: Duration::from_secs(600),
+            finish_timeout: Duration::from_secs(2),
+        }
+    }
+}
+
+/// What the RTMP ingress's transcodes have done.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TranscodeMetrics {
+    /// Transcodes started, restarts among them.
+    pub starts: u64,
+    pub restarts: u64,
+    /// Transcodes that stalled, failed, or ended before their input.
+    pub stalls: u64,
+    pub failures: u64,
+    /// Sessions that dropped their renditions after too many restarts.
+    pub abandoned: u64,
+    /// Runs of input dropped to the stream's next keyframe while a
+    /// transcode was behind.
+    pub dropped_gops: u64,
+    /// Sessions refused a transcode by [`TranscodeSettings::max_sessions`].
+    pub over_cap: u64,
+    /// Rendition records written, and their stream bytes.
+    pub records: u64,
+    pub bytes: u64,
 }
 
 /// What one RTMP connection takes and holds. Decoder configs (avcC,
@@ -404,6 +491,8 @@ pub struct Metrics {
     pub autoseed_skipped: u64,
     /// The RTMP ingress's counters.
     pub ingress: IngressMetrics,
+    /// The RTMP ingress's transcodes.
+    pub transcode: TranscodeMetrics,
 }
 
 /// Why a config was refused.

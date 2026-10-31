@@ -27,8 +27,8 @@ use strims_proto::chat::v1::{
 use strims_proto::debug::v1::MockStreamSegment;
 use strims_proto::devtools::v1::ppspp::cap_conn_log::peer_log::{Event, event};
 use strims_proto::network::v1::directory::{
-    ListingSnippet, ListingSnippetBody, ListingSnippetImage, SignedListingSnippet,
-    SnippetSubscribeResponse, listing_snippet_image,
+    ListingRendition, ListingSnippet, ListingSnippetBody, ListingSnippetImage,
+    SignedListingSnippet, SnippetSubscribeResponse, listing_snippet_image,
 };
 use strims_proto::rpc;
 use strims_proto::rpc::call::Kind;
@@ -521,6 +521,7 @@ fn listing_snippet_body() -> ListingSnippetBody {
             video_width: 1280,
             theme_color: 0xff00_ff00,
             start_time: -1,
+            renditions: Vec::new(),
         }),
         thumbnail_digest: seq(0x07, 32),
         channel_logo_digest: seq(0x27, 32),
@@ -549,6 +550,39 @@ fn directory_snippets(v: &mut Vectors) {
     }));
     let logo = image(SourceOneof::Url("https://example.com/logo.png".to_owned()));
     v.pin("directory_listing_snippet_body", &listing_snippet_body());
+    // A media listing's renditions: its own swarm's, then another's.
+    let rendition =
+        |mime: &str, uri: &str, bitrate, (width, height), frame_rate| ListingRendition {
+            mime_type: mime.to_owned(),
+            swarm_uri: uri.to_owned(),
+            bitrate,
+            width,
+            height,
+            frame_rate,
+        };
+    let mut with_renditions = listing_snippet_body();
+    if let Some(s) = &mut with_renditions.snippet {
+        s.renditions = vec![
+            rendition(
+                r#"video/x.strims-units;codecs="avc1.640028,mp4a.40.2""#,
+                "magnet:?xt=urn:ppspp:AEBAGBAFAYDQQCIKBMGA2DQPCAIREEYUCULBOGAZDINRYHI6D4QA&x.cs=4096",
+                6_128_000,
+                (1920, 1080),
+                59.94,
+            ),
+            rendition(
+                r#"video/x.strims-units;codecs="avc1.64001f,mp4a.40.2""#,
+                "magnet:?xt=urn:ppspp:CEBAGBAFAYDQQCIKBMGA2DQPCAIREEYUCULBOGAZDINRYHI6D4QA&x.cs=4096",
+                1_328_000,
+                (854, 480),
+                0.0,
+            ),
+        ];
+    }
+    v.pin(
+        "directory_listing_snippet_body_with_renditions",
+        &with_renditions,
+    );
     // A body without images names no digests.
     v.pin(
         "directory_listing_snippet_body_without_images",

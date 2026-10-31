@@ -143,6 +143,25 @@ message ListingSnippet {
   uint32 video_width = 12;
   fixed32 theme_color = 13;
   int64 start_time = 14;
+  // A media listing's renditions: every swarm its stream is published in,
+  // the listing's own among them, each another encoding of the stream on
+  // its timeline; empty for a stream of one. The snippet is signed by the
+  // listing's swarm key, which so binds the renditions to the stream.
+  repeated ListingRendition renditions = 15;
+}
+
+// One encoding of a media listing's stream, in a swarm of its own.
+message ListingRendition {
+  // The MIME type of its swarm's records, codecs included.
+  string mime_type = 1;
+  string swarm_uri = 2;
+  // Its nominal bits a second, audio included; 0 when unknown.
+  uint64 bitrate = 3;
+  // Its picture's size in pixels; 0 for audio alone.
+  uint32 width = 4;
+  uint32 height = 5;
+  // Its frames a second; 0 when unknown.
+  double frame_rate = 6;
 }
 
 // What a listing snippet states: its content without images, which travel

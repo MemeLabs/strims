@@ -24,6 +24,8 @@ use strims_video::synth::publisher::{Publisher, PublisherConfig};
 use strims_video::synth::script::{MetaValue, Script, Tag, TagKind};
 use strims_video::{Accepted, VideoHost};
 
+pub mod codec;
+
 #[derive(Default)]
 struct ListenerState {
     addr: String,
@@ -34,6 +36,8 @@ struct ListenerState {
 
 #[derive(Default)]
 pub struct FakeVideoState {
+    /// The codec stage, if the host has one.
+    pub codec: Option<codec::FakeCodec>,
     /// Every address `listen` was called with, in order.
     pub listens: Vec<String>,
     /// Listens to fail before the next succeeds.
@@ -185,10 +189,10 @@ impl VideoHost for FakeVideo {
         std::future::ready(res)
     }
 
-    type Codec = strims_video::codec::NoCodec;
+    type Codec = codec::FakeCodec;
 
     fn codec(&self) -> Option<Self::Codec> {
-        None
+        self.0.borrow().codec.clone()
     }
 }
 

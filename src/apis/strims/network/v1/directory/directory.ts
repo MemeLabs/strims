@@ -992,6 +992,7 @@ export type IListingSnippet = {
   videoWidth?: number;
   themeColor?: number;
   startTime?: bigint;
+  renditions?: strims_network_v1_directory_IListingRendition[];
 }
 
 export class ListingSnippet {
@@ -1009,6 +1010,7 @@ export class ListingSnippet {
   videoWidth: number;
   themeColor: number;
   startTime: bigint;
+  renditions: strims_network_v1_directory_ListingRendition[];
 
   constructor(v?: IListingSnippet) {
     this.title = v?.title || "";
@@ -1025,6 +1027,7 @@ export class ListingSnippet {
     this.videoWidth = v?.videoWidth || 0;
     this.themeColor = v?.themeColor || 0;
     this.startTime = v?.startTime || BigInt(0);
+    this.renditions = v?.renditions ? v.renditions.map(v => new strims_network_v1_directory_ListingRendition(v)) : [];
   }
 
   static encode(m: ListingSnippet, w?: Writer): Writer {
@@ -1043,6 +1046,7 @@ export class ListingSnippet {
     if (m.videoWidth) w.uint32(96).uint32(m.videoWidth);
     if (m.themeColor) w.uint32(109).fixed32(m.themeColor);
     if (m.startTime) w.uint32(112).int64(m.startTime);
+    for (const v of m.renditions) strims_network_v1_directory_ListingRendition.encode(v, w.uint32(122).fork()).ldelim();
     return w;
   }
 
@@ -1094,6 +1098,80 @@ export class ListingSnippet {
         break;
         case 14:
         m.startTime = r.int64();
+        break;
+        case 15:
+        m.renditions.push(strims_network_v1_directory_ListingRendition.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListingRendition = {
+  mimeType?: string;
+  swarmUri?: string;
+  bitrate?: bigint;
+  width?: number;
+  height?: number;
+  frameRate?: number;
+}
+
+export class ListingRendition {
+  mimeType: string;
+  swarmUri: string;
+  bitrate: bigint;
+  width: number;
+  height: number;
+  frameRate: number;
+
+  constructor(v?: IListingRendition) {
+    this.mimeType = v?.mimeType || "";
+    this.swarmUri = v?.swarmUri || "";
+    this.bitrate = v?.bitrate || BigInt(0);
+    this.width = v?.width || 0;
+    this.height = v?.height || 0;
+    this.frameRate = v?.frameRate || 0;
+  }
+
+  static encode(m: ListingRendition, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.mimeType.length) w.uint32(10).string(m.mimeType);
+    if (m.swarmUri.length) w.uint32(18).string(m.swarmUri);
+    if (m.bitrate) w.uint32(24).uint64(m.bitrate);
+    if (m.width) w.uint32(32).uint32(m.width);
+    if (m.height) w.uint32(40).uint32(m.height);
+    if (m.frameRate) w.uint32(49).double(m.frameRate);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListingRendition {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListingRendition();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.mimeType = r.string();
+        break;
+        case 2:
+        m.swarmUri = r.string();
+        break;
+        case 3:
+        m.bitrate = r.uint64();
+        break;
+        case 4:
+        m.width = r.uint32();
+        break;
+        case 5:
+        m.height = r.uint32();
+        break;
+        case 6:
+        m.frameRate = r.double();
         break;
         default:
         r.skipType(tag & 7);
@@ -4089,6 +4167,12 @@ export const strims_network_v1_directory_ListingSnippet = ListingSnippet;
 export type strims_network_v1_directory_ListingSnippet = ListingSnippet;
 /* @internal */
 export type strims_network_v1_directory_IListingSnippet = IListingSnippet;
+/* @internal */
+export const strims_network_v1_directory_ListingRendition = ListingRendition;
+/* @internal */
+export type strims_network_v1_directory_ListingRendition = ListingRendition;
+/* @internal */
+export type strims_network_v1_directory_IListingRendition = IListingRendition;
 /* @internal */
 export const strims_network_v1_directory_ListingSnippetBody = ListingSnippetBody;
 /* @internal */

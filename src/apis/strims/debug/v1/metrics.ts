@@ -3583,6 +3583,7 @@ export type IVideoMetrics = {
   hlsSkippedRecords?: bigint;
   autoseedSkipped?: bigint;
   ingress?: strims_debug_v1_IIngressMetrics;
+  transcode?: strims_debug_v1_ITranscodeMetrics;
 }
 
 export class VideoMetrics {
@@ -3597,6 +3598,7 @@ export class VideoMetrics {
   hlsSkippedRecords: bigint;
   autoseedSkipped: bigint;
   ingress: strims_debug_v1_IngressMetrics | undefined;
+  transcode: strims_debug_v1_TranscodeMetrics | undefined;
 
   constructor(v?: IVideoMetrics) {
     this.storeLags = v?.storeLags || BigInt(0);
@@ -3610,6 +3612,7 @@ export class VideoMetrics {
     this.hlsSkippedRecords = v?.hlsSkippedRecords || BigInt(0);
     this.autoseedSkipped = v?.autoseedSkipped || BigInt(0);
     this.ingress = v?.ingress && new strims_debug_v1_IngressMetrics(v.ingress);
+    this.transcode = v?.transcode && new strims_debug_v1_TranscodeMetrics(v.transcode);
   }
 
   static encode(m: VideoMetrics, w?: Writer): Writer {
@@ -3625,6 +3628,7 @@ export class VideoMetrics {
     if (m.hlsSkippedRecords) w.uint32(72).uint64(m.hlsSkippedRecords);
     if (m.autoseedSkipped) w.uint32(80).uint64(m.autoseedSkipped);
     if (m.ingress) strims_debug_v1_IngressMetrics.encode(m.ingress, w.uint32(90).fork()).ldelim();
+    if (m.transcode) strims_debug_v1_TranscodeMetrics.encode(m.transcode, w.uint32(98).fork()).ldelim();
     return w;
   }
 
@@ -3667,6 +3671,101 @@ export class VideoMetrics {
         break;
         case 11:
         m.ingress = strims_debug_v1_IngressMetrics.decode(r, r.uint32());
+        break;
+        case 12:
+        m.transcode = strims_debug_v1_TranscodeMetrics.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ITranscodeMetrics = {
+  starts?: bigint;
+  restarts?: bigint;
+  stalls?: bigint;
+  failures?: bigint;
+  abandoned?: bigint;
+  droppedGops?: bigint;
+  overCap?: bigint;
+  records?: bigint;
+  bytes?: bigint;
+}
+
+export class TranscodeMetrics {
+  starts: bigint;
+  restarts: bigint;
+  stalls: bigint;
+  failures: bigint;
+  abandoned: bigint;
+  droppedGops: bigint;
+  overCap: bigint;
+  records: bigint;
+  bytes: bigint;
+
+  constructor(v?: ITranscodeMetrics) {
+    this.starts = v?.starts || BigInt(0);
+    this.restarts = v?.restarts || BigInt(0);
+    this.stalls = v?.stalls || BigInt(0);
+    this.failures = v?.failures || BigInt(0);
+    this.abandoned = v?.abandoned || BigInt(0);
+    this.droppedGops = v?.droppedGops || BigInt(0);
+    this.overCap = v?.overCap || BigInt(0);
+    this.records = v?.records || BigInt(0);
+    this.bytes = v?.bytes || BigInt(0);
+  }
+
+  static encode(m: TranscodeMetrics, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.starts) w.uint32(8).uint64(m.starts);
+    if (m.restarts) w.uint32(16).uint64(m.restarts);
+    if (m.stalls) w.uint32(24).uint64(m.stalls);
+    if (m.failures) w.uint32(32).uint64(m.failures);
+    if (m.abandoned) w.uint32(40).uint64(m.abandoned);
+    if (m.droppedGops) w.uint32(48).uint64(m.droppedGops);
+    if (m.overCap) w.uint32(56).uint64(m.overCap);
+    if (m.records) w.uint32(64).uint64(m.records);
+    if (m.bytes) w.uint32(72).uint64(m.bytes);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): TranscodeMetrics {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new TranscodeMetrics();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.starts = r.uint64();
+        break;
+        case 2:
+        m.restarts = r.uint64();
+        break;
+        case 3:
+        m.stalls = r.uint64();
+        break;
+        case 4:
+        m.failures = r.uint64();
+        break;
+        case 5:
+        m.abandoned = r.uint64();
+        break;
+        case 6:
+        m.droppedGops = r.uint64();
+        break;
+        case 7:
+        m.overCap = r.uint64();
+        break;
+        case 8:
+        m.records = r.uint64();
+        break;
+        case 9:
+        m.bytes = r.uint64();
         break;
         default:
         r.skipType(tag & 7);
@@ -4370,6 +4469,12 @@ export const strims_debug_v1_VideoMetrics = VideoMetrics;
 export type strims_debug_v1_VideoMetrics = VideoMetrics;
 /* @internal */
 export type strims_debug_v1_IVideoMetrics = IVideoMetrics;
+/* @internal */
+export const strims_debug_v1_TranscodeMetrics = TranscodeMetrics;
+/* @internal */
+export type strims_debug_v1_TranscodeMetrics = TranscodeMetrics;
+/* @internal */
+export type strims_debug_v1_ITranscodeMetrics = ITranscodeMetrics;
 /* @internal */
 export const strims_debug_v1_IngressMetrics = IngressMetrics;
 /* @internal */
