@@ -65,6 +65,7 @@ enum Out {
     },
     Discontinuity,
     Restart(Duration),
+    End,
 }
 
 /// A script's tags through the FLV source, received at their tag times.
@@ -161,6 +162,7 @@ fn drain(d: &mut Demuxer, out: &mut Vec<Out>) {
             },
             DemuxOutput::Discontinuity => Out::Discontinuity,
             DemuxOutput::Restart { offset } => Out::Restart(offset),
+            DemuxOutput::End => Out::End,
         });
     }
 }
@@ -290,9 +292,12 @@ fn units_of_one_session_come_out_as_written() {
             }
         })
         .collect();
-    assert_eq!(out[1..], expected[..]);
+    // The session's END ends the output.
+    assert_eq!(out.last(), Some(&Out::End));
+    assert_eq!(out[1..out.len() - 1], expected[..]);
     let m = d.metrics();
     assert_eq!(m.units, expected.len() as u64);
+    assert_eq!(m.ends, 1);
     assert_eq!(m.restarts + m.dropped_backwards + m.oversize_records, 0);
 }
 
@@ -458,6 +463,115 @@ fn a_restarted_session_presents_after_the_output_so_far() {
     }
     assert_eq!(d.metrics().restarts, 1);
     assert_eq!(d.metrics().reader.ends, 2);
+}
+
+fn is_end(record: &[u8]) -> bool {
+    matches!(parse_record(record), Ok(Record::End { .. }))
+}
+
+/// An END outputs an end after the session's units, once for the record
+/// and the input's end after it.
+#[test]
+fn an_end_record_ends_the_output_once() {
+    let records = unit_records(&script(b_frames()));
+    assert!(is_end(records.last().unwrap()));
+    let (mut out, mut d) = demux(&records);
+    let ends: Vec<usize> = (0..out.len()).filter(|&i| out[i] == Out::End).collect();
+    assert_eq!(ends, [out.len() - 1]);
+    d.finish();
+    drain(&mut d, &mut out);
+    assert_eq!(out.iter().filter(|o| **o == Out::End).count(), 1);
+    assert_eq!(d.metrics().ends, 1);
+}
+
+/// The input's end ends a stream without an END record, once.
+#[test]
+fn the_input_end_ends_the_output_once() {
+    let records = unit_records(&script(b_frames()));
+    let (mut out, mut d) = demux(&records[..records.len() - 1]);
+    assert!(!out.contains(&Out::End));
+    d.finish();
+    d.finish();
+    drain(&mut d, &mut out);
+    assert_eq!(out.last(), Some(&Out::End));
+    assert_eq!(out.iter().filter(|o| **o == Out::End).count(), 1);
+    assert_eq!(d.metrics().ends, 1);
+}
+
+/// A later session after an END presents right after the output so far,
+/// whatever its timestamps: one that goes on from far ahead starts there
+/// too, and every track's presentation goes on from it.
+#[test]
+fn a_session_after_an_end_follows_the_output() {
+    let first = unit_records(&script(b_frames()));
+    let later = unit_records(&script(ScriptConfig {
+        start_ms: 600_000,
+        ..b_frames()
+    }));
+    let (alone, _) = demux(&first);
+    let mut marked: Vec<(Vec<u8>, bool)> = first.iter().map(|r| (r.clone(), false)).collect();
+    marked.extend(later.iter().enumerate().map(|(i, r)| (r.clone(), i == 0)));
+    let (out, d) = demux_marked(&marked);
+    let ends: Vec<usize> = (0..out.len()).filter(|&i| out[i] == Out::End).collect();
+    assert_eq!(ends.len(), 2);
+    assert_eq!(ends[1], out.len() - 1);
+    assert_eq!(&out[..=ends[0]], &alone[..]);
+    let restarts: Vec<(usize, Duration)> = out
+        .iter()
+        .enumerate()
+        .filter_map(|(i, o)| match o {
+            Out::Restart(offset) => Some((i, *offset)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(restarts.len(), 1);
+    let (at, offset) = restarts[0];
+    assert!(at > ends[0]);
+    let video = track_units(&alone, 1);
+    let interval = video[video.len() - 1].0 - video[video.len() - 2].0;
+    let end = |track: u32, lasts: Duration| {
+        track_units(&alone, track)
+            .iter()
+            .map(|u| u.1 + lasts)
+            .max()
+            .unwrap()
+    };
+    let first_end = end(1, interval).max(end(2, ticks(1024, 48_000)));
+    let Some(Out::Unit { pts, .. }) = out[at..].iter().find(|o| matches!(o, Out::Unit { .. }))
+    else {
+        panic!("no unit after the restart");
+    };
+    assert_eq!(*pts, first_end);
+    // The later session's first unit presents at 600 s on its own clock.
+    let first_pts = units(&script(ScriptConfig {
+        start_ms: 600_000,
+        ..b_frames()
+    }))
+    .iter()
+    .find(|u| u.track.0 == 1)
+    .map(|u| ticks(u.pts, 90_000))
+    .unwrap();
+    assert_eq!(offset, first_end - first_pts);
+    for track in [1, 2] {
+        let after = track_units(&out[at..], track);
+        assert!(after.windows(2).all(|w| w[1].0 >= w[0].0));
+        assert!(
+            after
+                .iter()
+                .all(|u| u.1 + Duration::from_millis(100) >= first_end)
+        );
+    }
+    let m = d.metrics();
+    assert_eq!((m.ends, m.restarts, m.dropped_backwards), (2, 1, 0));
+}
+
+/// A demuxer that joins a stream at its END outputs the end alone.
+#[test]
+fn a_join_at_the_end_outputs_only_the_end() {
+    let records = unit_records(&script(b_frames()));
+    let (out, d) = demux(&records[records.len() - 1..]);
+    assert_eq!(out, [Out::End]);
+    assert_eq!(d.metrics().ends, 1);
 }
 
 #[test]

@@ -105,12 +105,14 @@
 //! The [`Demuxer`] takes the same input and gives, in stream order, the
 //! tracks' configs whenever they change, each unit the reader returns
 //! with its timestamps, duration, publish time and payload, and the same
-//! gaps, discontinuities and restarts; an END record outputs nothing, and
-//! a later session after it comes with its configs. It writes nothing out
-//! ahead of a decoder: holding the picture over a loss, A/V sync and the
-//! playout clock are the player's. A writer's restart moves the new
-//! session to follow the presentation so far, so the output's
-//! presentation times never go back across sessions.
+//! gaps, discontinuities and restarts. An END record, and
+//! [`Demuxer::finish`] at the end of the input, output an end once for each
+//! run of units; a later session after it comes with its configs. It
+//! writes nothing out ahead of a decoder: holding the picture over a loss,
+//! A/V sync, the playout clock and playing out to an end are the player's.
+//! A writer's restart, and a later session after an end whatever its
+//! timestamps, move the new session to follow the presentation so far, so
+//! the output's presentation times never go back across sessions.
 
 pub mod demux;
 pub mod mime;

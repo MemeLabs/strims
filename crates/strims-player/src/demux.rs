@@ -61,13 +61,18 @@ pub enum DemuxOutput<'a> {
     },
     /// The input skipped: the record in progress was dropped.
     Discontinuity,
-    /// A writer's new session started its timestamps over: units from here
-    /// on are moved by `offset` (the whole offset, not its change), which
-    /// puts the session's first unit right after the latest presentation
-    /// end of the output so far.
+    /// A writer's new session started its timestamps over, or came after
+    /// an end: units from here on are moved by `offset` (the whole offset,
+    /// not its change), which puts the session's first unit right after
+    /// the latest presentation end of the output so far.
     Restart {
         offset: Duration,
     },
+    /// The stream ended: a writer session's END record, or the input's end
+    /// ([`Demuxer::finish`]). Every unit before it was output. Units after
+    /// it are a later session's, which follows the output so far whatever
+    /// its timestamps, with a [`Restart`](Self::Restart) before its first.
+    End,
 }
 
 /// What a [`Demuxer`] has read and dropped.
@@ -87,8 +92,11 @@ pub struct DemuxerMetrics {
     /// Units dropped for decoding before their track's last within one
     /// writer session.
     pub dropped_backwards: u64,
-    /// Writer sessions that started their timestamps over.
+    /// Writer sessions that started their timestamps over or came after
+    /// an end.
     pub restarts: u64,
+    /// Ends output: END records and [`Demuxer::finish`].
+    pub ends: u64,
     pub reader: UnitReaderMetrics,
 }
 
@@ -116,6 +124,7 @@ enum Queued {
     Restart {
         offset: Duration,
     },
+    End,
 }
 
 /// A track's place on the output timeline.
@@ -147,6 +156,12 @@ struct TrackOut {
 /// after its config and after every gap, so a decoder fed these units in
 /// order never sees a unit whose references went missing.
 ///
+/// An END record, a writer session's deliberate end, outputs an
+/// [`End`](DemuxOutput::End), as [`finish`](Self::finish) does at the end
+/// of the input, once for each run of units. The first unit after it, a
+/// later session's, starts a session at the latest presentation end of the
+/// output so far, whatever its timestamps.
+///
 /// # Bounds
 ///
 /// A record is at most [`MAX_RECORD_LEN`] bytes; a longer one is dropped
@@ -165,6 +180,10 @@ pub struct Demuxer {
     /// A CONFIGS record changed the reader's tracks since the last
     /// session began, so a unit going back starts a new one.
     configs_changed: bool,
+    /// An end was output and no unit since.
+    ended: bool,
+    /// The stream ended after output: the next unit starts a session.
+    after_end: bool,
     /// What every unit's timestamps are moved by.
     offset: Duration,
     /// Bound: `MAX_TRACKS`.
@@ -190,6 +209,8 @@ impl Demuxer {
             oversize: false,
             reader: UnitReader::new(),
             configs_changed: false,
+            ended: false,
+            after_end: false,
             offset: Duration::ZERO,
             outs: Vec::new(),
             queue: VecDeque::new(),
@@ -264,6 +285,14 @@ impl Demuxer {
         self.queue.push_back(Queued::Discontinuity);
     }
 
+    /// The input ended: outputs an [`End`](DemuxOutput::End), unless the
+    /// last end came after the last unit. Input after it is a later
+    /// session's, as after an END record.
+    pub fn finish(&mut self) {
+        self.reclaim();
+        self.end();
+    }
+
     /// The next output, in stream order.
     pub fn poll_output(&mut self) -> Option<DemuxOutput<'_>> {
         self.taken = Some(self.queue.pop_front()?);
@@ -299,6 +328,7 @@ impl Demuxer {
             },
             Queued::Discontinuity => DemuxOutput::Discontinuity,
             Queued::Restart { offset } => DemuxOutput::Restart { offset: *offset },
+            Queued::End => DemuxOutput::End,
         })
     }
 
@@ -333,13 +363,23 @@ impl Demuxer {
                         missing,
                     });
                 }
-                // A later session comes with its configs.
-                ReaderEvent::End => {}
+                ReaderEvent::End => self.end(),
             }
         }
         if let Some(unit) = unit {
             self.unit(&unit);
         }
+    }
+
+    /// The stream ended: an end output, once for each run of units, and
+    /// the next unit, after output, starts a session.
+    fn end(&mut self) {
+        if !self.ended {
+            self.ended = true;
+            self.metrics.ends += 1;
+            self.queue.push_back(Queued::End);
+        }
+        self.after_end = !self.outs.is_empty();
     }
 
     fn unit(&mut self, unit: &AccessUnit<'_>) {
@@ -355,12 +395,14 @@ impl Demuxer {
             .iter()
             .find(|o| o.track == unit.track)
             .and_then(|o| o.last_dts);
-        if let Some(last) = last
-            && raw_dts + self.offset < last
-        {
+        let after_end = std::mem::take(&mut self.after_end);
+        if after_end || last.is_some_and(|last| raw_dts + self.offset < last) {
             // The reader passes a track's units in decode order but for a
-            // writer's restart, which comes with a CONFIGS record.
-            if !std::mem::take(&mut self.configs_changed) {
+            // writer's restart, which comes with a CONFIGS record. A later
+            // session after an end follows the output whatever its
+            // timestamps.
+            let changed = std::mem::take(&mut self.configs_changed);
+            if !changed && !after_end {
                 self.metrics.dropped_backwards += 1;
                 return;
             }
@@ -420,6 +462,7 @@ impl Demuxer {
             published: unit.published,
             data: at..self.bytes.len(),
         });
+        self.ended = false;
         self.metrics.units += 1;
     }
 }

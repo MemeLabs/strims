@@ -166,8 +166,9 @@ declare module "*/strims-player/Cargo.toml" {
 
   /**
    * The stream ended: a writer session's END record, or `finish`. Every unit
-   * before it was output; end the MediaSource's stream once they are
-   * appended. Media after it is a later session's, which plays on.
+   * before it was output: a MediaSource's stream ends once they are
+   * appended, and a decoding player plays out to it. Media after it is a
+   * later session's, which plays on.
    */
   export interface EndOutput {
     type: "end";
@@ -182,8 +183,9 @@ declare module "*/strims-player/Cargo.toml" {
    * A video track's units start at a keyframe after its config and after
    * every gap, so a decoder fed them in order never sees a unit whose
    * references went missing. A writer session that starts its timestamps
-   * over is moved to present right after the output so far (a `restart`
-   * output), so presentation times never go back across sessions.
+   * over, or comes after an end whatever its timestamps, is moved to present
+   * right after the output so far (a `restart` output), so presentation
+   * times never go back across sessions.
    */
   export class Demuxer {
     constructor();
@@ -193,6 +195,8 @@ declare module "*/strims-player/Cargo.toml" {
      * trapping, after which the worker should be discarded.
      */
     push(data: Uint8Array, segmentEnd: boolean, discontinuity: boolean): DemuxerOutput[];
+    /** The stream ended: an `end` output, unless one came after the last unit. */
+    finish(): DemuxerOutput[];
     metrics(): DemuxerMetrics;
     /** Frees its memory now (garbage collection also does); later calls throw. */
     free(): void;
@@ -203,7 +207,8 @@ declare module "*/strims-player/Cargo.toml" {
     | DemuxedUnitOutput
     | GapOutput
     | DiscontinuityOutput
-    | RestartOutput;
+    | RestartOutput
+    | EndOutput;
 
   /**
    * The tracks' decoder configs changed: every track's, in track id order.
@@ -285,6 +290,8 @@ declare module "*/strims-player/Cargo.toml" {
     /** Units dropped for decoding before their track's last within a writer session. */
     droppedBackwards: number;
     restarts: number;
+    /** End outputs: END records and `finish`. */
+    ends: number;
     /** The module's linear memory, in bytes; it only grows. */
     memoryBytes: number;
     reader: RemuxerMetrics["reader"];

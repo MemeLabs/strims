@@ -282,6 +282,11 @@ fn demuxed_configs_and_units_have_their_declared_shapes() {
     assert_eq!(number(&audio, "numberOfChannels"), 2.0);
     assert_eq!(number(&audio, "preSkip"), 0.0);
 
+    // The records' END ends the outputs, alone: the finish adds none.
+    let end = out.pop().unwrap();
+    assert_eq!(get(&end, "type").as_string().unwrap(), "end");
+    assert_keys(&end, &["type"]);
+    assert_eq!(d.finish().length(), 0);
     let mut units = 0;
     for u in &out[1..] {
         assert_eq!(get(u, "type").as_string().unwrap(), "unit");
@@ -312,6 +317,7 @@ fn demuxed_configs_and_units_have_their_declared_shapes() {
     }
     let m = d.metrics();
     assert_eq!(number(&m, "units"), f64::from(units));
+    assert_eq!(number(&m, "ends"), 1.0);
     assert!(number(&m, "memoryBytes") > 0.0);
     assert_eq!(number(&get(&m, "reader"), "malformed"), 0.0);
 }
@@ -332,8 +338,11 @@ fn hostile_bytes_answer_the_demuxer_without_throwing() {
             .collect();
         for o in d.push(&data, i % 3 == 0, i % 17 == 0).iter() {
             let t = get(&o, "type").as_string().unwrap();
-            assert!(["configs", "unit", "gap", "discontinuity", "restart"].contains(&t.as_str()));
+            assert!(
+                ["configs", "unit", "gap", "discontinuity", "restart", "end"].contains(&t.as_str())
+            );
         }
     }
+    let _ = d.finish();
     assert!(number(&d.metrics(), "messages") == 200.0);
 }

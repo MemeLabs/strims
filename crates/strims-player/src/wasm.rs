@@ -77,7 +77,8 @@ impl JsRemuxer {
 }
 
 /// A [`Demuxer`] for JS: `new Demuxer()`, then `push` per Egress `Data`
-/// message, each answering the outputs completed, in order.
+/// message and `finish` at the stream's end, each answering the outputs
+/// completed, in order, an end among them.
 #[wasm_bindgen(js_name = Demuxer)]
 pub struct JsDemuxer {
     inner: Demuxer,
@@ -102,15 +103,26 @@ impl JsDemuxer {
     /// The bytes are copied during the call.
     pub fn push(&mut self, data: &[u8], segment_end: bool, discontinuity: bool) -> Array {
         self.inner.message(data, segment_end, discontinuity);
+        self.drain()
+    }
+
+    /// The stream ended: an end output, unless one came after the last
+    /// unit.
+    pub fn finish(&mut self) -> Array {
+        self.inner.finish();
+        self.drain()
+    }
+
+    pub fn metrics(&self) -> Object {
+        demuxer_metrics(&self.inner.metrics())
+    }
+
+    fn drain(&mut self) -> Array {
         let outputs = Array::new();
         while let Some(output) = self.inner.poll_output() {
             outputs.push(&demux_object(&output));
         }
         outputs
-    }
-
-    pub fn metrics(&self) -> Object {
-        demuxer_metrics(&self.inner.metrics())
     }
 }
 
@@ -251,6 +263,7 @@ fn demux_object(output: &DemuxOutput<'_>) -> Object {
             set_str(&o, "type", "restart");
             set_num(&o, "offset", offset.as_secs_f64());
         }
+        DemuxOutput::End => set_str(&o, "type", "end"),
     }
     o
 }
@@ -321,6 +334,7 @@ fn demuxer_metrics(m: &DemuxerMetrics) -> Object {
         ("units", m.units),
         ("droppedBackwards", m.dropped_backwards),
         ("restarts", m.restarts),
+        ("ends", m.ends),
     ] {
         set_num(&o, key, value as f64);
     }
