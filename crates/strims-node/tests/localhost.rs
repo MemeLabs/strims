@@ -23,6 +23,7 @@
     clippy::indexing_slicing
 )]
 
+use std::future::Future;
 use std::time::Duration as StdDuration;
 
 use futures_util::{SinkExt, StreamExt};
@@ -636,6 +637,42 @@ async fn store_info(t: &TestNode, swarm: SwarmKey) -> StoreInfo {
         .find(|s| s.swarm == swarm)
         .expect("the swarm")
         .store
+}
+
+/// The readers of `swarm` on `t`.
+async fn readers(t: &TestNode, swarm: SwarmKey) -> usize {
+    let m = t.node.metrics().await.unwrap();
+    m.runner
+        .swarms
+        .iter()
+        .find(|s| s.swarm == swarm)
+        .expect("the swarm")
+        .readers
+}
+
+/// An open whose caller goes before the node answers it leaves no reader
+/// of the swarm behind.
+#[tokio::test]
+async fn an_open_reader_dropped_before_its_answer_leaves_no_reader() {
+    let t = TestNode::spawn(27, Kind::Tcp).await;
+    let (swarm, _, _) = cached_stream(&t, 0x72).await;
+    for _ in 0..3 {
+        let mut open = Box::pin(t.node.open_reader(swarm));
+        let polled =
+            std::future::poll_fn(|cx| std::task::Poll::Ready(open.as_mut().poll(cx))).await;
+        assert!(polled.is_pending());
+        drop(open);
+    }
+    let _kept = t.node.open_reader(swarm).await.unwrap();
+    let mut n = readers(&t, swarm).await;
+    for _ in 0..20 {
+        if n == 1 {
+            break;
+        }
+        tokio::time::sleep(StdDuration::from_millis(50)).await;
+        n = readers(&t, swarm).await;
+    }
+    assert_eq!(n, 1);
 }
 
 /// A cache exported from a writer's swarm starts a swarm on another node,

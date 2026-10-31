@@ -638,21 +638,26 @@ impl Node {
         self.call(move |s, _| s.stop_swarm(&host_id, swarm)).await?
     }
 
-    /// A reader of the swarm's stream from its read offset.
+    /// A reader of the swarm's stream from its read offset. Dropped before
+    /// it answers, the call leaves no reader behind.
     pub async fn open_reader(&self, swarm: SwarmKey) -> Result<SwarmReader, NodeError> {
         let (reply_tx, reply) = mpsc::channel(1);
         let (rewind_tx, rewind_reply) = mpsc::channel(1);
-        let reader = self
-            .call(move |s, _| s.open_reader(swarm, reply_tx, rewind_tx))
-            .await??;
-        Ok(SwarmReader {
-            tx: self.tx.clone(),
-            reader,
-            buf: Some(vec![0; SWARM_IO_BUFFER]),
-            reply,
-            rewind_reply,
-            rewinding: false,
+        let tx = self.tx.clone();
+        // The node task makes the whole reader, so an answer no caller
+        // takes drops a reader, which closes its slot.
+        self.call(move |s, _| {
+            let reader = s.open_reader(swarm, reply_tx, rewind_tx)?;
+            Ok(SwarmReader {
+                tx,
+                reader,
+                buf: Some(vec![0; SWARM_IO_BUFFER]),
+                reply,
+                rewind_reply,
+                rewinding: false,
+            })
         })
+        .await?
     }
 }
 
