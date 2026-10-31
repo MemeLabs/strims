@@ -357,7 +357,8 @@ impl fmt::Display for Sign {
 /// first byte. A unit is signed once its last byte is written; a unit in
 /// progress is due at its deadline, and [`Signer::flush`] ends it as
 /// `strims_ppspp::Writer::flush` does: the chunk in progress padded with
-/// zeros, the unit's chunks after it data-less, never sent.
+/// zeros, the unit's chunks after it data-less. No zero is sent: a DATA
+/// leaves out its trailing zeros.
 #[derive(Clone, Debug)]
 pub struct Signer {
     deadline: Deadline,
@@ -522,7 +523,7 @@ pub struct Plan {
     pub chunk: u64,
     pub unit_chunks: u64,
     /// Access unit bytes, stream bytes (records, headers and zeros), and
-    /// the stream bytes sent (all but the data-less chunks).
+    /// the stream bytes sent (records and headers).
     pub media_bytes: u64,
     pub stream_bytes: u64,
     pub sent_bytes: u64,
@@ -538,6 +539,12 @@ impl Plan {
     pub fn is_pad(&self, offset: u64) -> bool {
         let i = self.pads.partition_point(|p| p.end <= offset);
         self.pads.get(i).is_some_and(|p| p.contains(&offset))
+    }
+
+    /// The chunks sent: all but the data-less ones.
+    pub fn sent_chunks(&self) -> u64 {
+        let dataless: u64 = self.dataless.iter().map(|d| d.end - d.start).sum();
+        (self.stream_bytes - dataless) / self.chunk.max(1)
     }
 
     /// Whether any of chunks `first..=last` is data-less.
@@ -611,7 +618,7 @@ pub fn plan(trace: &[Au], mut signer: Signer) -> Plan {
         flush(&mut p, &mut signer, due);
     }
     p.stream_bytes = signer.offset();
-    p.sent_bytes = p.stream_bytes - p.dataless.iter().map(|d| d.end - d.start).sum::<u64>();
+    p.sent_bytes = p.stream_bytes - p.pads.iter().map(|d| d.end - d.start).sum::<u64>();
     p.media_at
         .resize(usize::try_from(p.stream_bytes / chunk).unwrap_or(0), None);
     p
@@ -746,12 +753,13 @@ mod tests {
             p.stream_bytes
         );
         // 128 kbit/s fills 2 chunks in 0.5 s: flushed at 200 ms, padded,
-        // and the second chunk data-less
+        // and the second chunk data-less; only the records go out
         let p = plan_of(128, Mode::Cbr, "u2,t200", 30);
         let ratio = p.stream_bytes as f64 / p.media_bytes as f64;
         assert!((2.2..2.6).contains(&ratio), "{ratio}");
         let sent = p.sent_bytes as f64 / p.media_bytes as f64;
-        assert!((1.1..1.3).contains(&sent), "{sent}");
+        assert!((1.0..1.05).contains(&sent), "{sent}");
+        assert_eq!(p.sent_chunks(), p.media_at.iter().flatten().count() as u64);
     }
 
     #[test]

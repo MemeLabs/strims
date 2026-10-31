@@ -2070,14 +2070,10 @@ impl Sim {
         }
     }
 
-    /// Chunks sent a second, padding included.
+    /// Chunks sent a second.
     fn chunk_rate(&self) -> f64 {
         match &self.media {
-            Some(m) => {
-                m.plan.sent_bytes as f64
-                    / self.cfg.chunk_size as f64
-                    / self.cfg.stream_secs.max(1) as f64
-            }
+            Some(m) => m.plan.sent_chunks() as f64 / self.cfg.stream_secs.max(1) as f64,
             None => self.cfg.stream_rate as f64 / self.cfg.chunk_size as f64,
         }
     }

@@ -304,8 +304,8 @@ pub struct MediaLog {
     pub times: Vec<u64>,
     /// Per media chunk signed: how long after its first byte (ms).
     pub sign_waits: Vec<u32>,
-    /// Access unit bytes, stream bytes sent (padding included, data-less
-    /// chunks not), and units signed.
+    /// Access unit bytes, stream bytes sent (records and chunk headers:
+    /// the zeros of a unit signed early go nowhere), and units signed.
     pub media_bytes: u64,
     pub sent_bytes: u64,
     pub units: u64,
@@ -527,7 +527,7 @@ impl Report {
 
     /// One line per seed for the sweep's log.
     /// Swarm `swarm`'s data rate in bytes per second, as its seed sends a
-    /// copy: a media swarm's padding included.
+    /// copy.
     pub(crate) fn swarm_rate(&self, swarm: usize) -> f64 {
         let Some(s) = self.scenario.swarms.get(swarm) else {
             return 0.0;

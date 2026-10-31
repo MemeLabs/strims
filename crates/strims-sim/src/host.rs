@@ -620,12 +620,9 @@ impl MediaWriter {
         }
         let size = self.chunk.max(1);
         self.signed(w, s, pad.end / size);
+        // the padding goes nowhere: DATA leaves out trailing zeros, and
         // the unit's chunks after the chunk in progress are data-less
-        let sent = pad.start.next_multiple_of(size).min(pad.end) - pad.start;
-        w.media_log(s, |l| {
-            l.units += 1;
-            l.sent_bytes += sent;
-        });
+        w.media_log(s, |l| l.units += 1);
         true
     }
 }
