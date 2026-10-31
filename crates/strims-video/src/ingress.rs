@@ -135,8 +135,9 @@
 //!
 //! A partial integrity unit is signed the signing's interval after its
 //! first byte ([`SignTimer`]): the writer ends its frame, the swarm writer
-//! is flushed, which pads the unit with zeros that read as padding frames,
-//! and the writer goes on where the next unit starts.
+//! is flushed, which pads the chunk in progress with zeros and leaves the
+//! unit's later chunks data-less (zeros no peer sends), all read as
+//! padding frames, and the writer goes on where the next unit starts.
 //!
 //! # Renditions
 //!
@@ -530,8 +531,8 @@ pub struct IngressMetrics {
     /// Sessions a later publish to their channel replaced.
     pub replaced: u64,
     /// Records written, and the stream bytes written: the records, the
-    /// frame headers and padding, and the zeros that pad an integrity unit
-    /// signed early.
+    /// frame headers and padding, and the zeros that end an integrity unit
+    /// signed early (its data-less chunks included, which no peer sends).
     pub segments: u64,
     pub bytes: u64,
     /// Integrity units signed before they filled:

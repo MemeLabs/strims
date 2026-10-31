@@ -17,10 +17,11 @@ use super::SignTimer;
 /// the swarm URI carries the unit size. A peer verifies about
 /// max(bitrate ÷ unit size, 1 ÷ interval) signatures a second, and no byte
 /// waits longer than the interval for its signature. A unit signed early
-/// is padded with zeros to its end and the padding is sent, so a stream
-/// below unit size ÷ interval is sent at about that rate: 164 kbit/s for
-/// [`SMALL`](Self::SMALL), 874 kbit/s for [`LARGE`](Self::LARGE) in 4 KiB
-/// chunks.
+/// pads its chunk in progress with zeros, which are sent, and its later
+/// chunks are data-less, which no peer sends: a stream below a chunk ÷
+/// interval is sent at about that rate, 164 kbit/s for
+/// [`SMALL`](Self::SMALL) and 109 kbit/s for [`LARGE`](Self::LARGE) in 4
+/// KiB chunks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UnitSigning {
     /// A power of two.
