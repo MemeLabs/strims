@@ -37,8 +37,9 @@
 //!   renditions' out, over an ffmpeg process a native driver runs.
 //! - [`captions`]: A/53 closed captions in H.264 and H.265 SEI, read,
 //!   written and carried to a stream's renditions.
+//! - [`cea608`]: a CEA-608 decoder of caption channel 1 to plain text.
 //! - [`text`]: timed text: text tracks' cues, and the reader that turns a
-//!   stream's units into the cues players show.
+//!   stream's units into the cues players show, captions among them.
 //! - [`units`]: the unit format, a record per access unit in the chunked
 //!   chunkstream layout: its records, the [`UnitWriter`] muxer and the
 //!   [`UnitReader`], which builds for wasm32.
@@ -182,6 +183,7 @@ pub mod avc;
 mod bits;
 pub mod captions;
 pub mod capture;
+pub mod cea608;
 pub mod channels;
 pub mod codec;
 mod config;

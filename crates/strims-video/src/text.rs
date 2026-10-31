@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Timed text: the cues of a stream's text tracks, and the reader that
-//! turns a stream's units into the cues players show.
+//! turns a stream's units into the cues players show, its text tracks'
+//! and its video's CEA-608 captions.
 //!
 //! A text track ([`TrackKind::Text`]) has the codec [`CODEC`] and no
 //! configuration record. Each of its access units is a cue
@@ -27,12 +28,22 @@
 //! `max(start + MIN_CUE, min(start + duration, next start))`, and cues
 //! closer together than the floor show at once, stacked.
 //!
+//! A stream's closed captions, CC1 of the A/53 captions its video's SEI
+//! carries ([`captions`](crate::captions), [`cea608`](crate::cea608)),
+//! are cues too: each shows from the frame where the caption appears on
+//! screen to the frame where it changes or goes, or for at most
+//! [`CAPTION_TIMEOUT`] without a change.
+//!
 //! Every function takes hostile input: none panics, and each works in
 //! time linear in its input.
+
+use std::collections::VecDeque;
 
 use strims_base::time::Duration;
 use strims_chunkstream::{MAX_UVARINT_LEN, get_uvarint, put_uvarint};
 
+use crate::captions::{CcTuple, NalFormat};
+use crate::cea608::Cc1Decoder;
 use crate::media::{AccessUnit, CodecParams, DecoderConfig, TrackId, TrackKind};
 
 /// The codec string of a text track's decoder config.
@@ -47,6 +58,12 @@ pub const MAX_CUE_TEXT: usize = 2048;
 pub const MIN_CUE: Duration = Duration::from_millis(800);
 /// The longest duration [`estimate`] gives a cue.
 pub const MAX_ESTIMATE: Duration = Duration::from_secs(7);
+/// The longest a caption shows without a change: a stream whose captions
+/// stop leaves none on screen.
+pub const CAPTION_TIMEOUT: Duration = Duration::from_secs(16);
+/// The most video frames a [`CueReader`] holds to read their captions in
+/// presentation order.
+const MAX_REORDER: usize = 16;
 /// The reading rate [`estimate`] assumes, in characters a second: a
 /// subtitle reading rate for adult viewers.
 const READ_RATE: i64 = 15;
@@ -198,8 +215,10 @@ pub enum CueEvent {
 /// What a [`CueReader`] has read and dropped.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct CueReaderMetrics {
-    /// Cues shown.
+    /// Text tracks' cues shown.
     pub cues: u64,
+    /// Captions shown.
+    pub captions: u64,
     /// Cue units refused ([`parse_cue`]).
     pub malformed: u64,
 }
@@ -215,27 +234,40 @@ struct Showing {
 }
 
 /// Turns a stream's units into the cues players show ([`CueEvent`]): its
-/// text tracks' cue units.
+/// text tracks' cue units, and the CC1 captions of its first video track.
 ///
 /// It takes the stream's configs ([`set_configs`](Self::set_configs)),
 /// then its units in decode order ([`push`](Self::push)), and queues
 /// events, which [`poll_event`](Self::poll_event) takes. Times are the
-/// units' presentation times as durations.
+/// units' presentation times as durations. A video frame's captions are
+/// read once no later frame can present before it: once a frame decodes
+/// at or after its presentation time, or 16 frames on.
 ///
 /// # Bounds
 ///
 /// It holds at most [`MAX_TRACKS`](crate::fmp4::MAX_TRACKS) text tracks
-/// and 8 cues of at most [`MAX_CUE_TEXT`] bytes; a push
-/// queues at most 9 events, and its work is linear in
-/// the unit.
+/// and 8 cues of at most [`MAX_CUE_TEXT`] bytes, 16 frames' caption tuples
+/// and a caption decoder's two memories; a push queues at most 34 events,
+/// two of each of 17 frames, and its work is linear in the unit.
 #[derive(Debug, Default)]
 pub struct CueReader {
     /// The text tracks and their timescales.
     text: Vec<(TrackId, u32)>,
     /// Bound: `MAX_SHOWING`.
     showing: Vec<Showing>,
+    /// The video track whose captions are read, its timescale and its
+    /// units' NAL format.
+    video: Option<(TrackId, u32, NalFormat)>,
+    /// Video frames whose captions wait to be read, by presentation time.
+    /// Bound: `MAX_REORDER`.
+    frames: VecDeque<(i64, Vec<CcTuple>)>,
+    cc1: Cc1Decoder,
+    /// The caption showing.
+    caption: Option<Showing>,
+    /// Reused for a unit's tuples.
+    tuples: Vec<CcTuple>,
     next_id: u64,
-    events: std::collections::VecDeque<CueEvent>,
+    events: VecDeque<CueEvent>,
     metrics: CueReaderMetrics,
 }
 
@@ -249,7 +281,8 @@ impl CueReader {
     }
 
     /// The stream's tracks are `configs`. A text track no longer among
-    /// them forgets its cues.
+    /// them forgets its cues, and captions start afresh when the video
+    /// track changes.
     pub fn set_configs(&mut self, configs: &[DecoderConfig]) {
         self.text = configs
             .iter()
@@ -260,16 +293,37 @@ impl CueReader {
         let text = &self.text;
         self.showing
             .retain(|s| text.iter().any(|(track, _)| *track == s.track));
+        let video = configs
+            .iter()
+            .find(|c| c.kind == TrackKind::Video)
+            .and_then(|c| NalFormat::of(&c.params).map(|f| (c.track, c.timescale, f)));
+        if video != self.video {
+            self.video = video;
+            self.reset_captions();
+        }
     }
 
     /// The stream skipped or started over: the cues showing are
     /// forgotten, and the next cue of each track starts afresh.
     pub fn reset(&mut self) {
         self.showing.clear();
+        self.reset_captions();
+    }
+
+    fn reset_captions(&mut self) {
+        self.frames.clear();
+        self.cc1 = Cc1Decoder::new();
+        self.caption = None;
     }
 
     /// Takes the stream's next unit.
     pub fn push(&mut self, unit: &AccessUnit<'_>) {
+        if let Some((track, timescale, nals)) = self.video
+            && track == unit.track
+        {
+            self.video_frame(unit, timescale, nals);
+            return;
+        }
         let Some(&(track, timescale)) = self.text.iter().find(|(t, _)| *t == unit.track) else {
             return;
         };
@@ -338,6 +392,67 @@ impl CueReader {
     /// The next event, in the order the units made them.
     pub fn poll_event(&mut self) -> Option<CueEvent> {
         self.events.pop_front()
+    }
+
+    /// Holds a video frame's captions, and reads those of the frames
+    /// before it in presentation order that no later frame can precede.
+    fn video_frame(&mut self, unit: &AccessUnit<'_>, timescale: u32, nals: NalFormat) {
+        self.tuples.clear();
+        nals.cc_tuples(unit.payload, &mut self.tuples);
+        let at = self
+            .frames
+            .iter()
+            .position(|(pts, _)| *pts > unit.pts)
+            .unwrap_or(self.frames.len());
+        self.frames.insert(at, (unit.pts, self.tuples.clone()));
+        while let Some((pts, _)) = self.frames.front() {
+            if *pts > unit.dts && self.frames.len() <= MAX_REORDER {
+                break;
+            }
+            let Some((pts, tuples)) = self.frames.pop_front() else {
+                break;
+            };
+            let at = to_duration(pts, timescale);
+            if self.caption.as_ref().is_some_and(|c| c.end <= at) {
+                self.caption = None;
+            }
+            if let Some(text) = self.cc1.frame(at, &tuples) {
+                self.caption_changed(at, text);
+            }
+        }
+    }
+
+    /// The caption on screen is `text` from `at`: it ends the one showing,
+    /// unless it is that one.
+    fn caption_changed(&mut self, at: Duration, text: String) {
+        if let Some(c) = self.caption.take() {
+            if c.text == text {
+                self.caption = Some(c);
+                return;
+            }
+            self.events.push_back(CueEvent::End { id: c.id, end: at });
+        }
+        if text.is_empty() {
+            return;
+        }
+        let id = self.next_id;
+        self.next_id = self.next_id.wrapping_add(1);
+        let end = at + CAPTION_TIMEOUT;
+        self.metrics.captions += 1;
+        self.events.push_back(CueEvent::Show {
+            id,
+            kind: CueKind::Captions,
+            start: at,
+            end,
+            text: text.clone(),
+        });
+        self.caption = Some(Showing {
+            id,
+            track: TrackId(0),
+            start: at,
+            end,
+            text,
+        });
     }
 }
 
