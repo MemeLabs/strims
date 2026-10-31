@@ -185,6 +185,27 @@ Egress and players:
   Dumps grow about as fast as the node's traffic, nearly all of it
   incompressible payload; this would cut them about eightfold.
 
+### Fuzzing
+- Property tests bound most parsers, but nothing is fuzzed with coverage
+  guidance, and random bytes rarely pass a magic number or a length check.
+  Give every parser of bytes from peers, the network, publishers or files
+  a cargo-fuzz target at the entry point that reaches it (a nightly
+  toolchain beside stable, for the targets alone), seeded from the golden
+  vectors and the tests' synthetic inputs:
+  - ppspp's wire messages and the capture reader; strims-chunkstream's
+    layouts; strims-rpc's framing and the protobuf messages it decodes;
+    vnic's frames and session descriptions; vpn, network and kademlia
+    messages; directory listings and transfer records; chat's message
+    parser; dao's stream keys; strims-crypto's key and signature
+    decoding; strims-webrtc's STUN parsing.
+  - Video: the RTMP server's byte stream, which reaches FLV, AMF0, avcC,
+    SPS, AudioSpecificConfig and OpusHead; the unit-format reader over
+    the chunked layout; the HLS routes; and, on branch `video-target`,
+    strims-player's remuxer and demuxer.
+  - A short run of each target in `hack/check.sh --full`, and long
+    campaigns on the sim farm (quoted with `farm.py estimate`). Each
+    crash becomes a regression test beside its parser's property tests.
+
 ### Simulation farm
 - `long_run`'s heap grows about 4 MB over its 10 minutes even without
   its crashes, in allocations under 400 KiB (no larger one grows), which
