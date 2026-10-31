@@ -11,106 +11,93 @@ on it is in `CONVENTIONS.md`.
   `CapConnService`, which lists, watches and loads ppspp capture logs.
 
 ### Video
-Gaps in the current services:
-- Snippets go live without a thumbnail. Making one needs a decoder stage
-  in the driver (ffmpeg or a library) over a segment's keyframe.
-- The VideoIngressShare service isn't served. The ingress config's
-  `service_network_keys` are stored, and pruned when a network is
-  deleted, but nothing reads them.
-- One ingest per channel holds within a process. Stores shared by several
-  processes need the lease that spans them (see `strims-svc` below).
-- A writer never publishes its last partial integrity unit, so viewers
-  miss the end of a stream's last segment.
-- A stream without audio may not play in the current UI, whose
-  MediaSource codec string names both tracks.
-- No edit list offsets the B-frame composition delay.
-- A large backward jump in FLV tag times holds both tracks' timestamps
-  until the tag times catch up, which stalls an encoder that restarts its
-  clock mid-stream.
-- RTMP: a connection publishes once; AMF3 commands and shared objects are
-  ignored; the server never sends StreamBegin. A peer that stops reading
-  is cut off only once its queued output passes the bound, and the
-  server's replies are small. `NetVideoHost` sets no TCP options on RTMP
-  connections.
-- Egress publishes a swarm it adds only on the networks the node runs
-  when the stream opens. A stream of a swarm the node already runs
-  doesn't compare its URI's options. A cancelled `open_reader` can hold a
-  reader slot until its swarm goes. Each Data message allocates.
-- An HLS stream ends at its stream's first error, with no recovery. HLS
-  has no LL-HLS parts or `EXT-X-INDEPENDENT-SEGMENTS`, and its target
-  duration can grow during a stream.
-- The UI can't open an HLS stream: nothing calls HLSEgress.OpenStream, so
-  a playlist URL comes only through the RPC.
-- Autoseed: a seed that ends while streams or other seeds hold its swarm
-  leaves the transfer published on the rule's network until they end. A
-  rule that names a capture's or an ingest session's swarm seeds nothing.
-  An ingest session that takes over a seeded swarm ends its seeds until
-  the listings that match their rules next change.
-
-The target shape follows. Nothing in the current services needs rework to
-reach it.
-
-Pipeline:
-- Ingest sources produce access units, and muxers consume them. An access
-  unit is a track, decode and presentation timestamps, a keyframe flag and
-  a payload. Each track has a decoder config: an RFC 6381 codec string
-  plus avcC, hvcC or av1C, or AudioSpecificConfig or OpusHead. Sources are
-  RTMP, browser capture and transcoder output. Muxers are the fMP4
-  segmenter, HLS egress and the frame format.
-- Transcoded renditions come from a codec stage (ffmpeg or a library) that
-  takes and returns access units. Segmenting and muxing stay in Rust.
-- Ingest writes each access unit to the swarm as it arrives. In the fMP4
-  format that means a moof/mdat pair per access unit, or per small group,
-  within a segment's record. Check that the current player accepts that
-  before relying on it.
-- Each access unit keeps its publish time next to its media timestamps.
-  The players' playout clocks and the request deadlines that follow them
-  (Swarm, group 4) both need it.
-
-Wire formats:
-- The listing's MIME type names the format, and readers dispatch on it. A
-  new format gets a new MIME type.
-- The fMP4 format stays playable by the current UI. That format is one
-  chunkstream record per segment,
-  `[u16 init length][init segment][media segment]`, starting at a
-  keyframe, in 4 KiB chunks with BLAKE3 Merkle trees and Ed25519 live
-  signatures. The rule for cutting segments is a parameter. The codecs in
-  the MIME type come from the decoder configs.
-- The frame format is one chunkstream record per access unit, with the
-  decoder configs repeated ahead of each keyframe. Readers join and
-  recover at a keyframe, so a lost chunk costs the frames up to the next
-  keyframe.
-
-RTMP and codecs:
-- H.264 with AAC is the rendition every viewer can play. A streamer's HEVC
-  or AV1 passes through unchanged as another rendition. Each viewer picks
-  one with `VideoDecoder.isConfigSupported` or `MediaSource.isTypeSupported`.
-  VP9 isn't a target: OBS can't send it over RTMP, and it compresses no
-  better than HEVC.
-- Listing several renditions needs a listing schema change.
-
-Egress and players:
-- The UI egress stays format-agnostic: payload bytes, record ends and
-  discontinuities. Parsing the format is the player's job. In
-  `strims-wasm`, egress runs in the swarm's worker, so a player in that
-  worker can read records without the frontend RPC.
-- The browser floor is the current generation: WebCodecs, plus
-  ManagedMediaSource on iOS 17.1+. With that floor, the service-worker HLS
-  relay and the MPEG-TS decoder go. ManagedMediaSource needs
-  `disableRemotePlayback`.
-- The baseline player muxes the frame format into fMP4 for MediaSource or
-  ManagedMediaSource.
-- The low-latency player decodes with WebCodecs in the worker. It renders
-  to an OffscreenCanvas that the UI transfers in and plays audio through an
-  AudioWorklet. It owns its jitter buffer, a playout clock driven by audio,
-  A/V sync and keyframe recovery. VideoTrackGenerator (Safari) and
-  MediaStreamTrackGenerator (Chromium) give it a native `<video>` where
-  they exist; Firefox has neither.
-- Browser capture encodes with WebCodecs into the frame format, through the
-  same writer as RTMP. Input frames come from MediaStreamTrackProcessor
-  where it exists and from a canvas elsewhere. Audio is Opus, since Firefox
-  has no AAC encoder.
-- Native HLS egress is a muxer over access units, for external players.
+Live video is the unit format (`strims_video::units`) end to end: RTMP and
+browser capture write it, swarms carry it, and the native player
+(MediaSource), the opt-in low-latency player (WebCodecs) and HLS egress
+read it.
+- **Services.**
+  - The VideoIngressShare service isn't served; it needs a design
+    (discovery under a key and salt, the caller's identity from its vpn
+    certificate, quotas on the host's ingest and upload, the client and its
+    UI). The ingress form hides its `service_network_keys` until then.
+  - One ingest per channel holds within a process. Stores shared by several
+    processes need the lease that spans them (see `strims-svc` under
+    Targets).
+  - RTMP: a connection publishes once (OBS, ffmpeg and Larix reconnect to
+    publish again); shared objects are ignored; a peer that stops reading
+    is cut off only once its queued output passes the bound.
+  - Egress: each Data message of the RPC path allocates. On the writer's
+    own node, an RPC stream opened well into a capture replays about the
+    whole live window at once (about 2 MB in its first 4 s at 25 s in);
+    find where its reader starts. Without a listing, one stream with other
+    swarm options moves a slot's other holders until the next allowed
+    reopen.
+  - `SwarmReader` and `SwarmWriter` close themselves on drop with
+    `try_send`, so a full node command queue loses the close and leaks the
+    slot; a cancelled `create_swarm` or `add_swarm` leaks the same way.
+  - The signing rule (`UnitSigning::for_stream`) is untested between 0.75
+    and 1.5 Mbit/s and above 6.3 Mbit/s. A farm A/B at 1 Mbit/s (`suite.py`'s
+    `sign` tiers) settles whether 2 or 4 chunks lag less there.
+- **Stream ends.** A viewer that joins after a stream's END starts at the
+  newest chunk, padding, and never sees it. A writer keeps its swarm
+  `END_LINGER` after signing its END, blind to whether any peer took it;
+  keeping it until peers hold the END's chunk needs a ppspp API reporting
+  which peers hold a bin.
+- **Players.**
+  - The deadline-aware request scheduler (Swarm, item 4) reads the native
+    player's playout position, from `UnitsPlayer`'s map of presentation to
+    publish times.
+  - `UnitsPlayer`'s window path batches by hand; move it onto `feed.ts`'s
+    `WindowBatches`.
+  - HE-AAC and PCE-layout audio get no silence fill, in the player or HLS:
+    their holes stretch the last frame, which puts Chromium out of sync by
+    the hole. HLS fills holes only retroactively, so audio that stops for
+    good while video goes on ends its segments short.
+  - Untested: iOS 17's window ManagedMediaSource fallback, the iPhone's A/V
+    sync through the silence fill, and the rendition choice on an iPad,
+    with a real directory's listing latency, and while casting. A
+    rendition the worker's MediaSource refuses after the window accepted
+    its type fails through the player's restarts and isn't remembered.
+  - Measure the iPhone's playback energy (native player and swarm node)
+    with pymobiledevice3 once the phone can be plugged into a host.
+  - The low-latency player stays opt-in (`?player=lowlatency`): it saves
+    0.2-0.3 s for about 1.5x the CPU on Chromium and 2-3x on Firefox, which
+    has no track generator. Revisit if Firefox ships `VideoTrackGenerator`;
+    before it becomes a default anywhere, check whether its ±2% resampled
+    rate control is audible and measure device CPU and iOS's display
+    latency under `VideoTrackGenerator`.
+  - `VideoControls`' `remoteButtons` slot holds the rendition menu too;
+    name it for what it holds.
+- **Capture.** Turning the iPhone during a capture, and screen capture on
+  real devices, are untested; a capture started upside down
+  (landscape-secondary) isn't caught by the aspect check.
+- **Renditions.** Autoseed rules seed only a listing's main swarm, not its
+  renditions. OBS multitrack sources, switching renditions by bandwidth,
+  and large forward jumps in FLV tag times are left.
+- **Subtitles.** CC1 only; 708 is carried but not decoded; AV1 sources'
+  T.35 captions are lost in their H.264 renditions. Safari's in-band 608
+  ignores the erase code, so each caption shows until the next. ffmpeg
+  reading the multivariant playlist skips the first subtitle segment. One
+  subtitle language: `onTextData`'s `trackid` and `language` are ignored.
+- **Cast and AirPlay** play HLS egress; neither has played on a real
+  receiver.
+  - Check on a Chromecast that its default receiver plays Opus in fMP4
+    HLS, low-latency playlists and the subtitle renditions, and whether it
+    fetches from a plain-HTTP LAN address.
+  - Check on an Apple TV that the handoff plays, which URL the receiver
+    fetches, and whether iOS reports a receiver available before its first
+    use: with uxplay it read "not-available" until picked once, which
+    would hide the AirPlay button.
+  - A receiver that keeps failing flips the video between wireless and
+    local every few seconds; debounce, or give up after a few.
+  - Cast's media title and thumbnail; an `hls_reopens` metric through
+    node-core's plumbing.
+  - HTTP/2 connections can hold a slot idle for 30 s, which makes a
+    per-address connection cap on strims-svc's listeners matter more.
+  - A custom web receiver running the wasm node and `UnitsPlayer` would
+    cast a stream no reachable node serves, if the receiver runtime has
+    WebRTC data channels and WebAssembly and a Chromecast's CPU carries the
+    node; build it only if that case matters.
 
 ### Targets
 - `strims-wasm` runs a profile's node in a browser worker, and its PSI
@@ -119,6 +106,17 @@ Egress and players:
     has run them, so elsewhere two things are unverified: IndexedDB
     transactions staying active across the executor's microtask polls,
     and data channels transferred to a worker;
+  - real devices in the suites and the testbed. A phone, or Chrome or
+    Firefox on Windows where Docker's headless builds fall short (no
+    hardware decoding, no HEVC), opens `e2e.html` itself over the LAN and
+    dials its control socket. The `Site` then needs a LAN listener on
+    HTTPS with a dev CA (`hack/tls`), since WebCodecs and AudioWorklet
+    need a secure context. Safari starts audio and grants the screen wake
+    lock only from a tap, so one tap does both, and the page never
+    navigates so the tap lasts. The page forwards its console, and a tab
+    iOS kills shows up as a reload. Nothing restarts it from the socket's
+    side; pymobiledevice3 over USB could. A device's link is outside the
+    testbed's shaped network;
   - one compiled module for both workers: the window compiles it once and
     posts the `WebAssembly.Module` to each, which needs the loader to
     export the asset URL;
@@ -485,12 +483,6 @@ in `TRIED.md`.
 - **Swarm cache cost.** Importing a chat room's asset cache verifies up
   to 32 MiB on the node task, and storing one seals up to 32 MiB on the
   executor. Measure both on wasm.
-- **Signature cost on wasm.** Verifying a 32 KiB integrity unit of a
-  video swarm (8 chunks per signature) costs about 15 µs of BLAKE3 and
-  80–115 µs of Ed25519 in the worker, depending on the engine. Weigh more
-  chunks per signature (which holds chunks back longer) against
-  release-wasm at opt-level 3 (Ed25519 a sixth faster in SpiderMonkey, but
-  a module half again as large).
 - **Simulation coverage and fidelity.**
   - Waking an idle node to answer a query is a poll of its task and can shift
     later passes, so a sim's sampling cadence changes its trace. Make query
@@ -617,6 +609,20 @@ stack or a version gate.
 ### ppspp
 - Include the bin in live signatures; today chunks and munros can be
   replayed at other positions.
+- Elide the padding of units signed early. `Writer::flush` pads a partial
+  unit with zeros to a whole unit and sends them, so a stream signed early
+  on a timer is sent at no less than unit size ÷ interval
+  (`strims_video::units`'s signing). A live signature would cover how
+  many of its unit's chunks hold data, and peers would neither request,
+  push nor announce the rest. A receiver would check them as zero leaves
+  against the signed root. This lands with the bin item above, since both
+  change what the signature covers. Branch `video/ppspp-sign-gated` (on
+  main a356f676) holds an implementation: zero-leaf verification,
+  data-less chunks held as zeros and left out of HAVEs, requests for them
+  refused or split, and the hybrid's miss deferral for munros a node
+  hasn't seen, applied once a swarm shows a data-less chunk. Applied to
+  every swarm, the deferral slows the pruning of starved parents and grows
+  cycles. The gated branch hasn't been through the sim suite.
 - Make HAVE claims verifiable.
 - Stamp DATA at send time, not after the sender's queue.
 - STREAM_REQUEST: add an expiry or lease plus a rate limit. STREAM_CLOSE:
