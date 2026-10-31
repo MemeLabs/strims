@@ -36,9 +36,9 @@ use core::fmt;
 
 pub use messages::{
     Ack, Announce, AnnounceEntry, AnnounceIter, Cancel, ChannelHeader, Data, EpochOption,
-    Handshake, HandshakeOptions, Have, Integrity, MAX_ANNOUNCE_ENTRIES, MAX_PEER_ID, Message, Ping,
-    Pong, ProtocolOption, ProtocolOptions, ProtocolOptionsIter, Request, SignedIntegrity, Stream,
-    StreamCancel, StreamClose, StreamOpen, StreamRequest,
+    Handshake, HandshakeOptions, Have, Integrity, MAX_ANNOUNCE_ENTRIES, MAX_DATA_LEN, MAX_PEER_ID,
+    Message, Ping, Pong, ProtocolOption, ProtocolOptions, ProtocolOptionsIter, Request,
+    SignedIntegrity, Stream, StreamCancel, StreamClose, StreamOpen, StreamRequest,
 };
 pub use reader::{FrameReader, Reader, ReaderConfig};
 pub use wire::{uvarint_len, varint_len};
@@ -70,6 +70,11 @@ pub enum Error {
     /// bits, or a parent id of the wrong length.
     #[error("invalid announce")]
     InvalidAnnounce,
+    /// A DATA whose bin holds more than
+    /// [`MAX_DATA_LEN`](messages::MAX_DATA_LEN) bytes, or fewer than the
+    /// zeros it leaves out.
+    #[error("invalid data length")]
+    InvalidDataLength,
 }
 
 macro_rules! wire_enum {

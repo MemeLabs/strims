@@ -183,7 +183,10 @@ impl Peer {
                         i.signature,
                     ),
                     Message::Data(d) => {
-                        match self.swarm.handle_data(&mut self.verifier, d.bin, d.data) {
+                        match self
+                            .swarm
+                            .handle_data(&mut self.verifier, d.bin, d.data, d.zeros)
+                        {
                             Ok(p) => assert!(p.new),
                             Err(e) => self.rejected.push((d.bin, e)),
                         }
@@ -394,7 +397,7 @@ fn merkle_early_signed_units() {
             assert!(peer.swarm.store().is_dataless(b));
             assert!(
                 peer.swarm
-                    .handle_data(&mut peer.verifier, b, &[0; 128])
+                    .handle_data(&mut peer.verifier, b, &[0; 128], 0)
                     .is_err()
             );
             let mut r = Recorded::default();
@@ -529,7 +532,7 @@ fn tamper_case(pm: ProtectionMethod) {
         assert!(peer.rejected.is_empty());
     }
 
-    // short data
+    // data a byte short of what its DATA says doesn't decode
     let mut f = seeder.data_frame(Bin(8), t(8)).unwrap();
     let n = f.len();
     f.truncate(n - 1);
@@ -539,10 +542,10 @@ fn tamper_case(pm: ProtectionMethod) {
         ..h
     };
     fixed.encode(&mut f[..hn]).unwrap();
-    exchange(&mut seeder, &mut peer, &f);
+    let decoded: Vec<_> = Reader::new(peer.swarm.reader_config(), &f[hn..]).collect();
     assert_eq!(
-        peer.rejected.pop().unwrap(),
-        (Bin(8), SwarmError::Integrity(integrity::Error::DataLength))
+        decoded.last(),
+        Some(&Err(strims_ppspp::codec::Error::Truncated))
     );
 }
 
@@ -628,10 +631,10 @@ fn huge_bins_are_refused() {
     exchange(&mut seeder, &mut peer, &hs);
     for b in [Bin::new(40, 0), Bin::ALL, Bin::NONE, strims_ppspp::MAX_BIN] {
         peer.swarm
-            .handle_signed_integrity(&mut peer.verifier, b, t(0), 1, &[0; 64]);
+            .handle_signed_integrity(&mut peer.verifier, b, t(0), 0, &[0; 64]);
         assert!(
             peer.swarm
-                .handle_data(&mut peer.verifier, b, &[0; 128])
+                .handle_data(&mut peer.verifier, b, &[0; 128], 0)
                 .is_err()
         );
         assert!(

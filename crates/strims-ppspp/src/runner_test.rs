@@ -1373,6 +1373,47 @@ impl Pair {
     }
 }
 
+/// A munro signed early goes to a leech as the bytes written: its chunk in
+/// progress without the zeros after them, its data-less chunks not at all.
+#[test]
+fn an_early_signed_munro_sends_only_what_was_written() {
+    for o in [options(), hybrid()] {
+        let mut p = Pair::with(o.clone(), o.clone());
+        // 10 chunks and 100 bytes of the 11th
+        let end = p.write_early(10 * 1024 + 100);
+        for _ in 0..8 {
+            p.tick(50);
+        }
+        assert!(!p.read().unwrap().is_empty());
+        let cfg = p.seed.runner.swarm(p.seed.swarm).unwrap().reader_config();
+        let data: Vec<(Bin, usize, u64)> = p
+            .frames
+            .iter()
+            .flat_map(|f| crate::codec::FrameReader::new(f).flatten())
+            .flat_map(|(_, payload)| crate::codec::Reader::new(cfg, payload).flatten())
+            .filter_map(|m| match m {
+                crate::codec::Message::Data(d) => Some((d.bin, d.data.len(), d.zeros)),
+                _ => None,
+            })
+            .collect();
+        // the stream's own trailing zeros are left out with the padding
+        let written: Vec<u8> = (10 * 1024..end).map(byte).collect();
+        let kept = written.iter().rposition(|&x| x != 0).map_or(0, |i| i + 1);
+        let partial: Vec<_> = data.iter().filter(|d| d.0.contains(Bin(20))).collect();
+        assert_eq!(
+            partial,
+            vec![&(Bin(20), kept, 1024 - kept as u64)],
+            "{:?}",
+            o.push_mode
+        );
+        assert!(
+            data.iter().all(|d| d.0.base_right() <= Bin(20)),
+            "{:?}: {data:?}",
+            o.push_mode
+        );
+    }
+}
+
 /// A leech moves back into munros signed early, to a chunk with data and
 /// to a data-less one, which no peer sends or announces: that backlog
 /// starts at the chunk's munro, whose chunks of data bring the rest. The

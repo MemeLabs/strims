@@ -58,6 +58,7 @@ fn corpus() -> &'static [u8] {
             Message::Data(Data {
                 bin: Bin(0),
                 timestamp: at,
+                zeros: 0,
                 data: &[9; 100],
             }),
         ] {

@@ -358,22 +358,31 @@ impl Handshake<'_> {
     }
 }
 
-/// A chunk (or run of chunks) of the stream. `data` borrows from the
-/// decoded input.
+/// The most bytes a DATA's bin may hold: a frame payload's bound, which a
+/// bin sent whole always met.
+pub const MAX_DATA_LEN: usize = u16::MAX as usize;
+
+/// A chunk (or run of chunks) of the stream: the bin's bytes are `data`
+/// followed by `zeros` zero bytes, its trailing zeros, which the message
+/// leaves out. `data` borrows from the decoded input.
 ///
-/// The decoder takes `bin.base_length() * chunk_size` bytes or whatever
-/// remains of the payload if that is less, so `data` can be short.
-/// Verifiers reject short data.
+/// The decoder takes exactly `bin.base_length() * chunk_size - zeros`
+/// bytes, and refuses a bin of more than [`MAX_DATA_LEN`] bytes or of fewer
+/// than `zeros`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Data<'a> {
     pub bin: Bin,
     pub timestamp: Time,
+    pub zeros: u64,
     pub data: &'a [u8],
 }
 
 impl Data<'_> {
     pub fn byte_len(&self) -> usize {
-        uvarint_len(self.bin.0) + varint_len(time_to_wire(self.timestamp)) + self.data.len()
+        uvarint_len(self.bin.0)
+            + varint_len(time_to_wire(self.timestamp))
+            + uvarint_len(self.zeros)
+            + self.data.len()
     }
 }
 
@@ -792,6 +801,7 @@ impl<'a> Message<'a> {
             Message::Data(m) => {
                 e.uvarint(m.bin.0)?;
                 e.varint(time_to_wire(m.timestamp))?;
+                e.uvarint(m.zeros)?;
                 e.bytes(m.data)?;
             }
             Message::Ack(m) => {
@@ -849,13 +859,17 @@ impl<'a> Message<'a> {
             MessageType::Data => {
                 let bin = Bin(d.uvarint()?);
                 let timestamp = time_from_wire(d.varint()?);
+                let zeros = d.uvarint()?;
                 let n = usize::try_from(bin.base_length())
-                    .unwrap_or(usize::MAX)
-                    .saturating_mul(config.chunk_size)
-                    .min(d.remaining());
+                    .ok()
+                    .and_then(|n| n.checked_mul(config.chunk_size))
+                    .filter(|&n| n <= MAX_DATA_LEN)
+                    .and_then(|n| n.checked_sub(usize::try_from(zeros).ok()?))
+                    .ok_or(Error::InvalidDataLength)?;
                 Message::Data(Data {
                     bin,
                     timestamp,
+                    zeros,
                     data: d.bytes(n)?,
                 })
             }

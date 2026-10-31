@@ -184,7 +184,17 @@ fn codec_messages() {
             Message::Data(Data {
                 bin: Bin(21),
                 timestamp: ms(1234),
+                zeros: 0,
                 data: &ff32,
+            }),
+        ),
+        (
+            "data_short",
+            Message::Data(Data {
+                bin: Bin(21),
+                timestamp: ms(1234),
+                zeros: 12,
+                data: &ff32[..20],
             }),
         ),
         (
@@ -192,6 +202,7 @@ fn codec_messages() {
             Message::Data(Data {
                 bin: Bin(6),
                 timestamp: ms(1_700_000_000_000),
+                zeros: 0,
                 data: &d1,
             }),
         ),
@@ -200,6 +211,7 @@ fn codec_messages() {
             Message::Data(Data {
                 bin: Bin(0),
                 timestamp: ms(-1),
+                zeros: 0,
                 data: &d2,
             }),
         ),

@@ -139,7 +139,7 @@ fn feed(s: &mut Swarm, cv: &mut ChannelVerifier, m: &Message<'_>) {
             s.handle_signed_integrity(cv, i.bin, i.timestamp, i.dataless, i.signature)
         }
         Message::Data(d) => {
-            let _ = s.handle_data(cv, d.bin, d.data);
+            let _ = s.handle_data(cv, d.bin, d.data, d.zeros);
         }
         // bins a peer asks for or announces reach the send paths
         Message::Request(strims_ppspp::codec::Request { bin, .. })
@@ -347,7 +347,7 @@ proptest! {
                 2 => Message::StreamOpen(strims_ppspp::codec::StreamOpen { stream, bin }),
                 3 => Message::Cancel(strims_ppspp::codec::Cancel { bin }),
                 4 => Message::Pong(strims_ppspp::codec::Pong { nonce: b, delay: b.rotate_left(7) }),
-                _ => Message::Data(strims_ppspp::codec::Data { bin, timestamp: t, data: &[] }),
+                _ => Message::Data(strims_ppspp::codec::Data { bin, timestamp: t, zeros: 0, data: &[] }),
             }
         }).collect();
         let mut buf = vec![0u8; 1024];

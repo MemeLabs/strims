@@ -360,8 +360,8 @@ fn bins_and_bounds() {
     assert!(b.bins().is_empty());
     assert_eq!(b.tail(), Bin::NONE);
     b.set_offset(Bin(0));
-    b.consume(Bin(2), &[0; 4]).unwrap();
-    b.consume(Bin(9), &[0; 8]).unwrap();
+    b.consume(Bin(2), &[1; 4]).unwrap();
+    b.consume(Bin(9), &[1; 8]).unwrap();
     let bins = b.bins();
     assert!(bins.filled_at(Bin(2)) && bins.filled_at(Bin(9)) && bins.empty_at(Bin(0)));
 
@@ -374,8 +374,14 @@ fn bins_and_bounds() {
     assert_eq!(b.consume(Bin::ALL, &[]), Err(Error::BinOutOfBounds));
 
     let mut w = Recorder::default();
-    assert_eq!(b.write_data(Bin(2), Time::EPOCH, &mut w), Ok(1 + 1 + 1 + 4));
-    assert_eq!(b.write_data(Bin(9), Time::EPOCH, &mut w), Ok(1 + 1 + 1 + 8));
+    assert_eq!(
+        b.write_data(Bin(2), Time::EPOCH, &mut w),
+        Ok(1 + 1 + 1 + 1 + 4)
+    );
+    assert_eq!(
+        b.write_data(Bin(9), Time::EPOCH, &mut w),
+        Ok(1 + 1 + 1 + 1 + 8)
+    );
     assert_eq!(
         b.write_data(Bin(0), Time::EPOCH, &mut w),
         Err(Error::BinDataNotSet)
@@ -565,13 +571,59 @@ fn drain(r: &mut BufferReader, b: &mut Buffer, size: usize) -> Vec<Result<Vec<u8
 }
 
 /// Every `Data` message's bin and bytes.
+/// Each DATA's bin and bytes, its trailing zeros put back.
 #[derive(Default)]
 struct DataRecorder(Vec<(Bin, Vec<u8>)>);
 
 impl MessageWriter for DataRecorder {
     fn write(&mut self, m: &Message<'_>) -> Result<usize, codec::Error> {
         if let Message::Data(d) = m {
-            self.0.push((d.bin, d.data.to_vec()));
+            let mut b = d.data.to_vec();
+            b.resize(d.data.len() + d.zeros as usize, 0);
+            self.0.push((d.bin, b));
+        }
+        Ok(m.encoded_len())
+    }
+}
+
+/// A DATA leaves out its bin's trailing zeros, however the chunks came to
+/// end in them: a chunk of data and then zeros goes as its data, an
+/// all-zero chunk as no data, and a bin whose last chunk is all zeros as
+/// the chunks before it.
+#[test]
+fn data_leaves_out_trailing_zeros() {
+    let cs = 8;
+    let mut b = Buffer::new(16, cs).unwrap();
+    b.set_offset(Bin(0));
+    b.consume(Bin(0), &[1, 2, 3, 0, 0, 0, 0, 0]).unwrap();
+    b.consume(Bin(2), &[0; 8]).unwrap();
+    b.consume(
+        Bin::new(1, 2),
+        &[5, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    )
+    .unwrap();
+    b.consume(Bin(6), &[7; 8]).unwrap();
+    for (bin, data, zeros) in [
+        (Bin(0), &[1u8, 2, 3][..], 5),
+        (Bin(2), &[][..], 8),
+        (Bin::new(1, 2), &[5, 0, 6][..], 13),
+        (Bin(6), &[7; 8][..], 0),
+    ] {
+        let mut w = Sent::default();
+        let n = b.write_data(bin, Time::EPOCH, &mut w).unwrap();
+        assert_eq!(w.0, vec![(data.to_vec(), zeros)], "{bin}");
+        assert_eq!(n, 1 + 1 + 1 + 1 + data.len(), "{bin}");
+    }
+}
+
+/// Each DATA's data and its count of trailing zeros left out.
+#[derive(Default)]
+struct Sent(Vec<(Vec<u8>, u64)>);
+
+impl MessageWriter for Sent {
+    fn write(&mut self, m: &Message<'_>) -> Result<usize, codec::Error> {
+        if let Message::Data(d) = m {
+            self.0.push((d.data.to_vec(), d.zeros));
         }
         Ok(m.encoded_len())
     }

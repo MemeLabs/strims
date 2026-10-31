@@ -34,6 +34,7 @@ fn data_frame(channel: u64) -> Vec<u8> {
     cw.write(&Message::Data(Data {
         bin: Bin(2),
         timestamp: t(10),
+        zeros: 0,
         data: &[1, 2, 3, 4],
     }))
     .unwrap();

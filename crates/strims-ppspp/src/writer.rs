@@ -11,9 +11,10 @@
 //! # Early signing
 //!
 //! [`Writer::flush`] signs the staged partial unit at once. The chunk in
-//! progress is padded with zeros and sent; for Merkle, the unit's chunks
-//! after it are data-less: the signature counts them out, peers never
-//! request or send them, and every reader reads them as zeros
+//! progress is padded with zeros, which a DATA leaves out as it does any
+//! bin's trailing zeros; for Merkle, the unit's chunks after it are
+//! data-less: the signature counts them out, peers never request or send
+//! them, and every reader reads them as zeros
 //! ([`crate::integrity`], Data-less chunks). The next write starts the
 //! next unit, at the stream offset `flush` returns. The writer's owner
 //! decides when to flush, by the time it runs from a unit's first byte.

@@ -69,6 +69,7 @@ fn rows_describe_messages_and_decisions() {
             Message::Data(Data {
                 bin: Bin(2),
                 timestamp: t(10),
+                zeros: 0,
                 data: &[1, 2, 3, 4],
             }),
             Message::Have(Have { bin: Bin(5) }),
@@ -86,6 +87,7 @@ fn rows_describe_messages_and_decisions() {
                 Message::Data(Data {
                     bin: Bin(8),
                     timestamp: t(11),
+                    zeros: 0,
                     data: &[5, 6, 7, 8],
                 }),
                 Message::Pong(Pong {
@@ -206,7 +208,7 @@ fn rows_describe_messages_and_decisions() {
             base(10, "00", "out", 1),
             json!({
                 "swarm": 1, "channel": 9, "type": "DATA", "bin": 2, "first": 1, "last": 1,
-                "stream": 1, "ts": n(10), "len": 1 + 1 + 6 + 4, "ann": "push",
+                "stream": 1, "ts": n(10), "len": 1 + 1 + 6 + 1 + 4, "ann": "push",
                 "wait": Duration::from_millis(5).as_nanos(),
             }),
         ),
@@ -236,7 +238,7 @@ fn rows_describe_messages_and_decisions() {
             base(20, "00", "in", 2),
             json!({
                 "swarm": 1, "channel": 3, "type": "DATA", "bin": 8, "first": 4, "last": 4,
-                "stream": 0, "ts": n(11), "len": 1 + 1 + 6 + 4, "ann": "hit",
+                "stream": 0, "ts": n(11), "len": 1 + 1 + 6 + 1 + 4, "ann": "hit",
                 "lag": Duration::from_millis(7).as_nanos(),
             }),
         ),

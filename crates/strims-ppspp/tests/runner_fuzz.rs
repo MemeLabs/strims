@@ -196,7 +196,7 @@ enum Msg {
     Request(Bin, Time),
     Cancel(Bin),
     Ack(Bin, i64),
-    Data(Bin, Time, Vec<u8>),
+    Data(Bin, Time, u64, Vec<u8>),
     Integrity(Bin, Vec<u8>),
     Signed(Bin, Time, u64, Vec<u8>),
     Ping(u64),
@@ -227,8 +227,13 @@ fn msg() -> impl Strategy<Value = Msg> {
         3 => (bin(), time()).prop_map(|(b, t)| Msg::Request(b, t)),
         2 => bin().prop_map(Msg::Cancel),
         1 => (bin(), any::<i64>()).prop_map(|(b, d)| Msg::Ack(b, d)),
-        2 => (bin(), time(), prop::collection::vec(any::<u8>(), 0..300))
-            .prop_map(|(b, t, d)| Msg::Data(b, t, d)),
+        2 => (
+            bin(),
+            time(),
+            prop_oneof![Just(0u64), 0..2048u64, any::<u64>()],
+            prop::collection::vec(any::<u8>(), 0..300)
+        )
+            .prop_map(|(b, t, z, d)| Msg::Data(b, t, z, d)),
         1 => (bin(), prop::collection::vec(any::<u8>(), 32)).prop_map(|(b, h)| Msg::Integrity(b, h)),
         1 => (
             bin(),
@@ -270,9 +275,10 @@ fn encode(msgs: &[Msg], channel: u64) -> Vec<u8> {
                 bin: *b,
                 delay_sample: Duration::from_nanos(*d),
             }),
-            Msg::Data(b, t, d) => Message::Data(Data {
+            Msg::Data(b, t, z, d) => Message::Data(Data {
                 bin: *b,
                 timestamp: *t,
+                zeros: *z,
                 data: d,
             }),
             Msg::Integrity(b, h) => Message::Integrity(Integrity { bin: *b, hash: h }),

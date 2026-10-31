@@ -4511,6 +4511,7 @@ fn mutate_old(
                 Message::Data(Data {
                     bin: Bin::new(40, 2),
                     timestamp: t0(),
+                    zeros: 0,
                     data: &[1, 2, 3],
                 }),
                 Message::Restart,

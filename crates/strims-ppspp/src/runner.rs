@@ -521,7 +521,7 @@ fn handle_payload(
                     sched.handle_stale_data(peer, d.bin, d.timestamp, now);
                     continue;
                 }
-                match swarm.handle_data(&mut ch.verifier, d.bin, d.data) {
+                match swarm.handle_data(&mut ch.verifier, d.bin, d.data, d.zeros) {
                     Ok(published) => {
                         if published.new
                             && let Some(p) = q.peers.get_mut(peer)

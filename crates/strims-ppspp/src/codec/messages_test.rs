@@ -105,6 +105,7 @@ fn message_marshal_unmarshal() {
         Message::Data(Data {
             bin: Bin(22),
             timestamp: ms(1234),
+            zeros: 0,
             data: &FF16,
         }),
         Message::Ack(Ack {
@@ -290,32 +291,42 @@ fn swarm_identifier_length_is_checked() {
     assert_eq!(m.encode(&mut buf), Err(Error::SwarmIdentifierTooLong));
 }
 
+/// A DATA leaves out its bin's trailing zeros and says how many: the
+/// decoder takes exactly the rest of the bin's bytes, and refuses a bin
+/// past [`MAX_DATA_LEN`] or one smaller than its zeros.
 #[test]
-fn data_takes_what_remains() {
+fn data_leaves_out_its_trailing_zeros() {
     let mut buf = [0u8; 128];
-    let full = Message::Data(Data {
+    let short = Message::Data(Data {
         bin: Bin(1),
         timestamp: ms(5),
-        data: &FF64[..32],
+        zeros: 10,
+        data: &FF64[..22],
     });
-    let n = full.encode(&mut buf).unwrap();
-    // a short payload yields short data
-    let (m, used) = Message::decode(&config(), &buf[..n - 10]).unwrap();
-    assert_eq!(used, n - 10);
-    let Message::Data(d) = m else {
-        panic!("not data")
-    };
-    assert_eq!(d.data.len(), 22);
-    // a bin whose size overflows takes the rest of the payload
-    let huge = Message::Data(Data {
-        bin: Bin::ALL,
-        timestamp: ms(5),
-        data: &FF64,
-    });
-    let n = huge.encode(&mut buf).unwrap();
+    let n = short.encode(&mut buf).unwrap();
+    assert_eq!(n, short.encoded_len());
     let (m, used) = Message::decode(&config(), &buf[..n]).unwrap();
-    assert_eq!(used, n);
-    assert_eq!(m, huge);
+    assert_eq!((m, used), (short, n));
+    // missing bytes are no shorter data
+    assert_eq!(
+        Message::decode(&config(), &buf[..n - 1]),
+        Err(Error::Truncated)
+    );
+    // more zeros than the bin holds, and a bin past a frame's payload
+    for (bin, zeros) in [(Bin(1), 33), (Bin::ALL, 0), (Bin::new(20, 0), 1 << 20)] {
+        let m = Message::Data(Data {
+            bin,
+            timestamp: ms(5),
+            zeros,
+            data: &FF64[..8],
+        });
+        let n = m.encode(&mut buf).unwrap();
+        assert_eq!(
+            Message::decode(&config(), &buf[..n]),
+            Err(Error::InvalidDataLength),
+            "{bin} {zeros}"
+        );
+    }
 }
 
 #[test]
@@ -388,6 +399,7 @@ fn channel_writer_caps_payload_at_u16() {
     cw.write(&Message::Data(Data {
         bin: Bin(0),
         timestamp: ms(0),
+        zeros: 0,
         data: &data,
     }))
     .unwrap();
@@ -396,6 +408,7 @@ fn channel_writer_caps_payload_at_u16() {
         cw.write(&Message::Data(Data {
             bin: Bin(2),
             timestamp: ms(0),
+            zeros: 0,
             data: &data[..600],
         })),
         Err(Error::NotEnoughSpace)

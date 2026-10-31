@@ -602,7 +602,8 @@ impl Buffer {
     }
 
     /// Writes a `Data` message for `b`, which must be stored, in the
-    /// window, and hold no data-less chunk.
+    /// window, and hold no data-less chunk. The message leaves out the
+    /// bin's trailing zeros.
     pub fn write_data(&self, b: Bin, t: Time, w: &mut impl MessageWriter) -> Result<usize, Error> {
         if !self.contains(b) {
             return Err(Error::BinDataNotSet);
@@ -631,10 +632,12 @@ impl Buffer {
                 &generated
             }
         };
+        let kept = data.iter().rposition(|&x| x != 0).map_or(0, |i| i + 1);
         Ok(w.write(&Message::Data(Data {
             bin: b,
             timestamp: t,
-            data,
+            zeros: (n - kept) as u64,
+            data: data.get(..kept).unwrap_or_default(),
         }))?)
     }
 

@@ -126,7 +126,7 @@ pub trait SwarmWrite: 'static {
 
     /// Signs and publishes the partial unit at once
     /// (`strims_ppspp::Writer::flush`): the chunk in progress padded with
-    /// zeros, the unit's chunks after it data-less, which readers read as
+    /// zeros and the unit's chunks after it data-less, which readers read as
     /// zeros and peers never send. Returns the stream offset at which the
     /// next unit starts, where the next write lands: the bytes written so
     /// far plus the zeros the flush adds. With nothing staged it publishes

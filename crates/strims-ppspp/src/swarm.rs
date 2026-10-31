@@ -9,7 +9,9 @@
 //! chunk reaches the store through it:
 //!
 //! - [`Swarm::handle_data`] (a peer's chunk) verifies and then publishes;
-//!   the [`Writer`](crate::Writer) publishes local chunks directly.
+//!   the [`Writer`](crate::Writer) publishes local chunks directly. A DATA
+//!   leaves out its bin's trailing zeros, and `handle_data` puts them back
+//!   first: verifiers and the store see whole chunks.
 //!   Publishing stores the chunk and returns [`Published`], which says
 //!   whether it was new.
 //! - An integrity unit signed early ends in data-less chunks
@@ -40,7 +42,7 @@ use strims_binmap::{Bin, Map};
 use strims_proto::types::Cache;
 
 use crate::codec::{
-    EpochOption, Handshake, MessageWriter, ProtocolOption, ProtocolOptions, ReaderConfig,
+    self, EpochOption, Handshake, MessageWriter, ProtocolOption, ProtocolOptions, ReaderConfig,
 };
 use crate::epoch::{Epoch, EpochError};
 use crate::integrity::{self, ChannelVerifier, ProtectionMethod, SwarmVerifier};
@@ -107,6 +109,9 @@ pub struct Swarm {
     pub(crate) verifier: SwarmVerifier,
     epoch: Epoch,
     events: Events,
+    /// A peer's data padded with the zeros its DATA left out. Bound:
+    /// [`codec::MAX_DATA_LEN`].
+    padded: Vec<u8>,
 }
 
 /// The handshake options a swarm sends.
@@ -190,6 +195,7 @@ impl Swarm {
                 published: Map::new(),
                 readable_seen: 0,
             },
+            padded: Vec::new(),
         })
     }
 
@@ -398,23 +404,57 @@ impl Swarm {
         cv.chunk_verifier(b).set_integrity(b, hash);
     }
 
-    /// A `SignedIntegrity` message from a peer.
+    /// A `SignedIntegrity` message from a peer, with its unit's count of
+    /// data-less chunks.
     pub fn handle_signed_integrity(
         &self,
         cv: &mut ChannelVerifier,
         b: Bin,
         t: Time,
-        chunks: u64,
+        dataless: u64,
         sig: &[u8],
     ) {
-        cv.chunk_verifier(b).set_signed_integrity(b, t, chunks, sig);
+        cv.chunk_verifier(b)
+            .set_signed_integrity(b, t, dataless, sig);
     }
 
-    /// A `Data` message from a peer that the scheduler expected: verifies
-    /// it against the integrity messages that preceded it and publishes it,
-    /// with its unit's data-less chunks the first time. An error means the
-    /// data was invalid; the caller tells the scheduler either way.
+    /// A `Data` message from a peer that the scheduler expected, `data`
+    /// and then `zeros` zero bytes: verifies the bin's bytes against the
+    /// integrity messages that preceded it and publishes them, with its
+    /// unit's data-less chunks the first time. An error means the data was
+    /// invalid; the caller tells the scheduler either way.
     pub fn handle_data(
+        &mut self,
+        cv: &mut ChannelVerifier,
+        b: Bin,
+        data: &[u8],
+        zeros: u64,
+    ) -> Result<Published, SwarmError> {
+        if zeros == 0 {
+            return self.handle_whole(cv, b, data);
+        }
+        let len = usize::try_from(b.base_length())
+            .ok()
+            .and_then(|n| n.checked_mul(self.options.chunk_size))
+            .filter(|&n| n <= codec::MAX_DATA_LEN);
+        let pad = usize::try_from(zeros).ok();
+        let (Some(len), Some(pad)) = (len, pad) else {
+            return Err(integrity::Error::DataLength.into());
+        };
+        if data.len().checked_add(pad) != Some(len) {
+            return Err(integrity::Error::DataLength.into());
+        }
+        let mut padded = core::mem::take(&mut self.padded);
+        padded.clear();
+        padded.extend_from_slice(data);
+        padded.resize(len, 0);
+        let r = self.handle_whole(cv, b, &padded);
+        self.padded = padded;
+        r
+    }
+
+    /// [`Swarm::handle_data`] for the bin's whole bytes.
+    fn handle_whole(
         &mut self,
         cv: &mut ChannelVerifier,
         b: Bin,
@@ -500,6 +540,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
     use super::*;
+    use crate::codec::Message;
     use crate::integrity::{LiveSignatureAlgorithm, VerifierOptions};
     use crate::writer::{Writer, WriterOptions};
     use rand_core::Rng;
@@ -525,6 +566,96 @@ mod tests {
         }
         out.truncate(off);
         out
+    }
+
+    /// The messages for sending `b` to a peer that has none of its unit.
+    fn messages_for(s: &Swarm, b: Bin) -> Vec<u8> {
+        let mut buf = vec![0u8; 4096];
+        let mut e = crate::codec::Writer::new(&mut buf);
+        s.write_integrity(b, &Map::new(), &mut e).unwrap();
+        s.write_data(b, now(), &mut e).unwrap();
+        let n = e.as_bytes().len();
+        buf.truncate(n);
+        buf
+    }
+
+    /// A DATA that leaves out its bin's trailing zeros verifies and stores
+    /// the whole chunk under Merkle and sign-all, the zeros put back. A
+    /// count that doesn't make up the bin is refused, and so is a short
+    /// DATA whose zeros aren't the chunk's.
+    #[test]
+    fn short_data_verifies_with_its_zeros_put_back() {
+        for pm in [ProtectionMethod::MERKLE_TREE, ProtectionMethod::SIGN_ALL] {
+            let options = SwarmOptions {
+                chunk_size: 64,
+                chunks_per_signature: 8,
+                live_window: 64,
+                integrity: VerifierOptions {
+                    protection_method: pm,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let (mut w, mut src) = Writer::new(
+                WriterOptions {
+                    swarm_options: options.clone(),
+                    key: strims_crypto::key_from_seed(&[18; 32]),
+                },
+                now(),
+            )
+            .unwrap();
+            // the chunk in progress holds 20 bytes when the unit is signed
+            let data: Vec<u8> = (0..20).map(|i| (i % 251 + 1) as u8).collect();
+            w.write(&mut src, now(), &data).unwrap();
+            w.flush(&mut src, now()).unwrap();
+            let b = Bin(0);
+            let sent = messages_for(&src, b);
+            let cfg = src.reader_config();
+            let msgs: Vec<_> = crate::codec::Reader::new(cfg, &sent)
+                .map(Result::unwrap)
+                .collect();
+            let Some(Message::Data(d)) = msgs.last() else {
+                panic!("{pm:?}: no data")
+            };
+            assert_eq!((d.data, d.zeros), (&data[..], 44), "{pm:?}");
+
+            let deliver = |zeros: u64, data: &[u8]| {
+                let mut dst = Swarm::new(src.id().clone(), options.clone()).unwrap();
+                let mut cv = dst.channel_verifier();
+                for m in &msgs[..msgs.len() - 1] {
+                    match m {
+                        Message::SignedIntegrity(i) => dst.handle_signed_integrity(
+                            &mut cv,
+                            i.bin,
+                            i.timestamp,
+                            i.dataless,
+                            i.signature,
+                        ),
+                        Message::Integrity(i) => dst.handle_integrity(&mut cv, i.bin, i.hash),
+                        m => panic!("{m:?}"),
+                    }
+                }
+                let r = dst.handle_data(&mut cv, b, data, zeros);
+                (r, dst)
+            };
+            let (r, mut dst) = deliver(d.zeros, d.data);
+            assert!(r.is_ok(), "{pm:?}: {r:?}");
+            dst.set_offset(b);
+            let mut reader = dst.reader();
+            let mut want = data.clone();
+            want.resize(64, 0);
+            assert_eq!(read_all(&dst, &mut reader, 64), want, "{pm:?}");
+
+            for zeros in [43, 45, u64::MAX] {
+                assert_eq!(
+                    deliver(zeros, d.data).0,
+                    Err(SwarmError::Integrity(integrity::Error::DataLength)),
+                    "{pm:?} {zeros}"
+                );
+            }
+            // a byte of data left out as a zero
+            assert!(deliver(45, &d.data[..19]).0.is_err(), "{pm:?}");
+        }
     }
 
     /// A cache round-trips into a fresh swarm. A swarm refuses a cache with
