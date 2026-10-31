@@ -17,6 +17,7 @@ import { PlayerKind, choosePlayer, preferredPlayer } from "../../lib/media/playe
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
 import { useRemotePlayback } from "./RemotePlayback";
 import { SwarmMediaProps, UnitsMedia } from "./SwarmMedia";
+import { useRendition } from "./useRendition";
 import VideoControls from "./VideoControls";
 
 interface SwarmPlayerProps extends Pick<SwarmMediaProps, "networkKey" | "swarmUri" | "mimeType"> {
@@ -76,6 +77,15 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
     [format]
   );
   const SwarmMedia = swarmMedia[kind];
+  // The rendition of the listing's stream that this browser plays best,
+  // the listing's own failing others.
+  const rendition = useRendition({
+    swarmUri,
+    mimeType,
+    kind,
+    videoRef,
+    active: !!SwarmMedia && !remote.casting,
+  });
   useEffect(() => {
     if (kind === PlayerKind.None) {
       // eslint-disable-next-line no-console
@@ -134,16 +144,17 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         playsInline
         {...videoProps}
       />
-      {SwarmMedia && !remote.casting && (
+      {SwarmMedia && rendition.swarmUri && !remote.casting && (
         <SwarmMedia
-          key={`${kind}:${networkKey}:${swarmUri}`}
+          key={`${kind}:${networkKey}:${rendition.swarmUri}`}
           networkKey={networkKey}
-          swarmUri={swarmUri}
-          mimeType={mimeType}
+          swarmUri={rendition.swarmUri}
+          mimeType={rendition.mimeType}
           videoRef={videoRef}
           videoControls={videoControls}
           lowLatency={kind === PlayerKind.LowLatency}
           airPlaySource={remote.airPlaySource ?? undefined}
+          onUnplayable={rendition.unplayable}
         />
       )}
       {remote.overlay}

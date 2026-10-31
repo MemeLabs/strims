@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Base64 } from "js-base64";
-import React, { MutableRefObject, useEffect, useState } from "react";
+import React, { MutableRefObject, useEffect, useRef, useState } from "react";
 
 import { EgressOpenStreamResponse } from "../../apis/strims/video/v1/egress";
 import { useClient } from "../../contexts/FrontendApi";
@@ -24,10 +24,13 @@ export interface SwarmMediaProps {
   lowLatency?: boolean;
   /** The stream's HLS URL, as the baseline player's AirPlay source. */
   airPlaySource?: string;
+  /** The player gave up on the stream: it can't play here. */
+  onUnplayable?: (message: string) => void;
 }
 
 // Puts a swarm's stream on the video, rendering nothing. The player keys it
-// by the player kind it takes, so a change of player mounts it again.
+// by the player kind and the swarm it takes, so a change of either mounts
+// it again.
 
 // A unit-format stream: decoded with WebCodecs by the low-latency player
 // when asked for, until it gives up on the stream, else remuxed for
@@ -42,11 +45,14 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
   videoControls,
   lowLatency = false,
   airPlaySource,
+  onUnplayable,
 }) => {
   const client = useClient();
   const [{ conn }] = useSession();
   const feeds = conn?.feeds;
   const [fallback, setFallback] = useState(false);
+  const unplayable = useRef(onUnplayable);
+  unplayable.current = onUnplayable;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -74,6 +80,7 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
             // eslint-disable-next-line no-console
             console.warn("the low-latency player can't play the stream:", message);
             if (canFallBack) setFallback(true);
+            else unplayable.current?.(message);
           },
           feed,
         })
@@ -93,8 +100,11 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
             }
           },
           play: () => videoControls.play(),
-          // eslint-disable-next-line no-console
-          error: (message) => console.warn("the stream can't play:", message),
+          error: (message) => {
+            // eslint-disable-next-line no-console
+            console.warn("the stream can't play:", message);
+            unplayable.current?.(message);
+          },
           feed,
           airPlay: airPlaySource,
         });
