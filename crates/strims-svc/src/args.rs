@@ -52,6 +52,10 @@ options:
   --hls-part-target <secs>  the most a low-latency HLS part lasts, from 0.1
                             to the 4 s segment target; 0 serves whole
                             segments alone (default 1)
+  --hls-part-hold-back <secs>
+                            how far behind live players of parts start, up
+                            to 60; three part targets at least, a shorter
+                            one raised to them (default 6)
   --tls-cert <path>         serve HLS over HTTPS (HTTP/2 or HTTP/1.1) with
                             the certificate chain in this PEM file, the
                             service's own first
@@ -199,6 +203,16 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
                 }
                 app.video.hls.part_target = Duration::from_secs_f64(secs);
             }
+            "--hls-part-hold-back" => {
+                let v = value()?;
+                let secs: f64 = number(&flag, &v)?;
+                if !(secs > 0.0 && secs <= 60.0) {
+                    return Err(format!(
+                        "--hls-part-hold-back must be over 0 and at most 60: {v}"
+                    ));
+                }
+                app.video.hls.part_hold_back = Duration::from_secs_f64(secs);
+            }
             "--tls-cert" => tls_cert = Some(PathBuf::from(value()?)),
             "--tls-key" => tls_key = Some(PathBuf::from(value()?)),
             "--api-tls" => api_tls = true,
@@ -313,6 +327,8 @@ mod tests {
             "0.0.0.0:8082",
             "--hls-public-url=https://media.example",
             "--hls-part-target=0.5",
+            "--hls-part-hold-back",
+            "4.5",
             "--ppspp-capture",
             "/tmp/cap",
             "--ppspp-capture-max=16",
@@ -351,6 +367,7 @@ mod tests {
         assert_eq!(c.hls_listen.as_deref(), Some("0.0.0.0:8082"));
         assert_eq!(c.app.video.hls.base_url, "https://media.example");
         assert_eq!(c.app.video.hls.part_target, Duration::from_millis(500));
+        assert_eq!(c.app.video.hls.part_hold_back, Duration::from_millis(4500));
         assert_eq!(
             c.app.ppspp_capture,
             Some(CaptureConfig {
@@ -380,6 +397,7 @@ mod tests {
         assert_eq!(c.hls_listen, None);
         assert_eq!(c.app.video.hls.base_url, "");
         assert_eq!(c.app.video.hls.part_target, Duration::from_secs(1));
+        assert_eq!(c.app.video.hls.part_hold_back, Duration::from_secs(6));
         assert_eq!(c.app.ppspp_capture, None);
         let off = run(&["--db-memory", "--hls-part-target", "0"]).unwrap();
         assert_eq!(off.app.video.hls.part_target, Duration::ZERO);
@@ -388,6 +406,12 @@ mod tests {
                 .err()
                 .unwrap();
             assert!(err.contains("--hls-part-target"), "{bad}: {err}");
+        }
+        for bad in ["0", "61", "-1", "x"] {
+            let err = run(&["--db-memory", "--hls-part-hold-back", bad])
+                .err()
+                .unwrap();
+            assert!(err.contains("--hls-part-hold-back"), "{bad}: {err}");
         }
         assert_eq!(c.tls, None);
         let c = run(&[

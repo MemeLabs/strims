@@ -364,6 +364,10 @@ fn hls_serves_an_rtmp_stream_to_players() {
             let rules = &mut PlaylistRules::default();
             rules.check(&playlist);
             assert_eq!(rules.target, Some(4));
+            assert_eq!(
+                (rules.part_target, rules.part_hold_back),
+                (Some(1000), Some(6000))
+            );
             steps.done("the playlist lists two segments");
 
             let init_uri = &segments[0].init;

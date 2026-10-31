@@ -195,8 +195,10 @@ pub struct Entry {
 pub struct PlaylistRules {
     /// The target duration of the first reload.
     pub target: Option<u64>,
-    /// Its part target in milliseconds, for a low-latency playlist.
+    /// Its part target and hold-back in milliseconds, for a low-latency
+    /// playlist.
     pub part_target: Option<u64>,
+    pub part_hold_back: Option<u64>,
     media_sequence: u64,
     discontinuity_sequence: u64,
     /// Segments that left the listing, so it must hold three targets.
@@ -208,8 +210,9 @@ pub struct PlaylistRules {
 impl PlaylistRules {
     /// Checks a reload: the version-7 header, a target duration that never
     /// changes and that every EXTINF rounds to at most, a low-latency
-    /// playlist's part target that never changes, under blocking reloads
-    /// and a hold-back of three part targets, consecutive segment
+    /// playlist's part target and hold-back that never change, under
+    /// blocking reloads, the hold-back three part targets at least,
+    /// consecutive segment
     /// numbers from the media sequence, sequences that never go back, no
     /// `EXT-X-INDEPENDENT-SEGMENTS`, three targets listed once segments
     /// slid out, and listed segments that keep their duration. Its
@@ -237,19 +240,20 @@ impl PlaylistRules {
                 .unwrap_or_else(|| panic!("no part target: {playlist}"));
             let (secs, frac) = part.split_once('.').unwrap();
             let millis = secs.parse::<u64>().unwrap() * 1000 + frac.parse::<u64>().unwrap();
-            let hold_back = 3 * millis;
-            assert_eq!(
-                control,
-                format!(
-                    "CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK={}.{:03}",
-                    hold_back / 1000,
-                    hold_back % 1000
-                ),
-                "{playlist}"
-            );
+            let hold_back = control
+                .strip_prefix("CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=")
+                .and_then(|h| h.split_once('.'))
+                .map(|(s, f)| s.parse::<u64>().unwrap() * 1000 + f.parse::<u64>().unwrap())
+                .unwrap_or_else(|| panic!("no part hold-back: {playlist}"));
+            assert!(hold_back >= 3 * millis, "{playlist}");
             assert_eq!(
                 *self.part_target.get_or_insert(millis),
                 millis,
+                "{playlist}"
+            );
+            assert_eq!(
+                *self.part_hold_back.get_or_insert(hold_back),
+                hold_back,
                 "{playlist}"
             );
             next = lines.next();

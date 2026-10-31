@@ -856,6 +856,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 retained: settings.retained_duration,
                 max_retained_bytes: settings.max_retained_bytes,
                 part_target: settings.part_target,
+                part_hold_back: settings.part_hold_back,
             };
             let stream = h
                 .profile

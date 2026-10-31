@@ -62,7 +62,7 @@ fn segment(media: &[u8], millis: i64, published: i64, vtt: Option<&str>) -> HlsS
 }
 
 const LL_HEAD: &str = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:4\n\
-    #EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=3.000\n\
+    #EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=6.000\n\
     #EXT-X-PART-INF:PART-TARGET=1.000\n";
 
 #[test]
@@ -121,6 +121,40 @@ fn a_segments_parts_are_listed_while_it_is_open_and_after() {
     assert!(!subtitles.contains("MAP"));
     assert_eq!(&*p.part_vtt(101).unwrap(), EMPTY_VTT.as_bytes());
     assert_eq!(p.part_vtt(103), None);
+}
+
+#[test]
+fn the_part_hold_back_is_three_part_targets_at_least() {
+    let hold_back = |part_target: i64, part_hold_back: i64| {
+        let mut p = Playlist::new(PlaylistConfig {
+            part_target: ms(part_target),
+            part_hold_back: ms(part_hold_back),
+            ..PlaylistConfig::default()
+        });
+        p.push_part(&part(0, part_target, true, b"a", NOON));
+        let text = p.render();
+        text.lines()
+            .find_map(|l| {
+                l.strip_prefix("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=")
+            })
+            .map(str::to_owned)
+    };
+    // The 6 s default holds for part targets up to 2 s; past them, three
+    // part targets apply, as for a shorter hold-back.
+    assert_eq!(hold_back(1000, 6000).as_deref(), Some("6.000"));
+    assert_eq!(hold_back(500, 6000).as_deref(), Some("6.000"));
+    assert_eq!(hold_back(2000, 6000).as_deref(), Some("6.000"));
+    assert_eq!(hold_back(2500, 6000).as_deref(), Some("7.500"));
+    assert_eq!(hold_back(1000, 2000).as_deref(), Some("3.000"));
+    assert_eq!(hold_back(1000, 0).as_deref(), Some("3.000"));
+    assert_eq!(part_hold_back_floor(ms(1000), 4), Some(ms(3000)));
+    // Part targets come within their bounds first.
+    assert_eq!(part_hold_back_floor(ms(10), 4), Some(ms(300)));
+    assert_eq!(part_hold_back_floor(ms(9000), 4), Some(ms(12_000)));
+    assert_eq!(part_hold_back_floor(Duration::ZERO, 4), None);
+    let settings = crate::HlsSettings::default();
+    assert_eq!(settings.part_hold_back, ms(6000));
+    assert_eq!(settings.part_hold_back_floor(), Some(ms(3000)));
 }
 
 #[test]
@@ -436,7 +470,8 @@ fn check(p: &Playlist) {
         }
     }
     let target = target.unwrap();
-    assert_eq!(hold_back, Some(3 * target));
+    let configured = u64::try_from(p.config().part_hold_back.as_millis()).unwrap();
+    assert_eq!(hold_back, Some(configured.max(3 * target)));
     let open = current;
     let all: Vec<&Listed> = segments.iter().chain(Some(&open)).collect();
     let numbers: Vec<u64> = all

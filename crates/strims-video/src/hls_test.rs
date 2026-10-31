@@ -30,6 +30,7 @@ fn config(target: u64, listed: i64, retained: i64, max_retained_bytes: usize) ->
         retained: ms(retained),
         max_retained_bytes,
         part_target: Duration::ZERO,
+        part_hold_back: DEFAULT_PART_HOLD_BACK,
     }
 }
 

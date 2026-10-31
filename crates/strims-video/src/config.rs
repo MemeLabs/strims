@@ -422,9 +422,18 @@ pub struct HlsSettings {
     /// The most media a part of a stream's segments lasts, for
     /// low-latency HLS ([`hls`](crate::hls#low-latency)): from 0.1 s to
     /// the target duration, fixed for a playlist's life; zero serves no
-    /// parts. Players that load parts start three part targets behind the
-    /// live edge.
+    /// parts.
     pub part_target: Duration,
+    /// `PART-HOLD-BACK`: how far behind the live edge players that load
+    /// parts start, at least three part targets, RFC 8216bis's and Apple's
+    /// floor; a shorter one counts as three part targets
+    /// ([`part_hold_back_floor`](Self::part_hold_back_floor)). The default
+    /// 6 s rides over the delivery gaps a swarm commonly has: a player 6 s
+    /// behind plays through a 3 s gap in the stream's arrival and stalls
+    /// about half a second in a 6 s one, where a player three 1 s parts
+    /// behind stalls in any gap over about 3 s. With a part target over
+    /// 2 s, three part targets exceed 6 s and apply in its place.
+    pub part_hold_back: Duration,
     /// The longest request path.
     pub max_path_bytes: usize,
     /// The largest HTTP request head, and how long a connection has to
@@ -433,6 +442,16 @@ pub struct HlsSettings {
     pub request_head_timeout: Duration,
     /// HTTP connections open at once.
     pub max_connections: usize,
+}
+
+impl HlsSettings {
+    /// The least `PART-HOLD-BACK` there is under these settings, three
+    /// part targets; `None` without parts. A shorter
+    /// [`part_hold_back`](Self::part_hold_back) counts as it.
+    pub fn part_hold_back_floor(&self) -> Option<Duration> {
+        let target = crate::hls::target_secs(self.target_duration);
+        crate::hls::part_hold_back_floor(self.part_target, target)
+    }
 }
 
 impl Default for HlsSettings {
@@ -453,6 +472,7 @@ impl Default for HlsSettings {
             max_segment_bytes: 16 * 1024 * 1024,
             fragment_duration: crate::hls::DEFAULT_FRAGMENT_DURATION,
             part_target: Duration::from_secs(1),
+            part_hold_back: crate::hls::DEFAULT_PART_HOLD_BACK,
             max_path_bytes: 256,
             max_request_head_bytes: 8 * 1024,
             request_head_timeout: Duration::from_secs(10),

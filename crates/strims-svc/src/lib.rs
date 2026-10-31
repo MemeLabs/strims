@@ -39,7 +39,11 @@
 //!
 //! The playlists are low-latency HLS with parts of
 //! [`HlsSettings::part_target`](strims_video::HlsSettings::part_target)
-//! (1 s by default, `--hls-part-target`): a player that loads parts holds
+//! (1 s by default, `--hls-part-target`), whose players start
+//! [`HlsSettings::part_hold_back`](strims_video::HlsSettings::part_hold_back)
+//! behind live (6 s by default, `--hls-part-hold-back`; a hold-back under
+//! three part targets is raised to them, with a warning when the service
+//! starts): a player that loads parts holds
 //! a blocking reload and the hinted part open, each answered as its part
 //! comes, over HTTP/2 on one connection. Safari plays parts at low
 //! latency only over HTTP/2, so only with [`Config::tls`].
@@ -270,6 +274,16 @@ impl Svc {
         };
         let mut app = config.app;
         app.video.hls.serve = hls_listener.is_some();
+        if let Some(floor) = app.video.hls.part_hold_back_floor()
+            && hls_listener.is_some()
+            && app.video.hls.part_hold_back < floor
+        {
+            tracing::warn!(
+                part_hold_back_ms = app.video.hls.part_hold_back.as_millis(),
+                floor_ms = floor.as_millis(),
+                "the HLS part hold-back is under three part targets: players start three part targets behind"
+            );
+        }
         // The host a certificate renewal should name too.
         let mut tls_host = None;
         if let Some((_, addr)) = &hls_listener {

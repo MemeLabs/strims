@@ -140,8 +140,9 @@
 //!
 //! With a part target ([`PlaylistConfig::part_target`]), the media
 //! playlist is a low-latency one (RFC 8216bis): under `EXT-X-PART-INF`
-//! and an `EXT-X-SERVER-CONTROL` whose `PART-HOLD-BACK` is three part
-//! targets, it lists each segment's parts (`EXT-X-PART`, `INDEPENDENT=YES`
+//! and an `EXT-X-SERVER-CONTROL` whose `PART-HOLD-BACK` is
+//! [`PlaylistConfig::part_hold_back`], three part targets at least, it
+//! lists each segment's parts (`EXT-X-PART`, `INDEPENDENT=YES`
 //! on those that start at a keyframe) as they come, the open segment's
 //! after the last whole one, and while live hints at the next part
 //! (`EXT-X-PRELOAD-HINT`). Parts are numbered across the stream,
@@ -264,6 +265,10 @@ pub struct PlaylistConfig {
     /// most ([`HlsMuxerConfig::part_target`]); zero lists no parts. See
     /// [Low latency](self#low-latency).
     pub part_target: Duration,
+    /// `PART-HOLD-BACK`, at least three part targets
+    /// ([`part_hold_back_floor`]): a shorter one counts as three part
+    /// targets.
+    pub part_hold_back: Duration,
 }
 
 impl Default for PlaylistConfig {
@@ -274,6 +279,7 @@ impl Default for PlaylistConfig {
             retained: Duration::from_secs(40),
             max_retained_bytes: 64 << 20,
             part_target: Duration::ZERO,
+            part_hold_back: DEFAULT_PART_HOLD_BACK,
         }
     }
 }
@@ -287,6 +293,13 @@ impl PlaylistConfig {
     /// The part target, within its bounds; `None` lists no parts.
     fn parts(&self) -> Option<Duration> {
         part_target_within(self.part_target, self.target)
+    }
+
+    /// `PART-HOLD-BACK`: the configured one, three part targets at least;
+    /// `None` without parts.
+    fn hold_back(&self) -> Option<Duration> {
+        let floor = part_hold_back_floor(self.part_target, self.target)?;
+        Some(self.part_hold_back.max(floor))
     }
 
     /// The least listed media time, in milliseconds.
@@ -323,6 +336,18 @@ fn part_target_within(part_target: Duration, target: u64) -> Option<Duration> {
     }
     let most = Duration::from_secs(i64::try_from(target.max(1)).unwrap_or(i64::MAX));
     Some(part_target.clamp(MIN_PART_TARGET, most))
+}
+
+/// The `PART-HOLD-BACK` of a low-latency playlist by default
+/// ([`PlaylistConfig::part_hold_back`]): see
+/// [`HlsSettings::part_hold_back`](crate::HlsSettings::part_hold_back).
+pub const DEFAULT_PART_HOLD_BACK: Duration = Duration::from_secs(6);
+
+/// The least `PART-HOLD-BACK` RFC 8216bis and Apple's authoring rules
+/// allow: three part targets, `part_target` within its bounds under
+/// target duration `target`; `None` without parts.
+pub fn part_hold_back_floor(part_target: Duration, target: u64) -> Option<Duration> {
+    part_target_within(part_target, target).map(|t| t * 3)
 }
 
 /// The most parts a [`Playlist`] keeps of a segment; later ones are
@@ -773,12 +798,11 @@ impl Playlist {
             self.target_duration(),
         );
         let parts = self.config.parts();
-        if let Some(target) = parts {
-            let target = duration_millis(target);
+        if let (Some(target), Some(hold_back)) = (parts, self.config.hold_back()) {
             out.push_str("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=");
-            push_millis(&mut out, target.saturating_mul(3));
+            push_millis(&mut out, duration_millis(hold_back));
             out.push_str("\n#EXT-X-PART-INF:PART-TARGET=");
-            push_millis(&mut out, target);
+            push_millis(&mut out, duration_millis(target));
             out.push('\n');
         }
         let _ = write!(
