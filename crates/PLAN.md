@@ -204,12 +204,6 @@ read it.
     campaigns on the sim farm (quoted with `farm.py estimate`). Each
     crash becomes a regression test beside its parser's property tests.
 
-### Simulation farm
-- `long_run`'s heap grows about 4 MB over its 10 minutes even without
-  its crashes, in allocations under 400 KiB (no larger one grows), which
-  puts it near its check's bound; find whether the nodes or the harness
-  hold it.
-
 ### Swarm
 Hybrid (`PushMode::Hybrid`) is the design: push trees carry the stream
 and pull repairs what they miss. Its seed is the adaptive seed

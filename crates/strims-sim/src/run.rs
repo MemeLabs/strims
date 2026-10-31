@@ -33,7 +33,9 @@ fn wall_clock() -> impl FnOnce() -> f64 {
 pub fn run(spec: Scenario, seed: u64) -> Result<Report, String> {
     let mut group = MemoryGroup::new();
     let counters = group.as_ref().map(MemoryGroup::counters);
-    let w = Rc::new(World::new(spec, seed, counters));
+    let records = MemoryGroup::new();
+    let records_counters = records.as_ref().map(MemoryGroup::counters);
+    let w = Rc::new(World::new(spec, seed, counters, records));
     let guard = group.as_mut().map(MemoryGroup::enter);
     let elapsed = wall_clock();
     let sim_secs = simulate(&w);
@@ -42,6 +44,7 @@ pub fn run(spec: Scenario, seed: u64) -> Result<Report, String> {
     let (sim_secs, wan) = sim_secs?;
     let memory = counters.filter(|c| c.peak() > 0).map(|c| MemoryReport {
         peak: c.peak(),
+        records_peak: records_counters.map_or(0, |r| r.peak()),
         samples: w.st.borrow().memory_samples.clone(),
     });
     Ok(report(&w, sim_secs, wall_secs, memory, wan))

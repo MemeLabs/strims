@@ -192,11 +192,14 @@ fn ratio(a: u64, b: u64) -> f64 {
 }
 
 /// Memory of one run (needs [`crate::memory::Allocator`] as the test
-/// binary's global allocator).
+/// binary's global allocator): its nodes' and network's, which leaves out
+/// the harness's records of the run (trace, samples, viewer records).
 #[derive(Clone, Debug, Default)]
 pub struct MemoryReport {
     /// Live heap bytes of the run at its peak.
     pub peak: i64,
+    /// Live heap bytes of the harness's records at their peak.
+    pub records_peak: i64,
     /// `(sim ms, live bytes)` at every controller sample.
     pub samples: Vec<(u64, i64)>,
 }
@@ -947,9 +950,10 @@ impl Report {
         }
         if let Some(m) = &self.memory {
             s.push_str(&format!(
-                "\n  memory: peak {} KiB, last sample {} KiB",
+                "\n  memory: peak {} KiB, last sample {} KiB, records peak {} KiB",
                 m.peak / 1024,
                 m.samples.last().map_or(0, |&(_, b)| b / 1024),
+                m.records_peak / 1024,
             ));
         }
         if !self.violations.is_empty() {

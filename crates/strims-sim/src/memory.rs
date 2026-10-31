@@ -15,6 +15,8 @@
 //! thread. A turmoil simulation runs every host on that one thread, so the
 //! group sees every allocation of the run and nothing from runs on other
 //! threads: the other runs of its sweep, or tests running in parallel.
+//! The harness's records of the run grow with its length, so they count
+//! in a second group, and the run's numbers are its nodes' and network's.
 //! Without the allocator the counters stay at zero and reports carry no
 //! memory section. Memory numbers never enter the trace: allocator
 //! behaviour is not part of the determinism contract.
@@ -98,6 +100,14 @@ fn register() -> Option<AllocationGroupToken> {
 pub struct MemoryGroup {
     token: AllocationGroupToken,
     slot: Option<usize>,
+}
+
+impl std::fmt::Debug for MemoryGroup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MemoryGroup")
+            .field("slot", &self.slot)
+            .finish_non_exhaustive()
+    }
 }
 
 impl MemoryGroup {

@@ -6,6 +6,11 @@
 //!
 //! Every host and the controller run on the turmoil thread, so the state is
 //! an `Rc<World>` with a `RefCell` inside. Borrows never cross an `.await`.
+//!
+//! The state is the harness's record of the run, and it grows with the
+//! run's length. Every change to it goes through [`World::record`], which
+//! counts its allocations in a group of their own, so the run's memory
+//! numbers stay those of its nodes and its network.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -22,7 +27,7 @@ use strims_node::{
 use strims_proto::types::Key;
 use strims_wan::live::Au;
 
-use crate::memory::GroupCounters;
+use crate::memory::{GroupCounters, MemoryGroup};
 use crate::net::SendBuffers;
 use crate::report::{HostReport, MediaLog, VpnReport};
 use crate::spec::{HostIx, Scenario, Transport};
@@ -181,7 +186,11 @@ pub(crate) struct World {
     pub profile_keys: Vec<Key>,
     pub swarm_keys: Vec<Key>,
     pub network_keys: Vec<Key>,
+    /// The run's heap counters: its nodes and network, without the
+    /// harness's records.
     pub memory: Option<GroupCounters>,
+    /// The allocation group of the harness's records.
+    records: RefCell<Option<MemoryGroup>>,
     /// WAN mode's TCP send buffers ([`Scenario::send_buffer`]).
     pub send_buffers: Option<SendBuffers>,
     /// The WAN schedule, once the run made it.
@@ -193,7 +202,12 @@ pub(crate) struct World {
 }
 
 impl World {
-    pub fn new(spec: Scenario, seed: u64, memory: Option<GroupCounters>) -> World {
+    pub fn new(
+        spec: Scenario,
+        seed: u64,
+        memory: Option<GroupCounters>,
+        records: Option<MemoryGroup>,
+    ) -> World {
         let profile_keys = (0..spec.hosts.len())
             .map(|i| derive_key(b'P', seed, i))
             .collect();
@@ -245,11 +259,21 @@ impl World {
             swarm_keys,
             network_keys,
             memory,
+            records: RefCell::new(records),
             send_buffers,
             wan: SharedWan::default(),
             media_traces,
             st: RefCell::new(st),
         }
+    }
+
+    /// Runs `f` on the run's records with the records' allocation group
+    /// entered. An allocation counts in the group current when it's made,
+    /// a reallocation included, so a record grows only in here.
+    fn record<R>(&self, f: impl FnOnce(&mut WorldState) -> R) -> R {
+        let mut group = self.records.borrow_mut();
+        let _counted = group.as_mut().map(MemoryGroup::enter);
+        f(&mut self.st.borrow_mut())
     }
 
     pub fn name(&self, h: HostIx) -> &str {
@@ -269,10 +293,7 @@ impl World {
     }
 
     pub fn log_at(&self, ms: u64, who: &str, line: impl AsRef<str>) {
-        self.st
-            .borrow_mut()
-            .trace
-            .push(format!("{ms} {who} {}", line.as_ref()));
+        self.record(|st| st.trace.push(format!("{ms} {who} {}", line.as_ref())));
     }
 
     // --- keys and addresses ----------------------------------------------
@@ -351,12 +372,13 @@ impl World {
     /// A new incarnation of `h` starts; returns its number (1 for the
     /// first).
     pub fn begin_incarnation(&self, h: HostIx) -> u32 {
-        let mut st = self.st.borrow_mut();
-        let Some(hs) = st.hosts.get_mut(h) else {
-            return 0;
-        };
-        hs.incarnation += 1;
-        hs.incarnation
+        self.record(|st| {
+            let Some(hs) = st.hosts.get_mut(h) else {
+                return 0;
+            };
+            hs.incarnation += 1;
+            hs.incarnation
+        })
     }
 
     pub fn register(
@@ -367,24 +389,23 @@ impl World {
         swarms: Vec<Option<SwarmKey>>,
     ) {
         let id = node.host_id();
-        let inc = {
-            let mut st = self.st.borrow_mut();
+        let inc = self.record(|st| {
             st.ids.insert(id, h);
-            let Some(hs) = st.hosts.get_mut(h) else {
-                return;
-            };
+            let hs = st.hosts.get_mut(h)?;
             hs.node = Some(node.clone());
             hs.host_id = Some(id);
             hs.nets = nets;
             hs.swarms = swarms;
-            hs.incarnation
-        };
-        self.log(self.name(h), format!("up incarnation {inc}"));
+            Some(hs.incarnation)
+        });
+        if let Some(inc) = inc {
+            self.log(self.name(h), format!("up incarnation {inc}"));
+        }
     }
 
     /// Registers a host id as soon as the node exists.
     pub fn register_id(&self, h: HostIx, id: HostId) {
-        self.st.borrow_mut().ids.insert(id, h);
+        self.record(|st| st.ids.insert(id, h));
     }
 
     pub fn ix_of(&self, id: &HostId) -> Option<HostIx> {
@@ -411,23 +432,18 @@ impl World {
 
     /// Marks link `l` of `h` as being dialed; false if it already is.
     pub fn start_dial(&self, h: HostIx, l: usize) -> bool {
-        self.st
-            .borrow_mut()
-            .hosts
-            .get_mut(h)
-            .is_some_and(|s| s.dialing.insert(l))
+        self.record(|st| st.hosts.get_mut(h).is_some_and(|s| s.dialing.insert(l)))
     }
 
     /// A dial finished; logs it when the link's outcome changed.
     pub fn end_dial(&self, h: HostIx, l: usize, result: Result<(), String>) {
-        let changed = {
-            let mut st = self.st.borrow_mut();
-            let Some(s) = st.hosts.get_mut(h) else {
-                return;
-            };
-            s.dialing.remove(&l);
-            s.dial_ok.insert(l, result.is_ok()) != Some(result.is_ok())
-        };
+        let ok = result.is_ok();
+        let changed = self.record(|st| {
+            st.hosts.get_mut(h).is_some_and(|s| {
+                s.dialing.remove(&l);
+                s.dial_ok.insert(l, ok) != Some(ok)
+            })
+        });
         if changed {
             let to = self.spec.links.get(l).map_or("?", |l| self.name(l.to));
             match result {
@@ -440,19 +456,23 @@ impl World {
     // --- faults -------------------------------------------------------------
 
     pub fn crashed(&self, h: HostIx) {
-        if let Some(s) = self.st.borrow_mut().hosts.get_mut(h) {
-            s.retire();
-            s.totals.restarts += 1;
-        }
+        self.record(|st| {
+            if let Some(s) = st.hosts.get_mut(h) {
+                s.retire();
+                s.totals.restarts += 1;
+            }
+        });
     }
 
     pub fn set_reading_paused(&self, h: HostIx, paused: bool, now_ms: u64) {
-        if let Some(s) = self.st.borrow_mut().hosts.get_mut(h) {
-            s.reading_paused = paused;
-            if !paused {
-                s.resumed_ms = now_ms;
+        self.record(|st| {
+            if let Some(s) = st.hosts.get_mut(h) {
+                s.reading_paused = paused;
+                if !paused {
+                    s.resumed_ms = now_ms;
+                }
             }
-        }
+        });
     }
 
     pub fn reading_paused(&self, h: HostIx) -> bool {
@@ -464,65 +484,68 @@ impl World {
     }
 
     pub fn set_uplink(&self, h: HostIx, rate: u64) {
-        if let Some(s) = self.st.borrow_mut().hosts.get_mut(h) {
-            s.uplink = Some(rate);
-        }
+        self.record(|st| {
+            if let Some(s) = st.hosts.get_mut(h) {
+                s.uplink = Some(rate);
+            }
+        });
     }
 
     pub fn take_uplink(&self, h: HostIx) -> Option<u64> {
-        self.st
-            .borrow_mut()
-            .hosts
-            .get_mut(h)
-            .and_then(|s| s.uplink.take())
+        self.record(|st| st.hosts.get_mut(h).and_then(|s| s.uplink.take()))
     }
 
     pub fn request_connect(&self, from: HostIx, to: HostIx, network: usize) {
-        if let Some(s) = self.st.borrow_mut().hosts.get_mut(from) {
-            s.connects.push((to, network));
-        }
+        self.record(|st| {
+            if let Some(s) = st.hosts.get_mut(from) {
+                s.connects.push((to, network));
+            }
+        });
     }
 
     pub fn take_connects(&self, h: HostIx) -> Vec<(HostIx, usize)> {
-        self.st
-            .borrow_mut()
-            .hosts
-            .get_mut(h)
-            .map(|s| std::mem::take(&mut s.connects))
-            .unwrap_or_default()
+        self.record(|st| {
+            st.hosts
+                .get_mut(h)
+                .map(|s| std::mem::take(&mut s.connects))
+                .unwrap_or_default()
+        })
     }
 
     pub fn request_writer_reset(&self, swarm: usize) {
-        self.st.borrow_mut().reset_writer.insert(swarm);
+        self.record(|st| st.reset_writer.insert(swarm));
     }
 
     pub fn take_writer_reset(&self, swarm: usize) -> bool {
-        self.st.borrow_mut().reset_writer.remove(&swarm)
+        self.record(|st| st.reset_writer.remove(&swarm))
     }
 
     // --- streams --------------------------------------------------------
 
     pub fn mark_written(&self, swarm: usize, seqs: std::ops::Range<u64>) {
-        if let Some(w) = self.st.borrow_mut().written.get_mut(swarm) {
-            for s in seqs {
-                w.insert(s);
+        self.record(|st| {
+            if let Some(w) = st.written.get_mut(swarm) {
+                for s in seqs {
+                    w.insert(s);
+                }
             }
-        }
+        });
     }
 
     /// A media chunk of `swarm` opened at `time_ms`: its sequence number,
     /// next after every incarnation's.
     pub fn media_chunk(&self, swarm: usize, time_ms: u64) -> u64 {
-        let mut st = self.st.borrow_mut();
-        let Some(Some(log)) = st.media.get_mut(swarm) else {
-            return 0;
-        };
-        let seq = log.times.len() as u64;
-        log.times.push(time_ms);
-        if let Some(w) = st.written.get_mut(swarm) {
-            w.insert(seq);
-        }
-        seq
+        self.record(|st| {
+            let Some(Some(log)) = st.media.get_mut(swarm) else {
+                return 0;
+            };
+            let seq = log.times.len() as u64;
+            log.times.push(time_ms);
+            if let Some(w) = st.written.get_mut(swarm) {
+                w.insert(seq);
+            }
+            seq
+        })
     }
 
     /// The start of media swarm `swarm`'s latest GOP at or before stream
@@ -535,19 +558,16 @@ impl World {
 
     /// Notes how viewer `h`'s join rewind of `swarm` went.
     pub fn viewer_rewound(&self, swarm: usize, h: HostIx, r: JoinRewind) {
-        self.st
-            .borrow_mut()
-            .viewers
-            .entry((swarm, h))
-            .or_default()
-            .rewound(r);
+        self.record(|st| st.viewers.entry((swarm, h)).or_default().rewound(r));
     }
 
     /// Updates media swarm `swarm`'s log.
     pub fn media_log(&self, swarm: usize, f: impl FnOnce(&mut MediaLog)) {
-        if let Some(Some(log)) = self.st.borrow_mut().media.get_mut(swarm) {
-            f(log);
-        }
+        self.record(|st| {
+            if let Some(Some(log)) = st.media.get_mut(swarm) {
+                f(log);
+            }
+        });
     }
 
     /// Feeds bytes read at `offset` to a media viewer's parser and stats,
@@ -567,8 +587,7 @@ impl World {
         let chunk = spec.options.chunk_size;
         let every = (spec.rate() as u64 * 10 / chunk.max(1) as u64).max(1);
         let mut lines = Vec::new();
-        {
-            let mut st = self.st.borrow_mut();
+        self.record(|st| {
             let v = st.viewers.entry((swarm, h)).or_default();
             parser.push(self.seed, swarm as u32, chunk, offset, data, |p| {
                 let first = v.record(p, now);
@@ -582,19 +601,19 @@ impl World {
                     Parsed::Frame(_) => {}
                 }
             });
-        }
+        });
         for l in lines {
             self.log(self.name(h), l);
         }
     }
 
     pub fn viewer_start(&self, swarm: usize, h: HostIx) {
-        self.st
-            .borrow_mut()
-            .viewers
-            .entry((swarm, h))
-            .or_default()
-            .start(sim_now_ms());
+        self.record(|st| {
+            st.viewers
+                .entry((swarm, h))
+                .or_default()
+                .start(sim_now_ms())
+        });
     }
 
     /// Feeds read bytes to the viewer's parser and stats; logs the first
@@ -606,8 +625,7 @@ impl World {
             (per_sec * 10 * s.frames_per_write as u64).max(1)
         });
         let mut lines = Vec::new();
-        {
-            let mut st = self.st.borrow_mut();
+        self.record(|st| {
             let v = st.viewers.entry((swarm, h)).or_default();
             parser.push(self.seed, swarm as u32, data, |p| {
                 let first = v.record(p, now);
@@ -621,17 +639,19 @@ impl World {
                     Parsed::Frame(_) => {}
                 }
             });
-        }
+        });
         for l in lines {
             self.log(self.name(h), l);
         }
     }
 
     pub fn viewer_underrun(&self, swarm: usize, h: HostIx, skipped: u64) {
-        if let Some(v) = self.st.borrow_mut().viewers.get_mut(&(swarm, h)) {
-            v.underruns += 1;
-            v.skipped_bytes += skipped;
-        }
+        self.record(|st| {
+            if let Some(v) = st.viewers.get_mut(&(swarm, h)) {
+                v.underruns += 1;
+                v.skipped_bytes += skipped;
+            }
+        });
         self.log(
             self.name(h),
             format!("swarm {swarm} underrun skipped {skipped}"),
@@ -639,77 +659,75 @@ impl World {
     }
 
     pub fn viewer_reset(&self, swarm: usize, h: HostIx) {
-        if let Some(v) = self.st.borrow_mut().viewers.get_mut(&(swarm, h)) {
-            v.resets += 1;
-        }
+        self.record(|st| {
+            if let Some(v) = st.viewers.get_mut(&(swarm, h)) {
+                v.resets += 1;
+            }
+        });
         self.log(self.name(h), format!("swarm {swarm} reset"));
     }
 
     // --- vpn ----------------------------------------------------------------
 
     pub fn probe_sent(&self, id: u64, src: HostIx, dst: HostIx) {
-        self.st.borrow_mut().probes.insert(
-            id,
-            Probe {
-                sent_ms: sim_now_ms(),
-                src,
-                dst,
-                delivered: None,
-            },
-        );
+        let p = Probe {
+            sent_ms: sim_now_ms(),
+            src,
+            dst,
+            delivered: None,
+        };
+        self.record(|st| st.probes.insert(id, p));
     }
 
     /// A probe arrived; records it once.
     pub fn probe_delivered(&self, id: u64, hops: usize) -> bool {
-        let mut st = self.st.borrow_mut();
-        match st.probes.get_mut(&id) {
+        self.record(|st| match st.probes.get_mut(&id) {
             Some(p) if p.delivered.is_none() => {
                 p.delivered = Some(hops);
                 true
             }
             _ => false,
-        }
+        })
     }
 
     pub fn exchange_closed(&self, outcome: &ExchangeOutcome) {
         let name = format!("{outcome:?}");
-        let name = name.split('(').next().unwrap_or_default().to_owned();
-        *self
-            .st
-            .borrow_mut()
-            .vpn
-            .exchange_outcomes
-            .entry(name)
-            .or_default() += 1;
+        let name = name.split('(').next().unwrap_or_default();
+        self.record(|st| {
+            *st.vpn.exchange_outcomes.entry(name.to_owned()).or_default() += 1;
+        });
     }
 
     /// A hash table get or peer index search started at `start_ms` ended.
     pub fn lookup_done(&self, start_ms: u64, search: bool, ok: bool) {
-        let mut st = self.st.borrow_mut();
-        if search {
-            st.vpn.searches += 1;
-            st.vpn.searches_ok += u64::from(ok);
-        } else {
-            st.vpn.gets += 1;
-            st.vpn.gets_ok += u64::from(ok);
-        }
-        st.lookups.push((start_ms, search, ok));
+        self.record(|st| {
+            if search {
+                st.vpn.searches += 1;
+                st.vpn.searches_ok += u64::from(ok);
+            } else {
+                st.vpn.gets += 1;
+                st.vpn.gets_ok += u64::from(ok);
+            }
+            st.lookups.push((start_ms, search, ok));
+        });
     }
 
     pub fn with_vpn(&self, f: impl FnOnce(&mut VpnReport)) {
-        f(&mut self.st.borrow_mut().vpn);
+        self.record(|st| f(&mut st.vpn));
     }
 
     pub fn with_rng<T>(&self, f: impl FnOnce(&mut DetRng) -> T) -> T {
-        f(&mut self.st.borrow_mut().rng)
+        self.record(|st| f(&mut st.rng))
     }
 
     // --- samples --------------------------------------------------------
 
     pub fn store_metrics(&self, h: HostIx, m: NodeMetrics) {
-        if let Some(s) = self.st.borrow_mut().hosts.get_mut(h) {
-            s.last = Some(m);
-        }
+        self.record(|st| {
+            if let Some(s) = st.hosts.get_mut(h) {
+                s.last = Some(m);
+            }
+        });
     }
 
     /// The node's key for each scenario swarm.
@@ -728,9 +746,7 @@ impl World {
     pub fn observe_stats(&self, h: HostIx, m: &NodeMetrics) {
         let inv = &self.spec.invariants;
         let mut found = Vec::new();
-        {
-            let mut st = self.st.borrow_mut();
-            let st = &mut *st;
+        self.record(|st| {
             let Some(hs) = st.hosts.get_mut(h) else {
                 return;
             };
@@ -794,12 +810,12 @@ impl World {
                     format!("{} bad vpn frames", g.vpn_bad_input),
                 );
             }
-        }
+        });
         let now = sim_now_ms();
         for f in found {
             let f = format!("{} {f}", self.name(h));
             self.log("invariant", &f);
-            self.st.borrow_mut().violations.push((now, f));
+            self.record(|st| st.violations.push((now, f)));
         }
     }
 
@@ -811,7 +827,7 @@ impl World {
         let mut found = Vec::new();
         if let Some(c) = self.memory {
             let live = c.live();
-            self.st.borrow_mut().memory_samples.push((now, live));
+            self.record(|st| st.memory_samples.push((now, live)));
             if let Some(max) = inv.max_heap
                 && c.peak() > 0
                 && live > max
@@ -823,9 +839,7 @@ impl World {
             let (a, b) = (a.as_millis() as u64, b.as_millis() as u64);
             (a..b).contains(&now)
         });
-        {
-            let mut st = self.st.borrow_mut();
-            let st = &mut *st;
+        self.record(|st| {
             for (&(swarm, h), v) in &st.viewers {
                 let before = st.progress.insert((swarm, h), v.frames);
                 let Some(hs) = st.hosts.get(h) else {
@@ -848,10 +862,10 @@ impl World {
                     ));
                 }
             }
-        }
+        });
         for f in found {
             self.log("invariant", &f);
-            self.st.borrow_mut().violations.push((now, f));
+            self.record(|st| st.violations.push((now, f)));
         }
     }
 }
