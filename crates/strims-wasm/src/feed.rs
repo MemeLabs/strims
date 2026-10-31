@@ -22,9 +22,9 @@
 //! ([`VideoError::StreamClosed`] once its swarm is gone with none in its
 //! place), or when its port closes; the node then posts
 //! `{type: "closed", id, message}` on the feeds port, with the reason. A
-//! closed feed posts nothing. At most [`MAX_FEEDS`] are open; an `open`
-//! past that, of an id in use or that doesn't parse answers `closed` at
-//! once.
+//! feed the window closes, or one a new feed replaces, posts nothing more
+//! on either port. At most [`MAX_FEEDS`] are open; an `open` past that, of
+//! an id in use or that doesn't parse answers `closed` at once.
 //!
 //! # A feed's port
 //!
