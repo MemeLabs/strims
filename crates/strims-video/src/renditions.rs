@@ -261,6 +261,11 @@ impl<W: SwarmWrite> RenditionOutput<W> {
         let Some(swarm) = &self.swarm else {
             return (records, bytes, false);
         };
+        // A rendition that ended is listed no more.
+        if m.ends > 0 {
+            let changed = self.listed.take().is_some();
+            return (records, bytes, changed);
+        }
         if records == 0 {
             return (0, bytes, false);
         }
@@ -833,6 +838,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
                         o.listed = None;
                     }
                 }
+                self.list_renditions();
                 Ok(())
             }
         }
@@ -908,8 +914,13 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
             self.main_bitrate.unwrap_or(0),
             self.frame_rate,
         );
-        let mut listed = vec![main.clone()];
-        listed.extend(r.listed().cloned());
+        let others: Vec<ListingRendition> = r.listed().cloned().collect();
+        // A stream of one rendition lists none.
+        let listed = if others.is_empty() {
+            Vec::new()
+        } else {
+            std::iter::once(main.clone()).chain(others).collect()
+        };
         self.listed_main = Some(main);
         let s = self.publication.shared.clone();
         s.set_listed_renditions(

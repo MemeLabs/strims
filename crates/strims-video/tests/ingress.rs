@@ -34,6 +34,7 @@ use strims_proto::video::v1::{
 use strims_rpc::{Router, Timer};
 use strims_testworld::*;
 use strims_transfer::TransferId;
+use strims_video::codec::RenditionPlan;
 use strims_video::hls::HlsRoutes;
 use strims_video::ingress::unit_ingress_options;
 use strims_video::synth::script::{Script, ScriptConfig, Tag, TagKind, mux_tags};
@@ -43,6 +44,7 @@ use strims_video::{
     IngressSettings, Muxer, NoVideoHost, SourceEvent, SwarmKind, TrackId, UnitWriter, VideoControl,
     VideoEvent, VideoHost, VideoSwarm, bind_frontend, units_mime,
 };
+use support::codec::FakeCodec;
 use support::{FakeVideo, TestPublisher};
 
 type Control<V> = VideoControl<MemoryKv, FakeHost, V, TokioTimer>;
@@ -193,6 +195,11 @@ struct Ingest {
 
 impl Ingest {
     async fn new(with_viewer: bool, config: Config) -> Ingest {
+        Ingest::with_host(with_viewer, config, FakeVideo::default()).await
+    }
+
+    /// An ingest on `video`, such as a host with a codec stage.
+    async fn with_host(with_viewer: bool, config: Config, video: FakeVideo) -> Ingest {
         let world = World::default();
         let a = node_in(&world, 1).await;
         let b = if with_viewer {
@@ -202,7 +209,6 @@ impl Ingest {
         };
         let members: Vec<&Node> = b.iter().collect();
         let (net, pipes) = owned_network(&a, &members, 10).await;
-        let video = FakeVideo::default();
         let va = start(&a, video.clone(), config);
         let channel = va
             .create_channel(&net.public, snippet("first"))
@@ -1225,5 +1231,330 @@ fn a_session_ending_before_its_swarm_leaves_nothing() {
         assert_eq!(s.written(), 0);
         let m = s.va.metrics().ingress;
         assert_eq!((m.sessions, m.segments, m.bytes), (1, 0, 0));
+    });
+}
+
+// --- renditions --------------------------------------------------------------
+
+/// A host whose codec stage is the fake's.
+fn codec_host() -> (FakeVideo, FakeCodec) {
+    let video = FakeVideo::default();
+    let codec = FakeCodec::default();
+    video.0.borrow_mut().codec = Some(codec.clone());
+    (video, codec)
+}
+
+fn with_ladder(ladder: Vec<RenditionPlan>) -> Config {
+    let mut config = Config::default();
+    config.ingress.transcode.ladder = ladder;
+    config
+}
+
+/// The swarm URI a channel's rendition `id` is written to, in units of
+/// 8 chunks a signature.
+fn rendition_uri(c: &VideoChannel, id: &str, signing: &UnitSigning) -> String {
+    let key = rendition_key(channel_key(c), id);
+    let options = unit_ingress_options(signing);
+    Uri::new(SwarmId::new(&key.public), options.uri_options()).to_string()
+}
+
+/// The key a channel's rendition `id` derives, as the ingress makes it.
+fn rendition_key(channel: &Key, id: &str) -> Key {
+    use hmac::{Hmac, KeyInit, Mac};
+    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(&channel.private).unwrap();
+    mac.update(b"strims-video-rendition:");
+    mac.update(id.as_bytes());
+    let seed: [u8; 32] = mac.finalize().into_bytes().into();
+    strims_crypto::key_from_seed(&seed)
+}
+
+/// `units` as a rendition at `fps` keeps them: every keyframe, and each
+/// frame at least a frame of its rate after the last kept.
+fn kept(units: &[Unit], fps: i64) -> Vec<Unit> {
+    let mut last = None;
+    units
+        .iter()
+        .filter(|u| {
+            if u.0 != strims_video::flv::VIDEO_TRACK {
+                return true;
+            }
+            let keep = u.3 || last.is_none_or(|l| u.2 - l >= 90_000 / fps - 180);
+            if keep {
+                last = Some(u.2);
+            }
+            keep
+        })
+        .cloned()
+        .collect()
+}
+
+/// The script with its video sent as Enhanced RTMP HEVC of `hvcc`.
+fn as_hevc(script: &Script, hvcc: &[u8]) -> Script {
+    let mut hevc = script.clone();
+    for tag in &mut hevc.tags {
+        if tag.kind != TagKind::Video {
+            continue;
+        }
+        let frame_type = tag.body[0] >> 4;
+        let mut body = vec![0x80 | (frame_type << 4) | tag.body[1]];
+        body.extend_from_slice(b"hvc1");
+        match tag.body[1] {
+            0 => body.extend_from_slice(hvcc),
+            _ => body.extend_from_slice(&tag.body[2..]),
+        }
+        tag.body = body;
+    }
+    hevc
+}
+
+/// An H.264 stream with a ladder: its rung is a swarm of its own, keeping
+/// every keyframe and every other frame, listed in the channel's snippet
+/// after the channel's own swarm, read by another node, and taken down
+/// with the session.
+#[test]
+fn an_h264_streams_rungs_are_swarms_of_their_own_listed_in_its_snippet() {
+    run(async {
+        let (video, codec) = codec_host();
+        let config = with_ladder(vec![RenditionPlan {
+            short_side: 480,
+            max_frame_rate: 15,
+            bitrate: 500_000,
+        }]);
+        let s = Ingest::with_host(true, config, video).await;
+        let b = s.b.as_ref().unwrap();
+        let vb = start(b, NoVideoHost, Config::default());
+        let mut p = s.publish("10.0.0.1:50000").await;
+        let script = Script::new(&ScriptConfig::default());
+        let (configs, units) = script_units(&script);
+        let third = script.tags.len() / 3;
+        p.send_tags(&script.tags[..third], &script).await;
+
+        wait_for(10, "the renditions in the snippet", || {
+            shown_snippet(b).is_some_and(|s| s.renditions.len() == 2)
+        })
+        .await;
+        let shown = shown_snippet(b).unwrap();
+        let (main, rung) = (&shown.renditions[0], &shown.renditions[1]);
+        assert_eq!(
+            (main.swarm_uri.as_str(), main.mime_type.as_str()),
+            (
+                channel_uri(&s.channel).as_str(),
+                units_mime(&configs).as_str()
+            )
+        );
+        assert_eq!((main.width, main.height), (1280, 720));
+        assert_eq!((shown.video_width, shown.video_height), (1280, 720));
+        let uri = rendition_uri(&s.channel, "480p15", &UnitSigning::SMALL);
+        assert_eq!(rung.swarm_uri, uri);
+        assert_eq!((rung.width, rung.height, rung.bitrate), (852, 480, 628_000));
+        assert_eq!(
+            rung.mime_type,
+            r#"video/x.strims-units;codecs="avc1.64001f,mp4a.40.2""#
+        );
+        assert_eq!(codec.plans().len(), 1);
+        let ingest: Vec<_> =
+            s.va.video_swarms()
+                .into_iter()
+                .filter(|w| w.kind == SwarmKind::Ingest)
+                .map(|w| w.swarm_uri)
+                .collect();
+        assert_eq!(ingest.len(), 2);
+        assert!(ingest.contains(&uri));
+
+        let mut v = UnitViewer::new(
+            vb.open_stream(&uri, std::slice::from_ref(&s.net.public), &rung.mime_type)
+                .await
+                .unwrap(),
+        );
+        p.send_tags(&script.tags[third..], &script).await;
+        p.unpublish().await;
+        let expected = kept(&units, 15);
+        v.until_unit(expected.last().unwrap()).await;
+        let got = v.units();
+        assert!(got[0].3, "the first unit read is a keyframe");
+        assert_eq!(got[..], expected[expected.len() - got.len()..]);
+
+        wait_for(10, "the session's swarms to go", || {
+            s.va.video_swarms().is_empty()
+        })
+        .await;
+        let m = s.va.metrics().transcode;
+        assert_eq!(
+            (m.starts, m.restarts, m.failures, m.abandoned),
+            (1, 0, 0, 0)
+        );
+        assert!(m.records > 0);
+        assert_eq!(codec.0.borrow().finished, 1);
+    });
+}
+
+/// An HEVC stream on a node with a codec stage: the channel's swarm
+/// carries the transcode's H.264, and the stream as it came is the source
+/// rendition.
+#[test]
+fn an_hevc_streams_channel_swarm_carries_h264_and_its_own_is_a_rendition() {
+    run(async {
+        let (video, codec) = codec_host();
+        let s = Ingest::with_host(true, Config::default(), video).await;
+        let b = s.b.as_ref().unwrap();
+        let vb = start(b, NoVideoHost, Config::default());
+        let mut p = s.publish("10.0.0.1:50000").await;
+        let script = as_hevc(
+            &Script::new(&ScriptConfig::default()),
+            &strims_video::synth::script::hvcc(1280, 720),
+        );
+        let (_, units) = script_units(&script);
+        let half = script.tags.len() / 2;
+        p.send_tags(&script.tags[..half], &script).await;
+
+        wait_for(10, "the renditions in the snippet", || {
+            shown_snippet(b).is_some_and(|s| s.renditions.len() == 2)
+        })
+        .await;
+        let shown = shown_snippet(b).unwrap();
+        let (main, source) = (&shown.renditions[0], &shown.renditions[1]);
+        assert_eq!(main.swarm_uri, channel_uri(&s.channel));
+        assert!(main.mime_type.contains("avc1."), "{}", main.mime_type);
+        assert!(
+            source.mime_type.contains("hvc1.1.6.L93.90"),
+            "{}",
+            source.mime_type
+        );
+        assert_eq!(
+            source.swarm_uri,
+            rendition_uri(&s.channel, "source", &UnitSigning::LARGE)
+        );
+        assert_eq!(
+            codec.plans()[0].renditions,
+            [RenditionPlan {
+                short_side: 720,
+                max_frame_rate: 60,
+                bitrate: 4_000_000,
+            }]
+        );
+        let (_, m, _) = media(b, 10).remove(0);
+        assert_eq!(m.mime_type, main.mime_type);
+
+        let mut v = UnitViewer::new(
+            vb.open_stream(
+                &main.swarm_uri,
+                std::slice::from_ref(&s.net.public),
+                &main.mime_type,
+            )
+            .await
+            .unwrap(),
+        );
+        p.send_tags(&script.tags[half..], &script).await;
+        p.unpublish().await;
+        v.until_unit(units.last().unwrap()).await;
+        let got = v.units();
+        assert!(got[0].3);
+        assert_eq!(got[..], units[units.len() - got.len()..]);
+    });
+}
+
+#[test]
+fn an_hevc_publish_past_the_transcode_cap_ends_with_the_reason() {
+    run(async {
+        let (video, codec) = codec_host();
+        let mut config = Config::default();
+        config.ingress.transcode.max_sessions = 0;
+        let s = Ingest::with_host(false, config, video).await;
+        let mut p = s.publish("10.0.0.1:1").await;
+        let mut body = vec![0x90];
+        body.extend_from_slice(b"hvc1");
+        body.extend_from_slice(&strims_video::synth::script::hvcc(1280, 720));
+        p.publisher.send_video(0, &body).unwrap();
+        p.flush().await;
+        let (code, reason) = p.refusal().await;
+        assert_eq!(code, FAILED);
+        assert!(
+            reason.contains("this node transcodes no more streams"),
+            "{reason}"
+        );
+        assert_eq!(s.va.metrics().transcode.over_cap, 1);
+        assert!(codec.plans().is_empty());
+    });
+}
+
+/// A transcode that takes input and makes nothing is started again after
+/// the stall timeout, and past its restarts the renditions end and leave
+/// the snippet while the channel's stream goes on.
+#[test]
+fn a_stalled_transcode_is_given_up_and_its_renditions_unlisted() {
+    run(async {
+        let (video, codec) = codec_host();
+        let mut config = with_ladder(vec![RenditionPlan {
+            short_side: 480,
+            max_frame_rate: 30,
+            bitrate: 500_000,
+        }]);
+        config.ingress.transcode.max_restarts = 1;
+        let s = Ingest::with_host(true, config, video).await;
+        let b = s.b.as_ref().unwrap();
+        let mut p = s.publish("10.0.0.1:50000").await;
+        let script = Script::new(&ScriptConfig {
+            duration_secs: 20,
+            ..ScriptConfig::default()
+        });
+        let quarter = script.tags.len() / 4;
+        let part = |i: usize| &script.tags[i * quarter..((i + 1) * quarter).min(script.tags.len())];
+        p.send_tags(part(0), &script).await;
+        wait_for(10, "the renditions in the snippet", || {
+            shown_snippet(b).is_some_and(|s| s.renditions.len() == 2)
+        })
+        .await;
+
+        codec.set_stall(true);
+        p.send_tags(part(1), &script).await;
+        wait_for(10, "the first stall", || {
+            s.va.metrics().transcode.stalls == 1
+        })
+        .await;
+        // it starts again at the next keyframe, and stalls again
+        p.send_tags(part(2), &script).await;
+        wait_for(10, "the renditions to go", || {
+            s.va.metrics().transcode.abandoned == 1
+        })
+        .await;
+        let m = s.va.metrics().transcode;
+        assert_eq!((m.starts, m.restarts, m.stalls), (2, 1, 2));
+        wait_for(10, "the snippet without renditions", || {
+            shown_snippet(b).is_some_and(|s| s.renditions.is_empty())
+        })
+        .await;
+        // the channel's stream goes on
+        let before = s.written();
+        p.send_tags(&script.tags[3 * quarter..], &script).await;
+        wait_for(10, "the channel's stream", || s.written() > before).await;
+        assert_eq!(s.va.ingress_streams().len(), 1);
+    });
+}
+
+/// A transcode that fails starts again at the stream's next keyframe.
+#[test]
+fn a_failed_transcode_starts_again_at_the_next_keyframe() {
+    run(async {
+        let (video, codec) = codec_host();
+        let config = with_ladder(vec![RenditionPlan {
+            short_side: 480,
+            max_frame_rate: 30,
+            bitrate: 500_000,
+        }]);
+        let s = Ingest::with_host(false, config, video).await;
+        let mut p = s.publish("10.0.0.1:50000").await;
+        let script = Script::new(&ScriptConfig::default());
+        let third = script.tags.len() / 3;
+        p.send_tags(&script.tags[..third], &script).await;
+        wait_for(10, "the transcode", || s.va.metrics().transcode.records > 0).await;
+        codec.end_next();
+        p.send_tags(&script.tags[third..], &script).await;
+        wait_for(10, "the transcode to start again", || {
+            s.va.metrics().transcode.starts == 2
+        })
+        .await;
+        let m = s.va.metrics().transcode;
+        assert_eq!((m.failures, m.restarts, m.abandoned), (1, 1, 0));
+        assert_eq!(codec.plans().len(), 2);
     });
 }
