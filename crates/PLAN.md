@@ -37,7 +37,10 @@ read it.
     slot; a cancelled `create_swarm` or `add_swarm` leaks the same way.
   - The signing rule (`UnitSigning::for_stream`) is untested between 0.75
     and 1.5 Mbit/s and above 6.3 Mbit/s. A farm A/B at 1 Mbit/s (`suite.py`'s
-    `sign` tiers) settles whether 2 or 4 chunks lag less there.
+    `sign` tiers) settles whether 2 or 4 chunks lag less there. Streams
+    whose bitrate swings widely (VBR scenes) pad more at its 300 ms: the
+    sweep kept 8-chunk padding within a tenth of such a stream only at an
+    interval of about 500 ms.
 - **Stream ends.** A viewer that joins after a stream's END starts at the
   newest chunk, padding, and never sees it. A writer keeps its swarm
   `END_LINGER` after signing its END, blind to whether any peer took it;
