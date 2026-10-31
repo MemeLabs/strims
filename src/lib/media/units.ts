@@ -119,7 +119,8 @@ const defaultWorker = () =>
  *
  * At the stream's end, which `end` says or the worker finds, the worker
  * writes out what the remuxer holds, the MediaSource's stream ends, and
- * the video plays out to its end at rate 1.
+ * the video plays out to its end at rate 1. Media the worker gives after
+ * that goes on playing.
  */
 export class UnitsPlayer {
   private readonly mode: SinkMode;
@@ -398,6 +399,10 @@ export class UnitsPlayer {
         if (this.handlers.feed) {
           this.counts.messages = message.messages;
           this.counts.bytes = message.bytes;
+        }
+        if (this.ended && message.outputs.some((o) => o.type === "media")) {
+          // Media after the end: the stream goes on.
+          this.ended = false;
         }
         for (const out of message.outputs) {
           this.output(out, message.at);

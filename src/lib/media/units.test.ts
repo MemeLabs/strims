@@ -201,6 +201,28 @@ describe("UnitsPlayer", () => {
     p.destroy();
   });
 
+  it("goes on with the stream when media follows its end", () => {
+    const { p, workers } = player();
+    workers[0].send({ type: "ended" });
+    workers[0].send({
+      type: "outputs",
+      at: 1,
+      outputs: [{ type: "gap", track: 1, kind: "video", missing: 1 }],
+      messages: 0,
+      bytes: 0,
+    });
+    assert.ok(p.stats().ended, "no media yet");
+    workers[0].send({
+      type: "outputs",
+      at: 2,
+      outputs: [{ type: "media", units: [] }],
+      messages: 0,
+      bytes: 0,
+    });
+    assert.ok(!p.stats().ended);
+    p.destroy();
+  });
+
   it("plays an ended stream out at rate 1, and restarts no worker after", () => {
     const { p, video, workers } = player();
     video.playbackRate = 1.05;
