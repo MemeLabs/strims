@@ -392,9 +392,8 @@ pub struct Metrics {
     /// [`units::MAX_RECORD_LEN`](crate::units::MAX_RECORD_LEN), and those
     /// whose unit the muxer refused.
     pub hls_skipped_records: u64,
-    /// Times an autoseed rule found its swarm held by another: a
-    /// capture's or an ingest session's, or another component's transfer
-    /// under the rule's salt. The rule seeds nothing while it is so.
+    /// Times an autoseed rule found another component's transfer of its
+    /// swarm under the rule's salt. The rule seeds nothing while it is so.
     pub autoseed_skipped: u64,
     /// The RTMP ingress's counters.
     pub ingress: IngressMetrics,

@@ -122,7 +122,8 @@
 //! - **Seeds** ([`autoseed`]): an autoseed rule's hold on the swarm of a
 //!   listing it names: a swarm streams read, or one added as a stream's
 //!   is. The swarm goes with the last of its seeds and streams; a
-//!   capture's or an ingest session's takes no seed. A rule under a
+//!   capture's or an ingest session's is seeded where it is, and goes with
+//!   its writer. A rule under a
 //!   non-empty salt seeds a transfer of that salt outside the video
 //!   swarms. Bounds: [`AutoseedSettings`].
 //!

@@ -12,14 +12,15 @@
 //! An entry is a slot: it lasts from its insert to its removal. A capture
 //! or an ingest session removes its slot when it ends, whatever streams
 //! read it; an egress slot goes with its last stream. Autoseed holds
-//! seeds on egress slots and slots of its own ([`Registry::seed`]): a
-//! seeded slot is a seed slot, which no stream's release removes. The
-//! end of its last seed ([`Registry::unseed`]) makes it an egress slot
-//! again, which goes at once if no stream holds it. A slot's swarm can
-//! change while the slot lasts (`swarm` is `None` while one is being
-//! added): an ingest session that takes over a slot replaces its swarm
-//! ([`Registry::replace`]), and the slot keeps its streams but not its
-//! seeds. An egress or seed slot whose swarm takes other options
+//! seeds on any slot, and on slots of its own ([`Registry::seed`]): a
+//! seeded egress slot is a seed slot, which no stream's release removes.
+//! The end of its last seed ([`Registry::unseed`]) makes it an egress
+//! slot again, which goes at once if no stream holds it. A capture's or
+//! an ingest session's slot keeps its kind under seeds, which publish it
+//! on their networks too. A slot's swarm can change while the slot lasts
+//! (`swarm` is `None` while one is being added): an ingest session that
+//! takes over a slot replaces its swarm ([`Registry::replace`]), and the
+//! slot keeps its streams and seeds. An egress or seed slot whose swarm takes other options
 //! ([`Registry::reopen`]) keeps its streams and seeds, and its next swarm
 //! is one of those options: a swarm whose add began with others is not
 //! taken ([`Registry::set_added`]). Each swarm a slot holds has its own
@@ -240,9 +241,6 @@ pub(crate) enum Seeded<S> {
     Reopened { slot: u64, old: Option<S> },
     /// New seed slot `.0` holds it: add its swarm.
     Added(u64),
-    /// The swarm is a capture's or an ingest session's: nothing holds the
-    /// seed.
-    Refused,
 }
 
 /// The node's video swarms; see the [module docs](self).
@@ -426,11 +424,11 @@ impl<S: Copy> Registry<S> {
     }
 
     /// Has one more seed, on network `network`, hold the slot of `t` at
-    /// `now`: an egress or seed slot becomes or stays a seed slot, the seed
-    /// names `network`, and the slot's swarm takes the seed's `options`
-    /// when it has others. With no slot, a new seed slot of the swarm `id`
-    /// with `options` holds it. A capture's or an ingest session's slot
-    /// takes no seed.
+    /// `now`, naming `network`: an egress or seed slot becomes or stays a
+    /// seed slot, and its swarm takes the seed's `options` when it has
+    /// others. A capture's or an ingest session's slot keeps its kind and
+    /// its writer's swarm. With no slot, a new seed slot of the swarm `id`
+    /// with `options` holds it.
     pub(crate) fn seed(
         &mut self,
         t: TransferId,
@@ -440,13 +438,13 @@ impl<S: Copy> Registry<S> {
         now: Time,
     ) -> Seeded<S> {
         if let Some(e) = self.swarms.get_mut(&t) {
-            if !matches!(e.kind, SwarmKind::Egress | SwarmKind::Seed) {
-                return Seeded::Refused;
-            }
-            e.kind = SwarmKind::Seed;
             e.seeds += 1;
             name(&mut e.seeded, std::slice::from_ref(&network));
             let slot = e.slot;
+            if !names_networks(e.kind) {
+                return Seeded::Held(slot);
+            }
+            e.kind = SwarmKind::Seed;
             if same_options(&e.options, &options) {
                 return Seeded::Held(slot);
             }
@@ -461,22 +459,21 @@ impl<S: Copy> Registry<S> {
         Seeded::Added(claim.slot)
     }
 
-    /// Ends a seed on network `network` that slot `slot` of `t` holds. The
-    /// slot's last seed makes it an egress slot again, which goes as the
-    /// last stream's [`release`](Self::release) has it. A seed of a
-    /// removed slot, or of a slot an ingest session took over, ended with
-    /// it.
+    /// Ends a seed on network `network` that slot `slot` of `t` holds. A
+    /// seed slot's last seed makes it an egress slot again, which goes as
+    /// the last stream's [`release`](Self::release) has it. A seed of a
+    /// removed slot ended with it.
     pub(crate) fn unseed(&mut self, t: &TransferId, slot: u64, network: &[u8]) -> Released<S> {
         let Some(e) = self
             .swarms
             .get_mut(t)
-            .filter(|e| e.slot == slot && e.kind == SwarmKind::Seed)
+            .filter(|e| e.slot == slot && e.seeds > 0)
         else {
             return Released::default();
         };
         e.seeds = e.seeds.saturating_sub(1);
         let dropped = unname(&mut e.seeded, &[network.to_vec()]);
-        if e.seeds == 0 {
+        if e.seeds == 0 && e.kind == SwarmKind::Seed {
             e.kind = SwarmKind::Egress;
             if e.unheld() && e.swarm.is_some() {
                 return Released {
@@ -491,11 +488,11 @@ impl<S: Copy> Registry<S> {
         }
     }
 
-    /// Whether slot `slot` of `t` is a seed slot.
+    /// Whether seeds hold slot `slot` of `t`.
     pub(crate) fn seeds_slot(&self, t: &TransferId, slot: u64) -> bool {
         self.swarms
             .get(t)
-            .is_some_and(|e| e.slot == slot && e.kind == SwarmKind::Seed)
+            .is_some_and(|e| e.slot == slot && e.seeds > 0)
     }
 
     /// Removes the slot of `t`.
@@ -514,13 +511,13 @@ impl<S: Copy> Registry<S> {
     }
 
     /// Takes the swarm out of the slot of `t` for a swarm of `kind` to
-    /// come, written by its new writer: the slot keeps its streams, drops
-    /// its seeds and the networks its holders named, takes `id`, `options`
-    /// and its writer's networks `networks`, and gets a new generation
-    /// without a swarm until [`set_swarm`](Self::set_swarm). Its streams
-    /// read the next swarm once theirs closes. Returns the slot and the
-    /// swarm taken out, for the caller to remove with its transfer; `None`
-    /// without a slot.
+    /// come, written by its new writer: the slot keeps its streams, its
+    /// seeds and the networks they name, drops the networks its streams
+    /// named, takes `id`, `options` and its writer's networks `networks`,
+    /// and gets a new generation without a swarm until
+    /// [`set_swarm`](Self::set_swarm). Its streams read the next swarm
+    /// once theirs closes. Returns the slot and the swarm taken out, for
+    /// the caller to remove with its transfer; `None` without a slot.
     pub(crate) fn replace(
         &mut self,
         t: &TransferId,
@@ -535,10 +532,8 @@ impl<S: Copy> Registry<S> {
         e.id = id;
         e.options = options;
         e.kind = kind;
-        e.seeds = 0;
         e.own = networks;
         e.streamed.clear();
-        e.seeded.clear();
         e.generation = generation;
         Self::wake(&mut self.woken, e);
         Some((e.slot, old))
@@ -852,7 +847,7 @@ mod tests {
     }
 
     #[test]
-    fn replace_clears_the_seeds() {
+    fn a_writer_taking_over_a_seeded_slot_keeps_its_seeds() {
         let mut r = Registry::default();
         let Seeded::Added(slot) = seed(&mut r, 1, 10) else {
             panic!("no seed slot");
@@ -865,27 +860,49 @@ mod tests {
                 SwarmId::new(&[1; 32]),
                 SwarmOptions::default(),
                 SwarmKind::Ingest,
-                BTreeSet::new(),
+                BTreeSet::from([vec![11]]),
             )
             .unwrap();
         assert_eq!((taken, old), (slot, Some(7)));
         let e = r.get(&tid(1)).unwrap();
-        assert_eq!((e.kind, e.seeds, e.refs), (SwarmKind::Ingest, 0, 1));
+        assert_eq!((e.kind, e.seeds, e.refs), (SwarmKind::Ingest, 1, 1));
+        assert_eq!(e.networks(), BTreeSet::from([vec![10], vec![11]]));
+        assert!(r.seeds_slot(&tid(1), slot));
+        let released = r.unseed(&tid(1), slot, &[10]);
+        assert!(released.gone.is_none());
+        assert_eq!(released.unnamed, vec![vec![10]]);
+        let e = r.get(&tid(1)).unwrap();
+        assert_eq!((e.kind, e.seeds), (SwarmKind::Ingest, 0));
         assert!(!r.seeds_slot(&tid(1), slot));
-        assert!(r.unseed(&tid(1), slot, &[10]).gone.is_none());
-        assert_eq!(r.get(&tid(1)).unwrap().kind, SwarmKind::Ingest);
         assert!(r.release(&tid(1), c, &[]).gone.is_none());
     }
 
     #[test]
-    fn captures_and_ingest_sessions_take_no_seeds() {
+    fn a_seed_holds_a_writers_slot_as_it_is() {
         let mut r = Registry::default();
-        insert(&mut r, 1, Some(7), SwarmKind::Capture);
-        insert(&mut r, 2, Some(8), SwarmKind::Ingest);
-        assert_eq!(seed(&mut r, 1, 10), Seeded::Refused);
-        assert_eq!(seed(&mut r, 2, 10), Seeded::Refused);
-        assert_eq!(r.get(&tid(1)).unwrap().seeds, 0);
-        assert!(r.get(&tid(2)).unwrap().networks().is_empty());
+        let capture = insert(&mut r, 1, Some(7), SwarmKind::Capture);
+        let ingest = insert(&mut r, 2, Some(8), SwarmKind::Ingest);
+        let other = SwarmOptions {
+            chunks_per_signature: 1,
+            ..SwarmOptions::default()
+        };
+        let seeded = r.seed(tid(1), vec![10], SwarmId::new(&[1; 32]), other, Time::EPOCH);
+        assert_eq!(seeded, Seeded::Held(capture.slot));
+        assert_eq!(seed(&mut r, 2, 10), Seeded::Held(ingest.slot));
+        for (n, swarm) in [(1, 7), (2, 8)] {
+            let e = r.get(&tid(n)).unwrap();
+            assert_eq!((e.seeds, e.swarm), (1, Some(swarm)));
+            assert!(e.publishes_on(&[10]));
+        }
+        assert_eq!(r.get(&tid(1)).unwrap().kind, SwarmKind::Capture);
+        assert!(same_options(
+            &r.get(&tid(1)).unwrap().options,
+            &SwarmOptions::default()
+        ));
+        let released = r.unseed(&tid(1), capture.slot, &[10]);
+        assert!(released.gone.is_none());
+        assert_eq!(released.unnamed, vec![vec![10]]);
+        assert_eq!(r.get(&tid(1)).unwrap().kind, SwarmKind::Capture);
     }
 
     fn keys(ks: &[u8]) -> Vec<Vec<u8>> {

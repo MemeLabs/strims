@@ -34,10 +34,12 @@
 //!   ([crate docs](crate#video-swarms)), and the seed holds its slot. A
 //!   swarm the node reads for streams is seeded where it is, and streams
 //!   read a seeded swarm where it is; it goes with the last of its seeds
-//!   and streams. A seed's end withdraws the transfer from its rule's
-//!   network unless a stream or another seed names that network too. A capture's or an ingest session's swarm takes no seed,
-//!   and an ingest session that takes over a seeded swarm's slot ends its
-//!   seeds.
+//!   and streams. A capture's or an ingest session's swarm is seeded
+//!   where it is too: the seed publishes it on the rule's network, and
+//!   it goes with its writer. An ingest session that takes over a seeded
+//!   swarm's slot keeps its seeds, which publish the session's swarm. A
+//!   seed's end withdraws the transfer from its rule's network unless its
+//!   writer, a stream or another seed names that network too.
 //! - Under another salt, autoseed seeds only a transfer it added: while
 //!   another component has a transfer of the swarm id under the salt, the
 //!   rule seeds nothing ([`Metrics::autoseed_skipped`](crate::Metrics::autoseed_skipped)).
@@ -242,8 +244,7 @@ enum Hold {
     Slot(u64),
     /// A hold on the salted transfer that add `.0` made.
     Salted(u64),
-    /// Nothing: the swarm is a capture's or an ingest session's, or the
-    /// salted transfer another component's.
+    /// Nothing: the salted transfer is another component's.
     Skipped,
 }
 
@@ -517,7 +518,6 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                     self.spawn(add.boxed_local());
                     Hold::Slot(slot)
                 }
-                Seeded::Refused => Hold::Skipped,
             };
         }
         let joined = {

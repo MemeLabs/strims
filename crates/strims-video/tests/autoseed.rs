@@ -641,19 +641,49 @@ fn deleting_the_network_stops_its_seeds() {
     });
 }
 
-/// A capture's swarm takes no seed, and the rule seeds nothing while the
-/// capture runs.
+/// A rule naming a capture's swarm seeds it where it is: the capture's
+/// swarm goes on the rule's network too, and leaves it as the rule goes,
+/// staying on the capture's own.
 #[test]
-fn a_rule_naming_a_capture_seeds_nothing() {
+fn a_rule_naming_a_captures_swarm_publishes_it_on_the_rules_network() {
     run(async {
         let p = pair().await;
+        let (n11, _) = owned_network(&p.a, &[], 11).await;
         p.ua.enable(true).await;
         let (_, swarm) = p.listed_capture("live").await;
-        wait_for(10, "the owner's listing", || !media(&p.a, 10).is_empty()).await;
-        p.ua.create(rule(&p.key, &swarm, b"")).await.unwrap();
-        wait_for(10, "the skip", || p.va.metrics().autoseed_skipped == 1).await;
+        let uri = video_swarm(&p.va, &swarm).unwrap().swarm_uri;
+        p.a.directory
+            .publish(
+                &n11.public,
+                Listing {
+                    content: Some(Content::Media(Media {
+                        mime_type: strims_video::units::MIME_TYPE.into(),
+                        swarm_uri: uri,
+                    })),
+                },
+            )
+            .await
+            .unwrap();
+        wait_for(10, "the listing on 11", || !media(&p.a, 11).is_empty()).await;
+        let t = TransferId::new(&swarm, b"");
+        assert!(!p.a.transfers.is_published(t, p.a.net(&n11.public)));
+        let r = p.ua.create(rule(&n11.public, &swarm, b"")).await.unwrap();
+        wait_for(10, "the seed", || {
+            p.a.transfers.is_published(t, p.a.net(&n11.public))
+        })
+        .await;
         let v = video_swarm(&p.va, &swarm).unwrap();
-        assert_eq!((v.kind, v.seeds), (SwarmKind::Capture, 0));
+        assert_eq!((v.kind, v.seeds), (SwarmKind::Capture, 1));
+        assert_eq!(p.va.metrics().autoseed_skipped, 0);
+
+        p.ua.delete(r.id).await;
+        wait_for(10, "the seed to end", || {
+            video_swarm(&p.va, &swarm).is_some_and(|v| v.seeds == 0)
+        })
+        .await;
+        assert!(!p.a.transfers.is_published(t, p.a.net(&n11.public)));
+        assert!(p.a.transfers.is_published(t, p.a.net(&p.key)));
+        assert_eq!(video_swarm(&p.va, &swarm).unwrap().kind, SwarmKind::Capture);
     });
 }
 
