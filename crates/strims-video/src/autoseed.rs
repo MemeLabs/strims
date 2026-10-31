@@ -21,7 +21,9 @@
 //! within the egress bounds ([`EgressSettings`]); the salt takes no part.
 //! A rule that matches listings seeds the swarm with the options of the
 //! one of lowest listing id, and a live window of
-//! [`EgressSettings::window_bytes`]. At most
+//! [`EgressSettings::window_bytes`]: a swarm the node adds or seeds with
+//! other options is reopened with those, and so is a seeded swarm when its
+//! listing's options change ([`egress`](crate::egress#options)). At most
 //! [`AutoseedSettings::max_seeds`] rules seed at once, the lowest rule
 //! ids first.
 //!
@@ -70,7 +72,7 @@ use strims_transfer::TransferId;
 use crate::config::{AutoseedSettings, EgressSettings, MAX_NETWORK_KEY_BYTES};
 use crate::control::Shared;
 use crate::egress::check_stream;
-use crate::registry::Seeded;
+use crate::registry::{Seeded, same_options};
 use crate::{VideoControl, VideoError, VideoHost};
 
 // --- planning -----------------------------------------------------------------
@@ -283,6 +285,13 @@ pub(crate) struct Autoseed<S> {
     reconcile: bool,
 }
 
+impl<S> Autoseed<S> {
+    /// The id and key of each network whose directory runs.
+    pub(crate) fn directory_networks(&self) -> impl Iterator<Item = (u64, &Vec<u8>)> {
+        self.networks.iter().map(|(id, key)| (*id, key))
+    }
+}
+
 impl<S> Default for Autoseed<S> {
     fn default() -> Self {
         Autoseed {
@@ -420,6 +429,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             match wants.get(&rule) {
                 Some(w) if w.same_seed(&seed.want) && self.seed_held(&seed) => {
                     let want = w.clone();
+                    self.follow_listing(&want);
                     seeds.insert(rule, Seed { want, ..seed });
                     continue;
                 }
@@ -443,6 +453,22 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         self.autoseed.borrow_mut().seeds = seeds;
     }
 
+    /// Reopens the slot a held seed of `w` holds with the options of `w`'s
+    /// listing, when it has others.
+    fn follow_listing(self: &Rc<Self>, w: &Want) {
+        let t = w.transfer_id();
+        let now = self.timer.now();
+        let reopened = self.with_swarms(|r| {
+            r.get(&t)
+                .filter(|e| !same_options(&e.options, &w.options))?;
+            r.reopen(&t, w.options.clone(), now)
+        });
+        if let Some((slot, old)) = reopened {
+            tracing::debug!(swarm = %w.swarm_id, "a seed reopens its swarm with its listing's options");
+            self.reopen_swarm(t, slot, old, w.swarm_id.clone(), w.options.clone());
+        }
+    }
+
     /// Whether `seed` still holds what it seeds.
     fn seed_held(&self, seed: &Seed) -> bool {
         let t = seed.want.transfer_id();
@@ -462,17 +488,23 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
     fn start_seed(self: &Rc<Self>, w: &Want) -> Hold {
         let t = w.transfer_id();
         if w.salt.is_empty() {
+            let now = self.timer.now();
             let seeded = self.with_swarms(|r| {
                 r.seed(
                     t,
                     w.network_key.clone(),
                     w.swarm_id.clone(),
                     w.options.clone(),
+                    now,
                 )
             });
             return match seeded {
                 Seeded::Held(slot) => {
                     self.publish_joined(&t);
+                    Hold::Slot(slot)
+                }
+                Seeded::Reopened { slot, old } => {
+                    self.reopen_swarm(t, slot, old, w.swarm_id.clone(), w.options.clone());
                     Hold::Slot(slot)
                 }
                 Seeded::Added(slot) => {

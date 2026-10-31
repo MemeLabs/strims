@@ -248,7 +248,12 @@ const CHUNK: usize = 4096;
 /// pictures, keyframes of 20 KiB and pictures of 2 KiB, and AAC frames
 /// between, signed early every 25 units. Its records with their offsets.
 fn units_stream(pictures: i64) -> (Vec<u8>, Vec<(u64, Vec<u8>)>) {
-    let mut w = UnitWriter::new(CHUNK).unwrap();
+    units_stream_in(pictures, CHUNK)
+}
+
+/// [`units_stream`] in frames of `frame` bytes.
+fn units_stream_in(pictures: i64, frame: usize) -> (Vec<u8>, Vec<(u64, Vec<u8>)>) {
+    let mut w = UnitWriter::new(frame).unwrap();
     w.set_config(&video(1)).unwrap();
     w.set_config(&audio(2)).unwrap();
     let mut stream = Vec::new();
@@ -271,14 +276,14 @@ fn units_stream(pictures: i64) -> (Vec<u8>, Vec<(u64, Vec<u8>)>) {
         if pushed % 25 == 0 {
             w.end_frame();
             stream.extend(w.take_output());
-            let unit = 8 * CHUNK;
+            let unit = 8 * frame;
             let next = stream.len().div_ceil(unit) * unit;
             stream.resize(next, 0);
             w.continue_at(next as u64).unwrap();
         }
     }
     stream.extend(w.take_output());
-    let mut d = ChunkedRecordDecoder::new(CHUNK, units::MAX_RECORD_LEN).unwrap();
+    let mut d = ChunkedRecordDecoder::new(frame, units::MAX_RECORD_LEN).unwrap();
     let mut records = Vec::new();
     let mut at = 0;
     loop {
@@ -842,17 +847,22 @@ fn a_replaced_reader_joins_the_new_stream_again() {
     .unwrap();
     let (out, _) = collect_chunked(&mut r, 32 * 1024);
     assert_eq!(out, records_from(&old, 0));
-    r.replace(Script::default().reads(&b, join, b.len(), 4096).rewound(
-        Some(resume),
-        Script::default().reads(&b, resume as usize, b.len(), 4096),
-    ));
+    r.replace(
+        Script::default().reads(&b, join, b.len(), 4096).rewound(
+            Some(resume),
+            Script::default().reads(&b, resume as usize, b.len(), 4096),
+        ),
+        CHUNK,
+    )
+    .unwrap();
     let (out, _) = collect_chunked(&mut r, 32 * 1024);
     let mut expected = vec![Out::Discontinuity];
     expected.extend(records_from(&new, k));
     assert_eq!(out, expected);
     assert_eq!(r.metrics().rewinds, 1);
     // A replaced reader with a spare races its join again.
-    r.replace(Script::default().reads(&b, join, b.len(), 4096));
+    r.replace(Script::default().reads(&b, join, b.len(), 4096), CHUNK)
+        .unwrap();
     r.set_spare(Script::default().rewound(
         Some(resume),
         Script::default().reads(&b, resume as usize, b.len(), 4096),
@@ -860,6 +870,32 @@ fn a_replaced_reader_joins_the_new_stream_again() {
     let (out, _) = collect_chunked(&mut r, 32 * 1024);
     assert_eq!(out, expected);
     assert_eq!(r.metrics().rewinds, 2);
+}
+
+/// A swarm reopened with another chunk size is read in frames of it.
+#[test]
+fn a_replaced_reader_reads_frames_of_its_new_swarms_chunk_size() {
+    let (a, old) = units_stream(40);
+    let (b, new) = units_stream_in(40, 2 * CHUNK);
+    let mut r = ChunkedReader::new(
+        Script::default().reads(&a, 0, a.len(), 4096),
+        CHUNK,
+        64 * 1024,
+    )
+    .unwrap();
+    let (out, _) = collect_chunked(&mut r, 32 * 1024);
+    assert_eq!(out, records_from(&old, 0));
+    r.replace(Script::default().reads(&b, 0, b.len(), 4096), 2 * CHUNK)
+        .unwrap();
+    let (out, _) = collect_chunked(&mut r, 32 * 1024);
+    let mut expected = vec![Out::Discontinuity];
+    expected.extend(records_from(&new, 0));
+    assert_eq!(out, expected);
+    assert_eq!(r.metrics().corrupt_frames, 0);
+    assert!(
+        r.replace(Script::default().reads(&b, 0, b.len(), 4096), 2)
+            .is_err()
+    );
 }
 
 #[test]

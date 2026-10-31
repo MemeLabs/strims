@@ -23,7 +23,8 @@ use strims_dao::schema::network::Networks;
 use strims_kv::MemoryKv;
 use strims_ppspp::{SwarmId, SwarmOptions, Uri, WriterOptions};
 use strims_proto::network::v1::Network;
-use strims_proto::network::v1::directory::ListingSnippet;
+use strims_proto::network::v1::directory::listing::{Content, Media};
+use strims_proto::network::v1::directory::{Listing, ListingSnippet};
 use strims_proto::service::CallError;
 use strims_proto::video::v1::capture_config::Codec;
 use strims_proto::video::v1::egress_open_stream_response::Body;
@@ -37,7 +38,8 @@ use strims_video::hls::HlsRoutes;
 use strims_video::synth::script::avcc;
 use strims_video::units::{self, UnitReader, UnitSigning};
 use strims_video::{
-    Config, EgressSettings, NoVideoHost, SwarmKind, VideoControl, bind_frontend, capture_options,
+    Config, EgressSettings, NoVideoHost, SwarmKind, VideoControl, VideoError, bind_frontend,
+    capture_options,
 };
 
 type Control = VideoControl<MemoryKv, FakeHost, NoVideoHost, TokioTimer>;
@@ -465,6 +467,131 @@ fn a_closed_stream_withdraws_its_swarm_from_the_networks_only_it_named() {
             video.video_swarms()[0].network_keys,
             std::slice::from_ref(&n10.public)
         );
+    });
+}
+
+/// The URI of `p`'s swarm with `options`.
+fn uri_with(p: &Publisher, options: &SwarmOptions) -> String {
+    Uri::new(p.id.clone(), options.uri_options()).to_string()
+}
+
+/// [`capture_options`] with single-chunk integrity units.
+fn single_chunk_units() -> SwarmOptions {
+    SwarmOptions {
+        chunks_per_signature: 1,
+        ..capture_options()
+    }
+}
+
+/// The chunks per signature of the node's swarm of `p`.
+fn chunks_per_signature(video: &Control, p: &Publisher) -> usize {
+    let s = video
+        .video_swarms()
+        .into_iter()
+        .find(|s| s.transfer_id == p.transfer_id())
+        .unwrap();
+    Uri::parse(&s.swarm_uri)
+        .unwrap()
+        .options
+        .swarm_options()
+        .chunks_per_signature
+}
+
+/// A media listing of `uri` on network 10, published by `a`, once `b`'s
+/// view holds it.
+async fn list(a: &Node, b: &Node, key: &[u8], uri: &str) {
+    let listing = Listing {
+        content: Some(Content::Media(Media {
+            mime_type: units::MIME_TYPE.into(),
+            swarm_uri: uri.into(),
+        })),
+    };
+    a.directory.publish(key, listing).await.unwrap();
+    wait_for(10, "the listing", || {
+        b.directory
+            .listings(10)
+            .iter()
+            .any(|l| matches!(&l.listing.content, Some(Content::Media(m)) if m.swarm_uri == uri))
+    })
+    .await;
+}
+
+/// A swarm's listing names the options it is read with: a stream of other
+/// options is refused, and one of the listed options reopens the swarm
+/// the node reads with others, the open streams reading on there after a
+/// discontinuity.
+#[test]
+fn a_stream_of_its_listings_options_reopens_the_nodes_swarm() {
+    run(async {
+        let world = World::default();
+        let a = node_in(&world, 1).await;
+        let b = node_in(&world, 2).await;
+        let (net, _pipes) = owned_network(&a, &[&b], 10).await;
+        let mut p = Publisher::new(&a, 7, capture_options()).await;
+        let video = start(&b, Config::default());
+        let (e1, e2) = (egress(&video), egress(&video));
+        let keys = [net.public.clone()];
+        let (mut s1, _) = open(&e1, &p.uri, &keys).await.unwrap();
+        let r = records(0, 3);
+        p.record(&r[0]).await;
+        assert_eq!(read(&mut s1, 1).await, unflagged(&r[..1]));
+        assert_eq!(chunks_per_signature(&video, &p), 8);
+
+        let listed = uri_with(&p, &single_chunk_units());
+        list(&a, &b, &net.public, &listed).await;
+        assert_eq!(
+            open(&e2, &p.uri, &keys).await.unwrap_err(),
+            VideoError::ListingOptions.to_string()
+        );
+        let (mut s2, _) = open(&e2, &listed, &keys).await.unwrap();
+        assert_eq!(chunks_per_signature(&video, &p), 1);
+        let v = video.video_swarms().remove(0);
+        assert_eq!((v.kind, v.streams, v.added), (SwarmKind::Egress, 2, true));
+        assert_eq!(b.host.swarms_of(&p.id), (0, 1));
+        assert!(b.transfers.list().contains(&p.transfer_id()));
+
+        p.record(&r[1]).await;
+        let after = read(&mut s1, 1).await;
+        assert!(after[0].1, "a discontinuity comes first");
+        assert_eq!(read(&mut s2, 1).await, unflagged(&r[..1]));
+        // The slot reads its listing's options: a stream of the old ones
+        // is still refused, whoever holds the swarm.
+        assert_eq!(
+            open(&e2, &p.uri, &keys).await.unwrap_err(),
+            VideoError::ListingOptions.to_string()
+        );
+    });
+}
+
+/// A swarm no listing names takes the other options of a stream's URI at
+/// most once every `unlisted_reopen_interval`.
+#[test]
+fn a_swarm_no_listing_names_takes_other_options_at_most_once_an_interval() {
+    run(async {
+        let world = World::default();
+        let a = node_in(&world, 1).await;
+        let b = node_in(&world, 2).await;
+        let (net, _pipes) = owned_network(&a, &[&b], 10).await;
+        let p = Publisher::new(&a, 7, capture_options()).await;
+        let video = start(&b, Config::default());
+        let (e1, e2, e3) = (egress(&video), egress(&video), egress(&video));
+        let keys = [net.public.clone()];
+        let other = uri_with(&p, &single_chunk_units());
+        let (_s1, _) = open(&e1, &p.uri, &keys).await.unwrap();
+        let (_s2, _) = open(&e2, &other, &keys).await.unwrap();
+        assert_eq!(chunks_per_signature(&video, &p), 1);
+        assert_eq!(
+            open(&e3, &p.uri, &keys).await.unwrap_err(),
+            VideoError::ReopenTooSoon.to_string()
+        );
+        assert_eq!(chunks_per_signature(&video, &p), 1);
+
+        let interval = EgressSettings::default().unlisted_reopen_interval;
+        tokio::time::sleep(interval.to_std().unwrap()).await;
+        let (_s3, _) = open(&e3, &p.uri, &keys).await.unwrap();
+        assert_eq!(chunks_per_signature(&video, &p), 8);
+        settle().await;
+        assert_eq!(b.host.swarms_of(&p.id), (0, 1));
     });
 }
 

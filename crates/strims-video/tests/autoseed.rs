@@ -297,6 +297,72 @@ fn listing(swarm: &SwarmId, mime: &str) -> Listing {
     }
 }
 
+/// The chunks per signature of `video`'s swarm of `swarm`.
+fn chunks_per_signature(video: &Control, swarm: &SwarmId) -> usize {
+    let s = video_swarm(video, swarm).unwrap();
+    Uri::parse(&s.swarm_uri)
+        .unwrap()
+        .options
+        .swarm_options()
+        .chunks_per_signature
+}
+
+/// A seed takes its listing's options: a listing whose writer re-created
+/// the swarm with others reopens the swarm a stream still holds with them.
+#[test]
+fn a_seed_reopens_the_swarm_with_its_listings_new_options() {
+    run(async {
+        let p = pair().await;
+        let swarm = SwarmId::new(&[9; 32]);
+        p.ub.enable(true).await;
+        p.ub.create(rule(&p.key, &swarm, b"")).await.unwrap();
+        let d = &p.a.directory;
+        let first = listing(&swarm, strims_video::units::MIME_TYPE);
+        let id = d.publish(&p.key, first.clone()).await.unwrap();
+        p.wait_seeding(&swarm).await;
+        assert_eq!(chunks_per_signature(&p.vb, &swarm), 8);
+        let Some(Content::Media(m)) = &first.content else {
+            unreachable!();
+        };
+        let mut s =
+            p.ub.egress
+                .open_stream(&EgressOpenStreamRequest {
+                    swarm_uri: m.swarm_uri.clone(),
+                    network_keys: vec![p.key.clone()],
+                    mime_type: m.mime_type.clone(),
+                })
+                .await
+                .unwrap();
+        let Body::Open(_) = next(&mut s).await else {
+            panic!("not open first");
+        };
+
+        d.unpublish(&p.key, id).await.unwrap();
+        wait_for(10, "the seed to end", || {
+            video_swarm(&p.vb, &swarm).is_some_and(|v| v.kind == SwarmKind::Egress)
+        })
+        .await;
+        let options = strims_ppspp::SwarmOptions {
+            chunks_per_signature: 1,
+            ..strims_video::capture_options()
+        };
+        let uri = Uri::new(swarm.clone(), options.uri_options()).to_string();
+        let second = Listing {
+            content: Some(Content::Media(Media {
+                mime_type: strims_video::units::MIME_TYPE.into(),
+                swarm_uri: uri,
+            })),
+        };
+        d.publish(&p.key, second).await.unwrap();
+        p.wait_seeding(&swarm).await;
+        assert_eq!(chunks_per_signature(&p.vb, &swarm), 1);
+        let v = video_swarm(&p.vb, &swarm).unwrap();
+        assert_eq!((v.seeds, v.streams), (1, 1));
+        settle().await;
+        assert_eq!(p.b.host.swarms_of(&swarm), (0, 1));
+    });
+}
+
 /// A rule seeds its swarm's listing as it appears, and stops as it goes.
 #[test]
 fn a_seed_follows_the_listing_of_its_swarm() {

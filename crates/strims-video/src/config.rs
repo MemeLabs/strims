@@ -208,6 +208,13 @@ pub struct EgressSettings {
     /// as the player's join has settled, so the rewind still plays first
     /// while it lands within the target lag less the join's settle.
     pub rewind_grace: Duration,
+    /// How often a swarm no listing names takes the other options of a
+    /// stream's URI at most ([`egress`](crate::egress#options)). Its writer
+    /// changes its options only as it starts a new session, which a
+    /// stream to follow doesn't do twice a minute, while every change
+    /// moves the swarm's other streams to a swarm of the new options: a
+    /// caller naming other options shifts them at most this often.
+    pub unlisted_reopen_interval: Duration,
 }
 
 impl Default for EgressSettings {
@@ -227,6 +234,7 @@ impl Default for EgressSettings {
             read_buffer_bytes: 64 * 1024,
             rewind_timeout: Duration::from_secs(10),
             rewind_grace: Duration::from_millis(700),
+            unlisted_reopen_interval: Duration::from_secs(60),
         }
     }
 }

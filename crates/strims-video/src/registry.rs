@@ -19,9 +19,12 @@
 //! change while the slot lasts (`swarm` is `None` while one is being
 //! added): an ingest session that takes over a slot replaces its swarm
 //! ([`Registry::replace`]), and the slot keeps its streams but not its
-//! seeds. Each swarm a slot holds has its own generation. Slots and
-//! generations take their ids from one counter, starting at 1, so they
-//! never repeat.
+//! seeds. An egress or seed slot whose swarm takes other options
+//! ([`Registry::reopen`]) keeps its streams and seeds, and its next swarm
+//! is one of those options: a swarm whose add began with others is not
+//! taken ([`Registry::set_added`]). Each swarm a slot holds has its own
+//! generation. Slots and generations take their ids from one counter,
+//! starting at 1, so they never repeat.
 //!
 //! A stream holds a [`Claim`]: its slot, and the generation of the swarm
 //! it reads. When that swarm closes, the stream reads the slot's newer
@@ -39,6 +42,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::task::{Context, Poll, Waker};
 
+use strims_base::time::Time;
 use strims_ppspp::{SwarmId, SwarmOptions, Uri};
 use strims_transfer::TransferId;
 
@@ -165,9 +169,17 @@ pub(crate) struct LocalSwarm<S> {
     seeded: BTreeMap<Vec<u8>, usize>,
     pub(crate) slot: u64,
     pub(crate) generation: u64,
+    /// When its swarm last took other options ([`Registry::reopen`]).
+    pub(crate) reopened: Option<Time>,
     /// Tasks waiting for the slot's swarm to change. Bound: one per task,
     /// and the tasks are streams.
     waiters: Vec<Waker>,
+}
+
+/// Whether swarms of options `a` and `b` are one swarm: their URIs name
+/// the same options. The live window takes no part.
+pub(crate) fn same_options(a: &SwarmOptions, b: &SwarmOptions) -> bool {
+    a.uri_options() == b.uri_options()
 }
 
 impl<S> LocalSwarm<S> {
@@ -218,9 +230,14 @@ pub(crate) enum Added {
 
 /// What became of a seed ([`Registry::seed`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Seeded {
+pub(crate) enum Seeded<S> {
     /// The slot there was, slot `.0`, holds it.
     Held(u64),
+    /// The slot there was, `slot`, holds it, and its swarm takes the
+    /// seed's options ([`Registry::reopen`]): the swarm of other options
+    /// it held, `old`, is the caller's to remove with its transfer, and
+    /// the swarm of the seed's options its to add.
+    Reopened { slot: u64, old: Option<S> },
     /// New seed slot `.0` holds it: add its swarm.
     Added(u64),
     /// The swarm is a capture's or an ingest session's: nothing holds the
@@ -343,6 +360,7 @@ impl<S: Copy> Registry<S> {
                 seeded: BTreeMap::new(),
                 slot,
                 generation,
+                reopened: None,
                 waiters: Vec::new(),
             },
         );
@@ -407,18 +425,20 @@ impl<S: Copy> Registry<S> {
         }
     }
 
-    /// Has one more seed, on network `network`, hold the slot of `t`: an
-    /// egress or seed slot becomes or stays a seed slot, and the seed names
-    /// `network`. With no slot, a new seed slot of the swarm `id` with
-    /// `options` holds it. A capture's or an ingest session's slot takes
-    /// no seed.
+    /// Has one more seed, on network `network`, hold the slot of `t` at
+    /// `now`: an egress or seed slot becomes or stays a seed slot, the seed
+    /// names `network`, and the slot's swarm takes the seed's `options`
+    /// when it has others. With no slot, a new seed slot of the swarm `id`
+    /// with `options` holds it. A capture's or an ingest session's slot
+    /// takes no seed.
     pub(crate) fn seed(
         &mut self,
         t: TransferId,
         network: Vec<u8>,
         id: SwarmId,
         options: SwarmOptions,
-    ) -> Seeded {
+        now: Time,
+    ) -> Seeded<S> {
         if let Some(e) = self.swarms.get_mut(&t) {
             if !matches!(e.kind, SwarmKind::Egress | SwarmKind::Seed) {
                 return Seeded::Refused;
@@ -426,7 +446,12 @@ impl<S: Copy> Registry<S> {
             e.kind = SwarmKind::Seed;
             e.seeds += 1;
             name(&mut e.seeded, std::slice::from_ref(&network));
-            return Seeded::Held(e.slot);
+            let slot = e.slot;
+            if same_options(&e.options, &options) {
+                return Seeded::Held(slot);
+            }
+            let old = self.reopen(&t, options, now).and_then(|(_, old)| old);
+            return Seeded::Reopened { slot, old };
         }
         let claim = self.insert(t, None, id, options, SwarmKind::Seed, BTreeSet::new(), 0);
         if let Some(e) = self.swarms.get_mut(&t) {
@@ -519,6 +544,50 @@ impl<S: Copy> Registry<S> {
         Some((e.slot, old))
     }
 
+    /// Takes the swarm out of the egress or seed slot of `t` at `now` for a
+    /// swarm of `options` to come: the slot keeps its kind, streams, seeds
+    /// and the networks they name, takes `options`, and gets a new
+    /// generation without a swarm until
+    /// [`set_added`](Self::set_added). Its streams read the next swarm
+    /// once theirs closes. Returns the slot and the swarm taken out, for
+    /// the caller to remove with its transfer before it adds the next;
+    /// `None` without an egress or seed slot.
+    pub(crate) fn reopen(
+        &mut self,
+        t: &TransferId,
+        options: SwarmOptions,
+        now: Time,
+    ) -> Option<(u64, Option<S>)> {
+        let generation = self.next_id();
+        let e = self.swarms.get_mut(t).filter(|e| names_networks(e.kind))?;
+        let old = e.swarm.take();
+        e.options = options;
+        e.generation = generation;
+        e.reopened = Some(now);
+        Self::wake(&mut self.woken, e);
+        Some((e.slot, old))
+    }
+
+    /// [`set_swarm`](Self::set_swarm) of a swarm added with `options`: the
+    /// slot doesn't take it once it has other options, which a
+    /// [`reopen`](Self::reopen) during the add gave it.
+    pub(crate) fn set_added(
+        &mut self,
+        t: &TransferId,
+        slot: u64,
+        options: &SwarmOptions,
+        swarm: S,
+    ) -> Added {
+        if self
+            .swarms
+            .get(t)
+            .is_some_and(|e| !same_options(&e.options, options))
+        {
+            return Added::Unwanted;
+        }
+        self.set_swarm(t, slot, swarm)
+    }
+
     /// Sets the swarm of slot `slot` of `t`, which has none, as a new
     /// generation; an egress slot no stream or seed holds goes instead.
     pub(crate) fn set_swarm(&mut self, t: &TransferId, slot: u64, swarm: S) -> Added {
@@ -540,7 +609,8 @@ impl<S: Copy> Registry<S> {
     }
 
     /// The swarm of `t` for a stream with `claim`, reading on the networks
-    /// `networks`, to read: one of another generation than the claim's.
+    /// `networks`, to read, with its chunk size: one of another generation
+    /// than the claim's.
     /// Waits while the slot has none. A stream whose slot went takes a
     /// claim on the slot that replaced it, as [`claim`](Self::claim) has
     /// it. `None` when there is no slot, or the swarm is the one the claim
@@ -551,7 +621,7 @@ impl<S: Copy> Registry<S> {
         claim: &mut Claim,
         networks: &[Vec<u8>],
         cx: &Context<'_>,
-    ) -> Poll<Option<S>> {
+    ) -> Poll<Option<(S, usize)>> {
         let Some(e) = self.swarms.get_mut(t) else {
             return Poll::Ready(None);
         };
@@ -573,7 +643,7 @@ impl<S: Copy> Registry<S> {
         match e.swarm {
             Some(s) => {
                 claim.generation = e.generation;
-                Poll::Ready(Some(s))
+                Poll::Ready(Some((s, e.options.chunk_size)))
             }
             None => {
                 e.wait(cx);
@@ -607,8 +677,19 @@ mod tests {
         )
     }
 
+    /// The swarm a stream with `c` reads next, without its chunk size.
     fn poll(r: &mut Registry<u32>, n: u8, c: &mut Claim) -> Poll<Option<u32>> {
-        r.poll_swarm(&tid(n), c, &[], &Context::from_waker(Waker::noop()))
+        poll_on(r, n, c, &[])
+    }
+
+    fn poll_on(
+        r: &mut Registry<u32>,
+        n: u8,
+        c: &mut Claim,
+        networks: &[Vec<u8>],
+    ) -> Poll<Option<u32>> {
+        r.poll_swarm(&tid(n), c, networks, &Context::from_waker(Waker::noop()))
+            .map(|s| s.map(|(swarm, _)| swarm))
     }
 
     #[test]
@@ -706,12 +787,13 @@ mod tests {
         );
     }
 
-    fn seed(r: &mut Registry<u32>, n: u8, network: u8) -> Seeded {
+    fn seed(r: &mut Registry<u32>, n: u8, network: u8) -> Seeded<u32> {
         r.seed(
             tid(n),
             vec![network],
             SwarmId::new(&[n; 32]),
             SwarmOptions::default(),
+            Time::EPOCH,
         )
     }
 
@@ -865,13 +947,13 @@ mod tests {
         let t = tid(1);
         let mut c = insert(&mut r, 1, Some(7), SwarmKind::Capture);
         assert_eq!(
-            r.poll_swarm(&t, &mut c, &keys(&[2]), &Context::from_waker(Waker::noop())),
+            poll_on(&mut r, 1, &mut c, &keys(&[2])),
             Poll::Ready(Some(7))
         );
         r.remove(&t);
         insert(&mut r, 1, Some(9), SwarmKind::Egress);
         assert_eq!(
-            r.poll_swarm(&t, &mut c, &keys(&[2]), &Context::from_waker(Waker::noop())),
+            poll_on(&mut r, 1, &mut c, &keys(&[2])),
             Poll::Ready(Some(9))
         );
         assert!(r.get(&t).unwrap().publishes_on(&[2]));
@@ -896,6 +978,57 @@ mod tests {
         assert_eq!(r.get(&t).unwrap().networks(), BTreeSet::from([vec![1]]));
         let released = r.release(&t, c, &keys(&[2]));
         assert!(released.gone.is_none() && released.unnamed.is_empty());
+    }
+
+    fn options(chunks_per_signature: usize) -> SwarmOptions {
+        SwarmOptions {
+            chunks_per_signature,
+            ..SwarmOptions::default()
+        }
+    }
+
+    #[test]
+    fn a_reopened_slot_keeps_its_holders_and_reads_a_swarm_of_its_new_options() {
+        let mut r = Registry::default();
+        let t = tid(1);
+        let mut c = insert(&mut r, 1, Some(7), SwarmKind::Egress);
+        assert_eq!(poll(&mut r, 1, &mut c), Poll::Ready(Some(7)));
+        assert_eq!(seed(&mut r, 1, 3), Seeded::Held(c.slot));
+        let now = Time::EPOCH + strims_base::time::Duration::from_secs(5);
+        let (slot, old) = r.reopen(&t, options(1), now).unwrap();
+        assert_eq!((slot, old), (c.slot, Some(7)));
+        let e = r.get(&t).unwrap();
+        assert_eq!((e.kind, e.refs, e.seeds), (SwarmKind::Seed, 1, 1));
+        assert_eq!(e.reopened, Some(now));
+        assert!(e.publishes_on(&[3]));
+        assert_eq!(poll(&mut r, 1, &mut c), Poll::Pending);
+        // An add begun with the old options doesn't land.
+        assert_eq!(r.set_added(&t, slot, &options(8), 8), Added::Unwanted);
+        assert_eq!(r.set_added(&t, slot, &options(1), 9), Added::Kept);
+        assert_eq!(
+            r.poll_swarm(&t, &mut c, &[], &Context::from_waker(Waker::noop())),
+            Poll::Ready(Some((9, SwarmOptions::default().chunk_size)))
+        );
+    }
+
+    #[test]
+    fn a_seed_of_other_options_reopens_the_slot() {
+        let mut r = Registry::default();
+        let t = tid(1);
+        let c = insert(&mut r, 1, Some(7), SwarmKind::Egress);
+        let seeded = r.seed(t, vec![3], SwarmId::new(&[1; 32]), options(1), Time::EPOCH);
+        assert_eq!(
+            seeded,
+            Seeded::Reopened {
+                slot: c.slot,
+                old: Some(7)
+            }
+        );
+        assert!(same_options(&r.get(&t).unwrap().options, &options(1)));
+        // Writers' slots are read as they are.
+        r.remove(&t);
+        insert(&mut r, 1, Some(7), SwarmKind::Ingest);
+        assert!(r.reopen(&t, options(1), Time::EPOCH).is_none());
     }
 
     #[test]

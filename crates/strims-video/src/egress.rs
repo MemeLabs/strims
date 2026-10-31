@@ -17,6 +17,27 @@
 //!   The last stream of it to close removes the transfer, then the swarm,
 //!   unless autoseed seeds it ([`autoseed`](crate::autoseed)).
 //!
+//! # Options
+//!
+//! A swarm's listing names the options its writer publishes it with, so
+//! the node reads a swarm with its listing's options: those of the media
+//! listing of the swarm id in the view of the first of the stream's
+//! networks that lists it, or else of the network of lowest id that does.
+//! A stream whose URI names other options than that listing's is refused
+//! ([`VideoError::ListingOptions`]), unless the node's swarm is a
+//! capture's or an ingest session's: those are read where they are,
+//! whatever options the URI names.
+//!
+//! A stream of the listed options, of a swarm the node adds or seeds with
+//! others, reopens it with the listed ones: the swarm of the old options
+//! and its transfer go, a swarm of the new options is added in their
+//! place, and the streams and seeds holding it read on there after a
+//! discontinuity. A swarm no listing names reopens so for a stream of
+//! other options at most once every
+//! [`EgressSettings::unlisted_reopen_interval`]; a stream that comes
+//! sooner is refused ([`VideoError::ReopenTooSoon`]). Seeds follow their
+//! own listing's options ([`autoseed`](crate::autoseed)).
+//!
 //! Its URI is at most [`EgressSettings::max_uri_bytes`] and its options
 //! within the settings' bounds: the chunk size, chunks per signature (a
 //! power of two that fits the window, under a Merkle tree) and stream
@@ -72,13 +93,16 @@ use strims_kv::Kv;
 use strims_ppspp::codec::ProtocolOptionType;
 use strims_ppspp::integrity::{LiveSignatureAlgorithm, ProtectionMethod};
 use strims_ppspp::{SwarmId, SwarmOptions, Uri};
+use strims_proto::network::v1::directory::listing::{Content, Media};
+use strims_proto::network::v1::directory::listing_query::Query;
+use strims_proto::network::v1::directory::{Listing, ListingQuery};
 use strims_rpc::Timer;
 use strims_transfer::{ReadFailure, SwarmHost, SwarmRead, TransferId};
 
 use crate::config::EgressSettings;
 use crate::control::{Shared, Swarm};
 use crate::media::mime_essence;
-use crate::registry::{Added, Claim, SwarmKind};
+use crate::registry::{Added, Claim, SwarmKind, same_options};
 use crate::units::{self, record::GOP_HEAD_LEN};
 use crate::{VideoControl, VideoError, VideoHost};
 
@@ -306,9 +330,22 @@ impl<R: SwarmRead + Rewind> ChunkedReader<R> {
         Ok(self.piece(step))
     }
 
-    /// Reads from `reader` from now on, as after a discontinuity, and joins
-    /// again.
-    pub fn replace(&mut self, reader: R) {
+    /// Reads from `reader`, of a swarm in frames of `frame_size` bytes,
+    /// from now on, as after a discontinuity, and joins again.
+    ///
+    /// # Errors
+    ///
+    /// `frame_size` isn't a chunked frame size; the reader is unchanged.
+    pub fn replace(&mut self, reader: R, frame_size: usize) -> Result<(), FrameSizeError> {
+        if frame_size != self.decoder.frame_size() {
+            let decoder = ChunkedDecoder::new(frame_size, units::MAX_RECORD_LEN)?;
+            let old = std::mem::replace(&mut self.decoder, decoder);
+            // The metrics keep the corrupt frames of the decoders before.
+            self.metrics.corrupt_frames = self
+                .metrics
+                .corrupt_frames
+                .saturating_add(old.metrics().corrupt);
+        }
         self.reader = reader;
         self.spare = None;
         self.race = None;
@@ -318,11 +355,15 @@ impl<R: SwarmRead + Rewind> ChunkedReader<R> {
         self.held = None;
         self.rejoin();
         self.discontinuity();
+        Ok(())
     }
 
     pub fn metrics(&self) -> ReaderMetrics {
         ReaderMetrics {
-            corrupt_frames: self.decoder.metrics().corrupt,
+            corrupt_frames: self
+                .metrics
+                .corrupt_frames
+                .saturating_add(self.decoder.metrics().corrupt),
             ..self.metrics
         }
     }
@@ -839,6 +880,17 @@ pub(crate) fn live_window(window_bytes: usize, chunk_size: usize) -> usize {
     1 << n.ilog2()
 }
 
+/// How a stream's claim found its swarm.
+enum Open<S> {
+    /// A new slot, whose swarm is to be added.
+    Add,
+    /// The slot's swarm, as it is.
+    Held,
+    /// The slot, `.0`, reopened with the stream's options: the swarm of
+    /// the options before, `.1`, goes, and one of the stream's is added.
+    Reopened(u64, Option<S>),
+}
+
 /// A stream's place among the node's streams, and its claim on its swarm's
 /// slot. Dropping it releases both.
 struct StreamHold<K: Kv, H: Host, V: VideoHost, T: Timer> {
@@ -874,9 +926,10 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> StreamHold<K, H, V, T> {
         })
     }
 
-    /// The swarm the stream reads next: its slot's, once it has one other
-    /// than the one the stream read. `None` once there's none.
-    async fn next_swarm(&mut self) -> Option<Swarm<H>> {
+    /// The swarm the stream reads next, and its chunk size: its slot's,
+    /// once it has one other than the one the stream read. `None` once
+    /// there's none.
+    async fn next_swarm(&mut self) -> Option<(Swarm<H>, usize)> {
         let t = self.transfer_id;
         let shared = &self.shared;
         let claim = self.claim.as_mut()?;
@@ -932,7 +985,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> EgressStream<K, H, V, T> {
             match self.reader.advance(max).await {
                 Ok(step) => return Ok(self.reader.piece(step)),
                 Err(VideoError::StreamClosed) => {
-                    let Some(swarm) = self.hold.next_swarm().await else {
+                    let Some((swarm, frame_size)) = self.hold.next_swarm().await else {
                         return Err(VideoError::StreamClosed);
                     };
                     let s = &self.hold.shared;
@@ -941,7 +994,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> EgressStream<K, H, V, T> {
                         .open_reader(swarm)
                         .await
                         .map_err(|e| s.host_failed("opening a video stream reader", &e))?;
-                    self.reader.replace(s.host_reader(reader));
+                    self.reader
+                        .replace(s.host_reader(reader), frame_size)
+                        .map_err(|_| VideoError::SwarmOption("chunk size"))?;
                     if let Some(spare) = s.spare_reader(swarm).await {
                         self.reader.set_spare(spare);
                     }
@@ -987,19 +1042,81 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         }
     }
 
-    /// Takes a stream's claim on the slot of `t`, reading on the networks
-    /// `networks`: the slot there is, or a new egress slot whose swarm a
-    /// task adds.
+    /// The swarm URI of the media listing of swarm `id` that names the
+    /// options it is read with: in the view of the first of the networks
+    /// `network_keys` names whose directory lists the swarm, or else of the
+    /// network of lowest id whose directory does. A view holds at most one
+    /// media listing of a swarm id. `None` when no view the node runs lists
+    /// the swarm.
+    pub(crate) fn listed_swarm_uri(
+        &self,
+        id: &SwarmId,
+        network_keys: &[Vec<u8>],
+    ) -> Option<String> {
+        let mut networks: Vec<(usize, u64)> = self
+            .autoseed
+            .borrow()
+            .directory_networks()
+            .map(|(network_id, key)| {
+                let preferred = network_keys.iter().position(|k| k == key);
+                (preferred.unwrap_or(usize::MAX), network_id)
+            })
+            .collect();
+        networks.sort_unstable();
+        let query = ListingQuery {
+            query: Some(Query::Listing(Listing {
+                content: Some(Content::Media(Media {
+                    mime_type: String::new(),
+                    swarm_uri: Uri::new(id.clone(), Default::default()).to_string(),
+                })),
+            })),
+        };
+        networks.into_iter().find_map(|(_, network_id)| {
+            match self
+                .directory
+                .listing(network_id, &query)?
+                .listing
+                .content?
+            {
+                Content::Media(m) => Some(m.swarm_uri),
+                _ => None,
+            }
+        })
+    }
+
+    /// The options [`listed_swarm_uri`](Self::listed_swarm_uri) names, if
+    /// its URI parses.
+    fn listed_options(&self, id: &SwarmId, network_keys: &[Vec<u8>]) -> Option<SwarmOptions> {
+        let uri = Uri::parse(&self.listed_swarm_uri(id, network_keys)?).ok()?;
+        (uri.id == *id).then(|| {
+            uri.options
+                .swarm_options()
+                .assign_defaults(&SwarmOptions::default_options())
+        })
+    }
+
+    /// Takes a stream's claim on the slot of `t`, of the swarm `id` with
+    /// `options`, reading on the networks `networks`: the slot there is,
+    /// reopened with `options` when it has others, or a new egress slot
+    /// whose swarm a task adds. `listed`: the options its listing names,
+    /// if one does. See the [module docs](self#options).
     fn claim_stream(
         self: &Rc<Self>,
         t: TransferId,
         id: SwarmId,
         options: SwarmOptions,
         networks: &[Vec<u8>],
+        listed: Option<&SwarmOptions>,
     ) -> Result<Claim, VideoError> {
         let max = self.config.egress.max_swarms;
-        let (claim, added) = self.with_swarms(|r| {
-            if r.get(&t).is_none() {
+        let now = self.timer.now();
+        let interval = self.config.egress.unlisted_reopen_interval;
+        let disagrees = listed.is_some_and(|l| !same_options(l, &options));
+        let (claim, open) = self.with_swarms(|r| {
+            let Some(e) = r.get(&t) else {
+                if disagrees {
+                    return Err(VideoError::ListingOptions);
+                }
                 if r.count(SwarmKind::Egress) >= max {
                     return Err(VideoError::TooManySwarms);
                 }
@@ -1013,26 +1130,72 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                     0,
                 );
                 let c = r.claim(&t, networks).ok_or(VideoError::StreamClosed)?;
-                return Ok((c, true));
+                return Ok((c, Open::Add));
+            };
+            if matches!(e.kind, SwarmKind::Capture | SwarmKind::Ingest) {
+                let c = r.claim(&t, networks).ok_or(VideoError::StreamClosed)?;
+                return Ok((c, Open::Held));
             }
-            r.claim(&t, networks)
-                .map(|c| (c, false))
-                .ok_or(VideoError::StreamClosed)
+            if disagrees {
+                return Err(VideoError::ListingOptions);
+            }
+            let open = if same_options(&e.options, &options) {
+                Open::Held
+            } else if listed.is_none() && e.reopened.is_some_and(|at| now < at + interval) {
+                return Err(VideoError::ReopenTooSoon);
+            } else {
+                let (slot, old) = r
+                    .reopen(&t, options.clone(), now)
+                    .ok_or(VideoError::StreamClosed)?;
+                Open::Reopened(slot, old)
+            };
+            let c = r.claim(&t, networks).ok_or(VideoError::StreamClosed)?;
+            Ok((c, open))
         })?;
-        if added {
-            self.spawn(
+        match open {
+            Open::Add => self.spawn(
                 self.clone()
                     .add_stream_swarm(t, claim.slot, id, options)
                     .boxed_local(),
-            );
-        } else {
-            self.publish_joined(&t);
+            ),
+            Open::Held => self.publish_joined(&t),
+            Open::Reopened(slot, old) => {
+                tracing::debug!(swarm = %id, "a stream reopens its swarm with other options");
+                self.reopen_swarm(t, slot, old, id, options);
+            }
         }
         Ok(claim)
     }
 
-    /// Adds the swarm of egress or seed slot `slot` of `t`, and its
-    /// transfer.
+    /// Gives egress or seed slot `slot` of `t`, which a reopen left without
+    /// a swarm, a swarm of `id` with `options`: removes `old`, the swarm
+    /// of the options before, with its transfer, then adds the new one and
+    /// its transfer.
+    pub(crate) fn reopen_swarm(
+        self: &Rc<Self>,
+        t: TransferId,
+        slot: u64,
+        old: Option<Swarm<H>>,
+        id: SwarmId,
+        options: SwarmOptions,
+    ) {
+        if old.is_some() {
+            self.transfers.remove(t);
+        }
+        let s = self.clone();
+        self.spawn(
+            async move {
+                if let Some(old) = old {
+                    s.remove_host_swarm(old).await;
+                }
+                s.add_stream_swarm(t, slot, id, options).await;
+            }
+            .boxed_local(),
+        );
+    }
+
+    /// Adds the swarm of egress or seed slot `slot` of `t`, with `options`,
+    /// and its transfer, unless the slot took other options meanwhile.
     pub(crate) async fn add_stream_swarm(
         self: Rc<Self>,
         t: TransferId,
@@ -1040,15 +1203,21 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         id: SwarmId,
         options: SwarmOptions,
     ) {
-        let swarm = match self.host.add_swarm(id.clone(), options).await {
+        let swarm = match self.host.add_swarm(id.clone(), options.clone()).await {
             Ok(swarm) => swarm,
             Err(e) => {
                 self.host_failed("adding a video swarm", &e);
-                self.with_swarms(|r| r.remove_slot(&t, slot));
+                self.with_swarms(|r| {
+                    if r.get(&t)
+                        .is_some_and(|e| same_options(&e.options, &options))
+                    {
+                        r.remove_slot(&t, slot);
+                    }
+                });
                 return;
             }
         };
-        match self.with_swarms(|r| r.set_swarm(&t, slot, swarm)) {
+        match self.with_swarms(|r| r.set_added(&t, slot, &options, swarm)) {
             Added::Kept => {
                 self.transfers.add(swarm, &id, Vec::new());
                 self.publish_joined(&t);
@@ -1067,8 +1236,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
     ///
     /// The MIME type names another format than the unit format
     /// ([`check_format`]), the URI or network keys are refused (see the
-    /// module docs), the node has its most swarms or streams, or the swarm
-    /// couldn't be added or read.
+    /// module docs), the URI names other options than the swarm's listing
+    /// ([`VideoError::ListingOptions`]) or than the node's swarm no listing
+    /// names, reopened too recently ([`VideoError::ReopenTooSoon`]), the
+    /// node has its most swarms or streams, or the swarm couldn't be added
+    /// or read.
     pub async fn open_stream(
         &self,
         swarm_uri: &str,
@@ -1079,16 +1251,17 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
         check_format(mime_type)?;
         let (uri, options) = check_stream(&s.config.egress, swarm_uri, network_keys)?;
         let t = TransferId::new(&uri.id, b"");
+        let listed = s.listed_options(&uri.id, network_keys);
         let mut hold = StreamHold::new(s, t, network_keys)?;
-        hold.claim = Some(s.claim_stream(t, uri.id, options.clone(), &hold.networks)?);
-        let swarm = hold.next_swarm().await.ok_or(VideoError::StreamClosed)?;
+        hold.claim = Some(s.claim_stream(t, uri.id, options, &hold.networks, listed.as_ref())?);
+        let (swarm, frame_size) = hold.next_swarm().await.ok_or(VideoError::StreamClosed)?;
         let reader = s
             .host
             .open_reader(swarm)
             .await
             .map_err(|e| s.host_failed("opening a video stream reader", &e))?;
         let buffer = s.config.egress.read_buffer_bytes;
-        let mut reader = ChunkedReader::new(s.host_reader(reader), options.chunk_size, buffer)
+        let mut reader = ChunkedReader::new(s.host_reader(reader), frame_size, buffer)
             .map_err(|_| VideoError::SwarmOption("chunk size"))?;
         if let Some(spare) = s.spare_reader(swarm).await {
             reader.set_spare(spare);

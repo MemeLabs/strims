@@ -95,6 +95,19 @@ pub enum VideoError {
     /// streams open.
     #[error("too many streams")]
     TooManyStreams,
+    /// A stream's swarm URI names other options than the swarm's listing,
+    /// which names the options the node reads it with
+    /// ([`egress`](crate::egress#options)).
+    #[error("the swarm's listing names other options than the stream's swarm uri")]
+    ListingOptions,
+    /// A stream's swarm URI names other options than the node reads the
+    /// swarm with, a swarm no listing names whose options changed less than
+    /// [`EgressSettings::unlisted_reopen_interval`](crate::EgressSettings::unlisted_reopen_interval)
+    /// ago ([`egress`](crate::egress#options)).
+    #[error(
+        "the node reads the swarm with other options, which changed too recently to change again"
+    )]
+    ReopenTooSoon,
     /// The stream's swarm was removed, or couldn't be added.
     #[error("stream closed")]
     StreamClosed,
