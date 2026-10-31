@@ -2243,13 +2243,13 @@ fn collapse_pull_lock_in() {
 /// remove it: once its window is cut, the seed holds two or three copies
 /// while the viewers it dropped find relays, and on some seeds that takes
 /// long enough to show. At this seed frames lag about 0.2 s at p99 before
-/// the halving and 3.1 s after.
+/// the halving and 2.4 s after.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_halving_lock_in() {
     let mut c = collapse_case(7, 10, 70);
     c.seed_up_steps = vec![(30.0, 5.0)];
-    collapse_sweep("collapse_halving_lock_in", 81, &c, |r| {
+    collapse_sweep("collapse_halving_lock_in", 21, &c, |r| {
         let (_, start) = collapse_seed(r);
         let before = r.lag_between(0, start + secs(20), start + secs(30)).p99;
         let after = r.lag_between(0, start + secs(40), start + secs(70)).p99;
