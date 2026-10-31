@@ -149,6 +149,12 @@
 //!   channel's network. A session that replaces another takes the slots
 //!   of the renditions it makes, so their streams go on; the others go
 //!   with it.
+//! - **Captions.** The stream's A/53 closed captions
+//!   ([`captions`](crate::captions)) reach every rendition the transcode
+//!   makes, whose encoder writes none: each of its video frames carries,
+//!   in an SEI before its first slice, the caption tuples of the stream's
+//!   frames since its last, up to its time, in presentation order. A
+//!   transcode that starts again carries those of the frames it took.
 //! - **The transcode** starts at the stream's first video keyframe. Input
 //!   past its queue's bound is dropped up to the next keyframe. A
 //!   transcode that holds input without output for

@@ -6,6 +6,8 @@
 //! - [`script`]: deterministic FLV tag scripts and the records they
 //!   produce.
 //! - [`publisher`]: a sans-IO RTMP publisher client.
+//! - [`captions`]: CEA-608 caption byte pairs.
 
+pub mod captions;
 pub mod publisher;
 pub mod script;

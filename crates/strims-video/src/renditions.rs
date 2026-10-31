@@ -26,12 +26,13 @@ use std::pin::pin;
 use futures_util::future::{Either, select};
 
 use super::{End, IngestSwarm, Live, REPLACED, Shared, Sign, unit_ingress_options, untranscoded};
+use crate::captions::{CaptionCarry, CcTuple, NalFormat};
 use crate::codec::{
     Codec, CodecEvent, Input, Output, Refused, RenditionPlan, Transcode, TranscodePlan,
 };
 use crate::config::{TranscodeMetrics, TranscodeSettings};
 use crate::host::VideoHost;
-use crate::media::{AccessUnit, CodecParams, DecoderConfig, Muxer, TrackKind, units_mime};
+use crate::media::{AccessUnit, CodecParams, DecoderConfig, Muxer, TrackId, TrackKind, units_mime};
 use crate::registry::SwarmKind;
 use crate::units::{SignTimer, UnitSigning, UnitWriter, UnitWriterMetrics};
 
@@ -335,6 +336,16 @@ pub(super) struct Renditions<C: Codec, W> {
     starts: VecDeque<Time>,
     /// The renditions were given up.
     pub(super) abandoned: bool,
+    /// The stream's video track, its timescale and its units' NAL format,
+    /// which its captions are read in.
+    source_video: Option<(TrackId, u32, NalFormat)>,
+    /// The stream's captions, carried to the transcode's renditions, and
+    /// each rendition's video track, timescale and NAL format, once its
+    /// config came.
+    captions: CaptionCarry,
+    output_video: Vec<Option<(TrackId, u32, NalFormat)>>,
+    /// Reused for a unit's caption tuples.
+    tuples: Vec<CcTuple>,
 }
 
 /// What a session's renditions report to it.
@@ -388,6 +399,7 @@ impl<C: Codec, W: SwarmWrite> Renditions<C, W> {
                 }
             }
         }
+        let made = planned.transcode.as_ref().map_or(0, |p| p.renditions.len());
         Renditions {
             codec,
             settings: settings.clone(),
@@ -402,11 +414,18 @@ impl<C: Codec, W: SwarmWrite> Renditions<C, W> {
             stalled_since: None,
             starts: VecDeque::new(),
             abandoned: false,
+            source_video: None,
+            captions: CaptionCarry::new(made),
+            output_video: vec![None; made],
+            tuples: Vec::new(),
         }
     }
 
     /// Takes a config of the stream.
     pub(super) fn config(&mut self, c: &DecoderConfig) {
+        if c.kind == TrackKind::Video {
+            self.source_video = NalFormat::of(&c.params).map(|f| (c.track, c.timescale, f));
+        }
         match self.configs.iter_mut().find(|o| o.track == c.track) {
             Some(o) => *o = c.clone(),
             None => self.configs.push(c.clone()),
@@ -456,6 +475,13 @@ impl<C: Codec, W: SwarmWrite> Renditions<C, W> {
         match t.send(Input::Unit(u)) {
             Ok(()) => {
                 self.stalled_since.get_or_insert(now);
+                if let Some((track, timescale, nals)) = self.source_video
+                    && track == u.track
+                {
+                    self.tuples.clear();
+                    nals.cc_tuples(u.payload, &mut self.tuples);
+                    self.captions.source(u.pts, timescale, &self.tuples);
+                }
             }
             Err(Refused::Full) => {
                 m.dropped_gops += 1;
@@ -489,6 +515,7 @@ impl<C: Codec, W: SwarmWrite> Renditions<C, W> {
                 m.starts += 1;
                 self.transcode = Some(t);
                 self.stalled_since = None;
+                self.captions.restart();
                 true
             }
             Err(e) => {
@@ -512,9 +539,11 @@ impl<C: Codec, W: SwarmWrite> Renditions<C, W> {
         }
     }
 
-    /// Takes the transcode's `event` at `now`: an event for the channel's
+    /// Takes the transcode's `event` at `now`, with the stream's captions
+    /// up to its time if it is a video unit: an event for the channel's
     /// swarm, if it is one.
-    pub(super) fn event(&mut self, event: CodecEvent, now: Time) -> Option<Output> {
+    pub(super) fn event(&mut self, mut event: CodecEvent, now: Time) -> Option<Output> {
+        self.carry_captions(&mut event);
         self.stalled_since = self
             .transcode
             .as_ref()
@@ -528,6 +557,39 @@ impl<C: Codec, W: SwarmWrite> Renditions<C, W> {
                 None
             }
             None => None,
+        }
+    }
+
+    /// Puts into a rendition's video unit the caption tuples of the
+    /// stream's frames since its last, up to its time; see
+    /// [`ingress`](super#renditions).
+    fn carry_captions(&mut self, event: &mut CodecEvent) {
+        let Some(video) = self.output_video.get_mut(event.rendition) else {
+            return;
+        };
+        let u = match &mut event.output {
+            Output::Config(c) => {
+                if c.kind == TrackKind::Video {
+                    *video = NalFormat::of(&c.params).map(|f| (c.track, c.timescale, f));
+                }
+                return;
+            }
+            Output::Unit(u) => u,
+        };
+        let Some((track, timescale, nals)) = *video else {
+            return;
+        };
+        if u.track != track {
+            return;
+        }
+        let tuples = self.captions.take(event.rendition, u.pts, timescale);
+        if tuples.is_empty() {
+            return;
+        }
+        let mut payload = Vec::with_capacity(u.payload.len() + 16 + 3 * tuples.len());
+        match nals.with_cc_sei(&u.payload, &tuples, &mut payload) {
+            Ok(()) => u.payload = payload,
+            Err(e) => tracing::debug!(error = %e, "a rendition's frame took no captions"),
         }
     }
 

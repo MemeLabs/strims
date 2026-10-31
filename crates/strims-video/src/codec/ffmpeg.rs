@@ -66,7 +66,8 @@ pub struct FfmpegSettings {
     /// The video encoder and its options: the arguments after `-c:v`.
     /// They apply to every rendition, and each rendition adds its
     /// bitrate. The encoder must take `-force_key_frames source`, and
-    /// leave out the stream's captions, which the stage carries itself.
+    /// leave out the stream's captions, which the ingress carries to the
+    /// renditions itself ([`captions`](crate::captions)).
     pub video_encoder: Vec<String>,
     /// The input bytes a transcode queues before it refuses more: about 8
     /// s of an 8 Mbit/s stream.

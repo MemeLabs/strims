@@ -35,6 +35,8 @@
 //!   units into them, and the routes a driver serves them on.
 //! - [`codec`]: the codec stage, a stream's access units in and its
 //!   renditions' out, over an ffmpeg process a native driver runs.
+//! - [`captions`]: A/53 closed captions in H.264 and H.265 SEI, read,
+//!   written and carried to a stream's renditions.
 //! - [`units`]: the unit format, a record per access unit in the chunked
 //!   chunkstream layout: its records, the [`UnitWriter`] muxer and the
 //!   [`UnitReader`], which builds for wasm32.
@@ -176,6 +178,7 @@ pub mod autoseed;
 pub mod av1;
 pub mod avc;
 mod bits;
+pub mod captions;
 pub mod capture;
 pub mod channels;
 pub mod codec;

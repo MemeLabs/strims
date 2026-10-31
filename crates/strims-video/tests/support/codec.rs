@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! A codec stage for the tests: a transcode's renditions are the stream's
-//! units as they came, each rendition keeping every keyframe and the
+//! units as they came, without their SEI as an encoder that writes no
+//! captions makes them, each rendition keeping every keyframe and the
 //! frames at least a frame of its rate apart, with a config of its size.
+//! As a decoder and an encoder without B-frames would, it makes its video
+//! frames in presentation order, each once the stream's frames before it
+//! came, decoding when they present.
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 use std::task::{Context, Poll, Waker};
 
@@ -72,6 +76,8 @@ pub struct FakeTranscode {
     /// Each rendition's last kept frame's PTS.
     kept: Vec<Option<i64>>,
     video: Option<DecoderConfig>,
+    /// The stream's video frames not yet presented, by PTS.
+    reorder: BTreeMap<i64, Unit>,
     held: usize,
     finished: bool,
     ended: bool,
@@ -89,6 +95,7 @@ impl Codec for FakeCodec {
             events: VecDeque::new(),
             kept: vec![None; plan.renditions.len()],
             video: None,
+            reorder: BTreeMap::new(),
             held: 0,
             finished: false,
             ended: false,
@@ -120,6 +127,28 @@ impl Codec for FakeCodec {
 impl FakeTranscode {
     fn emit(&mut self, rendition: usize, output: Output) {
         self.events.push_back(CodecEvent { rendition, output });
+    }
+
+    /// Makes each rendition's frames of the stream's frames that present
+    /// by `dts`, the decode time of the stream's latest.
+    fn present(&mut self, dts: i64) {
+        while let Some(entry) = self.reorder.first_entry() {
+            if *entry.key() > dts {
+                break;
+            }
+            let mut u = entry.remove();
+            u.dts = u.pts;
+            u.payload = without_sei(&u.payload);
+            for i in 0..self.plan.renditions.len() {
+                let fps = i64::from(self.plan.renditions[i].max_frame_rate.max(1));
+                let interval = 90_000 / fps - 180;
+                let keep = u.keyframe || self.kept[i].is_none_or(|k| u.pts - k >= interval);
+                if keep {
+                    self.kept[i] = Some(u.pts);
+                    self.emit(i, Output::Unit(u.clone()));
+                }
+            }
+        }
     }
 
     /// Rendition `i`'s H.264 config of the stream's video config.
@@ -167,18 +196,12 @@ impl Transcode for FakeTranscode {
                     self.emit(i, Output::Config(c.clone()));
                 }
             }
+            Input::Unit(u) if self.video.as_ref().is_some_and(|v| v.track == u.track) => {
+                self.reorder.insert(u.pts, Unit::of(u));
+                self.present(u.dts);
+            }
             Input::Unit(u) => {
-                let video = self.video.as_ref().is_some_and(|v| v.track == u.track);
                 for i in 0..n {
-                    if video {
-                        let fps = i64::from(self.plan.renditions[i].max_frame_rate.max(1));
-                        let interval = 90_000 / fps - 180;
-                        let keep = u.keyframe || self.kept[i].is_none_or(|k| u.pts - k >= interval);
-                        if !keep {
-                            continue;
-                        }
-                        self.kept[i] = Some(u.pts);
-                    }
                     self.emit(i, Output::Unit(Unit::of(u)));
                 }
             }
@@ -191,6 +214,7 @@ impl Transcode for FakeTranscode {
     }
 
     fn finish(&mut self) {
+        self.present(i64::MAX);
         self.finished = true;
         self.state.borrow_mut().finished += 1;
     }
@@ -213,4 +237,21 @@ impl Transcode for FakeTranscode {
         self.state.borrow_mut().waker = Some(cx.waker().clone());
         Poll::Pending
     }
+}
+
+/// An H.264 unit of 4-byte lengths without its SEI NAL units.
+pub fn without_sei(unit: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut rest = unit;
+    while rest.len() >= 4 {
+        let len = u32::from_be_bytes(rest[..4].try_into().unwrap()) as usize;
+        let Some(nal) = rest.get(4..4 + len) else {
+            break;
+        };
+        if nal.first().is_some_and(|b| b & 0x1f != 6) {
+            out.extend_from_slice(&rest[..4 + len]);
+        }
+        rest = &rest[4 + len..];
+    }
+    out
 }

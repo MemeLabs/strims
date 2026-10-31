@@ -35,6 +35,7 @@ use strims_proto::video::v1::{
 use strims_rpc::{Router, Timer};
 use strims_testworld::*;
 use strims_transfer::TransferId;
+use strims_video::captions::NalFormat;
 use strims_video::codec::RenditionPlan;
 use strims_video::hls::HlsRoutes;
 use strims_video::ingress::unit_ingress_options;
@@ -1557,6 +1558,106 @@ fn a_failed_transcode_starts_again_at_the_next_keyframe() {
         let m = s.va.metrics().transcode;
         assert_eq!((m.failures, m.restarts, m.abandoned), (1, 1, 0));
         assert_eq!(codec.plans().len(), 2);
+    });
+}
+
+/// The script with a caption tuple in an SEI of each video frame, whose
+/// data is the frame's number in presentation order.
+fn with_captions(script: &Script) -> Script {
+    let mut captioned = script.clone();
+    for tag in &mut captioned.tags {
+        if tag.kind != TagKind::Video || tag.body[1] != 1 {
+            continue;
+        }
+        let cts = i32::from_be_bytes([0, tag.body[2], tag.body[3], tag.body[4]]) << 8 >> 8;
+        let n = ((i64::from(tag.timestamp) + i64::from(cts)) * 30 + 500) / 1000;
+        let tuple = [0xfc, 0x41 + (n / 64) as u8, 0x20 + (n % 64) as u8];
+        let mut body = tag.body[..5].to_vec();
+        NalFormat::avc(4)
+            .with_cc_sei(&tag.body[5..], &[tuple], &mut body)
+            .unwrap();
+        tag.body = body;
+    }
+    captioned
+}
+
+/// The frame numbers the caption tuples of `units` carry, in order.
+fn caption_frames(units: &[Unit]) -> Vec<i64> {
+    let mut frames = Vec::new();
+    for u in units
+        .iter()
+        .filter(|u| u.0 == strims_video::flv::VIDEO_TRACK)
+    {
+        let mut tuples = Vec::new();
+        NalFormat::avc(4).cc_tuples(&u.4, &mut tuples);
+        frames.extend(
+            tuples
+                .iter()
+                .map(|t| i64::from(t[1] - 0x41) * 64 + i64::from(t[2] - 0x20)),
+        );
+    }
+    frames
+}
+
+/// An H.264 stream's captions reach its rung, whose encoder writes none:
+/// each of the rung's frames, at half the stream's rate, carries the
+/// tuples of the stream's frames since its last, in presentation order
+/// across the stream's B-frames.
+#[test]
+fn an_h264_streams_captions_reach_its_rungs_in_presentation_order() {
+    run(async {
+        let (video, _codec) = codec_host();
+        let config = with_ladder(vec![RenditionPlan {
+            short_side: 480,
+            max_frame_rate: 15,
+            bitrate: 500_000,
+        }]);
+        let s = Ingest::with_host(true, config, video).await;
+        let b = s.b.as_ref().unwrap();
+        let vb = start(b, NoVideoHost, Config::default());
+        let mut p = s.publish("10.0.0.1:50000").await;
+        let script = with_captions(&Script::new(&ScriptConfig {
+            b_frames: true,
+            ..Default::default()
+        }));
+        let (_, units) = script_units(&script);
+        let third = script.tags.len() / 3;
+        p.send_tags(&script.tags[..third], &script).await;
+        wait_for(10, "the rung in the snippet", || {
+            shown_snippet(b).is_some_and(|s| s.renditions.len() == 2)
+        })
+        .await;
+        let rung = shown_snippet(b).unwrap().renditions[1].clone();
+        let mut v = UnitViewer::new(
+            vb.open_stream(
+                &rung.swarm_uri,
+                std::slice::from_ref(&s.net.public),
+                &rung.mime_type,
+            )
+            .await
+            .unwrap(),
+        );
+        p.send_tags(&script.tags[third..], &script).await;
+        p.unpublish().await;
+        let kept_video: Vec<Unit> = kept(&units, 15)
+            .into_iter()
+            .filter(|u| u.0 == strims_video::flv::VIDEO_TRACK)
+            .collect();
+        let last = kept_video.last().unwrap().clone();
+        v.until(|got| got.iter().any(|(u, _)| (u.0, u.2) == (last.0, last.2)))
+            .await;
+        let frames = caption_frames(&v.units());
+        assert!(frames.len() > 100, "{frames:?}");
+        let first = frames[0];
+        let want: Vec<i64> = (first..first + frames.len() as i64).collect();
+        assert_eq!(frames, want, "every frame's, once, in presentation order");
+        let rung_frames = v
+            .units()
+            .iter()
+            .filter(|u| u.0 == strims_video::flv::VIDEO_TRACK)
+            .count();
+        assert!(frames.len() >= 2 * rung_frames - 2, "two a frame");
+        assert_eq!(*frames.last().unwrap(), (last.2 * 30 + 45_000) / 90_000);
     });
 }
 
