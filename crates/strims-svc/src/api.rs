@@ -1,8 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The UI's connections: WebSocket upgrades at the API path, each served
-//! as a frontend RPC connection with its own router.
+//! The UI's connections: WebSocket upgrades at the API path, over TLS when
+//! the API has a certificate, each served as a frontend RPC connection
+//! with its own router.
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
@@ -17,8 +18,10 @@ use strims_dao::seal::StorageKey;
 use strims_proto::auth::v1::register_auth_frontend_service;
 use strims_rpc::{Config as RpcConfig, Router, connect, wire::MAX_VARINT_LEN};
 use strims_session::AuthService;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::{AbortHandle, spawn_local};
+use tokio::time::{Instant, timeout_at};
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::http::header::{COOKIE, SET_COOKIE};
 use tokio_tungstenite::tungstenite::http::{HeaderMap, HeaderValue, StatusCode};
@@ -26,8 +29,9 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{self, Message};
 
 use crate::SvcManager;
+use crate::tls::Tls;
 
-/// How long an upgrade may take.
+/// How long an upgrade, its TLS handshake included, may take.
 const HANDSHAKE_TIMEOUT: StdDuration = StdDuration::from_secs(10);
 /// A short pause after a failed accept, so a listener error doesn't spin.
 const ACCEPT_BACKOFF: StdDuration = StdDuration::from_millis(50);
@@ -50,17 +54,25 @@ pub(crate) struct Api {
     manager: Rc<SvcManager>,
     path: String,
     max_connections: usize,
+    /// The certificate connections' handshakes take, if served over TLS.
+    tls: Option<Rc<Tls>>,
     /// The connections being served. Bound: `max_connections`.
     connections: RefCell<BTreeMap<u64, AbortHandle>>,
     next_id: Cell<u64>,
 }
 
 impl Api {
-    pub(crate) fn new(manager: Rc<SvcManager>, path: String, max_connections: usize) -> Api {
+    pub(crate) fn new(
+        manager: Rc<SvcManager>,
+        path: String,
+        max_connections: usize,
+        tls: Option<Rc<Tls>>,
+    ) -> Api {
         Api {
             manager,
             path,
             max_connections,
+            tls,
             connections: RefCell::new(BTreeMap::new()),
             next_id: Cell::new(0),
         }
@@ -155,6 +167,24 @@ async fn serve(served: Served, stream: TcpStream, addr: SocketAddr) {
     if let Err(e) = stream.set_nodelay(true) {
         tracing::debug!(%addr, error = %e, "setting TCP_NODELAY failed");
     }
+    let deadline = Instant::now() + HANDSHAKE_TIMEOUT;
+    match &api.tls {
+        None => upgrade(&api, stream, addr, deadline).await,
+        Some(tls) => match timeout_at(deadline, tls.api().accept(stream)).await {
+            Ok(Ok(stream)) => upgrade(&api, stream, addr, deadline).await,
+            Ok(Err(e)) => tracing::debug!(%addr, error = %e, "an API TLS handshake failed"),
+            Err(_) => tracing::debug!(%addr, "an API TLS handshake timed out"),
+        },
+    }
+    drop(served);
+}
+
+/// Upgrades `stream` by `deadline` and serves the frontend on it until it
+/// ends.
+async fn upgrade<S>(api: &Rc<Api>, stream: S, addr: SocketAddr, deadline: Instant)
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let mut session_key = None;
     // tungstenite's `Callback` fixes the error type.
     #[allow(clippy::result_large_err)]
@@ -178,7 +208,7 @@ async fn serve(served: Served, stream: TcpStream, addr: SocketAddr) {
         Ok(resp)
     };
     let upgrade = tokio_tungstenite::accept_hdr_async_with_config(stream, check, Some(ws_config()));
-    let ws = match tokio::time::timeout(HANDSHAKE_TIMEOUT, upgrade).await {
+    let ws = match timeout_at(deadline, upgrade).await {
         Ok(Ok(ws)) => ws,
         Ok(Err(e)) => {
             tracing::debug!(%addr, error = %e, "websocket upgrade failed");
@@ -224,7 +254,6 @@ async fn serve(served: Served, stream: TcpStream, addr: SocketAddr) {
     );
     let res = conn.await;
     tracing::debug!(%addr, ?res, "frontend disconnected");
-    drop(served);
 }
 
 #[cfg(test)]

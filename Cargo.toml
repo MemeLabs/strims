@@ -158,9 +158,12 @@ turmoil = "0.7"
 tokio-tungstenite = "0.30"
 # HTTP/1 heads: strims-svc's HLS requests, strims-node's HTTPS responses
 httparse = "1.10"
-# TLS on the ring provider, for native HTTPS clients
+# TLS on the ring provider, for native HTTPS clients and strims-svc's
+# listeners
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+# the DNS names a server certificate is valid for: strims-svc's HLS URLs
+rustls-webpki = { version = "0.103", default-features = false, features = ["alloc"] }
 webpki-roots = "1"
 rcgen = { version = "0.14", default-features = false, features = ["ring"] }
 str0m = "0.24"

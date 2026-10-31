@@ -1,6 +1,6 @@
 [package]
 name = "strims-svc"
-description = "The headless service: runs a profile's node, serves the UI's frontend RPC over WebSocket and HLS over HTTP"
+description = "The headless service: runs a profile's node, serves the UI's frontend RPC over WebSocket and HLS over HTTP, with TLS if given a certificate"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -21,6 +21,9 @@ tracing.workspace = true
 data-encoding.workspace = true
 httparse.workspace = true
 rand_core.workspace = true
+rustls.workspace = true
+rustls-webpki.workspace = true
+tokio-rustls.workspace = true
 futures-util = { workspace = true, features = ["sink", "std"] }
 # `signal`: the binary stops on ctrl-c.
 tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util", "sync", "signal"] }
@@ -39,6 +42,8 @@ strims-video = { workspace = true, features = ["test-support"] }
 # the ffmpeg test runs ffmpeg and ffprobe
 tokio = { workspace = true, features = ["process"] }
 prost.workspace = true
+# the TLS tests' certificates
+rcgen.workspace = true
 
 [lints]
 workspace = true

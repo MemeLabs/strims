@@ -22,3 +22,13 @@ https://docs.vmware.com/en/VMware-Adapter-for-SAP-Landscape-Management/2.1.0/Ins
 
 ios:
 https://www.theictguy.co.uk/adding-trusted-root-certificates-to-ios14/
+
+strims-svc serves HLS over https with the same pair, for test devices that
+trust `development-ca.crt`:
+
+```
+strims-svc ... --hls-listen 0.0.0.0:8443 --public-ip <IP.1> \
+  --tls-cert hack/tls/development.crt --tls-key hack/tls/development.key
+```
+
+`--api-tls` serves the API over wss:// with it too.

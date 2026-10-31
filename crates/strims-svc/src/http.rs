@@ -4,13 +4,15 @@
 //! HLS over HTTP: the running profile's HLS streams, answered from the
 //! node factory's [`HlsRoutes`] for external players.
 //!
-//! The server speaks plain HTTP/1.1 and answers one request per
-//! connection:
+//! The server speaks HTTP/1.1, over TLS when it has a certificate, and
+//! answers one request per connection:
 //!
 //! - From its accept, a connection has
-//!   [`HlsSettings::request_head_timeout`] to send a request head of at
-//!   most [`HlsSettings::max_request_head_bytes`]. It closes at the
-//!   deadline; a longer head answers 431, and one that doesn't parse 400.
+//!   [`HlsSettings::request_head_timeout`] to finish its TLS handshake and
+//!   send a request head of at most
+//!   [`HlsSettings::max_request_head_bytes`]. It closes at the deadline,
+//!   or when its handshake fails; a longer head answers 431, and one that
+//!   doesn't parse 400.
 //! - `GET` and `HEAD` are answered from the routes, at the node's clock;
 //!   any other method answers 405. A path over
 //!   [`HlsSettings::max_path_bytes`] answers 414.
@@ -18,10 +20,10 @@
 //!   `Content-Length`, `Access-Control-Allow-Origin: *` and
 //!   `Connection: close`. A HEAD's has no body.
 //! - A response has [`RESPONSE_TIMEOUT`] to be sent. The connection then
-//!   ends its sending side and takes what the client still sends, for at
-//!   most [`LINGER`], before it closes: closing a socket with input unread
-//!   resets the connection, which can drop the response before the client
-//!   reads it.
+//!   ends its sending side (after TLS's `close_notify`) and takes what the
+//!   client still sends, for at most [`LINGER`], before it closes: closing
+//!   a socket with input unread resets the connection, which can drop the
+//!   response before the client reads it.
 //!
 //! At most [`HlsSettings::max_connections`] connections are served at
 //! once; the server closes the others as they come.
@@ -36,12 +38,13 @@ use std::time::Duration as StdDuration;
 use strims_rpc::Timer;
 use strims_video::HlsSettings;
 use strims_video::hls::{HlsResponse, HlsRoutes};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::{AbortHandle, spawn_local};
 use tokio::time::{Instant, timeout, timeout_at};
 
 use crate::SvcTimer;
+use crate::tls::Tls;
 
 /// How long a response may take to send.
 const RESPONSE_TIMEOUT: StdDuration = StdDuration::from_secs(60);
@@ -83,6 +86,8 @@ pub(crate) struct Http {
     routes: HlsRoutes,
     timer: SvcTimer,
     limits: Limits,
+    /// The certificate connections' handshakes take, if served over TLS.
+    tls: Option<Rc<Tls>>,
     /// The connections being served. Bound: `limits.max_connections`.
     connections: RefCell<BTreeMap<u64, AbortHandle>>,
     next_id: Cell<u64>,
@@ -157,11 +162,17 @@ fn reason(status: u16) -> &'static str {
 }
 
 impl Http {
-    pub(crate) fn new(routes: HlsRoutes, timer: SvcTimer, limits: Limits) -> Http {
+    pub(crate) fn new(
+        routes: HlsRoutes,
+        timer: SvcTimer,
+        limits: Limits,
+        tls: Option<Rc<Tls>>,
+    ) -> Http {
         Http {
             routes,
             timer,
             limits,
+            tls,
             connections: RefCell::new(BTreeMap::new()),
             next_id: Cell::new(0),
         }
@@ -203,10 +214,14 @@ impl Http {
         })
     }
 
-    /// Reads a request head and answers it; `None` when the connection
-    /// closes, fails or runs out of time first.
-    async fn read_request(&self, stream: &mut TcpStream, addr: SocketAddr) -> Option<Answer> {
-        let deadline = Instant::now() + self.limits.head_timeout;
+    /// Reads a request head by `deadline` and answers it; `None` when the
+    /// connection closes, fails or runs out of time first.
+    async fn read_request<S: AsyncRead + Unpin>(
+        &self,
+        stream: &mut S,
+        addr: SocketAddr,
+        deadline: Instant,
+    ) -> Option<Answer> {
         let mut head = vec![0u8; self.limits.max_head_bytes];
         let mut len = 0;
         loop {
@@ -231,6 +246,31 @@ impl Http {
                 return Some(answer);
             }
         }
+    }
+
+    /// Reads a request on `stream` by `deadline`, answers it, and ends
+    /// the connection.
+    async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(
+        &self,
+        mut stream: S,
+        addr: SocketAddr,
+        deadline: Instant,
+    ) {
+        let Some(answer) = self.read_request(&mut stream, addr, deadline).await else {
+            return;
+        };
+        match timeout(RESPONSE_TIMEOUT, respond(&mut stream, &answer)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                tracing::debug!(%addr, error = %e, "sending an HLS response failed");
+                return;
+            }
+            Err(_) => {
+                tracing::debug!(%addr, "sending an HLS response timed out");
+                return;
+            }
+        }
+        let _ = timeout(LINGER, drain(&mut stream)).await;
     }
 }
 
@@ -275,31 +315,25 @@ pub(crate) async fn accept(listener: TcpListener, http: Rc<Http>) {
 }
 
 /// Answers a connection's request, then closes it.
-async fn serve(served: Served, mut stream: TcpStream, addr: SocketAddr) {
+async fn serve(served: Served, stream: TcpStream, addr: SocketAddr) {
     let http = served.http.clone();
     if let Err(e) = stream.set_nodelay(true) {
         tracing::debug!(%addr, error = %e, "setting TCP_NODELAY failed");
     }
-    let Some(answer) = http.read_request(&mut stream, addr).await else {
-        return;
-    };
-    match timeout(RESPONSE_TIMEOUT, respond(&mut stream, &answer)).await {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) => {
-            tracing::debug!(%addr, error = %e, "sending an HLS response failed");
-            return;
-        }
-        Err(_) => {
-            tracing::debug!(%addr, "sending an HLS response timed out");
-            return;
-        }
+    let deadline = Instant::now() + http.limits.head_timeout;
+    match &http.tls {
+        None => http.exchange(stream, addr, deadline).await,
+        Some(tls) => match timeout_at(deadline, tls.hls().accept(stream)).await {
+            Ok(Ok(stream)) => http.exchange(stream, addr, deadline).await,
+            Ok(Err(e)) => tracing::debug!(%addr, error = %e, "an HLS TLS handshake failed"),
+            Err(_) => tracing::debug!(%addr, "an HLS TLS handshake timed out"),
+        },
     }
-    let _ = timeout(LINGER, drain(&mut stream)).await;
     drop(served);
 }
 
 /// Sends `answer` and ends the sending side.
-async fn respond(stream: &mut TcpStream, answer: &Answer) -> std::io::Result<()> {
+async fn respond<S: AsyncWrite + Unpin>(stream: &mut S, answer: &Answer) -> std::io::Result<()> {
     stream.write_all(answer.head().as_bytes()).await?;
     if answer.body {
         stream.write_all(&answer.response.body).await?;
@@ -308,7 +342,7 @@ async fn respond(stream: &mut TcpStream, answer: &Answer) -> std::io::Result<()>
 }
 
 /// Reads and drops the client's input until it ends.
-async fn drain(stream: &mut TcpStream) {
+async fn drain<S: AsyncRead + Unpin>(stream: &mut S) {
     let mut buf = [0u8; DRAIN_BUFFER];
     loop {
         match stream.read(&mut buf).await {
@@ -334,8 +368,11 @@ mod tests {
     use strims_node::app::NodeTimer;
     use strims_video::hls::{HlsProfile, HlsStream, PlaylistConfig};
     use tokio::task::LocalSet;
+    use tokio_rustls::TlsConnector;
 
     use super::*;
+    use crate::TlsConfig;
+    use crate::tls::testing::{self, client, connect, dir, self_signed, write};
 
     /// Routes holding one stream with one segment.
     struct Fixture {
@@ -364,7 +401,7 @@ mod tests {
     }
 
     fn http(routes: &HlsRoutes, limits: Limits) -> Http {
-        Http::new(routes.clone(), NodeTimer(SystemClock), limits)
+        Http::new(routes.clone(), NodeTimer(SystemClock), limits, None)
     }
 
     fn get(path: &str) -> Vec<u8> {
@@ -538,6 +575,82 @@ mod tests {
             assert!(
                 text.starts_with("HTTP/1.1 431 Request Header Fields Too Large\r\n"),
                 "{text}"
+            );
+        });
+    }
+
+    /// The TLS of a certificate for localhost and 127.0.0.1, and a client
+    /// that trusts it.
+    fn tls(name: &str) -> (Rc<Tls>, TlsConnector) {
+        let dir = dir(name);
+        let (cert, key, root) = self_signed(&["localhost", "127.0.0.1"]);
+        let (cert, key) = write(&dir, &cert, &key);
+        let (tls, _) = Tls::load(&TlsConfig::new(cert, key)).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        (Rc::new(tls), client(&root, &[]))
+    }
+
+    /// A server on localhost under `limits`, over `tls`.
+    async fn serving_tls(routes: &HlsRoutes, limits: Limits, tls: Rc<Tls>) -> SocketAddr {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let h = Rc::new(Http::new(
+            routes.clone(),
+            NodeTimer(SystemClock),
+            limits,
+            Some(tls),
+        ));
+        spawn_local(accept(listener, h));
+        addr
+    }
+
+    #[test]
+    fn tls_connections_carry_one_answer() {
+        run(async {
+            let f = fixture();
+            let (tls, client) = tls("one-answer");
+            let addr = serving_tls(&f.routes, limits(), tls).await;
+            let mut s = connect(&client, addr, "127.0.0.1").await.unwrap();
+            let playlist = format!("GET {} HTTP/1.1\r\nHost: x\r\n\r\n", f.stream.path());
+            s.write_all(playlist.as_bytes()).await.unwrap();
+            let mut out = Vec::new();
+            // The answer ends with TLS's close_notify: a truncated one
+            // reads as an error.
+            timeout(StdDuration::from_secs(10), s.read_to_end(&mut out))
+                .await
+                .unwrap()
+                .unwrap();
+            let text = String::from_utf8_lossy(&out);
+            assert!(text.starts_with("HTTP/1.1 200 OK\r\n"), "{text}");
+            assert!(text.contains("#EXTINF:1.500,"), "{text}");
+            assert!(text.contains("Connection: close\r\n"), "{text}");
+
+            // A client that trusts another root refuses the handshake.
+            let (_, _, other) = self_signed(&["localhost", "127.0.0.1"]);
+            let refused = connect(&testing::client(&other, &[]), addr, "127.0.0.1").await;
+            assert!(refused.is_err());
+            assert!(connect(&client, addr, "localhost").await.is_ok());
+        });
+    }
+
+    #[test]
+    fn stalled_and_plaintext_tls_handshakes_are_cut_off() {
+        run(async {
+            let f = fixture();
+            let (tls, _) = tls("cut-off");
+            let limits = Limits {
+                head_timeout: StdDuration::from_millis(200),
+                ..limits()
+            };
+            let addr = serving_tls(&f.routes, limits, tls).await;
+            let started = Instant::now();
+            let out = exchange(addr, b"").await;
+            assert!(out.is_empty());
+            assert!(started.elapsed() < StdDuration::from_secs(5));
+            let out = exchange(addr, &get(f.stream.path())).await;
+            assert!(
+                !String::from_utf8_lossy(&out).contains("HTTP/1.1"),
+                "a plaintext request is answered: {out:?}"
             );
         });
     }

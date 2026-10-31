@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! `strims-svc`: runs a profile's node, serves the UI's frontend RPC over
-//! WebSocket and, if asked, HLS over HTTP until interrupted. See
+//! WebSocket and, if asked, HLS over HTTP, with TLS if given a
+//! certificate, until interrupted. See
 //! [`args::USAGE`]. Its allocator counts the heap for the Debug service's
 //! snapshots ([`memory`]).
 
@@ -45,6 +46,10 @@ fn main() -> ExitCode {
     };
     rt.block_on(LocalSet::new().run_until(async {
         let path = config.api_path.clone();
+        let (hls_tls, api_tls) = config
+            .tls
+            .as_ref()
+            .map_or((false, false), |t| (true, t.api));
         let svc = match Svc::start(config).await {
             Ok(svc) => svc,
             Err(e) => {
@@ -52,14 +57,15 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        tracing::info!(address = %svc.api_addr(), %path, "serving the UI");
+        tracing::info!(address = %svc.api_addr(), %path, tls = api_tls, "serving the UI");
         if let Some(address) = svc.hls_addr() {
             match svc.hls_base_url() {
                 "" => tracing::warn!(
                     %address,
+                    tls = hls_tls,
                     "serving HLS; playlist URLs need the HLS config's public address"
                 ),
-                base_url => tracing::info!(%address, base_url, "serving HLS"),
+                base_url => tracing::info!(%address, base_url, tls = hls_tls, "serving HLS"),
             }
         }
         if let Err(e) = tokio::signal::ctrl_c().await {

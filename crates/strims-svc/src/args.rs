@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use strims_node::CaptureConfig;
 use strims_node::app::PsiMode;
 use strims_node::codec::FfmpegConfig;
-use strims_svc::{Config, Db};
+use strims_svc::{Config, Db, TlsConfig};
 use strims_video::codec::ffmpeg::FfmpegSettings;
 use strims_video::codec::{MAX_RENDITIONS, RenditionPlan};
 
@@ -17,7 +17,8 @@ pub(crate) const USAGE: &str = "\
 usage: strims-svc (--db <path> | --db-memory) [options]
 
 Runs a profile's node, serves the UI's frontend RPC over WebSocket, and
-serves the node's HLS streams to players over plain HTTP.
+serves the node's HLS streams to players over HTTP, or HTTPS with a
+certificate.
 
 options:
   --db <path>               the redb file holding the profiles' stores
@@ -44,7 +45,14 @@ options:
   --hls-public-url <url>    the http(s):// URL playlist URLs start with when
                             the HLS config sets no public address (default
                             http:// and the HLS address; for an unspecified
-                            address, the public IP or hostname at its port)
+                            address, the public IP or hostname at its port;
+                            with --tls-cert, https:// and the first of those
+                            the certificate names, else its DNS name)
+  --tls-cert <path>         serve HLS over HTTPS with the certificate chain
+                            in this PEM file, the service's own first
+  --tls-key <path>          the PEM file of the certificate's private key
+  --api-tls                 the API takes wss:// connections, with the
+                            --tls-cert certificate
   --ffmpeg <path>           the ffmpeg (7.1 or later, with libx264) the node
                             transcodes with: it turns HEVC and AV1 publishes
                             into the H.264 stream every viewer can play
@@ -58,6 +66,13 @@ options:
   --ppspp-capture-max <MiB> the most a capture keeps, in its last 8 files
                             (default 1024)
   --help                    print this
+
+Players accept a certificate that chains to a root their device trusts
+and names the playlist URL's host. A DNS name's certificate from a public
+CA plays everywhere, on AirPlay and Cast receivers too: ACME's DNS-01
+challenge (certbot, lego, acme.sh) issues one for a name a public DNS
+record points at a LAN address. The service checks both files each minute
+and serves a renewal without a restart.
 
 The log level comes from RUST_LOG (default info).";
 
@@ -116,6 +131,9 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
     let mut db = None;
     let mut capture_dir = None;
     let mut capture_max = None;
+    let mut tls_cert = None;
+    let mut tls_key = None;
+    let mut api_tls = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let (flag, inline) = match arg.split_once('=') {
@@ -168,6 +186,9 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
                 }
                 app.video.hls.base_url = url;
             }
+            "--tls-cert" => tls_cert = Some(PathBuf::from(value()?)),
+            "--tls-key" => tls_key = Some(PathBuf::from(value()?)),
+            "--api-tls" => api_tls = true,
             "--ffmpeg" => {
                 app.ffmpeg = Some(FfmpegConfig {
                     program: PathBuf::from(value()?),
@@ -195,6 +216,20 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
     if config.hls_listen.is_none() && !config.app.video.hls.base_url.is_empty() {
         return Err("--hls-public-url needs --hls-listen".to_owned());
     }
+    config.tls = match (tls_cert, tls_key) {
+        (Some(cert), Some(key)) => {
+            if config.hls_listen.is_none() && !api_tls {
+                return Err("--tls-cert serves --hls-listen, or the API with --api-tls".to_owned());
+            }
+            Some(TlsConfig {
+                api: api_tls,
+                ..TlsConfig::new(cert, key)
+            })
+        }
+        (None, None) if api_tls => return Err("--api-tls needs --tls-cert".to_owned()),
+        (None, None) => None,
+        _ => return Err("--tls-cert and --tls-key go together".to_owned()),
+    };
     Ok(Command::Run(Box::new(config)))
 }
 
@@ -268,8 +303,19 @@ mod tests {
             "/tmp/cap",
             "--ppspp-capture-max=16",
             "--ffmpeg=/opt/ffmpeg/bin/ffmpeg",
+            "--tls-cert",
+            "/etc/strims/fullchain.pem",
+            "--tls-key=/etc/strims/privkey.pem",
+            "--api-tls",
         ])
         .unwrap();
+        assert_eq!(
+            c.tls,
+            Some(TlsConfig {
+                api: true,
+                ..TlsConfig::new("/etc/strims/fullchain.pem", "/etc/strims/privkey.pem")
+            })
+        );
         assert!(c.app.video.ingress.transcode.ladder.is_empty());
         let ffmpeg = c.app.ffmpeg.as_ref().unwrap();
         assert_eq!(ffmpeg.program.to_str(), Some("/opt/ffmpeg/bin/ffmpeg"));
@@ -319,6 +365,17 @@ mod tests {
         assert_eq!(c.hls_listen, None);
         assert_eq!(c.app.video.hls.base_url, "");
         assert_eq!(c.app.ppspp_capture, None);
+        assert_eq!(c.tls, None);
+        let c = run(&[
+            "--db-memory",
+            "--hls-listen=:0",
+            "--tls-cert=c",
+            "--tls-key=k",
+        ])
+        .unwrap();
+        let tls = c.tls.unwrap();
+        assert!(!tls.api);
+        assert_eq!(tls.reload_interval, strims_svc::DEFAULT_TLS_RELOAD_INTERVAL);
     }
 
     #[test]
@@ -389,6 +446,18 @@ mod tests {
         }
         let lone = run(&["--db-memory", "--hls-public-url", "HTTP://a"]);
         assert!(lone.err().unwrap().contains("--hls-listen"));
+        for (args, why) in [
+            (&["--hls-listen=:0", "--tls-cert=c"][..], "go together"),
+            (&["--hls-listen=:0", "--tls-key=k"], "go together"),
+            (&["--hls-listen=:0", "--api-tls"], "--api-tls needs"),
+            (&["--tls-cert=c", "--tls-key=k"], "serves --hls-listen"),
+        ] {
+            let args = [&["--db-memory"][..], args].concat();
+            let e = run(&args).err().unwrap();
+            assert!(e.contains(why), "{args:?}: {e}");
+        }
+        let api_only = run(&["--db-memory", "--tls-cert=c", "--tls-key=k", "--api-tls"]);
+        assert!(api_only.unwrap().tls.unwrap().api);
         assert!(matches!(
             parse(["--help".to_owned()]).unwrap(),
             Command::Help

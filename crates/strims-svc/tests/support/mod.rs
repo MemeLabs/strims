@@ -15,13 +15,17 @@ use strims_node::app::AppConfig;
 use strims_proto::types::Certificate;
 use strims_rpc::{Client, Config as RpcConfig, connect};
 use strims_svc::{Config, Db, Svc};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::task::{LocalSet, spawn_local};
+use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::handshake::client::Response;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::http::header::{COOKIE, SET_COOKIE};
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{self, Message};
 
+pub mod tls;
 pub mod video;
 
 /// The config of a service on localhost: its API, and a node on TCP and
@@ -73,11 +77,24 @@ pub async fn connect_at(
         req.headers_mut()
             .insert(COOKIE, HeaderValue::from_str(c).unwrap());
     }
+    let (ws, resp) =
+        tokio_tungstenite::connect_async_with_config(req, Some(ws_config()), true).await?;
+    Ok(ui(ws, &resp))
+}
+
+/// The WebSocket limits of the UI's connections.
+pub fn ws_config() -> WebSocketConfig {
     let max = RpcConfig::frontend().max_message_bytes + 16;
-    let config = WebSocketConfig::default()
+    WebSocketConfig::default()
         .max_message_size(Some(max))
-        .max_frame_size(Some(max));
-    let (ws, resp) = tokio_tungstenite::connect_async_with_config(req, Some(config), true).await?;
+        .max_frame_size(Some(max))
+}
+
+/// The UI's connection over `ws`, whose upgrade `resp` answered.
+pub fn ui<S>(ws: WebSocketStream<S>, resp: &Response) -> Ui
+where
+    S: AsyncRead + AsyncWrite + Unpin + 'static,
+{
     let set_cookie = resp
         .headers()
         .get(SET_COOKIE)
@@ -102,7 +119,7 @@ pub async fn connect_at(
     spawn_local(async move {
         let _ = conn.await;
     });
-    Ok(Ui { client, set_cookie })
+    Ui { client, set_cookie }
 }
 
 /// Connects to `svc`'s API.
