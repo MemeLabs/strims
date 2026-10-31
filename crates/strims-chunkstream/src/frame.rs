@@ -145,8 +145,7 @@ pub enum Start {
     Data,
 }
 
-/// A piece of the frame stream, from [`FrameDecoder::decode`] or
-/// [`PackedDecoder::decode`](crate::packed::PackedDecoder::decode).
+/// A piece of the frame stream, from [`FrameDecoder::decode`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Frag<'a> {
     /// Bytes of the current record.
@@ -156,15 +155,6 @@ pub enum Frag<'a> {
     /// The frame's header flags an end outside `4..=size`: the current
     /// record is lost, and the rest of the frame is skipped.
     Corrupt,
-}
-
-/// What follows a record end in its frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum AfterEnd {
-    /// Padding: the next record starts on the next frame.
-    Padding,
-    /// The next record's bytes.
-    Record,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,22 +176,16 @@ pub struct FrameDecoder {
     pos: usize,
     state: State,
     header: [u8; HEADER_LEN],
-    after_end: AfterEnd,
 }
 
 impl FrameDecoder {
     /// A decoder for frames of `size` bytes, starting at stream offset 0.
     pub fn new(size: usize) -> Result<Self, SizeError> {
-        Self::with_after_end(size, AfterEnd::Padding)
-    }
-
-    pub(crate) fn with_after_end(size: usize, after_end: AfterEnd) -> Result<Self, SizeError> {
         Ok(Self {
             size: check_size(size)?,
             pos: 0,
             state: State::Header,
             header: [0; HEADER_LEN],
-            after_end,
         })
     }
 
@@ -271,13 +255,8 @@ impl FrameDecoder {
                 State::Data { end, eor } => {
                     if self.pos >= end {
                         if eor {
-                            self.state = match self.after_end {
-                                AfterEnd::Padding => State::Skip,
-                                AfterEnd::Record => State::Data {
-                                    end: self.size,
-                                    eor: false,
-                                },
-                            };
+                            // Padding follows a record's end in its frame.
+                            self.state = State::Skip;
                             return (used, Some(Frag::End));
                         }
                         self.next_frame();

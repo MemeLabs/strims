@@ -10,18 +10,13 @@
 //! write into caller buffers, and decoders take input in pieces of any
 //! size.
 //!
-//! Three layouts, all wire formats that must stay byte-exact. Two share
-//! one frame format:
+//! Two layouts, both wire formats that must stay byte-exact:
 //!
 //! - zero-padded frames, at the crate root: every record starts on a new
 //!   frame, and a length prefix lets the reader check it;
-//! - packed frames, in [`packed`]: records back to back, at most one
-//!   record end per frame. Video swarms of the fMP4 format use them.
-//!
-//! The third, chunked frames in [`chunked`], has frames of its own, one
-//! per swarm chunk: each frame's 2-byte header gives its first record
-//! boundary, and length-prefixed records follow, any number ending per
-//! frame.
+//! - chunked frames, in [`chunked`], one per swarm chunk: each frame's
+//!   2-byte header gives its first record boundary, and length-prefixed
+//!   records follow, any number ending per frame. Video swarms use them.
 //!
 //! # Frames
 //!
@@ -82,17 +77,9 @@
 //! - A payload longer than `max_record` is dropped at its end, and the
 //!   decoder buffers at most `max_record + MAX_UVARINT_LEN` bytes.
 //! - No input panics, and the work per call is linear in its input.
-//!
-//! # Packed frames
-//!
-//! The frames' data is the records back to back, so a record starts where
-//! the one before it ends, in the same frame, and a frame holds at most one
-//! record end. The [`packed`] module docs give the layout and its reader
-//! contract.
 
 pub mod chunked;
 mod frame;
-pub mod packed;
 mod record;
 mod uvarint;
 
