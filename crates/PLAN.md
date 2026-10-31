@@ -35,12 +35,6 @@ read it.
   - `SwarmReader` and `SwarmWriter` close themselves on drop with
     `try_send`, so a full node command queue loses the close and leaks the
     slot; a cancelled `create_swarm` or `add_swarm` leaks the same way.
-  - The signing rule (`UnitSigning::for_stream`) is untested between 0.75
-    and 1.5 Mbit/s and above 6.3 Mbit/s. A farm A/B at 1 Mbit/s (`suite.py`'s
-    `sign` tiers) settles whether 2 or 4 chunks lag less there. Streams
-    whose bitrate swings widely (VBR scenes) pad more at its 300 ms: the
-    sweep kept 8-chunk padding within a tenth of such a stream only at an
-    interval of about 500 ms.
 - **Stream ends.** A viewer that joins after a stream's END starts at the
   newest chunk, padding, and never sees it. A writer keeps its swarm
   `END_LINGER` after signing its END, blind to whether any peer took it;
@@ -55,7 +49,10 @@ read it.
   - HE-AAC and PCE-layout audio get no silence fill, in the player or HLS:
     their holes stretch the last frame, which puts Chromium out of sync by
     the hole. HLS fills holes only retroactively, so audio that stops for
-    good while video goes on ends its segments short.
+    good while video goes on ends its segments short; Safari doesn't start
+    a variant whose segments carry video and no audio (seen with a feed
+    whose audio ran 49 s behind its video in tag order), and HLS has no
+    silence that follows the video as the player has.
   - Untested: iOS 17's window ManagedMediaSource fallback, the iPhone's A/V
     sync through the silence fill, and the rendition choice on an iPad,
     with a real directory's listing latency, and while casting. A
@@ -615,7 +612,10 @@ stack or a version gate.
 - Elide the padding of units signed early. `Writer::flush` pads a partial
   unit with zeros to a whole unit and sends them, so a stream signed early
   on a timer is sent at no less than unit size ÷ interval
-  (`strims_video::units`'s signing). A live signature would cover how
+  (`strims_video::units`'s signing), and a stream whose bitrate swings
+  widely (VBR scenes) pads more: the sweep kept 8-chunk padding within a
+  tenth of such a stream only at an interval of about 500 ms, against the
+  300 ms it signs at. A live signature would cover how
   many of its unit's chunks hold data, and peers would neither request,
   push nor announce the rest. A receiver would check them as zero leaves
   against the signed root. This lands with the bin item above, since both
