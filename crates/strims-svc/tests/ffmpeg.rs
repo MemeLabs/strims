@@ -22,8 +22,9 @@
 //!   ([`PlaylistRules`]): a target duration that never changes and that
 //!   every segment rounds to at most, three targets listed, and no
 //!   `EXT-X-INDEPENDENT-SEGMENTS`.
-//! - ffmpeg publishing HEVC over Enhanced RTMP is refused with the
-//!   reason, and the channel has no live stream.
+//! - ffmpeg publishing HEVC over Enhanced RTMP to a node that doesn't
+//!   transcode it is refused with the reason, and the channel has no live
+//!   stream.
 //!
 //! `STRIMS_HLS_DUMP=<dir>` writes the scene-cut stream's inits and
 //! segments there, with a playlist listing all of them, for players to
@@ -801,7 +802,7 @@ async fn dump(live: &mut Live, seen: &[Entry], dir: &std::path::Path) {
 }
 
 #[test]
-fn ffmpeg_publishing_hevc_is_refused_with_the_reason() {
+fn ffmpeg_publishing_hevc_to_a_node_that_does_not_transcode_is_refused_with_the_reason() {
     if !tools_available() {
         return;
     }
@@ -833,7 +834,10 @@ fn ffmpeg_publishing_hevc_is_refused_with_the_reason() {
             eprintln!("ffmpeg: {status}: {err}");
             assert!(!status.success());
             assert!(
-                err.contains("HEVC (hvc1) is not supported; send H.264 with AAC"),
+                err.contains(
+                    "HEVC (hvc1) needs a node that transcodes it to H.264, and this one doesn't; \
+                     send H.264 with AAC"
+                ),
                 "{err}"
             );
             assert_eq!(ch.live_streams().await, 0);

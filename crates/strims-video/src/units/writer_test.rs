@@ -7,6 +7,7 @@
 use strims_chunkstream::chunked::{ChunkedRecordDecoder, Item};
 
 use super::*;
+use crate::media::CodecParams;
 use crate::units::record::{Record, parse_record};
 use crate::units::test_support::{audio, unit, video};
 

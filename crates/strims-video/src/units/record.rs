@@ -11,7 +11,9 @@ use strims_chunkstream::{MAX_UVARINT_LEN, get_uvarint, put_uvarint, uvarint_len}
 
 use super::{MAX_RECORD_LEN, MAX_TRACKS};
 use crate::aac::{AacError, parse_asc};
+use crate::av1::{Av1Error, parse_av1c};
 use crate::avc::{AvcError, parse_avcc};
+use crate::hevc::{HevcError, parse_hvcc};
 use crate::media::{CodecParams, DecoderConfig, MAX_CONFIG_LEN, TrackId, TrackKind};
 use crate::opus::{self, OpusError, parse_opus_head};
 
@@ -25,6 +27,10 @@ pub const KIND_END: u8 = 3;
 pub const FLAG_KEYFRAME: u8 = 0x01;
 /// The sample entry of an H.264 track, whose config is an avcC record.
 pub const SAMPLE_ENTRY_AVC: [u8; 4] = *b"avc1";
+/// The sample entry of an H.265 track, whose config is an hvcC record.
+pub const SAMPLE_ENTRY_HEVC: [u8; 4] = *b"hvc1";
+/// The sample entry of an AV1 track, whose config is an av1C record.
+pub const SAMPLE_ENTRY_AV1: [u8; 4] = *b"av01";
 /// The sample entry of an AAC track, whose config is an
 /// AudioSpecificConfig.
 pub const SAMPLE_ENTRY_AAC: [u8; 4] = *b"mp4a";
@@ -62,6 +68,10 @@ pub enum RecordError {
     ConfigTooLong,
     #[error("track {track}: {error}")]
     Avc { track: u32, error: AvcError },
+    #[error("track {track}: {error}")]
+    Hevc { track: u32, error: HevcError },
+    #[error("track {track}: {error}")]
+    Av1 { track: u32, error: Av1Error },
     #[error("track {track}: {error}")]
     Aac { track: u32, error: AacError },
     #[error("track {track}: {error}")]
@@ -104,11 +114,14 @@ impl<'a> ConfigEntry<'a> {
     /// The entry of `config`, at `version`, before the unit numbered
     /// `next_seq`.
     pub fn of(config: &'a DecoderConfig, version: u32, next_seq: u64) -> ConfigEntry<'a> {
-        let (sample_entry, bytes) = match &config.params {
-            CodecParams::Avc { avcc, .. } => (SAMPLE_ENTRY_AVC, avcc.as_slice()),
-            CodecParams::Aac { asc, .. } => (SAMPLE_ENTRY_AAC, asc.as_slice()),
-            CodecParams::Opus { head, .. } => (SAMPLE_ENTRY_OPUS, head.as_slice()),
+        let sample_entry = match &config.params {
+            CodecParams::Avc { .. } => SAMPLE_ENTRY_AVC,
+            CodecParams::Hevc { .. } => SAMPLE_ENTRY_HEVC,
+            CodecParams::Av1 { .. } => SAMPLE_ENTRY_AV1,
+            CodecParams::Aac { .. } => SAMPLE_ENTRY_AAC,
+            CodecParams::Opus { .. } => SAMPLE_ENTRY_OPUS,
         };
+        let bytes = config.params.record();
         ConfigEntry {
             track: config.track,
             version,
@@ -123,7 +136,14 @@ impl<'a> ConfigEntry<'a> {
     ///
     /// [`decoder_config`]: ConfigEntry::decoder_config
     pub fn is_known(&self) -> bool {
-        [SAMPLE_ENTRY_AVC, SAMPLE_ENTRY_AAC, SAMPLE_ENTRY_OPUS].contains(&self.sample_entry)
+        [
+            SAMPLE_ENTRY_AVC,
+            SAMPLE_ENTRY_HEVC,
+            SAMPLE_ENTRY_AV1,
+            SAMPLE_ENTRY_AAC,
+            SAMPLE_ENTRY_OPUS,
+        ]
+        .contains(&self.sample_entry)
     }
 
     /// Whether `config` is the decoder config this entry describes,
@@ -154,6 +174,32 @@ impl<'a> ConfigEntry<'a> {
                     },
                 })
                 .map_err(|error| RecordError::Avc { track, error }),
+            SAMPLE_ENTRY_HEVC => parse_hvcc(self.config)
+                .map(|p| DecoderConfig {
+                    track: self.track,
+                    kind: TrackKind::Video,
+                    codec: p.codec(),
+                    timescale: self.timescale,
+                    params: CodecParams::Hevc {
+                        hvcc: self.config.to_vec(),
+                        width: p.sps.width,
+                        height: p.sps.height,
+                    },
+                })
+                .map_err(|error| RecordError::Hevc { track, error }),
+            SAMPLE_ENTRY_AV1 => parse_av1c(self.config)
+                .map(|p| DecoderConfig {
+                    track: self.track,
+                    kind: TrackKind::Video,
+                    codec: p.codec(),
+                    timescale: self.timescale,
+                    params: CodecParams::Av1 {
+                        av1c: self.config.to_vec(),
+                        width: p.width,
+                        height: p.height,
+                    },
+                })
+                .map_err(|error| RecordError::Av1 { track, error }),
             SAMPLE_ENTRY_AAC => parse_asc(self.config)
                 .map_err(|error| RecordError::Aac { track, error })
                 .and_then(|p| {

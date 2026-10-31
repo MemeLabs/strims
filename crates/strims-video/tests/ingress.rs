@@ -51,7 +51,9 @@ type Stream<V> = EgressStream<MemoryKv, FakeHost, V, TokioTimer>;
 const ADDR: &str = "127.0.0.1:1935";
 const BAD_NAME: &str = "NetStream.Publish.BadName";
 const FAILED: &str = "NetStream.Publish.Failed";
-const HEVC: &str = "HEVC (hvc1) is not supported; send H.264 with AAC";
+const VP9: &str = "VP9 (vp09) is not supported; send H.264 with AAC";
+const HEVC: &str = "HEVC (hvc1) needs a node that transcodes it to H.264, and this one doesn't; send H.264 with AAC";
+const AV1: &str = "AV1 (av01) needs a node that transcodes it to H.264, and this one doesn't; send H.264 with AAC";
 const REPLACED: &str = "replaced by a new publish to the channel";
 /// The ingest swarm's chunk, and its integrity unit of 8 chunks.
 const CHUNK: u64 = 4096;
@@ -447,25 +449,35 @@ fn publishes_are_refused_with_their_reasons() {
     });
 }
 
-/// A stream of a codec the ingress doesn't take ends with the source's
-/// message, which the publisher gets too.
+/// A stream of a codec the ingress doesn't take ends with the reason,
+/// which the publisher gets too: the source's message for a codec it
+/// refuses, and for HEVC and AV1, which it takes, that the node doesn't
+/// transcode them to H.264.
 #[test]
-fn an_hevc_stream_ends_with_the_unsupported_message() {
-    run(async {
-        let s = Ingest::new(false, Config::default()).await;
-        let mut events = s.va.subscribe();
-        let mut p = s.publish("10.0.0.1:1").await;
-        // An Enhanced RTMP keyframe sequence start of hvc1.
-        let mut body = vec![0x90];
-        body.extend_from_slice(b"hvc1");
-        body.extend_from_slice(&[1, 2, 3, 4]);
-        p.publisher.send_video(0, &body).unwrap();
-        p.flush().await;
-        assert_eq!(p.refusal().await, refusal(FAILED, HEVC));
-        assert_eq!(ended(&mut events).await, (s.channel.id, HEVC.to_owned()));
-        assert_eq!(s.va.metrics().ingress.media_errors, 1);
-        assert!(s.va.video_swarms().is_empty());
-    });
+fn streams_of_codecs_the_node_cant_list_end_with_the_reason() {
+    use strims_video::synth::script::{av1c, hvcc};
+    let cases = [
+        (*b"vp09", vec![1, 2, 3, 4], VP9),
+        (*b"hvc1", hvcc(1280, 720), HEVC),
+        (*b"av01", av1c(1280, 720), AV1),
+    ];
+    for (i, (fourcc, record, reason)) in cases.into_iter().enumerate() {
+        run(async move {
+            let s = Ingest::new(false, Config::default()).await;
+            let mut events = s.va.subscribe();
+            let mut p = s.publish("10.0.0.1:1").await;
+            // An Enhanced RTMP keyframe sequence start.
+            let mut body = vec![0x90];
+            body.extend_from_slice(&fourcc);
+            body.extend_from_slice(&record);
+            p.publisher.send_video(0, &body).unwrap();
+            p.flush().await;
+            assert_eq!(p.refusal().await, refusal(FAILED, reason), "case {i}");
+            assert_eq!(ended(&mut events).await, (s.channel.id, reason.to_owned()));
+            assert_eq!(s.va.metrics().ingress.media_errors, 1);
+            assert!(s.va.video_swarms().is_empty());
+        });
+    }
 }
 
 /// A changed channel record serves the snippet again with the same start

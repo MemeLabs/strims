@@ -64,7 +64,10 @@ impl Track {
     fn new(config: &DecoderConfig, delay: Duration, reuse: Option<Track>) -> Self {
         let frame_samples = match config.params {
             CodecParams::Aac { frame_samples, .. } => frame_samples,
-            CodecParams::Avc { .. } | CodecParams::Opus { .. } => 0,
+            CodecParams::Avc { .. }
+            | CodecParams::Hevc { .. }
+            | CodecParams::Av1 { .. }
+            | CodecParams::Opus { .. } => 0,
         };
         let (prev_duration, mut samples, mut data) = match reuse {
             Some(t) if t.timescale == config.timescale => (t.prev_duration, t.samples, t.data),

@@ -2,14 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! A source over the bodies of FLV video and audio tags, as RTMP carries
-//! them: H.264 and AAC, in the legacy layout or Enhanced RTMP's FourCC
-//! headers.
+//! them: H.264, H.265 or AV1 video and AAC audio, in the legacy layout or
+//! Enhanced RTMP's FourCC headers.
 //!
 //! - **Video** is track [`VIDEO_TRACK`] on a 90 kHz timescale. The legacy
-//!   AVC packets (codec id 7) and Enhanced RTMP's `avc1` packets carry the
-//!   avcC sequence header and frames with a signed 24-bit composition time
-//!   in milliseconds: DTS is the tag time, PTS the tag time plus the
-//!   composition time. The FLV frame type marks keyframes.
+//!   AVC packets (codec id 7) and Enhanced RTMP's `avc1` and `hvc1`
+//!   packets carry the avcC or hvcC sequence header and frames with a
+//!   signed 24-bit composition time in milliseconds: DTS is the tag time,
+//!   PTS the tag time plus the composition time. Enhanced RTMP's `av01`
+//!   packets carry the av1C sequence header, which must hold a sequence
+//!   header OBU, and temporal units without a composition time, less the
+//!   temporal delimiter OBUs they start with. Frames packed without a
+//!   composition time present at their decode time. The FLV frame type
+//!   marks keyframes. A frame of a codec other than its track's config's is
+//!   dropped as one before the track's config.
 //! - **Audio** is track [`AUDIO_TRACK`] on a timescale of its output
 //!   sample rate. The legacy AAC packets (sound format 10) and Enhanced
 //!   RTMP's `mp4a` packets carry the AudioSpecificConfig and raw frames.
@@ -18,8 +24,9 @@
 //!   the tag time.
 //! - Other codecs, Enhanced RTMP multitrack and ModEx packets are refused
 //!   with [`FlvError::Unsupported`], whose message tells the streamer what
-//!   to send. Command frames, sequence ends, Enhanced RTMP metadata and
-//!   empty tags carry nothing and are skipped.
+//!   to send. Command frames, sequence ends, Enhanced RTMP metadata, AV1's
+//!   MPEG-2 TS sequence starts and empty tags carry nothing and are
+//!   skipped.
 //!
 //! Tag times are 32-bit milliseconds that wrap; each is taken as the time
 //! nearest the previous tag's, on one clock for both tracks. A track's
@@ -37,7 +44,9 @@ use std::fmt;
 use strims_base::time::Time;
 
 use crate::aac::{self, AacError};
+use crate::av1::{self, Av1Error};
 use crate::avc::{self, AvcError};
+use crate::hevc::{self, HevcError};
 use crate::media::{AccessUnit, CodecParams, DecoderConfig, TrackId, TrackKind};
 
 /// The video track's id.
@@ -68,6 +77,7 @@ const VIDEO_CODED_FRAMES: u8 = 1;
 const VIDEO_SEQUENCE_END: u8 = 2;
 const VIDEO_CODED_FRAMES_X: u8 = 3;
 const VIDEO_METADATA: u8 = 4;
+const VIDEO_MPEG2TS_SEQUENCE_START: u8 = 5;
 const VIDEO_MULTITRACK: u8 = 6;
 const VIDEO_MOD_EX: u8 = 7;
 
@@ -103,7 +113,7 @@ pub enum SourceEvent<'a> {
 pub enum Unsupported {
     /// A legacy FLV video codec id other than AVC.
     VideoCodecId(u8),
-    /// An Enhanced RTMP video FourCC other than `avc1`.
+    /// An Enhanced RTMP video FourCC other than `avc1`, `hvc1` and `av01`.
     VideoFourCc([u8; 4]),
     /// A legacy FLV sound format other than AAC.
     SoundFormat(u8),
@@ -130,8 +140,6 @@ impl fmt::Display for Unsupported {
                 _ => write!(f, "FLV video codec id {id} is not supported"),
             },
             Unsupported::VideoFourCc(fourcc) => match fourcc {
-                b"hvc1" => write!(f, "HEVC (hvc1) is not supported"),
-                b"av01" => write!(f, "AV1 (av01) is not supported"),
                 b"vp09" => write!(f, "VP9 (vp09) is not supported"),
                 b"vp08" => write!(f, "VP8 (vp08) is not supported"),
                 _ => write!(
@@ -186,6 +194,10 @@ pub enum FlvError {
     PacketType { kind: TrackKind, packet_type: u8 },
     #[error("invalid AVC sequence header: {0}")]
     Avc(AvcError),
+    #[error("invalid HEVC sequence header: {0}")]
+    Hevc(HevcError),
+    #[error("invalid AV1 sequence header: {0}")]
+    Av1(Av1Error),
     #[error("invalid AAC sequence header: {0}")]
     Aac(AacError),
 }
@@ -196,7 +208,8 @@ pub struct FlvMetrics {
     /// Tags that carry nothing new: command frames, sequence ends,
     /// metadata, empty tags and repeated sequence headers.
     pub skipped: u64,
-    /// Frames dropped because their track had no decoder config yet.
+    /// Frames dropped because their track had no decoder config of their
+    /// codec yet.
     pub before_config: u64,
     /// Units whose DTS was raised to the previous unit's.
     pub dts_clamped: u64,
@@ -224,9 +237,30 @@ impl Clock {
     }
 }
 
+/// A video codec the source takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VideoCodec {
+    Avc,
+    Hevc,
+    Av1,
+}
+
+impl VideoCodec {
+    /// The codec of an Enhanced RTMP FourCC.
+    fn of(fourcc: &[u8; 4]) -> Option<VideoCodec> {
+        match fourcc {
+            b"avc1" => Some(VideoCodec::Avc),
+            b"hvc1" => Some(VideoCodec::Hevc),
+            b"av01" => Some(VideoCodec::Av1),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct VideoTrack {
     config: DecoderConfig,
+    codec: VideoCodec,
     last_dts: Option<i64>,
 }
 
@@ -285,11 +319,12 @@ impl FlvSource {
             AVC_END_OF_SEQUENCE => Ok(self.skip()),
             AVC_SEQUENCE_HEADER => {
                 let (_, avcc) = rest.split_first_chunk::<3>().ok_or(truncated)?;
-                self.video_config(avcc)
+                self.video_config(VideoCodec::Avc, avcc)
             }
             AVC_NALU => {
                 let (cts, data) = rest.split_first_chunk::<3>().ok_or(truncated)?;
-                Ok(self.video_unit(ms, si24(*cts), frame_type == FRAME_KEY, data, now))
+                let key = frame_type == FRAME_KEY;
+                Ok(self.video_unit(VideoCodec::Avc, ms, si24(*cts), key, data, now))
             }
             _ => Err(FlvError::PacketType {
                 kind: TrackKind::Video,
@@ -326,17 +361,21 @@ impl FlvSource {
         }
         let truncated = FlvError::Truncated(TrackKind::Video);
         let (fourcc, rest) = rest.split_first_chunk::<4>().ok_or(truncated)?;
-        if fourcc != b"avc1" {
-            return Err(FlvError::Unsupported(Unsupported::VideoFourCc(*fourcc)));
-        }
+        let codec = VideoCodec::of(fourcc)
+            .ok_or(FlvError::Unsupported(Unsupported::VideoFourCc(*fourcc)))?;
+        let key = frame_type == FRAME_KEY;
         match packet_type {
-            VIDEO_SEQUENCE_START => self.video_config(rest),
-            VIDEO_CODED_FRAMES => {
+            VIDEO_SEQUENCE_START => self.video_config(codec, rest),
+            // AV1's frames carry no composition time.
+            VIDEO_CODED_FRAMES if codec != VideoCodec::Av1 => {
                 let (cts, data) = rest.split_first_chunk::<3>().ok_or(truncated)?;
-                Ok(self.video_unit(ms, si24(*cts), frame_type == FRAME_KEY, data, now))
+                Ok(self.video_unit(codec, ms, si24(*cts), key, data, now))
             }
-            VIDEO_CODED_FRAMES_X => Ok(self.video_unit(ms, 0, frame_type == FRAME_KEY, rest, now)),
+            VIDEO_CODED_FRAMES | VIDEO_CODED_FRAMES_X => {
+                Ok(self.video_unit(codec, ms, 0, key, rest, now))
+            }
             VIDEO_SEQUENCE_END | VIDEO_METADATA => Ok(self.skip()),
+            VIDEO_MPEG2TS_SEQUENCE_START if codec == VideoCodec::Av1 => Ok(self.skip()),
             _ => Err(FlvError::PacketType {
                 kind: TrackKind::Video,
                 packet_type,
@@ -344,29 +383,58 @@ impl FlvSource {
         }
     }
 
-    fn video_config<'a>(&mut self, avcc: &[u8]) -> Result<Option<SourceEvent<'a>>, FlvError> {
+    fn video_config<'a>(
+        &mut self,
+        codec: VideoCodec,
+        record: &[u8],
+    ) -> Result<Option<SourceEvent<'a>>, FlvError> {
         if self
             .video
             .as_ref()
-            .is_some_and(|t| config_bytes(&t.config) == avcc)
+            .is_some_and(|t| t.codec == codec && t.config.params.record() == record)
         {
             return Ok(self.skip());
         }
-        let parsed = avc::parse_avcc(avcc).map_err(FlvError::Avc)?;
+        let (codec_string, params) = match codec {
+            VideoCodec::Avc => {
+                let parsed = avc::parse_avcc(record).map_err(FlvError::Avc)?;
+                let params = CodecParams::Avc {
+                    avcc: record.to_vec(),
+                    width: parsed.sps.width,
+                    height: parsed.sps.height,
+                };
+                (parsed.codec(), params)
+            }
+            VideoCodec::Hevc => {
+                let parsed = hevc::parse_hvcc(record).map_err(FlvError::Hevc)?;
+                let params = CodecParams::Hevc {
+                    hvcc: record.to_vec(),
+                    width: parsed.sps.width,
+                    height: parsed.sps.height,
+                };
+                (parsed.codec(), params)
+            }
+            VideoCodec::Av1 => {
+                let parsed = av1::parse_av1c(record).map_err(FlvError::Av1)?;
+                let params = CodecParams::Av1 {
+                    av1c: record.to_vec(),
+                    width: parsed.width,
+                    height: parsed.height,
+                };
+                (parsed.codec(), params)
+            }
+        };
         let config = DecoderConfig {
             track: VIDEO_TRACK,
             kind: TrackKind::Video,
-            codec: parsed.codec(),
+            codec: codec_string,
             timescale: VIDEO_TIMESCALE,
-            params: CodecParams::Avc {
-                avcc: avcc.to_vec(),
-                width: parsed.sps.width,
-                height: parsed.sps.height,
-            },
+            params,
         };
         let last_dts = self.video.as_ref().and_then(|t| t.last_dts);
         self.video = Some(VideoTrack {
             config: config.clone(),
+            codec,
             last_dts,
         });
         Ok(Some(SourceEvent::Config(config)))
@@ -374,15 +442,20 @@ impl FlvSource {
 
     fn video_unit<'a>(
         &mut self,
+        codec: VideoCodec,
         ms: i64,
         cts: i64,
         keyframe: bool,
         payload: &'a [u8],
         now: Time,
     ) -> Option<SourceEvent<'a>> {
-        let Some(track) = &mut self.video else {
+        let Some(track) = self.video.as_mut().filter(|t| t.codec == codec) else {
             self.metrics.before_config += 1;
             return None;
+        };
+        let payload = match codec {
+            VideoCodec::Av1 => av1::strip_temporal_delimiters(payload),
+            VideoCodec::Avc | VideoCodec::Hevc => payload,
         };
         if payload.is_empty() {
             self.metrics.skipped += 1;
@@ -475,7 +548,7 @@ impl FlvSource {
         if self
             .audio
             .as_ref()
-            .is_some_and(|t| config_bytes(&t.config) == asc)
+            .is_some_and(|t| t.config.params.record() == asc)
         {
             return Ok(self.skip());
         }
@@ -569,15 +642,6 @@ fn clamp(last: &mut Option<i64>, dts: i64, metrics: &mut FlvMetrics) -> i64 {
 /// A signed 24-bit big-endian number.
 fn si24([a, b, c]: [u8; 3]) -> i64 {
     i64::from(i32::from_be_bytes([a, b, c, 0]) >> 8)
-}
-
-/// The codec record a config was built from.
-fn config_bytes(config: &DecoderConfig) -> &[u8] {
-    match &config.params {
-        CodecParams::Avc { avcc, .. } => avcc,
-        CodecParams::Aac { asc, .. } => asc,
-        CodecParams::Opus { head, .. } => head,
-    }
 }
 
 #[cfg(test)]

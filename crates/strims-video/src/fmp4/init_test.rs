@@ -320,6 +320,21 @@ fn invalid_config_sets_are_refused_and_leave_the_buffer() {
                 kind: TrackKind::Audio,
             },
         ),
+        (
+            vec![DecoderConfig {
+                kind: TrackKind::Audio,
+                params: CodecParams::Av1 {
+                    av1c: Vec::new(),
+                    width: 16,
+                    height: 16,
+                },
+                ..v.clone()
+            }],
+            InitError::KindMismatch {
+                track: 1,
+                kind: TrackKind::Audio,
+            },
+        ),
     ];
     for (configs, error) in cases {
         assert_eq!(write_init(&configs, Duration::ZERO, &mut out), Err(error));
@@ -339,6 +354,76 @@ fn invalid_config_sets_are_refused_and_leave_the_buffer() {
         Err(InitError::Aac { track: 2, .. })
     ));
     assert_eq!(out, [0xaa]);
+}
+
+/// The VisualSampleEntry fields after the box header, as `avc1` has them:
+/// reserved, data_reference_index 1, pre_defined and reserved, the size,
+/// 72 dpi, reserved, frame_count 1, compressorname, depth and pre_defined.
+fn visual_entry_fields(width: u16, height: u16) -> Vec<u8> {
+    [
+        &[0; 6][..],
+        &[0, 1],
+        &[0; 16],
+        &width.to_be_bytes(),
+        &height.to_be_bytes(),
+        &[0, 0x48, 0, 0],
+        &[0, 0x48, 0, 0],
+        &[0; 4],
+        &[0, 1],
+        &[0; 32],
+        &[0, 0x18],
+        &[0xff, 0xff],
+    ]
+    .concat()
+}
+
+#[test]
+fn hevc_and_av1_sample_entries_hold_their_records() {
+    let hvcc = crate::test_util::hvcc_720p();
+    let av1c = crate::test_util::av1c_720p();
+    for (params, entry, record_box, record) in [
+        (
+            CodecParams::Hevc {
+                hvcc: hvcc.clone(),
+                width: 1280,
+                height: 720,
+            },
+            b"hvc1",
+            b"hvcC",
+            &hvcc,
+        ),
+        (
+            CodecParams::Av1 {
+                av1c: av1c.clone(),
+                width: 1280,
+                height: 720,
+            },
+            b"av01",
+            b"av1C",
+            &av1c,
+        ),
+    ] {
+        let config = DecoderConfig {
+            params,
+            ..video(1, &[], 0, 0)
+        };
+        let mut out = Vec::new();
+        write_init(&[config], Duration::ZERO, &mut out).unwrap();
+        let record_len = u32::try_from(8 + record.len()).unwrap();
+        let expected = [
+            &(86 + record_len).to_be_bytes()[..],
+            entry,
+            &visual_entry_fields(1280, 720),
+            &record_len.to_be_bytes(),
+            record_box,
+            record,
+        ]
+        .concat();
+        assert_eq!(find_box(&out, entry), expected, "{}", entry.escape_ascii());
+        let tkhd = find_box(&out, b"tkhd");
+        assert_eq!(&tkhd[tkhd.len() - 8..], [0x05, 0, 0, 0, 0x02, 0xd0, 0, 0]);
+        assert_eq!(&find_box(&out, b"hdlr")[16..20], b"vide");
+    }
 }
 
 #[test]

@@ -32,7 +32,10 @@ use strims_base::time::Time;
 use crate::flv::{FlvSource, SourceEvent};
 use crate::fmp4::parse::Boxes;
 use crate::media::Muxer;
-use crate::test_util::{BitWriter, SpsSpec, avcc as avcc_record};
+use crate::test_util::{
+    Av1SeqSpec, BitWriter, HevcSpsSpec, SpsSpec, av1c as av1c_record, avcc as avcc_record,
+    hvcc as hvcc_record,
+};
 
 /// The kind of an FLV tag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -153,6 +156,18 @@ pub fn avcc(width: u16, height: u16) -> Vec<u8> {
         ..SpsSpec::high(w_mbs, h_mbs)
     };
     avcc_record(&sps.build())
+}
+
+/// The hvcC record of a Main profile, level 3.1 SPS for a `width` by
+/// `height` picture, between a VPS and a PPS: codec `hvc1.1.6.L93.90`.
+pub fn hvcc(width: u16, height: u16) -> Vec<u8> {
+    hvcc_record(&HevcSpsSpec::main(u32::from(width), u32::from(height)).build())
+}
+
+/// The av1C record of a Main profile 8-bit sequence at level 4.0 for a
+/// `width` by `height` picture: codec `av01.0.08M.08`.
+pub fn av1c(width: u16, height: u16) -> Vec<u8> {
+    av1c_record(&Av1SeqSpec::main(u32::from(width), u32::from(height)).build())
 }
 
 /// The AudioSpecificConfig of AAC LC, stereo, at `sample_rate`.

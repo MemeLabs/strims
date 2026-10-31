@@ -8,7 +8,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
 use super::*;
-use crate::test_util::avcc_720p;
+use crate::test_util::{Av1SeqSpec, av1c, av1c_720p, avcc_720p, hvcc_720p, obu};
 
 const NOW: Time = Time::from_unix_millis(1_700_000_000_000);
 const LC_44100: [u8; 2] = [0x12, 0x10];
@@ -174,6 +174,107 @@ fn enhanced_avc_sequence_start_and_frames() {
         Ok(None)
     );
     assert_eq!(s.metrics().skipped, 2);
+}
+
+#[test]
+fn enhanced_hevc_sequence_start_and_frames() {
+    let mut s = FlvSource::new();
+    let hvcc = hvcc_720p();
+    let c = config(s.video(0, &ex_video(1, VIDEO_SEQUENCE_START, b"hvc1", &hvcc), NOW));
+    assert_eq!(c.codec, "hvc1.1.6.L93.90");
+    assert_eq!(
+        (c.track, c.kind, c.timescale),
+        (VIDEO_TRACK, TrackKind::Video, 90_000)
+    );
+    assert_eq!(
+        c.params,
+        CodecParams::Hevc {
+            hvcc,
+            width: 1280,
+            height: 720
+        }
+    );
+
+    let mut coded = vec![0x00, 0x00, 0x42];
+    coded.extend_from_slice(b"key");
+    let u = unit(s.video(40, &ex_video(1, VIDEO_CODED_FRAMES, b"hvc1", &coded), NOW));
+    assert_eq!((u.dts, u.pts, u.keyframe), (40 * 90, 106 * 90, true));
+    assert_eq!(u.payload, b"key");
+    let u = unit(s.video(80, &ex_video(2, VIDEO_CODED_FRAMES_X, b"hvc1", b"p"), NOW));
+    assert_eq!((u.dts, u.pts, u.keyframe), (80 * 90, 80 * 90, false));
+
+    // ffmpeg sends its colour info as a metadata command frame
+    let metadata = ex_video(
+        FRAME_COMMAND,
+        VIDEO_METADATA,
+        b"hvc1",
+        b"\x02\x00\x09colorInfo",
+    );
+    assert_eq!(s.video(80, &metadata, NOW), Ok(None));
+    assert_eq!(s.metrics().skipped, 1);
+}
+
+#[test]
+fn enhanced_av1_sequence_start_and_frames() {
+    let mut s = FlvSource::new();
+    let av1c = av1c_720p();
+    let c = config(s.video(0, &ex_video(1, VIDEO_SEQUENCE_START, b"av01", &av1c), NOW));
+    assert_eq!(c.codec, "av01.0.08M.08");
+    assert_eq!(
+        c.params,
+        CodecParams::Av1 {
+            av1c,
+            width: 1280,
+            height: 720
+        }
+    );
+
+    // CodedFrames carries no composition time, and the unit loses the
+    // temporal delimiter it starts with
+    let frame = obu(6, b"key frame");
+    let coded = [obu(2, &[]), frame.clone()].concat();
+    let u = unit(s.video(40, &ex_video(1, VIDEO_CODED_FRAMES, b"av01", &coded), NOW));
+    assert_eq!((u.dts, u.pts, u.keyframe), (40 * 90, 40 * 90, true));
+    assert_eq!(u.payload, frame);
+    let u = unit(s.video(73, &ex_video(2, VIDEO_CODED_FRAMES_X, b"av01", &frame), NOW));
+    assert_eq!((u.dts, u.pts, u.keyframe), (73 * 90, 73 * 90, false));
+
+    // a temporal unit of a delimiter alone carries nothing
+    let td = ex_video(2, VIDEO_CODED_FRAMES, b"av01", &obu(2, &[]));
+    assert_eq!(s.video(90, &td, NOW), Ok(None));
+    let ts_start = ex_video(1, VIDEO_MPEG2TS_SEQUENCE_START, b"av01", b"\x80");
+    assert_eq!(s.video(90, &ts_start, NOW), Ok(None));
+    assert_eq!(s.metrics().skipped, 2);
+    // an MPEG-2 TS sequence start of another codec is malformed
+    let avc_ts_start = ex_video(1, VIDEO_MPEG2TS_SEQUENCE_START, b"avc1", b"\x80");
+    assert!(matches!(
+        s.video(90, &avc_ts_start, NOW),
+        Err(FlvError::PacketType { packet_type: 5, .. })
+    ));
+}
+
+#[test]
+fn frames_of_another_codec_than_the_config_are_dropped() {
+    let mut s = FlvSource::new();
+    config(s.video(0, &legacy_video(1, 0, 0, &avcc_720p()), NOW));
+    let hevc = ex_video(1, VIDEO_CODED_FRAMES_X, b"hvc1", b"frame");
+    assert_eq!(s.video(10, &hevc, NOW), Ok(None));
+    assert_eq!(s.metrics().before_config, 1);
+    unit(s.video(20, &legacy_video(1, 1, 0, b"avc"), NOW));
+
+    // a sequence start of another codec changes the track's codec
+    let c = config(s.video(
+        30,
+        &ex_video(1, VIDEO_SEQUENCE_START, b"hvc1", &hvcc_720p()),
+        NOW,
+    ));
+    assert_eq!(c.codec, "hvc1.1.6.L93.90");
+    assert_eq!(s.video(40, &legacy_video(1, 1, 0, b"avc"), NOW), Ok(None));
+    assert_eq!(s.metrics().before_config, 2);
+    // and keeps the DTS clamp
+    let u = unit(s.video(15, &hevc, NOW));
+    assert_eq!(u.dts, 20 * 90);
+    assert_eq!(s.metrics().dts_clamped, 1);
 }
 
 #[test]
@@ -395,16 +496,8 @@ fn audio_refusal(body: &[u8]) -> String {
 }
 
 #[test]
-fn enhanced_video_fourccs_other_than_avc1_are_refused() {
+fn enhanced_video_fourccs_other_than_avc1_hvc1_and_av01_are_refused() {
     let sequence_start = |fourcc| ex_video(1, VIDEO_SEQUENCE_START, fourcc, b"\x01");
-    assert_eq!(
-        video_refusal(&sequence_start(b"hvc1")),
-        "HEVC (hvc1) is not supported; send H.264 with AAC"
-    );
-    assert_eq!(
-        video_refusal(&sequence_start(b"av01")),
-        "AV1 (av01) is not supported; send H.264 with AAC"
-    );
     assert_eq!(
         video_refusal(&sequence_start(b"vp09")),
         "VP9 (vp09) is not supported; send H.264 with AAC"
@@ -601,6 +694,28 @@ fn invalid_sequence_headers_are_errors() {
         e.to_string(),
         "invalid AAC sequence header: AudioSpecificConfig is truncated"
     );
+    let mut hvcc = hvcc_720p();
+    hvcc[0] = 2;
+    let e = s
+        .video(0, &ex_video(1, VIDEO_SEQUENCE_START, b"hvc1", &hvcc), NOW)
+        .unwrap_err();
+    assert_eq!(e, FlvError::Hevc(HevcError::Version(2)));
+    assert_eq!(
+        e.to_string(),
+        "invalid HEVC sequence header: hvcC version 2 is not 1"
+    );
+    let e = s
+        .video(
+            0,
+            &ex_video(1, VIDEO_SEQUENCE_START, b"av01", &[0x81, 0x08, 0x0c, 0]),
+            NOW,
+        )
+        .unwrap_err();
+    assert_eq!(e, FlvError::Av1(Av1Error::NoSequenceHeader));
+    assert_eq!(
+        e.to_string(),
+        "invalid AV1 sequence header: av1C holds no sequence header OBU"
+    );
     let mut long = avcc_720p();
     long.resize(crate::MAX_CONFIG_LEN + 1, 0);
     assert_eq!(
@@ -638,6 +753,19 @@ fn tag() -> impl Strategy<Value = Tag> {
         vec![0x91, b'a', b'v', b'c', b'1'],
         vec![0x93, b'a', b'v', b'c', b'1'],
         vec![0x90, b'a', b'v', b'c', b'1', 1],
+        ex_video(1, VIDEO_SEQUENCE_START, b"hvc1", &hvcc_720p()),
+        ex_video(1, VIDEO_SEQUENCE_START, b"av01", &av1c_720p()),
+        ex_video(
+            1,
+            VIDEO_SEQUENCE_START,
+            b"av01",
+            &av1c(&Av1SeqSpec::main(64, 64).build()),
+        ),
+        vec![0x91, b'h', b'v', b'c', b'1'],
+        vec![0x93, b'h', b'v', b'c', b'1'],
+        vec![0x91, b'a', b'v', b'0', b'1', 0x12, 0x00],
+        vec![0x93, b'a', b'v', b'0', b'1'],
+        vec![0x95, b'a', b'v', b'0', b'1'],
         vec![0x80],
     ];
     let audio = vec![

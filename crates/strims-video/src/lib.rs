@@ -14,11 +14,14 @@
 //! - [`media`]: tracks, decoder configs, access units, the [`Muxer`]
 //!   trait and the unit format's MIME type.
 //! - [`avc`]: H.264 avcC records and the picture size from their SPS.
+//! - [`hevc`]: H.265 hvcC records and the picture size from their SPS.
+//! - [`av1`]: AV1 av1C records and the picture size from their sequence
+//!   header, and the temporal delimiters samples leave out.
 //! - [`aac`]: AAC AudioSpecificConfig and the `esds` box.
 //! - [`opus`]: the Opus identification header, OpusHead, and the `dOps`
 //!   box.
 //! - [`flv`]: the source over FLV tags, legacy and Enhanced RTMP. It takes
-//!   H.264 with AAC and refuses other codecs.
+//!   H.264, H.265 and AV1 video and AAC audio, and refuses other codecs.
 //! - [`amf0`]: the AMF0 values RTMP commands and metadata carry.
 //! - [`rtmp`]: the RTMP server a publisher streams FLV tags to.
 //! - [`fmp4`]: fragmented MP4 init segments and fragments, each with its
@@ -90,8 +93,8 @@
 //!   and signed early, in a swarm whose unit size and signing interval the
 //!   stream's nominal bitrate or tracks pick ([`units::UnitSigning`]) once
 //!   its metadata or decoder configs come, after the publish's accept; a
-//!   codec the [`FlvSource`] refuses, or media the writer refuses, ends
-//!   the session with the reason. The session serves the channel's snippet, live from the
+//!   codec the [`FlvSource`] refuses, video other than H.264, or media
+//!   the writer refuses, ends the session with the reason. The session serves the channel's snippet, live from the
 //!   publish's start time and signed with the channel key, and keeps a
 //!   listing of the records' MIME type and swarm URI on the channel's
 //!   network from its first record. A changed channel serves the snippet
@@ -166,6 +169,7 @@
 pub mod aac;
 pub mod amf0;
 pub mod autoseed;
+pub mod av1;
 pub mod avc;
 mod bits;
 pub mod capture;
@@ -178,6 +182,7 @@ mod events;
 pub mod flv;
 pub mod fmp4;
 pub mod frontend;
+pub mod hevc;
 pub mod hls;
 pub mod hls_egress;
 pub mod host;

@@ -17,14 +17,16 @@ pub fn codec(config: &DecoderConfig) -> &str {
     }
 }
 
-/// A config's WebCodecs `description`: the avcC record, under which the
-/// decoder takes length-prefixed NAL units (the unit format's H.264
-/// payloads); the AudioSpecificConfig, under which it takes raw AAC
-/// frames; or the OpusHead, from which decoders take the channel mapping
-/// and drop the pre-skip at their start. Empty for a codec without one.
+/// A config's WebCodecs `description`: the avcC or hvcC record, under
+/// which the decoder takes length-prefixed NAL units (the unit format's
+/// H.264 and H.265 payloads); the AudioSpecificConfig, under which it
+/// takes raw AAC frames; or the OpusHead, from which decoders take the
+/// channel mapping and drop the pre-skip at their start. Empty for a codec
+/// without one, AV1 among them.
 pub fn description(config: &DecoderConfig) -> &[u8] {
     match &config.params {
         CodecParams::Avc { avcc, .. } => avcc,
+        CodecParams::Hevc { hvcc, .. } => hvcc,
         CodecParams::Aac { asc, .. } => asc,
         CodecParams::Opus { head, .. } => head,
         _ => &[],
@@ -37,7 +39,7 @@ pub use strims_video::opus::packet_samples as opus_packet_samples;
 
 #[cfg(test)]
 mod tests {
-    use strims_video::synth::script::{aac_lc_asc, avcc};
+    use strims_video::synth::script::{aac_lc_asc, av1c, avcc, hvcc};
     use strims_video::{TrackId, TrackKind};
 
     use super::*;
@@ -113,5 +115,24 @@ mod tests {
             },
         );
         assert_eq!(description(&opus), head.as_slice());
+        let hevc = hvcc(1280, 720);
+        let h265 = DecoderConfig {
+            params: CodecParams::Hevc {
+                hvcc: hevc.clone(),
+                width: 1280,
+                height: 720,
+            },
+            ..video.clone()
+        };
+        assert_eq!(description(&h265), hevc.as_slice());
+        let av1 = DecoderConfig {
+            params: CodecParams::Av1 {
+                av1c: av1c(1280, 720),
+                width: 1280,
+                height: 720,
+            },
+            ..video
+        };
+        assert!(description(&av1).is_empty());
     }
 }

@@ -205,7 +205,9 @@ fn track_object(config: &DecoderConfig) -> Object {
     set_str(&o, "codec", mse_codec(&config.codec));
     set_num(&o, "timescale", f64::from(config.timescale));
     match &config.params {
-        CodecParams::Avc { width, height, .. } => {
+        CodecParams::Avc { width, height, .. }
+        | CodecParams::Hevc { width, height, .. }
+        | CodecParams::Av1 { width, height, .. } => {
             set_num(&o, "width", f64::from(*width));
             set_num(&o, "height", f64::from(*height));
         }
@@ -297,7 +299,9 @@ fn decoder_track_object(config: &DecoderConfig) -> Object {
     );
     set_num(&o, "timescale", f64::from(config.timescale));
     match &config.params {
-        CodecParams::Avc { width, height, .. } => {
+        CodecParams::Avc { width, height, .. }
+        | CodecParams::Hevc { width, height, .. }
+        | CodecParams::Av1 { width, height, .. } => {
             set_num(&o, "width", f64::from(*width));
             set_num(&o, "height", f64::from(*height));
         }

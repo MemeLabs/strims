@@ -11,9 +11,7 @@ use strims_chunkstream::chunked::{ChunkedEncoder, ContinueError, EncodeError, Fr
 use super::record::{ConfigEntry, UnitHeader, write_configs, write_end, write_unit_head};
 use super::{AUDIO_SYNC_SPAN, MAX_RECORD_LEN};
 use crate::fmp4::{InitError, check_configs};
-use crate::media::{
-    AccessUnit, CodecParams, DecoderConfig, MAX_CONFIG_LEN, Muxer, TrackId, TrackKind,
-};
+use crate::media::{AccessUnit, DecoderConfig, MAX_CONFIG_LEN, Muxer, TrackId, TrackKind};
 
 /// Why a [`UnitWriter`] call failed. A failed call writes nothing.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -284,12 +282,7 @@ impl Muxer for UnitWriter {
         if held.is_some_and(|t| t.config == *config) {
             return Ok(());
         }
-        let bytes = match &config.params {
-            CodecParams::Avc { avcc, .. } => avcc.len(),
-            CodecParams::Aac { asc, .. } => asc.len(),
-            CodecParams::Opus { head, .. } => head.len(),
-        };
-        if bytes > MAX_CONFIG_LEN {
+        if config.params.record().len() > MAX_CONFIG_LEN {
             return Err(UnitWriteError::ConfigTooLong);
         }
         let mut configs: Vec<DecoderConfig> = self

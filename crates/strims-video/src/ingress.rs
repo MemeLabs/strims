@@ -87,7 +87,8 @@
 //! frames of the swarm's chunk size, whose records go into the swarm as
 //! each unit arrives. A unit's publish time is when the connection took
 //! its message from the RTMP server, on the node's clock. A codec or tag
-//! the source refuses, or a unit or config the writer refuses, ends the
+//! the source refuses, video other than H.264, which needs a node that
+//! transcodes it, or a unit or config the writer refuses, ends the
 //! session; the publisher gets the reason in an error status. Metadata is
 //! counted, and its bitrates and tracks read.
 //!
@@ -196,7 +197,7 @@ use crate::config::{RtmpSettings, check_ingress_config};
 use crate::control::{Shared, Slot, Swarm};
 use crate::flv::{FlvSource, SourceEvent};
 use crate::host::{Accepted, VideoHost};
-use crate::media::{Muxer, TrackKind, units_mime};
+use crate::media::{CodecParams, DecoderConfig, Muxer, TrackKind, units_mime};
 use crate::registry::{Added, SwarmKind};
 use crate::rtmp::{Phase, RtmpConfig, RtmpError, RtmpEvent, RtmpServer};
 use crate::units::{END_LINGER, SignTimer, UnitSigning, UnitWriter, UnitWriterMetrics};
@@ -659,6 +660,20 @@ enum Woke {
     Stop(String),
     Closed,
     Failed(String),
+}
+
+/// Why the session can't take video of `config`'s codec: video other than
+/// H.264 needs a node that transcodes it to H.264, the rendition every
+/// viewer can play.
+fn untranscoded(config: &DecoderConfig) -> Option<String> {
+    let name = match config.params {
+        CodecParams::Hevc { .. } => "HEVC (hvc1)",
+        CodecParams::Av1 { .. } => "AV1 (av01)",
+        _ => return None,
+    };
+    Some(format!(
+        "{name} needs a node that transcodes it to H.264, and this one doesn't; send H.264 with AAC"
+    ))
 }
 
 /// The live snippet of `c`: its snippet, starting at `start_time`, live.
@@ -1445,6 +1460,9 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
             Err(e) => Err(media(&e)),
             Ok(None) => Ok(()),
             Ok(Some(SourceEvent::Config(c))) => {
+                if let Some(reason) = untranscoded(&c) {
+                    return Err(End::Media(reason));
+                }
                 let res = self.writer.set_config(&c).map_err(|e| media(&e));
                 if let Sign::Choosing(choice) = &mut self.sign {
                     choice.config(c.kind);

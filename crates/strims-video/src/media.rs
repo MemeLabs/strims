@@ -8,7 +8,8 @@ use std::fmt;
 
 use strims_base::time::Time;
 
-/// The largest avcC record, AudioSpecificConfig or OpusHead accepted.
+/// The largest avcC, hvcC or av1C record, AudioSpecificConfig or OpusHead
+/// accepted.
 pub const MAX_CONFIG_LEN: usize = 64 * 1024;
 
 /// A track of a stream; the fMP4 track id.
@@ -36,8 +37,8 @@ impl fmt::Display for TrackKind {
 pub struct DecoderConfig {
     pub track: TrackId,
     pub kind: TrackKind,
-    /// The RFC 6381 codec string, such as `avc1.64001f`, `mp4a.40.2` or
-    /// `Opus`.
+    /// The RFC 6381 codec string, such as `avc1.64001f`, `hvc1.1.6.L93.90`,
+    /// `av01.0.08M.08`, `mp4a.40.2` or `Opus`.
     pub codec: String,
     /// Timestamp units per second.
     pub timescale: u32,
@@ -54,6 +55,23 @@ pub enum CodecParams {
         /// The AVCDecoderConfigurationRecord as received.
         avcc: Vec<u8>,
         /// The picture size after cropping, in pixels.
+        width: u16,
+        height: u16,
+    },
+    /// H.265.
+    Hevc {
+        /// The HEVCDecoderConfigurationRecord as received.
+        hvcc: Vec<u8>,
+        /// The picture size inside the conformance window, in pixels.
+        width: u16,
+        height: u16,
+    },
+    /// AV1.
+    Av1 {
+        /// The AV1CodecConfigurationRecord as received, its sequence
+        /// header OBU among its config OBUs.
+        av1c: Vec<u8>,
+        /// The sequence header's largest frame size, in pixels.
         width: u16,
         height: u16,
     },
@@ -80,6 +98,40 @@ pub enum CodecParams {
         /// 48 kHz samples the decoder's output drops when it starts.
         pre_skip: u16,
     },
+}
+
+impl CodecParams {
+    /// The codec's configuration record as received: the avcC, hvcC or
+    /// av1C record, the AudioSpecificConfig or the OpusHead.
+    pub fn record(&self) -> &[u8] {
+        match self {
+            CodecParams::Avc { avcc, .. } => avcc,
+            CodecParams::Hevc { hvcc, .. } => hvcc,
+            CodecParams::Av1 { av1c, .. } => av1c,
+            CodecParams::Aac { asc, .. } => asc,
+            CodecParams::Opus { head, .. } => head,
+        }
+    }
+
+    /// A video codec's picture size, in pixels; `None` for audio.
+    pub fn picture_size(&self) -> Option<(u16, u16)> {
+        match *self {
+            CodecParams::Avc { width, height, .. }
+            | CodecParams::Hevc { width, height, .. }
+            | CodecParams::Av1 { width, height, .. } => Some((width, height)),
+            CodecParams::Aac { .. } | CodecParams::Opus { .. } => None,
+        }
+    }
+
+    /// The kind of track the codec's media is.
+    pub fn kind(&self) -> TrackKind {
+        match self {
+            CodecParams::Avc { .. } | CodecParams::Hevc { .. } | CodecParams::Av1 { .. } => {
+                TrackKind::Video
+            }
+            CodecParams::Aac { .. } | CodecParams::Opus { .. } => TrackKind::Audio,
+        }
+    }
 }
 
 /// One coded frame of a track.

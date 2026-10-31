@@ -185,6 +185,63 @@ fn an_opus_entry_carries_its_opus_head_at_48_khz() {
 }
 
 #[test]
+fn hevc_and_av1_entries_carry_their_records_and_derive_their_configs() {
+    use crate::synth::script::{av1c, hvcc};
+    let cases = [
+        (SAMPLE_ENTRY_HEVC, hvcc(1920, 1080), "hvc1.1.6.L93.90"),
+        (SAMPLE_ENTRY_AV1, av1c(1920, 1080), "av01.0.08M.08"),
+    ];
+    for (sample_entry, record, codec) in cases {
+        let entry = ConfigEntry {
+            track: TrackId(1),
+            version: 2,
+            next_seq: 9,
+            sample_entry,
+            timescale: 90_000,
+            config: &record,
+        };
+        assert!(entry.is_known());
+        let c = entry.decoder_config().unwrap().unwrap();
+        assert_eq!((c.kind, c.codec.as_str()), (TrackKind::Video, codec));
+        assert_eq!(c.params.picture_size(), Some((1920, 1080)));
+        assert_eq!(c.params.record(), record);
+        assert_eq!(ConfigEntry::of(&c, 2, 9), entry);
+        let mut r = Vec::new();
+        write_configs(0, [entry, ConfigEntry::of(&audio(), 0, 0)], &mut r);
+        let Record::Configs { entries, .. } = parse_record(&r).unwrap() else {
+            panic!("not configs");
+        };
+        let read: Vec<ConfigEntry<'_>> = entries.collect();
+        assert_eq!(read[0].decoder_config().unwrap().unwrap(), c);
+    }
+    let bad = |sample_entry| {
+        ConfigEntry {
+            track: TrackId(4),
+            version: 0,
+            next_seq: 0,
+            sample_entry,
+            timescale: 90_000,
+            config: &[2, 1, 2, 3],
+        }
+        .decoder_config()
+    };
+    assert_eq!(
+        bad(SAMPLE_ENTRY_HEVC),
+        Some(Err(RecordError::Hevc {
+            track: 4,
+            error: crate::hevc::HevcError::Truncated
+        }))
+    );
+    assert_eq!(
+        bad(SAMPLE_ENTRY_AV1),
+        Some(Err(RecordError::Av1 {
+            track: 4,
+            error: crate::av1::Av1Error::Marker
+        }))
+    );
+}
+
+#[test]
 fn readers_skip_header_fields_and_entry_bytes_they_dont_know() {
     // A header with a field after the known ones.
     let h = header();

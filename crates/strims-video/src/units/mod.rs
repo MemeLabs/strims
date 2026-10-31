@@ -58,7 +58,8 @@
 //! track         uvarint  the track id, nonzero and distinct, at most u32::MAX
 //! version       uvarint  the config's version: 0 for the track's first, then +1 at each change
 //! next_seq      uvarint  the seq of the track's next unit
-//! sample_entry  4 bytes  avc1 (an avcC record), mp4a (an AudioSpecificConfig) or Opus (an OpusHead)
+//! sample_entry  4 bytes  avc1 (an avcC record), hvc1 (an hvcC record), av01 (an av1C record),
+//!                        mp4a (an AudioSpecificConfig) or Opus (an OpusHead)
 //! timescale     uvarint  units per second of the track's timestamps, nonzero, at most u32::MAX
 //! config_len    uvarint  at most MAX_CONFIG_LEN
 //! config        config_len bytes

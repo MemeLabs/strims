@@ -25,7 +25,7 @@ const TKHD_ENABLED_IN_MOVIE: u32 = 0x03;
 const URL_SELF_CONTAINED: u32 = 0x01;
 /// 72 dpi in 16.16.
 const DPI_72: u32 = 72 << 16;
-/// `avc1` depth: colour with no alpha.
+/// A VisualSampleEntry's depth: colour with no alpha.
 const DEPTH_COLOUR: u16 = 0x0018;
 /// The channel count written when the AudioSpecificConfig leaves the
 /// layout to a program config element.
@@ -71,11 +71,7 @@ pub fn check_configs(configs: &[DecoderConfig]) -> Result<(), InitError> {
         if c.timescale == 0 {
             return Err(InitError::ZeroTimescale(track));
         }
-        let params_kind = match c.params {
-            CodecParams::Avc { .. } => TrackKind::Video,
-            CodecParams::Aac { .. } | CodecParams::Opus { .. } => TrackKind::Audio,
-        };
-        if params_kind != c.kind {
+        if c.params.kind() != c.kind {
             return Err(InitError::KindMismatch {
                 track,
                 kind: c.kind,
@@ -107,7 +103,9 @@ pub fn check_configs(configs: &[DecoderConfig]) -> Result<(), InitError> {
 ///   by the same time keeps them in sync; a stream's B-frame reordering
 ///   delay, its first keyframe's composition offset, makes that keyframe
 ///   present at its decode time.
-/// - Video's sample entry is `avc1` holding the avcC record as received.
+/// - Video's sample entry is `avc1` holding the avcC record, `hvc1`
+///   holding the hvcC record or `av01` holding the av1C record, each as
+///   received.
 /// - AAC's is `mp4a` holding an `esds` with the AudioSpecificConfig. Its
 ///   16.16 sample rate field holds 16 bits: a rate above 65535 Hz is
 ///   halved until it fits. Decoders take the rate from the
@@ -191,10 +189,7 @@ fn write_mvhd(configs: &[DecoderConfig], out: &mut Vec<u8>) {
 
 fn write_trak(c: &DecoderConfig, delay: Duration, out: &mut Vec<u8>) -> Result<(), InitError> {
     let trak = start(out, b"trak");
-    let (width, height) = match c.params {
-        CodecParams::Avc { width, height, .. } => (width, height),
-        CodecParams::Aac { .. } | CodecParams::Opus { .. } => (0, 0),
-    };
+    let (width, height) = c.params.picture_size().unwrap_or((0, 0));
     let tkhd = start_full(out, b"tkhd", 0, TKHD_ENABLED_IN_MOVIE);
     // creation_time, modification_time
     boxes::zeros(out, 8);
@@ -291,29 +286,17 @@ fn write_sample_entry(c: &DecoderConfig, out: &mut Vec<u8>) -> Result<(), InitEr
             avcc,
             width,
             height,
-        } => {
-            let avc1 = start(out, b"avc1");
-            sample_entry_header(out);
-            // pre_defined, reserved, pre_defined[3]
-            boxes::zeros(out, 16);
-            boxes::u16(out, *width);
-            boxes::u16(out, *height);
-            boxes::u32(out, DPI_72);
-            boxes::u32(out, DPI_72);
-            // reserved
-            boxes::u32(out, 0);
-            // frame_count
-            boxes::u16(out, 1);
-            // compressorname: an empty counted string
-            boxes::zeros(out, 32);
-            boxes::u16(out, DEPTH_COLOUR);
-            // pre_defined
-            boxes::u16(out, 0xffff);
-            let avcc_box = start(out, b"avcC");
-            out.extend_from_slice(avcc);
-            end(out, avcc_box);
-            end(out, avc1);
-        }
+        } => write_visual_entry(b"avc1", (*width, *height), b"avcC", avcc, out),
+        CodecParams::Hevc {
+            hvcc,
+            width,
+            height,
+        } => write_visual_entry(b"hvc1", (*width, *height), b"hvcC", hvcc, out),
+        CodecParams::Av1 {
+            av1c,
+            width,
+            height,
+        } => write_visual_entry(b"av01", (*width, *height), b"av1C", av1c, out),
         CodecParams::Aac {
             asc,
             sample_rate,
@@ -367,6 +350,38 @@ fn write_sample_entry(c: &DecoderConfig, out: &mut Vec<u8>) -> Result<(), InitEr
         }
     }
     Ok(())
+}
+
+/// A VisualSampleEntry of type `entry` for a picture of `size`, holding
+/// the codec's configuration record `record` in a box of type `config`.
+fn write_visual_entry(
+    entry: &[u8; 4],
+    (width, height): (u16, u16),
+    config: &[u8; 4],
+    record: &[u8],
+    out: &mut Vec<u8>,
+) {
+    let at = start(out, entry);
+    sample_entry_header(out);
+    // pre_defined, reserved, pre_defined[3]
+    boxes::zeros(out, 16);
+    boxes::u16(out, width);
+    boxes::u16(out, height);
+    boxes::u32(out, DPI_72);
+    boxes::u32(out, DPI_72);
+    // reserved
+    boxes::u32(out, 0);
+    // frame_count
+    boxes::u16(out, 1);
+    // compressorname: an empty counted string
+    boxes::zeros(out, 32);
+    boxes::u16(out, DEPTH_COLOUR);
+    // pre_defined
+    boxes::u16(out, 0xffff);
+    let record_box = start(out, config);
+    out.extend_from_slice(record);
+    end(out, record_box);
+    end(out, at);
 }
 
 /// An `edts` with one edit starting at `media_time` and lasting to the

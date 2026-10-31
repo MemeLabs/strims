@@ -30,9 +30,9 @@ fn open() -> Golden {
     Golden::open(concat!(env!("CARGO_MANIFEST_DIR"), "/golden/units.txt"))
 }
 
-/// The configs of the file's `tracks` entry: an H.264 track 1 at 90 kHz,
-/// and an AAC or an Opus track 2 at 48 kHz.
-fn configs(g: &Golden) -> (DecoderConfig, DecoderConfig, DecoderConfig) {
+/// The configs of the file's `tracks` entry: an H.264, H.265 or AV1 track 1
+/// at 90 kHz, and an AAC or an Opus track 2 at 48 kHz.
+fn configs(g: &Golden) -> Configs {
     let e = g.all("tracks")[0];
     let entry = |track, sample_entry, timescale, config: &[u8]| {
         ConfigEntry {
@@ -47,20 +47,34 @@ fn configs(g: &Golden) -> (DecoderConfig, DecoderConfig, DecoderConfig) {
         .unwrap()
         .unwrap()
     };
-    (
-        entry(VIDEO, *b"avc1", 90_000, &g.bytes(e, "avcc")),
-        entry(AUDIO, *b"mp4a", 48_000, &g.bytes(e, "asc")),
-        entry(AUDIO, *b"Opus", 48_000, &g.bytes(e, "opus_head")),
-    )
+    Configs {
+        avc: entry(VIDEO, *b"avc1", 90_000, &g.bytes(e, "avcc")),
+        hevc: entry(VIDEO, *b"hvc1", 90_000, &g.bytes(e, "hvcc")),
+        av1: entry(VIDEO, *b"av01", 90_000, &g.bytes(e, "av1c")),
+        aac: entry(AUDIO, *b"mp4a", 48_000, &g.bytes(e, "asc")),
+        opus: entry(AUDIO, *b"Opus", 48_000, &g.bytes(e, "opus_head")),
+    }
 }
 
+struct Configs {
+    avc: DecoderConfig,
+    hevc: DecoderConfig,
+    av1: DecoderConfig,
+    aac: DecoderConfig,
+    opus: DecoderConfig,
+}
+
+/// The configs `list` names, one letter each: `v` H.264, `h` H.265, `x`
+/// AV1, `a` AAC and `o` Opus.
 fn tracks(g: &Golden, list: &str) -> Vec<DecoderConfig> {
-    let (v, a, o) = configs(g);
+    let c = configs(g);
     list.chars()
-        .map(|c| match c {
-            'v' => v.clone(),
-            'a' => a.clone(),
-            'o' => o.clone(),
+        .map(|t| match t {
+            'v' => c.avc.clone(),
+            'h' => c.hevc.clone(),
+            'x' => c.av1.clone(),
+            'a' => c.aac.clone(),
+            'o' => c.opus.clone(),
             other => panic!("track kind {other}"),
         })
         .collect()
@@ -186,7 +200,7 @@ fn unit((track, dts, keyframe, payload): &(TrackId, i64, bool, Vec<u8>)) -> Acce
 #[test]
 fn streams() {
     let mut g = open();
-    let (v, a, _) = configs(&g);
+    let Configs { avc: v, aac: a, .. } = configs(&g);
     let units = script();
     for e in g.all("stream") {
         let frame: usize = g.str(e, "frame").parse().unwrap();
