@@ -33,6 +33,8 @@
 //!   muxers make of them, and an RTMP publisher client.
 //! - [`hls`]: HLS playlists of fMP4 segments, the muxer that cuts access
 //!   units into them, and the routes a driver serves them on.
+//! - [`codec`]: the codec stage, a stream's access units in and its
+//!   renditions' out, over an ffmpeg process a native driver runs.
 //! - [`units`]: the unit format, a record per access unit in the chunked
 //!   chunkstream layout: its records, the [`UnitWriter`] muxer and the
 //!   [`UnitReader`], which builds for wasm32.
@@ -176,6 +178,7 @@ pub mod avc;
 mod bits;
 pub mod capture;
 pub mod channels;
+pub mod codec;
 mod config;
 mod control;
 pub mod egress;
