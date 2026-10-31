@@ -11,6 +11,7 @@ use strims_node::app::PsiMode;
 use strims_node::codec::FfmpegConfig;
 use strims_svc::{Config, Db};
 use strims_video::codec::ffmpeg::FfmpegSettings;
+use strims_video::codec::{MAX_RENDITIONS, RenditionPlan};
 
 pub(crate) const USAGE: &str = "\
 usage: strims-svc (--db <path> | --db-memory) [options]
@@ -47,6 +48,11 @@ options:
   --ffmpeg <path>           the ffmpeg (7.1 or later, with libx264) the node
                             transcodes with: it turns HEVC and AV1 publishes
                             into the H.264 stream every viewer can play
+  --renditions <list>       with --ffmpeg, the renditions made of every
+                            stream below its shorter side, each another
+                            swarm the node seeds: comma-separated
+                            <side>p<fps>@<bitrate>, such as
+                            720p60@3000k,480p30@1200k (default none)
   --ppspp-capture <dir>     capture the node's ppspp frames and scheduler
                             decisions into <dir> (`ppspp-capture` reads them)
   --ppspp-capture-max <MiB> the most a capture keeps, in its last 8 files
@@ -59,6 +65,48 @@ The log level comes from RUST_LOG (default info).";
 pub(crate) enum Command {
     Run(Box<Config>),
     Help,
+}
+
+/// The renditions `--renditions` lists: `<side>p<fps>@<bitrate>`, the
+/// bitrate in bits a second, or thousands of them with `k`, or millions
+/// with `M`.
+fn ladder(list: &str) -> Result<Vec<RenditionPlan>, String> {
+    let bad =
+        |r: &str| format!("--renditions takes <side>p<fps>@<bitrate>, such as 480p30@1200k: {r}");
+    let rungs = list
+        .split(',')
+        .map(|r| {
+            let (size, bitrate) = r.split_once('@').ok_or_else(|| bad(r))?;
+            let (side, fps) = size.split_once('p').ok_or_else(|| bad(r))?;
+            let (digits, scale) = match bitrate.strip_suffix(['k', 'K']) {
+                Some(d) => (d, 1_000),
+                None => match bitrate.strip_suffix('M') {
+                    Some(d) => (d, 1_000_000),
+                    None => (bitrate, 1),
+                },
+            };
+            let plan = RenditionPlan {
+                short_side: side.parse().map_err(|_| bad(r))?,
+                max_frame_rate: fps.parse().map_err(|_| bad(r))?,
+                bitrate: digits
+                    .parse::<u64>()
+                    .ok()
+                    .and_then(|d| d.checked_mul(scale))
+                    .ok_or_else(|| bad(r))?,
+            };
+            if plan.short_side == 0 || plan.max_frame_rate == 0 || plan.bitrate == 0 {
+                return Err(bad(r));
+            }
+            Ok(plan)
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    if rungs.len() >= MAX_RENDITIONS {
+        return Err(format!(
+            "--renditions lists at most {} renditions",
+            MAX_RENDITIONS - 1
+        ));
+    }
+    Ok(rungs)
 }
 
 /// Parses the arguments after the program name. Flags take their value as
@@ -126,6 +174,7 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
                     settings: FfmpegSettings::default(),
                 })
             }
+            "--renditions" => app.video.ingress.transcode.ladder = ladder(&value()?)?,
             "--ppspp-capture" => capture_dir = Some(PathBuf::from(value()?)),
             "--ppspp-capture-max" => capture_max = Some(positive::<u64>(&flag, &value()?)?),
             _ => return Err(format!("unknown argument {flag}")),
@@ -221,6 +270,7 @@ mod tests {
             "--ffmpeg=/opt/ffmpeg/bin/ffmpeg",
         ])
         .unwrap();
+        assert!(c.app.video.ingress.transcode.ladder.is_empty());
         let ffmpeg = c.app.ffmpeg.as_ref().unwrap();
         assert_eq!(ffmpeg.program.to_str(), Some("/opt/ffmpeg/bin/ffmpeg"));
         assert_eq!(ffmpeg.settings, FfmpegSettings::default());
@@ -269,6 +319,44 @@ mod tests {
         assert_eq!(c.hls_listen, None);
         assert_eq!(c.app.video.hls.base_url, "");
         assert_eq!(c.app.ppspp_capture, None);
+    }
+
+    #[test]
+    fn renditions_list_their_sides_rates_and_bitrates() {
+        let c = run(&[
+            "--db-memory",
+            "--renditions",
+            "720p60@3M,480p30@1200k,240p15@250000",
+        ])
+        .unwrap();
+        let rung = |short_side, max_frame_rate, bitrate| RenditionPlan {
+            short_side,
+            max_frame_rate,
+            bitrate,
+        };
+        assert_eq!(
+            c.app.video.ingress.transcode.ladder,
+            [
+                rung(720, 60, 3_000_000),
+                rung(480, 30, 1_200_000),
+                rung(240, 15, 250_000)
+            ]
+        );
+        for bad in [
+            "720p60",
+            "720@3M",
+            "p30@1M",
+            "720p0@1M",
+            "720p30@",
+            "720p30@1G",
+            "x",
+        ] {
+            let e = run(&["--db-memory", "--renditions", bad]).err().unwrap();
+            assert!(e.contains("<side>p<fps>@<bitrate>"), "{bad}: {e}");
+        }
+        let eight = ["240p30@1M"; MAX_RENDITIONS].join(",");
+        let e = run(&["--db-memory", "--renditions", &eight]).err().unwrap();
+        assert!(e.contains("at most 7"), "{e}");
     }
 
     #[test]
