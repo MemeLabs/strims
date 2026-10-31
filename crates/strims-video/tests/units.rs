@@ -591,13 +591,6 @@ impl Got {
         parse_record(&self.records[i]).unwrap()
     }
 
-    /// The index of the first CONFIGS record.
-    fn first_configs(&self) -> usize {
-        (0..self.records.len())
-            .find(|&i| matches!(self.record(i), Record::Configs { .. }))
-            .expect("a CONFIGS record")
-    }
-
     /// Asserts that record `i` is a GOP's sync record and the next is its
     /// keyframe, `key`.
     fn assert_gop_start(&self, i: usize, key: &Unit) {
@@ -655,6 +648,11 @@ impl Viewer {
     fn rewinds(&self) -> (u64, u64, u64) {
         let m = self.stream.metrics();
         (m.rewinds, m.refused_rewinds, m.discontinuities)
+    }
+
+    /// The reader's rewinds a later sync record overtook.
+    fn overtaken(&self) -> u64 {
+        self.stream.metrics().overtaken_rewinds
     }
 }
 
@@ -784,6 +782,15 @@ fn join_point(records: &[(u64, Vec<u8>)], newest: u64) -> (u64, u64) {
     (*first, first - parse_record(r).unwrap().gop_back())
 }
 
+/// The offset of the first sync record after offset `after`.
+fn next_sync(records: &[(u64, Vec<u8>)], after: u64) -> u64 {
+    records
+        .iter()
+        .find(|(o, r)| *o > after && parse_record(r).unwrap().gop_back() == 0)
+        .unwrap()
+        .0
+}
+
 /// The records from offset `from` on.
 fn records_from(records: &[(u64, Vec<u8>)], from: u64) -> Vec<Vec<u8>> {
     records
@@ -793,13 +800,14 @@ fn records_from(records: &[(u64, Vec<u8>)], from: u64) -> Vec<Vec<u8>> {
         .collect()
 }
 
-/// A stream opened half way through a GOP rewinds its swarm reader to the
+/// A stream opened half way through a GOP rewinds a swarm reader to the
 /// GOP's sync record: it yields that CONFIGS record first, then the GOP's
 /// keyframe, then every record after them in order, whether the rewind
-/// answers at once or late but within the timeout.
+/// answers at once or late but within its grace after the next GOP's sync
+/// record arrived (with the rest of the stream, at once).
 #[test]
 fn a_viewer_joining_mid_gop_starts_at_its_gops_sync_record() {
-    for delay in [Duration::ZERO, Duration::from_millis(1500)] {
+    for delay in [Duration::ZERO, Duration::from_millis(500)] {
         run(async move {
             let mut live = Live::new().await;
             live.s.b.host.delay_rewinds(delay);
@@ -830,8 +838,8 @@ fn a_viewer_joining_mid_gop_starts_at_its_gops_sync_record() {
 const NARROW_WINDOW: usize = 128 * 1024;
 
 /// A stream opened half way through a GOP whose sync record left the live
-/// window can't rewind: it yields from the record it read first, and the
-/// unit reader starts at the next GOP's sync record and keyframe.
+/// window can't rewind: it starts at the next GOP's sync record and
+/// keyframe, and drops the records before them.
 #[test]
 fn a_viewer_whose_gop_left_the_window_starts_at_the_next_keyframe() {
     run(async {
@@ -845,14 +853,7 @@ fn a_viewer_whose_gop_left_the_window_starts_at_the_next_keyframe() {
         v.until(&live.last()).await;
         live.sent(rest).await;
 
-        // The first record's sync record is further back than the window.
-        let Record::Unit { gop_back, .. } = v.got.record(0) else {
-            panic!("{:?}", v.got.record(0));
-        };
-        assert!(gop_back > NARROW_WINDOW as u64, "gop_back {gop_back}");
-        let next = v.got.first_configs();
-        assert!(next > 0);
-        v.got.assert_gop_start(next, &live.units[live.keyframe(3)]);
+        v.got.assert_gop_start(0, &live.units[live.keyframe(3)]);
         assert_eq!(v.got.read.units, live.units[live.keyframe(3)..]);
         assert_eq!(v.got.read.configs, live.configs);
         assert!(v.got.read.gaps.is_empty());
@@ -861,9 +862,9 @@ fn a_viewer_whose_gop_left_the_window_starts_at_the_next_keyframe() {
     });
 }
 
-/// A stream whose rewind doesn't answer within the egress's timeout drops
-/// it, which cancels it, and yields from the record it read first: the unit
-/// reader starts at the next GOP's sync record and keyframe.
+/// A stream whose rewind doesn't answer within its grace after the next
+/// GOP's sync record arrived drops it, which cancels it, and starts at that
+/// sync record and keyframe.
 #[test]
 fn a_viewer_whose_rewind_answers_late_starts_at_the_next_keyframe_and_cancels_it() {
     run(async {
@@ -875,8 +876,8 @@ fn a_viewer_whose_rewind_answers_late_starts_at_the_next_keyframe_and_cancels_it
         let newest = live.newest_chunk();
         let rest = live.sending(live.all());
         let took = v.join().await;
-        let timeout = EgressSettings::default().rewind_timeout.to_std().unwrap();
-        assert!(took >= timeout && took < late, "joined after {took:?}");
+        let grace = EgressSettings::default().rewind_grace.to_std().unwrap();
+        assert!(took >= grace && took < late, "joined after {took:?}");
         assert_eq!(live.s.b.host.cancelled_rewinds(), 1);
         v.until(&live.last()).await;
         live.sent(rest).await;
@@ -884,13 +885,15 @@ fn a_viewer_whose_rewind_answers_late_starts_at_the_next_keyframe_and_cancels_it
         let records = records_of(&live.s.stream());
         let (first, k) = join_point(&records, newest);
         assert!(k < first, "joined at a sync record");
-        assert_eq!(v.got.records, records_from(&records, first));
-        let next = v.got.first_configs();
-        assert!(next > 0);
-        v.got.assert_gop_start(next, &live.units[live.keyframe(3)]);
+        assert_eq!(
+            v.got.records,
+            records_from(&records, next_sync(&records, first))
+        );
+        v.got.assert_gop_start(0, &live.units[live.keyframe(3)]);
         assert_eq!(v.got.read.units, live.units[live.keyframe(3)..]);
         assert_eq!(v.got.read.configs, live.configs);
-        assert_eq!(v.rewinds(), (0, 1, 0));
+        assert_eq!(v.rewinds(), (0, 0, 0));
+        assert_eq!(v.overtaken(), 1);
         assert_eq!(live.s.b.host.cancelled_rewinds(), 1);
     });
 }

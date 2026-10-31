@@ -8,8 +8,9 @@
     clippy::indexing_slicing
 )]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
+use std::task::Poll;
 
 use futures_util::FutureExt;
 use strims_chunkstream::chunked::{ChunkedRecordDecoder, Item};
@@ -32,6 +33,40 @@ struct Script {
     rewind: Option<(Option<u64>, VecDeque<Read>)>,
     /// The offsets rewinds were asked for.
     asked: Rc<RefCell<Vec<u64>>>,
+    /// With a budget, reads past it wait until it grows.
+    budget: Option<Rc<Cell<usize>>>,
+    /// With a gate, a rewind answers once it opens.
+    release: Option<Rc<Cell<bool>>>,
+    /// With a gate, the grace passes once it opens; without, at once.
+    grace: Option<Rc<Cell<bool>>>,
+    /// Rewinds dropped before they answered.
+    dropped: Rc<Cell<u64>>,
+}
+
+/// Waits until `gate` opens.
+async fn opened(gate: &Rc<Cell<bool>>) {
+    poll_fn(|_| {
+        if gate.get() {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    })
+    .await;
+}
+
+/// Counts a rewind dropped while armed.
+struct DropCount {
+    count: Rc<Cell<u64>>,
+    armed: bool,
+}
+
+impl Drop for DropCount {
+    fn drop(&mut self) {
+        if self.armed {
+            self.count.set(self.count.get() + 1);
+        }
+    }
 }
 
 impl Script {
@@ -62,11 +97,28 @@ impl Script {
 impl Rewind for Script {
     async fn rewind(&mut self, offset: u64) -> Option<u64> {
         self.asked.borrow_mut().push(offset);
+        let mut armed = DropCount {
+            count: self.dropped.clone(),
+            armed: true,
+        };
+        if let Some(gate) = &self.release {
+            opened(gate).await;
+        }
+        armed.armed = false;
         let (answer, reads) = self.rewind.take()?;
         if answer.is_some() {
             self.reads = reads;
         }
         answer
+    }
+
+    fn grace(&self) -> impl Future<Output = ()> + 'static {
+        let gate = self.grace.clone();
+        async move {
+            if let Some(gate) = gate {
+                opened(&gate).await;
+            }
+        }
     }
 }
 
@@ -74,6 +126,17 @@ impl SwarmRead for Script {
     type Error = String;
 
     async fn read_at(&mut self, out: &mut [u8]) -> Result<(u64, usize), ReadFailure<String>> {
+        if let Some(budget) = &self.budget {
+            poll_fn(|_| {
+                if budget.get() > 0 {
+                    Poll::Ready(())
+                } else {
+                    Poll::Pending
+                }
+            })
+            .await;
+            budget.set(budget.get() - 1);
+        }
         let (offset, data) = match self.reads.pop_front() {
             None => return Err(ReadFailure::Closed),
             Some(r) => r?,
@@ -537,26 +600,279 @@ fn a_join_mid_gop_rewinds_to_its_sync_record() {
 }
 
 #[test]
-fn a_join_that_can_not_rewind_reads_on_from_its_first_record() {
+fn a_join_that_can_not_rewind_starts_at_the_next_sync_record() {
     let (s, recs) = units_stream(70);
     let join = s.len() / 2 / CHUNK * CHUNK;
     let (first, k) = gop_of_first(&recs, join as u64);
     assert!(k < first);
+    let next = next_sync(&recs, first);
     // Refused, and an answer past the offset asked for, which can't be
-    // used.
+    // used; by the reader itself or by a spare.
     for answer in [None, Some(first)] {
-        let script = Script::default().reads(&s, join, s.len(), 5000).rewound(
-            answer,
-            Script::default().reads(&s, first as usize, s.len(), 5000),
-        );
-        let mut r = ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap();
-        let (out, _) = collect_chunked(&mut r, 32 * 1024);
-        if answer.is_none() {
-            assert_eq!(out, records_from(&recs, first));
+        for spared in [false, true] {
+            let rewinding = Script::default().rewound(
+                answer,
+                Script::default().reads(&s, first as usize, s.len(), 5000),
+            );
+            let main = Script::default().reads(&s, join, s.len(), 5000);
+            let mut r = if spared {
+                let mut r = ChunkedReader::new(main, CHUNK, 64 * 1024).unwrap();
+                r.set_spare(rewinding);
+                r
+            } else {
+                let script = Script {
+                    reads: main.reads,
+                    ..rewinding
+                };
+                ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap()
+            };
+            let (out, _) = collect_chunked(&mut r, 32 * 1024);
+            assert_eq!(out, records_from(&recs, next), "{answer:?} {spared}");
+            let m = r.metrics();
+            assert_eq!(
+                (m.rewinds, m.refused_rewinds, m.overtaken_rewinds),
+                (0, 1, 0),
+                "{answer:?} {spared}"
+            );
         }
-        let m = r.metrics();
-        assert_eq!((m.rewinds, m.refused_rewinds), (0, 1), "{answer:?}");
     }
+}
+
+/// A join in the second GOP, past its keyframe.
+struct MidGop {
+    s: Vec<u8>,
+    recs: Vec<(u64, Vec<u8>)>,
+    /// Where the reader starts.
+    join: usize,
+    /// The first whole record, its GOP's sync record, where a rewind to it
+    /// resumes, and the next GOP's sync record.
+    first: u64,
+    k: u64,
+    resume: u64,
+    next: u64,
+}
+
+fn mid_gop() -> MidGop {
+    let (s, recs) = units_stream(70);
+    let join = (recs
+        .iter()
+        .filter(|(_, r)| r.len() > 10_000)
+        .nth(1)
+        .unwrap()
+        .0 as usize
+        + 3 * CHUNK)
+        / CHUNK
+        * CHUNK;
+    let (first, k) = gop_of_first(&recs, join as u64);
+    assert!(k < first);
+    let next = next_sync(&recs, first);
+    MidGop {
+        resume: k - k % CHUNK as u64,
+        s,
+        recs,
+        join,
+        first,
+        k,
+        next,
+    }
+}
+
+impl MidGop {
+    /// The stream's reader, from the join on.
+    fn reader(&self) -> Script {
+        Script::default().reads(&self.s, self.join, self.s.len(), 5000)
+    }
+
+    /// A spare whose rewind moves it to the GOP's sync record.
+    fn spare(&self) -> Script {
+        Script::default().rewound(
+            Some(self.resume),
+            Script::default().reads(&self.s, self.resume as usize, self.s.len(), 5000),
+        )
+    }
+}
+
+/// The offset of the first sync record after offset `after`.
+fn next_sync(records: &[(u64, Vec<u8>)], after: u64) -> u64 {
+    records
+        .iter()
+        .find(|(o, r)| *o > after && units::record::parse_record(r).unwrap().gop_back() == 0)
+        .unwrap()
+        .0
+}
+
+/// Takes `r`'s pieces into `out` until a call waits (and is dropped) or
+/// fails: the failure, if one ended it.
+fn pull<R: SwarmRead + Rewind>(
+    r: &mut ChunkedReader<R>,
+    out: &mut Vec<Out>,
+    rec: &mut Vec<u8>,
+) -> Option<VideoError> {
+    loop {
+        match r.next(32 * 1024).now_or_never()? {
+            Ok(EgressPiece::Data(d)) => rec.extend_from_slice(d),
+            Ok(EgressPiece::RecordEnd) => out.push(Out::Record(std::mem::take(rec))),
+            Ok(EgressPiece::Discontinuity) => {
+                rec.clear();
+                out.push(Out::Discontinuity);
+            }
+            Err(e) => return Some(e),
+        }
+    }
+}
+
+/// The reader's rewinds that landed, were refused and were overtaken.
+fn joins<R: SwarmRead + Rewind>(r: &ChunkedReader<R>) -> (u64, u64, u64) {
+    let m = r.metrics();
+    (m.rewinds, m.refused_rewinds, m.overtaken_rewinds)
+}
+
+#[test]
+fn a_join_whose_spare_rewinds_first_starts_at_its_gops_sync_record() {
+    let g = mid_gop();
+    let asked = Rc::new(RefCell::new(Vec::new()));
+    let mut r = ChunkedReader::new(g.reader(), CHUNK, 64 * 1024).unwrap();
+    r.set_spare(Script {
+        asked: asked.clone(),
+        ..g.spare()
+    });
+    let (out, end) = collect_chunked(&mut r, 32 * 1024);
+    assert_eq!(out, records_from(&g.recs, g.k));
+    assert_eq!(end, VideoError::StreamClosed);
+    assert_eq!(joins(&r), (1, 0, 0));
+    assert_eq!(*asked.borrow(), [g.k]);
+}
+
+/// The next GOP's sync record comes while the spare's rewind waits: once
+/// the rewind's grace passes, the join starts there and drops the rewind;
+/// a rewind that lands within the grace wins.
+#[test]
+fn a_join_takes_the_next_sync_record_once_the_rewinds_grace_passes() {
+    for lands in [false, true] {
+        let g = mid_gop();
+        let (release, grace, dropped) = (Rc::default(), Rc::default(), Rc::default());
+        let mut r = ChunkedReader::new(g.reader(), CHUNK, 64 * 1024).unwrap();
+        r.set_spare(Script {
+            release: Some(Rc::clone(&release)),
+            dropped: Rc::clone(&dropped),
+            ..g.spare()
+        });
+        let r_grace = Rc::clone(&grace);
+        let main = std::mem::take(&mut r.reader);
+        r.reader = Script {
+            grace: Some(r_grace),
+            ..main
+        };
+        let (mut out, mut rec) = (Vec::new(), Vec::new());
+        // The reader is at the next sync record, the grace running.
+        assert_eq!(pull(&mut r, &mut out, &mut rec), None);
+        assert!(out.is_empty() && rec.is_empty());
+        if lands {
+            release.set(true);
+        } else {
+            grace.set(true);
+        }
+        assert_eq!(
+            pull(&mut r, &mut out, &mut rec),
+            Some(VideoError::StreamClosed)
+        );
+        if lands {
+            assert_eq!(out, records_from(&g.recs, g.k));
+            assert_eq!(joins(&r), (1, 0, 0));
+            assert_eq!(dropped.get(), 0);
+        } else {
+            assert_eq!(out, records_from(&g.recs, g.next));
+            assert_eq!(joins(&r), (0, 0, 1));
+            assert_eq!(dropped.get(), 1, "the rewind dropped");
+        }
+    }
+}
+
+/// Calls dropped while the join races, a read and the rewind both waiting,
+/// lose neither the spare nor its rewind: once it lands, the stream starts
+/// at the GOP's sync record, after one rewind.
+#[test]
+fn a_call_dropped_while_its_join_races_keeps_the_spare() {
+    let g = mid_gop();
+    // Reads up to the first record's head, and none to the next sync record.
+    let reads = (g.first as usize - g.join) / 5000 + 2;
+    assert!(g.join + reads * 5000 < g.next as usize);
+    let (budget, release, asked) = (Rc::new(Cell::new(reads)), Rc::default(), Rc::default());
+    let mut r = ChunkedReader::new(
+        Script {
+            budget: Some(Rc::clone(&budget)),
+            ..g.reader()
+        },
+        CHUNK,
+        64 * 1024,
+    )
+    .unwrap();
+    r.set_spare(Script {
+        release: Some(Rc::clone(&release)),
+        asked: Rc::clone(&asked),
+        ..g.spare()
+    });
+    let (mut out, mut rec) = (Vec::new(), Vec::new());
+    for _ in 0..3 {
+        assert_eq!(pull(&mut r, &mut out, &mut rec), None);
+    }
+    assert!(out.is_empty());
+    assert_eq!(*asked.borrow(), [g.k]);
+    release.set(true);
+    assert_eq!(
+        pull(&mut r, &mut out, &mut rec),
+        Some(VideoError::StreamClosed)
+    );
+    assert_eq!(out, records_from(&g.recs, g.k));
+    assert_eq!(joins(&r), (1, 0, 0));
+    assert_eq!(*asked.borrow(), [g.k]);
+    // The reader read no more: the rest came from the spare.
+    assert_eq!(budget.get(), 0);
+}
+
+/// A reader's own rewind whose call is dropped counts as refused, and the
+/// join waits for the next sync record.
+#[test]
+fn a_dropped_rewind_waits_for_the_next_sync_record() {
+    let g = mid_gop();
+    let (release, dropped) = (Rc::default(), Rc::default());
+    let script = Script {
+        reads: g.reader().reads,
+        release: Some(Rc::clone(&release)),
+        dropped: Rc::clone(&dropped),
+        ..g.spare()
+    };
+    let mut r = ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap();
+    let (mut out, mut rec) = (Vec::new(), Vec::new());
+    assert_eq!(pull(&mut r, &mut out, &mut rec), None);
+    assert_eq!(dropped.get(), 1);
+    assert_eq!(
+        pull(&mut r, &mut out, &mut rec),
+        Some(VideoError::StreamClosed)
+    );
+    assert_eq!(out, records_from(&g.recs, g.next));
+    assert_eq!(joins(&r), (0, 1, 0));
+}
+
+#[test]
+fn a_join_at_a_sync_record_drops_its_spare() {
+    let (s, recs) = units_stream(70);
+    let asked = Rc::new(RefCell::new(Vec::new()));
+    let mut r = ChunkedReader::new(
+        Script::default().reads(&s, 0, s.len(), 5000),
+        CHUNK,
+        64 * 1024,
+    )
+    .unwrap();
+    r.set_spare(Script {
+        asked: asked.clone(),
+        ..Script::default()
+    });
+    let (out, _) = collect_chunked(&mut r, 32 * 1024);
+    assert_eq!(out, records_from(&recs, 0));
+    assert!(r.spare.is_none());
+    assert!(asked.borrow().is_empty());
+    assert_eq!(joins(&r), (0, 0, 0));
 }
 
 #[test]
@@ -635,6 +951,15 @@ fn a_replaced_reader_joins_the_new_stream_again() {
     expected.extend(records_from(&new, k));
     assert_eq!(out, expected);
     assert_eq!(r.metrics().rewinds, 1);
+    // A replaced reader with a spare races its join again.
+    r.replace(Script::default().reads(&b, join, b.len(), 4096));
+    r.set_spare(Script::default().rewound(
+        Some(resume),
+        Script::default().reads(&b, resume as usize, b.len(), 4096),
+    ));
+    let (out, _) = collect_chunked(&mut r, 32 * 1024);
+    assert_eq!(out, expected);
+    assert_eq!(r.metrics().rewinds, 2);
 }
 
 #[test]
@@ -690,11 +1015,15 @@ fn a_rewind_answers_until_its_deadline() {
     assert_eq!(stuck, None);
     let past = within(&t, t.now, std::future::pending()).now_or_never();
     assert_eq!(past, Some(None));
-    // A host reader's swarm reader doesn't rewind.
+    // A host reader's swarm reader doesn't rewind; its grace waits.
     let mut h = HostReader {
         reader: Script::default(),
         timer: t.clone(),
         timeout: Duration::from_secs(2),
+        grace: Duration::from_millis(700),
     };
     assert_eq!(Rewind::rewind(&mut h, 0).now_or_never(), Some(None));
+    assert_eq!(h.grace().now_or_never(), None);
+    h.grace = Duration::ZERO;
+    assert_eq!(h.grace().now_or_never(), Some(()));
 }

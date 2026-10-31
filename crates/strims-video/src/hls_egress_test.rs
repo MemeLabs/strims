@@ -734,6 +734,6 @@ fn a_join_mid_gop_starts_at_the_next_keyframe_when_it_can_not_rewind() {
     let got = listed(&s.playlist());
     assert!(!got.is_empty());
     assert!(got.iter().all(|&(ms, d)| ms == 1000 && !d), "{got:?}");
-    // The units before the next GOP's configs had no track to go in.
-    assert!(feed.reader.metrics().unknown_tracks > 0);
+    // The join dropped the units before the next GOP's sync record.
+    assert_eq!(feed.reader.metrics().unknown_tracks, 0);
 }
