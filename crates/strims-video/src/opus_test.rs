@@ -4,6 +4,9 @@
 // Test code: a panic or out-of-range index is a test failure.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
+use proptest::prelude::*;
+use proptest::test_runner::{Config, RngSeed};
+
 use super::*;
 
 /// The header every WebCodecs Opus encoder tested gives for stereo at
@@ -196,4 +199,90 @@ fn dops_declares_48_khz_input_whatever_the_encoder_took() {
     let mut out = Vec::new();
     write_dops(&h, &mut out).unwrap();
     assert_eq!(out[4..8], 48_000u32.to_be_bytes());
+}
+
+/// What a parsed header promises, and that `write_dops` writes it whole.
+fn check_head(data: &[u8]) -> Result<(), TestCaseError> {
+    let Ok(h) = parse_opus_head(data) else {
+        return Ok(());
+    };
+    prop_assert!(h.version <= MAX_VERSION);
+    prop_assert!(h.channels >= 1);
+    prop_assert!(h.streams >= 1 && h.coupled <= h.streams);
+    let decoded = u16::from(h.streams) + u16::from(h.coupled);
+    prop_assert!(decoded <= 255);
+    match h.mapping_family {
+        0 => {
+            prop_assert!(h.channels <= 2);
+            prop_assert_eq!((h.streams, h.coupled), (1, h.channels - 1));
+            prop_assert!(h.mapping.is_empty());
+        }
+        1 | SILENT => {
+            prop_assert!(h.mapping_family != 1 || h.channels <= MAX_VORBIS_CHANNELS);
+            prop_assert_eq!(h.mapping.len(), usize::from(h.channels));
+            for &index in h.mapping {
+                prop_assert!(index == SILENT || u16::from(index) < decoded);
+            }
+        }
+        family => return Err(TestCaseError::fail(format!("family {family} parsed"))),
+    }
+    let mut out = vec![0xee];
+    prop_assert!(write_dops(data, &mut out).is_ok());
+    let table = if h.mapping_family == 0 {
+        0
+    } else {
+        2 + h.mapping.len()
+    };
+    prop_assert_eq!(out.len(), 1 + 11 + table);
+    prop_assert_eq!(out[1..3].to_vec(), vec![0, h.channels]);
+    Ok(())
+}
+
+/// A valid header to mutate: stereo family 0, or 5.1 family 1.
+fn base_head() -> impl Strategy<Value = Vec<u8>> {
+    prop_oneof![Just(STEREO.to_vec()), Just(surround())]
+}
+
+fn config() -> Config {
+    Config {
+        cases: 1024,
+        rng_seed: RngSeed::Fixed(0x0905_5eed),
+        failure_persistence: None,
+        ..Config::default()
+    }
+}
+
+proptest! {
+    #![proptest_config(config())]
+
+    #[test]
+    fn arbitrary_bytes_never_panic(data in proptest::collection::vec(any::<u8>(), 0..64)) {
+        check_head(&data)?;
+    }
+
+    #[test]
+    fn arbitrary_fields_after_the_magic_never_panic(
+        tail in proptest::collection::vec(any::<u8>(), 0..300),
+    ) {
+        let mut data = MAGIC.to_vec();
+        data.extend_from_slice(&tail);
+        check_head(&data)?;
+    }
+
+    #[test]
+    fn mutated_headers_never_panic(
+        base in base_head(),
+        edits in proptest::collection::vec((any::<prop::sample::Index>(), any::<u8>()), 1..6),
+        len in prop::option::of(0usize..40),
+    ) {
+        let mut data = base;
+        for (at, byte) in edits {
+            let i = at.index(data.len());
+            data[i] = byte;
+        }
+        if let Some(len) = len {
+            data.resize(len, 0);
+        }
+        check_head(&data)?;
+    }
 }
