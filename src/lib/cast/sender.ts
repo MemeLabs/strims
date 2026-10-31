@@ -77,7 +77,7 @@ interface CastWindow {
   isSecureContext: boolean;
   navigator: { userAgent: string };
   document: Document;
-  chrome?: { cast?: CastSdk["cast"] };
+  chrome?: { cast?: CastSdk["cast"] & { isAvailable?: boolean } };
   cast?: { framework?: CastSdk["framework"] };
   __onGCastApiAvailable?: (available: boolean) => void;
   setTimeout: (f: () => void, ms: number) => unknown;
@@ -110,6 +110,13 @@ export const loadCastSdk = (win: CastWindow = window): Promise<CastSdk | null> =
 
 const inject = (win: CastWindow): Promise<CastSdk | null> =>
   new Promise((resolve) => {
+    // The page has the SDK already, and it said the browser can cast.
+    const framework = win.cast?.framework;
+    const cast = win.chrome?.cast;
+    if (framework && cast?.isAvailable) {
+      resolve({ framework, cast });
+      return;
+    }
     win.__onGCastApiAvailable = (available) => {
       const framework = win.cast?.framework;
       const cast = win.chrome?.cast;

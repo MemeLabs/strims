@@ -309,6 +309,16 @@ describe("loadCastSdk", () => {
     assert.strictEqual(loaded.cast, sdk.cast);
   });
 
+  it("takes up the SDK the page has already", async () => {
+    const { win, scripts } = fakeWindow({ chrome: true });
+    const sdk = fakeSdk(new FakeContext());
+    win.cast = { framework: sdk.framework };
+    win.chrome = { cast: { ...sdk.cast, isAvailable: true } };
+    const loaded = await loadCastSdk(win as unknown as LoaderWindow);
+    assert.strictEqual(loaded.framework, sdk.framework);
+    assert.deepStrictEqual(scripts, []);
+  });
+
   it("answers null when the SDK says the browser can't cast, its script fails, or it says nothing", async () => {
     const refused = fakeWindow({ chrome: true });
     const a = loadCastSdk(refused.win as unknown as LoaderWindow);
