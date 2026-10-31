@@ -23,7 +23,8 @@
 //!   Aggregate messages split into their FLV tags.
 //! - **Commands:** `connect`, `releaseStream`, `FCPublish`,
 //!   `createStream`, `publish` and `deleteStream` / `FCUnpublish` /
-//!   `closeStream`; `@setDataFrame` and `onMetaData` data messages. Other
+//!   `closeStream`; `@setDataFrame` and `onMetaData` data messages, and
+//!   `onTextData` ones, whose `text` is a subtitle cue. Other
 //!   commands and data messages are ignored, as are audio and video
 //!   before the publish is accepted. AMF3 command and data messages are
 //!   taken as AMF0 ones when their format byte is 0 and a name follows in

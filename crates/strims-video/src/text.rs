@@ -290,7 +290,11 @@ impl CueReader {
         {
             return;
         }
-        for s in self.showing.iter_mut().filter(|s| s.track == track) {
+        for s in self
+            .showing
+            .iter_mut()
+            .filter(|s| s.track == track && s.start <= at)
+        {
             let end = (s.start + MIN_CUE).max(at);
             if end < s.end {
                 s.end = end;

@@ -40,6 +40,7 @@ use strims_video::codec::RenditionPlan;
 use strims_video::hls::HlsRoutes;
 use strims_video::ingress::unit_ingress_options;
 use strims_video::synth::script::{Script, ScriptConfig, Tag, TagKind, mux_tags};
+use strims_video::text;
 use strims_video::units::{self, ReaderEvent, UnitReader, UnitSigning};
 use strims_video::{
     AccessUnit, Config, DecoderConfig, EgressPiece, EgressStream, FlvSource, IngressMetrics,
@@ -1658,6 +1659,118 @@ fn an_h264_streams_captions_reach_its_rungs_in_presentation_order() {
             .count();
         assert!(frames.len() >= 2 * rung_frames - 2, "two a frame");
         assert_eq!(*frames.last().unwrap(), (last.2 * 30 + 45_000) / 90_000);
+    });
+}
+
+// --- subtitles ----------------------------------------------------------------
+
+/// Sends `tags` of `script` with `cues`, each an `onTextData` at its
+/// time, sent before the first tag at or after it.
+async fn send_with_cues(
+    p: &mut TestPublisher,
+    tags: &[Tag],
+    script: &Script,
+    cues: &mut Vec<(u32, &str)>,
+) {
+    for batch in tags.chunks(8) {
+        for tag in batch {
+            while let Some(&(at, text)) = cues.first().filter(|(at, _)| *at <= tag.timestamp) {
+                p.publisher.send_text(at, text).unwrap();
+                cues.remove(0);
+            }
+            p.send(tag, script);
+        }
+        p.flush().await;
+        p.pump();
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+}
+
+/// A text unit read: DTS, PTS, whether it continues a cue, its duration
+/// and text.
+fn cues_read(units: &[Unit]) -> Vec<(i64, i64, bool, u64, String)> {
+    units
+        .iter()
+        .filter(|u| u.0 == strims_video::flv::TEXT_TRACK)
+        .map(|u| {
+            let c = text::parse_cue(&u.4).unwrap();
+            (u.1, u.2, c.continues, c.duration, c.text.to_owned())
+        })
+        .filter(|c| c.4 != "one")
+        .collect()
+}
+
+/// A stream whose metadata declares a data stream carries its
+/// `onTextData` cues, on a text track declared from its start, in its
+/// channel's swarm and its rungs: each shows for its reading time, and
+/// each GOP that starts while it shows repeats it for a viewer that joins
+/// there. The text track stays out of the listing's MIME type.
+#[test]
+fn a_streams_subtitles_reach_its_channel_swarm_and_its_rungs() {
+    run(async {
+        let (video, _codec) = codec_host();
+        let config = with_ladder(vec![RenditionPlan {
+            short_side: 480,
+            max_frame_rate: 15,
+            bitrate: 500_000,
+        }]);
+        let s = Ingest::with_host(true, config, video).await;
+        let b = s.b.as_ref().unwrap();
+        let vb = start(b, NoVideoHost, Config::default());
+        let mut p = s.publish("10.0.0.1:50000").await;
+        let mut script = Script::new(&ScriptConfig::default());
+        script.metadata.push((
+            "datastream".into(),
+            strims_video::synth::script::MetaValue::Number(0.0),
+        ));
+        let (_, units) = script_units(&script);
+        let across = "a cue across the GOP start at four seconds";
+        let mut cues = vec![(500, "one"), (3500, across), (6900, "three")];
+        let third = script.tags.len() / 3;
+        send_with_cues(&mut p, &script.tags[..third], &script, &mut cues).await;
+        wait_for(10, "the rung in the snippet", || {
+            shown_snippet(b).is_some_and(|s| s.renditions.len() == 2)
+        })
+        .await;
+        let shown = shown_snippet(b).unwrap();
+        assert_eq!(
+            shown.renditions[0].mime_type,
+            r#"video/x.strims-units;codecs="avc1.64001f,mp4a.40.2""#
+        );
+        let mut viewers = Vec::new();
+        for r in &shown.renditions {
+            viewers.push(UnitViewer::new(
+                vb.open_stream(
+                    &r.swarm_uri,
+                    std::slice::from_ref(&s.net.public),
+                    &r.mime_type,
+                )
+                .await
+                .unwrap(),
+            ));
+        }
+        send_with_cues(&mut p, &script.tags[third..], &script, &mut cues).await;
+        p.unpublish().await;
+        let last = units
+            .iter()
+            .rfind(|u| u.0 == strims_video::flv::VIDEO_TRACK && u.3)
+            .unwrap()
+            .clone();
+        let want = [
+            (3500, 3500, false, 2800, across.to_owned()),
+            (4000, 4000, true, 2300, across.to_owned()),
+            (6000, 6000, true, 300, across.to_owned()),
+            (6900, 6900, false, 800, "three".to_owned()),
+        ];
+        for v in &mut viewers {
+            v.until(|got| got.iter().any(|(u, _)| (u.0, u.1) == (last.0, last.1)))
+                .await;
+            assert_eq!(cues_read(&v.units()), want);
+            assert_eq!(
+                v.reader.text_configs(),
+                [text::config(strims_video::flv::TEXT_TRACK)]
+            );
+        }
     });
 }
 

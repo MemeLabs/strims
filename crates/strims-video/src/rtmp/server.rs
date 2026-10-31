@@ -117,6 +117,9 @@ pub enum RtmpEvent<'a> {
     Video { timestamp: u32, data: &'a [u8] },
     /// An FLV audio tag body.
     Audio { timestamp: u32, data: &'a [u8] },
+    /// An `onTextData` message's text: a subtitle cue that shows from
+    /// `timestamp`.
+    Text { timestamp: u32, text: String },
     /// `deleteStream`, `FCUnpublish` or `closeStream` ended the publish.
     Unpublish,
 }
@@ -127,6 +130,10 @@ enum Pending {
         name: String,
     },
     Metadata(Metadata),
+    Text {
+        timestamp: u32,
+        text: String,
+    },
     Unpublish,
     /// A range of the delivered message's body.
     Media {
@@ -238,6 +245,7 @@ impl RtmpServer {
         Some(match self.session.pending.take()? {
             Pending::Publish { app, name } => RtmpEvent::Publish { app, name },
             Pending::Metadata(m) => RtmpEvent::Metadata(m),
+            Pending::Text { timestamp, text } => RtmpEvent::Text { timestamp, text },
             Pending::Unpublish => RtmpEvent::Unpublish,
             Pending::Media {
                 video,
@@ -395,10 +403,10 @@ impl Session {
                 }
                 Ok(false)
             }
-            DATA_AMF0 => self.data(msg.body),
+            DATA_AMF0 => self.data(msg.body, msg.timestamp),
             COMMAND_AMF0 => self.command(msg.stream_id, msg.body),
             DATA_AMF3 => match amf0_values(msg.body) {
-                Some(body) => self.data(body),
+                Some(body) => self.data(body, msg.timestamp),
                 None => Ok(false),
             },
             COMMAND_AMF3 => match amf0_values(msg.body) {
@@ -458,7 +466,7 @@ impl Session {
                             max: self.config.max_command_message,
                         });
                     }
-                    self.data(body.get(start..end).unwrap_or_default())?
+                    self.data(body.get(start..end).unwrap_or_default(), timestamp)?
                 }
                 _ => false,
             };
@@ -468,7 +476,9 @@ impl Session {
         }
     }
 
-    fn data(&mut self, body: &[u8]) -> Result<bool, RtmpError> {
+    /// A data message sent at `timestamp`: `onMetaData`, or `onTextData`
+    /// with its text, an object or ECMA array's `text` string.
+    fn data(&mut self, body: &[u8], timestamp: u32) -> Result<bool, RtmpError> {
         if self.phase != Phase::Publishing {
             return Ok(false);
         }
@@ -477,15 +487,28 @@ impl Session {
         if handler.as_str() == Some("@setDataFrame") {
             handler = d.decode().map_err(amf("data message"))?;
         }
-        if handler.as_str() != Some("onMetaData") {
-            return Ok(false);
-        }
-        let value = d.decode().map_err(amf("data message"))?;
-        let Some(metadata) = Metadata::from_value(&value) else {
-            return Ok(false);
+        let pending = match handler.as_str() {
+            Some("onMetaData") => {
+                let value = d.decode().map_err(amf("data message"))?;
+                Metadata::from_value(&value).map(Pending::Metadata)
+            }
+            Some("onTextData") => {
+                let value = d.decode().map_err(amf("data message"))?;
+                value
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .map(|text| Pending::Text {
+                        timestamp,
+                        text: text.to_owned(),
+                    })
+            }
+            _ => None,
         };
-        self.pending = Some(Pending::Metadata(metadata));
-        Ok(true)
+        let event = pending.is_some();
+        if event {
+            self.pending = pending;
+        }
+        Ok(event)
     }
 
     fn require_connected(&self, command: &'static str) -> Result<(), RtmpError> {

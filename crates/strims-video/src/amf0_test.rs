@@ -280,18 +280,22 @@ fn metadata_reads_its_fields() {
             audiocodecid: Some(10.0),
             audiosamplerate: Some(48000.0),
             encoder: Some("obs-output module".to_owned()),
+            datastream: false,
         })
     );
-    // Objects too; fields of another type are left out.
+    // Objects too; fields of another type are left out. A data stream is
+    // declared by its field, whatever its value.
     let v = Value::Object(vec![
         ("width", Value::String("1280")),
         ("framerate", Value::Number(30.0)),
         ("encoder", Value::Number(1.0)),
+        ("datastream", Value::Number(0.0)),
     ]);
     assert_eq!(
         Metadata::from_value(&v),
         Some(Metadata {
             framerate: Some(30.0),
+            datastream: true,
             ..Metadata::default()
         })
     );

@@ -339,6 +339,56 @@ fn media_and_metadata_flow_only_while_publishing() {
     );
 }
 
+#[test]
+fn text_data_messages_are_cues_at_their_times() {
+    let (mut server, _, mut c) = publishing();
+    let cue = |text| {
+        body(&[
+            s("onTextData"),
+            Value::EcmaArray(vec![("type", s("Text")), ("text", s(text))]),
+        ])
+    };
+    c.message(5, 1500, DATA_AMF0, 1, &cue("first\nline"));
+    c.message(
+        5,
+        2500,
+        DATA_AMF0,
+        1,
+        &body(&[s("onTextData"), Value::Object(vec![("text", s("object"))])]),
+    );
+    // A text that isn't a string says nothing.
+    c.message(
+        5,
+        2600,
+        DATA_AMF0,
+        1,
+        &body(&[s("onTextData"), Value::Object(vec![("text", n(1.0))])]),
+    );
+    c.message(
+        5,
+        3000,
+        DATA_AMF3,
+        1,
+        &amf3(
+            0,
+            &[s("onTextData"), Value::EcmaArray(vec![("text", s("amf3"))])],
+        ),
+    );
+    let agg = [tag(VIDEO, 100, &[1]), tag(DATA_AMF0, 140, &cue("tagged"))].concat();
+    c.message(6, 4000, AGGREGATE, 1, &agg);
+    let events = feed(&mut server, &c.take(), Answer::Accept).unwrap();
+    assert_eq!(
+        events,
+        [
+            Ev::Text(1500, "first\nline".into()),
+            Ev::Text(2500, "object".into()),
+            Ev::Text(3000, "amf3".into()),
+            Ev::Video(4000, vec![1]),
+            Ev::Text(4040, "tagged".into()),
+        ]
+    );
+}
+
 fn tag(type_id: u8, ts: u32, data: &[u8]) -> Vec<u8> {
     let mut t = vec![type_id];
     t.extend(&(data.len() as u32).to_be_bytes()[1..]);

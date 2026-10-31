@@ -6,7 +6,6 @@
 use std::collections::BTreeMap;
 
 use strims_base::time::{Duration, Time};
-use strims_chunkstream::MAX_UVARINT_LEN;
 use strims_chunkstream::chunked::{ChunkedEncoder, ContinueError, EncodeError, FrameSizeError};
 
 use super::record::{ConfigEntry, UnitHeader, write_configs, write_end, write_unit_head};
@@ -72,11 +71,47 @@ struct Track {
     seq: u64,
     /// A text track's last decode time written.
     last_dts: Option<i64>,
-    /// A text track's last cue, written or not.
-    cue: Option<HeldCue>,
+    /// A text track's cues that may show at a later GOP's start, written
+    /// or not, in the order they came. Bound: `MAX_HELD_CUES`.
+    cues: Vec<HeldCue>,
 }
 
-/// A text track's last cue, in the track's timescale.
+/// The most cues a text track holds for repeats; past it the oldest goes.
+const MAX_HELD_CUES: usize = 8;
+
+impl Track {
+    /// Holds a text track's cue that shows from `pts`: it ends the cues
+    /// held that start by `pts` and show past it, down to [`MIN_CUE`]
+    /// after their starts.
+    fn hold(&mut self, cue: &Cue<'_>, pts: i64) {
+        let floor =
+            i128::from(MIN_CUE.as_nanos()) * i128::from(self.config.timescale) / 1_000_000_000;
+        let floor = i64::try_from(floor).unwrap_or(i64::MAX);
+        for c in self.cues.iter_mut().filter(|c| c.start <= pts) {
+            c.end = c.end.min(c.start.saturating_add(floor).max(pts));
+        }
+        if cue.text.is_empty() {
+            return;
+        }
+        let lasts = i64::try_from(cue.duration).unwrap_or(i64::MAX);
+        // A continued cue's duration is what is left of it.
+        let lasts = if cue.continues {
+            lasts
+        } else {
+            lasts.max(floor)
+        };
+        if self.cues.len() >= MAX_HELD_CUES {
+            self.cues.remove(0);
+        }
+        self.cues.push(HeldCue {
+            start: pts,
+            end: pts.saturating_add(lasts),
+            text: cue.text.into(),
+        });
+    }
+}
+
+/// A text track's cue, in the track's timescale.
 #[derive(Debug, Clone)]
 struct HeldCue {
     start: i64,
@@ -289,28 +324,30 @@ impl UnitWriter {
         self.scratch = scratch;
         res
     }
-    /// Writes a CONTINUES cue of each text track's last cue that shows at
-    /// `key`'s presentation time, `key` the keyframe record starting
-    /// `gop`. The keyframe's record is written: a cue whose record can't
-    /// be is left out.
+    /// Writes a CONTINUES cue of each text track's cue held that shows at
+    /// or after `key`'s presentation time, `key` the keyframe record
+    /// starting `gop`: a cue showing then from that time, for what is left
+    /// of it, and a later one from its start. The keyframe's record is
+    /// written: a cue whose record can't be is left out.
     fn continue_cues(&mut self, key: &AccessUnit<'_>, gop: Gop) {
         let Some(key_timescale) = self.tracks.get(&key.track).map(|t| t.config.timescale) else {
             return;
         };
-        let due: Vec<(TrackId, i64)> = self
-            .tracks
-            .iter()
-            .filter_map(|(&id, t)| {
-                let cue = t.cue.as_ref()?;
-                let at = rescale(key.pts, key_timescale, t.config.timescale);
-                (cue.start <= at && at < cue.end).then_some((id, at))
-            })
-            .collect();
-        for (id, at) in due {
-            let Some(t) = self.tracks.get(&id) else {
+        let mut due = Vec::new();
+        for (&id, t) in &mut self.tracks {
+            if t.cues.is_empty() {
                 continue;
-            };
-            let Some(cue) = &t.cue else {
+            }
+            let at = rescale(key.pts, key_timescale, t.config.timescale);
+            t.cues.retain(|c| c.end > at);
+            for c in &t.cues {
+                let pts = c.start.max(at);
+                due.push((id, at, pts, c.end.saturating_sub(pts), c.text.clone()));
+            }
+        }
+        let mut body = Vec::new();
+        for (id, at, pts, duration, text) in due {
+            let Some(t) = self.tracks.get(&id) else {
                 continue;
             };
             let dts = t.last_dts.map_or(at, |last| at.max(last));
@@ -320,15 +357,15 @@ impl UnitWriter {
                 seq: t.seq,
                 config: t.version,
                 dts,
-                pts: at,
+                pts,
                 published: key.published,
             };
-            let mut body = Vec::with_capacity(cue.text.len() + 1 + MAX_UVARINT_LEN);
+            body.clear();
             write_cue(
                 &Cue {
                     continues: true,
-                    duration: u64::try_from(cue.end.saturating_sub(at)).unwrap_or(0),
-                    text: &cue.text,
+                    duration: u64::try_from(duration).unwrap_or(0),
+                    text: &text,
                 },
                 &mut body,
             );
@@ -373,9 +410,9 @@ impl Muxer for UnitWriter {
         configs.push(config.clone());
         configs.sort_by_key(|c| c.track);
         check_configs(&configs)?;
-        let (version, seq, last_dts, cue) = match held {
-            Some(t) => (t.version.wrapping_add(1), t.seq, t.last_dts, t.cue.clone()),
-            None => (0, 0, None, None),
+        let (version, seq, last_dts, cues) = match held {
+            Some(t) => (t.version.wrapping_add(1), t.seq, t.last_dts, t.cues.clone()),
+            None => (0, 0, None, Vec::new()),
         };
         self.tracks.insert(
             config.track,
@@ -384,7 +421,7 @@ impl Muxer for UnitWriter {
                 version,
                 seq,
                 last_dts,
-                cue,
+                cues,
             },
         );
         self.configs = configs;
@@ -394,7 +431,7 @@ impl Muxer for UnitWriter {
 
     /// Writes a unit's record, after the sync record when it starts a GOP
     /// or a CONFIGS record when a config changed, and after a GOP's
-    /// keyframe the text tracks' cues that show at it, repeated. Units
+    /// keyframe the text tracks' cues that show from it, repeated. Units
     /// before the first GOP are dropped. A text track's unit must be a
     /// cue ([`parse_cue`]).
     fn push(&mut self, unit: &AccessUnit<'_>) -> Result<(), UnitWriteError> {
@@ -407,7 +444,7 @@ impl Muxer for UnitWriter {
                 error,
             })?;
             let dts = track.last_dts.map_or(unit.dts, |last| unit.dts.max(last));
-            (dts, Some(held_cue(&cue, unit.pts, track.config.timescale)))
+            (dts, Some(cue))
         } else {
             (unit.dts, None)
         };
@@ -426,7 +463,7 @@ impl Muxer for UnitWriter {
             (false, Some(gop)) => Some(gop),
             (false, None) => {
                 if let (Some(cue), Some(t)) = (cue, self.tracks.get_mut(&unit.track)) {
-                    t.cue = cue;
+                    t.hold(&cue, unit.pts);
                 }
                 self.metrics.dropped_before_start += 1;
                 return Ok(());
@@ -480,7 +517,7 @@ impl Muxer for UnitWriter {
             t.seq = t.seq.wrapping_add(1);
             if let Some(cue) = cue {
                 t.last_dts = Some(dts);
-                t.cue = cue;
+                t.hold(&cue, unit.pts);
             }
         }
         self.metrics.units += 1;
@@ -509,26 +546,6 @@ impl Muxer for UnitWriter {
         self.ended_at = self.metrics.records;
         Ok(())
     }
-}
-
-/// The cue a text track's unit at presentation time `pts` holds, in the
-/// track's `timescale`; `None` for one that shows nothing.
-fn held_cue(cue: &Cue<'_>, pts: i64, timescale: u32) -> Option<HeldCue> {
-    if cue.text.is_empty() {
-        return None;
-    }
-    let lasts = i64::try_from(cue.duration).unwrap_or(i64::MAX);
-    let lasts = if cue.continues {
-        lasts
-    } else {
-        let floor = i128::from(MIN_CUE.as_nanos()) * i128::from(timescale) / 1_000_000_000;
-        lasts.max(i64::try_from(floor).unwrap_or(i64::MAX))
-    };
-    Some(HeldCue {
-        start: pts,
-        end: pts.saturating_add(lasts),
-        text: cue.text.into(),
-    })
 }
 
 /// `t` of timescale `from` in timescale `to`, rounded down; 0 for a zero

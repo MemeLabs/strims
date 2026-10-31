@@ -22,6 +22,14 @@
 //!   Each frame starts a frame's samples after the one before; when that
 //!   count drifts from the tag time by more than a frame, it restarts at
 //!   the tag time.
+//! - **Text** is track [`TEXT_TRACK`] on [`text::TIMESCALE`]: the
+//!   subtitles that `onTextData` data messages carry, each a cue
+//!   ([`crate::text`]) that shows from its message's time for
+//!   [`text::estimate`] of its text. [`FlvSource::text_config`] declares
+//!   the track, once: at the first cue, or sooner when the stream's
+//!   metadata declares a data stream. A cue's text keeps its lines,
+//!   joined by LF, without the whitespace around them, cut at a character
+//!   to [`text::MAX_CUE_TEXT`] bytes.
 //! - A multitrack source ([`FlvSource::multitrack`]) also takes Enhanced
 //!   RTMP's multitrack video packets that each carry one track (OneTrack),
 //!   of track ids below its track count. Each track has a config, a DTS
@@ -61,11 +69,14 @@ use crate::av1::{self, Av1Error};
 use crate::avc::{self, AvcError};
 use crate::hevc::{self, HevcError};
 use crate::media::{AccessUnit, CodecParams, DecoderConfig, TrackId, TrackKind};
+use crate::text::{self, Cue};
 
 /// The video track's id.
 pub const VIDEO_TRACK: TrackId = TrackId(1);
 /// The audio track's id.
 pub const AUDIO_TRACK: TrackId = TrackId(2);
+/// The text track's id: the subtitles of `onTextData` messages.
+pub const TEXT_TRACK: TrackId = TrackId(3);
 /// The video track's timescale.
 pub const VIDEO_TIMESCALE: u32 = 90_000;
 /// Video timescale units per tag millisecond.
@@ -379,6 +390,12 @@ pub struct FlvSource {
     /// [`MAX_VIDEO_TRACKS`].
     video: Vec<Option<VideoTrack>>,
     audio: Option<AudioTrack>,
+    /// The text track was declared.
+    text_declared: bool,
+    /// The text track's last DTS.
+    text_dts: Option<i64>,
+    /// The last cue's payload. Bound: a cue of `MAX_CUE_TEXT` bytes.
+    cue: Vec<u8>,
     metrics: FlvMetrics,
 }
 
@@ -403,7 +420,58 @@ impl FlvSource {
             clock: Clock::new(n),
             video: (0..n).map(|_| None).collect(),
             audio: None,
+            text_declared: false,
+            text_dts: None,
+            cue: Vec::new(),
             metrics: FlvMetrics::default(),
+        }
+    }
+
+    /// The text track's decoder config the first time; `None` after.
+    pub fn text_config(&mut self) -> Option<DecoderConfig> {
+        if std::mem::replace(&mut self.text_declared, true) {
+            return None;
+        }
+        Some(text::config(TEXT_TRACK))
+    }
+
+    /// The cue of an `onTextData` message of `text` sent at `ts_ms`,
+    /// received at `now`: a unit of the text track, which
+    /// [`text_config`](Self::text_config) declares.
+    pub fn text(&mut self, ts_ms: u32, text: &str, now: Time) -> AccessUnit<'_> {
+        let ms = self.clock.unwrap(ts_ms).saturating_add(self.clock.offset);
+        let dts = clamp(&mut self.text_dts, ms, &mut self.metrics);
+        let mut lines = String::with_capacity(text.len().min(text::MAX_CUE_TEXT));
+        for line in text.lines().map(str::trim) {
+            if !lines.is_empty() {
+                lines.push('\n');
+            }
+            lines.push_str(line);
+        }
+        let mut text = lines.trim();
+        if text.len() > text::MAX_CUE_TEXT {
+            let mut end = text::MAX_CUE_TEXT;
+            while !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            text = text.get(..end).unwrap_or_default();
+        }
+        self.cue.clear();
+        text::write_cue(
+            &Cue {
+                continues: false,
+                duration: u64::try_from(text::estimate(text).as_millis()).unwrap_or(0),
+                text,
+            },
+            &mut self.cue,
+        );
+        AccessUnit {
+            track: TEXT_TRACK,
+            dts,
+            pts: ms,
+            keyframe: true,
+            payload: &self.cue,
+            published: now,
         }
     }
 

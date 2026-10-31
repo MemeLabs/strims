@@ -364,6 +364,10 @@ pub struct Metadata {
     pub audiocodecid: Option<f64>,
     pub audiosamplerate: Option<f64>,
     pub encoder: Option<String>,
+    /// The stream declares a data stream: `datastream` is present, as
+    /// FLV muxers write it for a stream with subtitles, whose cues come
+    /// as `onTextData` messages.
+    pub datastream: bool,
 }
 
 impl Metadata {
@@ -385,6 +389,7 @@ impl Metadata {
                 .get("encoder")
                 .and_then(Value::as_str)
                 .map(str::to_owned),
+            datastream: value.get("datastream").is_some(),
         })
     }
 }

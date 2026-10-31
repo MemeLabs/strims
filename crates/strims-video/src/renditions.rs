@@ -440,6 +440,22 @@ impl<C: Codec, W: SwarmWrite> Renditions<C, W> {
         }
     }
 
+    /// Takes the stream's text track's config: every rendition carries
+    /// the track, and the transcode doesn't take it.
+    pub(super) fn text_config(&mut self, c: &DecoderConfig) {
+        for o in &mut self.outputs {
+            o.take(&Output::Config(c.clone()));
+        }
+    }
+
+    /// Takes a cue of the stream's text track, which every rendition
+    /// carries.
+    pub(super) fn text_unit(&mut self, u: &AccessUnit<'_>) {
+        for o in &mut self.outputs {
+            o.take_unit(u);
+        }
+    }
+
     /// Takes a unit of the stream at `now`, starting the transcode at its
     /// first video keyframe and again after a stall.
     pub(super) fn unit(&mut self, u: &AccessUnit<'_>, now: Time, m: &mut TranscodeMetrics) {
@@ -653,12 +669,15 @@ impl<C: Codec, W: SwarmWrite> Renditions<C, W> {
         self.outputs.iter().filter_map(|o| o.listed.as_ref())
     }
 
-    /// Outputs whose swarm isn't created yet but has its first config.
+    /// Outputs whose swarm isn't created yet but has its first media
+    /// config.
     pub(super) fn to_create(&self) -> Vec<usize> {
         self.outputs
             .iter()
             .enumerate()
-            .filter(|(_, o)| !o.created && !o.writer.configs().is_empty())
+            .filter(|(_, o)| {
+                !o.created && o.writer.configs().iter().any(|c| c.kind != TrackKind::Text)
+            })
             .map(|(i, _)| i)
             .collect()
     }
@@ -839,7 +858,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
             nominal
         };
         self.main_from_source = !planned.main_transcoded;
-        self.renditions = Some(Renditions::new(
+        let mut renditions = Renditions::new(
             stage,
             settings,
             &planned,
@@ -848,7 +867,11 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
             nominal,
             self.frame_rate,
             self.writer.frame_size(),
-        ));
+        );
+        if let Some(c) = &self.text_config {
+            renditions.text_config(c);
+        }
+        self.renditions = Some(renditions);
         Ok(())
     }
 

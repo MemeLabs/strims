@@ -165,6 +165,21 @@ impl Publisher {
             .write(DATA_CSID, 0, DATA_AMF0, self.stream_id, &body)
     }
 
+    /// Sends `onTextData` of `text` as FLV muxers write a subtitle: an
+    /// ECMA array of its `type`, `Text`, and its `text`.
+    pub fn send_text(&mut self, timestamp: u32, text: &str) -> Result<(), RtmpError> {
+        let values = [
+            Value::String("onTextData"),
+            Value::EcmaArray(vec![
+                ("type", Value::String("Text")),
+                ("text", Value::String(text)),
+            ]),
+        ];
+        let body = encode(&values)?;
+        self.writer
+            .write(DATA_CSID, timestamp, DATA_AMF0, self.stream_id, &body)
+    }
+
     /// Sends an FLV video tag body.
     pub fn send_video(&mut self, timestamp: u32, body: &[u8]) -> Result<(), RtmpError> {
         self.writer

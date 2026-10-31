@@ -1048,3 +1048,56 @@ proptest! {
         prop_assert_eq!(s.metrics().dts_clamped, 0);
     }
 }
+
+/// The text track's unit: its DTS, PTS, and cue's duration and text.
+fn cue_of(u: &AccessUnit<'_>) -> (i64, i64, u64, String) {
+    assert_eq!(u.track, TEXT_TRACK);
+    assert!(u.keyframe);
+    let c = text::parse_cue(u.payload).unwrap();
+    assert!(!c.continues);
+    (u.dts, u.pts, c.duration, c.text.to_owned())
+}
+
+#[test]
+fn the_text_track_is_declared_once() {
+    let mut s = FlvSource::new();
+    assert_eq!(s.text_config(), Some(text::config(TEXT_TRACK)));
+    assert_eq!(s.text_config(), None);
+}
+
+#[test]
+fn text_cues_show_from_their_tag_time_for_their_reading_time() {
+    let mut s = FlvSource::new();
+    let u = s.text(2000, "  Hello\r\n  there  \n\n", NOW);
+    assert_eq!(cue_of(&u), (2000, 2000, 800, "Hello\nthere".into()));
+    assert_eq!(u.published, NOW);
+    let long = "a fairly long line of subtitle text, read slowly";
+    let u = s.text(3000, long, NOW);
+    assert_eq!(cue_of(&u), (3000, 3000, 3200, long.into()));
+    // Behind the last: decoded at its time, shown at its own.
+    let u = s.text(2900, "behind", NOW);
+    assert_eq!(cue_of(&u).0, 3000);
+    assert_eq!(cue_of(&u).1, 2900);
+    assert_eq!(s.metrics().dts_clamped, 1);
+}
+
+#[test]
+fn text_cues_follow_the_clock_over_wraps_and_restarts() {
+    let mut s = FlvSource::new();
+    let config = avcc_720p();
+    s.video(u32::MAX - 100, &legacy_video(1, 0, 0, &config), NOW)
+        .unwrap();
+    let u = s.text(50, "wrapped", NOW);
+    assert_eq!(cue_of(&u).1, i64::from(u32::MAX) + 51);
+}
+
+#[test]
+fn a_long_text_is_cut_at_a_character_to_the_cue_bound() {
+    let mut s = FlvSource::new();
+    let text = "é".repeat(text::MAX_CUE_TEXT);
+    let u = s.text(0, &text, NOW);
+    let (_, _, duration, cut) = cue_of(&u);
+    assert_eq!(cut.len(), text::MAX_CUE_TEXT);
+    assert_eq!(cut.chars().count(), text::MAX_CUE_TEXT / 2);
+    assert_eq!(duration, 7000);
+}

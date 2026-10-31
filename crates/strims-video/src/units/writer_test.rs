@@ -454,3 +454,26 @@ fn a_text_unit_that_is_not_a_cue_is_refused_writing_nothing() {
         r#"video/x.strims-units;codecs="avc1.64001f""#
     );
 }
+
+#[test]
+fn cues_ahead_of_the_video_and_stacked_ones_are_continued() {
+    let mut w = UnitWriter::new(FRAME).unwrap();
+    w.set_config(&video(1)).unwrap();
+    w.set_config(&crate::text::config(crate::TrackId(3)))
+        .unwrap();
+    w.push(&unit(1, 0, true, 10)).unwrap();
+    // A one-word cue, and another 0.3 s later: both show till 0.8 s.
+    w.push(&cue_unit(3, 0, &cue(100, "Hi"))).unwrap();
+    w.push(&cue_unit(3, 300, &cue(2000, "there"))).unwrap();
+    // A cue ahead of the video's next GOP, at 0.5 s.
+    w.push(&cue_unit(3, 1500, &cue(1000, "ahead"))).unwrap();
+    w.push(&unit(1, 45_000, true, 10)).unwrap();
+    assert_eq!(
+        cues(w.output(), 3)[3..],
+        [
+            (3, 1500, 500, true, 300, "Hi".into()),
+            (4, 1500, 500, true, 1000, "there".into()),
+            (5, 1500, 1500, true, 1000, "ahead".into()),
+        ]
+    );
+}

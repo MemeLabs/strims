@@ -90,12 +90,14 @@
 //! config writes a CONFIGS record before the next unit. Units before the
 //! first GOP aren't written.
 //!
-//! Right after the GOP's keyframe record, each text track whose last cue
-//! shows at the keyframe's presentation time repeats it: a CONTINUES cue
-//! of what is left of it, presented then, so a reader that joins at the
-//! GOP shows it too. A text track's decode times stay in order with the
-//! repeats: a cue that decodes before the track's last unit is written
-//! at that unit's decode time, keeping its own presentation time.
+//! Right after the GOP's keyframe record, each text track repeats its
+//! cues written before it that show at or after the keyframe's
+//! presentation time, as CONTINUES cues, so a reader that joins at the
+//! GOP shows them too: a cue showing then from that time, for what is
+//! left of it, and a cue starting later (a stream's text can run ahead of
+//! its video) from its own start. A text track's decode times stay in order
+//! with the repeats: a cue that decodes before the track's last unit is
+//! written at that unit's decode time, keeping its own presentation time.
 //!
 //! So a reader that joins at any record learns the offset `K` of its GOP's
 //! sync record, the offset of its first byte less `gop_back`; from `K` on

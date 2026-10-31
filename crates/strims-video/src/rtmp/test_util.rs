@@ -19,6 +19,7 @@ pub(crate) enum Ev {
     Metadata(Metadata),
     Video(u32, Vec<u8>),
     Audio(u32, Vec<u8>),
+    Text(u32, String),
     Unpublish,
 }
 
@@ -29,6 +30,7 @@ impl From<RtmpEvent<'_>> for Ev {
             RtmpEvent::Metadata(m) => Ev::Metadata(m),
             RtmpEvent::Video { timestamp, data } => Ev::Video(timestamp, data.to_vec()),
             RtmpEvent::Audio { timestamp, data } => Ev::Audio(timestamp, data.to_vec()),
+            RtmpEvent::Text { timestamp, text } => Ev::Text(timestamp, text),
             RtmpEvent::Unpublish => Ev::Unpublish,
         }
     }

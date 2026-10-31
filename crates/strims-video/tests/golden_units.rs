@@ -342,12 +342,13 @@ fn text_streams() {
             }
         }
         // The first GOP, at 0 ms, repeats "early"; the second, at 100 ms,
-        // "across".
+        // both, stacked.
         assert_eq!(
             cues,
             [
                 (0, 0, true, 800, "early".into()),
                 (40, 40, false, 1500, "across".into()),
+                (100, 100, true, 700, "early".into()),
                 (100, 100, true, 1440, "across".into()),
                 (200, 200, false, 0, String::new()),
             ]

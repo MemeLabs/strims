@@ -92,6 +92,12 @@
 //! session; the publisher gets the reason in an error status. Metadata is
 //! counted, and its bitrates and tracks read.
 //!
+//! Subtitles, `onTextData` messages, are cues of the source's text track
+//! ([`text`](crate::text)), declared once: when the metadata declares a
+//! data stream, or else at the first cue. The channel's swarm and every
+//! rendition carry the track; the transcode doesn't take it. A cue the
+//! writer refuses is dropped, and cues don't keep a session from idling.
+//!
 //! The swarm's signing, its unit size and interval ([`UnitSigning`]), is
 //! the stream's, so the session creates the swarm once it knows enough of
 //! the stream:
@@ -1218,6 +1224,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
                 .video
                 .codec()
                 .map(|_| thumbnails::Thumbnails::new(&self.config.ingress.thumbnails)),
+            text_config: None,
         })
     }
 
@@ -1618,6 +1625,8 @@ struct Live<K: Kv, H: Host, V: VideoHost, T: Timer> {
     renditions: Option<renditions::Renditions<V::Codec, <H as SwarmHost>::Writer>>,
     /// Where the node has a codec stage.
     thumbnails: Option<thumbnails::Thumbnails>,
+    /// The text track's config, once declared.
+    text_config: Option<DecoderConfig>,
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
@@ -1684,6 +1693,39 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
         }
         if let Sign::Choosing(choice) = &mut self.sign {
             choice.metadata(m);
+        }
+        if m.datastream {
+            self.declare_text();
+        }
+    }
+
+    /// Declares the stream's text track, once, to the channel's swarm and
+    /// every rendition.
+    fn declare_text(&mut self) {
+        let Some(c) = self.source.text_config() else {
+            return;
+        };
+        if let Err(e) = self.writer.set_config(&c) {
+            tracing::debug!(error = %e, "the channel's writer refused the text track");
+        }
+        if let Some(r) = &mut self.renditions {
+            r.text_config(&c);
+        }
+        self.text_config = Some(c);
+    }
+
+    /// Takes an `onTextData` message's text sent at `ts`, received at
+    /// `now`: a cue of the text track, which the channel's swarm and every
+    /// rendition carry. Cues aren't media: they don't keep the session
+    /// from idling.
+    fn text(&mut self, ts: u32, text: &str, now: Time) {
+        self.declare_text();
+        let u = self.source.text(ts, text, now);
+        if let Err(e) = self.writer.push(&u) {
+            tracing::debug!(error = %e, "the channel's writer refused a cue");
+        }
+        if let Some(r) = &mut self.renditions {
+            r.text_unit(&u);
         }
     }
 
@@ -2070,6 +2112,12 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
                         self.shared.count(|c| c.metadata += 1);
                         if let Some(l) = &mut self.live {
                             l.metadata(&m);
+                        }
+                        None
+                    }
+                    Some(RtmpEvent::Text { timestamp, text }) => {
+                        if let Some(l) = &mut self.live {
+                            l.text(timestamp, &text, now);
                         }
                         None
                     }
