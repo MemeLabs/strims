@@ -16,6 +16,7 @@ import { streamFormat } from "../../lib/media/mime";
 import { PlayerKind, choosePlayer, preferredPlayer } from "../../lib/media/players";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
 import { useRemotePlayback } from "./RemotePlayback";
+import RenditionMenu from "./RenditionMenu";
 import { SwarmMediaProps, UnitsMedia } from "./SwarmMedia";
 import { useRendition } from "./useRendition";
 import VideoControls from "./VideoControls";
@@ -177,7 +178,12 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         theaterMode={theaterMode}
         toggleTheaterMode={toggleTheaterMode}
         close={handleClose}
-        remoteButtons={remote.buttons}
+        remoteButtons={
+          <>
+            <RenditionMenu {...rendition} />
+            {remote.buttons}
+          </>
+        }
         {...controls}
       />
     </div>

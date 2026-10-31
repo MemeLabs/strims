@@ -17,7 +17,10 @@
     "Cast": "Cast",
     "Stop casting": "Stop casting",
     "Casting to": "Casting to {{device}}",
-    "AirPlay": "AirPlay"
+    "AirPlay": "AirPlay",
+    "Quality": "Quality",
+    "Auto": "Auto",
+    "Auto playing": "Auto ({{rendition}})"
   },
 
   "layout": {

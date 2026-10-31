@@ -10,10 +10,12 @@ import { PlayerKind } from "../../lib/media/players";
 import { RenditionTrial } from "../../lib/media/rendition-trial";
 import {
   Assessment,
+  CodecFamily,
   Rendition,
   RenditionFailures,
   assessRenditions,
   browserProbes,
+  codecFamily,
   rankRenditions,
   renditionCandidates,
   swarmId,
@@ -37,12 +39,25 @@ export interface RenditionProps {
   active: boolean;
 }
 
+/** A rendition the viewer can pick. */
+export interface RenditionOption {
+  id: string;
+  /** Its shorter side, frame rate and codec, such as `1080p60 HEVC`. */
+  label: string;
+}
+
 export interface RenditionChoice {
   /** The stream to play, or null while the choice waits for the listing. */
   swarmUri: string | null;
   mimeType: string;
   /** The player gave up on the stream it was given. */
   unplayable: (message: string) => void;
+  /** The renditions the viewer can pick, largest first; none for a stream of one. */
+  options: RenditionOption[];
+  /** The rendition playing, and the one the viewer picked (null: the choice's). */
+  playing: string | null;
+  picked: string | null;
+  pick: (id: string | null) => void;
 }
 
 /** What the viewer learned of a stream's renditions while watching it. */
@@ -52,6 +67,8 @@ interface Watched {
   /** The renditions that failed, and those that played, by swarm id. */
   failed: string[];
   confirmed: string[];
+  /** The rendition the viewer picked. */
+  picked: string | null;
 }
 
 // The page's local storage, or none where the page may not use it.
@@ -78,8 +95,20 @@ const measure = (video: HTMLVideoElement | undefined) => {
   return { width: Math.round(width * ratio), height: Math.round(height * ratio) };
 };
 
-const label = (r: Rendition) =>
-  `${Math.min(r.width, r.height)}p${Math.round(r.frameRate) || ""} ${r.video}`;
+const CODEC_NAMES: Record<CodecFamily, string> = {
+  [CodecFamily.H264]: "H.264",
+  [CodecFamily.Hevc]: "HEVC",
+  [CodecFamily.Av1]: "AV1",
+};
+
+// A rendition's shorter side, its frame rate above 30, and its codec.
+const optionLabel = (r: Rendition): string => {
+  const rate = Math.round(r.frameRate);
+  const name = CODEC_NAMES[codecFamily(r.video)] ?? r.video;
+  return `${Math.min(r.width, r.height) || "?"}p${rate > 30 ? rate : ""} ${name}`;
+};
+
+const label = (r: Rendition) => `${optionLabel(r)} (${r.video})`;
 
 /**
  * The stream a player plays of a listing: the first of its renditions in
@@ -97,6 +126,10 @@ const label = (r: Rendition) =>
  * the size it ranks by is the largest it held for RESIZE_SETTLE_MS, so a
  * player that shrinks keeps its rendition. Once the listing goes, the
  * renditions its last snippet named stay.
+ *
+ * The viewer can pick any rendition the browser says it plays (`pick`),
+ * which plays in place of the choice, on trial as the choice is, until it
+ * fails or the viewer picks another; null gives the choice back.
  */
 export const useRendition = ({
   swarmUri,
@@ -190,34 +223,66 @@ export const useRendition = ({
     main: swarmUri,
     failed: [],
     confirmed: [],
+    picked: null,
   });
   const fresh = (s: Watched): Watched =>
-    s.main === swarmUri ? s : { main: swarmUri, failed: [], confirmed: [] };
+    s.main === swarmUri ? s : { main: swarmUri, failed: [], confirmed: [], picked: null };
   const watched = fresh(watchedState);
 
   const isPortable = useMemo(portable, []);
-  const choice = useMemo((): Rendition | null => {
-    const main = candidates.find((r) => r.main);
+  // The renditions the browser says it plays that haven't failed, the
+  // listing's own always among them; null while the choice waits.
+  const pool = useMemo((): Assessment[] | null => {
     if (!snippet && waited !== swarmUri) return null;
-    if (candidates.length < 2) return main;
+    if (candidates.length < 2) {
+      return candidates.map((r) => ({ rendition: r, supported: true, powerEfficient: false }));
+    }
     if (assessed?.main !== swarmUri) return null;
     const current = new Map(candidates.map((r) => [r.id, r]));
-    const pool = assessed.assessed
+    return assessed.assessed
       .filter((a) => current.has(a.rendition.id) && !watched.failed.includes(a.rendition.id))
       .map((a) => ({ ...a, rendition: current.get(a.rendition.id) }));
+  }, [candidates, snippet, waited, assessed, watched.failed, swarmUri]);
+  const choice = useMemo((): Rendition | null => {
+    if (!pool) return null;
+    const picked = pool.find((a) => a.supported && a.rendition.id === watched.picked);
+    if (picked) return picked.rendition;
     const viewport = {
       width: size?.main === swarmUri ? size.width : 0,
       height: size?.main === swarmUri ? size.height : 0,
       portable: isPortable,
     };
-    return rankRenditions(pool, viewport)[0] ?? main;
-  }, [candidates, snippet, waited, assessed, watched, size, swarmUri, isPortable]);
+    return rankRenditions(pool, viewport)[0] ?? candidates.find((r) => r.main);
+  }, [pool, watched.picked, size, swarmUri, isPortable, candidates]);
+  const options = useMemo(
+    () =>
+      (pool ?? [])
+        .filter((a) => a.supported)
+        .map((a) => a.rendition)
+        .sort(
+          (a, b) =>
+            Math.min(b.width, b.height) - Math.min(a.width, a.height) ||
+            b.frameRate - a.frameRate ||
+            Number(b.main) - Number(a.main)
+        )
+        .map((r) => ({ id: r.id, label: optionLabel(r) })),
+    [pool]
+  );
 
   const fail = (r: Rendition) =>
     setWatched((s) => {
       const w = fresh(s);
-      return w.failed.includes(r.id) ? w : { ...w, failed: [...w.failed, r.id] };
+      if (w.failed.includes(r.id)) return w;
+      return {
+        ...w,
+        failed: [...w.failed, r.id],
+        picked: w.picked === r.id ? null : w.picked,
+      };
     });
+  const pick = useMemo(
+    () => (id: string | null) => setWatched((s) => ({ ...fresh(s), picked: id })),
+    [swarmUri]
+  );
 
   const trial = choice && !choice.main && active && !watched.confirmed.includes(choice.id);
   useEffect(() => {
@@ -253,5 +318,9 @@ export const useRendition = ({
     swarmUri: choice?.swarmUri ?? null,
     mimeType: choice?.mimeType ?? mimeType,
     unplayable,
+    options: options.length > 1 ? options : [],
+    playing: choice?.id ?? null,
+    picked: options.some((o) => o.id === watched.picked) ? watched.picked : null,
+    pick,
   };
 };
