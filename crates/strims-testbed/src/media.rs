@@ -19,10 +19,12 @@
 //!   reader rewinds there within [`EgressSettings::rewind_timeout`] while
 //!   the reader reads on to the next sync record, and the join takes the
 //!   rewind if it lands within [`EgressSettings::rewind_grace`] of that
-//!   record's arrival. The records' pieces go out
-//!   as the Egress RPC's Data messages ([`DataMessages`]) to
-//!   [`Runtime::media`], and each unit record's lag from its publish time
-//!   to its arrival goes to the second's line.
+//!   record's arrival. Each unit record's lag from its publish time to its
+//!   arrival goes to the second's line. The records' pieces ([`Viewer`])
+//!   go to [`Runtime::play`]: by default as the Egress RPC's Data messages
+//!   ([`DataMessages`]) to [`Runtime::media`]. A player that takes over
+//!   the stream mid-way ([`Viewer::resync`]) gets it from the next whole
+//!   record; it doesn't rewind to its GOP's start.
 //!
 //! Every node takes the stream's chunks per signature
 //! ([`Stream::Units`](crate::node::Stream::Units)), as a viewer takes them
@@ -402,10 +404,11 @@ pub struct ViewerStats {
     /// Unit records read whole, and the keyframes among them.
     pub units: u64,
     pub keyframes: u64,
-    /// Data messages, and their bytes.
+    /// Messages that took records to the player (Data messages, or the
+    /// batches of a player's feed), and the records' bytes.
     pub messages: u64,
     pub bytes: u64,
-    /// When the first Data message went out, in Unix milliseconds.
+    /// When the first message went out, in Unix milliseconds.
     pub first_message_ms: Option<u64>,
     pub reader: ReaderMetrics,
     pub join: Join,
@@ -603,46 +606,91 @@ impl DataMessages {
 const HEAD_KEEP: usize = 128;
 const _: () = assert!(HEAD_KEEP > GOP_HEAD_LEN);
 
-/// Reads the stream through `reader` (see the [module docs](self)) until
-/// it closes, `spare` (a second reader opened with it) racing its join's
-/// rewind: each Data message goes to [`Runtime::media`], each unit
-/// record's lag to `lags`, and what was read to `stats`.
-pub async fn read<S: SwarmRead, R: Runtime + Clone + 'static>(
-    reader: S,
-    spare: Option<S>,
-    chunk_size: usize,
-    rt: &R,
-    lags: &RefCell<Vec<u64>>,
-    stats: &RefCell<ViewerStats>,
-) -> Result<(), String> {
-    let egress = EgressSettings::default();
-    let join = Rc::new(Cell::new(Join::default()));
-    let next = Rc::new(Cell::new(0));
-    let deadline = |reader| Deadline {
-        reader,
-        rt: rt.clone(),
-        timeout_ms: u64::try_from(egress.rewind_timeout.as_millis()).unwrap_or(0),
-        grace_ms: u64::try_from(egress.rewind_grace.as_millis()).unwrap_or(0),
-        next: next.clone(),
-        join: join.clone(),
-    };
-    let mut records = ChunkedReader::new(deadline(reader), chunk_size, egress.read_buffer_bytes)
-        .map_err(|e| format!("chunked reader: {e}"))?;
-    if let Some(spare) = spare {
-        records.set_spare(deadline(spare));
-    }
-    let mut messages = DataMessages::new(egress.max_data_bytes);
-    // The record in progress's first bytes. Bound: HEAD_KEEP.
-    let mut head = Vec::with_capacity(HEAD_KEEP);
-    loop {
-        let piece = match records.next(messages.room()).await {
-            Ok(p) => p,
-            Err(VideoError::StreamClosed) => return Ok(()),
-            Err(e) => {
-                rt.error(format!("read: {e}"));
-                continue;
-            }
+/// A viewer's stream (see the [module docs](self)): the pieces of its
+/// records as a [`ChunkedReader`] over the swarm reader gives them, joining
+/// at a GOP, with each unit record's lag from its publish time to its
+/// arrival noted in `lags` and what was read in `stats`. A
+/// [`Runtime::play`] takes them.
+pub struct Viewer<'a, S, R> {
+    records: ChunkedReader<Deadline<S, R>>,
+    rt: R,
+    join: Rc<Cell<Join>>,
+    lags: &'a RefCell<Vec<u64>>,
+    stats: &'a RefCell<ViewerStats>,
+    /// The record in progress's first bytes. Bound: HEAD_KEEP.
+    head: Vec<u8>,
+    /// Pieces are dropped up to the next record start.
+    resync: bool,
+    /// A discontinuity goes out before the next piece.
+    discontinuity: bool,
+}
+
+impl<'a, S: SwarmRead, R: Runtime + Clone + 'static> Viewer<'a, S, R> {
+    /// Reads the stream through `reader`, `spare` (a second reader opened
+    /// with it) racing its join's rewind, in chunks of `chunk_size`.
+    pub fn new(
+        reader: S,
+        spare: Option<S>,
+        chunk_size: usize,
+        rt: &R,
+        lags: &'a RefCell<Vec<u64>>,
+        stats: &'a RefCell<ViewerStats>,
+    ) -> Result<Viewer<'a, S, R>, String> {
+        let egress = EgressSettings::default();
+        let join = Rc::new(Cell::new(Join::default()));
+        let next = Rc::new(Cell::new(0));
+        let deadline = |reader| Deadline {
+            reader,
+            rt: rt.clone(),
+            timeout_ms: u64::try_from(egress.rewind_timeout.as_millis()).unwrap_or(0),
+            grace_ms: u64::try_from(egress.rewind_grace.as_millis()).unwrap_or(0),
+            next: next.clone(),
+            join: join.clone(),
         };
+        let mut records =
+            ChunkedReader::new(deadline(reader), chunk_size, egress.read_buffer_bytes)
+                .map_err(|e| format!("chunked reader: {e}"))?;
+        if let Some(spare) = spare {
+            records.set_spare(deadline(spare));
+        }
+        Ok(Viewer {
+            records,
+            rt: rt.clone(),
+            join,
+            lags,
+            stats,
+            head: Vec::with_capacity(HEAD_KEEP),
+            resync: false,
+            discontinuity: false,
+        })
+    }
+
+    /// The next piece of the stream, of at most `max` bytes (at least 1),
+    /// as egress gives a player its stream. Once the stream closes it
+    /// answers [`VideoError::StreamClosed`]; another error leaves the
+    /// stream readable.
+    pub async fn next(&mut self, max: usize) -> Result<EgressPiece<'_>, VideoError> {
+        self.note();
+        while self.resync {
+            let piece = self.records.next(max).await?;
+            if matches!(piece, EgressPiece::RecordEnd | EgressPiece::Discontinuity) {
+                self.resync = false;
+                self.discontinuity = true;
+                self.head.clear();
+            }
+        }
+        if std::mem::take(&mut self.discontinuity) {
+            return Ok(EgressPiece::Discontinuity);
+        }
+        let Viewer {
+            records,
+            rt,
+            lags,
+            stats,
+            head,
+            ..
+        } = self;
+        let piece = records.next(max).await?;
         let now = rt.now_ms();
         match piece {
             EgressPiece::Data(d) => {
@@ -650,7 +698,7 @@ pub async fn read<S: SwarmRead, R: Runtime + Clone + 'static>(
                 head.extend_from_slice(d.get(..keep).unwrap_or_default());
             }
             EgressPiece::RecordEnd => {
-                if let Ok(Record::Unit { header, .. }) = parse_record(&head) {
+                if let Ok(Record::Unit { header, .. }) = parse_record(head) {
                     let mut s = stats.borrow_mut();
                     s.units += 1;
                     s.keyframes += u64::from(header.keyframe);
@@ -661,16 +709,70 @@ pub async fn read<S: SwarmRead, R: Runtime + Clone + 'static>(
             }
             EgressPiece::Discontinuity => head.clear(),
         }
+        Ok(piece)
+    }
+
+    /// The next piece starts a whole record, for a player that takes the
+    /// stream from here: what remains of the record in progress is
+    /// dropped, and a discontinuity comes first.
+    pub fn resync(&mut self) {
+        self.resync = !self.head.is_empty();
+        self.discontinuity = !self.resync;
+    }
+
+    /// Counts `messages` that took `bytes` of records to the player.
+    pub fn sent(&self, messages: u64, bytes: usize) {
+        let mut s = self.stats.borrow_mut();
+        s.messages += messages;
+        s.bytes += bytes as u64;
+        s.first_message_ms.get_or_insert(self.rt.now_ms());
+    }
+
+    /// Notes the reader's counts and the join so far in the stats.
+    fn note(&self) {
+        let mut s = self.stats.borrow_mut();
+        s.reader = self.records.metrics();
+        s.join = self.join.get();
+    }
+}
+
+/// Reads the stream through `reader` (see the [module docs](self)) until
+/// it closes, `spare` (a second reader opened with it) racing its join's
+/// rewind, and has `rt` play it ([`Runtime::play`]); each unit record's
+/// lag goes to `lags`, and what was read to `stats`.
+pub async fn read<S: SwarmRead, R: Runtime + Clone + 'static>(
+    reader: S,
+    spare: Option<S>,
+    chunk_size: usize,
+    rt: &R,
+    lags: &RefCell<Vec<u64>>,
+    stats: &RefCell<ViewerStats>,
+) -> Result<(), String> {
+    let viewer = Viewer::new(reader, spare, chunk_size, rt, lags, stats)?;
+    rt.play(viewer).await
+}
+
+/// Plays a viewer's stream as the Egress RPC's Data messages
+/// ([`DataMessages`]) to [`Runtime::media`], until it closes; a read error
+/// is reported and reading goes on.
+pub async fn send_messages<S: SwarmRead, R: Runtime + Clone + 'static>(
+    mut viewer: Viewer<'_, S, R>,
+    rt: &R,
+) -> Result<(), String> {
+    let mut messages = DataMessages::new(EgressSettings::default().max_data_bytes);
+    loop {
+        let piece = match viewer.next(messages.room()).await {
+            Ok(p) => p,
+            Err(VideoError::StreamClosed) => return Ok(()),
+            Err(e) => {
+                rt.error(format!("read: {e}"));
+                continue;
+            }
+        };
         if let Some(m) = messages.piece(piece) {
             rt.media(m.data, m.segment_end, m.discontinuity);
-            let mut s = stats.borrow_mut();
-            s.messages += 1;
-            s.bytes += m.data.len() as u64;
-            s.first_message_ms.get_or_insert(now);
+            viewer.sent(1, m.data.len());
         }
-        let mut s = stats.borrow_mut();
-        s.reader = records.metrics();
-        s.join = join.get();
     }
 }
 

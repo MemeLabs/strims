@@ -261,10 +261,10 @@ fn records(messages: &[Message]) -> Vec<Vec<u8>> {
     out
 }
 
-#[test]
-fn a_viewer_joining_mid_stream_gets_whole_records_from_a_gop_start() {
-    let s = script(6);
-    let file = FlvFile::parse(flv(&s)).unwrap();
+/// The seed's swarm stream of `s`, written from `start` on `rt`'s clock,
+/// and its chunk size.
+fn written(s: &Script, rt: &Virtual, start: u64) -> (Vec<u8>, usize) {
+    let file = FlvFile::parse(flv(s)).unwrap();
     let signing = signing_of(file.metadata().as_ref(), true, true);
     assert_eq!(signing, UnitSigning::LARGE);
     let chunk = seed_options(signing.chunks_per_signature)
@@ -275,8 +275,6 @@ fn a_viewer_joining_mid_stream_gets_whole_records_from_a_gop_start() {
         bytes: bytes.clone(),
         unit: chunk * signing.chunks_per_signature,
     };
-    let rt = Virtual::default();
-    let start = 1_800_000_000_000;
     rt.now.set(start - 1000);
     let late = Cell::new(None);
     let stats = Cell::new(SeedStats::default());
@@ -288,7 +286,7 @@ fn a_viewer_joining_mid_stream_gets_whole_records_from_a_gop_start() {
             &file,
             start,
             start + 60_000,
-            &rt,
+            rt,
             &late,
             &stats,
         )
@@ -300,6 +298,15 @@ fn a_viewer_joining_mid_stream_gets_whole_records_from_a_gop_start() {
     assert_eq!(late.get(), Some(0));
     let bytes = bytes.borrow().clone();
     assert_eq!(bytes.len() % (chunk * signing.chunks_per_signature), 0);
+    (bytes, chunk)
+}
+
+#[test]
+fn a_viewer_joining_mid_stream_gets_whole_records_from_a_gop_start() {
+    let s = script(6);
+    let rt = Virtual::default();
+    let start = 1_800_000_000_000;
+    let (bytes, chunk) = written(&s, &rt, start);
 
     // Join 3.5 s in, inside the second GOP.
     let reader = Reader {
@@ -352,6 +359,79 @@ fn a_viewer_joining_mid_stream_gets_whole_records_from_a_gop_start() {
         .map(|t| u64::from(t.timestamp))
         .collect();
     assert_eq!(published, want);
+}
+
+/// A viewer resynced in the middle of a record, for a new player, drops the
+/// rest of it and goes on with a discontinuity and the next whole record;
+/// one resynced at a record's start goes on with a discontinuity alone.
+#[test]
+fn a_resynced_viewer_goes_on_from_the_next_whole_record() {
+    let s = script(6);
+    let rt = Virtual::default();
+    let (bytes, chunk) = written(&s, &rt, 1_800_000_000_000);
+    let reader = Reader {
+        bytes,
+        chunk,
+        next: 0,
+    };
+    let lags = RefCell::new(Vec::new());
+    let stats = RefCell::new(ViewerStats::default());
+    // Owned pieces: a record's data, its end, a discontinuity.
+    #[derive(Debug, PartialEq)]
+    enum Piece {
+        Data(Vec<u8>),
+        End,
+        Skip,
+    }
+    let own = |p: EgressPiece<'_>| match p {
+        EgressPiece::Data(d) => Piece::Data(d.to_vec()),
+        EgressPiece::RecordEnd => Piece::End,
+        EgressPiece::Discontinuity => Piece::Skip,
+    };
+    let records = |pieces: &[Piece]| {
+        let mut out = Vec::new();
+        let mut cur = Vec::new();
+        for p in pieces {
+            match p {
+                Piece::Data(d) => cur.extend_from_slice(d),
+                Piece::End => out.push(std::mem::take(&mut cur)),
+                Piece::Skip => panic!("a discontinuity mid-stream"),
+            }
+        }
+        out
+    };
+    block_on(async {
+        let all = {
+            let mut v = Viewer::new(reader.clone(), None, chunk, &rt, &lags, &stats).unwrap();
+            let mut all = Vec::new();
+            while let Ok(p) = v.next(1000).await {
+                all.push(own(p));
+            }
+            records(&all)
+        };
+        let mut v = Viewer::new(reader, None, chunk, &rt, &lags, &stats).unwrap();
+        let mut before = Vec::new();
+        // Through ten records, then into the eleventh.
+        while before.iter().filter(|p| **p == Piece::End).count() < 10 {
+            before.push(own(v.next(1000).await.unwrap()));
+        }
+        before.push(own(v.next(10).await.unwrap()));
+        v.resync();
+        assert_eq!(own(v.next(1000).await.unwrap()), Piece::Skip);
+        let mut after = Vec::new();
+        while after.iter().filter(|p| **p == Piece::End).count() < 3 {
+            after.push(own(v.next(1000).await.unwrap()));
+        }
+        assert_eq!(records(&after), all[11..14]);
+        // At a record's start: the discontinuity, then that record.
+        v.resync();
+        assert_eq!(own(v.next(1000).await.unwrap()), Piece::Skip);
+        let mut next = Vec::new();
+        while !next.contains(&Piece::End) {
+            next.push(own(v.next(1000).await.unwrap()));
+        }
+        assert_eq!(records(&next), all[14..15]);
+    });
 }
 
 fn block_on<F: std::future::Future>(f: F) -> F::Output {
