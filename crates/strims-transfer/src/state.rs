@@ -290,6 +290,31 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
         true
     }
 
+    /// Withdraws a transfer's publication on `net`: it is no longer
+    /// advertised or searched for there, and it stops and closes with the
+    /// network's peers it shares through no other network it is published
+    /// on. Returns whether it was published on `net`.
+    pub(crate) fn unpublish(&mut self, id: TransferId, net: N) -> bool {
+        let Some(t) = self.transfers.get_mut(&id) else {
+            return false;
+        };
+        if !t.networks.remove(&net) {
+            return false;
+        }
+        let hosts: Vec<ID> = match self.networks.get_mut(&net) {
+            Some(n) => {
+                n.transfers.remove(&id);
+                n.peers.iter().copied().collect()
+            }
+            None => Vec::new(),
+        };
+        self.withdraw(id, net);
+        for host in hosts {
+            self.close_unshared(host, &[id]);
+        }
+        true
+    }
+
     /// Stops searching for and advertising the transfer on `net`.
     fn withdraw(&mut self, id: TransferId, net: N) {
         self.searches.retain(|&(_, i, n)| (i, n) != (id, net));

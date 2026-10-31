@@ -298,6 +298,15 @@ impl<H: Host, T: Timer> TransferControl<H, T> {
         self.shared.update(|st, now| st.publish(id, net, now))
     }
 
+    /// Withdraws a transfer's publication on `net`: it is no longer
+    /// advertised or searched for there, and it stops and closes with the
+    /// network's peers it shares through no other network it is published
+    /// on. Its other publications and its swarm stay. Returns whether it
+    /// was published on `net`.
+    pub fn unpublish(&self, id: TransferId, net: H::Network) -> bool {
+        self.shared.update(|st, _| st.unpublish(id, net))
+    }
+
     pub fn is_published(&self, id: TransferId, net: H::Network) -> bool {
         self.shared.state.borrow().is_published(id, net)
     }

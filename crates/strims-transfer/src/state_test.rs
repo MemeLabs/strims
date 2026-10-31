@@ -460,6 +460,61 @@ fn leaving_the_last_shared_network_closes_the_peer_transfer() {
 }
 
 #[test]
+fn unpublishing_closes_the_transfer_only_with_peers_it_shares_nowhere_else() {
+    let mut p = Pair::new();
+    let id = p.a.s.add(10, &swarm_id(), Vec::new());
+    p.b.s.add(20, &swarm_id(), Vec::new());
+    for net in [NET, NET2] {
+        p.a.s.publish(id, net, t(0));
+        p.b.s.publish(id, net, t(0));
+    }
+    p.settle();
+    p.assert_bound(id);
+    // B is a peer on NET alone, so NET2 shares nothing with it.
+    assert!(p.a.s.unpublish(id, NET2));
+    assert!(!p.a.s.unpublish(id, NET2));
+    assert!(drain(&mut p.a.s).is_empty());
+    assert!(p.a.s.is_published(id, NET) && !p.a.s.is_published(id, NET2));
+    p.assert_bound(id);
+
+    assert!(p.a.s.unpublish(id, NET));
+    let actions = drain(&mut p.a.s);
+    assert_eq!(stops(&ops(&actions)), 1);
+    assert!(actions.iter().any(|a| matches!(a, Action::Close { .. })));
+    assert_eq!(p.a.s.running(p.b.id, id), None);
+    assert_eq!(p.a.s.list(), vec![id]);
+    assert!(!p.a.s.unpublish(TransferId::default(), NET));
+
+    // Published again, it is announced to the network's peers again.
+    p.a.s.publish(id, NET, t(0));
+    p.settle();
+    p.assert_bound(id);
+}
+
+#[test]
+fn unpublishing_withdraws_the_peer_index_entry_and_its_searches() {
+    let mut s = St::new(host(1), &config(true));
+    let id = s.add(10, &swarm_id(), Vec::new());
+    s.publish(id, NET, t(0));
+    s.publish(id, NET2, t(0));
+    drain(&mut s);
+    assert!(s.unpublish(id, NET2));
+    assert_eq!(
+        ops(&drain(&mut s)),
+        vec![Op::IndexUnpublish { id, net: NET2 }]
+    );
+    s.handle_timeout(t(0));
+    let searched: Vec<u8> = drain(&mut s)
+        .into_iter()
+        .filter_map(|a| match a {
+            Action::Search { net, .. } => Some(net),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(searched, vec![NET]);
+}
+
+#[test]
 fn frame_error_blocks_the_peer_until_it_relinks() {
     let mut p = Pair::new();
     let id = p.a.s.add(10, &swarm_id(), Vec::new());
