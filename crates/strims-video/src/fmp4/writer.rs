@@ -246,6 +246,48 @@ impl FragmentWriter {
         unit: &AccessUnit<'_>,
         out: &mut Vec<u8>,
     ) -> Result<usize, FragmentError> {
+        self.take(unit)?;
+        Ok(if self.due() { self.write_timed(out) } else { 0 })
+    }
+
+    /// Takes the next unit of a declared track as [`push`](Self::push)
+    /// does, appending nothing: a fragment it makes due waits for the next
+    /// push or flush, which writes it with what is due then.
+    pub fn hold(&mut self, unit: &AccessUnit<'_>) -> Result<(), FragmentError> {
+        self.take(unit)
+    }
+
+    /// Ends the samples `track` holds at decode time `end`: its last
+    /// lasts until `end`, and one fragment of every track's timed samples
+    /// and all of this track's is appended to `out`, whether or not the
+    /// run's first sample is timed. The track's next unit starts a `traf`
+    /// at its own decode time, so the track has a hole from `end` to it.
+    /// Returns the fragment's bytes, 0 when the track holds nothing.
+    pub fn end_track(
+        &mut self,
+        track: TrackId,
+        end: i64,
+        out: &mut Vec<u8>,
+    ) -> Result<usize, FragmentError> {
+        let Some(i) = self.tracks.iter().position(|t| t.track == track) else {
+            return Err(FragmentError::UnknownTrack(track.0));
+        };
+        let Some(t) = self.tracks.get_mut(i) else {
+            return Ok(0);
+        };
+        let last_dts = t.last_dts;
+        let Some(last) = t.samples.last_mut() else {
+            return Ok(0);
+        };
+        let d = duration(end.saturating_sub(last_dts));
+        last.duration = d;
+        t.prev_duration = Some(d);
+        Ok(self.write(out, |n| n == i))
+    }
+
+    /// Holds `unit` as the next sample of its track, timing the track's
+    /// last held one.
+    fn take(&mut self, unit: &AccessUnit<'_>) -> Result<(), FragmentError> {
         let Some((i, t)) = self
             .tracks
             .iter_mut()
@@ -287,7 +329,7 @@ impl FragmentWriter {
         t.data.extend_from_slice(unit.payload);
         t.last_dts = unit.dts;
         t.last = stamp;
-        Ok(if self.due() { self.write_timed(out) } else { 0 })
+        Ok(())
     }
 
     /// Appends one fragment of every held sample, each track's last timed
@@ -311,7 +353,7 @@ impl FragmentWriter {
             };
             last.duration = d;
         }
-        let n = self.write(out, false);
+        let n = self.write(out, |_| true);
         self.run_written = false;
         self.run_first = None;
         n
@@ -403,27 +445,29 @@ impl FragmentWriter {
     /// Appends the fragment of the timed samples, keeping each track's
     /// last.
     fn write_timed(&mut self, out: &mut Vec<u8>) -> usize {
-        self.write(out, true)
+        self.write(out, |_| false)
     }
 
-    /// Appends a `prft` and the fragment of the held samples, less each
-    /// track's last when `keep_last`, and drops what it wrote.
-    fn write(&mut self, out: &mut Vec<u8>, keep_last: bool) -> usize {
-        let count = |t: &Track| {
-            if keep_last {
-                t.timed()
-            } else {
-                t.samples.len()
-            }
+    /// Appends a `prft` and the fragment of the held samples, less the
+    /// last of each track whose index `all` refuses, and drops what it
+    /// wrote.
+    fn write(&mut self, out: &mut Vec<u8>, all: impl Fn(usize) -> bool) -> usize {
+        let count = |i: usize, t: &Track| {
+            if all(i) { t.samples.len() } else { t.timed() }
         };
-        let bytes = |t: &Track| {
-            if keep_last {
-                t.timed_bytes()
-            } else {
+        let bytes = |i: usize, t: &Track| {
+            if all(i) {
                 t.data.len()
+            } else {
+                t.timed_bytes()
             }
         };
-        let Some(lead) = self.tracks.iter().find(|t| count(t) > 0) else {
+        let Some(lead) = self
+            .tracks
+            .iter()
+            .enumerate()
+            .find_map(|(i, t)| (count(i, t) > 0).then_some(t))
+        else {
             return 0;
         };
         let start = out.len();
@@ -436,21 +480,21 @@ impl FragmentWriter {
             out,
         );
         let mut runs = [TrackRun::default(); MAX_TRACKS];
-        for (t, run) in self.tracks.iter().zip(runs.iter_mut()) {
+        for (i, (t, run)) in self.tracks.iter().zip(runs.iter_mut()).enumerate() {
             *run = TrackRun {
                 track: t.track,
                 kind: t.kind,
                 base_decode_time: u64::try_from(t.base_dts).unwrap_or(0),
-                samples: t.samples.get(..count(t)).unwrap_or_default(),
-                data: t.data.get(..bytes(t)).unwrap_or_default(),
+                samples: t.samples.get(..count(i, t)).unwrap_or_default(),
+                data: t.data.get(..bytes(i, t)).unwrap_or_default(),
             };
         }
         let runs = runs.get(..self.tracks.len()).unwrap_or_default();
         write_fragment(self.sequence, runs, out);
         self.sequence = self.sequence.checked_add(1).unwrap_or(1);
         self.run_written = true;
-        for t in &mut self.tracks {
-            let n = count(t);
+        for (i, t) in self.tracks.iter_mut().enumerate() {
+            let n = count(i, t);
             if n == 0 {
                 continue;
             }
@@ -463,7 +507,7 @@ impl FragmentWriter {
                 .sum();
             t.written_samples += n as u64;
             t.written_units = t.written_units.saturating_add(units);
-            if keep_last {
+            if !all(i) {
                 let b = t.timed_bytes();
                 t.samples.drain(..n);
                 t.data.drain(..b);

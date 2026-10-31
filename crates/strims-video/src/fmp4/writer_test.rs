@@ -435,3 +435,73 @@ fn samples_decoding_before_the_edit_keep_their_gop_in_one_fragment() {
     video(&mut w, &mut out, 0);
     assert!(video(&mut w, &mut out, 1) > 0);
 }
+
+#[test]
+fn held_units_are_written_with_the_next_push() {
+    let mut w = writer(Duration::ZERO, &[video_config(), audio_config()]);
+    let mut out = Vec::new();
+    video(&mut w, &mut out, 0);
+    audio(&mut w, &mut out, 0);
+    assert!(video(&mut w, &mut out, 1) > 0);
+    out.clear();
+    for n in 1..4 {
+        let payload = [0u8; 4];
+        w.hold(&AccessUnit {
+            track: AUDIO,
+            dts: n * 1024,
+            pts: n * 1024,
+            keyframe: true,
+            payload: &payload,
+            published: published(AUDIO, n),
+        })
+        .unwrap();
+    }
+    // Each hold timed the one before, but nothing is written until a push.
+    assert!(out.is_empty());
+    assert!(audio(&mut w, &mut out, 4) > 0);
+    let d = dump(&out);
+    assert_eq!(shape(&d), [vec![(2, 4)]]);
+    assert_eq!(d.traf(2).tfdt, 0);
+    assert_eq!(d.traf(2).durations(), [1024; 4]);
+    let unit = AccessUnit {
+        track: TrackId(9),
+        dts: 0,
+        pts: 0,
+        keyframe: true,
+        payload: &[],
+        published: Time::EPOCH,
+    };
+    assert_eq!(w.hold(&unit), Err(FragmentError::UnknownTrack(9)));
+}
+
+#[test]
+fn an_ended_track_starts_its_next_traf_at_its_own_decode_time() {
+    let mut w = writer(Duration::ZERO, &[video_config(), audio_config()]);
+    let mut out = Vec::new();
+    for k in 0..3 {
+        video(&mut w, &mut out, k);
+    }
+    audio(&mut w, &mut out, 0);
+    audio(&mut w, &mut out, 1);
+    out.clear();
+    // Audio ends a frame after its last unit, which is written though
+    // nothing times it; video's untimed last stays held.
+    assert!(w.end_track(AUDIO, 2 * 1024, &mut out).unwrap() > 0);
+    let d = dump(&out);
+    assert_eq!(shape(&d), [vec![(2, 1)]]);
+    assert_eq!((d.traf(2).tfdt, d.traf(2).durations()), (1024, vec![1024]));
+    assert_eq!(w.end_track(AUDIO, 0, &mut out).unwrap(), 0);
+    // The next audio unit, ten frames on, starts a traf at its DTS.
+    out.clear();
+    audio(&mut w, &mut out, 12);
+    audio(&mut w, &mut out, 13);
+    let d = dump(&out);
+    assert_eq!(
+        (d.traf(2).tfdt, d.traf(2).durations()),
+        (12 * 1024, vec![1024])
+    );
+    assert_eq!(
+        w.end_track(TrackId(9), 0, &mut out),
+        Err(FragmentError::UnknownTrack(9))
+    );
+}
