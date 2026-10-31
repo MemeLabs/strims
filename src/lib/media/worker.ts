@@ -36,8 +36,11 @@ type Input = { batch: ArrayBuffer; at: number } | { end: true };
 // getting acks stops sending, so a worker that falls behind holds a bounded
 // queue.
 //
-// At the stream's end the core writes out what it holds, a worker sink ends
-// its stream, and the window hears `ended`.
+// The stream ends at a writer session's END record, which the core finds in
+// the stream, or at the end of the input, where the core writes out what it
+// holds. Either way the core gives an end output: a worker sink ends its
+// stream there, and the window hears it with the outputs, in order. Media
+// after it, a later session's, opens the stream again.
 //
 // Any failure posts an error and stops the worker taking messages: the
 // window replaces it, which gives the stream a new core and MediaSource.
@@ -77,12 +80,16 @@ export const runPlayerWorker = (scope: DedicatedWorkerGlobalScope, load: CoreLoa
     post({ type: "error", message, final });
   };
 
-  // Gives the window a batch's outputs, the media in them to the sink that
-  // takes it.
+  // Gives the window a batch's outputs, the media and ends in them to the
+  // sink that takes them.
   const deliver = (outputs: CoreOutput[], at: number) => {
     if (!outputs.length) return;
     const transfer: ArrayBuffer[] = [];
     for (const out of outputs) {
+      if (out.type === "end") {
+        sink?.end();
+        continue;
+      }
       if (out.type !== "init" && out.type !== "media") continue;
       if (mode === SinkMode.Window) {
         // Each output's bytes have a buffer of their own.
@@ -152,8 +159,6 @@ export const runPlayerWorker = (scope: DedicatedWorkerGlobalScope, load: CoreLoa
       return;
     }
     deliver(outputs, now());
-    sink?.end();
-    post({ type: "ended" });
   };
 
   // Now, on the window's clock, in seconds.

@@ -5,7 +5,7 @@ import assert from "assert";
 
 import { Feed, parseBatch } from "./feed";
 import { SinkMode, WindowMessage, WorkerMessage } from "./protocol";
-import { UnitsPlayer, WINDOW_BYTES } from "./units";
+import { TICK_MS, UnitsPlayer, WINDOW_BYTES } from "./units";
 
 // A player worker that keeps what the window posts it.
 class FakeWorker {
@@ -203,7 +203,13 @@ describe("UnitsPlayer", () => {
 
   it("goes on with the stream when media follows its end", () => {
     const { p, workers } = player();
-    workers[0].send({ type: "ended" });
+    workers[0].send({
+      type: "outputs",
+      at: 0,
+      outputs: [{ type: "end" }],
+      messages: 0,
+      bytes: 0,
+    });
     workers[0].send({
       type: "outputs",
       at: 1,
@@ -223,10 +229,70 @@ describe("UnitsPlayer", () => {
     p.destroy();
   });
 
+  it("resumes where a video that played out stopped once a later session's media is past it", async () => {
+    const workers: FakeWorker[] = [];
+    const video = new FakeVideo();
+    let plays = 0;
+    const p = new UnitsPlayer(
+      video as unknown as HTMLVideoElement,
+      { attach: () => undefined, play: () => void plays++ },
+      () => {
+        const w = new FakeWorker();
+        workers.push(w);
+        return w as unknown as Worker;
+      }
+    );
+    const outputs = (type: "media" | "end"): WorkerMessage => ({
+      type: "outputs",
+      at: 1,
+      outputs: [type === "end" ? { type } : { type, units: [] }],
+      messages: 0,
+      bytes: 0,
+    });
+    const ticks = () => new Promise((r) => setTimeout(r, TICK_MS + 50));
+    workers[0].send(outputs("end"));
+    video.currentTime = 6;
+    video.paused = true;
+    video.dispatchEvent(new Event("ended"));
+    workers[0].send(outputs("media"));
+    // Media up to 6.5 s: short of the target lag past where it stopped.
+    video.buffered = { length: 1, start: () => 0, end: () => 6.5 };
+    await ticks();
+    assert.strictEqual(plays, 0);
+    video.currentTime = 0;
+    video.buffered = { length: 1, start: () => 0, end: () => 9 };
+    await ticks();
+    assert.strictEqual(plays, 1);
+    assert.strictEqual(video.currentTime, 6, "it seeks back where it stopped first");
+    p.destroy();
+  });
+
+  it("takes the end and the media of a later session in their order", () => {
+    const { p, workers } = player();
+    const outputs = (types: ("media" | "end")[]): WorkerMessage => ({
+      type: "outputs",
+      at: 1,
+      outputs: types.map((type) => (type === "end" ? { type } : { type, units: [] })),
+      messages: 0,
+      bytes: 0,
+    });
+    workers[0].send(outputs(["media", "end"]));
+    assert.ok(p.stats().ended, "the end after its media");
+    workers[0].send(outputs(["end", "media"]));
+    assert.ok(!p.stats().ended, "a later session's media after the end");
+    p.destroy();
+  });
+
   it("plays an ended stream out at rate 1, and restarts no worker after", () => {
     const { p, video, workers } = player();
     video.playbackRate = 1.05;
-    workers[0].send({ type: "ended" });
+    workers[0].send({
+      type: "outputs",
+      at: 0,
+      outputs: [{ type: "end" }],
+      messages: 0,
+      bytes: 0,
+    });
     assert.ok(p.stats().ended);
     assert.strictEqual(video.playbackRate, 1);
     workers[0].onerror({ message: "late" });

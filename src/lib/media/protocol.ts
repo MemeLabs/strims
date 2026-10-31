@@ -22,7 +22,10 @@ export type CoreOutput = RemuxerOutput extends infer O
 export interface Core {
   /** Never throws on hostile input; a throw means the core is broken. */
   push(data: Uint8Array, segmentEnd: boolean, discontinuity: boolean): RemuxerOutput[];
-  /** The stream ended: the outputs of what the core holds. */
+  /**
+   * The stream ended: the outputs of what the core holds, then an end
+   * output, unless one came after the last unit.
+   */
   finish(): RemuxerOutput[];
   metrics(): unknown;
   free(): void;
@@ -62,7 +65,9 @@ export type WorkerMessage =
   | { type: "attach"; handle: MediaSourceHandle }
   /**
    * The core's outputs for a batch received at `at`, on the window's clock,
-   * and the Data messages and bytes the core has taken so far.
+   * and the Data messages and bytes the core has taken so far. An `end`
+   * output ends the stream after the outputs before it: a window sink ends
+   * its stream there.
    */
   | { type: "outputs"; at: number; outputs: CoreOutput[]; messages: number; bytes: number }
   /**
@@ -72,7 +77,5 @@ export type WorkerMessage =
    * outputs.
    */
   | { type: "consumed"; batches: number }
-  /** The stream ended: every output is out. A window sink ends its stream. */
-  | { type: "ended" }
   /** The worker can't go on: the window replaces it, or gives up when `final`. */
   | { type: "error"; message: string; final: boolean };

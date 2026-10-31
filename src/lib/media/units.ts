@@ -117,10 +117,12 @@ const defaultWorker = () =>
  * new feed, which joins at the stream's current GOP, or from the next
  * whole record pushed.
  *
- * At the stream's end, which `end` says or the worker finds, the worker
- * writes out what the remuxer holds, the MediaSource's stream ends, and
- * the video plays out to its end at rate 1. Media the worker gives after
- * that goes on playing.
+ * At the stream's end, a writer session's END record in the stream or the
+ * end `end` says, the worker writes out what the remuxer holds, the
+ * MediaSource's stream ends, and the video plays out to its end at rate 1.
+ * Media the worker gives after that, a later session's, goes on playing; a
+ * video that played out to the end, and stopped there, resumes there once
+ * the later session's media is the target lag past it.
  */
 export class UnitsPlayer {
   private readonly mode: SinkMode;
@@ -156,6 +158,10 @@ export class UnitsPlayer {
   private dropDiscontinuity = false;
   private endSent = false;
   private ended = false;
+  /** The video played out to the end of an ended stream. */
+  private playedOut = false;
+  /** Where a video that played out resumes, once a later session's media is past it. */
+  private resumeAt: number | null = null;
   private counts = {
     restarts: 0,
     messages: 0,
@@ -176,6 +182,7 @@ export class UnitsPlayer {
     video.addEventListener("waiting", this.onWaiting);
     video.addEventListener("playing", this.onPlaying);
     video.addEventListener("seeked", this.onPlaying);
+    video.addEventListener("ended", this.onEnded);
     const players = ((window as PlayerRegistry).__strims_players__ ??= []);
     players.push(this);
     if (this.mode === null) {
@@ -265,6 +272,7 @@ export class UnitsPlayer {
     this.video.removeEventListener("waiting", this.onWaiting);
     this.video.removeEventListener("playing", this.onPlaying);
     this.video.removeEventListener("seeked", this.onPlaying);
+    this.video.removeEventListener("ended", this.onEnded);
     this.video.playbackRate = 1;
     if (!this.handlers.attach) {
       this.video.srcObject = null;
@@ -388,6 +396,7 @@ export class UnitsPlayer {
     this.live.rejoin();
     this.frontiers.clear();
     this.published = [];
+    this.resumeAt = null;
   }
 
   private onMessage = ({ data: message }: MessageEvent<WorkerMessage>) => {
@@ -400,10 +409,6 @@ export class UnitsPlayer {
           this.counts.messages = message.messages;
           this.counts.bytes = message.bytes;
         }
-        if (this.ended && message.outputs.some((o) => o.type === "media")) {
-          // Media after the end: the stream goes on.
-          this.ended = false;
-        }
         for (const out of message.outputs) {
           this.output(out, message.at);
         }
@@ -415,11 +420,6 @@ export class UnitsPlayer {
         } else {
           this.credit.ack(message.batches);
         }
-        return;
-      case "ended":
-        this.ended = true;
-        this.sink?.end();
-        this.video.playbackRate = 1;
         return;
       case "error":
         if (message.final) {
@@ -438,6 +438,13 @@ export class UnitsPlayer {
         this.sink?.init(out.data, out.mime, out.compatible);
         return;
       case "media": {
+        // Media after the end, a later session's: the stream goes on, and
+        // a video that played out to the end and stopped there resumes.
+        this.ended = false;
+        if (this.playedOut) {
+          this.playedOut = false;
+          this.resumeAt = this.video.currentTime;
+        }
         this.sink?.media(out.data);
         const keep: UnitInfo["kind"] = this.hasVideo ? "video" : "audio";
         for (const u of out.units) {
@@ -466,6 +473,11 @@ export class UnitsPlayer {
         this.counts.timelineRestarts++;
         this.relearn();
         return;
+      case "end":
+        this.ended = true;
+        this.sink?.end();
+        this.video.playbackRate = 1;
+        return;
     }
   }
 
@@ -487,6 +499,10 @@ export class UnitsPlayer {
     this.waiting = false;
   };
 
+  private onEnded = () => {
+    this.playedOut = this.ended;
+  };
+
   private tick = () => {
     const v = this.video;
     if (v.error && v.error !== this.handledError) {
@@ -495,6 +511,21 @@ export class UnitsPlayer {
       return;
     }
     const now = performance.now() / 1000;
+    if (this.resumeAt !== null) {
+      // A video that played out resumes where it stopped, the remuxer's
+      // later session starting there, once the target lag of media is
+      // past it or the stream ended again. It seeks first: playing a video
+      // that ended starts it over.
+      const ranges = timeRanges(v.buffered);
+      const end = ranges.length ? ranges[ranges.length - 1][1] : 0;
+      if (this.ended || end - this.resumeAt >= this.live.stats().target) {
+        v.currentTime = this.resumeAt;
+        this.resumeAt = null;
+        void (this.handlers.play ? this.handlers.play() : v.play().catch(() => undefined));
+      }
+      this.position(now);
+      return;
+    }
     if (this.ended) {
       // Played out to the end: nothing more to chase.
       this.position(now);

@@ -20,7 +20,7 @@ class FakeCore implements Core {
 
   finish(): RemuxerOutput[] {
     this.finished++;
-    return [media(99)];
+    return [media(99), { type: "end" }];
   }
 
   metrics(): unknown {
@@ -184,11 +184,11 @@ describe("the player worker", () => {
     node.postMessage(endBatch());
     await settle();
     assert.strictEqual(core.finished, 1);
-    assert.deepStrictEqual(types(posted), ["outputs", "ended"]);
+    assert.deepStrictEqual(types(posted), ["outputs"]);
     const out = posted[0].message as Extract<WorkerMessage, { type: "outputs" }>;
     assert.deepStrictEqual(
-      out.outputs.map((o) => o.type === "media" && Array.from(o.data)),
-      [[99]]
+      out.outputs.map((o) => (o.type === "media" ? Array.from(o.data) : o.type)),
+      [[99], "end"]
     );
   });
 
@@ -200,7 +200,7 @@ describe("the player worker", () => {
     await settle();
     w.send({ type: "data", batch: batch(true, [[5], true, false]), at: 12.5 });
     w.send({ type: "end" });
-    assert.deepStrictEqual(types(w.posted), ["outputs", "consumed", "outputs", "ended"]);
+    assert.deepStrictEqual(types(w.posted), ["outputs", "consumed", "outputs"]);
     assert.strictEqual((w.posted[0].message as { at: number }).at, 12.5);
     assert.deepStrictEqual(w.posted[1].message, { type: "consumed", batches: 1 });
   });
