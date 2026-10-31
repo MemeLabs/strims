@@ -697,6 +697,7 @@ mod tests {
             init: Rc::from(&b"init"[..]),
             discontinuity: false,
             published: NodeTimer(SystemClock).now(),
+            vtt: None,
         }
     }
 

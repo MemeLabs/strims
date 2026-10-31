@@ -42,6 +42,7 @@ fn part(index: u32, millis: i64, independent: bool, media: &[u8], published: i64
         init: Rc::from(&b"init"[..]),
         discontinuity: false,
         published: Time::from_unix_millis(published),
+        vtt: None,
     }
 }
 
@@ -104,8 +105,22 @@ fn a_segments_parts_are_listed_while_it_is_open_and_after() {
     assert_eq!(&*p.segment(100).unwrap(), b"aabbb");
     assert_eq!(p.retained_bytes(), 4 + 5 + 1);
     assert_eq!(p.next_part(), 103);
-    // The subtitles' playlist lists only whole segments, without parts.
-    assert!(!p.render_subtitles().contains("PART"));
+    // The subtitles' playlist lists the same parts as WebVTT files, empty
+    // for a stream without a text track.
+    let subtitles = p.render_subtitles();
+    assert!(
+        subtitles.contains("#EXT-X-PART-INF:PART-TARGET=1.000\n"),
+        "{subtitles}"
+    );
+    assert!(
+        subtitles
+            .contains("#EXT-X-PART:DURATION=0.999,URI=\"part-101.vtt\"\n#EXTINF:1.999,\n100.vtt\n"),
+        "{subtitles}"
+    );
+    assert!(subtitles.ends_with("#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part-103.vtt\"\n"));
+    assert!(!subtitles.contains("MAP"));
+    assert_eq!(&*p.part_vtt(101).unwrap(), EMPTY_VTT.as_bytes());
+    assert_eq!(p.part_vtt(103), None);
 }
 
 #[test]
@@ -227,15 +242,18 @@ fn the_media_and_subtitles_playlists_report_each_other() {
     p.push(&segment(b"a", 1000, NOON, Some("WEBVTT\n")));
     p.push_part(&part(0, 1000, true, b"b", NOON + 1000));
     p.push_part(&part(1, 1000, false, b"c", NOON + 1000));
+    // Both list the same parts: each reports the other's newest.
     let media = p.render();
     assert!(
-        media.contains("#EXT-X-RENDITION-REPORT:URI=\"subtitles.m3u8\",LAST-MSN=100\n"),
+        media
+            .ends_with("#EXT-X-RENDITION-REPORT:URI=\"subtitles.m3u8\",LAST-MSN=101,LAST-PART=1\n"),
         "{media}"
     );
     let subtitles = p.render_subtitles();
     assert!(
         subtitles.ends_with(
-            "#EXTINF:1.000,\n100.vtt\n\
+            "#EXT-X-PART:DURATION=1.000,URI=\"part-102.vtt\"\n\
+             #EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part-103.vtt\"\n\
              #EXT-X-RENDITION-REPORT:URI=\"index.m3u8\",LAST-MSN=101,LAST-PART=1\n"
         ),
         "{subtitles}"
@@ -744,22 +762,37 @@ fn an_ended_playlist_and_one_without_parts_answer_reloads_at_once() {
 }
 
 #[test]
-fn the_subtitles_playlist_blocks_by_segment() {
+fn the_subtitles_playlist_and_its_hinted_part_block_as_the_media_playlists_do() {
     let ll = Ll::new(ms(1000));
     let wakes = std::sync::Arc::new(Wakes(Default::default()));
     ll.stream().push_part(&part(0, 1000, true, b"a", NOON));
-    let msn = ll.first;
-    let mut reload = ll.blocked(&format!("subtitles.m3u8?_HLS_msn={msn}&_HLS_part=0"));
+    let (msn, first) = (ll.first, ll.first);
+    let mut reload = ll.blocked(&format!("subtitles.m3u8?_HLS_msn={msn}&_HLS_part=1"));
+    let mut hinted = ll.blocked(&format!("part-{}.vtt", first + 1));
     assert!(poll(&mut reload, &wakes).is_none());
-    ll.stream()
-        .push(&segment(b"a", 1000, NOON, Some("WEBVTT\n")));
+    assert!(poll(&mut hinted, &wakes).is_none());
+    let mut next = part(1, 1000, false, b"b", NOON);
+    next.vtt = Some(Rc::from(&b"WEBVTT\n\ncue"[..]));
+    ll.stream().push_part(&next);
     let r = poll(&mut reload, &wakes).unwrap();
     let text = String::from_utf8(r.body.to_vec()).unwrap();
     assert!(
-        text.contains("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES\n"),
+        text.contains(&format!("URI=\"part-{}.vtt\"\n", first + 1)),
         "{text}"
     );
-    assert!(!text.contains("#EXT-X-PART"), "{text}");
+    assert!(!text.contains(".m4s"), "{text}");
+    let r = poll(&mut hinted, &wakes).unwrap();
+    assert_eq!(
+        (r.status, r.content_type, &*r.body),
+        (200, "text/vtt", &b"WEBVTT\n\ncue"[..])
+    );
+    // A part of the stream before any text track is an empty WebVTT file.
+    let r = ll
+        .routes
+        .get(at(NOON), &ll.path(&format!("part-{first}.vtt")));
+    assert_eq!(&*r.body, EMPTY_VTT.as_bytes());
+    assert_eq!(ll.status(&format!("part-{}.vtt", first + 3)), 404);
+    assert_eq!(ll.status("part-x.vtt"), 400);
 }
 
 #[test]

@@ -597,3 +597,64 @@ proptest! {
         prop_assert_eq!(met.dropped_parts, 0);
     }
 }
+
+#[test]
+fn a_part_carries_the_cues_that_show_in_it_cut_to_it() {
+    const TEXT: u32 = 3;
+    let mut m = muxer(ms(1000), false);
+    m.set_config(&crate::text::config(TrackId(TEXT))).unwrap();
+    let cue = |duration: u64, text: &str| {
+        let mut out = Vec::new();
+        crate::text::write_cue(
+            &crate::text::Cue {
+                continues: false,
+                duration,
+                text,
+            },
+            &mut out,
+        );
+        out
+    };
+    let cues = [(500, cue(1000, "one")), (1500, cue(1500, "across"))];
+    let mut parts = Vec::new();
+    let mut next = 0;
+    for f in 0..90 {
+        let at = f * 1000 / 30;
+        while let Some((start, payload)) = cues.get(next).filter(|c| c.0 <= at) {
+            m.push(&AccessUnit {
+                track: TrackId(TEXT),
+                dts: *start,
+                pts: *start,
+                keyframe: true,
+                payload,
+                published: Time::from_unix_millis(*start),
+            })
+            .unwrap();
+            next += 1;
+        }
+        m.push(&unit(VIDEO, f * FRAME, f % 60 == 0, 100)).unwrap();
+        parts.extend(std::iter::from_fn(|| m.take_part()));
+    }
+    m.finish().unwrap();
+    parts.extend(std::iter::from_fn(|| m.take_part()));
+    let vtt = |p: &HlsPart| String::from_utf8(p.vtt.as_deref().unwrap().to_vec()).unwrap();
+    let head = "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000\n\n";
+    assert_eq!(
+        vtt(&parts[0]),
+        format!("{head}00:00:00.500 --> 00:00:01.000\none\n\n")
+    );
+    assert_eq!(
+        vtt(&parts[1]),
+        format!(
+            "{head}00:00:01.000 --> 00:00:01.500\none\n\n00:00:01.500 --> 00:00:02.000\nacross\n\n"
+        )
+    );
+    assert_eq!(
+        vtt(&parts[2]),
+        format!("{head}00:00:02.000 --> 00:00:03.000\nacross\n\n")
+    );
+    // A stream without a text track has none.
+    let mut plain = muxer(ms(1000), false);
+    let cuts = run(&mut plain, &av(90, &[0, 60], false));
+    assert!(cuts.iter().flat_map(|c| &c.parts).all(|p| p.vtt.is_none()));
+}

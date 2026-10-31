@@ -76,9 +76,12 @@
 //! ([`text`](crate::text)) are the subtitles of the segments they show
 //! in: once a stream had a text track, each segment carries a WebVTT
 //! file of the cues that show from its start for its duration, each cut
-//! to the segment, so a cue across a cut is in both segments. Cues that
-//! show at once are listed as they are, and players stack them. A cue's
-//! text has `&`, `<` and `>` escaped and no blank line.
+//! to the segment, so a cue across a cut is in both segments, and each
+//! part ([Parts](self#parts)) the same of its own time. Cues that show at
+//! once are listed as they are, and players stack them. A cue's text has
+//! `&`, `<` and `>` escaped and no blank line. A part's file holds the
+//! cues known when it ends: a cue that a later one ends sooner keeps its
+//! longer end there.
 //!
 //! A cue's times are the media's: the stream's presentation times less
 //! the init's composition delay, as its frames' are after the init's
@@ -147,8 +150,15 @@
 //! playlist's end list their parts, which stay fetchable while their
 //! segment is kept. A part lists its segment's milliseconds up to its
 //! end less those before it, so a segment's parts add up to its
-//! `EXTINF`. With subtitles, the media and subtitles playlists each carry
-//! a rendition report of the other (`EXT-X-RENDITION-REPORT`).
+//! `EXTINF`.
+//!
+//! The subtitles' playlist lists the same parts, under the same tags, as
+//! WebVTT files (`part-<number>.vtt`): each of the cues that show in its
+//! part, cut to it, under the segments' `X-TIMESTAMP-MAP`, and without
+//! cues for a part from before the stream had a text track. Players keep
+//! to low latency only while every playlist they load has parts. With
+//! subtitles, the media and subtitles playlists each carry a rendition
+//! report of the other (`EXT-X-RENDITION-REPORT`).
 //!
 //! Every segment a muxer made is dated (`EXT-X-PROGRAM-DATE-TIME`), in the
 //! media and subtitles playlists alike, by its first unit's publish time:
@@ -158,14 +168,13 @@
 //!
 //! # Blocking
 //!
-//! A low-latency media playlist offers blocking reloads
-//! (`CAN-BLOCK-RELOAD=YES`), and its subtitles' playlist offers them by
-//! segment. A reload of either with an `_HLS_msn` delivery directive, and
-//! of the media playlist with an `_HLS_part` too, waits
+//! A low-latency media playlist and its subtitles' playlist offer
+//! blocking reloads (`CAN-BLOCK-RELOAD=YES`). A reload of either with an
+//! `_HLS_msn` delivery directive, and an `_HLS_part` too, waits
 //! ([`HlsRoutes::request`], [`HlsBlock`]) until the playlist lists that
 //! segment whole, or that part of it, or something later: a part past a
 //! segment's last is the next segment's first. A request of the hinted
-//! part waits for it. A reload of an ended playlist, or of one without
+//! part, its media or its subtitles, waits for it. A reload of an ended playlist, or of one without
 //! parts, answers at once. One that asks for a segment more than two past
 //! the next, a part more than the Advance Part Limit past the newest
 //! (three part targets' worth, three at least), or a part without a
@@ -191,7 +200,9 @@
 //! - `/hls/<profile key>/<transfer id>/part-<number>.m4s`: a part of a
 //!   media segment;
 //! - `/hls/<profile key>/<transfer id>/<seq>.vtt`: a segment's subtitles,
-//!   a WebVTT file without cues for a segment that has none.
+//!   a WebVTT file without cues for a segment that has none;
+//! - `/hls/<profile key>/<transfer id>/part-<number>.vtt`: a part's
+//!   subtitles, the same.
 //!
 //! Keys are 32 bytes in hex, and the playlist's URIs are relative to it.
 //! Registrations are handles, [`HlsProfile`] and [`HlsStream`], whose drop
@@ -347,6 +358,15 @@ impl Segment {
             .map(|b| b.len())
             .sum()
     }
+
+    /// The bytes of its parts' subtitles.
+    fn part_vtt_bytes(&self) -> usize {
+        self.parts
+            .iter()
+            .filter_map(|p| p.vtt.as_ref())
+            .map(|v| v.len())
+            .sum()
+    }
 }
 
 /// A part of a segment.
@@ -363,6 +383,8 @@ struct Part {
     own: Option<Rc<[u8]>>,
     start: usize,
     len: usize,
+    /// Its subtitles, as a WebVTT file.
+    vtt: Option<Rc<[u8]>>,
 }
 
 /// What a multivariant playlist declares of a stream's variant, from its
@@ -507,6 +529,8 @@ impl Playlist {
                 at = at.saturating_add(part.len);
             }
         } else {
+            let vtt = open.part_vtt_bytes();
+            self.retained_bytes = self.retained_bytes.saturating_sub(vtt);
             open.parts.clear();
         }
         self.finish(open, &segment.media, vtt, segment.duration);
@@ -547,9 +571,14 @@ impl Playlist {
             own: Some(Rc::clone(&part.media)),
             start: 0,
             len: part.media.len(),
+            vtt: part.vtt.clone(),
         });
         self.next_part = self.next_part.saturating_add(1);
-        self.retained_bytes = self.retained_bytes.saturating_add(part.media.len());
+        let vtt = part.vtt.as_ref().map_or(0, |v| v.len());
+        self.retained_bytes = self
+            .retained_bytes
+            .saturating_add(part.media.len())
+            .saturating_add(vtt);
         self.trim();
     }
 
@@ -685,7 +714,9 @@ impl Playlist {
             let Some(dropped) = self.segments.pop_front() else {
                 break;
             };
-            let bytes = dropped.media.len() + dropped.vtt.as_ref().map_or(0, |v| v.len());
+            let bytes = dropped.media.len()
+                + dropped.vtt.as_ref().map_or(0, |v| v.len())
+                + dropped.part_vtt_bytes();
             self.retained_bytes = self.retained_bytes.saturating_sub(bytes);
             self.retained_millis = self.retained_millis.saturating_sub(dropped.millis);
             let oldest = self.segments.front().or(self.open.as_ref()).map(|s| s.init);
@@ -742,17 +773,13 @@ impl Playlist {
             self.target_duration(),
         );
         let parts = self.config.parts();
-        match parts {
-            Some(target) if media => {
-                let target = duration_millis(target);
-                out.push_str("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=");
-                push_millis(&mut out, target.saturating_mul(3));
-                out.push_str("\n#EXT-X-PART-INF:PART-TARGET=");
-                push_millis(&mut out, target);
-                out.push('\n');
-            }
-            Some(_) => out.push_str("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES\n"),
-            None => {}
+        if let Some(target) = parts {
+            let target = duration_millis(target);
+            out.push_str("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=");
+            push_millis(&mut out, target.saturating_mul(3));
+            out.push_str("\n#EXT-X-PART-INF:PART-TARGET=");
+            push_millis(&mut out, target);
+            out.push('\n');
         }
         let _ = write!(
             out,
@@ -775,11 +802,12 @@ impl Playlist {
             with_parts += 1;
         }
         let first_with_parts = listed.len() - with_parts;
+        let ext = if media { "m4s" } else { "vtt" };
         let mut init = None;
         for (i, s) in listed.iter().enumerate() {
             self.render_head(&mut out, s, media, &mut init);
-            if media && i >= first_with_parts {
-                render_parts(&mut out, s);
+            if i >= first_with_parts {
+                render_parts(&mut out, s, ext);
             }
             let _ = write!(
                 out,
@@ -790,15 +818,15 @@ impl Playlist {
                 if media { "m4s" } else { "vtt" }
             );
         }
-        if let Some(open) = self.open.as_ref().filter(|_| media) {
+        if let Some(open) = &self.open {
             self.render_head(&mut out, open, media, &mut init);
-            render_parts(&mut out, open);
+            render_parts(&mut out, open, ext);
         }
         if parts.is_some() {
-            if media && !self.ended {
+            if !self.ended {
                 let _ = writeln!(
                     out,
-                    "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part-{}.m4s\"",
+                    "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part-{}.{ext}\"",
                     self.next_part
                 );
             }
@@ -829,21 +857,10 @@ impl Playlist {
     }
 
     /// The other media playlist's rendition report, for a stream whose
-    /// multivariant playlist names both: the media playlist's newest part
-    /// in the subtitles' playlist, and the subtitles' newest segment in the
-    /// media playlist.
+    /// multivariant playlist names both: its newest part, which the media
+    /// and subtitles playlists share.
     fn render_report(&self, out: &mut String, media: bool) {
         if !self.variant.subtitles {
-            return;
-        }
-        if media {
-            if let Some(last) = self.segments.back() {
-                let _ = writeln!(
-                    out,
-                    "#EXT-X-RENDITION-REPORT:URI=\"subtitles.m3u8\",LAST-MSN={}",
-                    last.seq
-                );
-            }
             return;
         }
         let newest = self
@@ -854,9 +871,10 @@ impl Playlist {
         let Some(newest) = newest else {
             return;
         };
+        let other = if media { "subtitles" } else { "index" };
         let _ = write!(
             out,
-            "#EXT-X-RENDITION-REPORT:URI=\"index.m3u8\",LAST-MSN={}",
+            "#EXT-X-RENDITION-REPORT:URI=\"{other}.m3u8\",LAST-MSN={}",
             newest.seq
         );
         if let Some(last) = newest.parts.len().checked_sub(1) {
@@ -1023,26 +1041,45 @@ impl Playlist {
         Duration::from_secs(target.saturating_mul(3))
     }
 
-    /// The bytes of a kept part, its segment open or kept.
-    pub fn part(&self, number: u64) -> Option<Rc<[u8]>> {
-        let in_segment = |s: &Segment| {
+    /// A kept part, its segment open or kept, and that segment.
+    fn find_part(&self, number: u64) -> Option<(&Segment, &Part)> {
+        fn in_segment(s: &Segment, number: u64) -> Option<&Part> {
             let first = s.parts.first()?.number;
             let index = usize::try_from(number.checked_sub(first)?).ok()?;
-            s.parts.get(index).filter(|p| p.number == number).cloned()
-        };
+            s.parts.get(index).filter(|p| p.number == number)
+        }
         if let Some(open) = &self.open
-            && let Some(part) = in_segment(open)
+            && let Some(part) = in_segment(open, number)
         {
-            return part.own;
+            return Some((open, part));
         }
         let segment = self
             .segments
             .iter()
             .rev()
             .find(|s| s.parts.first().is_some_and(|p| p.number <= number))?;
-        let part = in_segment(segment)?;
+        Some((segment, in_segment(segment, number)?))
+    }
+
+    /// The bytes of a kept part, its segment open or kept.
+    pub fn part(&self, number: u64) -> Option<Rc<[u8]>> {
+        let (segment, part) = self.find_part(number)?;
+        if let Some(own) = &part.own {
+            return Some(Rc::clone(own));
+        }
         let end = part.start.checked_add(part.len)?;
         segment.media.get(part.start..end).map(Rc::from)
+    }
+
+    /// A kept part's subtitles: its WebVTT file, or one without cues for a
+    /// part that had none.
+    pub fn part_vtt(&self, number: u64) -> Option<Rc<[u8]>> {
+        let (_, part) = self.find_part(number)?;
+        Some(
+            part.vtt
+                .clone()
+                .unwrap_or_else(|| Rc::from(EMPTY_VTT.as_bytes())),
+        )
     }
 
     /// `EXT-X-DISCONTINUITY-SEQUENCE`: the discontinuities that preceded
@@ -1096,12 +1133,12 @@ impl fmt::Debug for Playlist {
     }
 }
 
-/// Appends a segment's parts' tags.
-fn render_parts(out: &mut String, s: &Segment) {
+/// Appends a segment's parts' tags, their files of extension `ext`.
+fn render_parts(out: &mut String, s: &Segment, ext: &str) {
     for p in &s.parts {
         out.push_str("#EXT-X-PART:DURATION=");
         push_millis(out, p.millis);
-        let _ = write!(out, ",URI=\"part-{}.m4s\"", p.number);
+        let _ = write!(out, ",URI=\"part-{}.{ext}\"", p.number);
         if p.independent {
             out.push_str(",INDEPENDENT=YES");
         }
@@ -1293,6 +1330,10 @@ pub struct HlsPart {
     pub init: Rc<[u8]>,
     pub discontinuity: bool,
     pub published: Time,
+    /// Its subtitles, the text tracks' cues that show during it, cut to
+    /// it, as a WebVTT file; `None` for a stream that never had a text
+    /// track.
+    pub vtt: Option<Rc<[u8]>>,
 }
 
 /// What an [`HlsMuxer`] has made and dropped.
@@ -2010,7 +2051,7 @@ impl HlsMuxer {
             return;
         };
         let duration = (at - p.start).max(Duration::ZERO);
-        let part = HlsPart {
+        let mut part = HlsPart {
             media: Rc::from(media),
             duration,
             independent: p.independent(held),
@@ -2018,6 +2059,7 @@ impl HlsMuxer {
             init: Rc::clone(&self.init),
             discontinuity: open.discontinuity,
             published: open.published,
+            vtt: None,
         };
         open.part = OpenPart::new(
             p.index.saturating_add(1),
@@ -2026,6 +2068,9 @@ impl HlsMuxer {
             p.before + duration,
             held_keyframe,
         );
+        part.vtt = self
+            .subtitles
+            .then(|| Rc::from(self.vtt(p.start, duration)));
         self.emit_part(part);
     }
 
@@ -2056,6 +2101,7 @@ impl HlsMuxer {
             return p.before;
         };
         let last = (duration - p.before).max(Duration::ZERO);
+        let vtt = self.subtitles.then(|| Rc::from(self.vtt(p.start, last)));
         self.emit_part(HlsPart {
             media: Rc::from(media),
             duration: last,
@@ -2064,6 +2110,7 @@ impl HlsMuxer {
             init: Rc::clone(&self.init),
             discontinuity: open.discontinuity,
             published: open.published,
+            vtt,
         });
         p.before + last
     }
@@ -2618,7 +2665,7 @@ impl StreamState {
             File::Playlist | File::Subtitles => {
                 let media = route.file == File::Playlist;
                 let reload = match route.directives {
-                    Some((msn, part)) => playlist.reload(msn, part.filter(|_| media)),
+                    Some((msn, part)) => playlist.reload(msn, part),
                     None => Reload::Now,
                 };
                 match reload {
@@ -2644,6 +2691,11 @@ impl StreamState {
                 .map(|body| HlsResponse::ok(SEGMENT_TYPE, IMMUTABLE, body)),
             File::Part(number) => match playlist.part(number) {
                 Some(body) => Some(HlsResponse::ok(SEGMENT_TYPE, IMMUTABLE, body)),
+                None if playlist.hints(number) => return Err(Waiting),
+                None => None,
+            },
+            File::PartVtt(number) => match playlist.part_vtt(number) {
+                Some(body) => Some(HlsResponse::ok(VTT_TYPE, IMMUTABLE, body)),
                 None if playlist.hints(number) => return Err(Waiting),
                 None => None,
             },
@@ -3033,6 +3085,7 @@ enum File {
     Segment(u64),
     Part(u64),
     Vtt(u64),
+    PartVtt(u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3111,6 +3164,12 @@ fn parse_file(name: &str) -> Result<File, u16> {
     }
     if let Some(seq) = name.strip_suffix(".m4s") {
         return parse_number(seq).map(File::Segment).ok_or(400);
+    }
+    if let Some(number) = name
+        .strip_prefix("part-")
+        .and_then(|n| n.strip_suffix(".vtt"))
+    {
+        return parse_number(number).map(File::PartVtt).ok_or(400);
     }
     if let Some(seq) = name.strip_suffix(".vtt") {
         return parse_number(seq).map(File::Vtt).ok_or(400);

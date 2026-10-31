@@ -387,6 +387,7 @@ mod tests {
                 init: Rc::from(&b"init"[..]),
                 discontinuity: false,
                 published: now,
+                vtt: None,
             };
             stream.push_part(&part(0));
             let f = Fixture {
