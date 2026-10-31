@@ -355,6 +355,27 @@ fn received(tag: &Tag) -> Time {
     Time::from_unix_millis(i64::from(tag.timestamp))
 }
 
+/// Takes `tags`, a script's, through `source` into `muxer`, each unit
+/// received at its tag's time. Metadata tags are skipped. Panics where the
+/// source or the muxer refuses a tag.
+pub fn mux_tags<M: Muxer>(tags: &[Tag], source: &mut FlvSource, muxer: &mut M)
+where
+    M::Error: std::fmt::Debug,
+{
+    for tag in tags {
+        let event = match tag.kind {
+            TagKind::Video => source.video(tag.timestamp, &tag.body, received(tag)),
+            TagKind::Audio => source.audio(tag.timestamp, &tag.body, received(tag)),
+            TagKind::Metadata => continue,
+        };
+        match event.expect("script tags are valid") {
+            Some(SourceEvent::Config(c)) => muxer.set_config(&c).expect("the muxer takes it"),
+            Some(SourceEvent::Unit(u)) => muxer.push(&u).expect("the muxer takes it"),
+            None => {}
+        }
+    }
+}
+
 /// The records `script` produces: its tags through [`FlvSource`] and a
 /// [`Segmenter`] into a [`PackedSink`], finished at the end, and the
 /// packed stream decoded from offset 0 into whole records.

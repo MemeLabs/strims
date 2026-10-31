@@ -38,13 +38,13 @@ use strims_transfer::TransferId;
 use strims_video::hls::HlsRoutes;
 use strims_video::ingress::unit_ingress_options;
 use strims_video::synth::script::{
-    Script, ScriptConfig, Tag, TagKind, expected_records, without_publish_times,
+    Script, ScriptConfig, Tag, TagKind, expected_records, mux_tags, without_publish_times,
 };
 use strims_video::units::{ReaderEvent, UnitReader, UnitSigning};
 use strims_video::{
     AccessUnit, Config, CutRule, DecoderConfig, EgressPiece, EgressStream, FlvSource, IngestFormat,
-    IngressSettings, NoVideoHost, SourceEvent, StreamFormat, SwarmKind, TrackId, VideoControl,
-    VideoEvent, VideoHost, VideoSwarm, bind_frontend, fmp4_mime, units_mime,
+    IngressSettings, Muxer, NoVideoHost, SourceEvent, StreamFormat, SwarmKind, TrackId, UnitWriter,
+    VideoControl, VideoEvent, VideoHost, VideoSwarm, bind_frontend, units_mime,
 };
 use support::{FakeVideo, TestPublisher};
 
@@ -215,19 +215,6 @@ async fn read<V: VideoHost>(s: &mut Stream<V>, n: usize) -> Vec<(Vec<u8>, bool)>
     out
 }
 
-/// Records of a stream until one equals `last`, none after a
-/// discontinuity.
-async fn read_until<V: VideoHost>(s: &mut Stream<V>, last: &[u8], most: usize) -> Vec<Vec<u8>> {
-    let mut got = Vec::new();
-    while got.last().map(Vec::as_slice) != Some(last) {
-        assert!(got.len() < most, "more records than expected");
-        let (r, flagged) = read(s, 1).await.remove(0);
-        assert!(!flagged, "a discontinuity");
-        got.push(r);
-    }
-    got
-}
-
 /// Where `got` starts in `expected`, which it is a contiguous run of.
 fn run_of(got: &[Vec<u8>], expected: &[Vec<u8>]) -> usize {
     assert!(!got.is_empty());
@@ -334,14 +321,15 @@ fn refusal(code: &str, description: &str) -> (String, String) {
 }
 
 /// A publisher's stream reaches another node whole: the node finds its
-/// listing, of the records' MIME type and the channel swarm's URI, with
-/// the channel's live snippet, and reads a contiguous run of the records,
-/// up to the last one, which the unpublish writes. The end takes the
-/// listing, transfer and swarm down.
+/// listing, of the unit format's MIME type and the channel swarm's URI,
+/// with the channel's live snippet, and reads a contiguous run of the
+/// script's units from the GOP it joins, up to the last one. The
+/// unpublish ends the session and takes the listing, transfer and swarm
+/// down.
 #[test]
 fn a_published_stream_is_listed_and_read_by_another_node() {
     run(async {
-        let s = Ingest::new(true, fmp4_config()).await;
+        let s = Ingest::new(true, units_config()).await;
         let b = s.b.as_ref().unwrap();
         let vb = start(b, NoVideoHost, Config::default());
         let mut events = s.va.subscribe();
@@ -357,6 +345,20 @@ fn a_published_stream_is_listed_and_read_by_another_node() {
                 channel_id: s.channel.id
             }
         );
+
+        let script = Script::new(&ScriptConfig::default());
+        let (configs, units) = script_units(&script);
+        let third = script.tags.len() / 3;
+        p.send_tags(&script.tags[..third], &script).await;
+
+        wait_for(10, "the listing and snippet", || shown_snippet(b).is_some()).await;
+        let (_, m, shown) = media(b, 10).remove(0);
+        assert_eq!(m.swarm_uri, channel_uri(&s.channel));
+        assert_eq!(m.mime_type, units_mime(&configs));
+        assert_eq!(
+            m.mime_type,
+            r#"video/x.strims-units;codecs="avc1.64001f,mp4a.40.2""#
+        );
         let t = s.transfer_id();
         assert!(s.a.transfers.is_published(t, s.a.net(&s.net.public)));
         let swarms = s.va.video_swarms();
@@ -365,18 +367,6 @@ fn a_published_stream_is_listed_and_read_by_another_node() {
             (swarms[0].kind, swarms[0].transfer_id, &swarms[0].swarm_uri),
             (SwarmKind::Ingest, t, &channel_uri(&s.channel))
         );
-
-        let script = Script::new(&ScriptConfig::default());
-        let expected = script_records(&script);
-        assert!(expected.len() >= 4);
-        let third = script.tags.len() / 3;
-        p.send_tags(&script.tags[..third], &script).await;
-
-        wait_for(10, "the listing and snippet", || shown_snippet(b).is_some()).await;
-        let (_, m, shown) = media(b, 10).remove(0);
-        assert_eq!(m.swarm_uri, channel_uri(&s.channel));
-        assert_eq!(m.mime_type, fmp4_mime(&script_configs(&script)));
-        assert_eq!(m.mime_type, "video/mp4;codecs=\"avc1.64001f,mp4a.40.2\"");
         let shown = shown.unwrap();
         // the server shows only snippets the swarm's key, the channel's,
         // signed
@@ -400,37 +390,45 @@ fn a_published_stream_is_listed_and_read_by_another_node() {
         assert_eq!(shown.start_time, streams[0].created_at);
         assert!(shown.start_time >= before && shown.start_time <= s.a.timer.now().unix());
 
-        let mut stream = vb
-            .open_stream(
+        let mut v = UnitViewer::new(
+            vb.open_stream(
                 &m.swarm_uri,
                 std::slice::from_ref(&s.net.public),
                 StreamFormat::from_mime(&m.mime_type),
             )
             .await
-            .unwrap();
+            .unwrap(),
+        );
         p.send_tags(&script.tags[third..], &script).await;
         p.unpublish().await;
-        let got = read_until(&mut stream, expected.last().unwrap(), expected.len()).await;
-        run_of(&got, &expected);
-        assert!(got.len() >= 3);
+        v.until_unit(units.last().unwrap()).await;
+        let got = v.units();
+        assert_eq!(v.discontinuities(), 0);
+        assert!(got[0].3, "the first unit read is a keyframe");
+        assert_eq!(got[..], units[units.len() - got.len()..]);
 
         assert_eq!(
             ended(&mut events).await,
             (s.channel.id, "the publisher ended the stream".to_owned())
         );
         p.until("the connection to close", |p| p.closed).await;
+        wait_for(10, "the session's swarm to go", || {
+            s.va.video_swarms().is_empty()
+        })
+        .await;
         assert!(s.va.ingress_streams().is_empty());
-        assert!(s.va.video_swarms().is_empty());
         assert!(!s.a.transfers.list().contains(&t));
         assert_eq!(s.a.host.swarms_of(&swarm_id(&s.channel)), (0, 0));
         wait_for(20, "the listing to go", || media(b, 10).is_empty()).await;
+        // Every record the script makes, its END included, and every byte
+        // written into the swarm.
+        let mut w = UnitWriter::new(CHUNK as usize).unwrap();
+        mux_tags(&script.tags, &mut FlvSource::new(), &mut w);
+        w.finish().unwrap();
         let m = s.va.metrics().ingress;
         assert_eq!((m.sessions, m.refused, m.connections), (1, 0, 1));
-        assert_eq!(m.segments, expected.len() as u64);
-        assert_eq!(
-            m.bytes,
-            expected.iter().map(|r| r.len() as u64).sum::<u64>()
-        );
+        assert_eq!(m.segments, w.metrics().records);
+        assert_eq!(m.bytes, s.written());
         assert_eq!((m.dropped_units, m.media_errors, m.write_errors), (0, 0, 0));
         assert_eq!(m.metadata, 1);
     });

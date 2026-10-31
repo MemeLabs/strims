@@ -7,12 +7,13 @@
 //! requests are raw HTTP.
 //!
 //! A profile signs up, creates a network and a video channel on it, and
-//! enables the RTMP ingress, writing fMP4 records, on a free port. A
-//! synthetic publisher streams 1-second GOPs to the channel's stream key,
-//! paced in real time. The profile enables HLS and opens an HLS stream of
-//! the channel's swarm; the player polls its playlist until it lists two
-//! segments, then fetches the init and every listed segment. They are the
-//! parts of a contiguous run of the records the script produces, each
+//! enables the RTMP ingress on a free port. A synthetic publisher streams
+//! 1-second GOPs to the channel's stream key, paced in real time. The
+//! profile enables HLS and opens an HLS stream of the channel's swarm of
+//! the unit format; the player polls its playlist until it lists two
+//! segments, then fetches the init and every listed segment. They are a
+//! contiguous run of the segments an HLS muxer cuts of the script's units,
+//! one a GOP, but for their publish times and fragment numbers; each
 //! EXTINF is its segment's media time, and the playlist keeps RFC 8216's
 //! rules under a 4 s target. Unknown streams answer 404, other methods
 //! 405, a HEAD has no body, and every answer allows any origin.
@@ -45,13 +46,13 @@ use strims_proto::video::v1::{
 };
 use strims_svc::{Config, Svc, SvcError};
 use strims_video::amf0::Value;
-use strims_video::fmp4::{media_duration, parse_init, split_record};
+use strims_video::fmp4::{media_duration, parse_init};
+use strims_video::hls::{HlsMuxer, HlsMuxerConfig, target_secs};
 use strims_video::synth::publisher::{Publisher, PublisherConfig};
 use strims_video::synth::script::{
-    MetaValue, Script, ScriptConfig, Tag, TagKind, expected_records, media_without_publish_times,
-    without_publish_times,
+    MetaValue, Script, ScriptConfig, Tag, TagKind, media_without_publish_times, mux_tags,
 };
-use strims_video::{CutRule, IngestFormat, ingress_options};
+use strims_video::{FlvSource, HlsSettings, ingress_options, units};
 use support::video::*;
 use support::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -68,6 +69,47 @@ fn extinf(init: &[u8], media: &[u8]) -> String {
     let d = media_duration(&parse_init(init).unwrap(), media).unwrap();
     let ms = u64::try_from(d.as_nanos()).unwrap().saturating_add(500_000) / 1_000_000;
     format!("#EXTINF:{}.{:03},", ms / 1000, ms % 1000)
+}
+
+/// The media of the segments an HLS stream of `script`'s units read from
+/// its start makes under the default settings, without their publish
+/// times and fragment numbers, and their init.
+fn script_segments(script: &Script) -> (Vec<u8>, Vec<Vec<u8>>) {
+    let s = HlsSettings::default();
+    let mut muxer = HlsMuxer::new(HlsMuxerConfig {
+        target: target_secs(s.target_duration),
+        fragment_duration: s.fragment_duration,
+        max_segment_bytes: s.max_record_bytes,
+    });
+    let mut source = FlvSource::new();
+    let (mut init, mut media) = (Vec::new(), Vec::new());
+    for tag in &script.tags {
+        mux_tags(std::slice::from_ref(tag), &mut source, &mut muxer);
+        while let Some(s) = muxer.take_segment() {
+            init = s.init.to_vec();
+            media.push(comparable(&s.media));
+        }
+    }
+    (init, media)
+}
+
+/// A segment's media without its publish times
+/// ([`media_without_publish_times`]) and with each fragment's `mfhd`
+/// sequence number zeroed: a muxer numbers the fragments it writes from
+/// where its stream started.
+fn comparable(media: &[u8]) -> Vec<u8> {
+    let mut out = media_without_publish_times(media);
+    let mut at = 0;
+    while at + 24 <= out.len() {
+        let size = u32::from_be_bytes(out[at..at + 4].try_into().unwrap()) as usize;
+        // A moof's first box is its mfhd: size, type, version and flags,
+        // then the sequence number.
+        if &out[at + 4..at + 8] == b"moof" && &out[at + 12..at + 16] == b"mfhd" {
+            out[at + 20..at + 24].fill(0);
+        }
+        at += size.max(8);
+    }
+    out
 }
 
 /// A publisher's RTMP connection.
@@ -177,11 +219,10 @@ fn hls_serves_an_rtmp_stream_to_players() {
     run(async {
         tokio::time::timeout(StdDuration::from_secs(300), async {
             let mut steps = Steps(Instant::now());
-            let mut config = Config {
+            let config = Config {
                 hls_listen: Some("127.0.0.1:0".into()),
                 ..local_config()
             };
-            config.app.video.ingress.format = IngestFormat::Fmp4;
             let alice = Profile::sign_up(config).await;
             let hls_addr = alice.svc.hls_addr().unwrap();
             assert_eq!(alice.svc.hls_base_url(), format!("http://{hls_addr}"));
@@ -280,7 +321,7 @@ fn hls_serves_an_rtmp_stream_to_players() {
                 .open_stream(&HlsEgressOpenStreamRequest {
                     swarm_uri: uri.to_string(),
                     network_keys: vec![net.clone()],
-                    ..Default::default()
+                    mime_type: units::MIME_TYPE.into(),
                 })
                 .await
                 .unwrap()
@@ -332,27 +373,25 @@ fn hls_serves_an_rtmp_stream_to_players() {
                 r.check(&s.uri, "video/iso.segment", "max-age=31536000, immutable");
                 assert_eq!(r.content_length(), r.body.len());
                 assert_eq!(s.extinf, extinf(&init.body, &r.body), "{}", s.uri);
-                media.push(media_without_publish_times(&r.body));
+                assert_eq!(s.extinf, "#EXTINF:1.000,", "{playlist}");
+                media.push(comparable(&r.body));
             }
 
-            // The segments are the parts of a contiguous run of the
-            // script's records, compared without their publish times,
-            // which are the ingest's own.
-            let expected = expected_records(&script, CutRule::default());
-            let expected: Vec<_> = expected.iter().map(|r| without_publish_times(r)).collect();
-            let parts: Vec<(&[u8], &[u8])> =
-                expected.iter().map(|r| split_record(r).unwrap()).collect();
-            let start = parts
+            // The segments are a contiguous run of the script's, compared
+            // without their publish times, which are the ingest's own, and
+            // their fragment numbers, which count from the GOP the stream
+            // joined.
+            let (want_init, expected) = script_segments(&script);
+            assert!(init.body == want_init, "the init");
+            let start = expected
                 .iter()
-                .position(|(_, m)| *m == media[0].as_slice())
-                .expect("the first segment is one of the script's records");
+                .position(|m| *m == media[0])
+                .expect("the first segment is one of the script's");
             for (i, m) in media.iter().enumerate() {
-                let (want_init, want_media) = parts[start + i];
-                assert!(init.body == want_init, "segment {i}'s init");
-                assert!(*m == want_media, "segment {i} is record {}", start + i);
+                assert!(*m == expected[start + i], "segment {i} is {}", start + i);
             }
             eprintln!(
-                "segments are records {start}..{} of {}, {}",
+                "segments are {start}..{} of the script's {}, {}",
                 start + media.len(),
                 expected.len(),
                 segments
@@ -361,7 +400,7 @@ fn hls_serves_an_rtmp_stream_to_players() {
                     .collect::<Vec<_>>()
                     .join(" ")
             );
-            steps.done("the init and segments are the script's records");
+            steps.done("the init and segments are the script's");
 
             // A HEAD answers a GET's headers without its body.
             let last = &segments[segments.len() - 1].uri;

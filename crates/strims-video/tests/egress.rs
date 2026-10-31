@@ -16,7 +16,7 @@
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use strims_chunkstream::packed::{DEFAULT_SIZE, PackedEncoder};
+use strims_chunkstream::chunked::ChunkedEncoder;
 use strims_crypto::key_from_seed;
 use strims_kv::MemoryKv;
 use strims_ppspp::{SwarmId, SwarmOptions, Uri, WriterOptions};
@@ -32,7 +32,7 @@ use strims_testworld::*;
 use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
 use strims_video::hls::HlsRoutes;
 use strims_video::synth::script::avcc;
-use strims_video::units::{UnitReader, UnitSigning};
+use strims_video::units::{self, UnitReader, UnitSigning};
 use strims_video::{
     Config, EgressSettings, NoVideoHost, SwarmKind, VideoControl, bind_frontend, capture_options,
 };
@@ -69,11 +69,13 @@ fn egress(video: &Control) -> EgressClient<Client> {
     EgressClient::new(frontend_client(router))
 }
 
-/// A swarm written on a node outside the controls, in the packed layout.
+/// A swarm written on a node outside the controls, in the unit format's
+/// chunked layout in frames of its chunk size.
 struct Publisher {
     id: SwarmId,
     uri: String,
-    encoder: PackedEncoder,
+    frame_size: usize,
+    encoder: ChunkedEncoder,
     writer: FakeWriter,
     out: Vec<u8>,
 }
@@ -89,10 +91,12 @@ impl Publisher {
             .await
             .unwrap();
         let uri = Uri::new(id.clone(), options.uri_options()).to_string();
+        let frame_size = options.chunk_size;
         Publisher {
             id,
             uri,
-            encoder: PackedEncoder::new(DEFAULT_SIZE).unwrap(),
+            frame_size,
+            encoder: ChunkedEncoder::new(frame_size).unwrap(),
             writer,
             out: Vec::new(),
         }
@@ -102,53 +106,61 @@ impl Publisher {
         TransferId::new(&self.id, b"")
     }
 
-    /// Writes `data` as a record, in pieces with a pause after each.
+    /// Writes record `data`, in pieces with a pause after each.
     async fn record(&mut self, data: &[u8]) {
-        for piece in data.chunks(16 * 1024) {
-            self.encoder.write(piece, &mut self.out);
-            self.flush().await;
-        }
-        self.encoder.end_record(&mut self.out).unwrap();
-        self.flush().await;
+        self.encode(data);
+        self.flush(self.out.len()).await;
     }
 
-    async fn flush(&mut self) {
-        if !self.out.is_empty() {
-            self.writer.write(&self.out).await.unwrap();
-            self.out.clear();
+    /// Encodes record `data` into the bytes to write.
+    fn encode(&mut self, data: &[u8]) {
+        let at = self.out.len();
+        self.out
+            .resize(at + self.encoder.encoded_len(data.len()).unwrap(), 0);
+        self.encoder.encode(&[data], &mut self.out[at..]).unwrap();
+    }
+
+    /// Writes the first `n` bytes to write, in pieces with a pause after
+    /// each.
+    async fn flush(&mut self, n: usize) {
+        let out: Vec<u8> = self.out.drain(..n).collect();
+        for piece in out.chunks(16 * 1024) {
+            self.writer.write(piece).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(1)).await;
         }
-        tokio::time::sleep(Duration::from_millis(1)).await;
     }
 
     /// Starts the stream over, as a restarted writer does.
     async fn reset(&mut self) {
         self.writer.reset().await.unwrap();
-        self.encoder = PackedEncoder::new(DEFAULT_SIZE).unwrap();
+        self.encoder = ChunkedEncoder::new(self.frame_size).unwrap();
+        self.out.clear();
     }
 }
 
-/// `n` bytes of record `i`.
+/// Record `i` of `n` bytes: a sync record of a kind no reader decodes, so a
+/// join starts at whichever record it reads whole first.
 fn record(i: u8, n: usize) -> Vec<u8> {
-    (0..n)
-        .map(|j| i.wrapping_mul(29).wrapping_add(j as u8))
-        .collect()
+    let mut r = vec![0x7f, 0];
+    r.extend((2..n).map(|j| i.wrapping_mul(29).wrapping_add(j as u8)));
+    r
 }
 
-/// Records over a frame each, so no two end in one frame.
+/// Records of several frames each.
 fn records(from: u8, n: u8) -> Vec<Vec<u8>> {
     (from..from + n)
         .map(|i| record(i, 66_000 + usize::from(i % 5) * 9_000))
         .collect()
 }
 
-/// Opens a stream: its responses after `Open`, and the transfer id
-/// `Open` carried. Fails with the refusal's message.
+/// Opens a stream of the unit format: its responses after `Open`, and the
+/// transfer id `Open` carried. Fails with the refusal's message.
 async fn open(
     e: &EgressClient<Client>,
     uri: &str,
     keys: &[Vec<u8>],
 ) -> Result<(Responses, Vec<u8>), String> {
-    open_as(e, uri, keys, "").await
+    open_as(e, uri, keys, units::MIME_TYPE).await
 }
 
 /// [`open`] of a stream of the format `mime` names.
@@ -223,7 +235,7 @@ fn a_stream_opens_then_carries_whole_records_in_bounded_messages() {
         let b = node_in(&world, 2).await;
         let (net, _pipes) = owned_network(&a, &[&b], 10).await;
         let mut p = Publisher::new(&a, 7, capture_options()).await;
-        let mut written = vec![record(0, DEFAULT_SIZE - 4), record(1, 3 * MAX_DATA)];
+        let mut written = vec![record(0, 4_000), record(1, 3 * MAX_DATA)];
         for r in &written {
             p.record(r).await;
         }
@@ -269,8 +281,8 @@ fn a_writer_reset_is_one_discontinuity_then_the_next_whole_record() {
         }
         assert_eq!(read(&mut s, 2).await, unflagged(&before));
         // A record cut short by the reset is never a record.
-        p.encoder.write(&record(9, 70_000), &mut p.out);
-        p.flush().await;
+        p.encode(&record(9, 70_000));
+        p.flush(40_000).await;
         p.reset().await;
         let after = records(5, 3);
         for r in &after {

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Unit-format streams written by the real writer, read back through the
-//! remuxer, against what the segmenter writes for the same units.
+//! remuxer, against an init per set of configs and a fragment per unit
+//! written for the same units.
 
 // Test code: a panic or out-of-range index is a test failure.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
@@ -12,10 +13,10 @@ use std::collections::BTreeMap;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 use strims_chunkstream::chunked::{ChunkedRecordDecoder, Item};
-use strims_video::fmp4::{media_duration, ntp_timestamp, parse_init, split_record};
+use strims_video::fmp4::{media_duration, ntp_timestamp, parse_init};
 use strims_video::synth::script::{Script, ScriptConfig, TagKind, aac_lc_asc, avcc};
 use strims_video::units::record::{Record, parse_record};
-use strims_video::{CutRule, FlvSource, Muxer, Segmenter, SourceEvent, UnitWriter, VecSink};
+use strims_video::{FlvSource, Muxer, SourceEvent, UnitWriter};
 
 use super::*;
 
@@ -120,17 +121,59 @@ fn unit_records(events: &[Event]) -> Vec<Vec<u8>> {
     }
 }
 
-/// The segmenter's records of `events`, a fragment per unit and a record
-/// per set of configs.
-fn segmenter_records(events: &[Event]) -> Vec<Vec<u8>> {
-    let rule = CutRule {
-        min_media_bytes: usize::MAX,
-        max_record_bytes: usize::MAX,
-        fragment_duration: Duration::ZERO,
-    };
-    let mut s = Segmenter::new(rule, VecSink::new());
-    feed(&mut s, events);
-    s.into_sink().records
+/// The init and media of each set of configs `events` sets, one writer
+/// session's: the init at the first keyframe of the video track once the
+/// configs changed, declaring them video first, each kind by track id,
+/// with that keyframe's composition delay; then a fragment per unit
+/// ([`FragmentWriter`]) up to the next such keyframe, which times the
+/// video's last sample. Units before the first such keyframe, and units of
+/// a config the init doesn't declare, are dropped.
+fn per_config_set(events: &[Event]) -> Vec<(Vec<u8>, Vec<u8>)> {
+    let mut configs: BTreeMap<TrackId, DecoderConfig> = BTreeMap::new();
+    let mut declared: Vec<DecoderConfig> = Vec::new();
+    let mut writer = FragmentWriter::new(Duration::ZERO);
+    let mut out: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+    for e in events {
+        let u = match e {
+            Event::Config(c) => {
+                configs.insert(c.track, c.clone());
+                continue;
+            }
+            Event::Unit(u) => u,
+        };
+        let of = |kind| configs.values().filter(move |c| c.kind == kind).cloned();
+        let ordered: Vec<DecoderConfig> =
+            of(TrackKind::Video).chain(of(TrackKind::Audio)).collect();
+        let cut = ordered
+            .iter()
+            .find(|c| c.kind == TrackKind::Video)
+            .map(|c| c.track);
+        if u.keyframe && cut == Some(u.track) && ordered != declared {
+            if let Some((_, media)) = out.last_mut() {
+                writer.flush(Some((u.track, u.dts)), media);
+            }
+            let timescale = configs[&u.track].timescale;
+            let delay = to_duration((u.pts - u.dts).max(0), timescale);
+            let mut init = Vec::new();
+            write_init(&ordered, delay, &mut init).unwrap();
+            writer.set_tracks(&ordered, delay).unwrap();
+            declared = ordered;
+            out.push((init, Vec::new()));
+        }
+        let Some((_, media)) = out.last_mut() else {
+            continue;
+        };
+        if declared
+            .iter()
+            .any(|c| configs.get(&c.track) == Some(c) && c.track == u.track)
+        {
+            writer.push(&u.unit(), media).unwrap();
+        }
+    }
+    if let Some((_, media)) = out.last_mut() {
+        writer.flush(None, media);
+    }
+    out
 }
 
 /// `events` moved as the remuxer moves a stream whose first keyframe
@@ -474,7 +517,7 @@ fn b_frames() -> ScriptConfig {
 }
 
 #[test]
-fn output_equals_the_segmenters_records_for_one_session() {
+fn output_is_an_init_per_set_of_configs_and_a_fragment_per_unit_for_one_session() {
     for config in [
         b_frames(),
         ScriptConfig {
@@ -494,13 +537,7 @@ fn output_equals_the_segmenters_records_for_one_session() {
     ] {
         let events = script(config.clone());
         let (out, r) = remux(&unit_records(&events));
-        let expected: Vec<(Vec<u8>, Vec<u8>)> = segmenter_records(&moved_to_the_edit(&events))
-            .iter()
-            .map(|rec| {
-                let (init, media) = split_record(rec).unwrap();
-                (init.to_vec(), media.to_vec())
-            })
-            .collect();
+        let expected = per_config_set(&moved_to_the_edit(&events));
         let got = segments(&out);
         assert_eq!(got.len(), expected.len(), "{config:?}");
         let last = got.len() - 1;
