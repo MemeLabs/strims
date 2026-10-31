@@ -9,22 +9,50 @@ import { nowUs } from "./clock";
 
 /** A video track's frames. */
 export interface FrameSource {
-  readonly kind: "processor" | "worker" | "element" | "upright";
+  readonly kind: "processor" | "worker" | "turned" | "element" | "upright";
   // The next frame, which the caller closes, or null once the track ended or
   // the source closed.
   next(): Promise<VideoFrame | null>;
   close(): void;
 }
 
+/** A source that can turn its frames, by quarter turns clockwise. */
+export interface TurningSource extends FrameSource {
+  /** The quarter turns the source's last frame was turned by. */
+  readonly turns: number;
+  /** Whether a turn the source was asked for didn't take. */
+  readonly cannotTurn: boolean;
+  /** Turns the frames from the next one on. */
+  turn(quarterTurns: number): void;
+}
+
 export type FramesRequest =
   | { type: "open"; track: MediaStreamTrack }
   | { type: "next" }
+  | { type: "turn"; quarterTurns: number }
   | { type: "close" };
 
 export type FramesResponse =
   | { type: "opened" }
-  | { type: "frame"; frame: VideoFrame | null }
+  /** A frame, and the quarter turns clockwise it was turned by. */
+  | { type: "frame"; frame: VideoFrame | null; turns: number }
   | { type: "error"; message: string };
+
+/**
+ * Tells each new picture a <video> presents from its frame callbacks:
+ * presentedFrames counts them, where a camera stream's mediaTime needn't
+ * move.
+ */
+export class PresentedPictures {
+  private presented = -1;
+
+  // Whether a callback's picture is one not seen before.
+  isNew({ presentedFrames }: Pick<VideoFrameCallbackMetadata, "presentedFrames">): boolean {
+    if (presentedFrames === this.presented) return false;
+    this.presented = presentedFrames;
+    return true;
+  }
+}
 
 // Runs `tick` every `intervalMs` from a worker's timer, which background tabs
 // don't throttle as they do the window's.
@@ -69,8 +97,11 @@ class ProcessorFrames implements FrameSource {
   }
 }
 
-class WorkerFrames implements FrameSource {
-  public readonly kind = "worker";
+class WorkerFrames implements TurningSource {
+  public turns = 0;
+  public cannotTurn = false;
+  /** The quarter turns asked for, until a frame turned by them comes. */
+  private asked: number | null = null;
   private waiting: ((m: FramesResponse) => void) | null = null;
   private closed = false;
 
@@ -83,7 +114,8 @@ class WorkerFrames implements FrameSource {
     };
   }
 
-  // Opens the source on `track`, which the worker takes.
+  // Opens the source on `track`, which the worker takes. Its frames come
+  // as the track gives them until it's asked to turn them.
   public static async open(worker: Worker, track: MediaStreamTrack): Promise<WorkerFrames | null> {
     const source = new WorkerFrames(worker);
     try {
@@ -109,12 +141,28 @@ class WorkerFrames implements FrameSource {
     });
   }
 
+  public get kind(): "worker" | "turned" {
+    return this.turns ? "turned" : "worker";
+  }
+
+  public turn(quarterTurns: number): void {
+    if (this.closed) return;
+    this.asked = quarterTurns;
+    this.worker.postMessage({ type: "turn", quarterTurns } satisfies FramesRequest);
+  }
+
   public async next(): Promise<VideoFrame | null> {
     if (this.closed) return null;
     const m = await this.request({ type: "next" });
     if (m.type !== "frame" || this.closed) {
       if (m.type === "frame") m.frame?.close();
       return null;
+    }
+    this.turns = m.turns;
+    // A frame asked for after the turn: the worker turns frames from there.
+    if (this.asked !== null) {
+      this.cannotTurn = m.turns !== this.asked;
+      this.asked = null;
     }
     return m.frame;
   }
@@ -126,13 +174,13 @@ class WorkerFrames implements FrameSource {
     this.worker.terminate();
     const w = this.waiting;
     this.waiting = null;
-    w?.({ type: "frame", frame: null });
+    w?.({ type: "frame", frame: null, turns: this.turns });
   }
 }
 
-/** Frames taken from a <video> element playing the track, as each is
- * presented, stamped with the capture's clock. Hidden pages present no
- * frames, so a worker's ticks take one while none comes.
+/** Frames taken from a <video> element playing the track, each picture it
+ * presents (PresentedPictures), stamped with the capture's clock. Hidden
+ * pages present no frames, so a worker's ticks take one while none comes.
  */
 class ElementFrames implements FrameSource {
   public readonly kind: "element" | "upright";
@@ -173,9 +221,10 @@ class ElementFrames implements FrameSource {
     this.video = video;
     video.play().catch(() => undefined);
     if (video.requestVideoFrameCallback) {
-      const onFrame = () => {
+      const pictures = new PresentedPictures();
+      const onFrame: VideoFrameRequestCallback = (_, metadata) => {
         if (this.closed) return;
-        this.take();
+        if (pictures.isNew(metadata)) this.take();
         video.requestVideoFrameCallback(onFrame);
       };
       video.requestVideoFrameCallback(onFrame);
@@ -186,11 +235,7 @@ class ElementFrames implements FrameSource {
   }
 
   private take(): void {
-    if (
-      this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
-      !this.video.videoWidth ||
-      performance.now() - this.lastAt < this.frameIntervalMs / 2
-    ) {
+    if (this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !this.video.videoWidth) {
       return;
     }
     let frame: VideoFrame;
@@ -248,7 +293,8 @@ class ElementFrames implements FrameSource {
 
 // The frames of a video track, from the best source the engine has. The
 // source reads `track` until it closes; `createWorker` makes a frames worker,
-// for engines whose MediaStreamTrackProcessor is worker-only.
+// for engines whose MediaStreamTrackProcessor is worker-only, which can turn
+// the frames (TurningSource).
 export const openFrameSource = async (
   track: MediaStreamTrack,
   frameRate: number,
@@ -286,6 +332,10 @@ export const framesTurned = (
   }
   return width > height !== frame.displayWidth > frame.displayHeight;
 };
+
+// Whether `source` can turn its frames.
+export const turning = (source: FrameSource): source is TurningSource =>
+  source instanceof WorkerFrames && !source.cannotTurn;
 
 // Frames of `track` drawn upright from a <video> element, which presents
 // them as the track's settings have them. The source stops `track` when it

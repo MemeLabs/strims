@@ -18,7 +18,8 @@ import {
 import { opusConfig, opusHead } from "./opus";
 import { CaptureSender } from "./sender";
 import { AUDIO_TRACK, VIDEO_TRACK } from "./sink";
-import { framesTurned } from "./video-source";
+import { turnedDraw } from "./turn";
+import { PresentedPictures, framesTurned } from "./video-source";
 import { WORKLET_SOURCE, WorkletBlock } from "./worklet";
 
 const hex = (s: string): Uint8Array => Uint8Array.from(s.match(/../g).map((b) => parseInt(b, 16)));
@@ -132,6 +133,92 @@ describe("capture frames", () => {
     // Settings without a size, or square pictures, say nothing.
     assert.ok(!framesTurned(frame(1280, 720), {}));
     assert.ok(!framesTurned(frame(720, 720), { width: 720, height: 1280 }));
+  });
+
+  it("turn by quarter turns clockwise onto a canvas of the turned size", () => {
+    // Where the transform puts a point of the frame.
+    const at = (t: number[], x: number, y: number) => [
+      t[0] * x + t[2] * y + t[4],
+      t[1] * x + t[3] * y + t[5],
+    ];
+    const corners = (w: number, h: number) => [
+      [0, 0],
+      [w, 0],
+      [w, h],
+      [0, h],
+    ];
+    // A 4x2 frame's corners, top left first, land on the turned canvas's
+    // corners, clockwise from the one each turn puts top left.
+    const cases: [number, [number, number], number[][]][] = [
+      [0, [4, 2], corners(4, 2)],
+      [
+        1,
+        [2, 4],
+        [
+          [2, 0],
+          [2, 4],
+          [0, 4],
+          [0, 0],
+        ],
+      ],
+      [
+        2,
+        [4, 2],
+        [
+          [4, 2],
+          [0, 2],
+          [0, 0],
+          [4, 0],
+        ],
+      ],
+      [
+        3,
+        [2, 4],
+        [
+          [0, 4],
+          [0, 0],
+          [2, 0],
+          [2, 4],
+        ],
+      ],
+      [
+        5,
+        [2, 4],
+        [
+          [2, 0],
+          [2, 4],
+          [0, 4],
+          [0, 0],
+        ],
+      ],
+      [
+        -1,
+        [2, 4],
+        [
+          [0, 4],
+          [0, 0],
+          [2, 0],
+          [2, 4],
+        ],
+      ],
+    ];
+    for (const [turns, size, want] of cases) {
+      const d = turnedDraw(4, 2, turns);
+      assert.deepStrictEqual(d.size, size, `${turns}`);
+      assert.deepStrictEqual(
+        // Adding 0 makes a -0 0.
+        corners(4, 2).map(([x, y]) => at(d.transform, x, y).map((v) => v + 0)),
+        want,
+        `${turns}`
+      );
+    }
+  });
+
+  it("come from a <video> once for each picture it presents, whatever its mediaTime", () => {
+    const p = new PresentedPictures();
+    // A camera stream's frames can keep one mediaTime.
+    const taken = [1, 2, 2, 3, 5, 5].map((presentedFrames) => p.isNew({ presentedFrames }));
+    assert.deepStrictEqual(taken, [true, true, false, true, true, false]);
   });
 });
 

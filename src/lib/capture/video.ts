@@ -15,12 +15,14 @@ import {
   sameBytes,
 } from "./h264";
 import { CaptureSink, VIDEO_TRACK } from "./sink";
+import { UPRIGHT_TURNS } from "./turn";
 import {
   FrameSource,
   framesTurned,
   openFrameSource,
   openUprightFrameSource,
   ticker,
+  turning,
 } from "./video-source";
 
 /**
@@ -61,8 +63,8 @@ export interface VideoCaptureInfo {
    * Constrained Baseline.
    */
   reorderFallbacks: number;
-  /** Whether the source's frames came turned, and the capture draws them
-   * upright.
+  /** Whether the source's frames came turned, and the capture has them
+   * drawn upright: turned in the frames worker, or drawn from a <video>.
    */
   turned: boolean;
   framesIn: number;
@@ -171,14 +173,21 @@ export class VideoCapture {
 
   private async take(frame: VideoFrame): Promise<void> {
     this.info.framesIn++;
+    const source = this.source;
+    if ("cannotTurn" in source && source.cannotTurn && source.kind !== "turned") {
+      // The source couldn't turn its frames as asked.
+      this.drawUpright();
+      return;
+    }
     if (
-      this.source.kind !== "upright" &&
+      source.kind !== "upright" &&
       this.info.framesIn % TURN_CHECK_FRAMES === 1 &&
       framesTurned(frame, this.track.getSettings())
     ) {
       this.turnUpright();
       return;
     }
+    this.info.source = source.kind;
     this.clock.anchor(frame.timestamp);
     // A source may stamp every frame alike: a frame whose time doesn't move
     // on takes its arrival's.
@@ -204,9 +213,24 @@ export class VideoCapture {
     this.encode(frame, sourceUs);
   }
 
-  // Moves to frames drawn upright: the source's come turned from the track's
-  // settings, and an encoder doesn't turn them.
+  // Has the frames turned upright: the source's come turned from the track's
+  // settings, and an encoder doesn't turn them. A source that turns its
+  // frames turns them by a quarter, or back, when they are found turned
+  // again: the camera turned with the page.
   private turnUpright(): void {
+    const s = this.source;
+    if (turning(s)) {
+      const turns = s.turns ? 0 : UPRIGHT_TURNS;
+      s.turn(turns);
+      this.info.turned = turns !== 0;
+      return;
+    }
+    this.drawUpright();
+  }
+
+  // Moves to frames drawn upright from a <video>, which shows the track as
+  // its settings have it.
+  private drawUpright(): void {
     const old = this.source;
     this.source = openUprightFrameSource(this.track.clone(), this.frameRate);
     this.info.source = this.source.kind;
