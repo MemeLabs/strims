@@ -10,7 +10,7 @@
 
 use std::time::Duration;
 
-use strims_ppspp::{PushMode, SeedPolicy, SwarmOptions};
+use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy, SwarmOptions};
 use strims_testbed::shape::LiveShape;
 use strims_vpn::Routing;
 use strims_wan::Site;
@@ -114,6 +114,13 @@ pub struct SwarmSpec {
     pub stop: Duration,
     /// In place of the frames, the seed writes this live stream.
     pub media: Option<MediaSpec>,
+    /// A media swarm's viewers join live and at a GOP, as egress joins:
+    /// a reader starts at the newest chunk it has, and after its first read
+    /// moves back to the start of the GOP that read falls in, through the
+    /// swarm's backlog, within this deadline; one that doesn't land in time
+    /// is dropped and reading goes on where it was. `None`: readers read on
+    /// from where they start ([`SwarmSpec::with_join_rewind`]).
+    pub join_rewind: Option<Duration>,
 }
 
 /// A live encoder's stream that its seed signs early
@@ -151,6 +158,7 @@ impl SwarmSpec {
             start,
             stop,
             media: None,
+            join_rewind: None,
         }
     }
 
@@ -183,6 +191,15 @@ impl SwarmSpec {
         .with_chunks(chunk, munro)?;
         self.options = shape.options;
         Ok(self)
+    }
+
+    /// The same media swarm with viewers that join live and rewind to their
+    /// GOP's start within `deadline` ([`SwarmSpec::join_rewind`]), in low
+    /// latency delivery.
+    pub fn with_join_rewind(mut self, deadline: Duration) -> SwarmSpec {
+        self.options.delivery_mode = DeliveryMode::LOW_LATENCY;
+        self.join_rewind = Some(deadline);
+        self
     }
 
     pub fn with_push_mode(mut self, mode: PushMode) -> SwarmSpec {

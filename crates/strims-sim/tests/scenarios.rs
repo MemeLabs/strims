@@ -2288,6 +2288,55 @@ fn collapse_thin_relays() {
     });
 }
 
+/// **A join's backlog in the post-loss hold.** A viewer that joins a live
+/// stream mid GOP moves its reader back to the GOP's start, as egress
+/// joins, and the swarm fetches the chunks behind its window as a backlog:
+/// pulled, after the live chunks, from the peers that announced them. A
+/// backlog's chunks are never announced, so two viewers joining the same
+/// GOP can't serve each other theirs, and the seed serves both in full.
+/// When a keyframe arrives the seed pushes it to every child at once, and
+/// the answers queued behind it wait past the joiners' congestion
+/// timeouts; each joiner's LEDBAT window drops to its 2 KiB minimum, under
+/// one 4 KiB chunk, and the window's stream floor stays off for
+/// `FLOOR_LOSS_HOLD` (2 s), so the channel asks for nothing and the
+/// backlog stalls. Two viewers joining a 3 Mbit/s CBR stream in the same
+/// second, 1.25 s into a 2 s GOP, behind a 10 Mbit seed, wait 4 to 5 s for
+/// their rewinds, where the uplink carries the two backlogs beside the live
+/// copies in about 2 s. Checks that the joiners' rewinds take over 3 s on
+/// average.
+#[test]
+#[ignore = "a collapse mode's case; run in release with --include-ignored"]
+fn collapse_join_backlog_hold() {
+    let mut c = collapse_case(2, 10, 20);
+    c.join_at = 5;
+    let scenario = |seed| {
+        let mut s = calibration_star_scenario(seed, &c);
+        let encoder = Encoder::parse("3000c").unwrap();
+        let sign = Sign::parse("u8,t300").unwrap().unwrap();
+        s.swarms = std::mem::take(&mut s.swarms)
+            .into_iter()
+            .map(|sw| sw.with_media(encoder, sign).with_join_rewind(secs(10)))
+            .collect();
+        s
+    };
+    sweep_at("collapse_join_backlog_hold", 1, scenario, |r| {
+        let took: Vec<u64> = all_viewers(r)
+            .into_iter()
+            .filter_map(|h| r.viewer(0, h)?.stats.joins.last()?.rewind)
+            .map(|j| j.took_ms)
+            .collect();
+        if took.len() != 2 {
+            return Err(format!("{} of 2 joiners rewound: {took:?}", took.len()));
+        }
+        let mean = took.iter().sum::<u64>() / 2;
+        if mean > 3000 {
+            Ok(())
+        } else {
+            Err(format!("the joiners' rewinds took {took:?} ms"))
+        }
+    });
+}
+
 // 10d. Mobile viewers: six on LTE and six on cable in North America.
 
 fn wan_mobile_viewers(seed: u64, push: PushMode) -> Scenario {

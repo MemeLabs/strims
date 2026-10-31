@@ -311,6 +311,9 @@ pub struct MediaLog {
     /// Chunks per unit and bytes per chunk.
     pub unit_chunks: u64,
     pub chunk: u64,
+    /// The stream offset of each GOP's start, its keyframe's record, as
+    /// written.
+    pub gops: Vec<u64>,
 }
 
 impl Report {

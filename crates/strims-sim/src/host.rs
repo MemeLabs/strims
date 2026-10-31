@@ -35,8 +35,8 @@ use crate::APP_PORT;
 use crate::net::SimNet;
 use crate::spec::{Binding, Fault, HostIx, LinkSpec, MediaSpec, SwarmSpec};
 use crate::stream::{
-    FRAME_LEN, FrameCodec, FrameParser, MEDIA_HEADER, MediaCodec, MediaParser, encode_frame,
-    fill_media, media_header,
+    FRAME_LEN, FrameCodec, FrameParser, JoinRewind, MEDIA_HEADER, MediaCodec, MediaParser,
+    encode_frame, fill_media, media_header,
 };
 use crate::world::{HASH_TABLE_SALT, PEER_INDEX_KEY, World, epoch, sim_now, sim_now_ms};
 use strims_wan::live::Signer;
@@ -508,6 +508,9 @@ async fn media_writer_task(
             };
         }
         let placed = st.signer.record(au);
+        if au.key && au.video {
+            w.media_log(s, |l| l.gops.push(placed.offset));
+        }
         st.lay_out(&w, s, chunk, placed.offset, placed.len, &mut buf);
         if let Err(e) = writer.write(&buf).await {
             w.log(&me, format!("swarm {s} write failed: {e}"));
@@ -669,10 +672,12 @@ async fn reader_task(w: Rc<World>, h: HostIx, s: usize, node: Node, swarm: Swarm
 }
 
 /// [`reader_task`]'s loop for a media swarm: reads at offsets, checked
-/// chunk by chunk ([`MediaParser`]).
+/// chunk by chunk ([`MediaParser`]), and rewinds to its GOP's start after
+/// its first read ([`SwarmSpec::join_rewind`]).
 async fn media_reader(w: &World, h: HostIx, s: usize, reader: &mut SwarmReader, buf: &mut [u8]) {
     let me = w.name(h).to_owned();
     let mut parser = MediaParser::default();
+    let mut rewind = w.spec.swarms.get(s).and_then(|x| x.join_rewind);
     loop {
         while w.reading_paused(h) {
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -680,6 +685,9 @@ async fn media_reader(w: &World, h: HostIx, s: usize, reader: &mut SwarmReader, 
         match reader.read_at(buf).await {
             Ok((offset, n)) => {
                 w.viewer_media(s, h, &mut parser, offset, buf.get(..n).unwrap_or_default());
+                if let Some(deadline) = rewind.take() {
+                    join_rewind(w, h, s, reader, offset, deadline).await;
+                }
             }
             Err(ReadError::Underrun { skipped }) => {
                 parser.resync();
@@ -695,4 +703,41 @@ async fn media_reader(w: &World, h: HostIx, s: usize, reader: &mut SwarmReader, 
             }
         }
     }
+}
+
+/// Moves `reader` back to the start of the GOP that stream offset `at`
+/// falls in, within `deadline`, and notes how it went.
+async fn join_rewind(
+    w: &World,
+    h: HostIx,
+    s: usize,
+    reader: &mut SwarmReader,
+    at: u64,
+    deadline: Duration,
+) {
+    let Some(to) = w.gop_start(s, at).filter(|&g| g < at) else {
+        return;
+    };
+    let start = sim_now_ms();
+    let landed = matches!(
+        tokio::time::timeout(deadline, reader.rewind(to)).await,
+        Ok(Ok(_))
+    );
+    let took = sim_now_ms().saturating_sub(start);
+    let back = at - to;
+    let how = if landed { "landed" } else { "dropped" };
+    w.log(
+        w.name(h),
+        format!("swarm {s} join rewind of {back} bytes {how} after {took} ms"),
+    );
+    w.viewer_rewound(
+        s,
+        h,
+        JoinRewind {
+            start_ms: start,
+            took_ms: took,
+            landed,
+            back,
+        },
+    );
 }

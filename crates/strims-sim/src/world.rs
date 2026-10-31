@@ -27,7 +27,7 @@ use crate::net::SendBuffers;
 use crate::report::{HostReport, MediaLog, VpnReport};
 use crate::spec::{HostIx, Scenario, Transport};
 use crate::stats::{HostStats, TransferSample};
-use crate::stream::{FrameParser, MediaParser, Parsed, SeqSet, ViewerStats};
+use crate::stream::{FrameParser, JoinRewind, MediaParser, Parsed, SeqSet, ViewerStats};
 use crate::wan::SharedWan;
 use crate::{EPOCH_MS, TCP_PORT, UDP_PORT, WS_PORT};
 
@@ -523,6 +523,24 @@ impl World {
             w.insert(seq);
         }
         seq
+    }
+
+    /// The start of media swarm `swarm`'s latest GOP at or before stream
+    /// offset `offset`, as its writer wrote it.
+    pub fn gop_start(&self, swarm: usize, offset: u64) -> Option<u64> {
+        let st = self.st.borrow();
+        let log = st.media.get(swarm)?.as_ref()?;
+        log.gops.iter().rev().find(|&&g| g <= offset).copied()
+    }
+
+    /// Notes how viewer `h`'s join rewind of `swarm` went.
+    pub fn viewer_rewound(&self, swarm: usize, h: HostIx, r: JoinRewind) {
+        self.st
+            .borrow_mut()
+            .viewers
+            .entry((swarm, h))
+            .or_default()
+            .rewound(r);
     }
 
     /// Updates media swarm `swarm`'s log.

@@ -388,14 +388,27 @@ pub struct ViewerStats {
 }
 
 /// One incarnation of a viewer: when it started reading, when the first
-/// frame arrived, and when it caught up (a frame with lag under
-/// [`CAUGHT_UP_MS`]).
+/// frame arrived, when it caught up (a frame with lag under
+/// [`CAUGHT_UP_MS`]), and its rewind to its GOP's start
+/// ([`SwarmSpec::join_rewind`](crate::SwarmSpec::join_rewind)).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Join {
     pub start_ms: u64,
     pub first_frame_ms: Option<u64>,
     pub first_seq: Option<u64>,
     pub caught_up_ms: Option<u64>,
+    pub rewind: Option<JoinRewind>,
+}
+
+/// A join's rewind to its GOP's start: when it started, how long it took
+/// to land or be dropped (ms), whether it landed, and how far back it went
+/// (bytes).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct JoinRewind {
+    pub start_ms: u64,
+    pub took_ms: u64,
+    pub landed: bool,
+    pub back: u64,
 }
 
 /// A viewer has caught up once a frame arrives this fresh.
@@ -408,6 +421,15 @@ impl ViewerStats {
             start_ms: now_ms,
             ..Join::default()
         });
+        self.last_seq = None;
+    }
+
+    /// The incarnation's join rewind went as `r`: the frames read from
+    /// there on follow the GOP's start, not the frames read before.
+    pub fn rewound(&mut self, r: JoinRewind) {
+        if let Some(j) = self.joins.last_mut() {
+            j.rewind = Some(r);
+        }
         self.last_seq = None;
     }
 
