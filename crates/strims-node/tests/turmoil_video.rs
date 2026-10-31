@@ -1003,10 +1003,11 @@ async fn owner(w: World) -> turmoil::Result {
             );
         }
         IngestFormat::Units => {
-            // A record per unit and a sync record per GOP; the session's
-            // end signed the last partial integrity unit.
+            // A record per unit, a sync record per GOP and the session's
+            // END; the session's end signed the last partial integrity
+            // unit.
             let keyframes = w.units.iter().filter(|u| u.0 == VIDEO && u.3).count();
-            assert_eq!(m.segments, (w.units.len() + keyframes) as u64);
+            assert_eq!(m.segments, (w.units.len() + keyframes + 1) as u64);
             assert_eq!(m.bytes % UNIT_BYTES, 0);
             assert!(m.early_signs > 0);
         }

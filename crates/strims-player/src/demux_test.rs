@@ -404,6 +404,8 @@ fn lost_audio_resumes_at_once_with_a_hole() {
     );
 }
 
+/// A later session, after the first's END, presents after the output so
+/// far; the demuxer reads past the END.
 #[test]
 fn a_restarted_session_presents_after_the_output_so_far() {
     let first = unit_records(&script(b_frames()));
@@ -455,6 +457,7 @@ fn a_restarted_session_presents_after_the_output_so_far() {
         assert!(after.windows(2).all(|w| w[1].0 >= w[0].0));
     }
     assert_eq!(d.metrics().restarts, 1);
+    assert_eq!(d.metrics().reader.ends, 2);
 }
 
 #[test]

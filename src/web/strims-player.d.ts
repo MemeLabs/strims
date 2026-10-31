@@ -19,7 +19,9 @@ declare module "*/strims-player/Cargo.toml" {
    * until the next keyframe while audio plays on, and the buffered timeline
    * has no hole. A writer session that starts its timestamps over is moved
    * to follow the output (a `restart` output), so decode times never go back
-   * and no `timestampOffset` is needed.
+   * and no `timestampOffset` is needed. A writer session's END record writes
+   * out what the remuxer holds and gives an `end` output; a later session
+   * after it is moved to follow the output, whatever its timestamps.
    *
    * Recovery: after a fatal media error, rebuild the MediaSource and make a
    * new Remuxer, which starts with an init at the next GOP's configs. To go
@@ -37,7 +39,10 @@ declare module "*/strims-player/Cargo.toml" {
      * should be discarded.
      */
     push(data: Uint8Array, segmentEnd: boolean, discontinuity: boolean): RemuxerOutput[];
-    /** The stream ended: the outputs of the units it holds. */
+    /**
+     * The stream ended: the outputs of the units it holds, then an `end`,
+     * unless the last `end` came after the last unit.
+     */
     finish(): RemuxerOutput[];
     metrics(): RemuxerMetrics;
     /** Frees its memory now (garbage collection also does); later calls throw. */
@@ -49,7 +54,8 @@ declare module "*/strims-player/Cargo.toml" {
     | MediaOutput
     | GapOutput
     | DiscontinuityOutput
-    | RestartOutput;
+    | RestartOutput
+    | EndOutput;
 
   /**
    * An init segment (ftyp, moov), for the media after it. It comes at a
@@ -148,13 +154,23 @@ declare module "*/strims-player/Cargo.toml" {
   }
 
   /**
-   * The writer's session started over at earlier timestamps. Units from here
-   * on are moved by `offset` seconds (the whole offset, not its change), so
-   * they follow the output so far.
+   * The writer's session started over at earlier timestamps, or a later
+   * session came after an `end`. Units from here on are moved by `offset`
+   * seconds (the whole offset, not its change), so they follow the output so
+   * far.
    */
   export interface RestartOutput {
     type: "restart";
     offset: number;
+  }
+
+  /**
+   * The stream ended: a writer session's END record, or `finish`. Every unit
+   * before it was output; end the MediaSource's stream once they are
+   * appended. Media after it is a later session's, which plays on.
+   */
+  export interface EndOutput {
+    type: "end";
   }
 
   /**
@@ -297,6 +313,8 @@ declare module "*/strims-player/Cargo.toml" {
     fragments: number;
     outputBytes: number;
     restarts: number;
+    /** End outputs: END records and `finish`. */
+    ends: number;
     /** Times the bounds on held units (8 MiB, 4096 units) wrote them all out. */
     heldFlushes: number;
     /** Holes in audio tracks filled with silence, and the silent frames written. */
@@ -322,6 +340,8 @@ declare module "*/strims-player/Cargo.toml" {
       outOfOrder: number;
       malformed: number;
       unknownKinds: number;
+      /** END records read. */
+      ends: number;
       unknownEntries: number;
       lost: number;
     };

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use strims_base::time::{Duration, Time};
 use strims_chunkstream::chunked::{ChunkedEncoder, ContinueError, EncodeError, FrameSizeError};
 
-use super::record::{ConfigEntry, UnitHeader, write_configs, write_unit_head};
+use super::record::{ConfigEntry, UnitHeader, write_configs, write_end, write_unit_head};
 use super::{AUDIO_SYNC_SPAN, MAX_RECORD_LEN};
 use crate::fmp4::{InitError, check_configs};
 use crate::media::{
@@ -41,7 +41,7 @@ pub enum UnitWriteError {
 /// What a [`UnitWriter`] has written and dropped.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct UnitWriterMetrics {
-    /// Records written: CONFIGS and UNIT.
+    /// Records written: CONFIGS, UNIT and END.
     pub records: u64,
     pub units: u64,
     /// GOPs started, each with its sync record.
@@ -54,6 +54,8 @@ pub struct UnitWriterMetrics {
     pub padding: u64,
     /// Units before the first GOP's keyframe.
     pub dropped_before_start: u64,
+    /// END records written: sessions finished.
+    pub ends: u64,
 }
 
 /// A track the writer has a config of.
@@ -82,7 +84,9 @@ struct Gop {
 /// swarm and returns the buffer ([`take_output`], [`restore`]). To have the
 /// swarm sign its partial integrity unit early, it ends the frame in
 /// progress ([`end_frame`]), writes the output, flushes the swarm writer,
-/// and continues at the offset the flush answers ([`continue_at`]).
+/// and continues at the offset the flush answers ([`continue_at`]). A
+/// session's deliberate end is [`finish`](Muxer::finish), which writes
+/// its END record, signed the same way.
 ///
 /// [`take_output`]: UnitWriter::take_output
 /// [`restore`]: UnitWriter::restore
@@ -107,6 +111,8 @@ pub struct UnitWriter {
     gop: Option<Gop>,
     /// A config changed since the last CONFIGS record.
     changed: bool,
+    /// The records written when the last END was.
+    ended_at: u64,
     /// Reused for record heads and CONFIGS records.
     scratch: Vec<u8>,
     metrics: UnitWriterMetrics,
@@ -123,6 +129,7 @@ impl UnitWriter {
             configs: Vec::new(),
             gop: None,
             changed: false,
+            ended_at: 0,
             scratch: Vec::new(),
             metrics: UnitWriterMetrics::default(),
         })
@@ -387,10 +394,23 @@ impl Muxer for UnitWriter {
         Ok(())
     }
 
-    /// Ends the GOP in progress: the writer holds no units, and the next
-    /// one written starts a GOP.
+    /// Ends the writer's session: writes an END record after the
+    /// session's records, and the next unit written starts a GOP, of the
+    /// next session. A writer that has written no record since its last
+    /// END writes none. The writer holds no units.
     fn finish(&mut self) -> Result<(), UnitWriteError> {
         self.gop = None;
+        if self.metrics.records == self.ended_at {
+            return Ok(());
+        }
+        let mut end = std::mem::take(&mut self.scratch);
+        end.clear();
+        write_end(&mut end);
+        let res = self.encode(&[&end]);
+        self.scratch = end;
+        res?;
+        self.metrics.ends += 1;
+        self.ended_at = self.metrics.records;
         Ok(())
     }
 }

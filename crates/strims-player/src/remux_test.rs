@@ -199,6 +199,7 @@ enum Out {
     },
     Discontinuity,
     Restart(Duration),
+    End,
 }
 
 fn drain(r: &mut Remuxer, out: &mut Vec<Out>) {
@@ -230,6 +231,7 @@ fn drain(r: &mut Remuxer, out: &mut Vec<Out>) {
             },
             Output::Discontinuity => Out::Discontinuity,
             Output::Restart { offset } => Out::Restart(offset),
+            Output::End => Out::End,
         });
     }
 }
@@ -285,6 +287,24 @@ struct Run {
 
 fn be32(b: &[u8], at: usize) -> u32 {
     u32::from_be_bytes(b[at..at + 4].try_into().unwrap())
+}
+
+/// A run's track, base decode time and samples.
+type RunOf = (u32, u64, Vec<(u32, i32)>);
+
+/// The fragments of `media`: each a `prft`, `moof` and `mdat`.
+fn fragments(media: &[u8]) -> Vec<&[u8]> {
+    let mut out = Vec::new();
+    let (mut at, mut start, mut n) = (0, 0, 0);
+    while at + 8 <= media.len() {
+        at += be32(media, at) as usize;
+        n += 1;
+        if n % 3 == 0 {
+            out.push(&media[start..at]);
+            start = at;
+        }
+    }
+    out
 }
 
 /// The boxes of `data`, each its type and content; the writers write
@@ -483,11 +503,47 @@ fn output_equals_the_segmenters_records_for_one_session() {
             .collect();
         let got = segments(&out);
         assert_eq!(got.len(), expected.len(), "{config:?}");
+        let last = got.len() - 1;
         for (i, (g, e)) in got.iter().zip(&expected).enumerate() {
             assert!(g.0 == e.0, "init {i} differs for {config:?}");
-            assert!(g.1 == e.1, "media {i} differs for {config:?}");
             let info = parse_init(&g.0).unwrap();
             assert!(media_duration(&info, &g.1).unwrap() > Duration::ZERO);
+            if i < last {
+                assert!(g.1 == e.1, "media {i} differs for {config:?}");
+                continue;
+            }
+            // The last fragment differs only in the video's last sample,
+            // which lasts to the end of the output.
+            let (gf, ef) = (fragments(&g.1), fragments(&e.1));
+            assert_eq!(gf.len(), ef.len(), "{config:?}");
+            let n = gf.len() - 1;
+            assert!(gf[..n] == ef[..n], "media {i} differs for {config:?}");
+            let (mut gr, mut er) = (runs(gf[n]).0, runs(ef[n]).0);
+            let mdat = |f: &[u8]| {
+                boxes(f)
+                    .into_iter()
+                    .find(|(t, _)| t == b"mdat")
+                    .unwrap()
+                    .1
+                    .to_vec()
+            };
+            assert_eq!(mdat(gf[n]), mdat(ef[n]));
+            let video = |runs: &mut Vec<Run>| {
+                runs.iter_mut()
+                    .find(|r| r.track == 1)
+                    .unwrap()
+                    .samples
+                    .pop()
+                    .unwrap()
+            };
+            let (gv, ev) = (video(&mut gr), video(&mut er));
+            assert!(gv.0 >= ev.0 && gv.1 == ev.1, "{gv:?} {ev:?} for {config:?}");
+            let samples = |runs: &[Run]| -> Vec<RunOf> {
+                runs.iter()
+                    .map(|r| (r.track, r.base, r.samples.clone()))
+                    .collect()
+            };
+            assert_eq!(samples(&gr), samples(&er), "{config:?}");
         }
         let m = r.metrics();
         assert_eq!(m.inits, expected.len() as u64);
@@ -936,8 +992,10 @@ fn a_restarted_session_follows_the_output() {
             ..b_frames()
         },
     ] {
+        // The first session ends without its END.
         let mut marked: Vec<(Vec<u8>, bool)> = unit_records(&first)
             .into_iter()
+            .filter(|r| !is_end(r))
             .map(|r| (r, false))
             .collect();
         let b = unit_records(&script(second.clone()));
@@ -998,6 +1056,71 @@ fn a_restarted_session_follows_the_output() {
         assert!(*pts.last().unwrap() > Duration::from_secs(15));
         assert_eq!(r.metrics().restarts, 1);
     }
+}
+
+fn is_end(record: &[u8]) -> bool {
+    matches!(parse_record(record), Ok(Record::End { .. }))
+}
+
+/// An END writes out what the remuxer holds and outputs an end, once for
+/// the record and the input's end after it, the picture's last unit lasting
+/// to the end of the output; the session after it starts an epoch there,
+/// whatever its timestamps, and plays on with no hole in the picture and
+/// every track going forward.
+#[test]
+fn a_session_after_an_end_follows_the_output() {
+    let first = unit_records(&script(b_frames()));
+    assert!(is_end(first.last().unwrap()));
+    // A later session whose timestamps go on from far ahead.
+    let later = unit_records(&script(ScriptConfig {
+        start_ms: 600_000,
+        ..b_frames()
+    }));
+    let (alone, _) = remux(&first);
+    let ended = alone.iter().position(|o| *o == Out::End).unwrap();
+    assert_eq!(ended, alone.len() - 1, "one end, after the media");
+
+    let mut marked: Vec<(Vec<u8>, bool)> = first.iter().map(|r| (r.clone(), false)).collect();
+    marked.extend(later.iter().enumerate().map(|(i, r)| (r.clone(), i == 0)));
+    let (out, r) = remux_marked(&marked);
+    let ends: Vec<usize> = (0..out.len()).filter(|&i| out[i] == Out::End).collect();
+    assert_eq!(ends.len(), 2);
+    assert_eq!(&out[..=ends[0]], &alone[..]);
+    let restarts: Vec<Duration> = out
+        .iter()
+        .filter_map(|o| match o {
+            Out::Restart(offset) => Some(*offset),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(restarts.len(), 1);
+    // The later session's first unit decodes where the output ends, 8 s
+    // in, its 600 s less.
+    let at = Duration::from_secs(8) - Duration::from_secs(600);
+    assert!(
+        (restarts[0] - at).abs() < Duration::from_millis(50),
+        "{restarts:?}"
+    );
+    assert_contiguous(&samples(&out, 1));
+    // Audio goes on from where the first session's ends.
+    let audio = samples(&out, 2);
+    let split = samples(&alone, 2).len();
+    let (last, next) = (audio[split - 1], audio[split]);
+    assert!(next.0 >= last.0 + last.1, "{last:?} {next:?}");
+    assert!(next.0 <= last.0 + last.1 + 1024, "{last:?} {next:?}");
+    assert!(audio.windows(2).all(|w| w[1].0 >= w[0].0 + w[0].1));
+    let m = r.metrics();
+    assert_eq!((m.ends, m.restarts, m.dropped_backwards), (2, 1, 0));
+    assert_eq!(m.reader.ends, 2);
+}
+
+/// A remuxer that joins a stream at its END outputs the end alone.
+#[test]
+fn a_join_at_the_end_outputs_only_the_end() {
+    let records = unit_records(&script(b_frames()));
+    let (out, r) = remux(&records[records.len() - 1..]);
+    assert_eq!(out, [Out::End]);
+    assert_eq!(r.metrics().ends, 1);
 }
 
 /// An H.264 track of `width` by `height` at 90 kHz.

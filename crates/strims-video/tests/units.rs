@@ -36,7 +36,7 @@ use strims_transfer::{ReadFailure, SwarmRead};
 use strims_video::hls::HlsRoutes;
 use strims_video::synth::script::{Script, ScriptConfig, TagKind};
 use strims_video::units::record::{Record, parse_record};
-use strims_video::units::{MAX_RECORD_LEN, ReaderEvent, UnitReader};
+use strims_video::units::{END_LINGER, MAX_RECORD_LEN, ReaderEvent, UnitReader};
 use strims_video::{
     AccessUnit, ChunkedReader, Config, DecoderConfig, EgressPiece, EgressSettings, EgressStream,
     FlvSource, IngestFormat, IngressSettings, NoVideoHost, Rewind, SourceEvent, StreamFormat,
@@ -123,13 +123,14 @@ fn media(n: &Node) -> Vec<Media> {
         .collect()
 }
 
-/// What a unit reader made of a stream: units, and the gaps it reported
-/// by track.
+/// What a unit reader made of a stream: units, the gaps it reported by
+/// track, and the ends it read.
 #[derive(Default)]
 struct Read {
     units: Vec<Unit>,
     gaps: Vec<(TrackId, u64)>,
     configs: Vec<DecoderConfig>,
+    ends: u64,
 }
 
 impl Read {
@@ -139,6 +140,7 @@ impl Read {
             match e {
                 ReaderEvent::Configs => self.configs = r.configs().to_vec(),
                 ReaderEvent::Gap { track, missing } => self.gaps.push((track, missing)),
+                ReaderEvent::End => self.ends += 1,
             }
         }
         self.units.extend(unit);
@@ -167,6 +169,58 @@ async fn read_stream<V: VideoHost>(s: &mut Stream<V>, last: &Unit) -> Read {
         }
     }
     read
+}
+
+/// The record a stream's pieces give next, whole, and whether a
+/// discontinuity came before it.
+async fn next_record<V: VideoHost>(s: &mut Stream<V>) -> (Vec<u8>, bool) {
+    let mut rec = Vec::new();
+    let mut skipped = false;
+    loop {
+        let piece = tokio::time::timeout(Duration::from_secs(60), s.next(usize::MAX))
+            .await
+            .expect("a piece in time");
+        match piece.unwrap() {
+            EgressPiece::Data(d) => rec.extend_from_slice(d),
+            EgressPiece::RecordEnd => return (rec, skipped),
+            EgressPiece::Discontinuity => {
+                rec.clear();
+                skipped = true;
+            }
+        }
+    }
+}
+
+/// Reads a stream's records until none comes for a second.
+async fn drain_records<V: VideoHost>(s: &mut Stream<V>) -> Vec<Vec<u8>> {
+    let mut out = Vec::new();
+    while let Ok((r, _)) = tokio::time::timeout(Duration::from_secs(1), next_record(s)).await {
+        out.push(r);
+    }
+    out
+}
+
+fn is_end(record: &[u8]) -> bool {
+    matches!(parse_record(record), Ok(Record::End { .. }))
+}
+
+/// Reads a stream's records up to its END: how many came before it, and
+/// how many of those after a discontinuity.
+async fn records_to_end<V: VideoHost>(s: &mut Stream<V>) -> (usize, usize) {
+    let (mut before, mut after) = (0, 0);
+    loop {
+        let (r, skipped) = next_record(s).await;
+        if skipped || after > 0 {
+            if is_end(&r) {
+                return (before, after);
+            }
+            after += 1;
+        } else if is_end(&r) {
+            return (before, after);
+        } else {
+            before += 1;
+        }
+    }
 }
 
 /// A node with network 10 and a channel on it, ingesting in the unit
@@ -257,7 +311,8 @@ impl Ingest {
 
 /// A unit-format ingest is listed with its MIME type, signs a partial
 /// integrity unit once the stream goes quiet, and reaches another node's
-/// stream whole, up to the last unit, which the session's end signs.
+/// stream whole, up to the last unit and the END after it, which the
+/// session's end signs.
 #[test]
 fn a_unit_format_ingest_reads_back_through_egress() {
     run(async {
@@ -299,6 +354,8 @@ fn a_unit_format_ingest_reads_back_through_egress() {
         assert_eq!(read.units, units);
         assert_eq!(read.configs, configs);
         assert!(read.gaps.is_empty());
+        let (end, _) = next_record(&mut stream).await;
+        assert_eq!(parse_record(&end).unwrap(), Record::End { gop_back: 0 });
         let r = stream.metrics();
         assert_eq!((r.discontinuities, r.rewinds, r.refused_rewinds), (0, 0, 0));
 
@@ -314,6 +371,144 @@ fn a_unit_format_ingest_reads_back_through_egress() {
         assert!(m.early_signs > before + 1);
         assert_eq!((m.dropped_units, m.media_errors, m.write_errors), (0, 0, 0));
     });
+}
+
+/// A session whose connection drops, with no unpublish, keeps its listing
+/// and swarm through the resume grace with no END, and ends with its END
+/// after it.
+#[test]
+fn a_dropped_session_ends_with_its_end_after_the_resume_grace() {
+    run(async {
+        let s = Ingest::new().await;
+        let vb = start(&s.b, NoVideoHost, Config::default());
+        let mut p = s.publish().await;
+        let script = Script::new(&ScriptConfig::default());
+        p.send_tags(&script.tags[..script.tags.len() / 2], &script)
+            .await;
+        wait_for(10, "the listing", || !media(&s.b).is_empty()).await;
+        let m = media(&s.b).remove(0);
+        let mut stream = vb
+            .open_stream(
+                &m.swarm_uri,
+                std::slice::from_ref(&s.net.public),
+                StreamFormat::Units,
+            )
+            .await
+            .unwrap();
+        drop(p);
+        let dropped = tokio::time::Instant::now();
+        let early =
+            tokio::time::timeout(Duration::from_secs(20), records_to_end(&mut stream)).await;
+        assert!(early.is_err(), "an END within the grace");
+        assert_eq!(s.va.ingress_streams().len(), 1);
+        assert!(!media(&s.b).is_empty());
+
+        records_to_end(&mut stream).await;
+        let grace = IngressSettings::default().resume_grace;
+        assert!(dropped.elapsed() >= grace.to_std().unwrap());
+        wait_for(10, "the session's end", || {
+            s.va.ingress_streams().is_empty()
+        })
+        .await;
+        wait_for(10, "the listing to go", || media(&s.b).is_empty()).await;
+        assert_eq!(s.va.metrics().ingress.replaced, 0);
+    });
+}
+
+/// A publish to the channel within a dropped session's resume grace takes
+/// the session over at once: the stream goes on in the new session's
+/// swarm with no END of the old, and its listing with it.
+#[test]
+fn a_publish_within_the_resume_grace_takes_the_session_over_without_an_end() {
+    run(async {
+        let s = Ingest::new().await;
+        let vb = start(&s.b, NoVideoHost, Config::default());
+        let mut p = s.publish().await;
+        let script = Script::new(&ScriptConfig::default());
+        p.send_tags(&script.tags[..script.tags.len() / 2], &script)
+            .await;
+        wait_for(10, "the listing", || !media(&s.b).is_empty()).await;
+        let m = media(&s.b).remove(0);
+        let mut stream = vb
+            .open_stream(
+                &m.swarm_uri,
+                std::slice::from_ref(&s.net.public),
+                StreamFormat::Units,
+            )
+            .await
+            .unwrap();
+        drop(p);
+        let old = drain_records(&mut stream).await;
+        assert!(!old.is_empty() && !old.iter().any(|r| is_end(r)));
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        let resumed = tokio::time::Instant::now();
+        let mut again = s.publish().await;
+        assert!(resumed.elapsed() < Duration::from_secs(1));
+        assert!(!media(&s.b).is_empty(), "the listing stays");
+        let m = s.va.metrics().ingress;
+        assert_eq!((m.sessions, m.replaced), (2, 1));
+        again.send_tags(&script.tags, &script).await;
+        again.unpublish().await;
+        let (before, after) = records_to_end(&mut stream).await;
+        assert_eq!(before, 0);
+        assert!(after > 0);
+        wait_for(10, "the session's end", || {
+            s.va.ingress_streams().is_empty()
+        })
+        .await;
+    });
+}
+
+/// An unpublished session's swarm stays for the END's linger, and a
+/// publish to the channel meanwhile starts at once and keeps its own
+/// swarm past it.
+#[test]
+fn a_publish_during_the_end_linger_starts_at_once() {
+    run(async {
+        let s = Ingest::new().await;
+        let mut p = s.publish().await;
+        let script = Script::new(&ScriptConfig::default());
+        p.send_tags(&script.tags[..script.tags.len() / 3], &script)
+            .await;
+        p.unpublish().await;
+        wait_for(10, "the END", || {
+            let stream = s.stream();
+            let recs = support_records(&stream);
+            recs.last().is_some_and(|r| is_end(r))
+        })
+        .await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        assert_eq!(s.va.video_swarms().len(), 1, "the swarm lingers");
+
+        let resumed = tokio::time::Instant::now();
+        let mut again = s.publish().await;
+        assert!(resumed.elapsed() < Duration::from_secs(1));
+        again
+            .send_tags(&script.tags[..script.tags.len() / 3], &script)
+            .await;
+        tokio::time::sleep(END_LINGER.to_std().unwrap()).await;
+        assert_eq!(s.va.ingress_streams().len(), 1);
+        assert_eq!(s.va.video_swarms().len(), 1);
+        assert!(!again.closed);
+        let recs = support_records(&s.stream());
+        assert!(!recs.is_empty() && !recs.iter().any(|r| is_end(r)));
+    });
+}
+
+/// The records of a stream from offset 0.
+fn support_records(stream: &[u8]) -> Vec<Vec<u8>> {
+    let mut d = ChunkedRecordDecoder::new(CHUNK, MAX_RECORD_LEN).unwrap();
+    let mut out = Vec::new();
+    let mut at = 0;
+    loop {
+        let (n, item) = d.decode(&stream[at..]);
+        at += n;
+        match item {
+            Some(Item::Record { payload, .. }) => out.push(payload.to_vec()),
+            Some(Item::Lost) => panic!("lost records"),
+            None => return out,
+        }
+    }
 }
 
 /// A swarm reader over a stream's bytes, reading a chunk at a time from
@@ -463,6 +658,28 @@ fn keyframe(units: &[Unit], n: usize) -> usize {
         .nth(n)
         .unwrap()
         .0
+}
+
+/// A reader joining at a finished session's END starts there: the END is
+/// a join point, so it yields the END alone, whether the record it reads
+/// first is the END or the last GOP's, whose rewind is refused.
+#[test]
+fn a_reader_joining_at_the_end_reads_the_end() {
+    let (stream, _, _) = ingested();
+    let records = records_of(&stream);
+    let (end, _) = records.last().unwrap();
+    assert!(matches!(
+        parse_record(&records.last().unwrap().1).unwrap(),
+        Record::End { gop_back: 0 }
+    ));
+    let data = Rc::new(stream);
+    let last_unit = records[records.len() - 2].0 as usize / CHUNK * CHUNK;
+    for join in [*end as usize, last_unit] {
+        let (read, m) = read_snapshot(Snapshot::new(&data, join / CHUNK * CHUNK));
+        assert_eq!(read.ends, 1, "joined at {join}");
+        assert!(read.units.is_empty(), "joined at {join}");
+        assert_eq!(m.records, 1, "joined at {join}");
+    }
 }
 
 /// A reader joining in the middle of a GOP rewinds to the GOP's sync

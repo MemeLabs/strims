@@ -412,6 +412,8 @@ struct Taken {
     bytes: usize,
     ended: bool,
     discontinuities: u64,
+    /// END records read.
+    ends: u64,
     record: Vec<u8>,
     reader: UnitReader,
     /// The reader's events and units, in order: `None` for a configs
@@ -454,6 +456,7 @@ impl Taken {
                         while let Some(e) = self.reader.poll_event() {
                             match e {
                                 ReaderEvent::Configs => self.read.push(None),
+                                ReaderEvent::End => self.ends += 1,
                                 e => panic!("{e:?}"),
                             }
                         }
@@ -564,6 +567,11 @@ async fn a_feed_reads_a_capture_on_the_node_and_ends_when_the_capture_closes() {
 
     profile.close_capture(&id).await;
     player.until("the end batch", |t| t.ended).await;
+    assert_eq!(
+        player.state.borrow().ends,
+        1,
+        "the capture's END comes first"
+    );
     let closed = eventually("the window hears the feed closed", || async {
         window.closed.borrow().first().cloned()
     })

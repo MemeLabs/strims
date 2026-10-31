@@ -75,11 +75,20 @@
 //!   Within an epoch, units that still go back are dropped. The output's
 //!   decode times never go back, so a SourceBuffer appends across a new
 //!   session without `timestampOffset` or a new MediaSource.
+//! - **Ends.** An END record, a writer session's deliberate end, writes
+//!   out every unit held, and then an end output, as [`Remuxer::finish`]
+//!   does at the end of the input. The cut track's last unit lasts to the
+//!   end of the output, as its picture holds over a loss; the others' are
+//!   timed by the fragment writer's flush. The first unit after an end, a
+//!   later session's, starts an epoch at the end of the output whatever
+//!   its timestamps, so the later session plays on from where the stream
+//!   ended, with no hole in any track.
 //!
 //! With these, the output for a stream of one writer session without
 //! holes equals what the segmenter writes for the same units moved as
 //! above, with a fragment per unit, each record's media following its
-//! init.
+//! init, but for the cut track's last unit, which lasts to the end of the
+//! output.
 //!
 //! # Recovery
 //!
@@ -94,11 +103,12 @@
 //! The [`Demuxer`] takes the same input and gives, in stream order, the
 //! tracks' configs whenever they change, each unit the reader returns
 //! with its timestamps, duration, publish time and payload, and the same
-//! gaps, discontinuities and restarts. It writes nothing out ahead of a
-//! decoder: holding the picture over a loss, A/V sync and the playout
-//! clock are the player's. A writer's restart moves the new session to
-//! follow the presentation so far, so the output's presentation times
-//! never go back across sessions.
+//! gaps, discontinuities and restarts; an END record outputs nothing, and
+//! a later session after it comes with its configs. It writes nothing out
+//! ahead of a decoder: holding the picture over a loss, A/V sync and the
+//! playout clock are the player's. A writer's restart moves the new
+//! session to follow the presentation so far, so the output's
+//! presentation times never go back across sessions.
 
 pub mod demux;
 pub mod mime;

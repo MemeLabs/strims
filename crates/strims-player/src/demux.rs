@@ -333,6 +333,8 @@ impl Demuxer {
                         missing,
                     });
                 }
+                // A later session comes with its configs.
+                ReaderEvent::End => {}
             }
         }
         if let Some(unit) = unit {

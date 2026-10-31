@@ -433,8 +433,8 @@ const FRAME: i64 = 3000;
 
 /// A unit-format stream in 4 KiB frames: `pictures` video frames at 30 a
 /// second, keyframes at `keyframes` (picture numbers) of 12 KiB and
-/// pictures of 1.5 KiB, with AAC frames between. Its bytes, and its
-/// records with their offsets.
+/// pictures of 1.5 KiB, with AAC frames between, its session still live.
+/// Its bytes, and its records with their offsets.
 fn units_stream(pictures: i64, keyframes: &[i64]) -> (Vec<u8>, Vec<(u64, Vec<u8>)>) {
     let mut w = UnitWriter::new(CHUNK).unwrap();
     w.set_config(&video(1)).unwrap();
@@ -453,7 +453,6 @@ fn units_stream(pictures: i64, keyframes: &[i64]) -> (Vec<u8>, Vec<(u64, Vec<u8>
             n += 1;
         }
     }
-    w.finish().unwrap();
     let stream = w.take_output();
     let mut d = ChunkedRecordDecoder::new(CHUNK, units::MAX_RECORD_LEN).unwrap();
     let mut records = Vec::new();
@@ -617,6 +616,37 @@ fn a_writer_starting_over_resets_the_muxer_after_a_discontinuity() {
             (1000, false)
         ]
     );
+}
+
+/// An END ends the last GOP's segment and the playlist; a later
+/// session's segment takes the end back off, after a discontinuity.
+#[test]
+fn an_end_ends_the_playlist_until_a_later_session() {
+    let s = served();
+    let keyframes: Vec<i64> = (0..3).map(|g| g * 30).collect();
+    let (_, first) = units_stream(90, &keyframes);
+    let (_, again) = units_stream(60, &keyframes);
+    let mut end = Vec::new();
+    crate::units::record::write_end(&mut end);
+    let mut feed = unit_feed();
+    let a: Vec<&[u8]> = first.iter().map(|(_, r)| r.as_slice()).collect();
+    assert_eq!(feed_units(&mut feed, &s, &a).segments, 2);
+    assert!(!s.playlist().contains("#EXT-X-ENDLIST"));
+    assert_eq!(feed_units(&mut feed, &s, &[&end]).segments, 1);
+    let playlist = s.playlist();
+    assert!(playlist.ends_with("#EXT-X-ENDLIST\n"), "{playlist}");
+    assert_eq!(listed(&playlist), vec![(1000, false); 3]);
+
+    let b: Vec<&[u8]> = again.iter().map(|(_, r)| r.as_slice()).collect();
+    feed.feed(EgressPiece::Discontinuity, &s.stream);
+    feed_units(&mut feed, &s, &b);
+    let playlist = s.playlist();
+    assert!(!playlist.contains("#EXT-X-ENDLIST"), "{playlist}");
+    assert_eq!(
+        listed(&playlist),
+        [(1000, false), (1000, false), (1000, false), (1000, true)]
+    );
+    assert_eq!(feed.reader.metrics().ends, 1);
 }
 
 #[test]

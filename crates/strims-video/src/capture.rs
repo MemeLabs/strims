@@ -81,10 +81,12 @@
 //! [`VideoControl::close_capture`] takes the capture out of the node, so
 //! its appends fail with [`VideoError::CaptureNotFound`], stops the listing
 //! keepers (each unpublishes its listing), and stops serving the snippet.
-//! The writer then writes its last appends' output and has the swarm sign
-//! the last partial integrity unit, for at most [`CLOSE_FLUSH_TIMEOUT`],
-//! and the transfer and then the swarm are removed. A frontend connection
-//! that ends closes its captures alike.
+//! The writer then writes its last appends' output and the capture's END
+//! record ([`units`](crate::units#records)), and has the swarm sign the
+//! last partial integrity unit, for at most [`CLOSE_FLUSH_TIMEOUT`]. The
+//! swarm stays for [`END_LINGER`] after the END was signed, for its peers
+//! to fetch the END, and the transfer and then the swarm are removed. A
+//! frontend connection that ends closes its captures alike.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
@@ -117,7 +119,7 @@ use crate::opus;
 use crate::registry::SwarmKind;
 use crate::units::record::{SAMPLE_ENTRY_AVC, SAMPLE_ENTRY_OPUS};
 use crate::units::{
-    ConfigEntry, MAX_RECORD_LEN, SignTimer, UnitSigning, UnitWriter, UnitWriterMetrics,
+    ConfigEntry, END_LINGER, MAX_RECORD_LEN, SignTimer, UnitSigning, UnitWriter, UnitWriterMetrics,
 };
 use crate::{VideoControl, VideoError, VideoHost};
 
@@ -238,8 +240,9 @@ pub(crate) struct Capture<H: Host> {
     signing: UnitSigning,
     writer: UnitWriterMetrics,
     early_signs: u64,
-    /// Set once the writer is done.
-    done: Rc<Slot<()>>,
+    /// Set once the writer is done: when it had the swarm sign the
+    /// capture's END, if it did.
+    done: Rc<Slot<Option<Time>>>,
 }
 
 impl<H: Host> Capture<H> {
@@ -399,12 +402,16 @@ impl Drop for Queued<'_> {
 }
 
 /// Sets its slot when dropped: the writer is done, whether it finished or
-/// its task was dropped.
-struct Done(Rc<Slot<()>>);
+/// its task was dropped, with when the swarm signed the capture's END, if
+/// it did.
+struct Done {
+    slot: Rc<Slot<Option<Time>>>,
+    ended: Option<Time>,
+}
 
 impl Drop for Done {
     fn drop(&mut self) {
-        self.0.set(());
+        self.slot.set(self.ended);
     }
 }
 
@@ -567,7 +574,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Drop for OpenReply<K, H, V, T> {
 pub(crate) struct Ended<H: Host> {
     id: TransferId,
     swarm: Swarm<H>,
-    done: Rc<Slot<()>>,
+    done: Rc<Slot<Option<Time>>>,
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
@@ -670,7 +677,16 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         };
         self.spawn(
             self.clone()
-                .write_capture(t, appends.clone(), media, writer, Done(done.clone()))
+                .write_capture(
+                    t,
+                    appends.clone(),
+                    media,
+                    writer,
+                    Done {
+                        slot: done.clone(),
+                        ended: None,
+                    },
+                )
                 .boxed_local(),
         );
         let prev = self.captures.borrow_mut().insert(
@@ -706,7 +722,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         appends: Rc<Appends>,
         mut media: MediaWriter,
         mut writer: <H as SwarmHost>::Writer,
-        done: Done,
+        mut done: Done,
     ) {
         let mut failed: Option<String> = None;
         loop {
@@ -744,16 +760,14 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             };
             a.reply.set(res);
         }
-        if failed.is_none() {
-            let _ = media.units.finish();
+        if failed.is_none() && media.units.finish().is_ok() {
             let now = self.timer.now();
-            if self
-                .write_output(&mut media, &mut writer, now)
-                .await
-                .is_ok()
-                && media.sign.is_partial()
-            {
-                let _ = self.sign_capture(&mut media, &mut writer).await;
+            let written = self.write_output(&mut media, &mut writer, now).await;
+            let signed = written.is_ok()
+                && (!media.sign.is_partial()
+                    || self.sign_capture(&mut media, &mut writer).await.is_ok());
+            if signed && media.units.metrics().ends > 0 {
+                done.ended = Some(self.timer.now());
             }
         }
         drop(done);
@@ -892,15 +906,22 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         })
     }
 
-    /// Waits for an ended capture's writer, then removes its transfer and
-    /// swarm.
+    /// Waits for an ended capture's writer, and [`END_LINGER`] after the
+    /// END it had signed, then removes its transfer and swarm.
     pub(crate) async fn finish_capture(&self, ended: Ended<H>) {
         let deadline = self.timer.now() + CLOSE_FLUSH_TIMEOUT;
-        let _ = select(
+        let signed = match select(
             pin!(ended.done.take()),
             pin!(self.timer.sleep_until(deadline)),
         )
-        .await;
+        .await
+        {
+            Either::Left((signed, _)) => signed,
+            Either::Right(_) => None,
+        };
+        if let Some(signed) = signed {
+            self.timer.sleep_until(signed + END_LINGER).await;
+        }
         self.transfers.remove(ended.id);
         self.with_swarms(|r| r.remove(&ended.id));
         self.remove_host_swarm(ended.swarm).await;

@@ -19,6 +19,7 @@ enum Out {
     Gap(u32, u64),
     /// Track, DTS, keyframe.
     Unit(u32, i64, bool),
+    End,
 }
 
 fn read(r: &mut UnitReader, record: &[u8], out: &mut Vec<Out>) {
@@ -29,6 +30,7 @@ fn read(r: &mut UnitReader, record: &[u8], out: &mut Vec<Out>) {
         out.push(match e {
             ReaderEvent::Configs => Out::Configs(r.configs().iter().map(|c| c.track.0).collect()),
             ReaderEvent::Gap { track, missing } => Out::Gap(track.0, missing),
+            ReaderEvent::End => Out::End,
         });
     }
     out.extend(unit);
@@ -346,4 +348,71 @@ fn records_the_reader_can_not_use_are_counted() {
         (m.malformed, m.unknown_kinds, m.unknown_entries, m.configs),
         (2, 1, 1, 1)
     );
+}
+
+/// An END forgets the session's tracks: units after it wait for the next
+/// CONFIGS record, a video track's for its keyframe, and numbers that go
+/// on from the last session's are no gap.
+#[test]
+fn an_end_forgets_the_sessions_tracks() {
+    let mut w = UnitWriter::new(4096).unwrap();
+    w.set_config(&video(1)).unwrap();
+    w.set_config(&audio(2)).unwrap();
+    w.push(&unit(1, 0, true, 8)).unwrap();
+    w.push(&unit(2, 0, true, 8)).unwrap();
+    w.push(&unit(1, 3000, false, 8)).unwrap();
+    w.finish().unwrap();
+    w.push(&unit(1, 90_000, true, 8)).unwrap();
+    w.push(&unit(2, 48_000, true, 8)).unwrap();
+    w.finish().unwrap();
+    let recs = crate::units::tests::decode(4096, w.output());
+    let mut r = UnitReader::new();
+    let out = read_all(&mut r, &recs);
+    assert_eq!(
+        out,
+        [
+            Out::Configs(vec![1, 2]),
+            Out::Unit(1, 0, true),
+            Out::Unit(2, 0, true),
+            Out::Unit(1, 3000, false),
+            Out::End,
+            Out::Configs(vec![1, 2]),
+            Out::Unit(1, 90_000, true),
+            Out::Unit(2, 48_000, true),
+            Out::End,
+        ]
+    );
+    assert!(r.configs().is_empty());
+    let m = r.metrics();
+    assert_eq!((m.ends, m.gaps, m.units), (2, 0, 5));
+
+    // Joined at the END: nothing, then the next session from its CONFIGS.
+    let mut r = UnitReader::new();
+    let out = read_all(&mut r, &recs[4..]);
+    assert_eq!(
+        out,
+        [
+            Out::End,
+            Out::Configs(vec![1, 2]),
+            Out::Unit(1, 90_000, true),
+            Out::Unit(2, 48_000, true),
+            Out::End,
+        ]
+    );
+
+    // Units after an END and before a CONFIGS record are no track's.
+    let mut r = UnitReader::new();
+    let mut tail = vec![recs[0].clone(), recs[1].clone(), recs[4].clone()];
+    tail.extend(recs[6..].iter().cloned());
+    let out = read_all(&mut r, &tail);
+    assert_eq!(
+        out,
+        [
+            Out::Configs(vec![1, 2]),
+            Out::Unit(1, 0, true),
+            Out::End,
+            Out::End
+        ]
+    );
+    assert_eq!(r.metrics().unknown_tracks, 2);
 }

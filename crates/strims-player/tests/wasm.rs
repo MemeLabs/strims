@@ -113,6 +113,10 @@ fn inits_and_media_have_their_declared_shapes() {
     let mut r = JsRemuxer::new();
     let mut out = push_all(&mut r, &records(&config()), None);
     out.extend(r.finish().iter());
+    // The records' END ends the outputs, alone: the finish adds none.
+    let end = out.pop().unwrap();
+    assert_eq!(get(&end, "type").as_string().unwrap(), "end");
+    assert_keys(&end, &["type"]);
     let init = &out[0];
     assert_eq!(get(init, "type").as_string().unwrap(), "init");
     assert_keys(init, &["type", "data", "mime", "tracks", "compatible"]);
@@ -166,9 +170,11 @@ fn inits_and_media_have_their_declared_shapes() {
     let init_len = Uint8Array::from(get(init, "data")).length() as f64;
     assert_eq!(number(&m, "outputBytes"), bytes as f64 + init_len);
     assert!(number(&m, "memoryBytes") > 0.0);
+    assert_eq!(number(&m, "ends"), 1.0);
     let reader = get(&m, "reader");
     assert_eq!(number(&reader, "units"), f64::from(units));
     assert_eq!(number(&reader, "malformed"), 0.0);
+    assert_eq!(number(&reader, "ends"), 1.0);
 }
 
 #[wasm_bindgen_test]
@@ -218,7 +224,9 @@ fn hostile_bytes_answer_without_throwing() {
         let out = r.push(&data, i % 3 == 0, i % 17 == 0);
         for o in out.iter() {
             let t = get(&o, "type").as_string().unwrap();
-            assert!(["init", "media", "gap", "discontinuity", "restart"].contains(&t.as_str()));
+            assert!(
+                ["init", "media", "gap", "discontinuity", "restart", "end"].contains(&t.as_str())
+            );
         }
     }
     let _ = r.finish();

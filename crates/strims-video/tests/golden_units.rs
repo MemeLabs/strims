@@ -1,10 +1,10 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Golden vectors of the unit format (`golden/units.txt`): UNIT and
-//! CONFIGS records, the MIME type, and the chunked stream a unit script
-//! makes through [`UnitWriter`], signed early once, read back through
-//! [`UnitReader`]. Values are hex. `STRIMS_GOLDEN=update` rewrites them
+//! Golden vectors of the unit format (`golden/units.txt`): UNIT, CONFIGS
+//! and END records, the MIME type, and the chunked stream a unit script
+//! makes through [`UnitWriter`], signed early once and ended, read back
+//! through [`UnitReader`]. Values are hex. `STRIMS_GOLDEN=update` rewrites them
 //! from the code (see `strims-golden`).
 
 #![allow(
@@ -18,9 +18,9 @@ use strims_base::time::Time;
 use strims_chunkstream::chunked::{ChunkedRecordDecoder, Item};
 use strims_golden::Golden;
 use strims_video::units::record::{
-    ConfigEntry, Record, UnitHeader, parse_record, write_configs, write_unit_head,
+    ConfigEntry, Record, UnitHeader, parse_record, write_configs, write_end, write_unit_head,
 };
-use strims_video::units::{MAX_RECORD_LEN, UnitReader, UnitWriter};
+use strims_video::units::{MAX_RECORD_LEN, ReaderEvent, UnitReader, UnitWriter};
 use strims_video::{AccessUnit, DecoderConfig, Muxer, TrackId, units_mime};
 
 const VIDEO: TrackId = TrackId(1);
@@ -132,6 +132,17 @@ fn configs_records() {
 }
 
 #[test]
+fn ends() {
+    let mut g = open();
+    for e in g.all("end") {
+        let mut out = Vec::new();
+        write_end(&mut out);
+        assert_eq!(parse_record(&out).unwrap(), Record::End { gop_back: 0 });
+        g.check_hex(e, "hex", &out);
+    }
+}
+
+#[test]
 fn mime() {
     let mut g = open();
     for e in g.all("mime") {
@@ -170,8 +181,8 @@ fn unit((track, dts, keyframe, payload): &(TrackId, i64, bool, Vec<u8>)) -> Acce
 }
 
 /// The script through a writer of `frame`-byte frames, signed early
-/// after unit `sign` into units of `unit_frames` frames, then read back
-/// whole.
+/// after unit `sign` into units of `unit_frames` frames and ended, then
+/// read back whole.
 #[test]
 fn streams() {
     let mut g = open();
@@ -195,12 +206,14 @@ fn streams() {
                 w.continue_at(next as u64).unwrap();
             }
         }
+        w.finish().unwrap();
         stream.extend(w.take_output());
         g.check_hex(e, "hex", &stream);
 
         let mut d = ChunkedRecordDecoder::new(frame, MAX_RECORD_LEN).unwrap();
         let mut r = UnitReader::new();
         let mut read = Vec::new();
+        let mut ends = Vec::new();
         let mut at = 0;
         loop {
             let (n, item) = d.decode(&stream[at..]);
@@ -210,12 +223,18 @@ fn streams() {
                     if let Some(u) = r.read(payload) {
                         read.push((u.track, u.dts, u.keyframe, u.payload.to_vec()));
                     }
+                    while let Some(e) = r.poll_event() {
+                        if e == ReaderEvent::End {
+                            ends.push(read.len());
+                        }
+                    }
                 }
                 Some(Item::Lost) => panic!("lost records"),
                 None => break,
             }
         }
         assert_eq!(read, units);
-        assert_eq!(r.configs(), [v.clone(), a.clone()]);
+        assert_eq!(ends, [units.len()], "an END after the last unit");
+        assert!(r.configs().is_empty());
     }
 }

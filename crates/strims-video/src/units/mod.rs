@@ -23,7 +23,7 @@
 //! Every record's payload starts the same way:
 //!
 //! ```text
-//! kind        u8       1 CONFIGS, 2 UNIT; never 0
+//! kind        u8       1 CONFIGS, 2 UNIT, 3 END; never 0
 //! gop_back    uvarint  the record's stream offset less its GOP's sync record's
 //! header_len  uvarint  the length of the header that follows
 //! header      header_len bytes: the kind's fields, in order
@@ -70,6 +70,12 @@
 //! holds (its codec string, picture size, sample rate or channels) from
 //! the config bytes. An AAC track's timescale is its output sample rate,
 //! and an Opus track's is 48 kHz.
+//!
+//! **END** ends the writer's session: the session writes no record after
+//! it. Its header and body are empty, and its `gop_back` is 0: it belongs
+//! to no GOP, so a reader that joins at it starts there, with the session
+//! over. Records after an END are a later session's, which starts with a
+//! GOP's sync record; a reader forgets the tracks it had at the END.
 //!
 //! # Groups of pictures
 //!
@@ -118,6 +124,12 @@ pub const MAX_RECORD_LEN: usize = 8 * 1024 * 1024;
 
 /// The least decode time between two GOP starts of an audio cut track.
 pub const AUDIO_SYNC_SPAN: Duration = Duration::from_secs(1);
+
+/// How long a writer's node keeps a session's swarm after the session's
+/// END is signed, for its peers to fetch the END before the swarm goes.
+/// A viewer further behind the writer than this, with no other peer to
+/// fetch from, misses the stream's last chunks, its END among them.
+pub const END_LINGER: Duration = Duration::from_secs(3);
 
 #[cfg(test)]
 pub(crate) mod test_support;

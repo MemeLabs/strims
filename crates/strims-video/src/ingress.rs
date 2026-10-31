@@ -144,22 +144,40 @@
 //! A session ends when its publisher unpublishes or disconnects, at a
 //! deadline, on an error, when a new publish replaces it, when the
 //! ingress is disabled, when its channel is deleted or moved, and when
-//! the control stops. Its end:
+//! the control stops. An unpublish (`deleteStream`, `FCUnpublish` or
+//! `closeStream`) and the control's stops are deliberate ends; after any
+//! other end the encoder may connect again and resume. Its end:
 //!
 //! 1. ends the record in progress and writes it, and has a unit-format
-//!    stream's last partial integrity unit signed; a unit-format session
-//!    without its swarm yet, never listed, writes nothing;
+//!    stream's last partial integrity unit signed. On a deliberate end, a
+//!    unit-format session writes its END record
+//!    ([`units`](crate::units#records)) after its last unit, before that
+//!    signing. A unit-format session without its swarm yet, never listed,
+//!    writes nothing.
+//!
+//!    After any other end, a unit-format session that wrote records waits
+//!    up to
+//!    [`IngressSettings::resume_grace`](crate::IngressSettings::resume_grace)
+//!    for a publish to its channel, keeping its listing and swarm. Such a
+//!    publish replaces the session at once, taking over its listing keeper
+//!    and its swarm's slot. A session still its channel's when the wait
+//!    ends, or when the control stops it meanwhile, writes and signs its
+//!    END then.
 //! 2. stops the listing keeper, which unpublishes the listing, waiting at
 //!    most the listing settings'
-//!    [`unpublish_timeout`](crate::ListingSettings::unpublish_timeout);
+//!    [`unpublish_timeout`](crate::ListingSettings::unpublish_timeout),
+//!    and keeps the swarm until [`END_LINGER`] after its END was signed,
+//!    for its peers to fetch the END, unless a publish to the channel
+//!    replaces the session first;
 //! 3. stops serving the snippet;
 //! 4. removes the transfer;
 //! 5. removes the swarm's slot, ending the node's streams of it;
 //! 6. removes the swarm.
 //!
-//! The connection then takes its last output and closes. A replaced
-//! session takes none of these steps: what they take down is the
-//! replacing session's. A control that stops takes steps 2 to 5 at once,
+//! The connection takes its last output and closes after step 1's writes,
+//! and stops counting against the connection caps. A replaced session
+//! takes none of these steps: what they take down is the replacing
+//! session's. A control that stops takes steps 2 to 5 at once,
 //! without waiting for the unpublish, and leaves the swarm to the node.
 //! [`VideoEvent::IngressEnded`] reports the end of a session that
 //! started, with its reason.
@@ -202,7 +220,7 @@ use crate::record::PackedSink;
 use crate::registry::{Added, SwarmKind};
 use crate::rtmp::{Phase, RtmpConfig, RtmpError, RtmpEvent, RtmpServer};
 use crate::segment::{CutRule, Segmenter};
-use crate::units::{SignTimer, UnitSigning, UnitWriter, UnitWriterMetrics};
+use crate::units::{END_LINGER, SignTimer, UnitSigning, UnitWriter, UnitWriterMetrics};
 use crate::{VideoError, VideoEvent};
 
 /// The app a publish names.
@@ -533,6 +551,12 @@ impl Stop {
         self.reason.borrow().clone()
     }
 
+    /// Has `cx` woken at the next stop, asked before or not.
+    fn register(&self, cx: &Context<'_>) {
+        let prev = self.waker.replace(Some(cx.waker().clone()));
+        drop(prev);
+    }
+
     /// The reason, once asked; registers `cx` until then.
     fn poll(&self, cx: &Context<'_>) -> Option<String> {
         if let Some(r) = self.reason.borrow().clone() {
@@ -607,6 +631,13 @@ impl End {
     /// Whether the connection can still take its last output.
     fn flushes(&self) -> bool {
         !matches!(self, End::PeerClosed | End::Io(_))
+    }
+
+    /// Whether the session ended on purpose: its publisher unpublished,
+    /// or the control ended it. After any other end the encoder may
+    /// connect again and resume the stream.
+    fn deliberate(&self) -> bool {
+        matches!(self, End::Unpublished | End::Stopped(_))
     }
 }
 
@@ -707,13 +738,16 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
             w.wake();
         }
         if self.listen_addr().is_none() {
-            let stops: Vec<Rc<Stop>> = self
-                .ingress
-                .borrow()
-                .conns
-                .values()
-                .map(|c| c.stop.clone())
-                .collect();
+            // Sessions waiting for their encoder to resume hold no
+            // connection.
+            let stops: Vec<Rc<Stop>> = {
+                let ing = self.ingress.borrow();
+                ing.conns
+                    .values()
+                    .map(|c| c.stop.clone())
+                    .chain(ing.sessions.values().map(|s| s.stop.clone()))
+                    .collect()
+            };
             for s in stops {
                 s.stop(DISABLED);
             }
@@ -1350,8 +1384,10 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Publication<K, H, V, T> {
     }
 
     /// Takes the publication down: steps 2 to 6 of the
-    /// [teardown](self#teardown).
-    async fn end(mut self) {
+    /// [teardown](self#teardown). The swarm stays until `linger`, if set,
+    /// unless a new session takes the channel, which `stop`, the
+    /// session's, is woken for.
+    async fn end(mut self, stop: &Stop, linger: Option<Time>) {
         let s = self.shared.clone();
         if let Some(k) = s.session_ending(&self) {
             k.keeper.stop();
@@ -1359,6 +1395,17 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Publication<K, H, V, T> {
             let done = pin!(k.done.take());
             let timeout = pin!(s.timer.sleep_until(deadline));
             select(done, timeout).await;
+        }
+        if let Some(until) = linger {
+            let sleep = pin!(s.timer.sleep_until(until));
+            let replaced = pin!(poll_fn(|cx| {
+                if !self.is_current() {
+                    return Poll::Ready(());
+                }
+                stop.register(cx);
+                Poll::Pending
+            }));
+            select(sleep, replaced).await;
         }
         self.armed = false;
         if let Some(swarm) = s.take_publication(&self) {
@@ -1678,18 +1725,57 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
 
     /// Ends and writes the record in progress, and has the swarm sign a
     /// unit-format stream's last partial unit: step 1 of the
-    /// [teardown](self#teardown).
-    async fn finish(&mut self, now: Time) {
+    /// [teardown](self#teardown). With `end`, a unit-format stream's END
+    /// goes first. When the END was written into the swarm and signed.
+    async fn finish(&mut self, now: Time, end: bool) -> Option<Time> {
         let finished = match &mut self.media {
             Mux::Fmp4(s) => s.finish().is_ok(),
-            Mux::Units { writer, .. } => writer.finish().is_ok(),
+            Mux::Units { writer, .. } => !end || writer.finish().is_ok(),
         };
-        if finished && self.write_output(now).await.is_ok() {
+        let written = finished && self.write_output(now).await.is_ok();
+        if written {
             self.take_segments(now, false);
         }
-        if self.partial() && self.sign(now).await.is_ok() {
+        if self.partial() {
+            if self.sign(now).await.is_err() {
+                return None;
+            }
             self.take_segments(now, false);
         }
+        let ended = matches!(&self.media, Mux::Units { writer, .. } if writer.metrics().ends > 0);
+        (end && written && ended && self.swarm.is_some()).then_some(now)
+    }
+
+    /// Whether the session waits for its encoder to resume after a
+    /// connection that ended by itself: a unit-format session that wrote
+    /// records into its swarm, and no END.
+    fn resumable(&self) -> bool {
+        match &self.media {
+            Mux::Units { writer, .. } => {
+                let m = writer.metrics();
+                self.swarm.is_some() && m.records > 0 && m.ends == 0
+            }
+            Mux::Fmp4(_) => false,
+        }
+    }
+
+    /// Waits up to the resume grace, or until `stop`, the session's,
+    /// stops it, for a new session to take the channel; then a session
+    /// still its channel's writes its END. When the END was signed; see
+    /// step 1 of the [teardown](self#teardown).
+    async fn await_resume(&mut self, stop: &Stop) -> Option<Time> {
+        let s = self.publication.shared.clone();
+        let deadline = s.timer.now() + s.config.ingress.resume_grace;
+        let sleep = pin!(s.timer.sleep_until(deadline));
+        let stopped = pin!(poll_fn(|cx| match stop.poll(cx) {
+            Some(_) => Poll::Ready(()),
+            None => Poll::Pending,
+        }));
+        select(sleep, stopped).await;
+        if !self.publication.is_current() {
+            return None;
+        }
+        self.finish(s.timer.now(), true).await
     }
 }
 
@@ -1716,12 +1802,18 @@ struct Connection<K: Kv, H: Host, V: VideoHost, T: Timer> {
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> Drop for Connection<K, H, V, T> {
     fn drop(&mut self) {
-        let c = self.shared.ingress.borrow_mut().conns.remove(&self.id);
-        drop(c);
+        self.release();
     }
 }
 
 impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
+    /// Takes the connection out of the control's connections, so it no
+    /// longer counts against their caps.
+    fn release(&self) {
+        let c = self.shared.ingress.borrow_mut().conns.remove(&self.id);
+        drop(c);
+    }
+
     async fn run(mut self) {
         let s = self.shared.clone();
         let mut armed = self.wake_at();
@@ -1766,15 +1858,21 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Connection<K, H, V, T> {
         }
         tracing::debug!(conn = self.id, reason = %end, "RTMP connection ended");
         let mut live = self.live.take();
+        let mut ended = None;
         if let Some(l) = &mut live
             && l.publication.is_current()
         {
-            l.finish(s.timer.now()).await;
+            ended = l.finish(s.timer.now(), end.deliberate()).await;
         }
         self.close(&end).await;
-        if let Some(live) = live {
+        self.release();
+        if let Some(mut live) = live {
             let channel_id = live.publication.channel_id;
-            live.publication.end().await;
+            if !end.deliberate() && live.publication.is_current() && live.resumable() {
+                ended = live.await_resume(&self.stop).await;
+            }
+            let linger = ended.map(|t| t + END_LINGER);
+            live.publication.end(&self.stop, linger).await;
             tracing::info!(channel = channel_id, reason = %end, "RTMP stream ended");
             s.emit(VideoEvent::IngressEnded {
                 channel_id,

@@ -92,10 +92,15 @@ pub enum Output<'a> {
     },
     /// The input skipped: the record in progress was dropped.
     Discontinuity,
-    /// The writer's session started over at earlier timestamps: units from
-    /// here on are moved by `offset` (the whole offset, not its change),
-    /// so they follow the output so far.
+    /// The writer's session started over at earlier timestamps, or a
+    /// later session came after an end: units from here on are moved by
+    /// `offset` (the whole offset, not its change), so they follow the
+    /// output so far.
     Restart { offset: Duration },
+    /// The stream ended: every unit before it was written out, the cut
+    /// track's last lasting to the end of the output. Media after it is a
+    /// later writer session's, which follows a restart.
+    End,
 }
 
 /// What a [`Remuxer`] has read, written and dropped.
@@ -125,8 +130,10 @@ pub struct RemuxerMetrics {
     pub inits: u64,
     pub fragments: u64,
     pub output_bytes: u64,
-    /// Epochs started at a writer's restart.
+    /// Epochs started at a writer's restart or after an end.
     pub restarts: u64,
+    /// Ends output: END records and [`Remuxer::finish`].
+    pub ends: u64,
     /// Times the held bounds wrote every held unit out.
     pub held_flushes: u64,
     /// Holes in audio tracks filled with silence, and the silent frames
@@ -163,6 +170,7 @@ enum Queued {
     Restart {
         offset: Duration,
     },
+    End,
 }
 
 /// The init the fragments follow.
@@ -318,6 +326,10 @@ pub struct Remuxer {
     /// A CONFIGS record changed the reader's tracks since the epoch began,
     /// so a unit going back starts a new one.
     configs_changed: bool,
+    /// An end was output and no unit written since.
+    ended: bool,
+    /// The stream ended after output: the next unit starts an epoch.
+    after_end: bool,
     /// What every unit's timestamps are moved by.
     offset: Duration,
     /// Where the init's cut keyframe decodes on the presentation timeline:
@@ -358,6 +370,8 @@ impl Remuxer {
             init: None,
             pending: true,
             configs_changed: false,
+            ended: false,
+            after_end: false,
             offset: Duration::ZERO,
             run_start: Duration::ZERO,
             follow: AUDIO_FOLLOW,
@@ -440,11 +454,15 @@ impl Remuxer {
         self.queue.push_back(Queued::Discontinuity);
     }
 
-    /// The stream ended: writes out the units held, each track's last
-    /// lasting as [`FragmentWriter::flush`] times it without a next unit.
+    /// The stream ended: writes out the units held, the cut track's last
+    /// lasting to the end of the output and the others' as
+    /// [`FragmentWriter::flush`] times them without a next unit, then an
+    /// [`Output::End`], unless the last end came after the last unit. An
+    /// END record ends the stream alike. Media after it is a later
+    /// session's, which starts an epoch at the end of the output.
     pub fn finish(&mut self) {
         self.reclaim();
-        self.flush(None);
+        self.end();
     }
 
     /// The next output, in append order.
@@ -478,6 +496,7 @@ impl Remuxer {
             },
             Queued::Discontinuity => Output::Discontinuity,
             Queued::Restart { offset } => Output::Restart { offset: *offset },
+            Queued::End => Output::End,
         })
     }
 
@@ -513,11 +532,30 @@ impl Remuxer {
                         missing,
                     });
                 }
+                ReaderEvent::End => self.end(),
             }
         }
         if let Some(unit) = unit {
             self.unit(&unit);
         }
+    }
+
+    /// The stream ended: writes out the units held, the cut track's last
+    /// lasting to the end of the output, where a later session starts, so
+    /// the picture has no hole there; then an end.
+    fn end(&mut self) {
+        let end = self.output_end();
+        let next = self
+            .outs
+            .first()
+            .map(|o| (o.track, to_units(end, o.timescale)));
+        self.flush(next);
+        if !self.ended {
+            self.ended = true;
+            self.metrics.ends += 1;
+            self.queue.push_back(Queued::End);
+        }
+        self.after_end = self.init.is_some();
     }
 
     fn unit(&mut self, unit: &AccessUnit<'_>) {
@@ -531,12 +569,14 @@ impl Remuxer {
             .iter()
             .find(|o| o.track == unit.track)
             .and_then(|o| o.last_dts);
-        if let Some(last) = last
-            && dts < last
-        {
+        let after_end = std::mem::take(&mut self.after_end);
+        if after_end || last.is_some_and(|last| dts < last) {
             // The reader passes a track's units in decode order but for a
-            // writer's restart, which comes with a CONFIGS record.
-            if !std::mem::take(&mut self.configs_changed) {
+            // writer's restart, which comes with a CONFIGS record. A later
+            // session after an end follows the output whatever its
+            // timestamps.
+            let changed = std::mem::take(&mut self.configs_changed);
+            if !changed && !after_end {
                 self.metrics.dropped_backwards += 1;
                 return;
             }
@@ -545,10 +585,10 @@ impl Remuxer {
             self.queue.push_back(Queued::Restart {
                 offset: self.offset,
             });
-            dts = unit
-                .dts
-                .saturating_add(to_units(self.offset, timescale))
-                .max(last);
+            dts = unit.dts.saturating_add(to_units(self.offset, timescale));
+            if let Some(last) = last {
+                dts = dts.max(last);
+            }
         }
 
         let cut = cut_track(self.reader.configs());
@@ -665,6 +705,7 @@ impl Remuxer {
             published: unit.published,
         });
         self.metrics.units += 1;
+        self.ended = false;
         if n > 0 {
             self.wrote(at, n, |_| false);
         }

@@ -78,6 +78,15 @@ pub struct IngressSettings {
     /// How long a closing connection has to take its last output, such as
     /// the status that tells a publisher why.
     pub close_timeout: Duration,
+    /// How long a unit-format session whose connection ended without an
+    /// unpublish (it dropped, failed or timed out) waits for its encoder to
+    /// publish to the channel again, keeping its listing and swarm, before
+    /// it ends with its END record (see
+    /// [`ingress`](crate::ingress#teardown)). Encoders reconnect after a
+    /// drop with backoff: OBS by default retries after 2 s, and about 1.5
+    /// times as long again before each retry after that, so its first five
+    /// retries come within 30 s.
+    pub resume_grace: Duration,
 }
 
 impl Default for IngressSettings {
@@ -97,6 +106,7 @@ impl Default for IngressSettings {
             signing_wait: Duration::from_secs(1),
             rtmp: RtmpSettings::default(),
             close_timeout: Duration::from_secs(5),
+            resume_grace: Duration::from_secs(30),
         }
     }
 }

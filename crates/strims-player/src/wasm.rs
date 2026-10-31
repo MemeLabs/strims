@@ -29,7 +29,7 @@ const PAGE_BYTES: f64 = 65_536.0;
 
 /// A [`Remuxer`] for JS: `new Remuxer()`, then `push` per Egress `Data`
 /// message and `finish` at the stream's end, each answering the outputs
-/// completed, in order.
+/// completed, in order, an end among them.
 #[wasm_bindgen(js_name = Remuxer)]
 pub struct JsRemuxer {
     inner: Remuxer,
@@ -181,6 +181,7 @@ fn output_object(output: &Output<'_>) -> Object {
             set_str(&o, "type", "restart");
             set_num(&o, "offset", offset.as_secs_f64());
         }
+        Output::End => set_str(&o, "type", "end"),
     }
     o
 }
@@ -348,6 +349,7 @@ fn metrics(m: &RemuxerMetrics) -> Object {
         ("fragments", m.fragments),
         ("outputBytes", m.output_bytes),
         ("restarts", m.restarts),
+        ("ends", m.ends),
         ("heldFlushes", m.held_flushes),
         ("silenceFills", m.silence_fills),
         ("silenceUnits", m.silence_units),
@@ -377,6 +379,7 @@ fn reader_metrics(m: &UnitReaderMetrics) -> Object {
         ("outOfOrder", m.out_of_order),
         ("malformed", m.malformed),
         ("unknownKinds", m.unknown_kinds),
+        ("ends", m.ends),
         ("unknownEntries", m.unknown_entries),
         ("lost", m.lost),
     ] {

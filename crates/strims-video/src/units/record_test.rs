@@ -240,13 +240,13 @@ fn readers_skip_header_fields_and_entry_bytes_they_dont_know() {
 #[test]
 fn records_of_unknown_kinds_read_as_other_with_their_gop() {
     assert_eq!(
-        parse_record(&[3, 0x81, 0x01, 0xff]).unwrap(),
+        parse_record(&[9, 0x81, 0x01, 0xff]).unwrap(),
         Record::Other {
-            kind: 3,
+            kind: 9,
             gop_back: 129
         }
     );
-    assert_eq!(gop_back(&[3, 0x81, 0x01]), Some(129));
+    assert_eq!(gop_back(&[9, 0x81, 0x01]), Some(129));
     assert_eq!(gop_back(&[0, 1]), None);
     assert_eq!(gop_back(&[2, 0x81]), None);
     assert_eq!(gop_back(&[]), None);
@@ -392,5 +392,22 @@ proptest! {
             }
         }
         let _ = gop_back(&r);
+    }
+}
+
+#[test]
+fn an_end_record_reads_back_and_skips_fields_it_gains() {
+    let mut out = Vec::new();
+    write_end(&mut out);
+    assert_eq!(out, [KIND_END, 0, 0]);
+    assert_eq!(parse_record(&out).unwrap(), Record::End { gop_back: 0 });
+    assert_eq!(gop_back(&out), Some(0));
+    // A header field and a body it doesn't know, and another gop_back.
+    assert_eq!(
+        parse_record(&[KIND_END, 5, 2, 0x10, 0x20, 0xff]).unwrap(),
+        Record::End { gop_back: 5 }
+    );
+    for cut in [&[KIND_END][..], &[KIND_END, 0], &[KIND_END, 0, 2, 0x10]] {
+        assert_eq!(parse_record(cut), Err(RecordError::Truncated), "{cut:?}");
     }
 }

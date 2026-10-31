@@ -39,7 +39,7 @@ use strims_transfer::TransferId;
 use strims_video::fmp4::{FragmentWriter, parse_init, write_init};
 use strims_video::hls::HlsRoutes;
 use strims_video::synth::script::avcc;
-use strims_video::units::{MIME_TYPE, ReaderEvent, UnitReader, UnitSigning};
+use strims_video::units::{END_LINGER, MIME_TYPE, ReaderEvent, UnitReader, UnitSigning};
 use strims_video::{
     CaptureSettings, CodecParams, Config, DecoderConfig, NoVideoHost, SwarmKind, TrackId,
     VideoControl, bind_frontend, capture_options,
@@ -458,7 +458,15 @@ fn a_captures_units_are_read_by_another_nodes_stream() {
         let payloads: usize = units.iter().map(|u| u.data.len()).sum();
         assert!(out.len() > payloads);
 
+        // The close writes the capture's END, which the other node's stream
+        // reads, and the swarm stays for the END's linger.
+        let closing = tokio::time::Instant::now();
         ua.close(&id).await.unwrap();
+        assert!(closing.elapsed() >= END_LINGER.to_std().unwrap());
+        let Body::Data(end) = next(&mut stream).await else {
+            panic!("not data");
+        };
+        assert_eq!((end.data, end.segment_end), (vec![3, 0, 0], true));
         assert!(va.captures().is_empty());
         assert!(va.video_swarms().is_empty());
         assert!(!a.transfers.list().contains(&tid));

@@ -7,9 +7,10 @@
 //! A [`Playlist`] takes finished segments from a source, each an init
 //! (`ftyp`+`moov`), its media (`moof`+`mdat`…) and its duration. It keeps
 //! the newest, serves them by number, and renders a live media playlist
-//! (RFC 8216, version 7) listing the newest of those. Segments that slid
-//! out of the listing stay fetchable for a while, for players that read
-//! an earlier playlist.
+//! (RFC 8216, version 7) listing the newest of those, which ends with
+//! `EXT-X-ENDLIST` once the stream ended. Segments that slid out of the
+//! listing stay fetchable for a while, for players that read an earlier
+//! playlist.
 //!
 //! # Target duration
 //!
@@ -189,6 +190,8 @@ pub struct Playlist {
     pending_discontinuity: bool,
     /// Segments ever pushed after a discontinuity.
     discontinuities: u64,
+    /// The stream ended: the playlist lists `EXT-X-ENDLIST`.
+    ended: bool,
 }
 
 impl Playlist {
@@ -210,6 +213,7 @@ impl Playlist {
             pushed: false,
             pending_discontinuity: false,
             discontinuities: 0,
+            ended: false,
         }
     }
 
@@ -227,7 +231,14 @@ impl Playlist {
     /// until the bounds hold. A segment too large to fit is dropped with
     /// all the others, and its init with it, so the next segment starts
     /// a new init.
+    ///
+    /// A segment pushed after the playlist [ended](Self::end), a later
+    /// session's, takes the end back off, so the playlist is live again,
+    /// and follows a discontinuity.
     pub fn push_segment(&mut self, init: &[u8], media: &[u8], duration: Duration) {
+        if mem::take(&mut self.ended) {
+            self.pending_discontinuity |= self.pushed;
+        }
         let shared = self.inits.back().filter(|i| *i.data == *init).map(|i| i.id);
         let init_id = match shared {
             Some(id) => id,
@@ -267,6 +278,17 @@ impl Playlist {
     /// their decoder and timeline there. Calls before that push mark one.
     pub fn discontinuity(&mut self) {
         self.pending_discontinuity = true;
+    }
+
+    /// The stream ended: the playlist ends with `EXT-X-ENDLIST`, until a
+    /// segment is pushed.
+    pub fn end(&mut self) {
+        self.ended = true;
+    }
+
+    /// Whether the playlist ended.
+    pub fn ended(&self) -> bool {
+        self.ended
     }
 
     /// Drops the oldest segments, and the inits only they referenced,
@@ -317,8 +339,9 @@ impl Playlist {
     /// The playlist's text.
     ///
     /// The first listed segment and every segment whose init differs from
-    /// the one before it carry an `EXT-X-MAP` naming their init. The
-    /// playlist is live: it never ends.
+    /// the one before it carry an `EXT-X-MAP` naming their init. A live
+    /// playlist lists no end; an [ended](Self::end) one ends with
+    /// `EXT-X-ENDLIST`.
     pub fn render(&self) -> String {
         let mut out = String::with_capacity(160 + 64 * self.segments.len());
         // Writing to a String can't fail.
@@ -349,6 +372,9 @@ impl Playlist {
                 s.millis % 1000,
                 s.seq
             );
+        }
+        if self.ended {
+            out.push_str("#EXT-X-ENDLIST\n");
         }
         out
     }
@@ -1294,6 +1320,11 @@ impl HlsStream {
     /// See [`Playlist::discontinuity`].
     pub fn discontinuity(&self) {
         self.state.playlist.borrow_mut().discontinuity();
+    }
+
+    /// See [`Playlist::end`].
+    pub fn end(&self) {
+        self.state.playlist.borrow_mut().end();
     }
 
     /// The bytes the playlist keeps; see [`Playlist::retained_bytes`].

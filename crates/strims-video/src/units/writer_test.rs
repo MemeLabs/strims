@@ -34,6 +34,7 @@ fn records(stream: &[u8]) -> Vec<(u64, Vec<u8>)> {
 enum R {
     Configs(u64, Vec<(u32, u32, u64)>),
     Unit(u64, u32, u64, u32, bool),
+    End,
 }
 
 fn summary(stream: &[u8]) -> Vec<(u64, R)> {
@@ -56,6 +57,10 @@ fn summary(stream: &[u8]) -> Vec<(u64, R)> {
                     header.config,
                     header.keyframe,
                 ),
+                Record::End { gop_back } => {
+                    assert_eq!(gop_back, 0);
+                    R::End
+                }
                 Record::Other { .. } => panic!("unknown kind"),
             };
             (*offset, r)
@@ -238,4 +243,44 @@ fn the_sign_timer_runs_from_a_partial_units_first_byte() {
     let mut never = SignTimer::new(100, Duration::MAX);
     never.written(1, t0);
     assert_eq!(never.due(), None);
+}
+
+#[test]
+fn finishing_ends_the_session_once_and_the_next_starts_a_gop() {
+    let mut w = UnitWriter::new(FRAME).unwrap();
+    // Nothing written: no END.
+    w.finish().unwrap();
+    assert!(w.output().is_empty());
+    w.set_config(&video(1)).unwrap();
+    w.push(&unit(1, 0, true, 10)).unwrap();
+    w.push(&unit(1, 3000, false, 10)).unwrap();
+    w.finish().unwrap();
+    w.finish().unwrap();
+    assert_eq!(w.metrics().ends, 1);
+    // The next session's first unit, not a keyframe, waits for one.
+    w.push(&unit(1, 6000, false, 10)).unwrap();
+    w.push(&unit(1, 9000, true, 10)).unwrap();
+    w.finish().unwrap();
+    // Units without their gop_back.
+    let kinds: Vec<R> = summary(w.output())
+        .into_iter()
+        .map(|(_, r)| match r {
+            R::Unit(_, track, seq, config, key) => R::Unit(0, track, seq, config, key),
+            r => r,
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            R::Configs(0, vec![(1, 0, 0)]),
+            R::Unit(0, 1, 0, 0, true),
+            R::Unit(0, 1, 1, 0, false),
+            R::End,
+            R::Configs(0, vec![(1, 0, 2)]),
+            R::Unit(0, 1, 2, 0, true),
+            R::End,
+        ]
+    );
+    let m = w.metrics();
+    assert_eq!((m.ends, m.gops, m.dropped_before_start), (2, 2, 1));
 }

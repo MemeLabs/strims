@@ -48,7 +48,10 @@
 //!   [`hls`](crate::hls#segments)). The reader's gaps are the muxer's, so
 //!   a lost chunk costs the units up to the next keyframe. New configs,
 //!   which also come when a writer starts the stream over, reset the
-//!   muxer. A record over the bound is dropped.
+//!   muxer. An END record ends the segment in progress and the playlist
+//!   (`EXT-X-ENDLIST`); a later session's segment takes the end back off
+//!   (see [`Playlist::push_segment`](crate::hls::Playlist::push_segment)).
+//!   A record over the bound is dropped.
 //!
 //! Once a segment was served, a skipped or dropped fMP4 record, a
 //! discontinuity of an fMP4 stream, or a gap or reset of a unit-format
@@ -483,6 +486,9 @@ pub(crate) struct UnitFeed {
     held: Held,
     reader: UnitReader,
     muxer: HlsMuxer,
+    /// The record read last was an END: the playlist ends once its last
+    /// segment is pushed.
+    ended: bool,
 }
 
 impl UnitFeed {
@@ -491,6 +497,7 @@ impl UnitFeed {
             held: Held::new(units::MAX_RECORD_LEN),
             reader: UnitReader::new(),
             muxer: HlsMuxer::new(config),
+            ended: false,
         }
     }
 
@@ -522,6 +529,9 @@ impl UnitFeed {
             stream.push_segment(&s.init, &s.media, s.duration);
             fed.segments += 1;
         }
+        if std::mem::take(&mut self.ended) {
+            stream.end();
+        }
         fed
     }
 
@@ -540,6 +550,11 @@ impl UnitFeed {
                     }
                 }
                 ReaderEvent::Gap { .. } => self.muxer.gap(),
+                ReaderEvent::End => {
+                    // Ending a segment can't fail.
+                    let _ = self.muxer.finish();
+                    self.ended = true;
+                }
             }
         }
         match unit.map(|u| self.muxer.push(&u)) {

@@ -21,6 +21,11 @@ pub enum ReaderEvent {
     /// `missing` units of `track` never arrived, by their sequence
     /// numbers. A video track then resumes at its next keyframe.
     Gap { track: TrackId, missing: u64 },
+    /// The writer's session ended (an END record). The reader forgot its
+    /// tracks ([`UnitReader::configs`] is empty): units come again after
+    /// the next CONFIGS record, a later session's, a video track's from
+    /// its next keyframe.
+    End,
 }
 
 /// What a [`UnitReader`] has read and dropped.
@@ -49,6 +54,8 @@ pub struct UnitReaderMetrics {
     /// doesn't know.
     pub malformed: u64,
     pub unknown_kinds: u64,
+    /// END records read.
+    pub ends: u64,
     /// Entries of a sample entry the reader doesn't know.
     pub unknown_entries: u64,
     /// Losses the caller reported ([`UnitReader::lost`]).
@@ -81,7 +88,8 @@ struct Track {
 /// config version its track doesn't have, from a lost CONFIGS record, is
 /// dropped, and its video track then waits for a CONFIGS record of the
 /// version and a keyframe. A CONFIGS record whose sequence numbers go
-/// back starts the track over.
+/// back starts the track over. An END record ends the session: the
+/// reader forgets its tracks, and reads what follows as a later session.
 ///
 /// # Bounds
 ///
@@ -93,7 +101,8 @@ pub struct UnitReader {
     tracks: BTreeMap<TrackId, Track>,
     /// The tracks' configs, in track id order.
     configs: Vec<DecoderConfig>,
-    /// The last read's events. Bound: a gap per track and a configs change.
+    /// The last read's events. Bound: a gap per track and a configs
+    /// change, or an end.
     events: VecDeque<ReaderEvent>,
     metrics: UnitReaderMetrics,
 }
@@ -136,6 +145,13 @@ impl UnitReader {
             }) => self.unit(&header, payload),
             Ok(Record::Configs { entries, .. }) => {
                 self.apply_configs(entries);
+                None
+            }
+            Ok(Record::End { .. }) => {
+                self.metrics.ends += 1;
+                self.tracks.clear();
+                self.configs.clear();
+                self.events.push_back(ReaderEvent::End);
                 None
             }
             Ok(Record::Other { .. }) => {

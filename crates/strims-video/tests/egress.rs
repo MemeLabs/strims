@@ -472,6 +472,11 @@ fn a_local_captures_swarm_is_read_where_it_is() {
             data(&[&first[..], &more[..]].concat())
         );
         video.close_capture(&id).await.unwrap();
+        // The capture's END, then the stream's end with its swarm's.
+        match next(&mut s).await.unwrap() {
+            Body::Data(d) => assert_eq!((d.data, d.segment_end), (vec![3, 0, 0], true)),
+            b => panic!("not the END: {b:?}"),
+        }
         match next(&mut s).await.unwrap() {
             Body::Error(e) => assert_eq!(e.message, "stream closed"),
             b => panic!("not an error: {b:?}"),

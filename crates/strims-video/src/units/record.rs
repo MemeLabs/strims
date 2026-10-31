@@ -19,6 +19,8 @@ use crate::opus::{self, OpusError, parse_opus_head};
 pub const KIND_CONFIGS: u8 = 1;
 /// The kind of a UNIT record.
 pub const KIND_UNIT: u8 = 2;
+/// The kind of an END record.
+pub const KIND_END: u8 = 3;
 /// A UNIT's flag of a keyframe.
 pub const FLAG_KEYFRAME: u8 = 0x01;
 /// The sample entry of an H.264 track, whose config is an avcC record.
@@ -210,6 +212,8 @@ pub enum Record<'a> {
         header: UnitHeader,
         payload: &'a [u8],
     },
+    /// The end of the writer's session.
+    End { gop_back: u64 },
     /// A record of a kind this reader doesn't know.
     Other { kind: u8, gop_back: u64 },
 }
@@ -220,6 +224,7 @@ impl Record<'_> {
         match self {
             Record::Configs { gop_back, .. }
             | Record::Unit { gop_back, .. }
+            | Record::End { gop_back }
             | Record::Other { gop_back, .. } => *gop_back,
         }
     }
@@ -350,12 +355,13 @@ pub fn parse_record(record: &[u8]) -> Result<Record<'_>, RecordError> {
         return Err(RecordError::KindZero);
     }
     let gop_back = c.uvarint()?;
-    if ![KIND_CONFIGS, KIND_UNIT].contains(&kind) {
+    if ![KIND_CONFIGS, KIND_UNIT, KIND_END].contains(&kind) {
         return Ok(Record::Other { kind, gop_back });
     }
     let mut header = Cursor(c.bytes()?);
     let body = c.0;
     match kind {
+        KIND_END => Ok(Record::End { gop_back }),
         KIND_UNIT => {
             let track = header.track()?;
             let flags = header.u8()?;
@@ -443,6 +449,13 @@ pub fn write_unit_head(gop_back: u64, h: &UnitHeader, out: &mut Vec<u8>) {
     put(out, gop_back);
     put(out, n as u64);
     out.extend_from_slice(header.get(..n).unwrap_or_default());
+}
+
+/// Appends an END record: its kind, `gop_back` 0 and an empty header.
+pub fn write_end(out: &mut Vec<u8>) {
+    out.push(KIND_END);
+    put(out, 0);
+    put(out, 0);
 }
 
 /// The bytes of an entry after its length.
