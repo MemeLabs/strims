@@ -1223,7 +1223,7 @@ fn cross_traffic_hybrid() {
 // --- 9. ten minutes ---------------------------------------------------------
 
 /// A seed and 8 viewers for 10 minutes at half the rate, a viewer crashing
-/// and restarting every minute, invariants checked every 10 s.
+/// and restarting every 30 s, invariants checked every 10 s.
 fn long_run_scenario(seed: u64) -> Scenario {
     let mut m = streaming(
         "long_run",
@@ -1234,10 +1234,13 @@ fn long_run_scenario(seed: u64) -> Scenario {
         (3, 595),
     );
     m.s.swarms[0] = SwarmSpec::live(m.seed, m.viewers.clone(), RATE / 2, secs(3), secs(595));
-    for minute in 1..10u64 {
-        let v = m.viewers[(seed as usize + minute as usize) % m.viewers.len()];
-        m.s.at(secs(minute * 60), Fault::Crash(v));
-        m.s.at(secs(minute * 60 + 10), Fault::Restart(v));
+    // Each half of the run restarts every viewer. A restart's catch-up
+    // grows the buffers of its new links once, so the halves the heap
+    // check compares hold as many grown links.
+    for i in 1..20u64 {
+        let v = m.viewers[(seed as usize + i as usize) % m.viewers.len()];
+        m.s.at(secs(i * 30), Fault::Crash(v));
+        m.s.at(secs(i * 30 + 10), Fault::Restart(v));
     }
     m.s.sample_every = secs(10);
     m.s.duration = secs(600);
@@ -1268,7 +1271,7 @@ fn check_long_run(r: &Report) -> Result<(), String> {
         }
     }
     // The heap stays flat: the last five minutes peak no higher than the
-    // first five (after the first minute's warm-up), give or take 15 %.
+    // first five (after the first minute's warm-up), give or take 8 %.
     let m = r.memory.as_ref().ok_or("no memory report")?;
     let per_minute: Vec<String> = (0..10)
         .map(|i| format!("{}", m.max_between(i * 60_000, (i + 1) * 60_000) / 1024))
@@ -1276,7 +1279,7 @@ fn check_long_run(r: &Report) -> Result<(), String> {
     eprintln!("long_run heap per minute (KiB): {}", per_minute.join(" "));
     let early = m.max_between(60_000, 300_000);
     let late = m.max_between(300_000, 600_000);
-    if late > early + early * 3 / 20 {
+    if late > early + early * 2 / 25 {
         return Err(format!(
             "heap grew from {} KiB (minutes 1–5) to {} KiB (minutes 5–10)",
             early / 1024,
