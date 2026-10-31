@@ -12,7 +12,6 @@ import {
   Button,
   ButtonSet,
   InputError,
-  NetworkSelectInput,
   TextInput,
   ToggleInput,
 } from "../../../components/Form";
@@ -113,14 +112,11 @@ const VideoIngressConfigForm = () => {
           name="publicServerAddr"
           placeholder="ex: ingress.strims.gg"
         />
-        <NetworkSelectInput
-          control={control}
-          name="serviceNetworkKeys"
-          label="Sharing"
-          description="Enable the creation of streams by peers in selected networks."
-          placeholder="Select network"
-          isMulti={true}
-        />
+        {/*
+          The sharing field (serviceNetworkKeys) is hidden: no node serves
+          VideoIngressShare, so networks picked there would let no peer
+          create streams. The form saves the stored keys as it loaded them.
+        */}
         <ButtonSet>
           <Button disabled={formState.isSubmitting || !formState.isDirty}>Save Changes</Button>
         </ButtonSet>
