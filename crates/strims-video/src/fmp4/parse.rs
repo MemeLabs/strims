@@ -1,8 +1,8 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Reading records: the init and media segments of a record, the tracks
-//! an init segment declares and the media time a media segment covers.
+//! Reading fMP4: the tracks an init segment declares and the media time a
+//! media segment covers.
 //!
 //! The input is untrusted: no input panics, the work is linear in its
 //! length, the results borrow from it, and an init segment declares at
@@ -35,9 +35,6 @@ impl fmt::Display for FourCc {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum ParseError {
-    /// The record is shorter than its init length prefix says.
-    #[error("record is shorter than its init segment length")]
-    Prefix,
     /// A box's size is below its header or past the end of its parent.
     #[error("{0} box is truncated")]
     Truncated(FourCc),
@@ -48,17 +45,6 @@ pub enum ParseError {
     Missing(FourCc),
     #[error("init segment declares more than {MAX_TRACKS} tracks")]
     TooManyTracks,
-}
-
-/// Splits a record, `[u16 BE init length][init segment][media segment]`,
-/// into its init and media segments.
-pub fn split_record(record: &[u8]) -> Result<(&[u8], &[u8]), ParseError> {
-    let (len, rest) = record.split_first_chunk::<2>().ok_or(ParseError::Prefix)?;
-    let len = usize::from(u16::from_be_bytes(*len));
-    if rest.len() < len {
-        return Err(ParseError::Prefix);
-    }
-    Ok(rest.split_at(len))
 }
 
 /// A track an init segment declares.

@@ -92,13 +92,6 @@ impl MediaDump {
             .filter(|t| t.track == track)
             .collect()
     }
-
-    pub(crate) fn has_traf(&self, track: u32) -> bool {
-        self.moofs
-            .iter()
-            .flat_map(|m| &m.trafs)
-            .any(|t| t.track == track)
-    }
 }
 
 fn be32(b: &[u8], at: usize) -> u32 {

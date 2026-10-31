@@ -12,7 +12,7 @@
 //! consume both.
 //!
 //! - [`media`]: tracks, decoder configs, access units, the [`Muxer`]
-//!   trait and the MIME types of the fMP4 and unit formats.
+//!   trait and the unit format's MIME type.
 //! - [`avc`]: H.264 avcC records and the picture size from their SPS.
 //! - [`aac`]: AAC AudioSpecificConfig and the `esds` box.
 //! - [`opus`]: the Opus identification header, OpusHead, and the `dOps`
@@ -23,13 +23,9 @@
 //! - [`rtmp`]: the RTMP server a publisher streams FLV tags to.
 //! - [`fmp4`]: fragmented MP4 init segments and fragments, each with its
 //!   `prft`, the [`fmp4::FragmentWriter`] that turns access units into
-//!   fragments, and the reading of records.
-//! - [`segment`]: the muxer cutting access units into fMP4 segments, one
-//!   record each written fragment by fragment, under a [`CutRule`].
-//! - [`record`]: where records go: packed into a video swarm's frames
-//!   ([`PackedSink`]) or collected whole ([`VecSink`]).
-//! - `synth` (feature `test-support`): deterministic FLV tag scripts, the
-//!   records they produce, and an RTMP publisher client.
+//!   fragments, and their reading.
+//! - `synth` (feature `test-support`): deterministic FLV tag scripts, what
+//!   muxers make of them, and an RTMP publisher client.
 //! - [`hls`]: HLS playlists of fMP4 segments, the muxer that cuts access
 //!   units into them, and the routes a driver serves them on.
 //! - [`units`]: the unit format, a record per access unit in the chunked
@@ -84,30 +80,25 @@
 //! one to seed. Each is the transfer of its swarm id under the empty
 //! salt, so a transfer id names one video swarm, and a stream or a seed
 //! of a swarm the node already runs takes it where it is.
-//! A video swarm carries records in the layout of its format, which its
-//! listing's MIME type names: opaque records in the packed chunkstream
-//! layout ([`strims_chunkstream::packed`]), with at most one record end per
-//! frame, or the [unit format](units)'s records in the chunked layout
-//! ([`strims_chunkstream::chunked`]).
+//! A video swarm carries the [unit format](units)'s records in the chunked
+//! layout ([`strims_chunkstream::chunked`]), as its listing's MIME type
+//! ([`units_mime`]) names.
 //!
 //! - **Ingest** ([`ingress`]): a broadcaster's RTMP stream to a channel.
 //!   Its session's swarm is under the channel key, so the swarm id is
-//!   the channel's public key. Its records are the unit format's,
-//!   written by a [`UnitWriter`] and signed early, in a swarm whose unit
-//!   size and signing interval the stream's nominal bitrate or tracks
-//!   pick ([`units::UnitSigning`]) once its metadata or decoder configs
-//!   come, after the publish's accept; or with [`IngestFormat::Fmp4`]
-//!   fMP4 segments, each starting at a keyframe and cut by a
-//!   [`Segmenter`] into a [`PackedSink`], in a swarm of
-//!   [`ingress_options`]; a record over its bound, or a codec the
-//!   [`FlvSource`] refuses, ends the session with the reason. The session serves the channel's snippet, live from the
+//!   the channel's public key. Its records are written by a [`UnitWriter`]
+//!   and signed early, in a swarm whose unit size and signing interval the
+//!   stream's nominal bitrate or tracks pick ([`units::UnitSigning`]) once
+//!   its metadata or decoder configs come, after the publish's accept; a
+//!   codec the [`FlvSource`] refuses, or media the writer refuses, ends
+//!   the session with the reason. The session serves the channel's snippet, live from the
 //!   publish's start time and signed with the channel key, and keeps a
 //!   listing of the records' MIME type and swarm URI on the channel's
 //!   network from its first record. A changed channel serves the snippet
-//!   again; a deleted or moved one ends the session. Its end writes the
-//!   record in progress (and has a unit-format stream's last partial
-//!   integrity unit signed), then takes the listing, snippet, transfer, slot
-//!   and swarm down; a session that replaces it keeps the slot, so the
+//!   again; a deleted or moved one ends the session. Its end writes what
+//!   the writer holds and has the stream's last partial integrity unit
+//!   signed, then takes the listing, snippet, transfer, slot and swarm
+//!   down; a session that replaces it keeps the slot, so the
 //!   node's streams of the channel go on after a discontinuity.
 //! - **Captures** ([`capture`]): the UI's encoded media. A capture has a
 //!   fresh key, a swarm of [`capture_options_for`] its nominal bitrate,
@@ -120,10 +111,10 @@
 //!   opened it, signing its last partial unit and taking its listings,
 //!   snippet, transfer and swarm with it. Bounds: [`CaptureSettings`].
 //! - **Streams** ([`egress`]): a viewer's read of the swarm a magnet URI
-//!   names, in the layout of its [`StreamFormat`], as [`EgressPiece`]s:
-//!   data, record ends, and a discontinuity before the next whole record
-//!   once the stream skipped. A unit-format stream starts at the GOP it
-//!   joins. A swarm added for streams gets a live window of
+//!   names, of a listing whose MIME type names the unit format, as
+//!   [`EgressPiece`]s: data, record ends, and a discontinuity before the
+//!   next whole record once the stream skipped. A stream starts at the GOP
+//!   it joins. A swarm added for streams gets a live window of
 //!   [`EgressSettings::window_bytes`], and goes with the last of them; a
 //!   capture's or an ingest session's stays with it. A stream whose swarm
 //!   closes reads the swarm that replaced it under its transfer id, if
@@ -141,21 +132,17 @@
 //! # HLS egress
 //!
 //! Where the driver serves HLS over HTTP ([`HlsSettings::serve`]), the
-//! node serves video swarms to external players as HLS streams
+//! node serves video swarms as HLS streams of fMP4 segments
 //! ([`hls_egress`]). [`VideoControl::open_hls`] reads a swarm as a
-//! stream in the format the listing's MIME type names, counted among the
-//! [`EgressSettings`] bounds, and answers its playlist URL.
+//! stream, of a listing whose MIME type names the unit format, counted
+//! among the [`EgressSettings`] bounds, and answers its playlist URL.
 //!
 //! - **Contract.** A playlist's target duration is
 //!   [`HlsSettings::target_duration`] for its life, and every segment
-//!   rounds to at most it. A whole fMP4 record ([`fmp4::split_record`]) is
-//!   a segment lasting its media time ([`fmp4::media_duration`]), or runs
-//!   of its fragments when it lasts longer; other records are skipped. A
-//!   unit-format stream's access units are cut into
-//!   segments at its keyframes, and mid-GOP when a GOP outlasts the target
+//!   rounds to at most it. A stream's access units are cut into segments
+//!   at its keyframes, and mid-GOP when a GOP outlasts the target
 //!   ([`hls::HlsMuxer`]). Segments are served with their inits on the
-//!   driver's [`hls::HlsRoutes`]. A skipped record, a discontinuity of an
-//!   fMP4 stream, or units lost from a unit-format one mark the next
+//!   driver's [`hls::HlsRoutes`]. Units lost from a stream mark the next
 //!   segment discontinuous.
 //! - **URL.** The HLS config's public server address, or else the
 //!   driver's [`HlsSettings::base_url`], followed by
@@ -167,9 +154,9 @@
 //!   request reaches it for [`HlsSettings::idle_timeout`], the HLS config
 //!   is disabled, or its stream fails. Then its routes answer 404 and its
 //!   swarm is released.
-//! - **Bounds.** [`HlsSettings`]: the streams the node serves, the record
-//!   a stream holds while it arrives, and the segments and bytes each
-//!   playlist keeps.
+//! - **Bounds.** [`HlsSettings`]: the streams the node serves, the segment
+//!   a stream's muxer holds, and the segments and bytes each playlist
+//!   keeps.
 
 pub mod aac;
 pub mod amf0;
@@ -192,10 +179,8 @@ pub mod host;
 pub mod ingress;
 pub mod media;
 pub mod opus;
-pub mod record;
 mod registry;
 pub mod rtmp;
-pub mod segment;
 #[cfg(any(test, feature = "test-support"))]
 pub mod synth;
 #[cfg(any(test, feature = "test-support"))]
@@ -207,13 +192,11 @@ pub use capture::{CaptureInfo, capture_options, capture_options_for};
 pub use channels::{ChannelUrl, MAX_CHANNELS};
 pub use config::{
     AutoseedSettings, CaptureSettings, Config, ConfigError, EgressSettings, HlsSettings,
-    IngestFormat, IngressSettings, ListingSettings, MAX_ADDR_BYTES, MAX_NETWORK_KEY_BYTES,
-    MAX_SERVICE_NETWORKS, Metrics, RtmpSettings, check_hls_config, check_ingress_config,
+    IngressSettings, ListingSettings, MAX_ADDR_BYTES, MAX_NETWORK_KEY_BYTES, MAX_SERVICE_NETWORKS,
+    Metrics, RtmpSettings, check_hls_config, check_ingress_config,
 };
 pub use control::VideoControl;
-pub use egress::{
-    ChunkedReader, EgressPiece, EgressStream, PackedReader, ReaderMetrics, Rewind, StreamFormat,
-};
+pub use egress::{ChunkedReader, EgressPiece, EgressStream, ReaderMetrics, Rewind, check_format};
 pub use error::VideoError;
 pub use events::VideoEvent;
 pub use frontend::{CaptureFrontend, VideoFrontend, bind_frontend};
@@ -224,9 +207,7 @@ pub use registry::{SwarmKind, VideoSwarm};
 
 pub use flv::{FlvError, FlvMetrics, FlvSource, SourceEvent, Unsupported};
 pub use media::{
-    AccessUnit, CodecParams, DecoderConfig, MAX_CONFIG_LEN, Muxer, TrackId, TrackKind, fmp4_mime,
+    AccessUnit, CodecParams, DecoderConfig, MAX_CONFIG_LEN, Muxer, TrackId, TrackKind,
     mime_essence, units_mime,
 };
-pub use record::{PackedSink, RecordSink, VecSink};
-pub use segment::{CutRule, SegmentError, SegmentInfo, Segmenter, SegmenterMetrics};
 pub use units::{UnitReader, UnitWriter};

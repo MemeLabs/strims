@@ -83,7 +83,6 @@ use strims_base::time::{Duration, Time};
 
 use crate::fmp4::{FragmentWriter, InitError, MAX_TRACKS, Written, write_init};
 use crate::media::{AccessUnit, DecoderConfig, Muxer, TrackId, TrackKind};
-use crate::segment::{MAX_INIT_LEN, composition_delay, ordered};
 
 /// The most segments a [`Playlist`] keeps, listed or not.
 pub const MAX_SEGMENTS: usize = 256;
@@ -476,6 +475,16 @@ pub const KEYFRAME_CUT_FLOOR: Duration = Duration::from_millis(400);
 /// [`HlsMuxer::take_segment`]; older ones are dropped.
 pub const MAX_PENDING_SEGMENTS: usize = 4;
 
+/// The longest init segment an [`HlsMuxer`] writes: configs whose init
+/// would be longer are refused ([`HlsMuxerError::InitTooLong`]).
+pub const MAX_INIT_LEN: usize = u16::MAX as usize;
+
+/// The media a segment's fragment holds by default
+/// ([`HlsMuxerConfig::fragment_duration`]): a few video frames and their
+/// audio, so a fragment's `prft`, `moof` and `mdat` headers stay a small
+/// share of its bytes.
+pub const DEFAULT_FRAGMENT_DURATION: Duration = Duration::from_millis(100);
+
 /// How an [`HlsMuxer`] cuts segments and fragments.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HlsMuxerConfig {
@@ -493,7 +502,7 @@ impl Default for HlsMuxerConfig {
     fn default() -> Self {
         HlsMuxerConfig {
             target: 4,
-            fragment_duration: Duration::from_millis(100),
+            fragment_duration: DEFAULT_FRAGMENT_DURATION,
             max_segment_bytes: 16 << 20,
         }
     }
@@ -1009,6 +1018,30 @@ fn samples_time(written: &[Written]) -> Duration {
     match video {
         Some(w) => time(w),
         None => written.iter().map(time).max().unwrap_or(Duration::ZERO),
+    }
+}
+
+/// The configs in init order: video, then audio, each by track id.
+fn ordered(
+    configs: &BTreeMap<TrackId, DecoderConfig>,
+) -> impl Iterator<Item = &DecoderConfig> + Clone {
+    let of = move |kind| configs.values().filter(move |c| c.kind == kind);
+    of(TrackKind::Video).chain(of(TrackKind::Audio))
+}
+
+/// The composition delay an init starting at `keyframe` declares: its PTS
+/// less DTS in its track's timescale, zero when not positive.
+fn composition_delay(
+    keyframe: &AccessUnit<'_>,
+    configs: &BTreeMap<TrackId, DecoderConfig>,
+) -> Duration {
+    let units = keyframe.pts.saturating_sub(keyframe.dts);
+    match configs.get(&keyframe.track) {
+        Some(c) if units > 0 && c.timescale > 0 => {
+            let nanos = i128::from(units) * 1_000_000_000 / i128::from(c.timescale);
+            Duration::from_nanos(i64::try_from(nanos).unwrap_or(i64::MAX))
+        }
+        _ => Duration::ZERO,
     }
 }
 

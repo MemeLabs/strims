@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Golden vectors (`golden/vectors.txt`): init segments with and without
-//! edit lists, `prft` boxes, and the fragments and records a unit script
-//! makes through [`FragmentWriter`] and [`Segmenter`] at each kind of
-//! span. Values are hex, and lists are comma-separated.
+//! edit lists, `prft` boxes, and the fragments a unit script makes through
+//! [`FragmentWriter`] at each kind of span. Values are hex, and lists are comma-separated.
 //! `STRIMS_GOLDEN=update` rewrites them from the code (see
 //! `strims-golden`).
 
@@ -18,9 +17,7 @@
 use strims_base::time::{Duration, Time};
 use strims_golden::Golden;
 use strims_video::fmp4::{FragmentWriter, ProducerTime, write_init, write_prft};
-use strims_video::{
-    AccessUnit, CodecParams, CutRule, DecoderConfig, Muxer, Segmenter, TrackId, TrackKind, VecSink,
-};
+use strims_video::{AccessUnit, CodecParams, DecoderConfig, TrackId, TrackKind};
 
 const VIDEO: TrackId = TrackId(1);
 const AUDIO: TrackId = TrackId(2);
@@ -190,28 +187,5 @@ fn fragments() {
         }
         w.flush(None, &mut out);
         g.check_hex(e, "hex", &out);
-    }
-}
-
-#[test]
-fn records() {
-    let mut g = open();
-    let units = script();
-    for e in g.all("records") {
-        let rule = CutRule {
-            min_media_bytes: 20,
-            fragment_duration: span(g.str(e, "span")),
-            ..CutRule::default()
-        };
-        let mut s = Segmenter::new(rule, VecSink::new());
-        s.set_config(&video_config()).unwrap();
-        s.set_config(&audio_config()).unwrap();
-        for u in &units {
-            s.push(&unit(u)).unwrap();
-        }
-        s.finish().unwrap();
-        let records: Vec<String> = s.sink().records.iter().map(hex::encode).collect();
-        assert_eq!(records.len(), 2);
-        g.check(e, "records", records.join(","));
     }
 }

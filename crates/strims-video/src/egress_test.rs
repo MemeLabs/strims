@@ -13,8 +13,7 @@ use std::collections::VecDeque;
 use std::task::Poll;
 
 use futures_util::FutureExt;
-use strims_chunkstream::chunked::{ChunkedRecordDecoder, Item};
-use strims_chunkstream::packed::PackedEncoder;
+use strims_chunkstream::chunked::{ChunkedEncoder, ChunkedRecordDecoder, Item};
 
 use super::*;
 use crate::Muxer;
@@ -151,218 +150,10 @@ impl SwarmRead for Script {
     }
 }
 
-/// `n` bytes of record `i`.
-fn record(i: u8, n: usize) -> Vec<u8> {
-    (0..n)
-        .map(|j| i.wrapping_mul(31).wrapping_add(j as u8))
-        .collect()
-}
-
-/// The packed stream of `records`, and each record's start offset.
-fn packed(records: &[Vec<u8>]) -> (Vec<u8>, Vec<usize>) {
-    let mut e = PackedEncoder::new(DEFAULT_SIZE).unwrap();
-    let mut out = Vec::new();
-    let mut starts = Vec::new();
-    for r in records {
-        starts.push(e.offset() as usize);
-        e.write(r, &mut out);
-        e.end_record(&mut out).unwrap();
-    }
-    (out, starts)
-}
-
-/// Records over a frame each, so each ends in a later frame than the one
-/// before; the first fills its frame exactly.
-fn records(n: u8) -> Vec<Vec<u8>> {
-    (0..n)
-        .map(|i| match i {
-            0 => record(0, DEFAULT_SIZE - 4),
-            i => record(i, 70_000 + usize::from(i) * 1000),
-        })
-        .collect()
-}
-
 #[derive(Debug, PartialEq)]
 enum Out {
     Record(Vec<u8>),
     Discontinuity,
-}
-
-/// What `r` yields until its swarm closes, with each data piece at most
-/// `max` bytes, and the failure that ended it. Bytes after the last end
-/// are dropped.
-fn collect<R: SwarmRead>(r: &mut PackedReader<R>, max: usize) -> (Vec<Out>, VideoError) {
-    let mut out = Vec::new();
-    let mut rec = Vec::new();
-    loop {
-        match r.next(max).now_or_never().expect("the script never waits") {
-            Ok(EgressPiece::Data(d)) => {
-                assert!(!d.is_empty() && d.len() <= max, "{} bytes", d.len());
-                rec.extend_from_slice(d);
-            }
-            Ok(EgressPiece::RecordEnd) => out.push(Out::Record(std::mem::take(&mut rec))),
-            Ok(EgressPiece::Discontinuity) => {
-                rec.clear();
-                out.push(Out::Discontinuity);
-            }
-            Err(e) => return (out, e),
-        }
-    }
-}
-
-fn whole(rs: &[Vec<u8>]) -> Vec<Out> {
-    rs.iter().cloned().map(Out::Record).collect()
-}
-
-#[test]
-fn records_read_from_the_start_come_whole() {
-    let rs = records(4);
-    let (s, _) = packed(&rs);
-    for (chunk, max) in [
-        (1000, 32 * 1024),
-        (65_536, 100),
-        (7, 1),
-        (s.len(), usize::MAX),
-    ] {
-        let mut r = PackedReader::new(Script::default().reads(&s, 0, s.len(), chunk), 64 * 1024);
-        let (out, end) = collect(&mut r, max);
-        assert_eq!(out, whole(&rs), "chunk {chunk} max {max}");
-        assert_eq!(end, VideoError::StreamClosed);
-        assert_eq!(r.metrics().records, 4);
-        assert_eq!(r.metrics().discontinuities, 0);
-    }
-}
-
-#[test]
-fn a_start_inside_a_record_drops_it() {
-    let rs = records(4);
-    let (s, starts) = packed(&rs);
-    // Record 1 starts after frame 1's header, record 2 in frame 2, which
-    // holds record 1's end.
-    assert_eq!(starts[1], DEFAULT_SIZE + 4);
-    assert!(starts[2] > 2 * DEFAULT_SIZE && starts[2] < 3 * DEFAULT_SIZE);
-    // A start inside frame 2's data misses its header, so record 1's end
-    // there too: record 2's end closes the partial record.
-    for (from, first) in [(10_000, 1), (starts[1] + 1, 2), (starts[2] - 1, 3)] {
-        let mut r = PackedReader::new(Script::default().reads(&s, from, s.len(), 4096), 64 * 1024);
-        let (out, _) = collect(&mut r, 32 * 1024);
-        assert_eq!(out, whole(&rs[first..]), "from {from}");
-    }
-}
-
-#[test]
-fn a_start_inside_a_header_drops_up_to_the_next_whole_record() {
-    let rs = records(4);
-    let (s, _) = packed(&rs);
-    // Frame 1's header holds record 0's end; its data, record 1's start.
-    let mut r = PackedReader::new(
-        Script::default().reads(&s, DEFAULT_SIZE + 2, s.len(), 4096),
-        64 * 1024,
-    );
-    let (out, _) = collect(&mut r, 32 * 1024);
-    assert_eq!(out, whole(&rs[2..]));
-}
-
-#[test]
-fn a_gap_between_reads_is_one_discontinuity_before_the_next_whole_record() {
-    let rs = records(6);
-    let (s, starts) = packed(&rs);
-    let mid = |i: usize| (starts[i] + starts[i + 1]) / 2;
-    let script = Script::default()
-        .reads(&s, 0, mid(1), 5000)
-        .reads(&s, mid(2), s.len(), 5000);
-    let mut r = PackedReader::new(script, 64 * 1024);
-    let (out, _) = collect(&mut r, 32 * 1024);
-    let mut expected = whole(&rs[..1]);
-    expected.push(Out::Discontinuity);
-    expected.extend(whole(&rs[3..]));
-    assert_eq!(out, expected);
-    assert_eq!(r.metrics().discontinuities, 1);
-}
-
-#[test]
-fn a_reported_discontinuity_restarts_at_the_readers_new_offset() {
-    let old = records(3);
-    let new: Vec<Vec<u8>> = (10..13).map(|i| record(i, 80_000)).collect();
-    let (a, starts) = packed(&old);
-    let (b, _) = packed(&new);
-    let script = Script::default()
-        .reads(&a, 0, starts[2] + 100, 3000)
-        .fail(ReadFailure::Discontinuity)
-        .reads(&b, 0, b.len(), 3000);
-    let mut r = PackedReader::new(script, 64 * 1024);
-    let (out, _) = collect(&mut r, 32 * 1024);
-    let mut expected = whole(&old[..2]);
-    expected.push(Out::Discontinuity);
-    expected.extend(whole(&new));
-    assert_eq!(out, expected);
-}
-
-#[test]
-fn a_discontinuity_before_anything_was_yielded_is_not_reported() {
-    let rs = records(4);
-    let (s, starts) = packed(&rs);
-    let script = Script::default()
-        .reads(&s, 1000, 2000, 500)
-        .fail(ReadFailure::Discontinuity)
-        .reads(&s, starts[1] + 10, s.len(), 4096);
-    let mut r = PackedReader::new(script, 64 * 1024);
-    let (out, _) = collect(&mut r, 32 * 1024);
-    assert_eq!(out, whole(&rs[2..]));
-    assert_eq!(r.metrics().discontinuities, 1);
-}
-
-#[test]
-fn a_corrupt_frame_drops_the_records_it_touches() {
-    let rs = records(5);
-    let (mut s, starts) = packed(&rs);
-    // Frame 2 holds record 1's end and record 2's start; an end past the
-    // frame is corrupt.
-    let frame = 2 * DEFAULT_SIZE;
-    assert!(starts[1] < frame && starts[2] > frame && starts[2] < frame + DEFAULT_SIZE);
-    s[frame..frame + 4].copy_from_slice(&(0x8000_0000u32 | 0xffff).to_be_bytes());
-    let mut r = PackedReader::new(Script::default().reads(&s, 0, s.len(), 4096), 64 * 1024);
-    let (out, _) = collect(&mut r, 32 * 1024);
-    let mut expected = whole(&rs[..1]);
-    expected.push(Out::Discontinuity);
-    expected.extend(whole(&rs[3..]));
-    assert_eq!(out, expected);
-    assert_eq!(r.metrics().corrupt_frames, 1);
-}
-
-#[test]
-fn a_replaced_reader_reads_the_new_stream_after_a_discontinuity() {
-    let old = records(3);
-    let new = records(2);
-    let (a, starts) = packed(&old);
-    let (b, _) = packed(&new);
-    let script = Script::default().reads(&a, 0, starts[2] + 100, 4096);
-    let mut r = PackedReader::new(script, 64 * 1024);
-    let (out, end) = collect(&mut r, 32 * 1024);
-    assert_eq!((out, end), (whole(&old[..2]), VideoError::StreamClosed));
-    r.replace(Script::default().reads(&b, 0, b.len(), 4096));
-    let (out, _) = collect(&mut r, 32 * 1024);
-    let mut expected = vec![Out::Discontinuity];
-    expected.extend(whole(&new));
-    assert_eq!(out, expected);
-}
-
-#[test]
-fn a_failed_read_fails_one_call_and_reading_goes_on() {
-    let rs = records(4);
-    let (s, starts) = packed(&rs);
-    let script = Script::default()
-        .reads(&s, 0, starts[1] + 10, 4096)
-        .fail(ReadFailure::Failed("disk".into()))
-        .reads(&s, starts[2] + 10, s.len(), 4096);
-    let mut r = PackedReader::new(script, 64 * 1024);
-    let (out, e) = collect(&mut r, 32 * 1024);
-    assert_eq!(out, whole(&rs[..1]));
-    assert_eq!(e, VideoError::StreamRead("disk".into()));
-    let (out, e) = collect(&mut r, 32 * 1024);
-    let mut expected = vec![Out::Discontinuity];
-    expected.extend(whole(&rs[3..]));
-    assert_eq!((out, e), (expected, VideoError::StreamClosed));
 }
 
 #[test]
@@ -539,6 +330,115 @@ fn gop_of_first(records: &[(u64, Vec<u8>)], from: u64) -> (u64, u64) {
     let (offset, r) = records.iter().find(|(o, _)| *o >= frame).unwrap();
     let k = offset - units::record::parse_record(r).unwrap().gop_back();
     (*offset, k)
+}
+
+/// Record `i` of `n` bytes: a sync record of a kind no reader decodes, so
+/// a join starts at the first one read whole.
+fn sync_record(i: u8, n: usize) -> Vec<u8> {
+    let mut r = vec![0x7f, 0];
+    r.extend((2..n).map(|j| i.wrapping_mul(31).wrapping_add(j as u8)));
+    r
+}
+
+/// Sync records of several frames each.
+fn sync_records(from: u8, n: u8) -> Vec<Vec<u8>> {
+    (from..from + n)
+        .map(|i| sync_record(i, 3 * CHUNK + usize::from(i) * 1000))
+        .collect()
+}
+
+/// The chunked stream of `records` in frames of [`CHUNK`] bytes, and each
+/// record's offset.
+fn chunked(records: &[Vec<u8>]) -> (Vec<u8>, Vec<(u64, Vec<u8>)>) {
+    let mut e = ChunkedEncoder::new(CHUNK).unwrap();
+    let mut out = Vec::new();
+    let mut offsets = Vec::new();
+    for r in records {
+        offsets.push((e.next_record_offset(), r.clone()));
+        let at = out.len();
+        out.resize(at + e.encoded_len(r.len()).unwrap(), 0);
+        e.encode(&[r], &mut out[at..]).unwrap();
+    }
+    (out, offsets)
+}
+
+/// The records whose offset is at or after `from`'s frame, or the next
+/// frame's when `from` is inside one: those a reader starting at `from`
+/// yields.
+fn joined_from(records: &[(u64, Vec<u8>)], from: usize) -> Vec<Out> {
+    records_from(records, from.div_ceil(CHUNK) as u64 * CHUNK as u64)
+}
+
+#[test]
+fn a_start_inside_a_record_drops_it() {
+    let (s, recs) = chunked(&sync_records(0, 6));
+    let starts: Vec<usize> = recs.iter().map(|(o, _)| *o as usize).collect();
+    // Inside a frame, at a frame start inside a record, and inside the
+    // frame a record starts in.
+    for from in [
+        starts[1] + 1,
+        (starts[2] / CHUNK + 1) * CHUNK,
+        starts[3] - 1,
+        CHUNK + 1,
+    ] {
+        let script = Script::default().reads(&s, from, s.len(), 4096);
+        let mut r = ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap();
+        let (out, _) = collect_chunked(&mut r, 32 * 1024);
+        let expected = joined_from(&recs, from);
+        assert!(expected.len() < recs.len(), "from {from}");
+        assert_eq!(out, expected, "from {from}");
+        assert_eq!(r.metrics().discontinuities, 0);
+    }
+}
+
+#[test]
+fn a_reported_discontinuity_restarts_at_the_readers_new_offset() {
+    let old = sync_records(0, 3);
+    let new = sync_records(10, 3);
+    let (a, olds) = chunked(&old);
+    let (b, _) = chunked(&new);
+    let script = Script::default()
+        .reads(&a, 0, olds[2].0 as usize + 100, 3000)
+        .fail(ReadFailure::Discontinuity)
+        .reads(&b, 0, b.len(), 3000);
+    let mut r = ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap();
+    let (out, _) = collect_chunked(&mut r, 32 * 1024);
+    let mut expected: Vec<Out> = old[..2].iter().cloned().map(Out::Record).collect();
+    expected.push(Out::Discontinuity);
+    expected.extend(new.iter().cloned().map(Out::Record));
+    assert_eq!(out, expected);
+}
+
+#[test]
+fn a_discontinuity_before_anything_was_yielded_is_not_reported() {
+    let (s, recs) = chunked(&sync_records(0, 5));
+    let from = recs[1].0 as usize + 10;
+    let script = Script::default()
+        .reads(&s, 1000, 2000, 500)
+        .fail(ReadFailure::Discontinuity)
+        .reads(&s, from, s.len(), 4096);
+    let mut r = ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap();
+    let (out, _) = collect_chunked(&mut r, 32 * 1024);
+    assert_eq!(out, joined_from(&recs, from));
+    assert_eq!(r.metrics().discontinuities, 1);
+}
+
+#[test]
+fn a_failed_read_fails_one_call_and_reading_goes_on() {
+    let (s, recs) = chunked(&sync_records(0, 5));
+    let from = recs[2].0 as usize + 10;
+    let script = Script::default()
+        .reads(&s, 0, recs[1].0 as usize + 10, 4096)
+        .fail(ReadFailure::Failed("disk".into()))
+        .reads(&s, from, s.len(), 4096);
+    let mut r = ChunkedReader::new(script, CHUNK, 64 * 1024).unwrap();
+    let (out, e) = collect_chunked(&mut r, 32 * 1024);
+    assert_eq!(out, records_from(&recs[..1], 0));
+    assert_eq!(e, VideoError::StreamRead("disk".into()));
+    let (out, e) = collect_chunked(&mut r, 32 * 1024);
+    let mut expected = vec![Out::Discontinuity];
+    expected.extend(joined_from(&recs, from));
+    assert_eq!((out, e), (expected, VideoError::StreamClosed));
 }
 
 #[test]
@@ -963,20 +863,22 @@ fn a_replaced_reader_joins_the_new_stream_again() {
 }
 
 #[test]
-fn stream_formats_follow_the_listings_mime_type() {
-    assert_eq!(
-        StreamFormat::from_mime(r#"video/x.strims-units;codecs="avc1.64001f,mp4a.40.2""#),
-        StreamFormat::Units
-    );
-    assert_eq!(
-        StreamFormat::from_mime("Video/X.Strims-Units"),
-        StreamFormat::Units
-    );
-    for packed in ["", r#"video/mp4;codecs="avc1.64001f""#] {
+fn only_the_unit_formats_mime_type_is_read() {
+    for units in [
+        r#"video/x.strims-units;codecs="avc1.64001f,mp4a.40.2""#,
+        " Video/X.Strims-Units ",
+    ] {
+        assert_eq!(check_format(units), Ok(()), "{units}");
+    }
+    for (mime, essence) in [
+        (r#"video/mp4;codecs="avc1.64001f""#, "video/mp4"),
+        ("", ""),
+        ("video/x.strims-units-2", "video/x.strims-units-2"),
+    ] {
         assert_eq!(
-            StreamFormat::from_mime(packed),
-            StreamFormat::Packed,
-            "{packed}"
+            check_format(mime),
+            Err(VideoError::UnsupportedFormat(essence.into())),
+            "{mime}"
         );
     }
 }

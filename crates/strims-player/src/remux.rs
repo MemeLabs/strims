@@ -983,7 +983,7 @@ fn same_layout(a: &[DecoderConfig], b: &[DecoderConfig]) -> bool {
 }
 
 /// The composition delay an init starting at `keyframe` declares: its
-/// PTS less DTS, zero when not positive, as the segmenter takes it.
+/// PTS less DTS, zero when not positive.
 fn composition_delay(keyframe: &AccessUnit<'_>, timescale: u32) -> Duration {
     let units = keyframe.pts.saturating_sub(keyframe.dts);
     if units <= 0 || timescale == 0 {

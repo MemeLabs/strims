@@ -80,6 +80,13 @@ pub enum VideoError {
     /// ([`EgressSettings`](crate::EgressSettings)) or unsupported.
     #[error("unsupported swarm option: {0}")]
     SwarmOption(&'static str),
+    /// A stream's MIME type, the essence held here, names a format other
+    /// than the [unit format](crate::units), the only one the node reads.
+    #[error(
+        "unsupported stream format {0:?}: the node reads {units} streams",
+        units = crate::units::MIME_TYPE
+    )]
+    UnsupportedFormat(String),
     /// The node reads [`EgressSettings::max_swarms`](crate::EgressSettings::max_swarms)
     /// swarms for streams.
     #[error("too many swarms")]
@@ -168,6 +175,12 @@ mod tests {
                 .to_rpc()
                 .message,
             "record not found"
+        );
+        assert_eq!(
+            VideoError::UnsupportedFormat("video/mp4".into())
+                .to_rpc()
+                .message,
+            r#"unsupported stream format "video/mp4": the node reads video/x.strims-units streams"#
         );
     }
 }

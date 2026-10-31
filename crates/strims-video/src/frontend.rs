@@ -32,12 +32,13 @@
 //!
 //! # Egress
 //!
-//! `OpenStream` reads the swarm in the format its request's MIME type, the
-//! listing's, names ([`StreamFormat::from_mime`]); any type but the unit
-//! format's reads packed records. It answers an error when the stream
-//! doesn't open: its URI or network keys are refused, the node has its
-//! most swarms or streams, or the swarm can't be added. An open stream answers `Open` with its
-//! transfer id, then `Data` messages of at most
+//! `OpenStream` reads the swarm in the unit format, which its request's
+//! MIME type, the listing's, must name
+//! ([`check_format`](crate::egress::check_format)). It answers an error
+//! when the stream doesn't open: its MIME type names another format, its
+//! URI or network keys are refused, the node has its most swarms or
+//! streams, or the swarm can't be added. An open stream answers `Open`
+//! with its transfer id, then `Data` messages of at most
 //! [`EgressSettings::max_data_bytes`](crate::EgressSettings::max_data_bytes)
 //! bytes of the records:
 //!
@@ -56,8 +57,8 @@
 //!
 //! `OpenStream` answers the playlist URL of the swarm's HLS stream, the
 //! one the node serves or a new one, or an error when it doesn't open. A
-//! new stream reads the swarm in the format its request's MIME type, the
-//! listing's, names, as `Egress` does.
+//! new stream reads the swarm in the unit format, which its request's MIME
+//! type must name, as `Egress` does.
 //! The stream isn't the connection's: it lasts past the call and the
 //! connection, until `CloseStream` with its transfer id closes it, it
 //! goes idle or HLS is disabled ([`hls_egress`](crate::hls_egress)).
@@ -111,7 +112,7 @@ use strims_proto::video::v1::{
 use strims_rpc::{Router, Timer};
 use strims_transfer::TransferId;
 
-use crate::egress::{EgressPiece, EgressStream, StreamFormat};
+use crate::egress::{EgressPiece, EgressStream};
 use crate::units::UnitSigning;
 use crate::{VideoControl, VideoError, VideoHost};
 
@@ -325,11 +326,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> HlsEgressService for VideoFrontend<
     ) -> Result<HlsEgressOpenStreamResponse, RpcError> {
         let playlist_url = self
             .control
-            .open_hls(
-                &req.swarm_uri,
-                &req.network_keys,
-                StreamFormat::from_mime(&req.mime_type),
-            )
+            .open_hls(&req.swarm_uri, &req.network_keys, &req.mime_type)
             .await
             .map_err(rpc)?;
         Ok(HlsEgressOpenStreamResponse { playlist_url })
@@ -500,11 +497,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> EgressService for VideoFrontend<K, 
     ) -> Result<ServerStream<EgressOpenStreamResponse>, RpcError> {
         let stream = self
             .control
-            .open_stream(
-                &req.swarm_uri,
-                &req.network_keys,
-                StreamFormat::from_mime(&req.mime_type),
-            )
+            .open_stream(&req.swarm_uri, &req.network_keys, &req.mime_type)
             .await
             .map_err(rpc)?;
         let max = self.control.shared.config.egress.max_data_bytes.max(1);

@@ -1,7 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! A deterministic script of FLV tags, and the records it produces.
+//! A deterministic script of FLV tags, and what muxers make of it.
 //!
 //! A [`Script`] is what an encoder publishing over RTMP sends: an
 //! `onMetaData` tag, the AVC sequence header (a real High profile SPS for
@@ -20,22 +20,18 @@
 //! - A resize at GOP `g` sends a new sequence header, for half the size,
 //!   before that GOP's keyframe.
 //!
-//! [`expected_records`] runs a script through the real source and
-//! segmenter into a [`PackedSink`] and decodes the packed stream back into
-//! records.
+//! [`mux_tags`] takes a script's tags through the real source into any
+//! [`Muxer`], and [`media_without_publish_times`] masks the times when
+//! units arrived out of the fMP4 it makes.
 
 // Test support: a panic is a test failure.
 #![allow(clippy::expect_used, clippy::panic)]
 
 use strims_base::time::Time;
-use strims_chunkstream::Frag;
-use strims_chunkstream::packed::{DEFAULT_SIZE, PackedDecoder};
 
 use crate::flv::{FlvSource, SourceEvent};
-use crate::fmp4::parse::{Boxes, split_record};
+use crate::fmp4::parse::Boxes;
 use crate::media::Muxer;
-use crate::record::PackedSink;
-use crate::segment::{CutRule, Segmenter};
 use crate::test_util::{BitWriter, SpsSpec, avcc as avcc_record};
 
 /// The kind of an FLV tag.
@@ -376,70 +372,9 @@ where
     }
 }
 
-/// The records `script` produces: its tags through [`FlvSource`] and a
-/// [`Segmenter`] into a [`PackedSink`], finished at the end, and the
-/// packed stream decoded from offset 0 into whole records.
-pub fn expected_records(script: &Script, rule: CutRule) -> Vec<Vec<u8>> {
-    let mut source = FlvSource::new();
-    let mut segmenter = Segmenter::new(rule, PackedSink::new());
-    let mut stream = Vec::new();
-    for tag in &script.tags {
-        let event = match tag.kind {
-            TagKind::Video => source.video(tag.timestamp, &tag.body, received(tag)),
-            TagKind::Audio => source.audio(tag.timestamp, &tag.body, received(tag)),
-            TagKind::Metadata => continue,
-        };
-        let result = match event.expect("script tags are valid") {
-            Some(SourceEvent::Config(c)) => segmenter.set_config(&c),
-            Some(SourceEvent::Unit(u)) => segmenter.push(&u),
-            None => Ok(()),
-        };
-        result.expect("the segmenter takes the script");
-        let out = segmenter.sink_mut().take_output();
-        stream.extend_from_slice(&out);
-        segmenter.sink_mut().restore(out);
-    }
-    segmenter.finish().expect("the segmenter finishes");
-    stream.extend_from_slice(segmenter.sink().output());
-    decode_records(&stream)
-}
-
-/// The whole records of a packed stream read from offset 0.
-pub fn decode_records(stream: &[u8]) -> Vec<Vec<u8>> {
-    let mut decoder = PackedDecoder::new(DEFAULT_SIZE).expect("DEFAULT_SIZE is valid");
-    let mut records = Vec::new();
-    let mut current = Vec::new();
-    let mut input = stream;
-    // An end can follow the input's last byte, so decoding goes on until
-    // no fragment is left.
-    loop {
-        let (used, frag) = decoder.decode(input);
-        input = input.get(used..).unwrap_or_default();
-        match frag {
-            Some(Frag::Data(d)) => current.extend_from_slice(d),
-            Some(Frag::End) => records.push(std::mem::take(&mut current)),
-            Some(Frag::Corrupt) => panic!("the packed stream is corrupt"),
-            None => return records,
-        }
-    }
-}
-
-/// `record` with the NTP timestamp of each of its media's `prft` boxes
-/// zeroed: the record as any writer of the same units writes it,
-/// whenever it received them. Bytes that aren't an fMP4 record come back
-/// as they are.
-pub fn without_publish_times(record: &[u8]) -> Vec<u8> {
-    let Ok((init, media)) = split_record(record) else {
-        return record.to_vec();
-    };
-    let mut out = record.to_vec();
-    out.truncate(2 + init.len());
-    out.extend_from_slice(&media_without_publish_times(media));
-    out
-}
-
 /// A media segment with the NTP timestamp of each of its `prft` boxes
-/// zeroed (see [`without_publish_times`]).
+/// zeroed: the media as any writer of the same units writes it, whenever
+/// it received them.
 pub fn media_without_publish_times(media: &[u8]) -> Vec<u8> {
     let mut out = media.to_vec();
     for b in Boxes::new(media) {

@@ -13,29 +13,24 @@
 //! - p, a plain host without a node, connects to the channel's RTMP
 //!   address and publishes a synthetic stream to `live/` and the
 //!   channel's stream key, paced in simulated time.
-//! - m finds the channel's media listing in its view, of the format's MIME
-//!   type and the ingest swarm's URI, with the channel's live snippet, and
-//!   opens a stream of the swarm.
+//! - m finds the channel's media listing in its view, of the unit format's
+//!   MIME type and the ingest swarm's URI, with the channel's live snippet,
+//!   and opens a stream of the swarm.
 //! - o's own stream of the channel reads the ingest swarm where it is:
 //!   the node has one video swarm, the ingest's.
 //! - p unpublishes: the session ends, its swarm goes, and the listing
 //!   goes from m's view.
 //!
-//! A run's [`Leg`] sets the ingest's format and the stream's GOPs:
-//!
-//! - fMP4, 1-second GOPs: a third of the way through, p waits until m
-//!   reads the stream, so m joins with most of the stream to come. Its
-//!   records, joined mid stream, are a contiguous run of those the script
-//!   produces.
-//! - The unit format: p goes on sending while m opens its stream half way
-//!   through a GOP. m's low-latency swarm reader starts at the newest chunk
-//!   it has and egress rewinds a spare reader to the GOP's sync record,
-//!   through the swarm's backlog from o, so m's records start at that
-//!   CONFIGS record and the GOP's keyframe, and its units are a contiguous
-//!   run of the script's. On an uplink too slow for the GOP's bytes to come
-//!   before the next GOP's sync record and the rewind's grace, the rewind
-//!   is dropped and m's records start at that sync record. m logs how long
-//!   its join took and how far behind the head it started.
+//! A run's [`Leg`] sets the stream's GOPs and where m joins: p goes on
+//! sending while m opens its stream half way through a GOP. m's
+//! low-latency swarm reader starts at the newest chunk it has and egress
+//! rewinds a spare reader to the GOP's sync record, through the swarm's
+//! backlog from o, so m's records start at that CONFIGS record and the
+//! GOP's keyframe, and its units are a contiguous run of the script's. On
+//! an uplink too slow for the GOP's bytes to come before the next GOP's
+//! sync record and the rewind's grace, the rewind is dropped and m's
+//! records start at that sync record. m logs how long its join took and
+//! how far behind the head it started.
 //!
 //! A leg whose m reads on to the stream's end ([`member_to_end`]) checks
 //! that the session's END record reaches m, after the script's last unit,
@@ -89,15 +84,12 @@ use strims_transfer::{TransferControl, TransferId};
 use strims_video::amf0::Value;
 use strims_video::hls::HlsRoutes;
 use strims_video::synth::publisher::{Publisher, PublisherConfig};
-use strims_video::synth::script::{
-    MetaValue, Script, ScriptConfig, Tag, TagKind, expected_records, without_publish_times,
-};
+use strims_video::synth::script::{MetaValue, Script, ScriptConfig, Tag, TagKind};
 use strims_video::units::ReaderEvent;
 use strims_video::units::record::{Record, UnitHeader, parse_record};
 use strims_video::{
-    AccessUnit, CutRule, DecoderConfig, EgressPiece, EgressStream, FlvSource, IngestFormat,
-    IngressSettings, ReaderMetrics, SourceEvent, StreamFormat, SwarmKind, TrackId, UnitReader,
-    VideoControl, VideoEvent, fmp4_mime, units_mime,
+    AccessUnit, DecoderConfig, EgressPiece, EgressStream, FlvSource, ReaderMetrics, SourceEvent,
+    SwarmKind, TrackId, UnitReader, VideoControl, VideoEvent, units, units_mime,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::spawn_local;
@@ -105,10 +97,6 @@ use tokio::task::spawn_local;
 const TCP_PORT: u16 = 7000;
 /// The port o's ingress listens on.
 const RTMP_PORT: u16 = 1935;
-/// The fraction of an fMP4 leg's script p sends before it waits for m.
-const BEFORE_PAUSE: usize = 3;
-/// The whole records m reads of an fMP4 stream.
-const RECORDS: usize = 3;
 /// The video track.
 const VIDEO: TrackId = TrackId(1);
 /// The ingest swarm's integrity unit.
@@ -119,20 +107,19 @@ const UNIT_BYTES: u64 = 8 * 4096;
 struct Leg {
     /// The test that runs it, for the replay command.
     test: &'static str,
-    format: IngestFormat,
     /// Pictures per GOP, at 30 fps.
     gop_frames: u32,
     duration_secs: u32,
-    /// The unit format's: the media time p sends up to before m opens its
-    /// stream, half way through a GOP.
+    /// The media time p sends up to before m opens its stream, half way
+    /// through a GOP.
     join_ms: u32,
     /// o's upload cap, in bytes per second.
     uplink: Option<u64>,
-    /// Where the unit format's join starts.
+    /// Where the join starts.
     start: JoinStart,
 }
 
-/// Where a unit-format join starts.
+/// Where a join starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum JoinStart {
     /// At the sync record of the GOP live at the open, rewound to.
@@ -144,36 +131,12 @@ enum JoinStart {
     Either,
 }
 
-const FMP4: Leg = Leg {
-    test: "an_rtmp_stream_reaches_a_member_on_whole_nodes",
-    format: IngestFormat::Fmp4,
-    gop_frames: 30,
-    duration_secs: 10,
-    join_ms: 0,
-    uplink: None,
-    start: JoinStart::Rewound,
-};
-
 impl Leg {
     /// The index of the tag p waits at for m.
     fn pause(&self, tags: &[Tag]) -> usize {
-        match self.format {
-            IngestFormat::Fmp4 => tags.len() / BEFORE_PAUSE,
-            IngestFormat::Units => tags
-                .iter()
-                .position(|t| t.timestamp >= self.join_ms)
-                .expect("a tag after the join"),
-        }
-    }
-
-    fn video_config(&self) -> strims_video::Config {
-        strims_video::Config {
-            ingress: IngressSettings {
-                format: self.format,
-                ..IngressSettings::default()
-            },
-            ..strims_video::Config::default()
-        }
+        tags.iter()
+            .position(|t| t.timestamp >= self.join_ms)
+            .expect("a tag after the join")
     }
 }
 
@@ -227,8 +190,6 @@ struct World {
     /// The start time of o's live session, in unix seconds.
     start_time: Rc<RefCell<Option<i64>>>,
     script: Rc<Script>,
-    /// The fMP4 records `script` produces.
-    expected: Rc<Vec<Vec<u8>>>,
     /// The units the source makes of `script`, in order.
     units: Rc<Vec<Unit>>,
     /// Steps done.
@@ -242,14 +203,6 @@ impl World {
             duration_secs: leg.duration_secs,
             ..ScriptConfig::default()
         });
-        // Publish times are the ingest's own: records compare without them.
-        let expected = match leg.format {
-            IngestFormat::Fmp4 => expected_records(&script, CutRule::default())
-                .iter()
-                .map(|r| without_publish_times(r))
-                .collect(),
-            IngestFormat::Units => Vec::new(),
-        };
         World {
             seed,
             leg,
@@ -260,7 +213,6 @@ impl World {
             start_time: Rc::default(),
             units: Rc::new(script_units(&script)),
             script: Rc::new(script),
-            expected: Rc::new(expected),
             done: Rc::default(),
         }
     }
@@ -330,23 +282,6 @@ impl World {
         tokio::time::timeout(StdDuration::from_secs(secs), wait)
             .await
             .unwrap_or_else(|_| panic!("timed out waiting for {what}"))
-    }
-
-    /// Where `got` starts in the expected records, which it is a
-    /// contiguous run of.
-    fn run_of(&self, got: &[Vec<u8>]) -> usize {
-        let expected = &self.expected;
-        let start = expected
-            .iter()
-            .position(|r| *r == got[0])
-            .expect("the first record is one of the expected");
-        let end = start + got.len();
-        assert!(
-            end <= expected.len() && got == &expected[start..end],
-            "records {start}..{end} of {} differ",
-            expected.len()
-        );
-        start
     }
 }
 
@@ -559,7 +494,7 @@ async fn start(w: &World, name: &str, index: u64) -> Started {
         HlsRoutes::new(),
         NodeTimer(clock),
         det_rng(w.seed.wrapping_mul(41) ^ index),
-        w.leg.video_config(),
+        strims_video::Config::default(),
     );
     spawn_local({
         let network = network.clone();
@@ -827,34 +762,6 @@ impl Started {
             );
         }
     }
-
-    /// The next `n` whole records of `stream`, logged with their place
-    /// among the expected records.
-    async fn read_records(&self, stream: &mut Stream, n: usize) -> Vec<Vec<u8>> {
-        let mut got = Vec::new();
-        let mut record = Vec::new();
-        while got.len() < n {
-            let piece = tokio::time::timeout(StdDuration::from_secs(60), stream.next(usize::MAX))
-                .await
-                .expect("a piece in time")
-                .expect("a piece");
-            match piece {
-                EgressPiece::Data(d) => record.extend_from_slice(d),
-                EgressPiece::RecordEnd => {
-                    got.push(without_publish_times(&std::mem::take(&mut record)))
-                }
-                EgressPiece::Discontinuity => panic!("a discontinuity after {} records", got.len()),
-            }
-        }
-        let start = self.world.run_of(&got);
-        let sizes: Vec<usize> = got.iter().map(Vec::len).collect();
-        self.log(format!(
-            "read records {start}..{} of {}: {sizes:?} bytes",
-            start + got.len(),
-            self.world.expected.len()
-        ));
-        got
-    }
 }
 
 async fn owner(w: World) -> turmoil::Result {
@@ -955,13 +862,9 @@ async fn owner(w: World) -> turmoil::Result {
     assert_eq!(swarms[0].network_keys, std::slice::from_ref(&net));
 
     // o's own stream reads the ingest swarm
-    let format = match w.leg.format {
-        IngestFormat::Fmp4 => StreamFormat::Packed,
-        IngestFormat::Units => StreamFormat::Units,
-    };
     let mut stream = h
         .video
-        .open_stream(&channel.uri(), std::slice::from_ref(&net), format)
+        .open_stream(&channel.uri(), std::slice::from_ref(&net), units::MIME_TYPE)
         .await
         .unwrap();
     assert_eq!(stream.transfer_id(), t);
@@ -969,14 +872,9 @@ async fn owner(w: World) -> turmoil::Result {
     assert_eq!(swarms.len(), 1);
     assert_eq!((swarms[0].kind, swarms[0].streams), (SwarmKind::Ingest, 1));
     h.log("o's stream reads the ingest swarm");
-    match w.leg.format {
-        IngestFormat::Fmp4 => drop(h.read_records(&mut stream, 2).await),
-        IngestFormat::Units => {
-            let run = h.read_units(&mut stream, 1).await;
-            assert!(matches!(run.record(0), Record::Configs { gop_back: 0, .. }));
-            assert_eq!(run.metrics.refused_rewinds, 0);
-        }
-    }
+    let run = h.read_units(&mut stream, 1).await;
+    assert!(matches!(run.record(0), Record::Configs { gop_back: 0, .. }));
+    assert_eq!(run.metrics.refused_rewinds, 0);
     drop(stream);
     assert_eq!(h.video.video_swarms()[0].streams, 0);
 
@@ -999,24 +897,12 @@ async fn owner(w: World) -> turmoil::Result {
         m.connections, m.sessions, m.segments, m.bytes, m.refused
     ));
     assert_eq!((m.connections, m.sessions, m.refused), (1, 1, 0));
-    match w.leg.format {
-        IngestFormat::Fmp4 => {
-            assert_eq!(m.segments, w.expected.len() as u64);
-            assert_eq!(
-                m.bytes,
-                w.expected.iter().map(|r| r.len() as u64).sum::<u64>()
-            );
-        }
-        IngestFormat::Units => {
-            // A record per unit, a sync record per GOP and the session's
-            // END; the session's end signed the last partial integrity
-            // unit.
-            let keyframes = w.units.iter().filter(|u| u.0 == VIDEO && u.3).count();
-            assert_eq!(m.segments, (w.units.len() + keyframes + 1) as u64);
-            assert_eq!(m.bytes % UNIT_BYTES, 0);
-            assert!(m.early_signs > 0);
-        }
-    }
+    // A record per unit, a sync record per GOP and the session's END; the
+    // session's end signed the last partial integrity unit.
+    let keyframes = w.units.iter().filter(|u| u.0 == VIDEO && u.3).count();
+    assert_eq!(m.segments, (w.units.len() + keyframes + 1) as u64);
+    assert_eq!(m.bytes % UNIT_BYTES, 0);
+    assert!(m.early_signs > 0);
     assert_eq!((m.dropped_units, m.media_errors, m.write_errors), (0, 0, 0));
     w.step("m done", 120).await;
     w.set("o done");
@@ -1062,20 +948,10 @@ async fn member(w: World) -> turmoil::Result {
     // the server shows only snippets the listing's swarm key signed: the
     // channel's
     assert_eq!(media.swarm_uri, channel.uri());
-    let configs = script_configs(&w.script);
-    let mime = match w.leg.format {
-        IngestFormat::Fmp4 => fmp4_mime(&configs),
-        IngestFormat::Units => units_mime(&configs),
-    };
-    assert_eq!(media.mime_type, mime);
-    assert!(
-        [
-            "video/mp4;codecs=\"avc1.64001f,mp4a.40.2\"",
-            "video/x.strims-units;codecs=\"avc1.64001f,mp4a.40.2\""
-        ]
-        .contains(&media.mime_type.as_str()),
-        "{}",
-        media.mime_type
+    assert_eq!(media.mime_type, units_mime(&script_configs(&w.script)));
+    assert_eq!(
+        media.mime_type,
+        "video/x.strims-units;codecs=\"avc1.64001f,mp4a.40.2\""
     );
     let shown = shown.unwrap();
     assert_eq!(
@@ -1092,18 +968,16 @@ async fn member(w: World) -> turmoil::Result {
     assert_eq!(shown.start_time, start_time);
 
     // a stream of the ingest swarm, joined mid stream: half way through a
-    // GOP of the unit format
-    if w.leg.format == IngestFormat::Units {
-        w.set("m ready");
-        w.step("join", 60).await;
-    }
+    // GOP
+    w.set("m ready");
+    w.step("join", 60).await;
     let opened = h.clock.now();
     let mut stream = h
         .video
         .open_stream(
             &media.swarm_uri,
             std::slice::from_ref(&net),
-            StreamFormat::from_mime(&media.mime_type),
+            &media.mime_type,
         )
         .await
         .unwrap();
@@ -1111,16 +985,8 @@ async fn member(w: World) -> turmoil::Result {
     assert_eq!(swarms.len(), 1);
     assert_eq!((swarms[0].kind, swarms[0].streams), (SwarmKind::Egress, 1));
     h.log("opened the stream");
-    match w.leg.format {
-        IngestFormat::Fmp4 => {
-            w.set("m reads");
-            h.read_records(&mut stream, RECORDS).await;
-        }
-        IngestFormat::Units => {
-            let run = h.read_units(&mut stream, 1).await;
-            h.check_join(&run, opened);
-        }
-    }
+    let run = h.read_units(&mut stream, 1).await;
+    h.check_join(&run, opened);
     drop(stream);
 
     // the session's end takes the listing down
@@ -1180,7 +1046,7 @@ async fn member_to_end(w: World) -> turmoil::Result {
         .open_stream(
             &media.swarm_uri,
             std::slice::from_ref(&net),
-            StreamFormat::from_mime(&media.mime_type),
+            &media.mime_type,
         )
         .await
         .unwrap();
@@ -1395,13 +1261,8 @@ async fn publisher(w: World) -> turmoil::Result {
     p.send_paced(&tags[..pause], start).await;
     p.log(format!("sent {pause} tags; waiting for m"));
     let paused = tokio::time::Instant::now();
-    match w.leg.format {
-        IngestFormat::Fmp4 => w.step("m reads", 25).await,
-        IngestFormat::Units => {
-            w.step("m ready", 25).await;
-            w.set("join");
-        }
-    }
+    w.step("m ready", 25).await;
+    w.set("join");
     let resumed = start + (tokio::time::Instant::now() - paused);
     p.send_paced(&tags[pause..], resumed).await;
     p.log(format!("sent {} tags", tags.len()));
@@ -1537,16 +1398,10 @@ fn check_with<F: Future<Output = turmoil::Result> + 'static>(leg: Leg, m: fn(Wor
     );
 }
 
-#[test]
-fn an_rtmp_stream_reaches_a_member_on_whole_nodes() {
-    check(FMP4);
-}
-
-/// A unit-format leg of `gop_secs`-second GOPs, joined at `join_ms`.
+/// A leg of `gop_secs`-second GOPs, joined at `join_ms`.
 const fn units(test: &'static str, gop_secs: u32, duration_secs: u32, join_ms: u32) -> Leg {
     Leg {
         test,
-        format: IngestFormat::Units,
         gop_frames: gop_secs * 30,
         duration_secs,
         join_ms,

@@ -501,8 +501,8 @@ fn a_local_captures_swarm_is_read_where_it_is() {
 }
 
 /// URIs that don't parse, are too long or carry options outside the
-/// egress bounds, and network keys past their bounds, are refused, and
-/// nothing is added.
+/// egress bounds, MIME types of another format, and network keys past
+/// their bounds, are refused, and nothing is added.
 #[test]
 fn bad_uris_and_options_are_refused() {
     run(async {
@@ -549,6 +549,16 @@ fn bad_uris_and_options_are_refused() {
                 open(&e, &u, &[]).await.err().as_deref(),
                 Some(message),
                 "{u}"
+            );
+        }
+        // A listing of another format than the unit format.
+        for mime in [r#"video/mp4;codecs="avc1.64001f""#, ""] {
+            let essence = mime.split(';').next().unwrap();
+            assert_eq!(
+                open_as(&e, &uri(""), &[], mime).await.err(),
+                Some(format!(
+                    "unsupported stream format {essence:?}: the node reads video/x.strims-units streams"
+                ))
             );
         }
         let keys = vec![vec![1; 32]; 17];

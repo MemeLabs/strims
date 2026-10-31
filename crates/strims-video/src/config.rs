@@ -9,7 +9,6 @@ use strims_directory::KeeperConfig;
 use strims_proto::video::v1::{HlsEgressConfig, VideoIngressConfig};
 
 use crate::ingress::IngressMetrics;
-use crate::segment::CutRule;
 
 /// The longest ingress listen address, ingress public address or HLS
 /// public address, in bytes.
@@ -32,8 +31,9 @@ pub struct Config {
     pub autoseed: AutoseedSettings,
 }
 
-/// The RTMP ingress: its connections, the sessions publishing on them,
-/// and the records it cuts.
+/// The RTMP ingress: its connections and the sessions publishing on them.
+/// A session's records are bounded by
+/// [`units::MAX_RECORD_LEN`](crate::units::MAX_RECORD_LEN).
 #[derive(Clone, Debug, PartialEq)]
 pub struct IngressSettings {
     /// How long a connection has from its accept to finish the RTMP
@@ -52,20 +52,7 @@ pub struct IngressSettings {
     pub max_sessions: usize,
     /// The wait before binding the listener again after a bind failed.
     pub bind_retry: Duration,
-    /// The media a record holds before it is cut at the next keyframe.
-    pub min_segment_media_bytes: usize,
-    /// The largest record. A session whose record would grow past it ends:
-    /// half the ingress swarm's 16 MiB window, so a viewer holds a whole
-    /// record.
-    pub max_record_bytes: usize,
-    /// The media a fragment within a record holds before it is written
-    /// ([`CutRule::fragment_duration`](crate::CutRule::fragment_duration)).
-    pub fragment_duration: Duration,
-    /// The format sessions write. The record bounds above are the fMP4
-    /// format's; the unit format's records are bounded by
-    /// [`units::MAX_RECORD_LEN`](crate::units::MAX_RECORD_LEN).
-    pub format: IngestFormat,
-    /// How long a unit-format session's access units wait, from its
+    /// How long a session's access units wait, from its
     /// first, for what settles its swarm's signing
     /// ([`UnitSigning`](crate::units::UnitSigning)): the stream's
     /// `onMetaData` or a video config. Past it, the session creates its
@@ -78,7 +65,7 @@ pub struct IngressSettings {
     /// How long a closing connection has to take its last output, such as
     /// the status that tells a publisher why.
     pub close_timeout: Duration,
-    /// How long a unit-format session whose connection ended without an
+    /// How long a session whose connection ended without an
     /// unpublish (it dropped, failed or timed out) waits for its encoder to
     /// publish to the channel again, keeping its listing and swarm, before
     /// it ends with its END record (see
@@ -99,28 +86,12 @@ impl Default for IngressSettings {
             max_unpublished_per_address: 2,
             max_sessions: 4,
             bind_retry: Duration::from_secs(30),
-            min_segment_media_bytes: 32 * 1024,
-            max_record_bytes: 8 * 1024 * 1024,
-            fragment_duration: CutRule::DEFAULT_FRAGMENT_DURATION,
-            format: IngestFormat::default(),
             signing_wait: Duration::from_secs(1),
             rtmp: RtmpSettings::default(),
             close_timeout: Duration::from_secs(5),
             resume_grace: Duration::from_secs(30),
         }
     }
-}
-
-/// The format an ingest session writes into its swarm.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum IngestFormat {
-    /// fMP4 records, one per segment, in the packed layout; listed as
-    /// [`fmp4_mime`](crate::fmp4_mime).
-    Fmp4,
-    /// The [unit format](crate::units): a record per access unit, in the
-    /// chunked layout; listed as [`units_mime`](crate::units_mime).
-    #[default]
-    Units,
 }
 
 /// What one RTMP connection takes and holds. Decoder configs (avcC,
@@ -294,10 +265,10 @@ pub struct HlsSettings {
     pub retained_duration: Duration,
     /// The bytes of segments a stream keeps.
     pub max_retained_bytes: usize,
-    /// The largest record a stream reads in the fMP4 format, and the
-    /// largest segment of a unit-format stream.
-    pub max_record_bytes: usize,
-    /// The media a fragment of a unit-format stream's segment holds
+    /// The largest segment of a stream, its held samples included
+    /// ([`HlsMuxerConfig::max_segment_bytes`](crate::hls::HlsMuxerConfig::max_segment_bytes)).
+    pub max_segment_bytes: usize,
+    /// The media a fragment of a stream's segment holds
     /// ([`HlsMuxerConfig::fragment_duration`](crate::hls::HlsMuxerConfig::fragment_duration)).
     pub fragment_duration: Duration,
     /// The longest request path.
@@ -322,8 +293,8 @@ impl Default for HlsSettings {
             listed_duration: Duration::from_secs(16),
             retained_duration: Duration::from_secs(40),
             max_retained_bytes: 64 * 1024 * 1024,
-            max_record_bytes: 16 * 1024 * 1024,
-            fragment_duration: CutRule::DEFAULT_FRAGMENT_DURATION,
+            max_segment_bytes: 16 * 1024 * 1024,
+            fragment_duration: crate::hls::DEFAULT_FRAGMENT_DURATION,
             max_path_bytes: 256,
             max_request_head_bytes: 8 * 1024,
             request_head_timeout: Duration::from_secs(10),
@@ -409,10 +380,8 @@ pub struct Metrics {
     pub hls_streams: u64,
     /// Segments HLS streams served.
     pub hls_segments: u64,
-    /// Records HLS streams skipped: fMP4 records over
-    /// [`HlsSettings::max_record_bytes`], not fMP4 records with media time
-    /// or with a fragment longer than the target, and unit-format records
-    /// over [`units::MAX_RECORD_LEN`](crate::units::MAX_RECORD_LEN) or
+    /// Records HLS streams skipped: those over
+    /// [`units::MAX_RECORD_LEN`](crate::units::MAX_RECORD_LEN), and those
     /// whose unit the muxer refused.
     pub hls_skipped_records: u64,
     /// Times an autoseed rule found its swarm held by another: a

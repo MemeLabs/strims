@@ -85,9 +85,11 @@
 //!   ended, with no hole in any track.
 //!
 //! With these, the output for a stream of one writer session without
-//! holes equals what the segmenter writes for the same units moved as
-//! above, with a fragment per unit, each record's media following its
-//! init, but for the cut track's last unit, which lasts to the end of the
+//! holes equals, for the same units moved as above, an init per set of
+//! configs, written at the cut track's keyframe the set starts at, each
+//! followed by a fragment per unit
+//! ([`FragmentWriter`](strims_video::fmp4::FragmentWriter) with no span),
+//! but for the cut track's last unit, which lasts to the end of the
 //! output.
 //!
 //! # Recovery

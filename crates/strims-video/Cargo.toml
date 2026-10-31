@@ -1,6 +1,6 @@
 [package]
 name = "strims-video"
-description = "Live video: video channels, RTMP ingress to fMP4 swarms, browser capture, egress streams and HLS"
+description = "Live video: video channels, RTMP ingress and browser capture to unit-format swarms, egress streams and HLS"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

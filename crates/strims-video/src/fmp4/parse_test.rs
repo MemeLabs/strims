@@ -105,16 +105,6 @@ fn ms(n: i64) -> Duration {
 }
 
 #[test]
-fn split_record_parts() {
-    let record = [0, 3, b'a', b'b', b'c', b'd', b'e'];
-    assert_eq!(split_record(&record), Ok((&b"abc"[..], &b"de"[..])));
-    assert_eq!(split_record(&[0, 0]), Ok((&[][..], &[][..])));
-    for bad in [&[][..], &[0], &[0, 5, 1, 2]] {
-        assert_eq!(split_record(bad), Err(ParseError::Prefix));
-    }
-}
-
-#[test]
 fn parse_init_reads_tracks() {
     let info = av_info();
     assert_eq!(
@@ -432,7 +422,6 @@ proptest! {
     #[test]
     fn arbitrary_input_never_panics(data in proptest::collection::vec(any::<u8>(), 0..512)) {
         let info = av_info();
-        let _ = split_record(&data);
         let _ = parse_init(&data);
         let _ = media_duration(&info, &data);
         if let Ok(parsed) = parse_init(&data) {
@@ -441,24 +430,22 @@ proptest! {
     }
 
     #[test]
-    fn corrupted_records_never_panic(
+    fn corrupted_segments_never_panic(
         flips in proptest::collection::vec((any::<prop::sample::Index>(), any::<u8>()), 1..8),
         cut in any::<prop::sample::Index>(),
     ) {
         let init = init(&[video_config(), audio_config(2, 48_000)]);
-        let mut record = (init.len() as u16).to_be_bytes().to_vec();
-        record.extend_from_slice(&init);
-        record.extend_from_slice(&fragment(1, 4, 3));
+        let mut bytes = init.clone();
+        bytes.extend_from_slice(&fragment(1, 4, 3));
         for (at, byte) in flips {
-            let i = at.index(record.len());
-            record[i] ^= byte;
+            let i = at.index(bytes.len());
+            bytes[i] ^= byte;
         }
-        record.truncate(cut.index(record.len() + 1));
-        if let Ok((init, media)) = split_record(&record) {
-            if let Ok(info) = parse_init(init) {
-                let _ = media_duration(&info, media);
-            }
-            let _ = media_duration(&InitInfo::default(), media);
+        bytes.truncate(cut.index(bytes.len() + 1));
+        let (init, media) = bytes.split_at(init.len().min(bytes.len()));
+        if let Ok(info) = parse_init(init) {
+            let _ = media_duration(&info, media);
         }
+        let _ = media_duration(&InitInfo::default(), media);
     }
 }

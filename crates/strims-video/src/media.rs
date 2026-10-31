@@ -115,18 +115,10 @@ pub trait Muxer {
     fn finish(&mut self) -> Result<(), Self::Error>;
 }
 
-/// The MIME type of an fMP4 stream of these tracks, with the codecs
-/// parameter quoted per RFC 6381: video codecs first, then audio, each in
-/// config order. The parameter is left out when there are no configs.
-///
-/// `video/mp4;codecs="avc1.64001f,mp4a.40.2"`
-pub fn fmp4_mime(configs: &[DecoderConfig]) -> String {
-    with_codecs("video/mp4", configs)
-}
-
 /// The MIME type of a unit-format stream of these tracks
-/// ([`units`](crate::units)), with the codecs parameter as
-/// [`fmp4_mime`] writes it.
+/// ([`units`](crate::units)), with the codecs parameter quoted per RFC
+/// 6381: video codecs first, then audio, each in config order. The
+/// parameter is left out when there are no configs.
 ///
 /// `video/x.strims-units;codecs="avc1.64001f,mp4a.40.2"`
 pub fn units_mime(configs: &[DecoderConfig]) -> String {
@@ -175,36 +167,19 @@ mod tests {
     }
 
     #[test]
-    fn fmp4_mime_lists_video_codecs_first_quoted() {
-        let configs = [
-            config(2, TrackKind::Audio, "mp4a.40.2"),
-            config(1, TrackKind::Video, "avc1.64001f"),
-        ];
+    fn units_mime_of_one_track() {
         assert_eq!(
-            fmp4_mime(&configs),
-            r#"video/mp4;codecs="avc1.64001f,mp4a.40.2""#
+            units_mime(&[config(1, TrackKind::Video, "avc1.42c01e")]),
+            r#"video/x.strims-units;codecs="avc1.42c01e""#
+        );
+        assert_eq!(
+            units_mime(&[config(2, TrackKind::Audio, "mp4a.40.5")]),
+            r#"video/x.strims-units;codecs="mp4a.40.5""#
         );
     }
 
     #[test]
-    fn fmp4_mime_of_one_track() {
-        assert_eq!(
-            fmp4_mime(&[config(1, TrackKind::Video, "avc1.42c01e")]),
-            r#"video/mp4;codecs="avc1.42c01e""#
-        );
-        assert_eq!(
-            fmp4_mime(&[config(2, TrackKind::Audio, "mp4a.40.5")]),
-            r#"video/mp4;codecs="mp4a.40.5""#
-        );
-    }
-
-    #[test]
-    fn fmp4_mime_without_configs_has_no_codecs_parameter() {
-        assert_eq!(fmp4_mime(&[]), "video/mp4");
-    }
-
-    #[test]
-    fn units_mime_names_the_unit_format_with_the_codecs() {
+    fn units_mime_lists_video_codecs_first_quoted_and_none_without_configs() {
         let configs = [
             config(2, TrackKind::Audio, "mp4a.40.2"),
             config(1, TrackKind::Video, "avc1.64001f"),
@@ -242,15 +217,15 @@ mod tests {
     }
 
     #[test]
-    fn fmp4_mime_keeps_config_order_within_a_kind() {
+    fn units_mime_keeps_config_order_within_a_kind() {
         let configs = [
             config(3, TrackKind::Video, "avc1.4d401f"),
             config(2, TrackKind::Audio, "mp4a.40.2"),
             config(1, TrackKind::Video, "avc1.64001f"),
         ];
         assert_eq!(
-            fmp4_mime(&configs),
-            r#"video/mp4;codecs="avc1.4d401f,avc1.64001f,mp4a.40.2""#
+            units_mime(&configs),
+            r#"video/x.strims-units;codecs="avc1.4d401f,avc1.64001f,mp4a.40.2""#
         );
     }
 }

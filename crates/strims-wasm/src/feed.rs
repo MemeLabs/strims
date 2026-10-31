@@ -14,7 +14,7 @@
 //!
 //! | `type` | fields | what the node does |
 //! |---|---|---|
-//! | `open` | `id`, `swarmUri`, `networkKeys` (an array of `Uint8Array`), `mimeType`, `port` (a transferred `MessagePort`), and optionally `replaces` | Opens a stream of the swarm in the format `mimeType` names ([`StreamFormat::from_mime`]) and feeds it on `port`. Once the stream opened or failed to, it closes feed `replaces`: a player's new feed holds the swarm before its old one lets go of it. |
+//! | `open` | `id`, `swarmUri`, `networkKeys` (an array of `Uint8Array`), `mimeType`, `port` (a transferred `MessagePort`), and optionally `replaces` | Opens a stream of the swarm, whose listing's MIME type `mimeType` must name the unit format ([`check_format`](strims_video::egress::check_format)), and feeds it on `port`. Once the stream opened or failed to, it closes feed `replaces`: a player's new feed holds the swarm before its old one lets go of it. |
 //! | `close` | `id` | Closes the feed: its stream closes, and its port gets nothing more. |
 //!
 //! Ids are the window's: a number of at most 2^53, distinct among the
@@ -74,7 +74,7 @@ use strims_directory::Host;
 use strims_kv::Kv;
 use strims_node_core::app::NodeHost;
 use strims_rpc::Timer;
-use strims_video::egress::{EgressPiece, EgressStream, StreamFormat};
+use strims_video::egress::{EgressPiece, EgressStream};
 use strims_video::{NoVideoHost, VideoControl, VideoError, VideoHost};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -681,11 +681,7 @@ fn start<K: Kv>(feeds: &Rc<Feeds>, video: &WasmVideo<K>, open: Open) {
 async fn feed<K: Kv>(feeds: Rc<Feeds>, video: WasmVideo<K>, serial: u64, open: Open) {
     let port = FeedPort::new(open.port);
     let opened = video
-        .open_stream(
-            &open.swarm_uri,
-            &open.network_keys,
-            StreamFormat::from_mime(&open.mime_type),
-        )
+        .open_stream(&open.swarm_uri, &open.network_keys, &open.mime_type)
         .await;
     if let Some(old) = open.replaces.filter(|r| *r != open.id) {
         feeds.close(old);

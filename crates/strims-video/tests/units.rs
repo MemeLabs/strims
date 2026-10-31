@@ -39,8 +39,8 @@ use strims_video::units::record::{Record, parse_record};
 use strims_video::units::{END_LINGER, MAX_RECORD_LEN, ReaderEvent, UnitReader};
 use strims_video::{
     AccessUnit, ChunkedReader, Config, DecoderConfig, EgressPiece, EgressSettings, EgressStream,
-    FlvSource, IngestFormat, IngressSettings, NoVideoHost, Rewind, SourceEvent, StreamFormat,
-    TrackId, VideoControl, VideoError, VideoHost, units_mime,
+    FlvSource, IngressSettings, NoVideoHost, Rewind, SourceEvent, TrackId, VideoControl,
+    VideoError, VideoHost, check_format, units, units_mime,
 };
 use support::{FakeVideo, TestPublisher};
 use tokio::task::JoinHandle;
@@ -78,16 +78,6 @@ fn start<V: VideoHost>(n: &Node, video: V, config: Config) -> Control<V> {
     let c = control.clone();
     n.spawn(async move { c.run().await });
     control
-}
-
-fn units_config() -> Config {
-    Config {
-        ingress: IngressSettings {
-            format: IngestFormat::Units,
-            ..IngressSettings::default()
-        },
-        ..Config::default()
-    }
 }
 
 /// The decoder configs and units the source makes of `script`, in order.
@@ -244,7 +234,7 @@ impl Ingest {
         let b = node_in(&world, 2).await;
         let (net, pipes) = owned_network(&a, &[&b], 10).await;
         let video = FakeVideo::default();
-        let va = start(&a, video.clone(), units_config());
+        let va = start(&a, video.clone(), Config::default());
         let snippet = ListingSnippet {
             title: "units".into(),
             ..Default::default()
@@ -338,12 +328,12 @@ fn a_unit_format_ingest_reads_back_through_egress() {
             m.mime_type,
             r#"video/x.strims-units;codecs="avc1.64001f,mp4a.40.2""#
         );
-        assert_eq!(StreamFormat::from_mime(&m.mime_type), StreamFormat::Units);
+        assert_eq!(check_format(&m.mime_type), Ok(()));
         let mut stream = vb
             .open_stream(
                 &m.swarm_uri,
                 std::slice::from_ref(&s.net.public),
-                StreamFormat::from_mime(&m.mime_type),
+                &m.mime_type,
             )
             .await
             .unwrap();
@@ -391,7 +381,7 @@ fn a_dropped_session_ends_with_its_end_after_the_resume_grace() {
             .open_stream(
                 &m.swarm_uri,
                 std::slice::from_ref(&s.net.public),
-                StreamFormat::Units,
+                units::MIME_TYPE,
             )
             .await
             .unwrap();
@@ -433,7 +423,7 @@ fn a_publish_within_the_resume_grace_takes_the_session_over_without_an_end() {
             .open_stream(
                 &m.swarm_uri,
                 std::slice::from_ref(&s.net.public),
-                StreamFormat::Units,
+                units::MIME_TYPE,
             )
             .await
             .unwrap();
@@ -968,7 +958,7 @@ impl Live {
             .open_stream(
                 &self.media.swarm_uri,
                 std::slice::from_ref(&self.s.net.public),
-                StreamFormat::from_mime(&self.media.mime_type),
+                &self.media.mime_type,
             )
             .await
             .unwrap();

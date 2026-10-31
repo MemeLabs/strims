@@ -7,15 +7,14 @@
 //!
 //! - ffmpeg publishes a test pattern as H.264 (libx264, High profile,
 //!   B-frames, 1-second GOPs) with AAC to a channel's RTMP URL, which
-//!   ingests it as fMP4 records, or in the unit format. The channel's
-//!   listing names the format and the stream's codecs. The service serves
-//!   the stream as HLS, opened with the listing's MIME type: every segment
-//!   lasts its GOP and starts at a keyframe, ffprobe reads the playlist as
-//!   H.264 at the published size with 48 kHz stereo AAC, and ffmpeg
-//!   decodes both tracks from it without an error. An init with a segment
-//!   probes as a whole fMP4 file.
+//!   ingests it in the unit format. The channel's listing names the format
+//!   and the stream's codecs. The service serves the stream as HLS, opened
+//!   with the listing's MIME type: every segment lasts its GOP and starts
+//!   at a keyframe, ffprobe reads the playlist as H.264 at the published
+//!   size with 48 kHz stereo AAC, and ffmpeg decodes both tracks from it
+//!   without an error. An init with a segment probes as a whole fMP4 file.
 //! - ffmpeg publishes a CRF stream whose keyframes come at scene cuts and
-//!   at most 10 s apart, ingested in the unit format. Its segments start
+//!   at most 10 s apart. Its segments start
 //!   at its keyframes, and each GOP longer than the 4 s target is split
 //!   into segments within it, which start mid-GOP and decode after the
 //!   GOP's first without an error.
@@ -56,7 +55,7 @@ use strims_proto::video::v1::{
     VideoIngressListStreamsRequest, VideoIngressSetConfigRequest,
 };
 use strims_svc::Config;
-use strims_video::{IngestFormat, ingress_options};
+use strims_video::ingress_options;
 use support::video::*;
 use support::*;
 use tokio::io::AsyncReadExt;
@@ -94,13 +93,12 @@ struct Channel {
 }
 
 impl Channel {
-    /// A channel ingesting in `format`.
-    async fn open(format: IngestFormat) -> Channel {
-        let mut config = Config {
+    /// A channel with an RTMP ingress.
+    async fn open() -> Channel {
+        let config = Config {
             hls_listen: Some("127.0.0.1:0".into()),
             ..local_config()
         };
-        config.app.video.ingress.format = format;
         let alice = Profile::sign_up(config).await;
         let network = NetworkFrontendClient::new(alice.client())
             .create_server(&CreateServerRequest {
@@ -410,16 +408,10 @@ struct Live {
 }
 
 impl Live {
-    /// Opens a channel ingesting in `format`, publishes `inputs` encoded
-    /// with `video` for at most `secs`, and opens its HLS stream.
-    async fn start(
-        format: IngestFormat,
-        inputs: &[String],
-        video: &[&str],
-        secs: u32,
-        steps: &mut Steps,
-    ) -> Live {
-        let ch = Channel::open(format).await;
+    /// Opens a channel, publishes `inputs` encoded with `video` for at most
+    /// `secs`, and opens its HLS stream.
+    async fn start(inputs: &[String], video: &[&str], secs: u32, steps: &mut Steps) -> Live {
+        let ch = Channel::open().await;
         let hls_addr = ch.alice.svc.hls_addr().unwrap();
         ch.wait_listening().await;
         steps.done("alice has a channel and an RTMP ingress");
@@ -553,20 +545,15 @@ impl Live {
     }
 }
 
-/// A stream of 1-second GOPs ingested in `format`: every segment a GOP,
-/// played back by ffmpeg.
-async fn one_second_gops(format: IngestFormat) {
+/// A stream of 1-second GOPs: every segment a GOP, played back by ffmpeg.
+async fn one_second_gops() {
     let mut steps = Steps(Instant::now());
-    let mut live = Live::start(format, &pattern(), H264, 120, &mut steps).await;
+    let mut live = Live::start(&pattern(), H264, 120, &mut steps).await;
     // The listing names the format and the stream's codecs: x264's High
     // profile at its level, and AAC-LC.
-    let essence = match format {
-        IngestFormat::Fmp4 => "video/mp4",
-        IngestFormat::Units => "video/x.strims-units",
-    };
     let mime = live.mime.clone();
     assert!(
-        mime.starts_with(&format!("{essence};codecs=\"avc1.6400"))
+        mime.starts_with("video/x.strims-units;codecs=\"avc1.6400")
             && mime.ends_with(",mp4a.40.2\""),
         "{mime}"
     );
@@ -644,32 +631,14 @@ async fn one_second_gops(format: IngestFormat) {
 }
 
 #[test]
-fn ffmpeg_publishes_and_plays_back_over_hls() {
-    if !tools_available() {
-        return;
-    }
-    run(async {
-        tokio::time::timeout(
-            StdDuration::from_secs(300),
-            one_second_gops(IngestFormat::Fmp4),
-        )
-        .await
-        .expect("the scenario took over 300 s");
-    });
-}
-
-#[test]
 fn ffmpeg_plays_back_a_unit_format_ingest_over_hls() {
     if !tools_available() {
         return;
     }
     run(async {
-        tokio::time::timeout(
-            StdDuration::from_secs(300),
-            one_second_gops(IngestFormat::Units),
-        )
-        .await
-        .expect("the scenario took over 300 s");
+        tokio::time::timeout(StdDuration::from_secs(300), one_second_gops())
+            .await
+            .expect("the scenario took over 300 s");
     });
 }
 
@@ -681,8 +650,7 @@ fn ffmpeg_plays_back_scene_cut_gops_split_within_the_target() {
     run(async {
         tokio::time::timeout(StdDuration::from_secs(300), async {
             let mut steps = Steps(Instant::now());
-            let mut live =
-                Live::start(IngestFormat::Units, &scenes(), H264_CRF, 60, &mut steps).await;
+            let mut live = Live::start(&scenes(), H264_CRF, 60, &mut steps).await;
             assert!(
                 live.mime.starts_with("video/x.strims-units;"),
                 "{}",
@@ -839,7 +807,7 @@ fn ffmpeg_publishing_hevc_is_refused_with_the_reason() {
     }
     run(async {
         tokio::time::timeout(StdDuration::from_secs(120), async {
-            let ch = Channel::open(IngestFormat::default()).await;
+            let ch = Channel::open().await;
             ch.wait_listening().await;
             let hevc = &[
                 "-c:v",

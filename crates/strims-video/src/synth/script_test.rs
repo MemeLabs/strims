@@ -5,13 +5,26 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
 use strims_base::time::Duration;
-use strims_chunkstream::packed::FrameHasEnd;
 
 use super::*;
-use crate::fmp4::parse::{media_duration, parse_init, split_record};
+use crate::fmp4::parse::{media_duration, parse_init};
+use crate::hls::{HlsMuxer, HlsMuxerConfig, HlsSegment};
 use crate::media::{AccessUnit, CodecParams, DecoderConfig};
-use crate::record::{RecordSink, VecSink};
-use crate::segment::SegmenterMetrics;
+
+/// The HLS segments of `script`'s tags, each unit received at its tag's
+/// time, finished at the end.
+fn segments(script: &Script) -> Vec<HlsSegment> {
+    let mut muxer = HlsMuxer::new(HlsMuxerConfig::default());
+    let mut source = FlvSource::new();
+    let mut out = Vec::new();
+    for tag in &script.tags {
+        mux_tags(std::slice::from_ref(tag), &mut source, &mut muxer);
+        out.extend(std::iter::from_fn(|| muxer.take_segment()));
+    }
+    muxer.finish().unwrap();
+    out.extend(std::iter::from_fn(|| muxer.take_segment()));
+    out
+}
 
 /// The configs and units a script's tags yield.
 fn source_events(script: &Script) -> (Vec<DecoderConfig>, Vec<(AccessUnit<'_>, TagKind)>) {
@@ -145,25 +158,25 @@ fn metadata_is_an_amf0_ecma_array() {
 }
 
 #[test]
-fn expected_records_parse_and_start_at_keyframes() {
+fn a_scripts_segments_parse_and_its_resize_changes_the_init_once() {
     let script = Script::new(&ScriptConfig {
         resize_at_gop: Some(3),
         ..ScriptConfig::default()
     });
-    let records = expected_records(&script, CutRule::default());
-    assert!(records.len() >= 5, "{}", records.len());
+    let segments = segments(&script);
+    assert!(segments.len() >= 5, "{}", segments.len());
     let mut total = Duration::ZERO;
-    let mut inits = Vec::new();
-    for record in &records {
-        let (init, media) = split_record(record).unwrap();
-        let info = parse_init(init).unwrap();
+    let mut inits: Vec<&[u8]> = Vec::new();
+    for s in &segments {
+        let info = parse_init(&s.init).unwrap();
         assert_eq!(info.tracks().len(), 2);
-        total += media_duration(&info, media).unwrap();
-        if inits.last() != Some(&init) {
-            inits.push(init);
+        assert_eq!(media_duration(&info, &s.media).unwrap(), s.duration);
+        assert!(s.keyframe);
+        total += s.duration;
+        if inits.last() != Some(&&s.init[..]) {
+            inits.push(&s.init);
         }
     }
-    // The resize changes the init once.
     assert_eq!(inits.len(), 2);
     // Ten seconds of video: up to the last frame, which lasts as long as
     // the one before it.
@@ -179,95 +192,15 @@ fn timestamps_may_wrap() {
     };
     let script = Script::new(&config);
     assert!(script.tags.last().unwrap().timestamp < 2_000);
-    let wrapped = expected_records(&script, CutRule::default());
-    let plain = expected_records(
-        &Script::new(&ScriptConfig {
-            start_ms: 0,
-            ..config
-        }),
-        CutRule::default(),
-    );
+    let wrapped = segments(&script);
+    let plain = segments(&Script::new(&ScriptConfig {
+        start_ms: 0,
+        ..config
+    }));
     assert_eq!(wrapped.len(), plain.len());
-}
-
-/// A packed sink that also collects whole records and the stream offset
-/// of each end.
-struct Tee {
-    packed: PackedSink,
-    whole: VecSink,
-    ends: Vec<u64>,
-}
-
-impl RecordSink for Tee {
-    fn end_blocked_after(&self, len: usize) -> bool {
-        self.packed.end_blocked_after(len)
+    for (w, p) in wrapped.iter().zip(&plain) {
+        assert_eq!(w.duration, p.duration);
     }
-
-    fn unblocking_len(&self, len: usize) -> usize {
-        self.packed.unblocking_len(len)
-    }
-
-    fn write(&mut self, data: &[u8]) {
-        self.packed.write(data);
-        self.whole.write(data);
-    }
-
-    fn end_record(&mut self) -> Result<(), FrameHasEnd> {
-        self.packed.end_record()?;
-        self.whole.end_record()?;
-        self.ends.push(self.packed.offset());
-        Ok(())
-    }
-}
-
-#[test]
-fn a_long_low_bitrate_stream_packs_one_end_per_frame() {
-    let script = Script::new(&ScriptConfig {
-        video_bitrate: 150_000,
-        audio_bitrate: 32_000,
-        gop_frames: 30,
-        duration_secs: 120,
-        ..ScriptConfig::default()
-    });
-    let mut segmenter = Segmenter::new(
-        CutRule::default(),
-        Tee {
-            packed: PackedSink::new(),
-            whole: VecSink::new(),
-            ends: Vec::new(),
-        },
-    );
-    let mut source = FlvSource::new();
-    for tag in &script.tags {
-        let event = match tag.kind {
-            TagKind::Video => source.video(tag.timestamp, &tag.body, received(tag)),
-            TagKind::Audio => source.audio(tag.timestamp, &tag.body, received(tag)),
-            TagKind::Metadata => continue,
-        };
-        match event.unwrap() {
-            Some(SourceEvent::Config(c)) => segmenter.set_config(&c).unwrap(),
-            Some(SourceEvent::Unit(u)) => segmenter.push(&u).unwrap(),
-            None => {}
-        }
-    }
-    segmenter.finish().unwrap();
-    let SegmenterMetrics {
-        records,
-        blocked_cuts,
-        ..
-    } = segmenter.metrics();
-    assert!(records > 20, "{records}");
-    assert!(blocked_cuts > 10, "{blocked_cuts}");
-    let tee = segmenter.into_sink();
-    let frames: Vec<u64> = tee.ends.iter().map(|e| e / DEFAULT_SIZE as u64).collect();
-    let mut unique = frames.clone();
-    unique.dedup();
-    assert_eq!(frames, unique);
-    assert_eq!(decode_records(tee.packed.output()), tee.whole.records);
-    assert_eq!(
-        expected_records(&script, CutRule::default()),
-        tee.whole.records
-    );
 }
 
 #[test]
@@ -281,39 +214,40 @@ fn aac_configs_signal_the_rate() {
 }
 
 #[test]
-fn records_without_publish_times_differ_only_in_when_units_arrived() {
+fn media_without_publish_times_differs_only_in_when_units_arrived() {
     let script = Script::new(&ScriptConfig {
         duration_secs: 4,
         b_frames: true,
         ..ScriptConfig::default()
     });
-    let records = expected_records(&script, CutRule::default());
+    let on_time = segments(&script);
     // The same units, received a minute later.
+    let mut muxer = HlsMuxer::new(HlsMuxerConfig::default());
     let mut source = FlvSource::new();
-    let mut s = Segmenter::new(CutRule::default(), VecSink::new());
+    let mut late = Vec::new();
     for tag in &script.tags {
-        let late = Time::from_unix_millis(60_000 + i64::from(tag.timestamp));
+        let at = Time::from_unix_millis(60_000 + i64::from(tag.timestamp));
         let event = match tag.kind {
-            TagKind::Video => source.video(tag.timestamp, &tag.body, late),
-            TagKind::Audio => source.audio(tag.timestamp, &tag.body, late),
+            TagKind::Video => source.video(tag.timestamp, &tag.body, at),
+            TagKind::Audio => source.audio(tag.timestamp, &tag.body, at),
             TagKind::Metadata => continue,
         };
         match event.unwrap() {
-            Some(SourceEvent::Config(c)) => s.set_config(&c).unwrap(),
-            Some(SourceEvent::Unit(u)) => s.push(&u).unwrap(),
+            Some(SourceEvent::Config(c)) => muxer.set_config(&c).unwrap(),
+            Some(SourceEvent::Unit(u)) => muxer.push(&u).unwrap(),
             None => {}
         }
+        late.extend(std::iter::from_fn(|| muxer.take_segment()));
     }
-    s.finish().unwrap();
-    let late = &s.sink().records;
-    assert_eq!(late.len(), records.len());
-    for (a, b) in records.iter().zip(late) {
-        assert_ne!(a, b);
-        assert_eq!(a.len(), b.len());
-        let masked = without_publish_times(a);
-        assert_eq!(masked, without_publish_times(b));
-        let differing = a.iter().zip(&masked).filter(|(x, y)| x != y).count();
+    muxer.finish().unwrap();
+    late.extend(std::iter::from_fn(|| muxer.take_segment()));
+    assert_eq!(late.len(), on_time.len());
+    for (a, b) in on_time.iter().zip(&late) {
+        assert_ne!(a.media, b.media);
+        assert_eq!(a.media.len(), b.media.len());
+        let masked = media_without_publish_times(&a.media);
+        assert_eq!(masked, media_without_publish_times(&b.media));
+        let differing = a.media.iter().zip(&masked).filter(|(x, y)| x != y).count();
         assert!(differing > 0);
     }
-    assert_eq!(without_publish_times(b"\x00"), b"\x00");
 }
