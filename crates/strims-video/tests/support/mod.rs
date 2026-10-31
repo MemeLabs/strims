@@ -184,6 +184,12 @@ impl VideoHost for FakeVideo {
         };
         std::future::ready(res)
     }
+
+    type Codec = strims_video::codec::NoCodec;
+
+    fn codec(&self) -> Option<Self::Codec> {
+        None
+    }
 }
 
 /// The client's ends of a connection.

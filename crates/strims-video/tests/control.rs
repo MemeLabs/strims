@@ -70,6 +70,12 @@ impl VideoHost for ListeningHost {
     fn listen(&self, _: &str) -> impl Future<Output = Result<NoListener, NoRtmp>> {
         std::future::ready(Err(NoRtmp))
     }
+
+    type Codec = strims_video::codec::NoCodec;
+
+    fn codec(&self) -> Option<Self::Codec> {
+        None
+    }
 }
 
 type Control<V> = VideoControl<MemoryKv, FakeHost, V, TokioTimer>;

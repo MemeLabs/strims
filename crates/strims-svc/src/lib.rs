@@ -123,6 +123,8 @@ pub enum SvcError {
     HlsListen(std::io::Error),
     #[error("drawing a seed from OS entropy: {0}")]
     Entropy(#[from] getrandom::Error),
+    #[error("checking the codec stage's ffmpeg: {0}")]
+    Ffmpeg(strims_node::codec::ProbeError),
 }
 
 /// A running service. Dropping it stops serving the UI and HLS.
@@ -144,7 +146,9 @@ struct Hls {
 
 impl Svc {
     /// Opens the store and starts serving the API, and HLS if configured.
-    /// Runs inside a tokio `LocalSet`.
+    /// A config naming an ffmpeg for the codec stage starts only if
+    /// [`probe_ffmpeg`](strims_node::codec::probe_ffmpeg) takes it. Runs
+    /// inside a tokio `LocalSet`.
     pub async fn start(config: Config) -> Result<Svc, SvcError> {
         // The HLS address goes into the video config the factory takes.
         let hls_listener = match &config.hls_listen {
@@ -161,6 +165,12 @@ impl Svc {
             && app.video.hls.base_url.is_empty()
         {
             app.video.hls.base_url = hls_base_url(*addr, &app);
+        }
+        if let Some(ffmpeg) = &app.ffmpeg {
+            let version = strims_node::codec::probe_ffmpeg(ffmpeg)
+                .await
+                .map_err(SvcError::Ffmpeg)?;
+            tracing::info!(program = %ffmpeg.program.display(), version, "transcoding with ffmpeg");
         }
         let hls_limits = http::Limits::new(&app.video.hls);
         let hls_base_url = app.video.hls.base_url.clone();

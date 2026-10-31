@@ -156,7 +156,7 @@ fn transcode_args_select_scale_and_encode_each_rendition() {
     assert_eq!(
         args,
         "-hide_banner -loglevel error -nostats -nostdin -protocol_whitelist pipe -copyts \
-         -fflags +nobuffer -probesize 32768 -analyzeduration 0 -f flv -i pipe:0 \
+         -probesize 32768 -analyzeduration 0 -f flv -i pipe:0 \
          -filter_complex [0:v]split=2[s0][s1];\
          [s0]select='key+isnan(prev_selected_t)+gte(t-prev_selected_t\\,0.0147)',\
          scale='if(gt(iw\\,ih)\\,-2\\,720)':'if(gt(iw\\,ih)\\,720\\,-2)'[o0];\
@@ -164,14 +164,15 @@ fn transcode_args_select_scale_and_encode_each_rendition() {
          scale='if(gt(iw\\,ih)\\,-2\\,480)':'if(gt(iw\\,ih)\\,480\\,-2)'[o1] \
          -map [o0] -map [o1] -map 0:a? -c:a copy -fps_mode passthrough \
          -c:v libx264 -preset veryfast -tune zerolatency -x264-params scenecut=0:keyint=infinite \
-         -a53cc 0 -force_key_frames source \
+         -a53cc 0 -enc_time_base:v 1:1000 -force_key_frames source \
          -b:v:0 3000000 -maxrate:v:0 3000000 -bufsize:v:0 6000000 \
          -b:v:1 1200000 -maxrate:v:1 1200000 -bufsize:v:1 2400000 \
          -max_interleave_delta 0 -flush_packets 1 -flvflags no_duration_filesize -f flv pipe:1"
     );
     let thumb = thumbnail_args(320).join(" ");
     assert!(thumb.ends_with(
-        "-i pipe:0 -frames:v 1 -vf scale=320:-2 -c:v mjpeg -q:v 5 -f image2pipe pipe:1"
+        "-i pipe:0 -frames:v 1 -vf scale=320:-2:out_range=pc,format=yuvj420p -c:v mjpeg -q:v 5 \
+         -f image2pipe pipe:1"
     ));
 }
 
@@ -456,7 +457,7 @@ fn a_thumbnail_is_ffmpegs_output_for_the_keyframe() {
     assert_eq!(jpeg, b"\xff\xd8jpeg\xff\xd9");
     let p = processes.0.borrow();
     assert!(p.stdin_closed);
-    assert!(p.args.iter().any(|a| a == "scale=320:-2"));
+    assert!(p.args.iter().any(|a| a.starts_with("scale=320:-2")));
     let (configs, units) = input_units(&p.stdin);
     assert_eq!(
         (configs, units),

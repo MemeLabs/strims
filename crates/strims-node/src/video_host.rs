@@ -35,6 +35,7 @@ use std::task::{Context, Poll, ready};
 use futures_util::stream::LocalBoxStream;
 use futures_util::{Sink, Stream, StreamExt};
 use strims_base::time::Duration;
+use strims_video::codec::NoCodec;
 use strims_video::{Accepted, VideoHost};
 use strims_vnic::TcpOptions;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
@@ -78,6 +79,12 @@ impl<N: Net> VideoHost for NetVideoHost<N> {
             let local_addr = net.tcp_listener_addr(&listener)?;
             Ok(NetListener::new(net, listener, local_addr))
         }
+    }
+
+    type Codec = NoCodec;
+
+    fn codec(&self) -> Option<NoCodec> {
+        None
     }
 }
 

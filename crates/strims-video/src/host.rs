@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! What the video control needs from the node it runs on: a listener for
-//! the RTMP ingress.
+//! the RTMP ingress, and the codec stage where the node has one.
 
 use std::fmt;
 use std::future::Future;
@@ -11,6 +11,8 @@ use std::task::{Context, Poll};
 
 use futures_core::Stream;
 use futures_sink::Sink;
+
+use crate::codec::{Codec, NoCodec};
 
 /// The node operations behind the video ingress. Only futures traits
 /// cross this boundary, so the browser and native drivers both supply
@@ -35,6 +37,9 @@ use futures_sink::Sink;
 ///   [`Sink::poll_close`] shuts the sending side down.
 /// - Dropping the reader and the writer closes the connection; that is
 ///   how a connection over a cap closes.
+/// - [`codec`](VideoHost::codec) is the node's codec stage
+///   ([`codec`](crate::codec)), or `None` where it has none: a browser,
+///   or a native node without an ffmpeg.
 pub trait VideoHost: Clone + 'static {
     type Error: fmt::Display;
     /// The bytes a connection receives, in the pieces they arrive in.
@@ -52,6 +57,12 @@ pub trait VideoHost: Clone + 'static {
 
     /// Listens for TCP connections on `addr`, a `host:port`.
     fn listen(&self, addr: &str) -> impl Future<Output = Result<Self::Listener, Self::Error>>;
+
+    /// The node's codec stage.
+    type Codec: Codec;
+
+    /// The node's codec stage, if it has one.
+    fn codec(&self) -> Option<Self::Codec>;
 }
 
 /// A connection a [`VideoHost::Listener`] accepted.
@@ -129,6 +140,12 @@ impl VideoHost for NoVideoHost {
 
     fn listen(&self, _: &str) -> impl Future<Output = Result<NoListener, NoRtmp>> {
         std::future::ready(Err(NoRtmp))
+    }
+
+    type Codec = NoCodec;
+
+    fn codec(&self) -> Option<NoCodec> {
+        None
     }
 }
 

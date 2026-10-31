@@ -38,8 +38,10 @@
 //! node's clock as their timer, [`app::NativePlatform`] the core's
 //! [`app::AppPlatform`] on a [`Net`] and a [`Clock`], and
 //! [`app::NodeFactory`] the session factory that runs a signed-in profile
-//! on it. [`video_host::NetVideoHost`] gives the video control its RTMP
-//! listeners on the node's [`Net`], and [`fetch::NetFetch`] the
+//! on it. [`codec::NodeVideoHost`] gives the video control its RTMP
+//! listeners on the node's [`Net`] ([`video_host::NetVideoHost`]) and the
+//! codec stage over the node's ffmpeg, if it has one ([`codec`]), and
+//! [`fetch::NetFetch`] the
 //! directory its HTTPS requests. [`app::AppConfig::psi`] picks where the
 //! network control's PSI sessions compute: inline, the default, or on a
 //! [`psi::ThreadPsi`].
@@ -109,6 +111,7 @@
 pub mod app;
 pub mod capture;
 pub mod clock;
+pub mod codec;
 pub mod fetch;
 mod link;
 mod native;

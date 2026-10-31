@@ -8,7 +8,9 @@ use std::path::PathBuf;
 
 use strims_node::CaptureConfig;
 use strims_node::app::PsiMode;
+use strims_node::codec::FfmpegConfig;
 use strims_svc::{Config, Db};
+use strims_video::codec::ffmpeg::FfmpegSettings;
 
 pub(crate) const USAGE: &str = "\
 usage: strims-svc (--db <path> | --db-memory) [options]
@@ -42,6 +44,9 @@ options:
                             the HLS config sets no public address (default
                             http:// and the HLS address; for an unspecified
                             address, the public IP or hostname at its port)
+  --ffmpeg <path>           the ffmpeg (7.1 or later, with libx264) the node
+                            transcodes with: it turns HEVC and AV1 publishes
+                            into the H.264 stream every viewer can play
   --ppspp-capture <dir>     capture the node's ppspp frames and scheduler
                             decisions into <dir> (`ppspp-capture` reads them)
   --ppspp-capture-max <MiB> the most a capture keeps, in its last 8 files
@@ -114,6 +119,12 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
                     ));
                 }
                 app.video.hls.base_url = url;
+            }
+            "--ffmpeg" => {
+                app.ffmpeg = Some(FfmpegConfig {
+                    program: PathBuf::from(value()?),
+                    settings: FfmpegSettings::default(),
+                })
             }
             "--ppspp-capture" => capture_dir = Some(PathBuf::from(value()?)),
             "--ppspp-capture-max" => capture_max = Some(positive::<u64>(&flag, &value()?)?),
@@ -207,8 +218,12 @@ mod tests {
             "--ppspp-capture",
             "/tmp/cap",
             "--ppspp-capture-max=16",
+            "--ffmpeg=/opt/ffmpeg/bin/ffmpeg",
         ])
         .unwrap();
+        let ffmpeg = c.app.ffmpeg.as_ref().unwrap();
+        assert_eq!(ffmpeg.program.to_str(), Some("/opt/ffmpeg/bin/ffmpeg"));
+        assert_eq!(ffmpeg.settings, FfmpegSettings::default());
         assert!(matches!(&c.db, Db::File(p) if p.to_str() == Some("/tmp/a.redb")));
         assert_eq!(c.api_listen, "0.0.0.0:9000");
         assert_eq!(c.api_path, "/manage");

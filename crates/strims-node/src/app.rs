@@ -10,7 +10,8 @@
 //!   with the config's listeners and advertised addresses, and its seed
 //!   comes from OS entropy. The directory's servers make their HTTPS
 //!   requests over the `Net` ([`NetFetch`]), and the video control's RTMP
-//!   ingress listens on it ([`NetVideoHost`]). The network control's PSI
+//!   ingress listens on it, with the codec stage over the config's
+//!   ffmpeg, if it names one ([`NodeVideoHost`]). The network control's PSI
 //!   sessions compute where [`AppConfig::psi`] says: inline, or on the
 //!   platform's [`ThreadPsi`].
 //! - [`TokioSpawn`] runs the app's tasks with `tokio::task::spawn_local`,
@@ -47,9 +48,9 @@ pub use strims_node_core::app::{
     ServicesConfig, Spawn, StartError, TaskHandle, bind_profile,
 };
 
+use crate::codec::{FfmpegConfig, NodeVideoHost};
 use crate::fetch::{NetFetch, tls_client_config};
 use crate::psi::ThreadPsi;
-use crate::video_host::NetVideoHost;
 use crate::{Clock, Net, Node, NodeConfig, NodeError, NodeEvents, NodeInfo};
 
 /// The core's [`strims_node_core::app::PeerServices`], spawning on
@@ -59,7 +60,7 @@ pub type PeerServices = strims_node_core::app::PeerServices<TokioSpawn>;
 /// A running profile on a [`NativePlatform`]: its node and the controls
 /// its frontends serve. Dropping it stops the controls' tasks and the
 /// node.
-pub type AppRuntime<K, N, C> = ProfileRuntime<K, NodeTimer<C>, NetVideoHost<N>, TokioSpawn>;
+pub type AppRuntime<K, N, C> = ProfileRuntime<K, NodeTimer<C>, NodeVideoHost<N>, TokioSpawn>;
 
 /// A node's clock as the app layer's [`Timer`].
 #[derive(Clone)]
@@ -158,6 +159,10 @@ pub struct AppConfig {
     /// Captures the node's ppspp traffic into files; `None` captures
     /// nothing.
     pub ppspp_capture: Option<crate::capture::CaptureConfig>,
+    /// The ffmpeg of the video control's codec stage, which
+    /// [`probe_ffmpeg`](crate::codec::probe_ffmpeg) checked; `None` runs
+    /// the node without the stage.
+    pub ffmpeg: Option<FfmpegConfig>,
 }
 
 impl AppConfig {
@@ -233,7 +238,7 @@ impl<N: Net, C: Clock> NativePlatform<N, C> {
 
 impl<N: Net, C: Clock> AppPlatform for NativePlatform<N, C> {
     type Timer = NodeTimer<C>;
-    type VideoHost = NetVideoHost<N>;
+    type VideoHost = NodeVideoHost<N>;
     type Spawn = TokioSpawn;
 
     fn seed(&self) -> Result<[u8; 32], StartError> {
@@ -287,8 +292,8 @@ impl<N: Net, C: Clock> AppPlatform for NativePlatform<N, C> {
         Fetch::new(NetFetch::new(self.net.clone(), self.tls.clone()))
     }
 
-    fn video_host(&self) -> NetVideoHost<N> {
-        NetVideoHost(self.net.clone())
+    fn video_host(&self) -> NodeVideoHost<N> {
+        NodeVideoHost::new(self.net.clone(), self.config.ffmpeg.as_ref())
     }
 
     fn hls_routes(&self) -> HlsRoutes {

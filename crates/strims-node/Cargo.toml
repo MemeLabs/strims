@@ -40,7 +40,8 @@ slotmap.workspace = true
 bytes.workspace = true
 hex.workspace = true
 rand_core.workspace = true
-tokio.workspace = true
+# `process`: the codec stage runs ffmpeg.
+tokio = { workspace = true, features = ["process"] }
 tokio-tungstenite.workspace = true
 httparse.workspace = true
 rustls.workspace = true

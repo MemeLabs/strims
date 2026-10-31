@@ -129,7 +129,11 @@ pub fn transcode_args(settings: &FfmpegSettings, plan: &TranscodePlan) -> Vec<St
         args.push(s.into());
     }
     args.extend(settings.video_encoder.iter().cloned());
-    args.extend(["-force_key_frames".into(), "source".into()]);
+    // The encoder counts in the input's milliseconds, so each frame keeps
+    // its time to the millisecond.
+    for s in ["-enc_time_base:v", "1:1000", "-force_key_frames", "source"] {
+        args.push(s.into());
+    }
     for (i, r) in plan.renditions.iter().enumerate() {
         args.extend([
             format!("-b:v:{i}"),
@@ -164,7 +168,8 @@ pub fn thumbnail_args(width: u16) -> Vec<String> {
         "-frames:v".to_owned(),
         "1".to_owned(),
         "-vf".to_owned(),
-        format!("scale={width}:-2"),
+        // JPEG's YUV is full range.
+        format!("scale={width}:-2:out_range=pc,format=yuvj420p"),
         "-c:v".to_owned(),
         "mjpeg".to_owned(),
         "-q:v".to_owned(),
@@ -190,8 +195,6 @@ fn input_args() -> Vec<String> {
         "-protocol_whitelist",
         "pipe",
         "-copyts",
-        "-fflags",
-        "+nobuffer",
         "-probesize",
         "32768",
         "-analyzeduration",
