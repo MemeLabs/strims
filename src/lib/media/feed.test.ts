@@ -11,6 +11,8 @@ import {
   Credit,
   DATA_DISCONTINUITY,
   DATA_RECORD_END,
+  MAX_BATCH_BYTES,
+  WindowBatches,
   endBatch,
   parseBatch,
 } from "./feed";
@@ -137,5 +139,86 @@ describe("feed credit", () => {
     c.post(5);
     c.ack(3);
     assert.deepStrictEqual(c.pending, [0, 0]);
+  });
+});
+
+describe("window batches", () => {
+  // Batches posted, as their messages; big ones by their length.
+  const posts = () => {
+    const posted: { ack: boolean; messages: unknown[] }[] = [];
+    const post = (b: ArrayBuffer) => {
+      const batch = parseBatch(b);
+      assert.ok(typeof batch !== "string" && batch.kind === "data");
+      posted.push({
+        ack: batch.ack,
+        messages: batch.messages.map((m) => [
+          m.data.byteLength > 64 ? m.data.byteLength : Array.from(m.data),
+          m.segmentEnd,
+          m.discontinuity,
+        ]),
+      });
+    };
+    return { posted, post };
+  };
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  const msg = (data: number[] | number, segmentEnd: boolean, discontinuity = false) => ({
+    data: typeof data === "number" ? new Uint8Array(data) : new Uint8Array(data),
+    segmentEnd,
+    discontinuity,
+  });
+
+  it("post a task's messages as one batch, and a full one at once", async () => {
+    const { posted, post } = posts();
+    const w = new WindowBatches(1 << 30, 1024, post);
+    w.push(msg([1], false));
+    w.push(msg([2], true));
+    assert.strictEqual(posted.length, 0);
+    await tick();
+    assert.deepStrictEqual(posted, [
+      {
+        ack: false,
+        messages: [
+          [[1], false, false],
+          [[2], true, false],
+        ],
+      },
+    ]);
+    w.push(msg(MAX_BATCH_BYTES, true));
+    assert.strictEqual(posted.length, 2);
+    assert.deepStrictEqual(posted[1].messages, [[MAX_BATCH_BYTES, true, false]]);
+  });
+
+  it("drop to the next whole record past the window, which goes with a discontinuity", async () => {
+    const { posted, post } = posts();
+    const w = new WindowBatches(100, 1024, post);
+    w.push(msg(100, true));
+    await tick();
+    assert.ok(posted[0].ack, "the batch that fills the window asks");
+    w.push(msg([1], false));
+    w.push(msg([2], true));
+    w.ack(1);
+    w.push(msg([3], false));
+    w.push(msg([4], true));
+    await tick();
+    assert.deepStrictEqual(posted[1].messages, [
+      [[3], false, true],
+      [[4], true, false],
+    ]);
+    // The message that met the full window; the rest of its record was skipped.
+    assert.strictEqual(w.dropped, 1);
+  });
+
+  it("start a restarted worker at the next whole record, with an empty window", async () => {
+    const first = posts();
+    const second = posts();
+    const w = new WindowBatches(100, 1024, first.post);
+    w.push(msg(100, false));
+    w.restart(second.post);
+    w.push(msg([1], true));
+    w.push(msg([2], true));
+    await tick();
+    // The record in progress went with the last worker, unposted.
+    assert.strictEqual(first.posted.length, 0);
+    assert.deepStrictEqual(second.posted, [{ ack: false, messages: [[[2], true, false]] }]);
   });
 });

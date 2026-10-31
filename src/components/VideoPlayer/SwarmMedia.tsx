@@ -8,6 +8,7 @@ import { EgressOpenStreamResponse } from "../../apis/strims/video/v1/egress";
 import { useClient } from "../../contexts/FrontendApi";
 import { useSession } from "../../contexts/Session";
 import { VideoControls } from "../../hooks/useVideo";
+import type { Feed } from "../../lib/media/feed";
 import { LowLatencyPlayer } from "../../lib/media/lowlatency/player";
 import { rendererParam } from "../../lib/media/lowlatency/support";
 import { UnitsPlayer, attachHandle } from "../../lib/media/units";
@@ -28,8 +29,8 @@ export interface SwarmMediaProps {
 // A unit-format stream: decoded with WebCodecs by the low-latency player
 // when asked for, until it gives up on the stream, else remuxed for
 // MediaSource by the baseline player, each in a player worker. A node in
-// the page feeds the baseline player's worker straight from the swarm;
-// otherwise the stream comes over the Egress RPC, through the window.
+// the page feeds the player's worker straight from the swarm; otherwise
+// the stream comes over the Egress RPC, through the window.
 export const UnitsMedia: React.FC<SwarmMediaProps> = ({
   networkKey,
   swarmUri,
@@ -52,6 +53,10 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
     };
     // eslint-disable-next-line no-console
     const ended = (message: string) => console.warn("the stream ended:", message);
+    const feed =
+      feeds &&
+      ((port: MessagePort, replaces: Feed | null) =>
+        feeds.open(request, port, { replaces, closed: ended }));
     const baseline = !lowLatency || fallback;
     const player = !baseline
       ? new LowLatencyPlayer(video, {
@@ -66,6 +71,7 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
             console.warn("the low-latency player can't play the stream:", message);
             if (canFallBack) setFallback(true);
           },
+          feed,
         })
       : new UnitsPlayer(video, {
           attach: (src) => {
@@ -80,11 +86,10 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
           play: () => videoControls.play(),
           // eslint-disable-next-line no-console
           error: (message) => console.warn("the stream can't play:", message),
-          feed:
-            feeds && ((port, replaces) => feeds.open(request, port, { replaces, closed: ended })),
+          feed,
         });
 
-    if (baseline && feeds) {
+    if (feeds) {
       return () => {
         player.destroy();
         video.srcObject = null;

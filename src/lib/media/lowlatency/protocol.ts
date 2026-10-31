@@ -65,14 +65,19 @@ export type WindowMessage =
       /** A port to the worklet, and the output's state; none without audio output. */
       audioPort?: MessagePort;
       audio?: AudioOutput;
+      /**
+       * The port of the stream's feed (../feed) when a node feeds it
+       * straight from the swarm; without one, the window posts the stream's
+       * batches.
+       */
+      feed?: MessagePort;
     }
   /**
-   * An Egress Data message: bytes of the record in progress, the record's
-   * end, and whether the bytes before were dropped. `at` is when the window
-   * received it, in Unix milliseconds (performance.timeOrigin + now).
+   * A batch of Egress Data messages (../feed). `at` is when the window
+   * received them, in Unix milliseconds (performance.timeOrigin + now).
    */
-  | { type: "data"; data: ArrayBuffer; segmentEnd: boolean; discontinuity: boolean; at: number }
-  /** The stream ended, after the messages before. */
+  | { type: "data"; batch: ArrayBuffer; at: number }
+  /** The stream ended, after the batches before. */
   | { type: "end" }
   /** The audio output changed: started, suspended, or its latency moved. */
   | { type: "audio"; audio: AudioOutput }
@@ -161,7 +166,20 @@ export type WorkerMessage =
    * it handed pictures to the renderer since the last, in Unix milliseconds
    * (performance.timeOrigin + now).
    */
-  | { type: "state"; clock: PlayoutClock; stats: CoreStats; handoffs: number[] }
+  | {
+      type: "state";
+      clock: PlayoutClock;
+      stats: CoreStats;
+      handoffs: number[];
+      /** The Data messages the demuxer took so far, and their bytes. */
+      messages: number;
+      bytes: number;
+    }
+  /**
+   * The worker has taken `batches` of the window's batches: an ack, for a
+   * batch that asked.
+   */
+  | { type: "consumed"; batches: number }
   /**
    * The worker can't go on: the window replaces it, or gives up when
    * `final`. `fallback` says another player may play the stream.

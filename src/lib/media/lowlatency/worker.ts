@@ -1,6 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { parseBatch } from "../feed";
 import { AudioDataLike, CoreEnv, FrameLike, PlayerCore } from "./core";
 import {
   AudioDecoderTrack,
@@ -14,7 +15,7 @@ import {
   WorkletReport,
 } from "./protocol";
 
-/** The most Data message bytes held while the demuxer loads. */
+/** The most batch bytes held while the demuxer loads. */
 export const MAX_PENDING_BYTES = 32 * 1024 * 1024;
 /** Milliseconds between the worker's state messages. */
 export const STATE_INTERVAL_MS = 250;
@@ -24,8 +25,11 @@ const MAX_HANDOFFS = 64;
 /** Loads a demuxer, resolving to a constructor of new ones. */
 export type CoreLoader = () => Promise<() => Core>;
 
-/** What the worker takes in stream order: a Data message, or the end. */
-type Input = Extract<WindowMessage, { type: "data" | "end" }>;
+/**
+ * What the worker takes in stream order: a batch received at `at`, on the
+ * worker's clock in seconds, or the end.
+ */
+type Input = { batch: ArrayBuffer; at: number } | { end: true };
 
 interface GeneratorScope {
   VideoTrackGenerator?: new () => { track: MediaStreamTrack; writable: WritableStream<VideoFrame> };
@@ -124,11 +128,20 @@ const audioConfig = (t: AudioDecoderTrack): AudioDecoderConfig => ({
   description: t.description,
 });
 
-// Runs the low-latency player's worker on `scope`: the window's Data
-// messages go through the demuxer into a PlayerCore on WebCodecs, whose
-// pictures go to the renderer the window chose and whose samples go to
-// the worklet's port. It says what it has at once ("hello"), and posts its
-// state every STATE_INTERVAL_MS.
+// Runs the low-latency player's worker on `scope`: the stream's batches of
+// Data messages (../feed) go through the demuxer into a PlayerCore on
+// WebCodecs, whose pictures go to the renderer the window chose and whose
+// samples go to the worklet's port. The batches come from the node on the
+// open message's feed port, or from the window. It says what it has at once
+// ("hello"), and posts its state every STATE_INTERVAL_MS.
+//
+// The worker acks a batch that asks once the core took its outputs, to
+// whoever posted it. A sender that stops getting acks stops sending, so a
+// worker that falls behind holds a bounded queue.
+//
+// The stream ends at a writer session's END record, which the demuxer
+// finds in the stream, or at the end of the input: either way the core
+// plays out to it.
 //
 // Any failure posts an error and stops the worker taking messages: the
 // window replaces it, or falls back to another player.
@@ -137,8 +150,13 @@ export const runLowLatencyWorker = (scope: DedicatedWorkerGlobalScope, load: Cor
   let core: PlayerCore | null = null;
   let renderer: WorkerRenderer | null = null;
   let port: MessagePort | null = null;
+  let feed: MessagePort | null = null;
   let pending: Input[] = [];
   let pendingBytes = 0;
+  /** Batches taken, and Data messages and their bytes. */
+  let batches = 0;
+  let messages = 0;
+  let bytes = 0;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let timerAt = Infinity;
@@ -154,6 +172,10 @@ export const runLowLatencyWorker = (scope: DedicatedWorkerGlobalScope, load: Cor
     if (stopped) return;
     stopped = true;
     pending = [];
+    if (feed) {
+      feed.onmessage = null;
+      feed.close();
+    }
     if (timer) clearTimeout(timer);
     if (stateTimer) clearInterval(stateTimer);
     core?.close();
@@ -261,21 +283,70 @@ export const runLowLatencyWorker = (scope: DedicatedWorkerGlobalScope, load: Cor
     fail: (message, final, fallback) => stop(message, final, fallback),
   };
 
-  const push = (input: Input) => {
+  // Acks the batches taken so far, to whoever posts them.
+  const ack = () => {
+    if (feed) {
+      feed.postMessage(batches);
+    } else {
+      post({ type: "consumed", batches });
+    }
+  };
+
+  const finish = () => {
     let outputs: DemuxerOutput[];
-    let at = performance.now() / 1000;
     try {
-      if (input.type === "end") {
-        outputs = demuxer.finish();
-      } else {
-        outputs = demuxer.push(new Uint8Array(input.data), input.segmentEnd, input.discontinuity);
-        at = (input.at - performance.timeOrigin) / 1000;
-      }
+      outputs = demuxer.finish();
     } catch (e) {
       stop(`the demuxer failed: ${String(e)}`, false, false);
       return;
     }
-    core.outputs(outputs, at);
+    core.outputs(outputs, performance.now() / 1000);
+  };
+
+  const push = (input: Input) => {
+    if ("end" in input) {
+      finish();
+      return;
+    }
+    const batch = parseBatch(input.batch);
+    if (typeof batch === "string") {
+      stop(`a malformed batch: ${batch}`, false, false);
+      return;
+    }
+    if (batch.kind === "end") {
+      finish();
+      return;
+    }
+    const outputs: DemuxerOutput[] = [];
+    for (const m of batch.messages) {
+      messages++;
+      bytes += m.data.byteLength;
+      try {
+        outputs.push(...demuxer.push(m.data, m.segmentEnd, m.discontinuity));
+      } catch (e) {
+        stop(`the demuxer failed: ${String(e)}`, false, false);
+        return;
+      }
+    }
+    batches++;
+    core.outputs(outputs, input.at);
+    if (batch.ack && !stopped) ack();
+  };
+
+  const input = (i: Input) => {
+    if (stopped) return;
+    if (ready()) {
+      push(i);
+      return;
+    }
+    if ("batch" in i) {
+      pendingBytes += i.batch.byteLength;
+      if (pendingBytes > MAX_PENDING_BYTES) {
+        stop("the demuxer is loading too slowly", false, false);
+        return;
+      }
+    }
+    pending.push(i);
   };
 
   const postState = () => {
@@ -284,7 +355,7 @@ export const runLowLatencyWorker = (scope: DedicatedWorkerGlobalScope, load: Cor
     const stats = { ...core.stats(), busy: +(busy / Math.max(1, now - busySince)).toFixed(4) };
     busy = 0;
     busySince = now;
-    post({ type: "state", clock: core.clock(), stats, handoffs });
+    post({ type: "state", clock: core.clock(), stats, handoffs, messages, bytes });
     handoffs = [];
   };
 
@@ -308,34 +379,37 @@ export const runLowLatencyWorker = (scope: DedicatedWorkerGlobalScope, load: Cor
               timed(() => core?.report(data));
           }
           stateTimer = setInterval(() => timed(postState), STATE_INTERVAL_MS);
+          if (message.feed) {
+            feed = message.feed;
+            feed.onmessage = ({ data }: MessageEvent<ArrayBuffer>) =>
+              timed(() => {
+                if (data instanceof ArrayBuffer) {
+                  input({ batch: data, at: performance.now() / 1000 });
+                } else {
+                  stop("the feed posted something other than a batch", false, false);
+                }
+              });
+          }
           load().then(
             (create) => {
               if (stopped) return;
               demuxer = create();
-              for (const m of pending) {
-                timed(() => push(m));
+              for (const i of pending) {
+                timed(() => push(i));
                 if (stopped) return;
               }
               pending = [];
+              pendingBytes = 0;
             },
             (e) => stop(`the demuxer didn't load: ${String(e)}`, true, true)
           );
           return;
         }
         case "data":
+          input({ batch: message.batch, at: (message.at - performance.timeOrigin) / 1000 });
+          return;
         case "end":
-          if (ready()) {
-            push(message);
-            return;
-          }
-          if (message.type === "data") {
-            pendingBytes += message.data.byteLength;
-            if (pendingBytes > MAX_PENDING_BYTES) {
-              stop("the demuxer is loading too slowly", false, false);
-              return;
-            }
-          }
-          pending.push(message);
+          input({ end: true });
           return;
         case "audio":
           core?.setAudio(message.audio);

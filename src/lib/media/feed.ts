@@ -167,6 +167,91 @@ export class Credit {
   }
 }
 
+/**
+ * The Data messages a window pushes a player worker, for a stream it reads
+ * over the Egress RPC: those pushed in one task go as one batch, at most
+ * MAX_BATCH_BYTES, within a Credit window of unacked batches. Past the
+ * window, messages are dropped to the next whole record, which goes with a
+ * discontinuity, so a worker that falls behind holds a bounded queue.
+ */
+export class WindowBatches {
+  private batch = new BatchWriter();
+  private queued = false;
+  private credit: Credit;
+  /** Messages are dropped until a whole record starts. */
+  private skipping = false;
+  /** The next message starts a whole record. */
+  private atRecordStart = true;
+  /** The next message goes with a discontinuity: those before it were dropped. */
+  private dropDiscontinuity = false;
+  /** Messages dropped for the worker falling behind. */
+  dropped = 0;
+
+  /** Posts each batch to the worker, asking for an ack if `ack`. */
+  constructor(
+    private readonly maxBytes: number,
+    private readonly maxBatches: number,
+    private post: (batch: ArrayBuffer) => void
+  ) {
+    this.credit = new Credit(maxBytes, maxBatches);
+  }
+
+  // Takes a Data message, which the batch copies when it's posted.
+  push({ data, segmentEnd, discontinuity }: DataMessage): void {
+    if (discontinuity) this.skipping = false;
+    const skip = this.skipping;
+    this.skipping &&= !segmentEnd;
+    this.atRecordStart = segmentEnd;
+    if (skip) {
+      // The record in progress began before this worker, or was dropped.
+      return;
+    }
+    if (!this.credit.open) {
+      // The worker fell behind: the record goes, and the next whole one
+      // tells the worker so.
+      this.dropped++;
+      this.skipping = !segmentEnd;
+      this.dropDiscontinuity = true;
+      return;
+    }
+    this.batch.add({
+      data,
+      segmentEnd,
+      discontinuity: discontinuity || this.dropDiscontinuity,
+    });
+    this.dropDiscontinuity = false;
+    if (this.batch.size >= MAX_BATCH_BYTES) {
+      this.flush();
+    } else if (!this.queued) {
+      this.queued = true;
+      queueMicrotask(this.flush);
+    }
+  }
+
+  // Posts the messages batched so far.
+  flush = (): void => {
+    this.queued = false;
+    if (this.batch.empty) return;
+    const ask = this.credit.post(this.batch.size);
+    this.post(this.batch.take(ask));
+  };
+
+  // The worker took `batches` batches, counted from the first.
+  ack(batches: number): void {
+    this.credit.ack(batches);
+  }
+
+  // A new worker, posted to with `post`: its window starts empty, and its
+  // messages from the next whole record on.
+  restart(post: (batch: ArrayBuffer) => void): void {
+    this.post = post;
+    this.credit = new Credit(this.maxBytes, this.maxBatches);
+    this.batch = new BatchWriter();
+    this.skipping = !this.atRecordStart;
+    this.dropDiscontinuity = false;
+  }
+}
+
 /** A stream to read: the Egress RPC's OpenStream request's fields. */
 export interface StreamRequest {
   swarmUri: string;

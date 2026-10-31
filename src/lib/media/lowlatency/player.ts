@@ -1,6 +1,8 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { Feed, WindowBatches } from "../feed";
+import { WINDOW_BATCHES, WINDOW_BYTES } from "../units";
 import { AudioPlayout, sharedAudioContext } from "./audio";
 import { quantile } from "./lag";
 import { CoreStats, PlayoutClock, Renderer, WindowMessage, WorkerMessage } from "./protocol";
@@ -32,14 +34,25 @@ export interface LowLatencyHandlers {
   audioContext?: AudioContext | null;
   /** The renderer to use, for trying them; the engine's default when not given. */
   renderer?: Renderer;
+  /**
+   * Opens the stream's feed to a player worker on `port`, straight from
+   * the node's swarm, taking over from `replaces`, the player's last feed.
+   * With it, the player opens a feed for each worker and closes the last
+   * one when it's done; without it, the owner pushes the stream's Data
+   * messages.
+   */
+  feed?: (port: MessagePort, replaces: Feed | null) => Feed;
 }
 
 export interface LowLatencyStats extends CoreStats {
   kind: "lowlatency";
   renderer: Renderer | null;
   restarts: number;
+  /** Data messages, and their bytes: pushed, or fed and taken by the worker. */
   messages: number;
   bytes: number;
+  /** Data messages dropped for the worker falling behind. */
+  dropped: number;
   /** Pictures the video presented, by its frame callbacks. */
   presented: number;
   /** Milliseconds from a picture's hand-off in the worker to its expected display, p50 and p95. */
@@ -101,10 +114,16 @@ const nowAbs = () => performance.timeOrigin + performance.now();
  * record in the stream or the end `end` says, the player plays out to it
  * and holds the last picture; a later session's media plays on.
  *
- * A failed worker is replaced, fed from the next whole record, at most
- * MAX_RESTARTS times in RESTART_WINDOW_MS; then, or when the stream can't
- * be decoded here, the error handler hears whether another player may
- * play it.
+ * The messages come straight from the node's swarm, on a feed of the
+ * worker's own (`handlers.feed`), or from the owner's `push`, which the
+ * window batches per task and keeps within WINDOW_BYTES and WINDOW_BATCHES
+ * unacked by dropping to the next whole record.
+ *
+ * A failed worker is replaced, at most MAX_RESTARTS times in
+ * RESTART_WINDOW_MS: fed by a new feed, which joins at the stream's
+ * current GOP, or from the next whole record pushed. Then, or when the
+ * stream can't be decoded here, the error handler hears whether another
+ * player may play it.
  */
 export class LowLatencyPlayer {
   private worker: Worker | null = null;
@@ -115,8 +134,11 @@ export class LowLatencyPlayer {
   private canvas: HTMLCanvasElement | null = null;
   private canvasContext: CanvasRenderingContext2D | null = null;
   private stream: MediaStream | null = null;
-  private skipping = false;
-  private atRecordStart = true;
+  /** The pushed messages, batched for the worker. */
+  private batches = new WindowBatches(WINDOW_BYTES, WINDOW_BATCHES, (b) => this.postBatch(b));
+  /** The worker's feed, while there is one, and the port its worker takes. */
+  private feed: Feed | null = null;
+  private feedPort: MessagePort | null = null;
   private endSent = false;
   private restartTimes: number[] = [];
   private destroyed = false;
@@ -145,33 +167,20 @@ export class LowLatencyPlayer {
     this.start();
   }
 
-  // Takes an Egress Data message.
+  // Takes an Egress Data message, when the player has no feed.
   push(data: Uint8Array, segmentEnd: boolean, discontinuity: boolean): void {
-    if (this.destroyed || this.failure || this.endSent) return;
+    if (this.destroyed || this.failure || this.endSent || this.handlers.feed) return;
     this.counts.messages++;
     this.counts.bytes += data.byteLength;
-    if (discontinuity) this.skipping = false;
-    const skip = this.skipping;
-    this.skipping &&= !segmentEnd;
-    this.atRecordStart = segmentEnd;
-    if (skip) return;
-    // Protobuf's bytes are a view of the whole message: copy them to
-    // transfer just these.
-    const copy = data.slice().buffer;
-    const message: WindowMessage = {
-      type: "data",
-      data: copy,
-      segmentEnd,
-      discontinuity,
-      at: nowAbs(),
-    };
-    this.worker?.postMessage(message, [copy]);
+    this.batches.push({ data: data as Uint8Array<ArrayBuffer>, segmentEnd, discontinuity });
   }
 
   /** The stream ended: the player plays out to its end, after what was pushed. */
   end(): void {
     if (this.destroyed || this.failure || this.endSent) return;
     this.endSent = true;
+    if (this.handlers.feed) return;
+    this.batches.flush();
     this.post({ type: "end" });
   }
 
@@ -244,6 +253,7 @@ export class LowLatencyPlayer {
         long: p50 === null ? 0 : this.intervals.filter((x) => x > 2 * p50).length,
       },
       postDelay: { p50: pct(this.postDelays, 0.5), p95: pct(this.postDelays, 0.95) },
+      dropped: this.batches.dropped,
       droppedFrames: q?.droppedVideoFrames ?? null,
       totalFrames: q?.totalVideoFrames ?? null,
       error: this.failure,
@@ -254,6 +264,7 @@ export class LowLatencyPlayer {
     if (this.destroyed) return;
     this.destroyed = true;
     this.stop();
+    this.closeFeed();
     this.video.removeEventListener("pause", this.onPause);
     this.video.removeEventListener("play", this.onPlay);
     this.attach(null);
@@ -269,13 +280,36 @@ export class LowLatencyPlayer {
       if (generation === this.generation) this.onMessage(data);
     };
     worker.onerror = (e) => this.restart(`the player worker failed: ${e.message}`);
-    if (this.endSent) this.post({ type: "end" });
+    if (this.handlers.feed) {
+      // The new feed takes over from the last one once it holds the
+      // stream, so the swarm stays open between them. Its port goes to
+      // the worker with the open message.
+      const channel = new MessageChannel();
+      this.feed = this.handlers.feed(channel.port1, this.feed);
+      this.feedPort = channel.port2;
+    } else if (this.endSent) {
+      this.post({ type: "end" });
+    }
+  }
+
+  private closeFeed(): void {
+    this.feed?.close();
+    this.feed = null;
+  }
+
+  // Posts a batch of the pushed messages to the worker.
+  private postBatch(batch: ArrayBuffer): void {
+    const message: WindowMessage = { type: "data", batch, at: nowAbs() };
+    this.worker?.postMessage(message, [batch]);
   }
 
   private stop(): void {
     this.generation++;
     this.worker?.terminate();
     this.worker = null;
+    // A feed port its worker never took.
+    this.feedPort?.close();
+    this.feedPort = null;
     this.audio?.close();
     this.audio = null;
     void this.writer?.close().catch(() => undefined);
@@ -300,13 +334,14 @@ export class LowLatencyPlayer {
     this.restartTimes.push(now);
     this.counts.restarts++;
     this.stop();
-    this.skipping = !this.atRecordStart;
+    this.batches.restart((b) => this.postBatch(b));
     this.start();
   }
 
   private fail(message: string, fallback: boolean): void {
     this.failure = message;
     this.stop();
+    this.closeFeed();
     this.handlers.error?.(message, fallback);
   }
 
@@ -424,6 +459,11 @@ export class LowLatencyPlayer {
       }
     }
     if (generation !== this.generation) return;
+    if (this.feedPort) {
+      message.feed = this.feedPort;
+      transfer.push(this.feedPort);
+      this.feedPort = null;
+    }
     this.worker?.postMessage(message, transfer);
   }
 
@@ -464,6 +504,10 @@ export class LowLatencyPlayer {
       case "state":
         this.core = m.stats;
         this.clockState = m.clock;
+        if (this.handlers.feed) {
+          this.counts.messages = m.messages;
+          this.counts.bytes = m.bytes;
+        }
         this.handoffs.push(...m.handoffs);
         this.matchDisplays();
         if (this.renderer === Renderer.Offscreen && !this.stream) {
@@ -473,6 +517,9 @@ export class LowLatencyPlayer {
           }
         }
         for (const l of this.listeners) l(m.clock);
+        return;
+      case "consumed":
+        this.batches.ack(m.batches);
         return;
       case "error":
         if (m.final) {
