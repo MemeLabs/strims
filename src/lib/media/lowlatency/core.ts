@@ -332,6 +332,7 @@ export class PlayerCore {
       at: this.env.wall(),
       published: p === null ? null : this.publishedAt(p),
       rate: this.state === State.Playing && this.stallStart === null ? this.rate : 0,
+      media: p,
       targetLag: this.lag.target,
       // An ended stream has no live edge to lag.
       lag: p === null || edge === null || this.ended ? null : edge - p,

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Feed, WindowBatches } from "../feed";
+import { CueTracks } from "../textTracks";
 import { WINDOW_BATCHES, WINDOW_BYTES } from "../units";
 import { AudioPlayout, sharedAudioContext } from "./audio";
 import { quantile } from "./lag";
@@ -13,8 +14,16 @@ export const MAX_RESTARTS = 3;
 export const RESTART_WINDOW_MS = 60_000;
 /** Measurements kept for the stats' quantiles. */
 const SAMPLES = 512;
+/** Cues held for the video's timeline before the playout clock gives it. */
+const MAX_PENDING_CUES = 64;
 /** Displays are matched to hand-offs this long after they show, once every hand-off before them came. */
 const MATCH_AFTER_MS = 300;
+/**
+ * Seconds the video's timeline may drift from the media's, as the cues
+ * show on it, before they move: the playout's rate, stalls and skips move
+ * the media against the video's stream time.
+ */
+export const CUE_DRIFT = 0.1;
 
 export interface LowLatencyHandlers {
   /**
@@ -119,6 +128,11 @@ const nowAbs = () => performance.timeOrigin + performance.now();
  * window batches per task and keeps within WINDOW_BYTES and WINDOW_BATCHES
  * unacked by dropping to the next whole record.
  *
+ * The stream's subtitles and captions show as cues of the video's text
+ * tracks (../textTracks). The video plays a stream, whose time isn't the
+ * media's, so the cues come on the media timeline and show on the
+ * video's, moved as the playout clock says the two drift apart.
+ *
  * A failed worker is replaced, at most MAX_RESTARTS times in
  * RESTART_WINDOW_MS: fed by a new feed, which joins at the stream's
  * current GOP, or from the next whole record pushed. Then, or when the
@@ -154,6 +168,11 @@ export class LowLatencyPlayer {
   private intervals: number[] = [];
   private postDelays: number[] = [];
   private counts = { restarts: 0, messages: 0, bytes: 0, presented: 0, windowDropped: 0 };
+  private cues: CueTracks;
+  /** The video's time less the media's, once the playout clock says. */
+  private cueShift: number | null = null;
+  /** Cues that came before the shift was known. */
+  private pendingCues: Extract<WorkerMessage, { type: "cues" }>["cues"] = [];
 
   constructor(
     private readonly video: HTMLVideoElement,
@@ -161,6 +180,7 @@ export class LowLatencyPlayer {
     private readonly createWorker: () => Worker = defaultWorker
   ) {
     video.disableRemotePlayback = true;
+    this.cues = new CueTracks(video);
     video.addEventListener("pause", this.onPause);
     video.addEventListener("play", this.onPlay);
     ((window as PlayerRegistry).__strims_players__ ??= []).push(this);
@@ -191,6 +211,7 @@ export class LowLatencyPlayer {
         at: Date.now(),
         published: null,
         rate: 0,
+        media: null,
         targetLag: this.core?.target ?? 0.5,
         lag: null,
       }
@@ -321,6 +342,9 @@ export class LowLatencyPlayer {
     this.canvas?.remove();
     this.canvas = null;
     this.canvasContext = null;
+    this.cues.clear();
+    this.cueShift = null;
+    this.pendingCues = [];
   }
 
   private restart(reason: string): void {
@@ -516,7 +540,11 @@ export class LowLatencyPlayer {
             push(this.intervals, m.handoffs[i] - m.handoffs[i - 1]);
           }
         }
+        this.mapCues(m.clock);
         for (const l of this.listeners) l(m.clock);
+        return;
+      case "cues":
+        this.takeCues(m.cues);
         return;
       case "consumed":
         this.batches.ack(m.batches);
@@ -552,6 +580,38 @@ export class LowLatencyPlayer {
       g.drawImage(frame, 0, 0, c.width, c.height);
     }
     frame.close();
+  }
+
+  // Shows cues on the video. Without a video to play the pictures (the
+  // offscreen renderer's canvas showing in its place) none show: the
+  // canvas has no text tracks.
+  private takeCues(cues: Extract<WorkerMessage, { type: "cues" }>["cues"]): void {
+    if (this.cueShift === null) {
+      this.pendingCues.push(...cues);
+      this.pendingCues.splice(0, this.pendingCues.length - MAX_PENDING_CUES);
+      return;
+    }
+    for (const c of cues) {
+      if (c.type === "cue") this.cues.add(c);
+      else this.cues.end(c);
+    }
+  }
+
+  // Moves the cues to where the playout clock puts the media on the
+  // video's timeline, once it drifted CUE_DRIFT from where they are.
+  private mapCues(c: PlayoutClock): void {
+    if (c.media === null) return;
+    const media = c.media + ((Date.now() - c.at) / 1000) * c.rate;
+    const shift = this.video.currentTime - media;
+    if (this.cueShift !== null && Math.abs(shift - this.cueShift) < CUE_DRIFT) {
+      this.cues.evict(this.video.currentTime);
+      return;
+    }
+    this.cueShift = shift;
+    this.cues.setShift(shift);
+    const pending = this.pendingCues;
+    this.pendingCues = [];
+    this.takeCues(pending);
   }
 
   // Milliseconds between the presented media's publishing and now.

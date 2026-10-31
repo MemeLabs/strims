@@ -6,6 +6,8 @@ import { AudioDataLike, CoreEnv, FrameLike, PlayerCore } from "./core";
 import {
   AudioDecoderTrack,
   Core,
+  CueEndOutput,
+  CueOutput,
   DecoderTrack,
   DemuxerOutput,
   Renderer,
@@ -301,6 +303,15 @@ export const runLowLatencyWorker = (scope: DedicatedWorkerGlobalScope, load: Cor
       return;
     }
     core.outputs(outputs, performance.now() / 1000);
+    postCues(outputs);
+  };
+
+  // Passes the window the outputs' cues, which it shows on its video.
+  const postCues = (outputs: DemuxerOutput[]) => {
+    const cues = outputs.filter(
+      (o): o is CueOutput | CueEndOutput => o.type === "cue" || o.type === "cueEnd"
+    );
+    if (cues.length) post({ type: "cues", cues });
   };
 
   const push = (input: Input) => {
@@ -330,6 +341,7 @@ export const runLowLatencyWorker = (scope: DedicatedWorkerGlobalScope, load: Cor
     }
     batches++;
     core.outputs(outputs, input.at);
+    postCues(outputs);
     if (batch.ack && !stopped) ack();
   };
 

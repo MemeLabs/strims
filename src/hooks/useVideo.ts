@@ -1,8 +1,9 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { ComponentProps, useState } from "react";
+import { ComponentProps, useEffect, useState } from "react";
 
+import { CUES_CHANGED, CueKind, cueKinds, cueTrack } from "../lib/media/textTracks";
 import useReady from "./useReady";
 
 export enum VideoReadyState {
@@ -23,6 +24,33 @@ export enum VideoReadyState {
 }
 
 const VOLUME_STORAGE_KEY = "volume";
+const CAPTIONS_STORAGE_KEY = "captions";
+
+/** The cues the viewer shows: none, or those of a kind, the other's when the stream has only it. */
+export type CaptionChoice = "off" | CueKind;
+
+const loadCaptions = (): CaptionChoice => {
+  try {
+    const saved = localStorage.getItem(CAPTIONS_STORAGE_KEY);
+    return saved === "subtitles" || saved === "captions" ? saved : "off";
+  } catch {
+    return "off";
+  }
+};
+
+const saveCaptions = (choice: CaptionChoice) => {
+  try {
+    localStorage.setItem(CAPTIONS_STORAGE_KEY, choice);
+  } catch {
+    // The choice lasts this page only.
+  }
+};
+
+/** The kind of cues showing for `choice`, of the stream's `kinds`. */
+export const shownCues = (choice: CaptionChoice, kinds: CueKind[]): CueKind | null => {
+  if (choice === "off" || !kinds.length) return null;
+  return kinds.includes(choice) ? choice : kinds[0];
+};
 
 export interface VideoState {
   readyState: number;
@@ -45,6 +73,9 @@ export interface VideoState {
   pip: boolean;
   src: string;
   error: MediaError | null;
+  /** The kinds of cues the stream has shown, and those showing: null when off. */
+  cueKinds: CueKind[];
+  captions: CueKind | null;
 }
 
 export interface VideoControls {
@@ -56,6 +87,8 @@ export interface VideoControls {
   setVolume: (value: number) => void;
   togglePiP: () => Promise<void>;
   setSrc: (src: string) => void;
+  /** Shows the next kind of cues the stream has, or none after the last; the choice is kept on the device. */
+  cycleCaptions: () => void;
 }
 
 const useVideo = (
@@ -78,6 +111,8 @@ const useVideo = (
   const [seekableStart, setSeekableStart] = useState(0);
   const [seekableEnd, setSeekableEnd] = useState(0);
   const [error, setError] = useState<MediaError>(null);
+  const [kinds, setKinds] = useState<CueKind[]>([]);
+  const [captionChoice, setCaptionChoice] = useState<CaptionChoice>(loadCaptions);
 
   useReady(() => {
     const savedVolume = localStorage.getItem(VOLUME_STORAGE_KEY);
@@ -98,6 +133,45 @@ const useVideo = (
     setEnded(true);
     setWaiting(true);
   }, [src]);
+
+  // The kinds of cues the stream's players showed, until the video's
+  // source goes.
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    const changed = () =>
+      setKinds((was) => {
+        const now = cueKinds(video);
+        const all = (["subtitles", "captions"] as const).filter(
+          (k) => was.includes(k) || now.includes(k)
+        );
+        return all.length === was.length ? was : all;
+      });
+    const emptied = () => setKinds([]);
+    video.addEventListener(CUES_CHANGED, changed);
+    video.addEventListener("emptied", emptied);
+    return () => {
+      video.removeEventListener(CUES_CHANGED, changed);
+      video.removeEventListener("emptied", emptied);
+    };
+  }, [ref.current]);
+
+  const captions = shownCues(captionChoice, kinds);
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    for (const k of ["subtitles", "captions"] as const) {
+      const track = cueTrack(video, k);
+      if (track) track.mode = k === captions ? "showing" : "hidden";
+    }
+  }, [ref.current, captions, kinds]);
+
+  const cycleCaptions = () => {
+    const order: CaptionChoice[] = ["off", ...kinds];
+    const next = order[(order.indexOf(captions ?? "off") + 1) % order.length];
+    setCaptionChoice(next);
+    saveCaptions(next);
+  };
 
   const onEnded = () => {
     setPlaying(false);
@@ -264,6 +338,8 @@ const useVideo = (
       pip,
       src,
       error,
+      cueKinds: kinds,
+      captions,
     },
     {
       ref,
@@ -290,6 +366,7 @@ const useVideo = (
       setVolume,
       togglePiP,
       setSrc,
+      cycleCaptions,
     },
   ];
 };

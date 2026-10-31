@@ -9,6 +9,8 @@ import { useTranslation } from "react-i18next";
 import { IconType } from "react-icons/lib";
 import {
   MdClose,
+  MdClosedCaption,
+  MdClosedCaptionOff,
   MdFullscreen,
   MdFullscreenExit,
   MdPause,
@@ -56,6 +58,32 @@ const PiPButton: React.FC<PiPButtonProps> = ({ supported, toggle }) => {
       tooltip={t("player.Miniplayer")}
       onClick={toggle}
       icon={MdPictureInPictureAlt}
+    />
+  );
+};
+
+interface CaptionsButtonProps {
+  videoState: VideoState;
+  cycle: () => void;
+}
+
+// Shown once the stream has cues: cycles off, then each kind it has.
+const CaptionsButton: React.FC<CaptionsButtonProps> = ({ videoState, cycle }) => {
+  const { t } = useTranslation();
+  const { cueKinds, captions } = videoState;
+  if (!cueKinds.length) return null;
+  const tooltip =
+    captions === "subtitles"
+      ? t("player.Subtitles")
+      : captions === "captions"
+      ? t("player.Captions")
+      : t("player.Captions off");
+  return (
+    <Button
+      className={clsx("captions", { on: captions !== null })}
+      tooltip={tooltip}
+      onClick={cycle}
+      icon={captions === null ? MdClosedCaptionOff : MdClosedCaption}
     />
   );
 };
@@ -224,6 +252,7 @@ const VideoControls: React.FC<VideoControlsProps> = (props) => {
         )}
       </div>
       <div className="controls_group right">
+        <CaptionsButton videoState={videoState} cycle={videoControls.cycleCaptions} />
         {props.remoteButtons}
         {props.showPiPButton && (
           <PiPButton supported={videoState.supportPiP} toggle={videoControls.togglePiP} />

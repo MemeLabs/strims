@@ -4,11 +4,17 @@
 // The messages between the low-latency player's window side, its worker and
 // its AudioWorklet.
 
-import type { DemuxerOutput } from "../../../../crates/strims-player/Cargo.toml";
+import type {
+  CueEndOutput,
+  CueOutput,
+  DemuxerOutput,
+} from "../../../../crates/strims-player/Cargo.toml";
 
 export type {
   AudioDecoderTrack,
   ConfigsOutput,
+  CueEndOutput,
+  CueOutput,
   DecoderTrack,
   DemuxedUnitOutput,
   DemuxerOutput,
@@ -96,6 +102,8 @@ export interface PlayoutClock {
   published: number | null;
   /** Media seconds the playout advances per second; 0 while stalled or paused. */
   rate: number;
+  /** The media time presented at `at`, in seconds; null before the player joins. */
+  media: number | null;
   /** Seconds behind the stream's live edge the player aims for. */
   targetLag: number;
   /** Seconds behind the live edge it is; null before it joins. */
@@ -175,6 +183,11 @@ export type WorkerMessage =
       messages: number;
       bytes: number;
     }
+  /**
+   * The demuxer's cues, on the media timeline: the window shows them on
+   * its video's.
+   */
+  | { type: "cues"; cues: (CueOutput | CueEndOutput)[] }
   /**
    * The worker has taken `batches` of the window's batches: an ack, for a
    * batch that asked.

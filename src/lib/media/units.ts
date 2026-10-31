@@ -7,6 +7,7 @@ import { LiveEdge, LiveStats } from "./live";
 import { CoreOutput, SinkMode, UnitInfo, WindowMessage, WorkerMessage } from "./protocol";
 import { timeRanges } from "./ranges";
 import { MediaSink, MediaSourceConstructor } from "./sink";
+import { CueTracks } from "./textTracks";
 
 /** Milliseconds between the player's looks at the video. */
 export const TICK_MS = 200;
@@ -134,6 +135,10 @@ const defaultWorker = () =>
  * video that played out to the end, and stopped there, resumes there once
  * the later session's media is the target lag past it.
  *
+ * The stream's subtitles and captions show as cues of the video's text
+ * tracks (./textTracks), on the MediaSource's timeline; they go with the
+ * MediaSource when it is rebuilt.
+ *
  * With an AirPlay source (`handlers.airPlay`) the browser can use, the
  * MediaSource lives in the window, the source beside it as the video's
  * alternative. While the video plays on an AirPlay receiver, the player
@@ -151,6 +156,7 @@ export class UnitsPlayer {
   private sink: MediaSink | null = null;
   private url: string | null = null;
   private live = new LiveEdge();
+  private cues: CueTracks;
   private timer: ReturnType<typeof setInterval>;
   private lastPosition = 0;
   /** Data messages are dropped until a whole record starts. */
@@ -198,6 +204,7 @@ export class UnitsPlayer {
     private readonly handlers: PlayerHandlers = {},
     private readonly createWorker: () => Worker = defaultWorker
   ) {
+    this.cues = new CueTracks(video);
     this.airPlay = handlers.airPlay && airPlayCapable() ? handlers.airPlay : null;
     this.mode = this.airPlay ? SinkMode.Window : chooseSinkMode();
     video.disableRemotePlayback = !this.airPlay;
@@ -376,6 +383,7 @@ export class UnitsPlayer {
     this.worker = null;
     this.sink?.close();
     this.sink = null;
+    this.cues.clear();
     if (this.url) {
       URL.revokeObjectURL(this.url);
       this.url = null;
@@ -515,6 +523,12 @@ export class UnitsPlayer {
         this.sink?.end();
         this.video.playbackRate = 1;
         return;
+      case "cue":
+        this.cues.add(out);
+        return;
+      case "cueEnd":
+        this.cues.end(out);
+        return;
     }
   }
 
@@ -615,6 +629,7 @@ export class UnitsPlayer {
     if (now * 1000 - this.lastPosition < POSITION_MS) return;
     this.lastPosition = now * 1000;
     const { currentTime } = this.video;
+    this.cues.evict(currentTime);
     if (this.sink) {
       this.sink.position(currentTime);
     } else {

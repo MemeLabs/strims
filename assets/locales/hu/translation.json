@@ -13,7 +13,10 @@
     "Pause": "Szünet",
     "Play": "Lejátszás",
     "Miniplayer": "Mini Lejátszó",
-    "Close": "Bezárás"
+    "Close": "Bezárás",
+    "Subtitles": "Felirat",
+    "Captions": "Zárt felirat",
+    "Captions off": "Felirat ki"
   },
 
   "layout": {

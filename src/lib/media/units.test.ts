@@ -6,6 +6,8 @@ import assert from "assert";
 import { WIRELESS_CHANGED } from "./airplay";
 import { Feed, parseBatch } from "./feed";
 import { SinkMode, WindowMessage, WorkerMessage } from "./protocol";
+import { cueTrack } from "./textTracks";
+import { FakeCue, FakeTextTrack, FakeTextVideo } from "./textTracks.test";
 import { TICK_MS, UnitsPlayer, WINDOW_BYTES } from "./units";
 
 // A player worker that keeps what the window posts it.
@@ -32,7 +34,7 @@ class FakeWorker {
   }
 }
 
-class FakeVideo extends EventTarget {
+class FakeVideo extends FakeTextVideo {
   webkitCurrentPlaybackTargetIsWireless = false;
   currentTime = 0;
   buffered = { length: 0, start: () => 0, end: () => 0 };
@@ -97,12 +99,42 @@ describe("UnitsPlayer", () => {
     globals.window = globalThis;
     globals.MediaSource = { canConstructInDedicatedWorker: true };
     globals.HTMLMediaElement = { HAVE_FUTURE_DATA: 3 };
+    globals.VTTCue = FakeCue;
   });
 
   after(() => {
     delete globals.window;
     delete globals.MediaSource;
     delete globals.HTMLMediaElement;
+    delete globals.VTTCue;
+  });
+
+  it("shows the worker's cues on the video's text tracks until its MediaSource goes", () => {
+    const { p, video, workers } = player();
+    const v = video as unknown as HTMLVideoElement;
+    workers[0].send({
+      type: "outputs",
+      at: 0,
+      messages: 0,
+      bytes: 0,
+      outputs: [
+        { type: "cue", id: 4, kind: "subtitles", start: 1, end: 3, text: "hello" },
+        { type: "cue", id: 5, kind: "captions", start: 2, end: 18, text: "CC" },
+        { type: "cueEnd", id: 4, end: 2.5 },
+      ],
+    });
+    const list = (k: "subtitles" | "captions") =>
+      (cueTrack(v, k) as unknown as FakeTextTrack).list.map((c) => [
+        c.startTime,
+        c.endTime,
+        c.text,
+      ]);
+    assert.deepStrictEqual(list("subtitles"), [[1, 2.5, "hello"]]);
+    assert.deepStrictEqual(list("captions"), [[2, 18, "CC"]]);
+    workers[0].onerror({ message: "boom" });
+    assert.deepStrictEqual(list("subtitles"), []);
+    assert.deepStrictEqual(list("captions"), []);
+    p.destroy();
   });
 
   it("opens a feed for its worker and hands the worker the feed's other port", () => {

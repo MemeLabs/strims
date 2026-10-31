@@ -4,6 +4,8 @@
 import assert from "assert";
 
 import { Feed, parseBatch } from "../feed";
+import { cueTrack } from "../textTracks";
+import { FakeCue, FakeTextTrack, FakeTextVideo } from "../textTracks.test";
 import { WINDOW_BYTES } from "../units";
 import { LowLatencyPlayer } from "./player";
 import { CoreStats, Renderer, WindowMessage, WorkerMessage } from "./protocol";
@@ -32,19 +34,23 @@ class FakeWorker {
   }
 }
 
-class FakeVideo extends EventTarget {
+class FakeVideo extends FakeTextVideo {
   disableRemotePlayback = false;
   srcObject: MediaStream | null = null;
+  currentTime = 0;
 }
 
 const globals = globalThis as unknown as Record<string, unknown>;
 
 // A player on a renderer the window needn't make, and its workers, each
 // past its hello.
-const player = (feed?: (port: MessagePort, replaces: Feed | null) => Feed) => {
+const player = (
+  feed?: (port: MessagePort, replaces: Feed | null) => Feed,
+  video = new FakeVideo()
+) => {
   const workers: FakeWorker[] = [];
   const p = new LowLatencyPlayer(
-    new FakeVideo() as unknown as HTMLVideoElement,
+    video as unknown as HTMLVideoElement,
     {
       attach: () => undefined,
       audioContext: null,
@@ -143,10 +149,46 @@ describe("LowLatencyPlayer", () => {
     (workers[0].posted[0].message as { feed: MessagePort }).feed.close();
   });
 
+  it("shows the worker's cues on the video's timeline, moved as the media drifts from it", () => {
+    globals.VTTCue = FakeCue;
+    const video = new FakeVideo();
+    const { p, workers } = player(undefined, video);
+    const stats = { ...p.stats() } as CoreStats;
+    const state = (media: number | null, currentTime: number) => {
+      video.currentTime = currentTime;
+      const clock = { at: Date.now(), published: null, rate: 0, media, targetLag: 0.5, lag: null };
+      workers[0].send({ type: "state", clock, stats, handoffs: [], messages: 0, bytes: 0 });
+    };
+    const list = () =>
+      (
+        cueTrack(video as unknown as HTMLVideoElement, "subtitles") as unknown as FakeTextTrack
+      ).list.map((c) => [c.startTime, c.endTime]);
+    // Before the player joins, cues wait for the video's timeline.
+    workers[0].send({
+      type: "cues",
+      cues: [{ type: "cue", id: 1, kind: "subtitles", start: 100, end: 102, text: "a" }],
+    });
+    state(null, 0.5);
+    assert.strictEqual(cueTrack(video as unknown as HTMLVideoElement, "subtitles"), null);
+    // Media 99 plays at video time 1.
+    state(99, 1);
+    assert.deepStrictEqual(list(), [[2, 4]]);
+    // Within the drift the cues stay; a stall past it moves them.
+    state(99.5, 1.55);
+    assert.deepStrictEqual(list(), [[2, 4]]);
+    state(99.5, 2);
+    assert.deepStrictEqual(list(), [[2.5, 4.5]]);
+    workers[0].send({ type: "cues", cues: [{ type: "cueEnd", id: 1, end: 101 }] });
+    assert.deepStrictEqual(list(), [[2.5, 3.5]]);
+    p.destroy();
+    assert.deepStrictEqual(list(), []);
+    delete globals.VTTCue;
+  });
+
   it("counts a fed worker's Data messages from its state", () => {
     const f = feeds();
     const { p, workers } = player(f.open);
-    const clock = { at: 0, published: null, rate: 0, targetLag: 0.5, lag: null };
+    const clock = { at: 0, published: null, rate: 0, media: null, targetLag: 0.5, lag: null };
     const stats = { ...p.stats() } as CoreStats;
     workers[0].send({ type: "state", clock, stats, handoffs: [], messages: 5, bytes: 70 });
     const s = p.stats();

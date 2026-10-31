@@ -13,7 +13,10 @@
     "Pause": "停",
     "Play": "开始",
     "Miniplayer": "小屏",
-    "Close": "关"
+    "Close": "关",
+    "Subtitles": "字幕",
+    "Captions": "隐藏式字幕",
+    "Captions off": "字幕关"
   },
 
   "layout": {
