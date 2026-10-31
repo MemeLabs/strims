@@ -264,6 +264,9 @@ in `TRIED.md`.
      arrivals run up to 1-1.5 s late (runs `mesh-a` at 23-26 s, `mesh-b`
      at 26 s). Find whether the seed's uplink or the joiner's requests
      take the time, and whether backlog answers should yield to pushes.
+     Backlog chunks are never announced, so viewers joining the same GOP
+     can't serve each other; all of it comes from the seed
+     (`collapse_join_backlog_hold`).
    - **Holders' shares under pull.** `SeedQos::ByAllocation` gives a lone
      holder 1000 / (1000 + 50 × the other neighbours) of the uplink,
      which with 32 neighbours is barely what a 6 Mbit/s copy needs. A
@@ -337,7 +340,13 @@ in `TRIED.md`.
      lose up to a fifth of p99 to that silence, and the real stack's busy
      stars lose as much without it (tried: TRIED.md). Find what it buys
      there, likely a congested peer left to its pushes, and keep the
-     silence for that alone.
+     silence for that alone. It also stalls joins: a joiner pulls its
+     GOP's backlog from the seed alone, the seed's keyframe pushes queue
+     those answers past the congestion timeout, and the window then sits
+     under a chunk for the hold. Two viewers joining in the same second
+     take 3-5 s for their backlogs, against 1.1 s for one and 1.7-2.4 s
+     without the hold (strims-sim's `collapse_join_backlog_hold`, on
+     branch `video-target`).
    - **Deadlines from the player.** Readers read chunks as soon as they
      arrive and never skip, so a deadline taken from first sight has no
      slack to spend and only moves repairs earlier (tried: TRIED.md).
