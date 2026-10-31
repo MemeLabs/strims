@@ -20,8 +20,8 @@ self.onmessage = ({ data }: MessageEvent<InitMessage>) => {
       );
     return;
   }
-  const { options, frontend, signal, psi } = data;
+  const { options, frontend, signal, psi, feeds } = data;
   init()
-    .then(() => start(options, frontend, signal, psi))
+    .then(() => start(options, frontend, signal, psi, feeds))
     .catch((e) => signal.postMessage({ type: "fatal", message: String(e) } satisfies WorkerSignal));
 };

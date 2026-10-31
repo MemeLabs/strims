@@ -1,6 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { BatchWriter, Credit, DataMessage, Feed, MAX_BATCH_BYTES } from "./feed";
 import { LiveEdge, LiveStats } from "./live";
 import { CoreOutput, SinkMode, UnitInfo, WindowMessage, WorkerMessage } from "./protocol";
 import { timeRanges } from "./ranges";
@@ -15,6 +16,13 @@ export const MAX_RESTARTS = 3;
 export const RESTART_WINDOW_MS = 60_000;
 /** Seconds of publish times kept for the playback position's. */
 const PUBLISHED_WINDOW = 60;
+/**
+ * The most bytes and batches the window posts the worker unacked. Past it,
+ * Data messages are dropped to the next whole record, which goes with a
+ * discontinuity. It covers a join's rewound GOP while the worker loads.
+ */
+export const WINDOW_BYTES = 32 * 1024 * 1024;
+export const WINDOW_BATCHES = 1024;
 
 export interface PlayerHandlers {
   /**
@@ -27,6 +35,14 @@ export interface PlayerHandlers {
   play?: () => Promise<void> | void;
   /** The player gave up: the stream can't play here. */
   error?: (message: string) => void;
+  /**
+   * Opens the stream's feed to a player worker on `port`, straight from
+   * the node's swarm, taking over from `replaces`, the player's last feed.
+   * With it, the player opens a feed for each worker and closes the last
+   * one when it's done; without it, the owner pushes the stream's Data
+   * messages.
+   */
+  feed?: (port: MessagePort, replaces: Feed | null) => Feed;
 }
 
 export interface PlayerStats extends LiveStats {
@@ -44,6 +60,10 @@ export interface PlayerStats extends LiveStats {
   playbackRate: number;
   droppedFrames: number | null;
   totalFrames: number | null;
+  /** Data messages dropped for the worker falling behind. */
+  dropped: number;
+  /** The stream ended, and plays out to its end. */
+  ended: boolean;
   error: string | null;
 }
 
@@ -82,14 +102,24 @@ const defaultWorker = () =>
   );
 
 /**
- * Plays a unit-format stream on a video: the Egress RPC's Data messages
- * go to a player worker, whose remuxer turns them into fMP4 for a
- * MediaSource in the worker, or in the window where workers have none
- * (Firefox). A LiveEdge holds playback at its target lag.
+ * Plays a unit-format stream on a video: its Egress Data messages go to a
+ * player worker, whose remuxer turns them into fMP4 for a MediaSource in
+ * the worker, or in the window where workers have none (Firefox). A
+ * LiveEdge holds playback at its target lag.
+ *
+ * The messages come straight from the node's swarm, on a feed of the
+ * worker's own (`handlers.feed`), or from the owner's `push`, which the
+ * window batches per task and keeps within WINDOW_BYTES and WINDOW_BATCHES
+ * unacked by dropping to the next whole record.
  *
  * A failed worker, sink or video is replaced by a new worker and
- * MediaSource, fed from the next whole record, at most MAX_RESTARTS times
- * in RESTART_WINDOW_MS.
+ * MediaSource, at most MAX_RESTARTS times in RESTART_WINDOW_MS: fed by a
+ * new feed, which joins at the stream's current GOP, or from the next
+ * whole record pushed.
+ *
+ * At the stream's end, which `end` says or the worker finds, the worker
+ * writes out what the remuxer holds, the MediaSource's stream ends, and
+ * the video plays out to its end at rate 1.
  */
 export class UnitsPlayer {
   private readonly mode: SinkMode;
@@ -115,6 +145,16 @@ export class UnitsPlayer {
   private lastCurrentTime = -1;
   /** The video's error a restart answered, which lasts until its new media loads. */
   private handledError: MediaError | null = null;
+  /** The worker's feed, while there is one. */
+  private feed: Feed | null = null;
+  /** The pushed messages for the worker's next batch, and its unacked ones. */
+  private batch = new BatchWriter();
+  private batchQueued = false;
+  private credit = new Credit(WINDOW_BYTES, WINDOW_BATCHES);
+  /** The next pushed message goes with a discontinuity: those before it were dropped. */
+  private dropDiscontinuity = false;
+  private endSent = false;
+  private ended = false;
   private counts = {
     restarts: 0,
     messages: 0,
@@ -122,6 +162,7 @@ export class UnitsPlayer {
     gaps: 0,
     discontinuities: 0,
     timelineRestarts: 0,
+    dropped: 0,
   };
 
   constructor(
@@ -144,9 +185,9 @@ export class UnitsPlayer {
     this.timer = setInterval(this.tick, TICK_MS);
   }
 
-  // Takes an Egress Data message.
+  // Takes an Egress Data message, when the player has no feed.
   push(data: Uint8Array, segmentEnd: boolean, discontinuity: boolean): void {
-    if (this.destroyed || this.failure) return;
+    if (this.destroyed || this.failure || this.endSent || this.handlers.feed) return;
     this.counts.messages++;
     this.counts.bytes += data.byteLength;
     if (discontinuity) {
@@ -158,20 +199,43 @@ export class UnitsPlayer {
     this.skipping &&= !segmentEnd;
     this.atRecordStart = segmentEnd;
     if (skip) {
-      // The record in progress began before this worker.
+      // The record in progress began before this worker, or was dropped.
       return;
     }
-    // Protobuf's bytes are a view of the whole message: copy them to
-    // transfer just these.
-    const copy = data.slice().buffer;
-    const message: WindowMessage = {
-      type: "data",
-      data: copy,
+    if (!this.credit.open) {
+      // The worker fell behind: the record goes, and the next whole one
+      // tells the worker so.
+      this.counts.dropped++;
+      this.skipping = !segmentEnd;
+      this.dropDiscontinuity = true;
+      return;
+    }
+    const message: DataMessage = {
+      data: data as Uint8Array<ArrayBuffer>,
       segmentEnd,
-      discontinuity,
-      at: performance.now() / 1000,
+      discontinuity: discontinuity || this.dropDiscontinuity,
     };
-    this.worker.postMessage(message, [copy]);
+    this.dropDiscontinuity = false;
+    this.batch.add(message);
+    if (this.batch.size >= MAX_BATCH_BYTES) {
+      this.flush();
+    } else if (!this.batchQueued) {
+      this.batchQueued = true;
+      queueMicrotask(this.flush);
+    }
+  }
+
+  /**
+   * The stream ended: the worker writes out what it holds, after what was
+   * pushed, and the video plays out to its end.
+   */
+  end(): void {
+    if (this.destroyed || this.failure || this.endSent) return;
+    this.endSent = true;
+    if (this.handlers.feed) return;
+    this.flush();
+    const message: WindowMessage = { type: "end" };
+    this.worker?.postMessage(message);
   }
 
   stats(): PlayerStats {
@@ -186,6 +250,7 @@ export class UnitsPlayer {
       playbackRate: this.video.playbackRate,
       droppedFrames: q?.droppedVideoFrames ?? null,
       totalFrames: q?.totalVideoFrames ?? null,
+      ended: this.ended,
       error: this.failure,
     };
   }
@@ -195,6 +260,7 @@ export class UnitsPlayer {
     this.destroyed = true;
     clearInterval(this.timer);
     this.stop();
+    this.closeFeed();
     this.video.removeEventListener("waiting", this.onWaiting);
     this.video.removeEventListener("playing", this.onPlaying);
     this.video.removeEventListener("seeked", this.onPlaying);
@@ -225,9 +291,44 @@ export class UnitsPlayer {
         error: (e) => this.restart(e),
       });
     }
-    const open: WindowMessage = { type: "open", mode: this.mode };
-    this.worker.postMessage(open);
+    this.credit = new Credit(WINDOW_BYTES, WINDOW_BATCHES);
+    this.batch = new BatchWriter();
+    this.dropDiscontinuity = false;
+    let feed: MessagePort | undefined;
+    if (this.handlers.feed) {
+      // The new feed takes over from the last one once it holds the
+      // stream, so the swarm stays open between them.
+      const channel = new MessageChannel();
+      this.feed = this.handlers.feed(channel.port1, this.feed);
+      feed = channel.port2;
+    }
+    const open: WindowMessage = {
+      type: "open",
+      mode: this.mode,
+      timeOrigin: performance.timeOrigin,
+      feed,
+    };
+    this.worker.postMessage(open, feed ? [feed] : []);
+    if (this.endSent && !feed) {
+      const end: WindowMessage = { type: "end" };
+      this.worker.postMessage(end);
+    }
   }
+
+  private closeFeed(): void {
+    this.feed?.close();
+    this.feed = null;
+  }
+
+  // Posts the pushed messages to the worker as one batch.
+  private flush = () => {
+    this.batchQueued = false;
+    if (this.batch.empty || !this.worker) return;
+    const ask = this.credit.post(this.batch.size);
+    const batch = this.batch.take(ask);
+    const message: WindowMessage = { type: "data", batch, at: performance.now() / 1000 };
+    this.worker.postMessage(message, [batch]);
+  };
 
   private stop(): void {
     this.worker?.terminate();
@@ -241,7 +342,7 @@ export class UnitsPlayer {
   }
 
   private restart(reason: string): void {
-    if (this.destroyed || this.failure) return;
+    if (this.destroyed || this.failure || this.ended) return;
     const now = performance.now();
     this.restartTimes = this.restartTimes.filter((t) => t > now - RESTART_WINDOW_MS);
     if (this.restartTimes.length >= MAX_RESTARTS) {
@@ -259,6 +360,7 @@ export class UnitsPlayer {
   private fail(message: string): void {
     this.failure = message;
     this.stop();
+    this.closeFeed();
     clearInterval(this.timer);
     this.handlers.error?.(message);
   }
@@ -293,9 +395,26 @@ export class UnitsPlayer {
         this.attach(message.handle);
         return;
       case "outputs":
+        if (this.handlers.feed) {
+          this.counts.messages = message.messages;
+          this.counts.bytes = message.bytes;
+        }
         for (const out of message.outputs) {
           this.output(out, message.at);
         }
+        return;
+      case "consumed":
+        if (this.handlers.feed) {
+          const ack: WindowMessage = { type: "ack", batches: message.batches };
+          this.worker?.postMessage(ack);
+        } else {
+          this.credit.ack(message.batches);
+        }
+        return;
+      case "ended":
+        this.ended = true;
+        this.sink?.end();
+        this.video.playbackRate = 1;
         return;
       case "error":
         if (message.final) {
@@ -371,6 +490,11 @@ export class UnitsPlayer {
       return;
     }
     const now = performance.now() / 1000;
+    if (this.ended) {
+      // Played out to the end: nothing more to chase.
+      this.position(now);
+      return;
+    }
     const stuck =
       v.currentTime === this.lastCurrentTime && v.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
     this.lastCurrentTime = v.currentTime;
@@ -391,14 +515,19 @@ export class UnitsPlayer {
     if (action.play) {
       void (this.handlers.play ? this.handlers.play() : v.play().catch(() => undefined));
     }
-    if (now * 1000 - this.lastPosition >= POSITION_MS) {
-      this.lastPosition = now * 1000;
-      if (this.sink) {
-        this.sink.position(v.currentTime);
-      } else {
-        const message: WindowMessage = { type: "position", currentTime: v.currentTime };
-        this.worker?.postMessage(message);
-      }
-    }
+    this.position(now);
   };
+
+  // Tells the sink the playback position, once a POSITION_MS.
+  private position(now: number): void {
+    if (now * 1000 - this.lastPosition < POSITION_MS) return;
+    this.lastPosition = now * 1000;
+    const { currentTime } = this.video;
+    if (this.sink) {
+      this.sink.position(currentTime);
+    } else {
+      const message: WindowMessage = { type: "position", currentTime };
+      this.worker?.postMessage(message);
+    }
+  }
 }

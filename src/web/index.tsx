@@ -41,6 +41,10 @@ class WorkerConn {
     return Promise.resolve(new C(bus, bus));
   }
 
+  get feeds() {
+    return this.node.feeds;
+  }
+
   close() {
     this.node.close();
   }

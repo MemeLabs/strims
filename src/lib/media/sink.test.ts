@@ -63,6 +63,7 @@ class FakeMediaSource extends EventTarget {
   static supported = (type: string) => type !== 'video/mp4; codecs="hev1"';
   log: string[] = [];
   duration = NaN;
+  readyState: ReadyState = "closed";
   sb: FakeSourceBuffer | null = null;
 
   constructor() {
@@ -80,7 +81,13 @@ class FakeMediaSource extends EventTarget {
     return this.sb;
   }
 
+  endOfStream(): void {
+    this.log.push("endOfStream");
+    this.readyState = "ended";
+  }
+
   open(): void {
+    this.readyState = "open";
     this.dispatchEvent(new Event("sourceopen"));
   }
 }
@@ -219,6 +226,51 @@ describe("MediaSink", () => {
     assert.strictEqual(errors.length, 1);
     sink.media(bytes(2));
     assert.deepStrictEqual(ms.log, [`addSourceBuffer ${AV}`, "append 1"]);
+  });
+
+  it("ends the stream once what is queued is appended", () => {
+    const { sink, ms } = setup();
+    sink.init(bytes(1), AV, true);
+    sink.media(bytes(2));
+    sink.end();
+    sink.end();
+    assert.deepStrictEqual(ms.log, [`addSourceBuffer ${AV}`, "append 1"]);
+    ms.sb.finish();
+    ms.sb.finish();
+    assert.deepStrictEqual(ms.log, [
+      `addSourceBuffer ${AV}`,
+      "append 1",
+      "append 2",
+      "endOfStream",
+    ]);
+  });
+
+  it("ends no stream it appended nothing to", () => {
+    const { sink, ms, errors } = setup();
+    sink.end();
+    assert.deepStrictEqual(ms.log, []);
+    assert.deepStrictEqual(errors, []);
+  });
+
+  it("evicts nothing from an ended stream, and media after the end appends", () => {
+    const { sink, ms } = setup();
+    sink.init(bytes(1), AV, true);
+    ms.sb.finish();
+    sink.end();
+    ms.sb.ranges = [[0, 30]];
+    sink.position(26);
+    assert.ok(!ms.log.some((l) => l.startsWith("remove")));
+    sink.media(bytes(2));
+    assert.strictEqual(ms.log[ms.log.length - 1], "append 2");
+  });
+
+  it("ends no stream when media follows the end it queued", () => {
+    const { sink, ms } = setup();
+    sink.init(bytes(1), AV, true);
+    sink.end();
+    sink.media(bytes(2));
+    ms.sb.finish();
+    assert.ok(!ms.log.includes("endOfStream"));
   });
 
   it("waits for its MediaSource to open", () => {

@@ -22,6 +22,8 @@ export type CoreOutput = RemuxerOutput extends infer O
 export interface Core {
   /** Never throws on hostile input; a throw means the core is broken. */
   push(data: Uint8Array, segmentEnd: boolean, discontinuity: boolean): RemuxerOutput[];
+  /** The stream ended: the outputs of what the core holds. */
+  finish(): RemuxerOutput[];
   metrics(): unknown;
   free(): void;
 }
@@ -36,13 +38,21 @@ export const enum SinkMode {
 
 /** What the window posts the worker. */
 export type WindowMessage =
-  | { type: "open"; mode: SinkMode }
   /**
-   * An Egress Data message: bytes of the record in progress, the record's
-   * end, and whether the bytes before were dropped. `at` is when the window
-   * received it, on its clock.
+   * The stream's sink, the window's `performance.timeOrigin`, and the port
+   * of the stream's feed (see ./feed) when a node feeds it straight from
+   * the swarm; without one, the window posts the stream's batches.
    */
-  | { type: "data"; data: ArrayBuffer; segmentEnd: boolean; discontinuity: boolean; at: number }
+  | { type: "open"; mode: SinkMode; timeOrigin: number; feed?: MessagePort }
+  /**
+   * A batch of Egress Data messages (see ./feed). `at` is when the window
+   * received them, on its clock.
+   */
+  | { type: "data"; batch: ArrayBuffer; at: number }
+  /** The stream ended, after the batches before. */
+  | { type: "end" }
+  /** The window took the outputs of `batches` batches of the feed: the worker acks them on the feed's port. */
+  | { type: "ack"; batches: number }
   /** The video's playback position, which bounds what the sink evicts. */
   | { type: "position"; currentTime: number };
 
@@ -50,7 +60,19 @@ export type WindowMessage =
 export type WorkerMessage =
   /** The worker's MediaSource for the video, at the start and after each rebuild. */
   | { type: "attach"; handle: MediaSourceHandle }
-  /** The core's outputs for the Data message the window received at `at`. */
-  | { type: "outputs"; at: number; outputs: CoreOutput[] }
+  /**
+   * The core's outputs for a batch received at `at`, on the window's clock,
+   * and the Data messages and bytes the core has taken so far.
+   */
+  | { type: "outputs"; at: number; outputs: CoreOutput[]; messages: number; bytes: number }
+  /**
+   * The worker has taken `batches` batches, the outputs before this message
+   * included: an ack, for a batch that asked, of the window's batches, or
+   * in a window's sink mode of the feed's, once the window has taken their
+   * outputs.
+   */
+  | { type: "consumed"; batches: number }
+  /** The stream ended: every output is out. A window sink ends its stream. */
+  | { type: "ended" }
   /** The worker can't go on: the window replaces it, or gives up when `final`. */
   | { type: "error"; message: string; final: boolean };

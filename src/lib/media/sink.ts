@@ -33,7 +33,8 @@ type Bytes = Uint8Array<ArrayBuffer>;
 type Op =
   | { type: "init"; data: Bytes; mime: string }
   | { type: "media"; data: Bytes }
-  | { type: "remove"; end: number };
+  | { type: "remove"; end: number }
+  | { type: "end" };
 
 // Concatenates byte arrays into one.
 export const concat = (parts: Bytes[]): Bytes => {
@@ -64,6 +65,11 @@ export const concat = (parts: Bytes[]): Bytes => {
  * - Media more than BACK_BUFFER seconds behind the playback position goes
  *   in batches of EVICT_SLACK seconds. An append refused for quota evicts
  *   down to QUOTA_BACK_BUFFER and is retried.
+ * - `end` ends the stream once what is queued is appended: the duration
+ *   becomes the buffered end, so the decoders give up their last frames and
+ *   the video plays out to that end. Nothing is evicted while the stream is
+ *   ended (a removal would open it again); a later init or media segment
+ *   opens it again, and the duration is infinite once more.
  *
  * Bounds: MAX_QUEUED_BYTES queued. An append error, an unsupported type,
  * a full queue or a quota that eviction can't meet fail the sink.
@@ -81,6 +87,8 @@ export class MediaSink {
   private removing = false;
   private quotaRetries = 0;
   private done = false;
+  /** An end is queued or done, and no media came after it. */
+  private ended = false;
 
   constructor(
     private readonly MediaSourceType: MediaSourceConstructor,
@@ -91,6 +99,7 @@ export class MediaSink {
 
   init(data: Bytes, mime: string, compatible: boolean): void {
     if (this.done) return;
+    this.ended = false;
     if (!this.MediaSourceType.isTypeSupported(mime)) {
       this.fail(`the browser can't play ${mime}`);
       return;
@@ -104,7 +113,15 @@ export class MediaSink {
 
   media(data: Bytes): void {
     if (this.done) return;
+    this.ended = false;
     this.enqueue({ type: "media", data });
+  }
+
+  /** The stream ended: ends the MediaSource's stream once what is queued is appended. */
+  end(): void {
+    if (this.done || this.ended) return;
+    this.ended = true;
+    this.enqueue({ type: "end" });
   }
 
   // The video's playback position, which bounds eviction.
@@ -112,7 +129,12 @@ export class MediaSink {
     if (this.done) return;
     this.currentTime = currentTime;
     const [first] = this.buffered();
-    if (!this.evicting && first && first[0] < currentTime - BACK_BUFFER - EVICT_SLACK) {
+    if (
+      !this.ended &&
+      !this.evicting &&
+      first &&
+      first[0] < currentTime - BACK_BUFFER - EVICT_SLACK
+    ) {
       this.evicting = true;
       this.enqueue({ type: "remove", end: currentTime - BACK_BUFFER });
     }
@@ -184,7 +206,7 @@ export class MediaSink {
   }
 
   private enqueue(op: Op): void {
-    if (op.type !== "remove") {
+    if (op.type === "init" || op.type === "media") {
       this.queuedBytes += op.data.byteLength;
       if (this.queuedBytes > MAX_QUEUED_BYTES) {
         this.fail("the SourceBuffer fell behind its stream");
@@ -202,6 +224,19 @@ export class MediaSink {
       if (op.type === "remove") {
         if (this.remove(0, op.end)) return;
         this.evicting = false;
+        continue;
+      }
+      if (op.type === "end") {
+        // A stream with nothing appended has nothing to end; later media
+        // may open it.
+        if (this.sb && this.ended && this.ms.readyState === "open") {
+          try {
+            this.ms.endOfStream();
+          } catch (e) {
+            this.fail(`ending the stream failed: ${String(e)}`);
+            return;
+          }
+        }
         continue;
       }
       let data = op.data;

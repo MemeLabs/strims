@@ -11,6 +11,7 @@ import { ISignInRequest, ISignUpRequest, LinkedProfile } from "../apis/strims/au
 import { Profile } from "../apis/strims/profile/v1/profile";
 import { Provider as ApiProvider } from "../contexts/FrontendApi";
 import { useStableCallbacks } from "../hooks/useStableCallback";
+import type { FeedOpener } from "../lib/media/feed";
 
 const API_TIMEOUT = 60 * 1000 * 1000;
 
@@ -21,6 +22,8 @@ export interface ClientConstructor<T> {
 export interface Conn {
   client<T>(C: ClientConstructor<T>): Promise<T>;
   close(): void;
+  /** Feeds players straight from the node's swarm, on a node in the page. */
+  readonly feeds?: FeedOpener;
 }
 
 export interface APIDialer {

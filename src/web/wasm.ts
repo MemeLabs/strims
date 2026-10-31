@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // The window's side of a strims-wasm node. The node runs in a dedicated
-// worker; the window hands it a port for the frontend RPC connection and a
-// port for signalling, hosts its RTCPeerConnections and forwards visibility
-// changes. The node's PSI sessions compute in a second worker, over a port
-// between the two.
+// worker; the window hands it a port for the frontend RPC connection, a
+// port for signalling and a port players' feeds open on, hosts its
+// RTCPeerConnections and forwards visibility changes. The node's PSI
+// sessions compute in a second worker, over a port between the two.
 
 import { EventEmitter } from "events";
 
+import { Feed, FeedOpener, FeedOptions, StreamRequest } from "../lib/media/feed";
 import { IS_IOS } from "../lib/userAgent";
 
 export interface WasmNodeOptions {
@@ -29,7 +30,8 @@ export type PsiWorkerOptions = Pick<WasmNodeOptions, "logLevel">;
  * The one message the window sends each worker, with its ports transferred.
  * The node's worker gets `psi` when a PSI worker serves the other end. That
  * port carries the PSI sessions' keys and seeds, so it connects this page's
- * two workers and nothing else.
+ * two workers and nothing else. It gets `feeds` unless it runs the browser
+ * link tests' bare node.
  */
 export type InitMessage =
   | {
@@ -39,6 +41,7 @@ export type InitMessage =
       frontend: MessagePort;
       signal: MessagePort;
       psi?: MessagePort;
+      feeds?: MessagePort;
     }
   | { type: "init"; role: "psi"; options: PsiWorkerOptions; port: MessagePort };
 
@@ -60,6 +63,67 @@ export type WindowSignal =
   | { type: "connected"; conn: number; maxMessageSize: number }
   | { type: "closed"; conn: number; reason: string }
   | { type: "visibility"; hidden: boolean; forceHUP: boolean };
+
+/** What the window posts on the feeds port (crates/strims-wasm's feed module). */
+export type FeedRequest =
+  | ({ type: "open"; id: number; port: MessagePort; replaces?: number } & StreamRequest)
+  | { type: "close"; id: number };
+
+/** What the node posts on the feeds port: a feed ended, and why. */
+export type FeedEvent = { type: "closed"; id: number; message: string };
+
+/**
+ * Opens players' feeds on the node's feeds port: a stream read from the
+ * swarm and posted straight to a player worker's port. A feed that ends
+ * of itself (its stream didn't open, failed or ended, or its port closed)
+ * calls its `closed`; one closed by `close` or replaced doesn't.
+ */
+export class FeedHost implements FeedOpener {
+  private nextId = 1;
+  /** The feeds open, and what each calls when it ends of itself. */
+  private live = new Map<number, ((message: string) => void) | undefined>();
+
+  constructor(private readonly port: MessagePort) {
+    port.onmessage = ({ data }: MessageEvent<FeedEvent>) => {
+      if (data?.type !== "closed" || !this.live.has(data.id)) return;
+      const closed = this.live.get(data.id);
+      this.live.delete(data.id);
+      closed?.(data.message);
+    };
+  }
+
+  open(request: StreamRequest, port: MessagePort, { replaces, closed }: FeedOptions = {}): Feed {
+    const id = this.nextId++;
+    this.live.set(id, closed);
+    // The node closes the replaced feed itself.
+    if (replaces) this.live.delete(replaces.id);
+    const { swarmUri, networkKeys, mimeType } = request;
+    const message: FeedRequest = {
+      type: "open",
+      id,
+      swarmUri,
+      networkKeys,
+      mimeType,
+      port,
+      replaces: replaces?.id,
+    };
+    this.port.postMessage(message, [port]);
+    return {
+      id,
+      close: () => {
+        if (!this.live.delete(id)) return;
+        this.port.postMessage({ type: "close", id } satisfies FeedRequest);
+      },
+    };
+  }
+
+  // Closes the port; feeds open on it end with the node.
+  shut(): void {
+    this.port.onmessage = null;
+    this.port.close();
+    this.live.clear();
+  }
+}
 
 /** Every live peer connection of every node, for the debugger. */
 const peerConnections: RTCPeerConnection[] = [];
@@ -251,6 +315,8 @@ class PeerHost {
 
 export interface WasmNode {
   bus: PortBus;
+  /** Opens players' feeds; the browser link tests' bare node has none. */
+  feeds?: FeedHost;
   /** Terminates the workers and closes the node's peer connections. */
   close(): void;
 }
@@ -292,6 +358,8 @@ export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
   const psiWorker = psi && startPsiWorker(options.logLevel, psi.port2);
   const frontend = new MessageChannel();
   const signal = new MessageChannel();
+  const feedPorts = options.e2e ? undefined : new MessageChannel();
+  const feeds = feedPorts && new FeedHost(feedPorts.port1);
   const bus = new PortBus(frontend.port1);
   const peers = new PeerHost((msg, transfer) => signal.port1.postMessage(msg, transfer ?? []));
 
@@ -313,6 +381,7 @@ export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
     worker.terminate();
     psiWorker?.terminate();
     peers.closeAll();
+    feeds?.shut();
     bus.shut();
   };
 
@@ -336,6 +405,7 @@ export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
 
   const ports = [frontend.port2, signal.port2];
   if (psi) ports.push(psi.port1);
+  if (feedPorts) ports.push(feedPorts.port2);
   worker.postMessage(
     {
       type: "init",
@@ -344,9 +414,10 @@ export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
       frontend: frontend.port2,
       signal: signal.port2,
       psi: psi?.port1,
+      feeds: feedPorts?.port2,
     } satisfies InitMessage,
     ports
   );
 
-  return { bus, close };
+  return { bus, feeds, close };
 };

@@ -11,13 +11,15 @@ declare module "*/strims-wasm/Cargo.toml" {
   /**
    * Starts the node with the window's options and the ports it transferred.
    * Without `psi`, the port to the PSI worker, the node computes PSI itself.
-   * Throws when it can't draw a seed.
+   * `feeds` is the port players' feeds open on (src/web/wasm.ts FeedHost),
+   * served while a profile runs. Throws when it can't draw a seed.
    */
   export function start(
     options: unknown,
     frontend: MessagePort,
     signal: MessagePort,
-    psi?: MessagePort
+    psi?: MessagePort,
+    feeds?: MessagePort
   ): void;
 
   /** Starts the PSI worker, serving the node's engine on `port`. */
