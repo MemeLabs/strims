@@ -20,6 +20,8 @@ pub struct TrackId(pub u32);
 pub enum TrackKind {
     Video,
     Audio,
+    /// Timed text: cues ([`text`](crate::text)), shown over the picture.
+    Text,
 }
 
 impl fmt::Display for TrackKind {
@@ -27,6 +29,7 @@ impl fmt::Display for TrackKind {
         f.write_str(match self {
             TrackKind::Video => "video",
             TrackKind::Audio => "audio",
+            TrackKind::Text => "text",
         })
     }
 }
@@ -38,7 +41,8 @@ pub struct DecoderConfig {
     pub track: TrackId,
     pub kind: TrackKind,
     /// The RFC 6381 codec string, such as `avc1.64001f`, `hvc1.1.6.L93.90`,
-    /// `av01.0.08M.08`, `mp4a.40.2` or `Opus`.
+    /// `av01.0.08M.08`, `mp4a.40.2` or `Opus`; a text track's is
+    /// [`text::CODEC`](crate::text::CODEC).
     pub codec: String,
     /// Timestamp units per second.
     pub timescale: u32,
@@ -98,11 +102,15 @@ pub enum CodecParams {
         /// 48 kHz samples the decoder's output drops when it starts.
         pre_skip: u16,
     },
+    /// Cues ([`text`](crate::text)), whose units carry what they show.
+    /// It has no configuration record.
+    Text,
 }
 
 impl CodecParams {
     /// The codec's configuration record as received: the avcC, hvcC or
-    /// av1C record, the AudioSpecificConfig or the OpusHead.
+    /// av1C record, the AudioSpecificConfig or the OpusHead; empty for
+    /// text.
     pub fn record(&self) -> &[u8] {
         match self {
             CodecParams::Avc { avcc, .. } => avcc,
@@ -110,16 +118,18 @@ impl CodecParams {
             CodecParams::Av1 { av1c, .. } => av1c,
             CodecParams::Aac { asc, .. } => asc,
             CodecParams::Opus { head, .. } => head,
+            CodecParams::Text => &[],
         }
     }
 
-    /// A video codec's picture size, in pixels; `None` for audio.
+    /// A video codec's picture size, in pixels; `None` for audio and
+    /// text.
     pub fn picture_size(&self) -> Option<(u16, u16)> {
         match *self {
             CodecParams::Avc { width, height, .. }
             | CodecParams::Hevc { width, height, .. }
             | CodecParams::Av1 { width, height, .. } => Some((width, height)),
-            CodecParams::Aac { .. } | CodecParams::Opus { .. } => None,
+            CodecParams::Aac { .. } | CodecParams::Opus { .. } | CodecParams::Text => None,
         }
     }
 
@@ -130,6 +140,7 @@ impl CodecParams {
                 TrackKind::Video
             }
             CodecParams::Aac { .. } | CodecParams::Opus { .. } => TrackKind::Audio,
+            CodecParams::Text => TrackKind::Text,
         }
     }
 }

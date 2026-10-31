@@ -298,6 +298,7 @@ impl FlvWriter {
                 CodecParams::Opus { .. } => {
                     fields.push(("audiocodecid", Value::Number(fourcc(b"Opus"))));
                 }
+                CodecParams::Text => {}
             }
         }
         if let Some(rate) = frame_rate {
@@ -335,6 +336,7 @@ impl FlvWriter {
             }
             CodecParams::Aac { .. } => tag(TAG_AUDIO, time, &[&[AAC_FLAGS, 0], record], out),
             CodecParams::Opus { .. } => Err(FlvWriteError::Codec("Opus")),
+            CodecParams::Text => Err(FlvWriteError::Codec(crate::text::CODEC)),
         }
     }
 
@@ -392,6 +394,7 @@ impl FlvWriter {
             }
             CodecParams::Aac { .. } => tag(TAG_AUDIO, time, &[&[AAC_FLAGS, 1], payload], out),
             CodecParams::Opus { .. } => Err(FlvWriteError::Codec("Opus")),
+            CodecParams::Text => Err(FlvWriteError::Codec(crate::text::CODEC)),
         };
         if written.is_ok() {
             self.last = time;

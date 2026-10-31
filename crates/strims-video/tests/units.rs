@@ -129,6 +129,7 @@ impl Read {
         while let Some(e) = r.poll_event() {
             match e {
                 ReaderEvent::Configs => self.configs = r.configs().to_vec(),
+                ReaderEvent::TextConfigs => panic!("no text track was written"),
                 ReaderEvent::Gap { track, missing } => self.gaps.push((track, missing)),
                 ReaderEvent::End => self.ends += 1,
             }

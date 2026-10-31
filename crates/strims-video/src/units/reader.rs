@@ -14,12 +14,18 @@ use crate::media::{AccessUnit, DecoderConfig, TrackId, TrackKind};
 /// What a [`UnitReader::read`] changed, before the unit it returned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReaderEvent {
-    /// The tracks' configs changed ([`UnitReader::configs`]): units from
-    /// here on decode with them. It also comes when a track starts over
-    /// under a new writer session, whose timestamps start over too.
+    /// The media tracks' configs changed ([`UnitReader::configs`]): units
+    /// from here on decode with them. It also comes when a track starts
+    /// over under a new writer session, whose timestamps start over too.
     Configs,
-    /// `missing` units of `track` never arrived, by their sequence
-    /// numbers. A video track then resumes at its next keyframe.
+    /// The text tracks changed ([`UnitReader::text_configs`]): one came,
+    /// went, or started over. It comes with [`Configs`](Self::Configs)
+    /// when the media tracks changed too.
+    TextConfigs,
+    /// `missing` units of media track `track` never arrived, by their
+    /// sequence numbers. A video track then resumes at its next keyframe.
+    /// A text track's missing cues are only counted
+    /// ([`UnitReaderMetrics::missing_cues`]).
     Gap { track: TrackId, missing: u64 },
     /// The writer's session ended (an END record). The reader forgot its
     /// tracks ([`UnitReader::configs`] is empty): units come again after
@@ -39,6 +45,8 @@ pub struct UnitReaderMetrics {
     /// Gaps reported, and the units they counted.
     pub gaps: u64,
     pub missing: u64,
+    /// Text tracks' units that never arrived, by their sequence numbers.
+    pub missing_cues: u64,
     /// Video units dropped while their track waited for a keyframe.
     pub awaiting_keyframe: u64,
     /// Units dropped for a config version their track doesn't have: a
@@ -81,6 +89,10 @@ struct Track {
 /// it has read a CONFIGS record, a video track's from its next keyframe.
 /// Its output is a source's: each track's config comes before its units,
 /// and each track's units come in decode order, with non-decreasing DTS.
+/// It holds the media tracks' configs ([`configs`](Self::configs)) apart
+/// from the text tracks' ([`text_configs`](Self::text_configs)), so a
+/// reader of media alone takes a text track's units as those of a track
+/// it has no config of.
 ///
 /// Losses show in sequence numbers, which the units and CONFIGS records
 /// carry: a gap is a [`ReaderEvent::Gap`], after which a video track
@@ -99,10 +111,12 @@ struct Track {
 pub struct UnitReader {
     /// Bound: `MAX_TRACKS`.
     tracks: BTreeMap<TrackId, Track>,
-    /// The tracks' configs, in track id order.
+    /// The media tracks' configs, in track id order.
     configs: Vec<DecoderConfig>,
-    /// The last read's events. Bound: a gap per track and a configs
-    /// change, or an end.
+    /// The text tracks' configs, in track id order.
+    text: Vec<DecoderConfig>,
+    /// The last read's events. Bound: a gap per track and two configs
+    /// changes, or an end.
     events: VecDeque<ReaderEvent>,
     metrics: UnitReaderMetrics,
 }
@@ -112,9 +126,15 @@ impl UnitReader {
         UnitReader::default()
     }
 
-    /// The tracks' current configs, in track id order.
+    /// The media tracks' current configs, video and audio, in track id
+    /// order.
     pub fn configs(&self) -> &[DecoderConfig] {
         &self.configs
+    }
+
+    /// The text tracks' current configs, in track id order.
+    pub fn text_configs(&self) -> &[DecoderConfig] {
+        &self.text
     }
 
     pub fn metrics(&self) -> UnitReaderMetrics {
@@ -151,6 +171,7 @@ impl UnitReader {
                 self.metrics.ends += 1;
                 self.tracks.clear();
                 self.configs.clear();
+                self.text.clear();
                 self.events.push_back(ReaderEvent::End);
                 None
             }
@@ -166,6 +187,10 @@ impl UnitReader {
     }
 
     fn gap(&mut self, track: TrackId, missing: u64) {
+        if self.text.iter().any(|c| c.track == track) {
+            self.metrics.missing_cues = self.metrics.missing_cues.saturating_add(missing);
+            return;
+        }
         self.metrics.gaps += 1;
         self.metrics.missing = self.metrics.missing.saturating_add(missing);
         self.events.push_back(ReaderEvent::Gap { track, missing });
@@ -244,6 +269,7 @@ impl UnitReader {
             let held = self
                 .configs
                 .iter()
+                .chain(&self.text)
                 .find(|c| c.track == e.track)
                 .filter(|c| e.describes(c));
             let config = match held {
@@ -265,10 +291,20 @@ impl UnitReader {
             return;
         }
         self.metrics.configs += 1;
+        let (text, configs): (Vec<DecoderConfig>, Vec<DecoderConfig>) =
+            configs.into_iter().partition(|c| c.kind == TrackKind::Text);
         let mut changed = configs.len() != self.configs.len();
+        let mut text_changed = text.len() != self.text.len();
         let mut tracks = BTreeMap::new();
         for (config, version, next_seq, same) in next {
             let video = config.kind == TrackKind::Video;
+            let is_text = config.kind == TrackKind::Text;
+            // A text track's units say nothing of how to decode media.
+            let changed = if is_text {
+                &mut text_changed
+            } else {
+                &mut changed
+            };
             let track = match self.tracks.remove(&config.track) {
                 Some(mut t) => {
                     let restarted = next_seq < t.next_seq;
@@ -283,13 +319,13 @@ impl UnitReader {
                     if !same || version != t.version {
                         t.awaiting_key |= video;
                     }
-                    changed |= restarted || !same || version != t.version;
+                    *changed |= restarted || !same || version != t.version;
                     t.version = version;
                     t.next_seq = next_seq;
                     t
                 }
                 None => {
-                    changed = true;
+                    *changed = true;
                     Track {
                         version,
                         next_seq,
@@ -304,6 +340,10 @@ impl UnitReader {
         if changed {
             self.configs = configs;
             self.events.push_back(ReaderEvent::Configs);
+        }
+        if text_changed {
+            self.text = text;
+            self.events.push_back(ReaderEvent::TextConfigs);
         }
     }
 }

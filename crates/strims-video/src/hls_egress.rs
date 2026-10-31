@@ -351,6 +351,7 @@ impl UnitFeed {
                         self.muxer.gap();
                     }
                 }
+                ReaderEvent::TextConfigs => {}
                 ReaderEvent::End => {
                     // Ending a segment can't fail.
                     let _ = self.muxer.finish();

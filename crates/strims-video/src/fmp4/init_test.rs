@@ -479,3 +479,15 @@ fn a_malformed_opus_head_is_refused_and_leaves_the_buffer() {
     );
     assert_eq!(out, [0xaa]);
 }
+
+#[test]
+fn text_tracks_pass_the_shared_check_but_no_init_declares_one() {
+    let configs = [audio(1, 48_000, 2), crate::text::config(TrackId(3))];
+    assert_eq!(check_configs(&configs), Ok(()));
+    let mut out = vec![7];
+    assert_eq!(
+        write_init(&configs, Duration::ZERO, &mut out),
+        Err(InitError::Text(3))
+    );
+    assert_eq!(out, [7]);
+}

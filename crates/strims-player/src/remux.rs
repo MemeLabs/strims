@@ -532,6 +532,7 @@ impl Remuxer {
                         missing,
                     });
                 }
+                ReaderEvent::TextConfigs => {}
                 ReaderEvent::End => self.end(),
             }
         }

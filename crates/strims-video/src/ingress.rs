@@ -411,11 +411,13 @@ impl SignChoice {
         self.metadata = Some(Declared::of(m));
     }
 
-    /// A decoder config of a track of `kind`.
+    /// A decoder config of a track of `kind`; a text track's says nothing
+    /// of the stream's bitrate.
     fn config(&mut self, kind: TrackKind) {
         match kind {
             TrackKind::Video => self.video = true,
             TrackKind::Audio => self.audio = true,
+            TrackKind::Text => {}
         }
     }
 

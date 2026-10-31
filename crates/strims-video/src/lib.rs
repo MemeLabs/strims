@@ -37,6 +37,8 @@
 //!   renditions' out, over an ffmpeg process a native driver runs.
 //! - [`captions`]: A/53 closed captions in H.264 and H.265 SEI, read,
 //!   written and carried to a stream's renditions.
+//! - [`text`]: timed text: text tracks' cues, and the reader that turns a
+//!   stream's units into the cues players show.
 //! - [`units`]: the unit format, a record per access unit in the chunked
 //!   chunkstream layout: its records, the [`UnitWriter`] muxer and the
 //!   [`UnitReader`], which builds for wasm32.
@@ -206,6 +208,7 @@ pub mod synth;
 #[cfg(any(test, feature = "test-support"))]
 #[cfg_attr(not(test), allow(dead_code))]
 mod test_util;
+pub mod text;
 pub mod units;
 
 pub use capture::{CaptureInfo, capture_options, capture_options_for};

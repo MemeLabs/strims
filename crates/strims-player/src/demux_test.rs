@@ -285,7 +285,7 @@ fn units_of_one_session_come_out_as_written() {
                 dts: ticks(u.dts, ts),
                 duration: match config.kind {
                     TrackKind::Audio => ticks(1024, ts),
-                    TrackKind::Video => Duration::ZERO,
+                    TrackKind::Video | TrackKind::Text => Duration::ZERO,
                 },
                 published: u.published,
                 data: u.payload.clone(),

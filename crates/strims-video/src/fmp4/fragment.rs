@@ -121,11 +121,11 @@ impl Default for TrackRun<'_> {
 }
 
 /// Bytes of a `trun` entry: duration, size, flags and composition offset
-/// for video; duration and size for audio.
+/// for video; duration and size for audio and text.
 pub(crate) fn entry_len(kind: TrackKind) -> usize {
     match kind {
         TrackKind::Video => 16,
-        TrackKind::Audio => 8,
+        TrackKind::Audio | TrackKind::Text => 8,
     }
 }
 
@@ -204,7 +204,7 @@ pub fn write_fragment_head(sequence: u32, runs: &[TrackRun<'_>], out: &mut Vec<u
         end(out, tfdt);
         let flags = match run.kind {
             TrackKind::Video => TRUN_VIDEO,
-            TrackKind::Audio => TRUN_AUDIO,
+            TrackKind::Audio | TrackKind::Text => TRUN_AUDIO,
         };
         let trun = start_full(out, b"trun", 1, flags);
         boxes::u32(out, u32::try_from(run.samples.len()).unwrap_or(u32::MAX));

@@ -285,3 +285,172 @@ fn finishing_ends_the_session_once_and_the_next_starts_a_gop() {
     let m = w.metrics();
     assert_eq!((m.ends, m.gops, m.dropped_before_start), (2, 2, 1));
 }
+
+/// A cue unit of text track `track` at `pts` milliseconds.
+fn cue_unit(track: u32, pts: i64, payload: &[u8]) -> AccessUnit<'_> {
+    AccessUnit {
+        track: crate::TrackId(track),
+        dts: pts,
+        pts,
+        keyframe: true,
+        payload,
+        published: Time::from_unix_millis(1_793_275_200_000 + pts),
+    }
+}
+
+fn cue(duration: u64, text: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    crate::text::write_cue(
+        &Cue {
+            continues: false,
+            duration,
+            text,
+        },
+        &mut out,
+    );
+    out
+}
+
+/// The text track's records: seq, dts, pts and cue.
+fn cues(stream: &[u8], track: u32) -> Vec<(u64, i64, i64, bool, u64, String)> {
+    records(stream)
+        .iter()
+        .filter_map(|(_, r)| match parse_record(r).unwrap() {
+            Record::Unit {
+                header, payload, ..
+            } if header.track.0 == track => {
+                assert!(header.keyframe);
+                let c = parse_cue(payload).unwrap();
+                Some((
+                    header.seq,
+                    header.dts,
+                    header.pts,
+                    c.continues,
+                    c.duration,
+                    c.text.into(),
+                ))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_cue_showing_at_a_gop_start_is_continued_after_its_keyframe() {
+    let mut w = UnitWriter::new(FRAME).unwrap();
+    w.set_config(&video(1)).unwrap();
+    w.set_config(&crate::text::config(crate::TrackId(3)))
+        .unwrap();
+    w.push(&unit(1, 0, true, 10)).unwrap();
+    w.push(&cue_unit(3, 100, &cue(4900, "shown"))).unwrap();
+    // 2 s in: what is left of it repeats.
+    w.push(&unit(1, 180_000, true, 10)).unwrap();
+    // 6 s in: it ended at 5 s.
+    w.push(&unit(1, 540_000, true, 10)).unwrap();
+    let out = w.output().to_vec();
+    assert_eq!(
+        cues(&out, 3),
+        [
+            (0, 100, 100, false, 4900, "shown".into()),
+            (1, 2000, 2000, true, 3000, "shown".into()),
+        ]
+    );
+    // The repeat comes right after the keyframe, in its GOP.
+    let s = summary(&out);
+    let key = s
+        .iter()
+        .position(|(_, r)| matches!(r, R::Unit(_, 1, 1, _, true)))
+        .unwrap();
+    assert!(matches!(s[key + 1].1, R::Unit(back, 3, 1, 0, true) if back > 0));
+    assert!(matches!(s[key - 1].1, R::Configs(0, _)));
+    assert_eq!(w.metrics().continued_cues, 1);
+}
+
+#[test]
+fn a_cue_before_the_first_gop_is_continued_at_its_start() {
+    let mut w = UnitWriter::new(FRAME).unwrap();
+    w.set_config(&video(1)).unwrap();
+    w.set_config(&crate::text::config(crate::TrackId(3)))
+        .unwrap();
+    w.push(&cue_unit(3, 0, &cue(5000, "early"))).unwrap();
+    w.push(&unit(1, 90_000, true, 10)).unwrap();
+    assert_eq!(
+        cues(w.output(), 3),
+        [(0, 1000, 1000, true, 4000, "early".into())]
+    );
+    assert_eq!(w.metrics().dropped_before_start, 1);
+}
+
+#[test]
+fn a_cue_shows_its_floor_at_a_gop_start() {
+    let mut w = UnitWriter::new(FRAME).unwrap();
+    w.set_config(&video(1)).unwrap();
+    w.set_config(&crate::text::config(crate::TrackId(3)))
+        .unwrap();
+    w.push(&unit(1, 0, true, 10)).unwrap();
+    w.push(&cue_unit(3, 0, &cue(100, "Hi"))).unwrap();
+    w.push(&unit(1, 45_000, true, 10)).unwrap();
+    assert_eq!(
+        cues(w.output(), 3)[1],
+        (1, 500, 500, true, 300, "Hi".into())
+    );
+}
+
+#[test]
+fn a_cue_decoding_before_a_repeat_keeps_the_tracks_decode_order() {
+    let mut w = UnitWriter::new(FRAME).unwrap();
+    w.set_config(&video(1)).unwrap();
+    w.set_config(&crate::text::config(crate::TrackId(3)))
+        .unwrap();
+    w.push(&unit(1, 0, true, 10)).unwrap();
+    w.push(&cue_unit(3, 0, &cue(3000, "first"))).unwrap();
+    w.push(&unit(1, 90_000, true, 10)).unwrap();
+    // Interleaved behind the keyframe: written at the repeat's decode
+    // time, shown at its own.
+    w.push(&cue_unit(3, 990, &cue(2000, "second"))).unwrap();
+    assert_eq!(
+        cues(w.output(), 3),
+        [
+            (0, 0, 0, false, 3000, "first".into()),
+            (1, 1000, 1000, true, 2000, "first".into()),
+            (2, 1000, 990, false, 2000, "second".into()),
+        ]
+    );
+}
+
+#[test]
+fn an_empty_cue_stops_the_repeats() {
+    let mut w = UnitWriter::new(FRAME).unwrap();
+    w.set_config(&video(1)).unwrap();
+    w.set_config(&crate::text::config(crate::TrackId(3)))
+        .unwrap();
+    w.push(&unit(1, 0, true, 10)).unwrap();
+    w.push(&cue_unit(3, 0, &cue(5000, "cleared"))).unwrap();
+    w.push(&cue_unit(3, 1000, &cue(0, ""))).unwrap();
+    w.push(&unit(1, 180_000, true, 10)).unwrap();
+    assert_eq!(cues(w.output(), 3).len(), 2);
+    assert_eq!(w.metrics().continued_cues, 0);
+}
+
+#[test]
+fn a_text_unit_that_is_not_a_cue_is_refused_writing_nothing() {
+    let mut w = UnitWriter::new(FRAME).unwrap();
+    w.set_config(&video(1)).unwrap();
+    w.set_config(&crate::text::config(crate::TrackId(3)))
+        .unwrap();
+    w.push(&unit(1, 0, true, 10)).unwrap();
+    let at = w.output().len();
+    assert_eq!(
+        w.push(&cue_unit(3, 0, &[2, 0, 1, 0xff])),
+        Err(UnitWriteError::Cue {
+            track: 3,
+            error: CueError::NotUtf8
+        })
+    );
+    assert_eq!(w.output().len(), at);
+    // A text track neither cuts GOPs nor enters the MIME type.
+    assert_eq!(
+        crate::units_mime(w.configs()),
+        r#"video/x.strims-units;codecs="avc1.64001f""#
+    );
+}

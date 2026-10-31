@@ -51,11 +51,15 @@ pub enum InitError {
     Aac { track: u32, error: AacError },
     #[error("track {track}: {error}")]
     Opus { track: u32, error: OpusError },
+    /// fMP4 carries no text track.
+    #[error("track {0} is a text track")]
+    Text(u32),
 }
 
 /// Checks that `configs` can be declared together: at most
 /// [`MAX_TRACKS`], distinct nonzero ids, nonzero timescales, and codec
-/// parameters of each track's kind.
+/// parameters of each track's kind. Text tracks pass: the unit format
+/// carries them, and [`write_init`] refuses them.
 pub fn check_configs(configs: &[DecoderConfig]) -> Result<(), InitError> {
     if configs.len() > MAX_TRACKS {
         return Err(InitError::TooManyTracks);
@@ -79,6 +83,15 @@ pub fn check_configs(configs: &[DecoderConfig]) -> Result<(), InitError> {
         }
     }
     Ok(())
+}
+
+/// [`check_configs`], and no text track among `configs`.
+pub(crate) fn check_media_configs(configs: &[DecoderConfig]) -> Result<(), InitError> {
+    check_configs(configs)?;
+    match configs.iter().find(|c| c.kind == TrackKind::Text) {
+        Some(c) => Err(InitError::Text(c.track.0)),
+        None => Ok(()),
+    }
 }
 
 /// Appends the init segment declaring `configs`, one `trak` each in the
@@ -117,13 +130,14 @@ pub fn check_configs(configs: &[DecoderConfig]) -> Result<(), InitError> {
 ///   sample rate 48 kHz. Its pre-skip is the `dOps`'s alone: no edit
 ///   trims it, so every track keeps the same edit.
 ///
-/// On error `out` is unchanged.
+/// Refused, with `out` unchanged, when [`check_configs`] refuses
+/// `configs` or one is a text track's.
 pub fn write_init(
     configs: &[DecoderConfig],
     composition_delay: Duration,
     out: &mut Vec<u8>,
 ) -> Result<(), InitError> {
-    check_configs(configs)?;
+    check_media_configs(configs)?;
     let from = out.len();
     let written = write_checked(configs, composition_delay, out);
     if written.is_err() {
@@ -229,6 +243,7 @@ fn write_trak(c: &DecoderConfig, delay: Duration, out: &mut Vec<u8>) -> Result<(
     let (handler, name): (&[u8; 4], &[u8]) = match c.kind {
         TrackKind::Video => (b"vide", b"VideoHandler\0"),
         TrackKind::Audio => (b"soun", b"SoundHandler\0"),
+        TrackKind::Text => return Err(InitError::Text(c.track.0)),
     };
     let hdlr = start_full(out, b"hdlr", 0, 0);
     // pre_defined
@@ -253,6 +268,7 @@ fn write_trak(c: &DecoderConfig, delay: Duration, out: &mut Vec<u8>) -> Result<(
             boxes::zeros(out, 4);
             end(out, smhd);
         }
+        TrackKind::Text => return Err(InitError::Text(c.track.0)),
     }
     let dinf = start(out, b"dinf");
     let dref = start_full(out, b"dref", 0, 0);
@@ -348,6 +364,7 @@ fn write_sample_entry(c: &DecoderConfig, out: &mut Vec<u8>) -> Result<(), InitEr
             end(out, dops);
             end(out, entry);
         }
+        CodecParams::Text => return Err(InitError::Text(c.track.0)),
     }
     Ok(())
 }

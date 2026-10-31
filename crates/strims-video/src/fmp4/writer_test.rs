@@ -505,3 +505,17 @@ fn an_ended_track_starts_its_next_traf_at_its_own_decode_time() {
         Err(FragmentError::UnknownTrack(9))
     );
 }
+
+#[test]
+fn a_text_track_is_refused_changing_nothing() {
+    let mut w = writer(Duration::from_millis(500), &[video_config()]);
+    assert_eq!(
+        w.set_tracks(
+            &[video_config(), crate::text::config(TrackId(3))],
+            Duration::ZERO
+        ),
+        Err(InitError::Text(3))
+    );
+    let mut out = Vec::new();
+    video(&mut w, &mut out, 0);
+}

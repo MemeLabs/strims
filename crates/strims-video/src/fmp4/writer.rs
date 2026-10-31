@@ -10,7 +10,7 @@ use crate::fmp4::fragment::{
     EMPTY_FRAGMENT_LEN, PRFT_LEN, ProducerTime, Sample, TRAF_FIXED_LEN, TrackRun, entry_len,
     traf_len, write_fragment, write_prft,
 };
-use crate::fmp4::init::{InitError, MAX_TRACKS, check_configs, delay_units};
+use crate::fmp4::init::{InitError, MAX_TRACKS, check_media_configs, delay_units};
 use crate::media::{AccessUnit, CodecParams, DecoderConfig, TrackId, TrackKind};
 
 /// The frame rate of a video sample's duration when nothing times it.
@@ -67,7 +67,8 @@ impl Track {
             CodecParams::Avc { .. }
             | CodecParams::Hevc { .. }
             | CodecParams::Av1 { .. }
-            | CodecParams::Opus { .. } => 0,
+            | CodecParams::Opus { .. }
+            | CodecParams::Text => 0,
         };
         let (prev_duration, mut samples, mut data) = match reuse {
             Some(t) if t.timescale == config.timescale => (t.prev_duration, t.samples, t.data),
@@ -217,13 +218,14 @@ impl FragmentWriter {
     /// carry (`write_init`'s), and starts a run. Held samples are dropped:
     /// [`flush`](Self::flush) first to keep them. A track whose id and
     /// timescale stay keeps its previous duration. Refused, changing
-    /// nothing, when [`check_configs`] refuses `configs`.
+    /// nothing, when [`check_configs`](crate::fmp4::check_configs) refuses
+    /// `configs` or one is a text track's.
     pub fn set_tracks(
         &mut self,
         configs: &[DecoderConfig],
         composition_delay: Duration,
     ) -> Result<(), InitError> {
-        check_configs(configs)?;
+        check_media_configs(configs)?;
         let mut old = std::mem::take(&mut self.tracks);
         self.tracks = configs
             .iter()

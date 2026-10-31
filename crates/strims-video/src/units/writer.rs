@@ -6,12 +6,14 @@
 use std::collections::BTreeMap;
 
 use strims_base::time::{Duration, Time};
+use strims_chunkstream::MAX_UVARINT_LEN;
 use strims_chunkstream::chunked::{ChunkedEncoder, ContinueError, EncodeError, FrameSizeError};
 
 use super::record::{ConfigEntry, UnitHeader, write_configs, write_end, write_unit_head};
 use super::{AUDIO_SYNC_SPAN, MAX_RECORD_LEN};
 use crate::fmp4::{InitError, check_configs};
 use crate::media::{AccessUnit, DecoderConfig, MAX_CONFIG_LEN, Muxer, TrackId, TrackKind};
+use crate::text::{Cue, CueError, MIN_CUE, parse_cue, write_cue};
 
 /// Why a [`UnitWriter`] call failed. A failed call writes nothing.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -34,6 +36,9 @@ pub enum UnitWriteError {
     /// Output not yet taken would land after the jump.
     #[error("the writer holds output not yet taken")]
     OutputPending,
+    /// A text track's unit isn't a cue.
+    #[error("track {track}: {error}")]
+    Cue { track: u32, error: CueError },
 }
 
 /// What a [`UnitWriter`] has written and dropped.
@@ -54,6 +59,8 @@ pub struct UnitWriterMetrics {
     pub dropped_before_start: u64,
     /// END records written: sessions finished.
     pub ends: u64,
+    /// CONTINUES cues written at GOP starts.
+    pub continued_cues: u64,
 }
 
 /// A track the writer has a config of.
@@ -63,6 +70,20 @@ struct Track {
     version: u32,
     /// The seq of the track's next unit.
     seq: u64,
+    /// A text track's last decode time written.
+    last_dts: Option<i64>,
+    /// A text track's last cue, written or not.
+    cue: Option<HeldCue>,
+}
+
+/// A text track's last cue, in the track's timescale.
+#[derive(Debug, Clone)]
+struct HeldCue {
+    start: i64,
+    /// Where it stops showing, unless a later cue ends it.
+    end: i64,
+    /// Bound: `MAX_CUE_TEXT`.
+    text: String,
 }
 
 /// The GOP in progress.
@@ -268,6 +289,64 @@ impl UnitWriter {
         self.scratch = scratch;
         res
     }
+    /// Writes a CONTINUES cue of each text track's last cue that shows at
+    /// `key`'s presentation time, `key` the keyframe record starting
+    /// `gop`. The keyframe's record is written: a cue whose record can't
+    /// be is left out.
+    fn continue_cues(&mut self, key: &AccessUnit<'_>, gop: Gop) {
+        let Some(key_timescale) = self.tracks.get(&key.track).map(|t| t.config.timescale) else {
+            return;
+        };
+        let due: Vec<(TrackId, i64)> = self
+            .tracks
+            .iter()
+            .filter_map(|(&id, t)| {
+                let cue = t.cue.as_ref()?;
+                let at = rescale(key.pts, key_timescale, t.config.timescale);
+                (cue.start <= at && at < cue.end).then_some((id, at))
+            })
+            .collect();
+        for (id, at) in due {
+            let Some(t) = self.tracks.get(&id) else {
+                continue;
+            };
+            let Some(cue) = &t.cue else {
+                continue;
+            };
+            let dts = t.last_dts.map_or(at, |last| at.max(last));
+            let header = UnitHeader {
+                track: id,
+                keyframe: true,
+                seq: t.seq,
+                config: t.version,
+                dts,
+                pts: at,
+                published: key.published,
+            };
+            let mut body = Vec::with_capacity(cue.text.len() + 1 + MAX_UVARINT_LEN);
+            write_cue(
+                &Cue {
+                    continues: true,
+                    duration: u64::try_from(cue.end.saturating_sub(at)).unwrap_or(0),
+                    text: &cue.text,
+                },
+                &mut body,
+            );
+            let back = self.encoder.next_record_offset().saturating_sub(gop.offset);
+            let mut head = std::mem::take(&mut self.scratch);
+            head.clear();
+            write_unit_head(back, &header, &mut head);
+            let res = self.encode(&[&head, &body]);
+            self.scratch = head;
+            if res.is_ok()
+                && let Some(t) = self.tracks.get_mut(&id)
+            {
+                t.seq = t.seq.wrapping_add(1);
+                t.last_dts = Some(dts);
+                self.metrics.continued_cues += 1;
+            }
+        }
+    }
 }
 
 impl Muxer for UnitWriter {
@@ -294,9 +373,9 @@ impl Muxer for UnitWriter {
         configs.push(config.clone());
         configs.sort_by_key(|c| c.track);
         check_configs(&configs)?;
-        let (version, seq) = match held {
-            Some(t) => (t.version.wrapping_add(1), t.seq),
-            None => (0, 0),
+        let (version, seq, last_dts, cue) = match held {
+            Some(t) => (t.version.wrapping_add(1), t.seq, t.last_dts, t.cue.clone()),
+            None => (0, 0, None, None),
         };
         self.tracks.insert(
             config.track,
@@ -304,6 +383,8 @@ impl Muxer for UnitWriter {
                 config: config.clone(),
                 version,
                 seq,
+                last_dts,
+                cue,
             },
         );
         self.configs = configs;
@@ -312,11 +393,23 @@ impl Muxer for UnitWriter {
     }
 
     /// Writes a unit's record, after the sync record when it starts a GOP
-    /// or a CONFIGS record when a config changed. Units before the first
-    /// GOP are dropped.
+    /// or a CONFIGS record when a config changed, and after a GOP's
+    /// keyframe the text tracks' cues that show at it, repeated. Units
+    /// before the first GOP are dropped. A text track's unit must be a
+    /// cue ([`parse_cue`]).
     fn push(&mut self, unit: &AccessUnit<'_>) -> Result<(), UnitWriteError> {
         let Some(track) = self.tracks.get(&unit.track) else {
             return Err(UnitWriteError::UnknownTrack(unit.track.0));
+        };
+        let (dts, cue) = if track.config.kind == TrackKind::Text {
+            let cue = parse_cue(unit.payload).map_err(|error| UnitWriteError::Cue {
+                track: unit.track.0,
+                error,
+            })?;
+            let dts = track.last_dts.map_or(unit.dts, |last| unit.dts.max(last));
+            (dts, Some(held_cue(&cue, unit.pts, track.config.timescale)))
+        } else {
+            (unit.dts, None)
         };
         let starts = self.starts_gop(unit, &track.config);
         let header = UnitHeader {
@@ -324,7 +417,7 @@ impl Muxer for UnitWriter {
             keyframe: unit.keyframe,
             seq: track.seq,
             config: track.version,
-            dts: unit.dts,
+            dts,
             pts: unit.pts,
             published: unit.published,
         };
@@ -332,6 +425,9 @@ impl Muxer for UnitWriter {
             (true, _) => None,
             (false, Some(gop)) => Some(gop),
             (false, None) => {
+                if let (Some(cue), Some(t)) = (cue, self.tracks.get_mut(&unit.track)) {
+                    t.cue = cue;
+                }
                 self.metrics.dropped_before_start += 1;
                 return Ok(());
             }
@@ -382,8 +478,15 @@ impl Muxer for UnitWriter {
         res?;
         if let Some(t) = self.tracks.get_mut(&unit.track) {
             t.seq = t.seq.wrapping_add(1);
+            if let Some(cue) = cue {
+                t.last_dts = Some(dts);
+                t.cue = cue;
+            }
         }
         self.metrics.units += 1;
+        if starts {
+            self.continue_cues(unit, gop);
+        }
         Ok(())
     }
 
@@ -406,6 +509,36 @@ impl Muxer for UnitWriter {
         self.ended_at = self.metrics.records;
         Ok(())
     }
+}
+
+/// The cue a text track's unit at presentation time `pts` holds, in the
+/// track's `timescale`; `None` for one that shows nothing.
+fn held_cue(cue: &Cue<'_>, pts: i64, timescale: u32) -> Option<HeldCue> {
+    if cue.text.is_empty() {
+        return None;
+    }
+    let lasts = i64::try_from(cue.duration).unwrap_or(i64::MAX);
+    let lasts = if cue.continues {
+        lasts
+    } else {
+        let floor = i128::from(MIN_CUE.as_nanos()) * i128::from(timescale) / 1_000_000_000;
+        lasts.max(i64::try_from(floor).unwrap_or(i64::MAX))
+    };
+    Some(HeldCue {
+        start: pts,
+        end: pts.saturating_add(lasts),
+        text: cue.text.into(),
+    })
+}
+
+/// `t` of timescale `from` in timescale `to`, rounded down; 0 for a zero
+/// timescale.
+fn rescale(t: i64, from: u32, to: u32) -> i64 {
+    if from == 0 {
+        return 0;
+    }
+    let v = (i128::from(t) * i128::from(to)).div_euclid(i128::from(from));
+    i64::try_from(v).unwrap_or(if v < 0 { i64::MIN } else { i64::MAX })
 }
 
 /// When a stream's partial integrity unit is due for signing: an

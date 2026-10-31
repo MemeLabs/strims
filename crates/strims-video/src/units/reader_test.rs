@@ -16,6 +16,7 @@ use crate::units::test_support::{audio, unit, video};
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Out {
     Configs(Vec<u32>),
+    TextConfigs(Vec<u32>),
     Gap(u32, u64),
     /// Track, DTS, keyframe.
     Unit(u32, i64, bool),
@@ -29,6 +30,9 @@ fn read(r: &mut UnitReader, record: &[u8], out: &mut Vec<Out>) {
     while let Some(e) = r.poll_event() {
         out.push(match e {
             ReaderEvent::Configs => Out::Configs(r.configs().iter().map(|c| c.track.0).collect()),
+            ReaderEvent::TextConfigs => {
+                Out::TextConfigs(r.text_configs().iter().map(|c| c.track.0).collect())
+            }
             ReaderEvent::Gap { track, missing } => Out::Gap(track.0, missing),
             ReaderEvent::End => Out::End,
         });
@@ -415,4 +419,98 @@ fn an_end_forgets_the_sessions_tracks() {
         ]
     );
     assert_eq!(r.metrics().unknown_tracks, 2);
+}
+
+/// A cue unit of text track 3 at `ms`.
+fn cue_unit(ms: i64, payload: &[u8]) -> crate::AccessUnit<'_> {
+    crate::AccessUnit {
+        track: TrackId(3),
+        dts: ms,
+        pts: ms,
+        keyframe: true,
+        payload,
+        published: Time::from_unix_millis(ms),
+    }
+}
+
+fn cue(text: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    crate::text::write_cue(
+        &crate::text::Cue {
+            continues: false,
+            duration: 1000,
+            text,
+        },
+        &mut out,
+    );
+    out
+}
+
+#[test]
+fn text_tracks_are_held_apart_from_the_media_tracks() {
+    let mut w = UnitWriter::new(4096).unwrap();
+    w.set_config(&video(1)).unwrap();
+    w.set_config(&crate::text::config(TrackId(3))).unwrap();
+    w.push(&unit(1, 0, true, 8)).unwrap();
+    let hello = cue("hello");
+    w.push(&cue_unit(0, &hello)).unwrap();
+    w.push(&unit(1, 3000, false, 8)).unwrap();
+    let recs = crate::units::tests::decode(4096, w.output());
+    let mut r = UnitReader::new();
+    assert_eq!(
+        read_all(&mut r, &recs),
+        [
+            Out::Configs(vec![1]),
+            Out::TextConfigs(vec![3]),
+            Out::Unit(1, 0, true),
+            Out::Unit(3, 0, true),
+            Out::Unit(1, 3000, false),
+        ]
+    );
+    assert_eq!(r.configs(), [video(1)]);
+    assert_eq!(r.text_configs(), [crate::text::config(TrackId(3))]);
+}
+
+#[test]
+fn a_text_track_that_comes_changes_no_media_config_and_its_losses_are_counted() {
+    let configs = |text: bool, seq: u64| {
+        let v = video(1);
+        let t = crate::text::config(TrackId(3));
+        let mut out = Vec::new();
+        let mut entries = vec![ConfigEntry::of(&v, 0, 0)];
+        if text {
+            entries.push(ConfigEntry::of(&t, 0, seq));
+        }
+        write_configs(0, entries, &mut out);
+        out
+    };
+    let mut r = UnitReader::new();
+    let mut out = Vec::new();
+    read(&mut r, &configs(false, 0), &mut out);
+    read(&mut r, &configs(true, 0), &mut out);
+    read(&mut r, &configs(true, 4), &mut out);
+    read(&mut r, &configs(false, 0), &mut out);
+    assert_eq!(
+        out,
+        [
+            Out::Configs(vec![1]),
+            Out::TextConfigs(vec![3]),
+            Out::TextConfigs(vec![]),
+        ]
+    );
+    let m = r.metrics();
+    assert_eq!((m.gaps, m.missing, m.missing_cues), (0, 0, 4));
+}
+
+#[test]
+fn an_end_forgets_the_text_tracks() {
+    let mut w = UnitWriter::new(4096).unwrap();
+    w.set_config(&video(1)).unwrap();
+    w.set_config(&crate::text::config(TrackId(3))).unwrap();
+    w.push(&unit(1, 0, true, 8)).unwrap();
+    w.finish().unwrap();
+    let recs = crate::units::tests::decode(4096, w.output());
+    let mut r = UnitReader::new();
+    read_all(&mut r, &recs);
+    assert!(r.text_configs().is_empty());
 }

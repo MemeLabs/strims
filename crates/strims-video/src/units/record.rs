@@ -16,6 +16,7 @@ use crate::avc::{AvcError, parse_avcc};
 use crate::hevc::{HevcError, parse_hvcc};
 use crate::media::{CodecParams, DecoderConfig, MAX_CONFIG_LEN, TrackId, TrackKind};
 use crate::opus::{self, OpusError, parse_opus_head};
+use crate::text;
 
 /// The kind of a CONFIGS record.
 pub const KIND_CONFIGS: u8 = 1;
@@ -36,6 +37,9 @@ pub const SAMPLE_ENTRY_AV1: [u8; 4] = *b"av01";
 pub const SAMPLE_ENTRY_AAC: [u8; 4] = *b"mp4a";
 /// The sample entry of an Opus track, whose config is an OpusHead.
 pub const SAMPLE_ENTRY_OPUS: [u8; 4] = *b"Opus";
+/// The sample entry of a text track ([`crate::text`]), whose units
+/// are cues. Writers write its config empty; readers ignore it.
+pub const SAMPLE_ENTRY_TEXT: [u8; 4] = *b"cues";
 /// The bytes of a record that hold its kind and `gop_back`: a record's
 /// first `GOP_HEAD_LEN` bytes, or all of a shorter one, are enough for
 /// [`gop_back`].
@@ -120,6 +124,7 @@ impl<'a> ConfigEntry<'a> {
             CodecParams::Av1 { .. } => SAMPLE_ENTRY_AV1,
             CodecParams::Aac { .. } => SAMPLE_ENTRY_AAC,
             CodecParams::Opus { .. } => SAMPLE_ENTRY_OPUS,
+            CodecParams::Text => SAMPLE_ENTRY_TEXT,
         };
         let bytes = config.params.record();
         ConfigEntry {
@@ -142,14 +147,22 @@ impl<'a> ConfigEntry<'a> {
             SAMPLE_ENTRY_AV1,
             SAMPLE_ENTRY_AAC,
             SAMPLE_ENTRY_OPUS,
+            SAMPLE_ENTRY_TEXT,
         ]
         .contains(&self.sample_entry)
     }
 
     /// Whether `config` is the decoder config this entry describes,
-    /// without parsing the entry's config.
+    /// without parsing the entry's config. A text entry's config bytes
+    /// don't count.
     pub fn describes(&self, config: &DecoderConfig) -> bool {
         let of = ConfigEntry::of(config, self.version, self.next_seq);
+        if self.sample_entry == SAMPLE_ENTRY_TEXT {
+            return ConfigEntry {
+                config: self.config,
+                ..of
+            } == *self;
+        }
         of == *self
     }
 
@@ -237,6 +250,13 @@ impl<'a> ConfigEntry<'a> {
                         },
                     })
                 }),
+            SAMPLE_ENTRY_TEXT => Ok(DecoderConfig {
+                track: self.track,
+                kind: TrackKind::Text,
+                codec: text::CODEC.into(),
+                timescale: self.timescale,
+                params: CodecParams::Text,
+            }),
             _ => return None,
         };
         Some(config)

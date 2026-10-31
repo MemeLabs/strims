@@ -363,6 +363,7 @@ impl Demuxer {
                         missing,
                     });
                 }
+                ReaderEvent::TextConfigs => {}
                 ReaderEvent::End => self.end(),
             }
         }

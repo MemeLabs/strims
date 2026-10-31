@@ -48,7 +48,8 @@
 //! published  zigzag   its publish time on the writer's Unix clock, in milliseconds
 //! ```
 //!
-//! Its body is the unit's payload.
+//! Its body is the unit's payload: a text track's is a cue
+//! ([`text`](crate::text)), every one a keyframe.
 //!
 //! **CONFIGS** holds the decoder config of every track, as of the record.
 //! Its header is empty. Its body is 1 to [`MAX_TRACKS`] entries, each a
@@ -59,7 +60,8 @@
 //! version       uvarint  the config's version: 0 for the track's first, then +1 at each change
 //! next_seq      uvarint  the seq of the track's next unit
 //! sample_entry  4 bytes  avc1 (an avcC record), hvc1 (an hvcC record), av01 (an av1C record),
-//!                        mp4a (an AudioSpecificConfig) or Opus (an OpusHead)
+//!                        mp4a (an AudioSpecificConfig), Opus (an OpusHead) or cues (a text
+//!                        track: its config written empty and ignored)
 //! timescale     uvarint  units per second of the track's timestamps, nonzero, at most u32::MAX
 //! config_len    uvarint  at most MAX_CONFIG_LEN
 //! config        config_len bytes
@@ -87,6 +89,13 @@
 //! `gop_back` 0, comes right before that keyframe's record. A changed
 //! config writes a CONFIGS record before the next unit. Units before the
 //! first GOP aren't written.
+//!
+//! Right after the GOP's keyframe record, each text track whose last cue
+//! shows at the keyframe's presentation time repeats it: a CONTINUES cue
+//! of what is left of it, presented then, so a reader that joins at the
+//! GOP shows it too. A text track's decode times stay in order with the
+//! repeats: a cue that decodes before the track's last unit is written
+//! at that unit's decode time, keeping its own presentation time.
 //!
 //! So a reader that joins at any record learns the offset `K` of its GOP's
 //! sync record, the offset of its first byte less `gop_back`; from `K` on

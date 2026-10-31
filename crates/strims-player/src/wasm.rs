@@ -147,6 +147,7 @@ fn kind_name(kind: TrackKind) -> &'static str {
     match kind {
         TrackKind::Video => "video",
         TrackKind::Audio => "audio",
+        TrackKind::Text => "text",
     }
 }
 
