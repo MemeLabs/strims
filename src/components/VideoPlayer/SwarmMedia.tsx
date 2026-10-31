@@ -8,6 +8,7 @@ import { EgressOpenStreamResponse } from "../../apis/strims/video/v1/egress";
 import { useClient } from "../../contexts/FrontendApi";
 import { useSession } from "../../contexts/Session";
 import { VideoControls } from "../../hooks/useVideo";
+import { attachSources, detachSources } from "../../lib/media/airplay";
 import type { Feed } from "../../lib/media/feed";
 import { LowLatencyPlayer } from "../../lib/media/lowlatency/player";
 import { rendererParam } from "../../lib/media/lowlatency/support";
@@ -21,6 +22,8 @@ export interface SwarmMediaProps {
   videoControls: VideoControls;
   /** A unit-format stream plays through the low-latency player, falling back to the baseline. */
   lowLatency?: boolean;
+  /** The stream's HLS URL, as the baseline player's AirPlay source. */
+  airPlaySource?: string;
 }
 
 // Puts a swarm's stream on the video, rendering nothing. The player keys it
@@ -38,6 +41,7 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
   videoRef,
   videoControls,
   lowLatency = false,
+  airPlaySource,
 }) => {
   const client = useClient();
   const [{ conn }] = useSession();
@@ -74,10 +78,15 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
           feed,
         })
       : new UnitsPlayer(video, {
-          attach: (src) => {
+          attach: (src, alternative) => {
             if (typeof src === "string") {
               video.srcObject = null;
-              videoControls.setSrc(src);
+              if (alternative) {
+                videoControls.setSrc(null);
+                attachSources(video, src, alternative);
+              } else {
+                videoControls.setSrc(src);
+              }
             } else {
               videoControls.setSrc(null);
               attachHandle(video, src);
@@ -87,11 +96,13 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
           // eslint-disable-next-line no-console
           error: (message) => console.warn("the stream can't play:", message),
           feed,
+          airPlay: airPlaySource,
         });
 
     if (feeds) {
       return () => {
         player.destroy();
+        detachSources(video);
         video.srcObject = null;
         videoControls.setSrc(null);
       };
@@ -120,10 +131,11 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
     return () => {
       stream.destroy();
       player.destroy();
+      detachSources(video);
       video.srcObject = null;
       videoControls.setSrc(null);
     };
-  }, [networkKey, swarmUri, mimeType, lowLatency, fallback, feeds]);
+  }, [networkKey, swarmUri, mimeType, lowLatency, fallback, feeds, airPlaySource]);
 
   return null;
 };

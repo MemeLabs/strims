@@ -3,6 +3,7 @@
 
 import assert from "assert";
 
+import { WIRELESS_CHANGED } from "./airplay";
 import { Feed, parseBatch } from "./feed";
 import { SinkMode, WindowMessage, WorkerMessage } from "./protocol";
 import { TICK_MS, UnitsPlayer, WINDOW_BYTES } from "./units";
@@ -32,6 +33,7 @@ class FakeWorker {
 }
 
 class FakeVideo extends EventTarget {
+  webkitCurrentPlaybackTargetIsWireless = false;
   currentTime = 0;
   buffered = { length: 0, start: () => 0, end: () => 0 };
   paused = true;
@@ -298,5 +300,102 @@ describe("UnitsPlayer", () => {
     workers[0].onerror({ message: "late" });
     assert.strictEqual(workers.length, 1);
     p.destroy();
+  });
+
+  describe("with an AirPlay source", () => {
+    const HLS = "https://node.example/hls/a/b/index.m3u8";
+    const urls: string[] = [];
+    const stubbed = ["createObjectURL", "revokeObjectURL"];
+    let saved: PropertyDescriptor[] = [];
+
+    // A window ManagedMediaSource, which takes every type.
+    class FakeManagedMediaSource extends EventTarget {
+      static isTypeSupported = () => true;
+    }
+
+    before(() => {
+      saved = stubbed.map((k) => Object.getOwnPropertyDescriptor(URL, k));
+      URL.createObjectURL = () => {
+        urls.push(`blob:${urls.length + 1}`);
+        return urls[urls.length - 1];
+      };
+      URL.revokeObjectURL = () => undefined;
+      globals.ManagedMediaSource = FakeManagedMediaSource;
+      globals.WebKitPlaybackTargetAvailabilityEvent = class {};
+    });
+
+    after(() => {
+      stubbed.forEach((k, i) => Object.defineProperty(URL, k, saved[i]));
+      delete globals.ManagedMediaSource;
+      delete globals.WebKitPlaybackTargetAvailabilityEvent;
+    });
+
+    // A player of the AirPlay source, and the attaches it asks for.
+    const airPlayer = () => {
+      const workers: FakeWorker[] = [];
+      const attached: [unknown, string | undefined][] = [];
+      const video = new FakeVideo();
+      const p = new UnitsPlayer(
+        video as unknown as HTMLVideoElement,
+        { attach: (src, alternative) => attached.push([src, alternative]), airPlay: HLS },
+        () => {
+          const w = new FakeWorker();
+          workers.push(w);
+          return w as unknown as Worker;
+        }
+      );
+      return { p, video, workers, attached };
+    };
+
+    const goWireless = (video: FakeVideo, wireless: boolean) => {
+      video.webkitCurrentPlaybackTargetIsWireless = wireless;
+      video.dispatchEvent(new Event(WIRELESS_CHANGED));
+    };
+
+    it("keeps its MediaSource in the window, the source its alternative, and remote playback on", () => {
+      const { p, video, workers, attached } = airPlayer();
+      const open = workers[0].messages()[0];
+      assert.ok(open.type === "open");
+      assert.strictEqual(open.mode, SinkMode.Window);
+      assert.strictEqual(video.disableRemotePlayback, false);
+      assert.deepStrictEqual(attached, [[urls[urls.length - 1], HLS]]);
+      p.destroy();
+    });
+
+    it("stops while the video plays on a receiver, and takes the stream up again after", async () => {
+      const { p, video, workers, attached } = airPlayer();
+      p.push(new Uint8Array([1]), false, false);
+      goWireless(video, true);
+      assert.ok(workers[0].terminated);
+      // The rest of the record in progress, and a whole one: dropped.
+      p.push(new Uint8Array([2]), true, false);
+      p.push(new Uint8Array([3]), true, false);
+      await tick();
+      assert.strictEqual(workers.length, 1);
+      goWireless(video, false);
+      assert.strictEqual(workers.length, 2);
+      assert.strictEqual(attached.length, 2);
+      assert.strictEqual(attached[1][1], HLS);
+      p.push(new Uint8Array([4]), true, false);
+      await tick();
+      assert.deepStrictEqual(pushed(workers[1]), [[[[4], true, false]]]);
+      assert.strictEqual(p.stats().restarts, 0);
+      p.destroy();
+    });
+
+    it("plays as without one where the browser can't AirPlay", () => {
+      delete globals.WebKitPlaybackTargetAvailabilityEvent;
+      try {
+        const { p, video, workers, attached } = airPlayer();
+        const open = workers[0].messages()[0];
+        assert.ok(open.type === "open");
+        assert.strictEqual(open.mode, SinkMode.Worker);
+        assert.strictEqual(video.disableRemotePlayback, true);
+        assert.deepStrictEqual(attached, []);
+        p.destroy();
+      } finally {
+        globals.WebKitPlaybackTargetAvailabilityEvent = class {};
+      }
+    });
   });
 });

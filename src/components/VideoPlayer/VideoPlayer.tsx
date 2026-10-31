@@ -15,6 +15,7 @@ import { lowLatencySupport } from "../../lib/media/lowlatency/support";
 import { streamFormat } from "../../lib/media/mime";
 import { PlayerKind, choosePlayer, preferredPlayer } from "../../lib/media/players";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
+import { useRemotePlayback } from "./RemotePlayback";
 import { SwarmMediaProps, UnitsMedia } from "./SwarmMedia";
 import VideoControls from "./VideoControls";
 
@@ -58,6 +59,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   const { theaterMode, toggleTheaterMode } = useLayout();
   const videoRef = useRef<HTMLVideoElement>();
   const [videoState, videoProps, videoControls] = useVideo(videoRef);
+  const remote = useRemotePlayback({ networkKey, swarmUri, mimeType, videoRef });
 
   // Unit-format streams play through a player worker everywhere, the
   // low-latency player's when the viewer asks for it (?player=lowlatency,
@@ -132,7 +134,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         playsInline
         {...videoProps}
       />
-      {SwarmMedia && (
+      {SwarmMedia && !remote.casting && (
         <SwarmMedia
           key={`${kind}:${networkKey}:${swarmUri}`}
           networkKey={networkKey}
@@ -141,8 +143,10 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
           videoRef={videoRef}
           videoControls={videoControls}
           lowLatency={kind === PlayerKind.LowLatency}
+          airPlaySource={remote.airPlaySource ?? undefined}
         />
       )}
+      {remote.overlay}
       <div
         className={clsx({
           "video_player__waiting_spinner": true,
@@ -162,6 +166,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         theaterMode={theaterMode}
         toggleTheaterMode={toggleTheaterMode}
         close={handleClose}
+        remoteButtons={remote.buttons}
         {...controls}
       />
     </div>

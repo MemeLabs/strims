@@ -152,6 +152,8 @@ interface VideoControlsProps {
   videoState: VideoState;
   videoControls: VideoControls;
   close: () => void;
+  /** Buttons that play the stream on other devices. */
+  remoteButtons?: React.ReactNode;
 
   showPlayButton?: boolean;
   showVolume?: boolean;
@@ -222,6 +224,7 @@ const VideoControls: React.FC<VideoControlsProps> = (props) => {
         )}
       </div>
       <div className="controls_group right">
+        {props.remoteButtons}
         {props.showPiPButton && (
           <PiPButton supported={videoState.supportPiP} toggle={videoControls.togglePiP} />
         )}

@@ -1,6 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { WIRELESS_CHANGED, airPlayCapable, attachSources, playsWireless } from "./airplay";
 import { BatchWriter, Credit, DataMessage, Feed, MAX_BATCH_BYTES } from "./feed";
 import { LiveEdge, LiveStats } from "./live";
 import { CoreOutput, SinkMode, UnitInfo, WindowMessage, WorkerMessage } from "./protocol";
@@ -27,10 +28,11 @@ export const WINDOW_BATCHES = 1024;
 export interface PlayerHandlers {
   /**
    * Points the video at the stream's media: a worker MediaSource's handle
-   * or a window MediaSource's object URL. Sets the video's srcObject or src
-   * when not given.
+   * or a window MediaSource's object URL, with the stream's AirPlay source
+   * (`airPlay`) as its alternative when it has one (attachSources). Sets
+   * the video's srcObject, src or source children when not given.
    */
-  attach?: (src: MediaSourceHandle | string) => void;
+  attach?: (src: MediaSourceHandle | string, alternative?: string) => void;
   /** Starts the video. Calls play() when not given. */
   play?: () => Promise<void> | void;
   /** The player gave up: the stream can't play here. */
@@ -43,6 +45,14 @@ export interface PlayerHandlers {
    * messages.
    */
   feed?: (port: MessagePort, replaces: Feed | null) => Feed;
+  /**
+   * The stream's HLS URL, as an AirPlay source, where the browser can use
+   * one (airPlayCapable): the MediaSource then lives in the window, the
+   * video's remote playback stays enabled, and while the video plays on
+   * an AirPlay receiver the player stops its worker and MediaSource,
+   * starting them again once the video plays here again.
+   */
+  airPlay?: string;
 }
 
 export interface PlayerStats extends LiveStats {
@@ -123,9 +133,20 @@ const defaultWorker = () =>
  * Media the worker gives after that, a later session's, goes on playing; a
  * video that played out to the end, and stopped there, resumes there once
  * the later session's media is the target lag past it.
+ *
+ * With an AirPlay source (`handlers.airPlay`) the browser can use, the
+ * MediaSource lives in the window, the source beside it as the video's
+ * alternative. While the video plays on an AirPlay receiver, the player
+ * holds no worker or MediaSource and drops what it is pushed; once the
+ * video plays here again, a new worker and MediaSource take the stream
+ * up, as after a restart.
  */
 export class UnitsPlayer {
   private readonly mode: SinkMode;
+  /** The AirPlay source the video names, if it names one. */
+  private readonly airPlay: string | null;
+  /** The video plays on an AirPlay receiver: the player stopped. */
+  private wireless = false;
   private worker: Worker | null = null;
   private sink: MediaSink | null = null;
   private url: string | null = null;
@@ -177,8 +198,12 @@ export class UnitsPlayer {
     private readonly handlers: PlayerHandlers = {},
     private readonly createWorker: () => Worker = defaultWorker
   ) {
-    this.mode = chooseSinkMode();
-    video.disableRemotePlayback = true;
+    this.airPlay = handlers.airPlay && airPlayCapable() ? handlers.airPlay : null;
+    this.mode = this.airPlay ? SinkMode.Window : chooseSinkMode();
+    video.disableRemotePlayback = !this.airPlay;
+    if (this.airPlay) {
+      video.addEventListener(WIRELESS_CHANGED, this.onWirelessChanged);
+    }
     video.addEventListener("waiting", this.onWaiting);
     video.addEventListener("playing", this.onPlaying);
     video.addEventListener("seeked", this.onPlaying);
@@ -202,6 +227,12 @@ export class UnitsPlayer {
       this.skipping = false;
       this.counts.discontinuities++;
       this.relearn();
+    }
+    if (this.wireless) {
+      // Nothing plays here: the player takes the stream up again from a
+      // whole record.
+      this.atRecordStart = segmentEnd;
+      return;
     }
     const skip = this.skipping;
     this.skipping &&= !segmentEnd;
@@ -273,6 +304,7 @@ export class UnitsPlayer {
     this.video.removeEventListener("playing", this.onPlaying);
     this.video.removeEventListener("seeked", this.onPlaying);
     this.video.removeEventListener("ended", this.onEnded);
+    this.video.removeEventListener(WIRELESS_CHANGED, this.onWirelessChanged);
     this.video.playbackRate = 1;
     if (!this.handlers.attach) {
       this.video.srcObject = null;
@@ -351,7 +383,7 @@ export class UnitsPlayer {
   }
 
   private restart(reason: string): void {
-    if (this.destroyed || this.failure || this.ended) return;
+    if (this.destroyed || this.failure || this.ended || this.wireless) return;
     const now = performance.now();
     this.restartTimes = this.restartTimes.filter((t) => t > now - RESTART_WINDOW_MS);
     if (this.restartTimes.length >= MAX_RESTARTS) {
@@ -376,11 +408,16 @@ export class UnitsPlayer {
 
   private attach(src: MediaSourceHandle | string): void {
     this.rejoin();
+    const alternative = this.airPlay ?? undefined;
     if (this.handlers.attach) {
-      this.handlers.attach(src);
+      this.handlers.attach(src, alternative);
     } else if (typeof src === "string") {
       this.video.srcObject = null;
-      this.video.src = src;
+      if (alternative) {
+        attachSources(this.video, src, alternative);
+      } else {
+        this.video.src = src;
+      }
     } else {
       attachHandle(this.video, src);
     }
@@ -503,8 +540,27 @@ export class UnitsPlayer {
     this.playedOut = this.ended;
   };
 
+  // The video took to an AirPlay receiver, which plays the AirPlay source
+  // in its place, or came back from one.
+  private onWirelessChanged = () => {
+    const wireless = playsWireless(this.video);
+    if (wireless === this.wireless || this.destroyed || this.failure) return;
+    this.wireless = wireless;
+    if (wireless) {
+      this.stop();
+      this.closeFeed();
+      this.video.playbackRate = 1;
+      return;
+    }
+    this.handledError = this.video.error;
+    this.skipping = !this.atRecordStart;
+    this.rejoin();
+    this.start();
+  };
+
   private tick = () => {
     const v = this.video;
+    if (this.wireless) return;
     if (v.error && v.error !== this.handledError) {
       this.handledError = v.error;
       this.restart(`the video failed: ${v.error.message || v.error.code}`);

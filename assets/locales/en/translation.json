@@ -13,7 +13,11 @@
     "Pause": "Pause",
     "Play": "Play",
     "Miniplayer": "Miniplayer",
-    "Close": "Close"
+    "Close": "Close",
+    "Cast": "Cast",
+    "Stop casting": "Stop casting",
+    "Casting to": "Casting to {{device}}",
+    "AirPlay": "AirPlay"
   },
 
   "layout": {
