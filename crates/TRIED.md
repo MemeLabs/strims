@@ -74,6 +74,33 @@ a parent that pushed nothing, with a fixed 10 s for one that had pushed:
 Both kept most of the liar gain (honest p99 ×0.88 and ×0.87, against
 ×0.83 for 2 s).
 
+**Deferring a push miss until its unit shows its count.** (`elide` 3974cf79
+as PPSPP_X_DEFER, against ac965fa1; first built on `video/ppspp-sign-gated`)
+A deadline that passed while a child held none of the chunk's unit, and no
+peer had announced it or a later chunk of the unit, released the chunk to
+pull unjudged; its miss counted once a chunk of the unit showed whether it
+held data. The hold already covers it: a unit's data-less chunks are held
+once any of its chunks arrives, within `DEADLINE_MAX` of the unit's first
+announcement. At 32 seeds and u8,t300 it matched counting at the deadline
+in all but two cells of `sign-confirm` (churn@1500v 8 against 11 of 32
+collapsed, n.s.).
+
+**A store rate of data alone for a stream signed early.** (`elide-c`
+48a006aa) The hybrid's store rate left data-less chunks out, so a VBR
+stream's quiet scenes opened subscriptions its loud ones couldn't carry:
+`sign-sens` at u8,t300, 32 seeds, against the padding sent: 1500v:s1.2 lag
+p99 x1.19-1.29 in the residential, overload and churn cells (first waves
+x1.33-1.39, honest holders x1.19-1.30, liar grafts x1.35-1.64). Counting
+them as stored brought those cells to x1.05-1.14.
+
+**Freshness against a quiet stream's latest data.** (`elide-d` 6be4456e,
+on `elide-c`) A peer's announcement lag stayed fresh within
+`CANDIDATE_FRESHNESS` of the stream's latest data here, and a seed's check
+judged a holder's pushes only when its streams had published since the
+last, for the streams an early unit leaves without data for seconds. No
+effect: against `elide-c` at 32 seeds, lag p99 x0.999 (`sign-confirm`) and
+x1.006 (`sign-sens`).
+
 ## Upload meter
 
 Relay readings other than the bound in `UploadInfo::relay_capacity`,

@@ -68,6 +68,11 @@ read it.
     latency under `VideoTrackGenerator`.
   - `VideoControls`' `remoteButtons` slot holds the rendition menu too;
     name it for what it holds.
+- **Signing.** A unit signed early sends only its chunk in progress, so
+  8-chunk units at short intervals pad no more than 1-chunk ones:
+  re-choose `UnitSigning`'s intervals and `SMALL_BELOW_BPS` (the `sign`
+  tier with u1 and u8 at t100-t300, on both sides of 750 kbit/s; only 1-
+  and 8-chunk units).
 - **Capture.** Turning the iPhone during a capture, and screen capture on
   real devices, are untested; a capture started upside down
   (landscape-secondary) isn't caught by the aspect check.
@@ -223,6 +228,13 @@ in `TRIED.md`.
      streams, which weigh startup heavily: rerun `defaults-cable` and
      `defaults-ab` at 2-minute streams to confirm or revise them and the
      stream count.
+   - Streams whose bitrate swings widely trail what they did with the
+     early units' padding sent (`sign-sens` at u8,t300, 32 seeds:
+     1500v:s1.2 lag p99 x1.05-1.14; overload x1.14 [1.02,1.27]). Relays'
+     meters and written peaks read the quiet scenes, and over 8-chunk
+     units the last streams of each half of 16 go 3-18 s without data at
+     1500v. Try relay readings that count a unit's data-less chunks, as
+     the store rate does.
    - Without a known capacity the upload meter still trails a known
      uplink. Measure the gap on the robust tier by role
      (`STRIMS_SIM_KNOWN_UPLINK=seed` and `=viewers`) before choosing the
@@ -601,25 +613,6 @@ stack or a version gate.
 - Use or remove `Rejection`.
 
 ### ppspp
-- Include the bin in live signatures; today chunks and munros can be
-  replayed at other positions.
-- Elide the padding of units signed early. `Writer::flush` pads a partial
-  unit with zeros to a whole unit and sends them, so a stream signed early
-  on a timer is sent at no less than unit size ÷ interval
-  (`strims_video::units`'s signing), and a stream whose bitrate swings
-  widely (VBR scenes) pads more: the sweep kept 8-chunk padding within a
-  tenth of such a stream only at an interval of about 500 ms, against the
-  300 ms it signs at. A live signature would cover how
-  many of its unit's chunks hold data, and peers would neither request,
-  push nor announce the rest. A receiver would check them as zero leaves
-  against the signed root. This lands with the bin item above, since both
-  change what the signature covers. Branch `video/ppspp-sign-gated` (on
-  main a356f676) holds an implementation: zero-leaf verification,
-  data-less chunks held as zeros and left out of HAVEs, requests for them
-  refused or split, and the hybrid's miss deferral for munros a node
-  hasn't seen, applied once a swarm shows a data-less chunk. Applied to
-  every swarm, the deferral slows the pruning of starved parents and grows
-  cycles. The gated branch hasn't been through the sim suite.
 - Make HAVE claims verifiable.
 - Stamp DATA at send time, not after the sender's queue.
 - STREAM_REQUEST: add an expiry or lease plus a rate limit. STREAM_CLOSE:
