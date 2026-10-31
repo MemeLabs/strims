@@ -29,6 +29,7 @@ fn config(target: u64, listed: i64, retained: i64, max_retained_bytes: usize) ->
         listed: ms(listed),
         retained: ms(retained),
         max_retained_bytes,
+        part_target: Duration::ZERO,
     }
 }
 
@@ -1083,8 +1084,12 @@ fn the_subtitles_playlist_lists_each_segments_webvtt() {
     let want = [
         header(4, 0, 0),
         "#EXTINF:2.000,\n0.vtt\n".to_owned(),
+        // The muxer's segments are dated; the third's publish time comes
+        // before the second's end, so it starts at that end.
+        "#EXT-X-PROGRAM-DATE-TIME:2026-10-29T12:00:00.000Z\n".to_owned(),
         "#EXTINF:2.000,\n1.vtt\n".to_owned(),
         "#EXT-X-DISCONTINUITY\n".to_owned(),
+        "#EXT-X-PROGRAM-DATE-TIME:2026-10-29T12:00:02.000Z\n".to_owned(),
         "#EXTINF:1.500,\n2.vtt\n".to_owned(),
         "#EXT-X-ENDLIST\n".to_owned(),
     ]

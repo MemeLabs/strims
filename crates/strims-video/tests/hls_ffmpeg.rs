@@ -19,9 +19,13 @@
 //! files, with the cues' texts at their times on the video's timeline,
 //! and decodes the captions from the video at theirs.
 //!
+//! The AAC stream cut into 1 s parts as well: ffmpeg plays the
+//! low-latency playlist as the other, and the parts, back to back after
+//! the init, decode to the same frames.
+//!
 //! Each stream's playlists and files stay in `CARGO_TARGET_TMPDIR`
-//! (`hls-ffmpeg-aac`, `hls-ffmpeg-opus`, `hls-ffmpeg-subtitles`), for
-//! other players to try.
+//! (`hls-ffmpeg-aac`, `hls-ffmpeg-opus`, `hls-ffmpeg-subtitles`,
+//! `hls-ffmpeg-parts`), for other players to try.
 
 #![allow(
     clippy::unwrap_used,
@@ -296,24 +300,29 @@ fn stream(flv: &[u8], opus: Option<(Vec<u8>, Vec<Vec<u8>>)>) -> Vec<Event> {
     }
 }
 
-/// Cuts `events` into segments and writes them to `dir` with a playlist
-/// listing them all, which ends: `index.m3u8`, `init-<id>.mp4` and
-/// `<seq>.m4s`.
-fn write_hls(events: &[Event], dir: &Path) -> Playlist {
+/// Cuts `events` into segments, and parts of `part_target` (zero for
+/// none), and writes them to `dir` with a playlist listing them all, which
+/// ends: `index.m3u8`, `init-<id>.mp4`, `<seq>.m4s` and
+/// `part-<number>.m4s`.
+fn write_hls(events: &[Event], dir: &Path, part_target: Duration) -> Playlist {
     let _ = std::fs::remove_dir_all(dir);
     std::fs::create_dir_all(dir).unwrap();
-    let mut muxer = HlsMuxer::new(HlsMuxerConfig::default());
+    let mut muxer = HlsMuxer::new(HlsMuxerConfig {
+        part_target,
+        ..HlsMuxerConfig::default()
+    });
     let mut playlist = Playlist::new(PlaylistConfig {
         listed: Duration::from_secs(60),
         retained: Duration::from_secs(60),
+        part_target,
         ..PlaylistConfig::default()
     });
     let mut configs = Vec::new();
     let take = |muxer: &mut HlsMuxer, playlist: &mut Playlist| {
+        while let Some(p) = muxer.take_part() {
+            playlist.push_part(&p);
+        }
         while let Some(s) = muxer.take_segment() {
-            if s.discontinuity {
-                playlist.discontinuity();
-            }
             playlist.push(&s);
         }
     };
@@ -351,7 +360,11 @@ fn write_hls(events: &[Event], dir: &Path) -> Playlist {
     playlist.end();
     let text = playlist.render();
     for line in text.lines() {
-        if let Some(seq) = line.strip_suffix(".m4s") {
+        if let Some(part) = line.split("URI=\"part-").nth(1) {
+            let number: u64 = part.split_once(".m4s").unwrap().0.parse().unwrap();
+            let name = format!("part-{number}.m4s");
+            std::fs::write(dir.join(name), &*playlist.part(number).unwrap()).unwrap();
+        } else if let Some(seq) = line.strip_suffix(".m4s") {
             let seq: u64 = seq.parse().unwrap();
             std::fs::write(dir.join(line), &*playlist.segment(seq).unwrap()).unwrap();
         } else if let Some(map) = line.strip_prefix("#EXT-X-MAP:URI=\"") {
@@ -418,9 +431,9 @@ fn quiet_runs(pcm: &[i16], floor: i16) -> Vec<(usize, usize)> {
     runs
 }
 
-fn check(name: &str, codec: &str, events: &[Event]) {
+fn check(name: &str, codec: &str, events: &[Event], part_target: Duration) {
     let dir: PathBuf = [env!("CARGO_TARGET_TMPDIR"), name].iter().collect();
-    let playlist = write_hls(events, &dir);
+    let playlist = write_hls(events, &dir, part_target);
     assert!(playlist.ended());
     let index = dir.join("index.m3u8");
     let file = index.to_str().unwrap();
@@ -474,7 +487,72 @@ fn aac_hls_with_holes_decodes_in_ffmpeg() {
         return;
     }
     let flv = flv();
-    check("hls-ffmpeg-aac", "aac", &stream(&flv, None));
+    check("hls-ffmpeg-aac", "aac", &stream(&flv, None), Duration::ZERO);
+}
+
+/// The video frames ffmpeg decodes of `file`.
+fn video_frames(file: &Path) -> u64 {
+    let out = run(
+        "ffprobe",
+        &[
+            "-count_frames",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=nb_read_frames",
+            "-of",
+            "csv=p=0",
+            file.to_str().unwrap(),
+        ],
+    );
+    // The HLS demuxer's program lists its streams again.
+    let out = String::from_utf8(out).unwrap();
+    out.lines()
+        .map(|l| l.trim().trim_end_matches(','))
+        .find(|l| !l.is_empty())
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
+#[test]
+fn low_latency_hls_decodes_in_ffmpeg_and_its_parts_are_its_media() {
+    if !tools_with("libx264") {
+        return;
+    }
+    let flv = flv();
+    let name = "hls-ffmpeg-parts";
+    check(name, "aac", &stream(&flv, None), Duration::from_secs(1));
+    let dir: PathBuf = [env!("CARGO_TARGET_TMPDIR"), name].iter().collect();
+    let text = std::fs::read_to_string(dir.join("index.m3u8")).unwrap();
+    assert!(
+        text.contains("#EXT-X-PART-INF:PART-TARGET=1.000\n"),
+        "{text}"
+    );
+    let init = text
+        .lines()
+        .find_map(|l| l.strip_prefix("#EXT-X-MAP:URI=\""))
+        .unwrap()
+        .trim_end_matches('"');
+    let mut parts = std::fs::read(dir.join(init)).unwrap();
+    let mut segments = parts.clone();
+    for line in text.lines() {
+        if let Some(part) = line
+            .split("URI=\"")
+            .nth(1)
+            .filter(|_| line.starts_with("#EXT-X-PART:"))
+        {
+            let file = part.split_once('"').unwrap().0;
+            parts.extend(std::fs::read(dir.join(file)).unwrap());
+        } else if line.ends_with(".m4s") {
+            segments.extend(std::fs::read(dir.join(line)).unwrap());
+        }
+    }
+    assert!(parts == segments, "the parts aren't the segments' media");
+    std::fs::write(dir.join("parts.mp4"), &parts).unwrap();
+    let frames = video_frames(&dir.join("parts.mp4"));
+    assert_eq!(frames, video_frames(&dir.join("index.m3u8")));
+    assert!(frames >= 30 * SECS as u64 - 1, "{frames}");
 }
 
 #[test]
@@ -483,7 +561,12 @@ fn opus_hls_with_holes_decodes_in_ffmpeg() {
         return;
     }
     let flv = flv();
-    check("hls-ffmpeg-opus", "opus", &stream(&flv, Some(opus())));
+    check(
+        "hls-ffmpeg-opus",
+        "opus",
+        &stream(&flv, Some(opus())),
+        Duration::ZERO,
+    );
 }
 
 /// The subtitled stream's cues: their times in milliseconds from the
@@ -592,7 +675,7 @@ fn subtitles_and_captions_of_hls_play_in_ffmpeg() {
     let dir: PathBuf = [env!("CARGO_TARGET_TMPDIR"), "hls-ffmpeg-subtitles"]
         .iter()
         .collect();
-    let playlist = write_hls(&events, &dir);
+    let playlist = write_hls(&events, &dir, Duration::ZERO);
     let multivariant = playlist.render_multivariant();
     assert!(
         multivariant.contains("SUBTITLES=\"subs\""),

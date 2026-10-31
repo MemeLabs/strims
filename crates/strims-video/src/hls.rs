@@ -7,11 +7,12 @@
 //!
 //! A [`Playlist`] takes finished segments from a source, each an init
 //! (`ftyp`+`moov`), its media (`moof`+`mdat`…), its duration, and from a
-//! muxer its subtitles. It keeps the newest, serves them by number, and
-//! renders a live media playlist (RFC 8216, version 7) listing the newest
-//! of those, which ends with `EXT-X-ENDLIST` once the stream ended, the
-//! subtitles' playlist of the same listing, and the multivariant playlist
-//! players open, of one variant
+//! muxer its subtitles and parts. It keeps the newest, serves them by
+//! number, and renders a live media playlist (RFC 8216, version 7)
+//! listing the newest of those, with a part target their parts too
+//! ([Low latency](self#low-latency)), which ends with `EXT-X-ENDLIST`
+//! once the stream ended, the subtitles' playlist of the same listing,
+//! and the multivariant playlist players open, of one variant
 //! ([`render_multivariant`](Playlist::render_multivariant)). Segments
 //! that slid out of the listing stay fetchable for a while, for players
 //! that read an earlier playlist.
@@ -132,6 +133,29 @@
 //! playlist goes without the new part RFC 8216bis asks for within each
 //! part target.
 //!
+//! # Low latency
+//!
+//! With a part target ([`PlaylistConfig::part_target`]), the media
+//! playlist is a low-latency one (RFC 8216bis): under `EXT-X-PART-INF`
+//! and an `EXT-X-SERVER-CONTROL` whose `PART-HOLD-BACK` is three part
+//! targets, it lists each segment's parts (`EXT-X-PART`, `INDEPENDENT=YES`
+//! on those that start at a keyframe) as they come, the open segment's
+//! after the last whole one, and while live hints at the next part
+//! (`EXT-X-PRELOAD-HINT`). Parts are numbered across the stream,
+//! `part-<number>.m4s`, so the hint names the next part whichever segment
+//! it starts. The segments that end within three targets of the
+//! playlist's end list their parts, which stay fetchable while their
+//! segment is kept. A part lists its segment's milliseconds up to its
+//! end less those before it, so a segment's parts add up to its
+//! `EXTINF`. With subtitles, the media and subtitles playlists each carry
+//! a rendition report of the other (`EXT-X-RENDITION-REPORT`).
+//!
+//! Every segment a muxer made is dated (`EXT-X-PROGRAM-DATE-TIME`), in the
+//! media and subtitles playlists alike, by its first unit's publish time:
+//! a date more than half a second before the end of the segment before,
+//! from a writer's clock that stepped back, becomes that end, so each
+//! date maps to one segment.
+//!
 //! # Routes
 //!
 //! [`HlsRoutes`] maps request paths to the playlists of registered
@@ -144,6 +168,8 @@
 //!   playlist;
 //! - `/hls/<profile key>/<transfer id>/init-<id>.mp4`: an init;
 //! - `/hls/<profile key>/<transfer id>/<seq>.m4s`: a media segment;
+//! - `/hls/<profile key>/<transfer id>/part-<number>.m4s`: a part of a
+//!   media segment;
 //! - `/hls/<profile key>/<transfer id>/<seq>.vtt`: a segment's subtitles,
 //!   a WebVTT file without cues for a segment that has none.
 //!
@@ -151,8 +177,8 @@
 //! Registrations are handles, [`HlsProfile`] and [`HlsStream`], whose drop
 //! removes them.
 //!
-//! Every collection is bounded: segments by [`MAX_SEGMENTS`] and their
-//! bytes by [`PlaylistConfig`], a muxer's segment by
+//! Every collection is bounded: segments by [`MAX_SEGMENTS`], their parts
+//! by [`MAX_SEGMENT_PARTS`] and their bytes by [`PlaylistConfig`], a muxer's segment by
 //! [`HlsMuxerConfig::max_segment_bytes`], profiles by [`MAX_PROFILES`],
 //! streams by [`MAX_STREAMS`], and request paths by [`MAX_PATH_LEN`].
 
@@ -197,8 +223,12 @@ pub struct PlaylistConfig {
     /// it: the newest segments whose durations add up to it, and to the
     /// listed time at least.
     pub retained: Duration,
-    /// The most bytes of kept segments and inits.
+    /// The most bytes of kept segments, their parts and inits.
     pub max_retained_bytes: usize,
+    /// `EXT-X-PART-INF`'s part target, which the segments' parts last at
+    /// most ([`HlsMuxerConfig::part_target`]); zero lists no parts. See
+    /// [Low latency](self#low-latency).
+    pub part_target: Duration,
 }
 
 impl Default for PlaylistConfig {
@@ -208,6 +238,7 @@ impl Default for PlaylistConfig {
             listed: Duration::from_secs(16),
             retained: Duration::from_secs(40),
             max_retained_bytes: 64 << 20,
+            part_target: Duration::ZERO,
         }
     }
 }
@@ -216,6 +247,11 @@ impl PlaylistConfig {
     /// The target, at least 1.
     fn target_at_least_one(&self) -> u64 {
         self.target.max(1)
+    }
+
+    /// The part target, within its bounds; `None` lists no parts.
+    fn parts(&self) -> Option<Duration> {
+        part_target_within(self.part_target, self.target)
     }
 
     /// The least listed media time, in milliseconds.
@@ -244,6 +280,24 @@ pub fn fits_target(d: Duration, target: u64) -> bool {
     rounded_secs(duration_millis(d)) <= target.max(1)
 }
 
+/// The part target `part_target` comes to under target duration
+/// `target`: from [`MIN_PART_TARGET`] to the target, `None` when zero.
+fn part_target_within(part_target: Duration, target: u64) -> Option<Duration> {
+    if part_target <= Duration::ZERO {
+        return None;
+    }
+    let most = Duration::from_secs(i64::try_from(target.max(1)).unwrap_or(i64::MAX));
+    Some(part_target.clamp(MIN_PART_TARGET, most))
+}
+
+/// The most parts a [`Playlist`] keeps of a segment; later ones are
+/// dropped.
+pub const MAX_SEGMENT_PARTS: usize = 128;
+
+/// How far a segment's date may go back over the end of the segment
+/// before it, as a writer's clock drifts.
+const DATE_OVERLAP: Duration = Duration::from_millis(500);
+
 struct Segment {
     seq: u64,
     init: u64,
@@ -254,6 +308,37 @@ struct Segment {
     millis: u64,
     /// A discontinuity precedes the segment.
     discontinuity: bool,
+    /// `EXT-X-PROGRAM-DATE-TIME`: the date of its start.
+    date: Option<Time>,
+    /// Its parts, in order. Bound: [`MAX_SEGMENT_PARTS`].
+    parts: Vec<Part>,
+}
+
+impl Segment {
+    /// The bytes its parts hold of their own.
+    fn own_part_bytes(&self) -> usize {
+        self.parts
+            .iter()
+            .filter_map(|p| p.own.as_ref())
+            .map(|b| b.len())
+            .sum()
+    }
+}
+
+/// A part of a segment.
+#[derive(Debug, Clone)]
+struct Part {
+    number: u64,
+    /// Its duration in milliseconds, as listed: the parts of its segment
+    /// up to it, in milliseconds, less those before it, so a segment's
+    /// parts add up to its own.
+    millis: u64,
+    independent: bool,
+    /// Its bytes while its segment is open; once it is kept, its bytes are
+    /// the range of the segment's media from `start` for `len`.
+    own: Option<Rc<[u8]>>,
+    start: usize,
+    len: usize,
 }
 
 /// What a multivariant playlist declares of a stream's variant, from its
@@ -281,10 +366,17 @@ struct Init {
 /// ids count up from the same start, one per distinct init. Kept segments
 /// hold consecutive numbers, and the playlist lists the newest of them.
 ///
-/// Bounds: at most [`MAX_SEGMENTS`] segments, and at most
-/// [`PlaylistConfig::max_retained_bytes`] of them and the inits they
-/// reference, oldest dropped first. An init is kept while a kept segment
-/// references it, so there are no more inits than segments.
+/// With a part target, a segment comes as its parts first
+/// ([`push_part`](Self::push_part)), which make it the open segment:
+/// listed by its parts, its number taken, its media to come with the
+/// segment itself ([`push`](Self::push)). Part numbers count up from the
+/// first segment number, one per pushed part.
+///
+/// Bounds: at most [`MAX_SEGMENTS`] segments, [`MAX_SEGMENT_PARTS`] parts
+/// of each, and at most [`PlaylistConfig::max_retained_bytes`] of them,
+/// the open segment's parts and the inits they reference, oldest dropped
+/// first. An init is kept while a kept or open segment references it, so
+/// there are no more inits than segments.
 pub struct Playlist {
     config: PlaylistConfig,
     /// Oldest first, with consecutive numbers.
@@ -305,6 +397,12 @@ pub struct Playlist {
     /// The stream ended: the playlist lists `EXT-X-ENDLIST`.
     ended: bool,
     variant: Variant,
+    /// The segment whose parts came, its media to come; its number is
+    /// `next_seq`, which its push takes.
+    open: Option<Segment>,
+    /// The open segment's parts' durations.
+    open_duration: Duration,
+    next_part: u64,
 }
 
 impl Playlist {
@@ -328,6 +426,9 @@ impl Playlist {
             discontinuities: 0,
             ended: false,
             variant: Variant::default(),
+            open: None,
+            open_duration: Duration::ZERO,
+            next_part: first,
         }
     }
 
@@ -350,16 +451,41 @@ impl Playlist {
     /// session's, takes the end back off, so the playlist is live again,
     /// and follows a discontinuity.
     pub fn push_segment(&mut self, init: &[u8], media: &[u8], duration: Duration) {
-        self.append(init, media, None, duration);
+        let segment = self.begin(init, false, None);
+        self.finish(segment, media, None, duration);
     }
 
     /// Appends a muxer's segment, as [`push_segment`](Self::push_segment)
-    /// does, with its subtitles; what it says of its codecs, picture size,
-    /// subtitles and captions is what the multivariant playlist declares
-    /// ([`render_multivariant`](Self::render_multivariant)).
+    /// does, with its subtitles, its date and the discontinuity it
+    /// follows; what it says of its codecs, picture size, subtitles and
+    /// captions is what the multivariant playlist declares
+    /// ([`render_multivariant`](Self::render_multivariant)). The open
+    /// segment, whose parts came, is this one: it keeps its number and
+    /// listing, and its parts become ranges of the segment's media, unless
+    /// they don't add up to it, when they go.
     pub fn push(&mut self, segment: &HlsSegment) {
         let vtt = segment.vtt.as_deref().map(Rc::from);
-        self.append(&segment.init, &segment.media, vtt, segment.duration);
+        let mut open = match self.open.take() {
+            Some(open) => open,
+            None => self.begin(
+                &segment.init,
+                segment.discontinuity,
+                Some(segment.published),
+            ),
+        };
+        let own = open.own_part_bytes();
+        self.retained_bytes = self.retained_bytes.saturating_sub(own);
+        if own == segment.media.len() {
+            let mut at = 0;
+            for part in &mut open.parts {
+                part.own = None;
+                part.start = at;
+                at = at.saturating_add(part.len);
+            }
+        } else {
+            open.parts.clear();
+        }
+        self.finish(open, &segment.media, vtt, segment.duration);
         let v = &mut self.variant;
         v.codecs = Some(Rc::clone(&segment.codecs));
         v.resolution = segment.resolution;
@@ -367,10 +493,69 @@ impl Playlist {
         v.captions |= segment.captions;
     }
 
-    fn append(&mut self, init: &[u8], media: &[u8], vtt: Option<Rc<[u8]>>, duration: Duration) {
+    /// Appends a part of a segment ([`HlsPart`]). A segment's first part
+    /// opens it, as a [`push`](Self::push) of it would begin it, and
+    /// finishes a segment still open from its parts; a later part goes on
+    /// the open segment, unless it isn't the next of it or the segment has
+    /// [`MAX_SEGMENT_PARTS`], when it is dropped. It takes the next part
+    /// number.
+    pub fn push_part(&mut self, part: &HlsPart) {
+        if part.index == 0 {
+            self.close_open();
+            let segment = self.begin(&part.init, part.discontinuity, Some(part.published));
+            self.open = Some(segment);
+            self.open_duration = Duration::ZERO;
+        }
+        let Some(open) = self.open.as_mut() else {
+            return;
+        };
+        if open.parts.len() != part.index as usize || open.parts.len() >= MAX_SEGMENT_PARTS {
+            return;
+        }
+        let before = duration_millis(self.open_duration);
+        self.open_duration += part.duration.max(Duration::ZERO);
+        let millis = duration_millis(self.open_duration).saturating_sub(before);
+        open.millis = open.millis.saturating_add(millis);
+        open.parts.push(Part {
+            number: self.next_part,
+            millis,
+            independent: part.independent,
+            own: Some(Rc::clone(&part.media)),
+            start: 0,
+            len: part.media.len(),
+        });
+        self.next_part = self.next_part.saturating_add(1);
+        self.retained_bytes = self.retained_bytes.saturating_add(part.media.len());
+        self.trim();
+    }
+
+    /// Finishes the open segment from its parts: its media theirs, without
+    /// subtitles.
+    fn close_open(&mut self) {
+        let Some(mut open) = self.open.take() else {
+            return;
+        };
+        let own = open.own_part_bytes();
+        self.retained_bytes = self.retained_bytes.saturating_sub(own);
+        let mut media = Vec::with_capacity(own);
+        for part in &mut open.parts {
+            if let Some(bytes) = part.own.take() {
+                part.start = media.len();
+                media.extend_from_slice(&bytes);
+            }
+        }
+        let duration = self.open_duration;
+        self.finish(open, &media, None, duration);
+    }
+
+    /// A segment of `init` that follows a discontinuity when
+    /// `discontinuity` says so, and dated by `published`: its number is the
+    /// next, which its [`finish`](Self::finish) takes.
+    fn begin(&mut self, init: &[u8], discontinuity: bool, published: Option<Time>) -> Segment {
         if mem::take(&mut self.ended) {
             self.pending_discontinuity |= self.pushed;
         }
+        self.pending_discontinuity |= discontinuity;
         let shared = self.inits.back().filter(|i| *i.data == *init).map(|i| i.id);
         let init_id = match shared {
             Some(id) => id,
@@ -386,25 +571,58 @@ impl Playlist {
                 id
             }
         };
-
-        let millis = duration_millis(duration);
         let discontinuity = mem::take(&mut self.pending_discontinuity);
         if discontinuity {
             self.discontinuities = self.discontinuities.saturating_add(1);
         }
-        let bytes = media.len() + vtt.as_ref().map_or(0, |v| v.len());
-        self.retained_bytes = self.retained_bytes.saturating_add(bytes);
-        self.retained_millis = self.retained_millis.saturating_add(millis);
-        self.segments.push_back(Segment {
+        self.pushed = true;
+        Segment {
             seq: self.next_seq,
             init: init_id,
-            media: Rc::from(media),
-            vtt,
-            millis,
+            media: Rc::from(&[][..]),
+            vtt: None,
+            millis: 0,
             discontinuity,
+            date: published.and_then(|t| self.date_of(t)),
+            parts: Vec::new(),
+        }
+    }
+
+    /// The date of a segment that starts at `published`, after the kept
+    /// segments: none before 1970, and the end of the segment before for
+    /// one that would start more than [`DATE_OVERLAP`] before it, so each
+    /// date maps to one segment.
+    fn date_of(&self, published: Time) -> Option<Time> {
+        if published.unix_millis() < 0 {
+            return None;
+        }
+        let end = self.segments.back().and_then(|s| {
+            let millis = i64::try_from(s.millis).ok()?;
+            Some(s.date? + Duration::from_millis(millis))
         });
+        match end {
+            Some(end) if published + DATE_OVERLAP < end => Some(end),
+            _ => Some(published),
+        }
+    }
+
+    /// Keeps `segment` with its media and subtitles, lasting `duration`
+    /// (negative counts as zero): it takes the next segment number.
+    fn finish(
+        &mut self,
+        mut segment: Segment,
+        media: &[u8],
+        vtt: Option<Rc<[u8]>>,
+        duration: Duration,
+    ) {
+        segment.millis = duration_millis(duration);
+        segment.media = Rc::from(media);
+        let bytes = media.len() + vtt.as_ref().map_or(0, |v| v.len());
+        segment.vtt = vtt;
+        self.retained_bytes = self.retained_bytes.saturating_add(bytes);
+        self.retained_millis = self.retained_millis.saturating_add(segment.millis);
+        self.segments.push_back(segment);
         self.next_seq = self.next_seq.saturating_add(1);
-        self.pushed = true;
         self.trim();
     }
 
@@ -415,8 +633,10 @@ impl Playlist {
     }
 
     /// The stream ended: the playlist ends with `EXT-X-ENDLIST`, until a
-    /// segment is pushed.
+    /// segment or part is pushed. A segment still open is finished from
+    /// its parts.
     pub fn end(&mut self) {
+        self.close_open();
         self.ended = true;
     }
 
@@ -444,7 +664,7 @@ impl Playlist {
             let bytes = dropped.media.len() + dropped.vtt.as_ref().map_or(0, |v| v.len());
             self.retained_bytes = self.retained_bytes.saturating_sub(bytes);
             self.retained_millis = self.retained_millis.saturating_sub(dropped.millis);
-            let oldest = self.segments.front().map(|s| s.init);
+            let oldest = self.segments.front().or(self.open.as_ref()).map(|s| s.init);
             while let Some(init) = self.inits.front() {
                 if oldest.is_some_and(|o| init.id >= o) {
                     break;
@@ -488,27 +708,50 @@ impl Playlist {
     }
 
     fn render_listing(&self, media: bool) -> String {
-        let mut out = String::with_capacity(160 + 64 * self.segments.len());
+        let mut out = String::with_capacity(256 + 96 * self.segments.len());
         // Writing to a String can't fail.
         let _ = write!(
             out,
             "#EXTM3U\n\
              #EXT-X-VERSION:7\n\
-             #EXT-X-TARGETDURATION:{}\n\
-             #EXT-X-MEDIA-SEQUENCE:{}\n\
-             #EXT-X-DISCONTINUITY-SEQUENCE:{}\n",
+             #EXT-X-TARGETDURATION:{}\n",
             self.target_duration(),
+        );
+        let parts = self.config.parts();
+        if let Some(target) = parts.filter(|_| media) {
+            let target = duration_millis(target);
+            out.push_str("#EXT-X-SERVER-CONTROL:PART-HOLD-BACK=");
+            push_millis(&mut out, target.saturating_mul(3));
+            out.push_str("\n#EXT-X-PART-INF:PART-TARGET=");
+            push_millis(&mut out, target);
+            out.push('\n');
+        }
+        let _ = write!(
+            out,
+            "#EXT-X-MEDIA-SEQUENCE:{}\n\
+             #EXT-X-DISCONTINUITY-SEQUENCE:{}\n",
             self.media_sequence(),
             self.discontinuity_sequence(),
         );
-        let mut init = None;
-        for s in self.listed() {
-            if s.discontinuity {
-                out.push_str("#EXT-X-DISCONTINUITY\n");
+        let listed: Vec<&Segment> = self.listed().collect();
+        // The listed segments that list their parts: those that end within
+        // three targets of the playlist's end.
+        let window = self.config.target_at_least_one().saturating_mul(3000);
+        let mut from_end = self.open.as_ref().map_or(0, |o| o.millis);
+        let mut with_parts = 0;
+        for s in listed.iter().rev() {
+            if from_end >= window {
+                break;
             }
-            if media && init != Some(s.init) {
-                let _ = writeln!(out, "#EXT-X-MAP:URI=\"init-{}.mp4\"", s.init);
-                init = Some(s.init);
+            from_end = from_end.saturating_add(s.millis);
+            with_parts += 1;
+        }
+        let first_with_parts = listed.len() - with_parts;
+        let mut init = None;
+        for (i, s) in listed.iter().enumerate() {
+            self.render_head(&mut out, s, media, &mut init);
+            if media && i >= first_with_parts {
+                render_parts(&mut out, s);
             }
             let _ = write!(
                 out,
@@ -519,10 +762,79 @@ impl Playlist {
                 if media { "m4s" } else { "vtt" }
             );
         }
+        if let Some(open) = self.open.as_ref().filter(|_| media) {
+            self.render_head(&mut out, open, media, &mut init);
+            render_parts(&mut out, open);
+        }
+        if parts.is_some() {
+            if media && !self.ended {
+                let _ = writeln!(
+                    out,
+                    "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part-{}.m4s\"",
+                    self.next_part
+                );
+            }
+            self.render_report(&mut out, media);
+        }
         if self.ended {
             out.push_str("#EXT-X-ENDLIST\n");
         }
         out
+    }
+
+    /// The tags before a segment's parts and its URI: its discontinuity,
+    /// in the media playlist its init when it differs from the one before,
+    /// and its date.
+    fn render_head(&self, out: &mut String, s: &Segment, media: bool, init: &mut Option<u64>) {
+        if s.discontinuity {
+            out.push_str("#EXT-X-DISCONTINUITY\n");
+        }
+        if media && *init != Some(s.init) {
+            let _ = writeln!(out, "#EXT-X-MAP:URI=\"init-{}.mp4\"", s.init);
+            *init = Some(s.init);
+        }
+        if let Some(date) = s.date {
+            out.push_str("#EXT-X-PROGRAM-DATE-TIME:");
+            push_date(out, date);
+            out.push('\n');
+        }
+    }
+
+    /// The other media playlist's rendition report, for a stream whose
+    /// multivariant playlist names both: the media playlist's newest part
+    /// in the subtitles' playlist, and the subtitles' newest segment in the
+    /// media playlist.
+    fn render_report(&self, out: &mut String, media: bool) {
+        if !self.variant.subtitles {
+            return;
+        }
+        if media {
+            if let Some(last) = self.segments.back() {
+                let _ = writeln!(
+                    out,
+                    "#EXT-X-RENDITION-REPORT:URI=\"subtitles.m3u8\",LAST-MSN={}",
+                    last.seq
+                );
+            }
+            return;
+        }
+        let newest = self
+            .open
+            .as_ref()
+            .filter(|o| !o.parts.is_empty())
+            .or(self.segments.back());
+        let Some(newest) = newest else {
+            return;
+        };
+        let _ = write!(
+            out,
+            "#EXT-X-RENDITION-REPORT:URI=\"index.m3u8\",LAST-MSN={}",
+            newest.seq
+        );
+        if let Some(last) = newest.parts.len().checked_sub(1) {
+            let _ = write!(out, ",LAST-PART={last}");
+        }
+        out.push('\n');
     }
 
     /// The multivariant playlist of the stream: one variant, the media
@@ -620,10 +932,42 @@ impl Playlist {
         self.listed().next().map_or(self.next_seq, |s| s.seq)
     }
 
+    /// The number the next pushed part takes: the part a live playlist
+    /// with parts hints at.
+    pub fn next_part(&self) -> u64 {
+        self.next_part
+    }
+
+    /// The bytes of a kept part, its segment open or kept.
+    pub fn part(&self, number: u64) -> Option<Rc<[u8]>> {
+        let in_segment = |s: &Segment| {
+            let first = s.parts.first()?.number;
+            let index = usize::try_from(number.checked_sub(first)?).ok()?;
+            s.parts.get(index).filter(|p| p.number == number).cloned()
+        };
+        if let Some(open) = &self.open
+            && let Some(part) = in_segment(open)
+        {
+            return part.own;
+        }
+        let segment = self
+            .segments
+            .iter()
+            .rev()
+            .find(|s| s.parts.first().is_some_and(|p| p.number <= number))?;
+        let part = in_segment(segment)?;
+        let end = part.start.checked_add(part.len)?;
+        segment.media.get(part.start..end).map(Rc::from)
+    }
+
     /// `EXT-X-DISCONTINUITY-SEQUENCE`: the discontinuities that preceded
     /// segments no longer listed.
     pub fn discontinuity_sequence(&self) -> u64 {
-        let listed = self.listed().filter(|s| s.discontinuity).count();
+        let listed = self
+            .listed()
+            .chain(self.open.as_ref())
+            .filter(|s| s.discontinuity)
+            .count();
         self.discontinuities
             .saturating_sub(u64::try_from(listed).unwrap_or(u64::MAX))
     }
@@ -665,6 +1009,55 @@ impl fmt::Debug for Playlist {
             .field("retained_bytes", &self.retained_bytes)
             .finish_non_exhaustive()
     }
+}
+
+/// Appends a segment's parts' tags.
+fn render_parts(out: &mut String, s: &Segment) {
+    for p in &s.parts {
+        out.push_str("#EXT-X-PART:DURATION=");
+        push_millis(out, p.millis);
+        let _ = write!(out, ",URI=\"part-{}.m4s\"", p.number);
+        if p.independent {
+            out.push_str(",INDEPENDENT=YES");
+        }
+        out.push('\n');
+    }
+}
+
+/// Appends `millis` as decimal seconds to the millisecond.
+fn push_millis(out: &mut String, millis: u64) {
+    let _ = write!(out, "{}.{:03}", millis / 1000, millis % 1000);
+}
+
+/// Appends `t`, 1970 or later, as an ISO 8601 UTC date to the
+/// millisecond: `YYYY-MM-DDThh:mm:ss.sssZ`.
+fn push_date(out: &mut String, t: Time) {
+    let ms = t.unix_millis().max(0);
+    let (days, of_day) = (ms.div_euclid(86_400_000), ms.rem_euclid(86_400_000));
+    let (y, m, d) = civil_from_days(days);
+    let _ = write!(
+        out,
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{:03}Z",
+        of_day / 3_600_000,
+        of_day / 60_000 % 60,
+        of_day / 1000 % 60,
+        of_day % 1000
+    );
+}
+
+/// The proleptic Gregorian year, month and day `days` after 1970-01-01
+/// (Howard Hinnant's `civil_from_days`).
+fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    (y, m, d)
 }
 
 /// `d` in whole milliseconds, rounded half up; zero when negative.
@@ -743,11 +1136,7 @@ impl HlsMuxerConfig {
     /// The part target parts are cut to, within its bounds; `None` cuts
     /// none.
     fn parts(&self) -> Option<Duration> {
-        if self.part_target <= Duration::ZERO {
-            return None;
-        }
-        let most = Duration::from_secs(i64::try_from(self.target.max(1)).unwrap_or(i64::MAX));
-        Some(self.part_target.clamp(MIN_PART_TARGET, most))
+        part_target_within(self.part_target, self.target)
     }
 }
 
@@ -2159,6 +2548,9 @@ impl HlsRoutes {
                 File::Segment(seq) => playlist
                     .segment(seq)
                     .map(|body| HlsResponse::ok(SEGMENT_TYPE, IMMUTABLE, body)),
+                File::Part(number) => playlist
+                    .part(number)
+                    .map(|body| HlsResponse::ok(SEGMENT_TYPE, IMMUTABLE, body)),
             }
         };
         match response {
@@ -2304,6 +2696,11 @@ impl HlsStream {
         self.state.playlist.borrow_mut().push(segment);
     }
 
+    /// See [`Playlist::push_part`].
+    pub fn push_part(&self, part: &HlsPart) {
+        self.state.playlist.borrow_mut().push_part(part);
+    }
+
     /// The number of segments the playlist lists.
     pub fn listed_segments(&self) -> usize {
         self.state.playlist.borrow().listed_segments()
@@ -2357,6 +2754,7 @@ enum File {
     Subtitles,
     Init(u64),
     Segment(u64),
+    Part(u64),
     Vtt(u64),
 }
 
@@ -2394,6 +2792,12 @@ fn parse_file(name: &str) -> Result<File, u16> {
         "index.m3u8" => return Ok(File::Playlist),
         "subtitles.m3u8" => return Ok(File::Subtitles),
         _ => {}
+    }
+    if let Some(number) = name
+        .strip_prefix("part-")
+        .and_then(|n| n.strip_suffix(".m4s"))
+    {
+        return parse_number(number).map(File::Part).ok_or(400);
     }
     if let Some(seq) = name.strip_suffix(".m4s") {
         return parse_number(seq).map(File::Segment).ok_or(400);
@@ -2453,3 +2857,7 @@ mod muxer_tests;
 #[cfg(test)]
 #[path = "hls_parts_test.rs"]
 mod parts_tests;
+
+#[cfg(test)]
+#[path = "hls_ll_test.rs"]
+mod ll_tests;

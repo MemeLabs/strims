@@ -44,7 +44,9 @@
 //! [`HlsSettings::target_duration`](crate::HlsSettings::target_duration)
 //! for its life. Each whole record of at most [`units::MAX_RECORD_LEN`]
 //! goes through a [`UnitReader`] into an [`HlsMuxer`], whose segments the
-//! playlist lists (see [`hls`](crate::hls#segments)), its text tracks
+//! playlist lists (see [`hls`](crate::hls#segments)), and with
+//! [`HlsSettings::part_target`](crate::HlsSettings::part_target) their
+//! parts as they come ([`hls`](crate::hls#low-latency)), its text tracks
 //! among its configs, whose cues are the segments' subtitles
 //! ([`hls`](crate::hls#subtitles)). The reader's gaps
 //! in a video track are the muxer's, so a lost chunk costs the units up
@@ -290,7 +292,7 @@ impl UnitFeed {
             target: target_secs(settings.target_duration),
             fragment_duration: settings.fragment_duration,
             max_segment_bytes: settings.max_segment_bytes,
-            ..HlsMuxerConfig::default()
+            part_target: settings.part_target,
         })
     }
 
@@ -324,10 +326,12 @@ impl UnitFeed {
                 self.reader.lost();
             }
         }
+        // A segment's parts come before it, and its first part says what it
+        // follows.
+        while let Some(p) = self.muxer.take_part() {
+            stream.push_part(&p);
+        }
         while let Some(s) = self.muxer.take_segment() {
-            if s.discontinuity {
-                stream.discontinuity();
-            }
             stream.push(&s);
             fed.segments += 1;
         }
@@ -851,6 +855,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> VideoControl<K, H, V, T> {
                 listed: settings.listed_duration,
                 retained: settings.retained_duration,
                 max_retained_bytes: settings.max_retained_bytes,
+                part_target: settings.part_target,
             };
             let stream = h
                 .profile

@@ -419,6 +419,12 @@ pub struct HlsSettings {
     /// The media a fragment of a stream's segment holds
     /// ([`HlsMuxerConfig::fragment_duration`](crate::hls::HlsMuxerConfig::fragment_duration)).
     pub fragment_duration: Duration,
+    /// The most media a part of a stream's segments lasts, for
+    /// low-latency HLS ([`hls`](crate::hls#low-latency)): from 0.1 s to
+    /// the target duration, fixed for a playlist's life; zero serves no
+    /// parts. Players that load parts start three part targets behind the
+    /// live edge.
+    pub part_target: Duration,
     /// The longest request path.
     pub max_path_bytes: usize,
     /// The largest HTTP request head, and how long a connection has to
@@ -446,6 +452,7 @@ impl Default for HlsSettings {
             max_retained_bytes: 64 * 1024 * 1024,
             max_segment_bytes: 16 * 1024 * 1024,
             fragment_duration: crate::hls::DEFAULT_FRAGMENT_DURATION,
+            part_target: Duration::ZERO,
             max_path_bytes: 256,
             max_request_head_bytes: 8 * 1024,
             request_head_timeout: Duration::from_secs(10),

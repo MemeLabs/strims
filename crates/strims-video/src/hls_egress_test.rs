@@ -244,6 +244,53 @@ fn a_gap_in_the_units_marks_the_segment_at_the_next_keyframe_discontinuous() {
     assert_eq!(feed.reader.metrics().gaps, 1);
 }
 
+#[test]
+fn a_low_latency_stream_lists_parts_as_they_come_and_a_gap_once() {
+    let second = Duration::from_secs(1);
+    let s = served_with(PlaylistConfig {
+        part_target: second,
+        ..PlaylistConfig::default()
+    });
+    let keyframes: Vec<i64> = (0..5).map(|g| g * 60).collect();
+    let (_, recs) = units_stream(300, &keyframes);
+    let mut feed = UnitFeed::new(HlsMuxerConfig {
+        part_target: second,
+        ..HlsMuxerConfig::default()
+    });
+    // Video units 130 to 134 are lost.
+    for (_, r) in &recs {
+        if picture_in(r, 130..135) {
+            feed.feed(EgressPiece::Discontinuity, &s.stream);
+            continue;
+        }
+        feed_units(&mut feed, &s, &[r]);
+    }
+    let playlist = s.playlist();
+    assert_eq!(
+        listed(&playlist),
+        [(2000, false), (2000, false), (333, false), (2000, true)]
+    );
+    assert_eq!(playlist.matches("#EXT-X-DISCONTINUITY\n").count(), 1);
+    // The last GOP's first part is listed after the segments, before the
+    // next part's hint.
+    let first_part = FIRST + 2 + 2 + 1 + 2;
+    let tail = format!(
+        "#EXT-X-PART:DURATION=1.000,URI=\"part-{first_part}.m4s\",INDEPENDENT=YES\n\
+         #EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part-{}.m4s\"\n",
+        first_part + 1
+    );
+    assert!(playlist.ends_with(&tail), "{playlist}");
+    // Each segment's parts are its media.
+    let mut number = FIRST;
+    for (seq, parts) in [(0, 2), (1, 2), (2, 1), (3, 2)] {
+        let media: Vec<u8> = (0..parts)
+            .flat_map(|i| s.file(&format!("part-{}.m4s", number + i)))
+            .collect();
+        assert!(media == s.file(&format!("{}.m4s", FIRST + seq)), "{seq}");
+        number += parts;
+    }
+}
+
 /// Whether unit-format record `r` is an audio unit of a frame in
 /// `frames`.
 fn audio_frame_in(r: &[u8], frames: std::ops::Range<i64>) -> bool {
