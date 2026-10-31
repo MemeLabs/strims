@@ -64,8 +64,10 @@ pub const MAX_PROBES: usize = 16;
 /// How often a link probes while it writes at least [`BUSY_BYTES`] of data
 /// between probes ...
 pub const PROBE_INTERVAL: Duration = Duration::from_millis(200);
-/// ... about a chunk of a media swarm ...
-pub const BUSY_BYTES: u64 = 4096;
+/// ... a quarter of a media swarm's chunk: a low-bitrate stream sends less
+/// than a chunk an interval (its partial chunks without their trailing
+/// zeros), and its links queue at each unit as much as any ...
+pub const BUSY_BYTES: u64 = 1024;
 /// ... and how often while it writes less. Only links that carry data
 /// build queues worth sampling closely.
 pub const QUIET_PROBE_INTERVAL: Duration = Duration::SECOND;
@@ -778,6 +780,19 @@ mod tests {
         assert!(m.probe_due(at(10_000), PROBE_INTERVAL));
     }
 
+    /// A 128 kbit/s stream sends about 3.2 KB a 200 ms unit: its links
+    /// are busy, probed at the interval.
+    #[test]
+    fn a_partial_chunk_an_interval_is_busy() {
+        let mut m = PathMeter::new();
+        m.probe(1, at(0));
+        for n in 1..10 {
+            m.wrote(3200, true);
+            assert!(m.probe_due(at(n * 200), PROBE_INTERVAL), "{n}");
+            m.probe(n as u32 + 1, at(n * 200));
+        }
+    }
+
     #[test]
     fn data_makes_a_probe_due_sooner_the_more_of_it() {
         let mut m = PathMeter::new();
@@ -792,7 +807,7 @@ mod tests {
         assert!(!m.probe_due(at(200), PROBE_INTERVAL));
         assert!(!m.probe_due(at(999), PROBE_INTERVAL));
         assert!(m.probe_due(at(1_000), PROBE_INTERVAL));
-        // A chunk's worth, after the probe interval.
+        // A low-bitrate stream's partial chunk, after the probe interval.
         m.wrote(BUSY_BYTES, true);
         assert!(!m.probe_due(at(199), PROBE_INTERVAL));
         assert!(m.probe_due(at(200), PROBE_INTERVAL));
