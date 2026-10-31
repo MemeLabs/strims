@@ -24,6 +24,9 @@ const MAX_HANDOFFS = 64;
 /** Loads a demuxer, resolving to a constructor of new ones. */
 export type CoreLoader = () => Promise<() => Core>;
 
+/** What the worker takes in stream order: a Data message, or the end. */
+type Input = Extract<WindowMessage, { type: "data" | "end" }>;
+
 interface GeneratorScope {
   VideoTrackGenerator?: new () => { track: MediaStreamTrack; writable: WritableStream<VideoFrame> };
 }
@@ -134,7 +137,7 @@ export const runLowLatencyWorker = (scope: DedicatedWorkerGlobalScope, load: Cor
   let core: PlayerCore | null = null;
   let renderer: WorkerRenderer | null = null;
   let port: MessagePort | null = null;
-  let pending: Extract<WindowMessage, { type: "data" }>[] = [];
+  let pending: Input[] = [];
   let pendingBytes = 0;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -258,20 +261,21 @@ export const runLowLatencyWorker = (scope: DedicatedWorkerGlobalScope, load: Cor
     fail: (message, final, fallback) => stop(message, final, fallback),
   };
 
-  const push = ({
-    data,
-    segmentEnd,
-    discontinuity,
-    at,
-  }: Extract<WindowMessage, { type: "data" }>) => {
+  const push = (input: Input) => {
     let outputs: DemuxerOutput[];
+    let at = performance.now() / 1000;
     try {
-      outputs = demuxer.push(new Uint8Array(data), segmentEnd, discontinuity);
+      if (input.type === "end") {
+        outputs = demuxer.finish();
+      } else {
+        outputs = demuxer.push(new Uint8Array(input.data), input.segmentEnd, input.discontinuity);
+        at = (input.at - performance.timeOrigin) / 1000;
+      }
     } catch (e) {
       stop(`the demuxer failed: ${String(e)}`, false, false);
       return;
     }
-    core.outputs(outputs, (at - performance.timeOrigin) / 1000);
+    core.outputs(outputs, at);
   };
 
   const postState = () => {
@@ -319,14 +323,17 @@ export const runLowLatencyWorker = (scope: DedicatedWorkerGlobalScope, load: Cor
           return;
         }
         case "data":
+        case "end":
           if (ready()) {
             push(message);
             return;
           }
-          pendingBytes += message.data.byteLength;
-          if (pendingBytes > MAX_PENDING_BYTES) {
-            stop("the demuxer is loading too slowly", false, false);
-            return;
+          if (message.type === "data") {
+            pendingBytes += message.data.byteLength;
+            if (pendingBytes > MAX_PENDING_BYTES) {
+              stop("the demuxer is loading too slowly", false, false);
+              return;
+            }
           }
           pending.push(message);
           return;

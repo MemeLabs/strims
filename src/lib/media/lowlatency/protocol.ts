@@ -19,6 +19,8 @@ export type {
 export interface Core {
   /** Never throws on hostile input; a throw means the core is broken. */
   push(data: Uint8Array, segmentEnd: boolean, discontinuity: boolean): DemuxerOutput[];
+  /** The stream ended: an end output, unless one came after the last unit. */
+  finish(): DemuxerOutput[];
   metrics(): unknown;
   free(): void;
 }
@@ -70,6 +72,8 @@ export type WindowMessage =
    * received it, in Unix milliseconds (performance.timeOrigin + now).
    */
   | { type: "data"; data: ArrayBuffer; segmentEnd: boolean; discontinuity: boolean; at: number }
+  /** The stream ended, after the messages before. */
+  | { type: "end" }
   /** The audio output changed: started, suspended, or its latency moved. */
   | { type: "audio"; audio: AudioOutput }
   /** The video was paused or played by the viewer. */
@@ -137,6 +141,8 @@ export interface CoreStats {
   busy: number;
   width: number;
   height: number;
+  /** The stream ended, and plays out to its end. */
+  ended: boolean;
 }
 
 /** What the worker posts the window. */

@@ -92,10 +92,7 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
       };
     }
 
-    // The stream's end, which only the baseline player plays out.
-    const end = () => {
-      if (player instanceof UnitsPlayer) player.end();
-    };
+    const end = () => player.end();
     const stream = client.videoEgress.openStream(request);
     stream.on("data", ({ body }) => {
       switch (body.case) {

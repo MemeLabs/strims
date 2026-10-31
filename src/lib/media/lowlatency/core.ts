@@ -58,6 +58,9 @@ export const RESUME_AHEAD = 0.1;
 export const STALL_MARGIN = 0.05;
 /** Seconds of publish times kept for the playout position's. */
 export const PUBLISHED_WINDOW = 60;
+/** Seconds between ticks with nothing due: waiting, paused or played out. */
+export const IDLE_TICK = 0.02;
+export const ENDED_TICK = 0.25;
 /** Decoder errors within DECODER_ERROR_WINDOW seconds past which the player gives up. */
 export const MAX_DECODER_ERRORS = 5;
 export const DECODER_ERROR_WINDOW = 10;
@@ -125,6 +128,8 @@ const enum State {
   Starting,
   Playing,
   Paused,
+  /** Played out to the end of an ended stream: the last picture holds. */
+  Ended,
 }
 
 // The q-quantile of values, null without any.
@@ -157,6 +162,11 @@ const configKey = (t: DecoderTrack): string =>
  * - **Stalls.** When the master track (audio, else video) runs out the
  *   clock holds, the target rises, and play resumes once RESUME_AHEAD of
  *   media came.
+ * - **Ends.** After an end output, a writer session's deliberate end or the
+ *   input's, the stream's end is its live edge: the player plays out to it
+ *   at rate 1, with no skip, and holds the last picture there. A later
+ *   session's media, which the demuxer puts right after the end, plays on
+ *   from where the playout is, or joins again once it played out.
  *
  * Bounds: the jitter buffer's (MAX_BUFFER_BYTES), MAX_FRAMES_AHEAD pictures,
  * AUDIO_QUEUE in the worklet and AUDIO_DECODE_AHEAD decoded.
@@ -194,6 +204,14 @@ export class PlayerCore {
   private ends = new Map<number, number>();
   private published: { pts: number; published: number }[] = [];
   private stallStart: number | null = null;
+  /** An end came and no unit since. */
+  private ended = false;
+  /**
+   * The worklet's underrun count when the end came, and the underruns that
+   * were the audio running out at an end.
+   */
+  private starvedAtEnd = 0;
+  private endUnderruns = 0;
   private errorTimes: number[] = [];
   private supportChecked = new Set<string>();
   private failed = false;
@@ -240,6 +258,12 @@ export class PlayerCore {
           this.counts.timelineRestarts++;
           this.lag.relearn();
           break;
+        case "end":
+          if (!this.ended) {
+            this.ended = true;
+            this.starvedAtEnd = this.audioClock?.latest?.starved ?? 0;
+          }
+          break;
       }
     }
     this.tick();
@@ -279,7 +303,7 @@ export class PlayerCore {
       this.free.hold(now);
       this.resetAudio(null);
       this.closeFrames();
-      if (this.state !== State.Waiting) this.state = State.Paused;
+      if (this.state !== State.Waiting && this.state !== State.Ended) this.state = State.Paused;
     } else if (this.state === State.Paused) {
       this.seek(now);
     }
@@ -301,14 +325,16 @@ export class PlayerCore {
 
   clock(): PlayoutClock {
     const now = this.env.now();
-    const p = this.playing() ? this.position(now) : null;
+    const played = this.state === State.Ended;
+    const p = this.playing() || played ? this.position(now) : null;
     const edge = this.lag.edge(now);
     return {
       at: this.env.wall(),
       published: p === null ? null : this.publishedAt(p),
       rate: this.state === State.Playing && this.stallStart === null ? this.rate : 0,
       targetLag: this.lag.target,
-      lag: p === null || edge === null ? null : edge - p,
+      // An ended stream has no live edge to lag.
+      lag: p === null || edge === null || this.ended ? null : edge - p,
     };
   }
 
@@ -335,7 +361,7 @@ export class PlayerCore {
       jitter: this.lag.jitter,
       rate: this.rate,
       outages: this.lag.outages,
-      audioUnderruns: latest?.starved ?? 0,
+      audioUnderruns: (latest?.starved ?? 0) - this.endUnderruns,
       audioQueued: Math.round(Math.max(0, queued) * 1000),
       avOffset: { p50: pct(this.avOffsets, 0.5), p95: pct(this.avOffsets, 0.95) },
       decodeMs: pct(this.decodeTimes, 0.5),
@@ -344,6 +370,7 @@ export class PlayerCore {
       busy: 0,
       width: this.width,
       height: this.height,
+      ended: this.ended,
     };
   }
 
@@ -396,6 +423,12 @@ export class PlayerCore {
   private arrive(u: DemuxedUnitOutput, at: number): void {
     const t = this.configs.get(u.track);
     if (!t || (t.id !== this.videoTrack?.id && t.id !== this.audioTrack?.id)) return;
+    if (this.ended) {
+      // A later session: it plays on from the end, or joins again once
+      // the playout reached the end.
+      this.ended = false;
+      if (this.state === State.Ended) this.state = State.Waiting;
+    }
     this.buffer.push(u);
     const pts = u.timestamp / 1e6;
     const end = pts + (u.duration > 0 ? u.duration / 1e6 : 1 / 30);
@@ -413,6 +446,14 @@ export class PlayerCore {
   private frontier(): number | null {
     const m = this.master();
     return m === null ? null : this.ends.get(m) ?? null;
+  }
+
+  // The live edge at `now`; an ended stream's is its end.
+  private edgeAt(now: number): number | null {
+    const edge = this.lag.edge(now);
+    const end = this.ended ? this.frontier() : null;
+    if (end === null) return edge;
+    return edge === null ? end : Math.min(edge, end);
   }
 
   private publishedAt(media: number): number | null {
@@ -458,7 +499,7 @@ export class PlayerCore {
 
   private join(now: number): void {
     if (this.paused || !this.lag.settled(now)) return;
-    const edge = this.lag.edge(now);
+    const edge = this.edgeAt(now);
     const v = this.videoTrack?.id;
     if (edge === null || (v !== undefined && !this.buffer.hasKey(v))) return;
     this.startAt(now, edge - this.lag.target, true);
@@ -488,7 +529,7 @@ export class PlayerCore {
   // Decoded up to the start: show its picture, then start the clock.
   private prerolled(now: number): void {
     const v = this.videoTrack;
-    const edge = this.lag.edge(now);
+    const edge = this.edgeAt(now);
     if (edge !== null && this.retargets < MAX_RETARGETS) {
       const start = edge - this.lag.target;
       if (start - this.floor > RETARGET_SLACK) {
@@ -538,6 +579,10 @@ export class PlayerCore {
       (this.audioMode(now)
         ? this.audioClock.starving && frontier - p < STALL_MARGIN
         : frontier <= p + 0.001);
+    if (this.ended && (out || this.stallStart !== null)) {
+      this.playedOut(now, p);
+      return;
+    }
     if (this.stallStart === null && out) {
       this.stallStart = now;
       this.counts.stalls++;
@@ -549,20 +594,45 @@ export class PlayerCore {
       this.free.start(p, now);
     }
     const edge = this.lag.edge(now);
-    if (edge !== null && this.stallStart === null) {
+    if (this.ended) {
+      // Out to the end at the stream's own pace.
+      this.setRate(1, now);
+    } else if (edge !== null && this.stallStart === null) {
       const error = edge - p - this.lag.target;
       if (error > SKIP_EXCESS) {
         this.counts.skips++;
         this.seek(now);
         return;
       }
-      const rate = rateFor(error);
-      if (rate !== this.rate) {
-        this.rate = rate;
-        this.free.setRate(rate, now);
-      }
+      this.setRate(rateFor(error), now);
     }
-    // Pictures due: the latest shows, the rest are dropped.
+    this.showDue(p);
+  }
+
+  private setRate(rate: number, now: number): void {
+    if (rate === this.rate) return;
+    this.rate = rate;
+    this.free.setRate(rate, now);
+  }
+
+  // Played out to the end of an ended stream: the pictures due show, the
+  // clock holds at the end, and the audio running out there is no
+  // underrun.
+  private playedOut(now: number, p: number): void {
+    this.showDue(p);
+    if (this.stallStart !== null) {
+      this.counts.stallTime += now - this.stallStart;
+      this.stallStart = null;
+    }
+    const frontier = this.frontier();
+    this.free.hold(now, frontier === null ? p : Math.min(p, frontier));
+    this.endUnderruns += Math.max(0, (this.audioClock?.latest?.starved ?? 0) - this.starvedAtEnd);
+    this.starvedAtEnd = this.audioClock?.latest?.starved ?? 0;
+    this.state = State.Ended;
+  }
+
+  // The pictures due at `p`: the latest shows, the rest are dropped.
+  private showDue(p: number): void {
     let due = -1;
     while (
       due + 1 < this.frames.length &&
@@ -592,8 +662,10 @@ export class PlayerCore {
   }
 
   // Skips to the target lag behind the live edge.
+  // Skips to the target lag behind the live edge; after an end, plays on
+  // from where the playout is.
   private seek(now: number): void {
-    const edge = this.lag.edge(now);
+    const edge = this.edgeAt(now);
     if (edge === null) {
       this.state = State.Waiting;
       return;
@@ -602,7 +674,8 @@ export class PlayerCore {
       this.counts.stallTime += now - this.stallStart;
       this.stallStart = null;
     }
-    this.startAt(now, edge - this.lag.target, false);
+    const start = this.ended ? Math.min(this.free.position(now), edge) : edge - this.lag.target;
+    this.startAt(now, start, false);
   }
 
   private closeFrames(before = Infinity): void {
@@ -714,7 +787,14 @@ export class PlayerCore {
 
   private feedVideo(now: number): void {
     const t = this.videoTrack;
-    if (!t || this.state === State.Waiting || this.state === State.Paused) return;
+    if (
+      !t ||
+      this.state === State.Waiting ||
+      this.state === State.Paused ||
+      this.state === State.Ended
+    ) {
+      return;
+    }
     const p = this.position(now) ?? this.floor;
     for (;;) {
       const u = this.buffer.peek(t.id);
@@ -853,7 +933,8 @@ export class PlayerCore {
   }
 
   private nextTick(now: number): number {
-    if (this.state === State.Waiting || this.state === State.Paused) return 0.02;
+    if (this.state === State.Ended) return ENDED_TICK;
+    if (this.state === State.Waiting || this.state === State.Paused) return IDLE_TICK;
     if (this.state !== State.Playing || !this.frames.length) return 0.01;
     const p = this.position(now);
     if (p === null) return 0.01;

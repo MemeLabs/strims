@@ -95,8 +95,11 @@ const nowAbs = () => performance.timeOrigin + performance.now();
  * stream a canvas the worker draws on, that canvas shows in the video's
  * place.
  *
- * It has UnitsPlayer's shape: push each Egress Data message, read stats(),
- * destroy(). clock() is where the playout is, for request scheduling.
+ * It has UnitsPlayer's shape: push each Egress Data message, end() at the
+ * stream's end, read stats(), destroy(). clock() is where the playout is,
+ * for request scheduling. At the stream's end, a writer session's END
+ * record in the stream or the end `end` says, the player plays out to it
+ * and holds the last picture; a later session's media plays on.
  *
  * A failed worker is replaced, fed from the next whole record, at most
  * MAX_RESTARTS times in RESTART_WINDOW_MS; then, or when the stream can't
@@ -114,6 +117,7 @@ export class LowLatencyPlayer {
   private stream: MediaStream | null = null;
   private skipping = false;
   private atRecordStart = true;
+  private endSent = false;
   private restartTimes: number[] = [];
   private destroyed = false;
   private failure: string | null = null;
@@ -143,7 +147,7 @@ export class LowLatencyPlayer {
 
   // Takes an Egress Data message.
   push(data: Uint8Array, segmentEnd: boolean, discontinuity: boolean): void {
-    if (this.destroyed || this.failure) return;
+    if (this.destroyed || this.failure || this.endSent) return;
     this.counts.messages++;
     this.counts.bytes += data.byteLength;
     if (discontinuity) this.skipping = false;
@@ -162,6 +166,13 @@ export class LowLatencyPlayer {
       at: nowAbs(),
     };
     this.worker?.postMessage(message, [copy]);
+  }
+
+  /** The stream ended: the player plays out to its end, after what was pushed. */
+  end(): void {
+    if (this.destroyed || this.failure || this.endSent) return;
+    this.endSent = true;
+    this.post({ type: "end" });
   }
 
   // Where the playout is; its target lag before the worker's first state.
@@ -215,6 +226,7 @@ export class LowLatencyPlayer {
       busy: 0,
       width: 0,
       height: 0,
+      ended: false,
     };
     const core = this.core ?? empty;
     return {
@@ -257,6 +269,7 @@ export class LowLatencyPlayer {
       if (generation === this.generation) this.onMessage(data);
     };
     worker.onerror = (e) => this.restart(`the player worker failed: ${e.message}`);
+    if (this.endSent) this.post({ type: "end" });
   }
 
   private stop(): void {

@@ -319,6 +319,31 @@ class World implements CoreEnv {
 
 const AUDIO: AudioOutput = { sampleRate: RATE, running: true, latency: 0.02 };
 
+// `arrivals` with an end output after the last.
+const ended = (arrivals: Arrival[]): Arrival[] => [
+  ...arrivals,
+  { at: arrivals[arrivals.length - 1].at, outputs: [{ type: "end" }] },
+];
+
+// A later session's arrivals: `arrivals` from `at` on, its units presenting
+// from `from` as the demuxer moves them, after a restart.
+const later = (arrivals: Arrival[], at: number, from: number): Arrival[] => [
+  { at, outputs: [{ type: "restart", offset: from }] },
+  ...arrivals.map((a) => ({
+    at: a.at + at,
+    outputs: a.outputs.map((o) =>
+      o.type === "unit"
+        ? {
+            ...o,
+            timestamp: o.timestamp + from * 1e6,
+            decodeTimestamp: o.decodeTimestamp + from * 1e6,
+            published: o.published + at * 1000,
+          }
+        : o
+    ),
+  })),
+];
+
 describe("PlayerCore", () => {
   it("joins at its target lag, decoding from the keyframe without showing what comes before", () => {
     const w = new World(AUDIO);
@@ -431,6 +456,73 @@ describe("PlayerCore", () => {
     assert.ok(Math.abs(s.lag - s.target) < 0.2, `lag ${s.lag} target ${s.target}`);
     // Pictures from about the target lag behind the edge, 1 s behind now.
     assert.ok(w.rendered[w.rendered.length - 1].pts > 14.5);
+  });
+
+  it("plays out to the end of an ended stream and holds its last picture, with no stall", () => {
+    const w = new World(AUDIO);
+    w.run(ended(stream({ audio: true, seconds: 10 })), 16);
+    const s = w.core.stats();
+    assert.ok(s.ended);
+    assert.strictEqual(s.stalls, 0);
+    assert.strictEqual(s.skips, 0);
+    assert.strictEqual(s.stallTime, 0);
+    assert.strictEqual(s.audioUnderruns, 0);
+    // The last picture showed, and holds.
+    const last = w.rendered[w.rendered.length - 1];
+    assert.ok(Math.abs(last.pts - 299 / FPS) < 1e-6, `${last.pts}`);
+    assert.ok(last.at < 11.5, `${last.at}`);
+    const c = w.core.clock();
+    assert.strictEqual(c.rate, 0);
+    assert.strictEqual(c.lag, null);
+    assert.ok(c.published !== null);
+  });
+
+  it("video alone plays out to the end on the worker's clock", () => {
+    const w = new World(null);
+    w.run(ended(stream({ seconds: 10 })), 16, false);
+    const s = w.core.stats();
+    assert.ok(s.ended);
+    assert.strictEqual(s.stalls, 0);
+    assert.ok(Math.abs(w.rendered[w.rendered.length - 1].pts - 299 / FPS) < 1e-6);
+  });
+
+  it("a later session's media after the end joins again and plays on", () => {
+    const w = new World(AUDIO);
+    const first = ended(stream({ audio: true, seconds: 10 }));
+    const second = later(stream({ audio: true, seconds: 10 }), 20, 10);
+    const rest = w.run(
+      [...first, ...second].sort((x, y) => x.at - y.at),
+      18
+    );
+    assert.ok(w.core.stats().ended);
+    const shown = w.rendered.length;
+    w.run(rest, 28);
+    const s = w.core.stats();
+    assert.ok(!s.ended);
+    assert.strictEqual(s.stalls, 0);
+    assert.ok(w.rendered.length > shown + 100, `${w.rendered.length - shown}`);
+    assert.ok(
+      w.rendered[w.rendered.length - 1].pts > 16,
+      `${w.rendered[w.rendered.length - 1].pts}`
+    );
+    assert.ok(Math.abs(s.lag - s.target) < 0.3, `lag ${s.lag} target ${s.target}`);
+  });
+
+  it("an end during a stall plays out there, ending the stall", () => {
+    const w = new World(AUDIO);
+    const arrivals = stream({ audio: true, seconds: 10 });
+    // The media up to 6 s comes; then the stream ends.
+    const cut = arrivals.filter(
+      (a) => !a.outputs.some((o) => o.type === "unit" && o.timestamp >= 6e6)
+    );
+    w.run([...cut, { at: 9, outputs: [{ type: "end" }] }], 12);
+    const s = w.core.stats();
+    assert.ok(s.ended);
+    assert.strictEqual(s.stalls, 1);
+    // From where the media ran out, about 7 s, to the end's arrival.
+    assert.ok(s.stallTime > 1.5 && s.stallTime < 2.5, `${s.stallTime}`);
+    w.run([], 14);
+    assert.strictEqual(w.core.stats().stallTime, s.stallTime);
   });
 
   it("publish times follow the presented media", () => {
