@@ -356,14 +356,24 @@ impl SignChoice {
         let m = self.metadata.unwrap_or_default();
         let video = self.video || m.video;
         let audio = self.audio || m.audio;
+        UnitSigning::for_stream(self.nominal(), audio && !video)
+    }
+
+    /// The stream's nominal bitrate as known now, if it has one; see the
+    /// [module docs](self#media).
+    fn nominal(&self) -> Option<u64> {
+        let m = self.metadata.unwrap_or_default();
+        let video = self.video || m.video;
+        let audio = self.audio || m.audio;
         let sum = m
             .video_bps
             .unwrap_or(0)
             .saturating_add(m.audio_bps.unwrap_or(0));
         // Missing rates only add to the sum.
         let whole = (!video || m.video_bps.is_some()) && (!audio || m.audio_bps.is_some());
-        let nominal = (whole || sum >= UnitSigning::SMALL_BELOW_BPS).then_some(sum);
-        UnitSigning::for_stream(nominal, audio && !video)
+        (whole || sum >= UnitSigning::SMALL_BELOW_BPS)
+            .then_some(sum)
+            .filter(|&n| n > 0)
     }
 }
 
@@ -435,6 +445,13 @@ pub struct IngressMetrics {
     pub media_errors: u64,
     /// Swarm writes that failed.
     pub write_errors: u64,
+    /// Session swarms created signing [`UnitSigning::SMALL`]'s 1-chunk
+    /// units and [`UnitSigning::LARGE`]'s 8-chunk ones, and of those, the
+    /// swarms of streams that stated no nominal bitrate, whose signing
+    /// their tracks chose ([`UnitSigning::for_stream`]).
+    pub small_unit_swarms: u64,
+    pub large_unit_swarms: u64,
+    pub unrated_swarms: u64,
 }
 
 /// The ingress state of the control.
@@ -1467,6 +1484,7 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
         let Some(signing) = choice.settled(now, self.writer.output().len()) else {
             return Ok(());
         };
+        let unrated = choice.nominal().is_none();
         let options = unit_ingress_options(&signing);
         let uri = Uri::new(self.publication.swarm_id.clone(), options.uri_options()).to_string();
         let s = self.publication.shared.clone();
@@ -1474,6 +1492,16 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Live<K, H, V, T> {
         let writer = created.map_err(|r| End::Stopped(r.description))?;
         self.sign = Sign::Timer(signing.timer(self.writer.frame_size()));
         self.swarm = Some(IngestSwarm { writer, uri });
+        s.count(|m| {
+            if signing == UnitSigning::SMALL {
+                m.small_unit_swarms += 1;
+            } else if signing == UnitSigning::LARGE {
+                m.large_unit_swarms += 1;
+            }
+            if unrated {
+                m.unrated_swarms += 1;
+            }
+        });
         tracing::debug!(
             channel = self.publication.channel_id,
             chunks_per_signature = signing.chunks_per_signature,

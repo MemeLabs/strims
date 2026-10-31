@@ -550,6 +550,11 @@ message IngressMetrics {
   uint64 media_errors = 13;
   uint64 write_errors = 14;
   uint64 early_signs = 15;
+  // Session swarms created with 1-chunk and 8-chunk integrity units, and
+  // of those, the swarms of streams that stated no nominal bitrate.
+  uint64 small_unit_swarms = 16;
+  uint64 large_unit_swarms = 17;
+  uint64 unrated_swarms = 18;
 }
 
 // The debug control's counters and its mock streams.

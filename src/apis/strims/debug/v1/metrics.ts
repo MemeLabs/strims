@@ -3693,6 +3693,9 @@ export type IIngressMetrics = {
   mediaErrors?: bigint;
   writeErrors?: bigint;
   earlySigns?: bigint;
+  smallUnitSwarms?: bigint;
+  largeUnitSwarms?: bigint;
+  unratedSwarms?: bigint;
 }
 
 export class IngressMetrics {
@@ -3711,6 +3714,9 @@ export class IngressMetrics {
   mediaErrors: bigint;
   writeErrors: bigint;
   earlySigns: bigint;
+  smallUnitSwarms: bigint;
+  largeUnitSwarms: bigint;
+  unratedSwarms: bigint;
 
   constructor(v?: IIngressMetrics) {
     this.listens = v?.listens || BigInt(0);
@@ -3728,6 +3734,9 @@ export class IngressMetrics {
     this.mediaErrors = v?.mediaErrors || BigInt(0);
     this.writeErrors = v?.writeErrors || BigInt(0);
     this.earlySigns = v?.earlySigns || BigInt(0);
+    this.smallUnitSwarms = v?.smallUnitSwarms || BigInt(0);
+    this.largeUnitSwarms = v?.largeUnitSwarms || BigInt(0);
+    this.unratedSwarms = v?.unratedSwarms || BigInt(0);
   }
 
   static encode(m: IngressMetrics, w?: Writer): Writer {
@@ -3747,6 +3756,9 @@ export class IngressMetrics {
     if (m.mediaErrors) w.uint32(104).uint64(m.mediaErrors);
     if (m.writeErrors) w.uint32(112).uint64(m.writeErrors);
     if (m.earlySigns) w.uint32(120).uint64(m.earlySigns);
+    if (m.smallUnitSwarms) w.uint32(128).uint64(m.smallUnitSwarms);
+    if (m.largeUnitSwarms) w.uint32(136).uint64(m.largeUnitSwarms);
+    if (m.unratedSwarms) w.uint32(144).uint64(m.unratedSwarms);
     return w;
   }
 
@@ -3801,6 +3813,15 @@ export class IngressMetrics {
         break;
         case 15:
         m.earlySigns = r.uint64();
+        break;
+        case 16:
+        m.smallUnitSwarms = r.uint64();
+        break;
+        case 17:
+        m.largeUnitSwarms = r.uint64();
+        break;
+        case 18:
+        m.unratedSwarms = r.uint64();
         break;
         default:
         r.skipType(tag & 7);

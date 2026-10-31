@@ -1094,6 +1094,9 @@ fn ingress(m: strims_video::IngressMetrics) -> v1::IngressMetrics {
         media_errors,
         write_errors,
         early_signs,
+        small_unit_swarms,
+        large_unit_swarms,
+        unrated_swarms,
     } = m;
     v1::IngressMetrics {
         listens,
@@ -1111,6 +1114,9 @@ fn ingress(m: strims_video::IngressMetrics) -> v1::IngressMetrics {
         media_errors,
         write_errors,
         early_signs,
+        small_unit_swarms,
+        large_unit_swarms,
+        unrated_swarms,
     }
 }
 

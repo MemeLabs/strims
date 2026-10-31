@@ -39,9 +39,9 @@ use strims_video::ingress::unit_ingress_options;
 use strims_video::synth::script::{Script, ScriptConfig, Tag, TagKind, mux_tags};
 use strims_video::units::{self, ReaderEvent, UnitReader, UnitSigning};
 use strims_video::{
-    AccessUnit, Config, DecoderConfig, EgressPiece, EgressStream, FlvSource, IngressSettings,
-    Muxer, NoVideoHost, SourceEvent, SwarmKind, TrackId, UnitWriter, VideoControl, VideoEvent,
-    VideoHost, VideoSwarm, bind_frontend, units_mime,
+    AccessUnit, Config, DecoderConfig, EgressPiece, EgressStream, FlvSource, IngressMetrics,
+    IngressSettings, Muxer, NoVideoHost, SourceEvent, SwarmKind, TrackId, UnitWriter, VideoControl,
+    VideoEvent, VideoHost, VideoSwarm, bind_frontend, units_mime,
 };
 use support::{FakeVideo, TestPublisher};
 
@@ -728,6 +728,12 @@ fn list_streams_reports_live_sessions() {
 
 /// The URI of a channel's swarm of the unit format, signing with
 /// `signing`.
+/// The swarms of each signing an ingress created, and the unrated ones:
+/// small, large and unrated.
+fn signings(m: &IngressMetrics) -> (u64, u64, u64) {
+    (m.small_unit_swarms, m.large_unit_swarms, m.unrated_swarms)
+}
+
 fn units_uri(c: &VideoChannel, signing: &UnitSigning) -> String {
     Uri::new(swarm_id(c), unit_ingress_options(signing).uri_options()).to_string()
 }
@@ -913,6 +919,7 @@ fn a_stream_stating_a_high_bitrate_signs_eight_chunk_units() {
         let m = s.va.metrics().ingress;
         assert_eq!((m.metadata, m.bytes), (1, s.written()));
         assert_eq!(s.written() % LARGE_UNIT, 0);
+        assert_eq!(signings(&m), (0, 1, 0));
     });
 }
 
@@ -967,6 +974,7 @@ fn a_stream_stating_a_low_bitrate_signs_single_chunk_units() {
         assert_eq!(m.bytes, s.written());
         assert_eq!(s.written() % CHUNK, 0);
         assert_eq!((m.dropped_units, m.media_errors, m.write_errors), (0, 0, 0));
+        assert_eq!(signings(&m), (1, 0, 0));
     });
 }
 
@@ -994,6 +1002,7 @@ fn a_stream_with_video_and_no_metadata_signs_eight_chunk_units() {
         assert_eq!((m.metadata, m.bytes), (0, s.written()));
         assert_eq!(s.written() % LARGE_UNIT, 0);
         assert_eq!((m.dropped_units, m.media_errors, m.write_errors), (0, 0, 0));
+        assert_eq!(signings(&m), (0, 1, 1));
     });
 }
 
@@ -1044,6 +1053,7 @@ fn audio_alone_without_metadata_signs_single_chunk_units_at_the_deadline() {
         let m = s.va.metrics().ingress;
         assert_eq!((m.metadata, m.bytes), (0, s.written()));
         assert_eq!((m.dropped_units, m.media_errors, m.write_errors), (0, 0, 0));
+        assert_eq!(signings(&m), (1, 0, 1));
     });
 }
 
