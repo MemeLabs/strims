@@ -11,7 +11,12 @@ import { MdAirplay, MdCast, MdCastConnected } from "react-icons/md";
 
 import { useClient } from "../../contexts/FrontendApi";
 import { CastSender, CastState, castButtonVisible, castSender } from "../../lib/cast/sender";
-import { airPlayCapable, showAirPlayPicker, watchAirPlay } from "../../lib/media/airplay";
+import {
+  airPlayCapable,
+  alternativeUsable,
+  showAirPlayPicker,
+  watchAirPlay,
+} from "../../lib/media/airplay";
 import { HlsApi, HlsLease, HlsRequest, hlsServed, openHls, reachable } from "../../lib/media/hls";
 
 /** How long a cast's failure shows. */
@@ -87,8 +92,8 @@ const useCast = (api: HlsApi, request: HlsRequest) => {
 
 // Whether an AirPlay receiver is available, where the browser can AirPlay,
 // and once one is, the stream's HLS URL as its AirPlay source, kept open
-// on the node while the player shows. Viewers without a receiver ask the
-// node nothing.
+// on the node while the player shows: one a receiver can reach, and https
+// on an https page. Viewers without a receiver ask the node nothing.
 const useAirPlay = (api: HlsApi, request: HlsRequest) => {
   const [available, setAvailable] = useState(false);
   const [source, setSource] = useState<{ request: HlsRequest; url: string } | null>(null);
@@ -102,7 +107,9 @@ const useAirPlay = (api: HlsApi, request: HlsRequest) => {
     void (async () => {
       if (!(await hlsServed(api))) return;
       const opened = await openHls(api, request);
-      if (live && opened && reachable(opened)) setSource({ request, url: opened });
+      if (live && opened && reachable(opened) && alternativeUsable(opened, location.href)) {
+        setSource({ request, url: opened });
+      }
     })();
     return () => {
       live = false;

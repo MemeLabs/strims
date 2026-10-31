@@ -88,6 +88,19 @@ export const watchAirPlay = (
   };
 };
 
+/**
+ * Whether a video on the page at `pageUrl` can name `url` as its AirPlay
+ * source: Safari doesn't hand an AirPlay receiver an http alternative of
+ * an https page's video.
+ */
+export const alternativeUsable = (url: string, pageUrl: string): boolean => {
+  try {
+    return !(new URL(pageUrl).protocol === "https:" && new URL(url).protocol === "http:");
+  } catch {
+    return false;
+  }
+};
+
 /** Shows Safari's AirPlay receiver picker for `video`. */
 export const showAirPlayPicker = (video: HTMLVideoElement): void =>
   (video as AirPlayVideo).webkitShowPlaybackTargetPicker?.();

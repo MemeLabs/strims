@@ -6,6 +6,7 @@ import assert from "assert";
 import {
   HLS_TYPE,
   airPlayCapable,
+  alternativeUsable,
   attachSources,
   detachSources,
   playsWireless,
@@ -121,6 +122,14 @@ describe("airplay", () => {
     changed("not-available");
     assert.deepStrictEqual(answers, [false, true]);
     assert.strictEqual(watcher.loads, 0);
+  });
+
+  it("takes no http alternative for an https page's video", () => {
+    const page = "https://strims.gg/c/abc";
+    assert.ok(alternativeUsable("https://node.example/x.m3u8", page));
+    assert.ok(!alternativeUsable("http://10.0.0.134:8082/x.m3u8", page));
+    assert.ok(alternativeUsable("http://10.0.0.134:8082/x.m3u8", "http://localhost:8080/"));
+    assert.ok(!alternativeUsable("not a url", page));
   });
 
   it("reads whether a video plays on a receiver", () => {
