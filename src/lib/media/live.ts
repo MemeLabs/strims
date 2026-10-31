@@ -216,8 +216,10 @@ export class LiveEdge {
       return { rate: this.rate };
     }
 
-    // Browsers stall short of a hole, such as the one between the encoder
-    // priming of two inits, and don't cross it.
+    // Browsers stall short of a hole and don't cross it. The remuxer fills
+    // audio holes with silence; those it leaves are over 3 s or of a codec
+    // without silent frames, and a browser drops video from one up to the
+    // next keyframe.
     const t = s.currentTime;
     const inRange = s.ranges.some(([a, b]) => t >= a && t < b - RANGE_END_EPSILON);
     const next = s.ranges.find(([a]) => a > t);

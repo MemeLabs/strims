@@ -342,12 +342,16 @@ fn metrics(m: &RemuxerMetrics) -> Object {
         ("droppedBeforeInit", m.dropped_before_init),
         ("droppedPendingConfig", m.dropped_pending_config),
         ("droppedBackwards", m.dropped_backwards),
+        ("droppedUnderSilence", m.dropped_under_silence),
         ("refusedInits", m.refused_inits),
         ("inits", m.inits),
         ("fragments", m.fragments),
         ("outputBytes", m.output_bytes),
         ("restarts", m.restarts),
         ("heldFlushes", m.held_flushes),
+        ("silenceFills", m.silence_fills),
+        ("silenceUnits", m.silence_units),
+        ("audioHoles", m.audio_holes),
         ("heldBytes", m.held_bytes),
     ] {
         set_num(&o, key, value as f64);

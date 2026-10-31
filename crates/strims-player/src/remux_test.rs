@@ -133,6 +133,52 @@ fn segmenter_records(events: &[Event]) -> Vec<Vec<u8>> {
     s.into_sink().records
 }
 
+/// `events` moved as the remuxer moves a stream whose first keyframe
+/// decodes before its composition delay: later by the difference.
+fn moved_to_the_edit(events: &[Event]) -> Vec<Event> {
+    let mut timescales = BTreeMap::new();
+    let mut lead = None;
+    for e in events {
+        match e {
+            Event::Config(c) => {
+                timescales.insert(c.track, c.timescale);
+            }
+            Event::Unit(u) if lead.is_none() && u.keyframe && u.pts > u.dts => {
+                let ts = timescales[&u.track];
+                let by = (u.pts - u.dts - u.dts).max(0);
+                lead = Some(to_duration(by, ts));
+            }
+            _ => {}
+        }
+    }
+    let lead = lead.unwrap_or(Duration::ZERO);
+    events
+        .iter()
+        .map(|e| match e {
+            Event::Unit(u) => {
+                let by = to_units(lead, timescales[&u.track]);
+                Event::Unit(Unit {
+                    dts: u.dts + by,
+                    pts: u.pts + by,
+                    ..u.clone()
+                })
+            }
+            e => e.clone(),
+        })
+        .collect()
+}
+
+/// The first video keyframe's composition delay, in its track's units.
+fn first_delay(events: &[Event]) -> i64 {
+    events
+        .iter()
+        .find_map(|e| match e {
+            Event::Unit(u) if u.track.0 == 1 && u.keyframe => Some(u.pts - u.dts),
+            _ => None,
+        })
+        .unwrap()
+}
+
 /// An output, owned.
 #[derive(Debug, Clone, PartialEq)]
 enum Out {
@@ -330,6 +376,63 @@ fn samples(out: &[Out], track: u32) -> Vec<(i64, i64)> {
     all
 }
 
+/// The silent frame of AAC LC stereo.
+const LC_STEREO_SILENCE: &[u8] = &[0x20, 0x64, 0x00, 0x01, 0x90, 0x00, 0x0e];
+
+/// Every written sample's bytes of `track`, in decode order.
+fn payloads(out: &[Out], track: u32) -> Vec<Vec<u8>> {
+    let mut all = Vec::new();
+    for o in out {
+        let Out::Media { data, .. } = o else {
+            continue;
+        };
+        let mut sizes: Vec<(u32, Vec<usize>)> = Vec::new();
+        let mut mdat: &[u8] = &[];
+        for (fourcc, content) in boxes(data) {
+            match &fourcc {
+                b"moof" => {
+                    for (fourcc, traf) in boxes(content) {
+                        if fourcc != *b"traf" {
+                            continue;
+                        }
+                        let (mut id, mut list) = (0, Vec::new());
+                        for (fourcc, c) in boxes(traf) {
+                            match &fourcc {
+                                b"tfhd" => id = be32(c, 4),
+                                b"trun" => {
+                                    let flags = be32(c, 0) & 0xff_ffff;
+                                    let entry = 8
+                                        + if flags & 0x400 != 0 { 4 } else { 0 }
+                                        + if flags & 0x800 != 0 { 4 } else { 0 };
+                                    let count = be32(c, 4) as usize;
+                                    let base = 8 + if flags & 1 != 0 { 4 } else { 0 };
+                                    for k in 0..count {
+                                        list.push(be32(c, base + k * entry + 4) as usize);
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        sizes.push((id, list));
+                    }
+                }
+                b"mdat" => mdat = content,
+                _ => {}
+            }
+        }
+        let mut at = 0;
+        for (id, list) in sizes {
+            for n in list {
+                if id == track {
+                    all.push(mdat[at..at + n].to_vec());
+                }
+                at += n;
+            }
+        }
+    }
+    all
+}
+
 /// Samples that each start where the one before ended.
 fn assert_contiguous(samples: &[(i64, i64)]) {
     for w in samples.windows(2) {
@@ -371,7 +474,7 @@ fn output_equals_the_segmenters_records_for_one_session() {
     ] {
         let events = script(config.clone());
         let (out, r) = remux(&unit_records(&events));
-        let expected: Vec<(Vec<u8>, Vec<u8>)> = segmenter_records(&events)
+        let expected: Vec<(Vec<u8>, Vec<u8>)> = segmenter_records(&moved_to_the_edit(&events))
             .iter()
             .map(|rec| {
                 let (init, media) = split_record(rec).unwrap();
@@ -527,10 +630,12 @@ fn a_lost_picture_holds_the_last_one_until_the_next_keyframe() {
     )));
     let video = samples(&out, 1);
     assert_contiguous(&video);
-    // The picture before the loss lasts until the keyframe at 360_000.
+    // The picture before the loss lasts until the keyframe at 360_000,
+    // which the output moves on by the first keyframe's composition delay.
+    let shift = first_delay(&events);
     let held = video
         .iter()
-        .find(|(dts, d)| *dts < 200_000 && dts + d == 360_000);
+        .find(|(dts, d)| *dts < 200_000 + shift && dts + d == 360_000 + shift);
     assert!(held.is_some(), "no picture held across the loss: {video:?}");
     assert_contiguous(&samples(&out, 2));
     let m = r.metrics();
@@ -539,11 +644,11 @@ fn a_lost_picture_holds_the_last_one_until_the_next_keyframe() {
 }
 
 #[test]
-fn lost_audio_lasts_its_last_frame_until_the_next() {
+fn lost_audio_is_filled_with_silence() {
     let events = script(b_frames());
     let records = unit_records(&events);
     // About 0.2 s of AAC at 48 kHz from 3 s on.
-    let (out, _) = remux_marked(&without(&records, 2, 144_000, 153_600, false));
+    let (out, r) = remux_marked(&without(&records, 2, 144_000, 153_600, false));
     assert!(out.iter().any(|o| matches!(
         o,
         Out::Gap {
@@ -554,12 +659,270 @@ fn lost_audio_lasts_its_last_frame_until_the_next() {
     )));
     let audio = samples(&out, 2);
     assert_contiguous(&audio);
-    assert!(audio.iter().any(|(_, d)| *d > 9 * 1024));
+    // Frames of 1024 samples, FLV's millisecond tag times making 1008 to
+    // 1056, and silence rounding the hole to whole frames.
+    assert!(audio.iter().all(|(_, d)| *d < 1536), "{audio:?}");
+    let silent = payloads(&out, 2)
+        .iter()
+        .filter(|p| p.as_slice() == LC_STEREO_SILENCE)
+        .count();
+    let m = r.metrics();
+    assert_eq!(silent as u64, m.silence_units);
+    assert!((8..=10).contains(&silent), "{silent} silent frames");
+    assert!(m.silence_fills >= 1);
+    assert_eq!(m.audio_holes, 0);
     // Video loses nothing and goes on frame by frame (FLV's millisecond
     // tag times make frames of 33 or 34 ms).
     let video = samples(&out, 1);
     assert_contiguous(&video);
     assert!(video.iter().all(|(_, d)| *d <= 3060));
+}
+
+#[test]
+fn a_stream_from_decode_time_zero_plays_from_its_first_keyframe() {
+    // Two B-frames: the first keyframe decodes two frames before it
+    // presents, at decode time zero.
+    let events = script(b_frames());
+    let records = unit_records(&events);
+    let mut r = Remuxer::new();
+    let mut out = Vec::new();
+    let mut before_second_gop = None;
+    for rec in &records {
+        if let Ok(Record::Unit { header, .. }) = parse_record(rec)
+            && header.track.0 == 1
+            && header.keyframe
+            && header.dts > 0
+            && before_second_gop.is_none()
+        {
+            before_second_gop = Some(out.len());
+        }
+        send(&mut r, rec, false, &mut out);
+    }
+    let first = &out[..before_second_gop.unwrap()];
+    let video: Vec<UnitInfo> = first
+        .iter()
+        .filter_map(|o| match o {
+            Out::Media { units, .. } => Some(units.clone()),
+            _ => None,
+        })
+        .flatten()
+        .filter(|u| u.kind == TrackKind::Video)
+        .collect();
+    // The first GOP comes out a unit a fragment, from its keyframe, which
+    // presents at the delay it was moved by.
+    let delay = first_delay(&events);
+    assert!(delay > 0);
+    assert!(
+        video.len() > 50,
+        "{} pictures before the second GOP",
+        video.len()
+    );
+    assert!(video[0].keyframe);
+    assert_eq!(video[0].pts, to_duration(delay, 90_000));
+    let fragments = first
+        .iter()
+        .filter(|o| matches!(o, Out::Media { .. }))
+        .count();
+    assert!(fragments > video.len());
+    // No sample decodes before the edit.
+    for o in &out {
+        if let Out::Media { data, .. } = o {
+            for run in runs(data).0.iter().filter(|r| r.track == 1) {
+                assert!(run.base >= delay as u64, "{run:?}");
+            }
+        }
+    }
+    assert_eq!(r.metrics().held_flushes, 0);
+}
+
+#[test]
+fn audio_that_stops_follows_the_video_with_silence() {
+    let events = script(b_frames());
+    let records = unit_records(&events);
+    // No audio from 3 s on, to the end at 8 s.
+    let (out, r) = remux_marked(&without(&records, 2, 144_000, i64::MAX, false));
+    let audio = samples(&out, 2);
+    assert_contiguous(&audio);
+    let video = samples(&out, 1);
+    let end = |s: &[(i64, i64)], rate: i64| {
+        let (dts, d) = s.last().unwrap();
+        Duration::from_nanos((dts + d) * 1_000_000_000 / rate)
+    };
+    // Silence reaches within AUDIO_FOLLOW and a frame of the video's end.
+    let gap = end(&video, 90_000) - end(&audio, 48_000);
+    assert!(
+        gap <= AUDIO_FOLLOW + Duration::from_millis(50),
+        "audio ends {gap:?} before the video"
+    );
+    let m = r.metrics();
+    assert!(m.silence_units > 200, "{m:?}");
+    assert_eq!(m.audio_holes, 0);
+}
+
+#[test]
+fn audio_later_than_the_silence_following_the_video_moves_the_follow() {
+    let events = script(b_frames());
+    // From 3 s on, audio comes half a second after the video of its time.
+    let mut late: Vec<Event> = Vec::new();
+    let mut queue: Vec<Unit> = Vec::new();
+    for e in events {
+        match e {
+            Event::Unit(u) if u.track.0 == 2 && u.dts >= 144_000 => queue.push(u),
+            Event::Unit(u) if u.track.0 == 1 => {
+                let now = u.dts * 48_000 / 90_000;
+                while queue.first().is_some_and(|a| a.dts + 24_000 <= now) {
+                    late.push(Event::Unit(queue.remove(0)));
+                }
+                late.push(Event::Unit(u));
+            }
+            e => late.push(e),
+        }
+    }
+    late.extend(queue.into_iter().map(Event::Unit));
+    let (out, r) = remux(&unit_records(&late));
+    let audio = samples(&out, 2);
+    assert_contiguous(&audio);
+    // Silence follows the video until the late audio comes; the audio
+    // within it is dropped, the follow moves past its lateness, and the
+    // rest plays: of 5 s of late audio, 0.3 s goes.
+    let m = r.metrics();
+    assert!(m.silence_units > 0, "{m:?}");
+    assert!((1..=16).contains(&m.dropped_under_silence), "{m:?}");
+    let payloads = payloads(&out, 2);
+    assert_eq!(payloads.len(), audio.len());
+    assert!(
+        payloads
+            .iter()
+            .rev()
+            .take(200)
+            .all(|p| p != LC_STEREO_SILENCE)
+    );
+}
+
+#[test]
+fn an_audio_hole_past_the_bound_stays_a_hole() {
+    // Audio alone, with five seconds missing: no video to follow, and the
+    // frame after the hole comes too late to fill it.
+    let mut events = vec![Event::Config(audio(2, 48_000))];
+    for n in (0..200).chain(434..500) {
+        events.push(Event::Unit(Unit {
+            track: TrackId(2),
+            dts: n * 1024,
+            pts: n * 1024,
+            keyframe: true,
+            payload: vec![2; 50],
+            published: Time::from_unix_millis(EPOCH_MS + n * 1024 / 48),
+        }));
+    }
+    let (out, r) = remux(&unit_records(&events));
+    let frames = samples(&out, 2);
+    let at = frames
+        .iter()
+        .position(|(dts, _)| *dts == 434 * 1024)
+        .unwrap();
+    assert_eq!(frames[at - 1], (199 * 1024, 1024));
+    assert_contiguous(&frames[..at]);
+    assert_contiguous(&frames[at..]);
+    let m = r.metrics();
+    assert_eq!((m.audio_holes, m.silence_units), (1, 0));
+
+    // A shorter one is filled when the frame after it comes.
+    let mut events = vec![Event::Config(audio(2, 48_000))];
+    for n in (0..200).chain(300..400) {
+        events.push(Event::Unit(Unit {
+            track: TrackId(2),
+            dts: n * 1024,
+            pts: n * 1024,
+            keyframe: true,
+            payload: vec![2; 50],
+            published: Time::from_unix_millis(EPOCH_MS + n * 1024 / 48),
+        }));
+    }
+    let (out, r) = remux(&unit_records(&events));
+    assert_contiguous(&samples(&out, 2));
+    assert_eq!(r.metrics().silence_units, 100);
+}
+
+#[test]
+fn opus_holes_are_filled_with_silent_packets_of_their_length() {
+    let mut head = b"OpusHead".to_vec();
+    head.extend_from_slice(&[1, 2, 0x38, 0x01, 0x80, 0xbb, 0, 0, 0, 0, 0]);
+    let opus = DecoderConfig {
+        track: TrackId(2),
+        kind: TrackKind::Audio,
+        codec: "Opus".into(),
+        timescale: 48_000,
+        params: CodecParams::Opus {
+            head,
+            channels: 2,
+            pre_skip: 312,
+        },
+    };
+    let mut events = vec![Event::Config(opus)];
+    // 20 ms CELT packets, with 135 ms missing after the hundredth.
+    let mut dts = 0;
+    for n in 0..200 {
+        if n == 100 {
+            dts += 6480;
+        }
+        events.push(Event::Unit(Unit {
+            track: TrackId(2),
+            dts,
+            pts: dts,
+            keyframe: true,
+            payload: vec![0xfc, 1, 2, 3],
+            published: Time::from_unix_millis(EPOCH_MS + dts / 48),
+        }));
+        dts += 960;
+    }
+    let (out, r) = remux(&unit_records(&events));
+    let audio = samples(&out, 2);
+    assert_contiguous(&audio);
+    let silent: Vec<Vec<u8>> = payloads(&out, 2)
+        .into_iter()
+        .filter(|p| p[1..] == [0xff, 0xfe])
+        .collect();
+    // 6480 samples: 2.5 ms short of 135, rounded to 2.5 ms steps.
+    let lens: Vec<u32> = silent
+        .iter()
+        .map(|p| crate::webcodecs::opus_packet_samples(p).unwrap())
+        .collect();
+    assert_eq!(lens.iter().sum::<u32>(), 6480, "{lens:?}");
+    assert_eq!(*lens.last().unwrap(), 960);
+    assert_eq!(r.metrics().silence_units, lens.len() as u64);
+}
+
+#[test]
+fn a_track_without_silent_frames_lasts_its_last_unit_until_its_next() {
+    // HE-AAC: SBR at 48 kHz over a 24 kHz core.
+    let he = DecoderConfig {
+        track: TrackId(2),
+        kind: TrackKind::Audio,
+        codec: "mp4a.40.5".into(),
+        timescale: 48_000,
+        params: CodecParams::Aac {
+            asc: vec![0x2b, 0x11, 0x88, 0x00],
+            sample_rate: 48_000,
+            channels: 2,
+            frame_samples: 2048,
+        },
+    };
+    let mut events = vec![Event::Config(he)];
+    for n in (0..50).chain(60..100) {
+        events.push(Event::Unit(Unit {
+            track: TrackId(2),
+            dts: n * 2048,
+            pts: n * 2048,
+            keyframe: true,
+            payload: vec![2; 50],
+            published: Time::from_unix_millis(EPOCH_MS + n * 2048 / 48),
+        }));
+    }
+    let (out, r) = remux(&unit_records(&events));
+    let audio = samples(&out, 2);
+    assert_contiguous(&audio);
+    assert!(audio.contains(&(49 * 2048, 11 * 2048)));
+    assert_eq!(r.metrics().silence_units, 0);
 }
 
 #[test]
@@ -616,8 +979,10 @@ fn a_restarted_session_follows_the_output() {
             // One run across the sessions: the last units of the first
             // last until the second's first.
             assert_contiguous(&samples(&out, 1));
-            assert_contiguous(&samples(&out, 2));
         }
+        // Audio goes on across the splice, its gap filled with silence
+        // where a new init flushed the run.
+        assert_contiguous(&samples(&out, 2));
         // Presentation times keep going.
         let pts: Vec<Duration> = out
             .iter()
@@ -840,11 +1205,22 @@ fn records_over_the_bound_are_dropped_as_lost() {
 
 #[test]
 fn held_units_are_bounded() {
-    // A first GOP decoding before its edit list is held whole.
-    let mut events = vec![Event::Config(video(1, 640, 360))];
-    events.push(unit(1, 0, 6000, true, 10));
-    for k in 1..2 * MAX_HELD_UNITS as i64 {
-        events.push(unit(1, k * 3000, 3000, false, 10));
+    // A run's first fragment waits for its keyframe to be timed, which a
+    // video track that stops after it never is, while audio goes on.
+    let mut events = vec![
+        Event::Config(video(1, 640, 360)),
+        Event::Config(audio(2, 48_000)),
+    ];
+    events.push(unit(1, 0, 0, true, 10));
+    for n in 0..2 * MAX_HELD_UNITS as i64 {
+        events.push(Event::Unit(Unit {
+            track: TrackId(2),
+            dts: n * 1024,
+            pts: n * 1024,
+            keyframe: true,
+            payload: vec![2; 10],
+            published: Time::from_unix_millis(EPOCH_MS + n * 1024 / 48),
+        }));
     }
     let records = unit_records(&events);
     let mut r = Remuxer::new();
@@ -856,7 +1232,7 @@ fn held_units_are_bounded() {
     r.finish();
     drain(&mut r, &mut out);
     assert!(r.metrics().held_flushes >= 1);
-    assert_eq!(samples(&out, 1).len(), 2 * MAX_HELD_UNITS);
+    assert_eq!(samples(&out, 2).len(), 2 * MAX_HELD_UNITS);
 }
 
 #[test]

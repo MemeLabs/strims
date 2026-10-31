@@ -286,10 +286,11 @@ declare module "*/strims-player/Cargo.toml" {
     discontinuities: number;
     /** Units given to the fragment writer. */
     units: number;
-    /** Units dropped before the first init, while their track's new config waits for its init, and for going back. */
+    /** Units dropped before the first init, while their track's new config waits for its init, for going back, and for starting within silence already written ahead of them. */
     droppedBeforeInit: number;
     droppedPendingConfig: number;
     droppedBackwards: number;
+    droppedUnderSilence: number;
     /** Configs no init segment could declare. */
     refusedInits: number;
     inits: number;
@@ -298,6 +299,11 @@ declare module "*/strims-player/Cargo.toml" {
     restarts: number;
     /** Times the bounds on held units (8 MiB, 4096 units) wrote them all out. */
     heldFlushes: number;
+    /** Holes in audio tracks filled with silence, and the silent frames written. */
+    silenceFills: number;
+    silenceUnits: number;
+    /** Holes in audio tracks left for being longer than 3 s. */
+    audioHoles: number;
     /** Payload bytes held unwritten now. */
     heldBytes: number;
     /** The module's linear memory, in bytes; it only grows. */

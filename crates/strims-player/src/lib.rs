@@ -46,14 +46,28 @@
 //!   [`strims_video::fmp4::FragmentWriter`] writes them with a span of
 //!   zero: a unit is written once its track's next unit gives its
 //!   duration. Each lists the units it holds, with their presentation
-//!   times on the SourceBuffer's timeline and their publish times.
+//!   times on the SourceBuffer's timeline and their publish times. A
+//!   stream whose first keyframe decodes before its composition delay
+//!   (decode times from zero, with B-frames) is moved later by the
+//!   difference, so no sample decodes before its edit list and the first
+//!   GOP comes out a unit a fragment from its keyframe.
 //! - **Gaps and discontinuities.** Units lost show as a gap of a track;
-//!   a skip of the input as a discontinuity. Neither writes anything out:
-//!   each track's unit before a loss lasts until its next unit, so the
-//!   picture holds until the next keyframe while audio plays on, and the
-//!   buffered timeline has no hole. MediaSource stalls at a hole in any
-//!   track, and a jump in one track's decode times makes every track wait
-//!   for a keyframe.
+//!   a skip of the input as a discontinuity. MediaSource stalls at a hole
+//!   in any track, and a jump in one track's decode times makes every
+//!   track wait for a keyframe, so the output's tracks have none:
+//!   - A video track's unit before a loss lasts until its next unit: the
+//!     picture holds until the next keyframe.
+//!   - An audio track's holes are filled with silent frames
+//!     (AAC-LC and Opus): the hole before an audio unit when it comes, up
+//!     to [`MAX_SILENCE`](remux::MAX_SILENCE), and while video comes
+//!     without audio, up to [`AUDIO_FOLLOW`](remux::AUDIO_FOLLOW) behind
+//!     the video, so a stream whose audio stops plays on. Audio arriving
+//!     within silence already written is dropped, and moves the silence
+//!     that much further behind the video, up to
+//!     [`MAX_AUDIO_FOLLOW`](remux::MAX_AUDIO_FOLLOW). A hole longer than
+//!     `MAX_SILENCE` stays a hole, which players jump; a track without
+//!     silent frames (HE-AAC) has its unit before a hole last until the
+//!     next.
 //! - **Restarts.** A writer's new session starts its timestamps over. Its
 //!   first unit that would decode before its track's last one starts an
 //!   epoch: every unit from there on is moved by an offset that puts that
@@ -62,9 +76,10 @@
 //!   decode times never go back, so a SourceBuffer appends across a new
 //!   session without `timestampOffset` or a new MediaSource.
 //!
-//! With these, the output for a stream of one writer session equals what
-//! the segmenter writes for the same units with a fragment per unit, each
-//! record's media following its init.
+//! With these, the output for a stream of one writer session without
+//! holes equals what the segmenter writes for the same units moved as
+//! above, with a fragment per unit, each record's media following its
+//! init.
 //!
 //! # Recovery
 //!
@@ -88,6 +103,7 @@
 pub mod demux;
 pub mod mime;
 pub mod remux;
+mod silence;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 pub mod webcodecs;
