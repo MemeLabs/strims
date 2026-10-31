@@ -81,6 +81,19 @@ fn install() {
     });
 }
 
+/// Registers an allocation group, one registration at a time.
+/// tracking-allocator numbers a group with one atomic and checks it against
+/// the highest number handed out with another, so of two registrations
+/// that overlap, the one numbered lower can find the higher already
+/// recorded and get none: a sweep's runs register on parallel threads, and
+/// a run that lost the race would carry no memory report.
+#[allow(clippy::disallowed_types)] // the sweep's runs register from parallel threads
+fn register() -> Option<AllocationGroupToken> {
+    static REGISTER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _one = REGISTER.lock().unwrap_or_else(|e| e.into_inner());
+    AllocationGroupToken::register()
+}
+
 /// One run's allocation group.
 pub struct MemoryGroup {
     token: AllocationGroupToken,
@@ -90,7 +103,7 @@ pub struct MemoryGroup {
 impl MemoryGroup {
     pub fn new() -> Option<MemoryGroup> {
         install();
-        let token = AllocationGroupToken::register()?;
+        let token = register()?;
         let slot = slot(&token.id());
         Some(MemoryGroup { token, slot })
     }
@@ -124,5 +137,35 @@ impl GroupCounters {
         self.slot
             .and_then(|i| PEAK.get(i))
             .map_or(0, |a| a.load(Ordering::Relaxed))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Barrier;
+    use std::sync::atomic::AtomicUsize;
+
+    use super::*;
+
+    /// A sweep's runs register their groups from parallel threads at once,
+    /// and every one gets a group.
+    #[test]
+    fn groups_registered_at_once_from_many_threads_all_register() {
+        const THREADS: usize = 16;
+        let barrier = Barrier::new(THREADS);
+        let missing = AtomicUsize::new(0);
+        std::thread::scope(|s| {
+            for _ in 0..THREADS {
+                s.spawn(|| {
+                    barrier.wait();
+                    for _ in 0..32 {
+                        if MemoryGroup::new().is_none() {
+                            missing.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                });
+            }
+        });
+        assert_eq!(missing.load(Ordering::Relaxed), 0);
     }
 }
