@@ -18,9 +18,9 @@ use strims_base::rng::{self, DetRng};
 
 use super::RtmpError;
 use super::chunk::{
-    ACKNOWLEDGEMENT, AGGREGATE, AUDIO, COMMAND_AMF0, ChunkReader, ChunkWriter, Control, DATA_AMF0,
-    Limits, MAX_CHUNK_SIZE, Message, Outcome, PROTOCOL_CSID, SET_CHUNK_SIZE, SET_PEER_BANDWIDTH,
-    VIDEO, WINDOW_ACK_SIZE,
+    ACKNOWLEDGEMENT, AGGREGATE, AUDIO, COMMAND_AMF0, COMMAND_AMF3, ChunkReader, ChunkWriter,
+    Control, DATA_AMF0, DATA_AMF3, Limits, MAX_CHUNK_SIZE, Message, Outcome, PROTOCOL_CSID,
+    SET_CHUNK_SIZE, SET_PEER_BANDWIDTH, STREAM_BEGIN, USER_CONTROL, VIDEO, WINDOW_ACK_SIZE,
 };
 use super::handshake::ServerHandshake;
 use crate::amf0::{self, Decoder, Metadata, Value};
@@ -33,6 +33,8 @@ const STATUS_CSID: u32 = 5;
 const STREAM_ID: f64 = 1.0;
 /// Set Peer Bandwidth's dynamic limit type.
 const LIMIT_DYNAMIC: u8 = 2;
+/// The AMF3 format byte of an AMF3 message whose values are AMF0.
+const AMF0_FORMAT: u8 = 0;
 /// The `fmsVer` and `capabilities` a connect reply declares.
 const FMS_VERSION: &str = "FMS/3,0,1,123";
 const CAPABILITIES: f64 = 31.0;
@@ -172,6 +174,16 @@ fn amf(context: &'static str) -> impl Fn(amf0::Amf0Error) -> RtmpError {
     move |error| RtmpError::Amf { context, error }
 }
 
+/// The AMF0 values of an AMF3 message's `body`: those after its format
+/// byte when it is [`AMF0_FORMAT`] and they start with a string, the
+/// command's or handler's name. `None` for any other, which is ignored.
+fn amf0_values(body: &[u8]) -> Option<&[u8]> {
+    let (&AMF0_FORMAT, values) = body.split_first()? else {
+        return None;
+    };
+    matches!(Decoder::new(values).decode(), Ok(Value::String(_))).then_some(values)
+}
+
 /// The next command value; undefined past the end.
 fn next<'a>(d: &mut Decoder<'a>) -> Result<Value<'a>, RtmpError> {
     if d.is_empty() {
@@ -248,14 +260,18 @@ impl RtmpServer {
         self.session.writer.poll_transmit(buf)
     }
 
-    /// Starts the pending publish: `onStatus NetStream.Publish.Start`.
+    /// Starts the pending publish: user control Stream Begin of its
+    /// message stream, then `onStatus NetStream.Publish.Start`.
     pub fn accept_publish(&mut self) {
         let s = &mut self.session;
         if s.phase != Phase::PublishPending {
             return;
         }
         s.phase = Phase::Publishing;
-        if let Err(e) = s.send_status("status", "NetStream.Publish.Start", "Publishing.") {
+        let started = s
+            .stream_begin(s.stream_id)
+            .and_then(|()| s.send_status("status", "NetStream.Publish.Start", "Publishing."));
+        if let Err(e) = started {
             s.close();
             s.error = Some(e);
         }
@@ -381,6 +397,14 @@ impl Session {
             }
             DATA_AMF0 => self.data(msg.body),
             COMMAND_AMF0 => self.command(msg.stream_id, msg.body),
+            DATA_AMF3 => match amf0_values(msg.body) {
+                Some(body) => self.data(body),
+                None => Ok(false),
+            },
+            COMMAND_AMF3 => match amf0_values(msg.body) {
+                Some(body) => self.command(msg.stream_id, body),
+                None => Ok(false),
+            },
             _ => Ok(false),
         }
     }
@@ -572,8 +596,9 @@ impl Session {
         }
     }
 
-    /// Window Acknowledgement Size, Set Peer Bandwidth, Set Chunk Size,
-    /// then `_result` NetConnection.Connect.Success.
+    /// Window Acknowledgement Size, Set Peer Bandwidth, user control Stream
+    /// Begin of message stream 0, Set Chunk Size, then `_result`
+    /// NetConnection.Connect.Success.
     fn connect_reply(&mut self, txid: f64) -> Result<(), RtmpError> {
         let window = self.config.window_ack_size;
         let [a, b, c, d] = self.config.peer_bandwidth.to_be_bytes();
@@ -587,6 +612,7 @@ impl Session {
             0,
             &[a, b, c, d, LIMIT_DYNAMIC],
         )?;
+        self.stream_begin(0)?;
         self.writer.write(
             PROTOCOL_CSID,
             0,
@@ -613,6 +639,14 @@ impl Session {
                 ]),
             ],
         )
+    }
+
+    /// User control Stream Begin of message stream `stream_id`.
+    fn stream_begin(&mut self, stream_id: u32) -> Result<(), RtmpError> {
+        let [e0, e1] = STREAM_BEGIN.to_be_bytes();
+        let [a, b, c, d] = stream_id.to_be_bytes();
+        self.writer
+            .write(PROTOCOL_CSID, 0, USER_CONTROL, 0, &[e0, e1, a, b, c, d])
     }
 
     fn send_status(&mut self, level: &str, code: &str, description: &str) -> Result<(), RtmpError> {

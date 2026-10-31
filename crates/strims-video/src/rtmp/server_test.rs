@@ -83,18 +83,25 @@ fn command_flow_replies_in_order() {
     assert_eq!(server.phase(), Phase::Publishing);
 
     let replies = Replies::new().read(&mut server);
-    assert_eq!(replies.len(), 9);
+    assert_eq!(replies.len(), 11);
     let mut bandwidth = 2_500_000u32.to_be_bytes().to_vec();
     bandwidth.push(2);
     assert_eq!(
-        replies[..3],
+        replies[..4],
         [
             control(WINDOW_ACK_SIZE, &2_500_000u32.to_be_bytes()),
             control(SET_PEER_BANDWIDTH, &bandwidth),
+            control(USER_CONTROL, &[0, 0, 0, 0, 0, 0]),
             control(SET_CHUNK_SIZE, &4096u32.to_be_bytes()),
         ]
     );
-    let commands: Vec<Vec<Value<'_>>> = replies[3..].iter().map(Reply::values).collect();
+    // The publish's message stream begins right before its status.
+    assert_eq!(replies[9], control(USER_CONTROL, &[0, 0, 0, 0, 0, 1]));
+    let commands: Vec<Vec<Value<'_>>> = replies[4..9]
+        .iter()
+        .chain(&replies[10..])
+        .map(Reply::values)
+        .collect();
     assert_eq!(
         commands,
         [
@@ -128,8 +135,85 @@ fn command_flow_replies_in_order() {
         ]
     );
     // The status goes on the publish's message stream.
-    assert_eq!(replies[8].stream_id, 1);
-    assert!(replies[3..].iter().all(|r| r.type_id == COMMAND_AMF0));
+    assert_eq!(replies[10].stream_id, 1);
+    assert!(
+        replies[4..9]
+            .iter()
+            .chain(&replies[10..])
+            .all(|r| r.type_id == COMMAND_AMF0)
+    );
+}
+
+/// `body(values)` as an AMF3 message's: its format byte, then the values.
+fn amf3(format: u8, values: &[Value<'_>]) -> Vec<u8> {
+    let mut b = vec![format];
+    b.extend(body(values));
+    b
+}
+
+#[test]
+fn amf3_commands_and_data_of_amf0_values_are_taken() {
+    let mut server = new_server();
+    let mut c = Client::new();
+    let connect = [
+        s("connect"),
+        n(1.0),
+        Value::Object(vec![
+            ("app", s("live")),
+            ("tcUrl", s("rtmp://example/live")),
+        ]),
+    ];
+    c.message(3, 0, COMMAND_AMF3, 0, &amf3(0, &connect));
+    c.message(
+        3,
+        0,
+        COMMAND_AMF3,
+        0,
+        &amf3(0, &[s("createStream"), n(2.0), Value::Null]),
+    );
+    let publish = [s("publish"), n(3.0), Value::Null, s("key"), s("live")];
+    c.message(5, 0, COMMAND_AMF3, 1, &amf3(0, &publish));
+    let events = feed(&mut server, &c.take(), Answer::Accept).unwrap();
+    assert_eq!(events, [publish_event("key")]);
+    let replies = Replies::new().read(&mut server);
+    let results = replies
+        .iter()
+        .filter(|r| r.type_id == COMMAND_AMF0)
+        .map(|r| r.values()[0].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(results, [s("_result"), s("_result"), s("onStatus")]);
+
+    let meta = [
+        s("@setDataFrame"),
+        s("onMetaData"),
+        Value::Object(vec![("width", n(640.0))]),
+    ];
+    c.message(5, 0, DATA_AMF3, 1, &amf3(0, &meta));
+    let events = feed(&mut server, &c.take(), Answer::Accept).unwrap();
+    assert_eq!(
+        events,
+        [Ev::Metadata(Metadata {
+            width: Some(640.0),
+            ..Metadata::default()
+        })]
+    );
+}
+
+#[test]
+fn amf3_messages_of_amf3_values_are_ignored() {
+    let (mut server, mut replies, mut c) = publishing();
+    let name = [s("onMetaData"), Value::Object(vec![("width", n(640.0))])];
+    // Another format byte, an AMF3 value (the 0x11 switch marker), no
+    // body, and a name that isn't a string.
+    c.message(5, 0, DATA_AMF3, 1, &amf3(3, &name));
+    c.message(5, 0, DATA_AMF3, 1, &[0, 0x11, 0x06, 0x03, b'x']);
+    c.message(5, 0, DATA_AMF3, 1, &[]);
+    c.message(3, 0, COMMAND_AMF3, 0, &amf3(0, &[n(1.0)]));
+    c.message(3, 0, COMMAND_AMF3, 0, &[0, 0x11, 0x0a]);
+    let events = feed(&mut server, &c.take(), Answer::Accept).unwrap();
+    assert!(events.is_empty());
+    assert_eq!(server.phase(), Phase::Publishing);
+    assert!(replies.read(&mut server).is_empty());
 }
 
 #[test]

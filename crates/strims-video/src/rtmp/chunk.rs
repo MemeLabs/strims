@@ -43,11 +43,16 @@ pub(crate) const WINDOW_ACK_SIZE: u8 = 5;
 pub(crate) const SET_PEER_BANDWIDTH: u8 = 6;
 pub(crate) const AUDIO: u8 = 8;
 pub(crate) const VIDEO: u8 = 9;
+/// AMF3 data and command messages: a format byte, then values.
+pub(crate) const DATA_AMF3: u8 = 15;
+pub(crate) const COMMAND_AMF3: u8 = 17;
 pub(crate) const DATA_AMF0: u8 = 18;
 pub(crate) const COMMAND_AMF0: u8 = 20;
 pub(crate) const AGGREGATE: u8 = 22;
 
 /// User control event types.
+/// User control Stream Begin: its data is the message stream's id.
+pub(crate) const STREAM_BEGIN: u16 = 0;
 pub(crate) const PING_REQUEST: u16 = 6;
 pub(crate) const PING_RESPONSE: u16 = 7;
 
