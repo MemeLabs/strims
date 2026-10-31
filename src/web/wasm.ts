@@ -30,8 +30,8 @@ export type PsiWorkerOptions = Pick<WasmNodeOptions, "logLevel">;
  * The one message the window sends each worker, with its ports transferred.
  * The node's worker gets `psi` when a PSI worker serves the other end. That
  * port carries the PSI sessions' keys and seeds, so it connects this page's
- * two workers and nothing else. It gets `feeds` unless it runs the browser
- * link tests' bare node.
+ * two workers and nothing else. It gets `feeds`, the port players' feeds
+ * open on, which the testbed's bare node feeds its page's player on too.
  */
 export type InitMessage =
   | {
@@ -315,8 +315,8 @@ class PeerHost {
 
 export interface WasmNode {
   bus: PortBus;
-  /** Opens players' feeds; the browser link tests' bare node has none. */
-  feeds?: FeedHost;
+  /** Opens players' feeds. */
+  feeds: FeedHost;
   /** Terminates the workers and closes the node's peer connections. */
   close(): void;
 }
@@ -358,8 +358,8 @@ export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
   const psiWorker = psi && startPsiWorker(options.logLevel, psi.port2);
   const frontend = new MessageChannel();
   const signal = new MessageChannel();
-  const feedPorts = options.e2e ? undefined : new MessageChannel();
-  const feeds = feedPorts && new FeedHost(feedPorts.port1);
+  const feedPorts = new MessageChannel();
+  const feeds = new FeedHost(feedPorts.port1);
   const bus = new PortBus(frontend.port1);
   const peers = new PeerHost((msg, transfer) => signal.port1.postMessage(msg, transfer ?? []));
 
@@ -381,7 +381,7 @@ export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
     worker.terminate();
     psiWorker?.terminate();
     peers.closeAll();
-    feeds?.shut();
+    feeds.shut();
     bus.shut();
   };
 
@@ -405,7 +405,7 @@ export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
 
   const ports = [frontend.port2, signal.port2];
   if (psi) ports.push(psi.port1);
-  if (feedPorts) ports.push(feedPorts.port2);
+  ports.push(feedPorts.port2);
   worker.postMessage(
     {
       type: "init",
@@ -414,7 +414,7 @@ export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
       frontend: frontend.port2,
       signal: signal.port2,
       psi: psi?.port1,
-      feeds: feedPorts?.port2,
+      feeds: feedPorts.port2,
     } satisfies InitMessage,
     ports
   );

@@ -294,6 +294,11 @@ impl Credit {
     pub fn unacked(&self) -> (usize, usize) {
         (self.bytes, self.unacked.len())
     }
+
+    /// Batches posted so far.
+    pub fn posted(&self) -> u64 {
+        self.posted
+    }
 }
 
 // --- a feed's port -------------------------------------------------------------
@@ -421,6 +426,11 @@ impl FeedPort {
     /// Bytes and batches posted and not yet acked.
     pub fn unacked(&self) -> (usize, usize) {
         self.state.borrow().credit.unacked()
+    }
+
+    /// Data batches posted so far.
+    pub fn posted(&self) -> u64 {
+        self.state.borrow().credit.posted()
     }
 
     fn send(&self, bytes: &[u8]) {

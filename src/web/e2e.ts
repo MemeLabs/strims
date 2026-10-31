@@ -6,13 +6,17 @@
 // connection to the WebSocket at /control?i=<i> on the page's host, as
 // binary messages both ways. ?logLevel= sets the nodes' zap level.
 //
-// A testbed node reading a media stream sends the page its Data messages
-// (MEDIA_BYTES, then flags, then the bytes), which play on a video through
-// the baseline player and aren't relayed. Each second the page sends the
-// harness a `player` event: the player's stats as window.__strims_players__
-// has them, the video's events since the last one, and when the first
-// data, `playing` and rendered frame came.
+// A testbed node that starts reading a media stream tells the page so
+// (MEDIA_OPEN, which isn't relayed): the stream then plays on a video
+// through the baseline player, whose worker the node feeds on the feeds
+// port as an app page's node does (crates/strims-wasm's e2e module). Each
+// second the page sends the harness a `player` event: the player's stats
+// as window.__strims_players__ has them, the video's events since the last
+// one, and when the stream started (`dataMs`), and the first `playing` and
+// rendered frame came.
 
+import { Feed } from "../lib/media/feed";
+import { UNITS_MIME_TYPE } from "../lib/media/mime";
 import { UnitsPlayer } from "../lib/media/units";
 import { WSReadWriter } from "../lib/ws";
 import { startWasmNode } from "./wasm";
@@ -22,10 +26,8 @@ const count = Math.max(1, parseInt(params.get("count") ?? "1") >> 0);
 const logLevel = parseInt(params.get("logLevel") ?? "0") >> 0;
 const scheme = location.protocol === "https:" ? "wss:" : "ws:";
 
-/** The first byte of a Data message from the node (strims-wasm's e2e). */
-const MEDIA_BYTES = 0x02;
-const MEDIA_SEGMENT_END = 0x01;
-const MEDIA_DISCONTINUITY = 0x02;
+/** The node's message that a media stream starts (strims-wasm's e2e). */
+const MEDIA_OPEN = 0x02;
 /** Milliseconds between `player` events. */
 const PLAYER_EVENT_MS = 1000;
 /** The video events a `player` event lists. */
@@ -65,7 +67,8 @@ const bufferedAhead = (v: HTMLVideoElement): number => {
   return 0;
 };
 
-// A media stream's viewer: its Data messages play on a video of its own.
+// A media stream's viewer: its stream plays on a video of its own, from the
+// feeds `feed` opens.
 class Viewer {
   private readonly video: HTMLVideoElement;
   private readonly player: UnitsPlayer;
@@ -77,7 +80,10 @@ class Viewer {
   };
   private frames = 0;
 
-  constructor(private readonly ws: WSReadWriter) {
+  constructor(
+    private readonly ws: WSReadWriter,
+    feed: (port: MessagePort, replaces: Feed | null) => Feed
+  ) {
     this.first = { dataMs: Date.now(), playingMs: null, frameMs: null };
     const video = document.createElement("video");
     video.width = 640;
@@ -93,17 +99,8 @@ class Viewer {
     };
     video.requestVideoFrameCallback(onFrame);
     this.video = video;
-    this.player = new UnitsPlayer(video);
+    this.player = new UnitsPlayer(video, { feed });
     setInterval(() => this.post(), PLAYER_EVENT_MS);
-  }
-
-  push(message: Uint8Array): void {
-    const flags = message[1] ?? 0;
-    this.player.push(
-      message.subarray(2),
-      (flags & MEDIA_SEGMENT_END) !== 0,
-      (flags & MEDIA_DISCONTINUITY) !== 0
-    );
   }
 
   private event(type: string): void {
@@ -143,10 +140,15 @@ for (let i = 0; i < count; i++) {
   const ws = new WSReadWriter(`${scheme}//${location.host}/control?i=${i}`);
   let viewer: Viewer | null = null;
 
+  // The node's own stream: the request's fields name nothing it reads.
+  const request = { swarmUri: "", networkKeys: [], mimeType: UNITS_MIME_TYPE };
+  // eslint-disable-next-line no-console
+  const closed = (message: string) => console.warn("the stream's feed ended:", message);
   node.bus.on("data", (d: Uint8Array) => {
-    if (d[0] === MEDIA_BYTES) {
-      viewer ??= new Viewer(ws);
-      viewer.push(d);
+    if (d[0] === MEDIA_OPEN && d.byteLength === 1) {
+      viewer ??= new Viewer(ws, (port, replaces) =>
+        node.feeds.open(request, port, { replaces, closed })
+      );
       return;
     }
     ws.write(d);

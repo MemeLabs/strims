@@ -415,6 +415,14 @@ pub struct ViewerStats {
 }
 
 impl ViewerStats {
+    /// Counts `messages` that took `bytes` of records to the player, at
+    /// `now_ms`.
+    pub fn sent(&mut self, messages: u64, bytes: usize, now_ms: u64) {
+        self.messages += messages;
+        self.bytes += bytes as u64;
+        self.first_message_ms.get_or_insert(now_ms);
+    }
+
     pub fn json(&self) -> String {
         let r = &self.reader;
         let j = &self.join;
@@ -720,12 +728,9 @@ impl<'a, S: SwarmRead, R: Runtime + Clone + 'static> Viewer<'a, S, R> {
         self.discontinuity = !self.resync;
     }
 
-    /// Counts `messages` that took `bytes` of records to the player.
-    pub fn sent(&self, messages: u64, bytes: usize) {
-        let mut s = self.stats.borrow_mut();
-        s.messages += messages;
-        s.bytes += bytes as u64;
-        s.first_message_ms.get_or_insert(self.rt.now_ms());
+    /// What the viewer has read and sent.
+    pub fn stats(&self) -> &'a RefCell<ViewerStats> {
+        self.stats
     }
 
     /// Notes the reader's counts and the join so far in the stats.
@@ -771,7 +776,10 @@ pub async fn send_messages<S: SwarmRead, R: Runtime + Clone + 'static>(
         };
         if let Some(m) = messages.piece(piece) {
             rt.media(m.data, m.segment_end, m.discontinuity);
-            viewer.sent(1, m.data.len());
+            viewer
+                .stats()
+                .borrow_mut()
+                .sent(1, m.data.len(), rt.now_ms());
         }
     }
 }

@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 [features]
 # a bare node controlled over the frontend port, for the browser link tests
 # and the testbed's browser nodes
-e2e = ["dep:strims-testbed"]
+e2e = ["dep:strims-testbed", "dep:strims-transfer"]
 
 # Everything is wasm32-only: native workspace builds see an empty crate.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -27,6 +27,7 @@ strims-proto = { workspace = true, features = ["services"] }
 strims-rpc.workspace = true
 strims-session.workspace = true
 strims-testbed = { workspace = true, optional = true }
+strims-transfer = { workspace = true, optional = true }
 strims-video.workspace = true
 strims-vnic.workspace = true
 futures-core.workspace = true

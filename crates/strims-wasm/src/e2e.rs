@@ -10,7 +10,9 @@
 //! [`start`] runs the control task on that port: the harness starts a
 //! node, has it dial, link and send, and hears about its peers and
 //! messages. A testbed harness (strims-testbed's `testbed_browser`) also
-//! has it run the testbed's swarm ([`strims_testbed::node`]).
+//! has it run the testbed's swarm ([`strims_testbed::node`]), and the
+//! page's player plays a media stream the node reads, fed on the worker's
+//! feeds port (see below).
 //!
 //! # Protocol
 //!
@@ -27,7 +29,7 @@
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
 //! | `stats` | | Reports `stats`. |
-//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, and optionally `rate`, `chunk` with `munro`, and `units` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. With `units`, the stream is media in the unit format in a swarm of `units` chunks per signature ([`strims_testbed::media`]), which the node reads as a viewer, sending the page its Data messages (see below). Only the first `testbed` runs. |
+//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, and optionally `rate`, `chunk` with `munro`, and `units` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. With `units`, the stream is media in the unit format in a swarm of `units` chunks per signature ([`strims_testbed::media`]), which the node reads as a viewer and feeds the page's player (see below). Only the first `testbed` runs. |
 //!
 //! Events, from the node:
 //!
@@ -50,10 +52,27 @@
 //! in that file. The node sends them each time the capture flushes, which
 //! is between records, about once a second.
 //!
-//! A media stream's Data messages come as binary messages for the page,
-//! which plays them and doesn't relay them: `0x02`, then a flags byte
-//! (bit 0 the message completes a record, bit 1 a discontinuity came
-//! before it), then the message's bytes of records.
+//! # A media stream's feed
+//!
+//! When the node starts reading a media stream as a viewer, it sends the
+//! page the binary message `0x02` alone, which the page doesn't relay: the
+//! page then opens a feed for its player on the worker's feeds port, as
+//! an app page does (`src/web/wasm.ts`'s `FeedHost`). The node feeds the
+//! stream to each feed's port as [`crate::feed`] feeds an app's player:
+//! batches of the stream's pieces within the port's window, the reader
+//! waiting while the window is full, and an end batch when the stream
+//! ends. The feeds port takes
+//!
+//! - `{type: "open", id, port}` (a request's other fields are ignored):
+//!   the port takes the stream over from the feed before it, from the next
+//!   whole record after a discontinuity
+//!   ([`Viewer::resync`](strims_testbed::media::Viewer::resync)). A
+//!   restarted player starts there; it doesn't rewind to its GOP's start.
+//! - `{type: "close", id}`: the feed closes, and the stream waits for
+//!   another.
+//!
+//! The node posts `{type: "closed", id, message}` on the feeds port when
+//! the stream ends, or a feed's port closes.
 //!
 //! Every vpn message on `echoPort` goes back to its sender's port,
 //! unchanged and from `echoPort`, in the order the messages arrived; it
@@ -65,11 +84,15 @@
 //! at the moment: [`clock::now`] holds the time a turn of the event loop
 //! started.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::fmt::Write as _;
+use std::future::Future;
 use std::io;
+use std::pin::pin;
 use std::rc::Rc;
 use std::sync::Arc;
+
+use futures_util::future::{Either, select};
 
 use js_sys::{Array, ArrayBuffer, JSON, Object, Reflect, Uint8Array};
 use strims_base::time::Time;
@@ -77,13 +100,17 @@ use strims_node_core::{
     HostId, NetworkId, NetworkOptions, Node, NodeEvent, NodeEvents, PeerInfo, PpsppCapture,
 };
 use strims_proto::types::Key;
+use strims_testbed::media::Viewer;
 use strims_testbed::node::{Runtime, Settings, Stream, kind_name};
 use strims_testbed::shape::RATE;
+use strims_transfer::SwarmRead;
+use strims_video::{EgressPiece, VideoError};
 use tokio::sync::mpsc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, MessagePort};
 
+use crate::feed::{FeedPort, Pieces, Stopped, pump};
 use crate::{clock, js, node, runtime};
 
 /// Whether `options` asks for the e2e node: `options.e2e` is `true`.
@@ -92,8 +119,9 @@ pub fn requested(options: &JsValue) -> bool {
 }
 
 /// Runs the control task on `frontend` (see the [module docs](self)). The
-/// node it starts signals WebRTC with the window over `signal`.
-pub fn start(frontend: MessagePort, signal: MessagePort) {
+/// node it starts signals WebRTC with the window over `signal`, and feeds
+/// the page's player on `feeds`.
+pub fn start(frontend: MessagePort, signal: MessagePort, feeds: Option<MessagePort>) {
     let (commands_tx, commands) = mpsc::unbounded_channel();
     let on_message = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
         // Anything but an ArrayBuffer is no bytes, which don't parse.
@@ -110,6 +138,7 @@ pub fn start(frontend: MessagePort, signal: MessagePort) {
         signal: Some(signal),
         running: None,
         peers: None,
+        feeds: feeds.map(Feeds::serve),
         _on_message: on_message,
     };
     // Detached: the worker runs it for as long as it lives.
@@ -186,6 +215,8 @@ struct Control {
     running: Option<Running>,
     /// The peers added since `start`, until `testbed` takes them.
     peers: Option<mpsc::UnboundedReceiver<PeerInfo>>,
+    /// The feeds port, which feeds the page's player.
+    feeds: Option<Rc<Feeds>>,
     _on_message: Closure<dyn FnMut(MessageEvent)>,
 }
 
@@ -303,9 +334,13 @@ impl Control {
                     stream,
                 };
                 let out = self.out.clone();
+                let feeds = self.feeds.clone();
                 // Detached: it ends 5 s after the stream does.
                 drop(runtime::spawn(async move {
-                    let rt = Testbed(out.clone());
+                    let rt = Testbed {
+                        out: out.clone(),
+                        feeds,
+                    };
                     if let Err(e) =
                         strims_testbed::node::run(&r.node, peers, settings, None, &rt).await
                     {
@@ -477,11 +512,8 @@ async fn post_capture(out: Out, mut chunks: mpsc::UnboundedReceiver<Chunk>) {
 /// The first byte of a binary message of capture bytes; a JSON message's
 /// is `{`.
 pub const CAPTURE_BYTES: u8 = 0x01;
-/// The first byte of a binary message of a media stream's Data message,
-/// and its flags.
-pub const MEDIA_BYTES: u8 = 0x02;
-const MEDIA_SEGMENT_END: u8 = 0x01;
-const MEDIA_DISCONTINUITY: u8 = 0x02;
+/// The binary message that has the page open a feed for its player.
+pub const MEDIA_OPEN: u8 = 0x02;
 
 /// Reports the node's events, hands added peers to `peers` for the
 /// testbed, and echoes the messages on the echo port, until the node
@@ -539,10 +571,177 @@ async fn watch(
     }
 }
 
+/// What the page asks of its player's feeds.
+enum FeedRequest {
+    Open { id: u64, port: MessagePort },
+    Close { id: u64 },
+}
+
+/// The feeds port: the page's requests, and the events the node posts it.
+struct Feeds {
+    port: MessagePort,
+    /// The requests not yet taken, until the stream's player takes them.
+    requests: RefCell<Option<mpsc::UnboundedReceiver<FeedRequest>>>,
+    _on_message: Closure<dyn FnMut(MessageEvent)>,
+}
+
+impl Feeds {
+    /// Takes the page's requests on `port`, which starts delivering them.
+    fn serve(port: MessagePort) -> Rc<Feeds> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let on_message = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
+            let msg = e.data();
+            let id = int(&msg, "id");
+            let request = match (property(&msg, "type").as_string().as_deref(), id) {
+                (Some("open"), Ok(id)) => match property(&msg, "port").dyn_into::<MessagePort>() {
+                    Ok(port) => FeedRequest::Open { id, port },
+                    Err(_) => {
+                        tracing::warn!("e2e: a feed open without a port");
+                        return;
+                    }
+                },
+                (Some("close"), Ok(id)) => FeedRequest::Close { id },
+                _ => {
+                    tracing::warn!("e2e: an unknown feeds message");
+                    return;
+                }
+            };
+            let _ = tx.send(request);
+        });
+        port.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
+        Rc::new(Feeds {
+            port,
+            requests: RefCell::new(Some(rx)),
+            _on_message: on_message,
+        })
+    }
+
+    /// Posts `{type: "closed", id, message}` to the page.
+    fn closed(&self, id: u64, message: &str) {
+        let o = Object::new();
+        let _ = Reflect::set(&o, &"type".into(), &"closed".into());
+        let _ = Reflect::set(&o, &"id".into(), &number(id));
+        let _ = Reflect::set(&o, &"message".into(), &message.into());
+        if let Err(e) = self.port.post_message(&o) {
+            tracing::warn!(error = %js::describe(&e), "e2e: feeds port");
+        }
+    }
+}
+
+/// The next request that changes which feed takes the stream: an open,
+/// or the close of feed `current`. `None` once the feeds port is gone.
+async fn next_request(
+    requests: &mut mpsc::UnboundedReceiver<FeedRequest>,
+    current: Option<u64>,
+) -> Option<FeedRequest> {
+    loop {
+        match requests.recv().await? {
+            FeedRequest::Close { id } if Some(id) != current => {}
+            r => return Some(r),
+        }
+    }
+}
+
+/// A viewer's stream for [`pump`], counting the batches posted on `port`
+/// and the bytes of records in the viewer's stats.
+struct Fed<'v, 'a, S> {
+    viewer: &'v mut Viewer<'a, S, Testbed>,
+    port: &'v FeedPort,
+    /// The batches posted on `port` counted so far.
+    posted: u64,
+}
+
+impl<S: SwarmRead> Pieces for Fed<'_, '_, S> {
+    fn next(&mut self, max: usize) -> impl Future<Output = Result<EgressPiece<'_>, VideoError>> {
+        let stats = self.viewer.stats();
+        let posted = self.port.posted();
+        let batches = posted.saturating_sub(std::mem::replace(&mut self.posted, posted));
+        let viewer = &mut *self.viewer;
+        async move {
+            let piece = viewer.next(max).await?;
+            let bytes = match piece {
+                EgressPiece::Data(d) => d.len(),
+                _ => 0,
+            };
+            if batches > 0 || bytes > 0 {
+                // `as` saturates, and NaN is 0.
+                let now = js_sys::Date::now() as u64;
+                stats.borrow_mut().sent(batches, bytes, now);
+            }
+            Ok(piece)
+        }
+    }
+}
+
 /// The testbed's side of the worker: its lines go out as `sample` events,
-/// and a media stream's Data messages to the page.
+/// and a media stream to the page's player on its feeds.
 #[derive(Clone)]
-struct Testbed(Out);
+struct Testbed {
+    out: Out,
+    feeds: Option<Rc<Feeds>>,
+}
+
+impl Testbed {
+    /// Feeds the viewer's stream to the feeds the page opens, each taking
+    /// it over from the one before, until the stream ends (see the
+    /// [module docs](self#a-media-streams-feed)).
+    async fn feed<S: SwarmRead>(&self, mut viewer: Viewer<'_, S, Testbed>) -> Result<(), String> {
+        let feeds = self.feeds.clone().ok_or("the page gave no feeds port")?;
+        let mut requests = feeds
+            .requests
+            .borrow_mut()
+            .take()
+            .ok_or("the page's player is fed already")?;
+        self.out.post_bytes(&[MEDIA_OPEN]);
+        let mut current: Option<(u64, FeedPort)> = None;
+        loop {
+            let (id, port) = match current.take() {
+                Some(c) => c,
+                None => match next_request(&mut requests, None).await {
+                    Some(FeedRequest::Open { id, port }) => (id, FeedPort::new(port)),
+                    Some(FeedRequest::Close { .. }) => continue,
+                    None => return Err("the feeds port closed".to_owned()),
+                },
+            };
+            let fed = {
+                let mut pieces = Fed {
+                    viewer: &mut viewer,
+                    port: &port,
+                    posted: port.posted(),
+                };
+                let pumped = pin!(pump(&mut pieces, &port));
+                let request = pin!(next_request(&mut requests, Some(id)));
+                match select(pumped, request).await {
+                    Either::Left((stopped, _)) => Ok(stopped),
+                    Either::Right((request, _)) => Err(request),
+                }
+            };
+            match fed {
+                Ok(Stopped::Stream(VideoError::StreamClosed)) => {
+                    port.end();
+                    feeds.closed(id, &VideoError::StreamClosed.to_string());
+                    return Ok(());
+                }
+                Ok(Stopped::Stream(e)) => {
+                    // The stream reads on, into the same feed.
+                    self.error(format!("read: {e}"));
+                    current = Some((id, port));
+                }
+                Ok(Stopped::Port) => {
+                    feeds.closed(id, &Stopped::Port.to_string());
+                    viewer.resync();
+                }
+                Err(Some(FeedRequest::Open { id, port: next })) => {
+                    drop(port);
+                    viewer.resync();
+                    current = Some((id, FeedPort::new(next)));
+                }
+                Err(Some(FeedRequest::Close { .. })) => viewer.resync(),
+                Err(None) => return Err("the feeds port closed".to_owned()),
+            }
+        }
+    }
+}
 
 impl Runtime for Testbed {
     fn now_ms(&self) -> u64 {
@@ -559,7 +758,7 @@ impl Runtime for Testbed {
     }
 
     fn emit(&self, line: String) {
-        self.0.post(&[
+        self.out.post(&[
             ("type", "sample".into()),
             ("line", line.into()),
             ("postMs", js_sys::Date::now().into()),
@@ -567,22 +766,14 @@ impl Runtime for Testbed {
     }
 
     fn error(&self, message: String) {
-        self.0.error("testbed", &message);
+        self.out.error("testbed", &message);
     }
 
-    fn media(&self, data: &[u8], segment_end: bool, discontinuity: bool) {
-        let mut msg = Vec::with_capacity(data.len() + 2);
-        msg.push(MEDIA_BYTES);
-        msg.push(
-            if segment_end { MEDIA_SEGMENT_END } else { 0 }
-                | if discontinuity {
-                    MEDIA_DISCONTINUITY
-                } else {
-                    0
-                },
-        );
-        msg.extend_from_slice(data);
-        self.0.post_bytes(&msg);
+    fn play<S: SwarmRead>(
+        &self,
+        viewer: Viewer<'_, S, Self>,
+    ) -> impl Future<Output = Result<(), String>> {
+        self.feed(viewer)
     }
 }
 

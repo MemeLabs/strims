@@ -177,6 +177,7 @@ fn acks_past_the_batches_posted_count_as_all_and_old_acks_change_nothing() {
     );
     c.ack(3);
     assert_eq!(c.unacked(), (0, 0));
+    assert_eq!(c.posted(), 3);
 }
 
 // --- pumping ----------------------------------------------------------------

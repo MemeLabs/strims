@@ -2785,6 +2785,7 @@ dependencies = [
  "strims-session",
  "strims-svc",
  "strims-testbed",
+ "strims-transfer",
  "strims-video",
  "strims-vnic",
  "thiserror",

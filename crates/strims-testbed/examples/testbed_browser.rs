@@ -40,7 +40,9 @@
 //!
 //! With `--units`, the stream is media in the unit format
 //! ([`strims_testbed::media`]): the page plays what the node reads through
-//! the baseline player, and its `player` events, a JSON object a second of
+//! the baseline player, whose worker the node feeds as an app page's node
+//! feeds its player (a player that restarts takes the stream from the next
+//! whole record), and its `player` events, a JSON object a second of
 //! the player's stats and the video's events, go to `--player`, one line
 //! each with `rel_ms` (the page's `postMs` less the start) and `host_t_ms`
 //! added.

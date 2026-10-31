@@ -66,7 +66,9 @@
 #                          unit format (strims-testbed's media module), in
 #                          place of the self-checking frames at RATE; it
 #                          must be native. Browser viewers play it through
-#                          the baseline player
+#                          the baseline player, fed from their node as an
+#                          app page's player is; a player that restarts
+#                          takes the stream from the next whole record
 #   UNITS_CPS=<n>          with MEDIA, the swarm's chunks per signature,
 #                          the file's signing as ingest chooses it
 #                          (default 8)

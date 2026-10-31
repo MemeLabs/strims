@@ -47,8 +47,8 @@ pub type WasmManager = Manager<IdbKv, WasmFactory, WasmClock>;
 /// this worker. `feeds` is the port players' feeds open on
 /// ([`crate::feed`]), served while a profile runs; without one, players
 /// read streams over the frontend RPC. With the `e2e` feature,
-/// `options.e2e: true` hands `frontend` and `signal` to the browser link
-/// tests' bare node instead.
+/// `options.e2e: true` hands `frontend`, `signal` and `feeds` to the
+/// browser link tests' and the testbed's bare node instead.
 #[wasm_bindgen]
 pub fn start(
     options: JsValue,
@@ -59,11 +59,11 @@ pub fn start(
 ) -> Result<(), JsValue> {
     let (parsed, ignored) = Options::parse(&options);
     crate::log::init(parsed.log_level);
-    // The `e2e` feature's bare node takes both ports here, before anything
+    // The `e2e` feature's bare node takes its ports here, before anything
     // opens.
     #[cfg(feature = "e2e")]
     if crate::e2e::requested(&options) {
-        crate::e2e::start(frontend, signal);
+        crate::e2e::start(frontend, signal, feeds);
         return Ok(());
     }
     for line in &ignored {
