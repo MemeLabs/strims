@@ -29,7 +29,12 @@
 //!   skipped.
 //!
 //! Tag times are 32-bit milliseconds that wrap; each is taken as the time
-//! nearest the previous tag's, on one clock for both tracks. A track's
+//! nearest the previous tag's, on one clock for both tracks. A tag more
+//! than [`CLOCK_RESTART`] before its track's previous tag is an encoder
+//! that started its clock over: the clock moves both tracks' later tags so
+//! that this one comes a step of its track's after the latest time either
+//! track reached, the step between its track's last two tags (at most
+//! [`CLOCK_RESTART`]). A track's
 //! frames before its first sequence header are dropped, and a DTS below
 //! the track's previous one is raised to it. [`FlvMetrics`] counts each
 //! of these.
@@ -57,6 +62,13 @@ pub const AUDIO_TRACK: TrackId = TrackId(2);
 pub const VIDEO_TIMESCALE: u32 = 90_000;
 /// Video timescale units per tag millisecond.
 const VIDEO_UNITS_PER_MS: i64 = VIDEO_TIMESCALE as i64 / 1000;
+/// How far, in milliseconds, a tag's time may fall behind its track's
+/// previous tag's before the clock takes it as an encoder's clock started
+/// over. A track's tags come in decode order, so they step back only by
+/// an encoder's jitter, which the DTS clamp absorbs.
+pub const CLOCK_RESTART: i64 = 1000;
+/// A track's step before its second tag, in milliseconds.
+const DEFAULT_STEP: i64 = 1;
 
 /// FLV video frame types.
 const FRAME_KEY: u8 = 1;
@@ -215,25 +227,59 @@ pub struct FlvMetrics {
     pub dts_clamped: u64,
     /// Times the audio sample count restarted at the tag time.
     pub audio_resyncs: u64,
+    /// Times the encoder's clock started over.
+    pub clock_restarts: u64,
 }
 
 /// Turns 32-bit tag times into 64-bit ones, each the value nearest the
-/// previous.
+/// previous, moved past the encoder's restarts.
 #[derive(Debug, Default)]
 struct Clock {
     /// The previous tag's raw and unwrapped times.
     last: Option<(u32, i64)>,
+    /// What the restarts moved the unwrapped times by.
+    offset: i64,
+    /// The latest time either track reached.
+    latest: Option<i64>,
+    /// Each track's previous time and its step.
+    video: Option<(i64, i64)>,
+    audio: Option<(i64, i64)>,
 }
 
 impl Clock {
-    fn unwrap(&mut self, ts: u32) -> i64 {
-        let ms = match self.last {
+    /// The time of a tag of `kind` sent at `ts`, and whether it started
+    /// the clock over.
+    fn time(&mut self, kind: TrackKind, ts: u32) -> (i64, bool) {
+        let unwrapped = match self.last {
             None => i64::from(ts),
             // A wrapped difference read as signed: within 2^31 ms either way.
             Some((raw, ms)) => ms.saturating_add(i64::from(ts.wrapping_sub(raw) as i32)),
         };
-        self.last = Some((ts, ms));
-        ms
+        self.last = Some((ts, unwrapped));
+        let mut ms = unwrapped.saturating_add(self.offset);
+        let track = match kind {
+            TrackKind::Video => &mut self.video,
+            TrackKind::Audio => &mut self.audio,
+        };
+        let restart = match (*track, self.latest) {
+            (Some((prev, step)), Some(latest)) if ms < prev.saturating_sub(CLOCK_RESTART) => {
+                Some(latest.saturating_add(step))
+            }
+            _ => None,
+        };
+        let step = match *track {
+            Some((_, step)) if restart.is_some() => step,
+            Some((prev, step)) if ms <= prev => step,
+            Some((prev, _)) => ms.saturating_sub(prev).min(CLOCK_RESTART),
+            None => DEFAULT_STEP,
+        };
+        if let Some(to) = restart {
+            self.offset = self.offset.saturating_add(to.saturating_sub(ms));
+            ms = to;
+        }
+        *track = Some((ms, step));
+        self.latest = Some(self.latest.map_or(ms, |l| l.max(ms)));
+        (ms, restart.is_some())
     }
 }
 
@@ -298,7 +344,7 @@ impl FlvSource {
         body: &'a [u8],
         now: Time,
     ) -> Result<Option<SourceEvent<'a>>, FlvError> {
-        let ms = self.clock.unwrap(ts_ms);
+        let ms = self.time(TrackKind::Video, ts_ms);
         let Some((&first, rest)) = body.split_first() else {
             return Ok(self.skip());
         };
@@ -483,7 +529,7 @@ impl FlvSource {
         body: &'a [u8],
         now: Time,
     ) -> Result<Option<SourceEvent<'a>>, FlvError> {
-        let ms = self.clock.unwrap(ts_ms);
+        let ms = self.time(TrackKind::Audio, ts_ms);
         let Some((&first, rest)) = body.split_first() else {
             return Ok(self.skip());
         };
@@ -617,6 +663,16 @@ impl FlvSource {
             payload,
             published: now,
         }))
+    }
+
+    /// The clock's time of a tag of `kind` sent at `ts`, counting a
+    /// restart.
+    fn time(&mut self, kind: TrackKind, ts: u32) -> i64 {
+        let (ms, restarted) = self.clock.time(kind, ts);
+        if restarted {
+            self.metrics.clock_restarts += 1;
+        }
+        ms
     }
 
     fn skip<'a>(&mut self) -> Option<SourceEvent<'a>> {

@@ -314,6 +314,58 @@ fn frame_ms(n: i64) -> u32 {
     u32::try_from(n * 1024 * 1000 / 44_100).unwrap()
 }
 
+/// An encoder an hour into its stream that starts its clock over: both
+/// tracks' tags restart at 0.
+#[test]
+fn an_encoder_clock_restart_continues_both_tracks_after_the_latest_time() {
+    let hour = 3_600_000u32;
+    let mut s = source_at(hour - 100, &LC_48000);
+    for k in 0..3 {
+        unit(s.video(hour - 66 + k * 33, &legacy_video(1, 1, 0, b"v"), NOW));
+    }
+    let a = unit(s.audio(hour - 10, &legacy_audio(1, b"a"), NOW));
+    // the restart: video first, at 0, then audio
+    let v = unit(s.video(0, &legacy_video(1, 1, 66, b"v"), NOW));
+    assert_eq!(
+        v.dts,
+        i64::from(hour + 33) * 90,
+        "a video step after the latest time"
+    );
+    assert_eq!(v.pts - v.dts, 66 * 90);
+    // audio restarted with video: its tag lands at the same time, two
+    // frames on, so its sample count restarts there
+    let next = unit(s.audio(0, &legacy_audio(1, b"a"), NOW));
+    assert_eq!(next.dts, i64::from(hour + 33) * 48);
+    assert!(next.dts > a.dts);
+    let v = unit(s.video(33, &legacy_video(2, 1, 0, b"v"), NOW));
+    assert_eq!(v.dts, i64::from(hour + 66) * 90);
+    let m = s.metrics();
+    assert_eq!(
+        (m.clock_restarts, m.dts_clamped, m.audio_resyncs),
+        (1, 0, 1)
+    );
+
+    // a later restart moves the clock again
+    unit(s.video(2_000, &legacy_video(1, 1, 0, b"v"), NOW));
+    unit(s.video(2_033, &legacy_video(2, 1, 0, b"v"), NOW));
+    let v = unit(s.video(0, &legacy_video(1, 1, 0, b"v"), NOW));
+    assert_eq!(v.dts, i64::from(hour + 2_066 + 33) * 90);
+    assert_eq!(s.metrics().clock_restarts, 2);
+}
+
+#[test]
+fn steps_back_within_the_bound_and_the_32_bit_wrap_are_not_restarts() {
+    let mut s = source_at(u32::MAX - 500, &LC_48000);
+    unit(s.video(u32::MAX - 400, &legacy_video(1, 1, 0, b"v"), NOW));
+    // the clamp holds a step back of under a second
+    let u = unit(s.video(u32::MAX - 1_399, &legacy_video(2, 1, 0, b"v"), NOW));
+    assert_eq!(u.dts, (i64::from(u32::MAX) - 400) * 90);
+    let u = unit(s.video(100, &legacy_video(2, 1, 0, b"v"), NOW));
+    assert_eq!(u.dts, ((1i64 << 32) + 100) * 90);
+    let m = s.metrics();
+    assert_eq!((m.clock_restarts, m.dts_clamped), (0, 1));
+}
+
 #[test]
 fn audio_dts_counts_samples() {
     let mut s = source(&LC_44100);
@@ -347,8 +399,9 @@ fn audio_resyncs_to_the_tag_time_after_drifting_a_frame() {
     assert_eq!(s.metrics().audio_resyncs, 1);
     let u = unit(s.audio(10_030, &legacy_audio(1, b"a"), NOW));
     assert_eq!(u.dts, 442_024);
-    // a jump back resyncs, and the clamp holds the DTS
-    let u = unit(s.audio(5_000, &legacy_audio(1, b"a"), NOW));
+    // a jump back within the restart bound resyncs, and the clamp holds
+    // the DTS
+    let u = unit(s.audio(9_500, &legacy_audio(1, b"a"), NOW));
     assert_eq!(u.dts, 442_024);
     assert_eq!(s.metrics().audio_resyncs, 2);
     assert_eq!(s.metrics().dts_clamped, 1);
@@ -826,5 +879,35 @@ proptest! {
                 Ok(None) | Err(_) => {}
             }
         }
+    }
+
+    // An encoder that starts its clock over at any frame, to any time at
+    // least two seconds back, never stalls a track: each one's DTS rises
+    // with every frame, and every restart is counted.
+    #[test]
+    fn an_encoder_restarting_its_clock_never_stalls_a_track(
+        start: u32,
+        frames in 2usize..240,
+        restarts in proptest::collection::vec((0usize..240, 2_000u32..u32::MAX / 2), 0..4),
+    ) {
+        let mut s = source_at(start, &LC_48000);
+        let mut t = start;
+        let mut last = [None::<i64>; 2];
+        let mut expected = 0;
+        for frame in 0..frames {
+            if let Some(&(_, back)) = restarts.iter().find(|(at, _)| *at == frame) {
+                t = t.wrapping_sub(back);
+                expected += 1;
+            }
+            let video = unit(s.video(t, &legacy_video(2, 1, 0, b"v"), NOW));
+            let audio = unit(s.audio(t.wrapping_add(5), &legacy_audio(1, b"a"), NOW));
+            for (i, dts) in [video.dts, audio.dts].into_iter().enumerate() {
+                prop_assert!(last[i].is_none_or(|l| dts > l), "frame {frame}");
+                last[i] = Some(dts);
+            }
+            t = t.wrapping_add(33);
+        }
+        prop_assert_eq!(s.metrics().clock_restarts, expected);
+        prop_assert_eq!(s.metrics().dts_clamped, 0);
     }
 }
