@@ -15,8 +15,11 @@
 //!   ingest session ([`seed_options`]).
 //! - **A viewer** ([`read()`]) adds the swarm with an egress stream's
 //!   options ([`viewer_options`]) and reads it through a
-//!   [`ChunkedReader`], which joins at a GOP by rewinding the swarm reader
-//!   within [`EgressSettings::rewind_timeout`]. The records' pieces go out
+//!   [`ChunkedReader`], which joins at a GOP as egress does: a spare swarm
+//!   reader rewinds there within [`EgressSettings::rewind_timeout`] while
+//!   the reader reads on to the next sync record, and the join takes the
+//!   rewind if it lands within [`EgressSettings::rewind_grace`] of that
+//!   record's arrival. The records' pieces go out
 //!   as the Egress RPC's Data messages ([`DataMessages`]) to
 //!   [`Runtime::media`], and each unit record's lag from its publish time
 //!   to its arrival goes to the second's line.
@@ -365,6 +368,8 @@ pub enum RewindOutcome {
     Refused,
     /// [`EgressSettings::rewind_timeout`] passed first.
     TimedOut,
+    /// The next sync record arrived and the rewind's grace passed first.
+    Overtaken,
 }
 
 impl RewindOutcome {
@@ -373,6 +378,7 @@ impl RewindOutcome {
             RewindOutcome::Granted => "granted",
             RewindOutcome::Refused => "refused",
             RewindOutcome::TimedOut => "timed_out",
+            RewindOutcome::Overtaken => "overtaken",
         }
     }
 }
@@ -410,7 +416,7 @@ impl ViewerStats {
         let r = &self.reader;
         let j = &self.join;
         format!(
-            "{{\"units\":{},\"keyframes\":{},\"messages\":{},\"bytes\":{},\"first_message_ms\":{},\"discontinuities\":{},\"corrupt_frames\":{},\"losses\":{},\"records\":{},\"rewinds\":{},\"refused_rewinds\":{},\"first_read_ms\":{},\"rewind_start_ms\":{},\"rewind_end_ms\":{},\"rewind\":{},\"rewind_back\":{}}}",
+            "{{\"units\":{},\"keyframes\":{},\"messages\":{},\"bytes\":{},\"first_message_ms\":{},\"discontinuities\":{},\"corrupt_frames\":{},\"losses\":{},\"records\":{},\"rewinds\":{},\"refused_rewinds\":{},\"overtaken_rewinds\":{},\"first_read_ms\":{},\"rewind_start_ms\":{},\"rewind_end_ms\":{},\"rewind\":{},\"rewind_back\":{}}}",
             self.units,
             self.keyframes,
             self.messages,
@@ -422,6 +428,7 @@ impl ViewerStats {
             r.records,
             r.rewinds,
             r.refused_rewinds,
+            r.overtaken_rewinds,
             opt(j.first_read_ms),
             opt(j.rewind_start_ms),
             opt(j.rewind_end_ms),
@@ -436,14 +443,39 @@ fn opt(v: Option<u64>) -> String {
     v.map_or("null".to_owned(), |v| v.to_string())
 }
 
-/// The swarm reader with a deadline on its rewinds, noting the join.
+/// The swarm reader with a deadline and a grace on its rewinds, noting the
+/// join. A stream's reader and its spare share what they note.
 struct Deadline<S, R> {
     reader: S,
     rt: R,
     timeout_ms: u64,
+    grace_ms: u64,
     /// The stream offset just past the last read.
-    next: u64,
+    next: Rc<Cell<u64>>,
     join: Rc<Cell<Join>>,
+}
+
+/// Notes a viewer's first rewind as it ends, or as overtaken when it is
+/// dropped first.
+struct Noting<R: Runtime> {
+    rt: R,
+    join: Rc<Cell<Join>>,
+    start: u64,
+    back: u64,
+    outcome: RewindOutcome,
+}
+
+impl<R: Runtime> Drop for Noting<R> {
+    fn drop(&mut self) {
+        let mut j = self.join.get();
+        if j.rewind.is_none() {
+            j.rewind_start_ms = Some(self.start);
+            j.rewind_end_ms = Some(self.rt.now_ms());
+            j.rewind = Some(self.outcome);
+            j.rewind_back = Some(self.back);
+            self.join.set(j);
+        }
+    }
 }
 
 impl<S: SwarmRead, R: Runtime + 'static> SwarmRead for Deadline<S, R> {
@@ -452,7 +484,7 @@ impl<S: SwarmRead, R: Runtime + 'static> SwarmRead for Deadline<S, R> {
     async fn read_at(&mut self, out: &mut [u8]) -> Result<(u64, usize), ReadFailure<S::Error>> {
         let r = SwarmRead::read_at(&mut self.reader, out).await;
         if let Ok((offset, n)) = r {
-            self.next = offset + n as u64;
+            self.next.set(offset + n as u64);
             let mut j = self.join.get();
             if j.first_read_ms.is_none() {
                 j.first_read_ms = Some(self.rt.now_ms());
@@ -463,9 +495,16 @@ impl<S: SwarmRead, R: Runtime + 'static> SwarmRead for Deadline<S, R> {
     }
 }
 
-impl<S: SwarmRead, R: Runtime + 'static> Rewind for Deadline<S, R> {
+impl<S: SwarmRead, R: Runtime + Clone + 'static> Rewind for Deadline<S, R> {
     async fn rewind(&mut self, offset: u64) -> Option<u64> {
         let start = self.rt.now_ms();
+        let mut noting = Noting {
+            rt: self.rt.clone(),
+            join: self.join.clone(),
+            start,
+            back: self.next.get().saturating_sub(offset),
+            outcome: RewindOutcome::Overtaken,
+        };
         let deadline = start + self.timeout_ms;
         let (at, outcome) = tokio::select! {
             biased;
@@ -475,15 +514,14 @@ impl<S: SwarmRead, R: Runtime + 'static> Rewind for Deadline<S, R> {
             },
             () = self.rt.sleep_until_ms(deadline) => (None, RewindOutcome::TimedOut),
         };
-        let mut j = self.join.get();
-        if j.rewind.is_none() {
-            j.rewind_start_ms = Some(start);
-            j.rewind_end_ms = Some(self.rt.now_ms());
-            j.rewind = Some(outcome);
-            j.rewind_back = Some(self.next.saturating_sub(offset));
-            self.join.set(j);
-        }
+        noting.outcome = outcome;
         at
+    }
+
+    fn grace(&self) -> impl Future<Output = ()> + 'static {
+        let rt = self.rt.clone();
+        let at = rt.now_ms() + self.grace_ms;
+        async move { rt.sleep_until_ms(at).await }
     }
 }
 
@@ -566,10 +604,12 @@ const HEAD_KEEP: usize = 128;
 const _: () = assert!(HEAD_KEEP > GOP_HEAD_LEN);
 
 /// Reads the stream through `reader` (see the [module docs](self)) until
-/// it closes: each Data message goes to [`Runtime::media`], each unit
+/// it closes, `spare` (a second reader opened with it) racing its join's
+/// rewind: each Data message goes to [`Runtime::media`], each unit
 /// record's lag to `lags`, and what was read to `stats`.
 pub async fn read<S: SwarmRead, R: Runtime + Clone + 'static>(
     reader: S,
+    spare: Option<S>,
     chunk_size: usize,
     rt: &R,
     lags: &RefCell<Vec<u64>>,
@@ -577,15 +617,20 @@ pub async fn read<S: SwarmRead, R: Runtime + Clone + 'static>(
 ) -> Result<(), String> {
     let egress = EgressSettings::default();
     let join = Rc::new(Cell::new(Join::default()));
-    let reader = Deadline {
+    let next = Rc::new(Cell::new(0));
+    let deadline = |reader| Deadline {
         reader,
         rt: rt.clone(),
         timeout_ms: u64::try_from(egress.rewind_timeout.as_millis()).unwrap_or(0),
-        next: 0,
+        grace_ms: u64::try_from(egress.rewind_grace.as_millis()).unwrap_or(0),
+        next: next.clone(),
         join: join.clone(),
     };
-    let mut records = ChunkedReader::new(reader, chunk_size, egress.read_buffer_bytes)
+    let mut records = ChunkedReader::new(deadline(reader), chunk_size, egress.read_buffer_bytes)
         .map_err(|e| format!("chunked reader: {e}"))?;
+    if let Some(spare) = spare {
+        records.set_spare(deadline(spare));
+    }
     let mut messages = DataMessages::new(egress.max_data_bytes);
     // The record in progress's first bytes. Bound: HEAD_KEEP.
     let mut head = Vec::with_capacity(HEAD_KEEP);

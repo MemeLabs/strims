@@ -219,6 +219,7 @@ impl SwarmWrite for Stream {
 
 /// Reads a whole stream from `next`, a chunk start, in chunks, and
 /// rewinds anywhere before it.
+#[derive(Clone)]
 struct Reader {
     bytes: Vec<u8>,
     chunk: usize,
@@ -309,7 +310,10 @@ fn a_viewer_joining_mid_stream_gets_whole_records_from_a_gop_start() {
     let lags = RefCell::new(Vec::new());
     let viewer = RefCell::new(ViewerStats::default());
     block_on(async {
-        read(reader, chunk, &rt, &lags, &viewer).await.unwrap();
+        let spare = reader.clone();
+        read(reader, Some(spare), chunk, &rt, &lags, &viewer)
+            .await
+            .unwrap();
     });
     let v = viewer.borrow();
     assert_eq!(v.join.rewind, Some(RewindOutcome::Granted));

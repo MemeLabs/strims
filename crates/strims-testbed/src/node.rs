@@ -34,7 +34,7 @@
 //! | `tick_late_ms` | how late the timer of this line fired |
 //! | `write_late_ms` | at the seed, the latest of that second's writes past its time; `null` without writes |
 //! | `wakeups` | passes of the node's loop since the last line (`null` on the first): it follows traffic, so it shows load only next to a native node's |
-//! | `media` | of a media stream, `null` otherwise: at the seed, [`SeedStats`]: the unit writer's `records`, `units`, `gops`, `bytes` and `padding`, `early_signs` and `dropped` units; at a viewer, [`ViewerStats`]: `units` and `keyframes` read whole, Data `messages` and their `bytes`, `first_message_ms`, the egress reader's `discontinuities`, `corrupt_frames`, `losses`, `records` and `rewinds`/`refused_rewinds`, and the join: `first_read_ms`, the first rewind's `rewind_start_ms`, `rewind_end_ms`, outcome (`granted`, `refused`, `timed_out`) and bytes back from the reader's position, `rewind_back`. Times are Unix ms. |
+//! | `media` | of a media stream, `null` otherwise: at the seed, [`SeedStats`]: the unit writer's `records`, `units`, `gops`, `bytes` and `padding`, `early_signs` and `dropped` units; at a viewer, [`ViewerStats`]: `units` and `keyframes` read whole, Data `messages` and their `bytes`, `first_message_ms`, the egress reader's `discontinuities`, `corrupt_frames`, `losses`, `records` and `rewinds`/`refused_rewinds`/`overtaken_rewinds`, and the join: `first_read_ms`, the first rewind's `rewind_start_ms`, `rewind_end_ms`, outcome (`granted`, `refused`, `timed_out`, `overtaken`) and bytes back from the reader's position, `rewind_back`. Times are Unix ms. |
 //!
 //! `tick_late_ms` and `write_late_ms` show a throttled timer or an
 //! overloaded host.
@@ -227,7 +227,15 @@ pub async fn run<R: Runtime + Clone + 'static>(
         let read = match s.stream {
             Stream::Frames => read_frames(reader, rt, &lags).await,
             Stream::Units { .. } => {
-                media::read(reader, options.chunk_size, rt, &lags, &viewer_stats).await
+                // The join's spare, opened with the reader as egress opens it.
+                let spare = match node.open_reader(swarm).await {
+                    Ok(r) => Some(r),
+                    Err(e) => {
+                        rt.error(format!("open spare reader: {e}"));
+                        None
+                    }
+                };
+                media::read(reader, spare, options.chunk_size, rt, &lags, &viewer_stats).await
             }
         };
         if let Err(e) = read {
