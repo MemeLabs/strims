@@ -166,6 +166,27 @@ robust tier collapsed 176 → 182 (interior) and 178 (any), the peers tier
 67 → 71 and 77, and lag p99 stayed ×1.00. star-3-10, the cell it aimed
 at, went ×1.13 [1.00, 1.27] with the interior stream alone.
 
+**A slow link's data left out of the busy time by its round trips.**
+(`own-queue` 29c6001c, `own-queue-v1` 1ec374e7 without its gate; against
+e5962e82) A peer's data in the runner wasn't busy time while its link's
+latest round trip stood 50 ms above the node's latest excess and the
+links' recent round trips showed no queue on the uplink (under 25 ms). It
+cured `collapse_slow_viewer` (the healthy viewers' p99 1.06–3.01 s →
+0.25–0.33 s at seeds 1–8), but a link's round trip shows what it carries
+as well as its path: each link that carries much waits behind its own
+buffer at its share of the uplink, so under a full uplink those links
+stand out from the ones that carry little, and TCP's sawtooth drains the
+shared queue often enough to open the gate. It changed every run of the
+scarce-seed stars, where no link is slow; at 32 seeds the robust tier
+collapsed 162 → 195 (star-31-5 2 → 12, p=0.01), halve-7-20's lag p99 went
+×1.26 and wan-super-peer's ×1.19, and the peers tier's ppspp cells tied
+(×0.997). Without the gate, the seed behind a competing upload read busy
+0.03–0.3 against 0.9–1.0 (`wan_residential_seed_adaptive_uncapped_varying`
+lost 623 of v0's frames at seed 6); left out of the push-busy time too,
+the holders' waits let `collapse_first_wave_overshoot`'s ramp open 6
+copies where the uplink pays for 2; a gate on the latest excess closed at
+every munro burst.
+
 ## Request control
 
 **A BBR-like request controller.** (`BbrLike`, retired in 3c40ec37) It

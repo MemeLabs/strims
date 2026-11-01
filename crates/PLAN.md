@@ -261,14 +261,16 @@ in `TRIED.md`.
      excess across its links lost a thin relay's own queue (`TRIED.md`).
    - One peer whose link blocks keeps its data queued, so the meter reads
      the node busy: its parent sheds subscribers and an adaptive seed's
-     budget falls to that link's rate. Count busy only while every peer
-     that had data queued still has (judge it in
-     `wan_slow_viewer_adaptive_uncapped` with `STRIMS_SIM_TCP`). The
-     Docker testbed's media runs (branch `video-target`; outputs in
+     budget falls to that link's rate (`collapse_slow_viewer`, a viewer
+     on a 2 Mbit/s downlink). The Docker testbed's media runs (outputs in
      `target/video/evidence/testbed-viewers-runs/`) show it on the real
      stack: one viewer on a 4.5 Mbit/s downlink in a five-node mesh at
      3 Mbit/s took the seed's children from 32 to 1 and put every viewer
-     4-13 s behind for 30 s (runs `slow-a` and `slow-b`).
+     4-13 s behind for 30 s (runs `slow-a` and `slow-b`). A link's round
+     trip can't single the link out, as it shows what the link carries
+     (`TRIED.md`). Try the runner's own counts: a peer's queue is its
+     link's while a peer with nothing queued took at least as much over
+     the meter's window.
    - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
      five-node mesh grows its push children from 16 to 50 every 15-20 s
      and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s
@@ -438,8 +440,6 @@ in `TRIED.md`.
      silent-holder rule is the adaptive seed's.
 
 ### strims-ppspp defects
-- Require monotonic sign-all timestamps until live signatures bind the
-  bin (see Wire changes).
 - Remove the unused `add_stream_close`.
 
 ### strims-chat defects
