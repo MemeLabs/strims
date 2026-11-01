@@ -201,6 +201,26 @@ while a drained peer took 340 KB/s. At 32 seeds wan-super-peer's lag p99
 went ×1.15 [1.10, 1.21] (parent changes ×1.15, startup p99 ×1.10) and
 wan-residential-seed's ×1.07 [1.03, 1.12].
 
+**Other ways to keep a slow link from reading as a busy uplink.**
+(`slow-fix-exp` 9458d27b and the knobs before it; against b0ab696c) Fed to
+each reader of the busy time alone, a busy time without the slow link's
+data cured `collapse_slow_viewer` only through the seed's budget: through
+shedding alone the healthy viewers lagged more (1.0–3.9 s at p99), and
+relay admission and the window changed nothing. Barring a holder whose
+pushes were overloaded, or whose link read behind and short of its
+streams, while most holders kept up, didn't cure it alone (the budget
+still fell on the slow viewer's answers), and beside the budget's rule it
+raised collapses (32 local seeds: star-15-5 5 → 9, wan-super-peer-varying
+4 → 8; with raw delivery rates the farm's robust tier collapsed
+162 → 176). Shedding the children whose data waited longest first changed
+nothing. A budget on the time pushes waited, not answers, cured nothing
+and lost frames under a competing upload
+(`wan_super_peer_adaptive_uncapped_varying` seed 4). As the test of a slow
+link, its recent excess alone (≥ 50 ms) took healthy links at munro
+bursts (wan-super-peer ×1.06), and raw delivery rates (under half the best
+other link's) took far links that TCP holds back under a competing upload
+(seed 4 again), which the window's base round trip corrects.
+
 ## Request control
 
 **A BBR-like request controller.** (`BbrLike`, retired in 3c40ec37) It

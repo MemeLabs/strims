@@ -259,25 +259,14 @@ in `TRIED.md`.
      uplink: star-3-10's viewers (20 Mbit/s uplinks) read about 550 KB/s
      and declined extra streams at half that. Clamping on the least latest
      excess across its links lost a thin relay's own queue (`TRIED.md`).
-   - One peer whose link blocks keeps its data queued, so the meter reads
-     the node busy: its parent sheds subscribers and an adaptive seed's
-     budget falls to that link's rate (`collapse_slow_viewer`, a viewer
-     on a 2 Mbit/s downlink). The Docker testbed's media runs (outputs in
-     `target/video/evidence/testbed-viewers-runs/`) show it on the real
-     stack: one viewer on a 4.5 Mbit/s downlink in a five-node mesh at
-     3 Mbit/s took the seed's children from 32 to 1 and put every viewer
-     4-13 s behind for 30 s (runs `slow-a` and `slow-b`). Leaving such a
-     link's data out of the busy time lost the robust tier: near a full
-     uplink TCP holds far links back while near ones drain, and neither
-     the links' round trips nor the runner's counts tell that from a slow
-     link (`TRIED.md`). Try keeping the reading and shedding the
-     subscribers whose data has waited longest first, so a slow child's
-     backlog sheds that child, not its siblings.
    - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
      five-node mesh grows its push children from 16 to 50 every 15-20 s
      and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s
      late (up to 2.1 s): most of that mesh's stalls. Reproduce it in the
-     sim before choosing a fix (runs `mesh-b` and `mesh-margin`).
+     sim before choosing a fix (runs `mesh-b` and `mesh-margin`). The slow
+     viewer's runs show it too (`slow-a`'s settings): its seed's budget
+     read 15 MB/s while the busy time read idle, three copies (1.2-1.8 MB/s)
+     filled the uplink, and two of the three holders fell behind.
    - Pushes queue toward a peer whose connection is backed up past one
      window, to ppspp's cap, and are dropped as stale only when written;
      and a viewer that falls a window behind sends its neighbours messages
