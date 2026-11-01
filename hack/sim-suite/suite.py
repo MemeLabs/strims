@@ -17,6 +17,8 @@ working tree's sims against the base's, cell by cell, paired by seed.
                                [--ref REF] [--tier ...] [--seeds N]
                                [--first-seed N] [--against SET]
                                [--farm-args ARGS] [--no-run] [--env KEY=VALUE ...]
+  hack/sim-suite/suite.py score RUN:ARM RUN:ARM [--tier ...] [--only CELL,...]
+                                [--knob SIM_EXP,STRIMS_SIM_EXP] [--all]
 
 `run` builds the ppspp sim and strims-sim's scenarios from the working
 tree (the checkout this script is in, changes and all) and from `--base`
@@ -53,7 +55,10 @@ and the paired effect over seeds: the geometric mean ratio of B to A for
 rates and times, the mean difference for shares, with a 95 % t-interval. A metric moved when the interval excludes no change and the
 effect passes its tie band; it is then marked better (+) or worse (-) by
 the metric's direction, or changed (~) where no direction is better.
-Hard failures (a run without a row, a panic, memory past the cell's
+Last, how many runs give
+the same trace as A's at the same cell and seed: all of them for a change
+that leaves the sims' behaviour alone, and which cells differ when only
+some do. Hard failures (a run without a row, a panic, memory past the cell's
 budget) are listed first. Four seeds show direction, not effect sizes:
 take what moves to the farm. Cheap cells run more seeds, and so do cells
 that tip between healthy and collapsed by seed.
@@ -87,11 +92,21 @@ alike) and the knob (the first of `--knob` for the ppspp sim, the second
 for strims-sim) at `off` and at each set, the tier's matrices in one
 farm run (one boot of its instances, one tail). Each set is scored
 against `off`, which stands for the base: with its flags off the commit
-must reproduce the base's traces. It prints each set's collapses and lag
+must reproduce the base's traces (`score` against a farm run of the base
+shows whether it does). It prints each set's collapses and lag
 p99 by cell, then its scorecard, against `off` or the set `--against`
 names.
 With `--refs` the arms are commits instead (the matrices' arms, no knob
 axis), scored against the first.
+
+`score` scores arm B of one farm run against arm A of another (or the
+same) run, paired by cell and seed: a new arm against base rows an earlier
+run holds, without running the base again. RUN is the run's name as
+`farm` prints it, ARM a `--refs` name or a `--sets` set (`off` for none).
+`farm` keeps each run's cells in the main checkout's
+target/sim-suite/farm-runs/RUN.json; a run without one is read as the
+cells of `--tier` and `--only` in the order `farm` wrote them, which must
+be the run's.
 """
 
 import argparse
@@ -636,7 +651,7 @@ def fmt(x):
     return f"{x:.0f}"
 
 
-def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False):
+def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False, traces=True):
     print(f"A = {a_label}   B = {b_label}")
     print("legend: + better  - worse  ~ moved  (ratio B/A or difference B-A, 95 % t-interval over seeds)")
     totals = collections.Counter()
@@ -679,6 +694,14 @@ def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False):
         print(f"\n{c['name']}, {n} seeds ({c['why']})")
         print("\n".join(lines) if lines else "   (no rows)")
     print(f"\nmoved: {totals['+']} better, {totals['-']} worse, {totals['~']} changed; {totals[' ']} ties")
+    pairs = [(k[0], ra["trace"] == b_rows[k]["trace"]) for k, ra in a_rows.items()
+             if k in b_rows and ra.get("trace") and b_rows[k].get("trace")]
+    if traces and pairs:
+        same = sum(1 for _, eq in pairs if eq)
+        differ = collections.Counter(name for name, eq in pairs if not eq)
+        cells_ = ", ".join(f"{name} ({k})" for name, k in differ.most_common(8))
+        more = f" and {len(differ) - 8} more" if len(differ) > 8 else ""
+        print(f"traces: {same} of {len(pairs)} runs as A's" + (f"; differ in {cells_}{more}" if 0 < same < len(pairs) else ""))
 
 
 # --- race -------------------------------------------------------------------
@@ -887,6 +910,28 @@ def peak_gib(sha):
     return peaks
 
 
+def farm_rows(name, cells, knob):
+    """Farm run `name`'s rows (its matrices are `cells`, in order) by
+    arm: a `--refs` name, or a `--sets` set as its knob's value, each by
+    (cell, seed)."""
+    rows = collections.defaultdict(dict)
+    for i, c in enumerate(cells):
+        seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
+        state = farm_root() / "target" / "sim-farm" / f"{name}-{i:02d}" / "rows.jsonl"
+        for rec in load_rows(state).values() if state.exists() else ():
+            if rec["test"] != c["test"]:
+                sys.exit(f"{name}-{i:02d} ran {rec['test']}, not {c['name']}'s {c['test']}: "
+                         "pass the run's --tier and --only")
+            row = {**rec["row"], "_rss_mb": rec.get("max_rss_mb"), "_wall_s": rec.get("wall_s")}
+            for v in {rec["arm"], rec["env"].get(knob[c["sim"]])} - {None}:
+                rows[v][(c["name"], int(rec["env"][seed_key]))] = row
+    return rows
+
+
+def farm_index(name):
+    return farm_root() / "target" / "sim-suite" / "farm-runs" / f"{name}.json"
+
+
 def farm(a, cells):
     # Either one commit with the flag sets as an axis, or several commits
     # as the matrices' arms.
@@ -939,22 +984,18 @@ def farm(a, cells):
         path = out / f"{name}-{i:02d}.toml"
         path.write_text(text)
         paths.append(path)
+    index = farm_index(name)
+    index.parent.mkdir(parents=True, exist_ok=True)
+    keep = ("name", "sim", "test", "why")
+    index.write_text(json.dumps({"cells": [{k: c[k] for k in keep} for c in cells]}) + "\n")
     farm_py = farm_root() / "hack" / "sim-farm" / "farm.py"
     if not a.no_run:
         print(f"farm run {name}: {len(cells)} matrices, {len(values)} arms x {len(seeds)} seeds", file=sys.stderr)
         # One run for the tier: one boot of its instances, and one tail.
         subprocess.run([sys.executable, str(farm_py), "run", *map(str, paths), *shlex.split(a.farm_args)])
-    rows = {v: {} for v in values}
-    for i, c in enumerate(cells):
-        seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
-        state = farm_root() / "target" / "sim-farm" / f"{name}-{i:02d}" / "rows.jsonl"
-        for rec in load_rows(state).values() if state.exists() else ():
-            v = rec["arm"] if a.refs else rec["env"].get(knob[c["sim"]])
-            if v in rows:
-                row = {**rec["row"], "_rss_mb": rec.get("max_rss_mb"), "_wall_s": rec.get("wall_s")}
-                rows[v][(c["name"], int(rec["env"][seed_key]))] = row
+    rows = farm_rows(name, cells, knob)
     base = a.against.strip() if a.against else values[0]
-    if base not in rows:
+    if base not in values:
         sys.exit(f"--against {base!r} is none of the sets")
     others = [v for v in values if v != base]
     for v in others:
@@ -968,6 +1009,27 @@ def farm(a, cells):
     for v in others:
         print()
         scorecard(cells, rows[base], rows[v], f"{sha[:8]} {base}", f"{sha[:8]} {v}", a.all)
+
+
+def score(a, cells):
+    knob = dict(zip((PPSPP, SIM), (k.strip() for k in a.knob.split(","))))
+    picked = []
+    for arg in (a.a, a.b):
+        run, sep, arm = arg.rpartition(":")
+        if not sep or not run:
+            sys.exit(f"{arg!r} isn't RUN:ARM")
+        index = farm_index(run)
+        run_cells = json.loads(index.read_text())["cells"] if index.exists() else cells
+        rows = farm_rows(run, run_cells, knob)
+        if arm not in rows:
+            sys.exit(f"run {run} has no rows of arm {arm!r} (it has {', '.join(sorted(rows)) or 'none'})")
+        picked.append((run_cells, rows[arm]))
+    (a_cells, a_rows), (b_cells, b_rows) = picked
+    names = {c["name"] for c in a_cells}
+    both = [c for c in b_cells if c["name"] in names]
+    if a.only:
+        both = [c for c in both if c["name"] in set(a.only.split(","))]
+    scorecard(both, a_rows, b_rows, a.a, a.b, a.all)
 
 
 def main():
@@ -1018,6 +1080,15 @@ def main():
     fc.add_argument("--all", action="store_true", help="every metric, ties too")
     fc.add_argument("--farm-args", default="", help="more arguments for farm.py run")
     fc.add_argument("--no-run", action="store_true", help="report the rows the farm has")
+    sc = sub.add_parser("score")
+    sc.add_argument("a", metavar="RUN:ARM", help="the base: a farm run's name and one of its arms")
+    sc.add_argument("b", metavar="RUN:ARM", help="the arm scored against it")
+    sc.add_argument("--tier", default="peers", choices=sorted(TIERS),
+                    help="a run's cells when it has no index: the tier it ran")
+    sc.add_argument("--only", help="cells, comma-separated (the run's, when it has no index)")
+    sc.add_argument("--knob", default="SIM_EXP,STRIMS_SIM_EXP",
+                    help="the knobs that took a --sets run's sets: the ppspp sim's, then strims-sim's")
+    sc.add_argument("--all", action="store_true", help="every metric, ties too")
     for p in (cal, r, rc, fc):
         p.add_argument("--env", action="append", default=[], metavar="KEY=VALUE",
                        help="set for every arm's runs, as part of each cell")
@@ -1027,6 +1098,9 @@ def main():
     if getattr(a, "only", None):
         want = set(a.only.split(","))
         cells = [c for c in cells if c["name"] in want]
+    if a.cmd == "score":
+        score(a, cells)
+        return
     every = dict(kv.split("=", 1) for kv in a.env)
     if every:
         cells = [{**c, "env": {**c["env"], **every}} for c in cells]
@@ -1052,7 +1126,7 @@ def main():
         b = {(c, s - per[c]): r for (c, s), r in every.items() if s > per[c]}
         a_rows = {k: r for k, r in every.items() if k[1] <= per[k[0]]}
         report = lambda: scorecard(cells, a_rows, b, f"{a.base} {sha[:8]} at seeds 1..N",
-                                   "the same at seeds N+1..2N", True)
+                                   "the same at seeds N+1..2N", True, traces=False)
     else:
         tree = {sim: tree_binary(sim, base[sim]) for sim in sims}
         # The working tree's knobs name its rows apart from the same binary's
