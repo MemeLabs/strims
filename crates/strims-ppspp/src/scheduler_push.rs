@@ -329,6 +329,10 @@ pub(crate) struct UploadInfo {
     pub(crate) rate: u64,
     /// The fraction of the window during which data was queued to send ...
     pub(crate) busy: f64,
+    /// ... and for a peer whose link doesn't hold it back: what an
+    /// adaptive seed's budget reads ([`for_budget`](Self::for_budget));
+    /// `None`: `busy`.
+    pub(crate) budget_busy: Option<f64>,
     /// ... and of the last 300 ms, and the fraction of those during which
     /// pushes were queued.
     pub(crate) busy_recent: f64,
@@ -357,6 +361,15 @@ pub(crate) struct UploadInfo {
 }
 
 impl UploadInfo {
+    /// The reading an adaptive seed's budget takes: the busy time without
+    /// the time data waited only for links that hold it back.
+    pub(crate) fn for_budget(&self) -> UploadInfo {
+        UploadInfo {
+            busy: self.budget_busy.unwrap_or(self.busy),
+            ..*self
+        }
+    }
+
     /// The upload capacity in bytes per second. With the driver's hint, the
     /// hint, or less while the link is saturated (at least
     /// [`SATURATED_BUSY`]) at a lower rate. Without, the rate while busy: a

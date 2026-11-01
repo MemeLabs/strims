@@ -2147,6 +2147,33 @@ fn under_one_copy_a_holder_takes_what_the_budget_pays_for() {
 }
 
 #[test]
+fn the_budget_leaves_out_the_time_data_waited_only_for_links_that_hold_it_back() {
+    let mut f = adaptive_seed(4, 2);
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    for s in 0..4 {
+        f.sched
+            .handle_stream_request(p, s, Bin(0), Bin(0), now(), &mut q)
+            .unwrap();
+    }
+    // Busy all the time, half of it with data only for links that hold it
+    // back: the budget pays for twice what the whole busy time would.
+    let t = now() + Duration::from_secs(1);
+    publish(&mut f, now(), t);
+    f.sched.set_upload(push::UploadInfo {
+        rate: 300_000,
+        busy: 1.0,
+        budget_busy: Some(0.5),
+        ..Default::default()
+    });
+    f.sched.run_push(t, &mut q);
+    publish(&mut f, t, t + push::seed::ALLOC_MEASURE);
+    let t = t + push::seed::ALLOC_MEASURE;
+    f.sched.run_push(t, &mut q);
+    assert_eq!(f.sched.push_stats().children, 4);
+}
+
+#[test]
 fn seed_weights_follow_the_streams_pushed() {
     let mut f = fixture(SwarmOptions {
         seed: crate::SeedPolicy {

@@ -2301,10 +2301,13 @@ fn collapse_thin_relays() {
 /// its parent's queue for it never empties, and the parent reads its uplink
 /// busy a third to a half of the time and its capacity near what it writes.
 /// Behind a 10 Mbit seed of a 3 Mbit/s CBR stream, with three viewers in a
-/// full mesh and the first behind a 2 Mbit/s downlink, the seed shed the
-/// others' subscriptions every few seconds, from 32-45 to 11-16, and the
-/// two healthy viewers lagged 1.1-3 s at p99. Checks that their frames from
-/// 15 s on lag over 800 ms at p99.
+/// full mesh and the first behind a 2 Mbit/s downlink, the seed's budget
+/// fell to one copy whenever the slow viewer's data backed up, the other
+/// holders lost theirs every few seconds (32-45 subscriptions down to
+/// 11-16), and the two healthy viewers lagged 1.1-3 s at p99. An adaptive
+/// seed's budget leaves out the time data waits only for links that hold it
+/// back. Checks that the healthy viewers' frames from 15 s on lag under
+/// 500 ms at p99.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_slow_viewer() {
@@ -2326,7 +2329,7 @@ fn collapse_slow_viewer() {
         let late = r
             .lag_of_between(0, others, start + secs(15), start + secs(60))
             .p99;
-        if late > 800 {
+        if late < 500 {
             Ok(())
         } else {
             Err(format!(

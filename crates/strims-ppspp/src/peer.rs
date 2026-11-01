@@ -138,6 +138,9 @@ pub(crate) struct RunnerPeer {
     pub(crate) link_path: Option<PathReading>,
     /// When a push was last queued for it; nil before the first.
     pub(crate) pushed: Time,
+    /// Since when data has been queued for it without a break; nil while
+    /// none is (hybrid only).
+    pub(crate) queued_since: Time,
 }
 
 impl RunnerPeer {
@@ -155,6 +158,7 @@ impl RunnerPeer {
             dropped: 0,
             link_path: None,
             pushed: Time::NIL,
+            queued_since: Time::NIL,
         }
     }
 

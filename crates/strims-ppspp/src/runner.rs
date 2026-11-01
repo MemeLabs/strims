@@ -164,6 +164,12 @@ struct Events {
 /// has one, bounds it. The queueing delay below the runner, from the
 /// driver's measure of the peers' links ([`queue_delay`](crate::queue_delay)),
 /// shows the time those further queues hold data.
+///
+/// An adaptive seed's budget reads a second busy time, without the time
+/// data was queued only for peers whose links hold it back
+/// ([`holds_back`]): one child on a narrow downlink, or one that reads
+/// slowly, would read as a full uplink and cut every holder's copy. The
+/// rest of the scheduler reads the whole busy time.
 #[derive(Debug)]
 struct UploadMeter {
     busy_since: Option<Time>,
@@ -175,6 +181,10 @@ struct UploadMeter {
     push_busy_recent: Sma,
     /// Since when pushes were queued, as `busy_since` for any data.
     push_since: Option<Time>,
+    /// Busy nanoseconds with data queued for a peer whose link doesn't
+    /// hold it back; the same window, and since when, as `busy_since`.
+    budget_busy: Sma,
+    budget_since: Option<Time>,
     /// Bytes written; the same window.
     bytes: Sma,
     /// The capacity the driver knows ([`Runner::set_upload_capacity`]).
@@ -224,6 +234,46 @@ fn takes_drained(drained: Option<f64>, delivered: f64, waited: bool, own_queued:
         && (waited || own_queued >= APP_LIMITED_QUEUED || drained.is_some_and(|d| delivered >= d))
 }
 
+/// Whether `link` holds back the data queued for its peer, `queued_for`
+/// without a break, rather than the uplink: it carries under
+/// [`HELD_SHARE`] of the largest window (delivery rate times base round
+/// trip) of the node's other links, `best` the two largest across all its
+/// links, while a queue stands on it, its latest or recent round trip
+/// [`HELD_QUEUE`] over its base. TCP shares a bottleneck by window, so
+/// links of every round trip that wait on a full uplink carry windows of
+/// about one size; one that carries much less waits on its own path: a
+/// narrow downlink, or a peer that reads slowly. A peer that reads slowly
+/// or delays its echoes leaves out only its own data. One that reads fast
+/// raises the best window, which leaves out at most the data of links that
+/// carry under half of it under a standing queue, and only from the seed's
+/// budget: the window and shedding read the whole busy time.
+fn holds_back(link: Option<PathReading>, queued_for: Duration, best: [f64; 2]) -> bool {
+    let Some(r) = link else {
+        return false;
+    };
+    let w = window(Some(r));
+    let other = if w >= best[0] { best[1] } else { best[0] };
+    queued_for >= HELD_SPAN
+        && w < HELD_SHARE * other
+        && r.base.is_some()
+        && (r.latest_excess() >= HELD_QUEUE || r.excess().is_some_and(|e| e >= HELD_QUEUE))
+}
+
+/// A link's window: its delivery rate times its base round trip, in bytes.
+fn window(link: Option<PathReading>) -> f64 {
+    link.map_or(0.0, |r| {
+        r.rate.unwrap_or(0) as f64 * r.base.map_or(0.0, |b| b.as_secs_f64())
+    })
+}
+
+/// See [`holds_back`].
+const HELD_SHARE: f64 = 0.5;
+const HELD_QUEUE: Duration = Duration::from_millis(50);
+/// A link holds back only data queued this long without a break: a burst
+/// queues data for every peer it goes to, and they drain one by one; a
+/// light link's few answers wait less.
+const HELD_SPAN: Duration = Duration::from_millis(500);
+
 /// How long the meter holds its largest write rate
 /// ([`UploadInfo::written_peak`]).
 const PEAK_SPAN: Duration = Duration::from_secs(10);
@@ -236,6 +286,8 @@ impl UploadMeter {
             busy_recent: Sma::new(3, Duration::from_millis(100), Time::EPOCH),
             push_busy_recent: Sma::new(3, Duration::from_millis(100), Time::EPOCH),
             push_since: None,
+            budget_busy: Sma::new(20, Duration::from_millis(100), Time::EPOCH),
+            budget_since: None,
             bytes: Sma::new(20, Duration::from_millis(100), Time::EPOCH),
             hint: None,
             queue_delay: None,
@@ -271,8 +323,9 @@ impl UploadMeter {
     }
 
     /// Accounts the time since the last call as busy if data was queued
-    /// then, and records whether data is queued now.
-    fn observe(&mut self, now: Time, backlog: bool, pushes: bool) {
+    /// then, and records whether data is queued now (`budget`: for a peer
+    /// whose link doesn't hold it back).
+    fn observe(&mut self, now: Time, backlog: bool, budget: bool, pushes: bool) {
         if let Some(t) = self.busy_since {
             let d = (now - t).as_nanos();
             if d > 0 {
@@ -280,6 +333,13 @@ impl UploadMeter {
                 self.busy_recent.add(d as u64, now);
             }
         }
+        if let Some(t) = self.budget_since {
+            let d = (now - t).as_nanos();
+            if d > 0 {
+                self.budget_busy.add(d as u64, now);
+            }
+        }
+        self.budget_since = budget.then_some(now);
         if let Some(t) = self.push_since {
             let d = (now - t).as_nanos();
             if d > 0 {
@@ -292,6 +352,7 @@ impl UploadMeter {
 
     fn info(&mut self, now: Time) -> UploadInfo {
         let busy = self.busy.rate(Duration::SECOND, now) as f64 / 1e9;
+        let budget_busy = self.budget_busy.rate(Duration::SECOND, now) as f64 / 1e9;
         let busy_recent = self.busy_recent.rate(Duration::SECOND, now) as f64 / 1e9;
         let push_busy_recent = self.push_busy_recent.rate(Duration::SECOND, now) as f64 / 1e9;
         let rate = self.bytes.rate(Duration::SECOND, now);
@@ -303,6 +364,7 @@ impl UploadMeter {
             written_peak: self.written_peak.map_or(0.0, |(peak, _)| peak),
             rate,
             busy: busy.clamp(0.0, 1.0),
+            budget_busy: Some(budget_busy.clamp(0.0, 1.0)),
             busy_recent: busy_recent.clamp(0.0, 1.0),
             push_busy_recent: push_busy_recent.clamp(0.0, 1.0),
             hint: self.hint,
@@ -411,6 +473,9 @@ pub struct Runner {
     last_now: Time,
     /// Swarms in [`PushMode::Hybrid`]; the upload meter runs while any.
     hybrid_swarms: usize,
+    /// The two largest windows of the peers' links ([`window`]); `None`
+    /// once a reading or a peer changed since.
+    best_windows: Option<[f64; 2]>,
     upload: UploadMeter,
     /// The push rate every swarm's subscriptions committed at the last tick.
     committed: f64,
@@ -632,6 +697,7 @@ impl Runner {
             touched: Vec::new(),
             last_now: Time::NIL,
             hybrid_swarms: 0,
+            best_windows: None,
             upload: UploadMeter::new(),
             committed: 0.0,
             tap: Tap::default(),
@@ -663,6 +729,7 @@ impl Runner {
     pub fn set_peer_path(&mut self, peer: PeerKey, reading: Option<PathReading>) {
         if let Some(p) = self.peers.get_mut(peer) {
             p.link_path = reading;
+            self.best_windows = None;
         }
     }
 
@@ -750,25 +817,51 @@ impl Runner {
     }
 
     /// Feeds the upload meter whether any data is queued that the node
-    /// would send now (hybrid only). Answers the push rule holds count:
-    /// it holds them only while pushes are queued. Answers the pace holds
-    /// count only while it has tokens, so answers held back don't read as
-    /// a busy uplink.
+    /// would send now (hybrid only), and whether any is for a peer whose
+    /// link doesn't hold it back ([`holds_back`]). Answers the push rule
+    /// holds count: it holds them only while pushes are queued. Answers the
+    /// pace holds count only while it has tokens, so answers held back
+    /// don't read as a busy uplink.
     fn observe_upload(&mut self, now: Time) {
         if self.hybrid_swarms == 0 {
             return;
         }
         let paced = self.answer_rate.open(now);
-        let backlog = self.peers.values().any(|p| {
-            p.dq.iter()
-                .zip(PeerPriority::ALL)
-                .any(|(q, pri)| !q.is_empty() && (paced || pri != PeerPriority::Scavenger))
+        let best = *self.best_windows.get_or_insert_with(|| {
+            let mut best = [0.0; 2];
+            for p in self.peers.values() {
+                let w = window(p.link_path);
+                if w > best[0] {
+                    best = [w, best[0]];
+                } else if w > best[1] {
+                    best[1] = w;
+                }
+            }
+            best
         });
+        let (mut backlog, mut budget) = (false, false);
+        for p in self.peers.values_mut() {
+            if p.dq.iter().all(|q| q.is_empty()) {
+                p.queued_since = Time::NIL;
+                continue;
+            }
+            if p.queued_since.is_nil() {
+                p.queued_since = now;
+            }
+            let queued =
+                p.dq.iter()
+                    .zip(PeerPriority::ALL)
+                    .any(|(q, pri)| !q.is_empty() && (paced || pri != PeerPriority::Scavenger));
+            if queued {
+                backlog = true;
+                budget |= !holds_back(p.link_path, now - p.queued_since, best);
+            }
+        }
         let pushes = self
             .peers
             .values()
             .any(|p| !p.queue(PeerPriority::High).is_empty());
-        self.upload.observe(now, backlog, pushes);
+        self.upload.observe(now, backlog, budget, pushes);
     }
 
     // --- swarms ---------------------------------------------------------
@@ -1075,6 +1168,7 @@ impl Runner {
             self.stop_channel(key, peer);
         }
         self.peers.remove(peer);
+        self.best_windows = None;
         self.held.remove(&peer);
         self.events.transmit.remove(&peer);
         self.events.weights.remove(&peer);

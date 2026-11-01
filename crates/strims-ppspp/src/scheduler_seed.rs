@@ -25,10 +25,13 @@
 //!   a subscriber's cost, once the store rate has been measured for
 //!   [`ALLOC_MEASURE`]; they pay for K / streams copies, or K of the
 //!   streams at one holder when K is under one copy (the rest go to pull).
-//!   It falls only once it is [`OVER_BUDGET`] too high. Pull answers take
-//!   what pushes leave of the uplink, so neither they nor the time the
-//!   uplink is busy with them bound it: [`SeedQos::ByAllocation`] puts
-//!   them behind the pushes.
+//!   It falls only once it is [`OVER_BUDGET`] too high. Its busy time
+//!   leaves out the time data waited only for links that hold it back (the
+//!   runner's meter): a neighbour whose own downlink can't take what it's
+//!   sent, or that reads slowly, backs up its own queue, not the uplink.
+//!   Pull answers take what pushes leave of the uplink, so neither they nor
+//!   the time the uplink is busy with them bound it:
+//!   [`SeedQos::ByAllocation`] puts them behind the pushes.
 //! - **Window.** The copies are at most a window, and at most the
 //!   budget's copies once it is measured. The window starts at one copy.
 //!   Until the budget is measured and the window first cut, each request
@@ -1052,7 +1055,7 @@ impl PeerSwarmScheduler {
         // The busy-time reading over-reads while buffers below the runner
         // hide a load, and never under-reads one it saw: the copies it pays
         // for bound the ramp.
-        let paid = match (upload.capacity(), early) {
+        let paid = match (upload.for_budget().capacity(), early) {
             (Some(cap), Some(rate)) => {
                 ((cap * ALLOC_UTILIZATION - upload.others).max(0.0) / rate) as usize / streams
             }
@@ -1286,7 +1289,8 @@ impl PeerSwarmScheduler {
                 ..Grant::default()
             };
         };
-        let cap = p.upload.capacity();
+        let budget = p.upload.for_budget();
+        let cap = budget.capacity();
         let a = p.alloc.get_or_insert_with(|| Allocator::new(now));
         // The first wave's size, from the early measurements.
         if !a.measured
@@ -1298,7 +1302,7 @@ impl PeerSwarmScheduler {
                 ((cap * ALLOC_UTILIZATION - p.upload.others).max(0.0) / rate) as usize / streams;
             // The reading holds only once the uplink was busy: without a
             // known capacity, and before, the wave ramps.
-            let unknown = p.upload.hint.is_none() && p.upload.busy < SATURATED_BUSY;
+            let unknown = budget.hint.is_none() && budget.busy < SATURATED_BUSY;
             if unknown && !a.ramping && a.first_wave == 0 {
                 a.ramping = true;
                 a.ramped = true;
@@ -1515,6 +1519,7 @@ impl PeerSwarmScheduler {
         }
         a.next_check = now + ALLOC_CHECK_INTERVAL;
         let signals = self.window_signals(upload.busy >= SHED_UTILIZATION);
+        let upload = upload.for_budget();
         let early = self.s.early_stream_rate(now);
         let follows = self.s.seed.qos == SeedQos::ByAllocation;
         let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {

@@ -1051,6 +1051,105 @@ fn the_meter_takes_the_links_excesses() {
     assert_eq!(m.queue_delay, Some(Duration::from_millis(40)));
 }
 
+/// A link that read `rate` B/s over a `base_ms` round trip, its latest
+/// round trip `latest_ms` and its recent least `recent_ms`.
+fn link(rate: u64, base_ms: i64, latest_ms: i64, recent_ms: i64) -> PathReading {
+    PathReading {
+        samples: 5,
+        at: t(1000),
+        rtt: Duration::from_millis(latest_ms),
+        base: Some(Duration::from_millis(base_ms)),
+        recent_min: Some(Duration::from_millis(recent_ms)),
+        in_flight: 16 * 1024,
+        rate: Some(rate),
+        queued: None,
+        written_since: 0,
+    }
+}
+
+#[test]
+fn a_link_that_carries_a_small_window_under_a_queue_holds_its_data_back() {
+    let ms = Duration::from_millis;
+    // The node's best links carry 12.8 and 11.2 kB windows.
+    let best = [
+        window(Some(link(400_000, 32, 32, 32))),
+        window(Some(link(350_000, 32, 32, 32))),
+    ];
+    let slow = link(50_000, 32, 700, 200);
+    assert!(holds_back(Some(slow), HELD_SPAN, best));
+    assert!(!holds_back(Some(slow), HELD_SPAN - ms(1), best));
+    // A queue on its latest round trip or its recent ones will do; with
+    // neither, its peer takes little.
+    assert!(holds_back(Some(link(50_000, 32, 82, 32)), HELD_SPAN, best));
+    assert!(holds_back(Some(link(50_000, 32, 32, 82)), HELD_SPAN, best));
+    assert!(!holds_back(Some(link(50_000, 32, 81, 81)), HELD_SPAN, best));
+    // A far link carries as large a window at a lower rate.
+    assert!(!holds_back(
+        Some(link(100_000, 140, 400, 200)),
+        HELD_SPAN,
+        best
+    ));
+    assert!(!holds_back(
+        Some(link(200_000, 32, 700, 200)),
+        HELD_SPAN,
+        best
+    ));
+    // The best link is judged against the second.
+    assert!(!holds_back(
+        Some(link(400_000, 32, 700, 200)),
+        HELD_SPAN,
+        best
+    ));
+    // Without a reading or a base, none.
+    assert!(!holds_back(None, HELD_SPAN, best));
+    let mut no_base = slow;
+    no_base.base = None;
+    assert!(!holds_back(Some(no_base), HELD_SPAN, best));
+}
+
+/// A hybrid runner whose peers' links read `links`, with a push queued
+/// from 1 s to 3 s for the peers at `queued`; its busy fraction at 3 s,
+/// and its budget's.
+fn busy_with(links: &[PathReading], queued: &[usize]) -> (f64, f64) {
+    let mut r = Runner::new(det_rng(1));
+    let key = strims_crypto::key_from_seed(&[4; 32]);
+    let swarm = r.add_swarm(Swarm::new(SwarmId::new(&key.public), hybrid()).unwrap());
+    let peers: Vec<PeerKey> = (0..links.len())
+        .map(|i| r.add_peer(&[b'p', i as u8], t(0)))
+        .collect();
+    for (&p, &l) in peers.iter().zip(links) {
+        r.set_peer_path(p, Some(l));
+    }
+    for &i in queued {
+        r.peers[peers[i]]
+            .queue_mut(PeerPriority::High)
+            .push(swarm, Bin::new(0, 0), t(1000));
+    }
+    for ms in [1000, 1500, 3000] {
+        r.observe_upload(t(ms));
+    }
+    let info = r.upload.info(t(3000));
+    (info.busy, info.budget_busy.unwrap())
+}
+
+#[test]
+fn data_queued_only_for_links_that_hold_it_back_leaves_the_budgets_busy_time() {
+    let fast = link(400_000, 32, 32, 32);
+    let slow = link(50_000, 32, 700, 200);
+    // The slow link's data counts for its first HELD_SPAN only.
+    let (busy, budget) = busy_with(&[fast, fast, slow], &[2]);
+    assert!(
+        busy > 0.95 && (0.2..0.3).contains(&budget),
+        "{busy} {budget}"
+    );
+    // Data waiting for a link that carries counts.
+    let (busy, budget) = busy_with(&[fast, fast, slow], &[1, 2]);
+    assert!(busy > 0.95 && budget > 0.95, "{busy} {budget}");
+    // Links that all carry little wait on the uplink.
+    let (busy, budget) = busy_with(&[slow, slow, slow], &[2]);
+    assert!(busy > 0.95 && budget > 0.95, "{busy} {budget}");
+}
+
 /// A hybrid seed and `n` leeches wired back to back with instant
 /// delivery, as in [`Pair`], whose frames move only when a test asks.
 struct Star {
