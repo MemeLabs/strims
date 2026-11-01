@@ -266,11 +266,13 @@ in `TRIED.md`.
      `target/video/evidence/testbed-viewers-runs/`) show it on the real
      stack: one viewer on a 4.5 Mbit/s downlink in a five-node mesh at
      3 Mbit/s took the seed's children from 32 to 1 and put every viewer
-     4-13 s behind for 30 s (runs `slow-a` and `slow-b`). A link's round
-     trip can't single the link out, as it shows what the link carries
-     (`TRIED.md`). Try the runner's own counts: a peer's queue is its
-     link's while a peer with nothing queued took at least as much over
-     the meter's window.
+     4-13 s behind for 30 s (runs `slow-a` and `slow-b`). Leaving such a
+     link's data out of the busy time lost the robust tier: near a full
+     uplink TCP holds far links back while near ones drain, and neither
+     the links' round trips nor the runner's counts tell that from a slow
+     link (`TRIED.md`). Try keeping the reading and shedding the
+     subscribers whose data has waited longest first, so a slow child's
+     backlog sheds that child, not its siblings.
    - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
      five-node mesh grows its push children from 16 to 50 every 15-20 s
      and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s

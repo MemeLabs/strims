@@ -187,6 +187,20 @@ the holders' waits let `collapse_first_wave_overshoot`'s ramp open 6
 copies where the uplink pays for 2; a gate on the latest excess closed at
 every munro burst.
 
+**A slow link's data left out of the busy time by the runner's counts.**
+(`own-bytes` ae307728, against 7c37a448) A peer's data wasn't busy time
+once it had been queued without a break for 1 s while a peer with nothing
+queued took at least as many bytes over the meter's window. It cured
+`collapse_slow_viewer` at seeds 1–7 (250–314 ms at p99; seed 8 1006 ms).
+Without the 1 s, a burst's children drain one by one, each having taken as
+much as the next, and 63 of 80 runs of the robust cells v4 lost changed.
+With it, near a full uplink TCP holds far links back while near ones
+drain, which reads the same: wan-super-peer's seed, sending 1.8–2.1 MB/s
+of its 2.5 MB/s, left out far links' backlogs of 1–2.5 s at 90–220 KB/s
+while a drained peer took 340 KB/s. At 32 seeds wan-super-peer's lag p99
+went ×1.15 [1.10, 1.21] (parent changes ×1.15, startup p99 ×1.10) and
+wan-residential-seed's ×1.07 [1.03, 1.12].
+
 ## Request control
 
 **A BBR-like request controller.** (`BbrLike`, retired in 3c40ec37) It
