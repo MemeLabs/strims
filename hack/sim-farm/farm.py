@@ -251,10 +251,11 @@ tb-* (run.sh's) is running.
 
 With `paired`, the jobs of one environment and repeat, one per arm, go to
 one instance together and run there one after another, the arms' order
-rotated a place per group (A B, B A, A B, ...), so what differs between
-hosts hits every arm alike and runs compare within a host. Each arm goes
-first equally often only when the groups are a multiple of the arms (3
-repeats of 2 arms put one first twice). A comparison takes as many runs'
+rotated a place per repeat and per environment (A B, B A, A B, ...), so
+what differs between hosts hits every arm alike and runs compare within a
+host. An environment's arms each go first equally often only when its
+repeats are a multiple of the arms (3 repeats of 2 arms put one first
+twice). A comparison takes as many runs'
 time as it has arms; paired = false sends every job its own way.
 
 A finished run's out dir comes back to target/sim-farm/<matrix>/runs/<id>/
@@ -662,18 +663,19 @@ class Matrix:
 
     def testbed_jobs(self) -> list[Job]:
         """Group by group, repeat by repeat: each group's arms in turn, their
-        order rotated a place per group."""
+        order rotated a place per repeat and per environment, so each
+        environment's arms take turns going first."""
         keys = list(self.axes)
         arms = list(self.arms)
         out = []
         for repeat in range(1, self.repeats + 1):
-            for combo in itertools.product(*(self.axes[k] for k in keys)):
+            for i, combo in enumerate(itertools.product(*(self.axes[k] for k in keys))):
                 env = {**self.env, **dict(zip(keys, combo))}
                 group = ""
                 if self.paired:
                     key = json.dumps([self.name, sorted(env.items()), repeat])
                     group = hashlib.sha256(key.encode()).hexdigest()[:12]
-                k = len(out) // len(arms) % len(arms)
+                k = (repeat - 1 + i) % len(arms)
                 out += [self.testbed_job(a, env, repeat, group) for a in arms[k:] + arms[:k]]
         return out
 
