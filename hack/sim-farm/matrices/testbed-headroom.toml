@@ -1,0 +1,34 @@
+# An adaptive seed's budget bounded once its links block below the runner
+# (fix, seed-headroom-land) against main, on testbed swarms of 5 to 50
+# native viewers linked as the ppspp sim's wide-area meshes
+# (topologies/mesh6-v*): the seed's uplink halved 60 s in and back at
+# 180 s, viewers dialing in 30 s after the start. Each instance runs one
+# repeat of both arms.
+
+kind = "testbed"
+repeats = 4
+host_cores = 32
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+
+[files]
+TOPOLOGY = "topologies/mesh6-v${VIEWERS}"
+
+[arms]
+main = "53ca21bc"
+fix = "8a607f52"
+
+[env]
+SECS = "240"
+SEED_UP_STEPS = "60:5 180:10"
+JOIN_AT = "30"
+
+[axes]
+VIEWERS = ["5", "10", "25", "50"]
+
+[report]
+group = ["VIEWERS"]
