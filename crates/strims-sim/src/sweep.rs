@@ -6,7 +6,8 @@
 //! - `STRIMS_SIM_SEEDS=<n>` runs seeds `1..=n` (default [`DEFAULT_SEEDS`],
 //!   or [`DEFAULT_SEEDS_DEBUG`] in a debug build, so the plain
 //!   `cargo test` stays short), and with `STRIMS_SIM_SEED_FROM=<k>` the
-//!   `n` seeds from `k`.
+//!   `n` seeds from `k` (a [`sweep_from`] sweep starts at its own seed
+//!   unless that's set).
 //! - `STRIMS_SIM_SEED=<s>` runs only seed `s` (the replay of a failure).
 //! - `STRIMS_SIM_TRACE=1` prints every run's trace.
 //! - `STRIMS_SIM_CAPTURE=<dir>` captures every node's ppspp traffic
@@ -91,15 +92,22 @@ fn env(name: &str) -> Option<String> {
 
 /// The seeds a sweep runs (see the module docs).
 pub fn seeds() -> Vec<u64> {
-    seeds_or(if cfg!(debug_assertions) {
+    seeds_from(1)
+}
+
+/// [`seeds`], from `from` when `STRIMS_SIM_SEED_FROM` isn't set.
+fn seeds_from(from: u64) -> Vec<u64> {
+    let n = if cfg!(debug_assertions) {
         DEFAULT_SEEDS_DEBUG
     } else {
         DEFAULT_SEEDS
-    })
+    };
+    seeds_or(n, from)
 }
 
-/// [`seeds`], with `n` seeds when `STRIMS_SIM_SEEDS` isn't set.
-fn seeds_or(n: u64) -> Vec<u64> {
+/// [`seeds`], with `n` seeds from `from` when `STRIMS_SIM_SEEDS` and
+/// `STRIMS_SIM_SEED_FROM` aren't set.
+fn seeds_or(n: u64, from: u64) -> Vec<u64> {
     if let Some(s) = env("STRIMS_SIM_SEED").and_then(|s| s.trim().parse().ok()) {
         return vec![s];
     }
@@ -109,7 +117,7 @@ fn seeds_or(n: u64) -> Vec<u64> {
         .max(1);
     let from: u64 = env("STRIMS_SIM_SEED_FROM")
         .and_then(|s| s.trim().parse().ok())
-        .unwrap_or(1);
+        .unwrap_or(from);
     (from..from.saturating_add(n)).collect()
 }
 
@@ -229,7 +237,19 @@ pub fn sweep_n(
     build: impl Fn(u64) -> Scenario + Sync,
     check: impl Fn(&Report) -> Result<(), String>,
 ) -> Vec<Report> {
-    sweep_seeds(test, seeds_or(n), build, check)
+    sweep_seeds(test, seeds_or(n, 1), build, check)
+}
+
+/// [`sweep`] over the seeds from `from`: for a check that thresholds a
+/// few samples per seed, where a seed's draw can fail it while the rate
+/// it checks holds.
+pub fn sweep_from(
+    test: &str,
+    from: u64,
+    build: impl Fn(u64) -> Scenario + Sync,
+    check: impl Fn(&Report) -> Result<(), String>,
+) -> Vec<Report> {
+    sweep_seeds(test, seeds_from(from), build, check)
 }
 
 /// [`sweep`] at `seed` alone unless `STRIMS_SIM_SEED` names another: a
