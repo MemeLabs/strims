@@ -209,6 +209,21 @@ read it.
     campaigns on the sim farm (quoted with `farm.py estimate`). Each
     crash becomes a regression test beside its parser's property tests.
 
+### Sim suite
+- `suite.py farm --refs` runs every arm, the base included, though an
+  earlier farm run may hold the base's rows at the same cells; only
+  `score` reuses them, by hand. Reuse a matching base by itself: find a
+  run whose arm builds the same code for the cell's sim at the same cell
+  and env, run only the new arms at that run's seeds, and score them
+  against its rows.
+  - Match on code, not commits: a rebase changes the sha and keeps the
+    code. `build_key` hashes everything under `crates/`, docs and crates
+    the sim doesn't build included; key on the sources of the sim's
+    dependency closure.
+  - Where the code differs only in strims-sim's harness, which should
+    leave the timeline alone, rerun the base at a couple of the run's
+    seeds and reuse the rest only if their traces match.
+
 ### Swarm
 Hybrid (`PushMode::Hybrid`) is the design: push trees carry the stream
 and pull repairs what they miss. Its seed is the adaptive seed
