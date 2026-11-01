@@ -2295,6 +2295,47 @@ fn collapse_thin_relays() {
     });
 }
 
+/// **A slow viewer read as a busy uplink.** The upload meter counts the
+/// node busy while any peer has data queued in the runner. A viewer whose
+/// downlink carries less than the stream backs up its own connection, so
+/// its parent's queue for it never empties, and the parent reads its uplink
+/// busy a third to a half of the time and its capacity near what it writes.
+/// Behind a 10 Mbit seed of a 3 Mbit/s CBR stream, with three viewers in a
+/// full mesh and the first behind a 2 Mbit/s downlink, the seed shed the
+/// others' subscriptions every few seconds, from 32-45 to 11-16, and the
+/// two healthy viewers lagged 1.1-3 s at p99. Checks that their frames from
+/// 15 s on lag over 800 ms at p99.
+#[test]
+#[ignore = "a collapse mode's case; run in release with --include-ignored"]
+fn collapse_slow_viewer() {
+    let mut c = collapse_case(3, 10, 60);
+    c.slow_down_kbit = Some(2000);
+    let scenario = |seed| {
+        let mut s = calibration_star_scenario(seed, &c);
+        let encoder = Encoder::parse("3000c").unwrap();
+        let sign = Sign::parse("u8,t300").unwrap().unwrap();
+        s.swarms = std::mem::take(&mut s.swarms)
+            .into_iter()
+            .map(|sw| sw.with_media(encoder, sign))
+            .collect();
+        s
+    };
+    sweep_at("collapse_slow_viewer", 1, scenario, |r| {
+        let (_, start) = collapse_seed(r);
+        let others = &r.scenario.swarms[0].viewers[1..];
+        let late = r
+            .lag_of_between(0, others, start + secs(15), start + secs(60))
+            .p99;
+        if late > 800 {
+            Ok(())
+        } else {
+            Err(format!(
+                "the healthy viewers' frames from 15 s on lag {late} ms at p99"
+            ))
+        }
+    });
+}
+
 /// **A join's backlog in the post-loss hold.** A viewer that joins a live
 /// stream mid GOP moves its reader back to the GOP's start, as egress
 /// joins, and the swarm fetches the chunks behind its window as a backlog:

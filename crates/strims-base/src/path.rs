@@ -135,6 +135,13 @@ impl PathReading {
         )
     }
 
+    /// How far the latest round trip stands above the base; zero without
+    /// a base.
+    pub fn latest_excess(&self) -> Duration {
+        self.base
+            .map_or(Duration::ZERO, |b| (self.rtt - b).max(Duration::ZERO))
+    }
+
     /// How long the queued bytes take to drain at the delivery rate.
     pub fn queued_delay(&self) -> Option<Duration> {
         let rate = self.rate.filter(|&r| r > 0)?;
@@ -573,10 +580,7 @@ pub fn latest_excess(
         readings
             .into_iter()
             .filter(|r| r.age(now) <= LATEST_MAX_AGE)
-            .map(|r| {
-                r.base
-                    .map_or(Duration::ZERO, |b| (r.rtt - b).max(Duration::ZERO))
-            }),
+            .map(|r| r.latest_excess()),
     );
     if scratch.len() >= MIN_PATHS {
         aggregate(scratch)
@@ -940,6 +944,17 @@ mod tests {
         let two = [reading(now, 60, 40), reading(now, 2_040, 40)];
         assert_eq!(latest_excess(two, at(now), &mut v), Some(ms(20)));
         assert_eq!(latest_excess([reading(0, 60, 40)], at(now), &mut v), None);
+    }
+
+    #[test]
+    fn a_readings_latest_excess_is_its_latest_round_trip_over_its_base() {
+        // However old, and however far the recent least stands.
+        let mut r = reading(0, 90, 40);
+        r.recent_min = Some(ms(50));
+        assert_eq!(r.latest_excess(), ms(50));
+        assert_eq!(reading(0, 30, 40).latest_excess(), Duration::ZERO);
+        r.base = None;
+        assert_eq!(r.latest_excess(), Duration::ZERO);
     }
 
     #[test]

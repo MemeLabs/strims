@@ -160,6 +160,29 @@ impl Report {
         )
     }
 
+    /// The lag of the frames of `swarm` written in `[from, to)` of run
+    /// time, over its viewers among `hosts`.
+    pub fn lag_of_between(
+        &self,
+        swarm: usize,
+        hosts: &[HostIx],
+        from: Duration,
+        to: Duration,
+    ) -> Percentiles {
+        if self.scenario.swarms.get(swarm).is_none() {
+            return Percentiles::default();
+        }
+        let range = self.frames_between(swarm, from, to);
+        Percentiles::of(
+            self.viewers
+                .iter()
+                .filter(|v| v.swarm == swarm && hosts.contains(&v.host))
+                .flat_map(|v| v.stats.lags.iter())
+                .filter(|(seq, _)| range.contains(seq))
+                .map(|&(_, l)| l),
+        )
+    }
+
     /// The lag per [`bucket`](Report::buckets).
     pub fn lag_buckets(&self, swarm: usize) -> Vec<Percentiles> {
         self.buckets(swarm)
