@@ -62,7 +62,10 @@
 //!   [`BETA`] of itself once a recovery: losses of segments sent before
 //!   it fell don't cut it again.
 //! - A segment through the receiver's downlink is acknowledged once the
-//!   acknowledgement crosses back, after the receiver's uplink queue. The
+//!   acknowledgement crosses back, after the receiver's uplink queue. Pure
+//!   acknowledgements take their turn on the receiver's uplink as Linux
+//!   sends them: one for every second segment received, or 40 ms after a
+//!   lone one, unless the receiver's own data carries them first. The
 //!   window grows by the bytes acknowledged in slow start, which HyStart's
 //!   delay test ends, and as CUBIC (RFC 8312) past it, only while it
 //!   limits the connection and outside a recovery; a connection idle for
@@ -183,6 +186,9 @@ enum Event {
     Timeout,
     /// The window model: `conn`'s tail-loss probe is due.
     Probe { conn: (SocketAddr, SocketAddr) },
+    /// The window model: the receiver of `conn`'s data sends the
+    /// acknowledgement it delayed, unless data it sent back carried it.
+    DelAck { conn: (SocketAddr, SocketAddr) },
     /// The window model: an acknowledgement of the `len` bytes at `seq`
     /// of `conn` reaches the sender.
     Ack {
@@ -591,9 +597,25 @@ pub(crate) struct Scheduler {
     /// [`QUEUE_SAMPLE_EVERY`]: (time since the start, bytes).
     cross_sent: Vec<Vec<(Duration, u64)>>,
     /// Per host, the window model's segments its connections lost to a
-    /// full access queue.
+    /// full access queue, and the acknowledgements its uplink carried.
     drops: Vec<u64>,
+    acks: Vec<u64>,
+    /// The acknowledgements receivers owe, by the connection whose data
+    /// they acknowledge. Bound: one per connection with data received.
+    owed: BTreeMap<(SocketAddr, SocketAddr), Owed>,
 }
+
+/// What a receiver owes its sender: the segments it hasn't acknowledged,
+/// and when its delayed acknowledgement is due.
+#[derive(Clone, Copy, Debug, Default)]
+struct Owed {
+    segments: u32,
+    due: Option<Time>,
+}
+
+/// How long a receiver delays the acknowledgement of a lone segment, as
+/// Linux's `TCP_DELACK_MIN`.
+const DELACK: Duration = Duration::from_millis(40);
 
 /// How often the scheduler samples each host's uplink queue.
 const QUEUE_SAMPLE_EVERY: Duration = Duration::from_millis(100);
@@ -696,6 +718,8 @@ impl Scheduler {
             cross_bytes: vec![0; spec.hosts.len()],
             cross_sent: vec![Vec::new(); spec.hosts.len()],
             drops: vec![0; spec.hosts.len()],
+            acks: vec![0; spec.hosts.len()],
+            owed: BTreeMap::new(),
         })
     }
 
@@ -801,6 +825,15 @@ impl Scheduler {
                     self.probe(t, conn);
                     continue;
                 }
+                Event::DelAck { conn } => {
+                    if self.owed.get(&conn).is_some_and(|o| o.due == Some(t)) {
+                        self.owed.remove(&conn);
+                        if let Some(h) = self.ip_host.get(&conn.1.ip()).copied() {
+                            self.pure_ack(t, h);
+                        }
+                    }
+                    continue;
+                }
                 Event::CrossAck(i) => {
                     self.cross_acked(t, i);
                     continue;
@@ -847,9 +880,10 @@ impl Scheduler {
                     if let (Some(_), Some((seq, len))) = (window, data) {
                         let back = self.net.one_way(r.to, r.from)
                             + (self.net.up_free(r.to) - done).max(Duration::ZERO);
-                        let conn = (r.src, r.dst);
+                        let (conn, to) = ((r.src, r.dst), r.to);
                         self.events
                             .insert((done + back, id), Event::Ack { conn, seq, len });
+                        self.owe_ack(t, conn, to);
                     }
                 }
                 Event::Deliver => r.state = State::Due,
@@ -884,6 +918,7 @@ impl Scheduler {
                 }
                 Event::Ack { .. }
                 | Event::Probe { .. }
+                | Event::DelAck { .. }
                 | Event::CrossAck(_)
                 | Event::CrossLost(_) => {}
             }
@@ -998,6 +1033,46 @@ impl Scheduler {
             if let Some((id, _, _)) = f.lost.remove(&s) {
                 self.events.insert((t + back, id), Event::Lost);
             }
+        }
+    }
+
+    /// A segment of `conn` reached its receiver `to` at `t`, which owes its
+    /// acknowledgement: a pure acknowledgement on its uplink for every
+    /// second segment, or [`DELACK`] after a lone one, unless data it sends
+    /// back on the connection carries it first ([`Scheduler::piggyback`]).
+    /// Linux's `__tcp_ack_snd_check` acknowledges once more than a segment
+    /// of its receive MSS estimate is unacknowledged, and the estimate
+    /// follows small segments down: on the testbed, a seed acknowledged
+    /// its viewers' 20-30-byte segments one for every two.
+    /// The sender's window is clocked by the segments' arrivals as before:
+    /// [`WINDOW_SEGMENT`](crate::spec::WINDOW_SEGMENT)s stand for the
+    /// delayed acknowledgements there.
+    fn owe_ack(&mut self, t: Time, conn: (SocketAddr, SocketAddr), to: HostIx) {
+        let o = self.owed.entry(conn).or_default();
+        o.segments += 1;
+        if o.segments >= 2 {
+            self.owed.remove(&conn);
+            self.pure_ack(t, to);
+        } else if o.due.is_none() {
+            o.due = Some(t + DELACK);
+            let key = self.next;
+            self.next += 1;
+            self.events
+                .insert((t + DELACK, key), Event::DelAck { conn });
+        }
+    }
+
+    /// Data of `conn` leaves its sender: it acknowledges what the sender
+    /// owes on the reverse connection.
+    fn piggyback(&mut self, conn: (SocketAddr, SocketAddr)) {
+        self.owed.remove(&(conn.1, conn.0));
+    }
+
+    /// Host `h`'s uplink carries a pure acknowledgement from `t`.
+    fn pure_ack(&mut self, t: Time, h: HostIx) {
+        self.net.occupy_up(t, h, tcp_wire(0).0);
+        if let Some(a) = self.acks.get_mut(h) {
+            *a += 1;
         }
     }
 
@@ -1139,6 +1214,7 @@ impl Scheduler {
             self.dropped(at, conn, seq, id);
             return;
         }
+        self.piggyback(conn);
         let t = self.net.send(at, from, to, wire, packets, Carrier::Stream);
         self.events
             .insert((t.arrival + t.retransmit, id), Event::Arrive);
@@ -1464,6 +1540,9 @@ impl Scheduler {
         self.flows.retain(|(src, dst), _| {
             ip_host.get(&src.ip()) != Some(&h) && ip_host.get(&dst.ip()) != Some(&h)
         });
+        self.owed.retain(|(src, dst), _| {
+            ip_host.get(&src.ip()) != Some(&h) && ip_host.get(&dst.ip()) != Some(&h)
+        });
     }
 
     /// Each host's site and counters.
@@ -1481,6 +1560,7 @@ impl Scheduler {
                         up_queue: self.up_queue.get(h).cloned().unwrap_or_default(),
                         competing: self.cross_sent.get(h).cloned().unwrap_or_default(),
                         queue_drops: self.drops.get(h).copied().unwrap_or(0),
+                        acks: self.acks.get(h).copied().unwrap_or(0),
                     })
                 })
                 .collect(),

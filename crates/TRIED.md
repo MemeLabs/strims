@@ -255,3 +255,13 @@ real stack's busy stars lost (robust tier: star-31-10 and mesh6-31-10
 ×1.16): there a peer that timed out is better left alone for the hold.
 A minimum of two chunks (`deadline`'s `min2`) ends the silence too, and
 scored the same in the ppspp sim (48 seeds).
+
+## Sim model
+
+**Ethernet framing on the access links.** (on `tcp-bench`, against
+d416f5c4) Counting 14 bytes more a packet on the window model's access
+links, as if the testbed's tbf charged Ethernet's header, doubled the bare
+TCP bench's drops where two holders share a 5 Mbit/s uplink (152 -> 313,
+the testbed 178-192; the halving 217 -> 292, the testbed 194-238) and
+left the 25-viewer twin of the testbed's uplink cut where it was (39.5
+cut seconds over 1 s against 37.5).

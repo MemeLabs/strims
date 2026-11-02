@@ -230,8 +230,10 @@ pub struct WanHostReport {
     /// bytes).
     pub competing: Vec<(strims_base::time::Duration, u64)>,
     /// With the window model, the segments its connections lost to a full
-    /// access queue, up or down.
+    /// access queue, up or down, and the pure acknowledgements its uplink
+    /// carried.
     pub queue_drops: u64,
+    pub acks: u64,
 }
 
 /// The access links of a WAN run, in host order.

@@ -1942,9 +1942,10 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
 
 /// The seed's meter, the upload it had, its push subscribers, its
 /// adaptive budget and copies and its true uplink queue per sample, the
-/// viewers' p99 lag per second of stream, and every node's transfers per
-/// sample (`[s, transfers]` lists by host, the testbed's `transfers`), as
-/// one JSON object (`SERIES {json}`).
+/// segments its uplink dropped and the pure acknowledgements it carried
+/// over the run, the viewers' p99 lag per second of stream, and every
+/// node's transfers per sample (`[s, transfers]` lists by host, the
+/// testbed's `transfers`), as one JSON object (`SERIES {json}`).
 fn calibration_series(r: &Report) -> String {
     let spec = &r.scenario.swarms[0];
     let seed = spec.seed;
@@ -2029,8 +2030,13 @@ fn calibration_series(r: &Report) -> String {
             format!("[{}]", xs.join(","))
         })
         .collect();
+    let (drops, acks) = r
+        .wan
+        .as_ref()
+        .and_then(|w| w.hosts.iter().find(|h| h.name == r.scenario.name_of(seed)))
+        .map_or((0, 0), |h| (h.queue_drops, h.acks));
     format!(
-        "{{\"up\":{up},\"goodput\":{:.0},\"seed\":[{}],\"lag_p99\":[{}],\"queue\":[{}],\"transfers\":[{}]}}",
+        "{{\"up\":{up},\"goodput\":{:.0},\"drops\":{drops},\"acks\":{acks},\"seed\":[{}],\"lag_p99\":[{}],\"queue\":[{}],\"transfers\":[{}]}}",
         r.hosts[seed].uploaded as f64 / stream_secs,
         rows.join(","),
         lags.join(","),
