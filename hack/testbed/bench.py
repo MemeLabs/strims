@@ -248,20 +248,11 @@ def fmt(v):
     return f"{v:.1f}"
 
 
-def main():
-    args = sys.argv[1:]
-    t0 = 2.0
-    if "--from" in args:
-        i = args.index("--from")
-        t0 = float(args[i + 1])
-        del args[i : i + 2]
-    only = None
-    if "--only" in args:
-        i = args.index("--only")
-        only = args[i + 1].split(",")
-        del args[i : i + 2]
-    run = args[0]
-    extra = args[1:]
+def compare(run, extra=(), only=None, t0=2.0):
+    """The arms of `run` (the testbed, its sim/ and sim-tcp/ logs and the
+    `extra` log dirs, or the testbed and `only`'s) and each one's metrics:
+    ([(name, dir)], [{(class, metric): [values]}])."""
+    extra = list(extra)
     s = settings(run)
     sched = schedule(run)
     cls = classes(sched)
@@ -286,6 +277,24 @@ def main():
         if name == "testbed":
             m[("node 0", "drops")] = [tc_drops(run)]
         ms.append(m)
+    return arms, ms
+
+
+def main():
+    args = sys.argv[1:]
+    t0 = 2.0
+    if "--from" in args:
+        i = args.index("--from")
+        t0 = float(args[i + 1])
+        del args[i : i + 2]
+    only = None
+    if "--only" in args:
+        i = args.index("--only")
+        only = args[i + 1].split(",")
+        del args[i : i + 2]
+    run = args[0]
+    s = settings(run)
+    arms, ms = compare(run, args[1:], only, t0)
     keys = sorted(set().union(*[m.keys() for m in ms]))
     print(f"{run}: {' '.join(f'{k}={v}' for k, v in s.items() if k != 'NODE_ARGS')}")
     print(f"from {t0} s; columns: " + "  ".join(n for n, _ in arms))
