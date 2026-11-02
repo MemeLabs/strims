@@ -52,6 +52,8 @@
 //!   down. A segment that doesn't fit in what one has left is lost there,
 //!   as a byte-limited FIFO (Linux's tbf and bfifo) drops it: a small
 //!   write fits where a full segment doesn't.
+//! - A segment that loses a packet on its path (the sites' loss) is lost
+//!   to its sender the same way.
 //! - Its sender learns of the loss from a later segment's acknowledgement,
 //!   a quarter of the least round trip later (RACK), or failing that from
 //!   its tail-loss probe's, two smoothed round trips after its last send
@@ -78,9 +80,10 @@
 //! ([`HostSpec::competing`](crate::spec::HostSpec::competing)) are TCP
 //! connections that always have data and reach no host: full segments
 //! enter the host's uplink queue within their window, are lost when it is
-//! full, and are acknowledged the upload's round trip after they leave the
-//! uplink. Their windows follow the connections' CUBIC, HyStart and
-//! recoveries too. They need the window model's bounded queues.
+//! full or to the host's site loss, and are acknowledged the upload's round
+//! trip after they leave the uplink. Their windows follow the connections'
+//! CUBIC, HyStart and recoveries too. They need the window model's bounded
+//! queues.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
@@ -1250,6 +1253,11 @@ impl Scheduler {
             if let Some(b) = self.cross_bytes.get_mut(host) {
                 *b += CROSS_WIRE as u64;
             }
+            if self.net.lost_off_net(host, 2) {
+                self.events
+                    .insert((depart + rtt, id), Event::CrossLost { i, seq });
+                continue;
+            }
             // The receiver acknowledges every second segment, and a lone one
             // after DELACK.
             match c.odd.take() {
@@ -1313,7 +1321,14 @@ impl Scheduler {
                         f.pending.pop_front();
                         continue;
                     };
-                    if f.in_flight > 0 && (f.in_flight + len) as f64 > f.cwnd {
+                    // A retransmission goes at once: the window falls to
+                    // its cut at once, where Linux's proportional rate
+                    // reduction brings it down over the recovery and sends
+                    // the retransmissions first.
+                    if f.in_flight > 0
+                        && (f.in_flight + len) as f64 > f.cwnd
+                        && !f.retx.contains(&seq)
+                    {
                         f.held = true;
                         return false;
                     }
@@ -1345,7 +1360,10 @@ impl Scheduler {
             What::Data { seq, len } => (seq, len),
             _ => (0, 0),
         };
-        if self.buffers.is_some() {
+        // A segment's bytes leave its socket's unsent count once, as it
+        // first goes out; its retransmissions were never unsent again.
+        let resent = self.flows.get(&conn).is_some_and(|f| f.retx.contains(&seq));
+        if self.buffers.is_some() && !resent {
             self.admits.insert((at, id), (conn, len));
         }
         let wait = (self.net.up_free(from) - at).max(Duration::ZERO);
@@ -1357,9 +1375,14 @@ impl Scheduler {
             return;
         }
         let t = self.net.send(at, from, to, wire, packets, Carrier::Stream);
-        self.piggyback(conn, t.arrival + t.retransmit);
-        self.events
-            .insert((t.arrival + t.retransmit, id), Event::Arrive);
+        if t.retransmit > Duration::ZERO {
+            // A packet of it was lost on the path: its sender learns so as
+            // of a full queue's drop, and resends it.
+            self.dropped(at, conn, seq, id);
+            return;
+        }
+        self.piggyback(conn, t.arrival);
+        self.events.insert((t.arrival, id), Event::Arrive);
     }
 
     /// Lines every queue up against its records, releases the due ones and
@@ -2068,18 +2091,23 @@ mod tests {
         assert!((1345..1380).contains(&got), "{got} ms");
     }
 
-    /// `a`, on a 10 Mbit/s uplink with 100 ms windowed queues and a
-    /// competing upload over `competing` (s), writes `bytes` to `b` from
-    /// 1 s on. Returns when `b` had them (ms from 1 s) and `a`'s access
-    /// link report.
-    fn beside_an_upload(bytes: usize, competing: (u64, u64)) -> (i64, WanHostReport) {
+    /// `a`, on a 10 Mbit/s uplink with 100 ms windowed queues, a competing
+    /// upload over `competing` (s) and each packet lost with probability
+    /// `loss`, writes `bytes` to `b` from 1 s on. Returns when `b` had them
+    /// (ms from 1 s) and `a`'s access link report.
+    fn beside_an_upload(bytes: usize, competing: (u64, u64), loss: f64) -> (i64, WanHostReport) {
         let mut sim = build();
         let sites = [
             (
                 "a",
-                Site::new(City::Frankfurt, Access::Fiber).with_up(1_250_000),
+                Site::new(City::Frankfurt, Access::Fiber)
+                    .with_up(1_250_000)
+                    .with_loss(loss),
             ),
-            ("b", Site::new(City::Frankfurt, Access::Fiber)),
+            (
+                "b",
+                Site::new(City::Frankfurt, Access::Fiber).with_loss(0.0),
+            ),
         ];
         let buffers = SendBuffers::new(SendBuffer {
             uplink_queue: StdDuration::from_millis(100),
@@ -2117,25 +2145,31 @@ mod tests {
             stop: StdDuration::from_secs(competing.1),
             rtt: StdDuration::from_millis(30),
         }];
-        let mut wan = Scheduler::new(&sim, &spec, QUIET, 1, Some(buffers)).unwrap();
+        let options = Options {
+            jitter: false,
+            loss: loss > 0.0,
+        };
+        let mut wan = Scheduler::new(&sim, &spec, options, 1, Some(buffers)).unwrap();
         wan.set_latency(0, 1, Duration::from_millis(15));
         drive(&mut sim, &mut wan);
         (got.get(), wan.report(&spec).hosts.swap_remove(0))
     }
 
+    /// Bytes `a`'s competing uploads had sent `s` seconds in.
+    fn competing_sent(a: &WanHostReport, s: i64) -> u64 {
+        a.competing
+            .iter()
+            .rev()
+            .find(|&&(t, _)| t <= Duration::from_secs(s))
+            .map_or(0, |&(_, b)| b)
+    }
+
     #[test]
     fn a_competing_upload_shares_the_uplink() {
-        let sent = |a: &WanHostReport, s: i64| {
-            a.competing
-                .iter()
-                .rev()
-                .find(|&&(t, _)| t <= Duration::from_secs(s))
-                .map_or(0, |&(_, b)| b)
-        };
         // Alone, the upload fills the uplink, through a queue it keeps from
         // emptying.
-        let (_, a) = beside_an_upload(0, (0, 30));
-        let alone = sent(&a, 3) - sent(&a, 1);
+        let (_, a) = beside_an_upload(0, (0, 30), 0.0);
+        let alone = competing_sent(&a, 3) - competing_sent(&a, 1);
         assert!(alone >= 2_250_000, "{alone} bytes in 2 s");
         let busy = a
             .up_queue
@@ -2146,12 +2180,12 @@ mod tests {
         // less while they share. A connection that joins a full queue loses
         // its first window and takes some seconds to its share; the bench's
         // join-compete cases check the share against the testbed.
-        let (quiet, _) = beside_an_upload(1_448_000, (30, 30));
-        let (shared, a) = beside_an_upload(1_448_000, (0, 30));
+        let (quiet, _) = beside_an_upload(1_448_000, (30, 30), 0.0);
+        let (shared, a) = beside_an_upload(1_448_000, (0, 30), 0.0);
         assert!((1150..1500).contains(&quiet), "{quiet} ms");
         assert!(shared > quiet * 3 / 2, "{shared} ms against {quiet} ms");
         let secs = (shared / 1000).max(1);
-        let during = sent(&a, 1 + secs) - sent(&a, 1);
+        let during = competing_sent(&a, 1 + secs) - competing_sent(&a, 1);
         let full = alone / 2 * secs.unsigned_abs();
         assert!(
             during < full * 19 / 20,
@@ -2165,6 +2199,27 @@ mod tests {
             rtt: StdDuration::from_millis(30),
         }];
         assert!(Scheduler::new(&build(), &s, QUIET, 1, None).is_err());
+    }
+
+    #[test]
+    fn site_loss_holds_windows_down() {
+        // Over a 30 ms round trip, a connection that loses 1 % of its
+        // packets keeps a window of a few segments, as Linux's does
+        // (hack/testbed/bench/lossy-over.sched): 1.45 MB take about 1.2 s
+        // on the bare uplink and twice that or more through the loss.
+        let (clean, _) = beside_an_upload(1_448_000, (30, 30), 0.0);
+        let (lossy, _) = beside_an_upload(1_448_000, (30, 30), 0.01);
+        assert!(lossy > clean * 2, "{lossy} ms against {clean} ms");
+        // An upload from the site loses its packets too.
+        let (_, a) = beside_an_upload(0, (0, 30), 0.0);
+        let (_, b) = beside_an_upload(0, (0, 30), 0.01);
+        let rate = |r: &WanHostReport| competing_sent(r, 6) - competing_sent(r, 2);
+        assert!(
+            rate(&b) < rate(&a) / 2,
+            "{} bytes in 4 s against {} without the loss",
+            rate(&b),
+            rate(&a)
+        );
     }
 
     #[test]

@@ -511,23 +511,23 @@ in `TRIED.md`.
     receiver, a congestion window over a long round trip). Only the
     uncapped WAN cases run them: with them on (a 100 ms uplink queue)
     `wan_mobile_viewers_pull`'s LTE p99 passes its 3.5 s bound on one seed
-    of 8. The window model (`STRIMS_SIM_TCP`) has both, and retransmission
-    timeouts, but drops only at full access queues: random path loss still
-    takes the loss model's fixed delay.
+    of 8. The window model (`STRIMS_SIM_TCP`) has both, retransmission
+    timeouts and the senders' response to path loss.
   - The window model follows the testbed's bare TCP bench
-    (`hack/testbed/bench.sh`, cases in `hack/testbed/bench/`) within about
-    10 % on the seed's holder shapes, but a competing bulk upload takes too
-    much of the uplink from an established link or the holders' bursts
-    (660 KB/s against iperf3's 525 beside the holders, whose delays run
-    twice the testbed's), the saturated links lose a few times fewer
-    packets than the tbf, the stepping case's 140 % overload runs 10-30 %
-    high, and there is no HyStart ack-train test. Its twin of the testbed's
-    uplink cut (`testbed-copy-floor`) lags over 1 s in 54.5 of 205 seconds
-    at 25 viewers against the testbed's 66.7, and its seed answers 0.6
-    times the testbed's pull requests in the cut. The model moves
-    `collapse_thin_relays` and both `*_uncapped_varying` WAN cases to
-    failing, and the robust tier past its guardrails both ways: settle
-    those before it lands.
+    (`hack/testbed/benchsuite.py`, cases in `hack/testbed/bench/`) within a
+    mean |log ratio| of 0.11-0.12 over its 14 cases, but beside the holders'
+    bursts a competing bulk upload takes too much of the uplink (657 KB/s
+    against iperf3's 525, a window of 48 KiB against 33) while the uplink
+    drops 81 buffers against the tbf's 118-166, the holders' probe round
+    trips fall short in the tail (p99 197 ms against 338), at 10 Mbit/s
+    their uplink drops a quarter of the testbed's buffers (16 against 60),
+    and there is no HyStart ack-train test. Its twin of the testbed's
+    uplink cut (`testbed-copy-floor`) lags over 1 s in 47.8 of 205 seconds
+    at 25 viewers (40.6 of the cut's 120) against the testbed's 66.7 (54.5);
+    at 10 viewers 17.2 against 17.5. On the model `collapse_thin_relays`
+    collapses at 13 of seeds 1-16 (main's model: 1), and the robust tier
+    went past its guardrails both ways: find whether the testbed's thin
+    relays collapse too, and settle both before it lands.
   - Through a halving of the seed's uplink the testbed fell into the
     lock-in deeper than its twin, and its round trips there ran 1.4 times
     the sim's. Recheck with today's frames; if the gap holds, find the

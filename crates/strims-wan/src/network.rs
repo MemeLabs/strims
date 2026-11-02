@@ -24,7 +24,9 @@
 //!   `1 − (1 − p_sender)(1 − p_receiver)`, drawn once per message from that
 //!   direction's rng. A lost datagram is dropped. A stream message that
 //!   lost a packet arrives late by [`retransmission`], and the caller keeps
-//!   later stream data behind it.
+//!   later stream data behind it. Traffic to a peer outside the network
+//!   (a lossless one) draws from the direction from its host to itself,
+//!   which no message crosses ([`Network::lost_off_net`]).
 //! - **Rate steps.** An uplink runs at its site's rate unless
 //!   [`Network::set_up_steps`] gives it rates from given times on. A
 //!   message that is still serializing when a step comes pays the new rate
@@ -406,6 +408,17 @@ impl Network {
         t
     }
 
+    /// Whether a message of `packets` packets from `h` to a lossless peer
+    /// outside the network loses a packet on `h`'s access link.
+    pub fn lost_off_net(&mut self, h: usize, packets: u32) -> bool {
+        let p = self.end(h).site.profile.loss;
+        if !self.options.loss || p <= 0.0 {
+            return false;
+        }
+        let dir = self.dir_mut(h, h);
+        unit(&mut dir.rng) < 1.0 - (1.0 - p).powi(i32::try_from(packets).unwrap_or(i32::MAX))
+    }
+
     /// `wire` bytes reaching `b`'s downlink at `at`: they wait for the
     /// downlink and serialize at its rate. Returns when the last bit is
     /// through. Calls for one receiver come in arrival order.
@@ -640,6 +653,48 @@ mod tests {
             (f64::from(hits) - expected).abs() < 0.25 * expected,
             "{hits} vs {expected}"
         );
+    }
+
+    #[test]
+    fn off_net_traffic_loses_at_its_hosts_rate() {
+        let sites = [
+            Site::new(City::Dallas, Access::Starlink),
+            Site::new(City::Dallas, Access::Lte),
+        ];
+        let lossy = Options {
+            jitter: false,
+            loss: true,
+        };
+        let mut n = net(&sites, lossy);
+        let mut m = net(&sites, lossy);
+        let p = 1.0 - (1.0 - 0.003_f64).powi(2);
+        let count: u32 = 100_000;
+        let mut lost: u32 = 0;
+        for i in 0..i64::from(count) {
+            if n.lost_off_net(0, 2) {
+                lost += 1;
+            }
+            // The directions between hosts draw as if it weren't there.
+            let (a, b) = (
+                n.send(t(i), 0, 1, 1500, 1, Carrier::Datagram),
+                m.send(t(i), 0, 1, 1500, 1, Carrier::Datagram),
+            );
+            assert_eq!(a.dropped, b.dropped);
+        }
+        let mean = p * f64::from(count);
+        let sigma = (mean * (1.0 - p)).sqrt();
+        assert!(
+            (f64::from(lost) - mean).abs() < 3.0 * sigma,
+            "{lost} vs {mean}"
+        );
+        let mut quiet = net(
+            &sites,
+            Options {
+                jitter: false,
+                loss: false,
+            },
+        );
+        assert!((0..1_000).all(|_| !quiet.lost_off_net(0, 2)));
     }
 
     #[test]
