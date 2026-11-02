@@ -256,6 +256,15 @@ real stack's busy stars lost (robust tier: star-31-10 and mesh6-31-10
 A minimum of two chunks (`deadline`'s `min2`) ends the silence too, and
 scored the same in the ppspp sim (48 seeds).
 
+**A paced answer rate grown only to twice what answers sent.**
+(`answer-validation`, against 1a97c9ad on the calibrated window model)
+Thin relays' paced rate swings from 32 KB/s to 1 MB/s, three times their
+uplinks, as answers wait for a burst's tokens; capping its growth at twice
+the answers' rate over the last quarter span left thin-15-10 collapsing 25
+of 32 times (24 without), lag p99 ×1.03 [0.93,1.13]. The cell collapses on
+the acknowledgements that wait behind a relay's uploads, not on the
+answers' bursts.
+
 ## Sim model
 
 **Ethernet framing on the access links.** (on `tcp-bench`, against

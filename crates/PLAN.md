@@ -264,12 +264,15 @@ in `TRIED.md`.
      32 KiB munros: `collapse_thin_relays`'s cell) lag over 2 s at the worst
      viewer in 29-40 of the 40 seconds from 20 s on, and some go seconds
      without frames; at the testbed's default 1 KiB chunks they lag 14-16 s.
-     The window model as the bare TCP bench calibrates it shows the mode too
-     (over 2 s in 5-27 of the 40 seconds at seeds 1-8;
-     `collapse_thin_relays` collapses at 13 of seeds 1-16), main's model
-     barely (0-5), so the relay reading's fix holds only where the model is
-     too kind. Find what holds the relays back on the real stack
-     (`hack/testbed/twin.py`, captures) and fix it before the model lands.
+     The window model as the bare TCP bench calibrates it shows the mode
+     (thin-15-10 collapses 23 of 32 times, main's model 10): a relay's own
+     uploads fill its uplink's FIFO, and the pure acknowledgements of what
+     it receives wait behind them, up to the queue's 100 ms, so the flows
+     that feed it slow down and its children starve. With acknowledgements
+     kept out of the queue the cell collapses 0 of 16 times (11 with them).
+     A relay must keep its own uplink queue short: pace what it sends below
+     its uplink, or take on less as its queueing delay rises. Fix it before
+     the model lands.
    - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
      five-node mesh grows its push children from 16 to 50 every 15-20 s
      and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s
