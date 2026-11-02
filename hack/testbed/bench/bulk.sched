@@ -1,0 +1,23 @@
+# Another app's bulk upload (iperf3, CUBIC) alone on a 10 Mbit/s uplink
+# from 5 s to 25 s, beside ten idle links' small writes and probes.
+# env: VIEWERS=10 SEED_UP_MBIT=10 SECS=30 COMPETE=5:20
+burst 0 1 1 250 128 128
+burst 0 2 1 250 128 128
+burst 0 3 1 250 128 128
+burst 0 4 1 250 128 128
+burst 0 5 1 250 128 128
+burst 0 6 1 250 128 128
+burst 0 7 1 250 128 128
+burst 0 8 1 250 128 128
+burst 0 9 1 250 128 128
+burst 0 10 1 250 128 128
+probe 0 1 7 200
+probe 0 2 47 200
+probe 0 3 17 200
+probe 0 4 37 200
+probe 0 5 57 200
+probe 0 6 77 200
+probe 0 7 97 200
+probe 0 8 117 200
+probe 0 9 137 200
+probe 0 10 157 200

@@ -606,10 +606,15 @@ pub(crate) struct Scheduler {
     /// Per host with competing uploads, [`Scheduler::cross_bytes`] every
     /// [`QUEUE_SAMPLE_EVERY`]: (time since the start, bytes).
     cross_sent: Vec<Vec<(Duration, u64)>>,
+    /// Per host with competing uploads, their windows summed, sampled as
+    /// [`Scheduler::cross_sent`] is.
+    cross_cwnd: Vec<Vec<(Duration, u64)>>,
     /// Per host, the window model's segments its connections lost to a
     /// full access queue, and the acknowledgements its uplink carried.
     drops: Vec<u64>,
     acks: Vec<u64>,
+    /// Per host, its competing uploads' segments lost to its full uplink.
+    cross_drops: Vec<u64>,
     /// The acknowledgements receivers owe, by the connection whose data
     /// they acknowledge. Bound: one per connection with data received.
     owed: BTreeMap<(SocketAddr, SocketAddr), Owed>,
@@ -727,8 +732,10 @@ impl Scheduler {
             cross,
             cross_bytes: vec![0; spec.hosts.len()],
             cross_sent: vec![Vec::new(); spec.hosts.len()],
+            cross_cwnd: vec![Vec::new(); spec.hosts.len()],
             drops: vec![0; spec.hosts.len()],
             acks: vec![0; spec.hosts.len()],
+            cross_drops: vec![0; spec.hosts.len()],
             owed: BTreeMap::new(),
         })
     }
@@ -794,6 +801,15 @@ impl Scheduler {
                 };
                 if samples.last().is_none_or(|&(t, _)| t < now - epoch()) {
                     samples.push((now - epoch(), bytes));
+                    let window = self
+                        .cross
+                        .iter()
+                        .filter(|x| x.host == c.host && x.started && now < x.stop)
+                        .map(|x| x.flow.cwnd as u64)
+                        .sum();
+                    if let Some(w) = self.cross_cwnd.get_mut(c.host) {
+                        w.push((now - epoch(), window));
+                    }
                 }
             }
         }
@@ -1152,6 +1168,9 @@ impl Scheduler {
             self.next += 1;
             let wait = (self.net.up_free(host) - at).max(Duration::ZERO);
             if overflows(wait, tx_time(CROSS_WIRE, self.net.up_rate(host, at)), cap) {
+                if let Some(d) = self.cross_drops.get_mut(host) {
+                    *d += 1;
+                }
                 self.events
                     .insert((at + rtt + wait, id), Event::CrossLost { i, seq });
                 continue;
@@ -1586,6 +1605,8 @@ impl Scheduler {
                         competing: self.cross_sent.get(h).cloned().unwrap_or_default(),
                         queue_drops: self.drops.get(h).copied().unwrap_or(0),
                         acks: self.acks.get(h).copied().unwrap_or(0),
+                        competing_drops: self.cross_drops.get(h).copied().unwrap_or(0),
+                        competing_cwnd: self.cross_cwnd.get(h).cloned().unwrap_or_default(),
                     })
                 })
                 .collect(),

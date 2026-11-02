@@ -55,12 +55,8 @@
 #                          namespace, through its shaped uplink, to a sink
 #                          container (10 ms egress delay), from <s> seconds
 #                          after the stream starts for <d> seconds
-#   SEED_LOSS_PCT=<p>      the seed's site loses each packet it sends or
-#                          receives with this probability, in percent, as
-#                          the sim's site loss does: one in round(100/<p>)
-#                          (tc's gact) as each packet reaches its receiver.
-#                          netem's loss on the seed's egress would drop the
-#                          whole GSO buffer a packet leaves in
+#   SS_EVERY=<s>           how often the seed's sockets are sampled into
+#                          ss-0.log (default 1)
 #   TOPOLOGY=<file>        links (`link a b` lines); default a star
 #   NODE_BIN=<path>        the testbed_node binary (default
 #                          target/release/examples/testbed_node), built by
@@ -134,12 +130,7 @@ join_at=${JOIN_AT:-0}
 slow=${SLOW_DOWN_KBIT:-}
 steps=${SEED_UP_STEPS:-}
 compete=${COMPETE:-}
-seed_loss=${SEED_LOSS_PCT:-}
-loss_every=""
-if [ -n "$seed_loss" ]; then
-  loss_every=$(awk -v p="$seed_loss" 'BEGIN { v = 100 / p; if (v < 1 || v > 10000) exit 1; printf "%.0f", v }') \
-    || { echo "SEED_LOSS_PCT=$seed_loss: out of range" >&2; exit 1; }
-fi
+ss_every=${SS_EVERY:-1}
 node_args=${NODE_ARGS:-}
 rate_arg=${RATE:+--rate $RATE}
 bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
@@ -224,7 +215,7 @@ docker network inspect "$net" >/dev/null 2>&1 \
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|KINDS|BROWSER_LINKS|MEDIA|UNITS_CPS|RECORD)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|KINDS|BROWSER_LINKS|MEDIA|UNITS_CPS|RECORD)=' \
   > "$out/settings" || true
 
 # The containers start one after another before the stream does, and
@@ -260,27 +251,17 @@ for i in $(seq 0 $((n - 1))); do
   shape="ethtool -K eth0 tso off gso off gro off >/dev/null 2>&1 || true
 tc qdisc replace dev eth0 root handle 1: netem delay ${delay}ms limit 100000
 tc qdisc add dev eth0 parent 1:1 handle 10: tbf rate ${up}mbit burst 3028 limit $limit"
-  ingress=""
-  if [ -n "$loss_every" ]; then
-    # The seed loses what it receives; a viewer, what the seed sends it.
-    if [ "$i" -eq 0 ]; then match=matchall; else match="protocol ip u32 match ip src $subnet.10/32"; fi
-    ingress="tc filter add dev eth0 parent ffff: prio 1 $match action gact continue random netrand drop $loss_every"
-  fi
   if [ "$i" -eq 1 ] && [ -n "$slow" ]; then
-    ingress="$ingress
-ip link add ifb0 type ifb && ip link set ifb0 up
-tc filter add dev eth0 parent ffff: prio 2 matchall action mirred egress redirect dev ifb0
-tc qdisc add dev ifb0 root tbf rate ${slow}kbit burst 3028 limit $((slow * queue / 8))"
-  fi
-  if [ -n "$ingress" ]; then
     shape="$shape
+ip link add ifb0 type ifb && ip link set ifb0 up
 tc qdisc add dev eth0 handle ffff: ingress
-$ingress"
+tc filter add dev eth0 parent ffff: matchall action mirred egress redirect dev ifb0
+tc qdisc add dev ifb0 root tbf rate ${slow}kbit burst 3028 limit $((slow * queue / 8))"
   fi
   sample=""
   if [ "$i" -eq 0 ]; then
     sample="( while :; do echo \"\$(date +%s%3N) \$(tc -s qdisc show dev eth0 | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &
-( while :; do echo \"@ \$(date +%s%3N)\"; ss -tin state established; sleep 1; done > /out/ss-$i.log ) &"
+( while :; do echo \"@ \$(date +%s%3N)\"; ss -tin state established; sleep $ss_every; done > /out/ss-$i.log ) &"
   fi
   capture=""
   if [ "${CAPTURE:-0}" = 1 ]; then capture="--capture /out/capture"; fi

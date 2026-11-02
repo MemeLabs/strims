@@ -27,8 +27,12 @@ links that carry the same schedule:
   rate    bytes read per second per link (KB/s), mean
   compete a competing upload's payload rate (KB/s) each second it ran
           (testbed: iperf3's report; sim: the model's wire bytes)
+  x cwnd  its window (KiB) each second
   drops   the seed's packets its uplink queue dropped over the whole run
-          (testbed: tc's tbf; sim: the window model's segments)
+          (testbed: tc's tbf; sim: the window model's segments, two packets
+          each)
+  x drops the competing uploads' share of them (testbed: iperf3's
+          retransmits)
 """
 
 import json
@@ -158,19 +162,33 @@ def tc_compete(run, start_ms):
         for iv in rep.get("intervals", []):
             s = iv["sum"]
             t = (began - start_ms) * 1000 + int(s["end"] * 1e6)
-            out.append((t, s["bits_per_second"] / 8 / 1000))
+            st = (iv.get("streams") or [{}])[0]
+            out.append((t, s["bits_per_second"] / 8 / 1000, st.get("snd_cwnd", 0) / 1024))
     return out
+
+
+def tc_compete_retx(run):
+    """The testbed's competing uploads' retransmitted packets, from
+    iperf3's reports."""
+    n = None
+    for f in os.listdir(run):
+        if f.startswith("compete-") and f.endswith(".json"):
+            try:
+                n = (n or 0) + json.load(open(os.path.join(run, f)))["end"]["sum_sent"]["retransmits"]
+            except (OSError, ValueError, KeyError):
+                pass
+    return n
 
 
 def sim_compete(evs):
     """The model's competing uploads' rate each second they sent, as
     payload (1448 of each 1500 wire bytes): [(t_us, KB/s)]."""
-    xs = sorted((e["t"], e["bytes"]) for e in evs if e.get("ev") == "x")
+    xs = sorted((e["t"], e["bytes"], e.get("cwnd", 0)) for e in evs if e.get("ev") == "x")
     out = []
-    for (t0, b0), (t1, b1) in zip(xs[::10], xs[10::10]):
+    for (t0, b0, _), (t1, b1, w) in zip(xs[::10], xs[10::10]):
         rate = (b1 - b0) / ((t1 - t0) / 1e6) * 1448 / 1500 / 1000
         if rate > 0:
-            out.append((t1, rate))
+            out.append((t1, rate, w / 1024))
     return out
 
 
@@ -225,12 +243,16 @@ def metrics(nodes, sched, cls, t0_us, queue=None, compete=None):
     for t, ms in queue or []:
         if t >= t0_us:
             m[("node 0", "upq")].append(ms)
-    for t, kbps in compete if compete is not None else sim_compete(nodes.get(0, [])):
+    for t, kbps, cwnd in compete if compete is not None else sim_compete(nodes.get(0, [])):
         if t >= t0_us:
             m[("node 0", "compete")].append(kbps)
+            m[("node 0", "x cwnd")].append(cwnd)
     for e in nodes.get(0, []):
         if e.get("ev") == "drops":
-            m[("node 0", "drops")] = [e["queue_drops"]]
+            # The model's segments are two packets.
+            m[("node 0", "drops")] = [2 * (e["queue_drops"] + e.get("competing_drops", 0))]
+            if "competing_drops" in e:
+                m[("node 0", "x drops")] = [2 * e["competing_drops"]]
     span = max(1.0, (tmax - t0_us) / 1e6)
     per = defaultdict(list)
     for (c, link), b in rbytes.items():
@@ -276,6 +298,9 @@ def compare(run, extra=(), only=None, t0=2.0):
         m = metrics(nodes, sched, cls, int(t0 * 1e6), q, x)
         if name == "testbed":
             m[("node 0", "drops")] = [tc_drops(run)]
+            x = tc_compete_retx(run)
+            if x is not None:
+                m[("node 0", "x drops")] = [x]
         ms.append(m)
     return arms, ms
 
@@ -305,7 +330,7 @@ def main():
             row = f"  {name:<8}"
             for m in ms:
                 xs = m.get(k, [])
-                if name == "drops":
+                if name in ("drops", "x drops"):
                     row += f" | {xs[0] if xs else '-':>6}"
                 elif name == "rate":
                     row += f" | {fmt(sum(xs) / len(xs)) if xs else '-':>6}"

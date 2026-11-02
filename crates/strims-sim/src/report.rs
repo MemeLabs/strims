@@ -234,6 +234,10 @@ pub struct WanHostReport {
     /// carried.
     pub queue_drops: u64,
     pub acks: u64,
+    /// With competing uploads, their segments lost to the full uplink, and
+    /// their windows summed every 100 ms while they run.
+    pub competing_drops: u64,
+    pub competing_cwnd: Vec<(strims_base::time::Duration, u64)>,
 }
 
 /// The access links of a WAN run, in host order.

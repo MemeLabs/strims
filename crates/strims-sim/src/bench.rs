@@ -54,10 +54,11 @@
 //!
 //! [`simulate`] adds a `{"ev":"q","t":..,"wait":..}` line per sample of
 //! the node's uplink queue (µs), as the testbed's `tc-0.log` samples the
-//! seed's, a `{"ev":"x","t":..,"bytes":..}` line per sample of the wire
-//! bytes its competing uploads sent (as `run.sh`'s `COMPETE` runs them, on
-//! the testbed in `compete-<s>.json`), and a `{"ev":"drops",..}` line with
-//! the segments the window model lost to its full access queues.
+//! seed's, a `{"ev":"x","t":..,"bytes":..,"cwnd":..}` line per sample of
+//! the wire bytes its competing uploads sent and their windows (as
+//! `run.sh`'s `COMPETE` runs them, on the testbed in `compete-<s>.json`),
+//! and a `{"ev":"drops",..}` line with the segments the window model lost
+//! to its full access queues, the connections' and the uploads'.
 
 // The bench's nodes share their state between their tasks on one thread.
 #![allow(clippy::disallowed_types)]
@@ -900,13 +901,19 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     let start = Duration::from(SIM_START);
     for (h, l) in report.iter().flat_map(|r| &r.hosts).zip(logs.iter_mut()) {
         l.push(format!(
-            r#"{{"ev":"drops","up_packets":{},"queue_drops":{}}}"#,
+            r#"{{"ev":"drops","up_packets":{},"queue_drops":{},"competing_drops":{}}}"#,
             h.stats.up_bytes / 1500,
-            h.queue_drops
+            h.queue_drops,
+            h.competing_drops
         ));
         for &(t, bytes) in &h.competing {
+            let cwnd = h
+                .competing_cwnd
+                .iter()
+                .find(|&&(at, _)| at == t)
+                .map_or(0, |&(_, w)| w);
             l.push(format!(
-                r#"{{"ev":"x","t":{},"bytes":{bytes}}}"#,
+                r#"{{"ev":"x","t":{},"bytes":{bytes},"cwnd":{cwnd}}}"#,
                 (t - start).as_micros()
             ));
         }
