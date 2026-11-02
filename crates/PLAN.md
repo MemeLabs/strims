@@ -259,6 +259,17 @@ in `TRIED.md`.
      uplink: star-3-10's viewers (20 Mbit/s uplinks) read about 550 KB/s
      and declined extra streams at half that. Clamping on the least latest
      excess across its links lost a thin relay's own queue (`TRIED.md`).
+   - Thin relays collapse on the Docker testbed. Behind a 10 Mbit/s seed, 15
+     viewers on 3 Mbit/s uplinks in a full mesh (256 KiB/s, 4 KiB chunks and
+     32 KiB munros: `collapse_thin_relays`'s cell) lag over 2 s at the worst
+     viewer in 29-40 of the 40 seconds from 20 s on, and some go seconds
+     without frames; at the testbed's default 1 KiB chunks they lag 14-16 s.
+     The window model as the bare TCP bench calibrates it shows the mode too
+     (over 2 s in 5-27 of the 40 seconds at seeds 1-8;
+     `collapse_thin_relays` collapses at 13 of seeds 1-16), main's model
+     barely (0-5), so the relay reading's fix holds only where the model is
+     too kind. Find what holds the relays back on the real stack
+     (`hack/testbed/twin.py`, captures) and fix it before the model lands.
    - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
      five-node mesh grows its push children from 16 to 50 every 15-20 s
      and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s
@@ -521,13 +532,12 @@ in `TRIED.md`.
     drops 81 buffers against the tbf's 118-166, the holders' probe round
     trips fall short in the tail (p99 197 ms against 338), at 10 Mbit/s
     their uplink drops a quarter of the testbed's buffers (16 against 60),
-    and there is no HyStart ack-train test. Its twin of the testbed's
-    uplink cut (`testbed-copy-floor`) lags over 1 s in 47.8 of 205 seconds
-    at 25 viewers (40.6 of the cut's 120) against the testbed's 66.7 (54.5);
-    at 10 viewers 17.2 against 17.5. On the model `collapse_thin_relays`
-    collapses at 13 of seeds 1-16 (main's model: 1), and the robust tier
-    went past its guardrails both ways: find whether the testbed's thin
-    relays collapse too, and settle both before it lands.
+    and there is no HyStart ack-train test. Its twin of the testbed's uplink
+    cut (`testbed-copy-floor`) lags over 1 s in 47.8 of 205 seconds at 25
+    viewers (40.6 of the cut's 120) against the testbed's 66.7 (54.5); at 10
+    viewers 17.2 against 17.5. Its thin relays collapse as the testbed's do
+    (Swarm, Ship it). The robust tier went past its guardrails both ways on
+    an earlier version of the model: rerun it before it lands.
   - Through a halving of the seed's uplink the testbed fell into the
     lock-in deeper than its twin, and its round trips there ran 1.4 times
     the sim's. Recheck with today's frames; if the gap holds, find the
