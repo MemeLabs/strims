@@ -23,9 +23,11 @@
 //! - **Budget.** K stream slots (one subscriber of one stream each) are
 //!   what [`ALLOC_UTILIZATION`] of the measured upload capacity carries at
 //!   a subscriber's cost, once the store rate has been measured for
-//!   [`ALLOC_MEASURE`]; they pay for K / streams copies, or K of the
-//!   streams at one holder when K is under one copy (the rest go to pull).
-//!   It falls only once it is [`OVER_BUDGET`] too high. Its busy time
+//!   [`ALLOC_MEASURE`]; they pay for K / streams copies, and at least one:
+//!   every chunk leaves the seed once at least, and one no holder carries
+//!   leaves it as answers, to each neighbour that asks before another has
+//!   it, several times what its push would cost. It falls only once it is
+//!   [`OVER_BUDGET`] too high. Its busy time
 //!   leaves out the time data waited only for links that hold it back (the
 //!   runner's meter): a neighbour whose own downlink can't take what it's
 //!   sent, or that reads slowly, backs up its own queue, not the uplink.
@@ -705,8 +707,8 @@ pub(crate) struct Allocator {
     /// Once measured, the budget in stream slots.
     measured: bool,
     budget: usize,
-    /// The copies in effect, and the streams a holder may take (fewer
-    /// than all only under one copy).
+    /// The copies in effect, and the streams a holder may take: all of
+    /// them once the budget is measured, any number before.
     copies: usize,
     streams: usize,
     window: Window,
@@ -1531,7 +1533,8 @@ impl PeerSwarmScheduler {
         }
         let measuring = !a.measuring_since.is_nil() && now - a.measuring_since >= ALLOC_MEASURE;
         if let Some(cap) = upload.capacity().filter(|_| measuring && rate > 0.0) {
-            let target = ((cap * ALLOC_UTILIZATION - upload.others).max(0.0) / rate) as usize;
+            let target =
+                (((cap * ALLOC_UTILIZATION - upload.others).max(0.0) / rate) as usize).max(streams);
             if !a.measured
                 || target > a.budget
                 || (target as f64) < a.budget as f64 * (1.0 - OVER_BUDGET)
@@ -1557,11 +1560,11 @@ impl PeerSwarmScheduler {
         };
         a.copies = a.window.copies;
         if a.measured {
-            a.streams = a.budget.clamp(1, streams);
+            a.streams = streams;
         }
         a.unconstrained =
             a.measured && a.budget >= neighbours.saturating_mul(streams) && a.copies >= neighbours;
-        let (copies, room) = (a.copies, a.streams);
+        let (copies, holds) = (a.copies, a.streams);
         let key = self.s.key;
         if changed || signals.pushed > 0 {
             self.s.tap.emit(key, None, || TapKind::SeedWindow {
@@ -1575,7 +1578,7 @@ impl PeerSwarmScheduler {
             self.s.tap.emit(key, None, || TapKind::SeedBudget {
                 budget,
                 copies: copies as u64,
-                streams: room as u64,
+                streams: holds as u64,
                 capacity: upload.capacity().map(|c| c as u64),
                 stream_rate: rate as u64,
                 others: upload.others as u64,
@@ -1583,29 +1586,6 @@ impl PeerSwarmScheduler {
         }
         if a.unconstrained {
             return;
-        }
-
-        // Under one copy, a holder's streams past the budget go.
-        let mut excess: Vec<(PeerKey, Stream)> = Vec::new();
-        if room < streams {
-            let mut seen: BTreeMap<PeerKey, usize> = BTreeMap::new();
-            for (i, st) in self.s.streams.iter().enumerate() {
-                for x in &st.subscribers {
-                    let n = seen.entry(x.channel).or_default();
-                    *n += 1;
-                    if *n > room {
-                        excess.push((x.channel, i as Stream));
-                    }
-                }
-            }
-        }
-        for (peer, stream) in excess {
-            self.close_subscriber(peer, stream, q);
-            let key = self.s.key;
-            self.s.tap.emit(key, Some(peer), || TapKind::Shed {
-                stream,
-                why: Shed::SeedBudget { room: room as u64 },
-            });
         }
 
         // A cut shows the uplink full, as a queue standing below the runner

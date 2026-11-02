@@ -2120,7 +2120,7 @@ fn without_uplink_shares_an_adaptive_seeds_window_is_its_budget() {
 }
 
 #[test]
-fn under_one_copy_a_holder_takes_what_the_budget_pays_for() {
+fn under_one_copy_a_holder_keeps_every_stream() {
     let mut f = adaptive_seed(4, 2);
     let mut q = MockQueue::default();
     let p = ready_channel(&mut f, &mut q);
@@ -2129,8 +2129,7 @@ fn under_one_copy_a_holder_takes_what_the_budget_pays_for() {
             .handle_stream_request(p, s, Bin(0), Bin(0), now(), &mut q)
             .unwrap();
     }
-    assert_eq!(f.sched.push_stats().children, 4);
-    // Two subscribers' worth.
+    // Two subscribers' worth: the budget is one copy.
     let t = now() + Duration::from_secs(1);
     publish(&mut f, now(), t);
     f.sched.set_upload(push::UploadInfo {
@@ -2142,35 +2141,40 @@ fn under_one_copy_a_holder_takes_what_the_budget_pays_for() {
     publish(&mut f, t, t + push::seed::ALLOC_MEASURE);
     let t = t + push::seed::ALLOC_MEASURE;
     f.sched.run_push(t, &mut q);
-    assert_eq!(f.sched.push_stats().children, 2);
+    assert_eq!(f.sched.push_stats().children, 4);
+    assert_eq!(f.sched.seed_allocation(t).unwrap().budget, 4);
     assert_eq!(holders(&f), vec![p]);
 }
 
 #[test]
 fn the_budget_leaves_out_the_time_data_waited_only_for_links_that_hold_it_back() {
-    let mut f = adaptive_seed(4, 2);
-    let mut q = MockQueue::default();
-    let p = ready_channel(&mut f, &mut q);
-    for s in 0..4 {
-        f.sched
-            .handle_stream_request(p, s, Bin(0), Bin(0), now(), &mut q)
-            .unwrap();
-    }
+    let budget = |budget_busy| {
+        let mut f = adaptive_seed(4, 2);
+        let mut q = MockQueue::default();
+        let p = ready_channel(&mut f, &mut q);
+        for s in 0..4 {
+            f.sched
+                .handle_stream_request(p, s, Bin(0), Bin(0), now(), &mut q)
+                .unwrap();
+        }
+        let t = now() + Duration::from_secs(1);
+        publish(&mut f, now(), t);
+        f.sched.set_upload(push::UploadInfo {
+            rate: 900_000,
+            busy: 1.0,
+            budget_busy,
+            ..Default::default()
+        });
+        f.sched.run_push(t, &mut q);
+        publish(&mut f, t, t + push::seed::ALLOC_MEASURE);
+        let t = t + push::seed::ALLOC_MEASURE;
+        f.sched.run_push(t, &mut q);
+        f.sched.seed_allocation(t).unwrap().budget
+    };
     // Busy all the time, half of it with data only for links that hold it
     // back: the budget pays for twice what the whole busy time would.
-    let t = now() + Duration::from_secs(1);
-    publish(&mut f, now(), t);
-    f.sched.set_upload(push::UploadInfo {
-        rate: 300_000,
-        busy: 1.0,
-        budget_busy: Some(0.5),
-        ..Default::default()
-    });
-    f.sched.run_push(t, &mut q);
-    publish(&mut f, t, t + push::seed::ALLOC_MEASURE);
-    let t = t + push::seed::ALLOC_MEASURE;
-    f.sched.run_push(t, &mut q);
-    assert_eq!(f.sched.push_stats().children, 4);
+    assert_eq!(budget(None), 6);
+    assert_eq!(budget(Some(0.5)), 12);
 }
 
 #[test]

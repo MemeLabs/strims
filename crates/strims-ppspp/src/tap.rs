@@ -329,8 +329,9 @@ pub enum Shed {
         excess: u64,
         count: u64,
     },
-    /// An adaptive seed's budget pays for fewer than one copy: each holder
-    /// keeps `room` streams.
+    /// An adaptive seed moved the stream between a holder whose link falls
+    /// behind and the neighbour that took some of its streams: the peer
+    /// closed keeps `room` streams.
     SeedBudget { room: u64 },
 }
 
