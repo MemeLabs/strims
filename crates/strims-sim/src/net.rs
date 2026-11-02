@@ -9,7 +9,10 @@
 //! pushes back on vnic. With send buffers a TCP connection whose socket has
 //! a `TCP_NOTSENT_LOWAT` mark (the node's
 //! [`TcpSocketConfig`](strims_node::TcpSocketConfig)) holds its writes while
-//! its unsent bytes reach the mark, as a kernel socket does. A byte is
+//! its unsent bytes reach the mark, as Linux does: Linux checks the mark
+//! only as a write starts a new buffer, and fills that buffer to a GSO
+//! segment ([`GSO_SEGMENT`]) first, so a burst of writes leaves up to the
+//! mark plus a segment unsent, not the mark alone. A byte is
 //! unsent from its write until the WAN scheduler admits its segment: to
 //! the sender's uplink queue once that queue holds less than
 //! [`SendBuffer::uplink_queue`] of transmission time, where the segment's
@@ -45,10 +48,20 @@ pub(crate) type ConnKey = (SocketAddr, SocketAddr);
 struct Conn {
     /// The socket's `TCP_NOTSENT_LOWAT`, once the node set it.
     lowat: Option<u64>,
-    /// Bytes written and not yet admitted to the uplink queue.
+    /// Bytes written and not yet admitted to the uplink queue ...
     unsent: u64,
+    /// ... and of them, those in the last buffer a write started, which
+    /// later writes fill to [`GSO_SEGMENT`] whatever the mark.
+    tail: u64,
     waker: Option<Waker>,
 }
+
+/// The most a socket's buffer takes before Linux checks
+/// `TCP_NOTSENT_LOWAT` again: a GSO segment, 64 KiB less its headers in
+/// whole 1448-byte segments. TCP sockets always segment in software, so
+/// this holds with the device's TSO and GSO off, as on the testbed, whose
+/// sockets leave at most 63712 bytes unsent at a 16 KiB mark.
+pub(crate) const GSO_SEGMENT: u64 = 44 * 1448;
 
 /// Every connection's unsent bytes, shared by the hosts' sockets and the
 /// WAN scheduler.
@@ -84,13 +97,15 @@ impl SendBuffers {
     }
 
     /// `len` bytes of `conn` reached the uplink queue. Returns the writer
-    /// to wake, if it waits.
+    /// to wake, if it waits: once its unsent bytes are under half the mark,
+    /// when Linux reports a socket with the mark writable.
     pub fn admit(&self, conn: ConnKey, len: usize) -> Option<Waker> {
         self.with(|b| {
             let c = b.conns.get_mut(&conn)?;
             c.unsent = c.unsent.saturating_sub(len as u64);
+            c.tail = c.tail.min(c.unsent);
             let lowat = c.lowat?;
-            if c.unsent < lowat {
+            if 2 * c.unsent < lowat {
                 c.waker.take()
             } else {
                 None
@@ -214,27 +229,42 @@ impl AsyncWrite for SimTcpStream {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         let this = &mut *self;
+        // The most this write may take: what the tail buffer has room for,
+        // or below the mark a new buffer.
+        let mut room = usize::MAX;
         if let Some((key, b)) = &this.conn {
-            let full = b.with(|x| match x.conns.get_mut(key) {
-                Some(c) if c.lowat.is_some_and(|l| c.unsent >= l) => {
+            let take = b.with(|x| {
+                let Some(c) = x.conns.get_mut(key) else {
+                    return Some(u64::MAX);
+                };
+                let Some(lowat) = c.lowat else {
+                    return Some(u64::MAX);
+                };
+                if c.tail > 0 && c.tail < GSO_SEGMENT {
+                    Some(GSO_SEGMENT - c.tail)
+                } else if c.unsent >= lowat {
                     c.waker = Some(cx.waker().clone());
-                    true
+                    None
+                } else {
+                    c.tail = 0;
+                    Some(GSO_SEGMENT)
                 }
-                _ => false,
             });
-            if full {
+            let Some(take) = take else {
                 return Poll::Pending;
-            }
+            };
+            room = usize::try_from(take).unwrap_or(usize::MAX);
         }
-        let buf = match this.segment {
-            Some(n) => buf.get(..buf.len().min(n.max(1))).unwrap_or(buf),
-            None => buf,
-        };
+        let n = this.segment.map_or(room, |n| n.max(1).min(room));
+        let buf = buf.get(..buf.len().min(n)).unwrap_or(buf);
         let r = Pin::new(&mut this.inner).poll_write(cx, buf);
         if let (Poll::Ready(Ok(n)), Some((key, b))) = (&r, &this.conn) {
             b.with(|x| {
                 if let Some(c) = x.conns.get_mut(key) {
                     c.unsent = c.unsent.saturating_add(*n as u64);
+                    if c.lowat.is_some() {
+                        c.tail = c.tail.saturating_add(*n as u64);
+                    }
                 }
             });
         }

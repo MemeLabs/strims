@@ -1261,14 +1261,16 @@ mod tests {
             window: false,
         });
         let (wrote, got, peak) = buffered_writes(Some(buffers), |_| {});
-        // The writes run ahead of the uplink by its 100 ms queue and the two
-        // writes the socket holds (one starts under the 16 KiB mark and ends
-        // past it), about 0.46 s of the 1.2 s the bytes take on the wire.
+        // The writes run ahead of the uplink by its 100 ms queue and what the
+        // socket holds: under the 16 KiB mark a write starts a buffer that
+        // later writes fill to a GSO segment, and a writer that waits resumes
+        // under half the mark. The last write goes about 0.46 s before the
+        // 1.2 s the bytes take on the wire end.
         assert!((700..800).contains(&wrote), "last write after {wrote} ms");
         assert!((1190..1215).contains(&got), "{got} ms");
-        // A segment waits at the uplink for at most the queue and those two
-        // writes; the FIN, sent with the last write, also for that write.
-        assert!(peak <= Duration::from_millis(470), "{peak:?}");
+        // A segment waits at the uplink for at most the queue, a GSO segment
+        // (0.51 s at 1 Mbit/s) and the write that started it.
+        assert!(peak <= Duration::from_millis(710), "{peak:?}");
     }
 
     #[test]
