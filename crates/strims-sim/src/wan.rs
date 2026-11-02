@@ -53,7 +53,8 @@
 //!   as a byte-limited FIFO (Linux's tbf and bfifo) drops it: a small
 //!   write fits where a full segment doesn't. An uplink queue frees a
 //!   segment's room once its last bit has left
-//!   ([`Network::up_backlog`](strims_wan::Network::up_backlog)).
+//!   ([`Network::up_backlog`](strims_wan::Network::up_backlog)). A
+//!   datagram that doesn't fit is lost the same way, and forgotten.
 //! - A segment that loses a packet on its path (the sites' loss) is lost
 //!   to its sender the same way.
 //! - Its sender learns of the loss from a later segment's acknowledgement,
@@ -962,7 +963,8 @@ impl Scheduler {
                         What::Data { seq, len } => Some((seq, len)),
                         _ => None,
                     };
-                    if let (Some(cap), Some(_)) = (window, data)
+                    let datagram = matches!(r.what, What::Datagram(_));
+                    if let (Some(cap), true) = (window, data.is_some() || datagram)
                         && overflows(
                             self.net.down_free(r.to) - t,
                             tx_time(
@@ -974,6 +976,11 @@ impl Scheduler {
                     {
                         if let Some(d) = self.drops.get_mut(r.from) {
                             *d += 1;
+                        }
+                        if datagram {
+                            r.state = State::Dropped;
+                            self.records.dropped += 1;
+                            continue;
                         }
                         let (conn, seq) = ((r.src, r.dst), data.map_or(0, |(s, _)| s));
                         self.dropped(t, conn, seq, id);
@@ -1657,6 +1664,7 @@ impl Scheduler {
     }
 
     fn transmit(&mut self, at: Time, id: u64) {
+        let window = self.window();
         let Some(r) = self.records.get_mut(&id) else {
             return;
         };
@@ -1664,6 +1672,19 @@ impl Scheduler {
             What::Datagram(_) => Carrier::Datagram,
             _ => Carrier::Stream,
         };
+        if let (Some(cap), Carrier::Datagram) = (window, carrier) {
+            // A full queue drops a datagram as it does a segment; the
+            // datagram's sender learns of it only from what it carries.
+            let wait = self.net.up_backlog(r.from, at);
+            if overflows(wait, tx_time(r.wire, self.net.up_rate(r.from, at)), cap) {
+                if let Some(d) = self.drops.get_mut(r.from) {
+                    *d += 1;
+                }
+                r.state = State::Dropped;
+                self.records.dropped += 1;
+                return;
+            }
+        }
         if let (Some(b), What::Data { len, .. }) = (&self.buffers, r.what) {
             let q = b.model().uplink_queue;
             let admit = at.max(self.net.up_free(r.from) - Duration::from(q));
@@ -2397,6 +2418,64 @@ mod tests {
         let got = got.get();
         assert!((440..540).contains(&got), "{got} of 1000");
         assert_eq!(u64::from(1000 - got), wan.net.stats(1).drops);
+        assert_eq!(wan.in_flight(), 0, "lost datagrams stay tracked");
+    }
+
+    #[test]
+    fn a_full_queue_drops_datagrams() {
+        let mut sim = build();
+        let sites = [
+            ("a", Site::new(City::Sydney, Access::Fiber).with_loss(0.0)),
+            (
+                "b",
+                Site::new(City::Sydney, Access::Fiber)
+                    .with_up(125_000)
+                    .with_loss(0.0),
+            ),
+        ];
+        let got = Rc::new(Cell::new(0u32));
+        let g = got.clone();
+        sim.host("a", move || {
+            let g = g.clone();
+            async move {
+                let s = UdpSocket::bind("0.0.0.0:9000").await?;
+                let mut buf = [0u8; 2048];
+                loop {
+                    s.recv_from(&mut buf).await?;
+                    g.set(g.get() + 1);
+                }
+            }
+        });
+        // 600-byte datagrams every 2 ms, two and a half times what b's
+        // 1 Mbit/s uplink carries, into its 100 ms queue.
+        sim.client("b", async {
+            let s = UdpSocket::bind("0.0.0.0:9001").await?;
+            for _ in 0..1000 {
+                s.send_to(&[23u8; 600], ("a", 9000)).await?;
+                tokio::time::sleep(StdDuration::from_millis(2)).await;
+            }
+            tokio::time::sleep(StdDuration::from_millis(500)).await;
+            Ok(())
+        });
+        let buffers = SendBuffers::new(SendBuffer {
+            uplink_queue: StdDuration::from_millis(100),
+            window: true,
+        });
+        let spec = spec(&sites);
+        let mut wan = Scheduler::new(&sim, &spec, QUIET, 1, Some(buffers)).unwrap();
+        drive(&mut sim, &mut wan);
+        // The uplink carries its share over the 2 s and the queue it holds
+        // at the end; the rest is lost at the queue, and forgotten.
+        let got = got.get();
+        let (wire, _) = udp_wire(600);
+        let share = 125_000 * 21 / 10 / u32::try_from(wire).unwrap();
+        assert!(
+            got.abs_diff(share) < share / 10,
+            "{got} of 1000, {share} expected"
+        );
+        let report = wan.report(&spec);
+        assert_eq!(u64::from(1000 - got), report.hosts[1].queue_drops);
+        assert_eq!(wan.net.stats(1).drops, 0);
         assert_eq!(wan.in_flight(), 0, "lost datagrams stay tracked");
     }
 
