@@ -54,9 +54,10 @@
 //!
 //! [`simulate`] adds a `{"ev":"q","t":..,"wait":..}` line per sample of
 //! the node's uplink queue (µs), as the testbed's `tc-0.log` samples the
-//! seed's, and a `{"ev":"x","t":..,"bytes":..}` line per sample of the
-//! wire bytes its competing uploads sent (as `run.sh`'s `COMPETE` runs
-//! them, on the testbed in `compete-<s>.json`).
+//! seed's, a `{"ev":"x","t":..,"bytes":..}` line per sample of the wire
+//! bytes its competing uploads sent (as `run.sh`'s `COMPETE` runs them, on
+//! the testbed in `compete-<s>.json`), and a `{"ev":"drops",..}` line with
+//! the segments the window model lost to its full access queues.
 
 // The bench's nodes share their state between their tasks on one thread.
 #![allow(clippy::disallowed_types)]
@@ -832,7 +833,7 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
         loss: false,
     });
     spec.tcp_segment = bench.tcp_segment;
-    let segment = spec.tcp_segment;
+    let segment = spec.segment();
     let end_us = i64::try_from(bench.secs).unwrap_or(0) * 1_000_000;
     let mut builder = turmoil::Builder::new();
     builder
@@ -898,6 +899,11 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     let mut logs = logs.take();
     let start = Duration::from(SIM_START);
     for (h, l) in report.iter().flat_map(|r| &r.hosts).zip(logs.iter_mut()) {
+        l.push(format!(
+            r#"{{"ev":"drops","up_packets":{},"queue_drops":{}}}"#,
+            h.stats.up_bytes / 1500,
+            h.queue_drops
+        ));
         for &(t, bytes) in &h.competing {
             l.push(format!(
                 r#"{{"ev":"x","t":{},"bytes":{bytes}}}"#,
@@ -917,9 +923,44 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
     use super::*;
+
+    /// `key`'s integer in a log line.
+    fn field(line: &str, key: &str) -> Option<i64> {
+        let at = line.find(&format!("\"{key}\":"))? + key.len() + 3;
+        let rest = line.get(at..)?;
+        let end = rest
+            .find(|c: char| c != '-' && !c.is_ascii_digit())
+            .unwrap_or(rest.len());
+        rest.get(..end)?.parse().ok()
+    }
+
+    /// `xs`' value at quantile `q`.
+    fn quantile(mut xs: Vec<i64>, q: f64) -> i64 {
+        xs.sort_unstable();
+        xs[((xs.len() as f64 * q) as usize).min(xs.len() - 1)]
+    }
+
+    /// `schedule` on the testbed's settings `settings`, with the window
+    /// model.
+    fn run(settings: &str, schedule: &str) -> Vec<Vec<String>> {
+        let bench = Bench::testbed(settings, "", schedule, true).unwrap();
+        simulate(&bench).unwrap()
+    }
+
+    /// The lines of `log` of event `ev` from 2 s on (by `t`, or `at` for
+    /// records).
+    fn events<'a>(log: &'a [String], ev: &str) -> impl Iterator<Item = &'a String> {
+        let tag = format!("\"ev\":\"{ev}\"");
+        log.iter().filter(move |l| {
+            l.contains(&tag)
+                && field(l, "t")
+                    .or(field(l, "at"))
+                    .is_some_and(|t| t >= 2_000_000)
+        })
+    }
 
     #[test]
     fn schedules_take_bursts_and_probes() {
@@ -950,5 +991,76 @@ mod tests {
         );
         assert!(Schedule::parse("burst 0 1 0 250 65536 8").is_err());
         assert!(Schedule::parse("pause 0 1").is_err());
+    }
+
+    /// On the testbed (`hack/testbed/bench/over.sched`) a socket asked for
+    /// more than its 5 Mbit/s uplink takes drains its unsent bytes to
+    /// under half the mark before the writer may write again, then takes
+    /// a GSO buffer: 14 KiB unsent at p10 and 61 at p90, and its writes
+    /// wait 101 ms at p90.
+    #[test]
+    fn a_full_socket_drains_to_half_its_mark_before_it_refills() {
+        let logs = run(
+            "VIEWERS=1\nSEED_UP_MBIT=5\nSECS=10",
+            "burst 0 1 0 250 163840 16384\nprobe 0 1 3 10",
+        );
+        let unsent: Vec<i64> = events(&logs[0], "s")
+            .filter_map(|l| field(l, "unsent"))
+            .collect();
+        let (lo, hi) = (quantile(unsent.clone(), 0.1), quantile(unsent, 0.9));
+        assert!(lo < 16 * 1024 && hi > 48 * 1024, "unsent p10 {lo} p90 {hi}");
+        let waits: Vec<i64> = events(&logs[0], "w")
+            .filter(|l| field(l, "k") == Some(0))
+            .map(|l| field(l, "done").unwrap() - field(l, "at").unwrap())
+            .collect();
+        let wait = quantile(waits, 0.9);
+        assert!(
+            (60_000..140_000).contains(&wait),
+            "writes wait {wait} µs at p90"
+        );
+    }
+
+    /// The testbed's seed shape (`hack/testbed/bench/holders.sched`): two
+    /// holders take 64 KiB bursts every 250 ms on a 5 Mbit/s uplink, eight
+    /// idle links a 128-byte write after each burst starts, and every link
+    /// a probe every 200 ms. The holder
+    /// written first gets its burst into the uplink's queue ahead of the
+    /// other's, which meets the queue full: their windows sat at 53 and 16
+    /// KiB at p50. The idle links' small writes fit in the queue's last
+    /// room, and arrived 114 ms after they were written at p50, 121 at
+    /// p90.
+    #[test]
+    fn the_socket_written_first_takes_the_queue_and_small_writes_fit() {
+        let mut schedule = String::from("burst 0 1 0 250 65536 4096\nburst 0 2 0 250 65536 4096\n");
+        for v in 3..=10 {
+            schedule += &format!("burst 0 {v} 1 250 128 128\n");
+        }
+        for (v, phase) in (1..=10).zip([7, 47, 17, 37, 57, 77, 97, 117, 137, 157]) {
+            schedule += &format!("probe 0 {v} {phase} 200\n");
+        }
+        let logs = run("VIEWERS=10\nSEED_UP_MBIT=5\nSECS=30", &schedule);
+        let cwnd = |to: i64| {
+            let xs = events(&logs[0], "s")
+                .filter(|l| field(l, "to") == Some(to))
+                .filter_map(|l| field(l, "cwnd"))
+                .collect();
+            quantile(xs, 0.5)
+        };
+        let (first, second) = (cwnd(1), cwnd(2));
+        assert!(
+            first > 2 * second,
+            "the holders' windows {first} and {second} bytes at p50"
+        );
+        let owd: Vec<i64> = logs[3..]
+            .iter()
+            .flat_map(|log| events(log, "r"))
+            .filter(|l| field(l, "k") == Some(0))
+            .map(|l| field(l, "got").unwrap() - field(l, "at").unwrap())
+            .collect();
+        let (p50, p90) = (quantile(owd.clone(), 0.5), quantile(owd, 0.9));
+        assert!(
+            (95_000..130_000).contains(&p50) && p90 < 140_000,
+            "idle links' writes take {p50} µs at p50, {p90} at p90"
+        );
     }
 }

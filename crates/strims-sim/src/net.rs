@@ -12,7 +12,12 @@
 //! its unsent bytes reach the mark, as Linux does: Linux checks the mark
 //! only as a write starts a new buffer, and fills that buffer to a GSO
 //! segment ([`GSO_SEGMENT`]) first, so a burst of writes leaves up to the
-//! mark plus a segment unsent, not the mark alone. A byte is
+//! mark plus a segment unsent, not the mark alone. A write it refuses
+//! leaves the socket unwritable until its unsent bytes fall under half the
+//! mark, as a real socket's readiness does, however often its writer is
+//! polled meanwhile. Each write is stamped with its order on the host, so
+//! the WAN scheduler hands a sender's segments to its uplink in the order
+//! its sockets took them. A byte is
 //! unsent from its write until the WAN scheduler admits its segment: to
 //! the sender's uplink queue once that queue holds less than
 //! [`SendBuffer::uplink_queue`] of transmission time, where the segment's
@@ -26,7 +31,7 @@
 // turmoil's thread, so it is never contended.
 #![allow(clippy::disallowed_types)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
@@ -53,7 +58,14 @@ struct Conn {
     /// ... and of them, those in the last buffer a write started, which
     /// later writes fill to [`GSO_SEGMENT`] whatever the mark.
     tail: u64,
+    /// The writer a refused write left waiting. Until it is woken the
+    /// socket stays unwritable, as a real socket's readiness does once a
+    /// write would block: it isn't polled again before the wake.
     waker: Option<Waker>,
+    /// The host-wide order of each write (one turmoil segment) the WAN
+    /// scheduler hasn't taken yet. Bound: the connection's segments
+    /// written in one step.
+    writes: VecDeque<u64>,
 }
 
 /// The most a socket's buffer takes before Linux checks
@@ -71,6 +83,8 @@ pub(crate) struct SendBuffers(Arc<Mutex<Buffers>>);
 #[derive(Debug)]
 struct Buffers {
     model: SendBuffer,
+    /// The next write's order.
+    stamp: u64,
     /// Bound: one per open TCP connection.
     conns: BTreeMap<ConnKey, Conn>,
 }
@@ -79,6 +93,7 @@ impl SendBuffers {
     pub fn new(model: SendBuffer) -> SendBuffers {
         SendBuffers(Arc::new(Mutex::new(Buffers {
             model,
+            stamp: 0,
             conns: BTreeMap::new(),
         })))
     }
@@ -94,6 +109,12 @@ impl SendBuffers {
     /// `conn`'s unsent bytes and `TCP_NOTSENT_LOWAT`, while it is open.
     fn conn(&self, conn: ConnKey) -> Option<(u64, Option<u64>)> {
         self.with(|b| b.conns.get(&conn).map(|c| (c.unsent, c.lowat)))
+    }
+
+    /// The order of `conn`'s next write the scheduler hasn't taken: writes
+    /// on every connection count in the order the hosts made them.
+    pub fn next_write(&self, conn: ConnKey) -> Option<u64> {
+        self.with(|b| b.conns.get_mut(&conn)?.writes.pop_front())
     }
 
     /// `len` bytes of `conn` reached the uplink queue. Returns the writer
@@ -240,7 +261,10 @@ impl AsyncWrite for SimTcpStream {
                 let Some(lowat) = c.lowat else {
                     return Some(u64::MAX);
                 };
-                if c.tail > 0 && c.tail < GSO_SEGMENT {
+                if c.waker.is_some() {
+                    c.waker = Some(cx.waker().clone());
+                    None
+                } else if c.tail > 0 && c.tail < GSO_SEGMENT {
                     Some(GSO_SEGMENT - c.tail)
                 } else if c.unsent >= lowat {
                     c.waker = Some(cx.waker().clone());
@@ -260,11 +284,14 @@ impl AsyncWrite for SimTcpStream {
         let r = Pin::new(&mut this.inner).poll_write(cx, buf);
         if let (Poll::Ready(Ok(n)), Some((key, b))) = (&r, &this.conn) {
             b.with(|x| {
+                let stamp = x.stamp;
+                x.stamp += 1;
                 if let Some(c) = x.conns.get_mut(key) {
                     c.unsent = c.unsent.saturating_add(*n as u64);
                     if c.lowat.is_some() {
                         c.tail = c.tail.saturating_add(*n as u64);
                     }
+                    c.writes.push_back(stamp);
                 }
             });
         }

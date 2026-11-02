@@ -19,8 +19,9 @@
 //! - `STRIMS_SIM_TCP=1` gives the send buffers congestion windows and
 //!   bounded access queues ([`SendBuffer::window`]).
 //! - `STRIMS_SIM_TCP_SEGMENT=<bytes>` splits TCP writes into segments of at
-//!   most that many bytes ([`Scenario::tcp_segment`]), so the window model
-//!   fills windows as real TCP does (1448, a segment's payload).
+//!   most that many bytes ([`Scenario::tcp_segment`]) in place of the
+//!   window model's two packets
+//!   ([`WINDOW_SEGMENT`](crate::spec::WINDOW_SEGMENT)).
 //! - `STRIMS_SIM_KNOWN_UPLINK=1` tells every WAN host its site's uplink
 //!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)): the
 //!   oracle the upload meter is measured against. `=seed` tells only the

@@ -68,7 +68,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
     let config = w.node_config(h, inc).ok_or("unknown host")?;
     let net = SimNet::new(w.send_buffers.clone())
         .with_wan(w.wan.clone())
-        .with_segment(w.spec.tcp_segment);
+        .with_segment(w.spec.segment());
     let (node, events) = Node::spawn(config, net, SimClock::turmoil(epoch())).await?;
     // Peers may link before the setup below finishes; they must know us.
     w.register_id(h, node.host_id());

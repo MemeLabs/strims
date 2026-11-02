@@ -441,9 +441,10 @@ pub struct Scenario {
     pub transfer_samples: bool,
     /// TCP writes in pieces of at most this many bytes, as segments: the
     /// window model ([`SendBuffer::window`]) then fills a window segment by
-    /// segment, as real TCP does, where a whole write of up to the
-    /// `TCP_NOTSENT_LOWAT` mark (16 KiB) otherwise waits until the window
-    /// takes all of it. `None`: writes stay whole.
+    /// segment, as real TCP does, where a whole write of up to a GSO
+    /// buffer otherwise waits until the window takes all of it. `None`:
+    /// [`WINDOW_SEGMENT`] with the window model, and writes whole without
+    /// it ([`Scenario::segment`]).
     pub tcp_segment: Option<usize>,
     /// Every node's stores keep their chunks' bytes, rather than each
     /// chunk's frames as [`FrameCodec`](crate::stream::FrameCodec) state:
@@ -451,6 +452,17 @@ pub struct Scenario {
     /// Changes no trace.
     pub stored_chunks: bool,
 }
+
+/// The window model's segment: two packets, acknowledged as one, as a
+/// receiver's delayed acknowledgements (one for every two full segments,
+/// Linux's) clock its sender. Against the Docker testbed's bare TCP bench
+/// (`hack/testbed/bench.sh`), a seed's bursts to two holders and its small
+/// writes to eight idle links on a 5 Mbit/s uplink lost 0.7 times the
+/// testbed's packets with these segments and 2.7 times with single
+/// packets, and their delays matched at p50 and p90 within about 10 ms;
+/// whole writes (up to a GSO buffer) lost a fifth and held the holders'
+/// windows still.
+pub const WINDOW_SEGMENT: usize = 2 * 1448;
 
 /// The TCP send buffer model of WAN mode. A connection whose node set a
 /// `TCP_NOTSENT_LOWAT` mark holds its writes while its bytes not yet in
@@ -471,6 +483,12 @@ pub struct SendBuffer {
 }
 
 impl Scenario {
+    /// The size TCP writes are cut to ([`Scenario::tcp_segment`]).
+    pub fn segment(&self) -> Option<usize> {
+        let window = self.wan.is_some() && self.send_buffer.is_some_and(|b| b.window);
+        self.tcp_segment.or(window.then_some(WINDOW_SEGMENT))
+    }
+
     /// An empty scenario with 2–20 ms latency, 60 s long.
     pub fn new(name: &str) -> Scenario {
         Scenario {

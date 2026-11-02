@@ -66,7 +66,7 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
         .max_message_latency(spec.latency.1);
     // turmoil holds 64 unread segments a connection: keep that many bytes
     // with segments split from 16 KiB writes.
-    if let Some(n) = spec.tcp_segment {
+    if let Some(n) = spec.segment() {
         builder.tcp_capacity(64 * (16 * 1024usize).div_ceil(n.max(1)));
     }
     let mut sim = builder.build();

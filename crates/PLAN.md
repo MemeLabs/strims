@@ -272,8 +272,10 @@ in `TRIED.md`.
      and a viewer that falls a window behind sends its neighbours messages
      they count as invalid (strims-sim's slow viewer).
    - After its uplink halves, an adaptive seed's viewers take 10-17 s to
-     recover (the robust tier's halve-x-10 cells,
-     `collapse_halving_lock_in`). Before the halving the seed runs near its
+     recover (the robust tier's halve-x-10 cells, on the window model
+     before the bare TCP bench calibrated it; on the calibrated model
+     `collapse_halving_lock_in` recovers within 10 s at seeds 1-160).
+     Before the halving the seed runs near its
      full uplink with copies to spare: buffers below the runner keep its
      busy time near zero, so its budget reads twenty times its rate and
      only the window bounds its copies, and the halving lands on a backlog
@@ -509,16 +511,20 @@ in `TRIED.md`.
     receiver, a congestion window over a long round trip). Only the
     uncapped WAN cases run them: with them on (a 100 ms uplink queue)
     `wan_mobile_viewers_pull`'s LTE p99 passes its 3.5 s bound on one seed
-    of 8. Nor are retransmission timeouts modelled: beside a competing
-    upload the sim's worst second of lag is half a real link's.
-  - Against the testbed (`hack/testbed`, `calibration_star` with
-    `STRIMS_SIM_TCP`), below saturation the sim's uplink shows no queueing
-    where a real link reads about 50 ms at p90 from bursts, behind 100 ms
-    queues its queueing delay reads half the real link's, and the window
-    model holds our data in its senders' queues far longer than real TCP
-    (at 0.8 of the uplink, one-way delay about 120 ms over its base
-    against 5 ms). Close these before trusting a ranking that turns on
-    the delay's level.
+    of 8. The window model (`STRIMS_SIM_TCP`) has both, and retransmission
+    timeouts, but drops only at full access queues: random path loss still
+    takes the loss model's fixed delay.
+  - The window model follows the testbed's bare TCP bench
+    (`hack/testbed/bench.sh`, cases in `hack/testbed/bench/`) within about
+    10 ms at p50 and p90, but where two holders share a 5 Mbit/s uplink it
+    loses 0.6-0.7 times the testbed's packets and its holders' probes read
+    20 ms high at p50; it charges 1500 bytes a packet where the tbf counts
+    1514 and nothing for pure acknowledgements (3 % more goodput at
+    saturation), and has no HyStart ack-train test. Its twin of the
+    testbed's uplink cut (`testbed-copy-floor`) lags over 1 s about as
+    often as the testbed at 10 viewers, but half as often at 25 (29 of 120
+    cut seconds against 55): replay a captured seed's writes and reads on
+    the bench to find whether that gap is the network's.
   - Through a halving of the seed's uplink the testbed fell into the
     lock-in deeper than its twin, and its round trips there ran 1.4 times
     the sim's. Recheck with today's frames; if the gap holds, find the

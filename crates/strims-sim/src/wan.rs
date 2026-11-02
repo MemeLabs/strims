@@ -33,25 +33,40 @@
 //! the model's `uplink_queue` of transmission time, and its bytes then
 //! stop counting against its socket's mark (see [`crate::net`]). Admitted
 //! segments are credited, and their writers woken, in admission time and
-//! record order at the end of the walk that reaches that time.
+//! record order at the end of the walk that reaches that time. A sender's
+//! new segments reach its uplink in the order its sockets took them, so
+//! one socket's burst goes ahead of another's written after it, as each
+//! `sendmsg` hands its packets to the qdisc.
 //!
 //! With the window model ([`SendBuffer::window`]) each TCP connection
 //! sends its data segments within a congestion window instead, and is
-//! credited as it sends them:
+//! credited as it sends them. It follows Linux's TCP (the Docker
+//! testbed's bare TCP bench, `hack/testbed/bench.sh`, checks it):
 //!
-//! - A segment waits in its connection's queue while the bytes in flight
+//! - Writes are cut to [`WINDOW_SEGMENT`](crate::spec::WINDOW_SEGMENT)s.
+//!   A segment waits in its connection's queue while the bytes in flight
 //!   (sent, neither acknowledged nor known lost) and it would pass the
-//!   window; a connection with nothing in flight sends one anyway.
+//!   window; a connection with nothing in flight sends one anyway. A
+//!   connection writing sends what its window allows at once.
 //! - The access queues hold `uplink_queue` of transmission time, up and
-//!   down. A segment that finds one full is lost there (segments are whole
-//!   writes, up to a socket's mark, so a queue can pass its bound by one),
-//!   and its sender learns so a round trip later: the segment goes to the front of
-//!   its connection's queue, and the window falls to [`BETA`] of itself,
-//!   at most once per round trip.
+//!   down. A segment that doesn't fit in what one has left is lost there,
+//!   as a byte-limited FIFO (Linux's tbf and bfifo) drops it: a small
+//!   write fits where a full segment doesn't.
+//! - Its sender learns of the loss from a later segment's acknowledgement,
+//!   a quarter of the least round trip later (RACK), or failing that from
+//!   its tail-loss probe's, two smoothed round trips after its last send
+//!   (and 200 ms more with one segment in flight) and a round trip on. A
+//!   lost retransmission waits for the retransmission timeout, which backs
+//!   off, and restarts the window from one segment. The lost segment goes
+//!   to the front of its connection's queue, and the window falls to
+//!   [`BETA`] of itself once a recovery: losses of segments sent before
+//!   it fell don't cut it again.
 //! - A segment through the receiver's downlink is acknowledged once the
-//!   acknowledgement crosses back, after the receiver's uplink queue: the
-//!   window grows by the bytes acknowledged below its threshold (slow
-//!   start) and by one [`MSS`] a window above it.
+//!   acknowledgement crosses back, after the receiver's uplink queue. The
+//!   window grows by the bytes acknowledged in slow start, which HyStart's
+//!   delay test ends, and as CUBIC (RFC 8312) past it, only while it
+//!   limits the connection and outside a recovery; a connection idle for
+//!   longer than its retransmission timeout restarts from a smaller one.
 //!
 //! The connection's order on the wire is its send order, and a resent
 //! segment holds back the rest of its connection at the receiver.
@@ -61,10 +76,8 @@
 //! connections that always have data and reach no host: full segments
 //! enter the host's uplink queue within their window, are lost when it is
 //! full, and are acknowledged the upload's round trip after they leave the
-//! uplink. Their windows follow CUBIC (RFC 8312), as bulk uploads' do:
-//! after a loss a window climbs back quickly and lingers near the size it
-//! lost at, so it keeps the queue fuller than the window model's own
-//! connections. They need the window model's bounded queues.
+//! uplink. Their windows follow CUBIC too. They need the window model's
+//! bounded queues.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
@@ -74,7 +87,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
-use strims_wan::wire::{tcp_wire, udp_wire};
+use strims_wan::network::RTO_MIN;
+use strims_wan::wire::{tcp_wire, tx_time, udp_wire};
 use strims_wan::{Carrier, Network, Options, Site};
 use turmoil::{Protocol, Segment, Sim};
 
@@ -161,12 +175,19 @@ enum Event {
     Arrive,
     /// The message is through the receiver's downlink.
     Deliver,
-    /// The window model: the sender learns the segment was lost.
+    /// The window model: the sender learns the segment was lost, from
+    /// later segments' acknowledgements or a tail-loss probe's.
     Lost,
-    /// The window model: an acknowledgement of `len` bytes of `conn`
-    /// reaches the sender.
+    /// The window model: a retransmission timeout tells the sender a
+    /// retransmitted segment was lost again.
+    Timeout,
+    /// The window model: `conn`'s tail-loss probe is due.
+    Probe { conn: (SocketAddr, SocketAddr) },
+    /// The window model: an acknowledgement of the `len` bytes at `seq`
+    /// of `conn` reaches the sender.
     Ack {
         conn: (SocketAddr, SocketAddr),
+        seq: u64,
         len: usize,
     },
     /// A competing upload's segment is acknowledged.
@@ -186,8 +207,12 @@ const CUBIC_C: f64 = 0.4;
 const INIT_WINDOW: f64 = 10.0 * MSS;
 /// The window after a loss, as a share of the window (CUBIC's beta).
 pub(crate) const BETA: f64 = 0.7;
+/// HyStart's samples a round, and the window it starts testing at: 16
+/// segments, as Linux's CUBIC.
+const HYSTART_SAMPLES: u32 = 8;
+const HYSTART_LOW_WINDOW: f64 = 16.0 * MSS;
 
-/// One TCP connection in the window model.
+/// One TCP connection in the window model, or a competing upload.
 #[derive(Debug)]
 struct Flow {
     cwnd: f64,
@@ -199,6 +224,51 @@ struct Flow {
     pending: VecDeque<u64>,
     /// When the window last fell.
     cut: Time,
+    /// CUBIC's window before its last cut, in segments; when its epoch
+    /// began (`NIL` until the first acknowledgement past slow start or a
+    /// cut), the window it grows back to and how long that takes, and the
+    /// window Reno would have started the epoch with.
+    w_max: f64,
+    epoch: Time,
+    origin: f64,
+    k: f64,
+    reno_start: f64,
+    /// The sequence number past the furthest data segment sent (turmoil
+    /// numbers a connection's segments), and that number when the window
+    /// last fell: a loss of a segment sent before it belongs to the same
+    /// recovery and doesn't cut the window again.
+    sent_end: u64,
+    recover: u64,
+    /// The most bytes in flight this round trip and the last, and when
+    /// this one began: the window grows only while it limits the flow.
+    flight_now: usize,
+    flight_last: usize,
+    round: Time,
+    /// When each data segment in flight went out, by sequence number, and
+    /// the smoothed round trip of their acknowledgements, its variation
+    /// and its least. Bound: the segments in flight.
+    sent_at: BTreeMap<u64, Time>,
+    srtt: Duration,
+    rttvar: Duration,
+    min_rtt: Duration,
+    /// HyStart's round (it ends with the acknowledgement of the segment
+    /// this numbers), its least round trip and samples so far, and whether
+    /// it ended slow start.
+    hs_end: u64,
+    hs_rtt: Duration,
+    hs_samples: u32,
+    hs_found: bool,
+    /// When the flow last sent.
+    last_send: Time,
+    /// Segments the access queues dropped that the sender doesn't know of
+    /// yet, by sequence number (their record, when they went out and a lost
+    /// retransmission's timeout), and those it retransmitted and hasn't
+    /// seen acknowledged; how often their timeout backed off, and whether
+    /// a tail-loss probe is pending. Bound: the segments in flight.
+    lost: BTreeMap<u64, (u64, Time, Option<Time>)>,
+    retx: BTreeSet<u64>,
+    backoff: u32,
+    probing: bool,
 }
 
 impl Default for Flow {
@@ -209,7 +279,199 @@ impl Default for Flow {
             in_flight: 0,
             pending: VecDeque::new(),
             cut: Time::NIL,
+            w_max: 0.0,
+            epoch: Time::NIL,
+            origin: 0.0,
+            k: 0.0,
+            reno_start: 0.0,
+            sent_end: 0,
+            recover: 0,
+            flight_now: 0,
+            flight_last: 0,
+            round: Time::NIL,
+            sent_at: BTreeMap::new(),
+            srtt: Duration::ZERO,
+            rttvar: Duration::ZERO,
+            min_rtt: Duration::ZERO,
+            hs_end: 0,
+            hs_rtt: Duration::ZERO,
+            hs_samples: 0,
+            hs_found: false,
+            last_send: Time::NIL,
+            lost: BTreeMap::new(),
+            retx: BTreeSet::new(),
+            backoff: 0,
+            probing: false,
         }
+    }
+}
+
+impl Flow {
+    /// The retransmission timeout, as Linux sets it: the smoothed round
+    /// trip and four times its variation, that at least [`RTO_MIN`].
+    fn rto(&self) -> Duration {
+        self.srtt + (self.rttvar * 4).max(RTO_MIN)
+    }
+
+    /// When the tail-loss probe is due, the path's round trip `base` (for
+    /// a flow with no round trip sampled yet): twice the smoothed round
+    /// trip after the last send, and a delayed acknowledgement's
+    /// [`RTO_MIN`] more with one segment in flight, as Linux's
+    /// `tcp_schedule_loss_probe`.
+    fn probe_at(&self, base: Duration) -> Time {
+        let srtt = if self.srtt > Duration::ZERO {
+            self.srtt
+        } else {
+            base
+        };
+        let extra = if self.in_flight as f64 <= MSS {
+            RTO_MIN
+        } else {
+            Duration::from_millis(2)
+        };
+        self.last_send + (srtt * 2).max(Duration::from_millis(10)) + extra
+    }
+
+    /// A round-trip `sample` of the segment at `seq`: the smoothed round
+    /// trip and its variation (RFC 6298), and HyStart's delay test, which
+    /// ends slow start once a round's least round trip of its first
+    /// [`HYSTART_SAMPLES`] passes the path's least by an eighth of it,
+    /// clamped to 4-16 ms, as Linux's CUBIC does.
+    fn sampled(&mut self, seq: u64, sample: Duration) {
+        if self.srtt == Duration::ZERO {
+            self.srtt = sample;
+            self.rttvar = sample / 2;
+            self.min_rtt = sample;
+        } else {
+            let dev = if sample > self.srtt {
+                sample - self.srtt
+            } else {
+                self.srtt - sample
+            };
+            self.rttvar = (self.rttvar * 3 + dev) / 4;
+            self.srtt = (self.srtt * 7 + sample) / 8;
+            self.min_rtt = self.min_rtt.min(sample);
+        }
+        if self.hs_found || self.cwnd >= self.ssthresh || self.cwnd < HYSTART_LOW_WINDOW {
+            return;
+        }
+        if seq >= self.hs_end {
+            self.hs_end = self.sent_end;
+            self.hs_rtt = Duration::MAX;
+            self.hs_samples = 0;
+        }
+        self.hs_rtt = self.hs_rtt.min(sample);
+        if self.hs_samples < HYSTART_SAMPLES {
+            self.hs_samples += 1;
+        } else {
+            let thresh =
+                (self.min_rtt / 8).clamp(Duration::from_millis(4), Duration::from_millis(16));
+            if self.hs_rtt > self.min_rtt + thresh {
+                self.hs_found = true;
+                self.ssthresh = self.cwnd;
+            }
+        }
+    }
+
+    /// `len` bytes go out at `t`, the path's round trip `rtt`. A flow that
+    /// sat idle with nothing in flight for more than its retransmission
+    /// timeout first halves its window for each timeout it sat, to the
+    /// initial window at least, as Linux's `tcp_slow_start_after_idle`.
+    fn sent(&mut self, t: Time, len: usize, rtt: Duration) {
+        if self.in_flight == 0 && !self.last_send.is_nil() && self.srtt > Duration::ZERO {
+            let rto = self.rto();
+            let mut idle = t - self.last_send;
+            let restart = self.cwnd.min(INIT_WINDOW);
+            while idle > rto && self.cwnd > restart {
+                self.cwnd /= 2.0;
+                idle -= rto;
+            }
+            self.cwnd = self.cwnd.max(restart);
+        }
+        if self.in_flight == 0 && !self.epoch.is_nil() && !self.last_send.is_nil() {
+            // CUBIC's epoch skips the time the flow sat idle.
+            self.epoch = (self.epoch + (t - self.last_send)).min(t);
+        }
+        self.last_send = t;
+        self.in_flight += len;
+        if self.round.is_nil() || t - self.round >= rtt {
+            self.flight_last = self.flight_now;
+            self.flight_now = 0;
+            self.round = t;
+        }
+        self.flight_now = self.flight_now.max(self.in_flight);
+    }
+
+    /// Whether the window limited the flow lately, as Linux's
+    /// `tcp_is_cwnd_limited` judges: in slow start, while the window is
+    /// under twice what the flow put in flight; past it, once the flow
+    /// filled it.
+    fn limited(&self) -> bool {
+        let used = self.flight_now.max(self.flight_last) as f64;
+        if self.cwnd < self.ssthresh {
+            self.cwnd < 2.0 * used
+        } else {
+            used + MSS >= self.cwnd
+        }
+    }
+
+    /// `len` bytes were acknowledged at `t`, the path's base round trip
+    /// `base` and its smoothed one `srtt`: slow start below the threshold,
+    /// CUBIC (RFC 8312, as Linux's `bictcp_update`) above it. Its epoch
+    /// starts at the first acknowledgement past slow start or a cut, from
+    /// the window lost last or the window now if that is larger; the
+    /// window then grows toward the cubic curve a base round trip ahead,
+    /// by at most half a segment for each segment acknowledged (1.5 times
+    /// a round trip), or follows the window Reno would have after as many
+    /// smoothed round trips, whichever is larger.
+    fn grow(&mut self, t: Time, len: usize, base: Duration, srtt: Duration) {
+        if self.cwnd < self.ssthresh {
+            self.cwnd += len as f64;
+            return;
+        }
+        let cwnd = self.cwnd / MSS;
+        if self.epoch.is_nil() {
+            self.epoch = t;
+            self.reno_start = cwnd;
+            if self.w_max <= cwnd {
+                self.k = 0.0;
+                self.origin = cwnd;
+            } else {
+                self.k = ((self.w_max - cwnd) / CUBIC_C).cbrt();
+                self.origin = self.w_max;
+            }
+        }
+        let (base, srtt) = (base.as_secs_f64().max(1e-3), srtt.as_secs_f64().max(1e-3));
+        let since = (t - self.epoch).as_secs_f64();
+        let cubic = self.origin + CUBIC_C * (since + base - self.k).powi(3);
+        let reno = self.reno_start + 3.0 * (1.0 - BETA) / (1.0 + BETA) * since / srtt;
+        let segs = len as f64 / MSS;
+        let mut step = if cubic > cwnd {
+            ((cubic - cwnd) / cwnd).min(0.5)
+        } else {
+            0.01 / cwnd
+        };
+        if self.w_max == 0.0 {
+            step = step.max(0.05);
+        }
+        let next = (cwnd + step * segs).max(reno.min(cwnd + 0.5 * segs));
+        self.cwnd = next.max(cwnd) * MSS;
+    }
+
+    /// The window falls to [`BETA`] of itself at `t`, CUBIC's target
+    /// lowered when it falls short of the last one (fast convergence).
+    fn fall(&mut self, t: Time) {
+        let w = self.cwnd / MSS;
+        self.w_max = if w < self.w_max {
+            w * (1.0 + BETA) / 2.0
+        } else {
+            w
+        };
+        self.epoch = Time::NIL;
+        self.ssthresh = (self.cwnd * BETA).max(2.0 * MSS);
+        self.cwnd = self.ssthresh;
+        self.cut = t;
+        self.recover = self.sent_end;
     }
 }
 
@@ -234,10 +496,19 @@ struct Cross {
     rtt: Duration,
     flow: Flow,
     started: bool,
-    /// CUBIC's window before its last cut, in segments, and how long the
-    /// window takes to grow back to it.
-    w_max: f64,
-    k: f64,
+}
+
+/// Whether a segment taking `tx` to send overflows an access queue that
+/// holds `cap` of transmission time and has `wait` queued: when it doesn't
+/// fit in what's left, as a byte-limited FIFO drops a packet. A segment
+/// longer than the whole queue (a write the model keeps whole) is lost
+/// only when the queue is full.
+fn overflows(wait: Duration, tx: Duration, cap: Duration) -> bool {
+    if tx > cap {
+        wait >= cap
+    } else {
+        wait + tx > cap
+    }
 }
 
 /// A host pair as a set key.
@@ -319,6 +590,9 @@ pub(crate) struct Scheduler {
     /// Per host with competing uploads, [`Scheduler::cross_bytes`] every
     /// [`QUEUE_SAMPLE_EVERY`]: (time since the start, bytes).
     cross_sent: Vec<Vec<(Duration, u64)>>,
+    /// Per host, the window model's segments its connections lost to a
+    /// full access queue.
+    drops: Vec<u64>,
 }
 
 /// How often the scheduler samples each host's uplink queue.
@@ -362,8 +636,6 @@ impl Scheduler {
                     rtt: Duration::from(c.rtt),
                     flow: Flow::default(),
                     started: false,
-                    w_max: 0.0,
-                    k: 0.0,
                 })
             })
             .collect();
@@ -423,6 +695,7 @@ impl Scheduler {
             cross,
             cross_bytes: vec![0; spec.hosts.len()],
             cross_sent: vec![Vec::new(); spec.hosts.len()],
+            drops: vec![0; spec.hosts.len()],
         })
     }
 
@@ -520,8 +793,12 @@ impl Scheduler {
             }
             let event = entry.remove();
             match event {
-                Event::Ack { conn, len } => {
-                    self.acked(t, conn, len);
+                Event::Ack { conn, seq, len } => {
+                    self.acked(t, conn, seq, len);
+                    continue;
+                }
+                Event::Probe { conn } => {
+                    self.probe(t, conn);
                     continue;
                 }
                 Event::CrossAck(i) => {
@@ -541,14 +818,24 @@ impl Scheduler {
             match event {
                 Event::Arrive => {
                     let data = match r.what {
-                        What::Data { len, .. } => Some(len),
+                        What::Data { seq, len } => Some((seq, len)),
                         _ => None,
                     };
                     if let (Some(cap), Some(_)) = (window, data)
-                        && self.net.down_free(r.to) - t >= cap
+                        && overflows(
+                            self.net.down_free(r.to) - t,
+                            tx_time(
+                                r.wire,
+                                self.net.site(r.to).map_or(u64::MAX, |s| s.profile.down),
+                            ),
+                            cap,
+                        )
                     {
-                        let back = self.net.one_way(r.to, r.from);
-                        self.events.insert((t + back, id), Event::Lost);
+                        if let Some(d) = self.drops.get_mut(r.from) {
+                            *d += 1;
+                        }
+                        let (conn, seq) = ((r.src, r.dst), data.map_or(0, |(s, _)| s));
+                        self.dropped(t, conn, seq, id);
                         continue;
                     }
                     let done = self.net.receive(t, r.to, r.wire);
@@ -557,33 +844,48 @@ impl Scheduler {
                     } else {
                         self.events.insert((done, id), Event::Deliver);
                     }
-                    if let (Some(_), Some(len)) = (window, data) {
+                    if let (Some(_), Some((seq, len))) = (window, data) {
                         let back = self.net.one_way(r.to, r.from)
                             + (self.net.up_free(r.to) - done).max(Duration::ZERO);
                         let conn = (r.src, r.dst);
                         self.events
-                            .insert((done + back, id), Event::Ack { conn, len });
+                            .insert((done + back, id), Event::Ack { conn, seq, len });
                     }
                 }
                 Event::Deliver => r.state = State::Due,
-                Event::Lost => {
-                    let (conn, from, to) = ((r.src, r.dst), r.from, r.to);
-                    let len = match r.what {
-                        What::Data { len, .. } => len,
-                        _ => 0,
+                Event::Lost | Event::Timeout => {
+                    let conn = (r.src, r.dst);
+                    let (seq, len) = match r.what {
+                        What::Data { seq, len } => (seq, len),
+                        _ => (0, 0),
                     };
-                    let rtt = self.net.rtt(from, to);
                     let f = self.flows.entry(conn).or_default();
-                    f.in_flight = f.in_flight.saturating_sub(len);
-                    if f.cut.is_nil() || t - f.cut >= rtt {
-                        f.ssthresh = (f.cwnd * BETA).max(2.0 * MSS);
-                        f.cwnd = f.ssthresh;
-                        f.cut = t;
+                    if matches!(event, Event::Timeout) {
+                        // Unless a later segment's acknowledgement told first.
+                        if f.lost.get(&seq).is_none_or(|&(_, _, due)| due != Some(t)) {
+                            continue;
+                        }
+                        f.lost.remove(&seq);
                     }
+                    f.in_flight = f.in_flight.saturating_sub(len);
+                    f.sent_at.remove(&seq);
+                    if f.cut.is_nil() || seq >= f.recover {
+                        f.fall(t);
+                    }
+                    if matches!(event, Event::Timeout) {
+                        // Linux's loss state: the window restarts from a
+                        // segment, and the timeout backs off.
+                        f.cwnd = MSS;
+                        f.backoff = f.backoff.saturating_add(1);
+                    }
+                    f.retx.insert(seq);
                     f.pending.push_front(id);
                     self.pump(t, &[conn]);
                 }
-                Event::Ack { .. } | Event::CrossAck(_) | Event::CrossLost(_) => {}
+                Event::Ack { .. }
+                | Event::Probe { .. }
+                | Event::CrossAck(_)
+                | Event::CrossLost(_) => {}
             }
         }
     }
@@ -597,41 +899,124 @@ impl Scheduler {
             .map(|m| Duration::from(m.uplink_queue))
     }
 
-    /// `len` bytes of `conn` were acknowledged at `t`.
-    fn acked(&mut self, t: Time, conn: (SocketAddr, SocketAddr), len: usize) {
+    /// The `len` bytes at `seq` of `conn` were acknowledged at `t`. The
+    /// window doesn't grow in a recovery (for data sent before it fell).
+    fn acked(&mut self, t: Time, conn: (SocketAddr, SocketAddr), seq: u64, len: usize) {
+        let base = self.conn_rtt(conn);
         let Some(f) = self.flows.get_mut(&conn) else {
             return;
         };
+        let sent = f.sent_at.remove(&seq);
+        if let Some(sent) = sent {
+            f.sampled(seq, t - sent);
+        }
+        if f.limited() && (f.cut.is_nil() || seq >= f.recover) {
+            f.grow(t, len, base, f.srtt.max(base));
+        }
         f.in_flight = f.in_flight.saturating_sub(len);
-        if f.cwnd < f.ssthresh {
-            f.cwnd += len as f64;
-        } else {
-            f.cwnd += MSS * len as f64 / f.cwnd.max(MSS);
+        if !f.retx.remove(&seq) {
+            f.backoff = 0;
+        }
+        // RACK: the acknowledgement of a segment sent later shows the
+        // earlier ones lost once a quarter of the least round trip passes.
+        if let Some(sent) = sent {
+            let earlier: Vec<u64> = f
+                .lost
+                .iter()
+                .filter(|(_, v)| v.1 < sent)
+                .map(|(&s, _)| s)
+                .collect();
+            let reo = f.min_rtt / 4;
+            for s in earlier {
+                if let Some((id, _, _)) = f.lost.remove(&s) {
+                    self.events.insert((t + reo, id), Event::Lost);
+                }
+            }
         }
         self.pump(t, &[conn]);
+    }
+
+    /// The access queues dropped segment `seq` (record `id`) of `conn` at
+    /// `t`. Its sender learns so from the acknowledgement of a segment sent
+    /// after it ([`Scheduler::acked`]), or failing that from its tail-loss
+    /// probe's ([`Scheduler::probe`]); a lost retransmission fails over to
+    /// the retransmission timeout, doubled for each time it backed off.
+    fn dropped(&mut self, t: Time, conn: (SocketAddr, SocketAddr), seq: u64, id: u64) {
+        let base = self.conn_rtt(conn);
+        let f = self.flows.entry(conn).or_default();
+        let sent = f.sent_at.get(&seq).copied().unwrap_or(t);
+        if f.retx.contains(&seq) {
+            let due = (sent + f.rto() * (1i64 << f.backoff.min(6))).max(t);
+            f.lost.insert(seq, (id, sent, Some(due)));
+            self.events.insert((due, id), Event::Timeout);
+            return;
+        }
+        f.lost.insert(seq, (id, sent, None));
+        if !f.probing {
+            f.probing = true;
+            let at = f.probe_at(base).max(t);
+            let key = self.next;
+            self.next += 1;
+            self.events.insert((at, key), Event::Probe { conn });
+        }
+    }
+
+    /// `conn`'s tail-loss probe is due at `t`: unless the flow sent since,
+    /// which moves it, the probe leaves now and its acknowledgement, a
+    /// round trip later, shows the segments lost.
+    fn probe(&mut self, t: Time, conn: (SocketAddr, SocketAddr)) {
+        let base = self.conn_rtt(conn);
+        let Some(f) = self.flows.get_mut(&conn) else {
+            return;
+        };
+        f.probing = false;
+        if f.lost.values().all(|&(_, _, due)| due.is_some()) {
+            return;
+        }
+        let at = f.probe_at(base);
+        if at > t {
+            f.probing = true;
+            let key = self.next;
+            self.next += 1;
+            self.events.insert((at, key), Event::Probe { conn });
+            return;
+        }
+        let back = if f.srtt > Duration::ZERO {
+            f.srtt
+        } else {
+            base
+        };
+        // The probe shows the original segments lost; retransmissions
+        // lost again wait for their timeout.
+        let found: Vec<u64> = f
+            .lost
+            .iter()
+            .filter(|(_, v)| v.2.is_none())
+            .map(|(&s, _)| s)
+            .collect();
+        for s in found {
+            if let Some((id, _, _)) = f.lost.remove(&s) {
+                self.events.insert((t + back, id), Event::Lost);
+            }
+        }
+    }
+
+    /// The base round trip of `conn`'s path.
+    fn conn_rtt(&self, conn: (SocketAddr, SocketAddr)) -> Duration {
+        match (
+            self.ip_host.get(&conn.0.ip()),
+            self.ip_host.get(&conn.1.ip()),
+        ) {
+            (Some(&a), Some(&b)) => self.net.rtt(a, b),
+            _ => Duration::ZERO,
+        }
     }
 
     /// Competing upload `i`'s segment was acknowledged at `t`.
     fn cross_acked(&mut self, t: Time, i: usize) {
         if let Some(c) = self.cross.get_mut(i) {
-            let f = &mut c.flow;
-            f.in_flight = f.in_flight.saturating_sub(CROSS_SEGMENT);
-            if f.cwnd < f.ssthresh {
-                f.cwnd += CROSS_SEGMENT as f64;
-            } else {
-                // RFC 8312: the cubic window a round trip ahead, or the
-                // window Reno would have, whichever is larger.
-                let (cwnd, rtt) = (f.cwnd / MSS, c.rtt.as_secs_f64().max(1e-3));
-                let since = (t - f.cut).as_secs_f64();
-                let cubic = CUBIC_C * (since + rtt - c.k).powi(3) + c.w_max;
-                let reno = c.w_max * BETA + 3.0 * (1.0 - BETA) / (1.0 + BETA) * since / rtt;
-                let next = if cubic < reno {
-                    reno
-                } else {
-                    cwnd + (cubic - cwnd).max(0.0) / cwnd
-                };
-                f.cwnd = next.max(cwnd) * MSS;
-            }
+            c.flow.in_flight = c.flow.in_flight.saturating_sub(CROSS_SEGMENT);
+            c.flow.grow(t, CROSS_SEGMENT, c.rtt, c.rtt);
         }
         self.cross_pump(t, i);
     }
@@ -642,11 +1027,7 @@ impl Scheduler {
             let f = &mut c.flow;
             f.in_flight = f.in_flight.saturating_sub(CROSS_SEGMENT);
             if f.cut.is_nil() || t - f.cut >= c.rtt {
-                c.w_max = f.cwnd / MSS;
-                c.k = (c.w_max * (1.0 - BETA) / CUBIC_C).cbrt();
-                f.ssthresh = (f.cwnd * BETA).max(2.0 * MSS);
-                f.cwnd = f.ssthresh;
-                f.cut = t;
+                f.fall(t);
             }
         }
         self.cross_pump(t, i);
@@ -674,7 +1055,7 @@ impl Scheduler {
             let id = self.next;
             self.next += 1;
             let wait = (self.net.up_free(host) - at).max(Duration::ZERO);
-            if wait >= cap {
+            if overflows(wait, tx_time(CROSS_WIRE, self.net.up_rate(host, at)), cap) {
                 self.events
                     .insert((at + rtt + wait, id), Event::CrossLost(i));
                 continue;
@@ -691,8 +1072,17 @@ impl Scheduler {
     /// turn.
     fn pump(&mut self, at: Time, conns: &[(SocketAddr, SocketAddr)]) {
         let mut open: Vec<(SocketAddr, SocketAddr)> = conns.to_vec();
+        let rtts: Vec<Duration> = open.iter().map(|&c| self.conn_rtt(c)).collect();
+        let rtt_of = |conn: &(SocketAddr, SocketAddr)| {
+            conns
+                .iter()
+                .position(|c| c == conn)
+                .and_then(|i| rtts.get(i).copied())
+                .unwrap_or(Duration::ZERO)
+        };
         while !open.is_empty() {
             open.retain(|conn| {
+                let rtt = rtt_of(conn);
                 let Some(f) = self.flows.get_mut(conn) else {
                     return false;
                 };
@@ -700,8 +1090,8 @@ impl Scheduler {
                     let Some(&id) = f.pending.front() else {
                         return false;
                     };
-                    let Some(len) = self.records.get(&id).and_then(|r| match r.what {
-                        What::Data { len, .. } => Some(len),
+                    let Some((seq, len)) = self.records.get(&id).and_then(|r| match r.what {
+                        What::Data { seq, len } => Some((seq, len)),
                         _ => None,
                     }) else {
                         f.pending.pop_front();
@@ -711,7 +1101,9 @@ impl Scheduler {
                         return false;
                     }
                     f.pending.pop_front();
-                    f.in_flight += len;
+                    f.sent(at, len, f.srtt.max(rtt));
+                    f.sent_end = f.sent_end.max(seq + 1);
+                    f.sent_at.insert(seq, at);
                     self.sending.push(id);
                     return true;
                 }
@@ -732,17 +1124,19 @@ impl Scheduler {
             return;
         };
         let (from, to, wire, packets, conn) = (r.from, r.to, r.wire, r.packets, (r.src, r.dst));
-        let len = match r.what {
-            What::Data { len, .. } => len,
-            _ => 0,
+        let (seq, len) = match r.what {
+            What::Data { seq, len } => (seq, len),
+            _ => (0, 0),
         };
         if self.buffers.is_some() {
             self.admits.insert((at, id), (conn, len));
         }
         let wait = (self.net.up_free(from) - at).max(Duration::ZERO);
-        if wait >= cap {
-            let back = self.net.rtt(from, to) + wait;
-            self.events.insert((at + back, id), Event::Lost);
+        if overflows(wait, tx_time(wire, self.net.up_rate(from, at)), cap) {
+            if let Some(d) = self.drops.get_mut(from) {
+                *d += 1;
+            }
+            self.dropped(at, conn, seq, id);
             return;
         }
         let t = self.net.send(at, from, to, wire, packets, Carrier::Stream);
@@ -847,10 +1241,19 @@ impl Scheduler {
         }
     }
 
-    /// Hands the new records to their senders' uplinks, sent at `at`: each
-    /// sender serves its links in turn, one message at a time, in queue
-    /// order on each link.
+    /// Hands the new records to their senders' uplinks, sent at `at`. With
+    /// send buffers a sender's TCP segments go in the order its sockets
+    /// took them, each other message behind its link's last segment, and
+    /// with the window model a connection sends what its window allows as
+    /// it writes, as Linux's `sendmsg` does: one socket's burst reaches
+    /// the uplink before another's written after it. Without, each sender
+    /// serves its links in turn, one message at a time, in queue order on
+    /// each link.
     fn send(&mut self, at: Time, fresh: Vec<u64>) {
+        if let Some(b) = self.buffers.clone() {
+            self.send_written(at, fresh, &b);
+            return;
+        }
         let mut by_sender: BTreeMap<HostIx, Queues> = BTreeMap::new();
         for id in fresh {
             if let Some(r) = self.records.get(&id) {
@@ -887,6 +1290,51 @@ impl Scheduler {
                 }
             }
             self.pump(at, &flows);
+        }
+    }
+
+    /// [`Scheduler::send`] with send buffers.
+    fn send_written(&mut self, at: Time, fresh: Vec<u64>, b: &SendBuffers) {
+        let mut by_sender: BTreeMap<HostIx, Queues> = BTreeMap::new();
+        for id in fresh {
+            if let Some(r) = self.records.get(&id) {
+                by_sender
+                    .entry(r.from)
+                    .or_default()
+                    .entry((r.to, r.src.ip(), r.dst.ip()))
+                    .or_default()
+                    .push_back(id);
+            }
+        }
+        let window = self.window().is_some();
+        for queues in by_sender.into_values() {
+            // (write order, queue position, record)
+            let mut keyed: Vec<(u64, usize, u64)> = Vec::new();
+            for q in queues.into_values() {
+                let mut last = 0;
+                for id in q {
+                    let stamp = self.records.get(&id).and_then(|r| match r.what {
+                        What::Data { .. } => b.next_write((r.src, r.dst)),
+                        _ => None,
+                    });
+                    last = stamp.unwrap_or(last);
+                    keyed.push((last, keyed.len(), id));
+                }
+            }
+            keyed.sort_unstable();
+            for (_, _, id) in keyed {
+                let data = self.records.get(&id).and_then(|r| match r.what {
+                    What::Data { .. } if window => Some((r.src, r.dst)),
+                    _ => None,
+                });
+                match data {
+                    Some(conn) => {
+                        self.flows.entry(conn).or_default().pending.push_back(id);
+                        self.pump(at, &[conn]);
+                    }
+                    None => self.transmit(at, id),
+                }
+            }
         }
     }
 
@@ -1032,6 +1480,7 @@ impl Scheduler {
                         stats: self.net.stats(h),
                         up_queue: self.up_queue.get(h).cloned().unwrap_or_default(),
                         competing: self.cross_sent.get(h).cloned().unwrap_or_default(),
+                        queue_drops: self.drops.get(h).copied().unwrap_or(0),
                     })
                 })
                 .collect(),
@@ -1196,6 +1645,13 @@ mod tests {
         );
     }
 
+    /// [`SimNet`] with `buffers`, its writes cut to the window model's
+    /// segments when they have the model, as scenarios cut them.
+    fn sim_net(buffers: Option<SendBuffers>) -> SimNet {
+        let window = buffers.as_ref().is_some_and(|b| b.model().window);
+        SimNet::new(buffers).with_segment(window.then_some(crate::spec::WINDOW_SEGMENT))
+    }
+
     /// A 1 Mbit/s sender, its spec adjusted by `shape`, writes 144 800
     /// bytes through [`SimNet`] with `buffers`, and `b` reads them. Returns
     /// when the last write returned, when the read finished (ms from the
@@ -1221,7 +1677,7 @@ mod tests {
             ("b", Site::new(City::Frankfurt, Access::Fiber)),
         ];
         let (wrote, got) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
-        let net = SimNet::new(buffers.clone());
+        let net = sim_net(buffers.clone());
         let w = wrote.clone();
         sim.host("a", move || {
             let (net, w) = (net.clone(), w.clone());
@@ -1281,11 +1737,11 @@ mod tests {
         });
         let (wrote, got, peak) = buffered_writes(Some(buffers), |_| {});
         // The window, not the queue, paces the writes: the bytes still take
-        // their 1.2 s on the wire, and a message waits at most the queue
-        // and the segment let in last (116 ms at 1 Mbit/s).
+        // their 1.2 s on the wire, and a segment waits at most the queue, as
+        // one that doesn't fit is lost.
         assert!(wrote > 700, "last write after {wrote} ms");
-        assert!((1190..1600).contains(&got), "{got} ms");
-        assert!(peak <= Duration::from_millis(220), "{peak:?}");
+        assert!((1190..1300).contains(&got), "{got} ms");
+        assert!(peak <= Duration::from_millis(100), "{peak:?}");
     }
 
     /// `a`, on a 1 Mbit/s uplink, writes 144 800 bytes to each of `b` and
@@ -1304,7 +1760,7 @@ mod tests {
                 Site::new(City::Frankfurt, Access::Fiber).with_down(25_000),
             ),
         ];
-        let net = SimNet::new(Some(buffers.clone()));
+        let net = sim_net(Some(buffers.clone()));
         sim.host("a", move || {
             let net = net.clone();
             async move {

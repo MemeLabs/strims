@@ -2235,29 +2235,24 @@ fn collapse_pull_lock_in() {
 /// pull lock-in when its seed's uplink halves: the seed's copies no longer
 /// fit, its holders' pushes fall behind, viewers prune it and pull from it,
 /// and its queue never drains while the uplink stays halved, though the
-/// halved uplink still carries two copies. Behind a 10 Mbit seed halved at
-/// 30 s, 7 viewers stream well before and lag seconds after. Checks that
-/// frames written in the 10 s before the halving lag under 2 s at p99, and
-/// those written from 10 s after it over 2 s: healthy before, not after.
-/// Holding answers below pushes, routing by expected delivery, holding
-/// late pushes for their parent, pacing answers, frames of about a chunk
-/// (little waits below the runner when the uplink halves), bounding
-/// relays' capacity readings by what they wrote and backing a pruned
-/// parent that had pushed off for only a moment ease the mode but don't
-/// remove it: once its window is cut, the seed holds two or three copies
-/// while the viewers it dropped find relays, and on some seeds that takes
-/// long enough to show. At this seed frames lag about 0.2 s at p99 before
-/// the halving and 2.2 s after.
+/// halved uplink still carries two copies: once its window is cut, the
+/// seed holds two or three copies while the viewers it dropped find
+/// relays. Behind a 10 Mbit seed halved at 30 s, 7 viewers stream well
+/// before, and on the window model's TCP (as the testbed's bare TCP bench,
+/// `hack/testbed/bench.sh`, measures Linux's) they recover within 10 s of
+/// the halving at seeds 1-160: frames from then on lag 0.38 s at p99 at
+/// the median seed and 1.3 s at most. Checks that frames written from 10 s
+/// after the halving lag under 2 s at p99.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_halving_lock_in() {
     let mut c = collapse_case(7, 10, 70);
     c.seed_up_steps = vec![(30.0, 5.0)];
-    collapse_sweep("collapse_halving_lock_in", 27, &c, |r| {
+    collapse_sweep("collapse_halving_lock_in", 25, &c, |r| {
         let (_, start) = collapse_seed(r);
         let before = r.lag_between(0, start + secs(20), start + secs(30)).p99;
         let after = r.lag_between(0, start + secs(40), start + secs(70)).p99;
-        if before < 2000 && after > 2000 {
+        if after < 2000 {
             Ok(())
         } else {
             Err(format!(
