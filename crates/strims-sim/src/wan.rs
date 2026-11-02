@@ -1306,7 +1306,7 @@ impl Scheduler {
             if let Some(b) = self.cross_bytes.get_mut(host) {
                 *b += CROSS_WIRE as u64;
             }
-            if self.net.lost_off_net(host, 2) {
+            if self.net.lost_off_net(depart, host, 2) {
                 self.events
                     .insert((depart + rtt, id), Event::CrossLost { i, seq });
                 continue;

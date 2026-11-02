@@ -543,9 +543,10 @@ in `TRIED.md`.
     lock-in deeper than its twin, and its round trips there ran 1.4 times
     the sim's. Recheck with today's frames; if the gap holds, find the
     per-byte overhead on the seed's link.
-  - Loss is independent per packet, and jitter changes every 20 ms per
-    end. Bursty mobile loss and satellite handover outages need their own
-    processes.
+  - LTE's and Starlink's loss comes in bursts at assumed figures (fades
+    of 50 ms every 4 s, the satellites' reassignment every 15 s; the
+    profiles' docs), and jitter changes every 20 ms per end. Measure both
+    where the app runs on those links.
   - No WAN scenario runs WebRTC yet. Show that a WAN run over WebRTC
     replays over 16 seeds (DTLS handshake sizes vary between runs and are
     charged a fixed size), then add one. Browser seeds stream over WebRTC,

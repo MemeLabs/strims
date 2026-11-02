@@ -22,7 +22,13 @@
 //!   direction, so jitter delays messages without reordering them.
 //! - **Loss.** A packet crossing a direction is lost with probability
 //!   `1 − (1 − p_sender)(1 − p_receiver)`, drawn once per message from that
-//!   direction's rng. A lost datagram is dropped. A stream message that
+//!   direction's rng, each end's `p` its profile's loss or, while the end
+//!   is in one of its [`Bursts`] (at the message's departure from the
+//!   sender's uplink, or its reach of the receiver's access link), the
+//!   burst's. Whether a time falls in a burst depends on the end and the
+//!   time alone, as jitter does: a phased end's bursts start on their
+//!   phase, a random one's in slots of [`BURST_MAX`], each slot's burst
+//!   drawn from an rng seeded by the end and the slot. A lost datagram is dropped. A stream message that
 //!   lost a packet arrives late by [`retransmission`], and the caller keeps
 //!   later stream data behind it. Traffic to a peer outside the network
 //!   (a lossless one) draws from the direction from its host to itself,
@@ -38,7 +44,7 @@ use std::collections::VecDeque;
 use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::{Duration, Time};
 
-use crate::access::Site;
+use crate::access::{BURST_MAX, Bursts, Site};
 use crate::sample::{exponential, unit};
 use crate::wire::tx_time;
 
@@ -189,10 +195,94 @@ struct End {
     down_free: Time,
     up_jitter: Jitter,
     down_jitter: Jitter,
+    bursts: Option<BurstState>,
     stats: EndStats,
 }
 
+/// An end's [`Bursts`] and the slots it read last.
+#[derive(Clone, Debug)]
+struct BurstState {
+    bursts: Bursts,
+    seed: u64,
+    /// The last two slots read and their bursts, as unix nanoseconds.
+    seen: [(i64, Option<(i64, i64)>); 2],
+}
+
+impl BurstState {
+    fn new(bursts: Bursts, seed: u64) -> BurstState {
+        BurstState {
+            bursts,
+            seed,
+            seen: [(i64::MIN, None); 2],
+        }
+    }
+
+    /// A slot's length and offset in unix time: a phased end's period, a
+    /// random one's [`BURST_MAX`].
+    fn slots(&self) -> (i64, i64) {
+        match self.bursts.phase {
+            Some(phase) => (self.bursts.every.as_nanos().max(1), phase.as_nanos()),
+            None => (BURST_MAX.as_nanos(), 0),
+        }
+    }
+
+    /// Slot `k`'s burst, if it has one: a phased slot's at its start, a
+    /// random slot's with probability [`BURST_MAX`] over `every`, anywhere
+    /// in it.
+    fn burst(&mut self, k: i64) -> Option<(i64, i64)> {
+        if let Some(&(_, b)) = self.seen.iter().find(|&&(slot, _)| slot == k) {
+            return b;
+        }
+        let (slot, phase) = self.slots();
+        let mut rng = det_rng(
+            self.seed
+                .wrapping_add((k as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)),
+        );
+        let start = match self.bursts.phase {
+            Some(_) => Some(k * slot + phase),
+            None => (unit(&mut rng) < slot as f64 / self.bursts.every.as_nanos().max(1) as f64)
+                .then(|| k * slot + (unit(&mut rng) * slot as f64) as i64),
+        };
+        let b = start.map(|start| {
+            let length = exponential(&mut rng, self.bursts.length)
+                .min(BURST_MAX)
+                .as_nanos()
+                .min(slot);
+            (start, start + length)
+        });
+        self.seen = [self.seen[1], (k, b)];
+        b
+    }
+
+    /// Whether `t` falls in a burst: one of its slot's or the slot's
+    /// before, which may last into it.
+    fn covers(&mut self, t: Time) -> bool {
+        let ns = t.unix_nanos();
+        let (slot, phase) = self.slots();
+        let k = (ns - phase).div_euclid(slot);
+        [k, k - 1].into_iter().any(|j| {
+            self.burst(j)
+                .is_some_and(|(start, end)| start <= ns && ns < end)
+        })
+    }
+}
+
 impl End {
+    /// The probability that the end loses a packet at `t`.
+    fn loss_at(&mut self, t: Time) -> f64 {
+        let between = self.site.profile.loss;
+        match &mut self.bursts {
+            Some(b) => {
+                if b.covers(t) {
+                    b.bursts.loss.max(between)
+                } else {
+                    between
+                }
+            }
+            None => between,
+        }
+    }
+
     /// Records a message handed to the uplink at `at` that starts through
     /// it at `start` and ends at `up_free`, and forgets those that had
     /// left by `at`.
@@ -230,6 +320,10 @@ impl Network {
             .map(|&site| {
                 let up = rng.next_u64();
                 let down = rng.next_u64();
+                let bursts = site
+                    .profile
+                    .bursts
+                    .map(|b| BurstState::new(b, rng.next_u64()));
                 End {
                     site,
                     up_steps: Vec::new(),
@@ -238,6 +332,7 @@ impl Network {
                     down_free: Time::NIL,
                     up_jitter: Jitter::new(up, site.profile.jitter),
                     down_jitter: Jitter::new(down, site.profile.jitter),
+                    bursts,
                     stats: EndStats::default(),
                 }
             })
@@ -413,7 +508,11 @@ impl Network {
         } else {
             (Duration::ZERO, Duration::ZERO)
         };
-        let p = 1.0 - (1.0 - self.end(a).site.profile.loss) * (1.0 - self.end(b).site.profile.loss);
+        let p = if options.loss {
+            1.0 - (1.0 - self.end_mut(a).loss_at(depart)) * (1.0 - self.end_mut(b).loss_at(reach))
+        } else {
+            0.0
+        };
         let rtt = self.rtt(a, b);
         let dir = self.dir_mut(a, b);
         let arrival = (reach + up_jitter + down_jitter).max(dir.last_arrival);
@@ -445,10 +544,14 @@ impl Network {
     }
 
     /// Whether a message of `packets` packets from `h` to a lossless peer
-    /// outside the network loses a packet on `h`'s access link.
-    pub fn lost_off_net(&mut self, h: usize, packets: u32) -> bool {
-        let p = self.end(h).site.profile.loss;
-        if !self.options.loss || p <= 0.0 {
+    /// outside the network, leaving `h`'s uplink at `at`, loses a packet on
+    /// `h`'s access link.
+    pub fn lost_off_net(&mut self, at: Time, h: usize, packets: u32) -> bool {
+        if !self.options.loss {
+            return false;
+        }
+        let p = self.end_mut(h).loss_at(at);
+        if p <= 0.0 {
             return false;
         }
         let dir = self.dir_mut(h, h);
@@ -651,8 +754,8 @@ mod tests {
     #[test]
     fn loss_matches_its_rate() {
         let sites = [
-            Site::new(City::Dallas, Access::Lte),
-            Site::new(City::Dallas, Access::Starlink),
+            Site::new(City::Dallas, Access::Lte).with_loss(0.002),
+            Site::new(City::Dallas, Access::Starlink).with_loss(0.003),
         ];
         let mut n = net(
             &sites,
@@ -721,8 +824,8 @@ mod tests {
     #[test]
     fn off_net_traffic_loses_at_its_hosts_rate() {
         let sites = [
-            Site::new(City::Dallas, Access::Starlink),
-            Site::new(City::Dallas, Access::Lte),
+            Site::new(City::Dallas, Access::Starlink).with_loss(0.003),
+            Site::new(City::Dallas, Access::Lte).with_loss(0.002),
         ];
         let lossy = Options {
             jitter: false,
@@ -734,7 +837,7 @@ mod tests {
         let count: u32 = 100_000;
         let mut lost: u32 = 0;
         for i in 0..i64::from(count) {
-            if n.lost_off_net(0, 2) {
+            if n.lost_off_net(t(i), 0, 2) {
                 lost += 1;
             }
             // The directions between hosts draw as if it weren't there.
@@ -757,7 +860,92 @@ mod tests {
                 loss: false,
             },
         );
-        assert!((0..1_000).all(|_| !quiet.lost_off_net(0, 2)));
+        assert!((0..1_000).all(|i| !quiet.lost_off_net(t(i), 0, 2)));
+    }
+
+    /// Datagrams of one packet from a bursty `site` to a lossless one, one
+    /// a millisecond for `secs`: whether each was lost.
+    fn losses(site: Site, secs: i64) -> Vec<bool> {
+        let sites = [site, Site::new(City::Dallas, Access::Fiber).with_loss(0.0)];
+        let mut n = net(
+            &sites,
+            Options {
+                jitter: false,
+                loss: true,
+            },
+        );
+        (0..secs * 1000)
+            .map(|i| n.send(t(i), 0, 1, 1200, 1, Carrier::Datagram).dropped)
+            .collect()
+    }
+
+    #[test]
+    fn bursty_links_lose_their_mean_in_runs() {
+        for access in [Access::Lte, Access::Starlink] {
+            let site = Site::new(City::Dallas, access);
+            let lost = losses(site, 600);
+            let rate = lost.iter().filter(|&&l| l).count() as f64 / lost.len() as f64;
+            let mean = site
+                .profile
+                .bursts
+                .map_or(0.0, |b| b.mean_loss(site.profile.loss));
+            assert!(
+                (rate - mean).abs() < mean / 4.0,
+                "{access}: {rate} against {mean}"
+            );
+            // A loss follows a loss far more often than the mean.
+            let pairs = lost.windows(2).filter(|w| w.first() == Some(&true)).count() as f64;
+            let runs = lost
+                .windows(2)
+                .filter(|w| matches!(w, [true, true]))
+                .count() as f64;
+            assert!(
+                runs / pairs > 20.0 * mean,
+                "{access}: {} after a loss",
+                runs / pairs
+            );
+        }
+    }
+
+    #[test]
+    fn phased_bursts_come_at_their_phase() {
+        let mut site = Site::new(City::Dallas, Access::Starlink);
+        site.profile.loss = 0.0;
+        let periods = site
+            .profile
+            .bursts
+            .and_then(|b| Some((b.every.as_nanos(), b.phase?.as_nanos())));
+        assert!(periods.is_some());
+        let Some((every, phase)) = periods else {
+            return;
+        };
+        let lost = losses(site, 600);
+        for (i, _) in (0_i64..).zip(&lost).filter(|&(_, &l)| l) {
+            let at = t(i).unix_nanos();
+            let into = (at - phase).rem_euclid(every);
+            assert!(
+                into < BURST_MAX.as_nanos(),
+                "a loss {into} ns into a period"
+            );
+        }
+        assert!(lost.iter().any(|&l| l));
+    }
+
+    #[test]
+    fn bursts_depend_on_the_time_alone() {
+        let bursts = Access::Lte.profile().bursts;
+        assert!(bursts.is_some());
+        let Some(b) = bursts else {
+            return;
+        };
+        let times: Vec<Time> = (0..20_000).map(|i| t(i * 7)).collect();
+        let mut forward = BurstState::new(b, 11);
+        let ahead: Vec<bool> = times.iter().map(|&x| forward.covers(x)).collect();
+        let mut backward = BurstState::new(b, 11);
+        let mut behind: Vec<bool> = times.iter().rev().map(|&x| backward.covers(x)).collect();
+        behind.reverse();
+        assert_eq!(ahead, behind);
+        assert!(ahead.iter().any(|&x| x) && ahead.iter().any(|&x| !x));
     }
 
     #[test]

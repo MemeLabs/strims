@@ -5,8 +5,11 @@
 //!
 //! A [`Profile`] gives typical figures for one kind of consumer or server
 //! connection. Loss is the residual IP packet loss once the link layer
-//! has recovered what it can; it stays low because the simulations don't
-//! model a TCP sender's congestion response to it.
+//! has recovered what it can. A radio link loses most of it in bursts
+//! ([`Bursts`]: a fade, a handover, a satellite's reassignment) rather than
+//! packet by packet, and a run of losses costs a TCP sender one cut of its
+//! window where as many spread out cost one each. The figures are typical
+//! ones, not measured.
 
 use core::fmt;
 
@@ -39,8 +42,36 @@ pub struct Profile {
     pub last_mile: Duration,
     /// Mean extra delay in each direction (see [`crate::network`]).
     pub jitter: Duration,
-    /// Probability that a packet crossing the link is lost.
+    /// Probability that a packet crossing the link is lost (between
+    /// bursts, with them).
     pub loss: f64,
+    /// Loss that comes in bursts, if the link has any.
+    pub bursts: Option<Bursts>,
+}
+
+/// Loss in bursts on an access link, both ways: a burst starts every
+/// `every` on average (at random, or exactly every `every` at `phase` past
+/// a multiple of it in unix time, at every such link at once), lasts
+/// `length` on average (exponentially, at most [`BURST_MAX`]), and loses
+/// each packet with probability `loss`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Bursts {
+    pub every: Duration,
+    pub phase: Option<Duration>,
+    pub length: Duration,
+    pub loss: f64,
+}
+
+/// The longest burst.
+pub const BURST_MAX: Duration = Duration::SECOND;
+
+impl Bursts {
+    /// The mean loss on a link that loses `between` of its packets between
+    /// bursts.
+    pub fn mean_loss(&self, between: f64) -> f64 {
+        let duty = (self.length.as_secs_f64() / self.every.as_secs_f64()).min(1.0);
+        between * (1.0 - duty) + self.loss.max(between) * duty
+    }
 }
 
 impl Access {
@@ -72,15 +103,40 @@ impl Access {
                 last_mile: Duration::from_micros(last_mile_us),
                 jitter: Duration::from_micros(jitter_us),
                 loss,
+                bursts: None,
             }
+        }
+        const fn bursty(mut p: Profile, bursts: Bursts) -> Profile {
+            p.bursts = Some(bursts);
+            p
         }
         match self {
             Access::Datacenter => p(1000, 1000, 500, 100, 0.0),
             Access::Fiber => p(500, 500, 2_000, 500, 0.000_05),
             Access::Cable => p(300, 20, 7_000, 3_000, 0.000_2),
             Access::Dsl => p(50, 10, 10_000, 2_000, 0.000_5),
-            Access::Lte => p(30, 8, 25_000, 12_000, 0.002),
-            Access::Starlink => p(100, 12, 15_000, 8_000, 0.003),
+            // 0.2 % on the whole: fades and handovers of 50 ms every 4 s
+            // that lose 12 % of their packets.
+            Access::Lte => bursty(
+                p(30, 8, 25_000, 12_000, 0.000_5),
+                Bursts {
+                    every: Duration::from_secs(4),
+                    phase: None,
+                    length: Duration::from_millis(50),
+                    loss: 0.12,
+                },
+            ),
+            // 0.3 % on the whole: the satellites' reassignment every 15 s
+            // (12, 27, 42 and 57 s past each minute) loses 30 % for 120 ms.
+            Access::Starlink => bursty(
+                p(100, 12, 15_000, 8_000, 0.000_5),
+                Bursts {
+                    every: Duration::from_secs(15),
+                    phase: Some(Duration::from_secs(12)),
+                    length: Duration::from_millis(120),
+                    loss: 0.3,
+                },
+            ),
         }
     }
 }
@@ -122,9 +178,10 @@ impl Site {
     }
 
     /// The site with each packet lost with probability `loss` on its
-    /// access link.
+    /// access link, and no bursts.
     pub const fn with_loss(mut self, loss: f64) -> Site {
         self.profile.loss = loss;
+        self.profile.bursts = None;
         self
     }
 }
@@ -183,9 +240,21 @@ mod tests {
             let p = a.profile();
             assert!(p.up > 0 && p.down >= p.up, "{a}");
             assert!((0.0..0.01).contains(&p.loss), "{a}");
+            let mean = p.bursts.map_or(p.loss, |b| b.mean_loss(p.loss));
+            assert!((0.0..0.01).contains(&mean), "{a}");
             assert!(p.last_mile > Duration::ZERO, "{a}");
         }
         assert_eq!(Access::Cable.profile().up, 2_500_000);
+    }
+
+    #[test]
+    fn bursty_links_lose_what_they_did_packet_by_packet() {
+        let mean = |a: Access| {
+            let p = a.profile();
+            p.bursts.map_or(p.loss, |b| b.mean_loss(p.loss))
+        };
+        assert!((mean(Access::Lte) - 0.002).abs() < 0.000_1);
+        assert!((mean(Access::Starlink) - 0.003).abs() < 0.000_2);
     }
 
     #[test]
