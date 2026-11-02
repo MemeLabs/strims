@@ -56,6 +56,7 @@
 //!
 //! | module | role |
 //! |---|---|
+//! | [`bench`] | a bare TCP bench, on the testbed's real sockets and the WAN model's |
 //! | [`spec`] | the scenario description and its builder helpers |
 //! | [`topology`] | seeded link layouts |
 //! | `world` | one run's shared state (keys, host registry, stats) |
@@ -108,6 +109,7 @@
 //! wire size, and the sizes of STUN messages and DTLS handshake records
 //! depend on key material, so they are charged a fixed size.
 
+pub mod bench;
 mod control;
 mod host;
 pub mod measures;

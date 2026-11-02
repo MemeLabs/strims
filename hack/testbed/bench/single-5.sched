@@ -1,0 +1,4 @@
+# The same link at two fifths of a 5 Mbit/s uplink.
+# env: VIEWERS=1 SEED_UP_MBIT=5 SECS=30
+burst 0 1 0 250 65536 16384
+probe 0 1 3 10
