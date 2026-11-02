@@ -25,6 +25,8 @@ links that carry the same schedule:
   upq     the seed's uplink queue: tc's tbf backlog over its rate at 10 Hz,
           or the model's every 10 ms
   rate    bytes read per second per link (KB/s), mean
+  compete a competing upload's payload rate (KB/s) each second it ran
+          (testbed: iperf3's report; sim: the model's wire bytes)
   drops   the seed's packets its uplink queue dropped over the whole run
           (testbed: tc's tbf; sim: the window model's segments)
 """
@@ -137,7 +139,42 @@ def tc_drops(run):
     return int(d[1]) if len(d) > 1 else None
 
 
-def metrics(nodes, sched, cls, t0_us, queue=None):
+def tc_compete(run, start_ms):
+    """The testbed's competing uploads' rate (KB/s of payload) each second
+    they ran, [(t_us, KB/s)], from compete.log and iperf3's reports."""
+    p = os.path.join(run, "compete.log")
+    if not os.path.exists(p) or start_ms is None:
+        return []
+    out = []
+    for line in open(p):
+        w = line.split()
+        if len(w) < 2:
+            continue
+        began, at = int(w[0]), w[1]
+        try:
+            rep = json.load(open(os.path.join(run, f"compete-{at}.json")))
+        except (OSError, json.JSONDecodeError):
+            continue
+        for iv in rep.get("intervals", []):
+            s = iv["sum"]
+            t = (began - start_ms) * 1000 + int(s["end"] * 1e6)
+            out.append((t, s["bits_per_second"] / 8 / 1000))
+    return out
+
+
+def sim_compete(evs):
+    """The model's competing uploads' rate each second they sent, as
+    payload (1448 of each 1500 wire bytes): [(t_us, KB/s)]."""
+    xs = sorted((e["t"], e["bytes"]) for e in evs if e.get("ev") == "x")
+    out = []
+    for (t0, b0), (t1, b1) in zip(xs[::10], xs[10::10]):
+        rate = (b1 - b0) / ((t1 - t0) / 1e6) * 1448 / 1500 / 1000
+        if rate > 0:
+            out.append((t1, rate))
+    return out
+
+
+def metrics(nodes, sched, cls, t0_us, queue=None, compete=None):
     m = defaultdict(list)
     period = {}
     for e in sched:
@@ -188,6 +225,9 @@ def metrics(nodes, sched, cls, t0_us, queue=None):
     for t, ms in queue or []:
         if t >= t0_us:
             m[("node 0", "upq")].append(ms)
+    for t, kbps in compete if compete is not None else sim_compete(nodes.get(0, [])):
+        if t >= t0_us:
+            m[("node 0", "compete")].append(kbps)
     for e in nodes.get(0, []):
         if e.get("ev") == "drops":
             m[("node 0", "drops")] = [e["queue_drops"]]
@@ -241,7 +281,8 @@ def main():
                 if e.get("ev") == "start":
                     start = e["ms"]
         q = tc_queue(run, start, s) if name == "testbed" else None
-        m = metrics(nodes, sched, cls, int(t0 * 1e6), q)
+        x = tc_compete(run, start) if name == "testbed" else None
+        m = metrics(nodes, sched, cls, int(t0 * 1e6), q, x)
         if name == "testbed":
             m[("node 0", "drops")] = [tc_drops(run)]
         ms.append(m)

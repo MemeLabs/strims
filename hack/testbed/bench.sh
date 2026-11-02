@@ -25,13 +25,17 @@ schedule=${2:?usage: bench.sh <out dir> <schedule file>}
 root=$(cd "$(dirname "$0")/../.." && pwd)
 bin=${BENCH_BIN:-$root/target/release/examples/testbed_bench}
 [ -x "$bin" ] || { echo "no testbed_bench at $bin" >&2; exit 1; }
-# A schedule's `# env: KEY=value ...` lines set run.sh's settings.
+# A schedule's `# env: KEY=value ...` lines set run.sh's settings (a value
+# with spaces in quotes).
 while read -r kv; do
   [ -n "$kv" ] && export "${kv?}"
-done < <(sed -n 's/^# env: //p' "$schedule" | tr ' ' '\n')
+done < <(sed -n 's/^# env: //p' "$schedule" | xargs -n1)
 mkdir -p "$out"
 cp "$schedule" "$out/schedule"
 NODE_BIN=$bin NODE_ARGS="--schedule /out/schedule" SECS=${SECS:-30} \
   "$root/hack/testbed/run.sh" "$out"
-"$bin" --sim "$out" --out "$out/sim"
+# Competing uploads need the window model.
+if [ -z "${COMPETE:-}" ]; then
+  "$bin" --sim "$out" --out "$out/sim"
+fi
 "$bin" --sim "$out" --out "$out/sim-tcp" --window

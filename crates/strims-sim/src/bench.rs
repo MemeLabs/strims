@@ -54,7 +54,9 @@
 //!
 //! [`simulate`] adds a `{"ev":"q","t":..,"wait":..}` line per sample of
 //! the node's uplink queue (µs), as the testbed's `tc-0.log` samples the
-//! seed's.
+//! seed's, and a `{"ev":"x","t":..,"bytes":..}` line per sample of the
+//! wire bytes its competing uploads sent (as `run.sh`'s `COMPETE` runs
+//! them, on the testbed in `compete-<s>.json`).
 
 // The bench's nodes share their state between their tasks on one thread.
 #![allow(clippy::disallowed_types)]
@@ -75,7 +77,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Notify;
 
 use crate::net::{SendBuffers, SimNet};
-use crate::spec::{Scenario, SendBuffer};
+use crate::spec::{Competing, Scenario, SendBuffer};
 use crate::wan::{Scheduler, SharedWan, sim_time};
 
 /// A record's header: kind, length, sequence number, due and write times.
@@ -649,6 +651,11 @@ pub struct Bench {
     /// A node's uplink from given seconds after the start, bytes per
     /// second.
     pub up_steps: Vec<(usize, Vec<(f64, u64)>)>,
+    /// Bulk uploads from node 0's uplink, from given seconds after the
+    /// start for given seconds, to a sink a round trip `compete_rtt_ms`
+    /// away, as `run.sh`'s `COMPETE` runs them. They need the window model.
+    pub compete: Vec<(f64, f64)>,
+    pub compete_rtt_ms: u64,
     pub send_buffer: SendBuffer,
     pub tcp_segment: Option<usize>,
 }
@@ -718,6 +725,15 @@ impl Bench {
         } else {
             topo.links.clone()
         };
+        let mut compete = Vec::new();
+        for flow in get("COMPETE").unwrap_or_default().split_whitespace() {
+            let (at, d) = flow
+                .split_once(':')
+                .ok_or_else(|| format!("COMPETE: {flow}"))?;
+            let at: f64 = at.parse().map_err(|e| format!("COMPETE: {e}"))?;
+            let d: f64 = d.parse().map_err(|e| format!("COMPETE: {e}"))?;
+            compete.push((at, d));
+        }
         let mut steps = Vec::new();
         for step in get("SEED_UP_STEPS").unwrap_or_default().split_whitespace() {
             let (at, m) = step
@@ -737,6 +753,9 @@ impl Bench {
             } else {
                 vec![(0, steps)]
             },
+            compete,
+            // The sink's egress delay is 10 ms.
+            compete_rtt_ms: num("SEED_DELAY_MS")? + 10,
             send_buffer: SendBuffer {
                 uplink_queue: StdDuration::from_millis(queue_ms),
                 window,
@@ -785,6 +804,17 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
                 .map(|&(at, rate)| (SIM_START + StdDuration::from_secs_f64(at), rate))
                 .collect();
         }
+    }
+    if let Some(seed) = spec.hosts.first_mut() {
+        seed.competing = bench
+            .compete
+            .iter()
+            .map(|&(at, secs)| Competing {
+                start: SIM_START + StdDuration::from_secs_f64(at),
+                stop: SIM_START + StdDuration::from_secs_f64(at + secs),
+                rtt: StdDuration::from_millis(bench.compete_rtt_ms),
+            })
+            .collect();
     }
     spec.send_buffer = Some(bench.send_buffer);
     spec.wan = Some(Options {
@@ -858,6 +888,12 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     let mut logs = logs.take();
     let start = Duration::from(SIM_START);
     for (h, l) in report.iter().flat_map(|r| &r.hosts).zip(logs.iter_mut()) {
+        for &(t, bytes) in &h.competing {
+            l.push(format!(
+                r#"{{"ev":"x","t":{},"bytes":{bytes}}}"#,
+                (t - start).as_micros()
+            ));
+        }
         for &(t, wait) in &h.up_queue {
             l.push(format!(
                 r#"{{"ev":"q","t":{},"wait":{}}}"#,
