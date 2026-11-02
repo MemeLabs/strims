@@ -33,6 +33,8 @@
 //!   for the rest of its bytes, so a step applies from its time, whatever
 //!   the queue holds then.
 
+use std::collections::VecDeque;
+
 use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::{Duration, Time};
 
@@ -181,10 +183,25 @@ struct End {
     /// The uplink's rate from each time on, in time order.
     up_steps: Vec<(Time, u64)>,
     up_free: Time,
+    /// The messages handed to the uplink that may not have left it yet:
+    /// when each started through it and when its last bit left.
+    up_spans: VecDeque<(Time, Time)>,
     down_free: Time,
     up_jitter: Jitter,
     down_jitter: Jitter,
     stats: EndStats,
+}
+
+impl End {
+    /// Records a message handed to the uplink at `at` that starts through
+    /// it at `start` and ends at `up_free`, and forgets those that had
+    /// left by `at`.
+    fn span(&mut self, at: Time, start: Time) {
+        while self.up_spans.front().is_some_and(|&(_, done)| done <= at) {
+            self.up_spans.pop_front();
+        }
+        self.up_spans.push_back((start, self.up_free));
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -217,6 +234,7 @@ impl Network {
                     site,
                     up_steps: Vec::new(),
                     up_free: Time::NIL,
+                    up_spans: VecDeque::new(),
                     down_free: Time::NIL,
                     up_jitter: Jitter::new(up, site.profile.jitter),
                     down_jitter: Jitter::new(down, site.profile.jitter),
@@ -339,6 +357,7 @@ impl Network {
         let end = self.end_mut(a);
         let start = sent.max(end.up_free);
         end.up_free = through(end.site.profile.up, &end.up_steps, start, wire);
+        end.span(sent, start);
         end.stats.up_bytes = end.stats.up_bytes.saturating_add(wire as u64);
         end.stats.up_queue_max = end.stats.up_queue_max.max(start - sent);
         let depart = end.up_free;
@@ -353,7 +372,24 @@ impl Network {
         let end = self.end_mut(h);
         let start = at.max(end.up_free);
         end.up_free = through(end.site.profile.up, &end.up_steps, start, wire);
+        end.span(at, start);
         end.up_free
+    }
+
+    /// How long `h`'s uplink takes from `at` to send what it holds,
+    /// counting the message it is sending whole: an access queue frees a
+    /// message's bytes once its last bit has left (Linux's tbf frees a
+    /// GSO buffer once its tokens are in), so what it has room for grows
+    /// in steps of what it sends.
+    pub fn up_backlog(&mut self, h: usize, at: Time) -> Duration {
+        let end = self.end_mut(h);
+        while end.up_spans.front().is_some_and(|&(_, done)| done <= at) {
+            end.up_spans.pop_front();
+        }
+        match end.up_spans.front() {
+            Some(&(start, _)) if start <= at => end.up_free - start,
+            _ => (end.up_free - at).max(Duration::ZERO),
+        }
     }
 
     /// A message of `packets` packets crossing from `a` to `b`, its last
@@ -437,6 +473,7 @@ impl Network {
     pub fn reset(&mut self, h: usize, now: Time) {
         let end = self.end_mut(h);
         end.up_free = now;
+        end.up_spans.clear();
         end.down_free = now;
         for x in 0..self.ends.len() {
             self.dir_mut(h, x).last_arrival = Time::NIL;
@@ -653,6 +690,32 @@ mod tests {
             (f64::from(hits) - expected).abs() < 0.25 * expected,
             "{hits} vs {expected}"
         );
+    }
+
+    #[test]
+    fn an_uplink_frees_a_message_once_it_has_left() {
+        let sites = [
+            Site::new(City::Dallas, Access::Fiber).with_up(1_000_000),
+            Site::new(City::Dallas, Access::Fiber),
+        ];
+        let mut n = net(
+            &sites,
+            Options {
+                jitter: false,
+                loss: false,
+            },
+        );
+        // Two 3000-byte messages at 1 MB/s: 0-3 ms and 3-6 ms.
+        n.send(t(0), 0, 1, 3000, 2, Carrier::Stream);
+        n.occupy_up(t(0), 0, 3000);
+        let ms = Duration::from_millis;
+        // The first counts whole until its last bit is out at 3 ms.
+        assert_eq!(n.up_backlog(0, t(1)), ms(6));
+        assert_eq!(n.up_backlog(0, t(2)), ms(6));
+        assert_eq!(n.up_backlog(0, t(3)), ms(3));
+        assert_eq!(n.up_backlog(0, t(5)), ms(3));
+        assert_eq!(n.up_backlog(0, t(6)), Duration::ZERO);
+        assert_eq!(n.up_backlog(0, t(9)), Duration::ZERO);
     }
 
     #[test]

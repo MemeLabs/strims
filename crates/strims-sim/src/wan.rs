@@ -51,7 +51,9 @@
 //! - The access queues hold `uplink_queue` of transmission time, up and
 //!   down. A segment that doesn't fit in what one has left is lost there,
 //!   as a byte-limited FIFO (Linux's tbf and bfifo) drops it: a small
-//!   write fits where a full segment doesn't.
+//!   write fits where a full segment doesn't. An uplink queue frees a
+//!   segment's room once its last bit has left
+//!   ([`Network::up_backlog`](strims_wan::Network::up_backlog)).
 //! - A segment that loses a packet on its path (the sites' loss) is lost
 //!   to its sender the same way.
 //! - Its sender learns of the loss from a later segment's acknowledgement,
@@ -1240,7 +1242,7 @@ impl Scheduler {
             f.sent(at, CROSS_SEGMENT, f.srtt.max(rtt));
             let id = self.next;
             self.next += 1;
-            let wait = (self.net.up_free(host) - at).max(Duration::ZERO);
+            let wait = self.net.up_backlog(host, at);
             if overflows(wait, tx_time(CROSS_WIRE, self.net.up_rate(host, at)), cap) {
                 if let Some(d) = self.cross_drops.get_mut(host) {
                     *d += 1;
@@ -1366,7 +1368,7 @@ impl Scheduler {
         if self.buffers.is_some() && !resent {
             self.admits.insert((at, id), (conn, len));
         }
-        let wait = (self.net.up_free(from) - at).max(Duration::ZERO);
+        let wait = self.net.up_backlog(from, at);
         if overflows(wait, tx_time(wire, self.net.up_rate(from, at)), cap) {
             if let Some(d) = self.drops.get_mut(from) {
                 *d += 1;
