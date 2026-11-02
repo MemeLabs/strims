@@ -1,0 +1,6 @@
+# A link asked for 105 % of a 10 Mbit/s uplink that another app's bulk
+# upload (iperf3, CUBIC) has filled since the start: the link starts
+# writing 5 s in, the upload stops at 25 s.
+# env: VIEWERS=1 SEED_UP_MBIT=10 SECS=35 COMPETE=0:25
+burst 0 1 5000 250 327680 16384
+probe 0 1 5003 10
