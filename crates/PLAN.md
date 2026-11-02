@@ -559,6 +559,27 @@ in `TRIED.md`.
     charged a fixed size), then add one. Browser seeds stream over WebRTC,
     so the upload meter's defaults need it measured before they cover
     them.
+  - The sim sends every data channel with str0m's SCTP (sctp-proto). On the
+    bare bench's WebRTC cases (`hack/testbed/bench/rtc-*`) str0m on the
+    testbed fits it (scores 0.045-0.055); the browsers' senders don't:
+    - Chromium's dcSCTP sends four packets per send opportunity and grows
+      its window by an MTU a SACK while the window is full, so it holds a
+      burst in its SCTP (the queue's p90 8 ms against str0m's 34). Those
+      rules in sctp-proto fit rtc-single (0.067 against 0.266), and fit the
+      holders and over cases worse than str0m does.
+    - On a link asked for 105 % of its uplink both browsers lose 300-990
+      packets in the first two seconds and keep sending at the uplink's
+      rate through it, where str0m pauses (50-74). dcSCTP takes a chunk it
+      marks lost out of its flight; that rule alone doesn't reproduce it.
+    - Firefox's usrsctp (path MTU 1179, `SCTP_NODELAY`, a 1 MiB send
+      buffer below `bufferedAmount`) can't carry the holders' 84 % of a
+      5 Mbit/s uplink: its holders fall 2.4-2.9 s behind.
+    Decide how the sim models a browser's sender: str0m with each
+    browser's rules in a patched sctp-proto (str0m builds sctp-proto's
+    config itself, so it needs a patch too), or a modelled data channel in
+    the window model, as TCP's. Calibrate with repeats: the holders case
+    swings between runs (Chromium sending to str0m, one-way p50 409 and
+    211 ms).
   - Every pair a sim links can reach each other. A model of peers that
     accept no inbound links (an untraversable NAT) would show what they
     cost the mesh and the seed's allocation, and whether either should
