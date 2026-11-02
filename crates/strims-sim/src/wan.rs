@@ -79,8 +79,8 @@
 //! connections that always have data and reach no host: full segments
 //! enter the host's uplink queue within their window, are lost when it is
 //! full, and are acknowledged the upload's round trip after they leave the
-//! uplink. Their windows follow CUBIC too. They need the window model's
-//! bounded queues.
+//! uplink. Their windows follow the connections' CUBIC, HyStart and
+//! recoveries too. They need the window model's bounded queues.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
@@ -196,17 +196,21 @@ enum Event {
         seq: u64,
         len: usize,
     },
-    /// A competing upload's segment is acknowledged.
-    CrossAck(usize),
-    /// A competing upload learns its segment was lost.
-    CrossLost(usize),
+    /// Competing upload `i`'s segment `seq` is acknowledged, a round trip
+    /// of `rtt` after it went out.
+    CrossAck { i: usize, seq: u64, rtt: Duration },
+    /// Competing upload `i` learns its segment `seq` was lost.
+    CrossLost { i: usize, seq: u64 },
 }
 
 /// The window model's segment size, for the window's growth.
 pub(crate) const MSS: f64 = 1448.0;
-/// A competing upload's segment: its payload and its bytes on the wire.
-const CROSS_SEGMENT: usize = 1448;
-const CROSS_WIRE: usize = 1500;
+/// A competing upload's segment, its payload and its bytes on the wire:
+/// two packets, as the window model cuts its connections'
+/// ([`WINDOW_SEGMENT`](crate::spec::WINDOW_SEGMENT)) and as the upload's
+/// receiver acknowledges them, so that they meet a full queue at one size.
+const CROSS_SEGMENT: usize = crate::spec::WINDOW_SEGMENT;
+const CROSS_WIRE: usize = 2 * 1500;
 /// CUBIC's scaling constant, in segments per second cubed.
 const CUBIC_C: f64 = 0.4;
 /// Its initial window: 10 segments.
@@ -246,10 +250,12 @@ struct Flow {
     sent_end: u64,
     recover: u64,
     /// The most bytes in flight this round trip and the last, and when
-    /// this one began: the window grows only while it limits the flow.
+    /// this one began, and whether the window last held back data the
+    /// connection had: the window grows only while it limits the flow.
     flight_now: usize,
     flight_last: usize,
     round: Time,
+    held: bool,
     /// When each data segment in flight went out, by sequence number, and
     /// the smoothed round trip of their acknowledgements, its variation
     /// and its least. Bound: the segments in flight.
@@ -275,6 +281,8 @@ struct Flow {
     retx: BTreeSet<u64>,
     backoff: u32,
     probing: bool,
+    /// When the retransmission timeout last fired.
+    timed_out: Time,
 }
 
 impl Default for Flow {
@@ -295,6 +303,7 @@ impl Default for Flow {
             flight_now: 0,
             flight_last: 0,
             round: Time::NIL,
+            held: false,
             sent_at: BTreeMap::new(),
             srtt: Duration::ZERO,
             rttvar: Duration::ZERO,
@@ -308,6 +317,7 @@ impl Default for Flow {
             retx: BTreeSet::new(),
             backoff: 0,
             probing: false,
+            timed_out: Time::NIL,
         }
     }
 }
@@ -410,14 +420,14 @@ impl Flow {
 
     /// Whether the window limited the flow lately, as Linux's
     /// `tcp_is_cwnd_limited` judges: in slow start, while the window is
-    /// under twice what the flow put in flight; past it, once the flow
-    /// filled it.
+    /// under twice what the flow put in flight; past it, while it holds
+    /// back data the connection has, or the flow filled it.
     fn limited(&self) -> bool {
         let used = self.flight_now.max(self.flight_last) as f64;
         if self.cwnd < self.ssthresh {
             self.cwnd < 2.0 * used
         } else {
-            used + MSS >= self.cwnd
+            self.held || used + MSS >= self.cwnd
         }
     }
 
@@ -834,12 +844,12 @@ impl Scheduler {
                     }
                     continue;
                 }
-                Event::CrossAck(i) => {
-                    self.cross_acked(t, i);
+                Event::CrossAck { i, seq, rtt } => {
+                    self.cross_acked(t, i, seq, rtt);
                     continue;
                 }
-                Event::CrossLost(i) => {
-                    self.cross_lost(t, i);
+                Event::CrossLost { i, seq } => {
+                    self.cross_lost(t, i, seq);
                     continue;
                 }
                 _ => {}
@@ -906,11 +916,13 @@ impl Scheduler {
                     if f.cut.is_nil() || seq >= f.recover {
                         f.fall(t);
                     }
-                    if matches!(event, Event::Timeout) {
+                    if matches!(event, Event::Timeout) && f.timed_out != t {
                         // Linux's loss state: the window restarts from a
-                        // segment, and the timeout backs off.
+                        // segment, and the timeout backs off, once for the
+                        // segments it finds lost together.
                         f.cwnd = MSS;
                         f.backoff = f.backoff.saturating_add(1);
+                        f.timed_out = t;
                     }
                     f.retx.insert(seq);
                     f.pending.push_front(id);
@@ -919,8 +931,8 @@ impl Scheduler {
                 Event::Ack { .. }
                 | Event::Probe { .. }
                 | Event::DelAck { .. }
-                | Event::CrossAck(_)
-                | Event::CrossLost(_) => {}
+                | Event::CrossAck { .. }
+                | Event::CrossLost { .. } => {}
             }
         }
     }
@@ -1087,21 +1099,28 @@ impl Scheduler {
         }
     }
 
-    /// Competing upload `i`'s segment was acknowledged at `t`.
-    fn cross_acked(&mut self, t: Time, i: usize) {
+    /// Competing upload `i`'s segment `seq` was acknowledged at `t`, a
+    /// round trip of `rtt` after it went out: its window grows as the
+    /// window model's connections' do.
+    fn cross_acked(&mut self, t: Time, i: usize, seq: u64, rtt: Duration) {
         if let Some(c) = self.cross.get_mut(i) {
-            c.flow.in_flight = c.flow.in_flight.saturating_sub(CROSS_SEGMENT);
-            c.flow.grow(t, CROSS_SEGMENT, c.rtt, c.rtt);
+            let f = &mut c.flow;
+            f.in_flight = f.in_flight.saturating_sub(CROSS_SEGMENT);
+            f.sampled(seq, rtt);
+            if f.cut.is_nil() || seq >= f.recover {
+                f.grow(t, CROSS_SEGMENT, c.rtt, f.srtt.max(c.rtt));
+            }
         }
         self.cross_pump(t, i);
     }
 
-    /// Competing upload `i` learned at `t` that a segment was lost.
-    fn cross_lost(&mut self, t: Time, i: usize) {
+    /// Competing upload `i` learned at `t` that its segment `seq` was
+    /// lost: its window falls once a recovery.
+    fn cross_lost(&mut self, t: Time, i: usize, seq: u64) {
         if let Some(c) = self.cross.get_mut(i) {
             let f = &mut c.flow;
             f.in_flight = f.in_flight.saturating_sub(CROSS_SEGMENT);
-            if f.cut.is_nil() || t - f.cut >= c.rtt {
+            if f.cut.is_nil() || seq >= f.recover {
                 f.fall(t);
             }
         }
@@ -1125,21 +1144,25 @@ impl Scheduler {
             {
                 return;
             }
-            f.in_flight += CROSS_SEGMENT;
             let (host, rtt) = (c.host, c.rtt);
+            let seq = f.sent_end;
+            f.sent_end += 1;
+            f.sent(at, CROSS_SEGMENT, f.srtt.max(rtt));
             let id = self.next;
             self.next += 1;
             let wait = (self.net.up_free(host) - at).max(Duration::ZERO);
             if overflows(wait, tx_time(CROSS_WIRE, self.net.up_rate(host, at)), cap) {
                 self.events
-                    .insert((at + rtt + wait, id), Event::CrossLost(i));
+                    .insert((at + rtt + wait, id), Event::CrossLost { i, seq });
                 continue;
             }
             let depart = self.net.occupy_up(at, host, CROSS_WIRE);
             if let Some(b) = self.cross_bytes.get_mut(host) {
                 *b += CROSS_WIRE as u64;
             }
-            self.events.insert((depart + rtt, id), Event::CrossAck(i));
+            let rtt = depart + rtt - at;
+            self.events
+                .insert((at + rtt, id), Event::CrossAck { i, seq, rtt });
         }
     }
 
@@ -1163,6 +1186,7 @@ impl Scheduler {
                 };
                 loop {
                     let Some(&id) = f.pending.front() else {
+                        f.held = false;
                         return false;
                     };
                     let Some((seq, len)) = self.records.get(&id).and_then(|r| match r.what {
@@ -1173,6 +1197,7 @@ impl Scheduler {
                         continue;
                     };
                     if f.in_flight > 0 && (f.in_flight + len) as f64 > f.cwnd {
+                        f.held = true;
                         return false;
                     }
                     f.pending.pop_front();
@@ -1941,7 +1966,7 @@ mod tests {
             uplink_queue: StdDuration::from_millis(100),
             window: true,
         });
-        let net = SimNet::new(Some(buffers.clone()));
+        let net = sim_net(Some(buffers.clone()));
         sim.host("a", move || {
             let net = net.clone();
             async move {
@@ -1974,6 +1999,7 @@ mod tests {
             rtt: StdDuration::from_millis(30),
         }];
         let mut wan = Scheduler::new(&sim, &spec, QUIET, 1, Some(buffers)).unwrap();
+        wan.set_latency(0, 1, Duration::from_millis(15));
         drive(&mut sim, &mut wan);
         (got.get(), wan.report(&spec).hosts.swap_remove(0))
     }
@@ -1998,12 +2024,15 @@ mod tests {
             .filter(|&&(t, w)| t > Duration::from_secs(1) && w > Duration::from_millis(5));
         assert!(busy.count() > 15, "{:?}", a.up_queue);
         // 1.45 MB take about 1.2 s alone and longer beside it, which then
-        // sends less.
+        // sends less once the connection has its share: on the testbed
+        // (`hack/testbed/bench/join-compete.sched`) iperf3 kept most of the
+        // uplink for a second or two after a link joined it.
         let (quiet, _) = beside_an_upload(1_448_000, (30, 30));
         let (shared, a) = beside_an_upload(1_448_000, (0, 30));
         assert!((1150..1500).contains(&quiet), "{quiet} ms");
         assert!(shared > quiet * 3 / 2, "{shared} ms against {quiet} ms");
-        assert!(sent(&a, 2) - sent(&a, 1) < alone / 2 * 3 / 4);
+        let later = sent(&a, 4) - sent(&a, 2);
+        assert!(later < alone * 3 / 4, "{later} bytes in 2-4 s");
         // Without windows nothing bounds the upload's queue.
         let mut s = spec(&[("a", Site::new(City::Frankfurt, Access::Fiber))]);
         s.hosts[0].competing = vec![Competing {

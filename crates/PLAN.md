@@ -516,15 +516,18 @@ in `TRIED.md`.
     takes the loss model's fixed delay.
   - The window model follows the testbed's bare TCP bench
     (`hack/testbed/bench.sh`, cases in `hack/testbed/bench/`) within about
-    10 ms at p50 and p90, but where two holders share a 5 Mbit/s uplink it
-    loses 0.6-0.7 times the testbed's packets and its holders' probes read
-    20 ms high at p50; it charges 1500 bytes a packet where the tbf counts
-    1514 and nothing for pure acknowledgements (3 % more goodput at
-    saturation), and has no HyStart ack-train test. Its twin of the
-    testbed's uplink cut (`testbed-copy-floor`) lags over 1 s about as
-    often as the testbed at 10 viewers, but half as often at 25 (29 of 120
-    cut seconds against 55): replay a captured seed's writes and reads on
-    the bench to find whether that gap is the network's.
+    10 % on the seed's holder shapes, but a competing bulk upload takes too
+    much of the uplink from an established link or the holders' bursts
+    (660 KB/s against iperf3's 525 beside the holders, whose delays run
+    twice the testbed's), the saturated links lose a few times fewer
+    packets than the tbf, the stepping case's 140 % overload runs 10-30 %
+    high, and there is no HyStart ack-train test. Its twin of the testbed's
+    uplink cut (`testbed-copy-floor`) lags over 1 s in 54.5 of 205 seconds
+    at 25 viewers against the testbed's 66.7, and its seed answers 0.6
+    times the testbed's pull requests in the cut. The model moves
+    `collapse_thin_relays` and both `*_uncapped_varying` WAN cases to
+    failing, and the robust tier past its guardrails both ways: settle
+    those before it lands.
   - Through a halving of the seed's uplink the testbed fell into the
     lock-in deeper than its twin, and its round trips there ran 1.4 times
     the sim's. Recheck with today's frames; if the gap holds, find the
