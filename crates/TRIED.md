@@ -264,7 +264,11 @@ rule over every DATA write of a node that seeds nothing, 25 ms target,
 the links' excess alone) collapsed 16 of 16 with lag p50 5.3 s: in a mesh
 of busy thin relays each link's round trip carries the far relay's queue
 too, as its echoes wait there, so the relay paces for queues it doesn't
-hold. A 15 ms answer target: 16 of 16 (repairs starve). Admitting by the
+hold. Pacing it on the model's true uplink queue instead (an oracle,
+`own-queue-oracle`) collapsed 7 of 16 at 25 ms and 13 at 10 ms: no better
+read of the queue cures the cell, as a pace holds a mean while the
+acknowledgements wait behind each window's burst. A 15 ms answer target:
+16 of 16 (repairs starve). Admitting by the
 committed pushes, answers out of the measured rule's load: 11 of 16.
 Uplink queues of 20 or 50 ms in place of 100: 16 of 16 (losses).
 
