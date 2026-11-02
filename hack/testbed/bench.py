@@ -22,6 +22,8 @@ links that carry the same schedule:
   unsent  the socket's unsent bytes (KiB)
   cwnd    its congestion window (KiB)
   flight  its bytes sent and unacknowledged (KiB)
+  buffered a data channel's buffered amount: unsent and unacknowledged
+          bytes (KiB)
   upq     the seed's uplink queue: tc's tbf backlog over its rate at 10 Hz,
           or the model's every 10 ms
   rate    bytes read per second per link (KB/s), mean
@@ -235,6 +237,9 @@ def metrics(nodes, sched, cls, t0_us, queue=None, compete=None):
                 c = cls.get((i, e["to"]), "idle")
                 if e["t"] < t0_us:
                     continue
+                if "buffered" in e:
+                    m[(c, "buffered")].append(e["buffered"] / 1024)
+                    continue
                 m[(c, "unsent")].append(e["unsent"] / 1024)
                 m[(c, "cwnd")].append(e["cwnd"] / 1024)
                 m[(c, "flight")].append(e.get("unacked", e.get("in_flight", 0)) / 1024)
@@ -243,6 +248,12 @@ def metrics(nodes, sched, cls, t0_us, queue=None, compete=None):
     for t, ms in queue or []:
         if t >= t0_us:
             m[("node 0", "upq")].append(ms)
+    if not m[("node 0", "upq")]:
+        # Links without socket samples of the model's queue (data
+        # channels): the sim's own samples of it.
+        for e in nodes.get(0, []):
+            if e.get("ev") == "q" and e["t"] >= t0_us:
+                m[("node 0", "upq")].append(e["wait"] / 1000)
     for t, kbps, cwnd in compete if compete is not None else sim_compete(nodes.get(0, [])):
         if t >= t0_us:
             m[("node 0", "compete")].append(kbps)

@@ -17,6 +17,8 @@
 # and <out dir>/sim-tcp (and their window model). BENCH_BIN is the
 # testbed_bench binary (default target/release/examples/testbed_bench),
 # built by `cargo build --release -p strims-sim --example testbed_bench`.
+# BENCH_WEBRTC=1 runs the links over WebRTC data channels (testbed_bench's
+# --webrtc), in the sim as on the testbed.
 
 set -euo pipefail
 
@@ -32,7 +34,7 @@ while read -r kv; do
 done < <(sed -n 's/^# env: //p' "$schedule" | xargs -n1)
 mkdir -p "$out"
 cp "$schedule" "$out/schedule"
-NODE_BIN=$bin NODE_ARGS="--schedule /out/schedule" SECS=${SECS:-30} \
+NODE_BIN=$bin NODE_ARGS="--schedule /out/schedule${BENCH_WEBRTC:+ --webrtc}" SECS=${SECS:-30} \
   "$root/hack/testbed/run.sh" "$out"
 # Competing uploads need the window model.
 if [ -z "${COMPETE:-}" ]; then

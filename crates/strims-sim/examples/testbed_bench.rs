@@ -7,7 +7,7 @@
 //!
 //! ```text
 //! testbed_bench --index <i> --topology <file> --schedule <file>
-//!               [--secs <s>] [--start <unix ms>]
+//!               [--secs <s>] [--start <unix ms>] [--webrtc]
 //! testbed_bench --sim <testbed run dir> --out <dir> [--window]
 //!               [--segment <bytes>]
 //! ```
@@ -15,8 +15,10 @@
 //! On the testbed a node listens on its topology address, dials the nodes
 //! it links to with a lower index, runs the schedule from `--start` (all
 //! nodes share the clock) for `--secs` and prints its log on stdout,
-//! after a `{"ev":"start","ms":..}` line with the start in Unix ms. It
-//! takes `run.sh`'s other flags and ignores them.
+//! after a `{"ev":"start","ms":..}` line with the start in Unix ms. With
+//! `--webrtc` its links carry the records over data channels from a UDP
+//! port, its TCP port's next. It takes `run.sh`'s other flags and ignores
+//! them.
 //!
 //! `--sim` runs the bench a testbed run made (its `settings`, `topology`
 //! and `schedule` files) under the WAN model, with the send buffers'
@@ -31,7 +33,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use strims_node::TokioNet;
-use strims_sim::bench::{Bench, BenchClock, NodePlan, Schedule, node, simulate};
+use strims_sim::bench::{Bench, BenchClock, NodePlan, RtcPlan, Schedule, node, simulate};
 use strims_testbed::native::now_ms;
 use strims_testbed::topology::Topology;
 
@@ -46,6 +48,7 @@ struct Args {
     out: Option<PathBuf>,
     window: bool,
     segment: Option<usize>,
+    webrtc: bool,
 }
 
 fn args() -> Result<Args, String> {
@@ -69,6 +72,7 @@ fn args() -> Result<Args, String> {
             "--out" => a.out = Some(value()?.into()),
             "--window" => a.window = true,
             "--segment" => a.segment = Some(num(value()?)? as usize),
+            "--webrtc" => a.webrtc = true,
             "--join-at" | "--rate" | "--hosts" | "--capture" => {
                 value()?;
             }
@@ -126,7 +130,7 @@ async fn testbed(a: &Args) -> Result<(), String> {
     let schedule = Schedule::parse(&read(a.schedule.as_ref())?)?;
     let this = topo.node(me).ok_or(format!("no node {me}"))?;
     let addr = |i: usize| topo.node(i).map(|n| n.addr.to_string()).unwrap_or_default();
-    let plan = NodePlan::new(
+    let mut plan = NodePlan::new(
         me,
         &topo.links,
         this.addr.to_string(),
@@ -134,6 +138,13 @@ async fn testbed(a: &Args) -> Result<(), String> {
         schedule,
         i64::try_from(a.secs).unwrap_or(0) * 1_000_000,
     );
+    if a.webrtc {
+        // testbed_node's UDP port: its TCP port's next.
+        plan.webrtc = Some(RtcPlan {
+            udp: format!("0.0.0.0:{}", this.addr.port() + 1),
+            ip: this.addr.ip(),
+        });
+    }
     let clock = Wall {
         start_ms: a.start_ms.unwrap_or_else(|| now_ms() + 2000),
     };

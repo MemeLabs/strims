@@ -64,7 +64,7 @@ def cmd_run(args):
     root = flag(args, "--root", os.path.join(ROOT, "target", "bench", "runs"))
     repeats = int(flag(args, "--repeats", "1"))
     env = {k: v for k, v in os.environ.items()
-           if k not in ("VIEWERS", "SEED_UP_MBIT", "SECS", "SEED_UP_STEPS", "COMPETE")}
+           if k not in ("VIEWERS", "SEED_UP_MBIT", "SECS", "SEED_UP_STEPS", "COMPETE", "BENCH_WEBRTC")}
     for k in range(1, repeats + 1):
         for c in args or all_cases():
             out = os.path.join(root, f"r{k}", c)

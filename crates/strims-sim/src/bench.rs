@@ -209,11 +209,18 @@ async fn sleep_until<C: BenchClock>(clock: &C, us: i64) {
     }
 }
 
+mod rtc;
+
+pub use rtc::RtcPlan;
+
 /// What one node does: where it listens, whom it dials, and the schedule.
 #[derive(Clone, Debug)]
 pub struct NodePlan {
     pub me: usize,
     pub listen: String,
+    /// With an endpoint, the links carry their records over WebRTC data
+    /// channels, signalled over their TCP connections.
+    pub webrtc: Option<RtcPlan>,
     /// The nodes it dials (its linked nodes of lower index) and their
     /// addresses.
     pub dial: Vec<(usize, String)>,
@@ -251,6 +258,7 @@ impl NodePlan {
         NodePlan {
             me,
             listen,
+            webrtc: None,
             dial,
             accepts,
             schedule,
@@ -356,57 +364,111 @@ pub async fn node<N: Net, C: BenchClock>(
         streams.push(d?);
     }
     streams.sort_by_key(|(peer, _)| *peer);
-
-    let mut tasks: Vec<Task> = Vec::new();
-    let mut links: Vec<Rc<LinkState>> = Vec::new();
-    for (peer, s) in streams {
-        let probe = net.link_probe(&s, false);
-        let link = Rc::new(LinkState {
-            peer,
-            out: RefCell::new(Outbox::default()),
-            ready: Notify::new(),
-            data_seq: Cell::new(0),
-            probe_seq: Cell::new(0),
-        });
-        let (r, w) = tokio::io::split(s);
-        tasks.push(Box::pin(writer(
-            w,
-            link.clone(),
-            clock.clone(),
-            log.clone(),
-        )));
-        tasks.push(Box::pin(reader(
-            r,
-            link.clone(),
-            clock.clone(),
-            log.clone(),
-        )));
-        if let Some(p) = probe {
-            tasks.push(Box::pin(sampler(p, peer, clock.clone(), log.clone())));
-        }
-        links.push(link);
-    }
-    for e in &plan.schedule.entries {
-        let (from, to) = e.ends();
-        if from != me {
-            continue;
-        }
-        let Some(link) = links.iter().find(|l| l.peer == to) else {
-            return Err(io::Error::other(format!("{from} and {to} aren't linked")));
-        };
-        tasks.push(Box::pin(feed(
-            e.clone(),
-            link.clone(),
-            clock.clone(),
-            plan.end_us,
-        )));
-    }
     let stop = plan.end_us + i64::try_from(LINGER.as_micros()).unwrap_or(i64::MAX);
+
+    let (endpoint, driver): (Option<rtc::Shared>, Task) = match &plan.webrtc {
+        Some(p) => {
+            let (shared, driver) = rtc::start(&net, p, me, &clock).await?;
+            (Some(shared), driver)
+        }
+        None => (None, Box::pin(std::future::pending())),
+    };
+    let run = async {
+        let mut tasks: Vec<Task> = Vec::new();
+        let mut links: Vec<Rc<LinkState>> = Vec::new();
+        for (peer, mut s) in streams {
+            let link = Rc::new(LinkState {
+                peer,
+                out: RefCell::new(Outbox::default()),
+                ready: Notify::new(),
+                data_seq: Cell::new(0),
+                probe_seq: Cell::new(0),
+            });
+            match &endpoint {
+                Some(shared) => {
+                    let dc = rtc::connect(shared, &mut s, peer < me, &clock).await?;
+                    tasks.push(Box::pin(writer(
+                        dc.handle(),
+                        link.clone(),
+                        clock.clone(),
+                        log.clone(),
+                    )));
+                    tasks.push(Box::pin(rtc_sampler(
+                        dc.handle(),
+                        peer,
+                        clock.clone(),
+                        log.clone(),
+                    )));
+                    tasks.push(Box::pin(reader(
+                        dc,
+                        link.clone(),
+                        clock.clone(),
+                        log.clone(),
+                    )));
+                }
+                None => {
+                    let probe = net.link_probe(&s, false);
+                    let (r, w) = tokio::io::split(s);
+                    tasks.push(Box::pin(writer(
+                        w,
+                        link.clone(),
+                        clock.clone(),
+                        log.clone(),
+                    )));
+                    tasks.push(Box::pin(reader(
+                        r,
+                        link.clone(),
+                        clock.clone(),
+                        log.clone(),
+                    )));
+                    if let Some(p) = probe {
+                        tasks.push(Box::pin(sampler(p, peer, clock.clone(), log.clone())));
+                    }
+                }
+            }
+            links.push(link);
+        }
+        for e in &plan.schedule.entries {
+            let (from, to) = e.ends();
+            if from != me {
+                continue;
+            }
+            let Some(link) = links.iter().find(|l| l.peer == to) else {
+                return Err(io::Error::other(format!("{from} and {to} aren't linked")));
+            };
+            tasks.push(Box::pin(feed(
+                e.clone(),
+                link.clone(),
+                clock.clone(),
+                plan.end_us,
+            )));
+        }
+        join_all(tasks).await;
+        Ok::<_, io::Error>(())
+    };
     tokio::select! {
-        _ = join_all(tasks) => {}
+        r = run => r?,
+        () = driver => {}
         () = sleep_until(&clock, stop) => {}
     }
     Ok(())
+}
+
+/// Logs a data channel's buffered amount every [`SAMPLE_EVERY`].
+async fn rtc_sampler<C: BenchClock>(
+    dc: rtc::DcStream,
+    peer: usize,
+    clock: C,
+    log: impl Fn(String),
+) {
+    loop {
+        log(format!(
+            r#"{{"ev":"s","to":{peer},"t":{},"buffered":{}}}"#,
+            clock.now_us(),
+            dc.buffered()
+        ));
+        tokio::time::sleep(SAMPLE_EVERY).await;
+    }
 }
 
 fn setup<N: Net>(net: &N, s: &N::TcpStream) {
@@ -663,6 +725,9 @@ pub struct Bench {
     pub compete_rtt_ms: u64,
     pub send_buffer: SendBuffer,
     pub tcp_segment: Option<usize>,
+    /// The links carry their records over WebRTC data channels (the
+    /// nodes ran with `--webrtc`, in `run.sh`'s `NODE_ARGS`).
+    pub webrtc: bool,
 }
 
 /// The defaults of `hack/testbed/run.sh`.
@@ -766,6 +831,7 @@ impl Bench {
             compete,
             // The sink's egress delay is 10 ms.
             compete_rtt_ms: num("SEED_DELAY_MS")? + 10,
+            webrtc: get("NODE_ARGS").is_some_and(|a| a.split_whitespace().any(|w| w == "--webrtc")),
             send_buffer: SendBuffer {
                 uplink_queue: StdDuration::from_millis(queue_ms),
                 window,
@@ -867,7 +933,15 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
                 l.push(line);
             }
         };
+        let webrtc = bench.webrtc;
         sim.client(format!("n{me}").as_str(), async move {
+            let mut plan = plan;
+            if webrtc {
+                plan.webrtc = Some(RtcPlan {
+                    udp: "0.0.0.0:9001".to_owned(),
+                    ip: turmoil::lookup(format!("n{me}")),
+                });
+            }
             node(net, SimBenchClock, plan, log).await?;
             Ok(())
         });
@@ -1025,6 +1099,46 @@ mod tests {
             (60_000..140_000).contains(&wait),
             "writes wait {wait} µs at p90"
         );
+    }
+
+    /// Over a data channel (`hack/testbed/bench/rtc-over.sched`) a link
+    /// asked for 105 % of a 5 Mbit/s uplink takes about the uplink, every
+    /// record arrives in order, and the channel holds up to the node's
+    /// 256 KiB cap and refills from half of it: on the testbed 554 KB/s
+    /// read, 142-272 KiB buffered at p10/max.
+    #[test]
+    fn a_data_channel_takes_its_uplink_and_holds_the_nodes_cap() {
+        let logs = run(
+            "VIEWERS=1\nSEED_UP_MBIT=5\nSECS=10\nNODE_ARGS=--webrtc",
+            "burst 0 1 0 250 163840 16384\nprobe 0 1 3 10",
+        );
+        let reads: Vec<i64> = events(&logs[1], "r")
+            .filter(|l| field(l, "k") == Some(0))
+            .filter_map(|l| field(l, "seq"))
+            .collect();
+        assert!(
+            reads.windows(2).all(|w| w[1] == w[0] + 1),
+            "records out of order"
+        );
+        // 16 KiB records read over the 8 s from 2 s on.
+        let read = events(&logs[1], "r")
+            .filter(|l| field(l, "k") == Some(0))
+            .filter(|l| field(l, "got").is_some_and(|t| (2_000_000..10_000_000).contains(&t)))
+            .count();
+        let rate = read as i64 * 16_384 / 8;
+        assert!((480_000..640_000).contains(&rate), "{rate} B/s read");
+        let buffered: Vec<i64> = events(&logs[0], "s")
+            .filter_map(|l| field(l, "buffered"))
+            .collect();
+        let (lo, hi) = (quantile(buffered.clone(), 0.1), quantile(buffered, 1.0));
+        assert!(
+            lo > 64 * 1024 && hi <= 280 * 1024,
+            "buffered p10 {lo} max {hi}"
+        );
+        let echoes = events(&logs[0], "r")
+            .filter(|l| field(l, "k") == Some(2))
+            .count();
+        assert!(echoes > 700, "{echoes} echoes");
     }
 
     /// The testbed's seed shape (`hack/testbed/bench/holders.sched`): two

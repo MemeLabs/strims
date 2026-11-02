@@ -2606,6 +2606,7 @@ dependencies = [
  "strims-transfer",
  "strims-vpn",
  "strims-wan",
+ "strims-webrtc",
  "tokio",
  "tracking-allocator",
  "turmoil",
