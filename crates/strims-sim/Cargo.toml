@@ -30,6 +30,10 @@ tracking-allocator = "0.4"
 
 [dev-dependencies]
 strims-ppspp-capture.workspace = true
+# testbed_bench's browser nodes: the page's control socket.
+futures-util = { workspace = true, features = ["sink", "std"] }
+serde_json.workspace = true
+tokio-tungstenite.workspace = true
 
 [lints]
 workspace = true

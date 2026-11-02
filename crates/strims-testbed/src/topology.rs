@@ -17,6 +17,8 @@
 //! testbed network and runs no swarm, through which browsers make their
 //! WebRTC links (peer exchange). With a relay, every node dials it (TCP
 //! from a native node, WebSocket from a browser) and joins the network.
+//! A browser node needs one, unless its harness makes its links itself, as
+//! the bare bench's does.
 //!
 //! The links ([`Topology::plan`]):
 //!
@@ -138,9 +140,6 @@ impl Topology {
                 [] => {}
                 _ => return Err(format!("bad topology line {line:?}")),
             }
-        }
-        if t.relay.is_none() && t.nodes.iter().any(|n| n.kind.is_browser()) {
-            return Err("browser nodes need a relay".to_owned());
         }
         Ok(t)
     }
@@ -276,6 +275,12 @@ mod tests {
         assert!(
             matches!(&t.plan(1)[..], [Link::Dial(u)] if u.starts_with("tcp://10.77.0.10:4000/"))
         );
-        assert!(Topology::parse("node 0 10.77.0.10:4000 firefox\n").is_err());
+    }
+
+    #[test]
+    fn a_browser_node_parses_without_a_relay() {
+        let t = Topology::parse("node 0 10.77.0.10:4000 firefox\n").unwrap();
+        assert_eq!(t.relay, None);
+        assert_eq!(t.relay_uri(0), None);
     }
 }

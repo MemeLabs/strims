@@ -23,7 +23,8 @@ the arms. `score` prints each arm's fit to the testbed: the mean
 |log(arm / testbed)| of the data links' one-way delay and probe round trip
 p50/p90, the uplink queue's p90 and the drops (each floored at 5), per case
 and over the cases. `phases` prints the data links' one-way delays, probe
-round trips and windows between the given times (default: each 8 s).
+round trips and windows (a data channel's buffered amount) between the given
+times (default: each 8 s).
 Comparisons take repeat R (default r1) and the cases that ran.
 """
 
@@ -64,7 +65,7 @@ def cmd_run(args):
     root = flag(args, "--root", os.path.join(ROOT, "target", "bench", "runs"))
     repeats = int(flag(args, "--repeats", "1"))
     env = {k: v for k, v in os.environ.items()
-           if k not in ("VIEWERS", "SEED_UP_MBIT", "SECS", "SEED_UP_STEPS", "COMPETE", "BENCH_WEBRTC")}
+           if k not in ("VIEWERS", "SEED_UP_MBIT", "SECS", "SEED_UP_STEPS", "COMPETE", "BENCH_WEBRTC", "KINDS")}
     for k in range(1, repeats + 1):
         for c in args or all_cases():
             out = os.path.join(root, f"r{k}", c)
@@ -211,7 +212,9 @@ def cmd_phases(args):
                    if e.get("ev") == "r" and e["k"] == 0 and inside(e["at"])]
             rtt = [(e["got"] - e["at"]) / 1000 for e in d.get(0, [])
                    if e.get("ev") == "r" and e["k"] == 2 and e["from"] in links and inside(e["at"])]
-            cw = [e["cwnd"] / 1024 for e in d.get(0, [])
+            # A data channel's samples carry its buffered amount in place
+            # of a window.
+            cw = [e.get("cwnd", e.get("buffered", 0)) / 1024 for e in d.get(0, [])
                   if e.get("ev") == "s" and e["to"] in links and inside(e["t"])]
             row += (f" | {show([q(owd, .5), q(owd, .9)]):>11} {show([q(rtt, .5), q(rtt, .9)]):>11}"
                     f" {show([q(cw, .5), max(cw) if cw else None]):>11}")

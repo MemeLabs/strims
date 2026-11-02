@@ -28,9 +28,10 @@
 # container serves the page and drives it on the container's loopback, so
 # the shaped eth0 is the browser's only other interface and carries every
 # link. Browsers can't listen, so a run with a browser node also runs a
-# relay (tb-relay, 10.77.0.5, unshaped): a native node in the testbed
-# network that runs no swarm. Every node dials it and joins the network,
-# and browsers make their WebRTC links by peer exchange through it.
+# relay (tb-relay, 10.77.0.5, unshaped; RELAY=0 leaves it out): a native
+# node in the testbed network that runs no swarm. Every node dials it and
+# joins the network, and browsers make their WebRTC links by peer exchange
+# through it.
 # Natives link to natives over TCP; a browser links to a native over a
 # WebSocket (BROWSER_LINKS=ws) or WebRTC (webrtc), and to a browser over
 # WebRTC. The topology file's header (strims-testbed's topology module)
@@ -93,10 +94,14 @@
 #                          target/release/examples/testbed_browser), built by
 #                          `cargo build --release -p strims-testbed --example
 #                          testbed_browser`
+#   BROWSER_ARGS=<args>    more flags for every browser node's harness
+#   RELAY=0                no relay, for a harness that makes its nodes'
+#                          links itself (the bare bench's, bench.sh)
 #   WEB_BUNDLE=<dir>       the browsers' page (default dist/wasm-testbed),
 #                          built by `npx webpack --mode production --env
 #                          TARGET=wasm-testbed` (node_modules, the pinned
-#                          wasm-bindgen-cli and the wasm32 target)
+#                          wasm-bindgen-cli and the wasm32 target); the
+#                          harness checks it holds its page
 #
 # Writes to <out dir>: topology, node-<i>.jsonl (a JSON line per second
 # from each node, strims-testbed's node module; a browser's adds post_ms
@@ -144,6 +149,7 @@ if [ -n "$seed_loss" ]; then
     || { echo "SEED_LOSS_PCT=$seed_loss: out of range" >&2; exit 1; }
 fi
 node_args=${NODE_ARGS:-}
+browser_args=${BROWSER_ARGS:-}
 rate_arg=${RATE:+--rate $RATE}
 bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
 browser_bin=${BROWSER_BIN:-$root/target/release/examples/testbed_browser}
@@ -159,6 +165,7 @@ if [ -n "$media" ]; then
   units_arg="--units ${UNITS_CPS:-8}"
 fi
 browser_links=${BROWSER_LINKS:-ws}
+relay_on=${RELAY:-1}
 image=strims-testbed
 browser_image=strims-testbed-browser
 net=strims-testbed
@@ -194,7 +201,7 @@ out=$(cd "$out" && pwd)
 docker build -q -t "$image" "$root/hack/testbed" >/dev/null
 if [ "$browsers" = 1 ]; then
   [ -x "$browser_bin" ] || { echo "no testbed_browser at $browser_bin" >&2; exit 1; }
-  [ -f "$web/e2e.html" ] || { echo "no web bundle at $web" >&2; exit 1; }
+  [ -d "$web" ] || { echo "no web bundle at $web" >&2; exit 1; }
   web=$(cd "$web" && pwd)
   docker build -q -t "$browser_image" -f "$root/hack/testbed/browser.Dockerfile" \
     "$root/hack/testbed" >/dev/null
@@ -217,8 +224,10 @@ docker network inspect "$net" >/dev/null 2>&1 \
       echo "node $i $subnet.$((10 + i)):4000"
     fi
   done
-  if [ "$browsers" = 1 ]; then
+  if [ "$browsers" = 1 ] && [ "$relay_on" = 1 ]; then
     echo "relay $relay:4000 $relay:4001"
+  fi
+  if [ "$browsers" = 1 ]; then
     echo "browser-links $browser_links"
   fi
   if [ -n "${TOPOLOGY:-}" ]; then
@@ -227,7 +236,7 @@ docker network inspect "$net" >/dev/null 2>&1 \
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|KINDS|BROWSER_LINKS|MEDIA|UNITS_CPS|RECORD)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
   > "$out/settings" || true
 
 # The containers start one after another before the stream does, and
@@ -249,6 +258,8 @@ cpu_log() {
 hosts=""
 if [ "$browsers" = 1 ]; then
   hosts="--hosts /out/hosts"
+fi
+if [ "$browsers" = 1 ] && [ "$relay_on" = 1 ]; then
   names+=(tb-relay)
   docker rm -f tb-relay >/dev/null 2>&1 || true
   docker run -d --name tb-relay --network "$net" --ip "$relay" \
@@ -330,7 +341,7 @@ $shape
 tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
-exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join $rate_arg $units_arg $hosts $capture $player_arg > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join $rate_arg $units_arg $hosts $capture $player_arg $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   fi
 done
 
@@ -381,6 +392,6 @@ sleep $(( wait_ms / 1000 + 1 ))
 for i in $(seq 0 $((n - 1))); do
   docker logs "tb-$i" > "$out/docker-$i.log" 2>&1 || true
 done
-if [ "$browsers" = 1 ]; then
+if [ "$browsers" = 1 ] && [ "$relay_on" = 1 ]; then
   docker logs tb-relay > "$out/docker-relay.log" 2>&1 || true
 fi

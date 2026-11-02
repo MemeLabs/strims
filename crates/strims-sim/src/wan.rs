@@ -659,10 +659,12 @@ pub(crate) struct Scheduler {
     flows: FastMap<(SocketAddr, SocketAddr), Flow>,
     /// Scratch for [`Scheduler::pump`].
     sending: Vec<u64>,
-    /// Per host, its uplink queue's wait every [`QUEUE_SAMPLE_EVERY`]:
-    /// (time since the start, wait).
+    /// Per host, its uplink queue's wait every `queue_every`: (time since
+    /// the start, wait).
     up_queue: Vec<Vec<(Duration, Duration)>>,
+    queue_every: Duration,
     next_queue_sample: Time,
+    next_cross_sample: Time,
     /// The competing uploads, in host order.
     cross: Vec<Cross>,
     /// Per host, the wire bytes its competing uploads have sent.
@@ -704,7 +706,8 @@ const QUICKACKS: u32 = 16;
 /// Linux's `TCP_DELACK_MIN`.
 const DELACK: Duration = Duration::from_millis(40);
 
-/// How often the scheduler samples each host's uplink queue.
+/// How often the scheduler samples each host's uplink queue, by default,
+/// and its competing uploads.
 const QUEUE_SAMPLE_EVERY: Duration = Duration::from_millis(100);
 
 impl Scheduler {
@@ -801,7 +804,9 @@ impl Scheduler {
             flows: FastMap::default(),
             sending: Vec::new(),
             up_queue: vec![Vec::new(); spec.hosts.len()],
+            queue_every: QUEUE_SAMPLE_EVERY,
             next_queue_sample: epoch(),
+            next_cross_sample: epoch(),
             cross,
             cross_bytes: vec![0; spec.hosts.len()],
             cross_sent: vec![Vec::new(); spec.hosts.len()],
@@ -860,11 +865,14 @@ impl Scheduler {
         self.purge(sim, &released);
         self.admit(now);
         if now >= self.next_queue_sample {
-            self.next_queue_sample = now + QUEUE_SAMPLE_EVERY;
+            self.next_queue_sample = now + self.queue_every;
             for (h, samples) in self.up_queue.iter_mut().enumerate() {
                 let wait = (self.net.up_free(h) - now).max(Duration::ZERO);
                 samples.push((now - epoch(), wait));
             }
+        }
+        if now >= self.next_cross_sample {
+            self.next_cross_sample = now + QUEUE_SAMPLE_EVERY;
             for c in &self.cross {
                 let (Some(samples), Some(&bytes)) = (
                     self.cross_sent.get_mut(c.host),
@@ -1791,6 +1799,13 @@ impl Scheduler {
 
     pub fn thaw(&mut self, a: HostIx, b: HostIx) {
         self.frozen.remove(&pair_key(a, b));
+    }
+
+    /// The hosts' uplink queues are sampled every `d` (by default
+    /// [`QUEUE_SAMPLE_EVERY`]). A period that divides a schedule's sees
+    /// the queue at the same few phases of it.
+    pub fn sample_queues_every(&mut self, d: Duration) {
+        self.queue_every = d;
     }
 
     /// The base one-way latency between `a` and `b` becomes `d`.

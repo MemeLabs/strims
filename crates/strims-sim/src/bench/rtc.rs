@@ -131,7 +131,18 @@ async fn drive<N: Net, C: BenchClock>(
         let wait = deadline.map_or(StdDuration::from_secs(1), |t| {
             StdDuration::from_micros((micros(t) - clock.now_us()).max(0).unsigned_abs())
         });
+        // Timers before datagrams, so a steady input can't hold them off.
+        if wait.is_zero() {
+            let t = now(&clock);
+            shared.borrow_mut().ep.handle_timeout(t);
+            continue;
+        }
         tokio::select! {
+            biased;
+            () = tokio::time::sleep(wait) => {
+                let t = now(&clock);
+                shared.borrow_mut().ep.handle_timeout(t);
+            }
             r = net.udp_recv_from(&sock, &mut buf) => {
                 if let Ok((n, from)) = r {
                     let t = now(&clock);
@@ -140,10 +151,6 @@ async fn drive<N: Net, C: BenchClock>(
                         .ep
                         .handle_udp_input(t, from, local, buf.get(..n).unwrap_or_default());
                 }
-            }
-            () = tokio::time::sleep(wait) => {
-                let t = now(&clock);
-                shared.borrow_mut().ep.handle_timeout(t);
             }
             () = kick.notified() => {}
         }
@@ -203,6 +210,7 @@ async fn until(shared: &Shared, mut ready: impl FnMut(&mut Rtc) -> bool) {
         }
         // Gathering completes on the endpoint's timers too.
         tokio::select! {
+            biased;
             () = notified => {}
             () = tokio::time::sleep(StdDuration::from_millis(5)) => {}
         }
@@ -229,22 +237,33 @@ async fn local_description<C: BenchClock>(
         .map_err(|e| io::Error::other(e.to_string()))
 }
 
-async fn send_description<S: AsyncWrite + Unpin>(
-    s: &mut S,
-    d: &SessionDescription,
-) -> io::Result<()> {
-    let text = d.to_json();
-    s.write_all(&u32::try_from(text.len()).unwrap_or(u32::MAX).to_be_bytes())
+/// Writes a session description on a link's signalling stream: its JSON
+/// (`JSON.stringify` of a browser's `RTCSessionDescription`) after its
+/// length (u32, big-endian).
+pub async fn write_signal<S: AsyncWrite + Unpin>(s: &mut S, json: &str) -> io::Result<()> {
+    s.write_all(&u32::try_from(json.len()).unwrap_or(u32::MAX).to_be_bytes())
         .await?;
-    s.write_all(text.as_bytes()).await
+    s.write_all(json.as_bytes()).await
 }
 
-async fn read_description<S: AsyncRead + Unpin>(s: &mut S) -> io::Result<SessionDescription> {
+/// Reads what [`write_signal`] wrote.
+pub async fn read_signal<S: AsyncRead + Unpin>(s: &mut S) -> io::Result<String> {
     let mut len = [0u8; 4];
     s.read_exact(&mut len).await?;
     let mut text = vec![0u8; u32::from_be_bytes(len) as usize];
     s.read_exact(&mut text).await?;
-    let text = String::from_utf8(text).map_err(io::Error::other)?;
+    String::from_utf8(text).map_err(io::Error::other)
+}
+
+async fn send_description<S: AsyncWrite + Unpin>(
+    s: &mut S,
+    d: &SessionDescription,
+) -> io::Result<()> {
+    write_signal(s, &d.to_json()).await
+}
+
+async fn read_description<S: AsyncRead + Unpin>(s: &mut S) -> io::Result<SessionDescription> {
+    let text = read_signal(s).await?;
     SessionDescription::from_json(&text).map_err(|e| io::Error::other(e.to_string()))
 }
 

@@ -317,10 +317,16 @@ async fn run() -> Result<(), String> {
     if !me.kind.is_browser() {
         return Err(format!("node {} isn't a browser", a.index));
     }
+    if topo.relay.is_none() {
+        return Err("a browser node needs the relay".to_owned());
+    }
     let start_ms = a.start_ms.unwrap_or_else(|| now_ms() + 2000);
     let end_ms = start_ms + a.secs * 1000;
 
     let bundle = Bundle::read(&a.web).map_err(|e| format!("{}: {e}", a.web.display()))?;
+    if !bundle.0.contains_key("e2e.html") {
+        return Err(format!("no e2e.html in {}", a.web.display()));
+    }
     let mut site = Site::serve(Arc::new(bundle))
         .await
         .map_err(|e| format!("serve: {e}"))?;

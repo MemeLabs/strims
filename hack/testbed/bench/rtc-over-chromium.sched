@@ -1,0 +1,5 @@
+# Over a WebRTC data channel from Chromium (its own SCTP), one link asked for 105 % of a
+# 5 Mbit/s uplink: 160 KiB every 250 ms.
+# env: VIEWERS=1 SEED_UP_MBIT=5 SECS=30 BENCH_WEBRTC=1 KINDS=chromium
+burst 0 1 0 250 163840 16384
+probe 0 1 3 10

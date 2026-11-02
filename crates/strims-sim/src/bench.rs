@@ -53,8 +53,8 @@
 //!   in bytes, `upq` the uplink queue in µs).
 //!
 //! [`simulate`] adds a `{"ev":"q","t":..,"wait":..}` line per sample of
-//! the node's uplink queue (µs), as the testbed's `tc-0.log` samples the
-//! seed's, a `{"ev":"x","t":..,"bytes":..,"cwnd":..}` line per sample of
+//! the node's uplink queue (µs) every 7 ms, as the testbed's `tc-0.log`
+//! samples the seed's, a `{"ev":"x","t":..,"bytes":..,"cwnd":..}` line per sample of
 //! the wire bytes its competing uploads sent and their windows (as
 //! `run.sh`'s `COMPETE` runs them, on the testbed in `compete-<s>.json`),
 //! and a `{"ev":"drops",..}` line with the segments the window model lost
@@ -211,7 +211,7 @@ async fn sleep_until<C: BenchClock>(clock: &C, us: i64) {
 
 mod rtc;
 
-pub use rtc::RtcPlan;
+pub use rtc::{RtcPlan, read_signal, write_signal};
 
 /// What one node does: where it listens, whom it dials, and the schedule.
 #[derive(Clone, Debug)]
@@ -320,14 +320,13 @@ impl LinkState {
 
 type Task = Pin<Box<dyn Future<Output = ()>>>;
 
-/// Runs node `plan.me` on `net` until [`LINGER`] past its schedule's end,
-/// logging to `log` (see the module docs).
-pub async fn node<N: Net, C: BenchClock>(
-    net: N,
-    clock: C,
-    plan: NodePlan,
-    log: impl Fn(String) + Clone + 'static,
-) -> io::Result<()> {
+/// Makes node `plan.me`'s TCP links: dials its dials until they connect
+/// (or fail after the start) and accepts the rest. Returns them by peer.
+pub async fn links<N: Net, C: BenchClock>(
+    net: &N,
+    clock: &C,
+    plan: &NodePlan,
+) -> io::Result<Vec<(usize, N::TcpStream)>> {
     let listener = net.tcp_bind(plan.listen.clone()).await?;
     let me = plan.me;
     let dials = plan.dial.iter().map(|(peer, addr)| {
@@ -351,7 +350,7 @@ pub async fn node<N: Net, C: BenchClock>(
         let mut got = Vec::new();
         while got.len() < plan.accepts {
             let (mut s, _) = net.tcp_accept(&listener).await?;
-            setup(&net, &s);
+            setup(net, &s);
             let mut ix = [0u8; 4];
             s.read_exact(&mut ix).await?;
             got.push((u32::from_be_bytes(ix) as usize, s));
@@ -364,6 +363,19 @@ pub async fn node<N: Net, C: BenchClock>(
         streams.push(d?);
     }
     streams.sort_by_key(|(peer, _)| *peer);
+    Ok(streams)
+}
+
+/// Runs node `plan.me` on `net` until [`LINGER`] past its schedule's end,
+/// logging to `log` (see the module docs).
+pub async fn node<N: Net, C: BenchClock>(
+    net: N,
+    clock: C,
+    plan: NodePlan,
+    log: impl Fn(String) + Clone + 'static,
+) -> io::Result<()> {
+    let me = plan.me;
+    let streams = links(&net, &clock, &plan).await?;
     let stop = plan.end_us + i64::try_from(LINGER.as_micros()).unwrap_or(i64::MAX);
 
     let (endpoint, driver): (Option<rtc::Shared>, Task) = match &plan.webrtc {
@@ -447,6 +459,7 @@ pub async fn node<N: Net, C: BenchClock>(
         Ok::<_, io::Error>(())
     };
     tokio::select! {
+        biased;
         r = run => r?,
         () = driver => {}
         () = sleep_until(&clock, stop) => {}
@@ -841,6 +854,12 @@ impl Bench {
     }
 }
 
+/// How often a simulated bench samples its nodes' uplink queues: a prime
+/// number of milliseconds, so a schedule's period (whole milliseconds, a
+/// multiple of 100 ms's samples) sees the queue at every phase, as the
+/// testbed's `tc` samples, whose loop drifts, do.
+const QUEUE_EVERY: StdDuration = StdDuration::from_millis(7);
+
 /// When a simulated bench's schedule starts, after its links connect.
 const SIM_START: StdDuration = StdDuration::from_secs(2);
 
@@ -902,6 +921,8 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     spec.tcp_segment = bench.tcp_segment;
     let segment = spec.segment();
     let end_us = i64::try_from(bench.secs).unwrap_or(0) * 1_000_000;
+    // str0m draws ICE credentials and SCTP details from a thread-local rng.
+    strims_node::seed_str0m_thread_rng(1);
     let mut builder = turmoil::Builder::new();
     builder
         .rng_seed(1)
@@ -951,6 +972,7 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
         loss: bench.sites.iter().any(|s| s.loss > 0.0),
     };
     let mut sched = Scheduler::new(&sim, &spec, options, 1, Some(buffers))?;
+    sched.sample_queues_every(Duration::from(QUEUE_EVERY));
     for &(a, b) in &bench.links {
         let (Some(sa), Some(sb)) = (bench.sites.get(a), bench.sites.get(b)) else {
             return Err(format!("link {a} {b}: no such node"));

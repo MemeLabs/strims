@@ -25,7 +25,8 @@ links that carry the same schedule:
   buffered a data channel's buffered amount: unsent and unacknowledged
           bytes (KiB)
   upq     the seed's uplink queue: tc's tbf backlog over its rate at 10 Hz,
-          or the model's every 10 ms
+          or the model's every 10 ms (its own samples every 7 ms where links
+          have no socket samples)
   rate    bytes read per second per link (KB/s), mean
   compete a competing upload's payload rate (KB/s) each second it ran
           (testbed: iperf3's report; sim: the model's wire bytes)

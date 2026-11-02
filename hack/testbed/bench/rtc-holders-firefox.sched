@@ -1,0 +1,25 @@
+# Over WebRTC data channels from Firefox (its own SCTP), the seed's shape at about a copy and
+# a half on a 5 Mbit/s uplink: two holders take 64 KiB every 250 ms in 4 KiB writes (84 % of
+# the uplink), eight idle links a 128-byte write after each burst starts, and every link a
+# probe every 200 ms, phases spread.
+# env: VIEWERS=10 SEED_UP_MBIT=5 SECS=30 BENCH_WEBRTC=1 KINDS=firefox
+burst 0 1 0 250 65536 4096
+burst 0 2 0 250 65536 4096
+burst 0 3 1 250 128 128
+burst 0 4 1 250 128 128
+burst 0 5 1 250 128 128
+burst 0 6 1 250 128 128
+burst 0 7 1 250 128 128
+burst 0 8 1 250 128 128
+burst 0 9 1 250 128 128
+burst 0 10 1 250 128 128
+probe 0 1 7 200
+probe 0 2 47 200
+probe 0 3 17 200
+probe 0 4 37 200
+probe 0 5 57 200
+probe 0 6 77 200
+probe 0 7 97 200
+probe 0 8 117 200
+probe 0 9 137 200
+probe 0 10 157 200

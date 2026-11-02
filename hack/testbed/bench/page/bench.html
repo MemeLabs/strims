@@ -1,0 +1,256 @@
+<!doctype html>
+<!-- Copyright 2026 Strims contributors -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!--
+The bare bench (strims-sim's bench module) in a browser, over its
+RTCDataChannels: testbed_bench's browser mode serves this page and drives
+it over its control socket (/control), making the bench's TCP links and
+carrying each link's offer and answer between them and the page.
+
+Harness to page, JSON:
+  {type: "setup", startMs, endUs, stopUs, cap, entries}  the schedule's
+      entries of this node ({kind: "burst" | "probe", to, startMs,
+      periodMs, bytes, write, endMs}) and the clock's start, Unix ms
+  {type: "link", peer, offer: true}          make the link's offer
+  {type: "link", peer, offer: false, description}  answer this offer
+  {type: "remote", peer, description}        the link's answer
+  {type: "go"}                               every link is open: run
+Page to harness:
+  {type: "local", peer, description}         the link's description,
+      gathered whole (no trickle), as JSON.stringify gives it
+  {type: "open", peer}                       the link's channel opened
+  {type: "log", lines}                       log lines, as the native
+      bench's (bench.rs's module docs)
+  {type: "error", message}
+  {type: "done"}                             the run's end: stopUs
+
+A link is one RTCPeerConnection with no ICE servers and the node's
+channel: pre-negotiated, id 1, ordered. Its records leave as the native
+bench's do, one write a message: every probe and echo waiting, or else the
+next data record. A write waits while the channel's bufferedAmount is at
+the node's max_buffered_amount (cap) at least, and then for
+bufferedamountlow at half of it, as the node's DcSocket does.
+-->
+<meta charset="utf-8">
+<title>bench</title>
+<script>
+"use strict";
+
+const HEADER = 25;
+const SAMPLE_EVERY_MS = 10;
+const FLUSH_EVERY_MS = 50;
+
+const ws = new WebSocket(`ws://${location.host}/control?i=0`);
+const send = (m) => ws.send(JSON.stringify(m));
+let lines = [];
+const log = (line) => lines.push(line);
+const flush = () => {
+  if (lines.length > 0 && ws.readyState === WebSocket.OPEN) {
+    send({ type: "log", lines });
+    lines = [];
+  }
+};
+setInterval(flush, FLUSH_EVERY_MS);
+const fail = (e) => send({ type: "error", message: String(e && e.stack || e) });
+window.addEventListener("error", (e) => fail(e.error || e.message));
+window.addEventListener("unhandledrejection", (e) => fail(e.reason));
+
+let setup = null;
+// Microseconds from the run's start.
+const nowUs = () => Math.round((performance.timeOrigin + performance.now() - setup.startMs) * 1000);
+const sleepUntil = async (us) => {
+  for (;;) {
+    const ms = (us - nowUs()) / 1000;
+    if (ms <= 0) return;
+    await new Promise((r) => setTimeout(r, Math.ceil(ms)));
+  }
+};
+
+// Out: {kind, len, seq, due, at}; kind 0 data, 1 probe, 2 echo.
+class Queue {
+  constructor() { this.items = []; this.head = 0; }
+  get length() { return this.items.length - this.head; }
+  push(x) { this.items.push(x); }
+  shift() {
+    const x = this.items[this.head++];
+    if (this.head > 1024 && this.head * 2 > this.items.length) {
+      this.items = this.items.slice(this.head);
+      this.head = 0;
+    }
+    return x;
+  }
+}
+
+class Link {
+  constructor(peer) {
+    this.peer = peer;
+    this.pc = new RTCPeerConnection({ iceServers: [] });
+    this.dc = this.pc.createDataChannel("data", { negotiated: true, id: 1, ordered: true });
+    this.dc.binaryType = "arraybuffer";
+    this.dc.bufferedAmountLowThreshold = setup.cap / 2;
+    this.control = [];
+    this.data = new Queue();
+    this.wake = null;
+    this.dataSeq = 0;
+    this.probeSeq = 0;
+    this.carry = null;
+    // Listened to before anything is awaited: a message dispatched before
+    // its listener is gone.
+    this.dc.addEventListener("message", (e) => this.read(new Uint8Array(e.data)));
+    this.opened = new Promise((r) => this.dc.addEventListener("open", r, { once: true }));
+  }
+
+  push(o) {
+    if (o.kind === 0) this.data.push(o);
+    else this.control.push(o);
+    if (this.wake) {
+      const w = this.wake;
+      this.wake = null;
+      w();
+    }
+  }
+
+  pop() {
+    if (this.control.length === 0) return this.data.length > 0 ? [this.data.shift()] : [];
+    const c = this.control;
+    this.control = [];
+    return c;
+  }
+
+  async gathered() {
+    const pc = this.pc;
+    if (pc.iceGatheringState === "complete") return;
+    await new Promise((r) => pc.addEventListener("icegatheringstatechange", () => {
+      if (pc.iceGatheringState === "complete") r();
+    }));
+  }
+
+  async describe(offer) {
+    const pc = this.pc;
+    await pc.setLocalDescription(offer ? await pc.createOffer() : await pc.createAnswer());
+    await this.gathered();
+    send({ type: "local", peer: this.peer, description: JSON.stringify(pc.localDescription) });
+  }
+
+  async writer() {
+    const dc = this.dc;
+    for (;;) {
+      const outs = this.pop();
+      if (outs.length === 0) {
+        await new Promise((r) => { this.wake = r; });
+        continue;
+      }
+      const at = nowUs();
+      const len = outs.reduce((n, o) => n + o.len, 0);
+      const buf = new ArrayBuffer(len);
+      const dv = new DataView(buf);
+      let off = 0;
+      for (const o of outs) {
+        dv.setUint8(off, o.kind);
+        dv.setUint32(off + 1, o.len);
+        dv.setUint32(off + 5, o.seq);
+        dv.setBigInt64(off + 9, BigInt(o.due));
+        dv.setBigInt64(off + 17, BigInt(o.at ?? at));
+        off += o.len;
+      }
+      if (dc.bufferedAmount >= setup.cap) {
+        await new Promise((r) => dc.addEventListener("bufferedamountlow", r, { once: true }));
+      }
+      if (dc.readyState !== "open") return;
+      dc.send(buf);
+      const done = nowUs();
+      for (const o of outs) {
+        log(`{"ev":"w","to":${this.peer},"k":${o.kind},"seq":${o.seq},"len":${o.len},"due":${o.due},"at":${at},"done":${done}}`);
+      }
+    }
+  }
+
+  // Records may span messages, as on a byte stream.
+  read(bytes) {
+    const got = nowUs();
+    if (this.carry) {
+      const b = new Uint8Array(this.carry.length + bytes.length);
+      b.set(this.carry);
+      b.set(bytes, this.carry.length);
+      bytes = b;
+      this.carry = null;
+    }
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let off = 0;
+    while (bytes.length - off >= HEADER) {
+      const len = dv.getUint32(off + 1);
+      if (len < HEADER || bytes.length - off < len) break;
+      const kind = dv.getUint8(off);
+      const seq = dv.getUint32(off + 5);
+      const due = Number(dv.getBigInt64(off + 9));
+      const at = Number(dv.getBigInt64(off + 17));
+      log(`{"ev":"r","from":${this.peer},"k":${kind},"seq":${seq},"len":${len},"due":${due},"at":${at},"got":${got}}`);
+      if (kind === 1) this.push({ kind: 2, len: HEADER, seq, due, at });
+      off += len;
+    }
+    if (off < bytes.length) this.carry = bytes.slice(off);
+  }
+
+  async sampler() {
+    for (;;) {
+      log(`{"ev":"s","to":${this.peer},"t":${nowUs()},"buffered":${this.dc.bufferedAmount}}`);
+      await new Promise((r) => setTimeout(r, SAMPLE_EVERY_MS));
+    }
+  }
+
+  async feed(e) {
+    const end = e.endMs == null ? setup.endUs : Math.min(e.endMs * 1000, setup.endUs);
+    for (let due = e.startMs * 1000; due < end; due += e.periodMs * 1000) {
+      await sleepUntil(due);
+      if (e.kind === "burst") {
+        for (let left = e.bytes; left > 0;) {
+          const len = Math.max(Math.min(left, e.write), HEADER);
+          left = Math.max(0, left - len);
+          this.push({ kind: 0, len, seq: this.dataSeq++, due, at: null });
+        }
+      } else {
+        this.push({ kind: 1, len: HEADER, seq: this.probeSeq++, due, at: null });
+      }
+    }
+  }
+}
+
+const links = new Map();
+
+async function onLink(m) {
+  const link = new Link(m.peer);
+  links.set(m.peer, link);
+  if (!m.offer) await link.pc.setRemoteDescription(JSON.parse(m.description));
+  await link.describe(m.offer);
+  await link.opened;
+  send({ type: "open", peer: m.peer });
+}
+
+async function go() {
+  for (const link of links.values()) {
+    link.writer().catch(fail);
+    link.sampler().catch(fail);
+  }
+  for (const e of setup.entries) {
+    const link = links.get(e.to);
+    if (!link) throw new Error(`no link to ${e.to}`);
+    link.feed(e).catch(fail);
+  }
+  await sleepUntil(setup.stopUs);
+  flush();
+  send({ type: "done" });
+}
+
+ws.addEventListener("message", (ev) => {
+  const m = JSON.parse(ev.data);
+  switch (m.type) {
+    case "setup": setup = m; break;
+    case "link": onLink(m).catch(fail); break;
+    case "remote":
+      links.get(m.peer).pc.setRemoteDescription(JSON.parse(m.description)).catch(fail);
+      break;
+    case "go": go().catch(fail); break;
+    default: fail(`unknown message ${m.type}`);
+  }
+});
+</script>

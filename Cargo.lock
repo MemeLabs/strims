@@ -2594,6 +2594,7 @@ dependencies = [
  "hex",
  "indexmap",
  "rand_core 0.10.1",
+ "serde_json",
  "sha2 0.11.1",
  "strims-base",
  "strims-crypto",
@@ -2608,6 +2609,7 @@ dependencies = [
  "strims-wan",
  "strims-webrtc",
  "tokio",
+ "tokio-tungstenite",
  "tracking-allocator",
  "turmoil",
 ]
