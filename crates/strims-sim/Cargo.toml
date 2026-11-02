@@ -20,6 +20,7 @@ strims-vpn.workspace = true
 strims-wan.workspace = true
 futures-util.workspace = true
 hex.workspace = true
+indexmap.workspace = true
 rand_core.workspace = true
 sha2.workspace = true
 tokio.workspace = true

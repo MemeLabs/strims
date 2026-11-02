@@ -31,7 +31,7 @@
 // turmoil's thread, so it is never contended.
 #![allow(clippy::disallowed_types)]
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
@@ -43,6 +43,7 @@ use strims_base::time::Time;
 use strims_node::{CaptureSample, LinkProbe, Net, TcpOptions, TcpSocketConfig, TurmoilNet};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
+use crate::fast_map::FastMap;
 use crate::spec::SendBuffer;
 use crate::wan::SharedWan;
 
@@ -86,7 +87,7 @@ struct Buffers {
     /// The next write's order.
     stamp: u64,
     /// Bound: one per open TCP connection.
-    conns: BTreeMap<ConnKey, Conn>,
+    conns: FastMap<ConnKey, Conn>,
 }
 
 impl SendBuffers {
@@ -94,7 +95,7 @@ impl SendBuffers {
         SendBuffers(Arc::new(Mutex::new(Buffers {
             model,
             stamp: 0,
-            conns: BTreeMap::new(),
+            conns: FastMap::default(),
         })))
     }
 
@@ -228,7 +229,7 @@ pub(crate) struct SimTcpStream {
 impl Drop for SimTcpStream {
     fn drop(&mut self) {
         if let Some((key, b)) = &self.conn {
-            b.with(|x| x.conns.remove(key));
+            b.with(|x| x.conns.swap_remove(key));
         }
     }
 }

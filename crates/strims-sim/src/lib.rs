@@ -111,6 +111,7 @@
 
 pub mod bench;
 mod control;
+mod fast_map;
 mod host;
 pub mod measures;
 pub mod memory;

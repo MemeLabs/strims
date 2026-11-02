@@ -100,6 +100,7 @@ use strims_wan::wire::{tcp_wire, tx_time, udp_wire};
 use strims_wan::{Carrier, Network, Options, Site};
 use turmoil::{Protocol, Segment, Sim};
 
+use crate::fast_map::FastMap;
 use crate::net::SendBuffers;
 use crate::report::{WanHostReport, WanReport};
 use crate::spec::{HostIx, Scenario};
@@ -175,6 +176,41 @@ struct Record {
     wire: usize,
     packets: u32,
     state: State,
+}
+
+/// The records in flight by id, never iterated, and how many of them a
+/// path dropped.
+#[derive(Debug, Default)]
+struct Records {
+    by_id: FastMap<u64, Record>,
+    dropped: usize,
+}
+
+impl Records {
+    fn get(&self, id: &u64) -> Option<&Record> {
+        self.by_id.get(id)
+    }
+
+    fn get_mut(&mut self, id: &u64) -> Option<&mut Record> {
+        self.by_id.get_mut(id)
+    }
+
+    fn insert(&mut self, id: u64, r: Record) {
+        self.by_id.insert(id, r);
+    }
+
+    fn remove(&mut self, id: &u64) -> Option<Record> {
+        let r = self.by_id.swap_remove(id)?;
+        if r.state == State::Dropped {
+            self.dropped -= 1;
+        }
+        Some(r)
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.by_id.len()
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -509,8 +545,23 @@ struct LinkState {
     records: VecDeque<u64>,
 }
 
-/// One sender's new messages, by receiver and connection addresses.
-type Queues = BTreeMap<(HostIx, IpAddr, IpAddr), VecDeque<u64>>;
+/// A delivered record's place in its link's queue until the queue
+/// compacts; no record takes the id.
+const DELIVERED: u64 = u64::MAX;
+
+/// An address as an integer that orders as [`IpAddr`] does: an
+/// `Ipv4Addr`'s octets compare through `memcmp`.
+type IpKey = (bool, u128);
+
+/// A new message's queue: its sender, receiver and connection addresses.
+type QueueKey = (HostIx, HostIx, IpKey, IpKey);
+
+fn ip_key(ip: IpAddr) -> IpKey {
+    match ip {
+        IpAddr::V4(a) => (false, u128::from(a.to_bits())),
+        IpAddr::V6(a) => (true, a.to_bits()),
+    }
+}
 
 /// One competing upload (see the module docs).
 struct Cross {
@@ -583,13 +634,13 @@ pub(crate) struct ConnState {
 pub(crate) struct Scheduler {
     net: Network,
     names: Vec<String>,
-    ip_host: BTreeMap<IpAddr, HostIx>,
+    ip_host: FastMap<IpAddr, HostIx>,
     /// Every turmoil link, in turmoil's order (which never changes once
     /// the hosts are registered).
     links: Vec<LinkState>,
     /// The link between each pair of hosts.
     link_of: BTreeMap<(HostIx, HostIx), usize>,
-    records: BTreeMap<u64, Record>,
+    records: Records,
     /// Pending events by time, then record. A record has at most one, and
     /// an event of a forgotten record is skipped.
     events: BTreeMap<(Time, u64), Event>,
@@ -604,7 +655,7 @@ pub(crate) struct Scheduler {
     admits: BTreeMap<(Time, u64), ((SocketAddr, SocketAddr), usize)>,
     /// The window model's connections. Bound: one per TCP connection that
     /// sent data.
-    flows: BTreeMap<(SocketAddr, SocketAddr), Flow>,
+    flows: FastMap<(SocketAddr, SocketAddr), Flow>,
     /// Scratch for [`Scheduler::pump`].
     sending: Vec<u64>,
     /// Per host, its uplink queue's wait every [`QUEUE_SAMPLE_EVERY`]:
@@ -629,7 +680,7 @@ pub(crate) struct Scheduler {
     cross_drops: Vec<u64>,
     /// The acknowledgements receivers owe, by the connection whose data
     /// they acknowledge. Bound: one per connection with data received.
-    owed: BTreeMap<(SocketAddr, SocketAddr), Owed>,
+    owed: FastMap<(SocketAddr, SocketAddr), Owed>,
 }
 
 /// What a receiver owes its sender: the segments it hasn't acknowledged
@@ -702,7 +753,7 @@ impl Scheduler {
             return Err("wan: competing uploads need the window model".to_owned());
         }
         let names: Vec<String> = spec.hosts.iter().map(|h| h.name.clone()).collect();
-        let ip_host: BTreeMap<IpAddr, HostIx> = names
+        let ip_host: FastMap<IpAddr, HostIx> = names
             .iter()
             .enumerate()
             .map(|(h, n)| (sim.lookup(n.as_str()), h))
@@ -738,7 +789,7 @@ impl Scheduler {
             ip_host,
             links,
             link_of,
-            records: BTreeMap::new(),
+            records: Records::default(),
             events: BTreeMap::new(),
             next: 0,
             frozen: BTreeSet::new(),
@@ -746,7 +797,7 @@ impl Scheduler {
             tick: Duration::from(spec.tick),
             buffers,
             admits: BTreeMap::new(),
-            flows: BTreeMap::new(),
+            flows: FastMap::default(),
             sending: Vec::new(),
             up_queue: vec![Vec::new(); spec.hosts.len()],
             next_queue_sample: epoch(),
@@ -757,7 +808,7 @@ impl Scheduler {
             drops: vec![0; spec.hosts.len()],
             acks: vec![0; spec.hosts.len()],
             cross_drops: vec![0; spec.hosts.len()],
-            owed: BTreeMap::new(),
+            owed: FastMap::default(),
         })
     }
 
@@ -1296,19 +1347,11 @@ impl Scheduler {
     /// Sends what `conns`' windows allow at `at`, a segment from each in
     /// turn.
     fn pump(&mut self, at: Time, conns: &[(SocketAddr, SocketAddr)]) {
-        let mut open: Vec<(SocketAddr, SocketAddr)> = conns.to_vec();
-        let rtts: Vec<Duration> = open.iter().map(|&c| self.conn_rtt(c)).collect();
-        let rtt_of = |conn: &(SocketAddr, SocketAddr)| {
-            conns
-                .iter()
-                .position(|c| c == conn)
-                .and_then(|i| rtts.get(i).copied())
-                .unwrap_or(Duration::ZERO)
-        };
+        let mut open: Vec<((SocketAddr, SocketAddr), Duration)> =
+            conns.iter().map(|&c| (c, self.conn_rtt(c))).collect();
         while !open.is_empty() {
-            open.retain(|conn| {
-                let rtt = rtt_of(conn);
-                let Some(f) = self.flows.get_mut(conn) else {
+            open.retain(|&(conn, rtt)| {
+                let Some(f) = self.flows.get_mut(&conn) else {
                     return false;
                 };
                 loop {
@@ -1417,12 +1460,19 @@ impl Scheduler {
                     continue;
                 };
                 let frozen = frozen.contains(&pair_key(a, b));
-                let mut known = std::mem::take(&mut ls.records).into_iter();
-                let mut kept = VecDeque::new();
+                // The link's known records come first in its queue, in
+                // order; those it delivers leave a mark until it compacts.
+                let known = ls.records.len();
+                let (mut seen, mut gone) = (0, 0);
                 for sent in link {
                     let (src, dst) = sent.pair();
                     let what = What::of(sent.protocol());
-                    if let Some(id) = known.next() {
+                    if seen < known {
+                        let at = seen;
+                        seen += 1;
+                        let Some(id) = ls.records.get(at).copied() else {
+                            break;
+                        };
                         let Some(r) = records.get(&id) else {
                             err = Some(format!("wan: link {li} lost record {id}"));
                             break 'links;
@@ -1437,11 +1487,13 @@ impl Scheduler {
                         if r.state == State::Due && !frozen {
                             sent.deliver();
                             records.remove(&id);
+                            if let Some(x) = ls.records.get_mut(at) {
+                                *x = DELIVERED;
+                            }
+                            gone += 1;
                             if let Some(x) = released.get_mut(li) {
                                 *x = true;
                             }
-                        } else {
-                            kept.push_back(id);
                         }
                         continue;
                     }
@@ -1466,16 +1518,22 @@ impl Scheduler {
                             state: State::InFlight,
                         },
                     );
-                    kept.push_back(id);
+                    ls.records.push_back(id);
                     fresh.push(id);
                 }
-                if known.next().is_some() {
+                if seen < known {
                     err = Some(format!(
                         "wan: link {li} dropped in-flight messages the scheduler didn't"
                     ));
                     break;
                 }
-                ls.records = kept;
+                while gone > 0 && ls.records.front() == Some(&DELIVERED) {
+                    ls.records.pop_front();
+                    gone -= 1;
+                }
+                if gone > 0 {
+                    ls.records.retain(|&id| id != DELIVERED);
+                }
             }
         });
         match err {
@@ -1497,20 +1555,9 @@ impl Scheduler {
             self.send_written(at, fresh, &b);
             return;
         }
-        let mut by_sender: BTreeMap<HostIx, Queues> = BTreeMap::new();
-        for id in fresh {
-            if let Some(r) = self.records.get(&id) {
-                by_sender
-                    .entry(r.from)
-                    .or_default()
-                    .entry((r.to, r.src.ip(), r.dst.ip()))
-                    .or_default()
-                    .push_back(id);
-            }
-        }
+        let by_sender = self.queues(fresh);
         let window = self.window().is_some();
-        for queues in by_sender.into_values() {
-            let mut queues: Vec<VecDeque<u64>> = queues.into_values().collect();
+        for mut queues in by_sender {
             let mut flows = Vec::new();
             while queues.iter().any(|q| !q.is_empty()) {
                 for q in &mut queues {
@@ -1536,24 +1583,52 @@ impl Scheduler {
         }
     }
 
-    /// [`Scheduler::send`] with send buffers.
-    fn send_written(&mut self, at: Time, fresh: Vec<u64>, b: &SendBuffers) {
-        let mut by_sender: BTreeMap<HostIx, Queues> = BTreeMap::new();
-        for id in fresh {
-            if let Some(r) = self.records.get(&id) {
-                by_sender
-                    .entry(r.from)
-                    .or_default()
-                    .entry((r.to, r.src.ip(), r.dst.ip()))
-                    .or_default()
-                    .push_back(id);
+    /// `fresh`'s records by sender, in host order, and each sender's by
+    /// receiver and connection addresses, in that order, each queue in
+    /// `fresh`'s order.
+    fn queues(&self, fresh: Vec<u64>) -> Vec<Vec<VecDeque<u64>>> {
+        // (sender, receiver, source and destination addresses), position
+        let mut keyed: Vec<(QueueKey, usize, u64)> = fresh
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, id)| {
+                let r = self.records.get(&id)?;
+                Some((
+                    (r.from, r.to, ip_key(r.src.ip()), ip_key(r.dst.ip())),
+                    i,
+                    id,
+                ))
+            })
+            .collect();
+        keyed.sort_unstable();
+        let mut senders: Vec<Vec<VecDeque<u64>>> = Vec::new();
+        let mut last: Option<QueueKey> = None;
+        for (key, _, id) in keyed {
+            match last {
+                Some(k) if k == key => {}
+                Some((from, ..)) if from == key.0 => {
+                    if let Some(s) = senders.last_mut() {
+                        s.push(VecDeque::new());
+                    }
+                }
+                _ => senders.push(vec![VecDeque::new()]),
+            }
+            last = Some(key);
+            if let Some(q) = senders.last_mut().and_then(|s| s.last_mut()) {
+                q.push_back(id);
             }
         }
+        senders
+    }
+
+    /// [`Scheduler::send`] with send buffers.
+    fn send_written(&mut self, at: Time, fresh: Vec<u64>, b: &SendBuffers) {
+        let by_sender = self.queues(fresh);
         let window = self.window().is_some();
-        for queues in by_sender.into_values() {
+        for queues in by_sender {
             // (write order, queue position, record)
             let mut keyed: Vec<(u64, usize, u64)> = Vec::new();
-            for q in queues.into_values() {
+            for q in queues {
                 let mut last = 0;
                 for id in q {
                     let stamp = self.records.get(&id).and_then(|r| match r.what {
@@ -1597,6 +1672,7 @@ impl Scheduler {
         let t = self.net.send(at, r.from, r.to, r.wire, r.packets, carrier);
         if t.dropped {
             r.state = State::Dropped;
+            self.records.dropped += 1;
             return;
         }
         let mut arrive = t.arrival + t.retransmit;
@@ -1612,6 +1688,9 @@ impl Scheduler {
     /// else, on links that released nothing in this walk and are neither
     /// partitioned nor frozen.
     fn purge(&mut self, sim: &Sim<'_>, released: &[bool]) {
+        if self.records.dropped == 0 {
+            return;
+        }
         let mut purges = Vec::new();
         for (li, ls) in self.links.iter().enumerate() {
             let Some((a, b)) = ls.hosts else {
