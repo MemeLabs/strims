@@ -249,7 +249,6 @@ def metrics(nodes, sched, cls, t0_us, queue=None, compete=None):
             m[("node 0", "x cwnd")].append(cwnd)
     for e in nodes.get(0, []):
         if e.get("ev") == "drops":
-            # The model's segments are two packets.
             m[("node 0", "drops")] = [e["queue_drops"] + e.get("competing_drops", 0)]
             if "competing_drops" in e:
                 m[("node 0", "x drops")] = [2 * e["competing_drops"]]
