@@ -526,16 +526,14 @@ in `TRIED.md`.
     timeouts and the senders' response to path loss.
   - The window model follows the testbed's bare TCP bench
     (`hack/testbed/benchsuite.py`, cases in `hack/testbed/bench/`) within a
-    mean |log ratio| of 0.11-0.12 over its 14 cases, but beside the holders'
-    bursts a competing bulk upload takes too much of the uplink (657 KB/s
-    against iperf3's 525, a window of 48 KiB against 33) while the uplink
-    drops 81 buffers against the tbf's 118-166, the holders' probe round
-    trips fall short in the tail (p99 197 ms against 338), at 10 Mbit/s
-    their uplink drops a quarter of the testbed's buffers (16 against 60),
-    and there is no HyStart ack-train test. Its twin of the testbed's uplink
-    cut (`testbed-copy-floor`) lags over 1 s in 47.8 of 205 seconds at 25
-    viewers (40.6 of the cut's 120) against the testbed's 66.7 (54.5); at 10
-    viewers 17.2 against 17.5. Its thin relays collapse as the testbed's do
+    mean |log ratio| of 0.10-0.13 over its 14 cases, but one of the holders'
+    links loses about 1.7 times the testbed's packets beside the other's
+    bursts (holders: 266 drops against 178-183), the holders' probe round
+    trips fall short in the tail (p99 193 ms against 338), and there is no
+    HyStart ack-train test. Its twin of the testbed's uplink cut
+    (`testbed-copy-floor`) lags over 1 s in 42.8 of 205 seconds at 25
+    viewers (32.8 of the cut's 120) against the testbed's 66.7 (54.5); at 10
+    viewers 23.6 against 17.5. Its thin relays collapse as the testbed's do
     (Swarm, Ship it). The robust tier went past its guardrails both ways on
     an earlier version of the model: rerun it before it lands.
   - Through a halving of the seed's uplink the testbed fell into the
