@@ -1,0 +1,5 @@
+# One link asked for 105 % of a 10 Mbit/s uplink that loses 1 % of its
+# packets at random: loss, not the uplink, bounds it.
+# env: VIEWERS=1 SEED_UP_MBIT=10 SECS=30 SEED_LOSS_PCT=1
+burst 0 1 0 250 327680 16384
+probe 0 1 3 10

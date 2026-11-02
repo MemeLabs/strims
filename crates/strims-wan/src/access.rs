@@ -120,6 +120,13 @@ impl Site {
         self.profile.down = down;
         self
     }
+
+    /// The site with each packet lost with probability `loss` on its
+    /// access link.
+    pub const fn with_loss(mut self, loss: f64) -> Site {
+        self.profile.loss = loss;
+        self
+    }
 }
 
 impl fmt::Display for Site {

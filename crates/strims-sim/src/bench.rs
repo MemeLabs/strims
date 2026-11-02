@@ -631,7 +631,7 @@ async fn sampler<C: BenchClock>(
 }
 
 /// One node's access link in a simulated bench.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BenchSite {
     /// Uplink, bytes per second.
     pub up: u64,
@@ -639,6 +639,9 @@ pub struct BenchSite {
     pub down: Option<u64>,
     /// The one-way delay its egress adds, as the testbed's netem does.
     pub delay_ms: u64,
+    /// The probability it loses a packet it sends or receives, as the
+    /// sim's site loss and `run.sh`'s `SEED_LOSS_PCT` do.
+    pub loss: f64,
 }
 
 /// A bench for [`simulate`].
@@ -705,6 +708,10 @@ impl Bench {
         let queue_ms = num("QUEUE_MS")?;
         let slow = get("SLOW_DOWN_KBIT").map(|k| k.parse::<u64>().map_err(|e| e.to_string()));
         let slow = slow.transpose()?;
+        let seed_loss = get("SEED_LOSS_PCT")
+            .map(|p| p.parse::<f64>().map_err(|e| format!("SEED_LOSS_PCT: {e}")))
+            .transpose()?
+            .map_or(0.0, |p| p / 100.0);
         let sites = (0..=viewers)
             .map(|i| {
                 let (up, delay) = if i == 0 {
@@ -716,6 +723,7 @@ impl Bench {
                     up: mbit(up as f64),
                     down: slow.filter(|_| i == 1).map(|k| k * 125),
                     delay_ms: delay,
+                    loss: if i == 0 { seed_loss } else { 0.0 },
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
@@ -784,14 +792,16 @@ impl BenchClock for SimBenchClock {
 }
 
 /// Runs `bench` on the sim's sockets under the WAN model, with fixed
-/// delays and neither jitter nor loss as the calibration scenarios have:
-/// a pair's paths take the mean of its two egress delays both ways.
-/// Returns each node's log lines.
+/// delays and no jitter as the calibration scenarios have, and loss only
+/// at sites given some: a pair's paths take the mean of its two egress
+/// delays both ways. Returns each node's log lines.
 pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     let n = bench.sites.len();
     let mut spec = Scenario::new("bench");
     for (i, s) in bench.sites.iter().enumerate() {
-        let mut site = Site::new(City::Chicago, Access::Cable).with_up(s.up);
+        let mut site = Site::new(City::Chicago, Access::Cable)
+            .with_up(s.up)
+            .with_loss(s.loss);
         if let Some(d) = s.down {
             site = site.with_down(d);
         }
@@ -862,7 +872,7 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     }
     let options = Options {
         jitter: false,
-        loss: false,
+        loss: bench.sites.iter().any(|s| s.loss > 0.0),
     };
     let mut sched = Scheduler::new(&sim, &spec, options, 1, Some(buffers))?;
     for &(a, b) in &bench.links {
