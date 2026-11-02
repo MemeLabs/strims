@@ -276,7 +276,10 @@ in `TRIED.md`.
      the acknowledgements' path off the relay's queue: a sender that paces
      its window (BBR on native links), relays carrying less than their
      uplink takes (routing copies around thin relays), or acknowledgements
-     on a separate path. Fix it before the model lands.
+     on a separate path. Parked until the WebRTC transport is calibrated:
+     browsers, the most common peers, send over SCTP, whose bursts and
+     acknowledgements differ; `collapse_thin_relays` checks the mode is
+     there meanwhile.
    - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
      five-node mesh grows its push children from 16 to 50 every 15-20 s
      and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s
