@@ -28,11 +28,11 @@ links that carry the same schedule:
   compete a competing upload's payload rate (KB/s) each second it ran
           (testbed: iperf3's report; sim: the model's wire bytes)
   x cwnd  its window (KiB) each second
-  drops   the seed's packets its uplink queue dropped over the whole run
-          (testbed: tc's tbf; sim: the window model's segments, two packets
-          each)
-  x drops the competing uploads' share of them (testbed: iperf3's
-          retransmits)
+  drops   what the seed's uplink queue dropped over the whole run: tc's
+          tbf counts the buffers it drops (TCP's GSO buffers of one or two
+          packets, a loss event each), the sim its window model's segments
+  x drops the competing uploads' lost packets (testbed: iperf3's
+          retransmits; sim: two per lost segment)
 """
 
 import json
@@ -250,7 +250,7 @@ def metrics(nodes, sched, cls, t0_us, queue=None, compete=None):
     for e in nodes.get(0, []):
         if e.get("ev") == "drops":
             # The model's segments are two packets.
-            m[("node 0", "drops")] = [2 * (e["queue_drops"] + e.get("competing_drops", 0))]
+            m[("node 0", "drops")] = [e["queue_drops"] + e.get("competing_drops", 0)]
             if "competing_drops" in e:
                 m[("node 0", "x drops")] = [2 * e["competing_drops"]]
     span = max(1.0, (tmax - t0_us) / 1e6)
