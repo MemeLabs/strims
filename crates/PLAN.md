@@ -270,9 +270,12 @@ in `TRIED.md`.
      it receives wait behind them, up to the queue's 100 ms, so the flows
      that feed it slow down and its children starve. With acknowledgements
      kept out of the queue the cell collapses 0 of 16 times (11 with them).
-     A relay must keep its own uplink queue short: pace what it sends below
-     its uplink, or take on less as its queueing delay rises. Fix it before
-     the model lands.
+     A relay must keep its own uplink queue short, and round trips can't
+     show it apart from its peers' (their echoes wait in their queues;
+     `TRIED.md`): give vnic's echoes the probe's receive time, read the
+     forward path's one-way delay as LEDBAT does (a low quantile across
+     links, so a peer's claim can only hide a queue), and pace a relay's
+     whole upload on it. Fix it before the model lands.
    - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
      five-node mesh grows its push children from 16 to 50 every 15-20 s
      and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s

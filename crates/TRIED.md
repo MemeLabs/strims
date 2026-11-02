@@ -256,6 +256,18 @@ real stack's busy stars lost (robust tier: star-31-10 and mesh6-31-10
 A minimum of two chunks (`deadline`'s `min2`) ends the silence too, and
 scored the same in the ppspp sim (48 seeds).
 
+**Thin relays' own uplink queue, by its round trips.** (against 75d9ca91
+on the calibrated window model, thin-15-10 at 16 seeds: 11 collapses)
+A relay's uploads hold the acknowledgements of what it receives in its
+uplink's queue. Pacing all a relay sends (`uplink-pace`: the answer pace's
+rule over every DATA write of a node that seeds nothing, 25 ms target,
+the links' excess alone) collapsed 16 of 16 with lag p50 5.3 s: in a mesh
+of busy thin relays each link's round trip carries the far relay's queue
+too, as its echoes wait there, so the relay paces for queues it doesn't
+hold. A 15 ms answer target: 16 of 16 (repairs starve). Admitting by the
+committed pushes, answers out of the measured rule's load: 11 of 16.
+Uplink queues of 20 or 50 ms in place of 100: 16 of 16 (losses).
+
 **A paced answer rate grown only to twice what answers sent.**
 (`answer-validation`, against 1a97c9ad on the calibrated window model)
 Thin relays' paced rate swings from 32 KB/s to 1 MB/s, three times their
