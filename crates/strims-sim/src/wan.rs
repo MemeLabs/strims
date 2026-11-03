@@ -116,7 +116,10 @@ pub use sctp::SctpProfile;
 
 /// The wire size charged for a STUN message or a DTLS record other than
 /// application data. Their sizes depend on DTLS key material the seed
-/// doesn't reach, so a fixed charge keeps a seed's timing reproducible.
+/// doesn't reach, so a fixed charge keeps a seed's timing reproducible,
+/// and so does never losing one: which handshake messages a datagram
+/// carries depends on those sizes, so the loss of one datagram would make
+/// the handshake recover differently from run to run.
 const NOMINAL_DATAGRAM: usize = 1228;
 
 /// The run's clock at `elapsed` since its start.
@@ -149,17 +152,20 @@ impl What {
     }
 }
 
+/// Whether `p` is charged [`NOMINAL_DATAGRAM`]: STUN (RFC 5389 messages
+/// start with 0b00) and DTLS change_cipher_spec, alert and handshake
+/// records.
+fn nominal(p: &Protocol) -> bool {
+    matches!(p, Protocol::Udp(d) if matches!(d.0.first(), Some(0..=3 | 20..=22)))
+}
+
 /// The wire bytes and packets a message is charged.
 fn wire(p: &Protocol) -> (usize, u32) {
     match p {
+        _ if nominal(p) => (NOMINAL_DATAGRAM, 1),
         Protocol::Tcp(Segment::Data(_, b)) => tcp_wire(b.len()),
         Protocol::Tcp(_) => tcp_wire(0),
-        Protocol::Udp(d) => match d.0.first() {
-            // STUN (RFC 5389 messages start with 0b00) and DTLS
-            // change_cipher_spec, alert and handshake records.
-            Some(0..=3 | 20..=22) => (NOMINAL_DATAGRAM, 1),
-            _ => udp_wire(d.0.len()),
-        },
+        Protocol::Udp(d) => udp_wire(d.0.len()),
     }
 }
 
@@ -183,6 +189,8 @@ struct Record {
     what: What,
     wire: usize,
     packets: u32,
+    /// Charged [`NOMINAL_DATAGRAM`], and never lost.
+    nominal: bool,
     state: State,
 }
 
@@ -1065,7 +1073,7 @@ impl Scheduler {
                         self.sctp_arrived(done.max(t), conn, seq);
                         continue;
                     }
-                    if let (Some(cap), true) = (window, data.is_some() || datagram)
+                    if let (Some(cap), true) = (window, data.is_some() || (datagram && !r.nominal))
                         && overflows(
                             self.net.down_free(r.to) - t,
                             tx_time(
@@ -1667,6 +1675,7 @@ impl Scheduler {
                             what,
                             wire,
                             packets,
+                            nominal: nominal(sent.protocol()),
                             state: State::InFlight,
                         },
                     );
@@ -1825,6 +1834,7 @@ impl Scheduler {
             return;
         };
         let carrier = match r.what {
+            What::Datagram(_) if r.nominal => Carrier::Lossless,
             What::Datagram(_) => Carrier::Datagram,
             _ => Carrier::Stream,
         };

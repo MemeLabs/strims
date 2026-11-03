@@ -76,6 +76,10 @@ pub enum Carrier {
     Stream,
     /// A datagram (UDP): loss drops.
     Datagram,
+    /// A datagram the path never loses: one whose contents a simulation
+    /// can't reproduce run to run, so that its loss would make the run
+    /// irreproducible (a DTLS handshake record).
+    Lossless,
 }
 
 /// One message's way across a path.
@@ -518,6 +522,7 @@ impl Network {
         let arrival = (reach + up_jitter + down_jitter).max(dir.last_arrival);
         dir.last_arrival = arrival;
         let lost = options.loss
+            && carrier != Carrier::Lossless
             && p > 0.0
             && unit(&mut dir.rng)
                 < 1.0 - (1.0 - p).powi(i32::try_from(packets).unwrap_or(i32::MAX));
@@ -534,7 +539,7 @@ impl Network {
                     t.retransmit = retransmission(packets, rtt);
                     stats.retransmits += 1;
                 }
-                Carrier::Datagram => {
+                Carrier::Datagram | Carrier::Lossless => {
                     t.dropped = true;
                     stats.drops += 1;
                 }
@@ -775,6 +780,16 @@ mod tests {
         assert!((drops - mean).abs() < 3.0 * sigma, "{drops} vs {mean}");
         assert_eq!(n.stats(0).drops, drops as u64);
         assert_eq!(n.stats(1).drops, 0);
+
+        // A lossless datagram crosses the same path whole.
+        let lossless = (0..count)
+            .filter(|&i| {
+                n.send(t(count + i), 0, 1, wire, packets, Carrier::Lossless)
+                    .dropped
+            })
+            .count();
+        assert_eq!(lossless, 0);
+        assert_eq!(n.stats(0).drops, drops as u64);
 
         // A large stream message is hit more often, and delayed, never
         // dropped.
