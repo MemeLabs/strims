@@ -53,20 +53,46 @@ elsewhere change nothing. build checks an arm's commit out in a worktree
 under target/sim-farm/src, builds the test's release binary into the
 shared target directory, and keeps it as
 target/sim-farm/bin/<crate>-<target>-<source>. Arms build from commits,
-never from the working tree.
+never from the working tree. target/sim-farm/bin-hashes.json keeps each
+binary's sha256, hashed when it's built or first needed, and again only
+if its size or mtime changes.
 
 run builds what's missing, then keeps spot instances busy until every job
 has a row. A matrix's state is target/sim-farm/<matrix>/: rows.jsonl (a
-row per finished job, with its arm, commit, environment, host and its
+row per finished job, with its arm, commit, key, environment, host and its
 zone, wall and CPU time and peak RSS), failures.jsonl, mismatches.jsonl
-and farm.log. A job's id hashes its arm's source and its environment, so
-a rerun skips the jobs that have rows, and an arm whose source changed
-runs again.
+and farm.log. A test job's id hashes its arm's source, the package, target
+and test, its environment and its [[derive]] table, and names the job: in
+the matrix, to the workers, and in what waits on it. Its key hashes the
+same with the binary's sha256 for the source, which covers what the
+source doesn't (the compiler, as rust-toolchain.toml names a channel and
+not a release, the linker, build scripts' C), and commits whose binaries
+are the same bytes (a change to a crate the test doesn't link) share
+keys. A job is done once a row of its key is in any matrix here, unless a
+mismatches.jsonl holds its key (such a row isn't a function of the binary
+and the job), and a derived job only once the job it waits on is done as
+well: a rerun skips the jobs that have rows, an arm whose binary changed
+runs again, and the rows of other matrices are copied in (below).
+target/sim-farm/row-keys.jsonl indexes every test row by key (a line of
+key, matrix, offset in its rows.jsonl and job id; the first row of a key
+is the one taken, and only if the line there is that job's), and each run
+first takes in what the matrices' rows.jsonl have added since
+(row-keys-read.json keeps how far). A row from before rows held their
+keys gets one from its commit's source, a binary in bin/ built from it,
+and the package, target, test and [[derive]] table that give its id (from
+bin/'s names and the matrix's toml, if it's still in matrices/ or
+target/sim-suite/farm/, which also gives the test of rows too old to name
+it). The first index here took in 281,587 test rows of 3.5k matrices in 9
+s, 17.6 MB, all but 22 of them (local matrices whose tomls are gone),
+4,178 by their toml's test; a run's update of it takes 0.4 s.
 
 run takes several matrices at once: one queue holds their jobs, and one
 set of instances runs them. A job two matrices share (the same source and
-environment) runs once, and its row goes to each under that matrix's arm;
-a row one of them already has is copied into the others. The run is named
+environment) runs once, and its row goes to each under that matrix's arm,
+all but the first's with `from` naming the first. As the run starts, each
+matrix gets a copy of the row of each of its jobs that it lacks and
+another matrix, in the run or not, has: with the matrix's own id, arm,
+commit and key, and `from` the matrix whose row ran. The run is named
 for its matrices, their names sorted and joined with "+" (past EC2's
 256-character tag value, the first's, "+<n>more-" and a hash of them all),
 and keeps its own files (the list of its matrices, the canary's trace, SSH
@@ -81,7 +107,8 @@ else of its matrix's cell, the rows whose environment is the matrix's
 axis), else whose environment has the matrix's [env] among other
 variables (a knob it doesn't name); else, once some have run, the mean of
 its matrix's jobs this run; else a minute. target/sim-farm/walls.jsonl
-holds every test row's test, environment, wall and time, and each run
+holds the test, environment, wall and time of every test row but those
+with `from` (each run of a job once), and each run
 first takes in what the matrices' rows.jsonl have added since
 (walls-read.json keeps how far). The queue runs the longest jobs first,
 and before them those no earlier row times, which may be long, so a run
@@ -171,8 +198,11 @@ speed. A run logs the speeds before its best pools.
   (Server.SpotInstanceTermination; an AWS FIS interruption ends as the
   user's). Runs are deterministic, so a reissued job must print the same
   row: a job whose row arrives twice is compared on (trace, frames,
-  bytes), and --verify N (2) runs N jobs of each matrix twice on purpose,
-  on different instances. A job that fails twice is recorded and dropped.
+  bytes), and --verify N (2) runs N jobs of each matrix (the first by
+  id) twice on purpose, on different instances: one whose row came from
+  another matrix runs once more, against that row, which checks it on
+  today's instances (the binaries take libm from the image). A job that
+  fails twice is recorded in failures.jsonl, not rows.jsonl, and dropped.
 - A job that waits goes to the head of the queue once the job it waits
   on has a row, and fails for good when that job does. Waiting jobs count
   towards the instances the run wants, and keep them from being retired.
@@ -256,8 +286,9 @@ as ${VAR}: "topologies/mesh6-v${VIEWERS}") to the host's copy. A job's id
 hashes its source, build, files, environment and repeat.
 
 Testbed runs are real time, so nothing checks that they reproduce: no
-canary, no --verify, and a reissued job just runs again (a job's second
-result is dropped). Instances are the --families types with host_cores
+canary, no --verify, a reissued job just runs again (a job's second
+result is dropped), and a job is done only by a row of its id in one of
+the run's matrices (no key, no row index). Instances are the --families types with host_cores
 cores, one job at a time each, and of one type where it has capacity:
 the type of the run's first launch comes first in every zone of every
 region. Docker and the qdisc modules are set up at boot, and shaping is
@@ -415,6 +446,17 @@ SPOT_TERMINATION = "Server.SpotInstanceTermination"
 WALLS = FARM / "walls.jsonl"
 WALLS_READ = FARM / "walls-read.json"
 COSTS = FARM / "costs.jsonl"
+# Each test binary's sha256 by its name in bin/, with the size and mtime it
+# was hashed at.
+BIN_HASHES = FARM / "bin-hashes.json"
+# Every test row's key, matrix, offset in its rows.jsonl and job id, a line
+# each (row_index), and how far each matrix's rows.jsonl has been read into
+# it, with the rows that got no key and why.
+ROW_KEYS = FARM / "row-keys.jsonl"
+ROW_KEYS_READ = FARM / "row-keys-read.json"
+# Where a matrix's toml may still be, by its name: what gives an old row's
+# [[derive]] table.
+MATRIX_DIRS = [HERE / "matrices", ROOT / "target" / "sim-suite" / "farm"]
 # The seed knobs, which reports don't group by.
 SEED_KEYS = {"SIM_SEED", "STRIMS_SIM_SEED"}
 # What a test binary is built from: commits that change none of it share
@@ -476,6 +518,9 @@ class Job:
     bin: str
     test: str
     env: tuple[tuple[str, str], ...]
+    # What the id hashes, with the binary's sha256 for the source: "" for a
+    # testbed job, or until the binary is built.
+    key: str = ""
     # The id of the job whose row this one waits for, and the variables it
     # takes from that row (its [[derive]] table's `set`).
     after: str = ""
@@ -526,6 +571,16 @@ def derived_env(job: "Job", row: dict) -> tuple[dict[str, str], str | None]:
             return {}, f"{var}: the row's {field} is {v!r}"
         out[var] = str(v)
     return out, None
+
+
+def job_hash(head: str, package: str, target: str, test: str, env: tuple, derive: Derive | None) -> str:
+    """A test job's id (head: its source) or key (head: its binary's
+    sha256): the hash of head, the package, target and test, the sorted
+    environment and the [[derive]] table, if any."""
+    key = [head, package, target, test, env]
+    if derive is not None:
+        key.append([sorted(derive.src.items()), derive.set])
+    return hashlib.sha256(json.dumps(key).encode()).hexdigest()[:16]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -648,13 +703,13 @@ class Matrix:
             after: str = "") -> Job:
         source = self.sources[arm]
         env_t = tuple(sorted(env.items()))
-        key = [source, self.package, self.target, test, env_t]
-        if derive is not None:
-            key.append([sorted(derive.src.items()), derive.set])
-        jid = hashlib.sha256(json.dumps(key).encode()).hexdigest()[:16]
+        bin_ = self.bin_name(source)
+        h = bin_hash(bin_)
         return Job(
-            jid, arm, self.commits[arm], source, self.bin_name(source), test, env_t,
-            after, derive.set if derive is not None else (),
+            job_hash(source, self.package, self.target, test, env_t, derive), arm, self.commits[arm],
+            source, bin_, test, env_t,
+            key=job_hash(h, self.package, self.target, test, env_t, derive) if h else "",
+            after=after, derive=derive.set if derive is not None else (),
         )
 
     def file_of(self, var: str, env: dict[str, str]) -> str:
@@ -831,7 +886,7 @@ def row_head(line: bytes) -> dict | None:
 
 def index_walls() -> list[dict]:
     """Every test row's test, environment, wall, time, instance type and
-    commit here: walls.jsonl,
+    commit here, a row copied from another matrix aside: walls.jsonl,
     after it takes in what each matrix's rows.jsonl has added since it was
     last read (all of it the first time)."""
     FARM.mkdir(parents=True, exist_ok=True)
@@ -854,7 +909,7 @@ def index_walls() -> list[dict]:
                         break  # still being written
                     at += len(line)
                     rec = row_head(line)
-                    if rec and rec.get("kind", "test") == "test" and rec.get("wall_s"):
+                    if rec and rec.get("kind", "test") == "test" and rec.get("wall_s") and not rec.get("from"):
                         new.append({
                             "test": rec.get("test"), "env": rec.get("env", {}),
                             "wall_s": rec["wall_s"], "at": rec.get("at", ""),
@@ -866,6 +921,190 @@ def index_walls() -> list[dict]:
         tmp.write_text(json.dumps(read))
         os.replace(tmp, WALLS_READ)
         return read_jsonl(WALLS)
+
+
+# --- rows across runs ---------------------------------------------------
+
+
+class Keyer:
+    """The keys of rows that don't record theirs: the row's commit gives its
+    source, the source the binaries in bin/ built from it, and the one
+    (package, target), [[derive]] table if any, and test (the matrix's, for
+    a row too old to record its own) that give the row's id give its key
+    with that binary's hash."""
+
+    def __init__(self) -> None:
+        self.sources: dict[str, str | None] = {}
+        self.bins: dict[str, list[tuple[str, str]]] = collections.defaultdict(list)
+        for p in BIN.iterdir() if BIN.is_dir() else ():
+            m = re.fullmatch(r"(.+)-([0-9a-f]{12})", p.name)
+            if m and not p.name.startswith(("testbed-", "file-")):
+                parts = m[1].split("-")
+                for i in range(1, len(parts)):
+                    self.bins[m[2]].append(("-".join(parts[:i]), "-".join(parts[i:])))
+        self.tomls: dict[str, Matrix | None] = {}
+
+    def source(self, commit: str) -> str | None:
+        if commit not in self.sources:
+            try:
+                tree = git("ls-tree", commit, *SOURCES)
+                self.sources[commit] = hashlib.sha256(tree.encode()).hexdigest()[:12]
+            except subprocess.CalledProcessError:
+                self.sources[commit] = None
+        return self.sources[commit]
+
+    def toml(self, matrix: str) -> Matrix | None:
+        """The matrix's toml, if it's still here."""
+        if matrix not in self.tomls:
+            self.tomls[matrix] = None
+            for d in MATRIX_DIRS:
+                if (d / f"{matrix}.toml").is_file():
+                    try:
+                        m = Matrix(str(d / f"{matrix}.toml"))
+                    except (SystemExit, Exception):
+                        continue
+                    self.tomls[matrix] = m if m.kind == "test" else None
+                    break
+        return self.tomls[matrix]
+
+    def key(self, rec: dict, matrix: str) -> tuple[str | None, str]:
+        """The key of a test row of the matrix, else None and why: "commit"
+        (its commit is gone), "binary" (no binary of its source is here) or
+        "id" (none gives its id)."""
+        if rec.get("key"):
+            return rec["key"], ""
+        source = self.source(rec.get("commit") or "")
+        if source is None:
+            return None, "commit"
+        if not self.bins.get(source):
+            return None, "binary"
+        env = rec.get("env", {})
+        m = self.toml(matrix)
+        tests = [rec["test"]] if rec.get("test") else m.tests if m else []
+        for d in [None, *(m.derives if m else [])]:
+            set_ = {k for k, _ in d.set} if d is not None else set()
+            env_t = tuple(sorted((k, v) for k, v in env.items() if k not in set_))
+            for test, (package, target) in itertools.product(tests, self.bins[source]):
+                if job_hash(source, package, target, test, env_t, d) == rec.get("id"):
+                    h = bin_hash(f"{package}-{target}-{source}")
+                    if h is None:
+                        return None, "binary"
+                    return job_hash(h, package, target, test, env_t, d), ""
+        return None, "id"
+
+
+def row_index(mine: set[str]) -> tuple[dict[str, tuple[str, int, str]], dict[str, collections.Counter]]:
+    """The row index, row-keys.jsonl, after it takes in what each matrix's
+    rows.jsonl has added since it was last read (all of it the first time):
+    each key's first row, as its matrix, offset and job id, and for the
+    matrices `mine` how many rows of each key they have."""
+    FARM.mkdir(parents=True, exist_ok=True)
+    with (FARM / "row-keys.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            state = json.loads(ROW_KEYS_READ.read_text())
+        except (OSError, ValueError):
+            state = {}
+        read = state.setdefault("read", {})
+        unkeyed = collections.Counter(state.get("unkeyed", {}))
+        left = collections.Counter()
+        keyer = None
+        new = []
+        for path in sorted(FARM.glob("*/rows.jsonl")):
+            name = path.parent.name
+            at = read.get(name, 0)
+            size = path.stat().st_size
+            if at > size:
+                at = 0  # rewritten
+            if at == size:
+                continue
+            with path.open("rb") as f:
+                f.seek(at)
+                for line in f:
+                    if not line.endswith(b"\n"):
+                        break  # still being written
+                    off = at
+                    at += len(line)
+                    rec = row_head(line)
+                    if not rec or rec.get("kind", "test") != "test" or not rec.get("id"):
+                        continue
+                    key = rec.get("key")
+                    if not key:
+                        keyer = keyer or Keyer()
+                        key, why = keyer.key(rec, name)
+                        if key is None:
+                            left[why] += 1
+                            continue
+                    new.append([key, name, off, rec["id"]])
+            read[name] = at
+        append_jsonl(ROW_KEYS, new)
+        if left:
+            unkeyed += left
+            log(f"row index: {sum(left.values())} rows left out, with no key: " + ", ".join(
+                f"{n} {UNKEYED[why]}" for why, n in sorted(left.items())))
+        state["unkeyed"] = dict(unkeyed)
+        tmp = ROW_KEYS_READ.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state))
+        os.replace(tmp, ROW_KEYS_READ)
+        first: dict[str, tuple[str, int, str]] = {}
+        have = {m: collections.Counter() for m in mine}
+        for key, name, off, jid in read_jsonl(ROW_KEYS):
+            first.setdefault(key, (name, off, jid))
+            if name in have:
+                have[name][key] += 1
+        return first, have
+
+
+UNKEYED = {"commit": "whose commit is gone", "binary": "with no binary of their source",
+           "id": "whose id no binary and [[derive]] table gives"}
+
+
+def bad_keys() -> set[str]:
+    """The keys of the jobs in any matrix's mismatches.jsonl, whose rows
+    aren't a function of their binary and job."""
+    out, keyer = set(), None
+    for path in FARM.glob("*/mismatches.jsonl"):
+        for m in read_jsonl(path):
+            for rec in (m["first"], m["again"]):
+                key = rec.get("key")
+                if not key:
+                    keyer = keyer or Keyer()
+                    key, _ = keyer.key(rec, path.parent.name)
+                if key:
+                    out.add(key)
+    return out
+
+
+def rows_at(places: list[tuple[str, int, str]]) -> list[dict | None]:
+    """The rows at (matrix, offset, job id) in the matrices' rows.jsonl, in
+    order; None where the line there isn't that job's."""
+    out: list[dict | None] = [None] * len(places)
+    order = sorted(range(len(places)), key=lambda i: places[i][:2])
+    for name, idx in itertools.groupby(order, key=lambda i: places[i][0]):
+        try:
+            f = (FARM / name / "rows.jsonl").open("rb")
+        except OSError:
+            continue
+        with f:
+            for i in idx:
+                f.seek(places[i][1])
+                try:
+                    rec = json.loads(f.readline())
+                except ValueError:
+                    continue
+                if isinstance(rec, dict) and rec.get("id") == places[i][2]:
+                    out[i] = rec
+    return out
+
+
+def copy_row(rec: dict, job: Job, src: str) -> dict:
+    """A row as the copy of `job`'s matrix: its own id, arm, commit, test
+    and key, and `from` the matrix of the row that ran, with `row` last."""
+    head = {k: v for k, v in rec.items() if k != "row"}
+    return {
+        **head, "id": job.id, "arm": job.arm, "commit": job.commit, "test": job.test, "key": job.key,
+        "from": rec.get("from") or src, "row": rec["row"],
+    }
 
 
 def env_key(env: dict[str, str], drop: set[str]) -> tuple:
@@ -959,6 +1198,44 @@ def priors(owners: dict[str, list[tuple["Matrix", "Job"]]], recs: list[dict],
 # --- build --------------------------------------------------------------
 
 
+_bin_hashes: dict[str, str] = {}
+
+
+def bin_hash(name: str) -> str | None:
+    """bin/<name>'s sha256, None if there's no such file: from
+    bin-hashes.json while the file's size and mtime are those it was hashed
+    at, else hashed and kept there."""
+    if name in _bin_hashes:
+        return _bin_hashes[name]
+    try:
+        f = (BIN / name).open("rb")
+    except OSError:
+        return None
+    with f:
+        st = os.fstat(f.fileno())
+        try:
+            saved = json.loads(BIN_HASHES.read_text())
+        except (OSError, ValueError):
+            saved = {}
+        got = saved.get(name)
+        if got and got["size"] == st.st_size and got["mtime_ns"] == st.st_mtime_ns:
+            _bin_hashes[name] = got["sha256"]
+            return got["sha256"]
+        h = hashlib.file_digest(f, "sha256").hexdigest()
+    with (FARM / "bin-hashes.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            saved = json.loads(BIN_HASHES.read_text())
+        except (OSError, ValueError):
+            saved = {}
+        saved[name] = {"size": st.st_size, "mtime_ns": st.st_mtime_ns, "sha256": h}
+        tmp = BIN_HASHES.with_suffix(".tmp")
+        tmp.write_text(json.dumps(saved, indent=0, sort_keys=True))
+        os.replace(tmp, BIN_HASHES)
+    _bin_hashes[name] = h
+    return h
+
+
 @contextlib.contextmanager
 def checkout(commit: str):
     """A worktree of the commit under target/sim-farm/src, for as long as
@@ -1012,6 +1289,7 @@ def build(matrix: Matrix) -> None:
             tmp = out.with_name(out.name + ".tmp")
             shutil.copy2(exe, tmp)
             os.replace(tmp, out)
+            bin_hash(out.name)
 
 
 def expand(spec: str, env: dict[str, str]) -> str:
@@ -1586,17 +1864,50 @@ class Run:
         # The run's own files; each matrix's rows and log are in its state.
         self.state = FARM / self.name
         self.slot_mem_gib = max(m.slot_mem_gib for m in matrices)
+        kinds = {m.kind for m in matrices}
+        if len(kinds) > 1:
+            sys.exit("testbed matrices run apart from test matrices: they want other instances")
         self.items: dict[str, Item] = {}
-        self.rows: dict[str, dict] = {}  # job id -> its first row, in any matrix
-        self.have: dict[str, set[str]] = {}  # matrix -> job ids with rows
+        # job id -> its first row: a testbed job's in the run's matrices, a
+        # test job's of its key in any matrix, as its first owner's copy.
+        self.rows: dict[str, dict] = {}
+        # matrix -> what has rows there (ident)
+        self.have: dict[str, set[str]] = {}
+        # The test jobs whose rows are from matrices outside the run.
+        self.earlier: set[str] = set()
+        jobs = {m.name: m.jobs() for m in matrices}
         counts: collections.Counter = collections.Counter()
-        for m in matrices:
-            c = collections.Counter()
-            for r in read_jsonl(m.state / "rows.jsonl"):
-                self.rows.setdefault(r["id"], r)
-                c[r["id"]] += 1
-            self.have[m.name] = set(c)
-            counts |= c
+        if kinds == {"testbed"}:
+            for m in matrices:
+                c = collections.Counter()
+                for r in read_jsonl(m.state / "rows.jsonl"):
+                    self.rows.setdefault(r["id"], r)
+                    c[r["id"]] += 1
+                self.have[m.name] = set(c)
+                counts |= c
+        else:
+            first, mine = row_index({m.name for m in matrices})
+            bad = bad_keys()
+            for m in matrices:
+                self.have[m.name] = set(mine[m.name])
+                counts |= mine[m.name]
+            hits = {}
+            for m in matrices:
+                for j in jobs[m.name]:
+                    if j.key in first and j.key not in bad:
+                        hits.setdefault(j.id, j)
+            places = [first[j.key] for j in hits.values()]
+            for j, place, rec in zip(hits.values(), places, rows_at(places)):
+                if rec is not None:
+                    self.rows[j.id] = copy_row(rec, j, place[0])
+            # A derived job's row is reused only with the row it took its values from.
+            for j in hits.values():
+                if j.after and j.after not in self.rows:
+                    self.rows.pop(j.id, None)
+            self.earlier = {
+                jid for jid, j in hits.items()
+                if jid in self.rows and not any(j.key in h for h in self.have.values())
+            }
         # job id -> the matrices that have it, each with its own arm and commit
         self.owners: dict[str, list[tuple[Matrix, Job]]] = {}
         self.njobs: dict[str, int] = {}
@@ -1632,9 +1943,6 @@ class Run:
         self.boot_prior = past_boot_s("testbed" if matrices[0].kind == "testbed" else "test")
         self.boot_failures = 0
         self.stopping = threading.Event()
-        kinds = {m.kind for m in matrices}
-        if len(kinds) > 1:
-            sys.exit("testbed matrices run apart from test matrices: they want other instances")
         self.testbed: Testbed | None = None
         if kinds == {"testbed"}:
             cores = {m.host_cores for m in matrices}
@@ -1659,9 +1967,8 @@ class Run:
 
         # One queue, matrix by matrix; a job two matrices share runs once.
         for m in matrices:
-            jobs = m.jobs()
-            self.njobs[m.name] = len(jobs)
-            for j in jobs:
+            self.njobs[m.name] = len(jobs[m.name])
+            for j in jobs[m.name]:
                 own = self.owners.setdefault(j.id, [])
                 if any(o is m for o, _ in own):
                     continue
@@ -1669,10 +1976,10 @@ class Run:
                 if len(own) == 1:
                     add(Item(j), j.id in self.rows)
             # The verify copies: the first jobs by id that haven't two rows yet.
-            for j in sorted(jobs, key=lambda j: j.id)[: args.verify if m.kind == "test" else 0]:
+            for j in sorted(jobs[m.name], key=lambda j: j.id)[: args.verify if m.kind == "test" else 0]:
                 item = Item(self.owners[j.id][0][1], "v")
                 if item.wid not in self.items:
-                    add(item, counts[j.id] >= 2)
+                    add(item, counts[self.ident(j)] >= 2)
         firsts = [own[0][1] for own in self.owners.values()]
         self.bins = sorted({j.bin for j in firsts} | {name for j in firsts for _, name in j.files})
         # job id -> its expected wall, from past rows. Test jobs run longest
@@ -1691,16 +1998,22 @@ class Run:
 
     # -- results
 
+    def ident(self, job: Job) -> str:
+        """What a matrix has rows of: a testbed job's id, a test job's key."""
+        return job.id if job.kind == "testbed" else job.key
+
     def share_rows(self) -> None:
-        """Copies into each matrix the rows another has of its jobs: runs
-        are deterministic, so a job runs once for every matrix."""
+        """Copies into each matrix the rows it lacks of its jobs, from the
+        run's other matrices, and a test job's from any matrix: runs are
+        deterministic, so a job runs once for every matrix."""
         n = 0
         for m in self.ms:
             recs = [
-                {**self.rows[j.id], "arm": j.arm, "commit": j.commit}
+                {**self.rows[jid], "arm": j.arm, "commit": j.commit} if j.kind == "testbed"
+                else copy_row(self.rows[jid], j, self.rows[jid]["from"])
                 for jid, own in self.owners.items()
                 for o, j in own
-                if o is m and jid in self.rows and jid not in self.have[m.name]
+                if o is m and jid in self.rows and self.ident(j) not in self.have[m.name]
             ]
             for r in recs:
                 if r.get("kind") == "testbed":
@@ -1708,7 +2021,8 @@ class Run:
             append_jsonl(m.state / "rows.jsonl", recs)
             n += len(recs)
         if n:
-            log(f"copied {n} rows from one matrix to another")
+            log(f"copied {n} rows from earlier runs into the run's matrices" + (
+                f", {len(self.earlier)} jobs' from matrices outside the run" if self.earlier else ""))
 
     def share_run(self, jid: str, m: Matrix) -> None:
         """Copies a testbed job's run dir into m's from a matrix that has it."""
@@ -1784,6 +2098,7 @@ class Run:
         for m, j in self.owners[item.job.id]:
             rec = {
                 "id": j.id,
+                "key": j.key,
                 "arm": j.arm,
                 "commit": j.commit,
                 "test": j.test,
@@ -1796,8 +2111,10 @@ class Run:
                 "cpu_s": res.get("cpu_s"),
                 "max_rss_mb": res.get("max_rss_mb"),
                 "at": at,
-                "row": res["row"],
             }
+            if recs:
+                rec["from"] = recs[0][0].name
+            rec["row"] = res["row"]
             append_jsonl(m.state / "rows.jsonl", [rec])
             recs.append((m, rec))
         self.done.add(item.wid)
@@ -2465,6 +2782,7 @@ class Run:
             by_region[p.region] += p.spec.slots
         return {
             "jobs": len(items),
+            "have_rows": sum(1 for i in self.items.values() if not i.copy and i.wid in self.done),
             "timed": sum(1 for i in items if i.job.id in self.prior),
             "work_slot_h": round(work / 3600, 2),
             "boot_s": round(b),
@@ -2481,7 +2799,8 @@ class Run:
     def say_estimate(self, est: dict) -> str:
         timed = f"{est['timed'] / est['jobs']:.0%}" if est["jobs"] else "-"
         head = (
-            f"{est['jobs']} jobs, {est['work_slot_h']:.1f} slot-h of work ({timed} of the jobs timed by "
+            f"{est['jobs']} jobs to run ({est['have_rows']} more have rows), "
+            f"{est['work_slot_h']:.1f} slot-h of work ({timed} of the jobs timed by "
             f"earlier rows), a boot of {est['boot_s']} s, --work-per-boot {self.args.work_per_boot:g}: "
         )
         if not est["slots"]:
@@ -2796,6 +3115,11 @@ class Run:
         if not self.pools:
             sys.exit("no instance type fits (families, sizes, slot_mem_gib, regions)")
         self.read_budgets(time.time())
+        unbuilt = [
+            f"{m.name} {arm}" for m in self.ms for arm, s in m.sources.items() if bin_hash(m.bin_name(s)) is None
+        ]
+        if unbuilt:
+            print(f"not built yet, so their jobs count as having no rows: {', '.join(unbuilt)}")
         print(self.say_estimate(self.estimate()))
         return 0
 
@@ -2940,7 +3264,7 @@ class Run:
             shared = sum(1 for own in self.owners.values() if len(own) > 1)
             log(f"{self.name}: {len(self.owners)} jobs, {shared} of them in more than one "
                 f"matrix; {to_run} to run")
-            self.share_rows()
+        self.share_rows()
         for jid in [j for j in self.waiting if j in self.rows]:
             self.release(jid)
         if self.local:
@@ -3050,11 +3374,15 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
     matrix.resolve()
     jobs = matrix.jobs()
     ids = {j.id for j in jobs}
+    keys = {j.id: j.key for j in jobs if j.key}
     recs = read_jsonl(matrix.state / "rows.jsonl")
+    # A job's first row of its key, else its first.
     first: dict[str, dict] = {}
     for r in recs:
         if r["id"] in ids:
-            first.setdefault(r["id"], r)
+            f = first.setdefault(r["id"], r)
+            if f is not r and r.get("key") and r.get("key") == keys.get(r["id"]) != f.get("key"):
+                first[r["id"]] = r
     stale = len({r["id"] for r in recs} - ids)
     group = group or matrix.group
     conds = [w.split("=", 1) for w in where]
