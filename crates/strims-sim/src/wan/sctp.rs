@@ -3,7 +3,10 @@
 
 //! The window model's data channels: an SCTP association's sender and
 //! receiver over one TCP connection of the sim, which carries its bytes in
-//! order, as an ordered channel delivers them. A channel's writes reach
+//! order, as an ordered channel delivers them, and hands its reader whole
+//! messages: a chunk reaches the reader once every chunk through the end of
+//! its message has arrived, as a channel's `onmessage` fires (the queues'
+//! release, `Scheduler::match_queues`). A channel's writes reach
 //! the connection whole while its buffered amount (bytes unsent or
 //! unacknowledged) is under its cap (see [`crate::net`]), cut into DATA
 //! chunks (turmoil segments) and each marked where its message ends; here
@@ -352,6 +355,9 @@ pub(super) struct Assoc {
     /// the packet at its last. Bound: the window.
     bundled: BTreeSet<u64>,
     immediate: BTreeSet<u64>,
+    /// The chunks that end a message and haven't reached the reader. Bound:
+    /// the channel's cap.
+    ends: BTreeSet<u64>,
 }
 
 impl Assoc {
@@ -378,6 +384,7 @@ impl Assoc {
             t3: None,
             timeouts: 0,
             sacks: BTreeMap::new(),
+            ends: BTreeSet::new(),
             bundled: BTreeSet::new(),
             immediate: BTreeSet::new(),
         }
@@ -464,6 +471,16 @@ impl Assoc {
     }
 
     /// The record and length of the waiting chunk `id`, if it is data.
+    /// Whether chunk `seq` ends its message.
+    pub(super) fn ends_message(&self, seq: u64) -> bool {
+        self.ends.contains(&seq)
+    }
+
+    /// The reader has every message up to the one chunk `seq` ends.
+    pub(super) fn read_through(&mut self, seq: u64) {
+        self.ends = self.ends.split_off(&(seq + 1));
+    }
+
     fn chunk_of(records: &super::Records, id: u64) -> Option<(u64, usize)> {
         records.get(&id).and_then(|r| match r.what {
             What::Data { seq, len } => Some((seq, len)),
@@ -506,6 +523,9 @@ impl Scheduler {
         let Some(a) = self.assocs.get_mut(&conn) else {
             return;
         };
+        if end && let Some((seq, _)) = Assoc::chunk_of(&self.records, id) {
+            a.ends.insert(seq);
+        }
         a.pending.push_back((id, end));
         // dcSCTP sends as a message is written; sctp-proto as str0m polls.
         if end || a.stack() == Stack::SctpProto {

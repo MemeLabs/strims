@@ -105,7 +105,7 @@ use strims_wan::{Carrier, Network, Options, Site};
 use turmoil::{Protocol, Segment, Sim};
 
 use crate::fast_map::FastMap;
-use crate::net::SendBuffers;
+use crate::net::{ConnKey, SendBuffers};
 use crate::report::{WanHostReport, WanReport};
 use crate::spec::{HostIx, Scenario};
 use crate::world::epoch;
@@ -1555,6 +1555,8 @@ impl Scheduler {
         let assocs = &self.assocs;
         let frozen = &self.frozen;
         let next = &mut self.next;
+        // Data channels whose reader takes messages through a chunk.
+        let mut reads: Vec<(ConnKey, u64)> = Vec::new();
         sim.links(|iter| {
             'links: for (li, link) in iter.enumerate() {
                 let Some(ls) = links.get_mut(li) else {
@@ -1573,6 +1575,40 @@ impl Scheduler {
                     continue;
                 };
                 let frozen = frozen.contains(&pair_key(a, b));
+                // A data channel hands its reader whole messages: a chunk
+                // goes once every chunk of its connection through the end
+                // of its message is due.
+                let mut whole: Vec<(ConnKey, u64)> = Vec::new();
+                if !assocs.is_empty() && !frozen {
+                    let mut cut: Vec<ConnKey> = Vec::new();
+                    for &id in &ls.records {
+                        let Some(r) = records.get(&id) else {
+                            continue;
+                        };
+                        let conn = (r.src, r.dst);
+                        let (What::Data { seq, .. }, Some(assoc)) = (r.what, assocs.get(&conn))
+                        else {
+                            continue;
+                        };
+                        if cut.contains(&conn) {
+                            continue;
+                        }
+                        if r.state != State::Due {
+                            cut.push(conn);
+                        } else if assoc.ends_message(seq) {
+                            match whole.iter_mut().find(|(c, _)| *c == conn) {
+                                Some(w) => w.1 = seq,
+                                None => whole.push((conn, seq)),
+                            }
+                        }
+                    }
+                }
+                let held = |r: &Record| match r.what {
+                    What::Data { seq, .. } if assocs.contains_key(&(r.src, r.dst)) => !whole
+                        .iter()
+                        .any(|&(c, w)| c == (r.src, r.dst) && seq <= w),
+                    _ => false,
+                };
                 // The link's known records come first in its queue, in
                 // order; those it delivers leave a mark until it compacts.
                 let known = ls.records.len();
@@ -1597,7 +1633,7 @@ impl Scheduler {
                             ));
                             break 'links;
                         }
-                        if r.state == State::Due && !frozen {
+                        if r.state == State::Due && !frozen && !held(r) {
                             sent.deliver();
                             records.remove(&id);
                             if let Some(x) = ls.records.get_mut(at) {
@@ -1643,6 +1679,7 @@ impl Scheduler {
                     ));
                     break;
                 }
+                reads.extend(whole);
                 while gone > 0 && ls.records.front() == Some(&DELIVERED) {
                     ls.records.pop_front();
                     gone -= 1;
@@ -1652,6 +1689,11 @@ impl Scheduler {
                 }
             }
         });
+        for (conn, seq) in reads {
+            if let Some(a) = self.assocs.get_mut(&conn) {
+                a.read_through(seq);
+            }
+        }
         match err {
             Some(e) => Err(e),
             None => Ok((fresh, released)),
