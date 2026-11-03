@@ -265,7 +265,8 @@ in `TRIED.md`.
      viewer in 29-40 of the 40 seconds from 20 s on, and some go seconds
      without frames; at the testbed's default 1 KiB chunks they lag 14-16 s.
      The window model as the bare TCP bench calibrates it shows the mode
-     (thin-15-10 collapses 23 of 32 times, main's model 10): a relay's own
+     (thin-15-10 collapsed 23 of 32 times, main's model 10; 7 once HAVEs to
+     a peer that announced the chunk wait for the tick): a relay's own
      uploads fill its uplink's FIFO, and the pure acknowledgements of what
      it receives wait behind them, up to the queue's 100 ms, so the flows
      that feed it slow down and its children starve. With acknowledgements
@@ -554,25 +555,32 @@ in `TRIED.md`.
     of 50 ms every 4 s, the satellites' reassignment every 15 s; the
     profiles' docs), and jitter changes every 20 ms per end. Measure both
     where the app runs on those links.
-  - Browser peers collapse about 2.5 times as often as TCP peers: on
-    robust's window-model cells at seeds 2001-2016, TCP 71 of 512 runs, the
-    `browsers` tier (`STRIMS_SIM_RTC`) 175 with 8 KiB messages, and TCP
-    links with its signalling relay and network 89. Most of it is the
-    channel's unsent queue below vnic, which `TCP_NOTSENT_LOWAT` keeps small
-    on TCP: an oracle mark of 16 KiB on it (`browsers-exp`'s `lowat16`)
-    takes the tier to 105, and a cap from the drain rate and the least
-    round trip (`bdp`: the rate over twice the least round trip and 50 ms,
-    and 16 KiB) to 118 with no guardrail broken. A writer sees only the
-    buffered amount, flight and unsent bytes together, and a round trip
-    can't tell its own queue from the path's: built for real (branch
-    `channel-pacer`, `rtc::pace::ChannelPacer` in node-core, the browser's
-    `DcSocket` and the sim's channel socket) the cap starves an LTE viewer
-    of `wan_webrtc_channels` (seeds 5 and 8) once the round trip outgrows
-    its horizon. Next: probe the cap up while write-to-ack round trips sit
-    at the least (the pacer, not the path, holds the link back), and score
-    it on the `browsers` tier and `wan_webrtc_channels`. The 5 Mbit/s stars
-    (star-31-5: TCP 0 of 8, browsers 8 of 8 with the oracle too) and thin
-    relays (16 of 16) are a second gap.
+  - Browser peers collapse about 1.5 times as often as TCP peers: on
+    robust's 32 window-model cells at seeds 3001-3032, TCP 132 of 1024
+    runs and the `browsers` tier (`STRIMS_SIM_RTC`) 197 (319 before the
+    channel pacer and the host pacer, 250 with the channel pacer alone).
+    Browsers do better through halvings (halve-7-10 13 against 21) and
+    worse in:
+    - thin-15-10 (32 of 32 against 7): a relay's uplink carries 39 %
+      overhead over SCTP (20.0 MB of data packets for 14.2 MB of payload,
+      3.8 MB of SACKs at seed 3001), most of it lone HAVE packets to the
+      neighbours that lack the chunk, one per frame handled. HAVEs to every
+      peer a frame pushes nothing to at the tick (`hp-exp`'s `haveall`)
+      take the tier to 169 and robust's TCP cells from 196 to 153, but
+      slow startup (star-7-10's p99 x1.50, star-3-20's x1.15) and
+      jitter-15-10 (1 -> 7 of 32 on browsers). Keep them eager to the
+      peers that need them soon: a peer starting up, or one pulling from
+      us.
+    - the WAN cells (global-audience 10 against 0, slow-viewer 11 against
+      1, residential-two-streams 16 against 5, residential-seed-varying 10
+      against 2): SCTP's Reno on long and lossy paths. An Oceania LTE
+      viewer of global-audience (seed 3001) has the scenario's three links,
+      and one association carries about 0.4 Mbit/s through LTE's fades
+      (each halves the window; it regains a packet a 350 ms round trip);
+      TCP's CUBIC carries the 2 Mbit/s stream on them. vnic keeps one link
+      per peer: try a second association per neighbour where a link's
+      delivered rate stays under what it's asked to carry.
+    - star-31-5 (10 against 5).
   - str0m over UDP under the WAN window model doesn't replay: an SCTP
     INIT's resend lands a millisecond apart between runs (2 of 8 runs of
     `wan_residential_seed_adaptive_uncapped_step` at seed 2007 with

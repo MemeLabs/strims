@@ -313,3 +313,26 @@ overloaded Chromium links worse (rtc-over-chromium 0.556 -> 0.632,
 rtc-over-chromium-chromium 0.403 -> 0.475, the rest unchanged): Chromium's
 `bufferedAmount` behaves as if it counts the flight.
 
+**A larger channel pacer slack.** (`pacer-exp`, against the channel
+pacer) `SLACK` at 24, 32 and 48 KiB in place of 16 on the browsers tier
+at seeds 3001-3032: 251, 258 and 273 collapsed of 1024 against 250. 32
+KiB cured the pacer's star-3-5 lag (p99 x0.79), which the host pacer
+cured too.
+
+**Coalescing a WebRTC link's small writes.** (`channel-pacer`,
+`WebRtcConfig::coalesce`) Holding writes under 1 KiB for 10, 25 or 50 ms
+after a link's last: at 10 ms 112 collapsed of 512 against 118 on the
+browsers tier, and with HAVEs to a peer that announced the chunk at the
+tick 101 but star-15-10's lag p99 x1.37. Deferring those HAVEs without
+coalescing: 233 collapsed of 1024 against the pacer's 250, and 197 with
+the host pacer.
+
+**A host pacer over the channels' summed buffered amounts.**
+(`pacer-exp`'s `agg`, `agg2`) Counting every channel's buffered amount
+whole let a neighbour behind a slow downlink take its parents' caps
+(wan-slow-viewer 14 -> 25 of 32); counting each at most its bandwidth over
+the host's horizon undercounted channels whose rate went stale before a
+burst (star-31-5 lag p99 x1.36). The host's own round trip (its summed
+amounts') is its nearest neighbour's: a cap over it starved an LTE viewer
+of `wan_webrtc_channels` (seed 13: lag p50 2.4 -> 14.6 s).
+
