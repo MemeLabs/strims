@@ -547,11 +547,11 @@ in `TRIED.md`.
     32 window-model cells at seeds 3001-3032, TCP 91 of 1024 runs and the
     `browsers` tier (`STRIMS_SIM_RTC`) 171 (319 against TCP's 142 before
     the channel pacer, the host pacer and HAVEs at the tick). The tier
-    links every host as a browser, the seed too; a native seed with a
-    public listener reaches browsers over WebSocket, so only the viewers'
-    links among themselves are WebRTC. Add a tier with a native seed to
-    see how much of the gap that case keeps. Browsers do better through
-    halvings (halve-7-10 6 against 17) and worse in:
+    links every host as a browser, the seed too: the least capable
+    clients, the case to cure first. Mixed audiences (a native seed with a
+    public listener reaches browsers over WebSocket) wait for tuning once
+    swarms stop collapsing. Browsers do better through halvings
+    (halve-7-10 6 against 17) and worse in:
     - thin-15-10 (32 of 32 against 4): a relay's 3 Mbit/s uplink carries
       the 2.3 Mbit/s stream and SCTP's costs a packet: 93 bytes of headers
       on 1191, SACKs of the copy it receives, and each tick's HAVE packets
