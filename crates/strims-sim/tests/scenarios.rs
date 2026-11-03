@@ -2353,23 +2353,22 @@ fn collapse_halving_lock_in() {
 /// its windows' bursts: the flows that feed it slow down, its children
 /// miss their pushes and pull, and the pulls fill its uplink further.
 /// Behind a 10 Mbit seed, 15 viewers on 3 Mbit uplinks lag 2.5-3.5 s at the
-/// worst viewer on the Docker testbed, as here at some draws (3 of seeds
-/// 1-16). Checks that the mode is there: frames written from 20 s on lag
-/// 2 s or more at p99.
+/// worst viewer on the Docker testbed. Each HAVE a relay sends, and each
+/// pure acknowledgement of one it receives, is a packet in that FIFO; with
+/// most HAVEs at the tick (`scheduler_peer`'s docs) frames from 20 s on lag
+/// 1.1-2.0 s at p99 at seeds 1-32. Checks that they lag under 2 s.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_thin_relays() {
     let mut c = collapse_case(15, 10, 60);
     c.viewer_up_mbit = 3;
-    collapse_sweep("collapse_thin_relays", 4, &c, |r| {
+    collapse_sweep("collapse_thin_relays", 2, &c, |r| {
         let (_, start) = collapse_seed(r);
         let late = r.lag_between(0, start + secs(20), start + secs(60)).p99;
-        if late >= 2000 {
+        if late < 2000 {
             Ok(())
         } else {
-            Err(format!(
-                "frames from 20 s on lag {late} ms at p99: the mode is gone"
-            ))
+            Err(format!("frames from 20 s on lag {late} ms at p99"))
         }
     });
 }

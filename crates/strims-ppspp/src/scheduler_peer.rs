@@ -60,7 +60,22 @@
 //! as chunks are stored and requests as soon as a HAVE makes chunks
 //! requestable; in [`PushMode::Off`] both wait for the next tick. Every
 //! chunk of a frame lands in the HAVE map before the driver polls, so an
-//! eager channel writes once per frame handled, not once per chunk.
+//! eager channel writes once per frame handled, not once per chunk. A write
+//! cycle per frame is a packet per frame on each link, which on a data
+//! channel costs a packet's headers and a SACK back: at a seed from every
+//! neighbour, and at a relay to every neighbour, a third of a 3 Mbit/s
+//! uplink. So a HAVE waits for the next tick (or goes with what the channel
+//! writes first) when it can:
+//!
+//! - in every mode, to a peer that announced the chunk itself: it can't
+//!   request it;
+//! - in [`PushMode::Hybrid`], to every peer but those the frame pushes to
+//!   (the HAVE goes with the push), those whose channel opened within
+//!   [`EAGER_HAVES_AFTER_OPEN`] (a viewer starting up requests what it
+//!   hears of first) and those that requested from us within
+//!   [`EAGER_HAVES_AFTER_REQUEST`] (they pull, and ask whoever announces
+//!   first). The rest get the chunk pushed, and pull only what their
+//!   parent misses, past its deadline.
 //!
 //! # Data-less chunks
 //!
@@ -167,6 +182,11 @@ pub(crate) const PING_INTERVAL: Duration = Duration::from_secs(1);
 /// them: two ticks, so every other channel gets a write cycle to request
 /// them first.
 pub(crate) const REQUEST_BACKOFF: Duration = Duration::from_millis(200);
+/// How long a hybrid channel's HAVEs go at once after it opens ...
+pub const EAGER_HAVES_AFTER_OPEN: Duration = Duration::from_secs(5);
+/// ... and after each request its peer makes of us (see the
+/// [module docs](self)).
+pub const EAGER_HAVES_AFTER_REQUEST: Duration = Duration::from_secs(2);
 
 /// How many live windows of a peer's HAVEs, and of bin times, are tracked
 /// behind the highest bin seen.
@@ -631,6 +651,8 @@ pub(crate) struct PeerChannelScheduler {
     next_ping_time: Time,
     /// The nonce of the outstanding ping, 0 if none.
     ping_nonce: u64,
+    /// Until then a hybrid frame's HAVEs go to the peer at once.
+    eager_haves_until: Time,
 
     /// Scratch for `write1`. Bound: one frame of requests plus a request
     /// group per lane (live and backlog), and [`CANDIDATE_CAPACITY`]
@@ -672,6 +694,7 @@ impl PeerChannelScheduler {
             handshake_received: false,
             next_ping_time: Time::EPOCH,
             ping_nonce: 0,
+            eager_haves_until: now + EAGER_HAVES_AFTER_OPEN,
             candidate_bins: Vec::new(),
             push: s.push.as_ref().map(|_| PushChannel::new(streams)),
         }
@@ -1510,6 +1533,8 @@ impl PeerSwarmScheduler {
         let queued = if s.push.is_some() { now } else { Time::EPOCH };
         let mut wasted = bin.base_length();
         let mut backlog_new = 0u64;
+        // The channels this frame pushes to. Bound: the subscribers.
+        let mut pushed: Vec<PeerKey> = Vec::new();
         {
             let mut it = s.have_bins.iterate_empty_at(bin);
             while let Some(x) = it.next_base() {
@@ -1523,6 +1548,9 @@ impl PeerSwarmScheduler {
                 }
                 if let Some(stream) = s.streams.get(usize::from(s.bin_stream(x))) {
                     for sub in &stream.subscribers {
+                        if sub.start_bin <= x && !pushed.contains(&sub.channel) {
+                            pushed.push(sub.channel);
+                        }
                         if sub.start_bin <= x
                             && !q.push_data(sub.channel, s.key, x, queued, PeerPriority::High)
                         {
@@ -1606,11 +1634,16 @@ impl PeerSwarmScheduler {
                 }
             }
             // Eager modes write the HAVEs (and the pushes) at once, `Off` at
-            // the next tick, and so do they to a peer that announced the
-            // chunk. Every chunk of the frame being handled lands in
-            // `have_bins` before the driver polls, so this is one write cycle
-            // per frame, not per chunk.
-            if s.mode == PushMode::Off || c.peer_have_bins.filled_at(bin) {
+            // the next tick, and so do they the HAVEs that can wait (see
+            // the module docs). Every chunk of the frame being handled lands
+            // in `have_bins` before the driver polls, so this is one write
+            // cycle per frame, not per chunk.
+            let waits = match s.mode {
+                PushMode::Off => true,
+                PushMode::Hybrid => !pushed.contains(&c.peer) && now >= c.eager_haves_until,
+                _ => false,
+            };
+            if waits || c.peer_have_bins.filled_at(bin) {
                 q.enqueue(c.peer, s.key);
             } else {
                 q.enqueue_now(c.peer, s.key);
@@ -2088,6 +2121,7 @@ impl PeerSwarmScheduler {
         if !c.handshake_received {
             return true;
         }
+        c.eager_haves_until = c.eager_haves_until.max(now + EAGER_HAVES_AFTER_REQUEST);
         if !crate::peer_bin_ok(b, s.window) {
             return false;
         }
