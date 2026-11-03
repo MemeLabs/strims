@@ -554,14 +554,23 @@ in `TRIED.md`.
     of 50 ms every 4 s, the satellites' reassignment every 15 s; the
     profiles' docs), and jitter changes every 20 ms per end. Measure both
     where the app runs on those links.
-  - WAN scenarios run WebRTC on the window model's data channels
-    (`HostSpec::rtc_stack`), as `wan_webrtc_channels` does, and the
-    sim-suite's `browsers` tier runs robust's window-model cells with every
-    host a browser (`STRIMS_SIM_RTC`). Browser seeds stream over WebRTC, so
-    the upload meter's defaults need that tier measured against robust's
-    TCP before they cover them. With str0m over UDP instead (`udp`),
-    `wan_webrtc_channels` loses frames at 7 of seeds 1-8: compare it with
-    `str0m` there before a WAN cell runs native WebRTC either way.
+  - Browser peers collapse about 2.5 times as often as TCP peers: on
+    robust's window-model cells at seeds 2001-2016, TCP 71 of 512 runs, the
+    `browsers` tier (`STRIMS_SIM_RTC`) 175 with 8 KiB messages, and TCP
+    links with its signalling relay and network 89, so the gap is the
+    WebRTC links. The upload meter, the seed's budget and the push trees
+    were tuned on TCP links, whose unsent bytes stay small under
+    `TCP_NOTSENT_LOWAT`; a channel holds up to `max_buffered_amount` below
+    vnic (a 64 KiB cap didn't help). Find which of them misreads a WebRTC
+    link (the halvings and the 5 Mbit/s stars collapse most), and score
+    changes on the `browsers` tier as well as robust.
+  - str0m over UDP under the WAN window model doesn't replay: an SCTP
+    INIT's resend lands a millisecond apart between runs (2 of 8 runs of
+    `wan_residential_seed_adaptive_uncapped_step` at seed 2007 with
+    `STRIMS_SIM_RTC=udp STRIMS_SIM_TCP=1 STRIMS_SIM_STREAM_SECS=20`, as farm
+    jobs). Find the leak; meanwhile WAN cells run native WebRTC on the
+    `str0m` model, which agrees with UDP on robust's cells (190 and 199
+    collapsed of 512, lag p99 x2.14 and x2.33 against TCP).
   - The bare bench's WebRTC links run on the window model's data channels
     (`strims-sim`'s `wan::sctp`), a node's own stack for what it sends and
     its peer's for the SACKs: str0m's (`SctpProfile::STR0M`) for native
