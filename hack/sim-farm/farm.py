@@ -59,32 +59,35 @@ if its size or mtime changes.
 
 run builds what's missing, then keeps spot instances busy until every job
 has a row. A matrix's state is target/sim-farm/<matrix>/: rows.jsonl (a
-row per finished job, with its arm, commit, key, environment, host and its
-zone, wall and CPU time and peak RSS), failures.jsonl, mismatches.jsonl
-and farm.log. A test job's id hashes its arm's source, the package, target
-and test, its environment and its [[derive]] table, and names the job: in
-the matrix, to the workers, and in what waits on it. Its key hashes the
-same with the binary's sha256 for the source, which covers what the
-source doesn't (the compiler, as rust-toolchain.toml names a channel and
-not a release, the linker, build scripts' C), and commits whose binaries
-are the same bytes (a change to a crate the test doesn't link) share
-keys. A job is done once a row of its key is in any matrix here, unless a
+row per finished job, with its arm, commit, binary's sha256, key,
+environment, host and its zone, wall and CPU time and peak RSS),
+failures.jsonl, mismatches.jsonl and farm.log. A test job's id hashes its
+arm's source, the package, target and test, its environment and its
+[[derive]] table, and names the job: in the matrix, to the workers, and in
+what waits on it. Its key hashes the same with, for the source, the
+binary's sha256 and how the worker runs it (worker.py's TEST_ARGS and
+TEST_ENV), which covers what the source doesn't (the compiler, as
+rust-toolchain.toml names a channel and not a release, the linker, build
+scripts' C, the test's command line), and commits whose binaries are the
+same bytes (a change to a crate the test doesn't link) share keys. A job
+is done once a row of its key is in any matrix here, unless a
 mismatches.jsonl holds its key (such a row isn't a function of the binary
 and the job), and a derived job only once the job it waits on is done as
-well: a rerun skips the jobs that have rows, an arm whose binary changed
-runs again, and the rows of other matrices are copied in (below).
-target/sim-farm/row-keys.jsonl indexes every test row by key (a line of
-key, matrix, offset in its rows.jsonl and job id; the first row of a key
-is the one taken, and only if the line there is that job's), and each run
-first takes in what the matrices' rows.jsonl have added since
-(row-keys-read.json keeps how far). A row from before rows held their
-keys gets one from its commit's source, a binary in bin/ built from it,
-and the package, target, test and [[derive]] table that give its id (from
-bin/'s names and the matrix's toml, if it's still in matrices/ or
-target/sim-suite/farm/, which also gives the test of rows too old to name
-it). The first index here took in 281,587 test rows of 3.5k matrices in 9
-s, 17.6 MB, all but 22 of them (local matrices whose tomls are gone),
-4,178 by their toml's test; a run's update of it takes 0.4 s.
+well: a rerun skips the jobs that have rows, a job whose binary or
+invocation changed runs again, and the rows of other matrices are copied
+in (below). target/sim-farm/row-keys.jsonl indexes every test row by key
+(a line of key, matrix, offset in its rows.jsonl and job id; the first row
+of a key is the one taken, and only if the line there is that job's), and
+each run first takes in what the matrices' rows.jsonl have added since
+(row-keys-read.json keeps how far). A row with its binary's sha256 has its
+key; one without gets it from its commit's source, a binary in bin/ built
+from it, and the package, target and [[derive]] table that give its id
+(from bin/'s names and the matrix's toml, if it's still in matrices/ or
+target/sim-suite/farm/), run as OLD_TEST, and one that doesn't name its
+test (one of the farm's first, whose worker ran --ignored) gets none. The
+first index here took in 287,823 test rows of 3.6k matrices in 9 s, 18.0
+MB, all but 4,200 (those that don't name their test); a run's update of it
+takes 0.5 s.
 
 run takes several matrices at once: one queue holds their jobs, and one
 set of instances runs them. A job two matrices share (the same source and
@@ -387,6 +390,8 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+import worker
+
 HERE = Path(__file__).resolve().parent
 CONFIG = HERE / "config.toml"
 ROOT = HERE.parent.parent
@@ -457,6 +462,9 @@ ROW_KEYS_READ = FARM / "row-keys-read.json"
 # Where a matrix's toml may still be, by its name: what gives an old row's
 # [[derive]] table.
 MATRIX_DIRS = [HERE / "matrices", ROOT / "target" / "sim-suite" / "farm"]
+# How the worker ran the tests of rows that name their test but record no
+# binary's hash (worker.TEST_ARGS and TEST_ENV then).
+OLD_TEST = (["--exact", "<test>", "--include-ignored", "--nocapture", "--test-threads", "1"], {"RUST_BACKTRACE": "1"})
 # The seed knobs, which reports don't group by.
 SEED_KEYS = {"SIM_SEED", "STRIMS_SIM_SEED"}
 # What a test binary is built from: commits that change none of it share
@@ -518,8 +526,8 @@ class Job:
     bin: str
     test: str
     env: tuple[tuple[str, str], ...]
-    # What the id hashes, with the binary's sha256 for the source: "" for a
-    # testbed job, or until the binary is built.
+    # What the id hashes, with the binary's sha256 and how the worker runs
+    # it for the source: "" for a testbed job, or until the binary is built.
     key: str = ""
     # The id of the job whose row this one waits for, and the variables it
     # takes from that row (its [[derive]] table's `set`).
@@ -573,10 +581,11 @@ def derived_env(job: "Job", row: dict) -> tuple[dict[str, str], str | None]:
     return out, None
 
 
-def job_hash(head: str, package: str, target: str, test: str, env: tuple, derive: Derive | None) -> str:
-    """A test job's id (head: its source) or key (head: its binary's
-    sha256): the hash of head, the package, target and test, the sorted
-    environment and the [[derive]] table, if any."""
+def job_hash(head: object, package: str, target: str, test: str, env: tuple, derive: Derive | None) -> str:
+    """A test job's id (head: its source) or key (head: its binary's sha256,
+    the worker's arguments and environment for it): the hash of head, the
+    package, target and test, the sorted environment and the [[derive]]
+    table, if any."""
     key = [head, package, target, test, env]
     if derive is not None:
         key.append([sorted(derive.src.items()), derive.set])
@@ -708,7 +717,8 @@ class Matrix:
         return Job(
             job_hash(source, self.package, self.target, test, env_t, derive), arm, self.commits[arm],
             source, bin_, test, env_t,
-            key=job_hash(h, self.package, self.target, test, env_t, derive) if h else "",
+            key=job_hash([h, worker.TEST_ARGS, worker.TEST_ENV], self.package, self.target, test, env_t, derive)
+            if h else "",
             after=after, derive=derive.set if derive is not None else (),
         )
 
@@ -927,11 +937,12 @@ def index_walls() -> list[dict]:
 
 
 class Keyer:
-    """The keys of rows that don't record theirs: the row's commit gives its
-    source, the source the binaries in bin/ built from it, and the one
-    (package, target), [[derive]] table if any, and test (the matrix's, for
-    a row too old to record its own) that give the row's id give its key
-    with that binary's hash."""
+    """The keys of rows that record none with their binary's hash: the
+    row's commit gives its source, the source the binaries in bin/ built
+    from it, and the one (package, target) and [[derive]] table, if any,
+    that give the row's id give its key with that binary's hash, run as
+    OLD_TEST. A row that doesn't name its test (one of the farm's first,
+    whose worker ran it with --ignored) gets none."""
 
     def __init__(self) -> None:
         self.sources: dict[str, str | None] = {}
@@ -968,11 +979,13 @@ class Keyer:
         return self.tomls[matrix]
 
     def key(self, rec: dict, matrix: str) -> tuple[str | None, str]:
-        """The key of a test row of the matrix, else None and why: "commit"
-        (its commit is gone), "binary" (no binary of its source is here) or
-        "id" (none gives its id)."""
-        if rec.get("key"):
+        """The key of a test row of the matrix, else None and why: "test"
+        (it doesn't name its test), "commit" (its commit is gone), "binary"
+        (no binary of its source is here) or "id" (none gives its id)."""
+        if rec.get("key") and rec.get("binary"):
             return rec["key"], ""
+        if not rec.get("test"):
+            return None, "test"
         source = self.source(rec.get("commit") or "")
         if source is None:
             return None, "commit"
@@ -980,16 +993,15 @@ class Keyer:
             return None, "binary"
         env = rec.get("env", {})
         m = self.toml(matrix)
-        tests = [rec["test"]] if rec.get("test") else m.tests if m else []
         for d in [None, *(m.derives if m else [])]:
             set_ = {k for k, _ in d.set} if d is not None else set()
             env_t = tuple(sorted((k, v) for k, v in env.items() if k not in set_))
-            for test, (package, target) in itertools.product(tests, self.bins[source]):
-                if job_hash(source, package, target, test, env_t, d) == rec.get("id"):
+            for package, target in self.bins[source]:
+                if job_hash(source, package, target, rec["test"], env_t, d) == rec.get("id"):
                     h = bin_hash(f"{package}-{target}-{source}")
                     if h is None:
                         return None, "binary"
-                    return job_hash(h, package, target, test, env_t, d), ""
+                    return job_hash([h, *OLD_TEST], package, target, rec["test"], env_t, d), ""
         return None, "id"
 
 
@@ -1028,13 +1040,11 @@ def row_index(mine: set[str]) -> tuple[dict[str, tuple[str, int, str]], dict[str
                     rec = row_head(line)
                     if not rec or rec.get("kind", "test") != "test" or not rec.get("id"):
                         continue
-                    key = rec.get("key")
-                    if not key:
-                        keyer = keyer or Keyer()
-                        key, why = keyer.key(rec, name)
-                        if key is None:
-                            left[why] += 1
-                            continue
+                    keyer = keyer or Keyer()
+                    key, why = keyer.key(rec, name)
+                    if key is None:
+                        left[why] += 1
+                        continue
                     new.append([key, name, off, rec["id"]])
             read[name] = at
         append_jsonl(ROW_KEYS, new)
@@ -1055,8 +1065,8 @@ def row_index(mine: set[str]) -> tuple[dict[str, tuple[str, int, str]], dict[str
         return first, have
 
 
-UNKEYED = {"commit": "whose commit is gone", "binary": "with no binary of their source",
-           "id": "whose id no binary and [[derive]] table gives"}
+UNKEYED = {"test": "that don't name their test", "commit": "whose commit is gone",
+           "binary": "with no binary of their source", "id": "whose id no binary and [[derive]] table gives"}
 
 
 def bad_keys() -> set[str]:
@@ -1066,10 +1076,8 @@ def bad_keys() -> set[str]:
     for path in FARM.glob("*/mismatches.jsonl"):
         for m in read_jsonl(path):
             for rec in (m["first"], m["again"]):
-                key = rec.get("key")
-                if not key:
-                    keyer = keyer or Keyer()
-                    key, _ = keyer.key(rec, path.parent.name)
+                keyer = keyer or Keyer()
+                key, _ = keyer.key(rec, path.parent.name)
                 if key:
                     out.add(key)
     return out
@@ -1098,12 +1106,13 @@ def rows_at(places: list[tuple[str, int, str]]) -> list[dict | None]:
 
 
 def copy_row(rec: dict, job: Job, src: str) -> dict:
-    """A row as the copy of `job`'s matrix: its own id, arm, commit, test
-    and key, and `from` the matrix of the row that ran, with `row` last."""
+    """A row as the copy of `job`'s matrix: its own id, arm, commit, test,
+    binary and key, not a verify copy's, and `from` the matrix of the row
+    that ran, with `row` last."""
     head = {k: v for k, v in rec.items() if k != "row"}
     return {
-        **head, "id": job.id, "arm": job.arm, "commit": job.commit, "test": job.test, "key": job.key,
-        "from": rec.get("from") or src, "row": rec["row"],
+        **head, "id": job.id, "arm": job.arm, "commit": job.commit, "test": job.test, "copy": "",
+        "binary": bin_hash(job.bin), "key": job.key, "from": rec.get("from") or src, "row": rec["row"],
     }
 
 
@@ -2098,6 +2107,7 @@ class Run:
         for m, j in self.owners[item.job.id]:
             rec = {
                 "id": j.id,
+                "binary": bin_hash(j.bin),
                 "key": j.key,
                 "arm": j.arm,
                 "commit": j.commit,
@@ -2417,10 +2427,8 @@ class Run:
         work = self.state / "canary"
         shutil.rmtree(work, ignore_errors=True)
         work.mkdir(parents=True)
-        p = subprocess.run(
-            [str(BIN / job.bin), "--exact", job.test, "--include-ignored", "--nocapture", "--test-threads", "1"],
-            cwd=work, env={**os.environ, **dict(job.env)}, capture_output=True, text=True,
-        )
+        cmd, env = worker.test_run(BIN / job.bin, job.test, dict(job.env), str(work))
+        p = subprocess.run(cmd, cwd=work, env=env, capture_output=True, text=True)
         rows = [l[l.index("ROW {") + 4 :] for l in p.stdout.splitlines() if "ROW {" in l]
         if p.returncode or len(rows) != 1:
             sys.exit(f"the canary failed here:\n{p.stdout[-2000:]}\n{p.stderr[-2000:]}")

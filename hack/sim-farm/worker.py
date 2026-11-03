@@ -9,8 +9,9 @@
 
 `serve` runs up to N jobs at once from D/queue/, by their `seq` if they
 have one, then oldest first. A job is a test binary in D/bin/ run as one
-test (`--exact <test> --include-ignored --nocapture`) with the job's
-environment, in D/work/<id>/, its output in out.log there. A finished job
+test (TEST_ARGS: `--exact <test> --include-ignored --nocapture
+--test-threads 1`) with TEST_ENV and the job's environment, in
+D/work/<id>/, its output in out.log there. A finished job
 leaves D/done/<id>.json: its exit, the single `ROW {json}` it printed,
 its wall and CPU time, its peak RSS, and the tail of its log if it
 failed. A job past --job-timeout minutes is killed.
@@ -75,6 +76,11 @@ LOG_TAIL = 40
 STEAL_WINDOW = 10
 # What runs as root where sudo wants a password.
 ROOT_IMAGE = "ubuntu:26.04"
+# How a test job runs: its binary with these arguments ("<test>" its test),
+# and this environment and then the job's over the host's PATH and HOME.
+# farm.py hashes both into the job's key.
+TEST_ARGS = ["--exact", "<test>", "--include-ignored", "--nocapture", "--test-threads", "1"]
+TEST_ENV = {"RUST_BACKTRACE": "1"}
 
 
 def dirs(root: Path) -> dict[str, Path]:
@@ -325,6 +331,18 @@ def tree_of(root: Path, bundle: str) -> Path:
     return tree
 
 
+def test_run(binary: Path, test: str, env: dict[str, str], home: str) -> tuple[list[str], dict[str, str]]:
+    """A test job's command and environment (TEST_ARGS, TEST_ENV); HOME
+    is `home` where the host has none."""
+    cmd = [str(binary), *(test if a == "<test>" else a for a in TEST_ARGS)]
+    return cmd, {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": os.environ.get("HOME", home),
+        **TEST_ENV,
+        **env,
+    }
+
+
 def testbed_run(root: Path, job: dict, work: Path) -> tuple[list[str], dict[str, str]]:
     """run.sh from the job's bundle, and its environment."""
     tree = tree_of(root, job["bin"])
@@ -478,21 +496,7 @@ def serve(args: argparse.Namespace) -> None:
                 if testbed:
                     cmd, env = testbed_run(root, job, work)
                 else:
-                    env = {
-                        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-                        "HOME": os.environ.get("HOME", str(root)),
-                        "RUST_BACKTRACE": "1",
-                        **job["env"],
-                    }
-                    cmd = [
-                        str(d["bin"] / job["bin"]),
-                        "--exact",
-                        job["test"],
-                        "--include-ignored",
-                        "--nocapture",
-                        "--test-threads",
-                        "1",
-                    ]
+                    cmd, env = test_run(d["bin"] / job["bin"], job["test"], job["env"], str(root))
                 with (work / "out.log").open("wb") as out:
                     proc = subprocess.Popen(
                         cmd,
