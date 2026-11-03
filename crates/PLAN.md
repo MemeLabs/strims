@@ -573,6 +573,17 @@ in `TRIED.md`.
       rates stay under what they're asked to carry (the scenarios script
       three).
     - star-31-5 (8 against 1) and halve-31-10 (32 against 23).
+  - A data channel's message holds one frame (`WebRtcConfig::max_message`,
+    `Host::poll_link_message`), and stacks that cut a message into chunks
+    as it is written end it in a short one, alone in its packet:
+    sctp-proto (str0m, 1062-byte chunks) sends a 4.3 KiB frame in 5
+    packets for 4.1, usrsctp (Firefox, 1160) in 4 for 3.75; dcSCTP fills
+    the packet with the next message. Ending messages at the sender's
+    chunk boundary past their frames (the next frame's head fills the
+    chunk) would save the packets for a wait of under a chunk. On the
+    str0m model at seeds 1-6 the one-frame messages moved collapses 48 ->
+    43 but startup p99 x1.67 on star-3-10, x1.31 on star-3-20, x1.28 on
+    star-31-10.
   - str0m over UDP under the WAN window model doesn't replay: an SCTP
     INIT's resend lands a millisecond apart between runs (2 of 8 runs of
     `wan_residential_seed_adaptive_uncapped_step` at seed 2007 with
