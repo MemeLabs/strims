@@ -24,7 +24,9 @@
 //!    the links with bytes waiting. Message-oriented transports (WebSocket,
 //!    data channel) send at most [`Host::link_mtu`] bytes per message. A link
 //!    is a byte stream: message boundaries need not match frames, and readers
-//!    concatenate messages.
+//!    concatenate messages. A transport whose reader takes whole messages
+//!    sends [`Host::poll_link_message`]'s, so a frame waits on no message
+//!    but its own.
 //! 3. Call [`Host::poll_egress`] after input, after owners change backlogs,
 //!    after [`Host::advance_link_transmit`], and at [`Host::poll_timeout`];
 //!    then drain events and send what the links have. The handshake deadline

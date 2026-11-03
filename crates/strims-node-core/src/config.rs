@@ -315,11 +315,12 @@ pub struct WebRtcConfig {
     /// The most bytes a WebRTC link writes to its data channel in one
     /// message. A channel hands its reader whole messages, so every frame
     /// of a message waits for its last byte: a 64 KiB message (the link
-    /// MTU) holds its first frame 175 ms at 3 Mbit/s. The default, 8 KiB,
-    /// takes a ppspp frame whole (they are 8 KiB at most); frames longer
-    /// than a message span several. Lower costs a send opportunity a
-    /// message in Chromium's dcSCTP, which sends at most four packets an
-    /// opportunity.
+    /// MTU) holds its first frame 175 ms at 3 Mbit/s. A link's messages end
+    /// where its frames do (`strims_vnic::Host::poll_link_message`), so no
+    /// frame waits on the next message, and the default, 4.5 KiB, holds one
+    /// ppspp frame of a 4 KiB chunk (about 4.2 KiB with its integrity and
+    /// headers) and the control frames vnic puts ahead of it, so none waits
+    /// on another's bytes either. A longer frame spans several messages.
     pub max_message: usize,
 }
 
@@ -334,7 +335,7 @@ impl Default for WebRtcConfig {
             udp_read_buffer_size: 4096,
             udp_send_queue: 1024,
             max_buffered_amount: 256 * 1024,
-            max_message: 8 * 1024,
+            max_message: 4 * 1024 + 512,
         }
     }
 }

@@ -22,8 +22,8 @@ use strims_proto::vnic::v1::PeerInit;
 use strims_vnic::host::CloseReason;
 use strims_vnic::stream::encode_stream_message;
 use strims_vnic::{
-    Error, Event, Fill, Host, LinkConfig, LinkKind, PeerInitError, PeerKey, TcpMux, TcpMuxAcceptor,
-    WriterId,
+    Error, Event, FRAME_HEADER_LEN, Fill, FrameHeader, Host, LinkConfig, LinkKind, PeerInitError,
+    PeerKey, TcpMux, TcpMuxAcceptor, WriterId,
 };
 
 fn no_handlers(_: &mut Host<Tag>, _: PeerKey) {}
@@ -593,4 +593,66 @@ fn rejects_bad_link_configs() {
     );
     a.host.set_max_peers(0);
     assert_eq!(a.host.max_peers(), i32::MAX as usize);
+}
+
+#[test]
+fn messages_carry_whole_frames() {
+    let mut a = Node::new(1, "a");
+    let mut b = Node::new(2, "b");
+    let mut cfg = plain(1000);
+    cfg.send_buffer = 5000;
+    let la = a.host.add_link(now(), cfg.clone()).unwrap();
+    let lb = b.host.add_link(now(), cfg).unwrap();
+    pump(&mut a, la, &mut b, lb, now(), 64, &mut no_handlers);
+    let w = a.host.open_writer(la, 1, a.host.qos_root(), 0).unwrap();
+    a.host.set_backlog(w).unwrap();
+    let mut sizes = vec![300, 996, 100, 500, 40];
+    let mut fill = |f: strims_vnic::EgressFrame<'_, Tag>| {
+        let n = sizes.remove(0).min(f.body.len());
+        f.body[..n].fill(0xaa);
+        if sizes.is_empty() {
+            Fill::last(n)
+        } else {
+            Fill::more(n)
+        }
+    };
+    while a.host.poll_egress(now(), &mut fill) > 0 {}
+    let stream = a.host.poll_link_transmit(la).unwrap().to_vec();
+    let mut ends = Vec::new();
+    let mut off = 0;
+    while let Ok((h, _)) = FrameHeader::decode(&stream[off..]) {
+        off += FRAME_HEADER_LEN + usize::from(h.length);
+        ends.push(off);
+    }
+    assert_eq!(off, stream.len());
+
+    // At most 700 bytes a message, one cut short to 10 bytes: whole frames,
+    // or a 1000-byte frame in pieces of 700 at most, the cut frame's rest
+    // on its own.
+    let (mut sent, mut msgs) = (Vec::new(), Vec::new());
+    let mut short = true;
+    loop {
+        let m = a.host.poll_link_message(la, 700).unwrap().to_vec();
+        if m.is_empty() {
+            break;
+        }
+        let n = if short && m.len() > 10 { 10 } else { m.len() };
+        short = false;
+        sent.extend_from_slice(&m[..n]);
+        msgs.push(sent.len());
+        a.host.advance_link_transmit(la, n).unwrap();
+    }
+    assert_eq!(sent, stream);
+    let mut start = 0;
+    for &end in &msgs {
+        let whole = ends.contains(&end);
+        let piece = end - start == 700 || end == 10;
+        assert!(
+            whole || piece,
+            "message {start}..{end}, frames end at {ends:?}"
+        );
+        start = end;
+    }
+    // The 1000-byte frame is cut, the frames around it go whole.
+    assert!(msgs.iter().any(|&e| !ends.contains(&e) && e != 10));
 }

@@ -146,19 +146,17 @@ pub(super) fn write_channel(
         if !rtc.pacer.may_write(now, host) {
             break;
         }
-        let room = dc
-            .pacer
-            .cap(now, rtc.max_buffered)
-            .saturating_sub(buffered)
-            .max(1);
-        let data = match vnic.poll_link_transmit(link) {
+        let data = match vnic.poll_link_message(link, rtc.max_message) {
             Ok(d) if !d.is_empty() => d,
             _ => break,
         };
-        let data = data
-            .get(..room.min(data.len()).min(rtc.max_message))
-            .unwrap_or_default();
+        // A message goes whole, once the cap has room for it (or alone).
+        let room = dc.pacer.cap(now, rtc.max_buffered).saturating_sub(buffered);
         let len = data.len();
+        if len > room && buffered > 0 {
+            dc.capped = true;
+            break;
+        }
         match rtc.ep.write(conn, data) {
             Ok(n) => {
                 if n > 0 {

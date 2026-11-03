@@ -688,7 +688,7 @@ impl<I: NodeIo> NodeTask<I> {
                 return;
             }
         };
-        let io = self.spawn_link_io(link, transport, max_write);
+        let io = self.spawn_link_io(link, transport, max_write, rtc.is_some());
         self.state.insert_link(link, kind, io, dial, rtc);
         if !leftover.is_empty() {
             self.state.handle_read(link, now, leftover);
@@ -702,6 +702,7 @@ impl<I: NodeIo> NodeTask<I> {
         link: LinkKey,
         transport: I::Transport,
         max_write: usize,
+        messages: bool,
     ) -> LinkIo {
         let b = self.buffers;
         let (nr, nw) = (b.read_buffers.max(1), b.write_buffers.max(1));
@@ -726,6 +727,7 @@ impl<I: NodeIo> NodeTask<I> {
             free_write,
             write_buffers: nw,
             max_write,
+            messages,
             read_free_tx,
             reader: tasks.reader,
             idle_ok: tasks.idle_ok,

@@ -499,6 +499,10 @@ struct Link<T> {
     control: Vec<u8>,
     /// Allocated when the peer is established.
     out: Option<OutBuf>,
+    /// The bytes of the frame at the front of `out` that a short write
+    /// left behind it; 0 while `out` starts with a frame. Unused on AES
+    /// links, whose headers are encrypted.
+    frame_left: usize,
     decoder: FrameDecoder,
     /// Whether the link's writers are blocked on a full `out`.
     blocked: bool,
@@ -713,6 +717,7 @@ impl<T: Copy> Host<T> {
             aes: None,
             control,
             out: None,
+            frame_left: 0,
             decoder: FrameDecoder::new(),
             blocked: false,
             metrics: LinkMetrics::default(),
@@ -975,8 +980,33 @@ impl<T: Copy> Host<T> {
         Ok(l.out.as_ref().map(OutBuf::pending).unwrap_or_default())
     }
 
+    /// The next message of at most `max` bytes for a transport whose
+    /// reader takes whole messages (a data channel's `onmessage`): the
+    /// handshake bytes, then as many whole frames as fit, so that no frame
+    /// waits on the message after its own. A frame longer than `max` goes
+    /// in pieces of `max`, its last with the whole frames that fit behind
+    /// it. AES links' frames can't be read here: their first `max` bytes.
+    pub fn poll_link_message(&self, link: PeerKey, max: usize) -> Result<&[u8], Error> {
+        let l = self.links.get(link).ok_or(Error::UnknownLink)?;
+        let max = max.max(1);
+        if !l.control.is_empty() {
+            return Ok(l
+                .control
+                .get(..max.min(l.control.len()))
+                .unwrap_or_default());
+        }
+        let pending = l.out.as_ref().map(OutBuf::pending).unwrap_or_default();
+        let n = if l.aes.is_some() {
+            max.min(pending.len())
+        } else {
+            whole_frames(pending, l.frame_left, max)
+        };
+        Ok(pending.get(..n).unwrap_or_default())
+    }
+
     /// Reports that the first `n` bytes from [`Host::poll_link_transmit`]
-    /// were sent. Unblocks the link's writers once an MTU is free.
+    /// (or [`Host::poll_link_message`]) were sent. Unblocks the link's
+    /// writers once an MTU is free.
     pub fn advance_link_transmit(&mut self, link: PeerKey, n: usize) -> Result<(), Error> {
         let l = self.links.get_mut(link).ok_or(Error::UnknownLink)?;
         if !l.control.is_empty() {
@@ -993,6 +1023,9 @@ impl<T: Copy> Host<T> {
                 return Err(Error::AdvancePastEnd);
             }
             if let Some(out) = &mut l.out {
+                if l.aes.is_none() {
+                    l.frame_left = frame_left_after(out.pending(), l.frame_left, n);
+                }
                 out.advance(n);
             }
         }
@@ -1893,4 +1926,43 @@ fn random_below(rng: &mut DetRng, n: u32) -> u32 {
             return (v % n) as u32;
         }
     }
+}
+
+/// The bytes of `pending` (the last `left` bytes of a frame a short write
+/// cut, then whole frames) that make one message of at most `max`:
+/// through the last frame that ends within `max`, or `max` bytes when none
+/// does.
+fn whole_frames(pending: &[u8], left: usize, max: usize) -> usize {
+    if left > max {
+        return max.min(pending.len());
+    }
+    let mut end = left.min(pending.len());
+    while let Ok((h, _)) = FrameHeader::decode(pending.get(end..).unwrap_or_default()) {
+        let next = end + FRAME_HEADER_LEN + usize::from(h.length);
+        if next > max || next > pending.len() {
+            break;
+        }
+        end = next;
+    }
+    if end == 0 {
+        max.min(pending.len())
+    } else {
+        end
+    }
+}
+
+/// The bytes left of the frame `pending` starts in once its first `n` are
+/// sent, `left` being those left of it now.
+fn frame_left_after(pending: &[u8], left: usize, n: usize) -> usize {
+    if n <= left {
+        return left - n;
+    }
+    let mut end = left;
+    while end < n {
+        let Ok((h, _)) = FrameHeader::decode(pending.get(end..).unwrap_or_default()) else {
+            return 0;
+        };
+        end += FRAME_HEADER_LEN + usize::from(h.length);
+    }
+    end - n
 }

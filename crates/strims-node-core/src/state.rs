@@ -145,6 +145,9 @@ pub(crate) struct LinkIo {
     /// The most bytes per write: the link MTU, so a message transport
     /// sends at most one MTU per message.
     pub(crate) max_write: usize,
+    /// A data channel's: each write is a message its reader takes whole,
+    /// so writes end where frames do ([`strims_vnic::Host::poll_link_message`]).
+    pub(crate) messages: bool,
     /// Read buffers back to the reader task.
     pub(crate) read_free_tx: mpsc::Sender<Vec<u8>>,
     /// Aborted when the link goes; the writer ends when `write_tx` drops.
@@ -958,10 +961,13 @@ impl State {
                 }
             };
             while let Some(mut buf) = io.free_write.pop() {
-                let chunk = match vnic.poll_link_transmit(link) {
-                    Ok(p) => p.get(..p.len().min(io.max_write)).unwrap_or_default(),
-                    Err(_) => &[],
+                let chunk = if io.messages {
+                    vnic.poll_link_message(link, io.max_write)
+                } else {
+                    vnic.poll_link_transmit(link)
+                        .map(|p| p.get(..p.len().min(io.max_write)).unwrap_or_default())
                 };
+                let chunk = chunk.unwrap_or_default();
                 if chunk.is_empty() {
                     io.free_write.push(buf);
                     break;
