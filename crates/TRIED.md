@@ -290,3 +290,26 @@ TCP bench's drops where two holders share a 5 Mbit/s uplink (152 -> 313,
 the testbed 178-192; the halving 217 -> 292, the testbed 194-238) and
 left the 25-viewer twin of the testbed's uplink cut where it was (39.5
 cut seconds over 1 s against 37.5).
+
+## WebRTC links
+
+**A smaller data channel cap.** (`browsers-exp`, against 226a5d43)
+`WebRtcConfig::max_buffered_amount` at 32 or 64 KiB in place of 256 KiB,
+on the sim-suite's browsers tier. The buffered amount counts the flight
+too, so a cap holds back throughput where it would hold back the queue:
+halve-15-10 at seeds 2001-2008 collapsed 6 of 8 at 64 KiB against 8 of 8
+(lag p99 4.3 -> 2.4 s), and before 8 KiB messages the tier went 191 -> 184
+collapsed of 512.
+
+**16 KiB messages.** (`browsers-exp`, against 7a90d302) Collapsed fewer
+than 8 KiB on the browsers tier (309 against 319 of 1024 at 32 seeds) but
+broke star-3-10's lag p99 (x2.46) and star-7-20's (x1.77) at both seed
+sets; 8 KiB landed.
+
+**Chromium's buffered amount as its unsent bytes alone.** (on
+`tcp-bench`, against 4b563937) dcSCTP's `buffered_amount` leaves out the
+flight, but modelling Chromium's channel that way fit the testbed's
+overloaded Chromium links worse (rtc-over-chromium 0.556 -> 0.632,
+rtc-over-chromium-chromium 0.403 -> 0.475, the rest unchanged): Chromium's
+`bufferedAmount` behaves as if it counts the flight.
+

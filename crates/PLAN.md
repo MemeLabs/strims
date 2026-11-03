@@ -557,13 +557,22 @@ in `TRIED.md`.
   - Browser peers collapse about 2.5 times as often as TCP peers: on
     robust's window-model cells at seeds 2001-2016, TCP 71 of 512 runs, the
     `browsers` tier (`STRIMS_SIM_RTC`) 175 with 8 KiB messages, and TCP
-    links with its signalling relay and network 89, so the gap is the
-    WebRTC links. The upload meter, the seed's budget and the push trees
-    were tuned on TCP links, whose unsent bytes stay small under
-    `TCP_NOTSENT_LOWAT`; a channel holds up to `max_buffered_amount` below
-    vnic (a 64 KiB cap didn't help). Find which of them misreads a WebRTC
-    link (the halvings and the 5 Mbit/s stars collapse most), and score
-    changes on the `browsers` tier as well as robust.
+    links with its signalling relay and network 89. Most of it is the
+    channel's unsent queue below vnic, which `TCP_NOTSENT_LOWAT` keeps small
+    on TCP: an oracle mark of 16 KiB on it (`browsers-exp`'s `lowat16`)
+    takes the tier to 105, and a cap from the drain rate and the least
+    round trip (`bdp`: the rate over twice the least round trip and 50 ms,
+    and 16 KiB) to 118 with no guardrail broken. A writer sees only the
+    buffered amount, flight and unsent bytes together, and a round trip
+    can't tell its own queue from the path's: built for real (branch
+    `channel-pacer`, `rtc::pace::ChannelPacer` in node-core, the browser's
+    `DcSocket` and the sim's channel socket) the cap starves an LTE viewer
+    of `wan_webrtc_channels` (seeds 5 and 8) once the round trip outgrows
+    its horizon. Next: probe the cap up while write-to-ack round trips sit
+    at the least (the pacer, not the path, holds the link back), and score
+    it on the `browsers` tier and `wan_webrtc_channels`. The 5 Mbit/s stars
+    (star-31-5: TCP 0 of 8, browsers 8 of 8 with the oracle too) and thin
+    relays (16 of 16) are a second gap.
   - str0m over UDP under the WAN window model doesn't replay: an SCTP
     INIT's resend lands a millisecond apart between runs (2 of 8 runs of
     `wan_residential_seed_adaptive_uncapped_step` at seed 2007 with
