@@ -74,15 +74,18 @@ pub(crate) struct Rtc {
     pub(crate) ep: Box<dyn RtcEndpoint>,
     /// `WebRtcConfig::max_buffered_amount`.
     max_buffered: usize,
+    /// `WebRtcConfig::max_message`.
+    max_message: usize,
     /// Bounded by the endpoint's connection limit.
     conns: BTreeMap<RtcConn, ConnSlot>,
 }
 
 impl Rtc {
-    pub(super) fn new(ep: Box<dyn RtcEndpoint>, max_buffered: usize) -> Rtc {
+    pub(super) fn new(ep: Box<dyn RtcEndpoint>, max_buffered: usize, max_message: usize) -> Rtc {
         Rtc {
             ep,
             max_buffered,
+            max_message,
             conns: BTreeMap::new(),
         }
     }
@@ -90,7 +93,8 @@ impl Rtc {
 
 /// Writes the link's pending bytes into its in-process data channel until
 /// vnic has no more, the channel is full, or its buffered amount reaches
-/// `max_buffered`. Returns the bytes taken.
+/// `max_buffered`, in messages of `max_message` bytes at most. Returns the
+/// bytes taken.
 ///
 /// A capped channel resumes once its buffered amount is down to half the
 /// cap. Acknowledgements arrive as driver input, and the pass after every
@@ -119,7 +123,9 @@ pub(super) fn write_channel(
             Ok(d) if !d.is_empty() => d,
             _ => break,
         };
-        let data = data.get(..room.min(data.len())).unwrap_or_default();
+        let data = data
+            .get(..room.min(data.len()).min(rtc.max_message))
+            .unwrap_or_default();
         let len = data.len();
         match rtc.ep.write(conn, data) {
             Ok(n) => {
@@ -371,6 +377,11 @@ impl State {
                 self.rtc_link_failed(conn, e.to_string(), now);
             }
         }
+    }
+
+    /// `WebRtcConfig::max_message`, with WebRTC on.
+    pub(crate) fn rtc_max_message(&self) -> Option<usize> {
+        self.rtc.as_ref().map(|r| r.max_message)
     }
 
     /// Whether a channel the driver attaches for `conn` can become its

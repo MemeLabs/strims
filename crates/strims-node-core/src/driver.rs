@@ -662,11 +662,17 @@ impl<I: NodeIo> NodeTask<I> {
             return;
         }
         let kind = config.kind;
-        let max_write = notsent_lowat.map_or(config.mtu, |l| {
+        let mut max_write = notsent_lowat.map_or(config.mtu, |l| {
             usize::try_from(l)
                 .unwrap_or(usize::MAX)
                 .clamp(MIN_WRITE.min(config.mtu), config.mtu)
         });
+        // A data channel's writes are its messages.
+        if rtc.is_some()
+            && let Some(m) = self.state.rtc_max_message()
+        {
+            max_write = max_write.min(m);
+        }
         if max_write < config.mtu {
             config.send_buffer = config.mtu.saturating_add(max_write);
         }
@@ -995,6 +1001,12 @@ mod tests {
         assert_eq!((pa.kind, pa.dialed), (LinkKind::WebRtc, true));
         assert_eq!((pb.kind, pb.dialed), (LinkKind::WebRtc, false));
         assert_eq!(candidate_state(&mut a, x), CandidateState::Linked);
+        let m = crate::config::WebRtcConfig::default().max_message;
+        assert_eq!(
+            a.task.state.test_max_writes(),
+            [m],
+            "messages of max_message"
+        );
     }
 
     /// The driver's channel failing closes its connection and fails the

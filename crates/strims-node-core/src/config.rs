@@ -311,6 +311,15 @@ pub struct WebRtcConfig {
     /// stream rates, and holds at most that much in FIFO order. The
     /// endpoint's own `send_buffer` (larger) is the hard limit behind it.
     pub max_buffered_amount: usize,
+    /// The most bytes a WebRTC link writes to its data channel in one
+    /// message. A channel hands its reader whole messages, so every frame
+    /// of a message waits for its last byte: a 64 KiB message (the link
+    /// MTU) holds its first frame 175 ms at 3 Mbit/s. The default, 8 KiB,
+    /// takes a ppspp frame whole (they are 8 KiB at most); frames longer
+    /// than a message span several. Lower costs a send opportunity a
+    /// message in Chromium's dcSCTP, which sends at most four packets an
+    /// opportunity.
+    pub max_message: usize,
 }
 
 impl Default for WebRtcConfig {
@@ -324,6 +333,7 @@ impl Default for WebRtcConfig {
             udp_read_buffer_size: 4096,
             udp_send_queue: 1024,
             max_buffered_amount: 256 * 1024,
+            max_message: 8 * 1024,
         }
     }
 }

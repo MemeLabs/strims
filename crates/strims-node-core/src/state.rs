@@ -464,6 +464,7 @@ impl State {
             rtc::Rtc::new(
                 factory(now, fork(&mut rng)),
                 config.webrtc.max_buffered_amount.max(1),
+                config.webrtc.max_message.max(1),
             )
         });
         Ok(State {
@@ -2068,6 +2069,17 @@ impl State {
 
     pub(crate) fn test_link_count(&self) -> usize {
         self.links.len()
+    }
+
+    /// The most bytes a write of each stream link takes.
+    pub(crate) fn test_max_writes(&self) -> Vec<usize> {
+        self.links
+            .values()
+            .filter_map(|l| match &l.io {
+                LinkTransport::Stream(io) => Some(io.max_write),
+                LinkTransport::DataChannel(_) => None,
+            })
+            .collect()
     }
 
     /// Hands the runner's events to the readers, as a pass does.
