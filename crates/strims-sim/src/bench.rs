@@ -860,8 +860,8 @@ pub struct Bench {
     pub webrtc: bool,
     pub str0m: bool,
     /// Each node's SCTP stack in the window model's data channels: its
-    /// kind's in the topology (Chromium's dcSCTP for Chromium, str0m's
-    /// otherwise).
+    /// kind's in the topology (Chromium's dcSCTP, Firefox's usrsctp, or
+    /// str0m's for a native node).
     pub stacks: Vec<SctpProfile>,
 }
 
@@ -971,6 +971,7 @@ impl Bench {
             stacks: (0..=viewers)
                 .map(|i| match topo.node(i).map(|n| n.kind) {
                     Some(strims_testbed::topology::Kind::Chromium) => SctpProfile::CHROMIUM,
+                    Some(strims_testbed::topology::Kind::Firefox) => SctpProfile::FIREFOX,
                     _ => SctpProfile::STR0M,
                 })
                 .collect(),

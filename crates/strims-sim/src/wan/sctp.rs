@@ -74,6 +74,14 @@
 //!   fires every outstanding chunk is marked for retransmission and the
 //!   window restarts from a packet.
 //!
+//! [`Stack::Usrsctp`] is Firefox's usrsctp ([`SctpProfile::FIREFOX`]),
+//! dcSCTP's rules but for these: a packet goes while the flight is under
+//! the window, so it may pass the window by a packet; the window grows in
+//! slow start by two packets at most a SACK while the flight filled it,
+//! not at all in a recovery, and halves to two packets at least; a
+//! recovery restarts the timer; and the receiver holds a lone packet's
+//! SACK 200 ms, acknowledging at once a packet past a gap or a duplicate.
+//!
 //! A chunk resent while its last copy is still on its way, or through, is
 //! a copy: it takes its turn on both access links and counts toward its
 //! packet at the receiver, which has it.
@@ -97,6 +105,7 @@ use crate::net::ConnKey;
 pub enum Stack {
     SctpProto,
     DcSctp,
+    Usrsctp,
 }
 
 /// An SCTP stack's sender and receiver as the window model runs them.
@@ -173,6 +182,28 @@ impl SctpProfile {
         max_burst: Some(4),
     };
 
+    /// usrsctp as Firefox runs it: packets of 1188 bytes (chunks of 1160
+    /// at most), a first window of three, a 1 MiB receive window, the
+    /// timeout 1 s at first and 1-60 s, the delayed SACK 200 ms, and four
+    /// packets a send opportunity. (usrsctp's sources cut the window to its
+    /// flight and four packets as it sends instead, which would restart
+    /// every burst from four packets: on the testbed Firefox sends a
+    /// burst's first 16 packets at once, as four packets a message does.)
+    pub const FIREFOX: SctpProfile = SctpProfile {
+        stack: Stack::Usrsctp,
+        mtu: 1188,
+        max_payload: 1160,
+        packet_overhead: PACKET_OVERHEAD,
+        rwnd: 1 << 20,
+        initial_window: 3 * (1188 - COMMON_HEADER),
+        rto_initial: Duration::from_millis(1000),
+        rto_min: Duration::from_millis(1000),
+        rto_max: Duration::from_millis(60_000),
+        min_rttvar: Duration::ZERO,
+        delayed_sack: Duration::from_millis(200),
+        max_burst: Some(4),
+    };
+
     /// A packet of one chunk of `len` bytes, on the wire.
     pub(crate) fn data_wire(&self, len: usize) -> usize {
         self.packet_overhead + COMMON_HEADER + chunk_size(len)
@@ -233,8 +264,8 @@ impl Chunk {
         match stack {
             _ if self.acked => 0,
             Stack::SctpProto => self.len,
-            Stack::DcSctp if self.retransmit || self.fast => 0,
-            Stack::DcSctp => chunk_size(self.len),
+            Stack::DcSctp | Stack::Usrsctp if self.retransmit || self.fast => 0,
+            Stack::DcSctp | Stack::Usrsctp => chunk_size(self.len),
         }
     }
 }
@@ -403,7 +434,7 @@ impl Assoc {
                 self.rto = Duration::from_millis(i64::try_from(rto).unwrap_or(i64::MAX))
                     .clamp(self.profile.rto_min, self.profile.rto_max);
             }
-            Stack::DcSctp => {
+            Stack::DcSctp | Stack::Usrsctp => {
                 let rtt = rtt.max(Duration::ZERO);
                 if self.srtt == Duration::ZERO {
                     self.srtt = rtt;
@@ -484,7 +515,7 @@ impl Scheduler {
     pub(super) fn sctp_pump(&mut self, at: Time, conn: ConnKey) {
         match self.assocs.get(&conn).map(Assoc::stack) {
             Some(Stack::SctpProto) => self.sctp_proto_pump(at, conn),
-            Some(Stack::DcSctp) => self.dcsctp_pump(at, conn),
+            Some(Stack::DcSctp | Stack::Usrsctp) => self.rfc_pump(at, conn),
             None => {}
         }
     }
@@ -574,11 +605,11 @@ impl Scheduler {
         }
     }
 
-    /// A send opportunity of dcSCTP: a fast retransmission's packet past
-    /// the window, then up to `max_burst` packets, each of the chunks
-    /// marked for retransmission and then the new ones that fit what the
-    /// window has left.
-    fn dcsctp_pump(&mut self, at: Time, conn: ConnKey) {
+    /// A send opportunity of dcSCTP or usrsctp: a fast retransmission's
+    /// packet past the window, then up to `max_burst` packets each of the
+    /// chunks marked for retransmission and then new ones: dcSCTP's of what
+    /// the window has left, usrsctp's while the flight is under it.
+    fn rfc_pump(&mut self, at: Time, conn: ConnKey) {
         let mut packets: Vec<Vec<Send>> = Vec::new();
         {
             let Some(a) = self.assocs.get_mut(&conn) else {
@@ -632,8 +663,16 @@ impl Scheduler {
                     packets.push(packet);
                 }
             }
+            let usrsctp = stack == Stack::Usrsctp;
             for _ in 0..a.profile.max_burst.unwrap_or(usize::MAX) {
-                let mut room = a.cwnd.saturating_sub(a.in_flight).min(room_in_packet) / 4 * 4;
+                if usrsctp && a.in_flight >= a.cwnd {
+                    break;
+                }
+                let mut room = if usrsctp {
+                    room_in_packet
+                } else {
+                    a.cwnd.saturating_sub(a.in_flight).min(room_in_packet) / 4 * 4
+                };
                 let mut packet = Vec::new();
                 let marked: Vec<u64> = a
                     .out
@@ -722,8 +761,8 @@ impl Scheduler {
             return;
         };
         let back = (conn.1, conn.0);
-        let ride =
-            profile.stack == Stack::DcSctp && self.rcvs.get(&back).is_some_and(|r| r.due.is_some());
+        let ride = profile.stack != Stack::SctpProto
+            && self.rcvs.get(&back).is_some_and(|r| r.due.is_some());
         let sack = if ride { self.sack_of(back) } else { None };
         let sack_bytes = sack
             .as_ref()
@@ -902,7 +941,8 @@ impl Scheduler {
         }
         let at_once = !r.above.is_empty()
             || r.due.is_some()
-            || (p.stack == Stack::DcSctp && (first || duplicate || immediate));
+            || (p.stack == Stack::DcSctp && (first || duplicate || immediate))
+            || (p.stack == Stack::Usrsctp && duplicate);
         if at_once {
             self.sctp_send_sack(t, conn);
             return;
@@ -994,7 +1034,7 @@ impl Scheduler {
         }
         let acked = match a.stack() {
             Stack::SctpProto => sctp_proto_sacked(a, t, conn, &sack, cum0),
-            Stack::DcSctp => dcsctp_sacked(a, t, &sack, cum0),
+            Stack::DcSctp | Stack::Usrsctp => rfc_sacked(a, t, &sack, cum0),
         };
         if !a.out.is_empty() && a.t3.is_none_or(|d| d < t) {
             let due = t + a.t3_period();
@@ -1024,7 +1064,7 @@ impl Scheduler {
         let mtu = a.profile.mtu;
         a.ssthresh = (a.cwnd / 2).max(4 * mtu);
         a.cwnd = mtu;
-        if a.stack() == Stack::DcSctp {
+        if a.stack() != Stack::SctpProto {
             a.partial_acked = 0;
         }
         let seqs: Vec<u64> = a.out.keys().copied().collect();
@@ -1153,9 +1193,9 @@ fn sctp_proto_sacked(a: &mut Assoc, t: Time, _conn: ConnKey, sack: &Sack, cum0: 
 }
 
 /// dcSCTP's `HandleSack` on `sack` at `t`, the cumulative point `cum0`
-/// before it: returns the payload it acknowledged.
-fn dcsctp_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
-    let stack = Stack::DcSctp;
+/// before it, or usrsctp's: returns the payload it acknowledged.
+fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
+    let stack = a.stack();
     let flight_before = a.in_flight;
     if sack.above.is_empty()
         && sack.cum > cum0
@@ -1234,12 +1274,19 @@ fn dcsctp_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
         a.t3 = None;
         a.timeouts = 0;
         let mtu = a.profile.mtu;
-        let full = flight_before + mtu >= a.cwnd;
+        // dcSCTP: the flight came within a packet of the window, a packet
+        // at most a SACK in slow start. usrsctp: the flight filled it, two
+        // (ABC, L = 2), and nothing in a recovery.
+        let (full, step) = match stack {
+            Stack::Usrsctp => (flight_before >= a.cwnd, 2 * mtu),
+            _ => (flight_before + mtu >= a.cwnd, mtu),
+        };
+        let grows = !(stack == Stack::Usrsctp && a.in_recovery);
         if a.cwnd <= a.ssthresh {
             if full && !a.in_recovery {
-                a.cwnd += acked.min(mtu);
+                a.cwnd += acked.min(step);
             }
-        } else {
+        } else if grows {
             a.partial_acked += acked;
             if a.partial_acked >= a.cwnd && full {
                 a.partial_acked -= a.cwnd;
@@ -1249,7 +1296,13 @@ fn dcsctp_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
     }
     if loss && !a.in_recovery {
         let mtu = a.profile.mtu;
-        a.ssthresh = (a.cwnd / 2).max(4 * mtu);
+        let least = if stack == Stack::Usrsctp { 2 } else { 4 };
+        if stack == Stack::Usrsctp {
+            // usrsctp restarts the timer as a recovery starts.
+            a.t3 = None;
+            a.timeouts = 0;
+        }
+        a.ssthresh = (a.cwnd / 2).max(least * mtu);
         a.cwnd = a.ssthresh;
         a.partial_acked = 0;
         a.in_recovery = true;

@@ -562,7 +562,8 @@ in `TRIED.md`.
   - The bare bench's WebRTC links run on the window model's data channels
     (`strims-sim`'s `wan::sctp`), a node's own stack for what it sends and
     its peer's for the SACKs: str0m's (`SctpProfile::STR0M`) for native
-    nodes and Firefox, dcSCTP's (`SctpProfile::CHROMIUM`) for Chromium.
+    nodes, dcSCTP's (`SctpProfile::CHROMIUM`) for Chromium and usrsctp's
+    (`SctpProfile::FIREFOX`) for Firefox.
     - Chromium's: on the testbed it loses 300-990 packets in a 105 % link's
       first two seconds, sending at the uplink's rate through them, where
       the model loses 46; its `bufferedAmount` falls in steps of about
@@ -570,10 +571,18 @@ in `TRIED.md`.
       cycle to the model's 8; and dcSCTP cuts a message's chunks to fit
       the window's room as it sends, about 790 bytes each on the holders'
       4 KiB writes, where the model cuts a write at 1160.
-    - Firefox's usrsctp (path MTU 1179, `SCTP_NODELAY`, a 1 MiB send
-      buffer below `bufferedAmount`, a window cut to its flight and four
-      MTUs before each send) can't carry the holders' 84 % of a 5 Mbit/s
-      uplink: its holders fall 2.4-2.9 s behind. Model it as a profile.
+    - Firefox's: on the testbed it can't carry the holders' 84 % of a
+      5 Mbit/s uplink (249 KB/s a holder of 262; 2.4-2.9 s behind), and
+      sends 12 % more bytes than the model for less payload: Firefox
+      writes a message to usrsctp in pieces when its send buffer is near
+      full, and usrsctp cuts a piece to fit the packet (38-52 % more chunks
+      than 1160-byte ones, some of 12-28 bytes), and it resends 2-4 % of
+      its chunks to str0m's receiver. `bufferedAmount` holds a burst until
+      the first SACKs free send space. Model usrsctp's send buffer and the
+      partial writes.
+    - Both browsers resend 2-4 % of their chunks to str0m's receiver, a
+      round trip or less after the first copy, where str0m resends 0.2 %:
+      find what in sctp-proto's SACKs reads as a loss to them.
     Then the node's WebRTC links in the sim, so a WAN scenario can run
     browser peers on them. The testbed's runs of a case vary (the holders'
     one-way p90 362-780 ms over three): score against repeats.
