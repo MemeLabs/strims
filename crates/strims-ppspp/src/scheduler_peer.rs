@@ -641,6 +641,14 @@ pub(crate) struct PeerChannelScheduler {
     /// The bins the peer claims to have. Bound: [`HISTORY_WINDOWS`]
     /// windows before `peer_max_have_bin`.
     pub(crate) peer_have_bins: Map,
+    /// Those and the bins this channel sent the peer, the integrity a push
+    /// goes against: the link is reliable and ordered, so the peer has
+    /// verified what came before by the time a DATA arrives, where its
+    /// HAVEs come a tick or a round trip later. Answers go against its
+    /// HAVEs alone, so a chunk it skipped or couldn't verify comes again
+    /// with all its integrity. Bound: [`HISTORY_WINDOWS`] windows before
+    /// the latest of them.
+    known_bins: Map,
 
     /// The request window.
     pub(crate) controller: Ledbat,
@@ -689,6 +697,7 @@ impl PeerChannelScheduler {
             peer_live_window: Bin(0),
             peer_max_have_bin: Bin(0),
             peer_have_bins: Map::new(),
+            known_bins: Map::new(),
             controller: Self::new_controller(s),
             next_restart_time: now + SCHEDULER_RESTART_COOLDOWN,
             handshake_received: false,
@@ -728,6 +737,7 @@ impl PeerChannelScheduler {
             ..Default::default()
         };
         self.peer_have_bins = Map::new();
+        self.known_bins = Map::new();
         // The new stream starts at bin 0: requests must not wait for it to
         // pass the old stream's position.
         self.peer_max_have_bin = Bin(0);
@@ -2063,9 +2073,11 @@ impl PeerSwarmScheduler {
         }
 
         c.peer_have_bins.set(b);
+        c.known_bins.set(b);
         if new_max > c.peer_max_have_bin || b.base_left() < lo {
             c.peer_max_have_bin = new_max;
             c.peer_have_bins.reset_before(lo);
+            c.known_bins.reset_before(lo);
         }
 
         if br > s.peer_max_have_bin {
@@ -2477,8 +2489,16 @@ impl PeerSwarmScheduler {
             // whether `b` fits; a write that runs out of space is discarded.
             let chunks = (b.base_length() as usize).saturating_mul(s.chunk_size);
             if chunks <= cw.available() {
-                match write_bin(swarm, b, &c.peer_have_bins, now, cw) {
+                let known = if push {
+                    &c.known_bins
+                } else {
+                    &c.peer_have_bins
+                };
+                match write_bin(swarm, b, known, now, cw) {
                     Ok(()) => {
+                        c.known_bins.set(b);
+                        c.known_bins
+                            .reset_before(s.history_start(b.base_right()).min(b.base_left()));
                         s.count_sent(b, pri, t, now);
                         s.tap.emit(s.key, Some(peer), || TapKind::DataSent {
                             bin: b,

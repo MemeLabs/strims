@@ -2927,6 +2927,56 @@ fn bins_whose_integrity_overflows_an_empty_frame_are_split() {
     );
 }
 
+#[test]
+fn pushes_leave_out_the_integrity_the_channel_sent() {
+    // Eight chunks a signature: the first push carries the signature and
+    // three uncles, the next ones only what the chunks sent before don't
+    // give the peer. An answer goes against the peer's HAVEs alone.
+    let (mut writer, mut swarm) = crate::Writer::new(
+        crate::WriterOptions {
+            swarm_options: SwarmOptions {
+                chunk_size: 1024,
+                chunks_per_signature: 8,
+                ..Default::default()
+            },
+            key: strims_crypto::key_from_seed(&[5; 32]),
+        },
+        now(),
+    )
+    .unwrap();
+    writer.write(&mut swarm, now(), &[7; 8 * 1024]).unwrap();
+    let mut f = fixture_with(swarm);
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let cfg = f.swarm.reader_config();
+    let mut write = |f: &mut Fixture, b: Bin, pri: PeerPriority| {
+        let mut buf = vec![0u8; 4096];
+        let mut cw = MeteredWriter::new(&mut buf, 1);
+        let r = f
+            .sched
+            .write_data(p, b, now(), pri, now(), &f.swarm, &mut cw, true, &mut q);
+        assert_eq!(r, Ok(()));
+        let (n, _) = cw.finish(&mut ChannelMetrics::default());
+        let msgs: Vec<_> = crate::codec::FrameReader::new(&buf[..n])
+            .flat_map(|c| Reader::new(cfg, c.unwrap().1).map(Result::unwrap))
+            .collect();
+        let signed = msgs
+            .iter()
+            .filter(|m| matches!(m, Message::SignedIntegrity(_)))
+            .count();
+        let uncles = msgs
+            .iter()
+            .filter(|m| matches!(m, Message::Integrity(_)))
+            .count();
+        (signed, uncles)
+    };
+    let pushed: Vec<_> = (0..4)
+        .map(|i| write(&mut f, Bin(2 * i), PeerPriority::High))
+        .collect();
+    assert_eq!(pushed, [(1, 3), (0, 0), (0, 1), (0, 0)]);
+    assert_eq!(write(&mut f, Bin(2), PeerPriority::Low), (1, 3));
+}
+
 // --- reports --------------------------------------------------------------
 
 /// The ANNOUNCE entries `peer`'s channel writes next: stream, hits, late,

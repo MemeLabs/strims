@@ -573,14 +573,6 @@ in `TRIED.md`.
       rates stay under what they're asked to carry (the scenarios script
       three).
     - star-31-5 (8 against 1) and halve-31-10 (32 against 23).
-  - A pushed chunk carries its unit's signature and every uncle hash: the
-    sender writes integrity against the peer's HAVEs (`write_bin`'s
-    `peer_have_bins`), which come at the tick or a round trip later, never
-    before the unit's next chunk goes. With 8-chunk units that is 210 link
-    bytes a 4 KiB chunk where about 70 do (104, 139, 210 and 245 at 1, 2,
-    8 and 16 chunks a unit, 12 Mbit/s over one link): 3.5 % of the stream
-    at any rate. Count the integrity already sent on the channel (links
-    are reliable and ordered) as the peer's.
   - A data channel's message holds one frame (`WebRtcConfig::max_message`,
     `Host::poll_link_message`), and stacks that cut a message into chunks
     as it is written end it in a short one, alone in its packet:
