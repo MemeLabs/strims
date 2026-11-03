@@ -972,8 +972,10 @@ def farm(a, cells):
     knob = dict(zip((PPSPP, SIM), (k.strip() for k in a.knob.split(","))))
     seeds = [str(s) for s in range(a.first_seed, a.first_seed + a.seeds)]
     # Matrix names are the run's EC2 tag, joined: keep them short, and
-    # name the inputs so a rerun adopts the run.
-    key = json.dumps([sorted(arms.items()), values, knob, seeds, [c["name"] for c in cells]])
+    # name the inputs so a rerun adopts the run. --env's settings join them
+    # only when given, so runs without keep their names.
+    key = [sorted(arms.items()), values, knob, seeds, [c["name"] for c in cells]]
+    key = json.dumps(key + ([sorted(a.env)] if a.env else []))
     name = "s" + hashlib.sha1(key.encode()).hexdigest()[:5]
     peaks = {}
     for r in arms.values():
