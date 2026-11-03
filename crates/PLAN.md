@@ -546,8 +546,12 @@ in `TRIED.md`.
   - Browser peers collapse about twice as often as TCP peers: on robust's
     32 window-model cells at seeds 3001-3032, TCP 91 of 1024 runs and the
     `browsers` tier (`STRIMS_SIM_RTC`) 171 (319 against TCP's 142 before
-    the channel pacer, the host pacer and HAVEs at the tick). Browsers do
-    better through halvings (halve-7-10 6 against 17) and worse in:
+    the channel pacer, the host pacer and HAVEs at the tick). The tier
+    links every host as a browser, the seed too; a native seed with a
+    public listener reaches browsers over WebSocket, so only the viewers'
+    links among themselves are WebRTC. Add a tier with a native seed to
+    see how much of the gap that case keeps. Browsers do better through
+    halvings (halve-7-10 6 against 17) and worse in:
     - thin-15-10 (32 of 32 against 4): a relay's 3 Mbit/s uplink carries
       the 2.3 Mbit/s stream and SCTP's costs a packet: 93 bytes of headers
       on 1191, SACKs of the copy it receives, and each tick's HAVE packets
@@ -562,9 +566,12 @@ in `TRIED.md`.
       global-audience (seed 3001) has the scenario's three links, and one
       association carries about 0.4 Mbit/s through LTE's fades (each halves
       the window; it regains a packet a 350 ms round trip); TCP's CUBIC
-      carries the 2 Mbit/s stream on them. vnic keeps one link per peer:
-      try a second association per neighbour where a link's delivered rate
-      stays under what it's asked to carry.
+      carries the 2 Mbit/s stream on them. A neighbour's transport is what
+      both peers have (vnic tries TCP, WebSocket, then WebRTC, and keeps
+      the first that links; browsers reach each other only over WebRTC), so
+      the levers are the swarm's: more neighbours where links' delivered
+      rates stay under what they're asked to carry (the scenarios script
+      three).
     - star-31-5 (8 against 1) and halve-31-10 (32 against 23).
   - str0m over UDP under the WAN window model doesn't replay: an SCTP
     INIT's resend lands a millisecond apart between runs (2 of 8 runs of
