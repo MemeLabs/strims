@@ -18,9 +18,11 @@
 # testbed_bench binary (default target/release/examples/testbed_bench),
 # built by `cargo build --release -p strims-sim --example testbed_bench`.
 # BENCH_WEBRTC=1 runs the links over WebRTC data channels (testbed_bench's
-# --webrtc), in the sim as on the testbed. Browser nodes (run.sh's KINDS)
-# run the bench page (hack/testbed/bench/page) over their own data
-# channels, so they need BENCH_WEBRTC=1; the sim runs them as native nodes.
+# --webrtc): str0m on the testbed, and in the sim the window model's data
+# channels (<out dir>/sim-tcp) and str0m's stack on the sim's sockets
+# (<out dir>/sim-str0m). Browser nodes (run.sh's KINDS) run the bench page
+# (hack/testbed/bench/page) over their own data channels, so they need
+# BENCH_WEBRTC=1; the sim runs them as native nodes.
 
 set -euo pipefail
 
@@ -40,8 +42,11 @@ args="--schedule /out/schedule${BENCH_WEBRTC:+ --webrtc}"
 NODE_BIN=$bin NODE_ARGS=$args BROWSER_BIN=$bin BROWSER_ARGS=$args RELAY=0 \
   WEB_BUNDLE=$root/hack/testbed/bench/page SECS=${SECS:-30} \
   "$root/hack/testbed/run.sh" "$out"
-# Competing uploads need the window model.
-if [ -z "${COMPETE:-}" ]; then
+# Competing uploads and data channels need the window model.
+if [ -z "${COMPETE:-}" ] && [ -z "${BENCH_WEBRTC:-}" ]; then
   "$bin" --sim "$out" --out "$out/sim"
 fi
 "$bin" --sim "$out" --out "$out/sim-tcp" --window
+if [ -n "${BENCH_WEBRTC:-}" ]; then
+  "$bin" --sim "$out" --out "$out/sim-str0m" --window --str0m
+fi

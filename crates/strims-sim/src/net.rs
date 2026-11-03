@@ -25,6 +25,15 @@
 //! does); or, with [`SendBuffer::window`], when the connection's
 //! congestion window lets it out, so a slow receiver or a long round trip
 //! holds back that connection alone (see the WAN scheduler).
+//!
+//! A connection that carries a modelled data channel
+//! ([`SimNet::open_channel`]) takes writes as a channel does instead: each
+//! whole, as a message, while its buffered amount (bytes unsent, and sent
+//! and not yet acknowledged by a SACK) is under the channel's cap, and once
+//! that is reached, again only from under half of it, as the node's link
+//! writer and the browser's `DcSocket` do. A write goes to turmoil as
+//! segments of a DATA chunk's payload at most, which the window model's
+//! association sends as packets.
 
 // `Net` sockets are `Send`, so the state they share with the scheduler
 // sits behind a lock, which only this module names. Everything runs on
@@ -67,6 +76,10 @@ struct Conn {
     /// scheduler hasn't taken yet. Bound: the connection's segments
     /// written in one step.
     writes: VecDeque<u64>,
+    /// A data channel's cap and chunk payload, and its bytes sent and not
+    /// yet acknowledged.
+    channel: Option<(u64, usize)>,
+    unacked: u64,
 }
 
 /// The most a socket's buffer takes before Linux checks
@@ -120,18 +133,59 @@ impl SendBuffers {
 
     /// `len` bytes of `conn` reached the uplink queue. Returns the writer
     /// to wake, if it waits: once its unsent bytes are under half the mark,
-    /// when Linux reports a socket with the mark writable.
+    /// when Linux reports a socket with the mark writable. A data channel's
+    /// bytes stay buffered until they are acknowledged
+    /// ([`SendBuffers::acked`]).
     pub fn admit(&self, conn: ConnKey, len: usize) -> Option<Waker> {
         self.with(|b| {
             let c = b.conns.get_mut(&conn)?;
             c.unsent = c.unsent.saturating_sub(len as u64);
             c.tail = c.tail.min(c.unsent);
+            if c.channel.is_some() {
+                c.unacked = c.unacked.saturating_add(len as u64);
+                return None;
+            }
             let lowat = c.lowat?;
             if 2 * c.unsent < lowat {
                 c.waker.take()
             } else {
                 None
             }
+        })
+    }
+}
+
+impl SendBuffers {
+    /// `conn` carries a data channel of `cap` bytes buffered at most, cut
+    /// into chunks of `chunk` bytes at most.
+    fn open_channel(&self, conn: ConnKey, cap: u64, chunk: usize) {
+        self.with(|b| {
+            if let Some(c) = b.conns.get_mut(&conn) {
+                c.channel = Some((cap, chunk.max(1)));
+            }
+        });
+    }
+
+    /// A SACK acknowledged `len` bytes of data channel `conn`. Returns the
+    /// writer to wake once its buffered amount is under half its cap.
+    pub fn acked(&self, conn: ConnKey, len: usize) -> Option<Waker> {
+        self.with(|b| {
+            let c = b.conns.get_mut(&conn)?;
+            c.unacked = c.unacked.saturating_sub(len as u64);
+            let (cap, _) = c.channel?;
+            if 2 * (c.unsent + c.unacked) < cap {
+                c.waker.take()
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Data channel `conn`'s buffered amount.
+    pub fn buffered(&self, conn: ConnKey) -> Option<u64> {
+        self.with(|b| {
+            let c = b.conns.get(&conn)?;
+            c.channel.map(|_| c.unsent + c.unacked)
         })
     }
 }
@@ -158,6 +212,32 @@ impl SimNet {
     /// Splits TCP writes into pieces of at most `segment` bytes.
     pub fn with_segment(self, segment: Option<usize>) -> SimNet {
         SimNet { segment, ..self }
+    }
+
+    /// `stream`'s connection carries a modelled data channel from now on,
+    /// buffering `cap` bytes at most and sent as `profile` sends (see the
+    /// module docs and the WAN scheduler). Returns the connection, or
+    /// `None` without send buffers and the WAN model.
+    pub fn open_channel(
+        &self,
+        stream: &SimTcpStream,
+        cap: u64,
+        profile: crate::wan::SctpProfile,
+    ) -> Option<ConnKey> {
+        let ((key, b), wan) = (stream.conn.as_ref()?, self.wan.as_ref()?);
+        let mut guard = wan.lock();
+        let sched = guard.as_mut()?;
+        b.open_channel(*key, cap, profile.max_payload);
+        sched.open_channel(*key, profile);
+        Some(*key)
+    }
+
+    pub(crate) fn buffers(&self) -> Option<SendBuffers> {
+        self.buffers.clone()
+    }
+
+    pub(crate) fn wan(&self) -> Option<SharedWan> {
+        self.wan.clone()
     }
 
     /// Lets the capture's link probes read `wan`.
@@ -244,6 +324,59 @@ impl AsyncRead for SimTcpStream {
     }
 }
 
+impl SimTcpStream {
+    /// For a data channel's connection, whether a write may go now: its
+    /// chunk payload, or `None` with the writer left waiting.
+    fn channel_write(&self, cx: &Context<'_>) -> Option<Option<usize>> {
+        let (key, b) = self.conn.as_ref()?;
+        b.with(|x| {
+            let c = x.conns.get_mut(key)?;
+            let (cap, chunk) = c.channel?;
+            if c.waker.is_some() || c.unsent + c.unacked >= cap {
+                c.waker = Some(cx.waker().clone());
+                return Some(None);
+            }
+            Some(Some(chunk))
+        })
+    }
+
+    /// Writes `buf` as a channel's message: as turmoil segments of `chunk`
+    /// bytes at most, each stamped and unsent until the WAN scheduler sends
+    /// it.
+    fn write_message(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        chunk: usize,
+    ) -> Poll<io::Result<usize>> {
+        let mut done = 0;
+        for piece in buf.chunks(chunk) {
+            match Pin::new(&mut self.inner).poll_write(cx, piece) {
+                Poll::Ready(Ok(n)) => {
+                    if let Some((key, b)) = &self.conn {
+                        b.with(|x| {
+                            let stamp = x.stamp;
+                            x.stamp += 1;
+                            if let Some(c) = x.conns.get_mut(key) {
+                                c.unsent = c.unsent.saturating_add(n as u64);
+                                c.writes.push_back(stamp);
+                            }
+                        });
+                    }
+                    done += n;
+                    if n < piece.len() {
+                        break;
+                    }
+                }
+                Poll::Ready(Err(e)) if done == 0 => return Poll::Ready(Err(e)),
+                Poll::Ready(Err(_)) | Poll::Pending if done > 0 => break,
+                other => return other,
+            }
+        }
+        Poll::Ready(Ok(done))
+    }
+}
+
 impl AsyncWrite for SimTcpStream {
     fn poll_write(
         mut self: Pin<&mut Self>,
@@ -251,6 +384,12 @@ impl AsyncWrite for SimTcpStream {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         let this = &mut *self;
+        if let Some(chunk) = this.channel_write(cx) {
+            return match chunk {
+                Some(chunk) => this.write_message(cx, buf, chunk),
+                None => Poll::Pending,
+            };
+        }
         // The most this write may take: what the tail buffer has room for,
         // or below the mark a new buffer.
         let mut room = usize::MAX;

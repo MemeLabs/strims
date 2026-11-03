@@ -79,6 +79,9 @@
 //! The connection's order on the wire is its send order, and a resent
 //! segment holds back the rest of its connection at the receiver.
 //!
+//! A connection a data channel opened ([`Scheduler::open_channel`])
+//! carries an SCTP association instead ([`sctp`]).
+//!
 //! A host's competing uploads
 //! ([`HostSpec::competing`](crate::spec::HostSpec::competing)) are TCP
 //! connections that always have data and reach no host: full segments
@@ -106,6 +109,10 @@ use crate::net::SendBuffers;
 use crate::report::{WanHostReport, WanReport};
 use crate::spec::{HostIx, Scenario};
 use crate::world::epoch;
+
+mod sctp;
+
+pub use sctp::SctpProfile;
 
 /// The wire size charged for a STUN message or a DTLS record other than
 /// application data. Their sizes depend on DTLS key material the seed
@@ -243,6 +250,21 @@ enum Event {
     CrossAck { i: usize, seq: u64, rtt: Duration },
     /// Competing upload `i` learns its segment `seq` was lost.
     CrossLost { i: usize, seq: u64 },
+    /// A SACK of data channel `conn` reaches its sender: the association's
+    /// SACK of the event's key.
+    SctpSack { conn: (SocketAddr, SocketAddr) },
+    /// Data channel `conn`'s retransmission timer is due.
+    SctpTimeout { conn: (SocketAddr, SocketAddr) },
+    /// Data channel `conn`'s receiver sends the SACK it held back.
+    SctpDelSack { conn: (SocketAddr, SocketAddr) },
+    /// A copy of chunk `seq` of data channel `conn` (`wire` bytes) reaches
+    /// its receiver's downlink.
+    SctpCopy {
+        conn: (SocketAddr, SocketAddr),
+        seq: u64,
+        wire: usize,
+        last: bool,
+    },
     /// The receiver of competing upload `i` acknowledges its lone segment
     /// `seq`, unless a second one came first.
     CrossDelAck { i: usize, seq: u64 },
@@ -684,6 +706,10 @@ pub(crate) struct Scheduler {
     /// The acknowledgements receivers owe, by the connection whose data
     /// they acknowledge. Bound: one per connection with data received.
     owed: FastMap<(SocketAddr, SocketAddr), Owed>,
+    /// The data channels' senders and receivers, by the connection that
+    /// carries the channel's data. Bound: one per channel opened.
+    assocs: FastMap<(SocketAddr, SocketAddr), sctp::Assoc>,
+    rcvs: FastMap<(SocketAddr, SocketAddr), sctp::Rcv>,
 }
 
 /// What a receiver owes its sender: the segments it hasn't acknowledged
@@ -815,6 +841,8 @@ impl Scheduler {
             acks: vec![0; spec.hosts.len()],
             cross_drops: vec![0; spec.hosts.len()],
             owed: FastMap::default(),
+            assocs: FastMap::default(),
+            rcvs: FastMap::default(),
         })
     }
 
@@ -825,6 +853,25 @@ impl Scheduler {
     /// The model's view at `now` of the connection whose sender's address
     /// pair is `conn`.
     pub(crate) fn conn_state(&self, conn: (SocketAddr, SocketAddr), now: Time) -> ConnState {
+        let host = self.ip_host.get(&conn.0.ip()).copied();
+        if let Some(a) = self.assocs.get(&conn) {
+            let pending = a
+                .pending()
+                .iter()
+                .filter_map(|id| match self.records.get(id)?.what {
+                    What::Data { len, .. } => Some(len as u64),
+                    _ => None,
+                })
+                .sum();
+            return ConnState {
+                cwnd: Some(a.cwnd() as u64),
+                ssthresh: Some(a.ssthresh() as u64),
+                in_flight: Some(a.in_flight() as u64),
+                pending: Some(pending),
+                uplink_queue: host.map(|h| (self.net.up_free(h) - now).max(Duration::ZERO)),
+                uplink_rate: host.map(|h| self.net.up_rate(h, now)),
+            };
+        }
         let flow = self.flows.get(&conn);
         let pending = flow.map(|f| {
             f.pending
@@ -946,6 +993,27 @@ impl Scheduler {
                     self.cross_lost(t, i, seq);
                     continue;
                 }
+                Event::SctpSack { conn } => {
+                    self.sctp_sacked(t, conn, id);
+                    continue;
+                }
+                Event::SctpTimeout { conn } => {
+                    self.sctp_timeout(t, conn);
+                    continue;
+                }
+                Event::SctpDelSack { conn } => {
+                    self.sctp_delayed_sack(t, conn);
+                    continue;
+                }
+                Event::SctpCopy {
+                    conn,
+                    seq,
+                    wire,
+                    last,
+                } => {
+                    self.sctp_copy_arrived(t, conn, seq, wire, last);
+                    continue;
+                }
                 Event::CrossDelAck { i, seq } => {
                     let odd = self.cross.get_mut(i).and_then(|c| match c.odd {
                         Some((s, sent, _)) if s == seq => {
@@ -972,6 +1040,30 @@ impl Scheduler {
                         _ => None,
                     };
                     let datagram = matches!(r.what, What::Datagram(_));
+                    let conn = (r.src, r.dst);
+                    if let (Some((seq, _)), true) = (data, self.assocs.contains_key(&conn)) {
+                        let (from, to, wire) = (r.from, r.to, r.wire);
+                        let rate = self.net.site(to).map_or(u64::MAX, |s| s.profile.down);
+                        if window.is_some_and(|cap| {
+                            overflows(self.net.down_free(to) - t, tx_time(wire, rate), cap)
+                        }) {
+                            if let Some(d) = self.drops.get_mut(from) {
+                                *d += 1;
+                            }
+                            self.sctp_lost(conn, seq);
+                            continue;
+                        }
+                        let done = self.net.receive(t, to, wire);
+                        if let Some(r) = self.records.get_mut(&id) {
+                            if done <= now {
+                                r.state = State::Due;
+                            } else {
+                                self.events.insert((done, id), Event::Deliver);
+                            }
+                        }
+                        self.sctp_arrived(done.max(t), conn, seq);
+                        continue;
+                    }
                     if let (Some(cap), true) = (window, data.is_some() || datagram)
                         && overflows(
                             self.net.down_free(r.to) - t,
@@ -1042,7 +1134,11 @@ impl Scheduler {
                 | Event::DelAck { .. }
                 | Event::CrossAck { .. }
                 | Event::CrossLost { .. }
-                | Event::CrossDelAck { .. } => {}
+                | Event::CrossDelAck { .. }
+                | Event::SctpSack { .. }
+                | Event::SctpTimeout { .. }
+                | Event::SctpDelSack { .. }
+                | Event::SctpCopy { .. } => {}
             }
         }
     }
@@ -1455,6 +1551,7 @@ impl Scheduler {
         let links = &mut self.links;
         let records = &mut self.records;
         let ip_host = &self.ip_host;
+        let assocs = &self.assocs;
         let frozen = &self.frozen;
         let next = &mut self.next;
         sim.links(|iter| {
@@ -1517,7 +1614,10 @@ impl Scheduler {
                         err = Some(format!("wan: link {li} carries {src}->{dst}"));
                         break 'links;
                     };
-                    let (wire, packets) = wire(sent.protocol());
+                    let (wire, packets) = match (what, assocs.get(&(src, dst))) {
+                        (What::Data { len, .. }, Some(a)) => (a.profile().data_wire(len), 1),
+                        _ => wire(sent.protocol()),
+                    };
                     let id = *next;
                     *next += 1;
                     records.insert(
@@ -1661,6 +1761,9 @@ impl Scheduler {
                     _ => None,
                 });
                 match data {
+                    Some(conn) if self.assocs.contains_key(&conn) => {
+                        self.sctp_write(at, conn, id);
+                    }
                     Some(conn) => {
                         self.flows.entry(conn).or_default().pending.push_back(id);
                         self.pump(at, &[conn]);

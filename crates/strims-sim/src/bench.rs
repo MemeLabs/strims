@@ -50,7 +50,13 @@
 //!   [`SAMPLE_EVERY`] as its link probe reads it: the kernel's `TCP_INFO`
 //!   (`unsent`, `unacked`, `cwnd` in bytes, `srtt` in µs) or the model's
 //!   view of the connection (`unsent`, `in_flight`, `pending` and `cwnd`
-//!   in bytes, `upq` the uplink queue in µs).
+//!   in bytes, `upq` the uplink queue in µs); over a data channel its
+//!   `buffered` amount, and the window model's channel adds its
+//!   association's `cwnd` and `in_flight` and the `upq`.
+//!
+//! In the sim a WebRTC bench's links are the window model's data channels
+//! (see [`crate::wan`]) on the links' TCP connections, with no signalling,
+//! or with [`Bench::str0m`] str0m's stack on the sim's UDP sockets.
 //!
 //! [`simulate`] adds a `{"ev":"q","t":..,"wait":..}` line per sample of
 //! the node's uplink queue (µs) every 7 ms, as the testbed's `tc-0.log`
@@ -58,7 +64,8 @@
 //! the wire bytes its competing uploads sent and their windows (as
 //! `run.sh`'s `COMPETE` runs them, on the testbed in `compete-<s>.json`),
 //! and a `{"ev":"drops",..}` line with the segments the window model lost
-//! to its full access queues, the connections' and the uploads'.
+//! to its full access queues, the connections' and the uploads', and the
+//! pure acknowledgements and SACKs the node's uplink carried (`acks`).
 
 // The bench's nodes share their state between their tasks on one thread.
 #![allow(clippy::disallowed_types)]
@@ -78,9 +85,9 @@ use strims_wan::{Access, City, Options, Site};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Notify;
 
-use crate::net::{SendBuffers, SimNet};
+use crate::net::{SendBuffers, SimNet, SimTcpStream};
 use crate::spec::{Competing, Scenario, SendBuffer};
-use crate::wan::{Scheduler, SharedWan, sim_time};
+use crate::wan::{Scheduler, SctpProfile, SharedWan, sim_time};
 
 /// A record's header: kind, length, sequence number, due and write times.
 pub const HEADER: usize = 1 + 4 + 4 + 8 + 8;
@@ -221,6 +228,9 @@ pub struct NodePlan {
     /// With an endpoint, the links carry their records over WebRTC data
     /// channels, signalled over their TCP connections.
     pub webrtc: Option<RtcPlan>,
+    /// The links carry their records over the sim's modelled data channels
+    /// ([`BenchNet::open_channel`]), on their TCP connections.
+    pub channels: bool,
     /// The nodes it dials (its linked nodes of lower index) and their
     /// addresses.
     pub dial: Vec<(usize, String)>,
@@ -259,6 +269,7 @@ impl NodePlan {
             me,
             listen,
             webrtc: None,
+            channels: false,
             dial,
             accepts,
             schedule,
@@ -366,9 +377,63 @@ pub async fn links<N: Net, C: BenchClock>(
     Ok(streams)
 }
 
+/// A [`Net`] whose TCP connections may carry a modelled data channel.
+pub trait BenchNet: Net {
+    /// Carries `s`'s writes as a data channel buffering `cap` bytes at
+    /// most, sent as `profile`'s SCTP sends: the probe of its buffered
+    /// amount and window, or `None` where the net models no channels.
+    fn open_channel(
+        &self,
+        _s: &Self::TcpStream,
+        _cap: usize,
+        _profile: SctpProfile,
+    ) -> Option<ChannelProbe> {
+        None
+    }
+}
+
+impl BenchNet for strims_node::TokioNet {}
+
+impl BenchNet for SimNet {
+    fn open_channel(
+        &self,
+        s: &SimTcpStream,
+        cap: usize,
+        profile: SctpProfile,
+    ) -> Option<ChannelProbe> {
+        let conn = SimNet::open_channel(self, s, cap as u64, profile)?;
+        Some(ChannelProbe {
+            conn,
+            buffers: self.buffers()?,
+            wan: self.wan()?,
+        })
+    }
+}
+
+/// A modelled data channel's view: its buffered amount, and its
+/// association's window, bytes in flight and sender's uplink queue.
+pub struct ChannelProbe {
+    conn: crate::net::ConnKey,
+    buffers: crate::net::SendBuffers,
+    wan: SharedWan,
+}
+
+impl ChannelProbe {
+    fn sample(&self, now: Time) -> (u64, crate::wan::ConnState) {
+        let buffered = self.buffers.buffered(self.conn).unwrap_or(0);
+        let state = self
+            .wan
+            .lock()
+            .as_ref()
+            .map(|s| s.conn_state(self.conn, now))
+            .unwrap_or_default();
+        (buffered, state)
+    }
+}
+
 /// Runs node `plan.me` on `net` until [`LINGER`] past its schedule's end,
 /// logging to `log` (see the module docs).
-pub async fn node<N: Net, C: BenchClock>(
+pub async fn node<N: BenchNet, C: BenchClock>(
     net: N,
     clock: C,
     plan: NodePlan,
@@ -414,6 +479,31 @@ pub async fn node<N: Net, C: BenchClock>(
                     tasks.push(Box::pin(reader(
                         dc,
                         link.clone(),
+                        clock.clone(),
+                        log.clone(),
+                    )));
+                }
+                None if plan.channels => {
+                    let cap = strims_node::WebRtcConfig::default().max_buffered_amount;
+                    let probe = net
+                        .open_channel(&s, cap, SctpProfile::STR0M)
+                        .ok_or_else(|| io::Error::other("this net models no data channels"))?;
+                    let (r, w) = tokio::io::split(s);
+                    tasks.push(Box::pin(writer(
+                        w,
+                        link.clone(),
+                        clock.clone(),
+                        log.clone(),
+                    )));
+                    tasks.push(Box::pin(reader(
+                        r,
+                        link.clone(),
+                        clock.clone(),
+                        log.clone(),
+                    )));
+                    tasks.push(Box::pin(channel_sampler(
+                        probe,
+                        peer,
                         clock.clone(),
                         log.clone(),
                     )));
@@ -465,6 +555,28 @@ pub async fn node<N: Net, C: BenchClock>(
         () = sleep_until(&clock, stop) => {}
     }
     Ok(())
+}
+
+/// Logs a modelled data channel's buffered amount every [`SAMPLE_EVERY`],
+/// with its association's window and bytes in flight and its uplink queue
+/// (µs).
+async fn channel_sampler<C: BenchClock>(
+    probe: ChannelProbe,
+    peer: usize,
+    clock: C,
+    log: impl Fn(String),
+) {
+    loop {
+        let (buffered, s) = probe.sample(clock.time());
+        log(format!(
+            r#"{{"ev":"s","to":{peer},"t":{},"buffered":{buffered},"cwnd":{},"in_flight":{},"upq":{}}}"#,
+            clock.now_us(),
+            s.cwnd.unwrap_or(0),
+            s.in_flight.unwrap_or(0),
+            s.uplink_queue.map_or(0, |d| d.as_micros()),
+        ));
+        tokio::time::sleep(SAMPLE_EVERY).await;
+    }
 }
 
 /// Logs a data channel's buffered amount every [`SAMPLE_EVERY`].
@@ -739,8 +851,11 @@ pub struct Bench {
     pub send_buffer: SendBuffer,
     pub tcp_segment: Option<usize>,
     /// The links carry their records over WebRTC data channels (the
-    /// nodes ran with `--webrtc`, in `run.sh`'s `NODE_ARGS`).
+    /// nodes ran with `--webrtc`, in `run.sh`'s `NODE_ARGS`): the window
+    /// model's data channels, or with `str0m` str0m's stack on the sim's
+    /// UDP sockets.
     pub webrtc: bool,
+    pub str0m: bool,
 }
 
 /// The defaults of `hack/testbed/run.sh`.
@@ -845,6 +960,7 @@ impl Bench {
             // The sink's egress delay is 10 ms.
             compete_rtt_ms: num("SEED_DELAY_MS")? + 10,
             webrtc: get("NODE_ARGS").is_some_and(|a| a.split_whitespace().any(|w| w == "--webrtc")),
+            str0m: false,
             send_buffer: SendBuffer {
                 uplink_queue: StdDuration::from_millis(queue_ms),
                 window,
@@ -929,8 +1045,17 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
         .epoch(std::time::UNIX_EPOCH + StdDuration::from_millis(crate::EPOCH_MS.unsigned_abs()))
         .simulation_duration(SIM_START + StdDuration::from_secs(bench.secs) + LINGER * 2)
         .tick_duration(spec.tick);
+    let channels = bench.webrtc && !bench.str0m;
+    if channels && !bench.send_buffer.window {
+        return Err("modelled data channels need the window model".to_owned());
+    }
     if let Some(seg) = segment {
         builder.tcp_capacity(64 * (64 * 1024usize).div_ceil(seg.max(1)));
+    }
+    if channels {
+        // A channel's chunks, as many as its cap and the reader's buffer
+        // hold.
+        builder.tcp_capacity(64 * (64 * 1024usize).div_ceil(SctpProfile::STR0M.max_payload));
     }
     let mut sim = builder.build();
     let buffers = SendBuffers::new(bench.send_buffer);
@@ -954,9 +1079,10 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
                 l.push(line);
             }
         };
-        let webrtc = bench.webrtc;
+        let webrtc = bench.webrtc && bench.str0m;
         sim.client(format!("n{me}").as_str(), async move {
             let mut plan = plan;
+            plan.channels = channels;
             if webrtc {
                 plan.webrtc = Some(RtcPlan {
                     udp: "0.0.0.0:9001".to_owned(),
@@ -997,10 +1123,11 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     let start = Duration::from(SIM_START);
     for (h, l) in report.iter().flat_map(|r| &r.hosts).zip(logs.iter_mut()) {
         l.push(format!(
-            r#"{{"ev":"drops","up_packets":{},"queue_drops":{},"competing_drops":{}}}"#,
+            r#"{{"ev":"drops","up_packets":{},"queue_drops":{},"competing_drops":{},"acks":{}}}"#,
             h.stats.up_bytes / 1500,
             h.queue_drops,
-            h.competing_drops
+            h.competing_drops,
+            h.acks
         ));
         for &(t, bytes) in &h.competing {
             let cwnd = h
@@ -1050,6 +1177,12 @@ mod tests {
     /// model.
     fn run(settings: &str, schedule: &str) -> Vec<Vec<String>> {
         let bench = Bench::testbed(settings, "", schedule, true).unwrap();
+        simulate(&bench).unwrap()
+    }
+
+    fn run_str0m(settings: &str, schedule: &str) -> Vec<Vec<String>> {
+        let mut bench = Bench::testbed(settings, "", schedule, true).unwrap();
+        bench.str0m = true;
         simulate(&bench).unwrap()
     }
 
@@ -1123,17 +1256,30 @@ mod tests {
         );
     }
 
-    /// Over a data channel (`hack/testbed/bench/rtc-over.sched`) a link
-    /// asked for 105 % of a 5 Mbit/s uplink takes about the uplink, every
+    /// Over the window model's data channel
+    /// (`hack/testbed/bench/rtc-over.sched`) a link asked for 105 % of a
+    /// 5 Mbit/s uplink takes about the uplink, every
     /// record arrives in order, and the channel holds up to the node's
     /// 256 KiB cap and refills from half of it: on the testbed 554 KB/s
     /// read, 142-272 KiB buffered at p10/max.
     #[test]
     fn a_data_channel_takes_its_uplink_and_holds_the_nodes_cap() {
-        let logs = run(
+        takes_its_uplink_and_holds_the_cap(&run(
             "VIEWERS=1\nSEED_UP_MBIT=5\nSECS=10\nNODE_ARGS=--webrtc",
             "burst 0 1 0 250 163840 16384\nprobe 0 1 3 10",
-        );
+        ));
+    }
+
+    /// The same over str0m's stack on the sim's UDP sockets.
+    #[test]
+    fn str0m_takes_its_uplink_and_holds_the_nodes_cap() {
+        takes_its_uplink_and_holds_the_cap(&run_str0m(
+            "VIEWERS=1\nSEED_UP_MBIT=5\nSECS=10\nNODE_ARGS=--webrtc",
+            "burst 0 1 0 250 163840 16384\nprobe 0 1 3 10",
+        ));
+    }
+
+    fn takes_its_uplink_and_holds_the_cap(logs: &[Vec<String>]) {
         let reads: Vec<i64> = events(&logs[1], "r")
             .filter(|l| field(l, "k") == Some(0))
             .filter_map(|l| field(l, "seq"))
@@ -1161,6 +1307,35 @@ mod tests {
             .filter(|l| field(l, "k") == Some(2))
             .count();
         assert!(echoes > 700, "{echoes} echoes");
+    }
+
+    /// Over the window model's data channel
+    /// (`hack/testbed/bench/rtc-single.sched`) one link at a fifth of a
+    /// 10 Mbit/s uplink sends each 64 KiB burst within its window, so the
+    /// uplink queue holds the burst, and its last record arrives a burst's
+    /// transmission and a one-way trip after it was written: on the
+    /// testbed the queue peaked at 55 ms, and records arrived 76 ms after
+    /// they were written at p90.
+    #[test]
+    fn a_data_channel_sends_a_burst_within_its_window() {
+        let logs = run(
+            "VIEWERS=1\nSEED_UP_MBIT=10\nSECS=10\nNODE_ARGS=--webrtc",
+            "burst 0 1 0 250 65536 16384\nprobe 0 1 3 10",
+        );
+        let queue: Vec<i64> = events(&logs[0], "q")
+            .filter_map(|l| field(l, "wait"))
+            .collect();
+        let peak = quantile(queue, 1.0);
+        assert!(
+            (45_000..60_000).contains(&peak),
+            "queue peaked at {peak} us"
+        );
+        let owd: Vec<i64> = events(&logs[1], "r")
+            .filter(|l| field(l, "k") == Some(0))
+            .filter_map(|l| Some(field(l, "got")? - field(l, "at")?))
+            .collect();
+        let p90 = quantile(owd, 0.9);
+        assert!((65_000..85_000).contains(&p90), "one-way p90 {p90} us");
     }
 
     /// The testbed's seed shape (`hack/testbed/bench/holders.sched`): two

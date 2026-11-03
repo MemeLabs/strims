@@ -22,7 +22,8 @@ delays, probe round trips and uplink queue (p50/p90), the testbed against
 the arms. `score` prints each arm's fit to the testbed: the mean
 |log(arm / testbed)| of the data links' one-way delay and probe round trip
 p50/p90, the uplink queue's p90 and the drops (each floored at 5), per case
-and over the cases. `phases` prints the data links' one-way delays, probe
+and over the cases; with --repeat all, each case's fit averaged over the
+repeats it ran in. `phases` prints the data links' one-way delays, probe
 round trips and windows (a data channel's buffered amount) between the given
 times (default: each 8 s).
 Comparisons take repeat R (default r1) and the cases that ran.
@@ -167,22 +168,29 @@ def fit(tb, m):
     return sum(errs) / len(errs) if errs else float("nan")
 
 
+def repeats(root):
+    return sorted((d for d in os.listdir(root) if d[:1] == "r" and d[1:].isdigit()),
+                  key=lambda d: int(d[1:]))
+
+
 def cmd_score(args):
     root = flag(args, "--root", os.path.join(ROOT, "target", "bench", "runs"))
     repeat = flag(args, "--repeat", "r1")
     arms = args
+    reps = repeats(root) if repeat == "all" else [repeat]
     tot = {a: [] for a in arms}
-    print(f"{'case':13}" + "".join(f"{a:>10}" for a in arms))
-    for c in ran(root, repeat):
-        run = os.path.join(root, repeat, c)
+    print(f"{'case':13}" + "".join(f"{a:>10}" for a in arms) + ("   repeats" if repeat == "all" else ""))
+    cases = sorted({c for r in reps for c in ran(root, r)})
+    for c in cases:
         line = f"{c:13}"
+        runs = [os.path.join(root, r, c) for r in reps if c in ran(root, r)]
         for a in arms:
-            tb, m = stats(run, a)
-            e = fit(tb, m)
+            es = [e for e in (fit(*stats(run, a)) for run in runs) if not math.isnan(e)]
+            e = sum(es) / len(es) if es else float("nan")
             if not math.isnan(e):
                 tot[a].append(e)
             line += f"{e:10.3f}"
-        print(line)
+        print(line + (f"{len(runs):10d}" if repeat == "all" else ""))
     print(f"{'mean':13}" + "".join(f"{sum(v) / len(v) if v else float('nan'):10.3f}" for v in tot.values()))
 
 

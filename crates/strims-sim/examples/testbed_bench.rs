@@ -10,7 +10,7 @@
 //!               [--secs <s>] [--start <unix ms>] [--webrtc]
 //!               [--web <dir>] [--browser-bin <path>]
 //! testbed_bench --sim <testbed run dir> --out <dir> [--window]
-//!               [--segment <bytes>]
+//!               [--segment <bytes>] [--str0m]
 //! ```
 //!
 //! On the testbed a node listens on its topology address, dials the nodes
@@ -35,7 +35,8 @@
 //! `--sim` runs the bench a testbed run made (its `settings`, `topology`
 //! and `schedule` files) under the WAN model, with the send buffers'
 //! window model if `--window`, and writes each node's log to
-//! `<out>/node-<i>.jsonl`.
+//! `<out>/node-<i>.jsonl`. A WebRTC bench's links are the window model's
+//! data channels, or with `--str0m` str0m's stack on the sim's sockets.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -76,6 +77,7 @@ struct Args {
     window: bool,
     segment: Option<usize>,
     webrtc: bool,
+    str0m: bool,
     web: Option<PathBuf>,
     browser_bin: Option<PathBuf>,
 }
@@ -102,6 +104,7 @@ fn args() -> Result<Args, String> {
             "--window" => a.window = true,
             "--segment" => a.segment = Some(num(value()?)? as usize),
             "--webrtc" => a.webrtc = true,
+            "--str0m" => a.str0m = true,
             "--web" => a.web = Some(value()?.into()),
             "--browser-bin" => a.browser_bin = Some(value()?.into()),
             "--join-at" | "--rate" | "--hosts" | "--capture" | "--units" | "--player" => {
@@ -144,6 +147,7 @@ fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
         a.window,
     )?;
     bench.tcp_segment = a.segment;
+    bench.str0m = a.str0m;
     let logs = simulate(&bench)?;
     std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
     for (i, lines) in logs.iter().enumerate() {
