@@ -13,6 +13,7 @@
   hack/sim-farm/farm.py status [MATRIX] [--regions R,...]
   hack/sim-farm/farm.py down   [MATRIX] [--regions R,...]
   hack/sim-farm/farm.py report MATRIX [--where KEY=VALUE ...] [--group KEY,...]
+  hack/sim-farm/farm.py spend  [--csv DIR]
 
 A matrix (matrices/*.toml) names tests that run one config from their
 environment and print one `ROW {json}` line: the ppspp sim's `sim_job`,
@@ -209,6 +210,21 @@ its estimate, and each instance AWS interrupted (its id, type, zone,
 launch, notice and how it ended, which the run asks once more as it
 ends) as a line of target/sim-farm/costs.jsonl.
 
+spend reads what the farm has spent from the matrices' farm.log files:
+each run once (each of its matrices' logs holds all of it), and its
+running cost at each status line from its start. It prints each local day
+from the first run to the last, with the day's spend, its runs and the
+one that spent most, then the total. A run's first line is the date it
+started, as the log's times are local times of day; a run without it is
+dated by the first row one of its instances wrote, and a run with neither
+is left out and counted. A run whose matrices' state is gone
+isn't there, but for those costs.jsonl lists, taken as spending evenly
+from the first launch to the end. --csv DIR also writes runs.csv (a run a
+row: name, start, end, cost, instances, the logs it's in, and whether it
+came from farm.log or costs.jsonl) and steps.csv (each run's running cost
+at each of its status lines), times in UTC. Like the run's own figures
+these are estimates, not what AWS bills, whose days are UTC.
+
 A testbed matrix (kind = "testbed") runs hack/testbed/run.sh as a black
 box: `run.sh <out dir>` with the job's environment, real nodes in Docker
 containers in real time. Its jobs are its arms by its axes by `repeats`:
@@ -317,6 +333,7 @@ import argparse
 import collections
 import concurrent.futures as cf
 import contextlib
+import csv
 import dataclasses
 import datetime
 import fcntl
@@ -2912,6 +2929,7 @@ class Run:
         (self.state / "matrices").write_text("".join(f"{m.name}\n" for m in self.ms))
         for m in self.ms:
             log.open(m.state / "farm.log")
+        log(time.strftime("%Y-%m-%d %Z"))  # lines carry local times of day: spend dates runs by this
         to_run = sum(1 for i in self.items.values() if i.wid not in self.done)
         if len(self.ms) == 1:
             m = self.ms[0]
@@ -3126,6 +3144,202 @@ def testbed_report(matrix: Matrix, groups: dict[tuple, list[dict]]) -> None:
         print(f"{label}={','.join(dirs)}")
 
 
+# --- spend --------------------------------------------------------------
+
+
+LOG_LINE = re.compile(r"\[(\d\d):(\d\d):(\d\d)\] (.*)")
+LOG_DATE = re.compile(r"(\d{4}-\d\d-\d\d)(?: \S+)?")
+LOG_MATRIX = re.compile(r"(\S+): \d+ jobs over ")
+LOG_RUN = re.compile(r"(\S+): \d+ jobs, \d+ of them in more than one matrix")
+LOG_LAUNCH = re.compile(r"launched (i-[0-9a-f]+): ")
+LOG_STATUS_COST = re.compile(r"; \$(\d+\.\d+)(?:, about .*)?$")
+LOG_RUN_COST = re.compile(r"\d+ jobs in [\d.]+ min on \d+ instances .*?: \$(\d+\.\d+)")
+# A costs.jsonl line is a logged run's if that run, of the same name, ends
+# this close to its time.
+SPEND_MATCH_S = 300
+
+
+@dataclasses.dataclass
+class Spent:
+    """A run's spend: its running cost at seconds since its start, from $0
+    then and never falling."""
+
+    name: str
+    start: datetime.datetime | None  # None: undated
+    points: list[tuple[float, float]]
+    secs: float  # its start to its last line
+    instances: int
+    logs: int  # the farm.log files it's in; 0 for costs.jsonl's
+    # Its first line's time of day, and its launches (seconds since its
+    # start, instance id): what dates it by rows.
+    tod: int = 0
+    launches: list[tuple[float, str]] = dataclasses.field(default_factory=list)
+
+    @property
+    def cost(self) -> float:
+        return self.points[-1][1]
+
+    @property
+    def end(self) -> datetime.datetime:
+        return self.start + datetime.timedelta(seconds=self.secs)
+
+    @property
+    def source(self) -> str:
+        return "farm.log" if self.logs else "costs.jsonl"
+
+
+def log_spends(farm: Path) -> list[Spent]:
+    """The runs that spent something in the matrices' farm.log files, each
+    once (every matrix of a run logs all of it). A run starts at its date
+    line, or in a log without one at its first matrix's "jobs over" line,
+    and is named by its run's line (several matrices) or its matrix; a
+    line's time of day that goes back more than an hour has passed
+    midnight."""
+    runs: dict[tuple, Spent] = {}
+    for path in sorted(farm.glob("*/farm.log")):
+        lines = []
+        for raw in path.read_text(errors="replace").splitlines():
+            if m := LOG_LINE.fullmatch(raw):
+                lines.append((int(m[1]) * 3600 + int(m[2]) * 60 + int(m[3]), m[4]))
+        heads = [
+            i for i, (_, msg) in enumerate(lines)
+            if LOG_DATE.fullmatch(msg) or LOG_MATRIX.match(msg) and not (
+                i and (LOG_DATE.fullmatch(lines[i - 1][1]) or LOG_MATRIX.match(lines[i - 1][1])))
+        ]
+        for a, b in zip(heads, heads[1:] + [len(lines)]):
+            seg = lines[a:b]
+            offs, at, prev = [], 0, seg[0][0]
+            for t, _ in seg:
+                d = t - prev
+                at += d + 86400 if d < -3600 else max(d, 0)
+                offs.append(at)
+                prev = t
+            launches = [(float(s), m[1]) for s, (_, msg) in zip(offs, seg) if (m := LOG_LAUNCH.match(msg))]
+            key = (seg[0], tuple(i for _, i in launches))
+            if key in runs:
+                runs[key].logs += 1
+                continue
+            points, cost = [(0.0, 0.0)], 0.0
+            for s, (_, msg) in zip(offs, seg):
+                if m := LOG_STATUS_COST.search(msg) or LOG_RUN_COST.match(msg):
+                    cost = max(cost, float(m[1]))
+                    points.append((float(s), cost))
+            if not cost:
+                continue
+            name = next((m[1] for _, msg in seg if (m := LOG_RUN.match(msg))), None) or next(
+                (m[1] for _, msg in seg if (m := LOG_MATRIX.match(msg))), path.parent.name)
+            start = None
+            if d := LOG_DATE.fullmatch(seg[0][1]):
+                t = seg[0][0]
+                start = datetime.datetime.combine(
+                    datetime.date.fromisoformat(d[1]), datetime.time(t // 3600, t // 60 % 60, t % 60)
+                ).astimezone()
+            runs[key] = Spent(name, start, points, float(offs[-1]), len(launches), 1, seg[0][0], launches)
+    return list(runs.values())
+
+
+def date_by_rows(farm: Path, runs: list[Spent]) -> None:
+    """Dates the runs without a date line by the first row one of their
+    instances wrote: that instance's launch, at its time of day in the log,
+    on the latest local date not after the row."""
+    undated = [r for r in runs if r.start is None and r.launches]
+    hosts = {i for r in undated for _, i in r.launches}
+    if not hosts:
+        return
+    first: dict[str, str] = {}
+    for path in farm.glob("*/rows.jsonl"):
+        with path.open("rb") as f:
+            for line in f:
+                rec = row_head(line) or {}
+                h, at = rec.get("host"), rec.get("at")
+                if h in hosts and at and (h not in first or at < first[h]):
+                    first[h] = at
+    for r in undated:
+        got = next(((s, first[i]) for s, i in r.launches if i in first), None)
+        if got is None:
+            continue
+        s, at = got
+        row = datetime.datetime.fromtimestamp(datetime.datetime.fromisoformat(at).timestamp())
+        t = int(r.tod + s) % 86400
+        launch = row.replace(hour=t // 3600, minute=t // 60 % 60, second=t % 60, microsecond=0)
+        if launch > row:
+            launch -= datetime.timedelta(days=1)
+        r.start = (launch - datetime.timedelta(seconds=s)).astimezone()
+
+
+def costs_spends(farm: Path, runs: list[Spent]) -> list[Spent]:
+    """The runs costs.jsonl lists that no dated log holds (their matrices'
+    state is gone), each spending evenly from its first launch to its end."""
+    out = []
+    for c in read_jsonl(farm / "costs.jsonl"):
+        end = datetime.datetime.fromisoformat(c["at"]).astimezone()
+        if any(r.name == c["run"] and r.start and abs((r.end - end).total_seconds()) < SPEND_MATCH_S
+               for r in runs):
+            continue
+        wall = float(c.get("wall_s") or 0)
+        start = end - datetime.timedelta(seconds=wall)
+        out.append(Spent(c["run"], start, [(0.0, 0.0), (wall, float(c["cost"]))], wall, c.get("instances", 0), 0))
+    return out
+
+
+def run_label(name: str) -> str:
+    """A run's name as a table shows it: past three matrices, the first
+    and how many more, as a name past EC2's tag limit is."""
+    names = name.split("+")
+    return f"{names[0]}+{len(names) - 1}more" if len(names) > 3 else name
+
+
+def spend(farm: Path, csv_dir: Path | None) -> int:
+    runs = log_spends(farm)
+    date_by_rows(farm, runs)
+    runs += costs_spends(farm, runs)
+    undated = [r for r in runs if r.start is None]
+    runs = sorted((r for r in runs if r.start is not None), key=lambda r: r.start)
+    if not runs:
+        print("no run has spent anything")
+        return 0
+    # What each run spent each local day, by its index.
+    days: dict[datetime.date, dict[int, float]] = collections.defaultdict(lambda: collections.defaultdict(float))
+    for n, r in enumerate(runs):
+        prev = 0.0
+        for s, c in r.points:
+            days[(r.start + datetime.timedelta(seconds=s)).astimezone().date()][n] += c - prev
+            prev = c
+    print(f"{'day':10}  {'spend':>8}  {'runs':>4}  costliest run that day")
+    day = min(days)
+    while day <= max(days):
+        by = days.get(day, {})
+        line = f"{day}  {f'${sum(by.values()):.2f}':>8}  {len(by):4}"
+        if by:
+            n = max(by, key=by.get)
+            line += f"  {run_label(runs[n].name)} ${by[n]:.2f}"
+        print(line)
+        day += datetime.timedelta(days=1)
+    note = f"{len(runs)} runs, ${sum(r.cost for r in runs):.2f} (farm.py's estimates, not billed amounts)"
+    if undated:
+        note += (f"; {len(undated)} undated left out, ${sum(r.cost for r in undated):.2f}: "
+                 + ", ".join(run_label(r.name) for r in undated))
+    print(note)
+    if csv_dir is not None:
+        csv_dir.mkdir(parents=True, exist_ok=True)
+
+        def utc(d: datetime.datetime) -> str:
+            return d.astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        with (csv_dir / "runs.csv").open("w", newline="") as f, (csv_dir / "steps.csv").open("w", newline="") as g:
+            rw, sw = csv.writer(f, lineterminator="\n"), csv.writer(g, lineterminator="\n")
+            rw.writerow(["run_id", "run", "start", "end", "cost_usd", "instances", "matrices", "logged_in"])
+            sw.writerow(["run_id", "t", "run_cost_usd"])
+            for n, r in enumerate(runs, 1):
+                rid = f"r{n:03d}"
+                rw.writerow([rid, r.name, utc(r.start), utc(r.end), f"{r.cost:.4f}", r.instances, r.logs or "",
+                             r.source])
+                for s, c in r.points:
+                    sw.writerow([rid, utc(r.start + datetime.timedelta(seconds=s)), f"{c:.4f}"])
+        print(f"wrote {csv_dir / 'runs.csv'} and {csv_dir / 'steps.csv'}")
+    return 0
+
+
 # --- status and down ----------------------------------------------------
 
 
@@ -3263,6 +3477,8 @@ def main() -> int:
     rp.add_argument("matrix")
     rp.add_argument("--where", action="append", default=[])
     rp.add_argument("--group", type=lambda s: s.split(","))
+    sp = sub.add_parser("spend")
+    sp.add_argument("--csv", type=Path, metavar="DIR")
     args = p.parse_args()
 
     def name(m: str | None) -> str | None:
@@ -3292,6 +3508,8 @@ def main() -> int:
         return down(name(args.matrix), regions_of(args.regions, cfg))
     elif args.cmd == "report":
         report(Matrix(args.matrix), args.where, args.group)
+    elif args.cmd == "spend":
+        return spend(FARM, args.csv)
     return 0
 
 
