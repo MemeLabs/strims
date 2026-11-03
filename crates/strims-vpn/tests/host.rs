@@ -924,9 +924,11 @@ fn peer_exchange_answerer_descriptions_and_refusals() {
             .any(|e| matches!(e, Event::DialRemoteDescriptions { exchange, .. } if *exchange == x))
     );
     assert!(has_closed(&ev0, &ExchangeOutcome::Connected), "{ev0:?}");
-    // Node 2's side stays open for a background link, then closes.
-    w.run_for(Duration::from_secs(20));
+    // Node 2's side stays open for a background link, and closes once
+    // node 0 is its peer.
+    w.service(2);
     assert!(has_closed(&w.take_events(2), &ExchangeOutcome::Answered));
+    assert_eq!(w.nodes[2].vpn.exchanges().count(), 0);
 
     // A host without room for peers refuses.
     let mut w = world(3);

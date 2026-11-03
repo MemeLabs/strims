@@ -20,12 +20,14 @@
 //!   [`Event::DialRemoteDescriptions`] with the offer's descriptions. If that
 //!   connects, an empty answer reports it; if not,
 //!   [`Event::GatherLocalDescriptions`] and the answer carries ours, so the
-//!   offerer can dial us. The exchange then stays open until its timeout,
-//!   for links that complete in the background (a WebRTC answerer).
+//!   offerer can dial us. The exchange then stays open, for links that
+//!   complete in the background (a WebRTC answerer), until the offerer is
+//!   a peer: an answered exchange holds one of
+//!   `Config::max_incoming_exchanges` only while its link may still come.
 //!
-//! Every exchange ends [`LINK_TIMEOUT`] after it started, so a lost answer
-//! can't block later connects to that host. Only an answer carrying the
-//! exchange's id counts.
+//! Every exchange ends [`LINK_TIMEOUT`] after it started at the latest, so
+//! a lost answer can't block later connects to that host. Only an answer
+//! carrying the exchange's id counts.
 
 use std::collections::{BTreeMap, VecDeque};
 
@@ -79,7 +81,8 @@ enum State {
     DialOffer,
     /// Incoming: waiting for our descriptions to answer with.
     GatherAnswer,
-    /// Incoming: answered with our descriptions; open until the timeout.
+    /// Incoming: answered with our descriptions; open until the offerer
+    /// is a peer or the timeout.
     Answered,
 }
 
@@ -379,8 +382,19 @@ impl<H: Copy> Host<H> {
             .count()
     }
 
-    /// Answers queued link offers, or starts dialing their descriptions.
+    /// Closes answered exchanges whose offerer is a peer, then answers
+    /// queued link offers, or starts dialing their descriptions.
     pub(crate) fn peer_exchange_flush<T: Copy>(&mut self, vnic: &VnicHost<T>, now: Time) {
+        let linked: Vec<ExchangeId> = self
+            .peer_exchange
+            .exchanges
+            .iter()
+            .filter(|(_, x)| x.state == State::Answered && vnic.has_peer(&x.host_id))
+            .map(|(k, _)| k)
+            .collect();
+        for x in linked {
+            self.close_exchange(x, ExchangeOutcome::Answered);
+        }
         while let Some(o) = self.peer_exchange.pending.pop_front() {
             if !self.networks.contains_key(o.network) {
                 continue;

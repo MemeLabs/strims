@@ -46,8 +46,9 @@
 //!   [`Event::DialRemoteDescriptions`] and dropped on
 //!   [`Event::ExchangeClosed`], and reports each step with
 //!   [`Host::set_local_descriptions`] and
-//!   [`Host::set_remote_descriptions_result`]. An exchange closes
-//!   [`peer_exchange::LINK_TIMEOUT`] after it starts; a link it made stays.
+//!   [`Host::set_remote_descriptions_result`]. An exchange closes once it
+//!   links, or [`peer_exchange::LINK_TIMEOUT`] after it starts; a link it
+//!   made stays.
 //! - Incoming link offers are refused while vnic has no room for peers.
 //!   `vnic.max_peers()` is 0 until the app calls `vnic.set_max_peers`.
 //!
