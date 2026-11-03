@@ -626,9 +626,9 @@ fn messages_carry_whole_frames() {
     }
     assert_eq!(off, stream.len());
 
-    // At most 700 bytes a message, one cut short to 10 bytes: whole frames,
-    // or a 1000-byte frame in pieces of 700 at most, the cut frame's rest
-    // on its own.
+    // Messages of 700 bytes at most, the first cut short to 10 bytes:
+    // whole frames, the cut one's rest, and the 1000-byte frame whole and
+    // alone.
     let (mut sent, mut msgs) = (Vec::new(), Vec::new());
     let mut short = true;
     loop {
@@ -645,14 +645,15 @@ fn messages_carry_whole_frames() {
     assert_eq!(sent, stream);
     let mut start = 0;
     for &end in &msgs {
-        let whole = ends.contains(&end);
-        let piece = end - start == 700 || end == 10;
         assert!(
-            whole || piece,
+            end == 10 || ends.contains(&end),
             "message {start}..{end}, frames end at {ends:?}"
         );
+        if end - start > 700 {
+            let frames = ends.iter().filter(|&&e| e > start && e <= end).count();
+            assert_eq!(frames, 1, "message {start}..{end} holds {frames} frames");
+        }
         start = end;
     }
-    // The 1000-byte frame is cut, the frames around it go whole.
-    assert!(msgs.iter().any(|&e| !ends.contains(&e) && e != 10));
+    assert!(msgs.windows(2).any(|w| w[1] - w[0] == 1000));
 }

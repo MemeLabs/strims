@@ -312,15 +312,17 @@ pub struct WebRtcConfig {
     /// at a 100 ms round trip, above stream rates. The endpoint's own
     /// `send_buffer` (larger) is the hard limit behind it.
     pub max_buffered_amount: usize,
-    /// The most bytes a WebRTC link writes to its data channel in one
-    /// message. A channel hands its reader whole messages, so every frame
-    /// of a message waits for its last byte: a 64 KiB message (the link
-    /// MTU) holds its first frame 175 ms at 3 Mbit/s. A link's messages end
-    /// where its frames do (`strims_vnic::Host::poll_link_message`), so no
-    /// frame waits on the next message, and the default, 4.5 KiB, holds one
-    /// ppspp frame of a 4 KiB chunk (about 4.2 KiB with its integrity and
-    /// headers) and the control frames vnic puts ahead of it, so none waits
-    /// on another's bytes either. A longer frame spans several messages.
+    /// The most bytes of frames a WebRTC link puts together in one data
+    /// channel message. A channel hands its reader whole messages, so every
+    /// frame of a message waits for its last byte: a 64 KiB message (the
+    /// link MTU) holds its first frame 175 ms at 3 Mbit/s. A link's
+    /// messages end where its frames do
+    /// (`strims_vnic::Host::poll_link_message`), so no frame waits on the
+    /// next message, and the default, 4.5 KiB, holds one ppspp frame of a
+    /// 4 KiB chunk (about 4.2 KiB with its integrity and headers) and the
+    /// control frames vnic puts ahead of it, so none waits on another's
+    /// bytes either. A longer frame (a larger chunk's) goes whole in a
+    /// message of its own.
     pub max_message: usize,
 }
 

@@ -980,12 +980,13 @@ impl<T: Copy> Host<T> {
         Ok(l.out.as_ref().map(OutBuf::pending).unwrap_or_default())
     }
 
-    /// The next message of at most `max` bytes for a transport whose
-    /// reader takes whole messages (a data channel's `onmessage`): the
-    /// handshake bytes, then as many whole frames as fit, so that no frame
-    /// waits on the message after its own. A frame longer than `max` goes
-    /// in pieces of `max`, its last with the whole frames that fit behind
-    /// it. AES links' frames can't be read here: their first `max` bytes.
+    /// The next message for a transport whose reader takes whole messages
+    /// (a data channel's `onmessage`): the handshake bytes (`max` at
+    /// most), then whole frames, as many as fit in `max` bytes, so that no
+    /// frame waits on the message after its own; a frame longer than `max`
+    /// goes whole in a message of its own (frames are one link MTU at
+    /// most). AES links' frames can't be read here: their first `max`
+    /// bytes.
     pub fn poll_link_message(&self, link: PeerKey, max: usize) -> Result<&[u8], Error> {
         let l = self.links.get(link).ok_or(Error::UnknownLink)?;
         let max = max.max(1);
@@ -1929,17 +1930,13 @@ fn random_below(rng: &mut DetRng, n: u32) -> u32 {
 }
 
 /// The bytes of `pending` (the last `left` bytes of a frame a short write
-/// cut, then whole frames) that make one message of at most `max`:
-/// through the last frame that ends within `max`, or `max` bytes when none
-/// does.
+/// cut, then whole frames) that make one message: through the last frame
+/// that ends within `max`, or through the first when it is longer.
 fn whole_frames(pending: &[u8], left: usize, max: usize) -> usize {
-    if left > max {
-        return max.min(pending.len());
-    }
     let mut end = left.min(pending.len());
     while let Ok((h, _)) = FrameHeader::decode(pending.get(end..).unwrap_or_default()) {
         let next = end + FRAME_HEADER_LEN + usize::from(h.length);
-        if next > max || next > pending.len() {
+        if next > pending.len() || (end > 0 && next > max) {
             break;
         }
         end = next;
