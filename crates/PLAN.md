@@ -581,9 +581,15 @@ in `TRIED.md`.
     the packet with the next message. Ending messages at the sender's
     chunk boundary past their frames (the next frame's head fills the
     chunk) would save the packets for a wait of under a chunk. On the
-    str0m model at seeds 1-6 the one-frame messages moved collapses 48 ->
-    43 but startup p99 x1.67 on star-3-10, x1.31 on star-3-20, x1.28 on
-    star-31-10.
+    str0m model at seeds 3001-3032 the one-frame messages moved collapses
+    289 -> 273 of 1024 but startup p99 x1.48 on star-3-10 (requests time out
+    at startup, 0-4 a run -> 10-14, and one viewer comes to relay most of
+    the stream: upload gini 0.11 -> 0.63 at seed 3007) and worse on
+    star-3-20. On the browsers tier the small stars' cost is the seed's
+    first wave reading busy and shedding (star-7-20 at seed 3009: 64
+    subscriptions, 7 copies -> 3, startup p99 189 -> 415 ms): find what
+    the meter should read there rather than hold more below the runner
+    (TRIED: data channel write buffers for 16 KiB).
   - str0m over UDP under the WAN window model doesn't replay: an SCTP
     INIT's resend lands a millisecond apart between runs (2 of 8 runs of
     `wan_residential_seed_adaptive_uncapped_step` at seed 2007 with

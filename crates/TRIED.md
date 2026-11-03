@@ -336,3 +336,12 @@ burst (star-31-5 lag p99 x1.36). The host's own round trip (its summed
 amounts') is its nearest neighbour's: a cap over it starved an LTE viewer
 of `wan_webrtc_channels` (seed 13: lag p50 2.4 -> 14.6 s).
 
+
+**Data channel write buffers for 16 KiB.** (`msg-bufs`) With one-frame
+4.5 KiB messages a link's two write buffers hold half what two 8 KiB
+writes did, and star-7-20's seed read its first wave busy and shed 64
+subscriptions at its worst seeds (startup p99 189 -> 415 ms at seed 3009).
+Four buffers stopped those sheds (244 ms), but on the browsers tier at
+seeds 3001-3032 collapses went 142 -> 168 of 1024 and halve-7-20's lag p99
+x1.27: what waits below the runner hides the queue from the upload meter
+everywhere else too.
