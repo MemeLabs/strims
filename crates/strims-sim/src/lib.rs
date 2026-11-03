@@ -137,6 +137,7 @@ pub use spec::{
 };
 pub use stats::{Peaks, PeerTransfer, RunnerReport, SwarmCounters, TransferSample};
 pub use sweep::{knob, seeds, stream_minutes, sweep, sweep_at, sweep_from, sweep_n};
+pub use wan::SctpProfile;
 
 /// The TCP listener port of every host.
 pub const TCP_PORT: u16 = 7000;

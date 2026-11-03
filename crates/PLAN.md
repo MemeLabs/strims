@@ -554,11 +554,13 @@ in `TRIED.md`.
     of 50 ms every 4 s, the satellites' reassignment every 15 s; the
     profiles' docs), and jitter changes every 20 ms per end. Measure both
     where the app runs on those links.
-  - No WAN scenario runs WebRTC yet. Show that a WAN run over WebRTC
-    replays over 16 seeds (DTLS handshake sizes vary between runs and are
-    charged a fixed size), then add one. Browser seeds stream over WebRTC,
-    so the upload meter's defaults need it measured before they cover
-    them.
+  - WAN scenarios run WebRTC on the window model's data channels
+    (`HostSpec::rtc_stack`), as `wan_webrtc_channels` does. Browser seeds
+    stream over WebRTC, so the upload meter's defaults need a sim-suite
+    tier of browser peers measured before they cover them. With str0m over
+    UDP instead (no `rtc_stack`), `wan_webrtc_channels` loses frames at 7
+    of seeds 1-8: compare it with `rtc_stack: STR0M` before a WAN cell runs
+    native WebRTC either way.
   - The bare bench's WebRTC links run on the window model's data channels
     (`strims-sim`'s `wan::sctp`), a node's own stack for what it sends and
     its peer's for the SACKs: str0m's (`SctpProfile::STR0M`) for native
@@ -583,9 +585,8 @@ in `TRIED.md`.
     - Both browsers resend 2-4 % of their chunks to str0m's receiver, a
       round trip or less after the first copy, where str0m resends 0.2 %:
       find what in sctp-proto's SACKs reads as a loss to them.
-    Then the node's WebRTC links in the sim, so a WAN scenario can run
-    browser peers on them. The testbed's runs of a case vary (the holders'
-    one-way p90 362-780 ms over three): score against repeats.
+    The testbed's runs of a case vary (the holders' one-way p90 362-780 ms
+    over three): score against repeats.
   - Every pair a sim links can reach each other. A model of peers that
     accept no inbound links (an untraversable NAT) would show what they
     cost the mesh and the seed's allocation, and whether either should

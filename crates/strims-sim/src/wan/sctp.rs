@@ -10,7 +10,9 @@
 //! the association sends them as its node's stack ([`SctpProfile`]) does,
 //! and the receiver acknowledges them in SACKs as its own node's stack
 //! does. Chunks that go together share packets as their stack bundles
-//! them; a packet is lost whole, and its receiver counts it once.
+//! them; a packet is lost whole, and its receiver counts it once. Channels
+//! carry the bare bench's WebRTC links, and the node's on hosts with a
+//! stack ([`HostSpec::rtc_stack`](crate::HostSpec::rtc_stack)).
 //!
 //! [`Stack::SctpProto`] is sctp-proto 0.10 as str0m drives it for the node
 //! ([`SctpProfile::STR0M`]):

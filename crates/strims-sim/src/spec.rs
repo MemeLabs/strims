@@ -48,6 +48,13 @@ pub struct HostSpec {
     /// A WebRTC UDP socket on [`crate::UDP_PORT`], offered in peer
     /// exchanges (`NodeConfig::webrtc`).
     pub webrtc: bool,
+    /// With [`SendBuffer::window`], the host's WebRTC connections are the
+    /// window model's data channels, sent as this stack sends, in place of
+    /// str0m over UDP: TCP connections to [`crate::UDP_PORT`] that carry
+    /// SCTP associations, as a browser's are, behind the node's endpoint
+    /// proxy (`strims_node`'s `model_rtc`). `None`, or without the window
+    /// model: str0m.
+    pub rtc_stack: Option<crate::SctpProfile>,
     /// Where the host sits on the WAN ([`Scenario::wan`]); every host has
     /// one in WAN mode.
     pub site: Option<Site>,
@@ -485,8 +492,14 @@ pub struct SendBuffer {
 impl Scenario {
     /// The size TCP writes are cut to ([`Scenario::tcp_segment`]).
     pub fn segment(&self) -> Option<usize> {
-        let window = self.wan.is_some() && self.send_buffer.is_some_and(|b| b.window);
-        self.tcp_segment.or(window.then_some(WINDOW_SEGMENT))
+        self.tcp_segment
+            .or(self.window_model().then_some(WINDOW_SEGMENT))
+    }
+
+    /// Whether TCP runs under the window model: WAN mode with
+    /// [`SendBuffer::window`].
+    pub fn window_model(&self) -> bool {
+        self.wan.is_some() && self.send_buffer.is_some_and(|b| b.window)
     }
 
     /// An empty scenario with 2–20 ms latency, 60 s long.
@@ -531,6 +544,7 @@ impl Scenario {
             routing: None,
             listen: true,
             webrtc: false,
+            rtc_stack: None,
             site: None,
             up_steps: Vec::new(),
             competing: Vec::new(),

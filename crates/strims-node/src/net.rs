@@ -66,6 +66,22 @@ pub trait Net: Clone + Send + Sync + 'static {
         None
     }
 
+    /// Whether the net carries WebRTC data channels as streams it models
+    /// one on ([`Net::open_channel`]): the node then runs its WebRTC
+    /// connections over its TCP streams (`crate::model_rtc`) in place of
+    /// str0m over UDP. The default doesn't.
+    fn models_channels(&self) -> bool {
+        false
+    }
+
+    /// Makes `stream` a modelled data channel's transport, buffering `cap`
+    /// bytes at most as a channel does. Returns whether it could; the
+    /// default can't.
+    fn open_channel(&self, stream: &Self::TcpStream, cap: usize) -> bool {
+        let _ = (stream, cap);
+        false
+    }
+
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send;
 
     fn udp_send_to<'a>(

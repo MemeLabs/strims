@@ -229,7 +229,7 @@ pub struct NodePlan {
     /// channels, signalled over their TCP connections.
     pub webrtc: Option<RtcPlan>,
     /// The links carry their records over the sim's modelled data channels
-    /// ([`BenchNet::open_channel`]), on their TCP connections, sent as
+    /// ([`BenchNet::probed_channel`]), on their TCP connections, sent as
     /// `profile`'s stack sends.
     pub channels: bool,
     pub profile: SctpProfile,
@@ -385,7 +385,7 @@ pub trait BenchNet: Net {
     /// Carries `s`'s writes as a data channel buffering `cap` bytes at
     /// most, sent as `profile`'s SCTP sends: the probe of its buffered
     /// amount and window, or `None` where the net models no channels.
-    fn open_channel(
+    fn probed_channel(
         &self,
         _s: &Self::TcpStream,
         _cap: usize,
@@ -398,13 +398,13 @@ pub trait BenchNet: Net {
 impl BenchNet for strims_node::TokioNet {}
 
 impl BenchNet for SimNet {
-    fn open_channel(
+    fn probed_channel(
         &self,
         s: &SimTcpStream,
         cap: usize,
         profile: SctpProfile,
     ) -> Option<ChannelProbe> {
-        let conn = SimNet::open_channel(self, s, cap as u64, profile)?;
+        let conn = self.open_channel_as(s, cap as u64, profile)?;
         Some(ChannelProbe {
             conn,
             buffers: self.buffers()?,
@@ -489,7 +489,7 @@ pub async fn node<N: BenchNet, C: BenchClock>(
                 None if plan.channels => {
                     let cap = strims_node::WebRtcConfig::default().max_buffered_amount;
                     let probe = net
-                        .open_channel(&s, cap, plan.profile)
+                        .probed_channel(&s, cap, plan.profile)
                         .ok_or_else(|| io::Error::other("this net models no data channels"))?;
                     let (r, w) = tokio::io::split(s);
                     tasks.push(Box::pin(writer(

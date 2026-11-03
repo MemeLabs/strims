@@ -19,8 +19,9 @@ use strims_base::rng::{DetRng, det_rng};
 use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
-    Binding, Competing, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SendBuffer,
-    SwarmSpec, Transport, VpnProbes, knob, stream_minutes, sweep, sweep_at, sweep_from, sweep_n,
+    Binding, Competing, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SctpProfile,
+    SendBuffer, SwarmSpec, Transport, VpnProbes, knob, stream_minutes, sweep, sweep_at, sweep_from,
+    sweep_n,
 };
 use strims_vpn::Routing;
 use strims_wan::live::{Encoder, Sign};
@@ -1160,6 +1161,81 @@ fn webrtc_upgrade_hybrid() {
     sweep(
         "webrtc_upgrade_hybrid",
         |s| webrtc_upgrade(s, PushMode::Hybrid),
+        check_webrtc_upgrade,
+    );
+}
+
+/// `GLOBAL_AUDIENCE`'s cities in North America.
+fn north_america() -> Vec<(City, u32)> {
+    GLOBAL_AUDIENCE
+        .iter()
+        .copied()
+        .filter(|(c, _)| c.region() == Region::NorthAmerica)
+        .collect()
+}
+
+/// [`webrtc_upgrade`] on the WAN under the window model, its WebRTC
+/// connections the model's data channels (`HostSpec::rtc_stack`): the
+/// seed on cable in Chicago runs Chromium's SCTP, its 4 residential viewers
+/// in North America Firefox's, str0m's, Chromium's and Firefox's. The
+/// relay, in a New York datacenter, links them over TCP and crashes once
+/// they have linked.
+fn wan_webrtc_channels(seed: u64) -> Scenario {
+    let mut s = Scenario::new("wan_webrtc_channels");
+    let relay = s.host_at("relay", Site::new(City::NewYork, Access::Datacenter));
+    let seed_host = s.host_at("seed", Site::new(City::Chicago, Access::Cable));
+    let viewers = s.hosts_at("v", &viewer_sites(seed, 4, &north_america(), RESIDENTIAL));
+    let stacks = [
+        SctpProfile::CHROMIUM,
+        SctpProfile::FIREFOX,
+        SctpProfile::STR0M,
+    ];
+    for (i, &h) in std::iter::once(&seed_host).chain(&viewers).enumerate() {
+        let host = &mut s.hosts[h];
+        host.listen = false;
+        host.webrtc = true;
+        host.rtc_stack = Some(stacks[i % stacks.len()]);
+        s.link(h, relay, Transport::Tcp);
+    }
+    let mut all = vec![relay, seed_host];
+    all.extend(&viewers);
+    let net = s.network(NetworkSpec {
+        members: all,
+        binding: Binding::Auto,
+        port: 9000,
+    });
+    for &v in &viewers {
+        s.at(
+            secs(UPGRADE),
+            Fault::Connect {
+                from: seed_host,
+                to: v,
+                network: net,
+            },
+        );
+    }
+    s.at(secs(RELAY_DOWN), Fault::Crash(relay));
+    s.swarm(
+        SwarmSpec::live(seed_host, viewers, WAN_RATE, secs(5), secs(40))
+            .with_live_window(WAN_WINDOW),
+    );
+    s.send_buffer = Some(SendBuffer {
+        uplink_queue: UPLINK_QUEUE,
+        window: true,
+    });
+    s.duration = secs(50);
+    s.invariants = Invariants {
+        max_heap: Some(64 * MIB),
+        ..Invariants::for_window(WAN_WINDOW)
+    };
+    s
+}
+
+#[test]
+fn wan_webrtc_channels_hybrid() {
+    sweep(
+        "wan_webrtc_channels_hybrid",
+        wan_webrtc_channels,
         check_webrtc_upgrade,
     );
 }
@@ -2393,11 +2469,7 @@ fn collapse_join_backlog_hold() {
 // 10d. Mobile viewers: six on LTE and six on cable in North America.
 
 fn wan_mobile_viewers(seed: u64, push: PushMode) -> Scenario {
-    let na: Vec<(City, u32)> = GLOBAL_AUDIENCE
-        .iter()
-        .copied()
-        .filter(|(c, _)| c.region() == Region::NorthAmerica)
-        .collect();
+    let na = north_america();
     let mut sites = viewer_sites(seed, 6, &na, &[(Access::Lte, 1)]);
     sites.extend(viewer_sites(seed + 1, 6, &na, &[(Access::Cable, 1)]));
     let mut m = wan(

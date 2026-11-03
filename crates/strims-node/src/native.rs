@@ -7,8 +7,9 @@
 //! [`spawn`] binds the listeners and the WebRTC sockets, builds the node
 //! with `strims_node_core::start` and spawns its task on the current
 //! runtime. The node task then has the driver spawn, in order: the TCP and
-//! WebSocket accept loops, each UDP socket's reader and writer, and the
-//! STUN resolver at start; a link's reader then its writer when the link is
+//! WebSocket accept loops, each UDP socket's reader and writer (on a net
+//! that models data channels, the channels' driver instead), and the STUN
+//! resolver at start; a link's reader then its writer when the link is
 //! attached; the queued dials after each pass.
 
 use std::future::Future;
@@ -29,6 +30,7 @@ use tokio::time::Sleep;
 
 use crate::clock::{Clock, SimClock, SystemClock};
 use crate::link::{self, Transport};
+use crate::model_rtc;
 use crate::net::Net;
 use crate::rtc::{NativeRtc, UdpTasks, bind_webrtc};
 use crate::transport::{self, IoConfig};
@@ -86,6 +88,9 @@ pub(crate) struct NativeIo<N: Net, C: Clock> {
     udp_tasks: Vec<UdpTasks<N>>,
     /// STUN servers to resolve, and how often.
     stun: Option<(Vec<StunServer>, std::time::Duration)>,
+    /// The modelled channels' driver, spawned when the loop starts, on a
+    /// net that models data channels.
+    model_rtc: Option<model_rtc::ModelRtc<N>>,
     /// The accept loops, UDP readers and the STUN resolver, aborted at
     /// shutdown. (UDP writers end when the state drops their queues, after
     /// sending the last datagrams.)
@@ -142,24 +147,22 @@ impl<N: Net, C: Clock> NativeIo<N, C> {
             format_ws_uri(&addr, &profile_key).ok()
         });
 
-        let (rtc, udp_tasks) = if config.webrtc.enabled {
-            let (setup, tasks) = bind_webrtc(&net, config).await?;
-            (Some(setup), tasks)
+        let (rtc, udp_tasks, webrtc_addrs, stun, model_rtc) = if !config.webrtc.enabled {
+            (None, Vec::new(), Vec::new(), None, None)
+        } else if net.models_channels() {
+            let (factory, model) = model_rtc::bind(&net, config).await?;
+            let addrs = vec![model.advertised];
+            (Some(factory), Vec::new(), addrs, None, Some(model))
         } else {
-            (None, Vec::new())
-        };
-        let webrtc_addrs = rtc
-            .as_ref()
-            .map(|r| r.sockets.iter().map(|s| s.addr).collect())
-            .unwrap_or_default();
-        let stun = rtc.as_ref().and_then(|r| {
-            let servers = r.config.stun_servers();
+            let (setup, udp_tasks) = bind_webrtc(&net, config).await?;
+            let webrtc_addrs = setup.sockets.iter().map(|s| s.addr).collect();
+            let servers = setup.config.stun_servers();
             let refresh = config.webrtc.stun_refresh.to_std().unwrap_or_default();
-            (!servers.is_empty()).then_some((servers, refresh))
-        });
-        let rtc = rtc.map(|setup| -> RtcFactory {
-            Box::new(move |now, rng| Box::new(NativeRtc::new(setup, now, rng)))
-        });
+            let stun = (!servers.is_empty()).then_some((servers, refresh));
+            let factory: RtcFactory =
+                Box::new(move |now, rng| Box::new(NativeRtc::new(setup, now, rng)));
+            (Some(factory), udp_tasks, webrtc_addrs, stun, None)
+        };
         let io = IoConfig {
             tcp: config.tcp,
             tcp_socket: config.tcp_socket.clone(),
@@ -185,6 +188,7 @@ impl<N: Net, C: Clock> NativeIo<N, C> {
                 ws_listener,
                 udp_tasks,
                 stun,
+                model_rtc,
                 tasks: Vec::new(),
             },
         ))
@@ -216,7 +220,8 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
     }
 
     /// The accept loops, then each UDP socket's reader and writer, then
-    /// the STUN resolver.
+    /// the STUN resolver; on a net that models data channels, the
+    /// modelled channels' driver in place of the UDP tasks.
     fn start(&mut self, inputs: &Inputs<Transport<N>>) {
         if let Some(l) = self.tcp_listener.take() {
             let h = tokio::spawn(transport::tcp_accept_loop(
@@ -246,6 +251,10 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
             ));
             self.tasks.push(h.abort_handle());
             tokio::spawn(udp::writer(self.net.clone(), t.sock, t.send_rx));
+        }
+        if let Some(m) = self.model_rtc.take() {
+            let h = tokio::spawn(model_rtc::run(self.net.clone(), m, inputs.clone()));
+            self.tasks.push(h.abort_handle());
         }
         if let Some((servers, refresh)) = self.stun.take() {
             let h = tokio::spawn(udp::stun_resolver(

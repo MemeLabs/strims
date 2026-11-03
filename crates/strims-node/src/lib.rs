@@ -19,6 +19,7 @@
 //! | `native` | the core's `NodeIo`: spawning, the clock, the timer; [`Node::spawn`] on a [`Net`] with a [`SystemClock`] or [`SimClock`] |
 //! | `link`, `transport` | link I/O tasks; TCP and WebSocket dial and accept |
 //! | `rtc`, `udp` | the WebRTC endpoint (str0m) in the node task; its UDP socket tasks and the STUN resolver |
+//! | `model_rtc` | on a net that models data channels ([`Net::models_channels`]), WebRTC as a browser worker runs it: the core's endpoint proxy, its connections the net's streams |
 //! | [`Net`], [`Clock`] | sockets and time: tokio or turmoil, wall clock or simulated |
 //! | [`app`] | the native platform of the core's app layer |
 //! | [`psi`] | PSI sessions on a thread of their own, off the node's |
@@ -52,8 +53,8 @@
 //! ([Determinism](strims_node_core#determinism)): the runtime is
 //! current-thread (turmoil hosts are; so is `#[tokio::test]` by default),
 //! and time comes from the [`Clock`]. Tasks spawn in the loop's order:
-//! accept loops, then each UDP socket's reader and writer, then the STUN
-//! resolver at start; a link's reader then its writer when the link is
+//! accept loops, then each UDP socket's reader and writer (or the modelled
+//! channels' driver), then the STUN resolver at start; a link's reader then its writer when the link is
 //! attached; dials after each pass.
 //!
 //! Randomness the seed doesn't reach changes bytes, never the schedule:
@@ -114,6 +115,7 @@ pub mod clock;
 pub mod codec;
 pub mod fetch;
 mod link;
+mod model_rtc;
 mod native;
 pub mod net;
 pub mod psi;

@@ -27,7 +27,7 @@
 //! holds back that connection alone (see the WAN scheduler).
 //!
 //! A connection that carries a modelled data channel
-//! ([`SimNet::open_channel`]) takes writes as a channel does instead: each
+//! ([`SimNet::open_channel_as`]) takes writes as a channel does instead: each
 //! whole, as a message, while its buffered amount (bytes unsent, and sent
 //! and not yet acknowledged by a SACK) is under the channel's cap, and once
 //! that is reached, again only from under half of it, as the node's link
@@ -199,6 +199,9 @@ pub(crate) struct SimNet {
     wan: Option<SharedWan>,
     /// [`Scenario::tcp_segment`](crate::Scenario::tcp_segment).
     segment: Option<usize>,
+    /// [`HostSpec::rtc_stack`](crate::HostSpec::rtc_stack), under the
+    /// window model.
+    rtc_stack: Option<crate::wan::SctpProfile>,
 }
 
 impl SimNet {
@@ -207,6 +210,16 @@ impl SimNet {
             buffers,
             wan: None,
             segment: None,
+            rtc_stack: None,
+        }
+    }
+
+    /// The node's WebRTC connections are data channels sent as `stack`
+    /// sends ([`Net::models_channels`]); `None`: str0m over UDP.
+    pub fn with_rtc_stack(self, stack: Option<crate::wan::SctpProfile>) -> SimNet {
+        SimNet {
+            rtc_stack: stack,
+            ..self
         }
     }
 
@@ -219,7 +232,7 @@ impl SimNet {
     /// buffering `cap` bytes at most and sent as `profile` sends (see the
     /// module docs and the WAN scheduler). Returns the connection, or
     /// `None` without send buffers and the WAN model.
-    pub fn open_channel(
+    pub fn open_channel_as(
         &self,
         stream: &SimTcpStream,
         cap: u64,
@@ -519,6 +532,16 @@ impl Net for SimNet {
             buffers: self.buffers.clone(),
             wan,
         }))
+    }
+
+    fn models_channels(&self) -> bool {
+        self.rtc_stack.is_some()
+    }
+
+    /// As the host's stack sends ([`SimNet::with_rtc_stack`]).
+    fn open_channel(&self, stream: &SimTcpStream, cap: usize) -> bool {
+        self.rtc_stack
+            .is_some_and(|p| self.open_channel_as(stream, cap as u64, p).is_some())
     }
 
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send {
