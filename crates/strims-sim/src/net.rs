@@ -73,9 +73,9 @@ struct Conn {
     /// write would block: it isn't polled again before the wake.
     waker: Option<Waker>,
     /// The host-wide order of each write (one turmoil segment) the WAN
-    /// scheduler hasn't taken yet. Bound: the connection's segments
-    /// written in one step.
-    writes: VecDeque<u64>,
+    /// scheduler hasn't taken yet, and whether it ends a data channel's
+    /// message. Bound: the connection's segments written in one step.
+    writes: VecDeque<(u64, bool)>,
     /// A data channel's cap and chunk payload, and its bytes sent and not
     /// yet acknowledged.
     channel: Option<(u64, usize)>,
@@ -125,9 +125,10 @@ impl SendBuffers {
         self.with(|b| b.conns.get(&conn).map(|c| (c.unsent, c.lowat)))
     }
 
-    /// The order of `conn`'s next write the scheduler hasn't taken: writes
-    /// on every connection count in the order the hosts made them.
-    pub fn next_write(&self, conn: ConnKey) -> Option<u64> {
+    /// The order of `conn`'s next write the scheduler hasn't taken (writes
+    /// on every connection count in the order the hosts made them), and
+    /// whether it ends a data channel's message.
+    pub fn next_write(&self, conn: ConnKey) -> Option<(u64, bool)> {
         self.with(|b| b.conns.get_mut(&conn)?.writes.pop_front())
     }
 
@@ -350,7 +351,8 @@ impl SimTcpStream {
         chunk: usize,
     ) -> Poll<io::Result<usize>> {
         let mut done = 0;
-        for piece in buf.chunks(chunk) {
+        let pieces = buf.len().div_ceil(chunk);
+        for (i, piece) in buf.chunks(chunk).enumerate() {
             match Pin::new(&mut self.inner).poll_write(cx, piece) {
                 Poll::Ready(Ok(n)) => {
                     if let Some((key, b)) = &self.conn {
@@ -359,7 +361,8 @@ impl SimTcpStream {
                             x.stamp += 1;
                             if let Some(c) = x.conns.get_mut(key) {
                                 c.unsent = c.unsent.saturating_add(n as u64);
-                                c.writes.push_back(stamp);
+                                c.writes
+                                    .push_back((stamp, i + 1 == pieces && n == piece.len()));
                             }
                         });
                     }
@@ -431,7 +434,9 @@ impl AsyncWrite for SimTcpStream {
                     if c.lowat.is_some() {
                         c.tail = c.tail.saturating_add(*n as u64);
                     }
-                    c.writes.push_back(stamp);
+                    // A write is a whole message, if a channel later
+                    // takes the connection.
+                    c.writes.push_back((stamp, true));
                 }
             });
         }

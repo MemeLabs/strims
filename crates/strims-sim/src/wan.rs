@@ -264,6 +264,7 @@ enum Event {
         seq: u64,
         wire: usize,
         last: bool,
+        immediate: bool,
     },
     /// The receiver of competing upload `i` acknowledges its lone segment
     /// `seq`, unless a second one came first.
@@ -857,8 +858,7 @@ impl Scheduler {
         if let Some(a) = self.assocs.get(&conn) {
             let pending = a
                 .pending()
-                .iter()
-                .filter_map(|id| match self.records.get(id)?.what {
+                .filter_map(|id| match self.records.get(&id)?.what {
                     What::Data { len, .. } => Some(len as u64),
                     _ => None,
                 })
@@ -1010,8 +1010,9 @@ impl Scheduler {
                     seq,
                     wire,
                     last,
+                    immediate,
                 } => {
-                    self.sctp_copy_arrived(t, conn, seq, wire, last);
+                    self.sctp_copy_arrived(t, conn, seq, wire, (last, immediate));
                     continue;
                 }
                 Event::CrossDelAck { i, seq } => {
@@ -1742,27 +1743,29 @@ impl Scheduler {
         let window = self.window().is_some();
         for queues in by_sender {
             // (write order, queue position, record)
-            let mut keyed: Vec<(u64, usize, u64)> = Vec::new();
+            // (write order, queue position, record, whether it ends a message)
+            let mut keyed: Vec<(u64, usize, u64, bool)> = Vec::new();
             for q in queues {
                 let mut last = 0;
                 for id in q {
-                    let stamp = self.records.get(&id).and_then(|r| match r.what {
+                    let write = self.records.get(&id).and_then(|r| match r.what {
                         What::Data { .. } => b.next_write((r.src, r.dst)),
                         _ => None,
                     });
-                    last = stamp.unwrap_or(last);
-                    keyed.push((last, keyed.len(), id));
+                    last = write.map_or(last, |(stamp, _)| stamp);
+                    let end = write.is_none_or(|(_, end)| end);
+                    keyed.push((last, keyed.len(), id, end));
                 }
             }
             keyed.sort_unstable();
-            for (_, _, id) in keyed {
+            for (_, _, id, end) in keyed {
                 let data = self.records.get(&id).and_then(|r| match r.what {
                     What::Data { .. } if window => Some((r.src, r.dst)),
                     _ => None,
                 });
                 match data {
                     Some(conn) if self.assocs.contains_key(&conn) => {
-                        self.sctp_write(at, conn, id);
+                        self.sctp_write(at, conn, id, end);
                     }
                     Some(conn) => {
                         self.flows.entry(conn).or_default().pending.push_back(id);

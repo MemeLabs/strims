@@ -560,23 +560,20 @@ in `TRIED.md`.
     so the upload meter's defaults need it measured before they cover
     them.
   - The bare bench's WebRTC links run on the window model's data channels
-    (`strims-sim`'s `wan::sctp`), whose `SctpProfile::STR0M` follows
-    sctp-proto's sender and receiver. Give it the browsers' stacks as
-    profiles, a node's own for what it sends and its peer's for the SACKs,
-    and the bench the topology's kinds:
-    - Chromium's dcSCTP sends four packets per send opportunity (a message
-      written, a SACK, a timeout), grows its window by an MTU a SACK while
-      the window is full, starts it at 10 MTUs of 1191 bytes, times out at
-      500 ms at first and 220-800 ms, takes a chunk it marks lost out of
-      its flight and resends every chunk that reaches three misses, and
-      delays a SACK min(RTO/2, 200 ms). It holds a burst in its SCTP (the
-      queue's p90 8 ms against str0m's 34), and on a link asked for 105 %
-      of its uplink loses 300-990 packets in the first two seconds, sending
-      at the uplink's rate through them.
+    (`strims-sim`'s `wan::sctp`), a node's own stack for what it sends and
+    its peer's for the SACKs: str0m's (`SctpProfile::STR0M`) for native
+    nodes and Firefox, dcSCTP's (`SctpProfile::CHROMIUM`) for Chromium.
+    - Chromium's: on the testbed it loses 300-990 packets in a 105 % link's
+      first two seconds, sending at the uplink's rate through them, where
+      the model loses 46; its `bufferedAmount` falls in steps of about
+      100 KiB a third of a second apart, so its writer refills 12 records a
+      cycle to the model's 8; and dcSCTP cuts a message's chunks to fit
+      the window's room as it sends, about 790 bytes each on the holders'
+      4 KiB writes, where the model cuts a write at 1160.
     - Firefox's usrsctp (path MTU 1179, `SCTP_NODELAY`, a 1 MiB send
       buffer below `bufferedAmount`, a window cut to its flight and four
       MTUs before each send) can't carry the holders' 84 % of a 5 Mbit/s
-      uplink: its holders fall 2.4-2.9 s behind.
+      uplink: its holders fall 2.4-2.9 s behind. Model it as a profile.
     Then the node's WebRTC links in the sim, so a WAN scenario can run
     browser peers on them. The testbed's runs of a case vary (the holders'
     one-way p90 362-780 ms over three): score against repeats.

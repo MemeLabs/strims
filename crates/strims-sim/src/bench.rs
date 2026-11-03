@@ -229,8 +229,10 @@ pub struct NodePlan {
     /// channels, signalled over their TCP connections.
     pub webrtc: Option<RtcPlan>,
     /// The links carry their records over the sim's modelled data channels
-    /// ([`BenchNet::open_channel`]), on their TCP connections.
+    /// ([`BenchNet::open_channel`]), on their TCP connections, sent as
+    /// `profile`'s stack sends.
     pub channels: bool,
+    pub profile: SctpProfile,
     /// The nodes it dials (its linked nodes of lower index) and their
     /// addresses.
     pub dial: Vec<(usize, String)>,
@@ -270,6 +272,7 @@ impl NodePlan {
             listen,
             webrtc: None,
             channels: false,
+            profile: SctpProfile::STR0M,
             dial,
             accepts,
             schedule,
@@ -486,7 +489,7 @@ pub async fn node<N: BenchNet, C: BenchClock>(
                 None if plan.channels => {
                     let cap = strims_node::WebRtcConfig::default().max_buffered_amount;
                     let probe = net
-                        .open_channel(&s, cap, SctpProfile::STR0M)
+                        .open_channel(&s, cap, plan.profile)
                         .ok_or_else(|| io::Error::other("this net models no data channels"))?;
                     let (r, w) = tokio::io::split(s);
                     tasks.push(Box::pin(writer(
@@ -856,6 +859,10 @@ pub struct Bench {
     /// UDP sockets.
     pub webrtc: bool,
     pub str0m: bool,
+    /// Each node's SCTP stack in the window model's data channels: its
+    /// kind's in the topology (Chromium's dcSCTP for Chromium, str0m's
+    /// otherwise).
+    pub stacks: Vec<SctpProfile>,
 }
 
 /// The defaults of `hack/testbed/run.sh`.
@@ -961,6 +968,12 @@ impl Bench {
             compete_rtt_ms: num("SEED_DELAY_MS")? + 10,
             webrtc: get("NODE_ARGS").is_some_and(|a| a.split_whitespace().any(|w| w == "--webrtc")),
             str0m: false,
+            stacks: (0..=viewers)
+                .map(|i| match topo.node(i).map(|n| n.kind) {
+                    Some(strims_testbed::topology::Kind::Chromium) => SctpProfile::CHROMIUM,
+                    _ => SctpProfile::STR0M,
+                })
+                .collect(),
             send_buffer: SendBuffer {
                 uplink_queue: StdDuration::from_millis(queue_ms),
                 window,
@@ -1055,7 +1068,9 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     if channels {
         // A channel's chunks, as many as its cap and the reader's buffer
         // hold.
-        builder.tcp_capacity(64 * (64 * 1024usize).div_ceil(SctpProfile::STR0M.max_payload));
+        let least = bench.stacks.iter().map(|p| p.max_payload).min();
+        let chunk = least.unwrap_or(SctpProfile::STR0M.max_payload);
+        builder.tcp_capacity(64 * (64 * 1024usize).div_ceil(chunk));
     }
     let mut sim = builder.build();
     let buffers = SendBuffers::new(bench.send_buffer);
@@ -1080,9 +1095,11 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
             }
         };
         let webrtc = bench.webrtc && bench.str0m;
+        let profile = bench.stacks.get(me).copied().unwrap_or(SctpProfile::STR0M);
         sim.client(format!("n{me}").as_str(), async move {
             let mut plan = plan;
             plan.channels = channels;
+            plan.profile = profile;
             if webrtc {
                 plan.webrtc = Some(RtcPlan {
                     udp: "0.0.0.0:9001".to_owned(),
@@ -1336,6 +1353,38 @@ mod tests {
             .collect();
         let p90 = quantile(owd, 0.9);
         assert!((65_000..85_000).contains(&p90), "one-way p90 {p90} us");
+    }
+
+    /// The same link from a Chromium node
+    /// (`hack/testbed/bench/rtc-single-chromium.sched`): dcSCTP sends four
+    /// packets a send opportunity, so its burst waits in its own queue more
+    /// than in the uplink's, as on the testbed (the queue peaked at 17-18
+    /// ms where str0m's took 55), and arrives as soon.
+    #[test]
+    fn a_chromium_channel_holds_its_burst() {
+        let topology = "node 0 10.77.0.10:4000 chromium\nnode 1 10.77.0.11:4000\nlink 0 1\n";
+        let bench = Bench::testbed(
+            "VIEWERS=1\nSEED_UP_MBIT=10\nSECS=10\nNODE_ARGS=--webrtc",
+            topology,
+            "burst 0 1 0 250 65536 16384\nprobe 0 1 3 10",
+            true,
+        )
+        .unwrap();
+        let logs = simulate(&bench).unwrap();
+        let queue: Vec<i64> = events(&logs[0], "q")
+            .filter_map(|l| field(l, "wait"))
+            .collect();
+        let peak = quantile(queue, 1.0);
+        assert!(
+            (10_000..25_000).contains(&peak),
+            "queue peaked at {peak} us"
+        );
+        let owd: Vec<i64> = events(&logs[1], "r")
+            .filter(|l| field(l, "k") == Some(0))
+            .filter_map(|l| Some(field(l, "got")? - field(l, "at")?))
+            .collect();
+        let p90 = quantile(owd, 0.9);
+        assert!((65_000..90_000).contains(&p90), "one-way p90 {p90} us");
     }
 
     /// The testbed's seed shape (`hack/testbed/bench/holders.sched`): two
