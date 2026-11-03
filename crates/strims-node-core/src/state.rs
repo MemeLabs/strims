@@ -912,8 +912,9 @@ impl State {
     /// that is the backpressure from a slow socket to the owners.
     ///
     /// In-process WebRTC links write straight into their data channel
-    /// until it is full; they wait for the endpoint's `Writable` (the same
-    /// backpressure, from SCTP's send buffer).
+    /// until it is full, or its pacer or the host's holds it
+    /// (`rtc::write_channel`); they wait for the endpoint's `Writable` (the
+    /// same backpressure, from SCTP's send buffer).
     fn drain_transmit(&mut self, now: Time) -> bool {
         let State {
             vnic,
@@ -925,6 +926,19 @@ impl State {
         } = self;
         scratch_links.clear();
         scratch_links.extend(vnic.links_with_transmit());
+        let mut host = match rtc {
+            Some(rtc) => rtc::host_sum(
+                rtc,
+                links
+                    .values()
+                    .filter_map(|slot| match (&slot.io, slot.rtc) {
+                        (LinkTransport::DataChannel(dc), Some(conn)) => Some((dc, conn)),
+                        _ => None,
+                    }),
+                now,
+            ),
+            None => crate::rtc::pace::HostSum::default(),
+        };
         let mut moved = false;
         for &link in scratch_links.iter() {
             let Some(slot) = links.get_mut(link) else {
@@ -936,7 +950,7 @@ impl State {
                     if let Some(rtc) = rtc
                         && let Some(conn) = slot.rtc
                     {
-                        let n = rtc::write_channel(rtc, conn, dc, vnic, link, now);
+                        let n = rtc::write_channel(rtc, conn, dc, &mut host, vnic, link, now);
                         metrics.bytes_written += n as u64;
                         moved |= n > 0;
                     }

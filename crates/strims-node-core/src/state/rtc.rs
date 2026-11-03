@@ -14,7 +14,8 @@
 //! - **Links.** An in-process channel's `Open` adds a vnic link
 //!   (`LinkConfig::webrtc().with_mtu`); `Data` is read like a stream
 //!   link's bytes; vnic's egress is written into the channel
-//!   (`write_channel`) until it is full, and `Writable` resumes it. A
+//!   (`write_channel`) until it is full, and `Writable` resumes it, under
+//!   the channel's pacer and the channels' together (`HostPacer`). A
 //!   channel the driver owns is attached as a stream link instead
 //!   (`Input::Connected` with `rtc`). Either way the link's slot names its
 //!   connection: an endpoint `Closed` removes the vnic link (the transport
@@ -37,7 +38,7 @@ use strims_vpn::ExchangeId;
 
 use super::{DialError, LinkSlot, LinkTransport, State, VnicHost};
 use crate::exchange::{Candidate, CandidateState};
-use crate::rtc::pace::ChannelPacer;
+use crate::rtc::pace::{ChannelPacer, HostPacer, HostSum};
 use crate::rtc::{RtcConn, RtcEndpoint, RtcEvent, RtcInput};
 
 /// An in-process data channel's write state.
@@ -80,6 +81,8 @@ pub(crate) struct Rtc {
     max_message: usize,
     /// Bounded by the endpoint's connection limit.
     conns: BTreeMap<RtcConn, ConnSlot>,
+    /// The in-process channels together.
+    pacer: HostPacer,
 }
 
 impl Rtc {
@@ -89,8 +92,24 @@ impl Rtc {
             max_buffered,
             max_message,
             conns: BTreeMap::new(),
+            pacer: HostPacer::default(),
         }
     }
+}
+
+/// Reads the in-process `channels` (each link's channel and connection)
+/// at `now`, for a pass of writes to add to.
+pub(super) fn host_sum<'a>(
+    rtc: &mut Rtc,
+    channels: impl Iterator<Item = (&'a DataChannel, RtcConn)>,
+    now: Time,
+) -> HostSum {
+    let mut sum = HostSum::default();
+    for (dc, conn) in channels {
+        sum.add(&dc.pacer, rtc.ep.buffered_amount(conn), dc.capped);
+    }
+    rtc.pacer.observe(now, &sum);
+    sum
 }
 
 /// Writes the link's pending bytes into its in-process data channel at
@@ -99,12 +118,14 @@ impl Rtc {
 /// messages of `max_message` bytes at most. Returns the bytes taken.
 ///
 /// A capped channel resumes once its buffered amount is down to the
-/// pacer's mark. Acknowledgements arrive as driver input, and the pass
-/// after every input calls this, so the check needs no event of its own.
+/// pacer's mark, and none writes while the channels' `host` load is at the
+/// host pacer's cap. Acknowledgements arrive as driver input, and the pass
+/// after every input calls this, so the checks need no event of their own.
 pub(super) fn write_channel(
     rtc: &mut Rtc,
     conn: RtcConn,
     dc: &mut DataChannel,
+    host: &mut HostSum,
     vnic: &mut VnicHost,
     link: LinkKey,
     now: Time,
@@ -120,6 +141,9 @@ pub(super) fn write_channel(
         let buffered = rtc.ep.buffered_amount(conn);
         if !dc.pacer.may_write(now, buffered, rtc.max_buffered) {
             dc.capped = true;
+            break;
+        }
+        if !rtc.pacer.may_write(now, host) {
             break;
         }
         let room = dc
@@ -141,6 +165,8 @@ pub(super) fn write_channel(
                     let _ = vnic.advance_link_transmit(link, n);
                     total += n;
                     dc.pacer.wrote(now, n);
+                    rtc.pacer.wrote(now, n);
+                    host.wrote(n);
                 }
                 // Short: the send buffer is full; `Writable` follows.
                 dc.blocked = n < len;

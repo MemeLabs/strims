@@ -30,10 +30,13 @@
 //! ([`SimNet::open_channel_as`]) takes writes as a channel does instead: each
 //! whole, as a message, while its buffered amount (bytes unsent, and sent
 //! and not yet acknowledged by a SACK) is under the channel's cap, and once
-//! that is reached, again only from under half of it, as the node's link
-//! writer and the browser's `DcSocket` do. A write goes to turmoil as
-//! segments of a DATA chunk's payload at most, which the window model's
-//! association sends as packets.
+//! that is reached, again only from under half of it. A node's channel is
+//! paced as the browser's `DcSocket` paces it: under its own pacer's cap,
+//! and the host's channels together under a [`HostPacer`]'s, each waiting
+//! for its mark once refused. (The browser's writer polls the host's load
+//! while the host holds it; here it reads it at each acknowledgement.) A
+//! write goes to turmoil as segments of a DATA chunk's payload at most,
+//! which the window model's association sends as packets.
 
 // `Net` sockets are `Send`, so the state they share with the scheduler
 // sits behind a lock, which only this module names. Everything runs on
@@ -43,14 +46,15 @@
 use std::collections::VecDeque;
 use std::future::Future;
 use std::io;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll, Waker};
 
 use strims_base::time::Time;
 use strims_node::{
-    CaptureSample, ChannelPacer, LinkProbe, Net, TcpOptions, TcpSocketConfig, TurmoilNet,
+    CaptureSample, ChannelPacer, HostPacer, HostSum, LinkProbe, Net, TcpOptions, TcpSocketConfig,
+    TurmoilNet,
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -87,6 +91,8 @@ struct Conn {
     /// amount only once it falls to the mark it waits for.
     pacer: Option<ChannelPacer>,
     low: u64,
+    /// The pacer refused the last write: the channel waits on its own cap.
+    waits: bool,
 }
 
 /// The most a socket's buffer takes before Linux checks
@@ -108,6 +114,32 @@ struct Buffers {
     stamp: u64,
     /// Bound: one per open TCP connection.
     conns: FastMap<ConnKey, Conn>,
+    /// Each host's paced channels, by its address. Bound: one per host.
+    hosts: FastMap<IpAddr, HostChannels>,
+}
+
+/// A host's paced channels together.
+#[derive(Debug, Default)]
+struct HostChannels {
+    pacer: HostPacer,
+    /// The load the channels the host holds wait for.
+    low: usize,
+    /// Bound: the host's open paced channels, as `waiting`.
+    channels: Vec<ConnKey>,
+    waiting: Vec<ConnKey>,
+}
+
+impl HostChannels {
+    /// The channels now.
+    fn sum(&self, conns: &FastMap<ConnKey, Conn>) -> HostSum {
+        let mut sum = HostSum::default();
+        for c in self.channels.iter().filter_map(|k| conns.get(k)) {
+            if let Some(p) = &c.pacer {
+                sum.add(p, (c.unsent + c.unacked) as usize, c.waits);
+            }
+        }
+        sum
+    }
 }
 
 impl SendBuffers {
@@ -116,6 +148,7 @@ impl SendBuffers {
             model,
             stamp: 0,
             conns: FastMap::default(),
+            hosts: FastMap::default(),
         })))
     }
 
@@ -171,17 +204,37 @@ impl SendBuffers {
             if let Some(c) = b.conns.get_mut(&conn) {
                 c.channel = Some((cap, chunk.max(1)));
                 c.pacer = paced.then(ChannelPacer::default);
+                if paced {
+                    b.hosts.entry(conn.0.ip()).or_default().channels.push(conn);
+                }
             }
         });
     }
 
     /// A SACK acknowledged `len` bytes of data channel `conn` at `at`.
     /// Returns the writer to wake once its buffered amount is under half
-    /// its cap, or a paced writer's once it is at its mark.
+    /// its cap, or a paced writer's once it is at its mark; wakes the
+    /// channels its host holds once their load is at the host's mark.
     pub fn acked(&self, conn: ConnKey, len: usize, at: Time) -> Option<Waker> {
         self.with(|b| {
-            let c = b.conns.get_mut(&conn)?;
+            let Buffers { conns, hosts, .. } = b;
+            let c = conns.get_mut(&conn)?;
             c.unacked = c.unacked.saturating_sub(len as u64);
+            if c.pacer.is_some()
+                && let Some(h) = hosts.get_mut(&conn.0.ip())
+                && !h.waiting.is_empty()
+            {
+                let sum = h.sum(conns);
+                if sum.load <= h.low {
+                    h.pacer.observe(at, &sum);
+                    for k in std::mem::take(&mut h.waiting) {
+                        if let Some(w) = conns.get_mut(&k).and_then(|o| o.waker.take()) {
+                            w.wake();
+                        }
+                    }
+                }
+            }
+            let c = conns.get_mut(&conn)?;
             let (cap, _) = c.channel?;
             let buffered = c.unsent + c.unacked;
             match &mut c.pacer {
@@ -340,7 +393,15 @@ pub(crate) struct SimTcpStream {
 impl Drop for SimTcpStream {
     fn drop(&mut self) {
         if let Some((key, b)) = &self.conn {
-            b.with(|x| x.conns.swap_remove(key));
+            b.with(|x| {
+                if let Some(c) = x.conns.swap_remove(key)
+                    && c.pacer.is_some()
+                    && let Some(h) = x.hosts.get_mut(&key.0.ip())
+                {
+                    h.channels.retain(|k| k != key);
+                    h.waiting.retain(|k| k != key);
+                }
+            });
         }
     }
 }
@@ -361,19 +422,41 @@ impl SimTcpStream {
     fn channel_write(&self, cx: &Context<'_>) -> Option<Option<usize>> {
         let (key, b) = self.conn.as_ref()?;
         b.with(|x| {
-            let c = x.conns.get_mut(key)?;
+            let Buffers { conns, hosts, .. } = x;
+            let c = conns.get_mut(key)?;
             let (cap, chunk) = c.channel?;
             let buffered = c.unsent + c.unacked;
+            let now = sim_time(turmoil::sim_elapsed().unwrap_or_default());
             let may = match &mut c.pacer {
                 Some(p) => {
-                    let now = sim_time(turmoil::sim_elapsed().unwrap_or_default());
                     p.observe(now, buffered as usize);
                     c.low = p.low_mark(now, cap as usize) as u64;
-                    p.may_write(now, buffered as usize, cap as usize)
+                    let may = p.may_write(now, buffered as usize, cap as usize);
+                    c.waits = !may;
+                    may
                 }
                 None => buffered < cap,
             };
-            if c.waker.is_some() || !may {
+            let waited = c.waker.is_some();
+            let paced = c.pacer.is_some();
+            let mut held = false;
+            if paced
+                && may
+                && !waited
+                && let Some(h) = hosts.get_mut(&key.0.ip())
+            {
+                let sum = h.sum(conns);
+                h.pacer.observe(now, &sum);
+                if !h.pacer.may_write(now, &sum) {
+                    held = true;
+                    h.low = h.pacer.low_mark(now, &sum);
+                    if !h.waiting.contains(key) {
+                        h.waiting.push(*key);
+                    }
+                }
+            }
+            let c = conns.get_mut(key)?;
+            if waited || !may || held {
                 c.waker = Some(cx.waker().clone());
                 return Some(None);
             }
@@ -406,6 +489,9 @@ impl SimTcpStream {
                                 if let Some(p) = &mut c.pacer {
                                     let now = sim_time(turmoil::sim_elapsed().unwrap_or_default());
                                     p.wrote(now, n);
+                                    if let Some(h) = x.hosts.get_mut(&key.0.ip()) {
+                                        h.pacer.wrote(now, n);
+                                    }
                                 }
                             }
                         });

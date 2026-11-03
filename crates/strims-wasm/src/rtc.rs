@@ -45,20 +45,25 @@
 //! channel's `bufferedAmount` is below its pacer's cap
 //! ([`ChannelPacer`](strims_node_core::rtc::pace::ChannelPacer), at most
 //! `max_buffered_amount`), and otherwise waits for `bufferedamountlow` at
-//! the pacer's mark. Dropping the last handle of a [`DcSocket`] closes the
+//! the pacer's mark; and while the load of the port's channels together is
+//! below the host pacer's cap
+//! ([`HostPacer`](strims_node_core::rtc::pace::HostPacer)), which it reads
+//! again every [`HOST_POLL`] while it isn't: no channel's event tells when
+//! the others drain. Dropping the last handle of a [`DcSocket`] closes the
 //! channel.
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::future::poll_fn;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll, Waker};
 
 use js_sys::{Array, ArrayBuffer, Object, Reflect, Uint8Array};
-use strims_node_core::rtc::pace::ChannelPacer;
+use strims_base::time::{Duration, Time};
+use strims_node_core::rtc::pace::{ChannelPacer, HostPacer, HostSum};
 use strims_node_core::rtc::proxy::MAX_CONN_ID;
 use strims_node_core::{Input, Inputs, LinkKey, RtcCommand, RtcConn, RtcInput, RtcSignal};
 use strims_vnic::LinkConfig;
@@ -144,8 +149,9 @@ impl SignalPort {
         max_buffered_amount: usize,
     ) -> SignalPort {
         let (events_tx, events) = mpsc::unbounded_channel();
+        let host = Rc::new(Host::default());
         let on_message = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
-            on_message(&events_tx, &e.data(), max_buffered_amount);
+            on_message(&events_tx, &e.data(), max_buffered_amount, &host);
         });
         // Setting `onmessage` starts the port, which delivers what it
         // buffered.
@@ -348,7 +354,12 @@ async fn signal(inputs: &Inputs<WasmTransport>, conn: u64, signal: RtcSignal) {
 }
 
 /// Handles one message from the window, in its callback.
-fn on_message(events: &mpsc::UnboundedSender<PortEvent>, data: &JsValue, max_buffered: usize) {
+fn on_message(
+    events: &mpsc::UnboundedSender<PortEvent>,
+    data: &JsValue,
+    max_buffered: usize,
+    host: &Rc<Host>,
+) {
     let Some(kind) = property(data, "type").as_string() else {
         return;
     };
@@ -368,8 +379,13 @@ fn on_message(events: &mpsc::UnboundedSender<PortEvent>, data: &JsValue, max_buf
             if !channel.is_object() {
                 return;
             }
-            let socket =
-                DcSocket::new(channel.unchecked_into(), conn, events.clone(), max_buffered);
+            let socket = DcSocket::new(
+                channel.unchecked_into(),
+                conn,
+                events.clone(),
+                max_buffered,
+                host,
+            );
             PortEvent::Channel { conn, socket }
         }
         "local" => PortEvent::Local {
@@ -440,6 +456,36 @@ impl Notify {
     }
 }
 
+/// How often a writer the host pacer holds reads the channels' load again.
+const HOST_POLL: Duration = Duration::from_millis(5);
+
+/// The port's channels together ([`HostPacer`]).
+#[derive(Default)]
+struct Host {
+    pacer: RefCell<HostPacer>,
+    /// Bound: the port's open channels.
+    channels: RefCell<Vec<Weak<Dc>>>,
+}
+
+impl Host {
+    /// Whether a channel may write at `now`: reads every channel's
+    /// buffered amount, and forgets the channels dropped.
+    fn admits(&self, now: Time) -> bool {
+        let mut sum = HostSum::default();
+        self.channels.borrow_mut().retain(|w| {
+            let Some(dc) = w.upgrade() else {
+                return false;
+            };
+            let b = dc.channel.buffered_amount() as usize;
+            sum.add(&dc.pacer.borrow(), b, dc.waits.get());
+            true
+        });
+        let mut pacer = self.pacer.borrow_mut();
+        pacer.observe(now, &sum);
+        pacer.may_write(now, &sum)
+    }
+}
+
 /// A data channel the window transferred. Dropping the last handle closes
 /// it.
 pub struct DcSocket(Rc<Dc>);
@@ -450,6 +496,9 @@ struct Dc {
     /// `bufferedamountlow`, or the channel ending.
     low: Rc<Notify>,
     pacer: RefCell<ChannelPacer>,
+    /// Its pacer refused the last send: it waits on its own cap.
+    waits: Cell<bool>,
+    host: Rc<Host>,
     _on_open: Closure<dyn FnMut()>,
     _on_message: Closure<dyn FnMut(MessageEvent)>,
     _on_error: Closure<dyn FnMut(Event)>,
@@ -486,6 +535,7 @@ impl DcSocket {
         conn: u64,
         events: mpsc::UnboundedSender<PortEvent>,
         max_buffered: usize,
+        host: &Rc<Host>,
     ) -> DcSocket {
         channel.set_binary_type(RtcDataChannelType::Arraybuffer);
         channel
@@ -542,17 +592,21 @@ impl DcSocket {
         if channel.ready_state() == RtcDataChannelState::Open {
             inbox.set_open();
         }
-        DcSocket(Rc::new(Dc {
+        let dc = Rc::new(Dc {
             channel,
             inbox,
             low,
             pacer: RefCell::new(ChannelPacer::default()),
+            waits: Cell::new(false),
+            host: host.clone(),
             _on_open: on_open,
             _on_message: on_message,
             _on_error: on_error,
             _on_close: on_close,
             _on_low: on_low,
-        }))
+        });
+        host.channels.borrow_mut().push(Rc::downgrade(&dc));
+        DcSocket(dc)
     }
 
     pub(crate) fn inbox(&self) -> Inbox {
@@ -571,8 +625,8 @@ impl DcSocket {
     }
 
     /// Sends `buf` as one message once the channel holds less than its
-    /// pacer's cap (`max_buffered` bytes at most). Returns the buffered
-    /// amount it sent at.
+    /// pacer's cap (`max_buffered` bytes at most) and the host's pacer
+    /// admits it. Returns the buffered amount it sent at.
     async fn send(&self, buf: &[u8], max_buffered: usize) -> Result<u32, String> {
         let c = &self.0.channel;
         let buffered = loop {
@@ -588,16 +642,24 @@ impl DcSocket {
             let mark = {
                 let mut pacer = self.0.pacer.borrow_mut();
                 pacer.observe(now, b as usize);
-                if pacer.may_write(now, b as usize, max_buffered) {
-                    break b;
-                }
-                pacer.low_mark(now, max_buffered)
+                let may = pacer.may_write(now, b as usize, max_buffered);
+                self.0.waits.set(!may);
+                (!may).then(|| pacer.low_mark(now, max_buffered))
             };
-            c.set_buffered_amount_low_threshold(u32::try_from(mark).unwrap_or(u32::MAX));
-            poll_fn(|cx| self.0.low.poll_wait(cx)).await;
+            if let Some(mark) = mark {
+                c.set_buffered_amount_low_threshold(u32::try_from(mark).unwrap_or(u32::MAX));
+                poll_fn(|cx| self.0.low.poll_wait(cx)).await;
+                continue;
+            }
+            if self.0.host.admits(now) {
+                break b;
+            }
+            clock::Sleep::until(now + HOST_POLL).await;
         };
         c.send_with_u8_array(buf).map_err(|e| js::describe(&e))?;
-        self.0.pacer.borrow_mut().wrote(clock::now(), buf.len());
+        let now = clock::now();
+        self.0.pacer.borrow_mut().wrote(now, buf.len());
+        self.0.host.pacer.borrow_mut().wrote(now, buf.len());
         Ok(buffered)
     }
 }

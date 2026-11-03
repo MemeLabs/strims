@@ -1606,10 +1606,11 @@ impl PeerSwarmScheduler {
                 }
             }
             // Eager modes write the HAVEs (and the pushes) at once, `Off` at
-            // the next tick. Every chunk of the frame being handled lands in
+            // the next tick, and so do they to a peer that announced the
+            // chunk. Every chunk of the frame being handled lands in
             // `have_bins` before the driver polls, so this is one write cycle
             // per frame, not per chunk.
-            if s.mode == PushMode::Off {
+            if s.mode == PushMode::Off || c.peer_have_bins.filled_at(bin) {
                 q.enqueue(c.peer, s.key);
             } else {
                 q.enqueue_now(c.peer, s.key);
