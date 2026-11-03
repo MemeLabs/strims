@@ -854,15 +854,17 @@ def run_matrices(run: str) -> list[str]:
         return []
 
 
-def read_jsonl(path: Path) -> list[dict]:
+def read_jsonl(path: Path, unique: bool = False) -> list[dict]:
     """A JSON-lines file's records; a last line without its newline is one
     another process is still appending, and is left for the next read, and
-    a line that doesn't parse (a torn append's, append_jsonl) is skipped."""
+    a line that doesn't parse (a torn append's, append_jsonl) is skipped.
+    With `unique`, a line that repeats an earlier one is skipped too."""
     if not path.exists():
         return []
     text = path.read_text()
+    lines = text[: text.rfind("\n") + 1].splitlines()
     out = []
-    for line in text[: text.rfind("\n") + 1].splitlines():
+    for line in dict.fromkeys(lines) if unique else lines:
         if line.strip():
             try:
                 out.append(json.loads(line))
@@ -909,7 +911,9 @@ def index_walls() -> list[dict]:
     """Every test row's test, environment, wall, time, instance type and
     commit here, a row copied from another matrix aside: walls.jsonl,
     after it takes in what each matrix's rows.jsonl has added since it was
-    last read (all of it the first time)."""
+    last read (all of it the first time). A pass cut off before it saved how
+    far it read takes the same rows in again, as the same lines: a line
+    counts once."""
     FARM.mkdir(parents=True, exist_ok=True)
     with (FARM / "walls.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -941,7 +945,7 @@ def index_walls() -> list[dict]:
         tmp = WALLS_READ.with_suffix(".tmp")
         tmp.write_text(json.dumps(read))
         os.replace(tmp, WALLS_READ)
-        return read_jsonl(WALLS)
+        return read_jsonl(WALLS, unique=True)
 
 
 # --- rows across runs ---------------------------------------------------
