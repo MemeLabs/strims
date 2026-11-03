@@ -79,7 +79,10 @@ def testbed_runs(matrix, arm, n):
     """The run dirs of `arm` at `n` viewers that finished."""
     out = []
     for line in open(os.path.join(matrix, "rows.jsonl")):
-        r = json.loads(line)
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue  # a torn append's
         if r.get("exit") == 0 and r["arm"] == arm and int(r["env"]["VIEWERS"]) == n:
             out.append(os.path.join(matrix, r["run_dir"]))
     return out

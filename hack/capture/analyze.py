@@ -564,7 +564,10 @@ def runs(paths):
                 line = line[at + 4:] if at >= 0 else line.strip()
                 if not line.startswith("{"):
                     continue
-                r = json.loads(line)
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue  # a torn append's
                 if "row" in r:
                     env = {
                         **r.get("env", {}),
@@ -665,7 +668,10 @@ def delay_rows(paths):
                 line = line[at + 4:] if at >= 0 else line.strip()
                 if not line.startswith("{"):
                     continue
-                r = json.loads(line)
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue  # a torn append's
                 if "row" in r:
                     env = {
                         **r.get("env", {}),

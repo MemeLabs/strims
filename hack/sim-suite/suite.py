@@ -550,10 +550,15 @@ def run_jobs(jobs, slots, mem_gib, need_gib):
 
 
 def load_rows(path):
+    """A rows file's records by id, but lines that don't parse: a torn
+    append's."""
     rows = {}
     if path.exists():
         for line in path.read_text().splitlines():
-            r = json.loads(line)
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
             rows[r["id"]] = r
     return rows
 

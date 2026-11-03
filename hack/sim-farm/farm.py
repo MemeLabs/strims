@@ -856,25 +856,36 @@ def run_matrices(run: str) -> list[str]:
 
 def read_jsonl(path: Path) -> list[dict]:
     """A JSON-lines file's records; a last line without its newline is one
-    another process is still appending, and is left for the next read."""
+    another process is still appending, and is left for the next read, and
+    a line that doesn't parse (a torn append's, append_jsonl) is skipped."""
     if not path.exists():
         return []
     text = path.read_text()
     out = []
     for line in text[: text.rfind("\n") + 1].splitlines():
         if line.strip():
-            out.append(json.loads(line))
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue
     return out
 
 
 def append_jsonl(path: Path, recs: list[dict]) -> None:
     """Appends the records in one write, holding an exclusive flock on the
-    file: runs at once share walls.jsonl and costs.jsonl."""
+    file: runs at once share walls.jsonl and costs.jsonl. A file that
+    doesn't end in a newline ends in a torn append (a writer that died or
+    ran out of disk; the lock rules out one in progress): the records start
+    a line after it, so it stays a line of its own, which readers skip."""
     if not recs:
         return
-    with path.open("a") as f:
+    with path.open("ab+") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
-        f.write("".join(json.dumps(r) + "\n" for r in recs))
+        torn = False
+        if end := f.seek(0, os.SEEK_END):
+            f.seek(end - 1)
+            torn = f.read(1) != b"\n"
+        f.write((("\n" if torn else "") + "".join(json.dumps(r) + "\n" for r in recs)).encode())
         f.flush()
         os.fsync(f.fileno())
 
@@ -1056,11 +1067,15 @@ def row_index(mine: set[str]) -> tuple[dict[str, tuple[str, int, str]], dict[str
         tmp = ROW_KEYS_READ.with_suffix(".tmp")
         tmp.write_text(json.dumps(state))
         os.replace(tmp, ROW_KEYS_READ)
+        # A pass cut off before it saved how far it read leaves its rows to
+        # be indexed again: a row counts once, by where it is.
         first: dict[str, tuple[str, int, str]] = {}
         have = {m: collections.Counter() for m in mine}
+        seen = set()
         for key, name, off, jid in read_jsonl(ROW_KEYS):
             first.setdefault(key, (name, off, jid))
-            if name in have:
+            if name in have and (name, off) not in seen:
+                seen.add((name, off))
                 have[name][key] += 1
         return first, have
 
