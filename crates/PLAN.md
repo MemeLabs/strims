@@ -555,12 +555,13 @@ in `TRIED.md`.
     profiles' docs), and jitter changes every 20 ms per end. Measure both
     where the app runs on those links.
   - WAN scenarios run WebRTC on the window model's data channels
-    (`HostSpec::rtc_stack`), as `wan_webrtc_channels` does. Browser seeds
-    stream over WebRTC, so the upload meter's defaults need a sim-suite
-    tier of browser peers measured before they cover them. With str0m over
-    UDP instead (no `rtc_stack`), `wan_webrtc_channels` loses frames at 7
-    of seeds 1-8: compare it with `rtc_stack: STR0M` before a WAN cell runs
-    native WebRTC either way.
+    (`HostSpec::rtc_stack`), as `wan_webrtc_channels` does, and the
+    sim-suite's `browsers` tier runs robust's window-model cells with every
+    host a browser (`STRIMS_SIM_RTC`). Browser seeds stream over WebRTC, so
+    the upload meter's defaults need that tier measured against robust's
+    TCP before they cover them. With str0m over UDP instead (`udp`),
+    `wan_webrtc_channels` loses frames at 7 of seeds 1-8: compare it with
+    `str0m` there before a WAN cell runs native WebRTC either way.
   - The bare bench's WebRTC links run on the window model's data channels
     (`strims-sim`'s `wan::sctp`), a node's own stack for what it sends and
     its peer's for the SACKs: str0m's (`SctpProfile::STR0M`) for native

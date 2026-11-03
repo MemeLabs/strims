@@ -75,6 +75,10 @@ pub(crate) struct HostState {
     pub host_id: Option<HostId>,
     pub incarnation: u32,
     pub nets: Vec<Option<NetworkId>>,
+    /// Peers bound to each network of `nets`, by index.
+    pub net_peers: BTreeMap<usize, u32>,
+    /// Peer exchanges that ended, by the other host.
+    pub exchanges: BTreeMap<HostIx, u32>,
     /// The node's key for each scenario swarm it takes part in.
     pub swarms: Vec<Option<SwarmKey>>,
     /// Links (indexes into `Scenario::links`) being dialed.
@@ -321,6 +325,7 @@ impl World {
         Some(match t {
             Transport::Tcp => format!("tcp://{ip}:{TCP_PORT}/{key}"),
             Transport::Ws => format!("ws://{ip}:{WS_PORT}/{key}"),
+            Transport::WebRtc(_) => return None,
         })
     }
 
@@ -395,6 +400,7 @@ impl World {
             hs.node = Some(node.clone());
             hs.host_id = Some(id);
             hs.nets = nets;
+            hs.net_peers.clear();
             hs.swarms = swarms;
             Some(hs.incarnation)
         });
@@ -418,6 +424,30 @@ impl World {
 
     pub fn host_id(&self, h: HostIx) -> Option<HostId> {
         self.st.borrow().hosts.get(h).and_then(|s| s.host_id)
+    }
+
+    /// A peer of `h` was bound to network `n`, or unbound.
+    pub fn network_peer(&self, h: HostIx, n: usize, added: bool) {
+        self.record(|st| {
+            if let Some(hs) = st.hosts.get_mut(h) {
+                let c = hs.net_peers.entry(n).or_default();
+                *c = if added {
+                    c.saturating_add(1)
+                } else {
+                    c.saturating_sub(1)
+                };
+            }
+        });
+    }
+
+    /// Whether `h` has a peer bound to network `n`, and so a route to the
+    /// rest of it.
+    pub fn on_network(&self, h: HostIx, n: usize) -> bool {
+        self.st
+            .borrow()
+            .hosts
+            .get(h)
+            .is_some_and(|s| s.net_peers.get(&n).is_some_and(|&c| c > 0))
     }
 
     pub fn net(&self, h: HostIx, n: usize) -> Option<NetworkId> {
@@ -690,12 +720,27 @@ impl World {
         })
     }
 
-    pub fn exchange_closed(&self, outcome: &ExchangeOutcome) {
+    /// A peer exchange of `h` with `with` ended.
+    pub fn exchange_closed(&self, h: HostIx, with: Option<HostIx>, outcome: &ExchangeOutcome) {
         let name = format!("{outcome:?}");
         let name = name.split('(').next().unwrap_or_default();
         self.record(|st| {
             *st.vpn.exchange_outcomes.entry(name.to_owned()).or_default() += 1;
+            if let (Some(hs), Some(x)) = (st.hosts.get_mut(h), with) {
+                let c = hs.exchanges.entry(x).or_default();
+                *c = c.wrapping_add(1);
+            }
         });
+    }
+
+    /// How many of `h`'s peer exchanges with `with` have ended.
+    pub fn exchanges_with(&self, h: HostIx, with: HostIx) -> u32 {
+        self.st
+            .borrow()
+            .hosts
+            .get(h)
+            .and_then(|s| s.exchanges.get(&with).copied())
+            .unwrap_or(0)
     }
 
     /// A hash table get or peer index search started at `start_ms` ended.

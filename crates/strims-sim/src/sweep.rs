@@ -44,6 +44,12 @@
 //!   its start, the run ending 10 s after the last stops: the WAN cases'
 //!   minute, longer. A scenario's faults, steps and competing uploads keep
 //!   their times.
+//! - `STRIMS_SIM_RTC=<stack>,...` links every host as a browser does
+//!   ([`Scenario::over_webrtc`]): over WebRTC, through a signalling relay,
+//!   host `i` on the `i`-th stack of the list, round: `chromium`,
+//!   `firefox` or `str0m` (the window model's data channels, under
+//!   `STRIMS_SIM_TCP=1`), or `udp` (str0m over UDP). `off` changes
+//!   nothing.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), so the row carries the run second by
 //!   second ([`Report::series`]).
@@ -75,6 +81,7 @@ use strims_wan::live::{Encoder, Sign};
 use crate::report::Report;
 use crate::run::run;
 use crate::spec::{HostIx, Scenario, SendBuffer};
+use crate::wan::SctpProfile;
 
 /// A media swarm's chunk size without `STRIMS_SIM_CHUNK`: a video swarm's.
 pub const MEDIA_CHUNK: usize = 4096;
@@ -208,6 +215,23 @@ fn media_knobs() -> Option<(Encoder, Sign)> {
     encoder.zip(sign)
 }
 
+/// `STRIMS_SIM_RTC`'s stacks; `off` is none.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn rtc_knob() -> Option<Vec<Option<SctpProfile>>> {
+    let v = env("STRIMS_SIM_RTC").filter(|v| v.trim() != "off")?;
+    let stacks = v
+        .split(',')
+        .map(|s| match s.trim() {
+            "chromium" => Some(SctpProfile::CHROMIUM),
+            "firefox" => Some(SctpProfile::FIREFOX),
+            "str0m" => Some(SctpProfile::STR0M),
+            "udp" => None,
+            other => panic!("STRIMS_SIM_RTC: {other} is no stack"),
+        })
+        .collect();
+    Some(stacks)
+}
+
 /// The stream length of a scenario that takes it from the run's settings:
 /// `STRIMS_SIM_MINUTES=<m>`, else `default` minutes.
 pub fn stream_minutes(default: u64) -> u64 {
@@ -289,6 +313,7 @@ fn sweep_seeds(
     let stream_secs: Option<u64> = knob("STRIMS_SIM_STREAM_SECS");
     let segment: Option<usize> = knob("STRIMS_SIM_TCP_SEGMENT");
     let media = media_knobs();
+    let rtc = rtc_knob();
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -347,6 +372,9 @@ fn sweep_seeds(
                     h.upload_capacity = Some(site.profile.up);
                 }
             }
+        }
+        if let Some(stacks) = &rtc {
+            spec.over_webrtc(stacks);
         }
         if let Some(dir) = &capture {
             let run = format!("seed-{seed}{replay}");

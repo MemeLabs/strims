@@ -13,10 +13,14 @@ use std::time::Duration;
 use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy, SwarmOptions};
 use strims_testbed::shape::LiveShape;
 use strims_vpn::Routing;
-use strims_wan::Site;
 use strims_wan::live::{Encoder, Sign};
+use strims_wan::{Access, City, Site};
 
 use crate::stream::FRAME_LEN;
+use crate::wan::SctpProfile;
+
+/// The port of [`Scenario::over_webrtc`]'s signalling network.
+const SIGNAL_PORT: u16 = 9900;
 
 /// A host's index in [`Scenario::hosts`].
 pub type HostIx = usize;
@@ -26,6 +30,10 @@ pub type HostIx = usize;
 pub enum Transport {
     Tcp,
     Ws,
+    /// WebRTC, linked by a peer exchange on the network of this index
+    /// (`Node::connect_peer`): both hosts need [`HostSpec::webrtc`] and no
+    /// listeners, and the exchange a route between them on the network.
+    WebRtc(usize),
 }
 
 /// One host.
@@ -578,6 +586,41 @@ impl Scenario {
         (0..n)
             .map(|i| self.host(&format!("{prefix}{i}"), uplink))
             .collect()
+    }
+
+    /// Every host as a browser links: each link over WebRTC
+    /// ([`Transport::WebRtc`]), its peer exchange through a signalling
+    /// relay, a host every other links to over TCP (in WAN mode, in a New
+    /// York datacenter) and that no swarm has; every host without
+    /// listeners, host `i` on `stacks[i % stacks.len()]`
+    /// ([`HostSpec::rtc_stack`]; `None`, or none given, str0m over UDP).
+    /// Returns the relay.
+    pub fn over_webrtc(&mut self, stacks: &[Option<SctpProfile>]) -> HostIx {
+        let relay = if self.wan.is_some() {
+            self.host_at("signal", Site::new(City::NewYork, Access::Datacenter))
+        } else {
+            self.host("signal", None)
+        };
+        let net = self.network(NetworkSpec {
+            members: (0..self.hosts.len()).collect(),
+            binding: Binding::Auto,
+            port: SIGNAL_PORT,
+        });
+        for l in &mut self.links {
+            l.transport = Transport::WebRtc(net);
+        }
+        if let Some(r) = self.hosts.get_mut(relay) {
+            r.max_peers = u32::try_from(relay).unwrap_or(u32::MAX).max(r.max_peers);
+        }
+        for h in 0..relay {
+            if let Some(spec) = self.hosts.get_mut(h) {
+                spec.listen = false;
+                spec.webrtc = true;
+                spec.rtc_stack = stacks.get(h % stacks.len().max(1)).copied().flatten();
+            }
+            self.link(h, relay, Transport::Tcp);
+        }
+        relay
     }
 
     pub fn link(&mut self, from: HostIx, to: HostIx, transport: Transport) {

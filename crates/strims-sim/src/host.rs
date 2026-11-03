@@ -33,7 +33,7 @@ use tokio::task::spawn_local;
 
 use crate::APP_PORT;
 use crate::net::SimNet;
-use crate::spec::{Binding, Fault, HostIx, LinkSpec, MediaSpec, SwarmSpec};
+use crate::spec::{Binding, Fault, HostIx, LinkSpec, MediaSpec, SwarmSpec, Transport};
 use crate::stream::{
     FRAME_LEN, FrameCodec, FrameParser, JoinRewind, MEDIA_HEADER, MediaCodec, MediaParser,
     encode_frame, fill_media, media_header,
@@ -317,7 +317,7 @@ async fn event_task(
             NodeEvent::ExchangeClosed {
                 host_id, outcome, ..
             } => {
-                w.exchange_closed(&outcome);
+                w.exchange_closed(h, w.ix_of(&host_id), &outcome);
                 w.log(
                     &me,
                     format!("exchange {} {outcome:?}", w.label(w.ix_of(&host_id))),
@@ -329,7 +329,13 @@ async fn event_task(
                     format!("transfer error {}: {error}", w.label(w.ix_of(&host_id))),
                 );
             }
-            NodeEvent::NetworkPeerAdded { .. } | NodeEvent::NetworkPeerRemoved { .. } => {}
+            NodeEvent::NetworkPeerAdded { network, .. }
+            | NodeEvent::NetworkPeerRemoved { network, .. } => {
+                let added = matches!(e, NodeEvent::NetworkPeerAdded { .. });
+                if let Some(n) = nets.iter().position(|x| *x == Some(network)) {
+                    w.network_peer(h, n, added);
+                }
+            }
         }
     }
 }
@@ -390,15 +396,47 @@ async fn control(w: Rc<World>, h: HostIx, node: Node) {
 }
 
 async fn dial(w: Rc<World>, h: HostIx, l: usize, spec: LinkSpec, node: Node) {
-    let Some(uri) = w.uri(spec.to, spec.transport) else {
-        return;
+    let linked = async {
+        match spec.transport {
+            Transport::WebRtc(n) => exchange(&w, h, spec.to, n, &node).await,
+            t => {
+                let uri = w.uri(spec.to, t).ok_or("no uri")?;
+                node.dial(&uri).await.map(drop).map_err(|e| e.to_string())
+            }
+        }
     };
-    let result = match tokio::time::timeout(DIAL_TIMEOUT, node.dial(&uri)).await {
-        Ok(Ok(_)) => Ok(()),
-        Ok(Err(e)) => Err(e.to_string()),
+    let result = match tokio::time::timeout(DIAL_TIMEOUT, linked).await {
+        Ok(r) => r,
         Err(_) => Err("timed out".to_owned()),
     };
     w.end_dial(h, l, result);
+}
+
+/// Links `h` to `to` by a peer exchange on network `n`, once both have a
+/// route on it (an exchange sent before is lost, and waits out its
+/// timeout): done once `to` is a peer, failed once the exchange ended
+/// without it (an answerer at its limit of exchanges refuses).
+async fn exchange(w: &World, h: HostIx, to: HostIx, n: usize, node: &Node) -> Result<(), String> {
+    let (Some(net), Some(id), Some(key)) = (w.net(h, n), w.host_id(to), w.profile_key(to)) else {
+        return Err("not on the network yet".to_owned());
+    };
+    if !(w.on_network(h, n) && w.on_network(to, n)) {
+        return Err("not on the network yet".to_owned());
+    }
+    let ended = w.exchanges_with(h, to);
+    node.connect_peer(net, id)
+        .await
+        .map_err(|e| e.to_string())?;
+    loop {
+        let peers = node.peers().await.map_err(|e| e.to_string())?;
+        if peers.iter().any(|p| p.profile_key == key.public) {
+            return Ok(());
+        }
+        if w.exchanges_with(h, to) != ended {
+            return Err("the exchange ended unlinked".to_owned());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 /// Writes `frames_per_write` frames every `write_interval` from `start` to

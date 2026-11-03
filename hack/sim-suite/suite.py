@@ -46,6 +46,12 @@ Tiers:
           greedy peers, WAN mixes, pull-heavy seeds, and the real stack
           (strims-sim).
   scale   1000 viewers, opt-in: memory and depth at scale.
+  browsers
+          robust's cells under the window model with every host a browser
+          (STRIMS_SIM_RTC=BROWSERS): WebRTC links on the model's data
+          channels, three hosts in four on Chromium's SCTP and one on
+          Firefox's. Its cells keep robust's names, so `score` pairs a
+          browsers run with a robust one.
 
 The scorecard, per cell, shows the seeds whose runs collapsed (8 unhealthy
 seconds in a row, lasting past the first 15) under each, with a Fisher
@@ -202,6 +208,20 @@ def robust_tier():
     return cells
 
 
+# A browser audience for STRIMS_SIM_RTC: three hosts in four on Chromium's
+# SCTP (Chrome, Edge and Safari run libwebrtc's dcSCTP), one on Firefox's
+# usrsctp, so swarms have links between the stacks.
+BROWSERS = "chromium,chromium,chromium,firefox"
+
+
+def browsers_tier():
+    """Robust's cells that run the window model (the stars and the uncapped
+    WAN cases; the others run no data channel model), every host a browser
+    (BROWSERS)."""
+    return [{**c, "env": {**c["env"], "STRIMS_SIM_RTC": BROWSERS}, "why": f"{c['why']}, as browsers"}
+            for c in TIERS["robust"] if c["test"] == "calibration_star" or "uncapped" in c["test"]]
+
+
 # The streams the sign tiers run (strims_wan::live's encoders): audio alone
 # at 128 kbit/s, then audio and video, CBR and VBR, to 6 Mbit/s.
 SIGN_MEDIA = ["128c", "512c", "1500c", "1500v", "3000c", "6000c", "6000v"]
@@ -312,6 +332,7 @@ TIERS = {
     ],
     "robust": robust_tier(),
 }
+TIERS["browsers"] = browsers_tier()
 TIERS["sign"] = sign_tier()
 TIERS["sign-confirm"] = sign_confirm_tier()
 TIERS["sign-sens"] = sign_sens_tier()
