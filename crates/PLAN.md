@@ -262,25 +262,13 @@ in `TRIED.md`.
    - Thin relays collapse on the Docker testbed. Behind a 10 Mbit/s seed, 15
      viewers on 3 Mbit/s uplinks in a full mesh (256 KiB/s, 4 KiB chunks and
      32 KiB munros: `collapse_thin_relays`'s cell) lag over 2 s at the worst
-     viewer in 29-40 of the 40 seconds from 20 s on, and some go seconds
-     without frames; at the testbed's default 1 KiB chunks they lag 14-16 s.
-     The window model as the bare TCP bench calibrates it shows the mode
-     (thin-15-10 collapsed 23 of 32 times, main's model 10; 7 once HAVEs to
-     a peer that announced the chunk wait for the tick): a relay's own
-     uploads fill its uplink's FIFO, and the pure acknowledgements of what
-     it receives wait behind them, up to the queue's 100 ms, so the flows
-     that feed it slow down and its children starve. With acknowledgements
-     kept out of the queue the cell collapses 0 of 16 times (11 with them).
-     Pacing a relay's whole upload doesn't cure it, even on the model's true
-     uplink queue (`TRIED.md`): the acknowledgements wait behind each
-     window's burst, not a mean queue. Try what shortens the bursts or takes
-     the acknowledgements' path off the relay's queue: a sender that paces
-     its window (BBR on native links), relays carrying less than their
-     uplink takes (routing copies around thin relays), or acknowledgements
-     on a separate path. Parked until the WebRTC transport is calibrated:
-     browsers, the most common peers, send over SCTP, whose bursts and
-     acknowledgements differ; `collapse_thin_relays` checks the mode is
-     there meanwhile.
+     viewer in 29-40 of the 40 seconds from 20 s on. In the sim the window
+     model showed the mode (thin-15-10 collapsed 23 of 32 times: a relay's
+     pure acknowledgements wait behind its uploads' bursts in its FIFO)
+     until most HAVEs went at the tick, a packet less a frame to each
+     neighbour and an acknowledgement less back (4 of 32;
+     `collapse_thin_relays` checks it healthy). Rerun the testbed's cell on
+     these HAVEs: if it still collapses, the twin lacks what keeps it.
    - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
      five-node mesh grows its push children from 16 to 50 every 15-20 s
      and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s
@@ -555,32 +543,29 @@ in `TRIED.md`.
     of 50 ms every 4 s, the satellites' reassignment every 15 s; the
     profiles' docs), and jitter changes every 20 ms per end. Measure both
     where the app runs on those links.
-  - Browser peers collapse about 1.5 times as often as TCP peers: on
-    robust's 32 window-model cells at seeds 3001-3032, TCP 132 of 1024
-    runs and the `browsers` tier (`STRIMS_SIM_RTC`) 197 (319 before the
-    channel pacer and the host pacer, 250 with the channel pacer alone).
-    Browsers do better through halvings (halve-7-10 13 against 21) and
-    worse in:
-    - thin-15-10 (32 of 32 against 7): a relay's uplink carries 39 %
-      overhead over SCTP (20.0 MB of data packets for 14.2 MB of payload,
-      3.8 MB of SACKs at seed 3001), most of it lone HAVE packets to the
-      neighbours that lack the chunk, one per frame handled. HAVEs to every
-      peer a frame pushes nothing to at the tick (`hp-exp`'s `haveall`)
-      take the tier to 169 and robust's TCP cells from 196 to 153, but
-      slow startup (star-7-10's p99 x1.50, star-3-20's x1.15) and
-      jitter-15-10 (1 -> 7 of 32 on browsers). Keep them eager to the
-      peers that need them soon: a peer starting up, or one pulling from
-      us.
-    - the WAN cells (global-audience 10 against 0, slow-viewer 11 against
-      1, residential-two-streams 16 against 5, residential-seed-varying 10
-      against 2): SCTP's Reno on long and lossy paths. An Oceania LTE
-      viewer of global-audience (seed 3001) has the scenario's three links,
-      and one association carries about 0.4 Mbit/s through LTE's fades
-      (each halves the window; it regains a packet a 350 ms round trip);
-      TCP's CUBIC carries the 2 Mbit/s stream on them. vnic keeps one link
-      per peer: try a second association per neighbour where a link's
-      delivered rate stays under what it's asked to carry.
-    - star-31-5 (10 against 5).
+  - Browser peers collapse about twice as often as TCP peers: on robust's
+    32 window-model cells at seeds 3001-3032, TCP 91 of 1024 runs and the
+    `browsers` tier (`STRIMS_SIM_RTC`) 171 (319 against TCP's 142 before
+    the channel pacer, the host pacer and HAVEs at the tick). Browsers do
+    better through halvings (halve-7-10 6 against 17) and worse in:
+    - thin-15-10 (32 of 32 against 4): a relay's 3 Mbit/s uplink carries
+      the 2.3 Mbit/s stream and SCTP's costs a packet: 93 bytes of headers
+      on 1191, SACKs of the copy it receives, and each tick's HAVE packets
+      to its 15 neighbours and their SACKs back (39 % over the payload
+      before HAVEs went at the tick, at seed 3001). TCP's 52-byte headers
+      and delayed acknowledgements leave room; a browser relay has none.
+      Fewer packets per neighbour (HAVEs every other tick to peers far
+      from pulling) or fewer neighbours told at all.
+    - the WAN cells (residential-two-streams 15 against 3, global-audience
+      6 against 0, slow-viewer 12 against 5, super-peer-varying 9 against
+      2): SCTP's Reno on long and lossy paths. An Oceania LTE viewer of
+      global-audience (seed 3001) has the scenario's three links, and one
+      association carries about 0.4 Mbit/s through LTE's fades (each halves
+      the window; it regains a packet a 350 ms round trip); TCP's CUBIC
+      carries the 2 Mbit/s stream on them. vnic keeps one link per peer:
+      try a second association per neighbour where a link's delivered rate
+      stays under what it's asked to carry.
+    - star-31-5 (8 against 1) and halve-31-10 (32 against 23).
   - str0m over UDP under the WAN window model doesn't replay: an SCTP
     INIT's resend lands a millisecond apart between runs (2 of 8 runs of
     `wan_residential_seed_adaptive_uncapped_step` at seed 2007 with
