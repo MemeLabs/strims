@@ -112,6 +112,7 @@ use crate::world::epoch;
 
 mod sctp;
 
+pub(crate) use sctp::Chunking;
 pub use sctp::SctpProfile;
 
 /// The wire size charged for a STUN message or a DTLS record other than

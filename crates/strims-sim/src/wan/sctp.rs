@@ -55,8 +55,10 @@
 //!   chunks marked for retransmission and then new ones that fit what the
 //!   window has left past the flight, which counts chunks as sent (their
 //!   header and padding) and leaves out those marked lost. (dcSCTP cuts a
-//!   message's chunks to fit the room as it sends; here a write is cut at
-//!   the most a packet carries, and a chunk that doesn't fit waits.)
+//!   message's chunks to fit the room as it sends; here a write is cut as
+//!   it is written ([`Chunking`]): its first chunk to the room the packet
+//!   of the chunks waiting before it has left, the rest at the most a
+//!   packet carries, and a chunk that doesn't fit the window waits.)
 //! - The receiver acknowledges every second packet, a lone one after
 //!   [`SctpProfile::delayed_sack`] or half its own timeout, whichever is
 //!   less, and at once its first DATA, a packet past a gap, a duplicate
@@ -223,6 +225,57 @@ impl SctpProfile {
 /// A DATA chunk of `len` payload bytes as sent: its header and padding.
 fn chunk_size(len: usize) -> usize {
     CHUNK_HEADER + len.next_multiple_of(4)
+}
+
+/// How a channel cuts its writes into DATA chunks: at the most a chunk
+/// carries, and on dcSCTP, which cuts each chunk to the room its packet
+/// has left as it sends, a write's first chunk to the room the packet of
+/// the chunks before it leaves while they wait to go, so a message's last
+/// chunk and the next one's first share a packet as they do there.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Chunking {
+    max: usize,
+    /// dcSCTP's room for chunks in a packet, and the bytes of it the
+    /// chunks cut since the channel last had none waiting take.
+    fit: Option<usize>,
+    open: usize,
+}
+
+impl Chunking {
+    pub(crate) fn new(p: &SctpProfile) -> Chunking {
+        Chunking {
+            max: p.max_payload.max(1),
+            fit: (p.stack == Stack::DcSctp).then(|| p.mtu - COMMON_HEADER),
+            open: 0,
+        }
+    }
+
+    /// The payload of the next chunk of a write with `left` bytes still to
+    /// cut; `waiting` says chunks cut before it wait to go.
+    pub(crate) fn next(&mut self, left: usize, waiting: bool) -> usize {
+        if !waiting {
+            self.open = 0;
+        }
+        let room = match self.fit {
+            Some(fit) if self.open > 0 => fit.saturating_sub(self.open + CHUNK_HEADER) / 4 * 4,
+            _ => 0,
+        };
+        let n = if room > 0 { room } else { self.max };
+        left.min(n).max(1)
+    }
+
+    /// Records a chunk of `len` payload bytes cut.
+    pub(crate) fn cut(&mut self, len: usize) {
+        let Some(fit) = self.fit else {
+            return;
+        };
+        let size = chunk_size(len);
+        self.open = if self.open > 0 && self.open + size <= fit {
+            self.open + size
+        } else {
+            size
+        };
+    }
 }
 
 /// A chunk sent and not yet below the cumulative point.
@@ -1331,4 +1384,61 @@ fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
         a.recovery_exit = a.next_seq.saturating_sub(1);
     }
     acked
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
+    use super::*;
+
+    /// The payloads `chunking` cuts `writes` into, the earlier chunks
+    /// still waiting at each write when `waiting` says so.
+    fn cuts(mut chunking: Chunking, writes: &[usize], waiting: bool) -> Vec<Vec<usize>> {
+        let mut first = true;
+        writes
+            .iter()
+            .map(|&len| {
+                let mut pieces = Vec::new();
+                let mut left = len;
+                while left > 0 {
+                    let n = chunking.next(left, waiting && !first);
+                    chunking.cut(n);
+                    pieces.push(n);
+                    left -= n;
+                    first = false;
+                }
+                pieces
+            })
+            .collect()
+    }
+
+    #[test]
+    fn dcsctp_fills_the_packet_a_message_ends_in() {
+        let c = Chunking::new(&SctpProfile::CHROMIUM);
+        let full = SctpProfile::CHROMIUM.max_payload;
+        let tail = 8192 - 7 * full;
+        // The next message's first chunk takes what the 72-byte tail's
+        // packet has left: 1179 less the tail's chunk (88) and its own
+        // header, in fours.
+        let fill = (1179 - chunk_size(tail) - CHUNK_HEADER) / 4 * 4;
+        let w = cuts(c, &[8192, 8192], true);
+        assert_eq!(w[0], [vec![full; 7], vec![tail]].concat());
+        assert_eq!(w[1].first(), Some(&fill));
+        assert!(w[1].iter().skip(1).all(|&n| n <= full));
+        assert_eq!(w[1].iter().sum::<usize>(), 8192);
+        // A chunk and the next one's fill share a packet as bundled.
+        assert!(chunk_size(tail) + chunk_size(fill) <= 1179);
+        // Once the chunks before it went, a message starts a packet.
+        assert_eq!(cuts(c, &[8192, 8192], false)[1].first(), Some(&full));
+    }
+
+    #[test]
+    fn other_stacks_cut_at_the_most_a_chunk_carries() {
+        for p in [SctpProfile::FIREFOX, SctpProfile::STR0M] {
+            let w = cuts(Chunking::new(&p), &[3000, 3000], true);
+            let full = p.max_payload;
+            assert_eq!(w[1], vec![full, full, 3000 - 2 * full]);
+        }
+    }
 }

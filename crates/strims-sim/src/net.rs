@@ -60,7 +60,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::fast_map::FastMap;
 use crate::spec::SendBuffer;
-use crate::wan::{SharedWan, sim_time};
+use crate::wan::{Chunking, SharedWan, sim_time};
 
 /// A TCP connection by its local and peer addresses.
 pub(crate) type ConnKey = (SocketAddr, SocketAddr);
@@ -82,9 +82,9 @@ struct Conn {
     /// scheduler hasn't taken yet, and whether it ends a data channel's
     /// message. Bound: the connection's segments written in one step.
     writes: VecDeque<(u64, bool)>,
-    /// A data channel's cap and chunk payload, and its bytes sent and not
-    /// yet acknowledged.
-    channel: Option<(u64, usize)>,
+    /// A data channel's cap and how it cuts its writes into chunks, and
+    /// its bytes sent and not yet acknowledged.
+    channel: Option<(u64, Chunking)>,
     unacked: u64,
     /// A node's channel: its writer paces the buffered amount
     /// ([`ChannelPacer`]) under the cap, and while it waits, reads the
@@ -199,10 +199,10 @@ impl SendBuffers {
 impl SendBuffers {
     /// `conn` carries a data channel of `cap` bytes buffered at most, cut
     /// into chunks of `chunk` bytes at most, its writer paced if `paced`.
-    fn open_channel(&self, conn: ConnKey, cap: u64, chunk: usize, paced: bool) {
+    fn open_channel(&self, conn: ConnKey, cap: u64, chunking: Chunking, paced: bool) {
         self.with(|b| {
             if let Some(c) = b.conns.get_mut(&conn) {
-                c.channel = Some((cap, chunk.max(1)));
+                c.channel = Some((cap, chunking));
                 c.pacer = paced.then(ChannelPacer::default);
                 if paced {
                     b.hosts.entry(conn.0.ip()).or_default().channels.push(conn);
@@ -311,7 +311,7 @@ impl SimNet {
         let ((key, b), wan) = (stream.conn.as_ref()?, self.wan.as_ref()?);
         let mut guard = wan.lock();
         let sched = guard.as_mut()?;
-        b.open_channel(*key, cap, profile.max_payload, paced);
+        b.open_channel(*key, cap, Chunking::new(&profile), paced);
         sched.open_channel(*key, profile);
         Some(*key)
     }
@@ -417,14 +417,14 @@ impl AsyncRead for SimTcpStream {
 }
 
 impl SimTcpStream {
-    /// For a data channel's connection, whether a write may go now: its
-    /// chunk payload, or `None` with the writer left waiting.
-    fn channel_write(&self, cx: &Context<'_>) -> Option<Option<usize>> {
+    /// For a data channel's connection, whether a write may go now, or
+    /// `false` with the writer left waiting.
+    fn channel_write(&self, cx: &Context<'_>) -> Option<bool> {
         let (key, b) = self.conn.as_ref()?;
         b.with(|x| {
             let Buffers { conns, hosts, .. } = x;
             let c = conns.get_mut(key)?;
-            let (cap, chunk) = c.channel?;
+            let (cap, _) = c.channel?;
             let buffered = c.unsent + c.unacked;
             let now = sim_time(turmoil::sim_elapsed().unwrap_or_default());
             let may = match &mut c.pacer {
@@ -458,24 +458,30 @@ impl SimTcpStream {
             let c = conns.get_mut(key)?;
             if waited || !may || held {
                 c.waker = Some(cx.waker().clone());
-                return Some(None);
+                return Some(false);
             }
-            Some(Some(chunk))
+            Some(true)
         })
     }
 
-    /// Writes `buf` as a channel's message: as turmoil segments of `chunk`
-    /// bytes at most, each stamped and unsent until the WAN scheduler sends
-    /// it.
-    fn write_message(
-        &mut self,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-        chunk: usize,
-    ) -> Poll<io::Result<usize>> {
+    /// Writes `buf` as a channel's message: as turmoil segments, the
+    /// chunks its [`Chunking`] cuts, each stamped and unsent until the WAN
+    /// scheduler sends it.
+    fn write_message(&mut self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         let mut done = 0;
-        let pieces = buf.len().div_ceil(chunk);
-        for (i, piece) in buf.chunks(chunk).enumerate() {
+        while done < buf.len() {
+            let left = buf.len() - done;
+            let len = self.conn.as_ref().map_or(left, |(key, b)| {
+                b.with(|x| {
+                    x.conns.get_mut(key).map_or(left, |c| {
+                        let waiting = c.unsent > 0;
+                        c.channel
+                            .as_mut()
+                            .map_or(left, |(_, ch)| ch.next(left, waiting))
+                    })
+                })
+            });
+            let piece = buf.get(done..done + len).unwrap_or_default();
             match Pin::new(&mut self.inner).poll_write(cx, piece) {
                 Poll::Ready(Ok(n)) => {
                     if let Some((key, b)) = &self.conn {
@@ -483,9 +489,11 @@ impl SimTcpStream {
                             let stamp = x.stamp;
                             x.stamp += 1;
                             if let Some(c) = x.conns.get_mut(key) {
+                                if let Some((_, ch)) = &mut c.channel {
+                                    ch.cut(n);
+                                }
                                 c.unsent = c.unsent.saturating_add(n as u64);
-                                c.writes
-                                    .push_back((stamp, i + 1 == pieces && n == piece.len()));
+                                c.writes.push_back((stamp, done + n == buf.len()));
                                 if let Some(p) = &mut c.pacer {
                                     let now = sim_time(turmoil::sim_elapsed().unwrap_or_default());
                                     p.wrote(now, n);
@@ -517,10 +525,11 @@ impl AsyncWrite for SimTcpStream {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         let this = &mut *self;
-        if let Some(chunk) = this.channel_write(cx) {
-            return match chunk {
-                Some(chunk) => this.write_message(cx, buf, chunk),
-                None => Poll::Pending,
+        if let Some(may) = this.channel_write(cx) {
+            return if may {
+                this.write_message(cx, buf)
+            } else {
+                Poll::Pending
             };
         }
         // The most this write may take: what the tail buffer has room for,
