@@ -37,6 +37,7 @@ use strims_vpn::ExchangeId;
 
 use super::{DialError, LinkSlot, LinkTransport, State, VnicHost};
 use crate::exchange::{Candidate, CandidateState};
+use crate::rtc::pace::ChannelPacer;
 use crate::rtc::{RtcConn, RtcEndpoint, RtcEvent, RtcInput};
 
 /// An in-process data channel's write state.
@@ -44,9 +45,10 @@ use crate::rtc::{RtcConn, RtcEndpoint, RtcEvent, RtcInput};
 pub(crate) struct DataChannel {
     /// The channel's send buffer filled up: wait for `Writable`.
     blocked: bool,
-    /// The buffered amount reached `max_buffered_amount`: wait until it
-    /// drains to half.
+    /// The buffered amount reached the pacer's cap: wait until it drains to
+    /// its mark.
     capped: bool,
+    pacer: ChannelPacer,
 }
 
 impl DataChannel {
@@ -91,34 +93,40 @@ impl Rtc {
     }
 }
 
-/// Writes the link's pending bytes into its in-process data channel until
-/// vnic has no more, the channel is full, or its buffered amount reaches
-/// `max_buffered`, in messages of `max_message` bytes at most. Returns the
-/// bytes taken.
+/// Writes the link's pending bytes into its in-process data channel at
+/// `now` until vnic has no more, the channel is full, or its buffered
+/// amount reaches the channel's pacer's cap (`max_buffered` at most), in
+/// messages of `max_message` bytes at most. Returns the bytes taken.
 ///
-/// A capped channel resumes once its buffered amount is down to half the
-/// cap. Acknowledgements arrive as driver input, and the pass after every
-/// input calls this, so the check needs no event of its own.
+/// A capped channel resumes once its buffered amount is down to the
+/// pacer's mark. Acknowledgements arrive as driver input, and the pass
+/// after every input calls this, so the check needs no event of its own.
 pub(super) fn write_channel(
     rtc: &mut Rtc,
     conn: RtcConn,
     dc: &mut DataChannel,
     vnic: &mut VnicHost,
     link: LinkKey,
+    now: Time,
 ) -> usize {
-    if dc.capped && rtc.ep.buffered_amount(conn) > rtc.max_buffered / 2 {
+    let buffered = rtc.ep.buffered_amount(conn);
+    dc.pacer.observe(now, buffered);
+    if dc.capped && buffered > dc.pacer.low_mark(now, rtc.max_buffered) {
         return 0;
     }
     dc.capped = false;
     let mut total = 0;
     while !dc.blocked {
-        let room = rtc
-            .max_buffered
-            .saturating_sub(rtc.ep.buffered_amount(conn));
-        if room == 0 {
+        let buffered = rtc.ep.buffered_amount(conn);
+        if !dc.pacer.may_write(now, buffered, rtc.max_buffered) {
             dc.capped = true;
             break;
         }
+        let room = dc
+            .pacer
+            .cap(now, rtc.max_buffered)
+            .saturating_sub(buffered)
+            .max(1);
         let data = match vnic.poll_link_transmit(link) {
             Ok(d) if !d.is_empty() => d,
             _ => break,
@@ -132,6 +140,7 @@ pub(super) fn write_channel(
                 if n > 0 {
                     let _ = vnic.advance_link_transmit(link, n);
                     total += n;
+                    dc.pacer.wrote(now, n);
                 }
                 // Short: the send buffer is full; `Writable` follows.
                 dc.blocked = n < len;
@@ -364,6 +373,7 @@ impl State {
                         io: LinkTransport::DataChannel(DataChannel {
                             blocked: false,
                             capped: false,
+                            pacer: ChannelPacer::default(),
                         }),
                         kind: LinkKind::WebRtc,
                         dial: None,

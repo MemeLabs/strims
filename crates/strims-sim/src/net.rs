@@ -49,12 +49,14 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll, Waker};
 
 use strims_base::time::Time;
-use strims_node::{CaptureSample, LinkProbe, Net, TcpOptions, TcpSocketConfig, TurmoilNet};
+use strims_node::{
+    CaptureSample, ChannelPacer, LinkProbe, Net, TcpOptions, TcpSocketConfig, TurmoilNet,
+};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::fast_map::FastMap;
 use crate::spec::SendBuffer;
-use crate::wan::SharedWan;
+use crate::wan::{SharedWan, sim_time};
 
 /// A TCP connection by its local and peer addresses.
 pub(crate) type ConnKey = (SocketAddr, SocketAddr);
@@ -80,6 +82,11 @@ struct Conn {
     /// yet acknowledged.
     channel: Option<(u64, usize)>,
     unacked: u64,
+    /// A node's channel: its writer paces the buffered amount
+    /// ([`ChannelPacer`]) under the cap, and while it waits, reads the
+    /// amount only once it falls to the mark it waits for.
+    pacer: Option<ChannelPacer>,
+    low: u64,
 }
 
 /// The most a socket's buffer takes before Linux checks
@@ -158,26 +165,35 @@ impl SendBuffers {
 
 impl SendBuffers {
     /// `conn` carries a data channel of `cap` bytes buffered at most, cut
-    /// into chunks of `chunk` bytes at most.
-    fn open_channel(&self, conn: ConnKey, cap: u64, chunk: usize) {
+    /// into chunks of `chunk` bytes at most, its writer paced if `paced`.
+    fn open_channel(&self, conn: ConnKey, cap: u64, chunk: usize, paced: bool) {
         self.with(|b| {
             if let Some(c) = b.conns.get_mut(&conn) {
                 c.channel = Some((cap, chunk.max(1)));
+                c.pacer = paced.then(ChannelPacer::default);
             }
         });
     }
 
-    /// A SACK acknowledged `len` bytes of data channel `conn`. Returns the
-    /// writer to wake once its buffered amount is under half its cap.
-    pub fn acked(&self, conn: ConnKey, len: usize) -> Option<Waker> {
+    /// A SACK acknowledged `len` bytes of data channel `conn` at `at`.
+    /// Returns the writer to wake once its buffered amount is under half
+    /// its cap, or a paced writer's once it is at its mark.
+    pub fn acked(&self, conn: ConnKey, len: usize, at: Time) -> Option<Waker> {
         self.with(|b| {
             let c = b.conns.get_mut(&conn)?;
             c.unacked = c.unacked.saturating_sub(len as u64);
             let (cap, _) = c.channel?;
-            if 2 * (c.unsent + c.unacked) < cap {
-                c.waker.take()
-            } else {
-                None
+            let buffered = c.unsent + c.unacked;
+            match &mut c.pacer {
+                // A browser reads the amount as it falls to the mark it
+                // waits for.
+                Some(p) if c.waker.is_some() && buffered <= c.low => {
+                    p.observe(at, buffered as usize);
+                    c.waker.take()
+                }
+                Some(_) => None,
+                None if 2 * buffered < cap => c.waker.take(),
+                None => None,
             }
         })
     }
@@ -237,11 +253,12 @@ impl SimNet {
         stream: &SimTcpStream,
         cap: u64,
         profile: crate::wan::SctpProfile,
+        paced: bool,
     ) -> Option<ConnKey> {
         let ((key, b), wan) = (stream.conn.as_ref()?, self.wan.as_ref()?);
         let mut guard = wan.lock();
         let sched = guard.as_mut()?;
-        b.open_channel(*key, cap, profile.max_payload);
+        b.open_channel(*key, cap, profile.max_payload, paced);
         sched.open_channel(*key, profile);
         Some(*key)
     }
@@ -346,7 +363,17 @@ impl SimTcpStream {
         b.with(|x| {
             let c = x.conns.get_mut(key)?;
             let (cap, chunk) = c.channel?;
-            if c.waker.is_some() || c.unsent + c.unacked >= cap {
+            let buffered = c.unsent + c.unacked;
+            let may = match &mut c.pacer {
+                Some(p) => {
+                    let now = sim_time(turmoil::sim_elapsed().unwrap_or_default());
+                    p.observe(now, buffered as usize);
+                    c.low = p.low_mark(now, cap as usize) as u64;
+                    p.may_write(now, buffered as usize, cap as usize)
+                }
+                None => buffered < cap,
+            };
+            if c.waker.is_some() || !may {
                 c.waker = Some(cx.waker().clone());
                 return Some(None);
             }
@@ -376,6 +403,10 @@ impl SimTcpStream {
                                 c.unsent = c.unsent.saturating_add(n as u64);
                                 c.writes
                                     .push_back((stamp, i + 1 == pieces && n == piece.len()));
+                                if let Some(p) = &mut c.pacer {
+                                    let now = sim_time(turmoil::sim_elapsed().unwrap_or_default());
+                                    p.wrote(now, n);
+                                }
                             }
                         });
                     }
@@ -541,7 +572,7 @@ impl Net for SimNet {
     /// As the host's stack sends ([`SimNet::with_rtc_stack`]).
     fn open_channel(&self, stream: &SimTcpStream, cap: usize) -> bool {
         self.rtc_stack
-            .is_some_and(|p| self.open_channel_as(stream, cap as u64, p).is_some())
+            .is_some_and(|p| self.open_channel_as(stream, cap as u64, p, true).is_some())
     }
 
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send {

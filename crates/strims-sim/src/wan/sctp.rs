@@ -1066,7 +1066,7 @@ impl Scheduler {
             self.events.insert((due, k), Event::SctpTimeout { conn });
         }
         if acked > 0
-            && let Some(w) = self.buffers.as_ref().and_then(|b| b.acked(conn, acked))
+            && let Some(w) = self.buffers.as_ref().and_then(|b| b.acked(conn, acked, t))
         {
             w.wake();
         }

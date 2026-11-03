@@ -156,6 +156,7 @@ pub use event::{
 pub use net::TurmoilNet;
 pub use net::{Net, TokioNet};
 pub use rpc::{PeerRpc, RpcChannel, RpcReader, RpcWriter};
+pub use strims_node_core::rtc::pace::ChannelPacer;
 pub use strims_node_core::{
     CaptureSample, HashTableGet, Interfaces, LinkProbe, Node, NodeEvents, NodeInfo,
     PeerIndexSearch, SwarmReader, SwarmWriter,

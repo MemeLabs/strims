@@ -792,7 +792,7 @@ impl State {
                     rpc::fill(peers, written, peer, side, f.body)
                 }
             });
-            let moved = self.drain_transmit();
+            let moved = self.drain_transmit(now);
             let evented = self.process_events(now);
             self.drain_capture(now);
             if !moved && !evented && !self.vpn.needs_flush() {
@@ -914,7 +914,7 @@ impl State {
     /// In-process WebRTC links write straight into their data channel
     /// until it is full; they wait for the endpoint's `Writable` (the same
     /// backpressure, from SCTP's send buffer).
-    fn drain_transmit(&mut self) -> bool {
+    fn drain_transmit(&mut self, now: Time) -> bool {
         let State {
             vnic,
             links,
@@ -936,7 +936,7 @@ impl State {
                     if let Some(rtc) = rtc
                         && let Some(conn) = slot.rtc
                     {
-                        let n = rtc::write_channel(rtc, conn, dc, vnic, link);
+                        let n = rtc::write_channel(rtc, conn, dc, vnic, link, now);
                         metrics.bytes_written += n as u64;
                         moved |= n > 0;
                     }

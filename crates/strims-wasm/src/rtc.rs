@@ -42,9 +42,11 @@
 //! it, before any of its events can be dispatched. As a link it has the
 //! shared reader ([`crate::io`]) with no read timeout: ICE and the
 //! connection state end a dead channel. Its writer sends while the
-//! channel's `bufferedAmount` is below `max_buffered_amount`, and otherwise
-//! waits for `bufferedamountlow`. Dropping the last handle of a
-//! [`DcSocket`] closes the channel.
+//! channel's `bufferedAmount` is below its pacer's cap
+//! ([`ChannelPacer`](strims_node_core::rtc::pace::ChannelPacer), at most
+//! `max_buffered_amount`), and otherwise waits for `bufferedamountlow` at
+//! the pacer's mark. Dropping the last handle of a [`DcSocket`] closes the
+//! channel.
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
@@ -56,6 +58,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll, Waker};
 
 use js_sys::{Array, ArrayBuffer, Object, Reflect, Uint8Array};
+use strims_node_core::rtc::pace::ChannelPacer;
 use strims_node_core::rtc::proxy::MAX_CONN_ID;
 use strims_node_core::{Input, Inputs, LinkKey, RtcCommand, RtcConn, RtcInput, RtcSignal};
 use strims_vnic::LinkConfig;
@@ -69,7 +72,7 @@ use web_sys::{
 
 use crate::inbox::Inbox;
 use crate::io::WasmTransport;
-use crate::{js, ws};
+use crate::{clock, js, ws};
 
 /// What the port's and the channels' callbacks hand the task, in the order
 /// they ran.
@@ -446,6 +449,7 @@ struct Dc {
     inbox: Inbox,
     /// `bufferedamountlow`, or the channel ending.
     low: Rc<Notify>,
+    pacer: RefCell<ChannelPacer>,
     _on_open: Closure<dyn FnMut()>,
     _on_message: Closure<dyn FnMut(MessageEvent)>,
     _on_error: Closure<dyn FnMut(Event)>,
@@ -542,6 +546,7 @@ impl DcSocket {
             channel,
             inbox,
             low,
+            pacer: RefCell::new(ChannelPacer::default()),
             _on_open: on_open,
             _on_message: on_message,
             _on_error: on_error,
@@ -565,8 +570,9 @@ impl DcSocket {
         )
     }
 
-    /// Sends `buf` as one message once the channel holds less than
-    /// `max_buffered` bytes. Returns the buffered amount it sent at.
+    /// Sends `buf` as one message once the channel holds less than its
+    /// pacer's cap (`max_buffered` bytes at most). Returns the buffered
+    /// amount it sent at.
     async fn send(&self, buf: &[u8], max_buffered: usize) -> Result<u32, String> {
         let c = &self.0.channel;
         let buffered = loop {
@@ -578,14 +584,21 @@ impl DcSocket {
                     .unwrap_or_else(|| "data channel closed".to_owned()));
             }
             let b = c.buffered_amount();
-            if (b as usize) < max_buffered {
-                break b;
-            }
+            let now = clock::now();
+            let mark = {
+                let mut pacer = self.0.pacer.borrow_mut();
+                pacer.observe(now, b as usize);
+                if pacer.may_write(now, b as usize, max_buffered) {
+                    break b;
+                }
+                pacer.low_mark(now, max_buffered)
+            };
+            c.set_buffered_amount_low_threshold(u32::try_from(mark).unwrap_or(u32::MAX));
             poll_fn(|cx| self.0.low.poll_wait(cx)).await;
         };
-        c.send_with_u8_array(buf)
-            .map(|()| buffered)
-            .map_err(|e| js::describe(&e))
+        c.send_with_u8_array(buf).map_err(|e| js::describe(&e))?;
+        self.0.pacer.borrow_mut().wrote(clock::now(), buf.len());
+        Ok(buffered)
     }
 }
 

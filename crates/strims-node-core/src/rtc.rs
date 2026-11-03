@@ -41,6 +41,7 @@ use strims_vnic::webrtc::{RemoteDescriptionAction, SessionDescription};
 
 use crate::event::DriverMetrics;
 
+pub mod pace;
 pub mod proxy;
 
 pub use proxy::{ProxyRtc, RtcCommand};

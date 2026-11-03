@@ -300,16 +300,17 @@ pub struct WebRtcConfig {
     /// counted (`DriverMetrics::udp_send_dropped`), and SCTP retransmits.
     pub udp_send_queue: usize,
     /// The most bytes a WebRTC link keeps in its data channel's buffered
-    /// amount; once there, the link writes again when it has drained to
-    /// half. Bytes held back wait in vnic's QoS, which serves fresh data
-    /// and the class weights first; the channel sends in FIFO order.
+    /// amount. Under it the link's pacer (`rtc::pace::ChannelPacer`) holds
+    /// the amount to the flight it estimates and 16 KiB, as
+    /// `TCP_NOTSENT_LOWAT` holds a TCP link's unsent bytes; bytes held back
+    /// wait in vnic's QoS, which serves fresh data and the class weights
+    /// first, where the channel sends in FIFO order.
     ///
     /// The buffered amount counts bytes sent and not yet acknowledged as
     /// well as bytes not yet sent, so this also bounds a link's throughput
-    /// to between half this and this much per round trip: the default,
-    /// 256 KiB, allows 1.3 to 2.6 MB/s at a 100 ms round trip, above
-    /// stream rates, and holds at most that much in FIFO order. The
-    /// endpoint's own `send_buffer` (larger) is the hard limit behind it.
+    /// to this much per round trip: the default, 256 KiB, allows 2.6 MB/s
+    /// at a 100 ms round trip, above stream rates. The endpoint's own
+    /// `send_buffer` (larger) is the hard limit behind it.
     pub max_buffered_amount: usize,
     /// The most bytes a WebRTC link writes to its data channel in one
     /// message. A channel hands its reader whole messages, so every frame
