@@ -345,3 +345,14 @@ Four buffers stopped those sheds (244 ms), but on the browsers tier at
 seeds 3001-3032 collapses went 142 -> 168 of 1024 and halve-7-20's lag p99
 x1.27: what waits below the runner hides the queue from the upload meter
 everywhere else too.
+
+**The first wave's ramp ending after three steps of queue.** (`first-wave`,
+`RAMP_OVER` = 3) Two steps of a queue below the runner can be a loss the
+seed's data channels share as their slow starts fill the uplink at once:
+star-7-20's seed (browsers) kept its 7 copies at its three shedding seeds
+(startup p99 320-388 -> 224-230 ms). At seeds 3001-3032 the browsers tier
+collapsed 130 -> 140 of 1024 (star-31-5 3 -> 10) and robust's TCP cells
+143 -> 160 of 1248, lag p99 x1.043 (halve-7-10 7 -> 18, Fisher p 0.01;
+star-7-10's lag p99 x1.35): where the uplink is short, the ramp's quarter
+second more of overshoot costs more than the shared loss does.
+

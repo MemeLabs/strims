@@ -585,11 +585,17 @@ in `TRIED.md`.
     289 -> 273 of 1024 but startup p99 x1.48 on star-3-10 (requests time out
     at startup, 0-4 a run -> 10-14, and one viewer comes to relay most of
     the stream: upload gini 0.11 -> 0.63 at seed 3007) and worse on
-    star-3-20. On the browsers tier the small stars' cost is the seed's
-    first wave reading busy and shedding (star-7-20 at seed 3009: 64
-    subscriptions, 7 copies -> 3, startup p99 189 -> 415 ms): find what
-    the meter should read there rather than hold more below the runner
-    (TRIED: data channel write buffers for 16 KiB).
+    star-3-20. On the browsers tier, with pushes' integrity cut, star-7-20
+    still sheds its first wave at 3 of seeds 3001-3032 (startup p99 320-388
+    ms against 225; TCP never): its 7 data channels' slow starts fill the
+    uplink's queue at once (about 390 KB in flight against 330), every
+    association loses a packet, every link's probes then wait behind its
+    own SCTP backlog for two ramp steps, and the ramp ends at half (7
+    copies -> 3). The host pacer doesn't hold the burst: its cap grows
+    (2 RTT + 50 ms) / RTT, about 3.6 times, a round trip at startup. Give it
+    a slow start's delay exit (HyStart's: the host's round trip rising past
+    its least while the load grows freezes the cap). TRIED: data channel
+    write buffers for 16 KiB, and RAMP_OVER = 3.
   - str0m over UDP under the WAN window model doesn't replay: an SCTP
     INIT's resend lands a millisecond apart between runs (2 of 8 runs of
     `wan_residential_seed_adaptive_uncapped_step` at seed 2007 with
