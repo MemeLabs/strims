@@ -39,3 +39,6 @@ RUN curl -fsSL -o /tmp/chrome.zip \
       $(sh /tmp/chrome-deps.sh /opt/chrome-linux64/deb.deps) \
  && ln -s /opt/chrome-linux64/chrome /usr/local/bin/chromium \
  && rm -rf /var/lib/apt/lists/* /tmp/chrome-deps.sh
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends tcpdump \
+ && rm -rf /var/lib/apt/lists/*

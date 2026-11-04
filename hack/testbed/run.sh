@@ -87,6 +87,15 @@
 #   NODE_ARGS=<args>       more flags for every native node
 #   CAPTURE=1              ppspp captures in <out dir>/capture, one dump
 #                          per node (native and browser), named by host id
+#   PCAP=1                 each node's packets on its eth0, both ways, in
+#                          <out dir>/pcap-<i>.pcap (tcpdump, after the
+#                          egress queue: what it drops isn't there), and
+#                          what it offers its egress queue in
+#                          pcap-<i>-offered.pcap (a clsact mirror to an
+#                          ifb, ahead of the queue): the first
+#                          PCAP_SNAPLEN bytes of each (default 128: the
+#                          headers; a data channel's payload past its DTLS
+#                          record header is encrypted)
 #   KINDS="<k0> <k1> ..."  node i's kind: native (the default for nodes not
 #                          listed), firefox or chromium
 #   BROWSER_LINKS=ws|webrtc  how browsers link to native nodes (default ws)
@@ -236,7 +245,7 @@ docker network inspect "$net" >/dev/null 2>&1 \
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
   > "$out/settings" || true
 
 # The containers start one after another before the stream does, and
@@ -295,6 +304,14 @@ $ingress"
   if [ "$i" -eq 0 ]; then
     sample="( while :; do echo \"\$(date +%s%3N) \$(tc -s qdisc show dev eth0 | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &
 ( while :; do echo \"@ \$(date +%s%3N)\"; ss -tin state established; sleep $ss_every; done > /out/ss-$i.log ) &"
+  fi
+  if [ "${PCAP:-0}" = 1 ]; then
+    sample="$sample
+ip link add ifb1 type ifb && ip link set ifb1 up
+tc qdisc add dev eth0 clsact
+tc filter add dev eth0 egress matchall action mirred egress mirror dev ifb1
+( tcpdump -i eth0 -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i.pcap 2> /out/tcpdump-$i.err ) &
+( tcpdump -i ifb1 -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i-offered.pcap 2> /out/tcpdump-$i-offered.err ) &"
   fi
   capture=""
   if [ "${CAPTURE:-0}" = 1 ]; then capture="--capture /out/capture"; fi
