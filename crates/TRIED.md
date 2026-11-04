@@ -347,12 +347,31 @@ x1.27: what waits below the runner hides the queue from the upload meter
 everywhere else too.
 
 **The first wave's ramp ending after three steps of queue.** (`first-wave`,
-`RAMP_OVER` = 3) Two steps of a queue below the runner can be a loss the
-seed's data channels share as their slow starts fill the uplink at once:
-star-7-20's seed (browsers) kept its 7 copies at its three shedding seeds
-(startup p99 320-388 -> 224-230 ms). At seeds 3001-3032 the browsers tier
-collapsed 130 -> 140 of 1024 (star-31-5 3 -> 10) and robust's TCP cells
-143 -> 160 of 1248, lag p99 x1.043 (halve-7-10 7 -> 18, Fisher p 0.01;
-star-7-10's lag p99 x1.35): where the uplink is short, the ramp's quarter
-second more of overshoot costs more than the shared loss does.
+`RAMP_OVER` = 3) Two steps of a queue below the runner can be an uplink
+that keeps up but queues each burst of the stream, where both steps'
+probes met bursts: star-7-20's seed (browsers) kept its 7 copies at its
+three shedding seeds (startup p99 320-388 -> 224-230 ms). At seeds
+3001-3032 the browsers tier collapsed 130 -> 140 of 1024 (star-31-5 3 ->
+10) and robust's TCP cells 143 -> 160 of 1248, lag p99 x1.043 (halve-7-10
+7 -> 18, Fisher p 0.01; star-7-10's lag p99 x1.35): where the uplink is
+short, the ramp's quarter second more of overshoot costs more than the
+bursts' sheds do.
+
+**A host pacer cap over a round trip and 20 ms.** (local, star-7-20 on the
+browsers tier at seeds 3001-3032) In place of twice the round trip and 50
+ms per channel, so that a burst at a near-full uplink waits in the runner
+as it does over TCP: no run shed its first wave (3 before) and lag p99
+went 220 -> 185 ms at the median, but the busy time then read the seed's
+capacity at its uplink, and the ramp, bounded by the copies that pays
+for, took 2 s to its 7 copies: request timeouts 4-21 -> 20-35 a run,
+startup p99 to 645 ms. The host pacer's cap had followed the delivered
+rate from the first round trips, so a slow start's delay exit would have
+held nothing the cap didn't.
+
+**The ramp ending only once its least link shows the queue too.** (offline,
+over the ramps' logged readings at seeds 3001-3032) It would have kept
+star-7-20's copies, but star-7-10's least links (browsers), where 4 copies
+are 105 % of the uplink, read 7-22 ms at 7 of its 13 ends, and TCP's at 3
+of 23: under a bursty stream a step's probes can't tell 92 % of an uplink
+from 105 %.
 

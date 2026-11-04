@@ -195,6 +195,8 @@ struct UploadMeter {
     latest_delay: Option<Duration>,
     /// Scratch for the peers' excesses. Bound: one per peer.
     excesses: Vec<Duration>,
+    /// The delivery rates of the links that `latest_delay` reads, summed.
+    delivered: f64,
     /// The links' delivery rates summed, at the last tick a queue stood
     /// below the runner (one of the node's own, or a sample that raises
     /// it: [`APP_LIMITED_QUEUED`]), and when ...
@@ -293,6 +295,7 @@ impl UploadMeter {
             queue_delay: None,
             latest_delay: None,
             excesses: Vec::new(),
+            delivered: 0.0,
             drained: None,
             standing: false,
             written_peak: None,
@@ -310,6 +313,12 @@ impl UploadMeter {
             now,
             &mut self.excesses,
         );
+        self.delivered = peers
+            .values()
+            .filter_map(|p| p.link_path)
+            .filter(|r| r.age(now) <= strims_base::path::LATEST_MAX_AGE)
+            .filter_map(|r| r.rate)
+            .sum::<u64>() as f64;
         self.standing = self.queue_delay.is_some_and(|d| d >= DRAIN_QUEUE);
         if self.standing {
             let delivered: u64 = peers.values().filter_map(|p| p.link_path?.rate).sum();
@@ -371,6 +380,7 @@ impl UploadMeter {
             others: 0.0,
             queue_delay: self.queue_delay,
             latest_delay: self.latest_delay,
+            delivered: self.delivered,
             drained: self.drained.map(|(c, at)| {
                 c * (1.0
                     + DRAIN_PROBE * (now - at).as_secs_f64() / DRAIN_PROBE_PERIOD.as_secs_f64())

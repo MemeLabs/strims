@@ -349,6 +349,9 @@ pub(crate) struct UploadInfo {
     /// The same from the links' latest round trips, which see a queue as
     /// it forms; `None` without fresh readings.
     pub(crate) latest_delay: Option<Duration>,
+    /// Those links' delivery rates summed, in bytes per second: while a
+    /// queue stands below the runner, what the uplink carries.
+    pub(crate) delivered: f64,
     /// The rate the uplink delivered at while a queue last stood below the
     /// runner (bytes per second), growing slowly since as a probe; `None`
     /// before one stood ...

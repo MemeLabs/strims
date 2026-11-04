@@ -1625,6 +1625,47 @@ fn without_a_known_capacity_the_first_wave_ramps_and_holds_the_rest() {
     assert!(!subscribed(&f, peers[5], 0));
 }
 
+/// The window a ramp at five copies ends at when its links deliver
+/// `copies` copies' worth (at the store rate) through a queue below the
+/// runner.
+fn ramp_end(copies: f64) -> usize {
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    let step = push::seed::RAMP_STEP;
+    publish(&mut f, now() - Duration::SECOND, now());
+    ramp_upload(&mut f, 0.0, 0);
+    for &p in &peers {
+        ask(&mut f, &mut q, p, 0, now());
+    }
+    let mut t = now() + step;
+    f.sched.run_push(t, &mut q);
+    ramp_upload(&mut f, 0.0, 30);
+    t += step;
+    f.sched.run_push(t, &mut q);
+    for _ in 0..push::seed::RAMP_OVER {
+        t += step;
+        let copy = f.sched.s.early_stream_rate(t).unwrap() * 4.0;
+        f.sched.set_upload(push::UploadInfo {
+            rate: 1_000_000,
+            latest_delay: Some(Duration::from_millis(60)),
+            delivered: copies * copy,
+            ..Default::default()
+        });
+        f.sched.run_push(t, &mut q);
+    }
+    f.sched.seed_allocation(t).unwrap().window
+}
+
+#[test]
+fn the_ramp_ends_at_the_copies_its_links_delivered() {
+    // Between half and one fewer: an uplink that carried four and a half
+    // of the five copies keeps four, one that carried them all keeps four
+    // too (the queue showed it overshot), and one that carried one goes to
+    // half.
+    assert_eq!(ramp_end(4.5), 4);
+    assert_eq!(ramp_end(9.0), 4);
+    assert_eq!(ramp_end(1.0), 2);
+}
+
 #[test]
 fn the_ramp_grows_only_while_its_copies_are_held() {
     let (mut f, mut q, peers) = adaptive_seed_with_rtts();

@@ -55,9 +55,14 @@
 //!   holder, and grows no further than the reading pays for (it over-reads
 //!   a load buffers hide, never under-reads one it saw). The requests its
 //!   copies don't cover wait up to [`PENDING_MAX`]. A queue past
-//!   [`RAMP_QUEUE`] for [`RAMP_OVER`] steps ends it at half the copies,
-//!   where doubling stops; once the budget is measured, or with a copy at
-//!   every neighbour, the window takes over.
+//!   [`RAMP_QUEUE`] for [`RAMP_OVER`] steps ends it at the copies the
+//!   links delivered (their delivery rates summed, over the store rate a
+//!   copy takes), half at least and one fewer at most, where doubling
+//!   stops; once the budget is measured, or with a copy at every
+//!   neighbour, the window takes over. Half is a slow start's answer to a
+//!   doubling that overshot; a ramp whose last step was smaller, or an
+//!   uplink that keeps up but queues each burst of the stream, would shed
+//!   holders it carries.
 //!
 //!   From then on the window follows the pushes. Each check reads, per
 //!   holder, the shortest wait of the pushes written to it or dropped
@@ -1018,15 +1023,24 @@ impl PeerSwarmScheduler {
         let delay = upload.latest_delay.unwrap_or(Duration::ZERO);
         // A queue below the runner for two steps in a row shows the ramp
         // overshot where the busy time can't see (one alone may be a
-        // retransmission's delay, which holds it): it ends at half, as the
-        // window's slow start, and past it the window grows a copy at a time.
+        // retransmission's delay, which holds it): it ends at the copies the
+        // links delivered, between half and one fewer, and past it the
+        // window grows a copy at a time.
         if delay >= RAMP_QUEUE {
             a.over = a.over.saturating_add(1);
             if a.over < RAMP_OVER {
                 return;
             }
             a.ramping = false;
-            let copies = (a.window.copies / 2).max(FIRST_WAVE_UNKNOWN);
+            let carried = match early {
+                Some(rate) if rate > 0.0 => {
+                    ((upload.delivered - upload.others).max(0.0) / rate) as usize / streams
+                }
+                _ => 0,
+            };
+            let copies = (a.window.copies / 2)
+                .max(carried.min(a.window.copies.saturating_sub(1)))
+                .max(FIRST_WAVE_UNKNOWN);
             a.window.copies = copies;
             a.window.ssthresh = copies;
             a.window.since = now;
