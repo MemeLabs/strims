@@ -215,35 +215,33 @@ impl Control {
         }
     }
 
-    /// Exchanges with `host` through the relay until it links.
-    async fn exchange(&self, host: &str) {
+    /// Exchanges with `host` through the relay once; false when it didn't
+    /// link (the host refused, or the exchange failed).
+    async fn exchange(&self, host: &str) -> bool {
+        let mut events = self.events.subscribe();
+        let cmd = json!({"type": "connectPeer", "hostId": host});
+        let started = self
+            .ask(cmd, |e| e["type"] == "connecting" && e["hostId"] == host)
+            .await;
+        // Not started: the host is already a peer, or the exchange that
+        // will link it runs.
+        if started.is_some_and(|e| e["started"] == false) {
+            return true;
+        }
+        let deadline = tokio::time::Instant::now() + STEP;
         loop {
-            let mut events = self.events.subscribe();
-            let cmd = json!({"type": "connectPeer", "hostId": host});
-            let started = self
-                .ask(cmd, |e| e["type"] == "connecting" && e["hostId"] == host)
-                .await;
-            // Not started: the host is already a peer, or the exchange
-            // that will link it runs.
-            if started.is_some_and(|e| e["started"] == false) {
-                return;
-            }
-            let deadline = tokio::time::Instant::now() + STEP;
-            loop {
-                match tokio::time::timeout_at(deadline, events.recv()).await {
-                    Ok(Ok(e)) if e["type"] == "peerAdded" && e["hostId"] == host => return,
-                    Ok(Ok(e)) if e["type"] == "exchangeClosed" && e["hostId"] == host => {
-                        if e["outcome"] == "Connected" {
-                            return;
-                        }
-                        eprintln!("exchange with {host}: {}", e["outcome"]);
-                        break;
+            match tokio::time::timeout_at(deadline, events.recv()).await {
+                Ok(Ok(e)) if e["type"] == "peerAdded" && e["hostId"] == host => return true,
+                Ok(Ok(e)) if e["type"] == "exchangeClosed" && e["hostId"] == host => {
+                    if e["outcome"] == "Connected" {
+                        return true;
                     }
-                    Ok(Ok(_) | Err(broadcast::error::RecvError::Lagged(_))) => {}
-                    Ok(Err(broadcast::error::RecvError::Closed)) | Err(_) => break,
+                    eprintln!("exchange with {host}: {}", e["outcome"]);
+                    return false;
                 }
+                Ok(Ok(_) | Err(broadcast::error::RecvError::Lagged(_))) => {}
+                Ok(Err(broadcast::error::RecvError::Closed)) | Err(_) => return false,
             }
-            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 }
@@ -545,6 +543,9 @@ async fn run() -> Result<(), String> {
         }
         let join = start_ms + a.join_at * 1000;
         tokio::time::sleep(Duration::from_millis(join.saturating_sub(now_ms()))).await;
+        // Each exchange once, in plan order; those that didn't link are
+        // tried again together, each second.
+        let mut unlinked = Vec::new();
         for link in topo.plan(a.index) {
             match link {
                 Link::Dial(uri) => control.dial(&uri).await,
@@ -559,9 +560,19 @@ async fn run() -> Result<(), String> {
                         }
                         tokio::time::sleep(Duration::from_millis(200)).await;
                     };
-                    control.exchange(&hex::encode(host.to_bytes())).await;
+                    let host = hex::encode(host.to_bytes());
+                    if !control.exchange(&host).await {
+                        unlinked.push(host);
+                    }
                 }
             }
+        }
+        while !unlinked.is_empty() {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let tries = unlinked.iter().map(|h| control.exchange(h));
+            let linked = futures_util::future::join_all(tries).await;
+            let mut linked = linked.into_iter();
+            unlinked.retain(|_| !linked.next().unwrap_or(false));
         }
         std::future::pending::<()>().await;
     };
