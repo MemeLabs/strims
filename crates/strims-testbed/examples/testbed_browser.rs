@@ -223,9 +223,12 @@ impl Control {
         let started = self
             .ask(cmd, |e| e["type"] == "connecting" && e["hostId"] == host)
             .await;
-        // Not started: the host is already a peer, or the exchange that
-        // will link it runs.
-        if started.is_some_and(|e| e["started"] == false) {
+        // An error: the node's peer budget is spent. Not started: the host
+        // is already a peer, or the exchange that will link it runs.
+        let Some(started) = started else {
+            return false;
+        };
+        if started["started"] == false {
             return true;
         }
         let deadline = tokio::time::Instant::now() + STEP;
