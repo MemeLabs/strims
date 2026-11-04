@@ -48,7 +48,8 @@
 //!   again at once (str0m drains the association, which resends a
 //!   window's worth each time it is polled).
 //!
-//! [`Stack::DcSctp`] is Chromium's dcSCTP ([`SctpProfile::CHROMIUM`]):
+//! [`Stack::DcSctp`] is dcSCTP, as Chromium and Firefox run it
+//! ([`SctpProfile::CHROMIUM`]):
 //!
 //! - A message written, a SACK and a timeout are each a send opportunity
 //!   of [`SctpProfile::max_burst`] packets at most. A packet takes the
@@ -63,7 +64,10 @@
 //!   [`SctpProfile::delayed_sack`] or half its own timeout, whichever is
 //!   less, and at once its first DATA, a packet past a gap, a duplicate
 //!   and a packet with the I bit, which a sender sets while its window is
-//!   under ten packets. A SACK it holds rides its next DATA.
+//!   under ten packets. A SACK it holds rides its next DATA. (A window
+//!   halved by a loss stays under ten packets while its association sends
+//!   less than it allows, as a thin relay's do: on the testbed 85-87 % of
+//!   their SACKs answer one packet, within a millisecond of it.)
 //! - The window grows when the cumulative point advances and the flight
 //!   before the SACK came within a packet of the window: by at most a
 //!   packet in slow start, by a packet once a window's bytes are
@@ -77,21 +81,17 @@
 //!   past the window at the next send opportunity, the rest it doesn't
 //!   fit marked for retransmission.
 //! - The timeout is RFC 6298's with the variation at least
-//!   [`SctpProfile::min_rttvar`], from SACKs without gaps; when the timer
-//!   fires every outstanding chunk is marked for retransmission and the
-//!   window restarts from a packet.
+//!   [`SctpProfile::min_rttvar`], from SACKs without gaps (on the testbed's
+//!   thin relays it sits at its 400 ms floor); when the timer fires every
+//!   outstanding chunk is marked for retransmission and the window
+//!   restarts from a packet. The timer backs off to
+//!   [`SctpProfile::max_backoff`].
 //!
-//! [`Stack::Usrsctp`] is Firefox's usrsctp ([`SctpProfile::FIREFOX`]),
-//! dcSCTP's rules but for these: a packet goes while the flight is under
-//! the window, so it may pass the window by a packet; the window grows in
-//! slow start by two packets at most a SACK while the flight filled it,
-//! not at all in a recovery, and halves to two packets at least; a
-//! recovery restarts the timer; and the receiver holds a lone packet's
-//! SACK 200 ms, acknowledging at once a packet past a gap or a duplicate.
-//!
-//! A chunk resent while its last copy is still on its way, or through, is
-//! a copy: it takes its turn on both access links and counts toward its
-//! packet at the receiver, which has it.
+//! A SACK of its own takes its turn on the receiver's uplink and is lost at
+//! a full queue as any packet is. A chunk resent while its last copy is
+//! still on its way, or through, is a copy: it takes its turn on both
+//! access links and counts toward its packet at the receiver, which has
+//! it.
 //!
 //! On the testbed's 105 % link the str0m model's window falls every
 //! 3.4-4.2 s from about 37 KB, sometimes twice in a recovery, as
@@ -112,7 +112,6 @@ use crate::net::ConnKey;
 pub enum Stack {
     SctpProto,
     DcSctp,
-    Usrsctp,
 }
 
 /// An SCTP stack's sender and receiver as the window model runs them.
@@ -136,6 +135,8 @@ pub struct SctpProfile {
     pub rto_min: Duration,
     pub rto_max: Duration,
     pub min_rttvar: Duration,
+    /// The most a timer backs off to after it fires.
+    pub max_backoff: Duration,
     /// How long a receiver holds the SACK of a lone packet at most.
     pub delayed_sack: Duration,
     /// The packets a send opportunity sends at most, if it limits them.
@@ -151,8 +152,18 @@ pub struct SctpProfile {
 /// A DATA chunk's header, and a SACK chunk's with no gaps.
 const CHUNK_HEADER: usize = 16;
 const COMMON_HEADER: usize = 12;
-/// 28 bytes of IP and UDP and 37 of an AES-GCM DTLS 1.2 record.
-const PACKET_OVERHEAD: usize = 28 + 37;
+/// A datagram's link framing: Ethernet's 14 bytes, which the testbed's tbf
+/// counts in each packet, and an access link's framing about matches. Most
+/// of a data channel's packets are small, so it costs a thin relay about
+/// 4 % of its uplink.
+const FRAMING: usize = 14;
+/// IP and UDP's 28 bytes, the framing, and 37 of an AES-GCM DTLS 1.2
+/// record (str0m's).
+const DTLS12_OVERHEAD: usize = FRAMING + 28 + 37;
+/// IP and UDP's 28 bytes, the framing, and 22 of an AES-GCM DTLS 1.3 record
+/// (the browsers': a 5-byte header, the content type and the tag; the
+/// testbed's pcaps show their SACKs in 92-byte frames).
+const DTLS13_OVERHEAD: usize = FRAMING + 28 + 22;
 
 impl SctpProfile {
     /// sctp-proto 0.10 as str0m 0.24 runs it: 1150-byte datagrams, less
@@ -164,13 +175,14 @@ impl SctpProfile {
         stack: Stack::SctpProto,
         mtu: 1062 + CHUNK_HEADER + COMMON_HEADER,
         max_payload: 1062,
-        packet_overhead: PACKET_OVERHEAD,
+        packet_overhead: DTLS12_OVERHEAD,
         rwnd: 1 << 20,
         initial_window: 4360,
         rto_initial: Duration::from_millis(3000),
         rto_min: Duration::from_millis(1000),
         rto_max: Duration::from_millis(60_000),
         min_rttvar: Duration::ZERO,
+        max_backoff: Duration::from_millis(60_000),
         delayed_sack: Duration::from_millis(200),
         max_burst: None,
         buffered_flight: true,
@@ -179,45 +191,33 @@ impl SctpProfile {
     /// dcSCTP's options as Chromium runs it: 1191-byte packets (a chunk of
     /// 1160 bytes at most, its room rounded down to 4), a first
     /// window of ten, a 5 MiB receive window, the timeout 500 ms at first
-    /// and 400 ms-60 s with a round-trip variation of 220 ms at least, the
+    /// and 400 ms-60 s with a variation of 27.5 ms at least (its 220 ms
+    /// option over 8) and its timers backing off to 3 s at most, the
     /// delayed SACK 200 ms at most, and four packets a send opportunity.
     pub const CHROMIUM: SctpProfile = SctpProfile {
         stack: Stack::DcSctp,
         mtu: 1191,
         max_payload: (1191 - COMMON_HEADER) / 4 * 4 - CHUNK_HEADER,
-        packet_overhead: PACKET_OVERHEAD,
+        packet_overhead: DTLS13_OVERHEAD,
         rwnd: 5 << 20,
         initial_window: 10 * 1191,
         rto_initial: Duration::from_millis(500),
         rto_min: Duration::from_millis(400),
         rto_max: Duration::from_millis(60_000),
-        min_rttvar: Duration::from_millis(220),
+        min_rttvar: Duration::from_micros(27_500),
+        max_backoff: Duration::from_secs(3),
         delayed_sack: Duration::from_millis(200),
         max_burst: Some(4),
         buffered_flight: false,
     };
 
-    /// usrsctp as Firefox runs it: packets of 1188 bytes (chunks of 1160
-    /// at most), a first window of three, a 1 MiB receive window, the
-    /// timeout 1 s at first and 1-60 s, the delayed SACK 200 ms, and four
-    /// packets a send opportunity. (usrsctp's sources cut the window to its
-    /// flight and four packets as it sends instead, which would restart
-    /// every burst from four packets: on the testbed Firefox sends a
-    /// burst's first 16 packets at once, as four packets a message does.)
+    /// dcSCTP as Firefox 158 runs it: Chromium's options but a 16 MiB
+    /// receive window and a delayed SACK of 50 ms. (Between two Firefoxes
+    /// its chunks are I-DATA, 4 bytes longer.)
     pub const FIREFOX: SctpProfile = SctpProfile {
-        stack: Stack::Usrsctp,
-        mtu: 1188,
-        max_payload: 1160,
-        packet_overhead: PACKET_OVERHEAD,
-        rwnd: 1 << 20,
-        initial_window: 3 * (1188 - COMMON_HEADER),
-        rto_initial: Duration::from_millis(1000),
-        rto_min: Duration::from_millis(1000),
-        rto_max: Duration::from_millis(60_000),
-        min_rttvar: Duration::ZERO,
-        delayed_sack: Duration::from_millis(200),
-        max_burst: Some(4),
-        buffered_flight: false,
+        rwnd: 16 << 20,
+        delayed_sack: Duration::from_millis(50),
+        ..SctpProfile::CHROMIUM
     };
 
     /// A packet of one chunk of `len` bytes, on the wire.
@@ -331,8 +331,8 @@ impl Chunk {
         match stack {
             _ if self.acked => 0,
             Stack::SctpProto => self.len,
-            Stack::DcSctp | Stack::Usrsctp if self.retransmit || self.fast => 0,
-            Stack::DcSctp | Stack::Usrsctp => chunk_size(self.len),
+            Stack::DcSctp if self.retransmit || self.fast => 0,
+            Stack::DcSctp => chunk_size(self.len),
         }
     }
 }
@@ -505,7 +505,7 @@ impl Assoc {
                 self.rto = Duration::from_millis(i64::try_from(rto).unwrap_or(i64::MAX))
                     .clamp(self.profile.rto_min, self.profile.rto_max);
             }
-            Stack::DcSctp | Stack::Usrsctp => {
+            Stack::DcSctp => {
                 let rtt = rtt.max(Duration::ZERO);
                 if self.srtt == Duration::ZERO {
                     self.srtt = rtt;
@@ -529,7 +529,8 @@ impl Assoc {
     /// The timer's period: the timeout, doubled for each time it fired.
     fn t3_period(&self) -> Duration {
         let factor = 1i64 << self.timeouts.min(30);
-        Duration::from_micros(self.rto.as_micros().saturating_mul(factor)).min(self.profile.rto_max)
+        Duration::from_micros(self.rto.as_micros().saturating_mul(factor))
+            .min(self.profile.max_backoff)
     }
 
     /// The record and length of the waiting chunk `id`, if it is data.
@@ -599,7 +600,7 @@ impl Scheduler {
     pub(super) fn sctp_pump(&mut self, at: Time, conn: ConnKey) {
         match self.assocs.get(&conn).map(Assoc::stack) {
             Some(Stack::SctpProto) => self.sctp_proto_pump(at, conn),
-            Some(Stack::DcSctp | Stack::Usrsctp) => self.rfc_pump(at, conn),
+            Some(Stack::DcSctp) => self.rfc_pump(at, conn),
             None => {}
         }
     }
@@ -689,10 +690,9 @@ impl Scheduler {
         }
     }
 
-    /// A send opportunity of dcSCTP or usrsctp: a fast retransmission's
-    /// packet past the window, then up to `max_burst` packets each of the
-    /// chunks marked for retransmission and then new ones: dcSCTP's of what
-    /// the window has left, usrsctp's while the flight is under it.
+    /// A send opportunity of dcSCTP: a fast retransmission's packet past
+    /// the window, then up to `max_burst` packets each of the chunks marked
+    /// for retransmission and then new ones, of what the window has left.
     fn rfc_pump(&mut self, at: Time, conn: ConnKey) {
         let mut packets: Vec<Vec<Send>> = Vec::new();
         {
@@ -747,16 +747,8 @@ impl Scheduler {
                     packets.push(packet);
                 }
             }
-            let usrsctp = stack == Stack::Usrsctp;
             for _ in 0..a.profile.max_burst.unwrap_or(usize::MAX) {
-                if usrsctp && a.in_flight >= a.cwnd {
-                    break;
-                }
-                let mut room = if usrsctp {
-                    room_in_packet
-                } else {
-                    a.cwnd.saturating_sub(a.in_flight).min(room_in_packet) / 4 * 4
-                };
+                let mut room = a.cwnd.saturating_sub(a.in_flight).min(room_in_packet) / 4 * 4;
                 let mut packet = Vec::new();
                 let marked: Vec<u64> = a
                     .out
@@ -833,7 +825,8 @@ impl Scheduler {
     /// its path; and a resent chunk whose last copy wasn't lost goes as a
     /// copy. Its chunks pass the receiver's downlink one after another,
     /// the first charged the packet's overhead. A dcSCTP packet carries the
-    /// SACK its sender holds back for the reverse direction.
+    /// SACK its sender holds back for the reverse direction, and the I bit
+    /// while the window is under ten packets.
     fn sctp_transmit(&mut self, at: Time, conn: ConnKey, packet: &[Send]) {
         let (Some(cap), Some(first)) = (self.window(), packet.first()) else {
             return;
@@ -1025,8 +1018,7 @@ impl Scheduler {
         }
         let at_once = !r.above.is_empty()
             || r.due.is_some()
-            || (p.stack == Stack::DcSctp && (first || duplicate || immediate))
-            || (p.stack == Stack::Usrsctp && duplicate);
+            || (p.stack == Stack::DcSctp && (first || duplicate || immediate));
         if at_once {
             self.sctp_send_sack(t, conn);
             return;
@@ -1077,7 +1069,8 @@ impl Scheduler {
     }
 
     /// `conn`'s receiver sends a SACK at `t`: a packet on its uplink that
-    /// reaches the sender a one-way trip after it leaves.
+    /// reaches the sender a one-way trip after it leaves, or is lost to a
+    /// full uplink queue.
     fn sctp_send_sack(&mut self, t: Time, conn: ConnKey) {
         let (Some(&from), Some(&to)) = (
             self.ip_host.get(&conn.0.ip()),
@@ -1093,6 +1086,18 @@ impl Scheduler {
         };
         let wire =
             p.packet_overhead + COMMON_HEADER + SctpProfile::sack_chunk(gap_blocks(&sack.above));
+        if let Some(cap) = self.window()
+            && overflows(
+                self.net.up_backlog(to, t),
+                tx_time(wire, self.net.up_rate(to, t)),
+                cap,
+            )
+        {
+            if let Some(d) = self.drops.get_mut(to) {
+                *d += 1;
+            }
+            return;
+        }
         let depart = self.net.occupy_up(t, to, wire);
         if let Some(n) = self.acks.get_mut(to) {
             *n += 1;
@@ -1118,7 +1123,7 @@ impl Scheduler {
         }
         let acked = match a.stack() {
             Stack::SctpProto => sctp_proto_sacked(a, t, conn, &sack, cum0),
-            Stack::DcSctp | Stack::Usrsctp => rfc_sacked(a, t, &sack, cum0),
+            Stack::DcSctp => rfc_sacked(a, t, &sack, cum0),
         };
         if !a.out.is_empty() && a.t3.is_none_or(|d| d < t) {
             let due = t + a.t3_period();
@@ -1277,7 +1282,7 @@ fn sctp_proto_sacked(a: &mut Assoc, t: Time, _conn: ConnKey, sack: &Sack, cum0: 
 }
 
 /// dcSCTP's `HandleSack` on `sack` at `t`, the cumulative point `cum0`
-/// before it, or usrsctp's: returns the payload it acknowledged.
+/// before it: returns the payload it acknowledged.
 fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
     let stack = a.stack();
     let flight_before = a.in_flight;
@@ -1358,19 +1363,14 @@ fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
         a.t3 = None;
         a.timeouts = 0;
         let mtu = a.profile.mtu;
-        // dcSCTP: the flight came within a packet of the window, a packet
-        // at most a SACK in slow start. usrsctp: the flight filled it, two
-        // (ABC, L = 2), and nothing in a recovery.
-        let (full, step) = match stack {
-            Stack::Usrsctp => (flight_before >= a.cwnd, 2 * mtu),
-            _ => (flight_before + mtu >= a.cwnd, mtu),
-        };
-        let grows = !(stack == Stack::Usrsctp && a.in_recovery);
+        // The flight came within a packet of the window; a packet at most a
+        // SACK in slow start.
+        let full = flight_before + mtu >= a.cwnd;
         if a.cwnd <= a.ssthresh {
             if full && !a.in_recovery {
-                a.cwnd += acked.min(step);
+                a.cwnd += acked.min(mtu);
             }
-        } else if grows {
+        } else {
             a.partial_acked += acked;
             if a.partial_acked >= a.cwnd && full {
                 a.partial_acked -= a.cwnd;
@@ -1380,13 +1380,7 @@ fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
     }
     if loss && !a.in_recovery {
         let mtu = a.profile.mtu;
-        let least = if stack == Stack::Usrsctp { 2 } else { 4 };
-        if stack == Stack::Usrsctp {
-            // usrsctp restarts the timer as a recovery starts.
-            a.t3 = None;
-            a.timeouts = 0;
-        }
-        a.ssthresh = (a.cwnd / 2).max(least * mtu);
+        a.ssthresh = (a.cwnd / 2).max(4 * mtu);
         a.cwnd = a.ssthresh;
         a.partial_acked = 0;
         a.in_recovery = true;
@@ -1443,11 +1437,10 @@ mod tests {
     }
 
     #[test]
-    fn other_stacks_cut_at_the_most_a_chunk_carries() {
-        for p in [SctpProfile::FIREFOX, SctpProfile::STR0M] {
-            let w = cuts(Chunking::new(&p), &[3000, 3000], true);
-            let full = p.max_payload;
-            assert_eq!(w[1], vec![full, full, 3000 - 2 * full]);
-        }
+    fn sctp_proto_cuts_at_the_most_a_chunk_carries() {
+        let p = SctpProfile::STR0M;
+        let w = cuts(Chunking::new(&p), &[3000, 3000], true);
+        let full = p.max_payload;
+        assert_eq!(w[1], vec![full, full, 3000 - 2 * full]);
     }
 }

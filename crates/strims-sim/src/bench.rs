@@ -860,8 +860,8 @@ pub struct Bench {
     pub webrtc: bool,
     pub str0m: bool,
     /// Each node's SCTP stack in the window model's data channels: its
-    /// kind's in the topology (Chromium's dcSCTP, Firefox's usrsctp, or
-    /// str0m's for a native node).
+    /// kind's in the topology (the browsers' dcSCTP, or str0m's for a
+    /// native node).
     pub stacks: Vec<SctpProfile>,
 }
 
