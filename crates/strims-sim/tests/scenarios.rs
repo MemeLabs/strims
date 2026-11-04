@@ -1792,6 +1792,9 @@ fn wan_super_peer_adaptive_uncapped() {
 ///   uplink to `factor` times `STRIMS_SIM_CAL_SEED_UP_MBIT`, so one value
 ///   fits every seed uplink (`60:0.5 180:1` halves it from 60 s to 180 s).
 ///   It replaces `STRIMS_SIM_CAL_SEED_UP_STEPS`.
+/// - Each viewer makes its links one at a time from the stream's start, as
+///   the testbed's harness does; `STRIMS_SIM_CAL_SERIAL_LINKS=0` links them
+///   all at once from the start of the run.
 /// - `STRIMS_SIM_CAL_JOIN_AT_MS=<ms>` boots the viewers that long after the
 ///   stream starts (before it if negative); `STRIMS_SIM_CAL_JOIN_AT=<s>`,
 ///   the testbed's `JOIN_AT`, in seconds.
@@ -1811,6 +1814,9 @@ struct Calibration {
     /// When the viewers boot, in ms after the stream starts (before it if
     /// negative); `None` with the seed, at the start of the run.
     join_at_ms: Option<i64>,
+    /// The viewers make their links one at a time from the stream's start,
+    /// as the testbed's harness does ([`HostSpec::serial_links`]).
+    serial_links: bool,
     slow_down_kbit: Option<u64>,
     /// `link <a> <b>` lines, node 0 the seed and node `i` viewer `i - 1`;
     /// a star without.
@@ -1874,6 +1880,7 @@ fn calibration_settings() -> Calibration {
                 .filter(|&s| s > 0)
                 .map(|s| s * 1000)
         }),
+        serial_links: knob::<u64>("STRIMS_SIM_CAL_SERIAL_LINKS").is_none_or(|v| v != 0),
         slow_down_kbit: knob("STRIMS_SIM_CAL_SLOW_DOWN_KBIT"),
         topology,
         seed_up_steps,
@@ -2004,6 +2011,11 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
             Duration::from_millis((c.seed_delay_ms + c.viewer_delay_ms) / 2),
         ),
     );
+    if c.serial_links {
+        for &v in &vs {
+            s.hosts[v].serial_links = Some(secs(5));
+        }
+    }
     if let Some(ms) = c.join_at_ms {
         let at = Duration::from_millis(u64::try_from(5000 + ms).unwrap_or(0).max(1));
         for &v in &vs {
@@ -2174,6 +2186,7 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
         viewer_delay_ms: 10,
         secs,
         join_at_ms: None,
+        serial_links: false,
         slow_down_kbit: None,
         topology: Some(full_mesh(viewers)),
         seed_up_steps: Vec::new(),

@@ -75,6 +75,13 @@ pub struct HostSpec {
     /// software on the host, which share its uplink with the node's
     /// traffic (see the WAN scheduler).
     pub competing: Vec<Competing>,
+    /// From this time in the run, the host dials its WebRTC links one at a
+    /// time in link order, each once, as the testbed's harness makes a
+    /// browser's links at `--join-at` (each peer exchange awaited: a full
+    /// mesh of 16 takes it about 8 s); the links still down are then
+    /// redialed together. `None`: every link at once, from the host's
+    /// start.
+    pub serial_links: Option<Duration>,
 }
 
 /// A bulk upload that isn't the node's: a TCP connection that always has
@@ -556,6 +563,7 @@ impl Scenario {
             site: None,
             up_steps: Vec::new(),
             competing: Vec::new(),
+            serial_links: None,
         });
         self.hosts.len() - 1
     }

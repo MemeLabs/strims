@@ -15,6 +15,7 @@
 //! number and write time ([`FrameCodec`]), or a media chunk's
 //! ([`MediaCodec`]), not its bytes.
 
+use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -355,11 +356,26 @@ async fn supervisor(w: Rc<World>, h: HostIx, node: Node) {
     if links.is_empty() {
         return;
     }
+    let serial = w.spec.hosts.get(h).and_then(|s| s.serial_links);
+    let serial_done = Rc::new(Cell::new(serial.is_none()));
+    if let Some(at) = serial {
+        spawn_local(serial_links(
+            w.clone(),
+            h,
+            node.clone(),
+            at,
+            links.clone(),
+            serial_done.clone(),
+        ));
+    }
     loop {
         let Ok(peers) = node.peers().await else {
             return;
         };
         for &(l, spec) in &links {
+            if !serial_done.get() && matches!(spec.transport, Transport::WebRtc(_)) {
+                continue;
+            }
             let Some(key) = w.profile_key(spec.to) else {
                 continue;
             };
@@ -393,6 +409,38 @@ async fn control(w: Rc<World>, h: HostIx, node: Node) {
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
+}
+
+/// The serial pass of [`HostSpec::serial_links`](crate::HostSpec): from
+/// `at`, each WebRTC link in order, dialed once (a peer at its budget
+/// refuses the exchange); then the supervisor redials those still down.
+async fn serial_links(
+    w: Rc<World>,
+    h: HostIx,
+    node: Node,
+    at: Duration,
+    links: Vec<(usize, LinkSpec)>,
+    done: Rc<Cell<bool>>,
+) {
+    let now = crate::world::sim_now();
+    if at > now {
+        tokio::time::sleep(at - now).await;
+    }
+    for (l, spec) in links {
+        if !matches!(spec.transport, Transport::WebRtc(_)) {
+            continue;
+        }
+        let Some(key) = w.profile_key(spec.to) else {
+            continue;
+        };
+        let Ok(peers) = node.peers().await else {
+            return;
+        };
+        if !peers.iter().any(|p| p.profile_key == key.public) && w.start_dial(h, l) {
+            dial(w.clone(), h, l, spec, node.clone()).await;
+        }
+    }
+    done.set(true);
 }
 
 async fn dial(w: Rc<World>, h: HostIx, l: usize, spec: LinkSpec, node: Node) {
