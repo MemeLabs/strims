@@ -8,9 +8,9 @@
 //! ```text
 //! testbed_browser --index <i> --topology <file> --web <dir>
 //!                 [--browser-bin <path>] [--secs <s>] [--start <unix ms>]
-//!                 [--rate <bytes/s>] [--units <chunks per signature>]
-//!                 [--join-at <s>] [--hosts <dir>] [--capture <dir>]
-//!                 [--player <file>]
+//!                 [--rate <bytes/s>] [--chunk <bytes> --munro <bytes>]
+//!                 [--units <chunks per signature>] [--join-at <s>]
+//!                 [--hosts <dir>] [--capture <dir>] [--player <file>]
 //! ```
 //!
 //! The node's kind (`firefox` or `chromium`) comes from the topology
@@ -100,6 +100,8 @@ struct Args {
     join_at: u64,
     hosts: Option<PathBuf>,
     capture: Option<PathBuf>,
+    chunk: Option<u64>,
+    munro: Option<u64>,
     units: Option<u64>,
     player: Option<PathBuf>,
 }
@@ -119,6 +121,8 @@ fn args() -> Result<Args, String> {
         join_at: 0,
         hosts: None,
         capture: None,
+        chunk: None,
+        munro: None,
         units: None,
         player: None,
     };
@@ -136,6 +140,8 @@ fn args() -> Result<Args, String> {
             "--join-at" => a.join_at = num(value()?)?,
             "--hosts" => a.hosts = Some(value()?.into()),
             "--capture" => a.capture = Some(value()?.into()),
+            "--chunk" => a.chunk = Some(num(value()?)?),
+            "--munro" => a.munro = Some(num(value()?)?),
             "--units" => a.units = Some(num(value()?)?),
             "--player" => a.player = Some(value()?.into()),
             _ => return Err(format!("unknown flag {flag}")),
@@ -143,6 +149,9 @@ fn args() -> Result<Args, String> {
     }
     if a.index == usize::MAX || a.topology.is_empty() || a.web.as_os_str().is_empty() {
         return Err("--index, --topology and --web are required".to_owned());
+    }
+    if a.chunk.is_some() != a.munro.is_some() {
+        return Err("--chunk and --munro go together".to_owned());
     }
     Ok(a)
 }
@@ -512,6 +521,10 @@ async fn run() -> Result<(), String> {
             "secs": a.secs,
             "rate": a.rate,
         });
+        if let (Some(chunk), Some(munro)) = (a.chunk, a.munro) {
+            testbed["chunk"] = json!(chunk);
+            testbed["munro"] = json!(munro);
+        }
         if let Some(cps) = a.units {
             testbed["units"] = json!(cps);
         }
