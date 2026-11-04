@@ -963,8 +963,9 @@ impl Scheduler {
             if entry.key().0 > now {
                 break;
             }
+            let at = entry.key().0;
             let (conn, len) = entry.remove();
-            if let Some(w) = b.admit(conn, len) {
+            if let Some(w) = b.admit(conn, len, at) {
                 w.wake();
             }
         }

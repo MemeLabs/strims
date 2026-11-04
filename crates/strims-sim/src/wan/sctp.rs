@@ -140,6 +140,12 @@ pub struct SctpProfile {
     pub delayed_sack: Duration,
     /// The packets a send opportunity sends at most, if it limits them.
     pub max_burst: Option<usize>,
+    /// Whether the channel's buffered amount counts the bytes sent and not
+    /// yet acknowledged: sctp-proto's does, until the SACK; Chromium's and
+    /// Firefox's fall as their SCTP first sends the bytes, so a browser's
+    /// pacers see none of the flight (on the testbed their hosts read a
+    /// least round trip of 0 ms, from writes and those readings).
+    pub buffered_flight: bool,
 }
 
 /// A DATA chunk's header, and a SACK chunk's with no gaps.
@@ -167,6 +173,7 @@ impl SctpProfile {
         min_rttvar: Duration::ZERO,
         delayed_sack: Duration::from_millis(200),
         max_burst: None,
+        buffered_flight: true,
     };
 
     /// dcSCTP's options as Chromium runs it: 1191-byte packets (a chunk of
@@ -187,6 +194,7 @@ impl SctpProfile {
         min_rttvar: Duration::from_millis(220),
         delayed_sack: Duration::from_millis(200),
         max_burst: Some(4),
+        buffered_flight: false,
     };
 
     /// usrsctp as Firefox runs it: packets of 1188 bytes (chunks of 1160
@@ -209,6 +217,7 @@ impl SctpProfile {
         min_rttvar: Duration::ZERO,
         delayed_sack: Duration::from_millis(200),
         max_burst: Some(4),
+        buffered_flight: false,
     };
 
     /// A packet of one chunk of `len` bytes, on the wire.

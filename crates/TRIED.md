@@ -306,13 +306,6 @@ than 8 KiB on the browsers tier (309 against 319 of 1024 at 32 seeds) but
 broke star-3-10's lag p99 (x2.46) and star-7-20's (x1.77) at both seed
 sets; 8 KiB landed.
 
-**Chromium's buffered amount as its unsent bytes alone.** (on
-`tcp-bench`, against 4b563937) dcSCTP's `buffered_amount` leaves out the
-flight, but modelling Chromium's channel that way fit the testbed's
-overloaded Chromium links worse (rtc-over-chromium 0.556 -> 0.632,
-rtc-over-chromium-chromium 0.403 -> 0.475, the rest unchanged): Chromium's
-`bufferedAmount` behaves as if it counts the flight.
-
 **A larger channel pacer slack.** (`pacer-exp`, against the channel
 pacer) `SLACK` at 24, 32 and 48 KiB in place of 16 on the browsers tier
 at seeds 3001-3032: 251, 258 and 273 collapsed of 1024 against 250. 32

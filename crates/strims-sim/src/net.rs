@@ -28,9 +28,11 @@
 //!
 //! A connection that carries a modelled data channel
 //! ([`SimNet::open_channel_as`]) takes writes as a channel does instead: each
-//! whole, as a message, while its buffered amount (bytes unsent, and sent
-//! and not yet acknowledged by a SACK) is under the channel's cap, and once
-//! that is reached, again only from under half of it. A node's channel is
+//! whole, as a message, while its buffered amount (bytes unsent, and for a
+//! stack whose amount counts them, sent and not yet acknowledged by a SACK:
+//! [`SctpProfile::buffered_flight`](crate::wan::SctpProfile::buffered_flight))
+//! is under the channel's cap, and once that is reached, again only from
+//! under half of it. A node's channel is
 //! paced as the browser's `DcSocket` paces it: under its own pacer's cap,
 //! and the host's channels together under a [`HostPacer`]'s, each waiting
 //! for its mark once refused. (The browser's writer polls the host's load
@@ -86,6 +88,8 @@ struct Conn {
     /// its bytes sent and not yet acknowledged.
     channel: Option<(u64, Chunking)>,
     unacked: u64,
+    /// The channel's buffered amount counts `unacked`.
+    flight: bool,
     /// A node's channel: its writer paces the buffered amount
     /// ([`ChannelPacer`]) under the cap, and while it waits, reads the
     /// amount only once it falls to the mark it waits for.
@@ -93,6 +97,13 @@ struct Conn {
     low: u64,
     /// The pacer refused the last write: the channel waits on its own cap.
     waits: bool,
+}
+
+impl Conn {
+    /// A data channel's buffered amount.
+    fn buffered(&self) -> u64 {
+        self.unsent + if self.flight { self.unacked } else { 0 }
+    }
 }
 
 /// The most a socket's buffer takes before Linux checks
@@ -135,7 +146,7 @@ impl HostChannels {
         let mut sum = HostSum::default();
         for c in self.channels.iter().filter_map(|k| conns.get(k)) {
             if let Some(p) = &c.pacer {
-                sum.add(p, (c.unsent + c.unacked) as usize, c.waits);
+                sum.add(p, c.buffered() as usize, c.waits);
             }
         }
         sum
@@ -172,19 +183,20 @@ impl SendBuffers {
         self.with(|b| b.conns.get_mut(&conn)?.writes.pop_front())
     }
 
-    /// `len` bytes of `conn` reached the uplink queue. Returns the writer
-    /// to wake, if it waits: once its unsent bytes are under half the mark,
-    /// when Linux reports a socket with the mark writable. A data channel's
-    /// bytes stay buffered until they are acknowledged
-    /// ([`SendBuffers::acked`]).
-    pub fn admit(&self, conn: ConnKey, len: usize) -> Option<Waker> {
+    /// `len` bytes of `conn` reached the uplink queue at `at`. Returns the
+    /// writer to wake, if it waits: once its unsent bytes are under half the
+    /// mark, when Linux reports a socket with the mark writable. A data
+    /// channel's bytes stay buffered until they are acknowledged
+    /// ([`SendBuffers::acked`]) where its stack's amount counts the flight,
+    /// and leave its amount now where it doesn't.
+    pub fn admit(&self, conn: ConnKey, len: usize, at: Time) -> Option<Waker> {
         self.with(|b| {
             let c = b.conns.get_mut(&conn)?;
             c.unsent = c.unsent.saturating_sub(len as u64);
             c.tail = c.tail.min(c.unsent);
             if c.channel.is_some() {
                 c.unacked = c.unacked.saturating_add(len as u64);
-                return None;
+                return if c.flight { None } else { release(b, conn, at) };
             }
             let lowat = c.lowat?;
             if 2 * c.unsent < lowat {
@@ -198,11 +210,13 @@ impl SendBuffers {
 
 impl SendBuffers {
     /// `conn` carries a data channel of `cap` bytes buffered at most, cut
-    /// into chunks of `chunk` bytes at most, its writer paced if `paced`.
-    fn open_channel(&self, conn: ConnKey, cap: u64, chunking: Chunking, paced: bool) {
+    /// into chunks of `chunk` bytes at most, its writer paced if `paced`,
+    /// its buffered amount counting the flight if `flight`.
+    fn open_channel(&self, conn: ConnKey, cap: u64, chunking: Chunking, paced: bool, flight: bool) {
         self.with(|b| {
             if let Some(c) = b.conns.get_mut(&conn) {
                 c.channel = Some((cap, chunking));
+                c.flight = flight;
                 c.pacer = paced.then(ChannelPacer::default);
                 if paced {
                     b.hosts.entry(conn.0.ip()).or_default().channels.push(conn);
@@ -217,37 +231,9 @@ impl SendBuffers {
     /// channels its host holds once their load is at the host's mark.
     pub fn acked(&self, conn: ConnKey, len: usize, at: Time) -> Option<Waker> {
         self.with(|b| {
-            let Buffers { conns, hosts, .. } = b;
-            let c = conns.get_mut(&conn)?;
+            let c = b.conns.get_mut(&conn)?;
             c.unacked = c.unacked.saturating_sub(len as u64);
-            if c.pacer.is_some()
-                && let Some(h) = hosts.get_mut(&conn.0.ip())
-                && !h.waiting.is_empty()
-            {
-                let sum = h.sum(conns);
-                if sum.load <= h.low {
-                    h.pacer.observe(at, &sum);
-                    for k in std::mem::take(&mut h.waiting) {
-                        if let Some(w) = conns.get_mut(&k).and_then(|o| o.waker.take()) {
-                            w.wake();
-                        }
-                    }
-                }
-            }
-            let c = conns.get_mut(&conn)?;
-            let (cap, _) = c.channel?;
-            let buffered = c.unsent + c.unacked;
-            match &mut c.pacer {
-                // A browser reads the amount as it falls to the mark it
-                // waits for.
-                Some(p) if c.waker.is_some() && buffered <= c.low => {
-                    p.observe(at, buffered as usize);
-                    c.waker.take()
-                }
-                Some(_) => None,
-                None if 2 * buffered < cap => c.waker.take(),
-                None => None,
-            }
+            if c.flight { release(b, conn, at) } else { None }
         })
     }
 
@@ -255,7 +241,7 @@ impl SendBuffers {
     pub fn buffered(&self, conn: ConnKey) -> Option<u64> {
         self.with(|b| {
             let c = b.conns.get(&conn)?;
-            c.channel.map(|_| c.unsent + c.unacked)
+            c.channel.map(|_| c.buffered())
         })
     }
 }
@@ -311,7 +297,13 @@ impl SimNet {
         let ((key, b), wan) = (stream.conn.as_ref()?, self.wan.as_ref()?);
         let mut guard = wan.lock();
         let sched = guard.as_mut()?;
-        b.open_channel(*key, cap, Chunking::new(&profile), paced);
+        b.open_channel(
+            *key,
+            cap,
+            Chunking::new(&profile),
+            paced,
+            profile.buffered_flight,
+        );
         sched.open_channel(*key, profile);
         Some(*key)
     }
@@ -381,6 +373,42 @@ impl LinkProbe for SimProbe {
     }
 }
 
+/// `conn`'s buffered amount fell at `at`: the writer to wake once the
+/// amount is under half its cap, or a paced writer's once it is at its
+/// mark; wakes the channels its host holds once their load is at the
+/// host's mark.
+fn release(b: &mut Buffers, conn: ConnKey, at: Time) -> Option<Waker> {
+    let Buffers { conns, hosts, .. } = b;
+    let c = conns.get_mut(&conn)?;
+    if c.pacer.is_some()
+        && let Some(h) = hosts.get_mut(&conn.0.ip())
+        && !h.waiting.is_empty()
+    {
+        let sum = h.sum(conns);
+        if sum.load <= h.low {
+            h.pacer.observe(at, &sum);
+            for k in std::mem::take(&mut h.waiting) {
+                if let Some(w) = conns.get_mut(&k).and_then(|o| o.waker.take()) {
+                    w.wake();
+                }
+            }
+        }
+    }
+    let c = conns.get_mut(&conn)?;
+    let (cap, _) = c.channel?;
+    let buffered = c.buffered();
+    match &mut c.pacer {
+        // A browser reads the amount as it falls to the mark it waits for.
+        Some(p) if c.waker.is_some() && buffered <= c.low => {
+            p.observe(at, buffered as usize);
+            c.waker.take()
+        }
+        Some(_) => None,
+        None if 2 * buffered < cap => c.waker.take(),
+        None => None,
+    }
+}
+
 /// A turmoil TCP stream whose writes wait while its unsent bytes reach
 /// its `TCP_NOTSENT_LOWAT`.
 #[derive(Debug)]
@@ -425,7 +453,7 @@ impl SimTcpStream {
             let Buffers { conns, hosts, .. } = x;
             let c = conns.get_mut(key)?;
             let (cap, _) = c.channel?;
-            let buffered = c.unsent + c.unacked;
+            let buffered = c.buffered();
             let now = sim_time(turmoil::sim_elapsed().unwrap_or_default());
             let may = match &mut c.pacer {
                 Some(p) => {
