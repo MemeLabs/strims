@@ -1792,6 +1792,9 @@ fn wan_super_peer_adaptive_uncapped() {
 ///   uplink to `factor` times `STRIMS_SIM_CAL_SEED_UP_MBIT`, so one value
 ///   fits every seed uplink (`60:0.5 180:1` halves it from 60 s to 180 s).
 ///   It replaces `STRIMS_SIM_CAL_SEED_UP_STEPS`.
+/// - `STRIMS_SIM_CAL_JOIN_AT_MS=<ms>` boots the viewers that long after the
+///   stream starts (before it if negative); `STRIMS_SIM_CAL_JOIN_AT=<s>`,
+///   the testbed's `JOIN_AT`, in seconds.
 /// - `STRIMS_SIM_CAL_RATE_LIMIT_PCT=<pct>` gives every node a rate limit
 ///   (`NodeConfig::rate_limit`) of `pct` percent of its starting uplink,
 ///   so the node's QoS, not the access link, is where its peers' data
@@ -1805,7 +1808,9 @@ struct Calibration {
     seed_delay_ms: u64,
     viewer_delay_ms: u64,
     secs: u64,
-    join_at: u64,
+    /// When the viewers boot, in ms after the stream starts (before it if
+    /// negative); `None` with the seed, at the start of the run.
+    join_at_ms: Option<i64>,
     slow_down_kbit: Option<u64>,
     /// `link <a> <b>` lines, node 0 the seed and node `i` viewer `i - 1`;
     /// a star without.
@@ -1864,7 +1869,11 @@ fn calibration_settings() -> Calibration {
         seed_delay_ms: knob("STRIMS_SIM_CAL_SEED_DELAY_MS").unwrap_or(20),
         viewer_delay_ms: knob("STRIMS_SIM_CAL_VIEWER_DELAY_MS").unwrap_or(10),
         secs: knob("STRIMS_SIM_CAL_SECS").unwrap_or(180),
-        join_at: knob("STRIMS_SIM_CAL_JOIN_AT").unwrap_or(0),
+        join_at_ms: knob::<i64>("STRIMS_SIM_CAL_JOIN_AT_MS").or_else(|| {
+            knob::<i64>("STRIMS_SIM_CAL_JOIN_AT")
+                .filter(|&s| s > 0)
+                .map(|s| s * 1000)
+        }),
         slow_down_kbit: knob("STRIMS_SIM_CAL_SLOW_DOWN_KBIT"),
         topology,
         seed_up_steps,
@@ -1995,10 +2004,11 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
             Duration::from_millis((c.seed_delay_ms + c.viewer_delay_ms) / 2),
         ),
     );
-    if c.join_at > 0 {
+    if let Some(ms) = c.join_at_ms {
+        let at = Duration::from_millis(u64::try_from(5000 + ms).unwrap_or(0).max(1));
         for &v in &vs {
             s.at(Duration::ZERO, Fault::Crash(v));
-            s.at(secs(5 + c.join_at), Fault::Restart(v));
+            s.at(at, Fault::Restart(v));
         }
     }
     let mut swarm = SwarmSpec::live(seed_host, vs, WAN_RATE, secs(5), secs(5 + c.secs))
@@ -2163,7 +2173,7 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
         seed_delay_ms: 20,
         viewer_delay_ms: 10,
         secs,
-        join_at: 0,
+        join_at_ms: None,
         slow_down_kbit: None,
         topology: Some(full_mesh(viewers)),
         seed_up_steps: Vec::new(),
@@ -2441,7 +2451,7 @@ fn collapse_slow_viewer() {
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_join_backlog_hold() {
     let mut c = collapse_case(2, 10, 20);
-    c.join_at = 5;
+    c.join_at_ms = Some(5000);
     let scenario = |seed| {
         let mut s = calibration_star_scenario(seed, &c);
         let encoder = Encoder::parse("3000c").unwrap();
