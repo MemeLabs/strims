@@ -63,6 +63,11 @@ impl TransferMetrics {
         self.rate.add(n, now);
     }
 
+    /// Bytes counted in all.
+    pub(crate) fn count(&self) -> u64 {
+        self.count
+    }
+
     /// Bytes per second over the window.
     pub(crate) fn rate(&mut self, now: Time) -> u64 {
         self.rate.rate(Duration::SECOND, now)

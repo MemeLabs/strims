@@ -1875,6 +1875,12 @@ impl Runner {
         self.peers.get(peer).and_then(|p| p.qos_weight)
     }
 
+    /// The bytes of data the peer sent that verified and were new to us,
+    /// in all.
+    pub fn peer_useful(&self, peer: PeerKey) -> Option<u64> {
+        self.peers.get(peer).map(|p| p.useful.count())
+    }
+
     /// The next notification: readable swarms, peers to poll, then weight
     /// changes.
     pub fn poll_event(&mut self) -> Option<Event> {
@@ -1927,6 +1933,7 @@ impl Runner {
         Some(ChannelStats {
             scheduler: ChannelSchedulerStats {
                 silent: sched.silent(peer, self.last_now),
+                subscribed: sched.subscribed(peer),
                 ..sched.channel_stats(peer)?
             },
             inbound: ch.metrics_in,

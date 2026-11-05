@@ -2660,6 +2660,7 @@ impl PeerSwarmScheduler {
             have_map_size: map_size(&c.have_bins),
             cancel_map_size: map_size(&c.cancel_bins),
             silent: false,
+            subscribed: 0,
         })
     }
 
@@ -2744,6 +2745,8 @@ pub struct ChannelSchedulerStats {
     pub cancel_map_size: usize,
     /// The peer is silent ([`push::SILENT`]): it takes no push from us.
     pub silent: bool,
+    /// The streams the peer takes from us as a subscriber.
+    pub subscribed: u16,
 }
 
 /// Scheduler state of a swarm, for diagnostics and tests.

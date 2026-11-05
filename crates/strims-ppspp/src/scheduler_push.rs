@@ -1630,6 +1630,17 @@ impl PeerSwarmScheduler {
         })
     }
 
+    /// The streams `peer` takes from us as a subscriber.
+    pub(crate) fn subscribed(&self, peer: PeerKey) -> u16 {
+        let n = self
+            .s
+            .streams
+            .iter()
+            .filter(|st| st.subscribers.iter().any(|x| x.channel == peer))
+            .count();
+        u16::try_from(n).unwrap_or(u16::MAX)
+    }
+
     /// Whether `peer` has a channel in the swarm that isn't
     /// [`silent`](Self::silent).
     pub(crate) fn heard(&self, peer: PeerKey, now: Time) -> bool {

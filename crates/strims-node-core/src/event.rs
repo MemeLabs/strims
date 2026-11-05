@@ -206,11 +206,25 @@ pub struct SwarmInfo {
     pub push: Option<PushStats>,
     /// Per stream, the host of its open parent (`PushStats::parents`).
     pub parent_hosts: Vec<Option<ID>>,
+    /// An adaptive seed's view of its neighbours (ppspp
+    /// `Runner::seed_allocation`); empty elsewhere.
+    pub seed_neighbours: Vec<SeedNeighbourInfo>,
     /// Open [`crate::SwarmReader`]s, and those waiting for data.
     pub readers: usize,
     pub readers_waiting: usize,
     /// Open [`crate::SwarmWriter`]s (0 or 1).
     pub publishers: usize,
+}
+
+/// An adaptive seed's neighbour: whether it holds a copy, whether the
+/// reports barred it from holding one, and its smallest link round trip
+/// lately (ppspp `SeedNeighbour`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SeedNeighbourInfo {
+    pub host_id: ID,
+    pub holder: bool,
+    pub barred: bool,
+    pub min_rtt: Option<strims_base::time::Duration>,
 }
 
 /// A swarm's chunk store (ppspp `store::Buffer`).
@@ -241,6 +255,9 @@ pub struct RunnerPeerInfo {
     /// Data bytes read from and written to the peer, and their rates over
     /// the last minute. The upload weights come from a separate meter.
     pub metrics: MetricsSnapshot,
+    /// Of the bytes read, those that verified and were new to us
+    /// (ppspp `Runner::peer_useful`).
+    pub useful: u64,
     /// vnic's QoS session for the peer's transfer writer.
     pub writer: Option<WriterInfo>,
     /// The swarms run with the peer, in swarm key order.

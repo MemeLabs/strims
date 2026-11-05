@@ -365,6 +365,7 @@ fn swarm(s: SwarmInfo) -> v1::SwarmInfo {
         scheduler,
         push: p,
         parent_hosts: _,
+        seed_neighbours: _,
         readers,
         readers_waiting,
         publishers,
@@ -523,6 +524,7 @@ fn peer(p: RunnerPeerInfo) -> v1::RunnerPeerInfo {
         qos_weight,
         queues,
         metrics,
+        useful: _,
         writer: w,
         channels,
     } = p;
@@ -627,6 +629,7 @@ fn channel_scheduler(s: ChannelSchedulerStats) -> v1::ChannelSchedulerStats {
         have_map_size,
         cancel_map_size,
         silent: _,
+        subscribed: _,
     } = s;
     v1::ChannelSchedulerStats {
         handshake_received,
@@ -1182,6 +1185,7 @@ mod tests {
             have_map_size: 8,
             cancel_map_size: 9,
             silent: false,
+            subscribed: 0,
         }
     }
 
@@ -1210,6 +1214,7 @@ mod tests {
             runner: RunnerMetrics {
                 swarms: vec![SwarmInfo {
                     parent_hosts: Vec::new(),
+                    seed_neighbours: Vec::new(),
                     swarm: swarm_key,
                     id: SwarmId::new(&[1, 2, 3]),
                     label: "mock".into(),
@@ -1244,6 +1249,7 @@ mod tests {
                         ..PeerStats::default()
                     },
                     metrics: MetricsSnapshot::default(),
+                    useful: 0,
                     writer: None,
                     channels: vec![ChannelInfo {
                         swarm: swarm_key,

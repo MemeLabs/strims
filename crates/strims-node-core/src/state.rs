@@ -59,7 +59,7 @@ use crate::driver::{IdleOk, Interfaces, LinkProbe, TaskGuard};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
     ChannelInfo, DriverMetrics, LinkInfo, NetworkInfo, NodeEvent, NodeMetrics, PeerInfo,
-    RunnerMetrics, RunnerPeerInfo, StoreInfo, SwarmInfo, WriterInfo,
+    RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmInfo, WriterInfo,
 };
 use crate::exchange::{Candidate, CandidateState};
 use crate::rpc::Outgoing;
@@ -1564,6 +1564,22 @@ impl State {
                             .map(|k| k.and_then(|k| hosts.get(&k).copied()))
                             .collect()
                     }),
+                    seed_neighbours: self.runner.seed_allocation(key, now).map_or(
+                        Vec::new(),
+                        |a| {
+                            a.neighbours
+                                .iter()
+                                .filter_map(|n| {
+                                    Some(SeedNeighbourInfo {
+                                        host_id: *hosts.get(&n.peer)?,
+                                        holder: n.holder,
+                                        barred: n.barred,
+                                        min_rtt: n.min_rtt,
+                                    })
+                                })
+                                .collect()
+                        },
+                    ),
                     readers: readers.clone().count(),
                     readers_waiting: readers.filter(|r| r.pending.is_some()).count(),
                     publishers: self.publishers.values().filter(|p| p.swarm == key).count(),
@@ -1610,6 +1626,7 @@ impl State {
                     qos_weight: runner.peer_qos_weight(ps.pp),
                     queues: runner.peer_stats(ps.pp).unwrap_or_default(),
                     metrics: snapshot.metrics,
+                    useful: runner.peer_useful(ps.pp).unwrap_or(0),
                     writer,
                     channels,
                 }
