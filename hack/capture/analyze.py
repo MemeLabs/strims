@@ -1149,7 +1149,7 @@ def holders(a):
         if r["type"] == "Pruned" and r.get("peer") in spans:
             per[(r["peer"], k)]["pruned by"].append(f"{r['node']}:{r['rule']}")
     print(f"-- {a.node}'s holders; a copy is its streams times {stream} B/s a stream (the seed's budget rate)")
-    for h in sorted(spans, key=lambda h: spans[h][0][0]):
+    for h in sorted((h for h in spans if spans[h]), key=lambda h: spans[h][0][0]):
         if a.holder and h != a.holder:
             continue
         for t0, t1, why in spans[h]:
