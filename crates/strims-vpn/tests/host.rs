@@ -949,6 +949,46 @@ fn peer_exchange_answerer_descriptions_and_refusals() {
     assert!(!w.linked(0, 2));
 }
 
+/// Open exchanges fill the peer budget as peers do: an answerer with room
+/// for one more peer takes one of two offers, and then can't start an
+/// exchange of its own.
+#[test]
+fn open_exchanges_fill_the_peer_budget() {
+    let mut w = world(4);
+    chain(&mut w);
+    w.nodes[0].auto_exchange = false;
+    w.nodes[0].vnic.set_max_peers(2);
+    let (now, id0) = (w.now, w.id(0));
+    for i in [2, 3] {
+        let net = w.nodes[i].net;
+        let node = &mut w.nodes[i];
+        node.vpn
+            .connect(&node.vnic, now, net, id0)
+            .unwrap()
+            .unwrap();
+        w.service(i);
+    }
+    w.run_for(Duration::SECOND);
+    let ev = w.take_events(0);
+    let offers = ev
+        .iter()
+        .filter(|e| matches!(e, Event::DialRemoteDescriptions { .. }))
+        .count();
+    assert_eq!(offers, 1, "{ev:?}");
+    let refused = ExchangeOutcome::Rejected(strims_vpn::peer_exchange::ERR_NO_NEW_PEERS.into());
+    let refusals = [2, 3]
+        .into_iter()
+        .filter(|&i| has_closed(&w.take_events(i), &refused))
+        .count();
+    assert_eq!(refusals, 1);
+    let (net, now, id3) = (w.nodes[0].net, w.now, w.id(3));
+    let node = &mut w.nodes[0];
+    assert_eq!(
+        node.vpn.connect(&node.vnic, now, net, id3),
+        Err(Error::PeerBudgetSpent)
+    );
+}
+
 /// An outgoing exchange whose answer never comes times out, and a later
 /// `connect` to that host starts a new one.
 #[test]

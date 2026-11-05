@@ -16,7 +16,8 @@
 //!   with [`Host::set_remote_descriptions_result`] →
 //!   [`Event::ExchangeClosed`].
 //! - **Offer**: refused with an error answer when the
-//!   host is already a peer or the vnic peer budget is spent; otherwise
+//!   host is already a peer or the vnic peer budget is spent (its peers
+//!   and every open exchange, either way, fill it); otherwise
 //!   [`Event::DialRemoteDescriptions`] with the offer's descriptions. If that
 //!   connects, an empty answer reports it; if not,
 //!   [`Event::GatherLocalDescriptions`] and the answer carries ours, so the
@@ -121,7 +122,9 @@ pub(crate) struct PeerExchangeService {
 
 impl<H: Copy> Host<H> {
     /// Starts an exchange to link with `host_id`. Returns `None` when it is
-    /// this host, already a vnic peer, or has an exchange in progress.
+    /// this host, already a vnic peer, or has an exchange in progress, and
+    /// [`Error::PeerBudgetSpent`] when vnic's peers and the open exchanges
+    /// fill its budget.
     pub fn connect<T: Copy>(
         &mut self,
         vnic: &VnicHost<T>,
@@ -137,6 +140,9 @@ impl<H: Copy> Host<H> {
         }
         if self.peer_exchange.outgoing.contains_key(&(net, host_id)) {
             return Ok(None);
+        }
+        if !self.peer_room(vnic) {
+            return Err(Error::PeerBudgetSpent);
         }
         let wire_id = random_u64(&mut self.rng);
         let x = self.peer_exchange.exchanges.insert(Exchange {
@@ -374,12 +380,10 @@ impl<H: Copy> Host<H> {
         });
     }
 
-    /// Outgoing exchanges counted against the peer budget.
-    fn mediator_count(&self, net: NetworkId) -> usize {
-        self.peer_exchange
-            .outgoing
-            .range((net, ID::MIN)..=(net, ID::MAX))
-            .count()
+    /// Whether vnic's peer budget has room for another peer past its peers
+    /// and the open exchanges, each of which may make one.
+    fn peer_room<T: Copy>(&self, vnic: &VnicHost<T>) -> bool {
+        vnic.peer_count() + self.peer_exchange.exchanges.len() < vnic.max_peers()
     }
 
     /// Closes answered exchanges whose offerer is a peer, then answers
@@ -399,7 +403,7 @@ impl<H: Copy> Host<H> {
             if !self.networks.contains_key(o.network) {
                 continue;
             }
-            let allow = vnic.peer_count() + self.mediator_count(o.network) < vnic.max_peers()
+            let allow = self.peer_room(vnic)
                 && self.peer_exchange.incoming < self.config.max_incoming_exchanges;
             let refuse = if vnic.has_peer(&o.src) {
                 Some(ERR_PEER_LINK_OPEN)

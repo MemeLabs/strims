@@ -49,8 +49,9 @@
 //!   [`Host::set_remote_descriptions_result`]. An exchange closes once it
 //!   links, or [`peer_exchange::LINK_TIMEOUT`] after it starts; a link it
 //!   made stays.
-//! - Incoming link offers are refused while vnic has no room for peers.
-//!   `vnic.max_peers()` is 0 until the app calls `vnic.set_max_peers`.
+//! - Link offers are refused, and [`Host::connect`] fails, while vnic's
+//!   peers and the open exchanges fill its peer budget. `vnic.max_peers()`
+//!   is 0 until the app calls `vnic.set_max_peers`.
 //!
 //! # Messaging
 //!
@@ -194,6 +195,9 @@ pub enum Error {
     PortInUse(u16),
     #[error("no free ports")]
     NoFreePorts,
+    /// vnic's peers and the open peer exchanges fill its peer budget.
+    #[error("no room for new peers")]
+    PeerBudgetSpent,
     /// [`M_COMPRESS`] is neither sent nor accepted.
     #[error("message compression is not supported")]
     CompressionUnsupported,
