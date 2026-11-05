@@ -334,8 +334,9 @@ pub(crate) struct Network<H> {
     pub(crate) new_links: BTreeSet<PeerKey>,
     /// When the next record push is due (`Time::NIL`: none).
     pub(crate) push_at: Time,
-    /// When records were last pushed (`Time::NIL`: never).
-    pub(crate) pushed_at: Time,
+    /// When each host last got this host's records, for those within
+    /// `RECORD_PUSH_INTERVAL`. Bounded by the hosts linked in that time.
+    pub(crate) pushed: BTreeMap<ID, Time>,
 }
 
 impl<H: Copy> Network<H> {
@@ -376,7 +377,7 @@ impl<H: Copy> Network<H> {
             announce_at: Time::NIL,
             new_links: BTreeSet::new(),
             push_at: Time::NIL,
-            pushed_at: Time::NIL,
+            pushed: BTreeMap::new(),
         }
     }
 

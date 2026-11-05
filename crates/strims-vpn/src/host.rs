@@ -64,7 +64,7 @@ const TOPOLOGY_PRUNE_INTERVAL: Duration = Duration::from_secs(30);
 /// How long after a link comes up this host pushes its records to it
 /// ([`Host::flush`]), so that links that come up together share a push.
 pub const RECORD_PUSH_DELAY: Duration = Duration::SECOND;
-/// The least time between two record pushes in a network: a peer that
+/// The least time between two record pushes to one host: a peer that
 /// keeps reconnecting gets this host's records at most this often.
 pub const RECORD_PUSH_INTERVAL: Duration = Duration::from_secs(10);
 
@@ -1444,12 +1444,7 @@ impl<H: Copy> Host<H> {
             // New links get this host's records (`push_records`).
             if !n.new_links.is_empty() && n.push_at.is_nil() {
                 if peer_index.publishes_in(net) || hash_table.unsent_in(net) {
-                    let at = now + RECORD_PUSH_DELAY;
-                    n.push_at = if n.pushed_at.is_nil() {
-                        at
-                    } else {
-                        at.max(n.pushed_at + RECORD_PUSH_INTERVAL)
-                    };
+                    n.push_at = now + RECORD_PUSH_DELAY;
                 } else {
                     n.new_links.clear();
                 }
@@ -1586,13 +1581,35 @@ impl<H: Copy> Host<H> {
     /// - **Hash table:** a record whose last publish reached no link is
     ///   published again (towards its hash, from the new links on). A
     ///   record that did reach the network is already where gets look.
+    ///
+    /// A link to a host that got them within [`RECORD_PUSH_INTERVAL`]
+    /// waits for the interval's end.
     fn push_records(&mut self, now: Time, net: NetworkId) {
         let Some(n) = self.networks.get_mut(net) else {
             return;
         };
         n.push_at = Time::NIL;
-        n.pushed_at = now;
-        let new = std::mem::take(&mut n.new_links);
+        n.pushed.retain(|_, at| now.before(*at + RECORD_PUSH_INTERVAL));
+        let mut new = std::mem::take(&mut n.new_links);
+        let mut wait = Time::NIL;
+        new.retain(|p| {
+            let host = n.links.get(p).map(|l| l.host_id);
+            match host.and_then(|h| n.pushed.get(&h)) {
+                Some(&at) => {
+                    let due = at + RECORD_PUSH_INTERVAL;
+                    wait = if wait.is_nil() || due.before(wait) { due } else { wait };
+                    n.new_links.insert(*p);
+                    false
+                }
+                None => {
+                    if let Some(h) = host {
+                        n.pushed.insert(h, now);
+                    }
+                    true
+                }
+            }
+        });
+        n.push_at = wait;
         let peers: Vec<PeerKey> = self
             .neighbours(now, net)
             .into_iter()

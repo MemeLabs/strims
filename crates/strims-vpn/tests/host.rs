@@ -1411,9 +1411,9 @@ fn records_published_before_links_are_found() {
     assert_eq!(ht_values(&ev), vec!["early".to_owned()]);
 }
 
-/// Links that come up later get the peer index records too, at most one
-/// push per `RECORD_PUSH_INTERVAL` per network; hash table records that
-/// reached the network aren't published again.
+/// Links that come up later get the peer index records too, a host at
+/// most once per `RECORD_PUSH_INTERVAL`; hash table records that reached
+/// the network aren't published again.
 #[test]
 fn new_links_get_records() {
     let mut w = world(4);
@@ -1439,16 +1439,22 @@ fn new_links_get_records() {
     assert_eq!(len(&w, 2), 1);
     assert_eq!(w.nodes[0].vpn.metrics().records_pushed, 1);
 
-    // Right after a push, the next one waits for the interval.
-    w.link(0, 3, LAT);
-    w.run_for(Duration::from_secs(3));
-    assert_eq!(len(&w, 3), 0);
-    w.run_for(strims_vpn::RECORD_PUSH_INTERVAL);
+    // Right after a push, a link to another host gets its own.
+    let l03 = w.link(0, 3, LAT);
+    w.run_for(Duration::from_secs(2));
     assert_eq!(len(&w, 3), 1);
     // One record per push, to the new link only.
     let m = w.nodes[0].vpn.metrics();
     assert_eq!(m.records_pushed, 2);
     assert_eq!(m.messages_sent, 2 + 2);
+    // A host that relinks within the interval waits for its end.
+    w.unlink(l03);
+    w.run_for(Duration::SECOND);
+    w.link(0, 3, LAT);
+    w.run_for(Duration::from_secs(3));
+    assert_eq!(w.nodes[0].vpn.metrics().records_pushed, 2);
+    w.run_for(strims_vpn::RECORD_PUSH_INTERVAL);
+    assert_eq!(w.nodes[0].vpn.metrics().records_pushed, 3);
 
     // A host without records sends nothing new to its new links.
     let before = w.nodes[1].vpn.metrics();
