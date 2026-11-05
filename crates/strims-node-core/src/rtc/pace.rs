@@ -15,8 +15,9 @@
 //! trip, so that the queue past it stays about [`SLACK`]:
 //!
 //! - the bandwidth: the most the channel delivered (the bytes written less
-//!   the buffered amount) over a round trip (20 ms at least), in the last
-//!   [`BW_SPAN`], so a stall (a loss's recovery) doesn't shrink it;
+//!   the buffered amount) over a round trip ([`RATE_WINDOW`] at least), in
+//!   the last [`BW_SPAN`], so a stall (a loss's recovery) doesn't shrink
+//!   it;
 //! - the round trip: the least of the last [`RTT_SPAN`], from each write to
 //!   the reading that shows it delivered, so it holds the path's and as
 //!   little of the channel's own queue as the span saw;
@@ -70,6 +71,14 @@ pub const FLOOR: usize = 32 * 1024;
 
 /// How long a delivery rate counts toward the bandwidth.
 pub const BW_SPAN: Duration = Duration::from_secs(2);
+
+/// The least span a delivery rate is read over. Acknowledgements come in
+/// bursts: a receiver holds a lone packet's SACK, and its SACKs wait behind
+/// its own uplink's queue. Over a round trip of a nearby peer, the most of a
+/// span reads such a burst: thin relays' hosts read 1.7 times their
+/// uplinks, held more than their queues take and lost packets, which their
+/// ordered channels wait about a second to resend.
+pub const RATE_WINDOW: Duration = Duration::from_millis(250);
 
 /// How long a round trip counts toward the least.
 pub const RTT_SPAN: Duration = Duration::from_secs(10);
@@ -194,12 +203,12 @@ impl ChannelPacer {
         self.rtts.front().map(|&(_, r)| r)
     }
 
-    /// The span a delivery rate is read over: the round trip, 20 ms at
-    /// least.
+    /// The span a delivery rate is read over: the round trip,
+    /// [`RATE_WINDOW`] at least.
     fn window(&self) -> Duration {
         self.rtt()
             .unwrap_or(Duration::from_millis(100))
-            .max(Duration::from_millis(20))
+            .max(RATE_WINDOW)
     }
 }
 
