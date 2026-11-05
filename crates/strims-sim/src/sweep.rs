@@ -55,6 +55,8 @@
 //!   relay and finds the others through transfer discovery.
 //! - `STRIMS_SIM_HOSTILE=<kind>:<share>` makes that share of the first
 //!   swarm's viewers hostile ([`Scenario::hostile`]).
+//! - `STRIMS_SIM_CHURN=<viewers/min>:<away s>` makes the first swarm's
+//!   viewers leave and rejoin in turn ([`Scenario::churn`]); `off` none.
 //! - `STRIMS_SIM_EXP=<flag>,...` sets experiment flags
 //!   ([`Scenario::exp`]); `off` sets none.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
@@ -261,6 +263,22 @@ fn hostile_knob() -> Option<(&'static str, f64)> {
     Some((kind, share))
 }
 
+/// `STRIMS_SIM_CHURN=<viewers/min>:<away s>` ([`Scenario::churn`]); `off`
+/// none.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn churn_knob() -> Option<(f64, Duration)> {
+    let v = env("STRIMS_SIM_CHURN").filter(|v| v.trim() != "off")?;
+    let parse = |x: &str| {
+        x.trim()
+            .parse::<f64>()
+            .unwrap_or_else(|_| panic!("STRIMS_SIM_CHURN: {v} is no <viewers/min>:<away s>"))
+    };
+    let (rate, away) = v
+        .split_once(':')
+        .unwrap_or_else(|| panic!("STRIMS_SIM_CHURN: {v} is no <viewers/min>:<away s>"));
+    Some((parse(rate), Duration::from_secs_f64(parse(away))))
+}
+
 /// `STRIMS_SIM_RTC`'s stacks; `off` is none.
 #[allow(clippy::panic)] // a mistyped setting fails its test
 fn rtc_knob() -> Option<Vec<Option<SctpProfile>>> {
@@ -363,6 +381,7 @@ fn sweep_seeds(
     let organic = env("STRIMS_SIM_DISCOVERY").is_some_and(|s| s.trim() == "1");
     let exp = exp_knob();
     let hostile = hostile_knob();
+    let churn = churn_knob();
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -431,6 +450,9 @@ fn sweep_seeds(
         spec.exp.extend(exp.iter().copied());
         if let Some((kind, share)) = hostile {
             spec.hostile(kind, share);
+        }
+        if let Some((per_min, away)) = churn {
+            spec.churn(per_min, away);
         }
         if let Some(dir) = &capture {
             let run = format!("seed-{seed}{replay}");

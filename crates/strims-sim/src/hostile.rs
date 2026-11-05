@@ -10,6 +10,11 @@
 //!   or HAVE, so no peer asks it for a chunk or grafts onto it.
 //! - `liar`: announces what it has (its HAVEs go out) and serves none of
 //!   it (no DATA or INTEGRITY): peers ask it and graft onto it in vain.
+//! - `whitewasher`: a free rider that restarts under a fresh host key
+//!   every [`REJOIN_EVERY`] ([`Scenario::hostile`](crate::Scenario::hostile)),
+//!   a newcomer again each time.
+//! - `hog`: a free rider whose pool links every host it finds and keeps
+//!   them, dialing again at once (`PoolConfig::greedy`).
 
 use std::sync::Arc;
 
@@ -20,13 +25,16 @@ use strims_ppspp::codec::{
 };
 
 /// The kinds a host can be ([`egress`]).
-pub const KINDS: &[&str] = &["free-rider", "liar"];
+pub const KINDS: &[&str] = &["free-rider", "liar", "whitewasher", "hog"];
+
+/// How often a whitewasher rejoins.
+pub const REJOIN_EVERY: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// The frame rewrite of a host of `kind` in swarms of `options`; `None`
 /// for a kind it doesn't know.
 pub fn egress(kind: &str, options: &SwarmOptions) -> Option<HostileEgress> {
     let drop_have = match kind {
-        "free-rider" => true,
+        "free-rider" | "whitewasher" | "hog" => true,
         "liar" => false,
         _ => return None,
     };

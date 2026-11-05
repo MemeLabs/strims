@@ -53,7 +53,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::time::Duration;
 
-use crate::report::{Percentiles, Report};
+use crate::report::{Percentiles, Report, spearman};
 use crate::spec::{HostClass, HostIx};
 use crate::stats::MeterSample;
 
@@ -933,6 +933,19 @@ impl Report {
             .num("links_dropped_per_host_min", dropped)
             .num("eclipsed_share", eclipsed)
             .num("cut_from_seed_share", cut);
+        for (key, v) in self.capacity_position(swarm) {
+            j.num(key, v);
+        }
+        let mut rejoins: Vec<u64> = self
+            .viewers
+            .iter()
+            .flat_map(|v| v.stats.joins.iter().skip(1))
+            .filter_map(|j| Some(j.caught_up_ms?.saturating_sub(j.start_ms)))
+            .collect();
+        rejoins.sort_unstable();
+        if let Some(&p90) = rejoins.get(((rejoins.len() as f64 - 1.0) * 0.9).round() as usize) {
+            j.int("rejoin_p90_ms", p90);
+        }
         for (key, outcome) in EXCHANGE_COLS {
             j.int(key, self.exchanges_ended(outcome));
         }
@@ -1005,25 +1018,7 @@ impl Report {
     pub fn eclipse(&self) -> [f64; 2] {
         let n = self.hosts.len();
         let honest: Vec<bool> = (0..n).map(|h| self.class(h) == HostClass::Honest).collect();
-        let mut rounds: BTreeMap<u64, Vec<Vec<HostIx>>> = BTreeMap::new();
-        for (h, r) in self.hosts.iter().enumerate() {
-            for (t, ns) in &r.neighbours {
-                if *t < NET_WARM {
-                    continue;
-                }
-                let g = rounds
-                    .entry(t.as_secs())
-                    .or_insert_with(|| vec![Vec::new(); n]);
-                for &x in ns {
-                    if let Some(e) = g.get_mut(h) {
-                        e.push(x);
-                    }
-                    if let Some(e) = g.get_mut(x) {
-                        e.push(h);
-                    }
-                }
-            }
-        }
+        let rounds = self.link_rounds();
         let viewers: Vec<(HostIx, HostIx)> = self
             .scenario
             .swarms
@@ -1061,6 +1056,205 @@ impl Report {
         [eclipsed as f64 / s, cut as f64 / s]
     }
 
+    /// The link graph in rounds of a second from [`NET_WARM`] on: each
+    /// host's neighbours, a link counting when either end reported it.
+    fn link_rounds(&self) -> BTreeMap<u64, Vec<Vec<HostIx>>> {
+        let n = self.hosts.len();
+        let mut rounds: BTreeMap<u64, Vec<Vec<HostIx>>> = BTreeMap::new();
+        for (h, r) in self.hosts.iter().enumerate() {
+            for (t, ns) in &r.neighbours {
+                if *t < NET_WARM {
+                    continue;
+                }
+                let g = rounds
+                    .entry(t.as_secs())
+                    .or_insert_with(|| vec![Vec::new(); n]);
+                for &x in ns {
+                    if let Some(e) = g.get_mut(h) {
+                        e.push(x);
+                    }
+                    if let Some(e) = g.get_mut(x) {
+                        e.push(h);
+                    }
+                }
+            }
+        }
+        rounds
+    }
+
+    /// Where the honest viewers of `swarm` sit by their uplinks (`Report::upload_cap`),
+    /// as ROW columns; none while their uplinks are alike (three distinct
+    /// at least):
+    /// - `cap_depth_rho`: Spearman's rank correlation of the uplink with
+    ///   the mean push-tree depth (a stream's hops to the seed), and
+    ///   `cap_depth_rho_startup` over the first [`BUCKET`]: negative while
+    ///   strong uplinks sit near the seed;
+    /// - `cap_fanout_rho`: with the mean children;
+    /// - `cap_hops_rho`: with the mean hops to the seed in the link graph
+    ///   (through hosts other than infrastructure);
+    /// - `seed_nbr_up_p50` and `depth1_up_p50`: the median uplink of the
+    ///   seed's neighbours, and of the viewers it pushes to, each second's
+    ///   median over the run;
+    /// - `top_seed_link_s`: when the strongest viewer first neighbours the
+    ///   seed, seconds after the stream's start (its length if never);
+    /// - `lag_p99_ms_weak`: the lag p99 of the weakest quarter;
+    /// - `seed_offers_per_min`: offers to link the seed answered and
+    ///   refused, per minute of run.
+    pub fn capacity_position(&self, swarm: usize) -> Vec<(&'static str, f64)> {
+        let mut out = Vec::new();
+        let Some(spec) = self.scenario.swarms.get(swarm) else {
+            return out;
+        };
+        let up: BTreeMap<HostIx, f64> = self
+            .honest_viewers()
+            .into_iter()
+            .filter(|h| spec.viewers.contains(h))
+            .filter_map(|h| Some((h, self.upload_cap(h)? as f64)))
+            .collect();
+        let mut distinct: Vec<f64> = up.values().copied().collect();
+        distinct.sort_by(f64::total_cmp);
+        distinct.dedup();
+        if distinct.len() < 3 {
+            return out;
+        }
+        let median = |mut v: Vec<f64>| -> Option<f64> {
+            v.sort_by(f64::total_cmp);
+            v.get(v.len() / 2).copied()
+        };
+        let rho = |means: &BTreeMap<HostIx, (f64, u64)>| {
+            let pairs: Vec<(f64, f64)> = means
+                .iter()
+                .filter_map(|(h, &(sum, n))| Some((*up.get(h)?, sum / n.max(1) as f64)))
+                .collect();
+            spearman(&pairs)
+        };
+        if let Some(walk) = self.depth_walk(swarm) {
+            let mean_depth = |to: Duration| {
+                let mut m: BTreeMap<HostIx, (f64, u64)> = BTreeMap::new();
+                for &(t, v, k) in &walk {
+                    if t < to && (1..=7).contains(&k) {
+                        let e = m.entry(v).or_default();
+                        e.0 += k as f64;
+                        e.1 += 1;
+                    }
+                }
+                m
+            };
+            if let Some(r) = rho(&mean_depth(spec.stop)) {
+                out.push(("cap_depth_rho", r));
+            }
+            if let Some(r) = rho(&mean_depth(spec.start + BUCKET)) {
+                out.push(("cap_depth_rho_startup", r));
+            }
+            let mut by_second: BTreeMap<Duration, Vec<f64>> = BTreeMap::new();
+            for &(t, v, k) in &walk {
+                if k == 1
+                    && let Some(&u) = up.get(&v)
+                {
+                    by_second.entry(t).or_default().push(u);
+                }
+            }
+            for v in by_second.values_mut() {
+                v.dedup();
+            }
+            if let Some(m) = median(by_second.into_values().filter_map(median).collect()) {
+                out.push(("depth1_up_p50", m));
+            }
+        }
+        let mut children: BTreeMap<HostIx, (f64, u64)> = BTreeMap::new();
+        for &h in up.keys() {
+            for (t, s, x) in self.hosts.get(h).map_or(&[][..], |r| &r.transfers[..]) {
+                if *s == swarm && *t >= spec.start + DEPTH_WARM {
+                    let e = children.entry(h).or_default();
+                    e.0 += x.children as f64;
+                    e.1 += 1;
+                }
+            }
+        }
+        if let Some(r) = rho(&children) {
+            out.push(("cap_fanout_rho", r));
+        }
+        let rounds = self.link_rounds();
+        let infra: Vec<bool> = (0..self.hosts.len())
+            .map(|h| self.class(h) == HostClass::Infra)
+            .collect();
+        let mut hops: BTreeMap<HostIx, (f64, u64)> = BTreeMap::new();
+        let mut seed_nbrs = Vec::new();
+        let top = up
+            .iter()
+            .max_by(|a, b| a.1.total_cmp(b.1).then(b.0.cmp(a.0)))
+            .map(|(&h, _)| h);
+        let mut top_linked: Option<u64> = None;
+        for (&t, g) in &rounds {
+            let ns = g.get(spec.seed).map_or(&[][..], Vec::as_slice);
+            if top.is_some_and(|x| ns.contains(&x)) && top_linked.is_none() {
+                top_linked = Some(t);
+            }
+            if let Some(m) = median(ns.iter().filter_map(|x| up.get(x).copied()).collect()) {
+                seed_nbrs.push(m);
+            }
+            let mut dist = vec![u64::MAX; g.len()];
+            let mut queue = std::collections::VecDeque::from([spec.seed]);
+            if let Some(d) = dist.get_mut(spec.seed) {
+                *d = 0;
+            }
+            while let Some(x) = queue.pop_front() {
+                let dx = dist.get(x).copied().unwrap_or(u64::MAX);
+                for &y in g.get(x).map_or(&[][..], Vec::as_slice) {
+                    if infra.get(y).copied().unwrap_or(true) {
+                        continue;
+                    }
+                    if let Some(d) = dist.get_mut(y)
+                        && *d == u64::MAX
+                    {
+                        *d = dx + 1;
+                        queue.push_back(y);
+                    }
+                }
+            }
+            for &h in up.keys() {
+                if let Some(&d) = dist.get(h)
+                    && d != u64::MAX
+                {
+                    let e = hops.entry(h).or_default();
+                    e.0 += d as f64;
+                    e.1 += 1;
+                }
+            }
+        }
+        if let Some(r) = rho(&hops) {
+            out.push(("cap_hops_rho", r));
+        }
+        if let Some(m) = median(seed_nbrs) {
+            out.push(("seed_nbr_up_p50", m));
+        }
+        let length = spec.stop.saturating_sub(spec.start).as_secs_f64();
+        let linked = top_linked.map_or(length, |t| {
+            (t as f64 - spec.start.as_secs_f64()).clamp(0.0, length)
+        });
+        out.push(("top_seed_link_s", linked));
+        let mut by_up: Vec<(f64, HostIx)> = up.iter().map(|(&h, &u)| (u, h)).collect();
+        by_up.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        let weak: Vec<HostIx> = by_up
+            .iter()
+            .take(by_up.len().div_ceil(4))
+            .map(|&(_, h)| h)
+            .collect();
+        let lag = self.lag_of_between(swarm, &weak, spec.start, spec.stop);
+        out.push(("lag_p99_ms_weak", f64::from(lag.p99)));
+        let minutes = self.scenario.duration.as_secs_f64() / 60.0;
+        if let Some(r) = self.hosts.get(spec.seed)
+            && minutes > 0.0
+        {
+            let answered = r.exchange_outcomes.get("Answered").copied().unwrap_or(0);
+            out.push((
+                "seed_offers_per_min",
+                (answered + r.offers_refused) as f64 / minutes,
+            ));
+        }
+        out
+    }
+
     /// The honest viewers' peer exchanges that ended so.
     pub fn exchanges_ended(&self, outcome: &str) -> u64 {
         self.honest_viewers()
@@ -1070,13 +1264,12 @@ impl Report {
             .sum()
     }
 
-    /// The push trees' depth over the viewers' (viewer, stream) pairs,
-    /// once a second from [`DEPTH_WARM`] after the stream's start, from the
-    /// transfer samples (each host's latest by then): the shares with no
-    /// open parent, `h` hops from the seed (1 to 6), deeper, in a cycle,
-    /// and in a chain that ends at a viewer with no open parent. `None`
-    /// without transfer samples.
-    pub fn depths(&self, swarm: usize) -> Option<Vec<(&'static str, f64)>> {
+    /// Each viewer's push-tree depth per stream, once a second from
+    /// [`DEPTH_WARM`] after the stream's start, from the transfer samples
+    /// (each host's latest by then): `(second, viewer, k)`, `k` the hops to
+    /// the seed (1-6), 7 deeper, 0 no parent, 8 a cycle, 9 a chain that
+    /// ends at a viewer with no parent. `None` without transfer samples.
+    fn depth_walk(&self, swarm: usize) -> Option<Vec<(Duration, HostIx, usize)>> {
         let spec = self.scenario.swarms.get(swarm)?;
         let hosts: Vec<HostIx> = spec.viewers.iter().chain(&spec.relays).copied().collect();
         let mut samples: Vec<(Duration, HostIx, &[Option<usize>])> = hosts
@@ -1095,7 +1288,7 @@ impl Report {
         samples.sort_by_key(|&(t, h, _)| (t, h));
         let streams = samples.iter().map(|s| s.2.len()).max().unwrap_or(0);
         let mut latest: BTreeMap<HostIx, &[Option<usize>]> = BTreeMap::new();
-        let mut counts = [0u64; 10];
+        let mut out = Vec::new();
         let from = spec.start + DEPTH_WARM;
         let mut next = from;
         let mut it = samples.iter().peekable();
@@ -1122,9 +1315,7 @@ impl Report {
                                 }
                             }
                         };
-                        if let Some(c) = counts.get_mut(k) {
-                            *c += 1;
-                        }
+                        out.push((next, v, k));
                     }
                 }
                 next = t.max(next) + Duration::from_secs(1);
@@ -1132,6 +1323,23 @@ impl Report {
             }
             latest.insert(h, p);
             it.next();
+        }
+        Some(out)
+    }
+
+    /// The push trees' depth over the viewers' (viewer, stream) pairs,
+    /// once a second from [`DEPTH_WARM`] after the stream's start, from the
+    /// transfer samples (each host's latest by then): the shares with no
+    /// open parent, `h` hops from the seed (1 to 6), deeper, in a cycle,
+    /// and in a chain that ends at a viewer with no open parent. `None`
+    /// without transfer samples.
+    pub fn depths(&self, swarm: usize) -> Option<Vec<(&'static str, f64)>> {
+        let walk = self.depth_walk(swarm)?;
+        let mut counts = [0u64; 10];
+        for &(_, _, k) in &walk {
+            if let Some(c) = counts.get_mut(k) {
+                *c += 1;
+            }
         }
         let all = counts.iter().sum::<u64>();
         if all == 0 {
@@ -1553,6 +1761,63 @@ mod tests {
             })
             .collect();
         r
+    }
+
+    /// A seed (0) and a chain of four viewers, each the parent of the
+    /// next, their uplinks falling down the chain and their links the
+    /// chain's, every second from 10 s to 19 s.
+    #[test]
+    fn capacity_position_ranks_uplinks_against_depth_and_hops() {
+        let mut s = Scenario::new("chain");
+        let seed = s.host("seed", Some(9_000));
+        let vs: Vec<HostIx> = [4_000, 3_000, 2_000, 1_000]
+            .iter()
+            .enumerate()
+            .map(|(i, &up)| s.host(&format!("v{i}"), Some(up)))
+            .collect();
+        s.swarm(SwarmSpec::live(
+            seed,
+            vs.clone(),
+            1024,
+            Duration::ZERO,
+            Duration::from_secs(20),
+        ));
+        let mut r = seed_reading(|_| 0);
+        r.scenario = s;
+        let parent = |h: HostIx| if h == 1 { 0 } else { h - 1 };
+        r.hosts = (0..5)
+            .map(|h: HostIx| HostReport {
+                neighbours: (10..20)
+                    .map(|t| {
+                        (
+                            Duration::from_secs(t),
+                            if h == 4 { vec![3] } else { vec![h + 1] },
+                        )
+                    })
+                    .collect(),
+                transfers: (0..20)
+                    .map(|t| {
+                        let x = strims_testbed::transfer::TransferSample {
+                            parent_peers: if h == 0 {
+                                vec![None]
+                            } else {
+                                vec![Some(parent(h))]
+                            },
+                            children: usize::from(h < 4),
+                            ..Default::default()
+                        };
+                        (Duration::from_secs(t), 0, x)
+                    })
+                    .collect(),
+                ..HostReport::default()
+            })
+            .collect();
+        let got: BTreeMap<&str, f64> = r.capacity_position(0).into_iter().collect();
+        assert!((got["cap_depth_rho"] + 1.0).abs() < 1e-9, "{got:?}");
+        assert!((got["cap_hops_rho"] + 1.0).abs() < 1e-9, "{got:?}");
+        assert_eq!(got["seed_nbr_up_p50"], 4_000.0);
+        assert_eq!(got["depth1_up_p50"], 4_000.0);
+        assert_eq!(got["top_seed_link_s"], 10.0);
     }
 
     #[test]

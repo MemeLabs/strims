@@ -170,6 +170,8 @@ pub struct PoolConfig {
     /// The rate a seed publishes at, which its publisher knows.
     pub stream_rate: f64,
     pub control: Control,
+    /// A hostile hog's pool ([`PoolConfig::greedy`]).
+    pub greedy: bool,
 }
 
 impl PoolConfig {
@@ -200,7 +202,23 @@ impl PoolConfig {
             unblock: exp.contains("pool-unblock"),
             stream_rate: 0.0,
             control,
+            greedy: false,
         })
+    }
+
+    /// A hog's pool (`hostile.rs`): it links every host it finds, keeps
+    /// every link, and dials a host again at once when it loses it or is
+    /// refused.
+    pub fn greedy(self) -> PoolConfig {
+        PoolConfig {
+            budget: NO_CAP,
+            evict: false,
+            recip: false,
+            unblock: false,
+            control: Control::Fixed,
+            greedy: true,
+            ..self
+        }
     }
 }
 
@@ -359,10 +377,15 @@ impl Pool {
             }
             NodeEvent::PeerRemoved { host_id } => {
                 if st.links.remove(host_id).is_some_and(|l| l.swarm) {
+                    let wait = if self.cfg.greedy {
+                        Duration::ZERO
+                    } else {
+                        RETRY_MAX
+                    };
                     st.candidates.entry(*host_id).or_insert(Candidate {
                         found: now,
                         tries: 1,
-                        next_try: now + RETRY_MAX,
+                        next_try: now + wait,
                     });
                 }
             }
@@ -379,7 +402,12 @@ impl Pool {
                 {
                     c.tries += 1;
                     let wait = RETRY.saturating_mul(1 << c.tries.min(8)) / 2;
-                    c.next_try = now + wait.min(RETRY_MAX);
+                    c.next_try = now
+                        + if self.cfg.greedy {
+                            RETRY
+                        } else {
+                            wait.min(RETRY_MAX)
+                        };
                 }
             }
             _ => {}

@@ -116,6 +116,11 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         .iter()
         .find(|s| s.seed == h)
         .map_or(0.0, SwarmSpec::rate);
+    let hog = w
+        .spec
+        .hosts
+        .get(h)
+        .is_some_and(|s| s.class == crate::HostClass::Hostile("hog"));
     let pool = index
         .zip(PoolConfig::from_flags(&w.spec.exp, cap))
         .map(|(net, cfg)| {
@@ -123,6 +128,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
                 stream_rate: rate,
                 ..cfg
             };
+            let cfg = if hog { cfg.greedy() } else { cfg };
             Rc::new(Pool::new(node.clone(), net, cfg))
         });
     if let Some(p) = &pool {

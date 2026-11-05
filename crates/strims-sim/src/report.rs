@@ -118,6 +118,9 @@ pub struct HostReport {
     pub peers_removed: u64,
     /// How its peer exchanges ended, either side (`ExchangeOutcome` names).
     pub exchange_outcomes: BTreeMap<String, u64>,
+    /// Offers to link it refused: its peers' exchanges with it that ended
+    /// `Rejected`.
+    pub offers_refused: u64,
     pub vpn_messages_relayed: u64,
     pub vpn_link_queue_full: u64,
     /// Peer index and hash table records vpn pushed to new links
@@ -1019,6 +1022,41 @@ pub struct UploadDistribution {
     pub gini: f64,
 }
 
+/// Spearman's rank correlation of `pairs`, ties at their mean rank; `None`
+/// for fewer than three pairs, or a side that doesn't vary.
+pub fn spearman(pairs: &[(f64, f64)]) -> Option<f64> {
+    fn ranks(v: &[f64]) -> Vec<f64> {
+        let mut order: Vec<(f64, usize)> = v.iter().copied().zip(0..).collect();
+        order.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut r = vec![0.0; v.len()];
+        let mut i = 0;
+        for run in order.chunk_by(|a, b| a.0 == b.0) {
+            let mean = i as f64 + (run.len() - 1) as f64 / 2.0 + 1.0;
+            for &(_, k) in run {
+                if let Some(x) = r.get_mut(k) {
+                    *x = mean;
+                }
+            }
+            i += run.len();
+        }
+        r
+    }
+    if pairs.len() < 3 {
+        return None;
+    }
+    let a = ranks(&pairs.iter().map(|p| p.0).collect::<Vec<_>>());
+    let b = ranks(&pairs.iter().map(|p| p.1).collect::<Vec<_>>());
+    let n = a.len() as f64;
+    let (ma, mb) = (a.iter().sum::<f64>() / n, b.iter().sum::<f64>() / n);
+    let (mut cov, mut va, mut vb) = (0.0, 0.0, 0.0);
+    for (x, y) in a.iter().zip(&b) {
+        cov += (x - ma) * (y - mb);
+        va += (x - ma) * (x - ma);
+        vb += (y - mb) * (y - mb);
+    }
+    (va > 0.0 && vb > 0.0).then(|| cov / (va * vb).sqrt())
+}
+
 fn gini(sorted: &[u64]) -> f64 {
     let n = sorted.len() as f64;
     let total: f64 = sorted.iter().map(|&x| x as f64).sum();
@@ -1044,5 +1082,16 @@ mod tests {
         assert_eq!(Percentiles::of([]).max, 0);
         assert!(gini(&[5, 5, 5, 5]).abs() < 1e-9);
         assert!(gini(&[0, 0, 0, 100]) > 0.7);
+    }
+
+    #[test]
+    fn spearman_ranks_ties_at_their_mean() {
+        let up = [(1.0, 4.0), (2.0, 3.0), (3.0, 2.0), (4.0, 1.0)];
+        assert!((spearman(&up).unwrap() + 1.0).abs() < 1e-9);
+        // Ranks 1.5, 1.5, 3 against 1, 2, 3.
+        let tied = [(1.0, 1.0), (1.0, 2.0), (2.0, 3.0)];
+        assert!((spearman(&tied).unwrap() - 0.866_025_4).abs() < 1e-6);
+        assert_eq!(spearman(&[(1.0, 1.0), (1.0, 2.0), (1.0, 3.0)]), None);
+        assert_eq!(spearman(&[(1.0, 1.0), (2.0, 2.0)]), None);
     }
 }

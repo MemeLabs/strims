@@ -538,6 +538,47 @@ impl Scenario {
             if let Some(h) = viewers.get(i).and_then(|&v| self.hosts.get_mut(v)) {
                 h.class = HostClass::Hostile(kind);
             }
+            // A whitewasher rejoins under a fresh host key, staggered.
+            if kind == "whitewasher"
+                && let (Some(&v), Some((start, stop))) = (
+                    viewers.get(i),
+                    self.swarms.first().map(|s| (s.start, s.stop)),
+                )
+            {
+                let mut t = start + Duration::from_secs(20 + 3 * j as u64);
+                while t + Duration::from_secs(1) < stop {
+                    self.at(t, Fault::Crash(v));
+                    self.at(t + Duration::from_secs(1), Fault::Restart(v));
+                    t += crate::hostile::REJOIN_EVERY;
+                }
+            }
+        }
+    }
+
+    /// Viewer churn: from 20 s into the first swarm, every `60 / per_min`
+    /// seconds the next of its viewers in turn leaves and rejoins `away`
+    /// later, until the swarm stops. It draws nothing from the run's rng.
+    pub fn churn(&mut self, per_min: f64, away: Duration) {
+        let Some((viewers, start, stop)) = self
+            .swarms
+            .first()
+            .map(|s| (s.viewers.clone(), s.start, s.stop))
+        else {
+            return;
+        };
+        if viewers.is_empty() || per_min <= 0.0 {
+            return;
+        }
+        let every = Duration::from_secs_f64(60.0 / per_min);
+        let mut t = start + Duration::from_secs(20);
+        let mut k = 0;
+        while t + away < stop {
+            if let Some(&v) = viewers.get(k % viewers.len()) {
+                self.at(t, Fault::Crash(v));
+                self.at(t + away, Fault::Restart(v));
+            }
+            t += every;
+            k += 1;
         }
     }
 

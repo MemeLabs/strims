@@ -1659,6 +1659,41 @@ fn super_peer_mesh(seed: u64, push: PushMode) -> Streaming {
     )
 }
 
+/// Viewers in the crowd cases unless `STRIMS_SIM_CROWD` says.
+const CROWD: usize = 31;
+
+/// [`wan_residential_seed`] with [`CROWD`] residential viewers: a swarm
+/// whose uplinks differ enough for where strong ones sit to show. The
+/// first 16 sites are [`wan_residential_seed`]'s.
+fn residential_crowd_mesh(seed: u64, push: PushMode) -> Streaming {
+    let n = knob("STRIMS_SIM_CROWD").unwrap_or(CROWD);
+    let sites = viewer_sites(seed, n, &atlantic(), RESIDENTIAL);
+    wan(
+        &format!("wan_residential_crowd x{n} {push:?}"),
+        seed,
+        Site::new(City::Chicago, Access::Cable),
+        &sites,
+        push,
+        (5, 65),
+    )
+}
+
+/// [`residential_crowd_mesh`] plus [`super_peer_mesh`]'s New York
+/// datacenter viewer.
+fn super_peer_crowd_mesh(seed: u64, push: PushMode) -> Streaming {
+    let n = knob("STRIMS_SIM_CROWD").unwrap_or(CROWD);
+    let mut sites = viewer_sites(seed, n, &atlantic(), RESIDENTIAL);
+    sites.push(Site::new(City::NewYork, Access::Datacenter));
+    wan(
+        &format!("wan_super_peer_crowd x{n} {push:?}"),
+        seed,
+        Site::new(City::Chicago, Access::Cable),
+        &sites,
+        push,
+        (5, 65),
+    )
+}
+
 /// Everyone gets the stream from 10 s on while the seed sends at most 60 %
 /// of the data and at least 2 viewers relay.
 fn check_wan_residential_seed(r: &Report) -> Result<(), String> {
@@ -2744,6 +2779,38 @@ fn wan_residential_seed_adaptive_uncapped_varying() {
         |s| {
             windowed(uncapped(striped(
                 varying(residential_seed_mesh(s, PushMode::Hybrid, (5, 65))),
+                STRIPES,
+                ADAPTIVE,
+            )))
+        },
+        check_wan_residential_seed,
+    );
+}
+
+#[test]
+#[ignore = "WAN, 32 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_residential_crowd_adaptive_uncapped() {
+    sweep(
+        "wan_residential_crowd_adaptive_uncapped",
+        |s| {
+            uncapped(striped(
+                residential_crowd_mesh(s, PushMode::Hybrid).s,
+                STRIPES,
+                ADAPTIVE,
+            ))
+        },
+        check_wan_residential_seed,
+    );
+}
+
+#[test]
+#[ignore = "WAN, 33 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_super_peer_crowd_adaptive_uncapped_varying() {
+    sweep(
+        "wan_super_peer_crowd_adaptive_uncapped_varying",
+        |s| {
+            windowed(uncapped(striped(
+                varying(super_peer_crowd_mesh(s, PushMode::Hybrid)),
                 STRIPES,
                 ADAPTIVE,
             )))

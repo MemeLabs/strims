@@ -754,6 +754,11 @@ impl World {
                 let c = hs.exchanges.entry(x).or_default();
                 *c = c.wrapping_add(1);
             }
+            if name == "Rejected"
+                && let Some(t) = with.and_then(|x| st.hosts.get_mut(x))
+            {
+                t.totals.offers_refused += 1;
+            }
         });
     }
 

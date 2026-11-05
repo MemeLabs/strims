@@ -368,9 +368,38 @@ TIERS = {
     ],
     "robust": robust_tier(),
 }
+def recip_tier():
+    """Organic browsers whose uplinks differ, for where strong ones sit
+    (reciprocal topology): the super-peer cells, a residential crowd of 31
+    and of 63, and the stars and WAN cells the pool touches most."""
+    net = {c["name"]: c for c in TIERS["net"]}
+    cells = [net[n] for n in ("org-wan-super-peer-varying", "org-star-31-10", "org-thin-15-10",
+                              "org-wan-global-audience")]
+    org = {"STRIMS_SIM_DISCOVERY": "1", "STRIMS_SIM_RTC": BROWSERS}
+    for test, name, crowd in (("wan_residential_crowd_adaptive_uncapped", "org-crowd-31", "31"),
+                              ("wan_residential_crowd_adaptive_uncapped", "org-crowd-63", "63"),
+                              ("wan_super_peer_crowd_adaptive_uncapped_varying", "org-super-peer-crowd-31", "31")):
+        cells.append(cell(name, SIM, test, {**SS_BASE, **org, "STRIMS_SIM_CROWD": crowd}, 2,
+                          f"{crowd} residential viewers, as browsers, organic"))
+    return cells
+
+
+def recip_hostile_tier():
+    """The residential crowd of 31 with a fifth of its viewers each kind of
+    defector, and with viewers leaving and rejoining."""
+    crowd = next(c for c in TIERS["recip"] if c["name"] == "org-crowd-31")
+    cells = [{**crowd, "name": f"org-crowd-31-{k}", "env": {**crowd["env"], "STRIMS_SIM_HOSTILE": f"{k}:0.2"},
+              "why": f"{crowd['why']}, a fifth {k}s"} for k in ("free-rider", "liar", "whitewasher", "hog")]
+    cells.append({**crowd, "name": "org-crowd-31-churn", "env": {**crowd["env"], "STRIMS_SIM_CHURN": "0.5:5"},
+                  "why": f"{crowd['why']}, a viewer leaving for 5 s every 2 minutes"})
+    return cells
+
+
 TIERS["browsers"] = browsers_tier()
 TIERS["net"] = net_tier()
 TIERS["net-hostile"] = net_hostile_tier()
+TIERS["recip"] = recip_tier()
+TIERS["recip-hostile"] = recip_hostile_tier()
 TIERS["sign"] = sign_tier()
 TIERS["sign-confirm"] = sign_confirm_tier()
 TIERS["sign-sens"] = sign_sens_tier()
@@ -442,6 +471,23 @@ METRICS = [
     ("hostile_lag_p99_ms", lambda r: r.get("lag_p99_ms_hostile"), None, "ratio", 0.05),
     ("hostile_delivery", lambda r: r.get("delivery_hostile"), None, "diff", 0.002),
     ("cut_from_seed_share", lambda r: r.get("cut_from_seed_share"), LOWER, "diff", 0.005),
+    # Where strong uplinks sit (`Report::capacity_position`).
+    ("cap_depth_rho", lambda r: r.get("cap_depth_rho"), LOWER, "diff", 0.05),
+    ("cap_depth_rho_startup", lambda r: r.get("cap_depth_rho_startup"), LOWER, "diff", 0.05),
+    ("cap_fanout_rho", lambda r: r.get("cap_fanout_rho"), HIGHER, "diff", 0.05),
+    ("cap_hops_rho", lambda r: r.get("cap_hops_rho"), LOWER, "diff", 0.05),
+    ("seed_nbr_up_p50", lambda r: r.get("seed_nbr_up_p50"), HIGHER, "ratio", 0.10),
+    ("depth1_up_p50", lambda r: r.get("depth1_up_p50"), HIGHER, "ratio", 0.10),
+    ("top_seed_link_s", lambda r: r.get("top_seed_link_s"), LOWER, "ratio", 0.10),
+    ("lag_p99_ms_weak", lambda r: r.get("lag_p99_ms_weak"), LOWER, "ratio", 0.05),
+    ("seed_offers_per_min", lambda r: r.get("seed_offers_per_min"), None, "ratio", 0.10),
+    ("links_formed/min", lambda r: r.get("links_formed_per_host_min"), None, "ratio", 0.10),
+    ("pool_trials/min", lambda r: r.get("pool_trials_per_host_min"), None, "diff", 0.1),
+    ("pool_trial_wins", lambda r: r.get("pool_trial_wins"), None, "diff", 0.05),
+    ("rejoin_p90_ms", lambda r: r.get("rejoin_p90_ms"), LOWER, "ratio", 0.10),
+    # What a defector's lag is to an honest viewer's: under 1, defecting pays.
+    ("defector_gain", lambda r: r["lag_p99_ms_hostile"] / r["lag_p99_ms_honest"]
+     if r.get("lag_p99_ms_hostile") and r.get("lag_p99_ms_honest") else None, HIGHER, "ratio", 0.05),
     ("exch_rejected", lambda r: r.get("exch_rejected"), None, "diff", 1),
     ("rss_mb", lambda r: r.get("_rss_mb"), LOWER, "diff", 100),
     ("wall_s", lambda r: r.get("_wall_s"), LOWER, "ratio", 0.20),
@@ -837,10 +883,14 @@ def arm_score(cells, base_rows, arm_rows):
         if mark(better, kind, tie, effect(kind, pairs("delivery"))) == "-":
             broken.append(f"{c['name']} delivery")
         if ka == 0:
-            for name in ("lag_p99_ms", "startup_p99_ms"):
+            for name in ("lag_p99_ms", "startup_p99_ms", "lag_p99_ms_weak"):
                 e = effect("ratio", pairs(name))
                 if e is not None and e[1] > GUARD_RATIO:
                     broken.append(f"{c['name']} {name} x{e[0]:.2f}")
+        # Defecting must not come to pay more.
+        e = effect("ratio", pairs("defector_gain"))
+        if e is not None and e[2] < 1:
+            broken.append(f"{c['name']} defector_gain x{e[0]:.2f}")
     p99 = math.exp(sum(logs) / len(logs)) if logs else None
     return {"collapsed": kb_all, "base_collapsed": ka_all, "p99": p99, "broken": broken, "cells": cells_out}
 
@@ -1016,7 +1066,7 @@ def farm(a, cells):
     else:
         sha = git("rev-parse", a.ref)
         arms = {"x": sha}
-        values = ["off"] + [x.strip() for x in a.sets.split(";") if x.strip()]
+        values = ([] if a.no_off else ["off"]) + [x.strip() for x in a.sets.split(";") if x.strip()]
     knob = dict(zip((PPSPP, SIM), (k.strip() for k in a.knob.split(","))))
     seeds = [str(s) for s in range(a.first_seed, a.first_seed + a.seeds)]
     # Matrix names are the run's EC2 tag, joined: keep them short, and
@@ -1156,6 +1206,7 @@ def main():
     fc.add_argument("--all", action="store_true", help="every metric, ties too")
     fc.add_argument("--farm-args", default="", help="more arguments for farm.py run")
     fc.add_argument("--no-run", action="store_true", help="report the rows the farm has")
+    fc.add_argument("--no-off", action="store_true", help="run only the sets given, not `off` beside them")
     sc = sub.add_parser("score")
     sc.add_argument("a", metavar="RUN:ARM", help="the base: a farm run's name and one of its arms")
     sc.add_argument("b", metavar="RUN:ARM", help="the arm scored against it")
