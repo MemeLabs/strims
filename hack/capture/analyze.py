@@ -1115,7 +1115,7 @@ def holders(a):
     rows = load(a)
     spans = collections.defaultdict(list)
     for r in rows:
-        if r["node"] == a.node and r["type"] in ("HolderJoined", "HolderLeft"):
+        if r["node"] == a.node and r["type"] in ("HolderJoined", "HolderLeft") and "peer" in r:
             if r["type"] == "HolderJoined":
                 spans[r["peer"]].append([r["t"], None, None])
             elif spans[r["peer"]]:
