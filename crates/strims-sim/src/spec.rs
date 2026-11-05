@@ -487,6 +487,11 @@ pub struct Scenario {
     /// the same run, with every node holding its window of the stream.
     /// Changes no trace.
     pub stored_chunks: bool,
+    /// The network (an index into `networks`) every host publishes its
+    /// swarms on and finds their other hosts through ([`Scenario::organic`]):
+    /// transfer discovery's peer index searches, then a peer exchange to
+    /// each host found. `None`: the scenario's links are the topology.
+    pub discovery: Option<usize>,
 }
 
 /// The window model's segment: two packets, acknowledged as one, as a
@@ -560,6 +565,7 @@ impl Scenario {
             transfer_samples: false,
             tcp_segment: None,
             stored_chunks: false,
+            discovery: None,
         }
     }
 
@@ -619,22 +625,9 @@ impl Scenario {
     /// ([`HostSpec::rtc_stack`]; `None`, or none given, str0m over UDP).
     /// Returns the relay.
     pub fn over_webrtc(&mut self, stacks: &[Option<SctpProfile>]) -> HostIx {
-        let relay = if self.wan.is_some() {
-            self.host_at("signal", Site::new(City::NewYork, Access::Datacenter))
-        } else {
-            self.host("signal", None)
-        };
-        let net = self.network(NetworkSpec {
-            members: (0..self.hosts.len()).collect(),
-            binding: Binding::Auto,
-            port: SIGNAL_PORT,
-        });
+        let (relay, net) = self.signalling();
         for l in &mut self.links {
             l.transport = Transport::WebRtc(net);
-        }
-        if let Some(r) = self.hosts.get_mut(relay) {
-            r.max_peers = u32::try_from(relay).unwrap_or(u32::MAX).max(r.max_peers);
-            r.class = HostClass::Infra;
         }
         for h in 0..relay {
             if let Some(spec) = self.hosts.get_mut(h) {
@@ -645,6 +638,52 @@ impl Scenario {
             self.link(h, relay, Transport::Tcp);
         }
         relay
+    }
+
+    /// Adds the signalling relay: a host every other may link to (in WAN
+    /// mode, in a New York datacenter), with room for all of them, that no
+    /// swarm has, and the network of every host it carries peer exchanges
+    /// on. Returns the relay and the network.
+    fn signalling(&mut self) -> (HostIx, usize) {
+        let relay = if self.wan.is_some() {
+            self.host_at("signal", Site::new(City::NewYork, Access::Datacenter))
+        } else {
+            self.host("signal", None)
+        };
+        let net = self.network(NetworkSpec {
+            members: (0..self.hosts.len()).collect(),
+            binding: Binding::Auto,
+            port: SIGNAL_PORT,
+        });
+        if let Some(r) = self.hosts.get_mut(relay) {
+            r.max_peers = u32::try_from(relay).unwrap_or(u32::MAX).max(r.max_peers);
+            r.class = HostClass::Infra;
+        }
+        (relay, net)
+    }
+
+    /// The hosts make their swarms' links themselves, as deployed nodes
+    /// do: each keeps only its link to the signalling relay (added, over
+    /// TCP, where [`Scenario::over_webrtc`] didn't), publishes its swarms
+    /// on the relay's network and links to the hosts it finds there
+    /// ([`Scenario::discovery`]). The scenario's other links go. Peer
+    /// exchanges carry what a host can be reached by: WebRTC sessions, or
+    /// its listeners.
+    pub fn organic(&mut self) {
+        let signal = self.networks.iter().position(|n| n.port == SIGNAL_PORT);
+        let relay = self.hosts.iter().position(|h| h.class == HostClass::Infra);
+        let (relay, net) = match (relay, signal) {
+            (Some(r), Some(n)) => (r, n),
+            _ => {
+                let (r, n) = self.signalling();
+                for h in 0..r {
+                    self.link(h, r, Transport::Tcp);
+                }
+                (r, n)
+            }
+        };
+        self.links.retain(|l| l.to == relay || l.from == relay);
+        self.discovery = Some(net);
     }
 
     pub fn link(&mut self, from: HostIx, to: HostIx, transport: Transport) {

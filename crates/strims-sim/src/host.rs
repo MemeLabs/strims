@@ -16,15 +16,18 @@
 //! ([`MediaCodec`]), not its bytes.
 
 use std::cell::Cell;
+use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
-use futures_util::stream::{Empty, empty};
+use futures_util::Stream;
 use strims_node::app::{NodeTimer, PeerHandler, PeerServices};
 use strims_node::{
-    HostId, NetworkId, NetworkOptions, Node, NodeError, NodeEvent, NodeEvents, PeerInfo, ReadError,
-    SimClock, SwarmId, SwarmKey, SwarmReader, SwarmWriter, WriterOptions,
+    HostId, NetworkId, NetworkOptions, Node, NodeError, NodeEvent, NodeEvents,
+    PeerIndexPublisherId, PeerIndexSearch, PeerInfo, ReadError, SimClock, SwarmId, SwarmKey,
+    SwarmReader, SwarmWriter, WriterOptions,
 };
 use strims_ppspp::SwarmOptions;
 use strims_ppspp::store::ChunkBytes;
@@ -97,11 +100,18 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         spawn_local(publish(w.clone(), h, node.clone(), *net));
     }
 
+    let index = w
+        .spec
+        .discovery
+        .and_then(|n| nets.get(n).copied().flatten());
     let transfers = TransferControl::new(
-        SimTransferHost(node.clone()),
+        SimTransferHost {
+            node: node.clone(),
+            index,
+        },
         NodeTimer(SimClock::turmoil(epoch())),
         strims_transfer::Config {
-            discovery: false,
+            discovery: index.is_some(),
             ..strims_transfer::Config::default()
         },
     );
@@ -187,19 +197,39 @@ async fn publish(w: Rc<World>, h: HostIx, node: Node, net: NetworkId) {
 
 /// The node as the transfers' host. Transfers are published on one
 /// network, `()`: every linked peer, so every peer that adds a swarm runs
-/// it with every other linked peer that has it. Scenario topologies are
-/// fixed, so nothing is discovered.
-struct SimTransferHost(Node);
+/// it with every other linked peer that has it. With
+/// [`Scenario::discovery`](crate::Scenario), they are advertised and
+/// searched for in that vpn network's peer index (`index`), and hosts
+/// found there are linked by peer exchange; otherwise the scenario's
+/// topology is fixed and nothing is discovered.
+struct SimTransferHost {
+    node: Node,
+    index: Option<NetworkId>,
+}
+
+/// The hosts a peer index search finds; none without one.
+struct Found(Option<PeerIndexSearch>);
+
+impl Stream for Found {
+    type Item = HostId;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<HostId>> {
+        match &mut self.0 {
+            Some(s) => Pin::new(s).poll_next(cx).map(|h| h.map(|h| h.host_id)),
+            None => Poll::Ready(None),
+        }
+    }
+}
 
 impl strims_transfer::Host for SimTransferHost {
     type Network = ();
     type Swarm = SwarmKey;
-    type Publication = ();
-    type Search = Empty<HostId>;
+    type Publication = Option<PeerIndexPublisherId>;
+    type Search = Found;
     type Error = NodeError;
 
     fn host_id(&self) -> HostId {
-        self.0.host_id()
+        self.node.host_id()
     }
 
     async fn run_swarm(
@@ -209,35 +239,55 @@ impl strims_transfer::Host for SimTransferHost {
         channel: u64,
         peer_channel: u64,
     ) -> Result<(), NodeError> {
-        self.0.run_swarm(host, swarm, channel, peer_channel).await
+        self.node
+            .run_swarm(host, swarm, channel, peer_channel)
+            .await
     }
 
     async fn stop_swarm(&self, host: HostId, swarm: SwarmKey) -> Result<(), NodeError> {
-        match self.0.stop_swarm(host, swarm).await {
+        match self.node.stop_swarm(host, swarm).await {
             Err(NodeError::UnknownPeer) => Ok(()),
             r => r,
         }
     }
 
-    async fn index_publish(&self, _: (), _: Vec<u8>, _: Vec<u8>) -> Result<(), NodeError> {
-        Ok(())
-    }
-
-    async fn index_unpublish(&self, _: ()) -> Result<(), NodeError> {
-        Ok(())
-    }
-
-    async fn index_search(
+    async fn index_publish(
         &self,
         _: (),
-        _: Vec<u8>,
-        _: Vec<u8>,
-    ) -> Result<Empty<HostId>, NodeError> {
-        Ok(empty())
+        key: Vec<u8>,
+        salt: Vec<u8>,
+    ) -> Result<Option<PeerIndexPublisherId>, NodeError> {
+        match self.index {
+            Some(net) => self
+                .node
+                .peer_index_publish(net, key, salt, 0)
+                .await
+                .map(Some),
+            None => Ok(None),
+        }
     }
 
-    async fn connect_peer(&self, _: (), _: HostId) -> Result<bool, NodeError> {
-        Ok(false)
+    async fn index_unpublish(&self, p: Option<PeerIndexPublisherId>) -> Result<(), NodeError> {
+        match p {
+            Some(p) => self.node.peer_index_unpublish(p).await,
+            None => Ok(()),
+        }
+    }
+
+    async fn index_search(&self, _: (), key: Vec<u8>, salt: Vec<u8>) -> Result<Found, NodeError> {
+        match self.index {
+            Some(net) => Ok(Found(Some(
+                self.node.peer_index_search(net, key, salt).await?,
+            ))),
+            None => Ok(Found(None)),
+        }
+    }
+
+    async fn connect_peer(&self, _: (), host: HostId) -> Result<bool, NodeError> {
+        match self.index {
+            Some(net) => self.node.connect_peer(net, host).await,
+            None => Ok(false),
+        }
     }
 }
 

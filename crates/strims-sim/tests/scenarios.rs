@@ -217,6 +217,38 @@ fn live_mesh_hybrid() {
     );
 }
 
+// --- 1a. a mesh the hosts make themselves -----------------------------------
+
+/// The live mesh's hosts linked only to a signalling relay: they find each
+/// other through transfer discovery and link by peer exchange
+/// ([`Scenario::organic`]), each to every other.
+fn organic_mesh(seed: u64) -> Scenario {
+    let mut m = streaming(
+        "organic_mesh",
+        seed,
+        8,
+        (2048 * KIB, 1024 * KIB),
+        PushMode::Hybrid,
+        (3, 23),
+    );
+    m.s.organic();
+    m.s.invariants.progress = vec![(secs(8), secs(23))];
+    m.s
+}
+
+#[test]
+fn organic_mesh_forms() {
+    sweep("organic_mesh_forms", organic_mesh, |r| {
+        sound(r)?;
+        whole_stream(r)?;
+        // the seed, the 7 other viewers, and the relay
+        match r.link_counts() {
+            [9, 9] => Ok(()),
+            got => Err(format!("viewers hold {got:?} links at p50/p90, not 9")),
+        }
+    });
+}
+
 // --- 1b. a live encoder's stream signed early -------------------------------
 
 /// The live mesh's 8 viewers streaming `encoder`'s access units in 4 KiB

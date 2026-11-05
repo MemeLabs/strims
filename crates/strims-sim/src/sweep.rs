@@ -50,6 +50,9 @@
 //!   `firefox` or `str0m` (the window model's data channels, under
 //!   `STRIMS_SIM_TCP=1`), or `udp` (str0m over UDP). `off` changes
 //!   nothing.
+//! - `STRIMS_SIM_DISCOVERY=1` lets the hosts make their swarms' links
+//!   ([`Scenario::organic`]): each keeps only its link to the signalling
+//!   relay and finds the others through transfer discovery.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), so the row carries the run second by
 //!   second ([`Report::series`]).
@@ -314,6 +317,7 @@ fn sweep_seeds(
     let segment: Option<usize> = knob("STRIMS_SIM_TCP_SEGMENT");
     let media = media_knobs();
     let rtc = rtc_knob();
+    let organic = env("STRIMS_SIM_DISCOVERY").is_some_and(|s| s.trim() == "1");
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -375,6 +379,9 @@ fn sweep_seeds(
         }
         if let Some(stacks) = &rtc {
             spec.over_webrtc(stacks);
+        }
+        if organic {
+            spec.organic();
         }
         if let Some(dir) = &capture {
             let run = format!("seed-{seed}{replay}");
