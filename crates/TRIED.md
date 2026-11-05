@@ -442,5 +442,8 @@ cell of two swarms 0 -> 13. Closing the links that gave least
 (`pool-recip`): free riders on WAN cells still lag x0.72-0.96 of the honest
 viewers, and the honest viewers' lag rises. Shedding a relay's subscribers
 whose links hold their data back for 3 s (ppspp, local): one of six
-collapsed slow-viewer seeds recovered.
+collapsed slow-viewer seeds recovered. A request flight floor of 32 KiB
+once a swarm has taken data in for 10 s, in place of 128 KiB: the net tier
+28 -> 27, browsers 109 -> 112, robust 93 -> 94 (seeds 3001-3032), the slow
+viewer's cell 17 -> 16.
 
