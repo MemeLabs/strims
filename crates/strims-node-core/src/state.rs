@@ -379,6 +379,8 @@ pub(crate) struct State {
     rtc_draining: bool,
     /// The runner's capture, if the config asks for one.
     capture: Option<RunnerCapture>,
+    /// See [`NodeConfig::hostile_egress`].
+    hostile: Option<crate::config::HostileEgress>,
     /// When the capture last flushed, and last sampled the links.
     capture_flushed: Time,
     capture_sampled: Time,
@@ -509,6 +511,7 @@ impl State {
             rtc,
             rtc_draining: false,
             capture,
+            hostile: config.hostile_egress.clone(),
             capture_flushed: now,
             capture_sampled: Time::EPOCH,
         })
@@ -771,6 +774,7 @@ impl State {
                 peers,
                 metrics,
                 capture,
+                hostile,
                 ..
             } = self;
             vnic.poll_egress(now, &mut |f| match f.tag {
@@ -778,10 +782,13 @@ impl State {
                 Tag::Ppspp(pp) => {
                     let room = ppspp_frame(runner).min(f.body.len());
                     let (body, _) = f.body.split_at_mut(room);
-                    let len = match capture.as_mut() {
+                    let mut len = match capture.as_mut() {
                         Some(c) => c.poll_transmit(runner, pp, now, body),
                         None => runner.poll_transmit(pp, now, body),
                     };
+                    if let Some(h) = hostile {
+                        len = (h.0)(body, len).min(len);
+                    }
                     Fill {
                         len,
                         more: runner.wants_transmit(pp),
