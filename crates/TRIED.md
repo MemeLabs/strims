@@ -477,3 +477,11 @@ riders, local): the honest viewers' lag p99 3.35 -> 4.7 s; a free rider
 dropped links again elsewhere, and the churn cost more than its slot. Holding
 a silent peer's answers only while a queue stands, in place of an
 allowance: it still took 86 % of the stream between queues.
+
+**Challenging children for liars.** A relay asking each subscriber every 3 s
+for the newest chunk it announced, and counting it silent after two
+unanswered (local, seeds 3001-3016): liars lagged x4.6 of the honest viewers
+on thin-15-10 (x2.0 before) and x10.7 on wan-global-audience (x0.78), but a
+relay whose uplink fell to half the stream couldn't answer in time and its
+parent shed it (the ppspp sim's slow parent, lag p99 1.10 s against 1 s),
+and a liar that answers its parents' challenges alone passes them.

@@ -485,9 +485,10 @@ in `TRIED.md`.
     send lag x0.78 of the honest viewers at p99 on wan-global-audience. A
     relay pushes to a child that announces, and in hybrid seldom asks its
     children for anything, so the silence rule's unanswered requests never
-    reach a liar leaf. Decide whether a relay asks each child for a chunk
-    it announced now and then (a few kB a child every few seconds) and
-    counts it silent when none comes. Free riders, which announce nothing,
+    reach a liar leaf, and challenging children for a chunk they announced
+    catches congested honest relays and passes a liar that answers its
+    parents alone (TRIED): what a child serves its own neighbours shows
+    only in the reports. Free riders, which announce nothing,
     lag x3.0-5.6 of the honest viewers since the silence rule (c1ac5b5a).
   - Still missing from the sim: referrals on refusal and prune,
     squatters, sybil colluders, poisoners and whitewashers, and NAT,
