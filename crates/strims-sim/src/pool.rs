@@ -40,6 +40,10 @@
 //!   been hot for [`HOT_FOR`] (busy past [`HOT_BUSY`] and queued past
 //!   [`HOT_QUEUE`]), between [`D_LO`] and [`D_HI`]: links until the
 //!   uplink fills, from [`D_LO`]. `capN` caps it.
+//! - `pool-recip`, with `pool-evict`: the link closed past the budget is
+//!   the one whose peer gave the least stream data per second since it
+//!   came up, past the [`PROTECT`] that gave the most: a peer that serves
+//!   nothing back loses its links first wherever links are short.
 //! - `pool-copies`, with `pool-evict`'s: the budget steps a link at a time
 //!   (at most every [`COPIES_STEP`]) toward [`D_LO`] and
 //!   [`LINKS_PER_COPY`] for each copy of the stream the uplink carries:
@@ -132,6 +136,8 @@ pub struct PoolConfig {
     /// The budget, fixed or the most a control sets.
     pub budget: u32,
     pub evict: bool,
+    /// `pool-recip`: links are kept for what their peers gave.
+    pub recip: bool,
     pub control: Control,
 }
 
@@ -157,6 +163,7 @@ impl PoolConfig {
         (evict || exp.contains("pool-retry")).then_some(PoolConfig {
             budget,
             evict,
+            recip: exp.contains("pool-recip"),
             control,
         })
     }
@@ -179,6 +186,8 @@ struct LinkUse {
     written: u64,
     /// Per tick of the last [`USE_SPAN`]: data in and out.
     recent: Vec<(u64, u64)>,
+    /// Stream data in at the link's first tick.
+    first_read: Option<u64>,
     swarm: bool,
 }
 
@@ -189,6 +198,12 @@ impl LinkUse {
 
     fn took(&self) -> u64 {
         self.recent.iter().map(|&(_, w)| w).sum()
+    }
+
+    /// Stream data in since the link came up.
+    fn gave(&self) -> u64 {
+        self.read
+            .saturating_sub(self.first_read.unwrap_or(self.read))
     }
 }
 
@@ -362,6 +377,7 @@ impl Pool {
                 l.recent.remove(0);
             }
             (l.read, l.written) = (r, w);
+            l.first_read.get_or_insert(r);
             l.swarm = !p.channels.is_empty();
         }
         let mut wire = 0;
@@ -583,14 +599,31 @@ impl Pool {
             return None;
         }
         let mut protected: BTreeSet<HostId> = BTreeSet::new();
-        for key in [LinkUse::brought, LinkUse::took] {
+        let keys: &[fn(&LinkUse) -> u64] = if self.cfg.recip {
+            &[LinkUse::gave]
+        } else {
+            &[LinkUse::brought, LinkUse::took]
+        };
+        for key in keys {
             let mut by: Vec<&(&HostId, &LinkUse)> = swarm.iter().collect();
             by.sort_by_key(|(h, l)| (std::cmp::Reverse(key(l)), **h));
             protected.extend(by.iter().take(PROTECT).map(|(h, _)| **h));
         }
-        swarm
+        let old = |l: &LinkUse| now.saturating_sub(l.since) >= MIN_AGE;
+        let unprotected = swarm
             .iter()
-            .filter(|(h, l)| now.saturating_sub(l.since) >= MIN_AGE && !protected.contains(h))
+            .filter(|(h, l)| old(l) && !protected.contains(h));
+        if self.cfg.recip {
+            // What the peer gave, per second linked.
+            let rate = |l: &LinkUse| {
+                let secs = now.saturating_sub(l.since).as_secs().max(1);
+                l.gave() / secs
+            };
+            return unprotected
+                .min_by_key(|(h, l)| (rate(l), std::cmp::Reverse(l.since), **h))
+                .map(|(h, _)| **h);
+        }
+        unprotected
             .min_by_key(|(h, l)| (l.brought() + l.took(), std::cmp::Reverse(l.since), **h))
             .map(|(h, _)| **h)
     }
