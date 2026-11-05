@@ -110,9 +110,21 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         .is_browser(h)
         .then(|| w.spec.exp_browser_cap())
         .flatten();
+    let rate = w
+        .spec
+        .swarms
+        .iter()
+        .find(|s| s.seed == h)
+        .map_or(0.0, SwarmSpec::rate);
     let pool = index
         .zip(PoolConfig::from_flags(&w.spec.exp, cap))
-        .map(|(net, cfg)| Rc::new(Pool::new(node.clone(), net, cfg)));
+        .map(|(net, cfg)| {
+            let cfg = PoolConfig {
+                stream_rate: rate,
+                ..cfg
+            };
+            Rc::new(Pool::new(node.clone(), net, cfg))
+        });
     if let Some(p) = &pool {
         let p = p.clone();
         spawn_local(async move { p.run().await });

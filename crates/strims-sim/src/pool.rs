@@ -44,7 +44,9 @@
 //!   [`COPIES_SPAN`], where a viewer that forwards less than
 //!   [`LEAF_COPIES`] of the stream (a leaf, its uplink's measure no more
 //!   than what it was asked for) takes the top: links cost a leaf little
-//!   uplink.
+//!   uplink. A leaf that stays [`BEHIND`] its peers takes [`COPIES_MIN`]:
+//!   what it can take in is short. A seed takes [`SEED_LINKS`] and one for
+//!   each copy of its stream (whose rate it knows) its uplink carries.
 //! - `pool-recip`, with `pool-evict`: the link closed past the budget is
 //!   the one whose peer gave the least stream data per second since it
 //!   came up, past the [`PROTECT`] that gave the most: a peer that serves
@@ -81,8 +83,15 @@ pub const D_HI: u32 = 16;
 /// `pool-uplink`: swarm links per copy of the stream the uplink carries.
 pub const LINKS_PER_COPY: f64 = 2.0;
 /// `pool-role`: a viewer that sends less than this many copies of the
-/// stream it takes in is a leaf, and takes the top.
+/// stream it takes in is a leaf, and takes the top ...
 pub const LEAF_COPIES: f64 = 0.5;
+/// ... unless its first missing chunk has stayed this far behind the
+/// newest its peers announce, in time at the rate they announce at, for
+/// [`HOT_FOR`]: what it can take in, not its uplink, is short, and it
+/// takes [`COPIES_MIN`].
+pub const BEHIND: Duration = Duration::from_secs(3);
+/// `pool-role`: a seed's links over the copies its uplink carries.
+pub const SEED_LINKS: f64 = 2.0;
 /// `pool-copies`: the budget before the uplink is measured ...
 pub const COPIES_START: u32 = 9;
 /// ... the least it takes from the measure ...
@@ -140,13 +149,15 @@ pub enum Control {
 }
 
 /// The pool's policy, from the scenario's experiment flags.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PoolConfig {
     /// The budget, fixed or the most a control sets.
     pub budget: u32,
     pub evict: bool,
     /// `pool-recip`: links are kept for what their peers gave.
     pub recip: bool,
+    /// The rate a seed publishes at, which its publisher knows.
+    pub stream_rate: f64,
     pub control: Control,
 }
 
@@ -175,6 +186,7 @@ impl PoolConfig {
             budget,
             evict,
             recip: exp.contains("pool-recip"),
+            stream_rate: 0.0,
             control,
         })
     }
@@ -233,6 +245,11 @@ struct State {
     /// [`COPIES_SPAN`], and when the budget last stepped (`pool-copies`).
     capacity: Vec<u64>,
     stepped_at: Option<Duration>,
+    /// The newest chunk any peer announced, per tick of the last
+    /// [`USE_SPAN`], and the first the node misses (`pool-role`).
+    heads: Vec<(u64, u64)>,
+    /// Since when the node has been [`BEHIND`] its peers.
+    behind_since: Option<Duration>,
     /// When the node first had a swarm link, and last closed one starving.
     first_link: Option<Duration>,
     starved_at: Option<Duration>,
@@ -413,6 +430,25 @@ impl Pool {
             .any(|d| d >= HOT_QUEUE);
         st.ticks.push((queued, wire, data));
         st.seed = m.runner.swarms.iter().any(|s| s.publishers > 0);
+        if let Some(s) = m.runner.swarms.first()
+            && let Some(sch) = &s.scheduler
+        {
+            st.heads.push((sch.peer_max_have_bin.0, s.store.next.0));
+            if st.heads.len() > span {
+                st.heads.remove(0);
+            }
+            let first = st.heads.first().copied().unwrap_or_default();
+            let last = st.heads.last().copied().unwrap_or_default();
+            let secs = (st.heads.len().saturating_sub(1) as f64 * TICK.as_secs_f64()).max(1.0);
+            let per_sec = last.0.saturating_sub(first.0) as f64 / secs;
+            let gap = last.0.saturating_sub(last.1) as f64;
+            let behind = per_sec > 0.0 && gap / per_sec >= BEHIND.as_secs_f64();
+            st.behind_since = if behind {
+                st.behind_since.or(Some(sim_now()))
+            } else {
+                None
+            };
+        }
         if st.first_link.is_none() && st.links.values().any(|l| l.swarm) {
             st.first_link = Some(sim_now());
         }
@@ -487,7 +523,17 @@ impl Pool {
                     / ticks
                     / TICK.as_secs_f64();
                 let leaf = self.cfg.control == Control::Role && sent < LEAF_COPIES * rate;
-                let target = if st.seed || leaf {
+                let behind = st
+                    .behind_since
+                    .is_some_and(|t| now.saturating_sub(t) >= HOT_FOR);
+                let target = if self.cfg.control == Control::Role && st.seed {
+                    let copies = most as f64 / self.cfg.stream_rate.max(1.0);
+                    ((SEED_LINKS + copies) as u32).clamp(COPIES_MIN.min(top), top)
+                } else if st.seed {
+                    top
+                } else if leaf && behind {
+                    COPIES_MIN.min(top)
+                } else if leaf {
                     top
                 } else if most > 0 && rate > 0.0 {
                     let b = f64::from(D_LO) + LINKS_PER_COPY * most as f64 / rate;
