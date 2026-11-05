@@ -35,6 +35,14 @@
 //!   mode). vnic's queued bytes, which read the queue as it is rather than
 //!   its floor, are also scored against the wait at the moment
 //!   ([`QueueTruth`]).
+//! - **network construction**, over the honest viewers (every swarm's
+//!   viewers whose [`HostClass`] is honest) from [`NET_WARM`] on: their
+//!   link counts at each stats sample ([`Report::link_counts`]); the links
+//!   they made and lost per minute ([`Report::link_churn`]); and, in
+//!   rounds of one second of stats samples, the shares of them with no
+//!   honest neighbour (eclipsed: hostile and infrastructure hosts don't
+//!   count) and with no path to their swarm's seed through honest hosts
+//!   (cut off) ([`Report::eclipse`]).
 //! - **series** ([`Report::series`]): with transfer samples, a swarm's run
 //!   second by second from its stream's start to the run's end, for
 //!   `hack/capture/analyze.py`'s collapse verdicts: each viewer's lag and
@@ -46,11 +54,24 @@ use std::fmt::Write;
 use std::time::Duration;
 
 use crate::report::{Percentiles, Report};
-use crate::spec::HostIx;
+use crate::spec::{HostClass, HostIx};
 use crate::stats::MeterSample;
 
 /// Tree depth counts from this long after a stream starts.
 const DEPTH_WARM: Duration = Duration::from_secs(10);
+/// The network measures start this long into the run, once the first
+/// links had their time to form.
+pub const NET_WARM: Duration = Duration::from_secs(10);
+/// The row's peer exchange columns, by `ExchangeOutcome` name.
+const EXCHANGE_COLS: [(&str, &str); 7] = [
+    ("exch_connected", "Connected"),
+    ("exch_remote_connected", "RemoteConnected"),
+    ("exch_answered", "Answered"),
+    ("exch_rejected", "Rejected"),
+    ("exch_not_connected", "NotConnected"),
+    ("exch_failed", "Failed"),
+    ("exch_timed_out", "TimedOut"),
+];
 
 /// The width of the stream-time buckets.
 pub const BUCKET: Duration = Duration::from_secs(30);
@@ -107,6 +128,30 @@ pub struct Roles {
 }
 
 /// p10, p50 and p90 of `v` (0 when empty), which is sorted.
+/// Which hosts reach `from` through honest hosts over the round's links
+/// `g` (by host: its neighbours), `from` and the end host aside.
+fn honest_reach(g: &[Vec<HostIx>], honest: &[bool], from: HostIx) -> Vec<bool> {
+    let mut seen = vec![false; g.len()];
+    let mut queue = vec![from];
+    if let Some(s) = seen.get_mut(from) {
+        *s = true;
+    }
+    while let Some(h) = queue.pop() {
+        if h != from && !honest.get(h).copied().unwrap_or(false) {
+            continue;
+        }
+        for &x in g.get(h).into_iter().flatten() {
+            if let Some(s) = seen.get_mut(x)
+                && !*s
+            {
+                *s = true;
+                queue.push(x);
+            }
+        }
+    }
+    seen
+}
+
 fn deciles(v: &mut [f64]) -> [f64; 3] {
     v.sort_by(f64::total_cmp);
     let at = |q: f64| {
@@ -855,11 +900,150 @@ impl Report {
             .int("timeouts", c.timeouts)
             .num("sim_secs", self.sim_secs)
             .num("wall_secs", self.wall_secs);
+        let [links_p50, links_p90] = self.link_counts();
+        let [formed, dropped] = self.link_churn();
+        let [eclipsed, cut] = self.eclipse();
+        j.int("links_p50", links_p50)
+            .int("links_p90", links_p90)
+            .num("links_formed_per_host_min", formed)
+            .num("links_dropped_per_host_min", dropped)
+            .num("eclipsed_share", eclipsed)
+            .num("cut_from_seed_share", cut);
+        for (key, outcome) in EXCHANGE_COLS {
+            j.int(key, self.exchanges_ended(outcome));
+        }
         self.media_cols(swarm, &mut j);
         if let Some(series) = self.series(swarm) {
             j.field("series", format_args!("{series}"));
         }
         j.finish()
+    }
+
+    /// Every swarm's viewers that are honest, each once.
+    pub fn honest_viewers(&self) -> Vec<HostIx> {
+        let mut v: Vec<HostIx> = self
+            .scenario
+            .swarms
+            .iter()
+            .flat_map(|s| s.viewers.iter().copied())
+            .filter(|&h| self.class(h) == HostClass::Honest)
+            .collect();
+        v.sort_unstable();
+        v.dedup();
+        v
+    }
+
+    fn class(&self, h: HostIx) -> HostClass {
+        self.scenario
+            .hosts
+            .get(h)
+            .map_or(HostClass::Infra, |s| s.class)
+    }
+
+    /// p50 and p90 of the honest viewers' link counts over their stats
+    /// samples from [`NET_WARM`] on.
+    pub fn link_counts(&self) -> [u64; 2] {
+        let mut v: Vec<u64> = self
+            .honest_viewers()
+            .into_iter()
+            .filter_map(|h| self.hosts.get(h))
+            .flat_map(|r| r.neighbours.iter())
+            .filter(|(t, _)| *t >= NET_WARM)
+            .map(|(_, ns)| ns.len() as u64)
+            .collect();
+        v.sort_unstable();
+        let at = |q: f64| {
+            let i = ((v.len() as f64 - 1.0) * q).round() as usize;
+            v.get(i).copied().unwrap_or(0)
+        };
+        [at(0.5), at(0.9)]
+    }
+
+    /// Links the honest viewers made and lost, per viewer-minute of run.
+    pub fn link_churn(&self) -> [f64; 2] {
+        let viewers = self.honest_viewers();
+        let minutes = viewers.len() as f64 * self.scenario.duration.as_secs_f64() / 60.0;
+        let (mut added, mut removed) = (0, 0);
+        for r in viewers.iter().filter_map(|&h| self.hosts.get(h)) {
+            added += r.peers_added;
+            removed += r.peers_removed;
+        }
+        if minutes <= 0.0 {
+            return [0.0; 2];
+        }
+        [added as f64 / minutes, removed as f64 / minutes]
+    }
+
+    /// Over the honest viewers' stats samples from [`NET_WARM`] on, in
+    /// rounds of a second: the share with no honest neighbour, and the
+    /// share with no path to their swarm's seed through honest hosts. A
+    /// link counts in a round when either end reported it.
+    pub fn eclipse(&self) -> [f64; 2] {
+        let n = self.hosts.len();
+        let honest: Vec<bool> = (0..n).map(|h| self.class(h) == HostClass::Honest).collect();
+        let mut rounds: BTreeMap<u64, Vec<Vec<HostIx>>> = BTreeMap::new();
+        for (h, r) in self.hosts.iter().enumerate() {
+            for (t, ns) in &r.neighbours {
+                if *t < NET_WARM {
+                    continue;
+                }
+                let g = rounds
+                    .entry(t.as_secs())
+                    .or_insert_with(|| vec![Vec::new(); n]);
+                for &x in ns {
+                    if let Some(e) = g.get_mut(h) {
+                        e.push(x);
+                    }
+                    if let Some(e) = g.get_mut(x) {
+                        e.push(h);
+                    }
+                }
+            }
+        }
+        let viewers: Vec<(HostIx, HostIx)> = self
+            .scenario
+            .swarms
+            .iter()
+            .flat_map(|s| s.viewers.iter().map(move |&v| (v, s.seed)))
+            .filter(|&(v, _)| honest.get(v).copied().unwrap_or(false))
+            .collect();
+        let (mut samples, mut eclipsed, mut cut) = (0u64, 0u64, 0u64);
+        for g in rounds.values() {
+            let mut reach: BTreeMap<HostIx, Vec<bool>> = BTreeMap::new();
+            for &(v, seed) in &viewers {
+                let Some(ns) = g.get(v) else {
+                    continue;
+                };
+                if ns.is_empty() {
+                    continue;
+                }
+                samples += 1;
+                let honest_of = |x: &HostIx| honest.get(*x).copied().unwrap_or(false);
+                if !ns.iter().any(honest_of) {
+                    eclipsed += 1;
+                }
+                let r = reach
+                    .entry(seed)
+                    .or_insert_with(|| honest_reach(g, &honest, seed));
+                if !r.get(v).copied().unwrap_or(false) {
+                    cut += 1;
+                }
+            }
+        }
+        if samples == 0 {
+            return [0.0; 2];
+        }
+        let s = samples as f64;
+        [eclipsed as f64 / s, cut as f64 / s]
+    }
+
+    /// The honest viewers' peer exchanges that ended so.
+    pub fn exchanges_ended(&self, outcome: &str) -> u64 {
+        self.honest_viewers()
+            .into_iter()
+            .filter_map(|h| self.hosts.get(h))
+            .filter_map(|r| r.exchange_outcomes.get(outcome))
+            .sum()
     }
 
     /// The push trees' depth over the viewers' (viewer, stream) pairs,
@@ -1303,6 +1487,47 @@ mod tests {
             violations: Vec::new(),
             wan: None,
         }
+    }
+
+    /// A seed (0), three honest viewers (1-3) and a hostile host (4), each
+    /// reporting `links` (by host) at every second from 10 s to 19 s.
+    fn linked(links: [&[HostIx]; 5]) -> Report {
+        let mut s = Scenario::new("net");
+        let hosts: Vec<HostIx> = (0..5).map(|i| s.host(&format!("h{i}"), None)).collect();
+        s.hosts[4].class = HostClass::Hostile("test");
+        s.swarm(SwarmSpec::live(
+            hosts[0],
+            vec![1, 2, 3, 4],
+            1024,
+            Duration::ZERO,
+            Duration::from_secs(20),
+        ));
+        let mut r = seed_reading(|_| 0);
+        r.scenario = s;
+        r.hosts = links
+            .iter()
+            .map(|ns| HostReport {
+                neighbours: (10..20)
+                    .map(|t| (Duration::from_secs(t), ns.to_vec()))
+                    .collect(),
+                ..HostReport::default()
+            })
+            .collect();
+        r
+    }
+
+    #[test]
+    fn eclipse_counts_viewers_cut_off_by_hostile_hosts() {
+        // 1 links the seed and 2; 3 has only the hostile host, through
+        // which 2's path would go too: 3 is eclipsed, and cut off.
+        let r = linked([&[1], &[0, 2], &[1, 4], &[4], &[2, 3]]);
+        let [eclipsed, cut] = r.eclipse();
+        assert!((eclipsed - 1.0 / 3.0).abs() < 1e-9, "{eclipsed}");
+        assert!((cut - 1.0 / 3.0).abs() < 1e-9, "{cut}");
+        assert_eq!(r.link_counts(), [2, 2]);
+        // Links reported by one end count for both.
+        let r = linked([&[], &[0], &[1], &[2], &[]]);
+        assert_eq!(r.eclipse(), [0.0, 0.0]);
     }
 
     #[test]

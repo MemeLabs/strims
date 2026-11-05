@@ -36,10 +36,24 @@ pub enum Transport {
     WebRtc(usize),
 }
 
+/// What a host is in a run, for the measures that split hosts by it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HostClass {
+    /// A node that follows the protocol.
+    #[default]
+    Honest,
+    /// A node the scenario adds to carry others' signalling (the
+    /// signalling relay): no swarm's.
+    Infra,
+    /// A node that departs from the protocol, by kind.
+    Hostile(&'static str),
+}
+
 /// One host.
 #[derive(Clone, Debug)]
 pub struct HostSpec {
     pub name: String,
+    pub class: HostClass,
     /// The upload cap in bytes per second (`NodeConfig::rate_limit`).
     /// Turmoil models no bandwidth, so outside WAN mode this is the host's
     /// only rate limit.
@@ -553,6 +567,7 @@ impl Scenario {
     pub fn host(&mut self, name: &str, uplink: Option<u64>) -> HostIx {
         self.hosts.push(HostSpec {
             name: name.to_owned(),
+            class: HostClass::Honest,
             uplink,
             upload_capacity: None,
             max_peers: 64,
@@ -619,6 +634,7 @@ impl Scenario {
         }
         if let Some(r) = self.hosts.get_mut(relay) {
             r.max_peers = u32::try_from(relay).unwrap_or(u32::MAX).max(r.max_peers);
+            r.class = HostClass::Infra;
         }
         for h in 0..relay {
             if let Some(spec) = self.hosts.get_mut(h) {

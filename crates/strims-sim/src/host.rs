@@ -277,6 +277,7 @@ async fn event_task(
         services.handle_event(&e).await;
         match e {
             NodeEvent::PeerAdded(p) => {
+                w.peer_changed(h, true);
                 let peer = w.ix_of(&p.host_id);
                 let dir = if p.dialed { "to" } else { "from" };
                 w.log(&me, format!("peer+ {dir} {} {:?}", w.label(peer), p.kind));
@@ -298,6 +299,7 @@ async fn event_task(
                 }
             }
             NodeEvent::PeerRemoved { host_id } => {
+                w.peer_changed(h, false);
                 w.log(&me, format!("peer- {}", w.label(w.ix_of(&host_id))));
             }
             NodeEvent::Message(d) => {

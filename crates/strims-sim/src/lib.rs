@@ -132,8 +132,8 @@ pub use report::{
 };
 pub use run::run;
 pub use spec::{
-    Binding, Competing, Fault, HostIx, HostSpec, Invariants, LinkSpec, MediaSpec, NetworkSpec,
-    Scenario, SendBuffer, SwarmSpec, Transport, VpnProbes,
+    Binding, Competing, Fault, HostClass, HostIx, HostSpec, Invariants, LinkSpec, MediaSpec,
+    NetworkSpec, Scenario, SendBuffer, SwarmSpec, Transport, VpnProbes,
 };
 pub use stats::{Peaks, PeerTransfer, RunnerReport, SwarmCounters, TransferSample};
 pub use sweep::{knob, seeds, stream_minutes, sweep, sweep_at, sweep_from, sweep_n};

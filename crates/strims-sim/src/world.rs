@@ -79,6 +79,8 @@ pub(crate) struct HostState {
     pub net_peers: BTreeMap<usize, u32>,
     /// Peer exchanges that ended, by the other host.
     pub exchanges: BTreeMap<HostIx, u32>,
+    /// See [`HostReport::neighbours`].
+    pub neighbours: Vec<(Duration, Vec<HostIx>)>,
     /// The node's key for each scenario swarm it takes part in.
     pub swarms: Vec<Option<SwarmKey>>,
     /// Links (indexes into `Scenario::links`) being dialed.
@@ -115,6 +117,7 @@ impl HostState {
         }
         r.runner = self.stats.report();
         r.transfers = self.transfers.clone();
+        r.neighbours = self.neighbours.clone();
         r
     }
 
@@ -729,9 +732,30 @@ impl World {
         let name = name.split('(').next().unwrap_or_default();
         self.record(|st| {
             *st.vpn.exchange_outcomes.entry(name.to_owned()).or_default() += 1;
-            if let (Some(hs), Some(x)) = (st.hosts.get_mut(h), with) {
+            let Some(hs) = st.hosts.get_mut(h) else {
+                return;
+            };
+            *hs.totals
+                .exchange_outcomes
+                .entry(name.to_owned())
+                .or_default() += 1;
+            if let Some(x) = with {
                 let c = hs.exchanges.entry(x).or_default();
                 *c = c.wrapping_add(1);
+            }
+        });
+    }
+
+    /// `h` made a link (`added`) or lost one.
+    pub fn peer_changed(&self, h: HostIx, added: bool) {
+        self.record(|st| {
+            if let Some(hs) = st.hosts.get_mut(h) {
+                let c = if added {
+                    &mut hs.totals.peers_added
+                } else {
+                    &mut hs.totals.peers_removed
+                };
+                *c += 1;
             }
         });
     }
@@ -800,6 +824,11 @@ impl World {
             };
             let swarms = std::mem::take(&mut hs.swarms);
             let g = hs.stats.observe(m, &swarms, sim_now());
+            let linked = m.links.iter().filter_map(|l| l.host_id);
+            let mut ns: Vec<HostIx> = linked.filter_map(|id| st.ids.get(&id).copied()).collect();
+            ns.sort_unstable();
+            ns.dedup();
+            hs.neighbours.push((sim_now(), ns));
             if self.spec.transfer_samples {
                 for (s, key) in swarms.iter().enumerate() {
                     let index = |id: &HostId| st.ids.get(id).copied();

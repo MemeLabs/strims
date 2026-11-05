@@ -110,6 +110,14 @@ pub struct HostReport {
     pub loop_iterations: u64,
     /// Links at the last sample.
     pub links: usize,
+    /// At every stats sample (time since the start), the hosts the node
+    /// had linked, every incarnation.
+    pub neighbours: Vec<(std::time::Duration, Vec<HostIx>)>,
+    /// Links the node made and lost (`NodeEvent::PeerAdded`/`PeerRemoved`).
+    pub peers_added: u64,
+    pub peers_removed: u64,
+    /// How its peer exchanges ended, either side (`ExchangeOutcome` names).
+    pub exchange_outcomes: BTreeMap<String, u64>,
     pub vpn_messages_relayed: u64,
     pub vpn_link_queue_full: u64,
     /// Peer index and hash table records vpn pushed to new links
