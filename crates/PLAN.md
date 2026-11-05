@@ -472,14 +472,22 @@ in `TRIED.md`.
     four links and two per stream copy their median measured uplink
     carries, leaves sixteen, seeds two and one per copy, a leaf 3 s
     behind six), with eviction past the budget, the starving rule and
-    sampled index answers: the `net` tier collapses 23 of 672 with the
-    ppspp request cap and bounded seed reading (99 with today's
-    discovery), lag p99 x0.92 of that.
-  - What still collapses there: the slow viewer's cell (12 of 32: relays
-    on LTE or Starlink uplinks saturate, every link blocks and closes at
-    once, then their WebRTC dials time out), super-peer-varying's
-    competing uploads (4), and single runs of the halving, step and WAN
-    cells.
+    sampled index answers: the `net` tier collapses 9 of 672 at seeds
+    3001-3032 and 8 at 3033-3064 (99 with today's discovery).
+  - What still collapses there is, but for one run, a lag ramp the
+    verdict counts: every run delivers the whole stream, lag p99 1.2-1.9
+    s, no viewer stalls past a second, while the median 10 s delivery
+    stays under 95 % for 8 s as the viewers fall 1-1.5 s behind and catch
+    up (halve-31-20 at its halving, super-peer-varying's competing
+    uploads, single step and TCP runs). Decide whether the verdict should
+    count a ramp that stays under 3 s.
+  - super-peer-varying's seed 3007 collapses (lag p99 3.9 s): its seed's
+    first nine links went to whoever asked, four of them on LTE, and the
+    super-peer, its nine links full by 2.6 s, never searched its way to
+    the seed until 33 s. Peers with spare capacity should find their way
+    toward the source: a seed's index record signed with the swarm's key
+    would let a node verify which holder publishes, without trusting a
+    claim.
   - Defecting pays: a fifth of the viewers free riders lag x0.72-0.91 of
     the honest viewers at p99 on the WAN cells (the honest still serve
     them, and they spend no uplink), more under nine peers with
