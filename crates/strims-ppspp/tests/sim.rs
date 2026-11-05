@@ -3069,6 +3069,7 @@ impl Sim {
                         match why {
                             strims_ppspp::Shed::Saturated { .. } => "saturated",
                             strims_ppspp::Shed::SeedBudget { .. } => "seed budget",
+                            strims_ppspp::Shed::Silent => "silent",
                         }
                     )),
                     _ => None,

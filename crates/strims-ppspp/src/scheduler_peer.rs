@@ -702,6 +702,14 @@ pub(crate) struct PeerChannelScheduler {
     ping_nonce: u64,
     /// Until then a hybrid frame's HAVEs go to the peer at once.
     eager_haves_until: Time,
+    /// The first chunk we sent the peer since it last announced one or
+    /// sent one valid ([`push::SILENT`]); `NIL` while none went ...
+    pub(crate) quiet_since: Time,
+    /// ... and the first chunk we asked it for since it last sent one
+    /// valid, whatever it announced, and the requests to it that timed out
+    /// since.
+    pub(crate) asked_since: Time,
+    pub(crate) unanswered: u32,
 
     /// Scratch for `write1`. Bound: one frame of requests plus a request
     /// group per lane (live and backlog), and [`CANDIDATE_CAPACITY`]
@@ -746,6 +754,9 @@ impl PeerChannelScheduler {
             next_ping_time: Time::EPOCH,
             ping_nonce: 0,
             eager_haves_until: now + EAGER_HAVES_AFTER_OPEN,
+            quiet_since: Time::NIL,
+            asked_since: Time::NIL,
+            unanswered: 0,
             candidate_bins: Vec::new(),
             push: s.push.as_ref().map(|_| PushChannel::new(streams)),
         }
@@ -837,6 +848,7 @@ impl PeerChannelScheduler {
                 self.request_times.unset(x);
                 self.cancel_bins.set(x);
                 self.backoff_bins.set(x);
+                self.unanswered = self.unanswered.saturating_add(1);
                 n += 1;
             }
             // Requests are single chunks; anything left with a request
@@ -1256,6 +1268,9 @@ impl PeerChannelScheduler {
             s.request_bins.set(b);
             self.request_times.set(b, now);
             self.request_bins.push(b, timeout);
+            if self.asked_since.is_nil() {
+                self.asked_since = now;
+            }
             self.controller
                 .on_sent(now, (b.base_length() as i64).saturating_mul(size));
             requested += 1;
@@ -2026,6 +2041,11 @@ impl PeerSwarmScheduler {
         let Some((s, c)) = self.channel(peer) else {
             return;
         };
+        if valid {
+            c.quiet_since = Time::NIL;
+            c.asked_since = Time::NIL;
+            c.unanswered = 0;
+        }
         if !valid {
             if crate::peer_bin_ok(b, s.window)
                 && b.base_left() >= window_start
@@ -2146,6 +2166,7 @@ impl PeerSwarmScheduler {
             c.enqueue_now = true;
         }
 
+        c.quiet_since = Time::NIL;
         c.peer_have_bins.set(b);
         c.known_bins.set(b);
         if new_max > c.peer_max_have_bin || b.base_left() < lo {
@@ -2580,6 +2601,9 @@ impl PeerSwarmScheduler {
                 };
                 match write_bin(swarm, b, known, now, cw) {
                     Ok(()) => {
+                        if c.quiet_since.is_nil() {
+                            c.quiet_since = now;
+                        }
                         c.known_bins.set(b);
                         c.known_bins
                             .reset_before(s.history_start(b.base_right()).min(b.base_left()));
@@ -2635,6 +2659,7 @@ impl PeerSwarmScheduler {
             peer_have_map_size: map_size(&c.peer_have_bins),
             have_map_size: map_size(&c.have_bins),
             cancel_map_size: map_size(&c.cancel_bins),
+            silent: false,
         })
     }
 
@@ -2717,6 +2742,8 @@ pub struct ChannelSchedulerStats {
     pub peer_have_map_size: usize,
     pub have_map_size: usize,
     pub cancel_map_size: usize,
+    /// The peer is silent ([`push::SILENT`]): it takes no push from us.
+    pub silent: bool,
 }
 
 /// Scheduler state of a swarm, for diagnostics and tests.

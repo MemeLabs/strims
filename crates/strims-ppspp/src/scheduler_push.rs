@@ -106,7 +106,11 @@
 //!   Before the upload is measured, [`UNMEASURED_FANOUT`] subscribers per
 //!   interior stream and no others. A subscriber costs our store rate per
 //!   stream times [`PUSH_OVERHEAD`]. A repeat from a subscriber is always
-//!   accepted; a declined request is answered with STREAM_CLOSE.
+//!   accepted; a declined request is answered with STREAM_CLOSE. A peer
+//!   that announced nothing and sent nothing valid for [`SILENT`] is
+//!   declined, at a seed too, and its subscriptions close: a free rider
+//!   that keeps its uplink to itself pulls what it wants, behind every
+//!   push.
 //! - **Shedding.** While the uplink is busy [`SHED_UTILIZATION`] of the time,
 //!   at most once per [`SHED_INTERVAL`], enough subscribers are closed to
 //!   bring the committed push under the interior target: extra streams
@@ -315,6 +319,16 @@ pub(crate) const SATURATED_BUSY: f64 = 0.5;
 pub const SHED_UTILIZATION: f64 = 0.9;
 /// ... at most this often.
 pub const SHED_INTERVAL: Duration = Duration::SECOND;
+/// How long a peer may announce nothing and send nothing valid, from the
+/// first chunk we sent it since it last did, before it takes no push from
+/// us: a viewer announces what it receives, so one that doesn't gives
+/// nothing back. A viewer that has received nothing has nothing to
+/// announce, and isn't silent.
+pub const SILENT: Duration = Duration::from_secs(5);
+/// The requests that time out within [`SILENT`] of the first, with no
+/// valid chunk from the peer, that make an announcing peer silent: one
+/// that announces what it never sends.
+pub const SILENT_UNANSWERED: u32 = 8;
 /// A non-seed node whose interior stream has had no subscribers this long
 /// lets another stream claim it.
 pub const INTERIOR_IDLE: Duration = Duration::from_secs(10);
@@ -1516,13 +1530,14 @@ impl PeerSwarmScheduler {
         if !self.s.hybrid() {
             return (true, false);
         }
-        let granted = (self.adaptive_seed()
-            && !self
-                .s
-                .streams
-                .get(usize::from(stream))
-                .is_some_and(|st| st.subscribers.iter().any(|x| x.channel == peer)))
-        .then(|| self.grant(peer, stream, now));
+        let subscribed = self
+            .s
+            .streams
+            .get(usize::from(stream))
+            .is_some_and(|st| st.subscribers.iter().any(|x| x.channel == peer));
+        let silent = !subscribed && self.silent(peer, now);
+        let granted =
+            (self.adaptive_seed() && !subscribed && !silent).then(|| self.grant(peer, stream, now));
         let rate = self.s.stream_rate(now);
         let children = self.s.children();
         let s = &mut self.s;
@@ -1548,6 +1563,8 @@ impl PeerSwarmScheduler {
         };
         let (ok, rule) = if already {
             (true, AdmitRule::Subscribed)
+        } else if silent {
+            (false, AdmitRule::Silent)
         } else {
             match (pinned.or(granted.map(|g| g.ok)), p.upload.relay_capacity()) {
                 (Some(ok), _) => (
@@ -1600,6 +1617,42 @@ impl PeerSwarmScheduler {
         p.stats.rejected = p.stats.rejected.saturating_add(1);
         self.close_subscriber(peer, stream, q);
         (false, extra)
+    }
+
+    /// Whether `peer` has announced nothing and sent nothing valid for
+    /// [`SILENT`] since we first sent it a chunk, or sent nothing valid for
+    /// as long since we first asked it for one, [`SILENT_UNANSWERED`] of
+    /// our requests timing out meanwhile: it takes no push from us.
+    pub(crate) fn silent(&self, peer: PeerKey, now: Time) -> bool {
+        let quiet = |t: Time| !t.is_nil() && now - t >= SILENT;
+        self.channels.get(&peer).is_some_and(|c| {
+            quiet(c.quiet_since) || (quiet(c.asked_since) && c.unanswered >= SILENT_UNANSWERED)
+        })
+    }
+
+    /// Whether `peer` has a channel in the swarm that isn't
+    /// [`silent`](Self::silent).
+    pub(crate) fn heard(&self, peer: PeerKey, now: Time) -> bool {
+        self.channels.contains_key(&peer) && !self.silent(peer, now)
+    }
+
+    /// Closes the subscriptions of the peers gone [`silent`](Self::silent).
+    fn close_silent(&mut self, now: Time, q: &mut impl PeerTaskQueue) {
+        let mut gone: Vec<(PeerKey, Stream)> = Vec::new();
+        for (i, st) in self.s.streams.iter().enumerate() {
+            for sub in &st.subscribers {
+                if self.silent(sub.channel, now) {
+                    gone.push((sub.channel, i as Stream));
+                }
+            }
+        }
+        for (peer, stream) in gone {
+            self.s.tap.emit(self.s.key, Some(peer), || TapKind::Shed {
+                stream,
+                why: Shed::Silent,
+            });
+            self.close_subscriber(peer, stream, q);
+        }
     }
 
     /// Ends `peer`'s subscription to `stream`, if any, with a STREAM_CLOSE.
@@ -2009,6 +2062,7 @@ impl PeerSwarmScheduler {
         if !self.s.hybrid() {
             return;
         }
+        self.close_silent(now, q);
         if self.adaptive_seed() {
             self.ramp_first_wave(now);
             self.answer_deferred(now, q);

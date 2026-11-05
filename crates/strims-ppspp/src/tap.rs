@@ -284,6 +284,9 @@ pub enum AdmitRule {
     /// The upload rate or the committed push rate, whichever is higher,
     /// plus a subscriber, against the capacity at the target.
     Measured,
+    /// The peer announced nothing and sent nothing valid for
+    /// [`SILENT`](crate::scheduler_peer::push::SILENT).
+    Silent,
 }
 
 /// What a decision on a child's request compared.
@@ -333,6 +336,9 @@ pub enum Shed {
     /// behind and the neighbour that took some of its streams: the peer
     /// closed keeps `room` streams.
     SeedBudget { room: u64 },
+    /// The peer went silent
+    /// ([`SILENT`](crate::scheduler_peer::push::SILENT)).
+    Silent,
 }
 
 /// The rule that pruned a parent. The numbers are the subscription's when

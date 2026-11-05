@@ -33,9 +33,9 @@
 //! | 14 | `OpenTimeout` | stream, waited |
 //! | 15 | `Declined` | stream |
 //! | 16 | `ShedBy` | stream |
-//! | 17 | `Admitted` | stream, rule (`subscribed`, `pin`, `seed_holder`, `seed_barred`, `seed_no_copy`, `seed_streams_held`, `unmeasured`, `measured`), extra, upload_rate, committed, others, stream_rate, capacity, target (thousandths), stream_children, holders, copies, held, per_holder |
+//! | 17 | `Admitted` | stream, rule (`subscribed`, `pin`, `seed_holder`, `seed_barred`, `seed_no_copy`, `seed_streams_held`, `unmeasured`, `measured`, `silent`), extra, upload_rate, committed, others, stream_rate, capacity, target (thousandths), stream_children, holders, copies, held, per_holder |
 //! | 18 | `Rejected` | as `Admitted` |
-//! | 19 | `Shed` | stream, cause (`saturated`, `seed_budget`), busy (thousandths), committed, others, capacity, excess, count, room |
+//! | 19 | `Shed` | stream, cause (`saturated`, `seed_budget`, `silent`), busy (thousandths), committed, others, capacity, excess, count, room |
 //! | 20 | `HolderJoined` | |
 //! | 21 | `HolderLeft` | why (`silent`, `unserved`, `past_copies`, `idle`, `closed`), copies, rtt |
 //! | 22 | `SeedBudget` | budget, copies, streams, capacity, stream_rate, others |
@@ -175,6 +175,7 @@ const ADMIT_RULES: &[&str] = &[
     "seed_streams_held",
     "unmeasured",
     "measured",
+    "silent",
 ];
 const ADMISSION: &[Field] = &[
     num("stream"),
@@ -261,7 +262,7 @@ pub const TAP_KINDS: &[KindInfo] = &[
         "Shed",
         &[
             num("stream"),
-            named("cause", &["saturated", "seed_budget"]),
+            named("cause", &["saturated", "seed_budget", "silent"]),
             num("busy"),
             num("committed"),
             num("others"),
@@ -835,6 +836,7 @@ fn tap_record(
             AdmitRule::SeedStreamsHeld => 5,
             AdmitRule::Unmeasured => 6,
             AdmitRule::Measured => 7,
+            AdmitRule::Silent => 8,
         };
         r(
             code,
@@ -951,6 +953,7 @@ fn tap_record(
                 ],
             ),
             Shed::SeedBudget { room } => r(19, &[s(stream), 1, 0, 0, 0, 0, 0, 0, n(room)]),
+            Shed::Silent => r(19, &[s(stream), 2, 0, 0, 0, 0, 0, 0, 0]),
         },
         TapKind::HolderJoined => r(20, &[]),
         TapKind::HolderLeft { why, copies, rtt } => {

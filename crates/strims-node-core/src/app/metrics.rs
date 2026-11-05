@@ -626,6 +626,7 @@ fn channel_scheduler(s: ChannelSchedulerStats) -> v1::ChannelSchedulerStats {
         peer_have_map_size,
         have_map_size,
         cancel_map_size,
+        silent: _,
     } = s;
     v1::ChannelSchedulerStats {
         handshake_received,
@@ -1180,6 +1181,7 @@ mod tests {
             peer_have_map_size: 7,
             have_map_size: 8,
             cancel_map_size: 9,
+            silent: false,
         }
     }
 

@@ -283,6 +283,13 @@ const HELD_SPAN: Duration = Duration::from_millis(500);
 /// ([`UploadInfo::latest_floor`]).
 const LATEST_FLOOR_SPAN: Duration = Duration::SECOND;
 
+/// The bytes a second of hybrid answers a peer silent in every swarm we
+/// share takes ([`SILENT`](crate::scheduler_peer::push::SILENT)): a chunk
+/// or two a neighbour, enough for a starving viewer's first chunks, after
+/// which it announces them, and next to nothing of a stream for one that
+/// gives nothing back.
+pub const SILENT_ANSWERS: u64 = 8 * 1024;
+
 /// How long the meter holds its largest write rate
 /// ([`UploadInfo::written_peak`]).
 const PEAK_SPAN: Duration = Duration::from_secs(10);
@@ -869,7 +876,8 @@ impl Runner {
             best
         });
         let (mut backlog, mut budget) = (false, false);
-        for p in self.peers.values_mut() {
+        let swarms = &self.swarms;
+        for (key, p) in self.peers.iter_mut() {
             if p.dq.iter().all(|q| q.is_empty()) {
                 p.queued_since = Time::NIL;
                 continue;
@@ -877,10 +885,16 @@ impl Runner {
             if p.queued_since.is_nil() {
                 p.queued_since = now;
             }
-            let queued =
-                p.dq.iter()
-                    .zip(PeerPriority::ALL)
-                    .any(|(q, pri)| !q.is_empty() && (paced || pri != PeerPriority::Scavenger));
+            // Answers held for a peer silent everywhere wait on its
+            // allowance, not on the uplink.
+            let allowed = || {
+                swarms
+                    .values()
+                    .any(|rs| rs.scheduler.as_ref().is_some_and(|sc| sc.heard(key, now)))
+            };
+            let queued = p.dq.iter().zip(PeerPriority::ALL).any(|(q, pri)| {
+                !q.is_empty() && (pri != PeerPriority::Scavenger || (paced && allowed()))
+            });
             if queued {
                 backlog = true;
                 budget |= !holds_back(p.link_path, now - p.queued_since, best);
@@ -1547,6 +1561,18 @@ impl Runner {
                     }
                     continue 'priorities;
                 }
+                // A peer silent in every swarm we share takes its allowance
+                // of answers at most.
+                if gated
+                    && peers
+                        .get_mut(peer)
+                        .is_some_and(|p| p.answered.rate(Duration::SECOND, now) >= SILENT_ANSWERS)
+                    && !swarms
+                        .values()
+                        .any(|rs| rs.scheduler.as_ref().is_some_and(|sc| sc.heard(peer, now)))
+                {
+                    continue 'priorities;
+                }
                 let Some((key, b, t)) = peers
                     .get_mut(peer)
                     .and_then(|p| p.dq.get_mut(pri.index()))
@@ -1571,6 +1597,9 @@ impl Runner {
                         off += n;
                         if gated {
                             answer_rate.spend(n);
+                            if let Some(p) = peers.get_mut(peer) {
+                                p.answered.add(n as u64, now);
+                            }
                         }
                     }
                     Err(WriteDataError::NotEnoughSpace) => continue 'priorities,
@@ -1894,8 +1923,12 @@ impl Runner {
     pub fn channel_stats(&self, peer: PeerKey, swarm: SwarmKey) -> Option<ChannelStats> {
         let rs = self.swarms.get(swarm)?;
         let ch = rs.channels.get(&peer)?;
+        let sched = rs.scheduler.as_ref()?;
         Some(ChannelStats {
-            scheduler: rs.scheduler.as_ref()?.channel_stats(peer)?,
+            scheduler: ChannelSchedulerStats {
+                silent: sched.silent(peer, self.last_now),
+                ..sched.channel_stats(peer)?
+            },
             inbound: ch.metrics_in,
             outbound: ch.metrics_out,
         })

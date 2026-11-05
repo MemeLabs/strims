@@ -141,6 +141,8 @@ pub(crate) struct RunnerPeer {
     /// Since when data has been queued for it without a break; nil while
     /// none is (hybrid only).
     pub(crate) queued_since: Time,
+    /// Hybrid answers written to it, in bytes, over the last second.
+    pub(crate) answered: Sma,
 }
 
 impl RunnerPeer {
@@ -159,6 +161,7 @@ impl RunnerPeer {
             link_path: None,
             pushed: Time::NIL,
             queued_since: Time::NIL,
+            answered: Sma::new(10, Duration::from_millis(100), now),
         }
     }
 

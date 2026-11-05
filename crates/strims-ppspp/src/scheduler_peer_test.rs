@@ -1502,6 +1502,10 @@ fn publish(f: &mut Fixture, from: Time, to: Time) {
     while at < to {
         at += Duration::from_millis(200);
         f.sched.s.push_consumed(Bin(0), 64, at);
+        // The neighbours announce what reaches them: none is silent.
+        for c in f.sched.channels.values_mut() {
+            c.quiet_since = Time::NIL;
+        }
     }
 }
 
