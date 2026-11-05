@@ -435,6 +435,24 @@ impl Report {
         ratio(got, want)
     }
 
+    /// [`Report::delivery`] over the viewers among `hosts`.
+    pub fn delivery_of(&self, swarm: usize, hosts: &[HostIx]) -> f64 {
+        let Some(w) = self.written.get(swarm) else {
+            return 0.0;
+        };
+        let (mut got, mut want) = (0, 0);
+        for v in self
+            .viewers
+            .iter()
+            .filter(|v| v.swarm == swarm && hosts.contains(&v.host))
+        {
+            let owed = w.count_in(0..w.bound());
+            want += owed;
+            got += owed - w.missing_from(&v.stats.received, 0..w.bound());
+        }
+        ratio(got, want)
+    }
+
     /// Upload of the swarm's seed, and the viewers' min, median and max.
     pub fn uploads(&self, swarm: usize) -> UploadDistribution {
         let Some(s) = self.scenario.swarms.get(swarm) else {

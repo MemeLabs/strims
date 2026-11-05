@@ -364,6 +364,11 @@ impl World {
         if browser && let Some(cap) = self.spec.exp_browser_cap() {
             c.max_peers = c.max_peers.min(cap);
         }
+        if let crate::HostClass::Hostile(kind) = spec.class
+            && let Some(s) = self.spec.swarms.first()
+        {
+            c.hostile_egress = crate::hostile::egress(kind, &s.options);
+        }
         if self.spec.exp.contains("index-sample") {
             c.vpn.peer_index_answers = strims_vpn::IndexAnswers::Sample;
         }

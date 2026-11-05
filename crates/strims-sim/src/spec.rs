@@ -521,6 +521,22 @@ pub const EXP_FLAGS: &[&str] = &[
 ];
 
 impl Scenario {
+    /// Makes `share` of the first swarm's viewers hostile hosts of `kind`
+    /// (see `hostile.rs`), spread evenly over their order.
+    pub fn hostile(&mut self, kind: &'static str, share: f64) {
+        let Some(viewers) = self.swarms.first().map(|s| s.viewers.clone()) else {
+            return;
+        };
+        let n = viewers.len();
+        let m = ((n as f64 * share).round() as usize).min(n);
+        for j in 0..m {
+            let i = ((j as f64 + 0.5) * n as f64 / m as f64) as usize;
+            if let Some(h) = viewers.get(i).and_then(|&v| self.hosts.get_mut(v)) {
+                h.class = HostClass::Hostile(kind);
+            }
+        }
+    }
+
     /// The peer budget the experiment flags give browsers.
     pub fn exp_browser_cap(&self) -> Option<u32> {
         self.exp

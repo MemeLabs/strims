@@ -53,6 +53,8 @@
 //! - `STRIMS_SIM_DISCOVERY=1` lets the hosts make their swarms' links
 //!   ([`Scenario::organic`]): each keeps only its link to the signalling
 //!   relay and finds the others through transfer discovery.
+//! - `STRIMS_SIM_HOSTILE=<kind>:<share>` makes that share of the first
+//!   swarm's viewers hostile ([`Scenario::hostile`]).
 //! - `STRIMS_SIM_EXP=<flag>,...` sets experiment flags
 //!   ([`Scenario::exp`]); `off` sets none.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
@@ -239,6 +241,26 @@ fn exp_knob() -> Vec<&'static str> {
         .collect()
 }
 
+/// `STRIMS_SIM_HOSTILE=<kind>:<share>`: that share of the first swarm's
+/// viewers hostile ([`Scenario::hostile`]); `off` none.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn hostile_knob() -> Option<(&'static str, f64)> {
+    let v = env("STRIMS_SIM_HOSTILE").filter(|v| v.trim() != "off")?;
+    let (kind, share) = v
+        .split_once(':')
+        .unwrap_or_else(|| panic!("STRIMS_SIM_HOSTILE: {v} is no <kind>:<share>"));
+    let kind = crate::hostile::KINDS
+        .iter()
+        .copied()
+        .find(|&k| k == kind.trim())
+        .unwrap_or_else(|| panic!("STRIMS_SIM_HOSTILE: {kind} is no kind"));
+    let share = share
+        .trim()
+        .parse()
+        .unwrap_or_else(|_| panic!("STRIMS_SIM_HOSTILE: {share} is no share"));
+    Some((kind, share))
+}
+
 /// `STRIMS_SIM_RTC`'s stacks; `off` is none.
 #[allow(clippy::panic)] // a mistyped setting fails its test
 fn rtc_knob() -> Option<Vec<Option<SctpProfile>>> {
@@ -340,6 +362,7 @@ fn sweep_seeds(
     let rtc = rtc_knob();
     let organic = env("STRIMS_SIM_DISCOVERY").is_some_and(|s| s.trim() == "1");
     let exp = exp_knob();
+    let hostile = hostile_knob();
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -406,6 +429,9 @@ fn sweep_seeds(
             spec.organic();
         }
         spec.exp.extend(exp.iter().copied());
+        if let Some((kind, share)) = hostile {
+            spec.hostile(kind, share);
+        }
         if let Some(dir) = &capture {
             let run = format!("seed-{seed}{replay}");
             spec.capture = Some(std::path::Path::new(dir).join(test).join(run));

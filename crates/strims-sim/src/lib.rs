@@ -113,6 +113,7 @@ pub mod bench;
 mod control;
 mod fast_map;
 mod host;
+mod hostile;
 pub mod measures;
 pub mod memory;
 mod net;

@@ -414,7 +414,11 @@ impl Pool {
             }
             Control::Shed => {
                 let n = |d: Duration| (d.as_millis() / TICK.as_millis()).max(1) as usize;
-                let recent = |d: Duration| &st.ticks[st.ticks.len().saturating_sub(n(d))..];
+                let recent = |d: Duration| {
+                    st.ticks
+                        .get(st.ticks.len().saturating_sub(n(d))..)
+                        .unwrap_or_default()
+                };
                 let share = |t: &[(bool, u64, u64)]| {
                     t.iter().filter(|x| x.0).count() as f64 / t.len().max(1) as f64
                 };

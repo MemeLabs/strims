@@ -903,6 +903,28 @@ impl Report {
         let [links_p50, links_p90] = self.link_counts();
         let [formed, dropped] = self.link_churn();
         let [eclipsed, cut] = self.eclipse();
+        let hostile: Vec<HostIx> = (0..self.hosts.len())
+            .filter(|&h| matches!(self.class(h), HostClass::Hostile(_)))
+            .collect();
+        if !hostile.is_empty() {
+            let honest = self.honest_viewers();
+            let s = self
+                .scenario
+                .swarms
+                .first()
+                .map_or(Duration::ZERO, |s| s.start);
+            let e = self
+                .scenario
+                .swarms
+                .first()
+                .map_or(Duration::ZERO, |s| s.stop);
+            for (name, hosts) in [("honest", &honest), ("hostile", &hostile)] {
+                let lag = self.lag_of_between(swarm, hosts, s, e);
+                j.int(&format!("lag_p99_ms_{name}"), u64::from(lag.p99))
+                    .int(&format!("lag_p50_ms_{name}"), u64::from(lag.p50))
+                    .num(&format!("delivery_{name}"), self.delivery_of(swarm, hosts));
+            }
+        }
         j.int("links_p50", links_p50)
             .int("links_p90", links_p90)
             .num("links_formed_per_host_min", formed)
