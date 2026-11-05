@@ -411,3 +411,20 @@ are 105 % of the uplink, read 7-22 ms at 7 of its 13 ends, and TCP's at 3
 of 23: under a bursty stream a step's probes can't tell 92 % of an uplink
 from 105 %.
 
+**A constant browser peer budget.** (`peer-cap`, `TMP-pch10`, `TMP-pch11`,
+`TMP-pch12`, `TMP-pchsf`) Browsers held to nine peers (eight data channel
+peers and a server link: the wasm platform's vnic ceiling,
+`browser_config`, and the sim's window-model browsers), with vpn's budget
+counting open exchanges. On the Docker testbed's thin cell 16 browsers
+lagged 8.2/12.2 s at p99 per viewer-second with the budget alone, and
+1.2/3.2 s with the pacer set (1.7/4.3 s with the egress pacer's hold),
+against about 16 s without; the twin's thin-15-10 collapsed 0 of 32
+against 32. At seeds 3001-3032 the browsers tier collapsed 86 of 1024
+against 133 without it, but its WAN cells' lag p99 went x1.1-1.5
+(wan-global-audience x1.48) and wan-residential-two-streams lost 0.7 % of
+its chunks (a guardrail): the budget binds random meshes' early viewers,
+whose refused links the sim never replaces. Ten: 94, no guardrail, but
+thin-15-10 3 of 32 and one of two testbed runs at 4.3/5.8 s; eleven 105
+(thin-15-10 15), twelve 116 (30); nine with the seeds free of it 93. The
+budget alone: 171. A constant tuned to one testbed config, where the
+pool should follow from what a node's links and hardware sustain.

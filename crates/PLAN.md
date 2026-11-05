@@ -259,22 +259,19 @@ in `TRIED.md`.
      uplink: star-3-10's viewers (20 Mbit/s uplinks) read about 550 KB/s
      and declined extra streams at half that. Clamping on the least latest
      excess across its links lost a thin relay's own queue (`TRIED.md`).
-   - Thin relays collapse on the Docker testbed. Behind a 10 Mbit/s seed, 15
-     viewers on 3 Mbit/s uplinks in a full mesh (256 KiB/s, 4 KiB chunks and
-     32 KiB munros: `collapse_thin_relays`'s cell) lag over 2 s at the worst
-     viewer in 29-40 of the 40 seconds from 20 s on. In the sim the window
-     model showed the mode (thin-15-10 collapsed 23 of 32 times: a relay's
-     pure acknowledgements wait behind its uploads' bursts in its FIFO)
-     until most HAVEs went at the tick, a packet less a frame to each
-     neighbour and an acknowledgement less back (4 of 32;
-     `collapse_thin_relays` checks it healthy). Rerun the testbed's cell on
-     these HAVEs: if it still collapses, the twin lacks what keeps it. On
-     browsers the cell collapses 20 of 32 times (TCP: 0): a packet lost
-     to a relay's full uplink queue holds its ordered channel about a
-     second (dcSCTP keeps a round-trip variation of 220 ms at least), and
-     each small frame costs a packet and half a SACK back. A seed's HAVEs
-     waiting as a queued relay's do cured halve-31-10 there too (28 -> 17
-     of 32) but cost star-3-5 on TCP (`TRIED.md`).
+   - Thin relays collapse on browsers. Behind a 10 Mbit/s seed, 15 viewers
+     on 3 Mbit/s uplinks in a full mesh (256 KiB/s, 4 KiB chunks and 32 KiB
+     munros: `collapse_thin_relays`'s cell, healthy on TCP): on the Docker
+     testbed's 16 browsers every viewer falls about 16 s behind, and the
+     browser twin collapses all 32 seeds, though with the egress pacer it
+     delivers 99.6 % of the stream (73.5 % without). Each of a relay's
+     peers costs its uplink as data alone doesn't: its HAVE frames and
+     probes, and a SACK for nearly each packet sent (dcSCTP sets the I bit
+     while a window is under ten packets), and a full mesh leaves each
+     association a fifteenth of the uplink. Browsers held to nine peers
+     were cured on both (`TRIED.md`), but a fixed budget fits one config:
+     the cure is a pool that follows from what a node's links and hardware
+     sustain (Network construction, in Open questions).
    - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
      five-node mesh grows its push children from 16 to 50 every 15-20 s
      and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s
@@ -464,8 +461,17 @@ in `TRIED.md`.
 
 ## Open questions
 
-- **Adversarial-node simulation.** Whole-node hostile-peer scenarios need a
-  test-only hook in `strims-node`. Waiting on the user.
+- **Network construction.** Which peers a node shares and when, when it
+  makes and drops links, and how many it keeps: a budget that is the
+  node's equilibrium under its uplink, hardware and network, not a
+  constant, with byzantine peers under an honest majority and no gain from
+  defecting. strims-sim takes every topology from its scenario; it needs
+  an organic mode (viewers find each other through transfer discovery,
+  the peer index and peer exchange), a node-level peer pool that chooses
+  whom to dial and drop and sets the budget, referrals on refusal and
+  prune, hostile whole-node hosts (free riders, withholders, liars,
+  squatters, sybil colluders, poisoners, whitewashers; a test-only hook in
+  `strims-node`), and NAT, setup-latency, churn and CPU models.
 - **TLS for `wss://` on native nodes.** Native nodes don't dial `wss://`
   yet. tokio-tungstenite can take the rustls `ClientConfig` that
   `NodeFactory` builds once for the node's HTTPS
