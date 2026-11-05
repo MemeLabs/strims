@@ -358,13 +358,6 @@ in `TRIED.md`.
      and misses until the reports bar it once more (WanSuperPeer at
      60 s). Decide whether a holder barred as unserved stays out longer,
      or holds again only once reports show it serving as a relay.
-   - **Answers to silent neighbours.** A seed answers the requests of a
-     neighbour that never announces what it receives like anyone's, so
-     free riders share what pushes leave of the uplink with honest
-     viewers.
-   - **Free riders at relays.** A relay admits and keeps a child whatever
-     the child gives back, so a free rider takes a slot of a relay's
-     interior stream like anyone.
    - **Colluders.** A verdict is a majority over a holder's reporters, so
      greedy viewers that praise a liar or defame an honest holder decide
      it where they outnumber its honest reporters: holders with few (far
@@ -488,13 +481,14 @@ in `TRIED.md`.
     toward the source: a seed's index record signed with the swarm's key
     would let a node verify which holder publishes, without trusting a
     claim.
-  - Defecting pays: a fifth of the viewers free riders lag x0.72-0.91 of
-    the honest viewers at p99 on the WAN cells (the honest still serve
-    them, and they spend no uplink), more under nine peers with
-    eviction, which protects the links a node sends the most to. Closing
-    the links that gave least (`pool-recip`) barely moves it: reciprocity
-    belongs in ppspp's service (Swarm 3, free riders at relays and answers
-    to silent neighbours).
+  - Liars still gain: a fifth of the viewers announcing what they never
+    send lag x0.78 of the honest viewers at p99 on wan-global-audience. A
+    relay pushes to a child that announces, and in hybrid seldom asks its
+    children for anything, so the silence rule's unanswered requests never
+    reach a liar leaf. Decide whether a relay asks each child for a chunk
+    it announced now and then (a few kB a child every few seconds) and
+    counts it silent when none comes. Free riders, which announce nothing,
+    lag x3.0-5.6 of the honest viewers since the silence rule (c1ac5b5a).
   - Still missing from the sim: referrals on refusal and prune,
     squatters, sybil colluders, poisoners and whitewashers, and NAT,
     setup-latency, churn and CPU models. Land the discovery fixes

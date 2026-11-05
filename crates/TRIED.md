@@ -470,3 +470,10 @@ its budget paid for 80 % of them (`COPY_KEEP`, against d9fe66b9, seeds
 (a guardrail): copies kept past the uplink after it halved. Ranking the
 holders a seed keeps by whether its pushes to them kept up, ahead of their
 reporters: super-peer-varying 1 -> 3 of 32 (local).
+
+**Pool links closed for silence.** Closing a link silent in every swarm
+(`pool-silent`, with ppspp's silence rule, thin-15-10 with a fifth free
+riders, local): the honest viewers' lag p99 3.35 -> 4.7 s; a free rider
+dropped links again elsewhere, and the churn cost more than its slot. Holding
+a silent peer's answers only while a queue stands, in place of an
+allowance: it still took 86 % of the stream between queues.
