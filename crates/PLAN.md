@@ -465,13 +465,31 @@ in `TRIED.md`.
   makes and drops links, and how many it keeps: a budget that is the
   node's equilibrium under its uplink, hardware and network, not a
   constant, with byzantine peers under an honest majority and no gain from
-  defecting. strims-sim takes every topology from its scenario; it needs
-  an organic mode (viewers find each other through transfer discovery,
-  the peer index and peer exchange), a node-level peer pool that chooses
-  whom to dial and drop and sets the budget, referrals on refusal and
-  prune, hostile whole-node hosts (free riders, withholders, liars,
-  squatters, sybil colluders, poisoners, whitewashers; a test-only hook in
-  `strims-node`), and NAT, setup-latency, churn and CPU models.
+  defecting. strims-sim's organic mode (`STRIMS_SIM_DISCOVERY`, the `net`
+  and `net-hostile` tiers) builds topologies from discovery, and its
+  peer pool (`pool.rs`, experiment flags) holds the policies under trial.
+  - The budget has to follow conditions: on the `net` tier with eviction,
+    the starving rule and sampled index answers, thin relays collapse 1,
+    5 and 32 of 32 at budgets of six, nine and twelve and the slow
+    viewer's cell 3 to 30 from six to sixteen, while the WAN cells run
+    lag p99 x1.18-1.31 at six and x0.89-1.01 at twelve to sixteen.
+    `pool-copies` (links per stream copy the uplink carries) collapses 54
+    of 672 against nine's 42 (99 uncapped): better on the WAN cells,
+    worse on thin relays, whose budgets don't come down far enough. Try a
+    target from each link's measured overhead against the uplink.
+  - Defecting pays: a fifth of the viewers free riders lag x0.72-0.91 of
+    the honest viewers at p99 on the WAN cells (the honest still serve
+    them, and they spend no uplink), more under nine peers with
+    eviction, which protects the links a node sends the most to. Closing
+    the links that gave least (`pool-recip`) barely moves it: reciprocity
+    belongs in ppspp's service (Swarm 3, free riders at relays and answers
+    to silent neighbours).
+  - Still missing from the sim: referrals on refusal and prune,
+    squatters, sybil colluders, poisoners and whitewashers, and NAT,
+    setup-latency, churn and CPU models. Land the discovery fixes
+    (searches after a network's first peer, record pushes per host,
+    crossed exchanges, sampled index answers) and port the winning pool
+    to the node's app layer once it holds.
 - **TLS for `wss://` on native nodes.** Native nodes don't dial `wss://`
   yet. tokio-tungstenite can take the rustls `ClientConfig` that
   `NodeFactory` builds once for the node's HTTPS
