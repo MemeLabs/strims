@@ -88,6 +88,10 @@ pub const RATE_WINDOW: Duration = Duration::from_millis(250);
 /// counts as stalled ([`HostSum::add`]).
 pub const STALL: Duration = Duration::from_secs(2);
 
+/// How often a writer the host pacer holds reads the channels' load again:
+/// no channel's event tells when the others' amounts fall.
+pub const HOST_POLL: Duration = Duration::from_millis(5);
+
 /// How long a round trip counts toward the least.
 pub const RTT_SPAN: Duration = Duration::from_secs(10);
 

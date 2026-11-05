@@ -35,8 +35,9 @@
 //! under half of it. A node's channel is
 //! paced as the browser's `DcSocket` paces it: under its own pacer's cap,
 //! and the host's channels together under a [`HostPacer`]'s, each waiting
-//! for its mark once refused. (The browser's writer polls the host's load
-//! while the host holds it; here it reads it at each acknowledgement.) A
+//! for its mark once refused: one the host holds reads the host's load
+//! again at each acknowledgement and every [`HOST_POLL`], as the browser's
+//! writer polls it. A
 //! write goes to turmoil as segments of a DATA chunk's payload at most,
 //! which the window model's association sends as packets.
 
@@ -55,8 +56,8 @@ use std::task::{Context, Poll, Waker};
 
 use strims_base::time::Time;
 use strims_node::{
-    CaptureSample, ChannelPacer, HostPacer, HostSum, LinkProbe, Net, TcpOptions, TcpSocketConfig,
-    TurmoilNet,
+    CaptureSample, ChannelPacer, HOST_POLL, HostPacer, HostSum, LinkProbe, Net, TcpOptions,
+    TcpSocketConfig, TurmoilNet,
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -336,6 +337,7 @@ impl SimNet {
             inner: stream,
             conn,
             segment: self.segment,
+            host_poll: None,
         }
     }
 }
@@ -416,6 +418,20 @@ pub(crate) struct SimTcpStream {
     inner: turmoil::net::TcpStream,
     conn: Option<(ConnKey, SendBuffers)>,
     segment: Option<usize>,
+    /// While the host's pacer holds a channel's writer: when it reads the
+    /// host's load again ([`HOST_POLL`]).
+    host_poll: Option<Pin<Box<tokio::time::Sleep>>>,
+}
+
+/// What a channel's writer does now ([`SimTcpStream::channel_write`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ChannelWrite {
+    Go,
+    /// For its own amount to fall to its mark.
+    Wait,
+    /// For the host's load to fall to the host's mark, or for its next
+    /// poll.
+    Held,
 }
 
 impl Drop for SimTcpStream {
@@ -446,8 +462,8 @@ impl AsyncRead for SimTcpStream {
 
 impl SimTcpStream {
     /// For a data channel's connection, whether a write may go now, or
-    /// `false` with the writer left waiting.
-    fn channel_write(&self, cx: &Context<'_>) -> Option<bool> {
+    /// what the writer, left waiting, waits for.
+    fn channel_write(&self, cx: &Context<'_>) -> Option<ChannelWrite> {
         let (key, b) = self.conn.as_ref()?;
         b.with(|x| {
             let Buffers { conns, hosts, .. } = x;
@@ -486,9 +502,40 @@ impl SimTcpStream {
             let c = conns.get_mut(key)?;
             if waited || !may || held {
                 c.waker = Some(cx.waker().clone());
-                return Some(false);
+                return Some(if held {
+                    ChannelWrite::Held
+                } else {
+                    ChannelWrite::Wait
+                });
             }
-            Some(true)
+            Some(ChannelWrite::Go)
+        })
+    }
+
+    /// The host's pacer's poll came: whether the host's load is down to
+    /// the mark it held its writers for, which wakes them, as a browser's
+    /// writer polls it.
+    fn poll_host(&mut self) -> bool {
+        let Some((key, b)) = &self.conn else {
+            return true;
+        };
+        b.with(|x| {
+            let Buffers { conns, hosts, .. } = x;
+            let Some(h) = hosts.get_mut(&key.0.ip()) else {
+                return true;
+            };
+            let now = sim_time(turmoil::sim_elapsed().unwrap_or_default());
+            let sum = h.sum(conns, now);
+            if sum.load > h.low {
+                return false;
+            }
+            h.pacer.observe(now, &sum);
+            for k in std::mem::take(&mut h.waiting) {
+                if let Some(w) = conns.get_mut(&k).and_then(|o| o.waker.take()) {
+                    w.wake();
+                }
+            }
+            true
         })
     }
 
@@ -553,11 +600,33 @@ impl AsyncWrite for SimTcpStream {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         let this = &mut *self;
-        if let Some(may) = this.channel_write(cx) {
-            return if may {
-                this.write_message(cx, buf)
-            } else {
-                Poll::Pending
+        if let Some(poll) = this.host_poll.as_mut()
+            && poll.as_mut().poll(cx).is_ready()
+        {
+            this.host_poll = None;
+            if !this.poll_host() {
+                let poll = this.host_poll.insert(Box::pin(tokio::time::sleep(
+                    HOST_POLL.to_std().unwrap_or_default(),
+                )));
+                let _ = poll.as_mut().poll(cx);
+            }
+        }
+        if let Some(write) = this.channel_write(cx) {
+            return match write {
+                ChannelWrite::Go => {
+                    this.host_poll = None;
+                    this.write_message(cx, buf)
+                }
+                ChannelWrite::Wait => Poll::Pending,
+                ChannelWrite::Held => {
+                    let poll = this.host_poll.get_or_insert_with(|| {
+                        Box::pin(tokio::time::sleep(std::time::Duration::from_nanos(
+                            HOST_POLL.as_nanos() as u64,
+                        )))
+                    });
+                    let _ = poll.as_mut().poll(cx);
+                    Poll::Pending
+                }
             };
         }
         // The most this write may take: what the tail buffer has room for,

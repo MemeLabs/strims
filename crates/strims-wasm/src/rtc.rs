@@ -62,8 +62,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll, Waker};
 
 use js_sys::{Array, ArrayBuffer, Object, Reflect, Uint8Array};
-use strims_base::time::{Duration, Time};
-use strims_node_core::rtc::pace::{ChannelPacer, HostPacer, HostSum};
+use strims_base::time::Time;
+use strims_node_core::rtc::pace::{ChannelPacer, HOST_POLL, HostPacer, HostSum};
 use strims_node_core::rtc::proxy::MAX_CONN_ID;
 use strims_node_core::{Input, Inputs, LinkKey, RtcCommand, RtcConn, RtcInput, RtcSignal};
 use strims_vnic::LinkConfig;
@@ -456,9 +456,6 @@ impl Notify {
     }
 }
 
-/// How often a writer the host pacer holds reads the channels' load again.
-const HOST_POLL: Duration = Duration::from_millis(5);
-
 /// The port's channels together ([`HostPacer`]).
 #[derive(Default)]
 struct Host {
@@ -468,9 +465,9 @@ struct Host {
 }
 
 impl Host {
-    /// Whether a channel may write at `now`: reads every channel's
-    /// buffered amount, and forgets the channels dropped.
-    fn admits(&self, now: Time) -> bool {
+    /// Every channel's buffered amount at `now`; forgets the channels
+    /// dropped.
+    fn sum(&self, now: Time) -> HostSum {
         let mut sum = HostSum::default();
         self.channels.borrow_mut().retain(|w| {
             let Some(dc) = w.upgrade() else {
@@ -480,9 +477,31 @@ impl Host {
             sum.add(&dc.pacer.borrow(), now, b, dc.waits.get());
             true
         });
+        sum
+    }
+
+    /// Whether a channel may write at `now`, or the mark the host holds it
+    /// for.
+    fn admits(&self, now: Time) -> Result<(), usize> {
+        let sum = self.sum(now);
         let mut pacer = self.pacer.borrow_mut();
         pacer.observe(now, &sum);
-        pacer.may_write(now, &sum)
+        if pacer.may_write(now, &sum) {
+            Ok(())
+        } else {
+            Err(pacer.low_mark(now, &sum))
+        }
+    }
+
+    /// Whether the channels' load at `now` is down to `mark`, which frees
+    /// the writer the host held for it.
+    fn at_mark(&self, now: Time, mark: usize) -> bool {
+        let sum = self.sum(now);
+        let at = sum.load <= mark;
+        if at {
+            self.pacer.borrow_mut().observe(now, &sum);
+        }
+        at
     }
 }
 
@@ -629,6 +648,7 @@ impl DcSocket {
     /// admits it. Returns the buffered amount it sent at.
     async fn send(&self, buf: &[u8], max_buffered: usize) -> Result<u32, String> {
         let c = &self.0.channel;
+        let mut held = None;
         let buffered = loop {
             if c.ready_state() != RtcDataChannelState::Open {
                 return Err(self
@@ -651,8 +671,13 @@ impl DcSocket {
                 poll_fn(|cx| self.0.low.poll_wait(cx)).await;
                 continue;
             }
-            if self.0.host.admits(now) {
-                break b;
+            match held {
+                None => match self.0.host.admits(now) {
+                    Ok(()) => break b,
+                    Err(mark) => held = Some(mark),
+                },
+                Some(mark) if self.0.host.at_mark(now, mark) => break b,
+                Some(_) => {}
             }
             clock::Sleep::until(now + HOST_POLL).await;
         };
