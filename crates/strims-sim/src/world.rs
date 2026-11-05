@@ -359,8 +359,7 @@ impl World {
         c.max_peers = spec.max_peers;
         c.rate_limit = spec.uplink;
         // A browser's channels hide their flight from its pacers.
-        let browser =
-            self.spec.window_model() && spec.rtc_stack.is_some_and(|p| !p.buffered_flight);
+        let browser = self.spec.is_browser(h);
         c.pace_egress = browser;
         if browser && let Some(cap) = self.spec.exp_browser_cap() {
             c.max_peers = c.max_peers.min(cap);

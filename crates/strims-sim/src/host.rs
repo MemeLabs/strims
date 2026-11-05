@@ -37,6 +37,7 @@ use tokio::task::spawn_local;
 
 use crate::APP_PORT;
 use crate::net::SimNet;
+use crate::pool::{Pool, PoolConfig};
 use crate::spec::{Binding, Fault, HostIx, LinkSpec, MediaSpec, SwarmSpec, Transport};
 use crate::stream::{
     FRAME_LEN, FrameCodec, FrameParser, JoinRewind, MEDIA_HEADER, MediaCodec, MediaParser,
@@ -104,10 +105,23 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         .spec
         .discovery
         .and_then(|n| nets.get(n).copied().flatten());
+    let cap = w
+        .spec
+        .is_browser(h)
+        .then(|| w.spec.exp_browser_cap())
+        .flatten();
+    let pool = index
+        .zip(PoolConfig::from_flags(&w.spec.exp, cap))
+        .map(|(net, cfg)| Rc::new(Pool::new(node.clone(), net, cfg)));
+    if let Some(p) = &pool {
+        let p = p.clone();
+        spawn_local(async move { p.run().await });
+    }
     let transfers = TransferControl::new(
         SimTransferHost {
             node: node.clone(),
             index,
+            pool: pool.clone(),
         },
         NodeTimer(SimClock::turmoil(epoch())),
         strims_transfer::Config {
@@ -161,6 +175,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         events,
         nets,
         services,
+        pool,
     ));
     if w.spec.faults.iter().any(|f| match f.fault {
         Fault::Uplink(x, _) | Fault::Connect { from: x, .. } => x == h,
@@ -200,11 +215,13 @@ async fn publish(w: Rc<World>, h: HostIx, node: Node, net: NetworkId) {
 /// it with every other linked peer that has it. With
 /// [`Scenario::discovery`](crate::Scenario), they are advertised and
 /// searched for in that vpn network's peer index (`index`), and hosts
-/// found there are linked by peer exchange; otherwise the scenario's
-/// topology is fixed and nothing is discovered.
+/// found there are linked by peer exchange, or offered to the host's
+/// [`Pool`]; otherwise the scenario's topology is fixed and nothing is
+/// discovered.
 struct SimTransferHost {
     node: Node,
     index: Option<NetworkId>,
+    pool: Option<Rc<Pool>>,
 }
 
 /// The hosts a peer index search finds; none without one.
@@ -284,9 +301,10 @@ impl strims_transfer::Host for SimTransferHost {
     }
 
     async fn connect_peer(&self, _: (), host: HostId) -> Result<bool, NodeError> {
-        match self.index {
-            Some(net) => self.node.connect_peer(net, host).await,
-            None => Ok(false),
+        match (self.index, &self.pool) {
+            (Some(_), Some(pool)) => pool.offer(host),
+            (Some(net), None) => self.node.connect_peer(net, host).await,
+            (None, _) => Ok(false),
         }
     }
 }
@@ -321,10 +339,14 @@ async fn event_task(
     mut events: NodeEvents,
     nets: Vec<Option<NetworkId>>,
     services: PeerServices,
+    pool: Option<Rc<Pool>>,
 ) {
     let me = w.name(h).to_owned();
     while let Some(e) = events.recv().await {
         services.handle_event(&e).await;
+        if let Some(p) = &pool {
+            p.handle_event(&e);
+        }
         match e {
             NodeEvent::PeerAdded(p) => {
                 w.peer_changed(h, true);

@@ -498,9 +498,20 @@ pub struct Scenario {
 }
 
 /// The experiment flags a scenario takes ([`Scenario::exp`]):
-/// - `capN` (N of 2 to 64): every browser (a window-model host whose data
-///   channels hide their flight) keeps N peers at most.
-pub const EXP_FLAGS: &[&str] = &["cap6", "cap8", "cap9", "cap10", "cap12", "cap16"];
+/// - `capN`: every browser ([`Scenario::is_browser`]) keeps N peers at
+///   most, and N swarm links in a pool's budget.
+/// - `pool-retry`, `pool-evict`: an organic host's peer pool (see
+///   `pool.rs`).
+pub const EXP_FLAGS: &[&str] = &[
+    "cap6",
+    "cap8",
+    "cap9",
+    "cap10",
+    "cap12",
+    "cap16",
+    "pool-retry",
+    "pool-evict",
+];
 
 impl Scenario {
     /// The peer budget the experiment flags give browsers.
@@ -551,6 +562,17 @@ impl Scenario {
     /// [`SendBuffer::window`].
     pub fn window_model(&self) -> bool {
         self.wan.is_some() && self.send_buffer.is_some_and(|b| b.window)
+    }
+
+    /// Whether host `h` is a browser: the window model's data channels
+    /// on a stack that hides their flight from the host's pacers.
+    pub fn is_browser(&self, h: HostIx) -> bool {
+        self.window_model()
+            && self
+                .hosts
+                .get(h)
+                .and_then(|s| s.rtc_stack)
+                .is_some_and(|p| !p.buffered_flight)
     }
 
     /// An empty scenario with 2–20 ms latency, 60 s long.

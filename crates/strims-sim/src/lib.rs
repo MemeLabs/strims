@@ -114,6 +114,7 @@ mod control;
 mod fast_map;
 mod host;
 pub mod measures;
+mod pool;
 pub mod memory;
 mod net;
 pub mod report;
