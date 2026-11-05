@@ -8,6 +8,7 @@
 //! [`crate::run`](fn@crate::run) or [`crate::sweep`](fn@crate::sweep).
 //! Times are simulated time since the start of the run.
 
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy, SwarmOptions};
@@ -492,6 +493,22 @@ pub struct Scenario {
     /// transfer discovery's peer index searches, then a peer exchange to
     /// each host found. `None`: the scenario's links are the topology.
     pub discovery: Option<usize>,
+    /// Experiment flags (`STRIMS_SIM_EXP`), each one of [`EXP_FLAGS`].
+    pub exp: BTreeSet<&'static str>,
+}
+
+/// The experiment flags a scenario takes ([`Scenario::exp`]):
+/// - `capN` (N of 2 to 64): every browser (a window-model host whose data
+///   channels hide their flight) keeps N peers at most.
+pub const EXP_FLAGS: &[&str] = &["cap6", "cap8", "cap9", "cap10", "cap12", "cap16"];
+
+impl Scenario {
+    /// The peer budget the experiment flags give browsers.
+    pub fn exp_browser_cap(&self) -> Option<u32> {
+        self.exp
+            .iter()
+            .find_map(|f| f.strip_prefix("cap").and_then(|n| n.parse().ok()))
+    }
 }
 
 /// The window model's segment: two packets, acknowledged as one, as a
@@ -566,6 +583,7 @@ impl Scenario {
             tcp_segment: None,
             stored_chunks: false,
             discovery: None,
+            exp: BTreeSet::new(),
         }
     }
 

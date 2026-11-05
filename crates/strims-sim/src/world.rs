@@ -359,8 +359,12 @@ impl World {
         c.max_peers = spec.max_peers;
         c.rate_limit = spec.uplink;
         // A browser's channels hide their flight from its pacers.
-        c.pace_egress =
+        let browser =
             self.spec.window_model() && spec.rtc_stack.is_some_and(|p| !p.buffered_flight);
+        c.pace_egress = browser;
+        if browser && let Some(cap) = self.spec.exp_browser_cap() {
+            c.max_peers = c.max_peers.min(cap);
+        }
         c.upload_capacity = spec.upload_capacity;
         c.vpn.routing = spec.routing.unwrap_or(self.spec.routing);
         if let Some(dir) = &self.spec.capture {

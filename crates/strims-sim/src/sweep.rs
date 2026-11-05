@@ -53,6 +53,8 @@
 //! - `STRIMS_SIM_DISCOVERY=1` lets the hosts make their swarms' links
 //!   ([`Scenario::organic`]): each keeps only its link to the signalling
 //!   relay and finds the others through transfer discovery.
+//! - `STRIMS_SIM_EXP=<flag>,...` sets experiment flags
+//!   ([`Scenario::exp`]); `off` sets none.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), so the row carries the run second by
 //!   second ([`Report::series`]).
@@ -218,6 +220,25 @@ fn media_knobs() -> Option<(Encoder, Sign)> {
     encoder.zip(sign)
 }
 
+/// `STRIMS_SIM_EXP`'s flags, comma-separated; `off` is none.
+#[allow(clippy::panic)] // a mistyped flag fails its test
+fn exp_knob() -> Vec<&'static str> {
+    let Some(v) = env("STRIMS_SIM_EXP").filter(|v| v.trim() != "off") else {
+        return Vec::new();
+    };
+    v.split(',')
+        .map(str::trim)
+        .filter(|f| !f.is_empty())
+        .map(|f| {
+            crate::spec::EXP_FLAGS
+                .iter()
+                .copied()
+                .find(|&k| k == f)
+                .unwrap_or_else(|| panic!("STRIMS_SIM_EXP: {f} is no flag"))
+        })
+        .collect()
+}
+
 /// `STRIMS_SIM_RTC`'s stacks; `off` is none.
 #[allow(clippy::panic)] // a mistyped setting fails its test
 fn rtc_knob() -> Option<Vec<Option<SctpProfile>>> {
@@ -318,6 +339,7 @@ fn sweep_seeds(
     let media = media_knobs();
     let rtc = rtc_knob();
     let organic = env("STRIMS_SIM_DISCOVERY").is_some_and(|s| s.trim() == "1");
+    let exp = exp_knob();
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -383,6 +405,7 @@ fn sweep_seeds(
         if organic {
             spec.organic();
         }
+        spec.exp.extend(exp.iter().copied());
         if let Some(dir) = &capture {
             let run = format!("seed-{seed}{replay}");
             spec.capture = Some(std::path::Path::new(dir).join(test).join(run));

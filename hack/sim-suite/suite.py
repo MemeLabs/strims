@@ -222,7 +222,29 @@ def browsers_tier():
             for c in TIERS["robust"] if c["test"] == "calibration_star" or "uncapped" in c["test"]]
 
 
-# The streams the sign tiers run (strims_wan::live's encoders): audio alone
+# The net tier's cells, robust's names: as browsers, and these over TCP.
+NET_RTC = ["star-7-5", "star-15-10", "star-15-20", "star-31-10", "star-31-20", "halve-15-10", "halve-31-20",
+           "jitter-15-10", "thin-15-10", "wan-residential-seed", "wan-global-audience", "wan-mobile-viewers",
+           "wan-residential-two-streams", "wan-slow-viewer", "wan-super-peer-varying", "wan-residential-seed-step"]
+NET_TCP = ["star-15-10", "star-31-10", "thin-15-10", "wan-global-audience", "wan-residential-two-streams"]
+
+
+def net_tier():
+    """Organic networks (STRIMS_SIM_DISCOVERY): every host keeps only its
+    link to the signalling relay and finds the others through transfer
+    discovery, then links by peer exchange; robust's window-model stars and
+    uncapped WAN cases across the conditions, as browsers (BROWSERS) and,
+    some, over TCP."""
+    robust = {c["name"]: c for c in TIERS["robust"]}
+    org = {"STRIMS_SIM_DISCOVERY": "1"}
+    cells = [{**robust[n], "name": f"org-{n}", "env": {**robust[n]["env"], **org, "STRIMS_SIM_RTC": BROWSERS},
+              "why": f"{robust[n]['why']}, as browsers, organic"} for n in NET_RTC]
+    cells += [{**robust[n], "name": f"org-{n}-tcp", "env": {**robust[n]["env"], **org},
+               "why": f"{robust[n]['why']}, organic"} for n in NET_TCP]
+    return cells
+
+
+# The streams the sign tiers run# The streams the sign tiers run (strims_wan::live's encoders): audio alone
 # at 128 kbit/s, then audio and video, CBR and VBR, to 6 Mbit/s.
 SIGN_MEDIA = ["128c", "512c", "1500c", "1500v", "3000c", "6000c", "6000v"]
 SIGN_CONFIRM_MEDIA = ["128c", "512c", "1500v", "3000c", "6000c"]
@@ -333,6 +355,7 @@ TIERS = {
     "robust": robust_tier(),
 }
 TIERS["browsers"] = browsers_tier()
+TIERS["net"] = net_tier()
 TIERS["sign"] = sign_tier()
 TIERS["sign-confirm"] = sign_confirm_tier()
 TIERS["sign-sens"] = sign_sens_tier()
@@ -395,6 +418,12 @@ METRICS = [
     ("startup_p99_ms", lambda r: r.get("startup_p99_ms"), LOWER, "ratio", 0.10),
     ("signed_lag_p99_ms", lambda r: r.get("signed_lag_p99_ms"), LOWER, "ratio", 0.05),
     ("wire/media", lambda r: r.get("wire_per_media"), LOWER, "ratio", 0.02),
+    ("links_p50", lambda r: r.get("links_p50"), None, "diff", 0.5),
+    ("links_p90", lambda r: r.get("links_p90"), None, "diff", 0.5),
+    ("links_dropped/min", lambda r: r.get("links_dropped_per_host_min"), LOWER, "diff", 0.1),
+    ("eclipsed_share", lambda r: r.get("eclipsed_share"), LOWER, "diff", 0.005),
+    ("cut_from_seed_share", lambda r: r.get("cut_from_seed_share"), LOWER, "diff", 0.005),
+    ("exch_rejected", lambda r: r.get("exch_rejected"), None, "diff", 1),
     ("rss_mb", lambda r: r.get("_rss_mb"), LOWER, "diff", 100),
     ("wall_s", lambda r: r.get("_wall_s"), LOWER, "ratio", 0.20),
 ]
