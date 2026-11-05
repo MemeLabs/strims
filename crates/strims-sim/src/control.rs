@@ -48,6 +48,15 @@ pub(crate) async fn controller(w: Rc<World>) -> turmoil::Result {
         if next >= next_stats {
             next_stats += stats_every;
         }
+        // A round longer than the cadence (each host answers at its next
+        // pass) skips the rounds it overran rather than falling behind.
+        let now = sim_now();
+        while next_full <= now {
+            next_full += every;
+        }
+        while next_stats <= now {
+            next_stats += stats_every;
+        }
     }
     tokio::time::sleep(end.saturating_sub(sim_now())).await;
     sample(&w, true, true).await;
