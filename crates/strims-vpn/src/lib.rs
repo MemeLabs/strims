@@ -145,8 +145,8 @@ pub use announce::LINK_ANNOUNCE_PORT;
 pub use channel::Channel;
 pub use hash_table::{HashTableGetOptions, hash_table_record_hash};
 pub use host::{
-    Config, DEFAULT_MAX_MESSAGE_LEN, Delivery, Event, Host, MAX_RELAYED_BODY_LEN, Metrics,
-    RECORD_PUSH_DELAY, RECORD_PUSH_INTERVAL, Routing, VerifyMode,
+    Config, DEFAULT_MAX_MESSAGE_LEN, Delivery, Event, Host, IndexAnswers, MAX_RELAYED_BODY_LEN,
+    Metrics, RECORD_PUSH_DELAY, RECORD_PUSH_INTERVAL, Routing, VerifyMode,
 };
 pub use message::{
     M_BROADCAST, M_COMPRESS, M_ENCRYPT, M_NORELAY, M_STD_FLAGS, MessageHeader, MessageId,

@@ -171,6 +171,20 @@ pub struct Config {
     pub max_incoming_exchanges: usize,
     /// Link offers waiting for `flush`; more are dropped.
     pub max_pending_offers: usize,
+    /// Which of the holders a peer index search reaches this host for it
+    /// names (up to five of its own links').
+    pub peer_index_answers: IndexAnswers,
+}
+
+/// How a host picks the holders it names in a peer index search's answer.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum IndexAnswers {
+    /// The nearest to the requester by id: the same for every search it
+    /// makes.
+    #[default]
+    Nearest,
+    /// A sample of them, drawn for each search.
+    Sample,
 }
 
 impl Default for Config {
@@ -196,6 +210,7 @@ impl Default for Config {
             peer_index_max_records: crate::peer_index::PEER_INDEX_MAX_SIZE,
             max_incoming_exchanges: 8,
             max_pending_offers: 16,
+            peer_index_answers: IndexAnswers::Nearest,
         }
     }
 }
@@ -1589,7 +1604,8 @@ impl<H: Copy> Host<H> {
             return;
         };
         n.push_at = Time::NIL;
-        n.pushed.retain(|_, at| now.before(*at + RECORD_PUSH_INTERVAL));
+        n.pushed
+            .retain(|_, at| now.before(*at + RECORD_PUSH_INTERVAL));
         let mut new = std::mem::take(&mut n.new_links);
         let mut wait = Time::NIL;
         new.retain(|p| {
@@ -1597,7 +1613,11 @@ impl<H: Copy> Host<H> {
             match host.and_then(|h| n.pushed.get(&h)) {
                 Some(&at) => {
                     let due = at + RECORD_PUSH_INTERVAL;
-                    wait = if wait.is_nil() || due.before(wait) { due } else { wait };
+                    wait = if wait.is_nil() || due.before(wait) {
+                        due
+                    } else {
+                        wait
+                    };
                     n.new_links.insert(*p);
                     false
                 }
@@ -1630,7 +1650,7 @@ fn backlog(config: &Config) -> Backlog {
 }
 
 /// Uniform in `0..n` (`n > 0`).
-fn random_below(rng: &mut DetRng, n: u32) -> u32 {
+pub(crate) fn random_below(rng: &mut DetRng, n: u32) -> u32 {
     let n = u64::from(n.max(1));
     let limit = (1u64 << 32) / n * n;
     loop {

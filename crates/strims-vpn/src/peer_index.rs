@@ -32,7 +32,7 @@ use strims_proto::vpn::v1::peer_index_message::{
 use strims_vnic::PeerKey;
 use strims_vnic::ports::PEER_INDEX_PORT;
 
-use crate::host::{Event, Host, Inbound, random_u64};
+use crate::host::{Event, Host, Inbound, IndexAnswers, random_below, random_u64};
 use crate::message::{M_NORELAY, M_STD_FLAGS};
 use crate::{Error, NetworkId, PeerIndexPublisherId, PeerIndexSearchId};
 
@@ -171,6 +171,19 @@ impl PeerIndexStore {
     /// Up to five records for `hash`, nearest to `requester` first,
     /// excluding the requester and holders `has_peer` rejects.
     fn get(&self, hash: &[u8; 32], requester: &ID, has_peer: impl Fn(&ID) -> bool) -> Vec<Record> {
+        let mut all = self.eligible(hash, requester, has_peer);
+        all.truncate(PEER_INDEX_SEARCH_RESPONSE_SIZE);
+        all
+    }
+
+    /// Every record for `hash` [`Self::get`] could answer with, nearest to
+    /// `requester` first.
+    fn eligible(
+        &self,
+        hash: &[u8; 32],
+        requester: &ID,
+        has_peer: impl Fn(&ID) -> bool,
+    ) -> Vec<Record> {
         let mut f = Filter::new(*requester);
         for (_, item) in self.items.range((*hash, [0; 32])..=(*hash, [0xff; 32])) {
             f.push(Holder {
@@ -180,7 +193,6 @@ impl PeerIndexStore {
         }
         f.iter()
             .filter(|h| h.id != *requester && has_peer(&h.id))
-            .take(PEER_INDEX_SEARCH_RESPONSE_SIZE)
             .map(|h| h.record.envelope().clone())
             .collect()
     }
@@ -455,7 +467,17 @@ impl<H: Copy> Host<H> {
                     return Ok(());
                 };
                 let n = self.networks.get(net).ok_or(Error::NetworkNotFound)?;
-                let records = n.peer_index.get(&hash, &msg.src, |id| n.has_peer(id));
+                let records = match self.config.peer_index_answers {
+                    IndexAnswers::Nearest => n.peer_index.get(&hash, &msg.src, |id| n.has_peer(id)),
+                    IndexAnswers::Sample => {
+                        let mut all = n.peer_index.eligible(&hash, &msg.src, |id| n.has_peer(id));
+                        while all.len() > PEER_INDEX_SEARCH_RESPONSE_SIZE {
+                            let len = u32::try_from(all.len()).unwrap_or(u32::MAX);
+                            all.remove(random_below(&mut self.rng, len) as usize);
+                        }
+                        all
+                    }
+                };
                 if records.is_empty() {
                     return Ok(());
                 }
