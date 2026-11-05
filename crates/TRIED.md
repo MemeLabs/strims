@@ -447,3 +447,26 @@ once a swarm has taken data in for 10 s, in place of 128 KiB: the net tier
 28 -> 27, browsers 109 -> 112, robust 93 -> 94 (seeds 3001-3032), the slow
 viewer's cell 17 -> 16.
 
+**The slow viewer's relays, before its cause was found.** (organic net
+tier, seeds 3001-3032, against b349b355's 20 of 672) A relay admitting and
+shedding on the busy time without links that hold their data back, as the
+seed's budget reads it: 26 (the slow viewer's cell 14 -> 16). One
+requester's hybrid answers capped at a third of the measured capacity while
+the uplink reads busy: 28 (15); capped always: 27 (14). Local screens of
+the seeds the base collapsed had shown six of eight healthy. The cell's
+viewers stalled because a channel model bug wedged an association and the
+host's pacer then held every channel (274065c2, 92a33a7b). An adaptive
+seed's budget rising at most 25 % a check: halve-15-10 6 of 32 against 5
+(local). Dialing a candidate past the budget every 15 s (`pool-explore`):
+super-peer-varying 3 of 32 either way (local); a seed doesn't search, and
+the cell's first collapse comes before any link is 20 s old. Counting a
+stalled channel by its delivery (none for 2 s) in place of its oldest
+byte's age: the slow viewer's cell 3 of 32 against 0 (local).
+
+**Adaptive seed copies held by hysteresis.** Keeping the seed's copies while
+its budget paid for 80 % of them (`COPY_KEEP`, against d9fe66b9, seeds
+3001-3032 and 3033-3064): the net tier 9 -> 6 but 7 -> 8, super-peer-varying
+3 -> 1 but 3 -> 5 (lag p99 x1.12), and robust's halve-7-20 lag p99 x1.70
+(a guardrail): copies kept past the uplink after it halved. Ranking the
+holders a seed keeps by whether its pushes to them kept up, ahead of their
+reporters: super-peer-varying 1 -> 3 of 32 (local).
