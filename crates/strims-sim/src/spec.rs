@@ -500,7 +500,7 @@ pub struct Scenario {
 /// The experiment flags a scenario takes ([`Scenario::exp`]):
 /// - `capN`: every browser ([`Scenario::is_browser`]) keeps N peers at
 ///   most, and N swarm links in a pool's budget.
-/// - `pool-retry`, `pool-evict`, `pool-uplink`, `pool-busy`, `pool-shed`, `pool-copies`, `pool-recip`, `pool-role`: an organic
+/// - `pool-retry`, `pool-evict`, `pool-uplink`, `pool-busy`, `pool-shed`, `pool-copies`, `pool-recip`, `pool-role`, `pool-unblock`: an organic
 ///   host's peer pool (see `pool.rs`).
 /// - `index-sample`: peer index searches are answered with a sample of the
 ///   holders, drawn for each search, not the nearest to the requester
@@ -520,6 +520,7 @@ pub const EXP_FLAGS: &[&str] = &[
     "pool-copies",
     "pool-recip",
     "pool-role",
+    "pool-unblock",
     "index-sample",
 ];
 

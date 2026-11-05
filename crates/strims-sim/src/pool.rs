@@ -47,6 +47,11 @@
 //!   uplink. A leaf that stays [`BEHIND`] its peers takes [`COPIES_MIN`]:
 //!   what it can take in is short. A seed takes [`SEED_LINKS`] and one for
 //!   each copy of its stream (whose rate it knows) its uplink carries.
+//! - `pool-unblock`, with `pool-evict`: of the swarm links that stay
+//!   blocked ([`BLOCKED_SHARE`] of [`USE_SPAN`]), the one the node sent
+//!   the most closes whatever the budget, so a peer that asks for more
+//!   than it can take in (a downlink short of the stream) doesn't hold
+//!   the node's uplink.
 //! - `pool-recip`, with `pool-evict`: the link closed past the budget is
 //!   the one whose peer gave the least stream data per second since it
 //!   came up, past the [`PROTECT`] that gave the most: a peer that serves
@@ -132,6 +137,10 @@ pub const MIN_AGE: Duration = Duration::from_secs(20);
 /// The links protected from closing for each of what they brought and
 /// what they took.
 pub const PROTECT: usize = 2;
+/// `pool-unblock`: a swarm link whose transport took no more bytes at
+/// this share of the ticks of the last [`USE_SPAN`] closes, at most one
+/// every [`STARVE_FOR`], and its host isn't dialed for [`RETRY_MAX`].
+pub const BLOCKED_SHARE: f64 = 0.7;
 /// A viewer starves after this long without stream data ...
 pub const STARVE_FOR: Duration = Duration::from_secs(5);
 /// ... once this long has passed since its first swarm link.
@@ -156,6 +165,8 @@ pub struct PoolConfig {
     pub evict: bool,
     /// `pool-recip`: links are kept for what their peers gave.
     pub recip: bool,
+    /// `pool-unblock`: a link that can't take what the node sends goes.
+    pub unblock: bool,
     /// The rate a seed publishes at, which its publisher knows.
     pub stream_rate: f64,
     pub control: Control,
@@ -186,6 +197,7 @@ impl PoolConfig {
             budget,
             evict,
             recip: exp.contains("pool-recip"),
+            unblock: exp.contains("pool-unblock"),
             stream_rate: 0.0,
             control,
         })
@@ -211,6 +223,9 @@ struct LinkUse {
     recent: Vec<(u64, u64)>,
     /// Stream data in at the link's first tick.
     first_read: Option<u64>,
+    /// Per tick of the last [`USE_SPAN`]: whether the transport took no
+    /// more bytes.
+    blocked: Vec<bool>,
     swarm: bool,
 }
 
@@ -253,6 +268,11 @@ struct State {
     /// When the node first had a swarm link, and last closed one starving.
     first_link: Option<Duration>,
     starved_at: Option<Duration>,
+    /// When the node last closed a link that stayed blocked
+    /// (`pool-unblock`), and the hosts it doesn't dial until then.
+    /// Bound: one a [`STARVE_FOR`] for [`RETRY_MAX`].
+    unblocked_at: Option<Duration>,
+    shunned: BTreeMap<HostId, Duration>,
     /// Per tick of the last [`CALM_FOR`]: whether the uplink queued past
     /// [`HOT_QUEUE`], and the bytes the links wrote and the stream data
     /// among them (`pool-shed`).
@@ -296,10 +316,14 @@ impl Pool {
     pub(crate) async fn offer(&self, host: HostId) -> Result<bool, NodeError> {
         let room = {
             let mut st = self.st.borrow_mut();
-            if st.links.contains_key(&host) || st.dialing.contains(&host) {
+            let now = sim_now();
+            st.shunned.retain(|_, t| *t > now);
+            if st.links.contains_key(&host)
+                || st.dialing.contains(&host)
+                || st.shunned.contains_key(&host)
+            {
                 return Ok(false);
             }
-            let now = sim_now();
             st.candidates.entry(host).or_insert(Candidate {
                 found: now,
                 tries: 0,
@@ -415,6 +439,10 @@ impl Pool {
             };
             wire += link.metrics.write_bytes.saturating_sub(l.wire);
             l.wire = link.metrics.write_bytes;
+            l.blocked.push(link.write_blocked);
+            if l.blocked.len() > span {
+                l.blocked.remove(0);
+            }
         }
         let data: u64 = st
             .links
@@ -634,7 +662,11 @@ impl Pool {
         let mut due: Vec<(&HostId, &Candidate)> = st
             .candidates
             .iter()
-            .filter(|(h, c)| c.next_try <= now && !st.dialing.contains(h))
+            .filter(|(h, c)| {
+                c.next_try <= now
+                    && !st.dialing.contains(h)
+                    && st.shunned.get(h).is_none_or(|&t| t <= now)
+            })
             .collect();
         due.sort_by_key(|(_, c)| (c.tries, c.found));
         due.into_iter().take(slots).map(|(&h, _)| h).collect()
@@ -644,6 +676,29 @@ impl Pool {
     fn victim(&self) -> Option<HostId> {
         let now = sim_now();
         let mut st = self.st.borrow_mut();
+        if self.cfg.unblock
+            && st
+                .unblocked_at
+                .is_none_or(|t| now.saturating_sub(t) >= STARVE_FOR)
+        {
+            let span = (USE_SPAN.as_millis() / TICK.as_millis()).max(1) as usize;
+            let stuck = st
+                .links
+                .iter()
+                .filter(|(_, l)| {
+                    l.swarm
+                        && now.saturating_sub(l.since) >= MIN_AGE
+                        && l.blocked.len() >= span
+                        && l.blocked.iter().filter(|&&b| b).count() as f64
+                            >= BLOCKED_SHARE * span as f64
+                })
+                .max_by_key(|(h, l)| (l.took(), **h));
+            if let Some((&h, _)) = stuck {
+                st.unblocked_at = Some(now);
+                st.shunned.insert(h, now + RETRY_MAX);
+                return Some(h);
+            }
+        }
         let swarm: Vec<(HostId, Duration, u64)> = st
             .links
             .iter()
