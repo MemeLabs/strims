@@ -26,6 +26,13 @@
 //!   a peer: an answered exchange holds one of
 //!   `Config::max_incoming_exchanges` only while its link may still come.
 //!
+//! Two hosts that connect to each other at once would each dial the other's
+//! offer, and the second link would replace the first, possibly as it
+//! opens: the lower host id's offer wins. The lower host refuses the other
+//! offer ([`ERR_EXCHANGE_CROSSED`]); the higher one, offered while its own
+//! exchange still waits, closes it ([`ExchangeOutcome::Crossed`]) and
+//! answers.
+//!
 //! Every exchange ends [`LINK_TIMEOUT`] after it started at the latest, so
 //! a lost answer can't block later connects to that host. Only an answer
 //! carrying the exchange's id counts.
@@ -48,6 +55,7 @@ pub const LINK_TIMEOUT: Duration = Duration::from_secs(20);
 /// Error texts sent in `LinkAnswer.error_message`.
 pub const ERR_PEER_LINK_OPEN: &str = "peer link already open";
 pub const ERR_NO_NEW_PEERS: &str = "unable to add new peers";
+pub const ERR_EXCHANGE_CROSSED: &str = "exchange crossed ours";
 
 /// How an exchange ended.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -68,6 +76,8 @@ pub enum ExchangeOutcome {
     Failed(String),
     /// No answer in time.
     TimedOut,
+    /// The remote offered at once, and its offer won the tie-break.
+    Crossed,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -402,6 +412,14 @@ impl<H: Copy> Host<H> {
         while let Some(o) = self.peer_exchange.pending.pop_front() {
             if !self.networks.contains_key(o.network) {
                 continue;
+            }
+            if let Some(&ours) = self.peer_exchange.outgoing.get(&(o.network, o.src)) {
+                if self.id < o.src {
+                    let e = Some(ERR_EXCHANGE_CROSSED);
+                    let _ = self.send_answer(now, o.network, o.src, o.wire_id, vec![], e);
+                    continue;
+                }
+                self.close_exchange(ours, ExchangeOutcome::Crossed);
             }
             let allow = self.peer_room(vnic)
                 && self.peer_exchange.incoming < self.config.max_incoming_exchanges;

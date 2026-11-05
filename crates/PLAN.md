@@ -487,9 +487,8 @@ in `TRIED.md`.
   - lossy transports report loss, so direct vpn links can get a backup copy;
   - peer-exchange topology hints that suggest links to shorten long paths;
   - decide whether any app needs to stop a broadcast from being relayed;
-  - peer exchange needs a tie-break (e.g. host id) for simultaneous
-    `connect_peer` calls, which can drop the WebRTC link, and so do two
-    nodes whose bootstrap clients dial each other at once;
+  - two nodes whose bootstrap clients dial each other at once need a
+    tie-break, as crossed peer exchanges have (the lower host id wins);
   - `connect_peer` policy belongs to the app layer; the node never initiates
     it. Transfer discovery asks to link to every host a search finds (16
     per search), with no budget across transfers or against `max_peers`;

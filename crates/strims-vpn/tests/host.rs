@@ -989,6 +989,45 @@ fn open_exchanges_fill_the_peer_budget() {
     );
 }
 
+/// Two hosts that connect to each other at once make one link: the lower
+/// id's offer wins, and the other host's exchange ends crossed.
+#[test]
+fn crossed_exchanges_make_one_link() {
+    let mut w = world(3);
+    chain(&mut w);
+    let (lo, hi) = if w.id(0) < w.id(2) { (0, 2) } else { (2, 0) };
+    let now = w.now;
+    for (i, j) in [(lo, hi), (hi, lo)] {
+        let (net, id) = (w.nodes[i].net, w.id(j));
+        let node = &mut w.nodes[i];
+        node.vpn.connect(&node.vnic, now, net, id).unwrap().unwrap();
+    }
+    w.service(lo);
+    w.service(hi);
+    w.run_for(Duration::SECOND);
+    let dials = |ev: &[Event<AppTag>]| {
+        ev.iter()
+            .filter(|e| matches!(e, Event::DialRemoteDescriptions { .. }))
+            .count()
+    };
+    let (ev_lo, ev_hi) = (w.take_events(lo), w.take_events(hi));
+    assert_eq!(
+        (dials(&ev_lo), dials(&ev_hi)),
+        (0, 1),
+        "{ev_lo:?} {ev_hi:?}"
+    );
+    assert!(
+        has_closed(&ev_lo, &ExchangeOutcome::RemoteConnected),
+        "{ev_lo:?}"
+    );
+    let crossed = ExchangeOutcome::Rejected(strims_vpn::peer_exchange::ERR_EXCHANGE_CROSSED.into());
+    assert!(
+        has_closed(&ev_hi, &ExchangeOutcome::Crossed) || has_closed(&ev_hi, &crossed),
+        "{ev_hi:?}"
+    );
+    assert!(w.nodes[lo].vpn.has_peer(w.nodes[lo].net, &w.id(hi)));
+}
+
 /// An outgoing exchange whose answer never comes times out, and a later
 /// `connect` to that host starts a new one.
 #[test]
