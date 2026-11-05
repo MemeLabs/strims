@@ -142,11 +142,11 @@ struct HostChannels {
 
 impl HostChannels {
     /// The channels now.
-    fn sum(&self, conns: &FastMap<ConnKey, Conn>) -> HostSum {
+    fn sum(&self, conns: &FastMap<ConnKey, Conn>, now: Time) -> HostSum {
         let mut sum = HostSum::default();
         for c in self.channels.iter().filter_map(|k| conns.get(k)) {
             if let Some(p) = &c.pacer {
-                sum.add(p, c.buffered() as usize, c.waits);
+                sum.add(p, now, c.buffered() as usize, c.waits);
             }
         }
         sum
@@ -384,7 +384,7 @@ fn release(b: &mut Buffers, conn: ConnKey, at: Time) -> Option<Waker> {
         && let Some(h) = hosts.get_mut(&conn.0.ip())
         && !h.waiting.is_empty()
     {
-        let sum = h.sum(conns);
+        let sum = h.sum(conns, at);
         if sum.load <= h.low {
             h.pacer.observe(at, &sum);
             for k in std::mem::take(&mut h.waiting) {
@@ -473,7 +473,7 @@ impl SimTcpStream {
                 && !waited
                 && let Some(h) = hosts.get_mut(&key.0.ip())
             {
-                let sum = h.sum(conns);
+                let sum = h.sum(conns, now);
                 h.pacer.observe(now, &sum);
                 if !h.pacer.may_write(now, &sum) {
                     held = true;

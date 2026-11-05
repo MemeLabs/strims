@@ -49,7 +49,11 @@
 //!   estimated flight (its bandwidth over its horizon): its own path holds
 //!   it back (a narrow downlink, a slow reader), and the rest waits for
 //!   its window, not in the uplink's queue. Counted whole, a backed-up
-//!   neighbour would take the host's cap from the rest;
+//!   neighbour would take the host's cap from the rest. One whose oldest
+//!   buffered byte was written [`STALL`] ago or more counts nothing: its
+//!   association is stalled (a loss's timeout, a peer that stopped
+//!   reading), and counted, it held the host's every channel until it
+//!   recovered, while nothing else's acknowledgement came to free them;
 //! - the cap is the host's bandwidth over the channels' horizons, each
 //!   weighted by its channel's bandwidth, plus [`SLACK`] ([`FLOOR`] at
 //!   least): the flight the channels hold while they share the uplink as
@@ -79,6 +83,10 @@ pub const BW_SPAN: Duration = Duration::from_secs(2);
 /// uplinks, held more than their queues take and lost packets, which their
 /// ordered channels wait about a second to resend.
 pub const RATE_WINDOW: Duration = Duration::from_millis(250);
+
+/// How long a channel's oldest buffered byte waits before the channel
+/// counts as stalled ([`HostSum::add`]).
+pub const STALL: Duration = Duration::from_secs(2);
 
 /// How long a round trip counts toward the least.
 pub const RTT_SPAN: Duration = Duration::from_secs(10);
@@ -157,6 +165,18 @@ impl ChannelPacer {
         }
     }
 
+    /// Whether the oldest of `buffered` bytes buffered at `now` was written
+    /// [`STALL`] ago or more.
+    pub fn stalled(&self, now: Time, buffered: usize) -> bool {
+        let delivered = self.written.saturating_sub(buffered as u64);
+        buffered > 0
+            && self
+                .writes
+                .iter()
+                .find(|&&(_, through)| through > delivered)
+                .is_some_and(|&(at, _)| now - at >= STALL)
+    }
+
     /// Whether the writer may write at `now` with `buffered` bytes
     /// buffered, `max` at most.
     pub fn may_write(&self, now: Time, buffered: usize, max: usize) -> bool {
@@ -231,12 +251,13 @@ pub struct HostSum {
 }
 
 impl HostSum {
-    /// Adds a channel with `buffered` bytes buffered that `waits` (or not)
-    /// on its own cap.
-    pub fn add(&mut self, channel: &ChannelPacer, buffered: usize, waits: bool) {
+    /// Adds a channel with `buffered` bytes buffered at `now` that `waits`
+    /// (or not) on its own cap.
+    pub fn add(&mut self, channel: &ChannelPacer, now: Time, buffered: usize, waits: bool) {
         self.buffered += buffered;
         let flight = channel.flight();
         self.load += match flight {
+            _ if channel.stalled(now, buffered) => 0,
             Some(f) if waits => buffered.min(f as usize),
             _ => buffered,
         };
@@ -345,13 +366,13 @@ mod tests {
         steady(&mut fast, 0, 100);
         // 100 KB/s over 850 ms.
         let mut sum = HostSum::default();
-        sum.add(&slow, 40_000, false);
+        sum.add(&slow, t(990), 40_000, false);
         assert_eq!(sum.load, 40_000);
         let mut held = HostSum::default();
-        held.add(&slow, 120_000, true);
+        held.add(&slow, t(990), 120_000, true);
         assert!(held.load.abs_diff(85_000) < 5_000, "{held:?}");
         let before = held.load;
-        held.add(&ChannelPacer::default(), 30_000, true);
+        held.add(&ChannelPacer::default(), t(990), 30_000, true);
         assert_eq!(held.buffered, 150_000);
         assert_eq!(held.load, before + 30_000, "no flight yet: whole");
 
@@ -360,8 +381,8 @@ mod tests {
         let mut host = HostPacer::default();
         steady(&mut host.pacer, 0, 100);
         let mut both = HostSum::default();
-        both.add(&fast, 0, false);
-        both.add(&slow, 0, false);
+        both.add(&fast, t(990), 0, false);
+        both.add(&slow, t(990), 0, false);
         let horizon = (1e6 * 0.13 + 1e5 * 0.85) / 1.1e6;
         let want = (1e6 * horizon) as usize + SLACK;
         let cap = host.cap(t(990), &both);
@@ -379,6 +400,29 @@ mod tests {
             host.cap(t(990), &HostSum::default()),
             host.pacer.cap(t(990), usize::MAX)
         );
+    }
+
+    /// A channel whose oldest buffered byte went [`STALL`] ago counts
+    /// nothing toward the host's load; fresh bytes on an idle channel count
+    /// whole.
+    #[test]
+    fn a_stalled_channel_holds_none_of_the_host() {
+        let mut p = ChannelPacer::default();
+        steady(&mut p, 0, 100);
+        p.wrote(t(1_000), 33_000);
+        let buffered = 33_000 + 40_000;
+        let mut sum = HostSum::default();
+        sum.add(&p, t(1_500), buffered, true);
+        assert!(sum.load > 0, "{sum:?}");
+        let mut stalled = HostSum::default();
+        stalled.add(&p, t(3_000), buffered, true);
+        assert_eq!((stalled.load, stalled.buffered), (0, buffered));
+
+        p.observe(t(6_000), 0);
+        p.wrote(t(6_000), 30_000);
+        let mut fresh = HostSum::default();
+        fresh.add(&p, t(6_010), 30_000, false);
+        assert_eq!(fresh.load, 30_000);
     }
 
     /// A stall (nothing delivered for a second) keeps the cap the

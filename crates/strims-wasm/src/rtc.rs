@@ -477,7 +477,7 @@ impl Host {
                 return false;
             };
             let b = dc.channel.buffered_amount() as usize;
-            sum.add(&dc.pacer.borrow(), b, dc.waits.get());
+            sum.add(&dc.pacer.borrow(), now, b, dc.waits.get());
             true
         });
         let mut pacer = self.pacer.borrow_mut();

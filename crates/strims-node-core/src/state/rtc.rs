@@ -106,7 +106,7 @@ pub(super) fn host_sum<'a>(
 ) -> HostSum {
     let mut sum = HostSum::default();
     for (dc, conn) in channels {
-        sum.add(&dc.pacer, rtc.ep.buffered_amount(conn), dc.capped);
+        sum.add(&dc.pacer, now, rtc.ep.buffered_amount(conn), dc.capped);
     }
     rtc.pacer.observe(now, &sum);
     sum
