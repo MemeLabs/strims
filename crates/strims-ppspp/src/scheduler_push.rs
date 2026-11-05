@@ -296,6 +296,9 @@ pub const RELAY_GROWTH: f64 = 4.0;
 /// ... this many once their latest round trips stand [`QUEUE_FORMING`]
 /// above their bases ...
 pub const RELAY_GROWTH_FORMING: f64 = 1.5;
+/// An adaptive seed's growth while its links show no queue, once its
+/// window was cut ([`UploadInfo::seed_capacity`]).
+pub const SEED_GROWTH: f64 = 1.5;
 pub const QUEUE_FORMING: Duration = Duration::from_millis(10);
 /// ... and no more than it wrote from [`QUEUE_FORMED`].
 pub const QUEUE_FORMED: Duration = Duration::from_millis(25);
@@ -408,29 +411,39 @@ impl UploadInfo {
     /// under a standing queue. The seed's budget has its own ramp and
     /// window validation and takes the unbounded reading.
     pub(crate) fn relay_capacity(&self) -> Option<f64> {
-        self.bounded_capacity(self.latest_delay)
+        self.bounded_capacity(self.latest_delay, RELAY_GROWTH)
     }
 
     /// The capacity an adaptive seed's measured budget follows:
-    /// [`relay_capacity`](Self::relay_capacity)'s bound, its growth read
-    /// from [`latest_floor`](Self::latest_floor). Unbounded, the busy
+    /// [`relay_capacity`](Self::relay_capacity)'s bound, at most
+    /// [`SEED_GROWTH`] once its window was `cut`, its growth read from
+    /// [`latest_floor`](Self::latest_floor). Unbounded, the busy
     /// time's reading ran four to six times a seed's uplink (buffers below
     /// the runner take writes at once, and a bursty stream's queue drains
     /// between bursts, so the drained bound never formed), and a seed whose
     /// uplink halved shed its copies, idled, read its capacity high again
     /// and took them back. A single round trip reads jitter as a queue.
-    pub(crate) fn seed_capacity(&self) -> Option<f64> {
-        self.bounded_capacity(self.latest_floor)
+    /// The seed's window validation grows its copies on its own, and the
+    /// least excess of a bursty seed's links reads no queue most of the
+    /// time: at a relay's growth its budget swung from one copy to eleven
+    /// and back within seconds after its uplink halved. Before the first
+    /// cut it grows as a relay does, as slow start doubles until a loss:
+    /// held to [`SEED_GROWTH`] from the start, seeds on lossy and far links
+    /// never took the copies their uplinks paid for.
+    pub(crate) fn seed_capacity(&self, cut: bool) -> Option<f64> {
+        let most = if cut { SEED_GROWTH } else { RELAY_GROWTH };
+        self.bounded_capacity(self.latest_floor, most)
     }
 
     /// [`capacity_within`](Self::capacity_within) at most a growth over the
-    /// most written lately, the growth by the queue `queue` reads.
-    fn bounded_capacity(&self, queue: Option<Duration>) -> Option<f64> {
+    /// most written lately: `most` while the queue `queue` reads none, less
+    /// as it forms.
+    fn bounded_capacity(&self, queue: Option<Duration>, most: f64) -> Option<f64> {
         let queue = queue.unwrap_or(Duration::ZERO);
         let growth = if queue < QUEUE_FORMING {
-            RELAY_GROWTH
+            most
         } else if queue < QUEUE_FORMED {
-            RELAY_GROWTH_FORMING
+            RELAY_GROWTH_FORMING.min(most)
         } else {
             1.0
         };
@@ -2433,6 +2446,8 @@ mod tests {
         };
         assert_eq!(idle.capacity(), Some(50_000.0 / MIN_BUSY));
         assert_eq!(idle.relay_capacity(), Some(RELAY_GROWTH * 60_000.0));
+        assert_eq!(idle.seed_capacity(false), Some(RELAY_GROWTH * 60_000.0));
+        assert_eq!(idle.seed_capacity(true), Some(SEED_GROWTH * 60_000.0));
         // Less once a queue forms, and what it wrote once one stands.
         let forming = UploadInfo {
             latest_delay: Some(QUEUE_FORMING),

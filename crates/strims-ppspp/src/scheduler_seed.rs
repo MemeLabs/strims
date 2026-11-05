@@ -1546,7 +1546,11 @@ impl PeerSwarmScheduler {
             a.measuring_since = now;
         }
         let measuring = !a.measuring_since.is_nil() && now - a.measuring_since >= ALLOC_MEASURE;
-        if let Some(cap) = upload.seed_capacity().filter(|_| measuring && rate > 0.0) {
+        let cut = a.window.ssthresh != usize::MAX;
+        if let Some(cap) = upload
+            .seed_capacity(cut)
+            .filter(|_| measuring && rate > 0.0)
+        {
             let target =
                 (((cap * ALLOC_UTILIZATION - upload.others).max(0.0) / rate) as usize).max(streams);
             if !a.measured

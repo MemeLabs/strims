@@ -1536,9 +1536,12 @@ fn alloc_check(
     for &p in pushed {
         push_to(f, p, t, t + wait, Some(Duration::from_millis(20)));
     }
+    // A seed that wrote what the reading shows: the growth bound doesn't
+    // bind it.
     f.sched.set_upload(push::UploadInfo {
         rate,
         busy,
+        written_peak: rate as f64 / busy.max(0.05),
         ..Default::default()
     });
     f.sched.run_push(next, q);
@@ -2206,6 +2209,7 @@ fn the_budget_leaves_out_the_time_data_waited_only_for_links_that_hold_it_back()
             rate: 900_000,
             busy: 1.0,
             budget_busy,
+            written_peak: 1_800_000.0,
             ..Default::default()
         });
         f.sched.run_push(t, &mut q);
