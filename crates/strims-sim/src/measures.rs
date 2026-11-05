@@ -1239,7 +1239,11 @@ impl Report {
         let (mut hits, mut misses, mut pruned, mut present) =
             (vec![0; n], vec![0; n], vec![0; n], vec![0; n]);
         let mut parents: Vec<Vec<i64>> = vec![Vec::new(); n];
-        for v in &viewers {
+        // The push counters are the honest viewers'.
+        for v in viewers
+            .iter()
+            .filter(|v| !matches!(self.class(v.host), HostClass::Hostile(_)))
+        {
             let mut last: Option<&crate::TransferSample> = None;
             for (t, x) in sampled(v.host) {
                 if let Some(k) = sample_second(t) {
@@ -1362,7 +1366,8 @@ impl Report {
             }
             j.field("written", format_args!("{}", ints(&written)));
         }
-        // The hostile viewers' places in `lag` and `frames`, if any.
+        // The hostile viewers' places in `lag` and `frames`, if any: `hits`,
+        // `misses`, `pruned`, `present` and `parents` leave them out.
         if !hostile.is_empty() {
             j.field("hostile", format_args!("{}", ints(&hostile)));
         }
