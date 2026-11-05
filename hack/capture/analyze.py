@@ -751,7 +751,8 @@ def measures(s):
     A series whose stream varies in rate (a media run's) carries the chunks
     sent each second that `frames` counts (`written`), which on-time pushes
     count against, and is measured against those; older rows carry the
-    chunks published (`chunks`), padding alone included."""
+    chunks published (`chunks`), padding alone included. Delivery and lag
+    leave out the viewers a series marks hostile (`hostile`)."""
     n = min(s["secs"], len(s["present"]))
     per_s = s["rate"] / s["chunk"]
     chunks, written = s.get("chunks"), s.get("written")
@@ -761,7 +762,9 @@ def measures(s):
     for k in range(n):
         w = [x for x in share[max(0, k - TREES_SMOOTH // 2): k + TREES_SMOOTH // 2 + 1] if x is not None]
         smooth.append(sum(w) / len(w) if w else None)
-    firsts = [next((i for i, f in enumerate(frames) if f), None) for frames in s["frames"]]
+    hostile = set(s.get("hostile", []))
+    viewers = [f for i, f in enumerate(s["frames"]) if i not in hostile]
+    firsts = [next((i for i, f in enumerate(frames) if f), None) for frames in viewers]
 
     def window(frames, k):
         got = sum(frames[k - DELIVERY_SECS + 1: k + 1])
@@ -773,12 +776,12 @@ def measures(s):
     deliv = []
     for k in range(n):
         d = [
-            x for frames, first in zip(s["frames"], firsts)
+            x for frames, first in zip(viewers, firsts)
             if first is not None and k >= first + DELIVERY_SECS - 1
             for x in [window(frames, k)] if x is not None
         ]
         deliv.append(med(d))
-    vl = lags(s)
+    vl = [v for i, v in enumerate(lags(s)) if i not in hostile]
     lag = [quantile([v[k] for v in vl if v[k] is not None], LAG_QUANTILE) for k in range(n)]
     return n, smooth, deliv, lag
 

@@ -1324,6 +1324,12 @@ impl Report {
         let frame = media.map_or(crate::stream::FRAME_LEN as u64, |_| {
             spec.options.chunk_size as u64
         });
+        let hostile: Vec<i64> = viewers
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| matches!(self.class(v.host), HostClass::Hostile(_)))
+            .map(|(i, _)| i as i64)
+            .collect();
         let mut j = JsonRow::default();
         j.int("rate", self.swarm_rate(swarm) as u64)
             .int("chunk", spec.options.chunk_size as u64)
@@ -1355,6 +1361,10 @@ impl Report {
                 }
             }
             j.field("written", format_args!("{}", ints(&written)));
+        }
+        // The hostile viewers' places in `lag` and `frames`, if any.
+        if !hostile.is_empty() {
+            j.field("hostile", format_args!("{}", ints(&hostile)));
         }
         Some(j.finish())
     }
