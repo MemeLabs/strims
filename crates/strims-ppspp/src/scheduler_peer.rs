@@ -77,6 +77,16 @@
 //!   first). The rest get the chunk pushed, and pull only what their
 //!   parent misses, past its deadline.
 //!
+//! While a queue holds a relay's uplink (its links' latest round trips
+//! stand [`push::QUEUE_FORMED`] above their bases), its HAVEs wait to every
+//! peer but those the frame pushes to, and only for a frame that carries
+//! something else to the peer, or the tick: a peer's HAVE starts a write
+//! cycle at once to request what it offers, and one that requests nothing
+//! would otherwise carry our waiting HAVEs alone, the neighbours' cycles
+//! trading them between ticks. Thin relays that pull, as each asks the
+//! others, would send a frame per chunk to every neighbour; a seed keeps
+//! its HAVEs to those that pull from it eager, as they pull most from it.
+//!
 //! # Data-less chunks
 //!
 //! A unit signed early ends in data-less chunks ([`crate::integrity`]),
@@ -422,6 +432,18 @@ struct Backlog {
 }
 
 impl SwarmState {
+    /// Whether a queue holds a relay's uplink: its links' latest round
+    /// trips stand [`push::QUEUE_FORMED`] above their bases. Its HAVEs then
+    /// wait for a frame or the tick (see the [module docs](self)).
+    fn uplink_queued(&self) -> bool {
+        !self.is_seed
+            && self.push.as_ref().is_some_and(|p| {
+                p.upload
+                    .latest_delay
+                    .is_some_and(|d| d >= push::QUEUE_FORMED)
+            })
+    }
+
     /// The stream of chunk bin `b`: chunk `i` is stream
     /// `i % stream_count`.
     pub(crate) fn bin_stream(&self, b: Bin) -> Stream {
@@ -619,6 +641,9 @@ pub(crate) struct PeerChannelScheduler {
 
     /// Bins to send HAVEs for. Bound: our window.
     have_bins: Map,
+    /// `have_bins` go in the next frame, whatever else it carries: one of
+    /// them goes at once, or the tick came since they waited.
+    haves_due: bool,
     /// Bins to send CANCELs for. Bound: timed out requests and chunks
     /// released from the peer as a parent, within the window.
     cancel_bins: Map,
@@ -683,6 +708,7 @@ impl PeerChannelScheduler {
             request_times: TimeSet::default(),
             answer_time: AnswerTime::default(),
             have_bins: s.announced(),
+            haves_due: false,
             cancel_bins: Map::new(),
             request_bins: BinQueue::default(),
             backoff_bins: Map::new(),
@@ -725,6 +751,7 @@ impl PeerChannelScheduler {
         let streams = usize::from(s.stream_count);
         self.request_times = TimeSet::default();
         self.have_bins = Map::new();
+        self.haves_due = false;
         self.cancel_bins = Map::new();
         self.request_bins = BinQueue::default();
         self.backoff_bins = Map::new();
@@ -980,7 +1007,7 @@ impl PeerChannelScheduler {
         self.extra.push_stream(stream, StreamMessage::Close);
     }
 
-    /// Writes the extra messages, HAVEs and CANCELs.
+    /// Writes the extra messages and CANCELs.
     fn write0(&mut self, swarm: &Swarm, cw: &mut MeteredWriter<'_>) -> Result<(), codec::Error> {
         if self.extra.handshake {
             let h = swarm.handshake_options();
@@ -1016,10 +1043,23 @@ impl PeerChannelScheduler {
             self.extra.order.pop_front();
         }
 
-        write_map_bins(&mut self.have_bins, cw, |bin| Message::Have(Have { bin }))?;
         write_map_bins(&mut self.cancel_bins, cw, |bin| {
             Message::Cancel(Cancel { bin })
         })?;
+        Ok(())
+    }
+
+    /// Writes the HAVEs if they are due or `ride` (the frame carries
+    /// something else to the peer); otherwise they wait for the tick (see
+    /// the [module docs](self)).
+    fn write_haves(&mut self, cw: &mut MeteredWriter<'_>, ride: bool) -> Result<(), codec::Error> {
+        if !self.haves_due && !ride {
+            return Ok(());
+        }
+        // Those a full frame leaves go in the next.
+        self.haves_due = true;
+        write_map_bins(&mut self.have_bins, cw, |bin| Message::Have(Have { bin }))?;
+        self.haves_due = false;
         Ok(())
     }
 
@@ -1408,6 +1448,10 @@ impl PeerSwarmScheduler {
         for c in self.channels.values_mut() {
             timed_out |= c.time_out_requests(&mut self.s, now, q);
             c.try_restart(&self.s, now, q);
+            if !c.have_bins.is_empty() {
+                c.haves_due = true;
+                q.enqueue(c.peer, self.s.key);
+            }
         }
         self.run_push(now, q);
         if timed_out {
@@ -1634,6 +1678,7 @@ impl PeerSwarmScheduler {
             }
             covers[0] = hb;
         }
+        let queued = s.uplink_queued();
         for c in self.channels.values_mut() {
             if !hidden {
                 for &hb in covers.iter().filter(|b| !b.is_none()).chain(&more) {
@@ -1650,12 +1695,15 @@ impl PeerSwarmScheduler {
             // cycle per frame, not per chunk.
             let waits = match s.mode {
                 PushMode::Off => true,
-                PushMode::Hybrid => !pushed.contains(&c.peer) && now >= c.eager_haves_until,
+                PushMode::Hybrid => {
+                    !pushed.contains(&c.peer) && (queued || now >= c.eager_haves_until)
+                }
                 _ => false,
             };
             if waits || c.peer_have_bins.filled_at(bin) {
                 q.enqueue(c.peer, s.key);
             } else {
+                c.haves_due = true;
                 q.enqueue_now(c.peer, s.key);
             }
         }
@@ -2421,19 +2469,22 @@ impl PeerSwarmScheduler {
     }
 
     /// Writes a ping when due, then
-    /// [`write0`](PeerChannelScheduler::write0), requests and the report
-    /// due to the peer. A full frame returns
-    /// [`codec::Error::NotEnoughSpace`] with what fit left in `cw`.
+    /// [`write0`](PeerChannelScheduler::write0), requests, the report due
+    /// to the peer and the HAVEs that go: `ride` says the frame carries
+    /// something else to the peer already, or data after this. A full frame
+    /// returns [`codec::Error::NotEnoughSpace`] with what fit left in `cw`.
     pub(crate) fn write(
         &mut self,
         peer: PeerKey,
         now: Time,
         swarm: &Swarm,
         cw: &mut MeteredWriter<'_>,
+        ride: bool,
     ) -> Result<(), codec::Error> {
         let Some((s, c)) = self.channel(peer) else {
             return Ok(());
         };
+        let room = cw.available();
         // The controller takes a ping a second.
         if now > c.next_ping_time {
             let nonce = now.unix_nanos() as u64;
@@ -2443,7 +2494,8 @@ impl PeerSwarmScheduler {
         }
         c.write0(swarm, cw)?;
         c.write1(s, now, cw)?;
-        c.write_report(cw)
+        c.write_report(cw)?;
+        c.write_haves(cw, ride || !s.uplink_queued() || cw.available() < room)
     }
 
     /// Writes integrity and data for `b`, or for the leftmost part of `b`

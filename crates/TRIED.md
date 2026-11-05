@@ -269,7 +269,9 @@ hold. Pacing it on the model's true uplink queue instead (an oracle,
 read of the queue cures the cell, as a pace holds a mean while the
 acknowledgements wait behind each window's burst. A 15 ms answer target:
 16 of 16 (repairs starve). Admitting by the
-committed pushes, answers out of the measured rule's load: 11 of 16.
+committed pushes, answers out of the measured rule's load: 11 of 16 (on
+browsers, with a queued relay's HAVEs at the tick, 7 of 8 local seeds
+against 6).
 Uplink queues of 20 or 50 ms in place of 100: 16 of 16 (losses).
 
 **A paced answer rate grown only to twice what answers sent.**
@@ -329,6 +331,22 @@ burst (star-31-5 lag p99 x1.36). The host's own round trip (its summed
 amounts') is its nearest neighbour's: a cap over it starved an LTE viewer
 of `wan_webrtc_channels` (seed 13: lag p50 2.4 -> 14.6 s).
 
+
+**HAVEs that wait at every node.** (`thin-rtc`, `pace250-ride`, against
+e20aac07, with the pacers' 250 ms rate window) HAVEs that can wait went
+only with a frame that carried something else to the peer, or at the
+tick, at seeds and at relays without a queue too. With the eager windows
+kept, the browsers tier collapsed 131 -> 110 of 1024 but robust's TCP
+cells 139 -> 153 of 1248, star-3-5's lag p99 359 -> 878 ms and its
+parent changes 0.67 -> 8.67 a minute: a 5 Mbit/s seed's HAVEs past its
+queue are what its three viewers pull by and choose parents by. With no
+eager HAVEs after a channel opens or a request, browsers collapsed 83
+(thin-15-10 32 -> 14, halve-31-10 28 -> 17), but robust 145, lag p99
+x1.71 on star-3-5, x1.62 on star-7-10 and x1.49 on limited-15-10, and
+the peers tier's grabbers and no-greedy lost delivery; keeping the eager
+HAVEs on new channels, star-3-5 went x1.91. A 100 ms rate window in place
+of 250 left relays' hosts reading 1.2 times their uplinks (browsers 103
+against 83; star-15-5's lag p99 x1.58).
 
 **Data channel write buffers for 16 KiB.** (`msg-bufs`) With one-frame
 4.5 KiB messages a link's two write buffers hold half what two 8 KiB

@@ -213,7 +213,7 @@ fn channel_requests_peer_have() {
 
     let cfg = f.swarm.reader_config();
     let (sched, swarm) = (&mut f.sched, &f.swarm);
-    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw, true).unwrap(), cfg);
     let requests: Vec<Bin> = msgs
         .iter()
         .filter_map(|m| match m {
@@ -233,11 +233,11 @@ fn first_write_sends_handshake_and_ping() {
     f.sched.add_channel(p, &[], now(), &mut q);
     let cfg = f.swarm.reader_config();
     let (sched, swarm) = (&mut f.sched, &f.swarm);
-    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw, true).unwrap(), cfg);
     assert!(matches!(msgs[0], Message::Ping(_)));
     assert!(matches!(msgs[1], Message::Handshake(_)));
     // Pings at most once a second.
-    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw, true).unwrap(), cfg);
     assert!(msgs.is_empty(), "{msgs:?}");
 }
 
@@ -605,7 +605,7 @@ fn pong_needs_an_outstanding_ping() {
 
     let cfg = f.swarm.reader_config();
     let (sched, swarm) = (&mut f.sched, &f.swarm);
-    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw, true).unwrap(), cfg);
     let Message::Ping(ping) = msgs[0] else {
         panic!("{msgs:?}")
     };
@@ -629,7 +629,7 @@ fn a_superseded_ping_skips_the_controller() {
     let mut nonces = Vec::new();
     for at in [now(), now() + PING_INTERVAL + Duration::from_millis(100)] {
         let (sched, swarm) = (&mut f.sched, &f.swarm);
-        let msgs = written(|cw| sched.write(p, at, swarm, cw).unwrap(), cfg);
+        let msgs = written(|cw| sched.write(p, at, swarm, cw, true).unwrap(), cfg);
         let Message::Ping(ping) = msgs[0] else {
             panic!("{msgs:?}")
         };
@@ -670,7 +670,7 @@ fn requests_are_bounded_by_the_window() {
         let (sched, swarm) = (&mut f.sched, &f.swarm);
         let msgs = written(
             |cw| {
-                let _ = sched.write(p, now() + Duration::from_millis(i), swarm, cw);
+                let _ = sched.write(p, now() + Duration::from_millis(i), swarm, cw, true);
             },
             cfg,
         );
@@ -710,7 +710,7 @@ fn time_outs_cancel_and_release() {
     f.sched.handle_have(p, Bin::new(2, 0), now());
     let cfg = f.swarm.reader_config();
     let (sched, swarm) = (&mut f.sched, &f.swarm);
-    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw, true).unwrap(), cfg);
     let n = msgs
         .iter()
         .filter(|m| matches!(m, Message::Request(_)))
@@ -723,7 +723,7 @@ fn time_outs_cancel_and_release() {
     let mut swarm = f.swarm;
     f.sched.run(later, &mut swarm, &mut q);
     assert!(f.sched.s.request_bins.empty_at(Bin::new(2, 0)));
-    let msgs = written(|cw| f.sched.write(p, later, &swarm, cw).unwrap(), cfg);
+    let msgs = written(|cw| f.sched.write(p, later, &swarm, cw, true).unwrap(), cfg);
     let cancels: Vec<_> = msgs
         .iter()
         .filter_map(|m| match m {
@@ -745,7 +745,7 @@ fn gc_keeps_request_times_before_the_read_offset() {
     f.sched.handle_have(p, Bin::new(2, 0), now());
     let cfg = f.swarm.reader_config();
     let (sched, swarm) = (&mut f.sched, &f.swarm);
-    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw, true).unwrap(), cfg);
     assert!(msgs.iter().any(|m| matches!(m, Message::Request(_))));
     let before = f.sched.channels[&p].request_times.size();
     assert!(before > 0);
@@ -770,7 +770,7 @@ fn unanswered_requests_filled_elsewhere_leave_the_flight() {
     f.sched.handle_have(p, Bin::new(1, 0), now());
     let cfg = f.swarm.reader_config();
     let (sched, swarm) = (&mut f.sched, &f.swarm);
-    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw, true).unwrap(), cfg);
     let requested: Vec<Bin> = msgs
         .iter()
         .filter_map(|m| match m {
@@ -823,7 +823,7 @@ fn requests_pruned_behind_the_store_leave_the_flight() {
     f.sched.handle_have(p, Bin::new(1, 0), now());
     let cfg = f.swarm.reader_config();
     let (sched, swarm) = (&mut f.sched, &f.swarm);
-    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw, true).unwrap(), cfg);
     assert_eq!(
         msgs.iter()
             .filter(|m| matches!(m, Message::Request(_)))
@@ -865,7 +865,7 @@ fn channels_ping_once_a_second() {
     for ms in (0..3000).step_by(100) {
         let (sched, swarm) = (&mut f.sched, &f.swarm);
         let at = now() + Duration::from_millis(ms);
-        let msgs = written(|cw| sched.write(p, at, swarm, cw).unwrap(), cfg);
+        let msgs = written(|cw| sched.write(p, at, swarm, cw, true).unwrap(), cfg);
         n += msgs
             .iter()
             .filter(|m| matches!(m, Message::Ping(_)))
@@ -881,7 +881,7 @@ fn pongs_reach_the_controller_and_path_samples_dont() {
     let p = ready_channel(&mut f, &mut q);
     let cfg = f.swarm.reader_config();
     let (sched, swarm) = (&mut f.sched, &f.swarm);
-    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw, true).unwrap(), cfg);
     let Some(Message::Ping(ping)) = msgs.first() else {
         panic!("{msgs:?}")
     };
@@ -906,7 +906,7 @@ fn path_samples_rank_a_seeds_holders_and_pongs_dont() {
     };
     let cfg = f.swarm.reader_config();
     let (sched, swarm) = (&mut f.sched, &f.swarm);
-    let msgs = written(|cw| sched.write(p, now(), swarm, cw).unwrap(), cfg);
+    let msgs = written(|cw| sched.write(p, now(), swarm, cw, true).unwrap(), cfg);
     let Some(ping) = msgs.iter().find_map(|m| match m {
         Message::Ping(x) => Some(x.nonce),
         _ => None,
@@ -929,7 +929,7 @@ fn requests_at(f: &mut Fixture, p: PeerKey, t: Time) -> Vec<Bin> {
     let (sched, swarm) = (&mut f.sched, &f.swarm);
     written(
         |cw| {
-            let _ = sched.write(p, t, swarm, cw);
+            let _ = sched.write(p, t, swarm, cw, true);
         },
         cfg,
     )
@@ -1197,7 +1197,7 @@ fn add_ready(f: &mut Fixture, q: &mut MockQueue, i: usize) -> PeerKey {
 fn next_messages(f: &mut Fixture, peer: PeerKey, t: Time) -> Vec<Message<'static>> {
     let cfg = f.swarm.reader_config();
     let (sched, swarm) = (&mut f.sched, &f.swarm);
-    written(|cw| sched.write(peer, t, swarm, cw).unwrap(), cfg)
+    written(|cw| sched.write(peer, t, swarm, cw, true).unwrap(), cfg)
 }
 
 #[test]

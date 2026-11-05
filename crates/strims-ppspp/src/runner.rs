@@ -1503,8 +1503,12 @@ impl Runner {
 
         let mut off = 0;
         while let Some(key) = detached.pop() {
+            let ride = off > 0
+                || peers
+                    .get(peer)
+                    .is_some_and(|p| p.dq.iter().any(|q| !q.is_empty()));
             let rest = buf.get_mut(off..).unwrap_or_default();
-            let (n, full) = write_channel(swarms, peer, key, now, rest);
+            let (n, full) = write_channel(swarms, peer, key, now, rest, ride);
             off += n;
             if full {
                 if let Some(p) = peers.get_mut(peer) {
@@ -1934,13 +1938,15 @@ impl Runner {
 
 /// Writes the channel's queued control messages (handshake, HAVEs,
 /// requests, ...) as one payload into the frame: returns the bytes used and
-/// whether the frame filled up.
+/// whether the frame filled up. `ride`: the frame carries something else
+/// to the peer.
 fn write_channel(
     swarms: &mut SlotMap<SwarmKey, RunnerSwarm>,
     peer: PeerKey,
     key: SwarmKey,
     now: Time,
     buf: &mut [u8],
+    ride: bool,
 ) -> (usize, bool) {
     let Some(rs) = swarms.get_mut(key) else {
         return (0, false);
@@ -1955,7 +1961,7 @@ fn write_channel(
         return (0, false);
     };
     let mut cw = MeteredWriter::new(buf, ch.peer_channel);
-    let r = sched.write(peer, now, swarm, &mut cw);
+    let r = sched.write(peer, now, swarm, &mut cw, ride);
     let (n, _) = cw.finish(&mut ch.metrics_out);
     (n, r == Err(codec::Error::NotEnoughSpace))
 }

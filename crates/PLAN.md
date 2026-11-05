@@ -268,7 +268,13 @@ in `TRIED.md`.
      until most HAVEs went at the tick, a packet less a frame to each
      neighbour and an acknowledgement less back (4 of 32;
      `collapse_thin_relays` checks it healthy). Rerun the testbed's cell on
-     these HAVEs: if it still collapses, the twin lacks what keeps it.
+     these HAVEs: if it still collapses, the twin lacks what keeps it. On
+     browsers the cell collapses 20 of 32 times (TCP: 0): a packet lost
+     to a relay's full uplink queue holds its ordered channel about a
+     second (dcSCTP keeps a round-trip variation of 220 ms at least), and
+     each small frame costs a packet and half a SACK back. A seed's HAVEs
+     waiting as a queued relay's do cured halve-31-10 there too (28 -> 17
+     of 32) but cost star-3-5 on TCP (`TRIED.md`).
    - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
      five-node mesh grows its push children from 16 to 50 every 15-20 s
      and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s
