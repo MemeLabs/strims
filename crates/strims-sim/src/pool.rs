@@ -40,6 +40,12 @@
 //!   been hot for [`HOT_FOR`] (busy past [`HOT_BUSY`] and queued past
 //!   [`HOT_QUEUE`]), between [`D_LO`] and [`D_HI`]: links until the
 //!   uplink fills, from [`D_LO`]. `capN` caps it.
+//! - `pool-copies`, with `pool-evict`'s: the budget steps a link at a time
+//!   (at most every [`COPIES_STEP`]) toward [`D_LO`] and
+//!   [`LINKS_PER_COPY`] for each copy of the stream the uplink carries:
+//!   the most capacity the runner measured over [`COPIES_SPAN`] over the
+//!   stream rate the node takes in, between [`COPIES_MIN`] and [`D_HI`],
+//!   from [`COPIES_START`]. A seed takes the top.
 //! - `pool-shed`, with `pool-evict`'s: from the top of `pool-busy`'s
 //!   range, the budget drops by one each [`HOT_FOR`] the uplink stays
 //!   hot, its queue standing ([`HOT_SHARE`] of the ticks past
@@ -65,6 +71,15 @@ pub const D_LO: u32 = 4;
 pub const D_HI: u32 = 16;
 /// `pool-uplink`: swarm links per copy of the stream the uplink carries.
 pub const LINKS_PER_COPY: f64 = 2.0;
+/// `pool-copies`: the budget before the uplink is measured ...
+pub const COPIES_START: u32 = 9;
+/// ... the least it takes from the measure ...
+pub const COPIES_MIN: u32 = 6;
+/// ... the span whose most capacity counts (a meter under a demand that
+/// doesn't fill the uplink reads low) ...
+pub const COPIES_SPAN: Duration = Duration::from_secs(30);
+/// ... and the least time between two steps of one link.
+pub const COPIES_STEP: Duration = Duration::from_secs(5);
 /// `pool-busy`: the uplink is calm under this busy share ...
 pub const CALM_BUSY: f64 = 0.8;
 /// ... for this long, and hot past this share ...
@@ -108,6 +123,7 @@ pub enum Control {
     Uplink,
     Busy,
     Shed,
+    Copies,
 }
 
 /// The pool's policy, from the scenario's experiment flags.
@@ -128,6 +144,8 @@ impl PoolConfig {
             Control::Busy
         } else if exp.contains("pool-shed") {
             Control::Shed
+        } else if exp.contains("pool-copies") {
+            Control::Copies
         } else {
             Control::Fixed
         };
@@ -185,6 +203,10 @@ struct State {
     hot_since: Option<Duration>,
     /// The node publishes a swarm.
     seed: bool,
+    /// The runner's measured upload capacity per tick of the last
+    /// [`COPIES_SPAN`], and when the budget last stepped (`pool-copies`).
+    capacity: Vec<u64>,
+    stepped_at: Option<Duration>,
     /// When the node first had a swarm link, and last closed one starving.
     first_link: Option<Duration>,
     starved_at: Option<Duration>,
@@ -212,6 +234,7 @@ impl Pool {
     pub(crate) fn new(node: Node, net: NetworkId, cfg: PoolConfig) -> Pool {
         let budget = match cfg.control {
             Control::Fixed | Control::Shed => cfg.budget,
+            Control::Copies => COPIES_START.min(cfg.budget),
             Control::Uplink | Control::Busy => D_LO.min(cfg.budget),
         };
         Pool {
@@ -410,6 +433,36 @@ impl Pool {
                     let copies = capacity as f64 / rate;
                     let b = f64::from(D_LO) + LINKS_PER_COPY * copies;
                     st.budget = (b as u32).clamp(D_LO.min(top), top);
+                }
+            }
+            Control::Copies => {
+                st.capacity.push(capacity);
+                let keep = (COPIES_SPAN.as_millis() / TICK.as_millis()).max(1) as usize;
+                if st.capacity.len() > keep {
+                    st.capacity.remove(0);
+                }
+                let most = st.capacity.iter().copied().max().unwrap_or(0);
+                let ticks = st.took_in.len().max(1) as f64;
+                let rate = st.took_in.iter().sum::<u64>() as f64 / ticks / TICK.as_secs_f64();
+                let target = if st.seed {
+                    top
+                } else if most > 0 && rate > 0.0 {
+                    let b = f64::from(D_LO) + LINKS_PER_COPY * most as f64 / rate;
+                    (b as u32).clamp(COPIES_MIN.min(top), top)
+                } else {
+                    st.budget
+                };
+                if target != st.budget
+                    && st
+                        .stepped_at
+                        .is_none_or(|t| now.saturating_sub(t) >= COPIES_STEP)
+                {
+                    st.budget = if target > st.budget {
+                        st.budget + 1
+                    } else {
+                        st.budget - 1
+                    };
+                    st.stepped_at = Some(now);
                 }
             }
             Control::Shed => {
