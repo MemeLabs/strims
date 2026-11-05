@@ -59,6 +59,11 @@ pub struct NodeConfig {
     /// effectively uncapped and unweighted). Change it at runtime with
     /// `Node::set_rate_limit`.
     pub rate_limit: Option<u64>,
+    /// Pace vnic's egress at a rate from what its links' paths deliver,
+    /// under `rate_limit` (`strims_vnic::pace`): for a node whose
+    /// transports hide what they hold in flight, as a browser's data
+    /// channels do.
+    pub pace_egress: bool,
     /// The node's upload capacity in bytes per second, when it is known:
     /// ppspp's push admission and seed allocation take it over a
     /// measurement that reads more (see `Runner::set_upload_capacity`).
@@ -227,6 +232,7 @@ impl NodeConfig {
             ws_public_port: 0,
             allow_insecure_ws: false,
             rate_limit: None,
+            pace_egress: false,
             upload_capacity: None,
             max_peers: 0,
             tcp: TcpOptions::default(),

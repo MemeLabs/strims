@@ -345,6 +345,27 @@ HAVEs on new channels, star-3-5 went x1.91. A 100 ms rate window in place
 of 250 left relays' hosts reading 1.2 times their uplinks (browsers 103
 against 83; star-15-5's lag p99 x1.58).
 
+**A browser host's egress pacer on other rules.** (`rtc-pace`,
+`rtc-pace-land`, `rtc-pace-v11`, `tmp-*`, against 33ba7038 with a
+queued relay's HAVEs at the tick and admission by committed push; browsers
+tier at seeds 3001-3032, base 168 of 1024 collapsed) At 1.25 times the
+most the links carried (bytes in flight over their round trips) over
+10 s, with a 50 ms bucket: on the testbed's browsers it ran at 2.8 times
+the seed's uplink and twice a relay's, and held nothing back; 168 -> 149.
+At 1.25 times the most they delivered, it held hosts under their demand
+(thin-15-10 6 of 8 local seeds against 2); with 0.9 of it while a queue
+stood, every host of a swarm of queued relays read its peers' queues as
+its own (the excess takes the echoes' way back) and drained to a
+collapse (star-31-5, wan-super-peer 8 of 8). At 2.5 times with a 20 ms
+bucket, without the growth: 168 -> 108, but every host paced at the first
+wave under a 20 Mbit/s uplink while its readings were young, and healthy
+stars' request timeouts went x3, their lag p99 x1.2-1.6 (seven
+guardrails). Pacing only once a queue had stood 0.5-1 s left the stars
+so; 2 s cured them but thin-15-10 collapsed again (its first wave's
+losses start it). Going unpaced 2 s after the last queue, not 10, left
+timeouts x2.5. Growing 10 % an update: 113, but star-15-10's lag p99
+x1.29 and star-15-5's x1.24.
+
 **Data channel write buffers for 16 KiB.** (`msg-bufs`) With one-frame
 4.5 KiB messages a link's two write buffers hold half what two 8 KiB
 writes did, and star-7-20's seed read its first wave busy and shed 64

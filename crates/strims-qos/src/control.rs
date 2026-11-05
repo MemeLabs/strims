@@ -56,7 +56,7 @@
 //!   most `VT_SCALE` ≈ 2^42 per byte, so it lasts about 2^86 bytes.
 
 use slotmap::{SlotMap, new_key_type};
-use strims_base::time::Time;
+use strims_base::time::{Duration, Time};
 
 use crate::Error;
 use crate::hlb::Hlb;
@@ -71,6 +71,10 @@ pub const MIN_WEIGHT: u64 = 1;
 /// The rate limit of [`Control::new`] in bytes per second: 1 TiB/s,
 /// effectively none.
 pub const DEFAULT_RATE_LIMIT: u64 = 1 << 40;
+
+/// The burst the rate limit lets through unless
+/// [`Control::set_rate_depth`] sets it, in time at its rate.
+pub const DEFAULT_RATE_DEPTH: Duration = Duration::SECOND;
 
 /// Virtual time units per byte at weight 1. A multiple of [`MAX_WEIGHT`], so
 /// the cost of weights that divide 1000 is exact; the factor 2^32 keeps the
@@ -330,6 +334,12 @@ impl Control {
 
     pub fn rate_limit(&self) -> u64 {
         self.hlb.limit()
+    }
+
+    /// The burst the rate limit lets through, in time at its rate
+    /// ([`DEFAULT_RATE_DEPTH`] by default).
+    pub fn set_rate_depth(&mut self, depth: Duration) {
+        self.hlb.set_depth(depth);
     }
 
     /// The root class.

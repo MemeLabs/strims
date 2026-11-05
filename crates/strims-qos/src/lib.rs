@@ -26,7 +26,8 @@ mod hlb;
 mod seff;
 
 pub use control::{
-    ClassId, Control, DEFAULT_RATE_LIMIT, MAX_WEIGHT, MIN_WEIGHT, NodeId, SessionId,
+    ClassId, Control, DEFAULT_RATE_DEPTH, DEFAULT_RATE_LIMIT, MAX_WEIGHT, MIN_WEIGHT, NodeId,
+    SessionId,
 };
 // TODO: remove `inverse_weight` and `Control::inverse_weight_of`; nothing
 // calls them.

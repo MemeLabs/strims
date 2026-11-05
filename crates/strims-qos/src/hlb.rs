@@ -3,21 +3,26 @@
 
 //! The leaky-bucket rate limiter.
 //!
-//! The bucket holds up to one second of traffic at the configured rate and
-//! drains continuously. The level is an exact integer in nano-bytes
-//! (bytes × 10⁹), so draining by `elapsed_ns × limit` never rounds and
-//! [`Hlb::ready_at`] can give the exact release time.
+//! The bucket holds up to its depth of traffic at the configured rate
+//! ([`DEFAULT_RATE_DEPTH`](crate::DEFAULT_RATE_DEPTH) unless
+//! [`Hlb::set_depth`] sets it) and drains continuously. The
+//! level is an exact integer in nano-bytes (bytes × 10⁹), so draining by
+//! `elapsed_ns × limit` never rounds and [`Hlb::ready_at`] can give the
+//! exact release time.
 
 use strims_base::time::{Duration, Time};
 
 const NANOS_PER_SEC: u128 = 1_000_000_000;
 
-/// A leaky bucket with a capacity of one second at `limit` bytes per
-/// second.
+/// A leaky bucket with a capacity of its depth
+/// ([`DEFAULT_RATE_DEPTH`](crate::DEFAULT_RATE_DEPTH) by default) at `limit`
+/// bytes per second.
 #[derive(Debug, Clone)]
 pub struct Hlb {
     /// Bytes per second.
     limit: u64,
+    /// The traffic the bucket holds, in time at the limit.
+    depth: Duration,
     /// Bucket level in nano-bytes.
     level: u128,
     /// Time the level was last drained to.
@@ -29,6 +34,7 @@ impl Hlb {
     pub fn new(limit: u64) -> Hlb {
         Hlb {
             limit,
+            depth: crate::DEFAULT_RATE_DEPTH,
             level: 0,
             last: Time::EPOCH,
         }
@@ -42,7 +48,14 @@ impl Hlb {
     /// Clamps the current level to the new capacity.
     pub fn set_limit(&mut self, limit: u64) {
         self.limit = limit;
-        self.level = self.level.min(Self::capacity(limit));
+        self.level = self.level.min(self.capacity());
+    }
+
+    /// The traffic the bucket holds, in time at the limit: a pacer's burst.
+    /// Clamps the current level to the new capacity.
+    pub fn set_depth(&mut self, depth: Duration) {
+        self.depth = depth.max(Duration::from_nanos(1));
+        self.level = self.level.min(self.capacity());
     }
 
     /// Time of the last drain. Every release time reported by
@@ -51,8 +64,8 @@ impl Hlb {
         self.last
     }
 
-    fn capacity(limit: u64) -> u128 {
-        u128::from(limit) * NANOS_PER_SEC
+    fn capacity(&self) -> u128 {
+        u128::from(self.limit) * u128::try_from(self.depth.as_nanos()).unwrap_or(0)
     }
 
     /// Drains the bucket up to `now`. A `now` earlier than the last drain is
@@ -76,7 +89,7 @@ impl Hlb {
             return false;
         }
         self.level == 0
-            || self.level.saturating_add(u128::from(n) * NANOS_PER_SEC) < Self::capacity(self.limit)
+            || self.level.saturating_add(u128::from(n) * NANOS_PER_SEC) < self.capacity()
     }
 
     /// Adds `n` sent bytes to the bucket.
@@ -105,7 +118,7 @@ impl Hlb {
             return Some(self.last);
         }
         let need = u128::from(n) * NANOS_PER_SEC;
-        let cap = Self::capacity(self.limit);
+        let cap = self.capacity();
         // Highest level at which `n` passes.
         let target = if need < cap { cap - need - 1 } else { 0 };
         let excess = self.level.saturating_sub(target);
@@ -186,5 +199,18 @@ mod tests {
         // Level clamped to 100 bytes, which drains in one second.
         assert!(!h.admits(1));
         assert!(h.check(1, ms(1000)));
+    }
+
+    #[test]
+    fn depth_bounds_the_burst() {
+        // 1000 B/s with 100 ms of depth: a 100-byte bucket.
+        let mut h = Hlb::new(1000);
+        h.set_depth(Duration::from_millis(100));
+        assert!(h.check(60, ms(0)));
+        assert!(!h.check(40, ms(0)), "60 + 40 >= 100");
+        assert!(h.check(39, ms(0)));
+        // 99 queued; after 50ms, 49 remain.
+        assert!(!h.check(51, ms(50)));
+        assert!(h.check(50, ms(50)));
     }
 }

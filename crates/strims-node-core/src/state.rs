@@ -447,6 +447,7 @@ impl State {
             HostConfig {
                 label: config.label.clone(),
                 rate_limit: config.rate_limit,
+                pace: config.pace_egress,
                 node_platform: config.node_platform.clone(),
                 node_version: config.node_version.clone(),
             },

@@ -68,6 +68,7 @@ pub mod interface;
 pub mod json;
 pub mod metrics;
 mod out_buf;
+pub mod pace;
 pub mod stream;
 pub mod tcp;
 pub mod webrtc;

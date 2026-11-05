@@ -51,6 +51,9 @@ pub fn browser_config(profile_key: Key, rng_seed: u64) -> NodeConfig {
     webrtc.endpoint.max_connections = MAX_PEER_CONNECTIONS;
     NodeConfig {
         webrtc,
+        // A browser's data channels count only their unsent bytes as
+        // buffered: its pacers see none of the flight.
+        pace_egress: true,
         node_platform: NODE_PLATFORM.to_owned(),
         ..NodeConfig::new(profile_key, rng_seed)
     }

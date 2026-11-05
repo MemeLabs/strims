@@ -111,13 +111,14 @@ use strims_crypto::{
 use strims_kademlia::ID;
 use strims_proto::types::{Certificate, Key, KeyUsage};
 use strims_proto::vnic::v1::{PeerInit, TcpMuxInit};
-use strims_qos::{ClassId, Control, SessionId};
+use strims_qos::{ClassId, Control, DEFAULT_RATE_DEPTH, DEFAULT_RATE_LIMIT, SessionId};
 
 use crate::aes_link::{AesLink, AesLinkHandshake};
 use crate::control::{self, Record};
 use crate::frame::{FRAME_HEADER_LEN, FrameDecoder, FrameHeader, MAX_FRAME_BODY_LEN};
 use crate::metrics::{HostMetrics, LinkMetrics};
 use crate::out_buf::OutBuf;
+use crate::pace::{EgressPacer, PACE_BURST};
 use crate::stream::{MessageReader, StreamError, decode_stream_message, encode_stream_message};
 use crate::{Error, PROTOCOL_VERSION};
 
@@ -281,6 +282,10 @@ pub struct HostConfig {
     pub label: String,
     /// Upload limit in bytes per second.
     pub rate_limit: Option<u64>,
+    /// Pace egress at a rate from what the links' paths deliver
+    /// ([`crate::pace`]), under `rate_limit`: for a host whose transports
+    /// hide what they hold in flight (a browser's data channels).
+    pub pace: bool,
     /// Sent in `PeerInit`.
     pub node_platform: String,
     /// Sent in `PeerInit`.
@@ -292,6 +297,7 @@ impl Default for HostConfig {
         HostConfig {
             label: String::new(),
             rate_limit: None,
+            pace: false,
             node_platform: String::new(),
             node_version: "dev".to_owned(),
         }
@@ -574,6 +580,10 @@ pub struct Host<T: Copy = ()> {
     /// Established links owing an echo or a probe that hasn't fit their
     /// buffer yet. Bounded by `links`.
     control_due: BTreeSet<PeerKey>,
+    /// The upload limit set ([`HostConfig::rate_limit`]), and with
+    /// [`HostConfig::pace`] the pacer whose rate QoS takes under it.
+    rate_limit: Option<u64>,
+    pacer: Option<EgressPacer>,
 }
 
 impl<T: Copy> Host<T> {
@@ -586,9 +596,8 @@ impl<T: Copy> Host<T> {
         let (id, _) =
             ID::unmarshal(&key.public).map_err(|_| strims_crypto::Error::InvalidKeyLength)?;
         let mut qos = Control::new();
-        if let Some(limit) = config.rate_limit {
-            qos.set_rate_limit(limit);
-        }
+        let pacer = config.pace.then(EgressPacer::default);
+        set_rate(&mut qos, config.rate_limit, pacer.as_ref());
         Ok(Host {
             profile_key,
             profile_x25519,
@@ -612,6 +621,8 @@ impl<T: Copy> Host<T> {
             max_pending_links: DEFAULT_MAX_PENDING_LINKS,
             probe_interval: Some(DEFAULT_PROBE_INTERVAL),
             control_due: BTreeSet::new(),
+            rate_limit: config.rate_limit,
+            pacer,
         })
     }
 
@@ -1475,9 +1486,29 @@ impl<T: Copy> Host<T> {
         Ok(self.qos.set_weight(class, weight)?)
     }
 
-    /// Bytes per second; 0 stops egress.
+    /// Bytes per second; 0 stops egress. A pacing host
+    /// ([`HostConfig::pace`]) paces under it.
     pub fn set_rate_limit(&mut self, limit: u64) {
-        self.qos.set_rate_limit(limit);
+        self.rate_limit = Some(limit);
+        set_rate(&mut self.qos, self.rate_limit, self.pacer.as_ref());
+    }
+
+    /// Takes a pacing host's rate again, when an update is due.
+    fn pace(&mut self, now: Time) {
+        let Host {
+            links,
+            pacer,
+            qos,
+            rate_limit,
+            ..
+        } = self;
+        let Some(p) = pacer.as_mut().filter(|p| p.due(now)) else {
+            return;
+        };
+        let readings = links.values().filter_map(|l| l.path.reading(now));
+        if p.update(now, readings).is_some() {
+            set_rate(qos, *rate_limit, Some(p));
+        }
     }
 
     // --- egress -----------------------------------------------------------
@@ -1502,6 +1533,7 @@ impl<T: Copy> Host<T> {
         if self.timers.first().is_some_and(|&(t, _)| t <= now) {
             self.handle_timeout(now);
         }
+        self.pace(now);
         let Host {
             links,
             writers,
@@ -1886,6 +1918,23 @@ fn write_control<T>(
         metrics.probe_write_count += 1;
     }
     ControlWrite::Written
+}
+
+/// Sets QoS's rate: the pacer's where it is under the upload limit, with a
+/// bucket of [`PACE_BURST`] at it; otherwise the limit, or QoS's default,
+/// with QoS's own bucket.
+fn set_rate(qos: &mut Control, limit: Option<u64>, pacer: Option<&EgressPacer>) {
+    let limit = limit.unwrap_or(DEFAULT_RATE_LIMIT);
+    match pacer.map(EgressPacer::rate).filter(|&r| r < limit) {
+        Some(rate) => {
+            qos.set_rate_depth(PACE_BURST);
+            qos.set_rate_limit(rate);
+        }
+        None => {
+            qos.set_rate_depth(DEFAULT_RATE_DEPTH);
+            qos.set_rate_limit(limit);
+        }
+    }
 }
 
 /// Blocks or unblocks a link's writers when its free space crosses an MTU.
