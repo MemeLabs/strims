@@ -828,10 +828,13 @@ impl Scheduler {
     /// SACK its sender holds back for the reverse direction, and the I bit
     /// while the window is under ten packets.
     fn sctp_transmit(&mut self, at: Time, conn: ConnKey, packet: &[Send]) {
-        let (Some(cap), Some(first)) = (self.window(), packet.first()) else {
+        let (Some(cap), Some(_)) = (self.window(), packet.first()) else {
             return;
         };
-        let Some((from, to)) = self.records.get(&first.id).map(|r| (r.from, r.to)) else {
+        let (Some(&from), Some(&to)) = (
+            self.ip_host.get(&conn.0.ip()),
+            self.ip_host.get(&conn.1.ip()),
+        ) else {
             return;
         };
         let Some((profile, cwnd)) = self.assocs.get(&conn).map(|a| (a.profile, a.cwnd)) else {
