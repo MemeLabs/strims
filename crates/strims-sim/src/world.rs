@@ -364,6 +364,9 @@ impl World {
         if browser && let Some(cap) = self.spec.exp_browser_cap() {
             c.max_peers = c.max_peers.min(cap);
         }
+        if self.spec.exp.contains("index-sample") {
+            c.vpn.peer_index_answers = strims_vpn::IndexAnswers::Sample;
+        }
         c.upload_capacity = spec.upload_capacity;
         c.vpn.routing = spec.routing.unwrap_or(self.spec.routing);
         if let Some(dir) = &self.spec.capture {

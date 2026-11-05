@@ -500,8 +500,11 @@ pub struct Scenario {
 /// The experiment flags a scenario takes ([`Scenario::exp`]):
 /// - `capN`: every browser ([`Scenario::is_browser`]) keeps N peers at
 ///   most, and N swarm links in a pool's budget.
-/// - `pool-retry`, `pool-evict`: an organic host's peer pool (see
-///   `pool.rs`).
+/// - `pool-retry`, `pool-evict`, `pool-uplink`, `pool-busy`, `pool-shed`: an organic
+///   host's peer pool (see `pool.rs`).
+/// - `index-sample`: peer index searches are answered with a sample of the
+///   holders, drawn for each search, not the nearest to the requester
+///   (`strims_vpn::IndexAnswers`).
 pub const EXP_FLAGS: &[&str] = &[
     "cap6",
     "cap8",
@@ -511,6 +514,10 @@ pub const EXP_FLAGS: &[&str] = &[
     "cap16",
     "pool-retry",
     "pool-evict",
+    "pool-uplink",
+    "pool-busy",
+    "pool-shed",
+    "index-sample",
 ];
 
 impl Scenario {

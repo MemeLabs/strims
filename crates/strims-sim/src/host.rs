@@ -302,7 +302,7 @@ impl strims_transfer::Host for SimTransferHost {
 
     async fn connect_peer(&self, _: (), host: HostId) -> Result<bool, NodeError> {
         match (self.index, &self.pool) {
-            (Some(_), Some(pool)) => pool.offer(host),
+            (Some(_), Some(pool)) => pool.offer(host).await,
             (Some(net), None) => self.node.connect_peer(net, host).await,
             (None, _) => Ok(false),
         }
