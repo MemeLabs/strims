@@ -550,24 +550,17 @@ in `TRIED.md`.
     profiles' docs), and jitter changes every 20 ms per end. Measure both
     where the app runs on those links.
   - Browser peers collapse about twice as often as TCP peers: on robust's
-    32 window-model cells at seeds 3001-3032, TCP 91 of 1024 runs and the
-    `browsers` tier (`STRIMS_SIM_RTC`) 171 (319 against TCP's 142 before
-    the channel pacer, the host pacer and HAVEs at the tick). The tier
-    links every host as a browser, the seed too: the least capable
+    32 window-model cells at seeds 3001-3032, TCP 59 of 1024 runs and the
+    `browsers` tier (`STRIMS_SIM_RTC`) 133 (204 under the twin of dcSCTP's
+    SCTP before the egress pacer). The tier links every host as a
+    browser, the seed too: the least capable
     clients, the case to cure first. Mixed audiences (a native seed with a
     public listener reaches browsers over WebSocket) wait for tuning once
     swarms stop collapsing. Browsers do better through halvings
-    (halve-7-10 6 against 17) and worse in:
-    - thin-15-10 (32 of 32 against 4): a relay's 3 Mbit/s uplink carries
-      the 2.3 Mbit/s stream and SCTP's costs a packet: 93 bytes of headers
-      on 1191, SACKs of the copy it receives, and each tick's HAVE packets
-      to its 15 neighbours and their SACKs back (39 % over the payload
-      before HAVEs went at the tick, at seed 3001). TCP's 52-byte headers
-      and delayed acknowledgements leave room; a browser relay has none.
-      Fewer packets per neighbour (HAVEs every other tick to peers far
-      from pulling) or fewer neighbours told at all.
-    - the WAN cells (residential-two-streams 15 against 3, global-audience
-      6 against 0, slow-viewer 12 against 5, super-peer-varying 9 against
+    (halve-7-10 2 against 8) and worse in:
+    - thin-15-10 (32 of 32 against 0): the thin relays item (Swarm 1).
+    - the WAN cells (residential-two-streams 9 against 3, global-audience
+      6 against 0, slow-viewer 15 against 1, super-peer-varying 9 against
       2): SCTP's Reno on long and lossy paths. An Oceania LTE viewer of
       global-audience (seed 3001) has the scenario's three links, and one
       association carries about 0.4 Mbit/s through LTE's fades (each halves
@@ -578,7 +571,6 @@ in `TRIED.md`.
       the levers are the swarm's: more neighbours where links' delivered
       rates stay under what they're asked to carry (the scenarios script
       three).
-    - star-31-5 (8 against 1) and halve-31-10 (32 against 23).
   - A data channel's message holds one frame (`WebRtcConfig::max_message`,
     `Host::poll_link_message`), and stacks that cut a message into chunks
     as it is written end it in a short one, alone in its packet:

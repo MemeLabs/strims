@@ -364,7 +364,14 @@ guardrails). Pacing only once a queue had stood 0.5-1 s left the stars
 so; 2 s cured them but thin-15-10 collapsed again (its first wave's
 losses start it). Going unpaced 2 s after the last queue, not 10, left
 timeouts x2.5. Growing 10 % an update: 113, but star-15-10's lag p99
-x1.29 and star-15-5's x1.24.
+x1.29 and star-15-5's x1.24. Under the browser twin (dcSCTP's SCTP,
+serial links), with the growth and browsers held to nine peers, in place of the
+400 ms hold (local, star-7-5 at seeds 3001-3016, thin-15-10 and star-31-5
+at 3001-3006): a target of 50 or 100 ms took star-7-5's lag p99 x0.90 and
+x0.74 of the pacer's without a hold (x0.75 with it), but thin-15-10's lag
+p50 x1.26 and x1.53 and star-31-5's x1.22; headroom 4 left star-7-5
+(x1.01). Headroom 1.2 and 1.1 there, without the budget: 145 -> 157 and
+163 of 1024 collapsed, the WAN cells' lag p99 up.
 
 **Data channel write buffers for 16 KiB.** (`msg-bufs`) With one-frame
 4.5 KiB messages a link's two write buffers hold half what two 8 KiB

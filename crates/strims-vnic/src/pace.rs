@@ -40,12 +40,18 @@
 //! within a second of its queue clearing, and one whose uplink is full
 //! keeps the rate its queue gives.
 //!
-//! It paces once the links' [`latest_excess`] stands past [`QUEUE_TARGET`],
-//! until none has for [`UNPACE_AFTER`]; otherwise the host goes unpaced
-//! ([`UNPACED`]): one whose uplink doesn't fill gains nothing from a rate
-//! taken from what it sent, and one whose uplink does shows a queue at its
-//! next bursts. The excess includes the echoes' way back, so a peer's queue
-//! can read as the host's: the headroom and the growth make that cheap.
+//! It paces once the links' [`latest_excess`] has stood past
+//! [`QUEUE_TARGET`] at every update for [`QUEUE_HOLD`], until no queue has
+//! for [`UNPACE_AFTER`]; otherwise the host goes unpaced ([`UNPACED`]): one
+//! whose uplink doesn't fill gains nothing from a rate taken from what it
+//! sent, and one whose uplink does shows a queue at its next bursts. A
+//! queue that drains within the hold doesn't count: a relay that forwards
+//! each unit to several children over an uplink with room queues at every
+//! burst, and paced at the headroom over what it delivered on average it
+//! would send each burst slower than its uplink, the frames waiting in QoS
+//! with its requests and answers. The excess includes the echoes' way back,
+//! so a peer's queue can read as the host's: the headroom and the growth
+//! make that cheap.
 //!
 //! The rate holds QoS's limit while it is under the host's upload limit,
 //! with its bucket; otherwise the upload limit applies with QoS's own.
@@ -63,8 +69,10 @@ use strims_base::time::{Duration, Time};
 pub const PACE_UPDATE: Duration = Duration::from_millis(100);
 /// How long a reading counts toward what the links delivered.
 pub const BW_SPAN: Duration = Duration::from_secs(10);
-/// The links' latest excess past which the host paces.
+/// The links' latest excess past which the host paces ...
 pub const QUEUE_TARGET: Duration = Duration::from_millis(25);
+/// ... once it has stood there this long.
+pub const QUEUE_HOLD: Duration = Duration::from_millis(400);
 /// The rate over the most the links delivered, while a queue stands.
 pub const HEADROOM: f64 = 2.5;
 /// How much the rate grows at each update while none does.
@@ -86,6 +94,9 @@ pub struct EgressPacer {
     rate: u64,
     /// When a queue last stood, while the host paces.
     paced: Option<Time>,
+    /// Since when the excess has stood past [`QUEUE_TARGET`] at every
+    /// update.
+    standing: Option<Time>,
     next: Time,
     /// What the links delivered together at each update of the last
     /// [`BW_SPAN`], each over every later one (a sliding most). Bound: a
@@ -100,6 +111,7 @@ impl Default for EgressPacer {
         EgressPacer {
             rate: UNPACED,
             paced: None,
+            standing: None,
             next: Time::EPOCH,
             delivered: VecDeque::new(),
             scratch: Vec::new(),
@@ -149,8 +161,12 @@ impl EgressPacer {
             self.delivered.pop_front();
         }
         let most = self.delivered.front().map_or(0, |&(_, d)| d) as f64;
-        let queued =
-            latest_excess(fresh, now, &mut self.scratch).is_some_and(|q| q >= QUEUE_TARGET);
+        if latest_excess(fresh, now, &mut self.scratch).is_some_and(|q| q >= QUEUE_TARGET) {
+            self.standing.get_or_insert(now);
+        } else {
+            self.standing = None;
+        }
+        let queued = self.standing.is_some_and(|t| now - t >= QUEUE_HOLD);
         if queued {
             self.paced = Some(now);
         } else if self.paced.is_some_and(|t| t + UNPACE_AFTER < now) {
@@ -208,8 +224,9 @@ mod tests {
             .collect()
     }
 
-    /// Unpaced until a queue stands; then 2.5 times the most the links
-    /// delivered over the span, which a queue's reading never lowers.
+    /// Unpaced until a queue has stood for the hold; then 2.5 times the
+    /// most the links delivered over the span, which a queue's reading
+    /// never lowers.
     #[test]
     fn a_queue_paces_the_host_past_the_most_its_links_delivered() {
         let mut p = EgressPacer::default();
@@ -217,14 +234,22 @@ mod tests {
             run(&mut p, 0, &[(250_000, 0), (300_000, 0)]),
             vec![UNPACED, UNPACED]
         );
-        assert_eq!(run(&mut p, 200, &[(100_000, 40)]), vec![3_000_000]);
-        let steps = [(50_000, 40), (400_000, 0), (50_000, 40)];
         assert_eq!(
-            run(&mut p, 300, &steps),
-            vec![3_000_000, 4_000_000, 4_000_000]
+            run(&mut p, 200, &[(100_000, 40); 5]),
+            vec![UNPACED, UNPACED, UNPACED, UNPACED, 3_000_000]
         );
-        // Once the 1.6 MB/s reading leaves the span: what is left in it.
-        assert_eq!(run(&mut p, 10_450, &[(50_000, 40)]), vec![500_000]);
+        assert_eq!(run(&mut p, 700, &[(50_000, 40)]), vec![3_000_000]);
+        // Once the 1.2 MB/s reading leaves the span: what is left in it.
+        assert_eq!(run(&mut p, 10_150, &[(50_000, 40)]), vec![1_000_000]);
+    }
+
+    /// A queue that drains within the hold, as one each burst raises,
+    /// leaves the host unpaced.
+    #[test]
+    fn a_passing_queue_leaves_the_host_unpaced() {
+        let mut p = EgressPacer::default();
+        let bursts = [(250_000, 40), (250_000, 40), (250_000, 0)].repeat(4);
+        assert!(run(&mut p, 0, &bursts).iter().all(|&r| r == UNPACED));
     }
 
     /// While no queue stands the rate grows from where it was, and a
@@ -232,12 +257,16 @@ mod tests {
     #[test]
     fn without_a_queue_the_rate_grows() {
         let mut p = EgressPacer::default();
-        assert_eq!(run(&mut p, 0, &[(250_000, 40)]), vec![2_500_000]);
+        assert_eq!(run(&mut p, 0, &[(250_000, 40); 5]).last(), Some(&2_500_000));
         let grown = (2_500_000.0 * GROWTH) as u64;
         let again = (grown as f64 * GROWTH) as u64;
         assert_eq!(
-            run(&mut p, 100, &[(250_000, 0), (250_000, 0), (250_000, 40)]),
-            vec![grown, again, 2_500_000]
+            run(&mut p, 500, &[(250_000, 0), (250_000, 0)]),
+            vec![grown, again]
+        );
+        assert_eq!(
+            run(&mut p, 700, &[(250_000, 40); 5]).last(),
+            Some(&2_500_000)
         );
     }
 
@@ -245,9 +274,9 @@ mod tests {
     #[test]
     fn a_quiet_host_goes_unpaced() {
         let mut p = EgressPacer::default();
-        run(&mut p, 0, &[(250_000, 40)]);
-        assert_ne!(run(&mut p, 10_000, &[(250_000, 0)]), vec![UNPACED]);
-        assert_eq!(run(&mut p, 10_100, &[(250_000, 0)]), vec![UNPACED]);
+        run(&mut p, 0, &[(250_000, 40); 5]);
+        assert_ne!(run(&mut p, 10_400, &[(250_000, 0)]), vec![UNPACED]);
+        assert_eq!(run(&mut p, 10_500, &[(250_000, 0)]), vec![UNPACED]);
     }
 
     /// Without fresh readings the rate holds; it never falls under the
@@ -258,9 +287,11 @@ mod tests {
         let stale = vec![link(t(-2_000), 1, Duration::ZERO)];
         assert_eq!(p.update(t(0), stale), None);
         assert_eq!(p.rate(), UNPACED);
-        let low = vec![link(t(100), 1_000, Duration::from_millis(50))];
-        p.update(t(100), low);
+        for k in 1..=5 {
+            let low = vec![link(t(100 * k), 1_000, Duration::from_millis(50))];
+            p.update(t(100 * k), low);
+        }
         assert_eq!(p.rate(), MIN_RATE);
-        assert!(!p.due(t(150)));
+        assert!(!p.due(t(550)));
     }
 }
