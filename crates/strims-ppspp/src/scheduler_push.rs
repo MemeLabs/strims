@@ -351,6 +351,10 @@ pub(crate) struct UploadInfo {
     /// The same from the links' latest round trips, which see a queue as
     /// it forms; `None` without fresh readings.
     pub(crate) latest_delay: Option<Duration>,
+    /// The least `latest_delay` of the last second: a queue that stands
+    /// through the stream's bursts, where one round trip can read a path's
+    /// jitter or a lossy hop's retransmission.
+    pub(crate) latest_floor: Option<Duration>,
     /// Those links' delivery rates summed, in bytes per second: while a
     /// queue stands below the runner, what the uplink carries.
     pub(crate) delivered: f64,
@@ -403,8 +407,26 @@ impl UploadInfo {
     /// The driver's hint stands as it is, and so does the delivered rate
     /// under a standing queue. The seed's budget has its own ramp and
     /// window validation and takes the unbounded reading.
-    fn relay_capacity(&self) -> Option<f64> {
-        let queue = self.latest_delay.unwrap_or(Duration::ZERO);
+    pub(crate) fn relay_capacity(&self) -> Option<f64> {
+        self.bounded_capacity(self.latest_delay)
+    }
+
+    /// The capacity an adaptive seed's measured budget follows:
+    /// [`relay_capacity`](Self::relay_capacity)'s bound, its growth read
+    /// from [`latest_floor`](Self::latest_floor). Unbounded, the busy
+    /// time's reading ran four to six times a seed's uplink (buffers below
+    /// the runner take writes at once, and a bursty stream's queue drains
+    /// between bursts, so the drained bound never formed), and a seed whose
+    /// uplink halved shed its copies, idled, read its capacity high again
+    /// and took them back. A single round trip reads jitter as a queue.
+    pub(crate) fn seed_capacity(&self) -> Option<f64> {
+        self.bounded_capacity(self.latest_floor)
+    }
+
+    /// [`capacity_within`](Self::capacity_within) at most a growth over the
+    /// most written lately, the growth by the queue `queue` reads.
+    fn bounded_capacity(&self, queue: Option<Duration>) -> Option<f64> {
+        let queue = queue.unwrap_or(Duration::ZERO);
         let growth = if queue < QUEUE_FORMING {
             RELAY_GROWTH
         } else if queue < QUEUE_FORMED {

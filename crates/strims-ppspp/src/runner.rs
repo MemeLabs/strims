@@ -9,7 +9,7 @@
 //!
 //! [`Runner`]'s docs give the contract a driver must honour.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::ops::{Deref, DerefMut};
 
 use indexmap::IndexMap;
@@ -195,6 +195,9 @@ struct UploadMeter {
     latest_delay: Option<Duration>,
     /// Scratch for the peers' excesses. Bound: one per peer.
     excesses: Vec<Duration>,
+    /// `latest_delay` at each tick of the last [`LATEST_FLOOR_SPAN`].
+    /// Bound: the ticks of that span.
+    latest_history: VecDeque<(Time, Duration)>,
     /// The delivery rates of the links that `latest_delay` reads, summed.
     delivered: f64,
     /// The links' delivery rates summed, at the last tick a queue stood
@@ -276,6 +279,10 @@ const HELD_QUEUE: Duration = Duration::from_millis(50);
 /// light link's few answers wait less.
 const HELD_SPAN: Duration = Duration::from_millis(500);
 
+/// How long the least of the links' latest excesses counts
+/// ([`UploadInfo::latest_floor`]).
+const LATEST_FLOOR_SPAN: Duration = Duration::SECOND;
+
 /// How long the meter holds its largest write rate
 /// ([`UploadInfo::written_peak`]).
 const PEAK_SPAN: Duration = Duration::from_secs(10);
@@ -295,6 +302,7 @@ impl UploadMeter {
             queue_delay: None,
             latest_delay: None,
             excesses: Vec::new(),
+            latest_history: VecDeque::new(),
             delivered: 0.0,
             drained: None,
             standing: false,
@@ -313,6 +321,16 @@ impl UploadMeter {
             now,
             &mut self.excesses,
         );
+        if let Some(d) = self.latest_delay {
+            self.latest_history.push_back((now, d));
+        }
+        while self
+            .latest_history
+            .front()
+            .is_some_and(|&(t, _)| now - t > LATEST_FLOOR_SPAN)
+        {
+            self.latest_history.pop_front();
+        }
         self.delivered = peers
             .values()
             .filter_map(|p| p.link_path)
@@ -380,6 +398,7 @@ impl UploadMeter {
             others: 0.0,
             queue_delay: self.queue_delay,
             latest_delay: self.latest_delay,
+            latest_floor: self.latest_history.iter().map(|&(_, d)| d).min(),
             delivered: self.delivered,
             drained: self.drained.map(|(c, at)| {
                 c * (1.0
