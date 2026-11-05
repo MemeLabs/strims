@@ -104,6 +104,12 @@
 #                          `cargo build --release -p strims-testbed --example
 #                          testbed_browser`
 #   BROWSER_ARGS=<args>    more flags for every browser node's harness
+#   CPU_PROFILE=<at>:<s>   each Chromium node's page and workers sampled by
+#                          V8's profiler from <at> seconds after the start
+#                          for <s> (testbed_browser's --cpu-profile), into
+#                          <out dir>/profile/cpu-<i>-<target>.cpuprofile;
+#                          wasm frames have names with a bundle built with
+#                          CARGO_PROFILE_RELEASE_WASM_STRIP=false
 #   RELAY=0                no relay, for a harness that makes its nodes'
 #                          links itself (the bare bench's, bench.sh)
 #   WEB_BUNDLE=<dir>       the browsers' page (default dist/wasm-testbed),
@@ -326,6 +332,13 @@ tc filter add dev eth0 egress matchall action mirred egress mirror dev ifb1
   for r in "${records[@]}"; do
     if [ "$r" = "$i" ] && [ -n "$media" ]; then record_arg="--record /out/record-$i.bin"; fi
   done
+  profile_arg=""
+  if [ -n "${CPU_PROFILE:-}" ] && [ "$(kind_of "$i")" = chromium ]; then
+    # Written by the browser's unprivileged user.
+    mkdir -p "$out/profile"
+    chmod 777 "$out/profile"
+    profile_arg="--cpu-profile /out/profile --cpu-profile-at ${CPU_PROFILE%%:*} --cpu-profile-secs ${CPU_PROFILE#*:}"
+  fi
   player_arg=""
   if [ -n "$media" ] && [ "$(kind_of "$i")" != native ]; then
     # Written by the browser's unprivileged user.
@@ -358,7 +371,7 @@ $shape
 tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
-exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join $rate_arg $units_arg $hosts $capture $player_arg $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   fi
 done
 

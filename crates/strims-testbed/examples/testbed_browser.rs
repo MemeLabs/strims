@@ -11,6 +11,8 @@
 //!                 [--rate <bytes/s>] [--chunk <bytes> --munro <bytes>]
 //!                 [--units <chunks per signature>] [--join-at <s>]
 //!                 [--hosts <dir>] [--capture <dir>] [--player <file>]
+//!                 [--cpu-profile <dir> [--cpu-profile-at <s>]
+//!                  [--cpu-profile-secs <s>] [--cpu-profile-us <us>]]
 //! ```
 //!
 //! The node's kind (`firefox` or `chromium`) comes from the topology
@@ -52,6 +54,16 @@
 //! it to `<dir>/<host id hex>-<n>.ppcap`. It reads on for
 //! [`CAPTURE_GRACE`] after the last line, so the capture's last flush
 //! arrives before the browser is killed.
+//!
+//! With `--cpu-profile` (Chromium only), Chromium listens for the DevTools
+//! protocol on 127.0.0.1:[`CDP_PORT`], and from `--cpu-profile-at` seconds
+//! after the start (default 30) for `--cpu-profile-secs` (default 30) the
+//! harness samples the page and every worker it runs (the node's) with V8's
+//! profiler, every `--cpu-profile-us` (default 500), and writes each one's
+//! profile to `<dir>/cpu-<i>-<target>.cpuprofile` (DevTools' format) and
+//! the targets' URLs to `<dir>/cpu-<i>.targets`. A profile holds only what
+//! runs on the target's thread: the browser's SCTP, DTLS and ICE run on its
+//! own threads.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 // Indexing a `serde_json::Value` by key gives `Null` for a missing key.
@@ -104,6 +116,10 @@ struct Args {
     munro: Option<u64>,
     units: Option<u64>,
     player: Option<PathBuf>,
+    cpu_profile: Option<PathBuf>,
+    cpu_profile_at: u64,
+    cpu_profile_secs: u64,
+    cpu_profile_us: u64,
 }
 
 fn args() -> Result<Args, String> {
@@ -125,6 +141,10 @@ fn args() -> Result<Args, String> {
         munro: None,
         units: None,
         player: None,
+        cpu_profile: None,
+        cpu_profile_at: 30,
+        cpu_profile_secs: 30,
+        cpu_profile_us: 500,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -144,6 +164,10 @@ fn args() -> Result<Args, String> {
             "--munro" => a.munro = Some(num(value()?)?),
             "--units" => a.units = Some(num(value()?)?),
             "--player" => a.player = Some(value()?.into()),
+            "--cpu-profile" => a.cpu_profile = Some(value()?.into()),
+            "--cpu-profile-at" => a.cpu_profile_at = num(value()?)?,
+            "--cpu-profile-secs" => a.cpu_profile_secs = num(value()?)?,
+            "--cpu-profile-us" => a.cpu_profile_us = num(value()?)?,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -162,6 +186,177 @@ async fn main() {
         eprintln!("testbed_browser: {e}");
         std::process::exit(1);
     }
+}
+
+/// The port Chromium serves the DevTools protocol on, with `--cpu-profile`.
+const CDP_PORT: u16 = 9222;
+
+/// A DevTools protocol connection to the browser: commands by id, and the
+/// events that came while it waited.
+struct Cdp {
+    ws: tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+    next: u64,
+    events: Vec<Value>,
+}
+
+impl Cdp {
+    /// Connects to the browser's socket, which Chromium printed
+    /// ([`DEVTOOLS`]).
+    async fn connect() -> Result<Cdp, String> {
+        let url = DEVTOOLS
+            .get()
+            .ok_or("Chromium printed no DevTools socket")?;
+        let (ws, _) = tokio_tungstenite::connect_async(url.as_str())
+            .await
+            .map_err(|e| format!("{url}: {e}"))?;
+        Ok(Cdp {
+            ws,
+            next: 0,
+            events: Vec::new(),
+        })
+    }
+
+    /// Runs `method` in `session` (the browser's own without one) and
+    /// returns its result.
+    async fn call(
+        &mut self,
+        session: Option<&str>,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, String> {
+        self.next += 1;
+        let id = self.next;
+        let mut msg = json!({ "id": id, "method": method, "params": params });
+        if let Some(s) = session {
+            msg["sessionId"] = json!(s);
+        }
+        self.ws
+            .send(Message::text(msg.to_string()))
+            .await
+            .map_err(|e| format!("{method}: {e}"))?;
+        loop {
+            let Some(m) = self.ws.next().await else {
+                return Err(format!("{method}: the socket closed"));
+            };
+            let Message::Text(t) = m.map_err(|e| format!("{method}: {e}"))? else {
+                continue;
+            };
+            let v: Value = serde_json::from_str(&t).map_err(|e| format!("{method}: {e}"))?;
+            if v["id"] == id {
+                if !v["error"].is_null() {
+                    return Err(format!("{method}: {}", v["error"]));
+                }
+                return Ok(v["result"].clone());
+            }
+            if !v["method"].is_null() {
+                self.events.push(v);
+            }
+        }
+    }
+
+    /// Reads events for `span`.
+    async fn drain(&mut self, span: Duration) {
+        let deadline = tokio::time::Instant::now() + span;
+        while let Ok(Some(Ok(Message::Text(t)))) =
+            tokio::time::timeout_at(deadline, self.ws.next()).await
+        {
+            if let Ok(v) = serde_json::from_str::<Value>(&t)
+                && !v["method"].is_null()
+            {
+                self.events.push(v);
+            }
+        }
+    }
+}
+
+/// Samples the page and its workers for `secs`, every `us`, and writes
+/// their profiles into `dir` (see the module docs).
+async fn cpu_profile(
+    dir: &std::path::Path,
+    index: usize,
+    secs: Duration,
+    us: u64,
+) -> Result<(), String> {
+    let mut cdp = Cdp::connect().await?;
+    let targets = cdp.call(None, "Target.getTargets", json!({})).await?;
+    let page = targets["targetInfos"]
+        .as_array()
+        .and_then(|t| t.iter().find(|t| t["type"] == "page"))
+        .ok_or("no page target")?;
+    let attached = cdp
+        .call(
+            None,
+            "Target.attachToTarget",
+            json!({ "targetId": page["targetId"], "flatten": true }),
+        )
+        .await?;
+    let page_session = attached["sessionId"]
+        .as_str()
+        .ok_or("no page session")?
+        .to_owned();
+    let mut sessions = vec![("page".to_owned(), page["url"].clone(), page_session.clone())];
+    let mut seen = vec![page["targetId"].clone()];
+    cdp.call(
+        Some(&page_session),
+        "Target.setAutoAttach",
+        json!({ "autoAttach": true, "waitForDebuggerOnStart": false, "flatten": true }),
+    )
+    .await?;
+    cdp.drain(Duration::from_millis(500)).await;
+    for e in std::mem::take(&mut cdp.events) {
+        let info = &e["params"]["targetInfo"];
+        if e["method"] == "Target.attachedToTarget"
+            && !seen.contains(&info["targetId"])
+            && let Some(s) = e["params"]["sessionId"].as_str()
+        {
+            seen.push(info["targetId"].clone());
+            let kind = info["type"].as_str().unwrap_or("target");
+            let label = format!("{kind}{}", sessions.len());
+            sessions.push((label, info["url"].clone(), s.to_owned()));
+        }
+    }
+    for (label, _, s) in &sessions {
+        // V8 takes a new interval only while it isn't sampling; with the
+        // old one (1 ms) the profile is coarser, nothing more.
+        if let Err(e) = cdp
+            .call(
+                Some(s),
+                "Profiler.setSamplingInterval",
+                json!({ "interval": us }),
+            )
+            .await
+        {
+            eprintln!("cpu profile: {label}: {e}");
+        }
+        for method in ["Profiler.enable", "Profiler.start"] {
+            if let Err(e) = cdp.call(Some(s), method, json!({})).await {
+                eprintln!("cpu profile: {label}: {e}");
+            }
+        }
+    }
+    eprintln!("cpu profile: {} targets from {}", sessions.len(), now_ms());
+    tokio::time::sleep(secs).await;
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let mut list = String::new();
+    for (label, url, s) in &sessions {
+        let r = match cdp.call(Some(s), "Profiler.stop", json!({})).await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("cpu profile: {label}: {e}");
+                continue;
+            }
+        };
+        let file = dir.join(format!("cpu-{index}-{label}.cpuprofile"));
+        std::fs::write(&file, r["profile"].to_string())
+            .map_err(|e| format!("{}: {e}", file.display()))?;
+        list.push_str(&format!("{label} {url}\n"));
+    }
+    let file = dir.join(format!("cpu-{index}.targets"));
+    std::fs::write(&file, list).map_err(|e| format!("{}: {e}", file.display()))?;
+    eprintln!("cpu profile: written at {}", now_ms());
+    Ok(())
 }
 
 /// The browser, killed when this drops.
@@ -311,10 +506,16 @@ fn relay_output(pipe: impl Read + Send + 'static, tag: &'static str) {
     #[allow(clippy::disallowed_methods)]
     std::thread::spawn(move || {
         for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+            if let Some(url) = line.strip_prefix("DevTools listening on ") {
+                let _ = DEVTOOLS.set(url.trim().to_owned());
+            }
             eprintln!("{tag}: {line}");
         }
     });
 }
+
+/// The browser's DevTools socket, as Chromium prints it.
+static DEVTOOLS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 async fn run() -> Result<(), String> {
     let a = args()?;
@@ -353,8 +554,15 @@ async fn run() -> Result<(), String> {
         .into()
     });
     let url = format!("http://{}/e2e.html?count=1&logLevel=0", site.addr);
+    let mut args = browser_args(me.kind, &profile, &url);
+    if a.cpu_profile.is_some() {
+        if me.kind != Kind::Chromium {
+            return Err("--cpu-profile needs Chromium".to_owned());
+        }
+        args.insert(0, format!("--remote-debugging-port={CDP_PORT}").into());
+    }
     let mut child = Command::new(&bin)
-        .args(browser_args(me.kind, &profile, &url))
+        .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -579,11 +787,23 @@ async fn run() -> Result<(), String> {
         }
         std::future::pending::<()>().await;
     };
+    let sample = async {
+        let Some(dir) = &a.cpu_profile else {
+            return std::future::pending::<()>().await;
+        };
+        let at = start_ms + a.cpu_profile_at * 1000;
+        tokio::time::sleep(Duration::from_millis(at.saturating_sub(now_ms()))).await;
+        let secs = Duration::from_secs(a.cpu_profile_secs);
+        if let Err(e) = cpu_profile(dir, a.index, secs, a.cpu_profile_us).await {
+            eprintln!("cpu profile: {e}");
+        }
+        std::future::pending::<()>().await
+    };
     // The page's lines end the run; the deadline covers a page that died.
     let deadline = Duration::from_millis((end_ms + 15_000).saturating_sub(now_ms()));
     tokio::select! {
         () = receive => {}
-        () = async { tokio::join!(send, drive); } => {}
+        () = async { tokio::join!(send, drive, sample); } => {}
         () = tokio::time::sleep(deadline) => eprintln!("the page sent no last line"),
     }
     if let Some(c) = capture.as_mut() {
