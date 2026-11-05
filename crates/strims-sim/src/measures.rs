@@ -920,8 +920,10 @@ impl Report {
                 .map_or(Duration::ZERO, |s| s.stop);
             for (name, hosts) in [("honest", &honest), ("hostile", &hostile)] {
                 let lag = self.lag_of_between(swarm, hosts, s, e);
+                let startup = self.lag_of_between(swarm, hosts, s, (s + BUCKET).min(e));
                 j.int(&format!("lag_p99_ms_{name}"), u64::from(lag.p99))
                     .int(&format!("lag_p50_ms_{name}"), u64::from(lag.p50))
+                    .int(&format!("startup_p99_ms_{name}"), u64::from(startup.p99))
                     .num(&format!("delivery_{name}"), self.delivery_of(swarm, hosts));
             }
         }

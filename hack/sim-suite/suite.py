@@ -402,10 +402,11 @@ def share(num, den):
 
 
 METRICS = [
-    ("lag_p50_ms", lambda r: r.get("lag_p50_ms"), LOWER, "ratio", 0.05),
-    ("lag_p99_ms", lambda r: r.get("lag_p99_ms"), LOWER, "ratio", 0.05),
+    # A row with hostile viewers scores its honest ones'.
+    ("lag_p50_ms", lambda r: r.get("lag_p50_ms_honest", r.get("lag_p50_ms")), LOWER, "ratio", 0.05),
+    ("lag_p99_ms", lambda r: r.get("lag_p99_ms_honest", r.get("lag_p99_ms")), LOWER, "ratio", 0.05),
     ("unhealthy", unhealthy, LOWER, "diff", 0.03),
-    ("delivery", lambda r: r.get("delivery"), HIGHER, "diff", 0.002),
+    ("delivery", lambda r: r.get("delivery_honest", r.get("delivery")), HIGHER, "diff", 0.002),
     ("timeouts", lambda r: r.get("timeouts"), LOWER, "ratio", 0.10),
     ("wasted/read", lambda r: (r.get("wasted") or 0) / r["chunks_read"] if r.get("chunks_read") else None,
      LOWER, "diff", 0.01),
@@ -430,7 +431,7 @@ METRICS = [
     ("holder_short", lambda r: r.get("holder_short"), LOWER, "diff", 0.03),
     ("join_p50_ms", lambda r: r.get("join_p50_ms"), LOWER, "ratio", 0.10),
     ("join_p90_ms", lambda r: r.get("join_p90_ms"), LOWER, "ratio", 0.10),
-    ("startup_p99_ms", lambda r: r.get("startup_p99_ms"), LOWER, "ratio", 0.10),
+    ("startup_p99_ms", lambda r: r.get("startup_p99_ms_honest", r.get("startup_p99_ms")), LOWER, "ratio", 0.10),
     ("signed_lag_p99_ms", lambda r: r.get("signed_lag_p99_ms"), LOWER, "ratio", 0.05),
     ("wire/media", lambda r: r.get("wire_per_media"), LOWER, "ratio", 0.02),
     ("links_p50", lambda r: r.get("links_p50"), None, "diff", 0.5),
