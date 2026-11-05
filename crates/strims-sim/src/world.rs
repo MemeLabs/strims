@@ -762,6 +762,17 @@ impl World {
         });
     }
 
+    /// A probe of `h`'s pool ended its trial, its link staying (`won`) or
+    /// going.
+    pub fn pool_trial(&self, h: HostIx, won: bool) {
+        self.record(|st| {
+            if let Some(hs) = st.hosts.get_mut(h) {
+                hs.totals.pool_trials += 1;
+                hs.totals.pool_trial_wins += u64::from(won);
+            }
+        });
+    }
+
     /// `h` made a link (`added`) or lost one.
     pub fn peer_changed(&self, h: HostIx, added: bool) {
         self.record(|st| {

@@ -129,7 +129,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
                 ..cfg
             };
             let cfg = if hog { cfg.greedy() } else { cfg };
-            Rc::new(Pool::new(node.clone(), net, cfg))
+            Rc::new(Pool::new(node.clone(), net, cfg, w.clone(), h))
         });
     if let Some(p) = &pool {
         let p = p.clone();

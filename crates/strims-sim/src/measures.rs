@@ -936,6 +936,18 @@ impl Report {
         for (key, v) in self.capacity_position(swarm) {
             j.num(key, v);
         }
+        let viewers = self.honest_viewers();
+        let (trials, wins) = viewers
+            .iter()
+            .filter_map(|&h| self.hosts.get(h))
+            .fold((0, 0), |(t, w), r| {
+                (t + r.pool_trials, w + r.pool_trial_wins)
+            });
+        let minutes = viewers.len() as f64 * self.scenario.duration.as_secs_f64() / 60.0;
+        if trials > 0 && minutes > 0.0 {
+            j.num("pool_trials_per_host_min", trials as f64 / minutes)
+                .num("pool_trial_wins", wins as f64 / trials as f64);
+        }
         let mut rejoins: Vec<u64> = self
             .viewers
             .iter()

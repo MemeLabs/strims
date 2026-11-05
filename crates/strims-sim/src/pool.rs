@@ -68,14 +68,46 @@
 //!   [`HOT_QUEUE`]) while the links' overhead is high ([`HOT_OVERHEAD`] of
 //!   what they write past the stream's data), and grows by one each
 //!   [`CALM_FOR`] it stays calm ([`CALM_SHARE`]).
+//! - `pool-trial`, with `pool-evict`: a link younger than [`MIN_AGE`] is on
+//!   trial, unless it is silent in every swarm (ppspp's `SILENT`), which
+//!   settles its value at once. While trials stand nothing is closed for
+//!   them; once a trial ends, the link that goes is chosen among the old
+//!   ones, the newcomer with them. So a newcomer no longer wins by coming,
+//!   a full node takes one trial at a time and refuses other offers, and
+//!   the host a link went to is shunned for [`RETRY_MAX`]: should it link
+//!   again meanwhile, the link closes at once. A refused candidate waits
+//!   its retry, whoever offers it.
+//! - `pool-useful`, with `pool-trial`: links are kept for the verified new
+//!   data their peers sent over [`USE_SPAN`], the node's own measurement,
+//!   which a liar, a free rider or a sender of duplicates earns none of.
+//!   The links the node pushes to are its leechers' allowance, which push
+//!   admission sizes by the measured uplink, and are kept: a weak viewer
+//!   that can't give back still takes its share, while a free rider, which
+//!   the silence rule declines, gets none. Past them, the [`PROTECT`] that
+//!   gave the most are kept, when they gave anything. A seed, which takes
+//!   in nothing, closes first the neighbours its reports barred.
+//! - `pool-probe`, with `pool-trial`: a node at its budget that is
+//!   [`BEHIND`], or has an old link that is neither a child nor a top
+//!   giver, dials a candidate drawn at random past its budget, its probe
+//!   holding a link of its own so offers still find room. The probe waits
+//!   [`MIN_AGE`] after the last, doubling to [`RETRY_MAX`] each time the
+//!   probe's link is the one that goes once its trial ends, from
+//!   [`MIN_AGE`] again once one stays or the node falls behind. A seed
+//!   never probes: its neighbours come to it, one trial at a time.
+//! - `pool-near`, with `pool-useful`: among links of equal value the
+//!   farthest goes first, by its smallest round trip, within ppspp's
+//!   `NEAR_MARGIN`.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 use std::time::Duration;
 
 use strims_node::{ExchangeOutcome, HostId, NetworkId, Node, NodeError, NodeEvent};
+use strims_ppspp::scheduler_peer::push::seed::NEAR_MARGIN;
 
-use crate::world::sim_now;
+use crate::spec::HostIx;
+use crate::world::{World, sim_now};
 
 /// How often the pool takes its links' counters and decides.
 pub const TICK: Duration = Duration::from_secs(1);
@@ -172,6 +204,11 @@ pub struct PoolConfig {
     pub control: Control,
     /// A hostile hog's pool ([`PoolConfig::greedy`]).
     pub greedy: bool,
+    /// `pool-trial`, `pool-useful`, `pool-probe`, `pool-near`.
+    pub trial: bool,
+    pub useful: bool,
+    pub probe: bool,
+    pub near: bool,
 }
 
 impl PoolConfig {
@@ -203,6 +240,13 @@ impl PoolConfig {
             stream_rate: 0.0,
             control,
             greedy: false,
+            trial: exp.contains("pool-trial")
+                || exp.contains("pool-useful")
+                || exp.contains("pool-probe")
+                || exp.contains("pool-near"),
+            useful: exp.contains("pool-useful") || exp.contains("pool-near"),
+            probe: exp.contains("pool-probe"),
+            near: exp.contains("pool-near"),
         })
     }
 
@@ -217,6 +261,10 @@ impl PoolConfig {
             unblock: false,
             control: Control::Fixed,
             greedy: true,
+            trial: false,
+            useful: false,
+            probe: false,
+            near: false,
             ..self
         }
     }
@@ -245,9 +293,26 @@ struct LinkUse {
     /// more bytes.
     blocked: Vec<bool>,
     swarm: bool,
+    /// Verified new data in at the last tick, and per tick of the last
+    /// [`USE_SPAN`] (`pool-useful`).
+    useful: u64,
+    valued: Vec<u64>,
+    /// The peer subscribes to a stream from us; it is silent in every
+    /// swarm; the smallest round trip of its channels; a seed's reports
+    /// barred it; our probe made the link.
+    child: bool,
+    silent: bool,
+    min_rtt: Option<Duration>,
+    barred: bool,
+    probe: bool,
 }
 
 impl LinkUse {
+    /// Verified new data in over the last [`USE_SPAN`].
+    fn value(&self) -> u64 {
+        self.valued.iter().sum()
+    }
+
     fn brought(&self) -> u64 {
         self.recent.iter().map(|&(r, _)| r).sum()
     }
@@ -301,6 +366,11 @@ struct State {
     links: BTreeMap<HostId, LinkUse>,
     /// Exchanges the pool opened. Bound: [`MAX_DIALING`].
     dialing: BTreeSet<HostId>,
+    /// The probe out, dialing or on trial; when the next may go, and the
+    /// wait after (`pool-probe`).
+    probing: Option<HostId>,
+    probe_at: Option<Duration>,
+    probe_wait: Duration,
 }
 
 /// See the [module docs](self).
@@ -309,10 +379,19 @@ pub(crate) struct Pool {
     net: NetworkId,
     cfg: PoolConfig,
     st: RefCell<State>,
+    /// The run's world (its rng, the trials' counters) and the host.
+    w: Rc<World>,
+    h: HostIx,
 }
 
 impl Pool {
-    pub(crate) fn new(node: Node, net: NetworkId, cfg: PoolConfig) -> Pool {
+    pub(crate) fn new(
+        node: Node,
+        net: NetworkId,
+        cfg: PoolConfig,
+        w: Rc<World>,
+        h: HostIx,
+    ) -> Pool {
         let budget = match cfg.control {
             Control::Fixed | Control::Shed => cfg.budget,
             Control::Copies | Control::Role => COPIES_START.min(cfg.budget),
@@ -324,8 +403,11 @@ impl Pool {
             cfg,
             st: RefCell::new(State {
                 budget,
+                probe_wait: MIN_AGE,
                 ..State::default()
             }),
+            w,
+            h,
         }
     }
 
@@ -342,11 +424,14 @@ impl Pool {
             {
                 return Ok(false);
             }
-            st.candidates.entry(host).or_insert(Candidate {
+            let c = st.candidates.entry(host).or_insert(Candidate {
                 found: now,
                 tries: 0,
                 next_try: now,
             });
+            if self.cfg.trial && c.next_try > now {
+                return Ok(false);
+            }
             let swarm = st.links.values().filter(|l| l.swarm).count();
             swarm + st.dialing.len() < st.budget as usize
         };
@@ -367,15 +452,21 @@ impl Pool {
         match e {
             NodeEvent::PeerAdded(p) => {
                 st.candidates.remove(&p.host_id);
+                let probe = st.probing == Some(p.host_id);
                 st.links.insert(
                     p.host_id,
                     LinkUse {
                         since: now,
+                        probe,
                         ..LinkUse::default()
                     },
                 );
             }
             NodeEvent::PeerRemoved { host_id } => {
+                if st.probing == Some(*host_id) {
+                    st.probing = None;
+                    st.probe_at = Some(now + st.probe_wait);
+                }
                 if st.links.remove(host_id).is_some_and(|l| l.swarm) {
                     let wait = if self.cfg.greedy {
                         Duration::ZERO
@@ -397,6 +488,11 @@ impl Pool {
                     outcome,
                     ExchangeOutcome::Connected | ExchangeOutcome::RemoteConnected
                 );
+                // A refused probe waits as the last did.
+                if !linked && st.probing == Some(*host_id) {
+                    st.probing = None;
+                    st.probe_at = Some(now + st.probe_wait);
+                }
                 if let Some(c) = st.candidates.get_mut(host_id)
                     && !linked
                 {
@@ -424,13 +520,20 @@ impl Pool {
             };
             let infra = self.observe(&m);
             self.control(&m);
-            let max = self.st.borrow().budget + infra + headroom;
+            let max = {
+                let st = self.st.borrow();
+                st.budget + infra + headroom + u32::from(st.probing.is_some())
+            };
             if self.node.set_max_peers(max).await.is_err() {
                 return;
             }
             for host in self.to_dial() {
-                if let Ok(true) = self.node.connect_peer(self.net, host).await {
-                    self.st.borrow_mut().dialing.insert(host);
+                let started = matches!(self.node.connect_peer(self.net, host).await, Ok(true));
+                let mut st = self.st.borrow_mut();
+                if started {
+                    st.dialing.insert(host);
+                } else if st.probing == Some(host) {
+                    st.probing = None;
                 }
             }
             if self.cfg.evict
@@ -459,6 +562,31 @@ impl Pool {
             (l.read, l.written) = (r, w);
             l.first_read.get_or_insert(r);
             l.swarm = !p.channels.is_empty();
+            l.valued.push(p.useful.saturating_sub(l.useful));
+            if l.valued.len() > span {
+                l.valued.remove(0);
+            }
+            l.useful = p.useful;
+            let stats = || p.channels.iter().filter_map(|c| c.stats.as_ref());
+            l.child = stats().any(|s| s.scheduler.subscribed > 0);
+            l.silent = l.swarm
+                && stats().count() == p.channels.len()
+                && stats().all(|s| s.scheduler.silent);
+            l.min_rtt = stats()
+                .filter_map(|s| s.scheduler.min_rtt.to_std())
+                .filter(|d| !d.is_zero())
+                .min();
+        }
+        let barred: BTreeSet<HostId> = m
+            .runner
+            .swarms
+            .iter()
+            .flat_map(|s| s.seed_neighbours.iter())
+            .filter(|n| n.barred)
+            .map(|n| n.host_id)
+            .collect();
+        for (h, l) in st.links.iter_mut() {
+            l.barred = barred.contains(h);
         }
         let mut wire = 0;
         for link in &m.links {
@@ -680,14 +808,15 @@ impl Pool {
         }
     }
 
-    /// The candidates to dial this tick.
+    /// The candidates to dial this tick; with `pool-probe`, a probe past
+    /// the budget when one is due.
     fn to_dial(&self) -> Vec<HostId> {
         let now = sim_now();
-        let st = self.st.borrow();
+        let mut st = self.st.borrow_mut();
         let swarm = st.links.values().filter(|l| l.swarm).count();
         let room = (st.budget as usize).saturating_sub(swarm + st.dialing.len());
         let slots = room.min(MAX_DIALING.saturating_sub(st.dialing.len()));
-        let mut due: Vec<(&HostId, &Candidate)> = st
+        let mut due: Vec<(HostId, u32, Duration)> = st
             .candidates
             .iter()
             .filter(|(h, c)| {
@@ -695,15 +824,139 @@ impl Pool {
                     && !st.dialing.contains(h)
                     && st.shunned.get(h).is_none_or(|&t| t <= now)
             })
+            .map(|(&h, c)| (h, c.tries, c.found))
             .collect();
-        due.sort_by_key(|(_, c)| (c.tries, c.found));
-        due.into_iter().take(slots).map(|(&h, _)| h).collect()
+        due.sort_by_key(|&(_, tries, found)| (tries, found));
+        let mut out: Vec<HostId> = due.iter().take(slots).map(|d| d.0).collect();
+        if self.cfg.probe && out.is_empty() && !due.is_empty() {
+            let behind = st.behind_since.is_some();
+            if behind {
+                st.probe_wait = MIN_AGE;
+            }
+            let replaceable = {
+                let protected = Self::protected(&self.cfg, &st);
+                st.links.iter().any(|(h, l)| {
+                    l.swarm && now.saturating_sub(l.since) >= MIN_AGE && !protected.contains(h)
+                })
+            };
+            let ready = !st.seed
+                && swarm == st.budget as usize
+                && st.dialing.is_empty()
+                && st.probing.is_none()
+                && st
+                    .first_link
+                    .is_some_and(|t| now.saturating_sub(t) >= MIN_AGE)
+                && st.probe_at.is_none_or(|t| now >= t)
+                && (behind || replaceable);
+            if ready {
+                let n = due.len();
+                let k = self
+                    .w
+                    .with_rng(|r| (strims_wan::sample::unit(r) * n as f64) as usize)
+                    .min(n - 1);
+                if let Some(&(h, ..)) = due.get(k) {
+                    st.probing = Some(h);
+                    out.push(h);
+                }
+            }
+        }
+        out
+    }
+
+    /// The swarm link that goes past the budget, if one does (see the
+    /// [module docs](self)).
+    fn choose(cfg: &PoolConfig, st: &State, now: Duration) -> Option<HostId> {
+        let swarm: Vec<(&HostId, &LinkUse)> = st.links.iter().filter(|(_, l)| l.swarm).collect();
+        if swarm.len() <= st.budget as usize {
+            return None;
+        }
+        let young = |l: &LinkUse| now.saturating_sub(l.since) < MIN_AGE;
+        if cfg.trial
+            && swarm.len() - st.budget as usize
+                <= swarm.iter().filter(|(_, l)| young(l) && !l.silent).count()
+        {
+            return None;
+        }
+        let protected = Self::protected(cfg, st);
+        let unprotected = swarm
+            .iter()
+            .filter(|(h, l)| !protected.contains(h) && (!young(l) || (cfg.trial && l.silent)));
+        if cfg.useful {
+            let far = |l: &LinkUse| {
+                if !cfg.near {
+                    return 0;
+                }
+                let margin = NEAR_MARGIN.to_std().unwrap_or_default().as_nanos().max(1);
+                l.min_rtt.map_or(u128::MAX, |d| d.as_nanos() / margin)
+            };
+            return unprotected
+                .min_by_key(|(h, l)| {
+                    (
+                        !l.barred,
+                        l.value(),
+                        std::cmp::Reverse(far(l)),
+                        std::cmp::Reverse(l.since),
+                        **h,
+                    )
+                })
+                .map(|(h, _)| **h);
+        }
+        if cfg.recip {
+            // What the peer gave, per second linked.
+            let rate = |l: &LinkUse| {
+                let secs = now.saturating_sub(l.since).as_secs().max(1);
+                l.gave() / secs
+            };
+            return unprotected
+                .min_by_key(|(h, l)| (rate(l), std::cmp::Reverse(l.since), **h))
+                .map(|(h, _)| **h);
+        }
+        unprotected
+            .min_by_key(|(h, l)| (l.brought() + l.took(), std::cmp::Reverse(l.since), **h))
+            .map(|(h, _)| **h)
+    }
+
+    /// The links eviction keeps whatever their use: with `pool-useful` the
+    /// node's children and the [`PROTECT`] that gave it the most verified
+    /// new data, when they gave any; otherwise the [`PROTECT`] that brought
+    /// it the most data and the [`PROTECT`] it sent the most to (with
+    /// `pool-recip`, that gave it the most since they came up).
+    fn protected(cfg: &PoolConfig, st: &State) -> BTreeSet<HostId> {
+        let swarm: Vec<(&HostId, &LinkUse)> = st.links.iter().filter(|(_, l)| l.swarm).collect();
+        let mut protected: BTreeSet<HostId> = BTreeSet::new();
+        if cfg.useful {
+            protected.extend(swarm.iter().filter(|(_, l)| l.child).map(|(h, _)| **h));
+            let mut by: Vec<&(&HostId, &LinkUse)> =
+                swarm.iter().filter(|(_, l)| l.value() > 0).collect();
+            by.sort_by_key(|(h, l)| (std::cmp::Reverse(l.value()), **h));
+            protected.extend(by.iter().take(PROTECT).map(|(h, _)| **h));
+            return protected;
+        }
+        let keys: &[fn(&LinkUse) -> u64] = if cfg.recip {
+            &[LinkUse::gave]
+        } else {
+            &[LinkUse::brought, LinkUse::took]
+        };
+        for key in keys {
+            let mut by: Vec<&(&HostId, &LinkUse)> = swarm.iter().collect();
+            by.sort_by_key(|(h, l)| (std::cmp::Reverse(key(l)), **h));
+            protected.extend(by.iter().take(PROTECT).map(|(h, _)| **h));
+        }
+        protected
     }
 
     /// The swarm link to close, if the node has more than its budget.
     fn victim(&self) -> Option<HostId> {
         let now = sim_now();
         let mut st = self.st.borrow_mut();
+        // A host shunned after its link went that linked again goes at once.
+        if self.cfg.trial
+            && let Some(&h) = st.links.iter().find_map(|(h, l)| {
+                (l.swarm && st.shunned.get(h).is_some_and(|&t| t > now)).then_some(h)
+            })
+        {
+            return Some(h);
+        }
         if self.cfg.unblock
             && st
                 .unblocked_at
@@ -749,38 +1002,118 @@ impl Pool {
             st.starved_at = Some(now);
             return Some(oldest);
         }
-        let st = &*st;
-        let swarm: Vec<(&HostId, &LinkUse)> = st.links.iter().filter(|(_, l)| l.swarm).collect();
-        if swarm.len() <= st.budget as usize {
-            return None;
+        let chosen = Self::choose(&self.cfg, &st, now);
+        if let Some(v) = chosen
+            && self.cfg.trial
+        {
+            st.shunned.insert(v, now + RETRY_MAX);
         }
-        let mut protected: BTreeSet<HostId> = BTreeSet::new();
-        let keys: &[fn(&LinkUse) -> u64] = if self.cfg.recip {
-            &[LinkUse::gave]
-        } else {
-            &[LinkUse::brought, LinkUse::took]
-        };
-        for key in keys {
-            let mut by: Vec<&(&HostId, &LinkUse)> = swarm.iter().collect();
-            by.sort_by_key(|(h, l)| (std::cmp::Reverse(key(l)), **h));
-            protected.extend(by.iter().take(PROTECT).map(|(h, _)| **h));
-        }
-        let old = |l: &LinkUse| now.saturating_sub(l.since) >= MIN_AGE;
-        let unprotected = swarm
-            .iter()
-            .filter(|(h, l)| old(l) && !protected.contains(h));
-        if self.cfg.recip {
-            // What the peer gave, per second linked.
-            let rate = |l: &LinkUse| {
-                let secs = now.saturating_sub(l.since).as_secs().max(1);
-                l.gave() / secs
+        // The probe's trial ends: it stayed unless its link is the one
+        // that goes.
+        if let Some(pr) = st.probing
+            && st
+                .links
+                .get(&pr)
+                .is_some_and(|l| l.probe && now.saturating_sub(l.since) >= MIN_AGE)
+        {
+            let won = chosen != Some(pr);
+            st.probe_wait = if won {
+                MIN_AGE
+            } else {
+                (st.probe_wait * 2).min(RETRY_MAX)
             };
-            return unprotected
-                .min_by_key(|(h, l)| (rate(l), std::cmp::Reverse(l.since), **h))
-                .map(|(h, _)| **h);
+            st.probing = None;
+            st.probe_at = Some(now + st.probe_wait);
+            self.w.pool_trial(self.h, won);
         }
-        unprotected
-            .min_by_key(|(h, l)| (l.brought() + l.took(), std::cmp::Reverse(l.since), **h))
-            .map(|(h, _)| **h)
+        chosen
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn host(i: u8) -> HostId {
+        HostId::from_bytes(&[i; 32])
+    }
+
+    fn cfg(flags: &[&'static str]) -> PoolConfig {
+        let exp: BTreeSet<&'static str> = flags.iter().copied().collect();
+        PoolConfig::from_flags(&exp, Some(2)).unwrap()
+    }
+
+    /// A node with a budget of two and `links`: (host, linked at, verified
+    /// new data over the span).
+    fn state(links: &[(u8, u64, u64)]) -> State {
+        let mut st = State {
+            budget: 2,
+            ..State::default()
+        };
+        for &(i, since, value) in links {
+            st.links.insert(
+                host(i),
+                LinkUse {
+                    since: Duration::from_secs(since),
+                    swarm: true,
+                    valued: vec![value],
+                    ..LinkUse::default()
+                },
+            );
+        }
+        st
+    }
+
+    #[test]
+    fn a_trial_closes_nothing_until_it_ends_and_the_incumbent_wins_ties() {
+        let c = cfg(&["pool-role", "pool-useful"]);
+        // 1 gave nothing, 2 gave, 3 came at 30 s and gave nothing.
+        let st = state(&[(1, 0, 0), (2, 0, 100), (3, 30, 0)]);
+        assert_eq!(Pool::choose(&c, &st, Duration::from_secs(40)), None);
+        // Its trial over, the newcomer goes before the incumbent.
+        assert_eq!(
+            Pool::choose(&c, &st, Duration::from_secs(50)),
+            Some(host(3))
+        );
+    }
+
+    #[test]
+    fn a_silent_trial_ends_at_once_and_children_stay() {
+        let c = cfg(&["pool-role", "pool-useful"]);
+        let mut st = state(&[(1, 0, 0), (2, 0, 100), (3, 30, 0)]);
+        st.links.get_mut(&host(3)).unwrap().silent = true;
+        assert_eq!(
+            Pool::choose(&c, &st, Duration::from_secs(31)),
+            Some(host(3))
+        );
+        // A child that gives nothing back stays; the old non-child goes.
+        let mut st = state(&[(1, 0, 0), (2, 0, 0), (3, 0, 0)]);
+        st.links.get_mut(&host(1)).unwrap().child = true;
+        st.links.get_mut(&host(2)).unwrap().child = true;
+        assert_eq!(
+            Pool::choose(&c, &st, Duration::from_secs(40)),
+            Some(host(3))
+        );
+    }
+
+    #[test]
+    fn a_seed_closes_the_barred_first_and_near_keeps_the_nearest() {
+        let c = cfg(&["pool-role", "pool-near"]);
+        let mut st = state(&[(1, 0, 0), (2, 0, 0), (3, 0, 0)]);
+        st.links.get_mut(&host(1)).unwrap().barred = true;
+        assert_eq!(
+            Pool::choose(&c, &st, Duration::from_secs(40)),
+            Some(host(1))
+        );
+        let mut st = state(&[(1, 0, 0), (2, 0, 0), (3, 0, 0)]);
+        let rtt = |ms| Some(Duration::from_millis(ms));
+        st.links.get_mut(&host(1)).unwrap().min_rtt = rtt(20);
+        st.links.get_mut(&host(2)).unwrap().min_rtt = rtt(90);
+        st.links.get_mut(&host(3)).unwrap().min_rtt = rtt(22);
+        assert_eq!(
+            Pool::choose(&c, &st, Duration::from_secs(40)),
+            Some(host(2))
+        );
     }
 }
