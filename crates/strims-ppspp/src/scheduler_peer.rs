@@ -226,6 +226,18 @@ fn request_key(order: &[u8], b: Bin) -> (u64, u8) {
 
 /// The smallest REQUEST: type byte, one-byte bin and timestamp varints.
 const MIN_REQUEST_LEN: usize = 3;
+
+/// A swarm's requests in flight on all its channels together are at most
+/// what it took in over this long ...
+pub const FLIGHT_HORIZON: Duration = Duration::SECOND;
+/// ... or this many bytes. Each channel's LEDBAT window sizes against its
+/// own delay samples, from a base delay that is the least of four
+/// minutes: a node whose downlink stands full from its start (one short
+/// of the stream) reads no queue on any channel and lets every window
+/// grow, and its neighbours' answers back up their uplinks behind its
+/// downlink (strims-sim's slow viewer kept about 630 KB of requests in
+/// flight on a 125 KB/s downlink).
+pub const FLIGHT_FLOOR: i64 = 128 * 1024;
 /// Candidate bins kept allocated between request rounds.
 const CANDIDATE_CAPACITY: usize = 256;
 
@@ -343,6 +355,10 @@ pub(crate) struct SwarmState {
 
     peer_have_chunk_rate: Sma,
     peer_max_have_bin: Bin,
+    /// New verified data taken in, in bytes, and the requests in flight on
+    /// the other channels than the one writing ([`FLIGHT_HORIZON`]).
+    taken_in: Sma,
+    flight_others: i64,
 
     /// The chunks we have. Bound: pruned one window behind the store's.
     pub(crate) have_bins: Map,
@@ -1134,7 +1150,11 @@ impl PeerChannelScheduler {
             .on_round(now, rate.saturating_mul(s.chunk_size as u64), chunk);
         let timeout = now + self.controller.request_timeout();
         let (cap, in_flight) = (self.controller.in_flight_cap(), self.controller.in_flight());
-        let budget = (cap - in_flight).max(0) / chunk;
+        let horizon = FLIGHT_HORIZON.as_nanos() as f64 / 1e9;
+        let took = s.taken_in.rate(Duration::SECOND, now) as f64 * horizon;
+        let swarm_cap = (took as i64).max(FLIGHT_FLOOR);
+        let window = (swarm_cap - s.flight_others).min(cap);
+        let budget = (window - in_flight).max(0) / chunk;
         let room = max_pending_requests(s.window).saturating_sub(self.request_bins.len());
         // A request is at least `MIN_REQUEST_LEN` bytes: no more than this
         // many fit the frame.
@@ -1393,6 +1413,8 @@ impl PeerSwarmScheduler {
                 bin_times_max: Bin::NONE,
                 peer_have_chunk_rate: Sma::new(15, Duration::SECOND, now),
                 peer_max_have_bin: Bin(0),
+                taken_in: Sma::new(5, Duration::SECOND, now),
+                flight_others: 0,
                 request_bins: have_bins.clone(),
                 source_bins: Map::new(),
                 have_bins,
@@ -1544,6 +1566,7 @@ impl PeerSwarmScheduler {
         s.bin_times = TimeSet::default();
         s.bin_times_max = Bin::NONE;
         s.peer_have_chunk_rate = Sma::new(15, Duration::SECOND, now);
+        s.taken_in = Sma::new(5, Duration::SECOND, now);
         s.have_bins = Map::new();
         s.announce_bins = Map::new();
         s.have_bin_max = Bin(0);
@@ -2025,6 +2048,9 @@ impl PeerSwarmScheduler {
         }
 
         let size = (b.base_length() as i64).saturating_mul(s.chunk_size as i64);
+        if new {
+            s.taken_in.add(size.max(0) as u64, now);
+        }
         c.controller.on_delivered(now, size);
         if let Some((_, ts)) = c.request_times.get(b) {
             c.controller.on_answered(now, size, ts, t);
@@ -2481,6 +2507,12 @@ impl PeerSwarmScheduler {
         cw: &mut MeteredWriter<'_>,
         ride: bool,
     ) -> Result<(), codec::Error> {
+        self.s.flight_others = self
+            .channels
+            .iter()
+            .filter(|&(&k, _)| k != peer)
+            .map(|(_, c)| c.controller.in_flight().max(0))
+            .sum();
         let Some((s, c)) = self.channel(peer) else {
             return Ok(());
         };
