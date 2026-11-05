@@ -152,6 +152,8 @@ pub(crate) struct State<N, S> {
     host_id: ID,
     discovery: bool,
     search_interval: Duration,
+    search_retry: Duration,
+    search_settle: Duration,
     connect_backoff: Duration,
     max_contacted: usize,
     /// Bound: the driver's calls.
@@ -170,6 +172,8 @@ pub(crate) struct State<N, S> {
     searches: BTreeSet<(Time, TransferId, N)>,
     /// Searches in flight, at most one per published pair.
     searching: BTreeSet<(TransferId, N)>,
+    /// The wait after each pair's next search. Bound: as `searches`.
+    search_wait: BTreeMap<(TransferId, N), Duration>,
     /// Hosts asked to link, and until when they aren't asked again.
     /// Bound: `max_contacted`.
     contacted: BTreeMap<ID, Time>,
@@ -182,6 +186,8 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
         let Config {
             discovery,
             search_interval,
+            search_retry,
+            search_settle,
             connect_backoff,
             max_contacted,
             ..
@@ -190,6 +196,8 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
             host_id,
             discovery,
             search_interval,
+            search_retry,
+            search_settle,
             connect_backoff,
             max_contacted,
             transfers: BTreeMap::new(),
@@ -200,6 +208,7 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
             next_op: 0,
             searches: BTreeSet::new(),
             searching: BTreeSet::new(),
+            search_wait: BTreeMap::new(),
             contacted: BTreeMap::new(),
             actions: VecDeque::new(),
         }
@@ -267,8 +276,8 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
 
     /// Publishes a transfer on `net`: announces it to the network's
     /// peers and, with discovery, advertises it in the network's peer
-    /// index and searches there now and every `search_interval`. Returns
-    /// whether the transfer exists.
+    /// index and searches there (see [the crate docs](crate), Discovery):
+    /// now if the network has peers. Returns whether the transfer exists.
     pub(crate) fn publish(&mut self, id: TransferId, net: N, now: Time) -> bool {
         let Some(t) = self.transfers.get_mut(&id) else {
             return false;
@@ -280,12 +289,16 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
         let n = self.networks.entry(net).or_default();
         n.transfers.insert(id);
         let hosts: Vec<ID> = n.peers.iter().copied().collect();
+        let linked = !hosts.is_empty();
         for host in hosts {
             self.announce(host, id);
         }
         if self.discovery {
             self.push_op(Op::IndexPublish { id, net, key, salt });
-            self.searches.insert((now, id, net));
+            self.search_wait.insert((id, net), self.search_retry);
+            if linked {
+                self.searches.insert((now, id, net));
+            }
         }
         true
     }
@@ -319,6 +332,7 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
     fn withdraw(&mut self, id: TransferId, net: N) {
         self.searches.retain(|&(_, i, n)| (i, n) != (id, net));
         self.searching.remove(&(id, net));
+        self.search_wait.remove(&(id, net));
         if self.discovery {
             self.push_op(Op::IndexUnpublish { id, net });
         }
@@ -361,13 +375,29 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
         }
     }
 
-    /// The peer joined `net`, whether or not it is linked yet.
-    pub(crate) fn add_network_peer(&mut self, net: N, host: ID) {
+    /// The peer joined `net`, whether or not it is linked yet. With
+    /// discovery, the network's first peer starts its transfers' searches
+    /// over: `search_settle` from now, then from `search_retry`.
+    pub(crate) fn add_network_peer(&mut self, net: N, host: ID, now: Time) {
         let n = self.networks.entry(net).or_default();
+        let first = n.peers.is_empty();
         if !n.peers.insert(host) {
             return;
         }
         let ids: Vec<TransferId> = n.transfers.iter().copied().collect();
+        if first && self.discovery {
+            let idle: Vec<TransferId> = ids
+                .iter()
+                .copied()
+                .filter(|&id| !self.searching.contains(&(id, net)))
+                .collect();
+            self.searches
+                .retain(|&(_, id, n)| n != net || !idle.contains(&id));
+            for id in idle {
+                self.searches.insert((now + self.search_settle, id, net));
+                self.search_wait.insert((id, net), self.search_retry);
+            }
+        }
         for id in ids {
             self.announce(host, id);
         }
@@ -654,8 +684,8 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
         self.searches.first().map(|&(at, _, _)| at)
     }
 
-    /// Starts the searches that are due, except those still in flight,
-    /// and schedules each again `search_interval` from now.
+    /// Starts the searches that are due, except those still in flight:
+    /// each schedules the next as it ends ([`State::search_done`]).
     pub(crate) fn handle_timeout(&mut self, now: Time) {
         let due: Vec<(Time, TransferId, N)> = self
             .searches
@@ -665,7 +695,6 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
             .collect();
         for entry @ (_, id, net) in due {
             self.searches.remove(&entry);
-            self.searches.insert((now + self.search_interval, id, net));
             let Some(t) = self.transfers.get(&id) else {
                 continue;
             };
@@ -709,9 +738,20 @@ impl<N: Copy + Ord, S: Copy + Eq> State<N, S> {
         self.push_op(Op::Connect { net, host });
     }
 
-    /// A search ended.
-    pub(crate) fn search_done(&mut self, id: TransferId, net: N) {
-        self.searching.remove(&(id, net));
+    /// A search ended: the next is due after the pair's wait, and the
+    /// wait after it doubles, up to `search_interval`.
+    pub(crate) fn search_done(&mut self, id: TransferId, net: N, now: Time) {
+        if !self.searching.remove(&(id, net)) || !self.is_published(id, net) {
+            return;
+        }
+        let wait = self
+            .search_wait
+            .entry((id, net))
+            .or_insert(self.search_retry);
+        let next = now + *wait;
+        *wait = (*wait + *wait).min(self.search_interval);
+        self.searches.retain(|&(_, i, n)| (i, n) != (id, net));
+        self.searches.insert((next, id, net));
     }
 
     // --- applying ops -------------------------------------------------------

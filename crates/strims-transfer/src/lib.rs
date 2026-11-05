@@ -25,7 +25,14 @@
 //!
 //! With [`Config::discovery`], publishing also advertises the transfer in
 //! the network's peer index under (swarm id, salt), and searches the
-//! index now and every [`Config::search_interval`] for hosts to link to.
+//! index for hosts to link to: [`Config::search_settle`] after the network
+//! has a peer (at once if it has one), then again after each search ends,
+//! [`Config::search_retry`] after the first and twice as long after each
+//! next, up to [`Config::search_interval`]. A host's records reach its
+//! links a second after they come up (`strims_vpn::RECORD_PUSH_DELAY`),
+//! and each responder names a few of the holders it links: a joining node
+//! finds its first peers within seconds and searches again through them,
+//! where one search per interval would leave it half a minute alone.
 //!
 //! # Running
 //!
@@ -99,10 +106,16 @@ pub struct Config {
     /// Advertise published transfers in their networks' peer indexes and
     /// search there for hosts to link to.
     pub discovery: bool,
-    /// How often each published transfer is searched for on each network.
+    /// The longest wait between a search's end and the next.
     pub search_interval: Duration,
-    /// How long a search takes hosts for.
+    /// The wait after the first search, doubling after each next.
+    pub search_retry: Duration,
+    /// How long a network's first peer is linked before the first search.
+    pub search_settle: Duration,
+    /// How long a search takes hosts for at most ...
     pub search_timeout: Duration,
+    /// ... and how long it waits for the next.
+    pub search_idle: Duration,
     /// The most hosts one search takes.
     pub max_search_hosts: usize,
     /// How long to wait before asking the node to link to a host again.
@@ -118,7 +131,10 @@ impl Default for Config {
         Config {
             discovery: true,
             search_interval: Duration::from_secs(30),
+            search_retry: Duration::from_secs(1),
+            search_settle: Duration::from_secs(2),
             search_timeout: Duration::from_secs(10),
+            search_idle: Duration::from_secs(2),
             max_search_hosts: 16,
             connect_backoff: Duration::from_secs(60),
             max_contacted: 1024,

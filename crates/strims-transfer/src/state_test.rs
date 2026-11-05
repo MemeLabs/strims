@@ -84,8 +84,8 @@ impl Pair {
         };
         a.link = a.s.add_peer(ib);
         b.link = b.s.add_peer(ia);
-        a.s.add_network_peer(NET, ib);
-        b.s.add_network_peer(NET, ia);
+        a.s.add_network_peer(NET, ib, t(0));
+        b.s.add_network_peer(NET, ia, t(0));
         Pair { a, b }
     }
 
@@ -193,8 +193,8 @@ fn transfers_published_before_peers_join_are_announced_when_they_do() {
     // membership reported before the link exists
     let link = p.a.s.add_peer(p.b.id);
     p.a.link = link;
-    p.a.s.add_network_peer(NET, p.b.id);
-    p.b.s.add_network_peer(NET, p.a.id);
+    p.a.s.add_network_peer(NET, p.b.id, t(0));
+    p.b.s.add_network_peer(NET, p.a.id, t(0));
     p.settle();
     p.assert_bound(id);
 }
@@ -364,9 +364,9 @@ fn removing_a_transfer_closes_it_with_every_peer() {
     let c = host(3);
     let mut sc = St::new(c, &config(false));
     let a_link_c = p.a.s.add_peer(c);
-    p.a.s.add_network_peer(NET, c);
+    p.a.s.add_network_peer(NET, c, t(0));
     sc.add_peer(p.a.id);
-    sc.add_network_peer(NET, p.a.id);
+    sc.add_network_peer(NET, p.a.id, t(0));
     let id = p.a.s.add(10, &swarm_id(), Vec::new());
     p.b.s.add(20, &swarm_id(), Vec::new());
     sc.add(30, &swarm_id(), Vec::new());
@@ -427,8 +427,8 @@ fn removing_a_transfer_with_an_announce_in_flight_closes_it() {
 #[test]
 fn leaving_the_last_shared_network_closes_the_peer_transfer() {
     let mut p = Pair::new();
-    p.a.s.add_network_peer(NET2, p.b.id);
-    p.b.s.add_network_peer(NET2, p.a.id);
+    p.a.s.add_network_peer(NET2, p.b.id, t(0));
+    p.b.s.add_network_peer(NET2, p.a.id, t(0));
     let id = p.a.s.add(10, &swarm_id(), Vec::new());
     p.b.s.add(20, &swarm_id(), Vec::new());
     for net in [NET, NET2] {
@@ -494,6 +494,8 @@ fn unpublishing_closes_the_transfer_only_with_peers_it_shares_nowhere_else() {
 #[test]
 fn unpublishing_withdraws_the_peer_index_entry_and_its_searches() {
     let mut s = St::new(host(1), &config(true));
+    s.add_network_peer(NET, host(9), t(0));
+    s.add_network_peer(NET2, host(9), t(0));
     let id = s.add(10, &swarm_id(), Vec::new());
     s.publish(id, NET, t(0));
     s.publish(id, NET2, t(0));
@@ -535,7 +537,7 @@ fn frame_error_blocks_the_peer_until_it_relinks() {
         p.a.s.handle_announce(p.b.id, p.a.link, id, b_channel),
         Answer::Refuse
     );
-    p.a.s.add_network_peer(NET2, p.b.id);
+    p.a.s.add_network_peer(NET2, p.b.id, t(0));
     p.a.s.publish(id, NET2, t(0));
     assert!(drain(&mut p.a.s).is_empty());
 
@@ -544,8 +546,8 @@ fn frame_error_blocks_the_peer_until_it_relinks() {
     p.b.s.remove_peer(p.a.id);
     p.a.link = p.a.s.add_peer(p.b.id);
     p.b.link = p.b.s.add_peer(p.a.id);
-    p.a.s.add_network_peer(NET, p.b.id);
-    p.b.s.add_network_peer(NET, p.a.id);
+    p.a.s.add_network_peer(NET, p.b.id, t(0));
+    p.b.s.add_network_peer(NET, p.a.id, t(0));
     p.settle();
     p.assert_bound(id);
 }
@@ -660,12 +662,13 @@ fn channels_are_never_reused_on_a_link() {
 }
 
 #[test]
-fn searches_repeat_every_interval_and_connect_with_backoff() {
+fn searches_back_off_to_the_interval_and_connect_with_backoff() {
     let me = host(1);
     let linked = host(2);
     let found = host(3);
     let mut s = St::new(me, &config(true));
     s.add_peer(linked);
+    s.add_network_peer(NET, linked, t(0));
     let id = s.add(10, &swarm_id(), b"salt".to_vec());
     s.publish(id, NET, t(0));
     assert_eq!(
@@ -688,12 +691,10 @@ fn searches_repeat_every_interval_and_connect_with_backoff() {
             salt: b"salt".to_vec()
         }]
     );
-    assert_eq!(s.poll_timeout(), Some(t(30)));
-    // a search still in flight isn't started again
-    s.handle_timeout(t(30));
-    assert!(drain(&mut s).is_empty());
+    // the next is scheduled as this one ends
+    assert_eq!(s.poll_timeout(), None);
     for h in [me, linked, found] {
-        s.search_found(id, NET, h, t(31));
+        s.search_found(id, NET, h, t(1));
     }
     assert_eq!(
         ops(&drain(&mut s)),
@@ -702,21 +703,43 @@ fn searches_repeat_every_interval_and_connect_with_backoff() {
             host: found
         }]
     );
-    s.search_done(id, NET);
-    // within the backoff the host isn't asked about again
-    s.handle_timeout(t(60));
-    assert_eq!(drain(&mut s).len(), 1);
-    s.search_found(id, NET, found, t(61));
-    assert!(drain(&mut s).is_empty());
-    s.search_done(id, NET);
-    s.handle_timeout(t(90));
-    drain(&mut s);
-    s.search_found(id, NET, found, t(91));
-    assert_eq!(ops(&drain(&mut s)).len(), 1);
-    s.search_done(id, NET);
+    s.search_done(id, NET, t(2));
+    // waits of 1, 2, 4, 8, 16 s, then the interval
+    let mut end = 2;
+    for wait in [1, 2, 4, 8, 16, 30, 30] {
+        assert_eq!(s.poll_timeout(), Some(t(end + wait)));
+        s.handle_timeout(t(end + wait));
+        assert_eq!(drain(&mut s).len(), 1);
+        end += wait;
+        // within the backoff the host isn't asked about again
+        s.search_found(id, NET, found, t(end));
+        let again = ops(&drain(&mut s)).len();
+        assert_eq!(again, usize::from(end == 63), "at {end}");
+        s.search_done(id, NET, t(end));
+    }
     // hosts reported for a search that has ended are dropped
-    s.search_found(id, NET, host(4), t(92));
+    s.search_found(id, NET, host(4), t(end + 1));
     assert!(drain(&mut s).is_empty());
+}
+
+#[test]
+fn a_networks_first_peer_starts_its_searches_after_the_settle() {
+    let mut s = St::new(host(1), &config(true));
+    let id = s.add(10, &swarm_id(), Vec::new());
+    s.publish(id, NET, t(0));
+    drain(&mut s);
+    // nothing to search through yet
+    assert_eq!(s.poll_timeout(), None);
+    s.add_network_peer(NET, host(2), t(5));
+    drain(&mut s);
+    assert_eq!(s.poll_timeout(), Some(t(7)));
+    s.handle_timeout(t(7));
+    assert!(matches!(drain(&mut s)[..], [Action::Search { .. }]));
+    s.search_done(id, NET, t(8));
+    assert_eq!(s.poll_timeout(), Some(t(9)));
+    // later peers leave the schedule alone
+    s.add_network_peer(NET, host(3), t(8));
+    assert_eq!(s.poll_timeout(), Some(t(9)));
 }
 
 #[test]
@@ -729,6 +752,7 @@ fn contacted_hosts_are_bounded() {
         },
     );
     let id = s.add(10, &swarm_id(), Vec::new());
+    s.add_network_peer(NET, host(9), t(0));
     s.publish(id, NET, t(0));
     s.handle_timeout(t(0));
     drain(&mut s);
@@ -742,6 +766,8 @@ fn contacted_hosts_are_bounded() {
 #[test]
 fn peer_index_entries_follow_publish_and_remove() {
     let mut s = St::new(host(1), &config(true));
+    s.add_network_peer(NET, host(9), t(0));
+    s.add_network_peer(NET2, host(9), t(0));
     let id = s.add(10, &swarm_id(), Vec::new());
     assert!(!s.publish(TransferId::default(), NET, t(0)));
     s.publish(id, NET, t(0));

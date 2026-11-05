@@ -348,7 +348,8 @@ impl<H: Host, T: Timer> TransferControl<H, T> {
     /// The peer joined `net`. It may be reported before or after it
     /// links.
     pub fn add_network_peer(&self, net: H::Network, host: ID) {
-        self.shared.update(|st, _| st.add_network_peer(net, host));
+        self.shared
+            .update(|st, now| st.add_network_peer(net, host, now));
     }
 
     /// The peer left `net`: transfers it shares through no other network
@@ -586,15 +587,15 @@ impl<H: Host, T: Timer> TransferControl<H, T> {
                 if !ok {
                     s.metrics_mut().search_errors += 1;
                 }
-                s.update(|st, _| st.search_done(id, net));
+                s.update(|st, now| st.search_done(id, net, now));
             }
         }
     }
 }
 
-/// Runs a peer index search for `search_timeout`, reporting at most
-/// `max_search_hosts` hosts as they arrive. Resolves to whether it
-/// started.
+/// Runs a peer index search for `search_timeout` at most, reporting at
+/// most `max_search_hosts` hosts as they arrive, until none has come for
+/// `search_idle`. Resolves to whether it started.
 async fn search<H: Host, T: Timer>(
     s: &Shared<H, T>,
     id: TransferId,
@@ -606,7 +607,12 @@ async fn search<H: Host, T: Timer>(
         let mut found = s.host.index_search(net, key, salt).await?;
         let mut taken = Vec::new();
         while taken.len() < s.config.max_search_hosts {
-            let Some(host) = found.next().await else {
+            let idle = pin!(s.timer.sleep_until(s.timer.now() + s.config.search_idle));
+            let next = match select(found.next(), idle).await {
+                Either::Left((host, _)) => host,
+                Either::Right(_) => None,
+            };
+            let Some(host) = next else {
                 break;
             };
             if !taken.contains(&host) {

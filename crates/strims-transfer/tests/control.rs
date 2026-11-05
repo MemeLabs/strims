@@ -632,6 +632,8 @@ fn discovery_links_hosts_found_in_the_peer_index() {
         let c = node(&world, 3, Config::default(), 0);
         let id = publish(&a, 10);
         idle().await;
+        // a network to search through
+        c.control.add_network_peer(NET, ID([9; 4]));
         publish(&c, 30);
         settle(std::time::Duration::from_secs(5), || {
             world.0.borrow().connects.contains(&(c.id, a.id))
@@ -644,8 +646,7 @@ fn discovery_links_hosts_found_in_the_peer_index() {
         })
         .await;
 
-        // searching goes on every interval, but the linked host isn't
-        // asked for again
+        // searching goes on, but the linked host isn't asked for again
         let before = world.0.borrow().connects.len();
         tokio::time::sleep(std::time::Duration::from_secs(120)).await;
         assert!(c.control.metrics().searches >= 4);
