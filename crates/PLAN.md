@@ -468,15 +468,18 @@ in `TRIED.md`.
   defecting. strims-sim's organic mode (`STRIMS_SIM_DISCOVERY`, the `net`
   and `net-hostile` tiers) builds topologies from discovery, and its
   peer pool (`pool.rs`, experiment flags) holds the policies under trial.
-  - The budget has to follow conditions: on the `net` tier with eviction,
-    the starving rule and sampled index answers, thin relays collapse 1,
-    5 and 32 of 32 at budgets of six, nine and twelve and the slow
-    viewer's cell 3 to 30 from six to sixteen, while the WAN cells run
-    lag p99 x1.18-1.31 at six and x0.89-1.01 at twelve to sixteen.
-    `pool-copies` (links per stream copy the uplink carries) collapses 54
-    of 672 against nine's 42 (99 uncapped): better on the WAN cells,
-    worse on thin relays, whose budgets don't come down far enough. Try a
-    target from each link's measured overhead against the uplink.
+  - The pool to port to the node's app layer: `pool-role` (relays take
+    four links and two per stream copy their median measured uplink
+    carries, leaves sixteen, seeds two and one per copy, a leaf 3 s
+    behind six), with eviction past the budget, the starving rule and
+    sampled index answers: the `net` tier collapses 23 of 672 with the
+    ppspp request cap and bounded seed reading (99 with today's
+    discovery), lag p99 x0.92 of that.
+  - What still collapses there: the slow viewer's cell (12 of 32: relays
+    on LTE or Starlink uplinks saturate, every link blocks and closes at
+    once, then their WebRTC dials time out), super-peer-varying's
+    competing uploads (4), and single runs of the halving, step and WAN
+    cells.
   - Defecting pays: a fifth of the viewers free riders lag x0.72-0.91 of
     the honest viewers at p99 on the WAN cells (the honest still serve
     them, and they spend no uplink), more under nine peers with

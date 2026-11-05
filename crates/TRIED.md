@@ -428,3 +428,19 @@ thin-15-10 3 of 32 and one of two testbed runs at 4.3/5.8 s; eleven 105
 (thin-15-10 15), twelve 116 (30); nine with the seeds free of it 93. The
 budget alone: 171. A constant tuned to one testbed config, where the
 pool should follow from what a node's links and hardware sustain.
+
+**Peer pool controls that lost.** (strims-sim's organic net tier, `pool.rs`
+flags, seeds 3001-3032) Budgets that start low and grow (`pool-uplink`,
+`pool-busy` from four links): startup p99 6-16 s. `pool-busy` and
+`pool-shed` on the meter's busy share: thin relays read busy 0.1-0.35 under
+standing queues and never shed. `pool-copies` on the most capacity of 30 s:
+leaves read 48-110 KB/s (demand, not uplink) and took six links, thin
+relays caught spikes and kept eight to ten; 54 collapsed of 672 against
+`pool-role`'s 29. Closing the link that stays write-blocked
+(`pool-unblock`): the slow viewer's cell 14 -> 7, but 45 against 29, a TCP
+cell of two swarms 0 -> 13. Closing the links that gave least
+(`pool-recip`): free riders on WAN cells still lag x0.72-0.96 of the honest
+viewers, and the honest viewers' lag rises. Shedding a relay's subscribers
+whose links hold their data back for 3 s (ppspp, local): one of six
+collapsed slow-viewer seeds recovered.
+
