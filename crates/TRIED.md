@@ -268,10 +268,7 @@ hold. Pacing it on the model's true uplink queue instead (an oracle,
 `own-queue-oracle`) collapsed 7 of 16 at 25 ms and 13 at 10 ms: no better
 read of the queue cures the cell, as a pace holds a mean while the
 acknowledgements wait behind each window's burst. A 15 ms answer target:
-16 of 16 (repairs starve). Admitting by the
-committed pushes, answers out of the measured rule's load: 11 of 16 (on
-browsers, with a queued relay's HAVEs at the tick, 7 of 8 local seeds
-against 6).
+16 of 16 (repairs starve).
 Uplink queues of 20 or 50 ms in place of 100: 16 of 16 (losses).
 
 **A paced answer rate grown only to twice what answers sent.**

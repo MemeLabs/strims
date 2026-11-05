@@ -1234,20 +1234,22 @@ fn hybrid_thicket_constraint_and_admission() {
             .any(|m| matches!(m, Message::StreamClose(c) if c.stream == 5))
     );
 
-    // A saturated uplink still declines it ...
+    // Pushes that fill the uplink still decline it (here the node's other
+    // swarms') ...
     f.sched.set_upload(push::UploadInfo {
         rate: 100_000,
         busy: 0.95,
+        others: 100_000.0,
         ..Default::default()
     });
     f.sched
         .handle_stream_request(r, 5, Bin(0), Bin(0), now(), &mut q)
         .unwrap();
     assert_eq!(f.sched.push_stats().children, 1);
-    // ... measured spare upload accepts it as an extra stream.
+    // ... and what it writes past its pushes doesn't: answers yield to them.
     f.sched.set_upload(push::UploadInfo {
         rate: 100_000,
-        busy: 0.1,
+        busy: 0.95,
         ..Default::default()
     });
     f.sched
@@ -2427,11 +2429,12 @@ fn the_tap_gives_admissions_their_rule_and_numbers() {
     assert!(got[0].0 && got[0].1.rule == crate::AdmitRule::Unmeasured && !got[0].1.extra);
     assert!(!got[1].0 && got[1].1.rule == crate::AdmitRule::Unmeasured && got[1].1.extra);
 
-    // Measured: the rate plus a subscriber against the capacity at the
-    // extra target.
+    // Measured: the committed push (here the other swarms') plus a
+    // subscriber against the capacity at the extra target.
     f.sched.set_upload(push::UploadInfo {
         rate: 100_000,
         busy: 0.95,
+        others: 60_000.0,
         ..Default::default()
     });
     f.sched
@@ -2443,8 +2446,14 @@ fn the_tap_gives_admissions_their_rule_and_numbers() {
     };
     assert_eq!(a.rule, crate::AdmitRule::Measured);
     assert_eq!(
-        (a.upload_rate, a.capacity, a.target_permille, a.extra),
-        (100_000, Some(105_263), 500, true)
+        (
+            a.upload_rate,
+            a.committed,
+            a.capacity,
+            a.target_permille,
+            a.extra
+        ),
+        (100_000, 60_000, Some(105_263), 500, true)
     );
     assert_eq!(a.stream_children, 0);
 }

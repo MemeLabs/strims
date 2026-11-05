@@ -97,10 +97,12 @@
 //! - **Thicket.** A non-seed node is *interior* (forwards to children) for
 //!   at most one stream: the first it accepts a subscriber for, until it has
 //!   had none for [`INTERIOR_IDLE`]. The seed is interior for every stream.
-//! - **Admission.** A STREAM_REQUEST is accepted while the projected upload
-//!   (the larger of the measured rate and the committed push, plus one more
-//!   subscriber) stays under [`INTERIOR_UTILIZATION`] of the measured
-//!   capacity for the interior stream, or [`EXTRA_UTILIZATION`] for another.
+//! - **Admission.** A STREAM_REQUEST is accepted while the committed push,
+//!   plus one more subscriber, stays under [`INTERIOR_UTILIZATION`] of the
+//!   measured capacity for the interior stream, or [`EXTRA_UTILIZATION`]
+//!   for another. What the node writes past its pushes doesn't count:
+//!   answers yield to pushes, and a relay busy answering its neighbours'
+//!   pulls would turn away the children that would stop pulling.
 //!   Before the upload is measured, [`UNMEASURED_FANOUT`] subscribers per
 //!   interior stream and no others. A subscriber costs our store rate per
 //!   stream times [`PUSH_OVERHEAD`]. A repeat from a subscriber is always
@@ -1526,10 +1528,7 @@ impl PeerSwarmScheduler {
                 ),
                 (None, Some(cap)) => {
                     let committed = children as f64 * rate + p.upload.others;
-                    (
-                        (p.upload.rate as f64).max(committed) + rate <= cap * target,
-                        AdmitRule::Measured,
-                    )
+                    (committed + rate <= cap * target, AdmitRule::Measured)
                 }
             }
         };
