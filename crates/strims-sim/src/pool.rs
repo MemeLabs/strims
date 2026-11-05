@@ -40,6 +40,11 @@
 //!   been hot for [`HOT_FOR`] (busy past [`HOT_BUSY`] and queued past
 //!   [`HOT_QUEUE`]), between [`D_LO`] and [`D_HI`]: links until the
 //!   uplink fills, from [`D_LO`]. `capN` caps it.
+//! - `pool-role`: `pool-copies` on the median capacity measured over
+//!   [`COPIES_SPAN`], where a viewer that forwards less than
+//!   [`LEAF_COPIES`] of the stream (a leaf, its uplink's measure no more
+//!   than what it was asked for) takes the top: links cost a leaf little
+//!   uplink.
 //! - `pool-recip`, with `pool-evict`: the link closed past the budget is
 //!   the one whose peer gave the least stream data per second since it
 //!   came up, past the [`PROTECT`] that gave the most: a peer that serves
@@ -75,6 +80,9 @@ pub const D_LO: u32 = 4;
 pub const D_HI: u32 = 16;
 /// `pool-uplink`: swarm links per copy of the stream the uplink carries.
 pub const LINKS_PER_COPY: f64 = 2.0;
+/// `pool-role`: a viewer that sends less than this many copies of the
+/// stream it takes in is a leaf, and takes the top.
+pub const LEAF_COPIES: f64 = 0.5;
 /// `pool-copies`: the budget before the uplink is measured ...
 pub const COPIES_START: u32 = 9;
 /// ... the least it takes from the measure ...
@@ -128,6 +136,7 @@ pub enum Control {
     Busy,
     Shed,
     Copies,
+    Role,
 }
 
 /// The pool's policy, from the scenario's experiment flags.
@@ -152,6 +161,8 @@ impl PoolConfig {
             Control::Shed
         } else if exp.contains("pool-copies") {
             Control::Copies
+        } else if exp.contains("pool-role") {
+            Control::Role
         } else {
             Control::Fixed
         };
@@ -249,7 +260,7 @@ impl Pool {
     pub(crate) fn new(node: Node, net: NetworkId, cfg: PoolConfig) -> Pool {
         let budget = match cfg.control {
             Control::Fixed | Control::Shed => cfg.budget,
-            Control::Copies => COPIES_START.min(cfg.budget),
+            Control::Copies | Control::Role => COPIES_START.min(cfg.budget),
             Control::Uplink | Control::Busy => D_LO.min(cfg.budget),
         };
         Pool {
@@ -451,16 +462,32 @@ impl Pool {
                     st.budget = (b as u32).clamp(D_LO.min(top), top);
                 }
             }
-            Control::Copies => {
+            Control::Copies | Control::Role => {
                 st.capacity.push(capacity);
                 let keep = (COPIES_SPAN.as_millis() / TICK.as_millis()).max(1) as usize;
                 if st.capacity.len() > keep {
                     st.capacity.remove(0);
                 }
-                let most = st.capacity.iter().copied().max().unwrap_or(0);
+                let most = if self.cfg.control == Control::Role {
+                    let mut c = st.capacity.clone();
+                    c.sort_unstable();
+                    c.get(c.len() / 2).copied().unwrap_or(0)
+                } else {
+                    st.capacity.iter().copied().max().unwrap_or(0)
+                };
                 let ticks = st.took_in.len().max(1) as f64;
                 let rate = st.took_in.iter().sum::<u64>() as f64 / ticks / TICK.as_secs_f64();
-                let target = if st.seed {
+                let sent = st
+                    .ticks
+                    .iter()
+                    .rev()
+                    .take(st.took_in.len())
+                    .map(|x| x.2)
+                    .sum::<u64>() as f64
+                    / ticks
+                    / TICK.as_secs_f64();
+                let leaf = self.cfg.control == Control::Role && sent < LEAF_COPIES * rate;
+                let target = if st.seed || leaf {
                     top
                 } else if most > 0 && rate > 0.0 {
                     let b = f64::from(D_LO) + LINKS_PER_COPY * most as f64 / rate;
