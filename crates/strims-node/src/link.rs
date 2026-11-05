@@ -53,6 +53,11 @@ use crate::net::Net;
 /// task per UDP socket (`udp.rs`).
 pub(crate) enum Transport<N: Net> {
     Tcp(N::TcpStream),
+    /// A data channel the net models ([`crate::model_rtc`]): read and
+    /// written as a browser's, with no timeout. A browser's channel writer
+    /// waits for its buffered amount to fall however long that takes, and
+    /// ICE and the connection's state end a dead channel.
+    Channel(N::TcpStream),
     /// Boxed: tungstenite's state is large and a link is built once.
     Ws(Box<WebSocketStream<N::TcpStream>>),
 }

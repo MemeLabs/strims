@@ -102,7 +102,7 @@ async fn attach<N: Net>(stream: N::TcpStream, conn: RtcConn, inputs: &Inputs<Tra
     let _ = inputs
         .send(Input::Connected {
             dial: None,
-            transport: Transport::Tcp(stream),
+            transport: Transport::Channel(stream),
             config: LinkConfig::webrtc(),
             leftover: Vec::new(),
             notsent_lowat: None,
