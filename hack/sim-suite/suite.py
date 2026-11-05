@@ -244,6 +244,20 @@ def net_tier():
     return cells
 
 
+# The net-hostile tier's cells (net's names) and hostile kinds.
+NET_HOSTILE = ["org-star-15-20", "org-star-31-10", "org-thin-15-10", "org-wan-residential-seed",
+               "org-wan-global-audience"]
+
+
+def net_hostile_tier():
+    """The net tier's browser cells with a fifth of the viewers hostile
+    (STRIMS_SIM_HOSTILE): free riders, then liars. The row splits the
+    honest viewers' lag and delivery from the hostile ones'."""
+    net = {c["name"]: c for c in TIERS["net"]}
+    return [{**net[n], "name": f"{n}-{k}", "env": {**net[n]["env"], "STRIMS_SIM_HOSTILE": f"{k}:0.2"},
+             "why": f"{net[n]['why']}, a fifth {k}s"} for k in ("free-rider", "liar") for n in NET_HOSTILE]
+
+
 # The streams the sign tiers run# The streams the sign tiers run (strims_wan::live's encoders): audio alone
 # at 128 kbit/s, then audio and video, CBR and VBR, to 6 Mbit/s.
 SIGN_MEDIA = ["128c", "512c", "1500c", "1500v", "3000c", "6000c", "6000v"]
@@ -356,6 +370,7 @@ TIERS = {
 }
 TIERS["browsers"] = browsers_tier()
 TIERS["net"] = net_tier()
+TIERS["net-hostile"] = net_hostile_tier()
 TIERS["sign"] = sign_tier()
 TIERS["sign-confirm"] = sign_confirm_tier()
 TIERS["sign-sens"] = sign_sens_tier()
@@ -422,6 +437,9 @@ METRICS = [
     ("links_p90", lambda r: r.get("links_p90"), None, "diff", 0.5),
     ("links_dropped/min", lambda r: r.get("links_dropped_per_host_min"), LOWER, "diff", 0.1),
     ("eclipsed_share", lambda r: r.get("eclipsed_share"), LOWER, "diff", 0.005),
+    ("honest_lag_p99_ms", lambda r: r.get("lag_p99_ms_honest"), LOWER, "ratio", 0.05),
+    ("hostile_lag_p99_ms", lambda r: r.get("lag_p99_ms_hostile"), None, "ratio", 0.05),
+    ("hostile_delivery", lambda r: r.get("delivery_hostile"), None, "diff", 0.002),
     ("cut_from_seed_share", lambda r: r.get("cut_from_seed_share"), LOWER, "diff", 0.005),
     ("exch_rejected", lambda r: r.get("exch_rejected"), None, "diff", 1),
     ("rss_mb", lambda r: r.get("_rss_mb"), LOWER, "diff", 100),
