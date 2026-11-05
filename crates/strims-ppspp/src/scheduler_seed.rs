@@ -1660,7 +1660,8 @@ impl PeerSwarmScheduler {
             .iter()
             .flat_map(|st| st.subscribers.iter().map(|x| x.channel))
             .collect();
-        let mut held: Vec<(bool, bool, Option<Duration>, PeerKey)> = Vec::new();
+        let mut held: Vec<(bool, std::cmp::Reverse<u8>, bool, Option<Duration>, PeerKey)> =
+            Vec::new();
         let mut askers: Vec<(Duration, PeerKey)> = Vec::new();
         let mut leave: Vec<(PeerKey, HolderLeft)> = Vec::new();
         let mut pending = 0;
@@ -1686,7 +1687,19 @@ impl PeerSwarmScheduler {
                     askers.push((r, peer));
                 }
             } else if subscribed.contains(&peer) {
-                held.push((h.cap.is_none(), rtt.is_none(), rtt, peer));
+                // What the reports show it relaying keeps its place first.
+                let relays = if h.served == Some(true) {
+                    h.reporters
+                } else {
+                    0
+                };
+                held.push((
+                    h.cap.is_none(),
+                    std::cmp::Reverse(relays),
+                    rtt.is_none(),
+                    rtt,
+                    peer,
+                ));
             } else if recent {
                 pending += 1;
             } else {
@@ -1698,7 +1711,7 @@ impl PeerSwarmScheduler {
         leave.extend(
             held.iter()
                 .skip(copies)
-                .map(|h| (h.3, HolderLeft::PastCopies)),
+                .map(|h| (h.4, HolderLeft::PastCopies)),
         );
         let kept = held.len().min(copies);
         let free = copies.saturating_sub(kept + pending);
@@ -1714,7 +1727,7 @@ impl PeerSwarmScheduler {
         };
         if free == 0
             && pending == 0
-            && let (Some(&(r, peer)), Some(&(_, _, far, holder))) = (askers.first(), farthest)
+            && let (Some(&(r, peer)), Some(&(_, _, _, far, holder))) = (askers.first(), farthest)
             && !spilled(holder)
             && far.is_none_or(|f| r + NEAR_MARGIN.max(f / 10) < f)
         {
