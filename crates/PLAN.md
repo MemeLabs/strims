@@ -463,10 +463,13 @@ in `TRIED.md`.
     time, and the host whose link went is shunned for a minute), the
     starving rule and sampled index answers: the `net` tier collapses 9 of
     672 at seeds 3001-3032 and 8 at 3033-3064 (99 with today's discovery),
-    11 with trials (lag p99 x0.995). Trials drop x0.29-0.65 the links a
-    host drops a minute, take a residential crowd's lag p99 x0.96, and
-    leave hogs (free riders that link all they find) x12 of the honest
-    viewers' lag p99 where they had x2.9.
+    11 with trials (lag p99 x0.995; 10 against 8 and x1.007 at
+    3033-3064). Trials drop x0.29-0.65 the links a host drops a minute,
+    take a residential crowd's lag p99 x0.96, and leave hogs (free riders
+    that link all they find) x12 of the honest viewers' lag p99 where they
+    had x2.9; the newcomer they keep past the budget for its 20 s raises
+    15-viewer stars' parent changes a fifth and their lag p99 x1.06 at
+    both seed sets.
   - What still collapses there is, but for one run, a lag ramp the
     verdict counts: every run delivers the whole stream, lag p99 1.2-1.9
     s, no viewer stalls past a second, while the median 10 s delivery
