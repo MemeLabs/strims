@@ -409,7 +409,6 @@ in `TRIED.md`.
    - A non-seed's interior stream is the first it accepts a subscriber
      for. Its extras are admitted at `EXTRA_UTILIZATION` of the measured
      capacity, so a datacenter viewer forwards every stream it holds.
-   - Reciprocity versus tree children (children get the minimum weight).
    - Push loops fed by pull. A candidate must have announced our newest
      chunk of the stream before we held it, which no peer our pushes feed
      can, but one that pulled it from elsewhere can while its parents
