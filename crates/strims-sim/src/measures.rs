@@ -948,6 +948,24 @@ impl Report {
             j.num("pool_trials_per_host_min", trials as f64 / minutes)
                 .num("pool_trial_wins", wins as f64 / trials as f64);
         }
+        // A seed's first wave of offers, and when its viewers found it
+        // (`pool-find`).
+        if let Some(r) = self
+            .scenario
+            .swarms
+            .get(swarm)
+            .and_then(|s| self.hosts.get(s.seed))
+        {
+            j.int("seed_offers_30s", r.offers_early);
+        }
+        let mut resolved: Vec<u64> = viewers
+            .iter()
+            .filter_map(|&h| self.hosts.get(h)?.source_resolved_ms)
+            .collect();
+        resolved.sort_unstable();
+        if let Some(&p90) = resolved.get(((resolved.len() as f64 - 1.0) * 0.9).round() as usize) {
+            j.int("source_resolved_p90_ms", p90);
+        }
         let mut rejoins: Vec<u64> = self
             .viewers
             .iter()

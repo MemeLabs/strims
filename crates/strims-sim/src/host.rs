@@ -135,6 +135,10 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         let p = p.clone();
         spawn_local(async move { p.run().await });
     }
+    if let Some(p) = &pool {
+        let p = p.clone();
+        spawn_local(async move { p.resolve_sources().await });
+    }
     let transfers = TransferControl::new(
         SimTransferHost {
             node: node.clone(),
@@ -165,6 +169,15 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
                 Some(m) => spawn_local(media_writer_task(w.clone(), h, s, writer, m)),
                 None => spawn_local(writer_task(w.clone(), h, s, writer)),
             };
+            // `pool-find`: the writer names itself the swarm's source.
+            if w.spec.exp.contains("pool-find")
+                && let Some(net) = index
+                && let Err(e) = node
+                    .publish_vpn_address(net, key.clone(), crate::pool::SOURCE_SALT.to_vec(), 0)
+                    .await
+            {
+                w.log(w.name(h), format!("source publish failed: {e}"));
+            }
             swarm
         } else if spec.member(h) {
             let swarm = node

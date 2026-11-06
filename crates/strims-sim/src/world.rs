@@ -44,6 +44,11 @@ pub(crate) fn epoch() -> Time {
     Time::from_unix_millis(EPOCH_MS)
 }
 
+/// The run's first stretch, over which a host's offers to link it count
+/// apart ([`HostReport::offers_early`](crate::report::HostReport)): a
+/// seed's first wave.
+pub const EARLY_OFFERS: Duration = Duration::from_secs(30);
+
 /// Simulated time since the start of the run, from inside a host.
 pub(crate) fn sim_now() -> Duration {
     turmoil::sim_elapsed().unwrap_or_default()
@@ -754,10 +759,25 @@ impl World {
                 let c = hs.exchanges.entry(x).or_default();
                 *c = c.wrapping_add(1);
             }
+            let early = u64::from(sim_now() < EARLY_OFFERS);
+            if name == "Answered" {
+                hs.totals.offers_early += early;
+            }
             if name == "Rejected"
                 && let Some(t) = with.and_then(|x| st.hosts.get_mut(x))
             {
                 t.totals.offers_refused += 1;
+                t.totals.offers_early += early;
+            }
+        });
+    }
+
+    /// `h`'s pool resolved a swarm's source (`pool-find`).
+    pub fn source_resolved(&self, h: HostIx) {
+        let now = sim_now_ms();
+        self.record(|st| {
+            if let Some(hs) = st.hosts.get_mut(h) {
+                hs.totals.source_resolved_ms.get_or_insert(now);
             }
         });
     }

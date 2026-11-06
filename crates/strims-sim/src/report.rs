@@ -121,10 +121,15 @@ pub struct HostReport {
     /// Offers to link it refused: its peers' exchanges with it that ended
     /// `Rejected`.
     pub offers_refused: u64,
+    /// Offers to link it, answered or refused, in the run's first
+    /// [`EARLY_OFFERS`](crate::world::EARLY_OFFERS).
+    pub offers_early: u64,
     /// Its pool's probes whose trials ended, and those whose link stayed
     /// (`pool-probe`).
     pub pool_trials: u64,
     pub pool_trial_wins: u64,
+    /// When its pool first resolved a swarm's source (`pool-find`), in ms.
+    pub source_resolved_ms: Option<u64>,
     pub vpn_messages_relayed: u64,
     pub vpn_link_queue_full: u64,
     /// Peer index and hash table records vpn pushed to new links

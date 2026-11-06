@@ -97,13 +97,22 @@
 //! - `pool-near`, with `pool-useful`: among links of equal value the
 //!   farthest goes first, by its smallest round trip, within ppspp's
 //!   `NEAR_MARGIN`.
+//! - `pool-find`: a seed publishes its address under its swarm's key
+//!   ([`SOURCE_SALT`]), which only its writer holds, and a viewer resolves
+//!   it (vpn checks the record's signature) and dials the source first
+//!   among its candidates, while it has room under its budget: once full
+//!   it offers the seed nothing past it, so the seed sees each viewer's
+//!   offers only while that viewer is still linking, its first wave, and
+//!   refuses what its own budget has no room for.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::time::Duration;
 
-use strims_node::{ExchangeOutcome, HostId, NetworkId, Node, NodeError, NodeEvent};
+use strims_node::{
+    ExchangeOutcome, HashTableGetOptions, HostId, NetworkId, Node, NodeError, NodeEvent,
+};
 use strims_ppspp::scheduler_peer::push::seed::NEAR_MARGIN;
 
 use crate::spec::HostIx;
@@ -177,6 +186,12 @@ pub const BLOCKED_SHARE: f64 = 0.7;
 pub const STARVE_FOR: Duration = Duration::from_secs(5);
 /// ... once this long has passed since its first swarm link.
 pub const JOIN_GRACE: Duration = Duration::from_secs(10);
+/// `pool-find`: the salt a seed publishes its address under, with its
+/// swarm's key.
+pub const SOURCE_SALT: &[u8] = b"source";
+/// `pool-find`: how long one lookup of a source waits; a viewer looks
+/// again until it has one, for [`JOIN_GRACE`].
+pub const RESOLVE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// How the budget is set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -204,11 +219,12 @@ pub struct PoolConfig {
     pub control: Control,
     /// A hostile hog's pool ([`PoolConfig::greedy`]).
     pub greedy: bool,
-    /// `pool-trial`, `pool-useful`, `pool-probe`, `pool-near`.
+    /// `pool-trial`, `pool-useful`, `pool-probe`, `pool-near`, `pool-find`.
     pub trial: bool,
     pub useful: bool,
     pub probe: bool,
     pub near: bool,
+    pub find: bool,
 }
 
 impl PoolConfig {
@@ -247,6 +263,7 @@ impl PoolConfig {
             useful: exp.contains("pool-useful") || exp.contains("pool-near"),
             probe: exp.contains("pool-probe"),
             near: exp.contains("pool-near"),
+            find: exp.contains("pool-find"),
         })
     }
 
@@ -371,6 +388,9 @@ struct State {
     probing: Option<HostId>,
     probe_at: Option<Duration>,
     probe_wait: Duration,
+    /// The sources of the swarms the node views, as resolved
+    /// (`pool-find`). Bound: one per swarm.
+    sources: BTreeSet<HostId>,
 }
 
 /// See the [module docs](self).
@@ -511,6 +531,61 @@ impl Pool {
     }
 
     /// Ticks every [`TICK`] for as long as the node runs.
+    /// `pool-find`: looks up the sources of the swarms the node views,
+    /// each until it is found or [`JOIN_GRACE`] has passed, and makes each
+    /// found one a candidate the node dials first.
+    pub(crate) async fn resolve_sources(&self) {
+        if !self.cfg.find {
+            return;
+        }
+        let mut keys: Vec<Vec<u8>> = self
+            .w
+            .spec
+            .swarms
+            .iter()
+            .zip(&self.w.swarm_keys)
+            .filter(|(s, _)| s.viewers.contains(&self.h))
+            .map(|(_, k)| k.public.clone())
+            .collect();
+        let start = sim_now();
+        while !keys.is_empty() && sim_now().saturating_sub(start) < JOIN_GRACE {
+            let mut left = Vec::new();
+            for key in keys {
+                let options = HashTableGetOptions {
+                    disable_cache: false,
+                    timeout: strims_base::time::Duration::from_secs(
+                        RESOLVE_TIMEOUT.as_secs().cast_signed(),
+                    ),
+                };
+                let found = self
+                    .node
+                    .resolve_vpn_address(self.net, key.clone(), SOURCE_SALT.to_vec(), options)
+                    .await;
+                match found {
+                    Ok(Some(addr)) if addr.host != self.node.host_id() => {
+                        let now = sim_now();
+                        let mut st = self.st.borrow_mut();
+                        st.sources.insert(addr.host);
+                        if !st.links.contains_key(&addr.host) {
+                            st.candidates.entry(addr.host).or_insert(Candidate {
+                                found: now,
+                                tries: 0,
+                                next_try: now,
+                            });
+                        }
+                        self.w.source_resolved(self.h);
+                    }
+                    Ok(Some(_)) => {}
+                    _ => left.push(key),
+                }
+            }
+            keys = left;
+            if !keys.is_empty() {
+                tokio::time::sleep(TICK).await;
+            }
+        }
+    }
+
     pub(crate) async fn run(&self) {
         let headroom = u32::from(self.cfg.evict);
         loop {
@@ -826,7 +901,9 @@ impl Pool {
             })
             .map(|(&h, c)| (h, c.tries, c.found))
             .collect();
-        due.sort_by_key(|&(_, tries, found)| (tries, found));
+        // A swarm's source first (`pool-find`; none without).
+        let sources = &st.sources;
+        due.sort_by_key(|&(h, tries, found)| (!sources.contains(&h), tries, found));
         let mut out: Vec<HostId> = due.iter().take(slots).map(|d| d.0).collect();
         if self.cfg.probe && out.is_empty() && !due.is_empty() {
             let behind = st.behind_since.is_some();
