@@ -1091,10 +1091,10 @@ mod tests {
     #[test]
     fn spearman_ranks_ties_at_their_mean() {
         let up = [(1.0, 4.0), (2.0, 3.0), (3.0, 2.0), (4.0, 1.0)];
-        assert!((spearman(&up).unwrap() + 1.0).abs() < 1e-9);
+        assert!(spearman(&up).is_some_and(|r| (r + 1.0).abs() < 1e-9));
         // Ranks 1.5, 1.5, 3 against 1, 2, 3.
         let tied = [(1.0, 1.0), (1.0, 2.0), (2.0, 3.0)];
-        assert!((spearman(&tied).unwrap() - 0.866_025_4).abs() < 1e-6);
+        assert!(spearman(&tied).is_some_and(|r| (r - 0.866_025_4).abs() < 1e-6));
         assert_eq!(spearman(&[(1.0, 1.0), (1.0, 2.0), (1.0, 3.0)]), None);
         assert_eq!(spearman(&[(1.0, 1.0), (2.0, 2.0)]), None);
     }
