@@ -253,6 +253,17 @@ halve-31-10 x1.25. Up: browsers 95 -> 125 (star-31-5 3 -> 26). A copy the
 budget only partly pays for helps a pull-heavy swarm and overloads a seed
 whose uplink falls.
 
+**An adaptive seed's budget remainder as a part copy.** (`TMP-part`,
+against 308c0341, seeds 3001-3032) One more holder took the slots past the
+whole copies while the window held what the budget paid for. On the
+lowest-indexed streams: peers 55 -> 50 of 672, robust 80 -> 77 of 1248,
+browsers 95 -> 90 of 1024; on the streams the seed's tree-fed neighbours
+announced latest: 49, 78 and 102. Lag p99 x0.995-1.02 (overload's x0.98,
+where rounding's was x0.78), halve-15-10's x1.10-1.17 under both. The
+budget moves the remainder by a quarter copy or more between checks, so in
+capped-seed the part holder held 0-1 of its 2-14 slots; and the streams'
+lags differ by less than their noise.
+
 **Rarest-first requests.** (`TMP-rarest`, against 938a829b) A request
 round ordered its candidates by how few channels had announced each
 chunk, within the request group or across the round, the node's own

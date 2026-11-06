@@ -271,10 +271,6 @@ and dropped are in `TRIED.md`.
      which with 32 neighbours is barely what a 6 Mbit/s copy needs. A
      holder's weight should cover its pushes whatever the neighbour
      count.
-   - **Window steps.** The window and the budget step in whole copies, so
-     the budget's remainder past them pushes nothing; push it as a part
-     copy, which needs the holder rules (a holder takes every stream) to
-     allow a holder some of the streams (`TRIED.md`).
    - **Protocol overhead.** Find where the bytes go at the media swarms'
      4 KiB chunks, from a capture. Request runs of chunks, not one at a
      time (no wire change). Ping per peer, not per channel: one ping loop
