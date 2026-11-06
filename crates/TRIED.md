@@ -245,6 +245,14 @@ mostly still arrive, and pulling them adds load. The rest tied once an
 empty window carried a request (48 seeds: ×0.92–1.03 on capped-seed,
 sparse-lossy, wan-mobile, wan-global and residential).
 
+**An adaptive seed's budget rounded up to copies.** (`TMP-copy-round`,
+against 2010b658, seeds 3001-3032) To the nearest copy: the peers tier
+55 -> 45 of 672 (overload's lag p99 x0.78), but robust's halvings past
+their guardrails (halve-7-10 x1.32, halve-7-20 x1.99) and browsers'
+halve-31-10 x1.25. Up: browsers 95 -> 125 (star-31-5 3 -> 26). A copy the
+budget only partly pays for helps a pull-heavy swarm and overloads a seed
+whose uplink falls.
+
 **Rarest-first requests.** (`TMP-rarest`, against 938a829b) A request
 round ordered its candidates by how few channels had announced each
 chunk, within the request group or across the round, the node's own
