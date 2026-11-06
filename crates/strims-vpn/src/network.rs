@@ -900,7 +900,11 @@ mod tests {
         let now = Time::from_unix(100, 0);
         for routing in [Routing::Greedy, Routing::Learned] {
             let t = n.select_links(now, &id0, true, &[], routing, 2, BACKLOG);
-            assert_eq!(t.iter().map(|r| r.peer).collect::<Vec<_>>(), vec![k0], "{routing:?}");
+            assert_eq!(
+                t.iter().map(|r| r.peer).collect::<Vec<_>>(),
+                vec![k0],
+                "{routing:?}"
+            );
         }
     }
 }

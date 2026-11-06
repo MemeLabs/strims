@@ -468,9 +468,13 @@ impl<H: Copy> Host<H> {
                 };
                 let n = self.networks.get(net).ok_or(Error::NetworkNotFound)?;
                 let records = match self.config.peer_index_answers {
-                    IndexAnswers::Nearest => n.peer_index.get(&hash, &msg.src, |id| n.link_to(id).is_some()),
+                    IndexAnswers::Nearest => n
+                        .peer_index
+                        .get(&hash, &msg.src, |id| n.link_to(id).is_some()),
                     IndexAnswers::Sample => {
-                        let mut all = n.peer_index.eligible(&hash, &msg.src, |id| n.link_to(id).is_some());
+                        let mut all = n
+                            .peer_index
+                            .eligible(&hash, &msg.src, |id| n.link_to(id).is_some());
                         while all.len() > PEER_INDEX_SEARCH_RESPONSE_SIZE {
                             let len = u32::try_from(all.len()).unwrap_or(u32::MAX);
                             all.remove(random_below(&mut self.rng, len) as usize);
