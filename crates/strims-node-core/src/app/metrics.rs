@@ -348,7 +348,11 @@ fn link(l: LinkInfo) -> v1::LinkInfo {
 }
 
 fn runner(m: RunnerMetrics) -> v1::RunnerMetrics {
-    let RunnerMetrics { swarms, peers } = m;
+    let RunnerMetrics {
+        swarms,
+        peers,
+        totals: _,
+    } = m;
     v1::RunnerMetrics {
         swarms: swarms.into_iter().map(swarm).collect(),
         peers: peers.into_iter().map(peer).collect(),
@@ -653,6 +657,8 @@ fn channel_scheduler(s: ChannelSchedulerStats) -> v1::ChannelSchedulerStats {
 }
 
 fn channel_metrics(m: ChannelMetrics) -> v1::ChannelMetrics {
+    // The export keeps one byte count for every message byte but data.
+    let overhead_bytes = m.message_bytes();
     let ChannelMetrics {
         handshake,
         restart,
@@ -674,13 +680,26 @@ fn channel_metrics(m: ChannelMetrics) -> v1::ChannelMetrics {
         stream_close,
         announce,
         data_bytes,
-        overhead_bytes,
+        data_header_bytes: _,
+        integrity_bytes: _,
+        signed_integrity_bytes: _,
+        have_bytes: _,
+        ack_bytes: _,
+        request_bytes: _,
+        ping_bytes: _,
+        stream_bytes: _,
+        announce_bytes: _,
+        session_bytes: _,
+        payloads: _,
+        header_bytes: _,
         invalid_data,
         invalid_chunk,
         invalid_bytes,
         rejected,
         stale_stream_open,
         stale_data,
+        stale_bytes: _,
+        new_bytes: _,
     } = m;
     v1::ChannelMetrics {
         handshake,
@@ -1163,7 +1182,7 @@ mod tests {
     use strims_base::time::Duration;
     use strims_binmap::Bin;
     use strims_kademlia::ID;
-    use strims_ppspp::{PeerKey, SwarmId, SwarmKey};
+    use strims_ppspp::{ChannelTotals, PeerKey, SwarmId, SwarmKey};
     use strims_vpn::NetworkId;
 
     use super::*;
@@ -1272,6 +1291,7 @@ mod tests {
                         }),
                     }],
                 }],
+                totals: ChannelTotals::default(),
             },
             networks: vec![NetworkInfo {
                 network,

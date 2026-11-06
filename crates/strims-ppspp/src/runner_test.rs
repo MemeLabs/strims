@@ -194,6 +194,41 @@ fn transfer_between_runners() {
 }
 
 #[test]
+fn channel_bytes_add_up_to_the_frames() {
+    let mut p = Pair::new(options());
+    for _ in 0..10 {
+        p.write(1);
+        for _ in 0..5 {
+            p.tick(50);
+        }
+    }
+    let seed = p.seed.runner.channel_totals();
+    let leech = p.leech.runner.channel_totals();
+    let sent: usize = p.frames.iter().map(Vec::len).sum();
+    assert_eq!(
+        seed.outbound.wire_bytes() + leech.outbound.wire_bytes(),
+        sent as u64
+    );
+    // What one sends the other reads; only the reader knows what was new.
+    let read = |m: ChannelMetrics| ChannelMetrics { new_bytes: 0, ..m };
+    assert_eq!(read(leech.inbound), seed.outbound);
+    assert_eq!(read(seed.inbound), leech.outbound);
+    let m = leech.inbound;
+    assert!(m.data_header_bytes > 0 && m.signed_integrity_bytes > 0 && m.have_bytes > 0);
+    assert!(m.new_bytes > 0 && m.new_bytes <= m.data_bytes);
+
+    // A closed channel's counters stay in the totals.
+    p.leech.runner.stop_swarm(p.leech.peer, p.leech.swarm);
+    assert!(
+        p.leech
+            .runner
+            .channel_stats(p.leech.peer, p.leech.swarm)
+            .is_none()
+    );
+    assert_eq!(p.leech.runner.channel_totals(), leech);
+}
+
+#[test]
 fn writer_reset_restarts_the_stream() {
     // After a writer reset the stream restarts at bin 0 under a new epoch.
     // The leech must forget the seed's old newest HAVE, or it would ask for
@@ -775,6 +810,8 @@ fn late_data_behind_the_window_is_ignored_as_stale() {
     let after = stats(&p).inbound;
     assert_eq!(after.invalid_data, 0, "{after:?}");
     assert!(after.stale_data > before.stale_data, "{after:?}");
+    assert!(after.stale_bytes > before.stale_bytes, "{after:?}");
+    assert_eq!(after.new_bytes, before.new_bytes, "{after:?}");
 }
 
 fn hybrid() -> SwarmOptions {

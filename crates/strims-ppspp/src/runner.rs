@@ -424,6 +424,14 @@ pub struct ChannelStats {
     pub outbound: ChannelMetrics,
 }
 
+/// Every channel's message counters summed, closed channels' included
+/// ([`Runner::channel_totals`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ChannelTotals {
+    pub inbound: ChannelMetrics,
+    pub outbound: ChannelMetrics,
+}
+
 /// The ppspp runner: one per node, driven by frames in and out, a clock
 /// and events.
 ///
@@ -528,6 +536,8 @@ pub struct Runner {
     push_waits: Vec<Duration>,
     /// The rate and reading last tapped, so a tap marks a change.
     tapped_rate: Option<(u64, Option<Duration>)>,
+    /// The closed channels' counters.
+    closed: ChannelTotals,
 }
 
 /// Hands a swarm's queued events to its scheduler and the driver. Called
@@ -559,13 +569,15 @@ fn drain_swarm(
     }
 }
 
-/// Handles one channel payload from `peer`, message by message, stopping
-/// at the first error.
+/// Handles one channel payload from `peer` behind a `header`-byte header,
+/// message by message, stopping at the first error.
+#[allow(clippy::too_many_arguments)]
 fn handle_payload(
     rs: &mut RunnerSwarm,
     key: SwarmKey,
     peer: PeerKey,
     now: Time,
+    header: usize,
     payload: &[u8],
     q: &mut Queues<'_>,
     readable: &mut BTreeSet<SwarmKey>,
@@ -580,6 +592,7 @@ fn handle_payload(
         return Ok(());
     };
 
+    ch.metrics_in.payload(header);
     for m in Reader::new(ch.reader_config, payload) {
         let m = m?;
         ch.metrics_in.count(&m);
@@ -619,15 +632,18 @@ fn handle_payload(
                 if d.bin.base_right() < window_start.max(swarm.verifier().verifiable_from()) {
                     let m = &mut ch.metrics_in;
                     m.stale_data = m.stale_data.saturating_add(1);
+                    m.stale_bytes = m.stale_bytes.saturating_add(n);
                     sched.handle_stale_data(peer, d.bin, d.timestamp, now);
                     continue;
                 }
                 match swarm.handle_data(&mut ch.verifier, d.bin, d.data, d.zeros) {
                     Ok(published) => {
-                        if published.new
-                            && let Some(p) = q.peers.get_mut(peer)
-                        {
-                            p.useful.add(n, now);
+                        if published.new {
+                            let m = &mut ch.metrics_in;
+                            m.new_bytes = m.new_bytes.saturating_add(n);
+                            if let Some(p) = q.peers.get_mut(peer) {
+                                p.useful.add(n, now);
+                            }
                         }
                         drain_swarm(swarm, Some(sched), key, now, q, readable);
                         sched.handle_data(
@@ -742,6 +758,7 @@ impl Runner {
             answer_rate: AnswerRate::new(),
             push_waits: Vec::new(),
             tapped_rate: None,
+            closed: ChannelTotals::default(),
         }
     }
 
@@ -1327,6 +1344,7 @@ impl Runner {
             peers,
             events,
             tap,
+            closed,
             ..
         } = self;
         let Some(rs) = swarms.get_mut(key) else {
@@ -1335,6 +1353,8 @@ impl Runner {
         let Some(ch) = rs.channels.shift_remove(&peer) else {
             return;
         };
+        closed.inbound.merge(&ch.metrics_in);
+        closed.outbound.merge(&ch.metrics_out);
         tap.push(TapEvent {
             swarm: Some(key),
             peer: Some(peer),
@@ -1491,7 +1511,16 @@ impl Runner {
                 peers,
                 transmit: &mut events.transmit,
             };
-            handle_payload(rs, key, peer, now, payload, &mut q, &mut events.readable)?;
+            handle_payload(
+                rs,
+                key,
+                peer,
+                now,
+                h.byte_len(),
+                payload,
+                &mut q,
+                &mut events.readable,
+            )?;
         }
 
         let mut q = Queues {
@@ -1939,6 +1968,17 @@ impl Runner {
             inbound: ch.metrics_in,
             outbound: ch.metrics_out,
         })
+    }
+
+    /// Every channel's message counters since the runner started, closed
+    /// channels' included.
+    pub fn channel_totals(&self) -> ChannelTotals {
+        let mut t = self.closed;
+        for ch in self.swarms.values().flat_map(|rs| rs.channels.values()) {
+            t.inbound.merge(&ch.metrics_in);
+            t.outbound.merge(&ch.metrics_out);
+        }
+        t
     }
 
     /// The swarm scheduler's state, while it has channels.

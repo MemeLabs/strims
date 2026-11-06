@@ -1632,7 +1632,11 @@ impl State {
                 }
             })
             .collect();
-        RunnerMetrics { swarms, peers }
+        RunnerMetrics {
+            swarms,
+            peers,
+            totals: self.runner.channel_totals(),
+        }
     }
 
     fn network_metrics(&self) -> Vec<NetworkInfo> {

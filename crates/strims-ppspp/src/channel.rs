@@ -130,9 +130,11 @@ pub fn validate_handshake<'a>(
 /// Message counters for one direction of a channel: one per message type,
 /// plus byte and validation counters.
 ///
-/// `chunk` counts the chunks `Data` messages span. `data_bytes` counts
-/// `Data` payload bytes and `overhead_bytes` every other byte of a message
-/// body; neither counts the type byte.
+/// `chunk` counts the chunks `Data` messages span. The byte counters split
+/// a channel payload's wire bytes: `data_bytes` is `Data`'s payload, each
+/// `*_bytes` class is its messages with their type bytes, and
+/// `header_bytes` the payloads' headers, so together they are every byte
+/// of the payloads counted.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ChannelMetrics {
     pub handshake: u64,
@@ -155,7 +157,24 @@ pub struct ChannelMetrics {
     pub stream_close: u64,
     pub announce: u64,
     pub data_bytes: u64,
-    pub overhead_bytes: u64,
+    /// `Data`'s type byte, bin, timestamp and zeros.
+    pub data_header_bytes: u64,
+    pub integrity_bytes: u64,
+    pub signed_integrity_bytes: u64,
+    pub have_bytes: u64,
+    pub ack_bytes: u64,
+    /// REQUEST and CANCEL.
+    pub request_bytes: u64,
+    /// PING and PONG.
+    pub ping_bytes: u64,
+    /// STREAM_REQUEST, STREAM_CANCEL, STREAM_OPEN and STREAM_CLOSE.
+    pub stream_bytes: u64,
+    pub announce_bytes: u64,
+    /// HANDSHAKE, RESTART, CHOKE and UNCHOKE.
+    pub session_bytes: u64,
+    /// Channel payloads, and their headers' bytes.
+    pub payloads: u64,
+    pub header_bytes: u64,
     /// Inbound `Data` messages that failed verification.
     pub invalid_data: u64,
     /// The chunks those messages spanned.
@@ -174,45 +193,60 @@ pub struct ChannelMetrics {
     /// Inbound `Data` for chunks already behind our window (or behind the
     /// munros we can still verify), ignored: late answers.
     pub stale_data: u64,
+    /// Their payload bytes.
+    pub stale_bytes: u64,
+    /// Inbound `Data` payload bytes that verified and were new to us. The
+    /// rest of `data_bytes` did no good: stale, invalid, unexpected or
+    /// already held.
+    pub new_bytes: u64,
 }
 
 impl ChannelMetrics {
     /// Counts one message.
     pub(crate) fn count(&mut self, m: &Message<'_>) {
-        let body = m.byte_len() as u64;
-        let c = match m {
-            Message::Handshake(_) => &mut self.handshake,
-            Message::Restart => &mut self.restart,
+        let len = m.encoded_len() as u64;
+        let (c, bytes) = match m {
+            Message::Handshake(_) => (&mut self.handshake, &mut self.session_bytes),
+            Message::Restart => (&mut self.restart, &mut self.session_bytes),
             Message::Data(d) => {
                 add(&mut self.data, 1);
                 add(&mut self.chunk, d.bin.base_length());
                 let data = d.data.len() as u64;
                 add(&mut self.data_bytes, data);
-                add(&mut self.overhead_bytes, body.saturating_sub(data));
+                add(&mut self.data_header_bytes, len.saturating_sub(data));
                 return;
             }
-            Message::Ack(_) => &mut self.ack,
-            Message::Have(_) => &mut self.have,
-            Message::Integrity(_) => &mut self.integrity,
-            Message::SignedIntegrity(_) => &mut self.signed_integrity,
-            Message::Request(_) => &mut self.request,
-            Message::Cancel(_) => &mut self.cancel,
-            Message::Choke => &mut self.choke,
-            Message::Unchoke => &mut self.unchoke,
-            Message::Ping(_) => &mut self.ping,
-            Message::Pong(_) => &mut self.pong,
-            Message::StreamRequest(_) => &mut self.stream_request,
-            Message::StreamCancel(_) => &mut self.stream_cancel,
-            Message::StreamOpen(_) => &mut self.stream_open,
-            Message::StreamClose(_) => &mut self.stream_close,
-            Message::Announce(_) => &mut self.announce,
+            Message::Ack(_) => (&mut self.ack, &mut self.ack_bytes),
+            Message::Have(_) => (&mut self.have, &mut self.have_bytes),
+            Message::Integrity(_) => (&mut self.integrity, &mut self.integrity_bytes),
+            Message::SignedIntegrity(_) => {
+                (&mut self.signed_integrity, &mut self.signed_integrity_bytes)
+            }
+            Message::Request(_) => (&mut self.request, &mut self.request_bytes),
+            Message::Cancel(_) => (&mut self.cancel, &mut self.request_bytes),
+            Message::Choke => (&mut self.choke, &mut self.session_bytes),
+            Message::Unchoke => (&mut self.unchoke, &mut self.session_bytes),
+            Message::Ping(_) => (&mut self.ping, &mut self.ping_bytes),
+            Message::Pong(_) => (&mut self.pong, &mut self.ping_bytes),
+            Message::StreamRequest(_) => (&mut self.stream_request, &mut self.stream_bytes),
+            Message::StreamCancel(_) => (&mut self.stream_cancel, &mut self.stream_bytes),
+            Message::StreamOpen(_) => (&mut self.stream_open, &mut self.stream_bytes),
+            Message::StreamClose(_) => (&mut self.stream_close, &mut self.stream_bytes),
+            Message::Announce(_) => (&mut self.announce, &mut self.announce_bytes),
             Message::End => return,
         };
         add(c, 1);
-        add(&mut self.overhead_bytes, body);
+        add(bytes, len);
     }
 
-    fn merge(&mut self, o: &ChannelMetrics) {
+    /// Counts one channel payload's header of `len` bytes.
+    pub(crate) fn payload(&mut self, len: usize) {
+        add(&mut self.payloads, 1);
+        add(&mut self.header_bytes, len as u64);
+    }
+
+    /// Adds `o`'s counters to these.
+    pub(crate) fn merge(&mut self, o: &ChannelMetrics) {
         let ChannelMetrics {
             handshake,
             restart,
@@ -234,13 +268,26 @@ impl ChannelMetrics {
             stream_close,
             announce,
             data_bytes,
-            overhead_bytes,
+            data_header_bytes,
+            integrity_bytes,
+            signed_integrity_bytes,
+            have_bytes,
+            ack_bytes,
+            request_bytes,
+            ping_bytes,
+            stream_bytes,
+            announce_bytes,
+            session_bytes,
+            payloads,
+            header_bytes,
             invalid_data,
             invalid_chunk,
             invalid_bytes,
             rejected,
             stale_stream_open,
             stale_data,
+            stale_bytes,
+            new_bytes,
         } = o;
         add(&mut self.handshake, *handshake);
         add(&mut self.restart, *restart);
@@ -262,13 +309,51 @@ impl ChannelMetrics {
         add(&mut self.stream_close, *stream_close);
         add(&mut self.announce, *announce);
         add(&mut self.data_bytes, *data_bytes);
-        add(&mut self.overhead_bytes, *overhead_bytes);
+        add(&mut self.data_header_bytes, *data_header_bytes);
+        add(&mut self.integrity_bytes, *integrity_bytes);
+        add(&mut self.signed_integrity_bytes, *signed_integrity_bytes);
+        add(&mut self.have_bytes, *have_bytes);
+        add(&mut self.ack_bytes, *ack_bytes);
+        add(&mut self.request_bytes, *request_bytes);
+        add(&mut self.ping_bytes, *ping_bytes);
+        add(&mut self.stream_bytes, *stream_bytes);
+        add(&mut self.announce_bytes, *announce_bytes);
+        add(&mut self.session_bytes, *session_bytes);
+        add(&mut self.payloads, *payloads);
+        add(&mut self.header_bytes, *header_bytes);
         add(&mut self.invalid_data, *invalid_data);
         add(&mut self.invalid_chunk, *invalid_chunk);
         add(&mut self.invalid_bytes, *invalid_bytes);
         add(&mut self.rejected, *rejected);
         add(&mut self.stale_stream_open, *stale_stream_open);
         add(&mut self.stale_data, *stale_data);
+        add(&mut self.stale_bytes, *stale_bytes);
+        add(&mut self.new_bytes, *new_bytes);
+    }
+
+    /// The payloads' wire bytes: headers, messages and data.
+    pub fn wire_bytes(&self) -> u64 {
+        self.data_bytes
+            .saturating_add(self.message_bytes())
+            .saturating_add(self.header_bytes)
+    }
+
+    /// Every message byte but `Data`'s payload.
+    pub fn message_bytes(&self) -> u64 {
+        [
+            self.data_header_bytes,
+            self.integrity_bytes,
+            self.signed_integrity_bytes,
+            self.have_bytes,
+            self.ack_bytes,
+            self.request_bytes,
+            self.ping_bytes,
+            self.stream_bytes,
+            self.announce_bytes,
+            self.session_bytes,
+        ]
+        .into_iter()
+        .fold(0, u64::saturating_add)
     }
 }
 
@@ -307,11 +392,13 @@ impl<'b> MeteredWriter<'b> {
     /// Writes the channel header, merges the counts into `out`, and
     /// returns the bytes used (0 if nothing was written) and the data bytes
     /// written.
-    pub(crate) fn finish(self, out: &mut ChannelMetrics) -> (usize, u64) {
+    pub(crate) fn finish(mut self, out: &mut ChannelMetrics) -> (usize, u64) {
+        let header = self.cw.len().saturating_sub(self.cw.payload_len());
         let n = self.cw.finish();
         if n == 0 {
             return (0, 0);
         }
+        self.pending.payload(header);
         out.merge(&self.pending);
         (n, self.pending.data_bytes)
     }
@@ -435,6 +522,10 @@ mod tests {
         assert!(n > 0);
         assert_eq!(data, 0);
         assert_eq!(out.have, 1);
-        assert_eq!(out.overhead_bytes, 1);
+        // The type byte and bin 6, then the channel header: id 3 and the
+        // length.
+        assert_eq!(out.have_bytes, 2);
+        assert_eq!((out.payloads, out.header_bytes), (1, 3));
+        assert_eq!(out.wire_bytes(), n as u64);
     }
 }

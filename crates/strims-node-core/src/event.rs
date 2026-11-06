@@ -6,7 +6,8 @@
 use strims_binmap::Bin;
 use strims_kademlia::ID;
 use strims_ppspp::{
-    ChannelStats, MetricsSnapshot, PeerStats, PushStats, SwarmId, SwarmKey, SwarmSchedulerStats,
+    ChannelStats, ChannelTotals, MetricsSnapshot, PeerStats, PushStats, SwarmId, SwarmKey,
+    SwarmSchedulerStats,
 };
 use strims_vnic::{HostMetrics, LinkKind, LinkMetrics, LinkPath};
 use strims_vpn::{Delivery, ExchangeOutcome, NetworkId};
@@ -186,6 +187,9 @@ pub struct RunnerMetrics {
     pub swarms: Vec<SwarmInfo>,
     /// Every connected peer, in vnic link order.
     pub peers: Vec<RunnerPeerInfo>,
+    /// Every channel's message counters since the runner started, closed
+    /// channels' included.
+    pub totals: ChannelTotals,
 }
 
 /// One swarm: its store, its scheduler and its local handles.

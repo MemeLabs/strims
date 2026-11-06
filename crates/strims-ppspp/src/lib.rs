@@ -115,8 +115,9 @@ pub use channel::{ChannelMetrics, HandshakeError};
 pub use peer::{MetricsSnapshot, PeerMetricsSnapshot, PeerStats, TransferMetricsSnapshot};
 pub use peer_data_queue::DATA_QUEUE_CAP;
 pub use runner::{
-    ChannelStats, Event, MAX_PEER_QOS_WEIGHT, MIN_PEER_QOS_WEIGHT, PEER_QOS_UPDATE_INTERVAL,
-    PeerKey, Rewind, Runner, RunnerError, SwarmKey, SwarmMut, TICK_INTERVAL,
+    ChannelStats, ChannelTotals, Event, MAX_PEER_QOS_WEIGHT, MIN_PEER_QOS_WEIGHT,
+    PEER_QOS_UPDATE_INTERVAL, PeerKey, Rewind, Runner, RunnerError, SwarmKey, SwarmMut,
+    TICK_INTERVAL,
 };
 pub use scheduler_peer::push::PushStats;
 pub use scheduler_peer::push::seed::{
