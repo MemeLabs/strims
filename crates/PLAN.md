@@ -6,32 +6,19 @@ on it is in `CONVENTIONS.md`.
 ## Remaining work
 
 ### App layer
-- Video; see Video below.
 - A server for the devtools UI (`src/devtools`): `DevToolsService`, and
-  `CapConnService`, which lists, watches and loads ppspp capture logs.
+  `CapConnService`, which lists, watches and loads ppspp captures (the page
+  reads the old `CapConnLog` format, not `.ppcap` dumps).
 
 ### Video
-Live video is the unit format (`strims_video::units`) end to end: RTMP and
-browser capture write it, swarms carry it, and the native player
-(MediaSource), the opt-in low-latency player (WebCodecs) and HLS egress
-read it.
 - **Services.**
   - The VideoIngressShare service isn't served; it needs a design
     (discovery under a key and salt, the caller's identity from its vpn
     certificate, quotas on the host's ingest and upload, the client and its
     UI). The ingress form hides its `service_network_keys` until then.
-  - One ingest per channel holds within a process. Stores shared by several
-    processes need the lease that spans them (see `strims-svc` under
-    Targets).
-  - RTMP: a connection publishes once (OBS, ffmpeg and Larix reconnect to
-    publish again); shared objects are ignored; a peer that stops reading
-    is cut off only once its queued output passes the bound.
-  - Egress: each Data message of the RPC path allocates. On the writer's
-    own node, an RPC stream opened well into a capture replays about the
-    whole live window at once (about 2 MB in its first 4 s at 25 s in);
-    find where its reader starts. Without a listing, one stream with other
-    swarm options moves a slot's other holders until the next allowed
-    reopen.
+  - Egress: each Data message of the RPC path allocates; an RPC stream on
+    the writer's own node replays the live window from its tail, and
+    should start near the head.
   - `SwarmReader` and `SwarmWriter` close themselves on drop with
     `try_send`, so a full node command queue loses the close and leaks the
     slot; a cancelled `create_swarm` or `add_swarm` leaks the same way.
@@ -97,8 +84,6 @@ read it.
     local every few seconds; debounce, or give up after a few.
   - Cast's media title and thumbnail; an `hls_reopens` metric through
     node-core's plumbing.
-  - HTTP/2 connections can hold a slot idle for 30 s, which makes a
-    per-address connection cap on strims-svc's listeners matter more.
   - A custom web receiver running the wasm node and `UnitsPlayer` would
     cast a stream no reachable node serves, if the receiver runtime has
     WebRTC data channels and WebAssembly and a Chromecast's CPU carries the
@@ -107,10 +92,8 @@ read it.
 ### Targets
 - `strims-wasm` runs a profile's node in a browser worker, and its PSI
   sessions in a second worker. Remaining:
-  - the browser suites on Safari (iOS 17.1+) and Chromium. Only Firefox
-    has run them, so elsewhere two things are unverified: IndexedDB
-    transactions staying active across the executor's microtask polls,
-    and data channels transferred to a worker;
+  - the browser suites on Safari (iOS 17.1+) and Chromium; only Firefox
+    has run them;
   - real devices in the suites and the testbed. A phone, or Chrome or
     Firefox on Windows where Docker's headless builds fall short (no
     hardware decoding, no HEVC), opens `e2e.html` itself over the LAN and
@@ -141,9 +124,6 @@ read it.
   - rate limits on SignUp and SignIn, which each cost a 100k-iteration
     PBKDF2;
   - redb moved off the executor if its fsyncs show in profiles;
-  - TLS for the API and the HLS listener (see `wss://` on native nodes
-    below); until then the dev page reaches the API through the webpack
-    dev server's proxy;
   - Origin checks on the API's upgrade, which accepts any origin;
   - the UI and its node must come from one build, since the frontend
     API keeps no unknown fields: the UI could send its build id when it
@@ -157,14 +137,12 @@ read it.
     delimited `io.prometheus.client.MetricFamily` messages and reads the
     gauge `strims_debug_mock_stream_latency_ms{id,swarm_id}`, each mock
     stream reader's last segment latency;
-  - on the HLS listener: keep-alive, Range requests, CORS preflight, and
-    a cap per address. One client's slow connections can hold every slot
-    for up to 10 s on the request head or 60 s on the response.
-  - invite shortlinks, for sign-up with little friction:
-    `InviteLink.GetInvitation` over HTTP at `/api/invite` maps a short
-    code to a stored invitation, and the UI's `/invite/<code>` page signs
-    a newcomer up and into that network in one step, and a way to mint
-    codes;
+  - on the HLS listener: keep-alive over HTTP/1.1, Range requests, CORS
+    preflight, and a cap per address, so one client's slow or idle
+    connections can't hold every slot.
+  - invite shortlinks: a server for `InviteLink.GetInvitation` at
+    `/api/invite` (the UI's `/invite/<code>` page already asks it), sign-up
+    in the same step for a newcomer, and a way to mint codes;
   - profile commands: list, add, remove, import and export profiles
     from the command line;
   - a container image, for infra's leader, seeder and invites
@@ -178,8 +156,7 @@ read it.
   mobile cross build needs a C toolchain for its target.
 
 ### Capture
-- strims-wasm nodes capture nothing: the browser driver has no file to
-  write (OPFS, or dumps streamed to the UI).
+- Captures from the app's page node (OPFS, or dumps streamed to the UI).
 - A capture runs for its node's life, from a driver flag. A runtime
   toggle (the Debug service's config) is a stored-record change.
 - Tell a pull answer from a duplicate push in the receiving side's tap;
@@ -201,9 +178,8 @@ read it.
     messages; directory listings and transfer records; chat's message
     parser; dao's stream keys; strims-crypto's key and signature
     decoding; strims-webrtc's STUN parsing.
-  - Video: the RTMP server's byte stream, which reaches FLV, AMF0, avcC,
-    SPS, AudioSpecificConfig and OpusHead; the unit-format reader over
-    the chunked layout; the HLS routes; and, on branch `video-target`,
+  - Video: the RTMP server's byte stream and the parsers it reaches; the
+    unit-format reader over the chunked layout; the HLS routes;
     strims-player's remuxer and demuxer.
   - A short run of each target in `hack/check.sh --full`, and long
     campaigns on the sim farm (quoted with `farm.py estimate`). Each
@@ -227,10 +203,10 @@ read it.
 ### Swarm
 Hybrid (`PushMode::Hybrid`) is the design: push trees carry the stream
 and pull repairs what they miss. Its seed is the adaptive seed
-(`SeedAllocation::Adaptive` with `SeedQos::ByAllocation`), which also
-holds the defences against greedy peers. The groups are in priority
-order, and so are the items in each. Ideas already tried and dropped are
-in `TRIED.md`.
+(`SeedAllocation::Adaptive` with `SeedQos::ByAllocation`), whose reports
+judge its holders; every hybrid node declines silent peers. The groups
+are in priority order, and so are the items in each. Ideas already tried
+and dropped are in `TRIED.md`.
 
 1. **Ship it.** Swarms run Hybrid with the adaptive seed by default, and
    each later trial should measure against the defaults it would change.
@@ -272,49 +248,24 @@ in `TRIED.md`.
      were cured on both (`TRIED.md`), but a fixed budget fits one config:
      the cure is a pool that follows from what a node's links and hardware
      sustain (Network construction, in Open questions).
-   - On the Docker testbed a 10 Mbit/s seed of a 3 Mbit/s stream in a
-     five-node mesh grows its push children from 16 to 50 every 15-20 s
-     and fills its uplink, and every viewer's arrivals then run 0.5-1.3 s
-     late (up to 2.1 s): most of that mesh's stalls. Reproduce it in the
-     sim before choosing a fix (runs `mesh-b` and `mesh-margin`). The slow
-     viewer's runs show it too (`slow-a`'s settings): its seed's budget
-     read 15 MB/s while the busy time read idle, three copies (1.2-1.8 MB/s)
-     filled the uplink, and two of the three holders fell behind.
+   - Rerun the Docker testbed's five-node mesh (`mesh-b`, `mesh-margin`),
+     whose seed's push children filled its uplink, on today's seed budget,
+     and reproduce what remains in the sim.
    - Pushes queue toward a peer whose connection is backed up past one
      window, to ppspp's cap, and are dropped as stale only when written;
      and a viewer that falls a window behind sends its neighbours messages
      they count as invalid (strims-sim's slow viewer).
-   - After its uplink halves, an adaptive seed's viewers take 10-17 s to
-     recover (the robust tier's halve-x-10 cells, on the window model
-     before the bare TCP bench calibrated it; on the calibrated model
-     `collapse_halving_lock_in` recovers within 10 s at seeds 1-160).
-     Before the halving the seed runs near its
-     full uplink with copies to spare: buffers below the runner keep its
-     busy time near zero, so its budget reads twenty times its rate and
-     only the window bounds its copies, and the halving lands on a backlog
-     the budget sees a second or two late. Find a headroom signal the
-     seed's own munro bursts don't trip (the relay bound does: `TRIED.md`).
 2. **A residential seed at a real bitrate.** Behind a cable seed at
    6-8 Mbit/s honest viewers lag several times what they do behind fiber.
-   - **Pull from a constrained seed.** Bound the answers a constrained
-     seed sends for each fresh chunk. With 100 viewers at 6 Mbit/s and
-     1 KiB chunks (the ppspp sim's ignored `wan_cable_seed`) its push
-     tree held, but its other neighbours pulled the newest chunks from it:
-     it sent each chunk 4 times, its uplink stayed 89 % busy and the
-     median viewer lagged 4 s. Recheck with paced answers and 4 KiB
-     chunks. Candidates, none a wire change: answer a
-     fresh chunk to a bounded number of neighbours, by the seed's own
-     count of what it sent; a viewer's requests to a peer whose answers
-     lag (its own measurement) yield to peers that announce the chunk,
-     and queued ones are cancelled; gate pull from the seed by deadline.
-   - **Joins' backlogs.** On the Docker testbed, while a viewer joining
-     fetches its first GOP's backlog (130-600 KB), the others' live
-     arrivals run up to 1-1.5 s late (runs `mesh-a` at 23-26 s, `mesh-b`
-     at 26 s). Find whether the seed's uplink or the joiner's requests
-     take the time, and whether backlog answers should yield to pushes.
-     Backlog chunks are never announced, so viewers joining the same GOP
-     can't serve each other; all of it comes from the seed
-     (`collapse_join_backlog_hold`).
+   - **Pull from a constrained seed.** Its neighbours pull the newest
+     chunks from it several times over. Candidates, none a wire change:
+     answer a fresh chunk to a bounded number of neighbours, by the seed's
+     own count of what it sent; cancel the requests already queued at a
+     peer whose answers lag; gate pull from the seed by deadline.
+   - **Joins' backlogs.** A joiner's backlog delays the others' live
+     arrivals: find whether the seed's uplink or the joiner's requests take
+     the time. Backlog chunks are never announced, so viewers joining the
+     same GOP can't serve each other (`collapse_join_backlog_hold`).
    - **Holders' shares under pull.** `SeedQos::ByAllocation` gives a lone
      holder 1000 / (1000 + 50 × the other neighbours) of the uplink,
      which with 32 neighbours is barely what a 6 Mbit/s copy needs. A
@@ -326,38 +277,25 @@ in `TRIED.md`.
      holder takes every stream) to allow it. Once doubled, the window
      keeps two copies even where the uplink pays for one (strims-sim's
      cross traffic, whose seeds commit about twice their cap).
-   - **Budget hysteresis in copies.** The budget's hysteresis is in
-     slots, so at a copy boundary a holder joins and leaves with each
-     swing.
    - **Protocol overhead.** Find where the bytes go at the media swarms'
-     4 KiB chunks, from a capture. Coalesce HAVE-only frames. One chunk
-     per request costs about 27 % at 1 KiB chunks; requesting runs of
-     chunks needs no wire change. Ping per peer, not per channel: every
-     channel to a peer shares its link, but each pings once a second for
-     its controller, so peers that share a media, chat and directory
-     swarm ping three times over. One ping loop per peer in the runner
-     would feed every channel's controller to that peer, riding the first
-     channel payload written to it, with no wire change.
-     It changes what the controllers see: gate it on the ppspp sim's A/B
-     matrix and strims-sim's WAN cases.
-3. **Greedy peers.** Free riders and liars cost honest viewers more tail
-   lag than anything but a constrained seed, most of it on the child
-   side.
-   - **Pull from liars.** A request that timed out may go back to the
-     same channel after `REQUEST_BACKOFF` (200 ms), and LEDBAT's floor
-     reopens its window, so liars among a viewer's few neighbours keep
-     holding its requests (the ppspp sim's lossy mobile viewers lag
-     about 9 s at p99 against 2 s without them).
+     4 KiB chunks, from a capture. Request runs of chunks, not one at a
+     time (no wire change). Ping per peer, not per channel: one ping loop
+     per peer in the runner, riding the first channel payload written to
+     it, would feed every channel's controller to that peer (no wire
+     change); it changes what the controllers see, so gate it on the ppspp
+     sim's A/B matrix and strims-sim's WAN cases.
+3. **Greedy peers.** Liars and colluders, most of their cost on the
+   child side.
+   - **Pull from liars.** A liar still gets requests when the channels
+     expected to answer sooner have no room, and LEDBAT's floor reopens
+     its window after each timeout.
    - **HAVEs past the head.** A HAVE far past the stream's head moves a
      non-seed's newest bin time and prunes its bin times, so deadlines
      and HAVE lags lose their start until the stream catches up. It
      needs a bound on how far past the newest chunk a peer may announce.
-   - **Liars after a bar.** Reports bar a liar a few seconds after it
-     takes a copy, but the bar lapses after `HOLDER_BAR` and the liar
-     takes a copy again, at the price of its would-be children's grafts
-     and misses until the reports bar it once more (WanSuperPeer at
-     60 s). Decide whether a holder barred as unserved stays out longer,
-     or holds again only once reports show it serving as a relay.
+   - **Liars after a bar.** Each time a bar lapses the liar takes a copy
+     again until the reports bar it once more; reports judge only peers
+     the seed feeds, so a barred peer can't show it serves first.
    - **Colluders.** A verdict is a majority over a holder's reporters, so
      greedy viewers that praise a liar or defame an honest holder decide
      it where they outnumber its honest reporters: holders with few (far
@@ -368,58 +306,38 @@ in `TRIED.md`.
      reporters seen; decide whether colluders join the default greedy
      mix.
    - **ANNOUNCE's reach** (Wire changes, ppspp), then **holders nobody
-     grafts onto.** The seed picks holders by its round trip to them and
-     children pick parents by announcement lag, so a far holder can
-     relay to nobody, and a near one with a weak uplink to few. No
-     reporter votes on them, and they keep their copies. Decide whether a
-     copy should go to a neighbour the reports show serving as a relay.
+     grafts onto**: a far holder can relay to nobody, and keeps its copy
+     while no reporter votes on it.
 4. **Pull on lossy, sparse and mobile paths.** The worst scenarios after
    a constrained seed, where pull does the most repair.
-   - **The silence after a timeout.** LEDBAT's 2 KiB minimum, under a
-     4 KiB chunk, leaves a channel asking for nothing for
-     `FLOOR_LOSS_HOLD` after a timeout. The ppspp sim's pull-heavy cells
-     lose up to a fifth of p99 to that silence, and the real stack's busy
-     stars lose as much without it (tried: TRIED.md). Find what it buys
-     there, likely a congested peer left to its pushes, and keep the
-     silence for that alone. It also stalls joins: a joiner pulls its
-     GOP's backlog from the seed alone, the seed's keyframe pushes queue
-     those answers past the congestion timeout, and the window then sits
-     under a chunk for the hold. Two viewers joining in the same second
-     take 3-5 s for their backlogs, against 1.1 s for one and 1.7-2.4 s
-     without the hold (strims-sim's `collapse_join_backlog_hold`, on
-     branch `video-target`).
-   - **Deadlines from the player.** Readers read chunks as soon as they
-     arrive and never skip, so a deadline taken from first sight has no
-     slack to spend and only moves repairs earlier (tried: TRIED.md).
-     Once players keep playout clocks (Video), a chunk's deadline is its
-     publish time plus the player's target lag: wait longer for pushes
-     while pull can still meet it, and skip chunks no peer can meet.
+   - **The silence after a timeout.** LEDBAT's minimum window, under a
+     chunk, leaves a channel asking for nothing for `FLOOR_LOSS_HOLD` after
+     a timeout, which costs pull-heavy cells tail lag and stalls joins
+     (`collapse_join_backlog_hold`). Find what it buys there, likely a
+     congested peer left to its pushes, and keep the silence for that
+     alone.
+   - **Deadlines from the player.** Once `UnitsPlayer`'s position reaches
+     the scheduler (Video, Players), a chunk's deadline is its publish time
+     plus the player's target lag: wait longer for pushes while pull can
+     still meet it, and skip chunks no peer can meet.
    - **Request decorrelation.** LEDBAT keeps viewers' requests apart
      with a cwnd floor and randomized 64-chunk request groups, which cost
      about 70 ms of p99 in well-provisioned meshes; scheduler-level
      decorrelation (rarest-first) could replace the groups. Plain oldest
      first tied (TRIED.md).
-   - Convergence on sparse meshes.
 5. **Push-tree refinements.** Smaller or narrower costs.
    - Slow parents are detected late, so `sim_push_slow_parent`'s p99 can
      still pass 1 s on some seeds. The upload meter's 2 s busy window
      takes about 1.5 s to reach `SHED_UTILIZATION`, a child's deadline
      stretches with its parent's lag up to `DEADLINE_MAX`, and
      `PRUNE_MIN_AGE` and `SWITCH_HOLD` shield a new parent.
-   - A non-seed's interior stream is the first it accepts a subscriber
-     for. Its extras are admitted at `EXTRA_UTILIZATION` of the measured
-     capacity, so a datacenter viewer forwards every stream it holds.
-   - Push loops fed by pull. A candidate must have announced our newest
-     chunk of the stream before we held it, which no peer our pushes feed
-     can, but one that pulled it from elsewhere can while its parents
-     pass through us: in the ppspp sim's capped-seed 107 loops over 32
-     seeds remain (68 of them in one run that lags 7.6 s either way), and
-     its parent's late pushes prune it only after `PRUNE_MIN_EXPECTED`,
-     slowly on a low-rate stream.
-   - Push bypassing congestion control. Judging it needs the WAN model's
-     sender backpressure (Simulation coverage and fidelity).
-   - **Copies by region.** Copies go to the nearest neighbours. Try a
-     scenario whose nearest neighbours share one path or access network.
+   - Push loops fed by pull: a peer that pulled our newest chunk from
+     elsewhere passes the graft rule while its parents pass through us,
+     and the silent-parent prune breaks the loop late where parents lag.
+   - Push bypassing congestion control: judge it on the window model
+     (`STRIMS_SIM_TCP`).
+   - **Copies by region.** Try a scenario whose nearest neighbours share
+     one path or access network.
    - **Allocations.** `TimeSet` allocates per node (one ring entry per
      munro would do); the data queue's `BTreeMap` index allocates;
      `channel_stats` sizes binmaps from their debug dump.
@@ -433,8 +351,8 @@ in `TRIED.md`.
      admits more than a constrained uplink carries, and at 6 Mbit/s its
      pushes go stale. The adaptive seed's window counts whole copies at
      holders; this one needs slots, with shedding down to it;
-   - it keeps a greedy subscriber's slot for as long as it asks; the
-     silent-holder rule is the adaptive seed's.
+   - it keeps a liar's slot for as long as it asks (the silence rule
+     declines free riders); the silent-holder rule is the adaptive seed's.
 
 ### strims-ppspp defects
 - Remove the unused `add_stream_close`.
@@ -459,68 +377,32 @@ in `TRIED.md`.
   defecting. strims-sim's organic mode (`STRIMS_SIM_DISCOVERY`, the `net`
   and `net-hostile` tiers) builds topologies from discovery, and its
   peer pool (`pool.rs`, experiment flags) holds the policies under trial.
-  - The pool to port to the node's app layer: `pool-role` (relays take
-    four links and two per stream copy their median measured uplink
-    carries, leaves sixteen, seeds two and one per copy, a leaf 3 s
-    behind six), with eviction past the budget, trials (`pool-trial`: a
-    link is on trial for 20 s, a full node takes one inbound trial at a
-    time, and the host whose link went is shunned for a minute), the
-    starving rule and sampled index answers: the `net` tier collapses 9 of
-    672 at seeds 3001-3032 and 8 at 3033-3064 (99 with today's discovery),
-    11 with trials (lag p99 x0.995; 10 against 8 and x1.007 at
-    3033-3064). Trials drop x0.29-0.65 the links a host drops a minute,
-    take a residential crowd's lag p99 x0.96, and leave hogs (free riders
-    that link all they find) x12 of the honest viewers' lag p99 where they
-    had x2.9; the newcomer they keep past the budget for its 20 s raises
-    15-viewer stars' parent changes a fifth and their lag p99 x1.06 at
-    both seed sets.
-  - What still collapses there is, but for one run, a lag ramp the
-    verdict counts: every run delivers the whole stream, lag p99 1.2-1.9
-    s, no viewer stalls past a second, while the median 10 s delivery
-    stays under 95 % for 8 s as the viewers fall 1-1.5 s behind and catch
-    up (halve-31-20 at its halving, super-peer-varying's competing
-    uploads, single step and TCP runs). Decide whether the verdict should
-    count a ramp that stays under 3 s.
-  - Strong relays belong beside the source from the first wave. On
-    super-peer-crowd-31 (31 residential browsers, a datacenter viewer,
-    competing uploads) the datacenter viewer linked to the seed from the
-    start takes collapses 7 -> 1 of 32 (lag p99 x0.92), near cable and DSL
-    viewers linked so 7 -> 6, and one that probes its way there arrives at
-    23 s and makes it worse (TRIED). A seed's trials can't rank strength
-    (it receives nothing, and its reports judge only its holders), a
-    seed made findable by its swarm's key brings it the fastest dialers
-    (5 -> 7 of 32, star-7-5's lag p99 x1.14), and a copy handed to the
-    datacenter viewer at 12 s by an oracle doesn't help (5 -> 6), so
-    reports, which show a relay's service at 7-9 s at the earliest, come
-    too late (TRIED). What the pin buys is trees formed around a strong
-    relay before the competing uploads; what's left is how trees formed
-    around residential holders absorb one losing its uplink.
-  - Liars still gain: a fifth of the viewers announcing what they never
-    send lag x0.78 of the honest viewers at p99 on wan-global-audience. A
-    relay pushes to a child that announces, and in hybrid seldom asks its
-    children for anything, so the silence rule's unanswered requests never
-    reach a liar leaf, and challenging children for a chunk they announced
-    catches congested honest relays and passes a liar that answers its
-    parents alone (TRIED): what a child serves its own neighbours shows
-    only in the reports. Free riders, which announce nothing,
-    lag x3.0-5.6 of the honest viewers since the silence rule (c1ac5b5a).
+  - The pool to port to the node's app layer: `pool-role` with eviction
+    past the budget, trials (`pool-trial`), the starving rule and sampled
+    index answers.
+  - Cure the lag ramps that still collapse the `net` tier's runs (the
+    verdict keeps counting them).
+  - Strong relays belong beside the source from the first wave; neither a
+    findable seed nor a seed allocation by reports gets one there in time
+    (`TRIED.md`). Find how trees formed around residential holders absorb
+    one losing its uplink.
+  - Liars still gain: a relay seldom asks its children for anything, so
+    the silence rule doesn't reach a liar leaf, and challenging children
+    for what they announced failed (`TRIED.md`); what a child serves its
+    own neighbours shows only in the reports.
   - Still missing from the sim: referrals on refusal and prune,
     squatters, sybil colluders and poisoners, and NAT, setup-latency and
-    CPU models. Land the discovery fixes (searches after a network's first
-    peer, record pushes per host, crossed exchanges, sampled index
-    answers, a host's links past a full bucket) and port the winning pool
-    to the node's app layer once it holds.
+    CPU models. Make sampled index answers the default, and port the
+    winning pool to the node's app layer once it holds.
 - **TLS for `wss://` on native nodes.** Native nodes don't dial `wss://`
   yet. tokio-tungstenite can take the rustls `ClientConfig` that
   `NodeFactory` builds once for the node's HTTPS
   (`strims_node::fetch::tls_client_config`).
 - **Link and peer housekeeping:**
-  - an idle timeout for established peers that send keepalives;
   - cache host certificates until near expiry;
   - QoS: a per-link gate if per-session blocking shows up in profiles;
     per-link and per-class rate limits; MTU vs exact backlog hints; a
     neutral starting weight for new non-ppspp writers;
-  - vpn rejects messages larger than one frame (MTU − 4) at send time;
   - make vpn `VerifyMode::Enforce` the default; it is `Off`;
   - lossy transports report loss, so direct vpn links can get a backup copy;
   - peer-exchange topology hints that suggest links to shorten long paths;
@@ -528,12 +410,12 @@ in `TRIED.md`.
   - two nodes whose bootstrap clients dial each other at once need a
     tie-break, as crossed peer exchanges have (the lower host id wins);
   - `connect_peer` policy belongs to the app layer; the node never initiates
-    it. Transfer discovery asks to link to every host a search finds (16
-    per search), with no budget across transfers or against `max_peers`;
+    it. Transfer discovery asks to link to every host a search finds, with
+    no budget across transfers;
   - lowering the peer budget keeps the peers already connected; decide
     whether it should close the excess, and which peers go;
-  - peers that send invalid data or false HAVEs are only backed off; scoring
-    or disconnecting them is app policy;
+  - peers that mix invalid data or false HAVEs with valid data are only
+    backed off; scoring or disconnecting them is app policy;
   - whether a ppspp frame error should drop the peer rather than close its
     transfers until it relinks, and a minimum link MTU, since chunks that
     don't fit a frame are dropped.
@@ -563,27 +445,10 @@ in `TRIED.md`.
     scenario input.
   - Nodes stop reporting a channel's counters once it closes, so run totals
     and the clean-input check are lower bounds.
-  - WAN paths (`strims-wan`) turn a lost packet into a retransmission delay
-    but model no TCP sender's congestion response, so a lossy connection
-    keeps its full rate. Send buffers (`Scenario::send_buffer`) push back
-    on a sender only through its uplink, not through one slow path (a slow
-    receiver, a congestion window over a long round trip). Only the
-    uncapped WAN cases run them: with them on (a 100 ms uplink queue)
-    `wan_mobile_viewers_pull`'s LTE p99 passes its 3.5 s bound on one seed
-    of 8. The window model (`STRIMS_SIM_TCP`) has both, retransmission
-    timeouts and the senders' response to path loss.
-  - The window model follows the testbed's bare TCP bench
-    (`hack/testbed/benchsuite.py`, cases in `hack/testbed/bench/`) within a
-    mean |log ratio| of 0.10-0.13 over its 14 cases, but one of the holders'
-    links loses about 1.7 times the testbed's packets beside the other's
-    bursts (holders: 266 drops against 178-183), the holders' probe round
-    trips fall short in the tail (p99 193 ms against 338), and there is no
-    HyStart ack-train test. Its twin of the testbed's uplink cut
-    (`testbed-copy-floor`) lags over 1 s in 42.8 of 205 seconds at 25
-    viewers (32.8 of the cut's 120) against the testbed's 66.7 (54.5); at 10
-    viewers 23.6 against 17.5. Its thin relays collapse as the testbed's do
-    (Swarm, Ship it). The robust tier went past its guardrails both ways on
-    an earlier version of the model: rerun it before it lands.
+  - Close the window model's gaps against the testbed's bare TCP bench
+    (`hack/testbed/benchsuite.py`): the holders' losses beside each
+    other's bursts, the holders' probe round-trip tails, a HyStart
+    ack-train test, and the uplink cut's twin (`testbed-copy-floor`).
   - Through a halving of the seed's uplink the testbed fell into the
     lock-in deeper than its twin, and its round trips there ran 1.4 times
     the sim's. Recheck with today's frames; if the gap holds, find the
@@ -592,74 +457,23 @@ in `TRIED.md`.
     of 50 ms every 4 s, the satellites' reassignment every 15 s; the
     profiles' docs), and jitter changes every 20 ms per end. Measure both
     where the app runs on those links.
-  - Browser peers collapse about twice as often as TCP peers: on robust's
-    32 window-model cells at seeds 3001-3032, TCP 59 of 1024 runs and the
-    `browsers` tier (`STRIMS_SIM_RTC`) 133 (204 under the twin of dcSCTP's
-    SCTP before the egress pacer). The tier links every host as a
-    browser, the seed too: the least capable
-    clients, the case to cure first. Mixed audiences (a native seed with a
-    public listener reaches browsers over WebSocket) wait for tuning once
-    swarms stop collapsing. Browsers do better through halvings
-    (halve-7-10 2 against 8) and worse in:
-    - thin-15-10 (32 of 32 against 0): the thin relays item (Swarm 1).
-    - the WAN cells (residential-two-streams 9 against 3, global-audience
-      6 against 0, slow-viewer 15 against 1, super-peer-varying 9 against
-      2): SCTP's Reno on long and lossy paths. An Oceania LTE viewer of
-      global-audience (seed 3001) has the scenario's three links, and one
-      association carries about 0.4 Mbit/s through LTE's fades (each halves
-      the window; it regains a packet a 350 ms round trip); TCP's CUBIC
-      carries the 2 Mbit/s stream on them. A neighbour's transport is what
-      both peers have (vnic tries TCP, WebSocket, then WebRTC, and keeps
-      the first that links; browsers reach each other only over WebRTC), so
-      the levers are the swarm's: more neighbours where links' delivered
-      rates stay under what they're asked to carry (the scenarios script
-      three).
-  - A data channel's message holds one frame (`WebRtcConfig::max_message`,
-    `Host::poll_link_message`), and stacks that cut a message into chunks
-    as it is written end it in a short one, alone in its packet:
-    sctp-proto (str0m, 1062-byte chunks) sends a 4.3 KiB frame in 5
-    packets for 4.1, usrsctp (Firefox, 1160) in 4 for 3.75; dcSCTP fills
-    the packet with the next message. Ending messages at the sender's
-    chunk boundary past their frames (the next frame's head fills the
-    chunk) would save the packets for a wait of under a chunk. On the
-    str0m model at seeds 3001-3032 the one-frame messages moved collapses
-    289 -> 273 of 1024 but startup p99 x1.48 on star-3-10 (requests time out
-    at startup, 0-4 a run -> 10-14, and one viewer comes to relay most of
-    the stream: upload gini 0.11 -> 0.63 at seed 3007) and worse on
-    star-3-20.
+  - Browser peers collapse more often than TCP peers (the `browsers` tier,
+    `STRIMS_SIM_RTC`), most in thin relays and the WAN cells, where SCTP's
+    Reno holds a long, lossy path's window low. Mixed audiences (a native
+    seed reaching browsers over WebSocket) wait for tuning once swarms stop
+    collapsing.
+  - A data channel's message holds one frame, and sctp-proto (str0m) ends
+    each in a short chunk alone in its packet; ending messages at the
+    sender's chunk boundary past their frames would save those packets.
   - str0m over UDP under the WAN window model doesn't replay: an SCTP
-    INIT's resend lands a millisecond apart between runs (2 of 8 runs of
-    `wan_residential_seed_adaptive_uncapped_step` at seed 2007 with
-    `STRIMS_SIM_RTC=udp STRIMS_SIM_TCP=1 STRIMS_SIM_STREAM_SECS=20`, as farm
-    jobs). Find the leak; meanwhile WAN cells run native WebRTC on the
-    `str0m` model, which agrees with UDP on robust's cells (190 and 199
-    collapsed of 512, lag p99 x2.14 and x2.33 against TCP).
-  - The bare bench's WebRTC links run on the window model's data channels
-    (`strims-sim`'s `wan::sctp`), a node's own stack for what it sends and
-    its peer's for the SACKs: str0m's (`SctpProfile::STR0M`) for native
-    nodes, dcSCTP's (`SctpProfile::CHROMIUM`) for Chromium and usrsctp's
-    (`SctpProfile::FIREFOX`) for Firefox.
-    - Chromium's: on the testbed it loses 300-990 packets in a 105 % link's
-      first two seconds, sending at the uplink's rate through them, where
-      the model loses 46; its `bufferedAmount` falls in steps of about
-      100 KiB a third of a second apart, so its writer refills 12 records a
-      cycle to the model's 8; and dcSCTP cuts a message's chunks to fit
-      the window's room as it sends, about 790 bytes each on the holders'
-      4 KiB writes, where the model cuts a write at 1160.
-    - Firefox's: on the testbed it can't carry the holders' 84 % of a
-      5 Mbit/s uplink (249 KB/s a holder of 262; 2.4-2.9 s behind), and
-      sends 12 % more bytes than the model for less payload: Firefox
-      writes a message to usrsctp in pieces when its send buffer is near
-      full, and usrsctp cuts a piece to fit the packet (38-52 % more chunks
-      than 1160-byte ones, some of 12-28 bytes), and it resends 2-4 % of
-      its chunks to str0m's receiver. `bufferedAmount` holds a burst until
-      the first SACKs free send space. Model usrsctp's send buffer and the
-      partial writes.
-    - Both browsers resend 2-4 % of their chunks to str0m's receiver, a
-      round trip or less after the first copy, where str0m resends 0.2 %:
-      find what in sctp-proto's SACKs reads as a loss to them.
-    The testbed's runs of a case vary (the holders' one-way p90 362-780 ms
-    over three): score against repeats.
+    INIT's resend lands a millisecond apart between runs. Find the leak;
+    meanwhile WAN cells run native WebRTC on the `str0m` model.
+  - Fit the bare bench's WebRTC links (the window model's data channels,
+    `wan::sctp`'s `SctpProfile`s) to the testbed: Chromium's first-second
+    losses, `bufferedAmount` steps and chunk sizing; Firefox's shortfall
+    at a holder's share of the uplink; and both browsers' resends to
+    str0m's receiver. The testbed's runs of a case vary: score against
+    repeats.
   - Every pair a sim links can reach each other. A model of peers that
     accept no inbound links (an untraversable NAT) would show what they
     cost the mesh and the seed's allocation, and whether either should
@@ -671,12 +485,11 @@ in `TRIED.md`.
   - Renewals sign under a new root the CA doesn't log, so a full-chain
     `Find` can't rebuild a renewed certificate's chain.
   - The server config's `root_cert_ttl_secs` and `peer_cert_ttl_secs` are
-    unused; every certificate lasts two years.
+    unused.
   - A member whose certificate has expired can't renew: the CA verifies it
     in full. Decide how a lapsed member rejoins.
   - The CA's records live on the device holding the server config and
     don't replicate.
-  - The CA event swarm isn't run; it carries nothing yet.
   - A network whose record gains a server config after its first write
     gets neither the owner's CA records nor its directory admin record.
 - **Bootstrap.**
@@ -685,8 +498,6 @@ in `TRIED.md`.
     The publisher could record it.
   - A peer is asked `GetPublishEnabled` once per link, so a change to
     its bootstrap config reaches linked peers when they relink.
-  - Native nodes dial bootstrap clients over `ws://` only, with
-    `allow_insecure_ws`.
   - `PeerService.ListNetworks` is unimplemented.
 - **Directory.**
   - A refresh rewrites every listing, snippet images included, into an
@@ -739,8 +550,7 @@ stack or a version gate.
 - Widen the 16-bit body length.
 - Authenticate headers (AAD).
 - Check trailer timestamps against replay.
-- Bound trailer length and add a hop-limit field. 8 hops reach the far pairs
-  that 5 can't.
+- Bound trailer length and add a hop-limit field.
 - Authenticate unencrypted senders, which prevents reflection.
 - Don't trust the publisher's clock in hash-table conflicts.
 - Add a signed link-state message with a capability bit, and cheap per-hop
@@ -767,7 +577,6 @@ stack or a version gate.
 ### network
 - Give runs an id, and answer `Negotiate` with the key count, so a stale
   message can't join a later run.
-- Match `Open` bindings by network key, not position.
 - Frame the broker stream per run, so a failed run's bytes can't reach the
   next.
 
@@ -783,5 +592,3 @@ KDF before using them as AES keys, or use per-message keys.
 ### PSI
 - Fix the cuckoo hash. Hash function 0 reaches only `nbins/gcd(256, nbins)`
   bins, so runs fail at random and need retries.
-- Inputs shorter than 16 bytes are zero-padded, so different short inputs can
-  collide.
