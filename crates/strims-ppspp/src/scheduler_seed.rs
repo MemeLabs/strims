@@ -26,7 +26,11 @@
 //!   [`ALLOC_MEASURE`]; they pay for K / streams copies, and at least one:
 //!   every chunk leaves the seed once at least, and one no holder carries
 //!   leaves it as answers, to each neighbour that asks before another has
-//!   it, several times what its push would cost. It falls only once it is
+//!   it, several times what its push would cost. The slots past the whole
+//!   copies push nothing: a seed that writes more reads a higher capacity,
+//!   and once its uplink falls under that load its links can read no queue
+//!   for seconds, so what it would push there is the headroom that carries
+//!   it until the budget falls. It falls only once it is
 //!   [`OVER_BUDGET`] too high. Its busy time
 //!   leaves out the time data waited only for links that hold it back (the
 //!   runner's meter): a neighbour whose own downlink can't take what it's
