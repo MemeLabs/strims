@@ -457,11 +457,27 @@ the seeds the base collapsed had shown six of eight healthy. The cell's
 viewers stalled because a channel model bug wedged an association and the
 host's pacer then held every channel (274065c2, 92a33a7b). An adaptive
 seed's budget rising at most 25 % a check: halve-15-10 6 of 32 against 5
-(local). Dialing a candidate past the budget every 15 s (`pool-explore`):
-super-peer-varying 3 of 32 either way (local); a seed doesn't search, and
-the cell's first collapse comes before any link is 20 s old. Counting a
-stalled channel by its delivery (none for 2 s) in place of its oldest
-byte's age: the slow viewer's cell 3 of 32 against 0 (local).
+(local). Counting a stalled channel by its delivery (none for 2 s) in place
+of its oldest byte's age: the slow viewer's cell 3 of 32 against 0 (local).
+
+**Reciprocal pool links.** (the recip tier: organic browsers, residential
+crowds of 31 and 63, the super-peer, star, thin and global cells, seeds
+3001-3032, on `pool-trial`) Keeping the links whose peers sent the most
+verified new data, the peers we push to and a seed's unbarred neighbours
+(`pool-useful`): 15 -> 9 collapsed against trials alone (not
+significant), lag p99 x0.99; with probes and, among equals, the nearest
+kept (`pool-near`) as well, 11; where strong uplinks sit didn't move
+(uplink against push-tree depth -0.24 -> -0.22 at crowd-31); on the
+recip-hostile tier useful and near gave nothing past trials. Probing a
+random candidate past the budget once a link is 20 s old, backing off
+while probes lose their trials (`pool-probe`; it replaces dialing one
+every 15 s, `pool-explore`: super-peer-varying 3 of 32 either way): 0.4
+probes a host-minute, 85-100 % kept, the same correlations. Probing the
+seed itself, an oracle telling every pool which host it is: offers to the
+seed 14 -> 50 a minute and super-peer-crowd-31 4 -> 7 of 32 (a seed takes
+one 20 s trial at a time and can't rank strength); the datacenter viewer
+alone: it reached the seed at 23 s, as the competing uploads began, and 4
+-> 7.
 
 **Adaptive seed copies held by hysteresis.** Keeping the seed's copies while
 its budget paid for 80 % of them (`COPY_KEEP`, against d9fe66b9, seeds

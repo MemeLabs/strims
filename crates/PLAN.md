@@ -416,12 +416,6 @@ in `TRIED.md`.
      sender backpressure (Simulation coverage and fidelity).
    - **Copies by region.** Copies go to the nearest neighbours. Try a
      scenario whose nearest neighbours share one path or access network.
-   - **Reciprocal topology.** Nodes keep their links whatever a peer
-     reciprocates. Dropping links that don't reciprocate and dialing
-     random new peers, with a budget for leechers, would move high-upload
-     peers toward the centre of the swarm: the half of the topology a
-     seed's allocation can't reach. The untraversable-NAT model
-     (Simulation coverage and fidelity) would show what leechers cost.
    - **Allocations.** `TimeSet` allocates per node (one ring entry per
      munro would do); the data queue's `BTreeMap` index allocates;
      `channel_stats` sizes binmaps from their debug dump.
@@ -464,9 +458,15 @@ in `TRIED.md`.
   - The pool to port to the node's app layer: `pool-role` (relays take
     four links and two per stream copy their median measured uplink
     carries, leaves sixteen, seeds two and one per copy, a leaf 3 s
-    behind six), with eviction past the budget, the starving rule and
-    sampled index answers: the `net` tier collapses 9 of 672 at seeds
-    3001-3032 and 8 at 3033-3064 (99 with today's discovery).
+    behind six), with eviction past the budget, trials (`pool-trial`: a
+    link is on trial for 20 s, a full node takes one inbound trial at a
+    time, and the host whose link went is shunned for a minute), the
+    starving rule and sampled index answers: the `net` tier collapses 9 of
+    672 at seeds 3001-3032 and 8 at 3033-3064 (99 with today's discovery),
+    11 with trials (lag p99 x0.995). Trials drop x0.29-0.65 the links a
+    host drops a minute, take a residential crowd's lag p99 x0.96, and
+    leave hogs (free riders that link all they find) x12 of the honest
+    viewers' lag p99 where they had x2.9.
   - What still collapses there is, but for one run, a lag ramp the
     verdict counts: every run delivers the whole stream, lag p99 1.2-1.9
     s, no viewer stalls past a second, while the median 10 s delivery
@@ -474,13 +474,17 @@ in `TRIED.md`.
     up (halve-31-20 at its halving, super-peer-varying's competing
     uploads, single step and TCP runs). Decide whether the verdict should
     count a ramp that stays under 3 s.
-  - super-peer-varying's seed 3007 collapses (lag p99 3.9 s): its seed's
-    first nine links went to whoever asked, four of them on LTE, and the
-    super-peer, its nine links full by 2.6 s, never searched its way to
-    the seed until 33 s. Peers with spare capacity should find their way
-    toward the source: a seed's index record signed with the swarm's key
-    would let a node verify which holder publishes, without trusting a
-    claim.
+  - Strong relays belong beside the source from the first wave. On
+    super-peer-crowd-31 (31 residential browsers, a datacenter viewer,
+    competing uploads) the datacenter viewer linked to the seed from the
+    start takes collapses 7 -> 1 of 32 (lag p99 x0.92), near cable and DSL
+    viewers linked so 7 -> 6, and one that probes its way there arrives at
+    23 s and makes it worse (TRIED). A seed's trials can't rank strength
+    (it receives nothing, and its reports judge only its holders), and a
+    seed's index record signed with the swarm's key would bring it every
+    viewer's offer. What a relay does with what it is given shows only in
+    other nodes' reports: find a first-wave placement that rests on them
+    or on the node's own measurements.
   - Liars still gain: a fifth of the viewers announcing what they never
     send lag x0.78 of the honest viewers at p99 on wan-global-audience. A
     relay pushes to a child that announces, and in hybrid seldom asks its
@@ -491,10 +495,10 @@ in `TRIED.md`.
     only in the reports. Free riders, which announce nothing,
     lag x3.0-5.6 of the honest viewers since the silence rule (c1ac5b5a).
   - Still missing from the sim: referrals on refusal and prune,
-    squatters, sybil colluders, poisoners and whitewashers, and NAT,
-    setup-latency, churn and CPU models. Land the discovery fixes
-    (searches after a network's first peer, record pushes per host,
-    crossed exchanges, sampled index answers) and port the winning pool
+    squatters, sybil colluders and poisoners, and NAT, setup-latency and
+    CPU models. Land the discovery fixes (searches after a network's first
+    peer, record pushes per host, crossed exchanges, sampled index
+    answers, a host's links past a full bucket) and port the winning pool
     to the node's app layer once it holds.
 - **TLS for `wss://` on native nodes.** Native nodes don't dial `wss://`
   yet. tokio-tungstenite can take the rustls `ClientConfig` that
