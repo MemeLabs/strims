@@ -1669,8 +1669,9 @@ impl PeerSwarmScheduler {
             .iter()
             .flat_map(|st| st.subscribers.iter().map(|x| x.channel))
             .collect();
-        let mut held: Vec<(bool, std::cmp::Reverse<u8>, bool, Option<Duration>, PeerKey)> =
-            Vec::new();
+        // Not spilled, reporters that saw it relay, unmeasured, round trip.
+        type Rank = (bool, std::cmp::Reverse<u8>, bool, Option<Duration>, PeerKey);
+        let mut held: Vec<Rank> = Vec::new();
         let mut askers: Vec<(Duration, std::cmp::Reverse<u8>, PeerKey)> = Vec::new();
         let mut leave: Vec<(PeerKey, HolderLeft)> = Vec::new();
         let mut pending = 0;
