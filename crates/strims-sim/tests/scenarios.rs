@@ -1668,14 +1668,22 @@ const CROWD: usize = 31;
 fn residential_crowd_mesh(seed: u64, push: PushMode) -> Streaming {
     let n = knob("STRIMS_SIM_CROWD").unwrap_or(CROWD);
     let sites = viewer_sites(seed, n, &atlantic(), RESIDENTIAL);
-    wan(
+    crowd_heap(wan(
         &format!("wan_residential_crowd x{n} {push:?}"),
         seed,
         Site::new(City::Chicago, Access::Cable),
         &sites,
         push,
         (5, 65),
-    )
+    ))
+}
+
+/// [`wan`]'s heap bound, which holds 16 viewers, for each host of a
+/// crowd.
+fn crowd_heap(mut st: Streaming) -> Streaming {
+    let hosts = i64::try_from(st.viewers.len() + 1).unwrap_or(i64::MAX);
+    st.s.invariants.max_heap = Some(16 * MIB * hosts);
+    st
 }
 
 /// [`residential_crowd_mesh`] plus [`super_peer_mesh`]'s New York
@@ -1684,14 +1692,14 @@ fn super_peer_crowd_mesh(seed: u64, push: PushMode) -> Streaming {
     let n = knob("STRIMS_SIM_CROWD").unwrap_or(CROWD);
     let mut sites = viewer_sites(seed, n, &atlantic(), RESIDENTIAL);
     sites.push(Site::new(City::NewYork, Access::Datacenter));
-    wan(
+    crowd_heap(wan(
         &format!("wan_super_peer_crowd x{n} {push:?}"),
         seed,
         Site::new(City::Chicago, Access::Cable),
         &sites,
         push,
         (5, 65),
-    )
+    ))
 }
 
 /// Everyone gets the stream from 10 s on while the seed sends at most 60 %
