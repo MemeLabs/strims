@@ -432,6 +432,14 @@ pub struct ChannelTotals {
     pub outbound: ChannelMetrics,
 }
 
+impl ChannelTotals {
+    /// Adds `o`'s counters to these.
+    pub fn merge(&mut self, o: &ChannelTotals) {
+        self.inbound.merge(&o.inbound);
+        self.outbound.merge(&o.outbound);
+    }
+}
+
 /// The ppspp runner: one per node, driven by frames in and out, a clock
 /// and events.
 ///

@@ -116,14 +116,14 @@ use strims_ppspp::codec::{
 };
 use strims_ppspp::store::{self, BufferReader, ChunkBytes, ChunkCodec};
 use strims_ppspp::{
-    DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, ParentAction, PeerKey, PushMode, PushStats,
-    ReportCounters, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey, SwarmOptions,
-    TapKind, TapLevel, Writer, WriterOptions,
+    ChannelMetrics, ChannelTotals, DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, ParentAction,
+    PeerKey, PushMode, PushStats, ReportCounters, Runner, SeedAllocation, SeedPolicy, SeedQos,
+    SwarmId, SwarmKey, SwarmOptions, TapKind, TapLevel, Writer, WriterOptions,
 };
 use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
 use strims_wan::live::{self, Encoder, Op, Plan, Sign, Signer};
 use strims_wan::sample::pick;
-use strims_wan::wire::tcp_wire;
+use strims_wan::wire::{small_packets, tcp_wire};
 use strims_wan::{
     Access, Carrier, City, EndStats, GLOBAL_AUDIENCE, Network, RESIDENTIAL, Region, Site,
 };
@@ -717,15 +717,52 @@ struct Node {
     removed: BTreeSet<PeerKey>,
     /// The cross-traffic swarm, if any.
     cross: Option<Side>,
-    /// Bytes through its uplink and downlink (TCP framing included in WAN
-    /// mode) and its downlink's longest queue. The path's counters are the
-    /// network's ([`Sim::wan_stats`]).
+    /// Bytes and packets through its uplink and downlink (TCP framing
+    /// included in WAN mode) and its downlink's longest queue. The path's
+    /// counters are the network's ([`Sim::wan_stats`]).
     wire: EndStats,
+    /// What its uplink carried by layer.
+    sent: Sent,
+    /// Its runners' counters from before it last took a place.
+    past: ChannelTotals,
+    /// A greedy viewer (not a grabber) or an adversary, whose runner counts
+    /// frames the harness rewrites, until an honest viewer takes its place.
+    hostile: bool,
     cap: Option<SimCapture>,
     /// It left at least once ([`Churn`]).
     churned: bool,
     /// When it last took a place again, until it reads its first chunk.
     rejoined: Option<Time>,
+}
+
+/// What a node's uplink carried, by layer ([`Sim::send`]).
+#[derive(Clone, Copy, Debug, Default)]
+struct Sent {
+    /// Frames with ppspp data, and their bytes.
+    frames: u64,
+    frame_bytes: u64,
+    /// The frame bytes of a hostile incarnation ([`Node::hostile`]).
+    hostile_bytes: u64,
+    /// vnic's control records ([`Ctl`]).
+    ctl_bytes: u64,
+    /// TCP/IP headers, in WAN mode.
+    transport_bytes: u64,
+}
+
+impl Node {
+    /// Its runners' counters since the run started.
+    fn totals(&self) -> ChannelTotals {
+        let mut t = self.past;
+        t.merge(&self.runner.channel_totals());
+        t
+    }
+
+    /// The bytes through its uplink that weren't chunk data.
+    fn overhead(&self) -> u64 {
+        self.wire
+            .up_bytes
+            .saturating_sub(self.totals().outbound.data_bytes)
+    }
 }
 
 struct Link {
@@ -909,12 +946,13 @@ struct MediaRun {
 /// One second's sample for [`Sim::series`].
 struct SeriesSample {
     /// Per viewer node (from 1), if honest and present: pushes before
-    /// their deadline, deadlines released to pull, parents pruned, and
-    /// streams with an open parent.
-    viewers: Vec<Option<[u64; 4]>>,
+    /// their deadline, deadlines released to pull, parents pruned, streams
+    /// with an open parent, and its uplink's overhead bytes so far
+    /// ([`Node::overhead`]).
+    viewers: Vec<Option<[u64; 5]>>,
     /// The seed's meter capacity and busy thousandths, copies, chunks sent
-    /// and pushed, and uplink.
-    seed: [u64; 6],
+    /// and pushed, uplink, and overhead bytes so far.
+    seed: [u64; 7],
 }
 
 impl Verdicts {
@@ -1373,6 +1411,10 @@ impl Sim {
                 removed: BTreeSet::new(),
                 cross,
                 wire: EndStats::default(),
+                sent: Sent::default(),
+                past: ChannelTotals::default(),
+                hostile: matches!(role, Role::Greedy(g) if g != Greed::Grabber)
+                    || matches!(role, Role::Adversary(_)),
                 cap: None,
                 churned: false,
                 rejoined: None,
@@ -2014,6 +2056,10 @@ impl Sim {
         let reader = swarm.reader();
         let key = runner.add_swarm(swarm);
         let n = &mut self.nodes[i];
+        if !n.hostile {
+            n.past.merge(&n.runner.channel_totals());
+        }
+        n.hostile = false;
         n.role = Role::Peer;
         n.runner = runner;
         n.swarm = key;
@@ -2313,10 +2359,12 @@ impl Sim {
             .skip(1)
             .map(|n| {
                 (n.role == Role::Peer).then(|| {
-                    n.runner.push_stats(n.swarm).map_or([0; 4], |p| {
-                        let parents = p.parents.iter().filter(|x| x.is_some()).count();
-                        [p.hits, p.misses, p.pruned, parents as u64]
-                    })
+                    let [hits, misses, pruned, parents] =
+                        n.runner.push_stats(n.swarm).map_or([0; 4], |p| {
+                            let parents = p.parents.iter().filter(|x| x.is_some()).count();
+                            [p.hits, p.misses, p.pruned, parents as u64]
+                        });
+                    [hits, misses, pruned, parents, n.overhead()]
                 })
             })
             .collect();
@@ -2335,6 +2383,7 @@ impl Sim {
                 sent,
                 pushed,
                 seed.up_bw,
+                seed.overhead(),
             ],
         });
     }
@@ -2376,7 +2425,7 @@ impl Sim {
         }
         // Sample k + 1 closes second k, over the viewers present at both.
         let pairs = || samples.windows(2);
-        let both = |w: &[SeriesSample]| -> Vec<([u64; 4], [u64; 4])> {
+        let both = |w: &[SeriesSample]| -> Vec<([u64; 5], [u64; 5])> {
             w[1].viewers
                 .iter()
                 .zip(&w[0].viewers)
@@ -2432,7 +2481,9 @@ impl Sim {
             .field("avail", format_args!("{}", seed(5)))
             .field("copies", format_args!("{}", seed(2)))
             .field("sent", format_args!("{}", seed_delta(3)))
-            .field("pushed", format_args!("{}", seed_delta(4)));
+            .field("pushed", format_args!("{}", seed_delta(4)))
+            .field("seed_ovh", format_args!("{}", seed_delta(6)))
+            .field("viewer_ovh", format_args!("{}", pooled(4)));
         // A media run's chunks sent each second, by their signing: those
         // holding media (`written`, what `frames` counts), as its other
         // chunks are data-less.
@@ -3397,6 +3448,18 @@ impl Sim {
         }
         node.up_free = now + tx_time(wire, node.up_bw);
         node.wire.up_bytes += wire as u64;
+        node.wire.up_packets += u64::from(packets);
+        node.wire.small_packets += u64::from(small_packets(wire, packets));
+        let s = &mut node.sent;
+        s.ctl_bytes += ctl.len() as u64;
+        s.transport_bytes += (wire - n - ctl.len()) as u64;
+        if n > 0 {
+            s.frames += 1;
+            s.frame_bytes += n as u64;
+            if node.hostile {
+                s.hostile_bytes += n as u64;
+            }
+        }
         // A paced uplink (vnic's rate limit over turmoil, which models
         // no bandwidth) sends the frame at once and makes the next one
         // wait; a serial one takes the frame's transmission time.
@@ -4650,6 +4713,54 @@ fn sim_capture_changes_no_trace() {
         assert_eq!(taps > 0, tap);
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The ledger's layers add up to the bytes through the uplinks, and an
+/// honest node's runners' counters to the frames it sent, through a
+/// viewer's place taken again.
+#[test]
+fn sim_ledger_adds_up_to_the_wire() {
+    let mut cfg = Config::new(3, 8);
+    cfg.stream_secs = 6;
+    cfg.degree = 4;
+    cfg.push_mode = PushMode::Hybrid;
+    cfg.stream_count = 4;
+    cfg.churn = Some(Churn {
+        per_min: 120.0,
+        away: Duration::from_secs(1),
+    });
+    let mut sim = Sim::new(cfg);
+    let r = sim.run();
+    assert!(sim.nodes.iter().any(|n| n.churned));
+    // The row is flat: "key":value pairs.
+    let row = job_row("s", "c", &sim, &r);
+    let fields: Vec<(&str, &str)> = row
+        .trim_matches(['{', '}'])
+        .split(',')
+        .filter_map(|f| f.split_once(':'))
+        .map(|(k, v)| (k.trim_matches('"'), v))
+        .collect();
+    let int = |k: &str| {
+        fields
+            .iter()
+            .find(|f| f.0 == k)
+            .unwrap()
+            .1
+            .parse::<u64>()
+            .unwrap()
+    };
+    let layers: u64 = fields
+        .iter()
+        .filter(|(k, _)| k.starts_with("up_") && *k != "up_wire")
+        .map(|(k, _)| int(k))
+        .sum();
+    assert_eq!(layers, int("up_wire"));
+    assert!(sim.nodes.iter().any(|n| n.hostile));
+    for n in sim.nodes.iter().filter(|n| !n.hostile) {
+        assert_eq!(n.totals().outbound.wire_bytes(), n.sent.frame_bytes);
+    }
+    let frames: u64 = sim.nodes.iter().map(|n| n.sent.frame_bytes).sum();
+    assert_eq!(frames, r.bytes);
 }
 
 /// Stores that keep no state or a little per chunk, and make their chunks'
@@ -7225,6 +7336,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             }
         }
     }
+    ledger_cols(&mut row, sim, span);
     if let Some(m) = &sim.media {
         media_cols(&mut row, sim, m, r);
     }
@@ -7232,6 +7344,118 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         row.field("series", format_args!("{series}"));
     }
     row.finish()
+}
+
+/// The uplinks' bytes by layer over every node, in strims-sim's rows'
+/// terms: the ppspp layers from the seed's and the honest viewers' runners
+/// (`up_hostile` is the frames of greedy viewers and adversaries, whose
+/// runners count what the harness rewrites), vnic's control records, and
+/// TCP/IP headers in WAN mode. This sim models neither vnic's frame headers
+/// nor its other ports, TCP's pure ACKs or resent bytes, so those read 0.
+/// Then the waste in the honest viewers' inbound data, the wire bytes per
+/// chunk byte they read (the cross swarm's included), each role's overhead
+/// per second over its uplink (relays: honest viewers that accepted a
+/// subscription), and the packets (frames, off WAN mode) and frames.
+fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
+    let span = span.max(1e-9);
+    let (mut up, mut down) = (ChannelMetrics::default(), ChannelMetrics::default());
+    let (mut sent, mut wire) = (Sent::default(), EndStats::default());
+    let mut frames = 0;
+    for (i, n) in sim.nodes.iter().enumerate() {
+        let t = n.totals();
+        if !n.hostile {
+            up.merge(&t.outbound);
+            frames += n.sent.frames;
+            if i != 0 {
+                down.merge(&t.inbound);
+            }
+        }
+        sent.frames += n.sent.frames;
+        sent.frame_bytes += n.sent.frame_bytes;
+        sent.hostile_bytes += n.sent.hostile_bytes;
+        sent.ctl_bytes += n.sent.ctl_bytes;
+        sent.transport_bytes += n.sent.transport_bytes;
+        wire.up_bytes += n.wire.up_bytes;
+        wire.down_bytes += n.wire.down_bytes;
+        wire.up_packets += n.wire.up_packets;
+        wire.small_packets += n.wire.small_packets;
+    }
+    let cross: u64 = sim
+        .nodes
+        .iter()
+        .filter(|n| n.role == Role::Peer)
+        .filter_map(|n| n.cross.as_ref().filter(|c| c.reads))
+        .map(|c| c.read_chunks.iter().filter(|&&r| r).count() as u64)
+        .sum();
+    let useful = (sim.chunks_read() + cross) * sim.cfg.chunk_size as u64;
+    let waste = down
+        .data_bytes
+        .saturating_sub(down.new_bytes + down.stale_bytes + down.invalid_bytes);
+    row.int("up_payload", up.data_bytes)
+        .int("up_data_hdr", up.data_header_bytes)
+        .int("up_integrity", up.integrity_bytes)
+        .int("up_signed", up.signed_integrity_bytes)
+        .int("up_have", up.have_bytes)
+        .int("up_ack", up.ack_bytes)
+        .int("up_request", up.request_bytes)
+        .int("up_ping", up.ping_bytes)
+        .int("up_stream", up.stream_bytes)
+        .int("up_announce", up.announce_bytes)
+        .int("up_session", up.session_bytes)
+        .int("up_chan_hdr", up.header_bytes)
+        .int("up_hostile", sent.hostile_bytes)
+        .int("up_vnic", sent.ctl_bytes)
+        .int("up_ports", 0)
+        .int("up_transport", sent.transport_bytes)
+        .int("up_acks", 0)
+        .int("up_wire", wire.up_bytes)
+        .int("down_wire", wire.down_bytes)
+        .int("dup_bytes", waste)
+        .int("stale_bytes", down.stale_bytes)
+        .int("useful_bytes", useful)
+        .num(
+            "wire_per_useful",
+            wire.up_bytes as f64 / useful.max(1) as f64,
+        );
+
+    let share = |n: &Node| n.overhead() as f64 / (n.up_bw.max(1) as f64 * span);
+    let (mut relays, mut leaves, mut pps) = (Vec::new(), Vec::new(), Vec::new());
+    for n in sim.nodes.iter().filter(|n| n.role == Role::Peer) {
+        match n.totals().outbound.stream_open > 0 {
+            true => relays.push(share(n)),
+            false => leaves.push(share(n)),
+        }
+        pps.push(n.wire.up_packets as f64 / span);
+    }
+    for v in [&mut relays, &mut leaves, &mut pps] {
+        v.sort_by(f64::total_cmp);
+    }
+    row.num("ovh_seed", share(&sim.nodes[0]));
+    for (name, v, p) in [
+        ("ovh_relay_p50", &relays, 50),
+        ("ovh_leaf_p50", &leaves, 50),
+        ("ovh_leaf_p90", &leaves, 90),
+        ("pps_p50", &pps, 50),
+        ("pps_p90", &pps, 90),
+    ] {
+        if let Some(&x) = v.get(v.len().saturating_sub(1) * p / 100) {
+            row.num(name, x);
+        }
+    }
+    row.int("packets_up", wire.up_packets)
+        .num(
+            "small_packet_share",
+            wire.small_packets as f64 / wire.up_packets.max(1) as f64,
+        )
+        .num("seed_pps", sim.nodes[0].wire.up_packets as f64 / span)
+        .num(
+            "frame_bytes_mean",
+            sent.frame_bytes as f64 / sent.frames.max(1) as f64,
+        )
+        .num(
+            "msgs_per_frame",
+            up.messages() as f64 / frames.max(1) as f64,
+        );
 }
 
 /// A media run's columns: its encoder and policy, the chunks per unit, the

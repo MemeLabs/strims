@@ -46,7 +46,7 @@ use strims_base::time::{Duration, Time};
 
 use crate::access::{BURST_MAX, Bursts, Site};
 use crate::sample::{exponential, unit};
-use crate::wire::tx_time;
+use crate::wire::{small_packets, tx_time};
 
 /// How long an end's jitter offset holds.
 pub const JITTER_WINDOW: Duration = Duration::from_millis(20);
@@ -112,6 +112,10 @@ pub struct EndStats {
     pub retransmits: u64,
     /// Datagrams it sent that were lost.
     pub drops: u64,
+    /// Packets through the uplink, and the small ones among them
+    /// ([`crate::wire::small_packets`]).
+    pub up_packets: u64,
+    pub small_packets: u64,
 }
 
 /// The extra delay of a stream message of `packets` packets that lost one,
@@ -458,6 +462,11 @@ impl Network {
         end.up_free = through(end.site.profile.up, &end.up_steps, start, wire);
         end.span(sent, start);
         end.stats.up_bytes = end.stats.up_bytes.saturating_add(wire as u64);
+        end.stats.up_packets = end.stats.up_packets.saturating_add(u64::from(packets));
+        end.stats.small_packets = end
+            .stats
+            .small_packets
+            .saturating_add(u64::from(small_packets(wire, packets)));
         end.stats.up_queue_max = end.stats.up_queue_max.max(start - sent);
         let depart = end.up_free;
         self.transit(depart, a, b, packets, carrier)

@@ -246,7 +246,7 @@ impl ChannelMetrics {
     }
 
     /// Adds `o`'s counters to these.
-    pub(crate) fn merge(&mut self, o: &ChannelMetrics) {
+    pub fn merge(&mut self, o: &ChannelMetrics) {
         let ChannelMetrics {
             handshake,
             restart,
@@ -336,6 +336,32 @@ impl ChannelMetrics {
         self.data_bytes
             .saturating_add(self.message_bytes())
             .saturating_add(self.header_bytes)
+    }
+
+    /// Messages of every type.
+    pub fn messages(&self) -> u64 {
+        [
+            self.handshake,
+            self.restart,
+            self.data,
+            self.integrity,
+            self.signed_integrity,
+            self.ack,
+            self.have,
+            self.request,
+            self.cancel,
+            self.choke,
+            self.unchoke,
+            self.ping,
+            self.pong,
+            self.stream_request,
+            self.stream_cancel,
+            self.stream_open,
+            self.stream_close,
+            self.announce,
+        ]
+        .into_iter()
+        .fold(0, u64::saturating_add)
     }
 
     /// Every message byte but `Data`'s payload.
