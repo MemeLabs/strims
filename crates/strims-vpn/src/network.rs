@@ -386,6 +386,16 @@ impl<H: Copy> Network<H> {
         self.routes.contains(id)
     }
 
+    /// The link to `id`, routed or not. A host linked to more neighbours
+    /// than their buckets hold keeps the rest out of its routing table,
+    /// but a message for one of them still goes over its link, and a peer
+    /// index answer names it: a signalling relay that links every host of
+    /// a large swarm otherwise leaves the hosts past its full buckets
+    /// unanswered and unnamed.
+    pub(crate) fn link_to(&self, id: &ID) -> Option<Route> {
+        self.by_host.get(id).map(|&peer| Route { id: *id, peer })
+    }
+
     /// Adds a link to the table and the routing table. Returns the link
     /// evicted from the routing table, if any.
     pub(crate) fn insert_link(&mut self, peer: PeerKey, mut link: Link) {
@@ -525,7 +535,7 @@ impl<H: Copy> Network<H> {
                 .get(&r.peer)
                 .is_some_and(|l| l.backlogged(now, backlog))
         };
-        let direct = self.routes.get(dst).copied();
+        let direct = self.link_to(dst);
         if let Some(r) = direct {
             out.push(r);
             // The direct link is the shortest path. A backup over a longer
@@ -581,14 +591,11 @@ impl<H: Copy> Network<H> {
     ) -> Targets {
         let mut c = self.closest(dst);
         if unicast {
-            let direct = c
-                .items
-                .first()
-                .copied()
-                .flatten()
-                .is_some_and(|r| r.id == *dst);
-            if direct {
+            if let Some(r) = self.link_to(dst) {
                 c.len = 1;
+                if let Some(x) = c.items.first_mut() {
+                    *x = Some(r);
+                }
             } else if let Some(r) = self
                 .next_hop
                 .get(now, dst)
@@ -871,5 +878,29 @@ mod tests {
         assert!(!n.links[&k2].routed);
         n.remove_link(k2).unwrap();
         assert_eq!(n.routes.len(), LINK_BUCKET_SIZE);
+    }
+
+    /// A unicast for a host whose link a full bucket left unrouted goes
+    /// over that link alone, under either routing.
+    #[test]
+    fn unicast_to_unrouted_link_is_direct() {
+        let mut keys: SlotMap<PeerKey, ()> = SlotMap::with_key();
+        let mut writers: SlotMap<WriterId, ()> = SlotMap::with_key();
+        let mut n = network(ID::MIN);
+        let mut peers = Vec::new();
+        for i in 0..=LINK_BUCKET_SIZE as u64 {
+            let id = ID([(1 << 63) | (u64::MAX - i * (1 << 40)), 0, 0, 0]);
+            let k = keys.insert(());
+            peers.push((k, id));
+            n.insert_link(k, link(id, writers.insert(())));
+        }
+        let (k0, id0) = peers[0];
+        assert!(!n.has_peer(&id0));
+        assert_eq!(n.link_to(&id0).map(|r| r.peer), Some(k0));
+        let now = Time::from_unix(100, 0);
+        for routing in [Routing::Greedy, Routing::Learned] {
+            let t = n.select_links(now, &id0, true, &[], routing, 2, BACKLOG);
+            assert_eq!(t.iter().map(|r| r.peer).collect::<Vec<_>>(), vec![k0], "{routing:?}");
+        }
     }
 }
