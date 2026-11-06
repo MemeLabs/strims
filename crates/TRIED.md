@@ -245,6 +245,14 @@ mostly still arrive, and pulling them adds load. The rest tied once an
 empty window carried a request (48 seeds: ×0.92–1.03 on capped-seed,
 sparse-lossy, wan-mobile, wan-global and residential).
 
+**Rarest-first requests.** (`TMP-rarest`, against 938a829b) A request
+round ordered its candidates by how few channels had announced each
+chunk, within the request group or across the round, the node's own
+order breaking ties. Both tied the random order within a group (32
+seeds: peers 55 -> 50 and 52 of 672, robust 80 -> 74 and 79 of 1248, lag
+p99 x0.99-1.01; duplicates, the seed's shares and lag p50 moved no more
+than noise does).
+
 **One request through any empty window.** (`one-request`, against
 a356f676) A window with nothing in flight always asked for a chunk, which
 also ended LEDBAT's silence after a timeout (its 2 KiB minimum is under a

@@ -320,11 +320,6 @@ and dropped are in `TRIED.md`.
      the scheduler (Video, Players), a chunk's deadline is its publish time
      plus the player's target lag: wait longer for pushes while pull can
      still meet it, and skip chunks no peer can meet.
-   - **Request decorrelation.** LEDBAT keeps viewers' requests apart
-     with a cwnd floor and randomized 64-chunk request groups, which cost
-     about 70 ms of p99 in well-provisioned meshes; scheduler-level
-     decorrelation (rarest-first) could replace the groups. Plain oldest
-     first tied (TRIED.md).
 5. **Push-tree refinements.** Smaller or narrower costs.
    - Slow parents are detected late, so `sim_push_slow_parent`'s p99 can
      still pass 1 s on some seeds. The upload meter's 2 s busy window
