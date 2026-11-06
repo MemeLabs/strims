@@ -253,20 +253,26 @@ halve-31-10 x1.25. Up: browsers 95 -> 125 (star-31-5 3 -> 26). A copy the
 budget only partly pays for helps a pull-heavy swarm and overloads a seed
 whose uplink falls.
 
-**An adaptive seed's budget remainder as a part copy.** (`TMP-part`,
-against 308c0341, seeds 3001-3032) One more holder took the slots past the
-whole copies while the window held what the budget paid for. On the
-lowest-indexed streams: peers 55 -> 50 of 672, robust 80 -> 77 of 1248,
-browsers 95 -> 90 of 1024; on the streams the seed's tree-fed neighbours
-announced latest: 49, 78 and 102. Lag p99 x0.995-1.02 (overload's x0.98,
-where rounding's was x0.78), halve-15-10's x1.10-1.17 under both. The
-budget moves the remainder by a quarter copy or more between checks, so in
-capped-seed the part holder held 0-1 of its 2-14 slots; and the streams'
-lags differ by less than their noise. Smoothed (`TMP-part` 95fe8000: the
-least the seed pushed at a check of the last 10 s, the first holder past
-the copies keeping the part copy), the part holder held its slots: peers
-48, robust 71, browsers 100, but robust's halve-7-20 lag p99 x1.52 and
-browsers' halve-31-10 9 -> 16 collapsed.
+**An adaptive seed's budget remainder as a part copy.** (`TMP-part`
+6d0fa192, `DBG_PART`, against 308c0341, seeds 3001-3032) One more holder
+took the slots past the whole copies while the window held what the budget
+paid for. Variants: its streams the lowest-indexed, those the seed's
+tree-fed neighbours announced latest, those it asked for, or a stream at a
+time to whoever asked; its slots smoothed (the least pushed over 10 s),
+gated on headroom (10 s unsaturated, no standing queue, no holder behind),
+or both; the first holder past the copies keeping it; and, in its place,
+rounding to the nearest copy while gated clear. A part copy that stayed
+mostly empty tied: a child asks the seed only for a stream the seed beats
+its parent on, and the budget moves the remainder a quarter copy or more
+between checks (the gated one on fresh seeds 3033-3064: peers 48 -> 50 of
+672, robust 76 -> 80 of 1248, browsers 100 -> 96 of 1024; the gains at
+3001-3032 were the base's luck). The stream lags lie within their noise. A
+part copy that filled lost the halvings: robust's halve-7-20 lag p99 x1.25-1.52
+(demand, the kept holder), halvings x1.27-1.46 and browsers 95 -> 114
+(spread), x1.89 (gated rounding). A seed that writes more reads a higher
+capacity, and with its uplink halved under that load its links' least
+excess can read no queue for seconds while none of the gate's signals
+fires: the remainder left unspent is the headroom that absorbs it.
 
 **Rarest-first requests.** (`TMP-rarest`, against 938a829b) A request
 round ordered its candidates by how few channels had announced each
