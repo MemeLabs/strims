@@ -95,15 +95,19 @@
 //!   copies becomes one, so the first to ask hold the stream. One without
 //!   a subscription is pending: it keeps its copy for [`HOLDER_GRACE`]
 //!   after it joined or last asked, then gives it back (a holder that gave
-//!   up every subscription frees only its own copy). At each check the
-//!   farthest subscribed holders past the copies go, and free copies go to
-//!   the nearest neighbours that asked within the grace. With none free,
-//!   the nearest of those, if its round trip is [`NEAR_MARGIN`] (or a
-//!   tenth) shorter than the farthest holder's, is given one, which that
-//!   holder gives up once the new one subscribed: one move per
-//!   [`ALLOC_CHECK_INTERVAL`], so jitter doesn't move the allocation and
-//!   no copy goes empty. A neighbour that stops being a holder loses all
-//!   its subscriptions (STREAM_CLOSE).
+//!   up every subscription frees only its own copy). Holders rank by the
+//!   reporters that saw them relay (when most of a quorum saw them serve;
+//!   see Served holders), then by round trip. At each check the subscribed
+//!   holders past the copies go, the last ranked first, and free copies go
+//!   to the nearest neighbours that asked within the grace. With none free,
+//!   the first ranked of those, ranked the same way, is given one if it
+//!   ranks ahead of the last holder kept: more reporters saw it relay, or
+//!   as many and its round trip is [`NEAR_MARGIN`] (or a tenth) shorter.
+//!   That holder gives its copy up once the new one subscribed: one move
+//!   per [`ALLOC_CHECK_INTERVAL`], so jitter doesn't move the allocation
+//!   and no copy goes empty. An asker that ranks behind it would be the one
+//!   past the copies as soon as it subscribed. A neighbour that stops being
+//!   a holder loses all its subscriptions (STREAM_CLOSE).
 //! - **Spilling.** A whole copy rides one transport connection, whose rate
 //!   is its window over a round trip that queues at both ends' uplinks (a
 //!   relaying holder's own queue delays the acknowledgements): behind a
@@ -1650,14 +1654,15 @@ impl PeerSwarmScheduler {
         }
         let unserved = self.judge(now, q);
 
-        // Holders by round trip, unmeasured ones farthest, after those whose
-        // streams spilled (their copies stay spread). One without a
-        // subscription is pending: it keeps its copy for HOLDER_GRACE after
-        // it joined or last asked. Past the copies the farthest subscribed
-        // holders go; free copies go to the nearest neighbours that asked
-        // within the grace; and with none free, the nearest of those, if
-        // nearer than the farthest holder by the margin, is given one that
-        // holder gives up once it subscribed.
+        // Holders by the reporters that saw them relay, then round trip
+        // (unmeasured ones last), after those whose streams spilled (their
+        // copies stay spread). One without a subscription is pending: it
+        // keeps its copy for HOLDER_GRACE after it joined or last asked.
+        // Past the copies the last ranked subscribed holders go; free copies
+        // go to the nearest neighbours that asked within the grace; and with
+        // none free, the first ranked of those, if it ranks ahead of the last
+        // holder kept (`moves_in`), is given one that holder gives up once
+        // it subscribed.
         let subscribed: BTreeSet<PeerKey> = self
             .s
             .streams
@@ -1666,7 +1671,7 @@ impl PeerSwarmScheduler {
             .collect();
         let mut held: Vec<(bool, std::cmp::Reverse<u8>, bool, Option<Duration>, PeerKey)> =
             Vec::new();
-        let mut askers: Vec<(Duration, PeerKey)> = Vec::new();
+        let mut askers: Vec<(Duration, std::cmp::Reverse<u8>, PeerKey)> = Vec::new();
         let mut leave: Vec<(PeerKey, HolderLeft)> = Vec::new();
         let mut pending = 0;
         for (&peer, c) in &self.channels {
@@ -1675,6 +1680,12 @@ impl PeerSwarmScheduler {
             };
             let recent = now - h.active <= HOLDER_GRACE;
             let rtt = h.min_rtt(now);
+            // What the reports show it relaying ranks it first.
+            let relays = if h.served == Some(true) {
+                h.reporters
+            } else {
+                0
+            };
             if h.satellite {
                 // A satellite takes no copy: it goes once it holds nothing.
                 if h.holds && !subscribed.contains(&peer) && !recent {
@@ -1688,15 +1699,9 @@ impl PeerSwarmScheduler {
                     && !h.barred(now)
                     && let Some(r) = rtt
                 {
-                    askers.push((r, peer));
+                    askers.push((r, std::cmp::Reverse(relays), peer));
                 }
             } else if subscribed.contains(&peer) {
-                // What the reports show it relaying keeps its place first.
-                let relays = if h.served == Some(true) {
-                    h.reporters
-                } else {
-                    0
-                };
                 held.push((
                     h.cap.is_none(),
                     std::cmp::Reverse(relays),
@@ -1719,7 +1724,7 @@ impl PeerSwarmScheduler {
         );
         let kept = held.len().min(copies);
         let free = copies.saturating_sub(kept + pending);
-        let mut join: Vec<PeerKey> = askers.iter().take(free).map(|a| a.1).collect();
+        let mut join: Vec<PeerKey> = askers.iter().take(free).map(|a| a.2).collect();
         let farthest = kept.checked_sub(1).and_then(|i| held.get(i));
         // A holder whose streams spilled keeps its place: its copy is spread
         // over its satellites, and its link's queue reads as distance.
@@ -1729,11 +1734,13 @@ impl PeerSwarmScheduler {
                 .and_then(|c| c.push.as_ref())
                 .is_some_and(|pc| pc.holder.cap.is_some())
         };
+        let first = askers.iter().min_by_key(|a| (a.1, a.0, a.2));
         if free == 0
             && pending == 0
-            && let (Some(&(r, peer)), Some(&(_, _, _, far, holder))) = (askers.first(), farthest)
+            && let (Some(&(r, relays, peer)), Some(&(_, kept_relays, _, far, holder))) =
+                (first, farthest)
             && !spilled(holder)
-            && far.is_none_or(|f| r + NEAR_MARGIN.max(f / 10) < f)
+            && moves_in(relays.0, r, kept_relays.0, far)
         {
             join.push(peer);
         }
@@ -2459,9 +2466,38 @@ impl PeerSwarmScheduler {
     }
 }
 
+/// Whether an asker that `relays` reporters saw relay, at round trip
+/// `rtt`, ranks ahead of the last holder kept (`kept_relays`, `kept_rtt`)
+/// and takes its copy: more reporters saw it relay, or as many and its
+/// round trip is [`NEAR_MARGIN`] (or a tenth) shorter. One that ranks
+/// behind would be the holder past the copies once it subscribed.
+fn moves_in(relays: u8, rtt: Duration, kept_relays: u8, kept_rtt: Option<Duration>) -> bool {
+    match relays.cmp(&kept_relays) {
+        std::cmp::Ordering::Greater => true,
+        std::cmp::Ordering::Less => false,
+        std::cmp::Ordering::Equal => kept_rtt.is_none_or(|f| rtt + NEAR_MARGIN.max(f / 10) < f),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_asker_moves_in_only_ranking_ahead_of_the_last_holder() {
+        let ms = Duration::from_millis;
+        // Nearer by the margin, as many reporters: it moves in.
+        assert!(moves_in(0, ms(10), 0, Some(ms(100))));
+        assert!(!moves_in(0, ms(95), 0, Some(ms(100))));
+        // An unmeasured holder gives way to a measured asker.
+        assert!(moves_in(0, ms(500), 0, None));
+        // However near, an asker no reporter vouches for keeps behind a
+        // holder that reporters saw relay: it would leave as soon as it
+        // subscribed.
+        assert!(!moves_in(0, ms(1), 2, Some(ms(150))));
+        // More reporters win whatever the round trip.
+        assert!(moves_in(3, ms(150), 2, Some(ms(10))));
+    }
 
     #[test]
     fn the_round_trip_is_the_windowed_minimum() {
