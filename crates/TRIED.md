@@ -262,7 +262,11 @@ announced latest: 49, 78 and 102. Lag p99 x0.995-1.02 (overload's x0.98,
 where rounding's was x0.78), halve-15-10's x1.10-1.17 under both. The
 budget moves the remainder by a quarter copy or more between checks, so in
 capped-seed the part holder held 0-1 of its 2-14 slots; and the streams'
-lags differ by less than their noise.
+lags differ by less than their noise. Smoothed (`TMP-part` 95fe8000: the
+least the seed pushed at a check of the last 10 s, the first holder past
+the copies keeping the part copy), the part holder held its slots: peers
+48, robust 71, browsers 100, but robust's halve-7-20 lag p99 x1.52 and
+browsers' halve-31-10 9 -> 16 collapsed.
 
 **Rarest-first requests.** (`TMP-rarest`, against 938a829b) A request
 round ordered its candidates by how few channels had announced each
