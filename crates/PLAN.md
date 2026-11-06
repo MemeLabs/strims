@@ -483,11 +483,14 @@ in `TRIED.md`.
     start takes collapses 7 -> 1 of 32 (lag p99 x0.92), near cable and DSL
     viewers linked so 7 -> 6, and one that probes its way there arrives at
     23 s and makes it worse (TRIED). A seed's trials can't rank strength
-    (it receives nothing, and its reports judge only its holders), and a
-    seed's index record signed with the swarm's key would bring it every
-    viewer's offer. What a relay does with what it is given shows only in
-    other nodes' reports: find a first-wave placement that rests on them
-    or on the node's own measurements.
+    (it receives nothing, and its reports judge only its holders), a
+    seed made findable by its swarm's key brings it the fastest dialers
+    (5 -> 7 of 32, star-7-5's lag p99 x1.14), and a copy handed to the
+    datacenter viewer at 12 s by an oracle doesn't help (5 -> 6), so
+    reports, which show a relay's service at 7-9 s at the earliest, come
+    too late (TRIED). What the pin buys is trees formed around a strong
+    relay before the competing uploads; what's left is how trees formed
+    around residential holders absorb one losing its uplink.
   - Liars still gain: a fifth of the viewers announcing what they never
     send lag x0.78 of the honest viewers at p99 on wan-global-audience. A
     relay pushes to a child that announces, and in hybrid seldom asks its

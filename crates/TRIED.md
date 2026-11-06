@@ -479,6 +479,22 @@ one 20 s trial at a time and can't rank strength); the datacenter viewer
 alone: it reached the seed at 23 s, as the competing uploads began, and 4
 -> 7.
 
+**Strong relays at the source.** (organic browsers on trials and the
+seed's copy moves by rank, a75e632f, seeds 3001-3032) A findable seed
+(`pool-find`: its address published under its swarm's key, each viewer
+dialing it first while under its budget): offers to the seed in the first
+30 s 4-12 -> 47-60, its neighbours' median uplink x1.8 on
+super-peer-crowd-31, but the recip tier 11 -> 13 collapsed (super-peer-
+varying 3 -> 5, super-peer-crowd-31 5 -> 7) and the net tier 9 -> 10, with
+star-7-5's lag p99 x1.14 [1.04, 1.25] and the stars' request timeouts
+x1.13-1.41: first come brings the fastest dialers, not the strongest. Seed
+allocation by reports, bounded before it was built: the datacenter viewer
+linked to the seed at 12 s and handed a copy at the next check by an
+oracle, super-peer-crowd-31 5 -> 6 of 32 (lag p99 x1.05); linked at 12 s
+alone, 3 (x0.97). Reports show a relay's service at 7-9 s at the earliest
+and would put it at the seed at 13-17 s, so the tally of what reporters
+see non-neighbours relay, and the seed's invites, weren't built.
+
 **Adaptive seed copies held by hysteresis.** Keeping the seed's copies while
 its budget paid for 80 % of them (`COPY_KEEP`, against d9fe66b9, seeds
 3001-3032 and 3033-3064): the net tier 9 -> 6 but 7 -> 8, super-peer-varying
