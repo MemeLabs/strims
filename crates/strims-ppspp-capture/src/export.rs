@@ -21,6 +21,7 @@
 //! | `stream` | the stream: a message's, or a single chunk's (`chunk % stream_count`) |
 //! | `ts` | DATA, SIGNED_INTEGRITY and REQUEST timestamps, ns |
 //! | `len` | bytes: a frame's, a message's with its type byte, or what's left of a payload that didn't decode |
+//! | `data` | on DATA, its payload bytes (its `len` less them is its header) |
 //! | `ann` | on DATA out, `push` or `answer`; on DATA in, `hit`, `late`, `unsolicited` or `stale` |
 //! | `wait` | on DATA out and push decisions, ns from queueing to now |
 //! | `lag` | on DATA in and push hits and late pushes, ns since the chunk was first seen |
@@ -98,6 +99,7 @@ struct Row {
     stream: Option<u64>,
     ts: Option<i64>,
     len: Option<u64>,
+    data: Option<u64>,
     ann: Option<&'static str>,
     wait: Option<i64>,
     lag: Option<i64>,
@@ -581,6 +583,9 @@ impl<S: RowSink> Dump<S> {
         if let Some(v) = r.len {
             let _ = write!(o, ",\"len\":{v}");
         }
+        if let Some(v) = r.data {
+            let _ = write!(o, ",\"data\":{v}");
+        }
         if let Some(a) = r.ann {
             let _ = write!(o, ",\"ann\":\"{a}\"");
         }
@@ -682,6 +687,7 @@ fn message_row(row: Row, m: &Message<'_>, p: &SwarmParams) -> Row {
     match m {
         Message::Data(d) => Row {
             ts: Some(d.timestamp.unix_nanos()),
+            data: Some(d.data.len() as u64),
             ..with_bin("DATA", d.bin)
         },
         Message::Have(h) => with_bin("HAVE", h.bin),

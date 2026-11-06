@@ -22,6 +22,8 @@ delivery or latency collapsed.
                                   [--from S] [--until S]
   hack/capture/analyze.py diverge  a.jsonl b.jsonl [--source NAME] [--from S]
                                   [--until S]
+  hack/capture/analyze.py bytes  run.jsonl [--seed NAME] [--node NAME] [--step S]
+                                 [--from S] [--until S]
 
 `reduce` writes the rows the other commands read: `ppspp-capture swarm
 --labels --start` over every node's dumps (the capture crate's swarm module
@@ -73,6 +75,13 @@ The other commands print tables about one question each, `--from` and
           misses and prunes), the first second they part (on-time pushes or
           the seed's answers twice the other's), and each run's decisions
           that the other lacks in the 2 s before it
+  bytes   where the ppspp frames' bytes go (`reduce --all` rows): per role
+          (the seed, relays that sent pushes, leaves) and direction, the
+          KB/s per node, each class's share (DATA's payload and headers,
+          the message types, the channel headers), the frames' rate, mean
+          size, messages each and sizes; `--node` per peer of one node,
+          `--step` per interval. vnic, vpn and the transport's bytes
+          aren't in a capture: the sims' rows count them
 
 Runs, second by second (no capture needed):
 
@@ -1239,6 +1248,125 @@ def diverge(a):
             print(f"   {v:5d} {k}")
 
 
+# `bytes`: each message type's class, and frame-size buckets (bytes; 1448
+# is a TCP packet's payload).
+BYTE_CLASSES = {
+    "INTEGRITY": "integrity", "SIGNED_INTEGRITY": "signed", "HAVE": "have", "ACK": "ack",
+    "REQUEST": "request", "CANCEL": "request", "PING": "ping", "PONG": "ping",
+    "STREAM_REQUEST": "stream", "STREAM_CANCEL": "stream", "STREAM_OPEN": "stream",
+    "STREAM_CLOSE": "stream", "ANNOUNCE": "announce", "HANDSHAKE": "session", "RESTART": "session",
+    "CHOKE": "session", "UNCHOKE": "session", "UNKNOWN_CHANNEL": "other", "MALFORMED": "other",
+}
+CLASS_ORDER = ("payload", "data_hdr", "integrity", "signed", "have", "ack", "request", "ping", "stream",
+               "announce", "session", "headers", "other")
+FRAME_BUCKETS = (64, 256, 1448, 4096)
+
+
+class Bytes:
+    """One side of some traffic: bytes by class, and the frames: their
+    count, bytes and sizes, and the messages and message bytes in them (a
+    frame's channel headers are its bytes less its messages')."""
+
+    def __init__(self):
+        self.cls = collections.Counter()
+        self.frames = self.frame_bytes = self.msg_bytes = self.msgs = 0
+        self.buckets = [0] * (len(FRAME_BUCKETS) + 1)
+
+    def add(self, o):
+        self.cls.update(o.cls)
+        self.frames += o.frames
+        self.frame_bytes += o.frame_bytes
+        self.msg_bytes += o.msg_bytes
+        self.msgs += o.msgs
+        self.buckets = [x + y for x, y in zip(self.buckets, o.buckets)]
+
+    def row(self, r):
+        t = r["type"]
+        if t == "FRAME":
+            self.frames += 1
+            self.frame_bytes += r["len"]
+            self.buckets[next((i for i, b in enumerate(FRAME_BUCKETS) if r["len"] <= b), len(FRAME_BUCKETS))] += 1
+            return
+        if t == "DATA":
+            data = r.get("data", 0)
+            self.cls["payload"] += data
+            self.cls["data_hdr"] += r["len"] - data
+        else:
+            self.cls[BYTE_CLASSES.get(t, "other")] += r["len"]
+        self.msg_bytes += r["len"]
+        self.msgs += t not in ("UNKNOWN_CHANNEL", "MALFORMED")
+
+    def line(self, secs, nodes=1):
+        cls = self.cls + collections.Counter(headers=self.frame_bytes - self.msg_bytes)
+        total = max(self.frame_bytes, 1)
+        n = max(self.frames, 1)
+        shares = " ".join(f"{100 * cls[c] / total:{len(c)}.1f}" for c in CLASS_ORDER)
+        return (f"{self.frame_bytes / 1e3 / secs / nodes:8.1f} {shares} | {self.frames / secs / nodes:8.1f}"
+                f" {self.frame_bytes / n:6.0f} {self.msgs / n:6.1f}  "
+                + " ".join(f"{100 * b / n:5.1f}" for b in self.buckets))
+
+
+def bytes_header(first):
+    sizes = " ".join(f"<={b}" for b in FRAME_BUCKETS) + f" >{FRAME_BUCKETS[-1]}"
+    return f"{first} {'KB/s':>8s} {' '.join(CLASS_ORDER)} | frames/s mean_B msgs/f  {sizes} (%)"
+
+
+def bytes_(a):
+    """Where a capture's bytes go: per role and direction (or per peer of
+    `--node`, or per `--step` seconds), the KB/s each node moved in ppspp
+    frames, each class's share of them, and the frames: their rate, mean
+    size, messages each and sizes. Streams the rows: captures are large."""
+    lo = a.from_ * 1000 if a.from_ is not None else float("-inf")
+    hi = a.until * 1000 if a.until is not None else float("inf")
+    step = a.step * 1000 if a.step else None
+    groups = collections.defaultdict(Bytes)
+    nodes, pushers = set(), set()
+    t0 = t1 = None
+    with open(a.rows) as f:
+        for line in f:
+            r = json.loads(line)
+            if not lo <= r["t"] <= hi:
+                continue
+            t0 = r["t"] if t0 is None else t0
+            t1 = r["t"]
+            nodes.add(r["node"])
+            if r["dir"] not in ("in", "out") or "len" not in r or (a.node and r["node"] != a.node):
+                continue
+            if r["type"] == "DATA" and r["dir"] == "out" and r.get("ann") == "push":
+                pushers.add(r["node"])
+            sub = int(r["t"] // step) if step else r.get("peer") if a.node else None
+            groups[(r["node"], r["dir"], sub)].row(r)
+    if not any(g.frames for g in groups.values()):
+        sys.exit("no FRAME rows: reduce the dumps with --all")
+    secs = max((t1 - t0) / 1000, 1e-3)
+
+    def role(n):
+        # The ppspp sim's labels add the seed's site ("Seed Chicago Cable").
+        seed = n.lower() == a.seed.lower() or n.lower().startswith(a.seed.lower() + " ")
+        return "seed" if seed else "relay" if n in pushers else "leaf"
+
+    folded = collections.defaultdict(Bytes)
+    for (n, d, sub), g in groups.items():
+        folded[(sub, d) if a.node or step else (role(n), d)].add(g)
+    if step:
+        print(f"-- {a.node or 'every node'}'s ppspp frames per {a.step:g} s")
+        print(bytes_header(f"{'s':>7s} dir"))
+        for (slot, d) in sorted(folded):
+            print(f"{slot * a.step:7.1f} {d:>3s} {folded[(slot, d)].line(a.step)}")
+        return
+    if a.node:
+        print(f"-- {a.node}'s ppspp frames per peer over {secs:.1f} s")
+        print(bytes_header(f"{'peer':>10s} dir"))
+        for (peer, d) in sorted(folded, key=lambda k: (str(k[0]), k[1])):
+            print(f"{str(peer):>10s} {d:>3s} {folded[(peer, d)].line(secs)}")
+        return
+    roles = collections.Counter(role(n) for n in nodes)
+    print(f"-- ppspp frames by role over {secs:.1f} s ({dict(roles)}; relays sent pushes), per node of the role")
+    print(bytes_header(f"{'role':>6s} dir"))
+    for key in sorted(folded, key=lambda k: (("seed", "relay", "leaf").index(k[0]), k[1])):
+        print(f"{key[0]:>6s} {key[1]:>3s} {folded[key].line(secs, max(roles[key[0]], 1))}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1289,6 +1417,11 @@ def main():
     p.add_argument("rows")
     p.add_argument("--node", default="seed")
     p.add_argument("--holder", help="one holder only")
+    p = command("bytes", bytes_)
+    p.add_argument("rows")
+    p.add_argument("--seed", default="seed", help="the seed's label, or its first word, in any case")
+    p.add_argument("--node", help="one node's frames per peer")
+    p.add_argument("--step", type=float, help="seconds per line instead (with --node, that node's)")
     p = command("diverge", diverge)
     p.add_argument("runs", nargs=2)
     p.add_argument("--source", default="seed")

@@ -208,7 +208,7 @@ fn rows_describe_messages_and_decisions() {
             base(10, "00", "out", 1),
             json!({
                 "swarm": 1, "channel": 9, "type": "DATA", "bin": 2, "first": 1, "last": 1,
-                "stream": 1, "ts": n(10), "len": 1 + 1 + 6 + 1 + 4, "ann": "push",
+                "stream": 1, "ts": n(10), "len": 1 + 1 + 6 + 1 + 4, "data": 4, "ann": "push",
                 "wait": Duration::from_millis(5).as_nanos(),
             }),
         ),
@@ -238,7 +238,7 @@ fn rows_describe_messages_and_decisions() {
             base(20, "00", "in", 2),
             json!({
                 "swarm": 1, "channel": 3, "type": "DATA", "bin": 8, "first": 4, "last": 4,
-                "stream": 0, "ts": n(11), "len": 1 + 1 + 6 + 1 + 4, "ann": "hit",
+                "stream": 0, "ts": n(11), "len": 1 + 1 + 6 + 1 + 4, "data": 4, "ann": "hit",
                 "lag": Duration::from_millis(7).as_nanos(),
             }),
         ),
