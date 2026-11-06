@@ -43,7 +43,7 @@
 //! | 24 | `HolderSilent` | |
 //! | 25 | `HolderUnserved` | reporters |
 //! | 26 | `PushCancelled` | bin |
-//! | 27 | `ParentChoice` | stream, action (`graft`, `none`, `vote`, `switch`, `reset`), chosen (peer), chosen_lag, runner_up (peer), runner_up_lag, unready, subscriber, backed_off, stale, votes, parent_have, parent_push |
+//! | 27 | `ParentChoice` | stream, action (`graft`, `none`, `vote`, `switch`, `reset`), chosen (peer), chosen_lag, runner_up (peer), runner_up_lag, unready, subscriber, backed_off, stale, behind, votes, parent_have, parent_push |
 //! | 28 | `RequestRound` | floor (bin), cap, in_flight, room, fit, candidates, requested |
 //! | 29 | `Upload` | rate, busy (thousandths), capacity, hint, others, committed, queue_delay |
 //! | 30 | `SeedFirstWave` | capacity, early_rate, others, neighbours, copies |
@@ -322,6 +322,7 @@ pub const TAP_KINDS: &[KindInfo] = &[
             num("subscriber"),
             num("backed_off"),
             num("stale"),
+            num("behind"),
             num("votes"),
             num("parent_have"),
             num("parent_push"),
@@ -1016,6 +1017,7 @@ fn tap_record(
                     n(c.subscriber),
                     n(c.backed_off),
                     n(c.stale),
+                    n(c.behind),
                     n(c.votes),
                     od(c.parent_have),
                     od(c.parent_push),
@@ -1197,6 +1199,7 @@ mod tests {
                     subscriber: 1,
                     backed_off: 1,
                     stale: 1,
+                    behind: 1,
                     votes: 1,
                     parent_have: None,
                     parent_push: Some(d),

@@ -316,6 +316,8 @@ pub(crate) struct PeerSchedulerStream {
     pub(crate) source: Option<StreamSubscription>,
     /// The channels we push this stream to. Bound: one per channel.
     pub(crate) subscribers: Vec<StreamSubscription>,
+    /// The newest chunk of the stream we hold.
+    pub(crate) head: Option<Bin>,
 }
 
 impl PeerSchedulerStream {
@@ -1662,6 +1664,17 @@ impl PeerSwarmScheduler {
         s.source_bins.reset(bin);
 
         s.have_bins.set(bin);
+        // Each stream's newest chunk we hold: its last in the bin.
+        let last = bin.base_right();
+        let span = 2 * u64::from(s.stream_count.saturating_sub(1));
+        let mut x = Bin(last.0.saturating_sub(span).max(bin.base_left().0));
+        while x <= last {
+            let stream = usize::from(s.bin_stream(x));
+            if let Some(st) = s.streams.get_mut(stream) {
+                st.head = Some(st.head.map_or(x, |h| h.max(x)));
+            }
+            x = Bin(x.0 + 2);
+        }
         // Keep one window of history behind the store's window: the HAVEs
         // we send never claim more.
         let prune = Bin(store.window_start().0.saturating_sub(s.live_window.0));
@@ -2149,12 +2162,19 @@ impl PeerSwarmScheduler {
                         || (s.have_bins.filled_at(y) && s.announce_bins.empty_at(y))
                 };
                 while let Some(x) = next {
+                    let stream = usize::from(s.bin_stream(x));
                     // A bin with no time (pruned, or never published by a
                     // seed) gives no sample.
                     let t = s.bin_time(x);
                     if t != Time::EPOCH && (!s.is_seed || unit_last(x)) {
-                        let stream = usize::from(s.bin_stream(x));
                         Self::push_have_lag(&mut c.push, stream, now - t, now);
+                    }
+                    if !s.is_seed
+                        && s.streams
+                            .get(stream)
+                            .is_some_and(|st| st.head.is_none_or(|h| x > h))
+                    {
+                        Self::push_ahead(&mut c.push, stream, x);
                     }
                     next = it.next_base();
                 }

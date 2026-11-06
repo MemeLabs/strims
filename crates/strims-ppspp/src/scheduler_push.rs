@@ -45,9 +45,21 @@
 //!   announcement lag (how long after the first announcement anywhere its
 //!   HAVEs arrive), from the first chunk after everything we have or have
 //!   seen announced. A candidate has a handshake, doesn't choke us, isn't
-//!   backed off for the stream, isn't our own subscriber for it (no
-//!   2-cycles), and announced it within [`CANDIDATE_FRESHNESS`]. The seed
-//!   never subscribes: it has every chunk first.
+//!   backed off for the stream, isn't our own subscriber for it,
+//!   announced it within [`CANDIDATE_FRESHNESS`], and announced the newest
+//!   chunk of it we hold, or a newer one, before we held it: a peer our
+//!   pushes feed, directly or through a chain, has nothing of the stream
+//!   before we do, so it is never a candidate and no push loop closes. The
+//!   test moves with the stream, not time: a peer that was ahead of us and
+//!   came to take the stream from us drops out at the next chunk we take
+//!   in from anyone else, and it holds while the stream stalls. Only our
+//!   own holdings decide: a
+//!   peer that announces what it doesn't hold to look ahead is grafted and
+//!   then pruned as any parent that doesn't push. One fed by pull from
+//!   elsewhere can be ahead of us while its chain of parents passes
+//!   through us; its parent's pushes then come after its pulls, and it
+//!   prunes that parent. The seed never subscribes: it has every chunk
+//!   first.
 //! - **Switch.** A candidate that beats the parent at [`SWITCH_CHECKS`]
 //!   checks in a row, outside [`SWITCH_HOLD`] after the parent opened, is
 //!   grafted; the old parent is cancelled only once the new one opens.
@@ -691,6 +703,9 @@ pub(crate) struct PushChannel {
     /// How long after a chunk was first seen the peer announces it.
     /// Bound: one per stream.
     have_lag: Vec<LagEwma>,
+    /// The newest chunk of each stream the peer announced before we held
+    /// it. Bound: one per stream.
+    ahead: Vec<Option<Bin>>,
     /// Not a candidate for the stream until then. Bound: one per stream.
     backoff: Vec<Time>,
     /// The peer's prunes in a row as the stream's parent. Bound: one per
@@ -720,6 +735,7 @@ impl PushChannel {
     pub(crate) fn new(streams: usize) -> PushChannel {
         PushChannel {
             have_lag: vec![LagEwma::default(); streams],
+            ahead: vec![None; streams],
             backoff: vec![Time::EPOCH; streams],
             prunes: vec![0; streams],
             cancel_at: vec![Time::EPOCH; streams],
@@ -734,6 +750,16 @@ impl PushChannel {
 
     fn tally(&mut self, stream: Stream) -> Option<&mut Tally> {
         self.tally.get_mut(usize::from(stream))
+    }
+
+    /// Whether the peer announced, before we held it, a chunk of stream
+    /// `i` at least as new as `head`, the newest we hold.
+    fn ahead_of(&self, i: usize, head: Option<Bin>) -> bool {
+        self.ahead
+            .get(i)
+            .copied()
+            .flatten()
+            .is_some_and(|a| head.is_none_or(|h| a >= h))
     }
 
     /// Appends to `lags` the peer's announcement lag per stream, where
@@ -1398,6 +1424,14 @@ impl PeerSwarmScheduler {
         }
     }
 
+    /// Hybrid `handle_have` bookkeeping: the peer announced chunk `b` of
+    /// `stream` before we held it (`pc` is the channel's `push`).
+    pub(crate) fn push_ahead(pc: &mut Option<PushChannel>, stream: usize, b: Bin) {
+        if let Some(a) = pc.as_mut().and_then(|pc| pc.ahead.get_mut(stream)) {
+            *a = Some(a.map_or(b, |a| a.max(b)));
+        }
+    }
+
     /// Hybrid `handle_have` bookkeeping: the peer's announcement lag for
     /// the chunk's stream (`pc` is the channel's `push`).
     pub(crate) fn push_have_lag(
@@ -1927,8 +1961,9 @@ impl PeerSwarmScheduler {
     }
 
     /// The best peer to take `stream` from: the lowest announcement lag
-    /// among peers that announced it recently, aren't backed off, and
-    /// aren't our own subscribers for it (no 2-cycles).
+    /// among peers that announced it recently, and its newest chunk we hold
+    /// or a newer one before we held it (no loops), aren't backed off, and
+    /// aren't our own subscribers for it.
     fn best_candidate(
         &self,
         stream: Stream,
@@ -1954,6 +1989,9 @@ impl PeerSwarmScheduler {
             let Some(lag) = pc.have_lag.get(i).filter(|l| l.fresh(now)) else {
                 continue;
             };
+            if !pc.ahead_of(i, st.head) {
+                continue;
+            }
             let m = lag.mean();
             if best.is_none_or(|(_, b)| m < b) {
                 best = Some((peer, m));
@@ -1992,6 +2030,7 @@ impl PeerSwarmScheduler {
             subscriber: 0,
             backed_off: 0,
             stale: 0,
+            behind: 0,
             votes: votes.into(),
             parent_have,
             parent_push,
@@ -2020,6 +2059,10 @@ impl PeerSwarmScheduler {
                 c.stale += 1;
                 continue;
             };
+            if !pc.ahead_of(i, st.head) {
+                c.behind += 1;
+                continue;
+            }
             let m = lag.mean();
             if c.best.is_none_or(|(_, b)| m < b) {
                 c.runner_up = c.best;

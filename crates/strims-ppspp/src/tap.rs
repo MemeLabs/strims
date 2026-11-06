@@ -411,6 +411,9 @@ pub struct ParentChoice {
     pub backed_off: u64,
     /// It didn't announce the stream recently.
     pub stale: u64,
+    /// It announced nothing of the stream we lacked recently: it may take
+    /// the stream from us, through any chain.
+    pub behind: u64,
     /// Checks in a row at which a candidate beat the parent.
     pub votes: u64,
     /// The parent's mean announcement lag and push delay, when measured.

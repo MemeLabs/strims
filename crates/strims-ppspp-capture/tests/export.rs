@@ -416,7 +416,7 @@ fn decisions_name_their_rules_and_peers() {
                     code("ParentChoice"),
                     1,
                     0,
-                    &[4, 0, 1, ms(20), 2, ms(30), 0, 1, 2, 3, 0, -1, -1],
+                    &[4, 0, 1, ms(20), 2, ms(30), 0, 1, 2, 3, 4, 0, -1, -1],
                 )),
             ),
             (
@@ -444,7 +444,7 @@ fn decisions_name_their_rules_and_peers() {
             base(2, "02"),
             json!({"type": "ParentChoice", "stream": 4, "action": "graft", "chosen": "02",
                 "chosen_lag": ms(20), "runner_up": "03", "runner_up_lag": ms(30), "unready": 0,
-                "subscriber": 1, "backed_off": 2, "stale": 3, "votes": 0, "parent_have": -1,
+                "subscriber": 1, "backed_off": 2, "stale": 3, "behind": 4, "votes": 0, "parent_have": -1,
                 "parent_push": -1}),
         ),
         // A value past an enum's names stays a number.
