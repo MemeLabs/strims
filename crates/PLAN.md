@@ -410,8 +410,13 @@ in `TRIED.md`.
      for. Its extras are admitted at `EXTRA_UTILIZATION` of the measured
      capacity, so a datacenter viewer forwards every stream it holds.
    - Reciprocity versus tree children (children get the minimum weight).
-   - Cycles longer than two; a hop count (Wire changes, ppspp) would
-     show them.
+   - Push loops fed by pull. A candidate must have announced our newest
+     chunk of the stream before we held it, which no peer our pushes feed
+     can, but one that pulled it from elsewhere can while its parents
+     pass through us: in the ppspp sim's capped-seed 107 loops over 32
+     seeds remain (68 of them in one run that lags 7.6 s either way), and
+     its parent's late pushes prune it only after `PRUNE_MIN_EXPECTED`,
+     slowly on a low-rate stream.
    - Push bypassing congestion control. Judging it needs the WAN model's
      sender backpressure (Simulation coverage and fidelity).
    - **Copies by region.** Copies go to the nearest neighbours. Try a
@@ -750,13 +755,12 @@ stack or a version gate.
   add a reason.
 - Announce the interior stream.
 - Mark pushed DATA and echo send times.
-- Add a hop count or depth to STREAM_OPEN or HAVE.
 - ANNOUNCE's reach: a report names the reporter's direct parent and
   reaches only the seed's own neighbours, so a holder whose children
   aren't among them goes unjudged (at 6 Mbit/s the seed links to 32 of
-  100 viewers). Name the reporter's root holder, carried down the tree
-  (with the hop count above), or relay reports up the tree, signed by
-  viewer identities the seed can check.
+  100 viewers). Name the reporter's root holder, carried down the tree,
+  or relay reports up the tree, signed by viewer identities the seed can
+  check.
 - Add an epoch counter: `Writer::reset` within one millisecond keeps the
   epoch, so peers don't reset.
 - Bump the protocol version.
