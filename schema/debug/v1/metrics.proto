@@ -163,6 +163,12 @@ message LinkInfo {
 message RunnerMetrics {
   repeated SwarmInfo swarms = 1;
   repeated RunnerPeerInfo peers = 2;
+  ChannelTotals totals = 3;
+}
+
+message ChannelTotals {
+  ChannelMetrics inbound = 1;
+  ChannelMetrics outbound = 2;
 }
 
 message SwarmInfo {
@@ -339,7 +345,7 @@ message ChannelMetrics {
   uint64 stream_open = 17;
   uint64 stream_close = 18;
   uint64 data_bytes = 19;
-  uint64 overhead_bytes = 20;
+  uint64 data_header_bytes = 20;
   uint64 invalid_data = 21;
   uint64 invalid_chunk = 22;
   uint64 invalid_bytes = 23;
@@ -347,6 +353,19 @@ message ChannelMetrics {
   uint64 stale_stream_open = 25;
   uint64 stale_data = 26;
   uint64 announce = 27;
+  uint64 integrity_bytes = 28;
+  uint64 signed_integrity_bytes = 29;
+  uint64 have_bytes = 30;
+  uint64 ack_bytes = 31;
+  uint64 request_bytes = 32;
+  uint64 ping_bytes = 33;
+  uint64 stream_bytes = 34;
+  uint64 announce_bytes = 35;
+  uint64 session_bytes = 36;
+  uint64 payloads = 37;
+  uint64 header_bytes = 38;
+  uint64 stale_bytes = 39;
+  uint64 new_bytes = 40;
 }
 
 message NetworkInfo {

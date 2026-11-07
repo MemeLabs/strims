@@ -351,11 +351,15 @@ fn runner(m: RunnerMetrics) -> v1::RunnerMetrics {
     let RunnerMetrics {
         swarms,
         peers,
-        totals: _,
+        totals,
     } = m;
     v1::RunnerMetrics {
         swarms: swarms.into_iter().map(swarm).collect(),
         peers: peers.into_iter().map(peer).collect(),
+        totals: Some(v1::ChannelTotals {
+            inbound: Some(channel_metrics(totals.inbound)),
+            outbound: Some(channel_metrics(totals.outbound)),
+        }),
     }
 }
 
@@ -657,8 +661,6 @@ fn channel_scheduler(s: ChannelSchedulerStats) -> v1::ChannelSchedulerStats {
 }
 
 fn channel_metrics(m: ChannelMetrics) -> v1::ChannelMetrics {
-    // The export keeps one byte count for every message byte but data.
-    let overhead_bytes = m.message_bytes();
     let ChannelMetrics {
         handshake,
         restart,
@@ -680,26 +682,26 @@ fn channel_metrics(m: ChannelMetrics) -> v1::ChannelMetrics {
         stream_close,
         announce,
         data_bytes,
-        data_header_bytes: _,
-        integrity_bytes: _,
-        signed_integrity_bytes: _,
-        have_bytes: _,
-        ack_bytes: _,
-        request_bytes: _,
-        ping_bytes: _,
-        stream_bytes: _,
-        announce_bytes: _,
-        session_bytes: _,
-        payloads: _,
-        header_bytes: _,
+        data_header_bytes,
+        integrity_bytes,
+        signed_integrity_bytes,
+        have_bytes,
+        ack_bytes,
+        request_bytes,
+        ping_bytes,
+        stream_bytes,
+        announce_bytes,
+        session_bytes,
+        payloads,
+        header_bytes,
         invalid_data,
         invalid_chunk,
         invalid_bytes,
         rejected,
         stale_stream_open,
         stale_data,
-        stale_bytes: _,
-        new_bytes: _,
+        stale_bytes,
+        new_bytes,
     } = m;
     v1::ChannelMetrics {
         handshake,
@@ -721,7 +723,7 @@ fn channel_metrics(m: ChannelMetrics) -> v1::ChannelMetrics {
         stream_open,
         stream_close,
         data_bytes,
-        overhead_bytes,
+        data_header_bytes,
         invalid_data,
         invalid_chunk,
         invalid_bytes,
@@ -729,6 +731,19 @@ fn channel_metrics(m: ChannelMetrics) -> v1::ChannelMetrics {
         stale_stream_open,
         stale_data,
         announce,
+        integrity_bytes,
+        signed_integrity_bytes,
+        have_bytes,
+        ack_bytes,
+        request_bytes,
+        ping_bytes,
+        stream_bytes,
+        announce_bytes,
+        session_bytes,
+        payloads,
+        header_bytes,
+        stale_bytes,
+        new_bytes,
     }
 }
 

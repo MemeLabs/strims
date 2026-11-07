@@ -1001,21 +1001,25 @@ export class LinkInfo {
 export type IRunnerMetrics = {
   swarms?: strims_debug_v1_ISwarmInfo[];
   peers?: strims_debug_v1_IRunnerPeerInfo[];
+  totals?: strims_debug_v1_IChannelTotals;
 }
 
 export class RunnerMetrics {
   swarms: strims_debug_v1_SwarmInfo[];
   peers: strims_debug_v1_RunnerPeerInfo[];
+  totals: strims_debug_v1_ChannelTotals | undefined;
 
   constructor(v?: IRunnerMetrics) {
     this.swarms = v?.swarms ? v.swarms.map(v => new strims_debug_v1_SwarmInfo(v)) : [];
     this.peers = v?.peers ? v.peers.map(v => new strims_debug_v1_RunnerPeerInfo(v)) : [];
+    this.totals = v?.totals && new strims_debug_v1_ChannelTotals(v.totals);
   }
 
   static encode(m: RunnerMetrics, w?: Writer): Writer {
     if (!w) w = new Writer();
     for (const v of m.swarms) strims_debug_v1_SwarmInfo.encode(v, w.uint32(10).fork()).ldelim();
     for (const v of m.peers) strims_debug_v1_RunnerPeerInfo.encode(v, w.uint32(18).fork()).ldelim();
+    if (m.totals) strims_debug_v1_ChannelTotals.encode(m.totals, w.uint32(26).fork()).ldelim();
     return w;
   }
 
@@ -1031,6 +1035,52 @@ export class RunnerMetrics {
         break;
         case 2:
         m.peers.push(strims_debug_v1_RunnerPeerInfo.decode(r, r.uint32()));
+        break;
+        case 3:
+        m.totals = strims_debug_v1_ChannelTotals.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IChannelTotals = {
+  inbound?: strims_debug_v1_IChannelMetrics;
+  outbound?: strims_debug_v1_IChannelMetrics;
+}
+
+export class ChannelTotals {
+  inbound: strims_debug_v1_ChannelMetrics | undefined;
+  outbound: strims_debug_v1_ChannelMetrics | undefined;
+
+  constructor(v?: IChannelTotals) {
+    this.inbound = v?.inbound && new strims_debug_v1_ChannelMetrics(v.inbound);
+    this.outbound = v?.outbound && new strims_debug_v1_ChannelMetrics(v.outbound);
+  }
+
+  static encode(m: ChannelTotals, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.inbound) strims_debug_v1_ChannelMetrics.encode(m.inbound, w.uint32(10).fork()).ldelim();
+    if (m.outbound) strims_debug_v1_ChannelMetrics.encode(m.outbound, w.uint32(18).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ChannelTotals {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ChannelTotals();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.inbound = strims_debug_v1_ChannelMetrics.decode(r, r.uint32());
+        break;
+        case 2:
+        m.outbound = strims_debug_v1_ChannelMetrics.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -2103,7 +2153,7 @@ export type IChannelMetrics = {
   streamOpen?: bigint;
   streamClose?: bigint;
   dataBytes?: bigint;
-  overheadBytes?: bigint;
+  dataHeaderBytes?: bigint;
   invalidData?: bigint;
   invalidChunk?: bigint;
   invalidBytes?: bigint;
@@ -2111,6 +2161,19 @@ export type IChannelMetrics = {
   staleStreamOpen?: bigint;
   staleData?: bigint;
   announce?: bigint;
+  integrityBytes?: bigint;
+  signedIntegrityBytes?: bigint;
+  haveBytes?: bigint;
+  ackBytes?: bigint;
+  requestBytes?: bigint;
+  pingBytes?: bigint;
+  streamBytes?: bigint;
+  announceBytes?: bigint;
+  sessionBytes?: bigint;
+  payloads?: bigint;
+  headerBytes?: bigint;
+  staleBytes?: bigint;
+  newBytes?: bigint;
 }
 
 export class ChannelMetrics {
@@ -2133,7 +2196,7 @@ export class ChannelMetrics {
   streamOpen: bigint;
   streamClose: bigint;
   dataBytes: bigint;
-  overheadBytes: bigint;
+  dataHeaderBytes: bigint;
   invalidData: bigint;
   invalidChunk: bigint;
   invalidBytes: bigint;
@@ -2141,6 +2204,19 @@ export class ChannelMetrics {
   staleStreamOpen: bigint;
   staleData: bigint;
   announce: bigint;
+  integrityBytes: bigint;
+  signedIntegrityBytes: bigint;
+  haveBytes: bigint;
+  ackBytes: bigint;
+  requestBytes: bigint;
+  pingBytes: bigint;
+  streamBytes: bigint;
+  announceBytes: bigint;
+  sessionBytes: bigint;
+  payloads: bigint;
+  headerBytes: bigint;
+  staleBytes: bigint;
+  newBytes: bigint;
 
   constructor(v?: IChannelMetrics) {
     this.handshake = v?.handshake || BigInt(0);
@@ -2162,7 +2238,7 @@ export class ChannelMetrics {
     this.streamOpen = v?.streamOpen || BigInt(0);
     this.streamClose = v?.streamClose || BigInt(0);
     this.dataBytes = v?.dataBytes || BigInt(0);
-    this.overheadBytes = v?.overheadBytes || BigInt(0);
+    this.dataHeaderBytes = v?.dataHeaderBytes || BigInt(0);
     this.invalidData = v?.invalidData || BigInt(0);
     this.invalidChunk = v?.invalidChunk || BigInt(0);
     this.invalidBytes = v?.invalidBytes || BigInt(0);
@@ -2170,6 +2246,19 @@ export class ChannelMetrics {
     this.staleStreamOpen = v?.staleStreamOpen || BigInt(0);
     this.staleData = v?.staleData || BigInt(0);
     this.announce = v?.announce || BigInt(0);
+    this.integrityBytes = v?.integrityBytes || BigInt(0);
+    this.signedIntegrityBytes = v?.signedIntegrityBytes || BigInt(0);
+    this.haveBytes = v?.haveBytes || BigInt(0);
+    this.ackBytes = v?.ackBytes || BigInt(0);
+    this.requestBytes = v?.requestBytes || BigInt(0);
+    this.pingBytes = v?.pingBytes || BigInt(0);
+    this.streamBytes = v?.streamBytes || BigInt(0);
+    this.announceBytes = v?.announceBytes || BigInt(0);
+    this.sessionBytes = v?.sessionBytes || BigInt(0);
+    this.payloads = v?.payloads || BigInt(0);
+    this.headerBytes = v?.headerBytes || BigInt(0);
+    this.staleBytes = v?.staleBytes || BigInt(0);
+    this.newBytes = v?.newBytes || BigInt(0);
   }
 
   static encode(m: ChannelMetrics, w?: Writer): Writer {
@@ -2193,7 +2282,7 @@ export class ChannelMetrics {
     if (m.streamOpen) w.uint32(136).uint64(m.streamOpen);
     if (m.streamClose) w.uint32(144).uint64(m.streamClose);
     if (m.dataBytes) w.uint32(152).uint64(m.dataBytes);
-    if (m.overheadBytes) w.uint32(160).uint64(m.overheadBytes);
+    if (m.dataHeaderBytes) w.uint32(160).uint64(m.dataHeaderBytes);
     if (m.invalidData) w.uint32(168).uint64(m.invalidData);
     if (m.invalidChunk) w.uint32(176).uint64(m.invalidChunk);
     if (m.invalidBytes) w.uint32(184).uint64(m.invalidBytes);
@@ -2201,6 +2290,19 @@ export class ChannelMetrics {
     if (m.staleStreamOpen) w.uint32(200).uint64(m.staleStreamOpen);
     if (m.staleData) w.uint32(208).uint64(m.staleData);
     if (m.announce) w.uint32(216).uint64(m.announce);
+    if (m.integrityBytes) w.uint32(224).uint64(m.integrityBytes);
+    if (m.signedIntegrityBytes) w.uint32(232).uint64(m.signedIntegrityBytes);
+    if (m.haveBytes) w.uint32(240).uint64(m.haveBytes);
+    if (m.ackBytes) w.uint32(248).uint64(m.ackBytes);
+    if (m.requestBytes) w.uint32(256).uint64(m.requestBytes);
+    if (m.pingBytes) w.uint32(264).uint64(m.pingBytes);
+    if (m.streamBytes) w.uint32(272).uint64(m.streamBytes);
+    if (m.announceBytes) w.uint32(280).uint64(m.announceBytes);
+    if (m.sessionBytes) w.uint32(288).uint64(m.sessionBytes);
+    if (m.payloads) w.uint32(296).uint64(m.payloads);
+    if (m.headerBytes) w.uint32(304).uint64(m.headerBytes);
+    if (m.staleBytes) w.uint32(312).uint64(m.staleBytes);
+    if (m.newBytes) w.uint32(320).uint64(m.newBytes);
     return w;
   }
 
@@ -2269,7 +2371,7 @@ export class ChannelMetrics {
         m.dataBytes = r.uint64();
         break;
         case 20:
-        m.overheadBytes = r.uint64();
+        m.dataHeaderBytes = r.uint64();
         break;
         case 21:
         m.invalidData = r.uint64();
@@ -2291,6 +2393,45 @@ export class ChannelMetrics {
         break;
         case 27:
         m.announce = r.uint64();
+        break;
+        case 28:
+        m.integrityBytes = r.uint64();
+        break;
+        case 29:
+        m.signedIntegrityBytes = r.uint64();
+        break;
+        case 30:
+        m.haveBytes = r.uint64();
+        break;
+        case 31:
+        m.ackBytes = r.uint64();
+        break;
+        case 32:
+        m.requestBytes = r.uint64();
+        break;
+        case 33:
+        m.pingBytes = r.uint64();
+        break;
+        case 34:
+        m.streamBytes = r.uint64();
+        break;
+        case 35:
+        m.announceBytes = r.uint64();
+        break;
+        case 36:
+        m.sessionBytes = r.uint64();
+        break;
+        case 37:
+        m.payloads = r.uint64();
+        break;
+        case 38:
+        m.headerBytes = r.uint64();
+        break;
+        case 39:
+        m.staleBytes = r.uint64();
+        break;
+        case 40:
+        m.newBytes = r.uint64();
         break;
         default:
         r.skipType(tag & 7);
@@ -4333,6 +4474,12 @@ export const strims_debug_v1_RunnerMetrics = RunnerMetrics;
 export type strims_debug_v1_RunnerMetrics = RunnerMetrics;
 /* @internal */
 export type strims_debug_v1_IRunnerMetrics = IRunnerMetrics;
+/* @internal */
+export const strims_debug_v1_ChannelTotals = ChannelTotals;
+/* @internal */
+export type strims_debug_v1_ChannelTotals = ChannelTotals;
+/* @internal */
+export type strims_debug_v1_IChannelTotals = IChannelTotals;
 /* @internal */
 export const strims_debug_v1_SwarmInfo = SwarmInfo;
 /* @internal */
