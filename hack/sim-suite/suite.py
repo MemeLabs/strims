@@ -79,10 +79,19 @@ the base on the same seeds, by its collapsed runs over all cells, then by
 the geometric mean over cells of its lag p99 ratio; it is out if a cell's
 delivery falls significantly, a cell collapses more often (Fisher p under
 0.05: a sum over cells would let one cell's losses buy another's gains),
-or a cell where the base never collapsed gets a lag p99 or startup p99
-ratio whose interval lies past 1.10. Rounds print their tables, round 0
+a cell where the base never collapsed gets a lag p99, startup p99 or weak
+viewers' lag p99 ratio whose interval lies past 1.10, or defecting comes
+to pay more (`defector_gain`). Rounds print their tables, round 0
 each flag's main effects, and the confirmation each cell's collapses and
 lag p99 ratio.
+
+`--rank overhead` (race, farm, score) spends latency on bytes: arms rank
+by collapsed runs, then by the geometric mean over cells of their wire
+bytes per byte of the stream read (`wire_per_useful`, the sims' `up_*`
+ledger). The lag guardrails take `--lag-budget` (1.25) for 1.10, and a
+cell whose median lag p99 the base kept under `--lag-ceiling` (1000 ms)
+is out when the arm's isn't: the budget stops a slow creep, and the
+ceiling spends only the headroom the cell has.
 
 `calibrate` scores the base against itself at other seeds (seeds 1..N
 against N+1..2N, paired in order): what moves there is seed noise, an
@@ -127,6 +136,7 @@ import os
 import random
 import re
 import shlex
+import statistics
 import subprocess
 import sys
 import threading
@@ -430,6 +440,16 @@ def share(num, den):
     return lambda r: (r.get(num, 0) or 0) / den(r) if den(r) else None
 
 
+def per_useful(*fields):
+    """The row's `fields` summed, per byte of the stream the honest viewers
+    read (`useful_bytes`)."""
+    def get(r):
+        if not r.get("useful_bytes") or any(f not in r for f in fields):
+            return None
+        return sum(r[f] for f in fields) / r["useful_bytes"]
+    return get
+
+
 METRICS = [
     # A row with hostile viewers scores its honest ones'.
     ("lag_p50_ms", lambda r: r.get("lag_p50_ms_honest", r.get("lag_p50_ms")), LOWER, "ratio", 0.05),
@@ -463,6 +483,18 @@ METRICS = [
     ("startup_p99_ms", lambda r: r.get("startup_p99_ms_honest", r.get("startup_p99_ms")), LOWER, "ratio", 0.10),
     ("signed_lag_p99_ms", lambda r: r.get("signed_lag_p99_ms"), LOWER, "ratio", 0.05),
     ("wire/media", lambda r: r.get("wire_per_media"), LOWER, "ratio", 0.02),
+    # Where the uplinks' bytes go (the sims' `up_*` ledger), per byte read.
+    ("wire/useful", lambda r: r.get("wire_per_useful"), LOWER, "ratio", 0.02),
+    ("packets/useful", per_useful("packets_up"), LOWER, "ratio", 0.02),
+    ("dup/useful", per_useful("dup_bytes"), LOWER, "diff", 0.002),
+    ("ovh_seed", lambda r: r.get("ovh_seed"), LOWER, "diff", 0.005),
+    ("ovh_leaf_p90", lambda r: r.get("ovh_leaf_p90"), LOWER, "diff", 0.005),
+    ("have/useful", per_useful("up_have"), None, "ratio", 0.05),
+    ("ack/useful", per_useful("up_ack"), None, "ratio", 0.05),
+    ("request/useful", per_useful("up_request"), None, "ratio", 0.05),
+    ("integrity/useful", per_useful("up_integrity", "up_signed"), None, "ratio", 0.05),
+    ("transport/useful", per_useful("up_transport"), None, "ratio", 0.05),
+    ("acks/useful", per_useful("up_acks"), None, "ratio", 0.05),
     ("links_p50", lambda r: r.get("links_p50"), None, "diff", 0.5),
     ("links_p90", lambda r: r.get("links_p90"), None, "diff", 0.5),
     ("links_dropped/min", lambda r: r.get("links_dropped_per_host_min"), LOWER, "diff", 0.1),
@@ -847,12 +879,17 @@ def design(flags):
 GUARD_RATIO = 1.10
 
 
-def arm_score(cells, base_rows, arm_rows):
+def arm_score(cells, base_rows, arm_rows, rank=None):
     """An arm against the base on the same seeds: its collapsed runs and the
-    base's, the geometric mean over cells of its lag p99 ratio, and the
-    guardrails it broke."""
+    base's, the geometric means over cells of its lag p99 ratio and its
+    wire bytes per useful byte, and the guardrails it broke. Ranked for
+    overhead (`rank`: --lag-budget, --lag-ceiling), its lag guardrails take
+    the budget, and a cell whose median lag p99 the base kept under the
+    ceiling breaks one when the arm's isn't."""
+    overhead = rank is not None and rank.rank == "overhead"
+    guard = rank.lag_budget if overhead else GUARD_RATIO
     ka_all = kb_all = 0
-    logs = []
+    logs, wires = [], []
     broken = []
     cells_out = []
     get = {name: (fn, better, kind, tie) for name, fn, better, kind, tie in METRICS}
@@ -879,24 +916,41 @@ def arm_score(cells, base_rows, arm_rows):
         if e is not None:
             logs.append(math.log(e[0]))
         cells_out.append((c["name"], ka, kb, n, e))
+        w = effect("ratio", pairs("wire/useful"))
+        if w is not None:
+            wires.append(math.log(w[0]))
+        if overhead and (lags := pairs("lag_p99_ms")):
+            ma = statistics.median(x for x, _ in lags)
+            mb = statistics.median(y for _, y in lags)
+            if ma < rank.lag_ceiling <= mb:
+                broken.append(f"{c['name']} lag p99 {ma:.0f}->{mb:.0f} ms past {rank.lag_ceiling:.0f}")
         fn, better, kind, tie = get["delivery"]
         if mark(better, kind, tie, effect(kind, pairs("delivery"))) == "-":
             broken.append(f"{c['name']} delivery")
         if ka == 0:
             for name in ("lag_p99_ms", "startup_p99_ms", "lag_p99_ms_weak"):
                 e = effect("ratio", pairs(name))
-                if e is not None and e[1] > GUARD_RATIO:
+                if e is not None and e[1] > guard:
                     broken.append(f"{c['name']} {name} x{e[0]:.2f}")
         # Defecting must not come to pay more.
         e = effect("ratio", pairs("defector_gain"))
         if e is not None and e[2] < 1:
             broken.append(f"{c['name']} defector_gain x{e[0]:.2f}")
     p99 = math.exp(sum(logs) / len(logs)) if logs else None
-    return {"collapsed": kb_all, "base_collapsed": ka_all, "p99": p99, "broken": broken, "cells": cells_out}
+    wire = math.exp(sum(wires) / len(wires)) if wires else None
+    return {"collapsed": kb_all, "base_collapsed": ka_all, "p99": p99, "wire": wire, "broken": broken,
+            "cells": cells_out, "overhead": overhead}
 
 
 def rank_key(sc):
-    return (bool(sc["broken"]), sc["collapsed"], sc["p99"] if sc["p99"] is not None else math.inf)
+    """Broken arms last, then fewer collapsed runs, then the lower lag p99
+    ratio, or wire per useful byte when ranked for overhead."""
+    by = sc["wire"] if sc["overhead"] else sc["p99"]
+    return (bool(sc["broken"]), sc["collapsed"], by if by is not None else math.inf)
+
+
+def ratio_text(x):
+    return "-" if x is None else f"x{x:.3f}"
 
 
 def race(a, cells, count, sha, base, sims, union):
@@ -918,13 +972,13 @@ def race(a, cells, count, sha, base, sims, union):
             runs.update(r)
         rows, failures = run_cells(cells, runs, a.slots, a.mem_gib)
         base_rows = union(rows, [label for label, _ in base.values()])
-        scores = {arm: arm_score(cells, base_rows, union(rows, labels[arm])) for arm in arms}
+        scores = {arm: arm_score(cells, base_rows, union(rows, labels[arm]), a) for arm in arms}
         print(f"\n{title}: {len(arms)} arms")
-        print(f"   {'arm':58} collapsed (base)   p99 ratio   guardrails")
+        print(f"   {'arm':58} collapsed (base)   p99 ratio  wire ratio   guardrails")
         for arm in sorted(arms, key=lambda x: rank_key(scores[x])):
             sc = scores[arm]
-            p99 = "-" if sc["p99"] is None else f"x{sc['p99']:.3f}"
-            print(f"   {','.join(arm):58} {sc['collapsed']:5} ({sc['base_collapsed']:3})   {p99:>9}   "
+            p99, wire = ratio_text(sc["p99"]), ratio_text(sc["wire"])
+            print(f"   {','.join(arm):58} {sc['collapsed']:5} ({sc['base_collapsed']:3})   {p99:>9}  {wire:>10}   "
                   f"{'; '.join(sc['broken'][:3]) + (' ...' if len(sc['broken']) > 3 else '') or 'ok'}")
             for name, ka, kb, n, e in sc["cells"] if per_cell else ():
                 p99 = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
@@ -1125,16 +1179,18 @@ def farm(a, cells):
         sys.exit(f"--against {base!r} is none of the sets")
     others = [v for v in values if v != base]
     for v in others:
-        sc = arm_score(cells, rows[base], rows[v])
-        p99 = "-" if sc["p99"] is None else f"x{sc['p99']:.3f}"
-        print(f"\n{v} against {base} at {sha[:8]}: collapsed {sc['collapsed']} ({sc['base_collapsed']}), "
-              f"p99 {p99}, guardrails {'; '.join(sc['broken']) or 'ok'}")
-        for cname, ka, kb, n, e in sc["cells"]:
-            p = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
-            print(f"   {cname:22} collapsed {ka:>3} -> {kb:>3} of {n:<3} Fisher p={fisher(ka, n, kb, n):.2f}  lag p99 {p}")
+        print_arm_score(f"{v} against {base} at {sha[:8]}", arm_score(cells, rows[base], rows[v], a))
     for v in others:
         print()
         scorecard(cells, rows[base], rows[v], f"{sha[:8]} {base}", f"{sha[:8]} {v}", a.all)
+
+
+def print_arm_score(title, sc):
+    print(f"\n{title}: collapsed {sc['collapsed']} ({sc['base_collapsed']}), p99 {ratio_text(sc['p99'])}, "
+          f"wire/useful {ratio_text(sc['wire'])}, guardrails {'; '.join(sc['broken']) or 'ok'}")
+    for cname, ka, kb, n, e in sc["cells"]:
+        p = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
+        print(f"   {cname:22} collapsed {ka:>3} -> {kb:>3} of {n:<3} Fisher p={fisher(ka, n, kb, n):.2f}  lag p99 {p}")
 
 
 def score(a, cells):
@@ -1155,6 +1211,9 @@ def score(a, cells):
     both = [c for c in b_cells if c["name"] in names]
     if a.only:
         both = [c for c in both if c["name"] in set(a.only.split(","))]
+    if a.rank == "overhead":
+        print_arm_score(f"{a.b} against {a.a}", arm_score(both, a_rows, b_rows, a))
+        print()
     scorecard(both, a_rows, b_rows, a.a, a.b, a.all)
 
 
@@ -1219,6 +1278,13 @@ def main():
     for p in (cal, r, rc, fc):
         p.add_argument("--env", action="append", default=[], metavar="KEY=VALUE",
                        help="set for every arm's runs, as part of each cell")
+    for p in (rc, fc, sc):
+        p.add_argument("--rank", choices=("lag", "overhead"), default="lag",
+                       help="rank arms after collapses by lag p99, or by wire bytes per useful byte")
+        p.add_argument("--lag-budget", type=float, default=1.25,
+                       help="with --rank overhead: the lag guardrails' ratio")
+        p.add_argument("--lag-ceiling", type=float, default=1000,
+                       help="with --rank overhead: the lag p99 (ms) a cell under it must stay under")
     a = ap.parse_args()
 
     cells = TIERS[a.tier]

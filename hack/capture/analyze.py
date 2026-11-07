@@ -107,7 +107,8 @@ with or without the STRIMS_SIM_CAL_, STRIMS_SIM_ or SIM_ prefix.
   series    per second: viewers present, on-time pushes against the chunks
             the viewers needed, the median viewer's delivery, the swarm's
             lag, prunes, parents, and the seed's meter, uplink, busy share,
-            copies and share of its chunks sent as pushes
+            copies and share of its chunks sent as pushes; with rows that
+            have them, the overhead the seed and the mean viewer wrote
   collapse  one line per run: its verdicts, onsets, course and feasibility
   map       per cell (the runs that share every setting but the seed): the
             share of runs whose trees failed, delivery collapsed and latency
@@ -869,15 +870,24 @@ def series(a):
         n, smooth, deliv, lag = measures(s)
         vl = lags(s)
         print(f"== {label} {' '.join(f'{short(k)}={v}' for k, v in sorted(env.items()) if v not in (None, ''))}")
-        print("    s viewers ontime deliv   lag_ms pruned parents  seed: cap_kB avail_kB busy copies sent pushed%")
+        # Overhead written (not chunk data, the transports' framing aside):
+        # the seed's, and the mean viewer's.
+        ovh = "seed_ovh" in s
+        print("    s viewers ontime deliv   lag_ms pruned parents  seed: cap_kB avail_kB busy copies sent pushed%"
+              + ("  ovh_kB: seed viewer" if ovh else ""))
         for k in range(0, len(s["present"]), a.every):
             f = lambda x, fmt: format(x, fmt) if x is not None else "-"
             sent = s["sent"][k]
+            tail = ""
+            if ovh:
+                per = s["viewer_ovh"][k] / 1000 / s["present"][k] if s["present"][k] else None
+                tail = f"  {s['seed_ovh'][k] / 1000:12.1f} {f(per, '6.1f')}"
             print(
                 f"{k:5d} {s['present'][k]:7d} {f(smooth[k] if k < n else None, '6.2f')} {f(deliv[k] if k < n else None, '5.2f')}"
                 f" {f(quantile([v[k] for v in vl if v[k] is not None], LAG_QUANTILE), '8d')} {s['pruned'][k]:6d} {s['parents'][k]:7d}"
                 f"  {s['capacity'][k] // 1000 if s['capacity'][k] >= 0 else '-':>12} {s['avail'][k] // 1000 if s['avail'][k] >= 0 else '-':>8}"
                 f" {s['busy'][k] / 10 if s['busy'][k] >= 0 else '-':>5} {s['copies'][k]:6d} {sent:4d} {100 * s['pushed'][k] // sent if sent else '-':>7}"
+                + tail
             )
 
 
