@@ -77,6 +77,11 @@
 //! Cross traffic is a second swarm in the same runners, seeded by a peer,
 //! viewed by every other node, sharing every uplink.
 //!
+//! Nodes' clocks can be off ([`ClockSkew`], `SIM_CLOCK_SKEW`), as
+//! production nodes' wall clocks are: each runner then reads its own clock
+//! in every call, and stamps what it writes with it, while every result is
+//! measured in true time.
+//!
 //! The seed allocation runs measure how a seed on a constrained uplink
 //! spends it, at 16 streams on WAN paths: the ignored
 //! `seed_allocation_bounds` pins allocations the seed can't know (random
@@ -105,7 +110,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
 use rand_core::Rng;
-use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter};
+use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter, PathReading, PathSample};
 use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
@@ -163,6 +168,15 @@ impl Ctl {
 
 fn t0() -> Time {
     Time::from_unix_millis(1_700_000_000_000)
+}
+
+/// `t` moved by `d`, [`Time::NIL`] and [`Time::MAX`] left as they are.
+fn shift(t: Time, d: Duration) -> Time {
+    if t.is_nil() || t == Time::MAX {
+        t
+    } else {
+        t + d
+    }
 }
 
 /// The stream the seed writes: a byte per offset.
@@ -562,6 +576,9 @@ struct Config {
     /// A live encoder's stream signed early, in place of whole munros at
     /// `stream_rate` (`SIM_MEDIA`, `SIM_SIGN`: [`media_knobs`]).
     media: Option<Media>,
+    /// How far the nodes' clocks are off (`SIM_CLOCK_SKEW`,
+    /// [`clock_skew_knob`]).
+    clock_skew: ClockSkew,
 }
 
 /// A media run: the seed writes `encoder`'s access units as they arrive,
@@ -590,6 +607,72 @@ struct Churn {
     /// How long a place stays empty.
     away: Duration,
 }
+
+/// How far the nodes' clocks are off: one offset per node for the run, the
+/// seed's included, a place taken again keeping its node's, never more than
+/// [`MAX_SKEW`] either way. A node's runner
+/// reads the true time plus its offset in every call that takes a time,
+/// and the deadlines it returns are moved back by it; the event queue, the
+/// path measure, captures and every result stay in true time. Offsets are
+/// whole milliseconds, the clocks' precision on the wire. Drawn from the
+/// run's rng once the rest of the setup has drawn, so a seed's run with
+/// skew has the mesh, viewers and stream of its run without; offsets that
+/// take no draw leave every later draw as it was too, and random ones
+/// shift what a run draws as it goes (losses off WAN paths, adversaries'
+/// frames, the runners of places taken again).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ClockSkew {
+    /// Every clock is right, and nothing is drawn.
+    Off,
+    /// Offsets as clocks are off in the wild ([`CLOCK_SHARES`]).
+    Real,
+    /// Every clock is off by this much (at most [`MAX_SKEW`]), ahead or
+    /// behind at even odds.
+    Either(Duration),
+    /// Every clock is off by exactly this (at most [`MAX_SKEW`]), so they
+    /// all agree: what the runners do is then timed as without it, which
+    /// checks that the harness hands every call its node's clock
+    /// ([`sim_agreeing_clocks_change_no_timing`]).
+    All(Duration),
+}
+
+/// The knob's form ([`clock_skew_knob`]).
+impl std::fmt::Display for ClockSkew {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            ClockSkew::Off => f.write_str("off"),
+            ClockSkew::Real => f.write_str("real"),
+            ClockSkew::Either(d) => write!(f, "{}", ms(d)),
+            ClockSkew::All(d) => write!(f, "{:+}", ms(d)),
+        }
+    }
+}
+
+/// The furthest any node's clock is off. A clock further off is user
+/// error, for the UI to surface; the stack needn't handle it. The cap keeps
+/// any two nodes' clocks within 20 minutes of each other, inside the
+/// stack's tightest cross-clock tolerances: the hash table's 30 minute
+/// record age and the link certificate's 1 hour window.
+const MAX_SKEW: Duration = Duration::from_secs(10 * 60);
+
+/// How far clocks are off in the wild, from web telemetry up to
+/// [`MAX_SKEW`]: the share of nodes in each class of [`CLOCK_BOUNDS`], the
+/// sign either way at even odds. strims-sim draws its nodes' clocks from
+/// the same numbers.
+const CLOCK_SHARES: [f64; 4] = [0.90, 0.05, 0.04, 0.01];
+
+/// Each class's bounds on an offset's magnitude, `[lo, hi)`: uniform in
+/// the first class, log-uniform in the others.
+const CLOCK_BOUNDS: [(Duration, Duration); 4] = [
+    (Duration::ZERO, Duration::from_millis(100)),
+    (Duration::from_millis(100), Duration::from_secs(2)),
+    (Duration::from_secs(2), Duration::from_secs(15)),
+    (Duration::from_secs(15), MAX_SKEW),
+];
+
+/// The names a row counts [`CLOCK_BOUNDS`]' classes by, the last taking
+/// offsets of [`MAX_SKEW`] itself.
+const CLOCK_CLASSES: [&str; 4] = ["lt_100ms", "lt_2s", "lt_15s", "le_10min"];
 
 /// Where a run's captures go: `node-<i>.ppcap` in `dir`, one per node,
 /// named by node index like the peers in its runner.
@@ -663,6 +746,7 @@ impl Config {
             churn: churn_knob(),
             keep: Keep::Nothing,
             media: None,
+            clock_skew: clock_skew_knob(),
         }
     }
 }
@@ -733,6 +817,9 @@ struct Node {
     churned: bool,
     /// When it last took a place again, until it reads its first chunk.
     rejoined: Option<Time>,
+    /// How far its clock is off ([`ClockSkew`]): its runner reads the true
+    /// time plus this.
+    clock: Duration,
 }
 
 /// What a node's uplink carried, by layer ([`Sim::send`]).
@@ -769,6 +856,24 @@ impl Node {
     /// it.
     fn written_overhead(&self) -> u64 {
         self.overhead().saturating_sub(self.sent.transport_bytes)
+    }
+
+    /// Its clock's reading at true time `t`.
+    fn local(&self, t: Time) -> Time {
+        shift(t, self.clock)
+    }
+
+    /// The true time at which its clock reads `t`.
+    fn true_time(&self, t: Time) -> Time {
+        shift(t, -self.clock)
+    }
+
+    /// `r`, a path reading in true time, in its clock.
+    fn local_reading(&self, r: Option<PathReading>) -> Option<PathReading> {
+        r.map(|r| PathReading {
+            at: self.local(r.at),
+            ..r
+        })
     }
 }
 
@@ -1326,16 +1431,110 @@ impl Sim {
             assert!(cfg.loss <= 0.0, "WAN paths lose packets of their own");
         }
 
-        let mut nodes = Vec::new();
+        // The run's draws come before the runners' first calls, which take
+        // each node's clock: each node's runner, the mesh and its
+        // latencies, the churn and the media trace, then the clocks
+        // ([`ClockSkew`]).
+        let runners: Vec<Runner> = roles.iter().map(|_| Runner::new(fork(&mut rng))).collect();
+
+        // The mesh: the seed's peers, then each peer's.
+        let n = roles.len();
+        let mut edges = BTreeSet::new();
+        let honest: Vec<usize> = (1..=cfg.peers).collect();
+        let mut seed_peers = honest.clone();
+        if cfg.seed_degree > 0 && cfg.seed_degree < seed_peers.len() {
+            shuffle(&mut seed_peers, &mut rng);
+            seed_peers.truncate(cfg.seed_degree);
+        }
+        for &p in &seed_peers {
+            edges.insert((0, p));
+        }
+        if cfg.dial > 0 {
+            edges.clear();
+            for i in 1..n {
+                let mut targets: Vec<usize> = Vec::new();
+                while targets.len() < cfg.dial.min(i) {
+                    let j = (rng.next_u64() % i as u64) as usize;
+                    if !targets.contains(&j) {
+                        targets.push(j);
+                    }
+                }
+                for j in targets {
+                    edges.insert((j, i));
+                }
+            }
+        }
+        for i in (1..n).filter(|_| cfg.dial == 0) {
+            let mut others: Vec<usize> = (1..n).filter(|&j| j != i).collect();
+            if cfg.degree > 0 {
+                shuffle(&mut others, &mut rng);
+                others.truncate(cfg.degree);
+            }
+            for j in others {
+                edges.insert((i.min(j), i.max(j)));
+            }
+        }
+        // Adversaries also reach the seed so they hold real data.
         for (i, &role) in roles.iter().enumerate() {
-            let mut runner = Runner::new(fork(&mut rng));
+            if matches!(role, Role::Adversary(_)) {
+                edges.insert((0, i));
+            }
+        }
+
+        let span = (cfg.latency_ms.1 - cfg.latency_ms.0).max(1) as u64;
+        let latencies: Vec<Duration> = edges
+            .iter()
+            .map(|_| Duration::from_millis(cfg.latency_ms.0 + (rng.next_u64() % span) as i64))
+            .collect();
+        let capture = cfg.capture.clone().or_else(|| {
+            knob::<String>("SIM_CAPTURE").map(|dir| CaptureTo {
+                dir: Path::new(&dir).join(run_tag(&cfg)),
+                tap: knob::<String>("SIM_CAPTURE_TAP").as_deref() != Some("0"),
+            })
+        });
+        let churn = match cfg.churn {
+            Some(c) => {
+                assert!(
+                    capture.is_none() && cfg.cross.is_none(),
+                    "churn takes no capture or cross traffic"
+                );
+                churn_plan(&cfg, c, &roles, &mut rng)
+            }
+            None => Vec::new(),
+        };
+        let media = cfg.media.zip(padded).map(|(m, padded)| {
+            let span = Duration::from_secs(cfg.stream_secs as i64);
+            let trace = m.encoder.trace(&mut rng, span);
+            let signer = Signer::new(
+                m.sign.deadline,
+                cfg.munro_chunks,
+                cfg.chunk_size,
+                live::CHUNK_HEADER,
+            );
+            let plan = live::plan(&trace, signer);
+            padded.0.set(plan.pads.clone()).unwrap();
+            let start = t0() + Duration::SECOND;
+            MediaRun {
+                media: m,
+                signed: plan.signed_at.iter().map(|&d| start + d).collect(),
+                plan,
+                done: 0,
+                start,
+                padded,
+            }
+        });
+        let clocks = clock_offsets(cfg.clock_skew, roles.len(), &mut rng);
+
+        let mut nodes = Vec::new();
+        for ((i, &role), mut runner) in roles.iter().enumerate().zip(runners) {
+            let start = shift(t0(), clocks[i]);
             let (writer, swarm) = if role == Role::Seed {
                 let (w, s) = Writer::new(
                     WriterOptions {
                         swarm_options: options.clone(),
                         key: key.clone(),
                     },
-                    t0(),
+                    start,
                 )
                 .unwrap();
                 (Some(w), s)
@@ -1355,7 +1554,7 @@ impl Sim {
                                 swarm_options: o.clone(),
                                 key: cross_key.clone(),
                             },
-                            t0(),
+                            start,
                         )
                         .unwrap();
                         (Some(w), s)
@@ -1425,71 +1624,27 @@ impl Sim {
                 cap: None,
                 churned: false,
                 rejoined: None,
+                clock: clocks[i],
             });
         }
 
-        // The mesh: the seed's peers, then each peer's.
-        let n = nodes.len();
-        let mut edges = BTreeSet::new();
-        let honest: Vec<usize> = (1..=cfg.peers).collect();
-        let mut seed_peers = honest.clone();
-        if cfg.seed_degree > 0 && cfg.seed_degree < seed_peers.len() {
-            shuffle(&mut seed_peers, &mut rng);
-            seed_peers.truncate(cfg.seed_degree);
-        }
-        for &p in &seed_peers {
-            edges.insert((0, p));
-        }
-        if cfg.dial > 0 {
-            edges.clear();
-            for i in 1..n {
-                let mut targets: Vec<usize> = Vec::new();
-                while targets.len() < cfg.dial.min(i) {
-                    let j = (rng.next_u64() % i as u64) as usize;
-                    if !targets.contains(&j) {
-                        targets.push(j);
-                    }
-                }
-                for j in targets {
-                    edges.insert((j, i));
-                }
-            }
-        }
-        for i in (1..n).filter(|_| cfg.dial == 0) {
-            let mut others: Vec<usize> = (1..n).filter(|&j| j != i).collect();
-            if cfg.degree > 0 {
-                shuffle(&mut others, &mut rng);
-                others.truncate(cfg.degree);
-            }
-            for j in others {
-                edges.insert((i.min(j), i.max(j)));
-            }
-        }
-        // Adversaries also reach the seed so they hold real data.
-        for (i, &role) in roles.iter().enumerate() {
-            if matches!(role, Role::Adversary(_)) {
-                edges.insert((0, i));
-            }
-        }
-
         let mut links = Vec::new();
-        for &(a, b) in &edges {
-            let span = (cfg.latency_ms.1 - cfg.latency_ms.0).max(1) as u64;
-            let latency = Duration::from_millis(cfg.latency_ms.0 + (rng.next_u64() % span) as i64);
-            let pa = nodes[a].runner.add_peer(node_id(b), t0());
-            let pb = nodes[b].runner.add_peer(node_id(a), t0());
+        for (&(a, b), &latency) in edges.iter().zip(&latencies) {
+            let (ta, tb) = (nodes[a].local(t0()), nodes[b].local(t0()));
+            let pa = nodes[a].runner.add_peer(node_id(b), ta);
+            let pb = nodes[b].runner.add_peer(node_id(a), tb);
             let (ca, cb) = (a as u64 + 1, b as u64 + 1);
             let sa = nodes[a].swarm;
             let sb = nodes[b].swarm;
-            nodes[a].runner.run_swarm(pa, sa, cb, ca, t0()).unwrap();
-            nodes[b].runner.run_swarm(pb, sb, ca, cb, t0()).unwrap();
+            nodes[a].runner.run_swarm(pa, sa, cb, ca, ta).unwrap();
+            nodes[b].runner.run_swarm(pb, sb, ca, cb, tb).unwrap();
             if let (Some(xa), Some(xb)) = (
                 nodes[a].cross.as_ref().map(|x| x.key),
                 nodes[b].cross.as_ref().map(|x| x.key),
             ) {
                 let (ka, kb) = (ca + 1000, cb + 1000);
-                nodes[a].runner.run_swarm(pa, xa, kb, ka, t0()).unwrap();
-                nodes[b].runner.run_swarm(pb, xb, ka, kb, t0()).unwrap();
+                nodes[a].runner.run_swarm(pa, xa, kb, ka, ta).unwrap();
+                nodes[b].runner.run_swarm(pb, xb, ka, kb, tb).unwrap();
             }
             let la = links.len();
             links.push(Link::new(a, b, latency, cfg.loss, pa, ca, pb));
@@ -1499,6 +1654,7 @@ impl Sim {
             nodes[a].vtime.insert(la, 0);
             nodes[b].vtime.insert(la + 1, 0);
         }
+
         let wan = cfg.wan.as_ref().map(|w| {
             let net = Network::new(&w.sites, w.options, &mut det_rng(cfg.seed ^ 0x5741_4e00));
             for l in &mut links {
@@ -1523,21 +1679,19 @@ impl Sim {
                 .unwrap();
         }
 
-        let capture = cfg.capture.clone().or_else(|| {
-            knob::<String>("SIM_CAPTURE").map(|dir| CaptureTo {
-                dir: Path::new(&dir).join(run_tag(&cfg)),
-                tap: knob::<String>("SIM_CAPTURE_TAP").as_deref() != Some("0"),
-            })
-        });
         if let Some(to) = &capture {
             std::fs::create_dir_all(&to.dir).unwrap();
             for (i, n) in nodes.iter_mut().enumerate() {
-                let label = match &cfg.wan {
+                let mut label = match &cfg.wan {
                     Some(w) => {
                         format!("{:?} {:?} {:?}", n.role, w.sites[i].city, w.sites[i].access)
                     }
                     None => format!("{:?}", n.role),
                 };
+                // Its decisions' times are its clock's.
+                if cfg.clock_skew != ClockSkew::Off {
+                    label += &format!(" clock {:+}ms", ms(n.clock));
+                }
                 let path = to.dir.join(format!("node-{i}.ppcap"));
                 let sink: Box<dyn FnMut(u64) -> io::Result<BufWriter<std::fs::File>>> =
                     Box::new(move |_| Ok(BufWriter::new(std::fs::File::create(&path)?)));
@@ -1571,37 +1725,6 @@ impl Sim {
                 n.runner.set_tap(TapLevel::All);
             }
             Loops::default()
-        });
-        let churn = match cfg.churn {
-            Some(c) => {
-                assert!(
-                    capture.is_none() && cfg.cross.is_none(),
-                    "churn takes no capture or cross traffic"
-                );
-                churn_plan(&cfg, c, &roles, &mut rng)
-            }
-            None => Vec::new(),
-        };
-        let media = cfg.media.zip(padded).map(|(m, padded)| {
-            let span = Duration::from_secs(cfg.stream_secs as i64);
-            let trace = m.encoder.trace(&mut rng, span);
-            let signer = Signer::new(
-                m.sign.deadline,
-                cfg.munro_chunks,
-                cfg.chunk_size,
-                live::CHUNK_HEADER,
-            );
-            let plan = live::plan(&trace, signer);
-            padded.0.set(plan.pads.clone()).unwrap();
-            let start = t0() + Duration::SECOND;
-            MediaRun {
-                media: m,
-                signed: plan.signed_at.iter().map(|&d| start + d).collect(),
-                plan,
-                done: 0,
-                start,
-                padded,
-            }
         });
         let munro = cfg.munro_chunks * cfg.chunk_size;
         let munros = match &media {
@@ -1739,7 +1862,7 @@ impl Sim {
         }
         let mut t = Time::MAX;
         if let Some(rt) = n.runner.poll_timeout() {
-            t = t.min(rt);
+            t = t.min(n.true_time(rt));
         }
         if n.links
             .values()
@@ -1917,12 +2040,18 @@ impl Sim {
         // Only nodes due now can have a timeout due.
         for i in self.due_nodes() {
             let n = &mut self.nodes[i];
-            if n.role != Role::Dead && n.runner.poll_timeout().is_some_and(|t| t <= now) {
+            if n.role != Role::Dead
+                && n.runner
+                    .poll_timeout()
+                    .is_some_and(|t| n.true_time(t) <= now)
+            {
                 for &l in n.links.values() {
                     let link = &self.links[l];
-                    n.runner.set_peer_path(link.peer, link.path.reading(now));
+                    let reading = n.local_reading(link.path.reading(now));
+                    n.runner.set_peer_path(link.peer, reading);
                 }
-                n.runner.handle_timeout(now);
+                let local = n.local(now);
+                n.runner.handle_timeout(local);
                 self.touch(i);
             }
         }
@@ -1990,9 +2119,10 @@ impl Sim {
                         );
                         self.links[l].last_send = now;
                         let n = &mut self.nodes[from];
+                        let local = n.local(now);
                         n.runner.stop_swarm(peer, n.swarm);
                         n.runner
-                            .run_swarm(peer, n.swarm, rchannel, channel, now)
+                            .run_swarm(peer, n.swarm, rchannel, channel, local)
                             .unwrap();
                         self.touch(from);
                     }
@@ -2084,12 +2214,13 @@ impl Sim {
         }
         let links: Vec<(usize, usize)> = n.links.iter().map(|(&j, &l)| (j, l)).collect();
         for (j, l) in links {
-            let pi = self.nodes[i].runner.add_peer(node_id(j), now);
-            let pj = self.nodes[j].runner.add_peer(node_id(i), now);
+            let (ti, tj) = (self.nodes[i].local(now), self.nodes[j].local(now));
+            let pi = self.nodes[i].runner.add_peer(node_id(j), ti);
+            let pj = self.nodes[j].runner.add_peer(node_id(i), tj);
             let (ci, cj) = (i as u64 + 1, j as u64 + 1);
             let (si, sj) = (self.nodes[i].swarm, self.nodes[j].swarm);
-            self.nodes[i].runner.run_swarm(pi, si, cj, ci, now).unwrap();
-            self.nodes[j].runner.run_swarm(pj, sj, ci, cj, now).unwrap();
+            self.nodes[i].runner.run_swarm(pi, si, cj, ci, ti).unwrap();
+            self.nodes[j].runner.run_swarm(pj, sj, ci, cj, tj).unwrap();
             for (l, from, to, peer, channel, rpeer) in
                 [(l, i, j, pi, ci, pj), (l ^ 1, j, i, pj, cj, pi)]
             {
@@ -2138,6 +2269,7 @@ impl Sim {
         let Sim { media, nodes, .. } = self;
         let Some(m) = media.as_mut() else { return };
         let seed = &mut nodes[0];
+        let local = seed.local(now);
         let mut w = seed.writer.take().unwrap();
         while let Some(&op) = m.plan.ops.get(m.done) {
             let at = match op {
@@ -2150,10 +2282,10 @@ impl Sim {
                 Op::Write { offset, len, .. } => {
                     let mut data = vec![0; len as usize];
                     m.padded.fill(offset, &mut data);
-                    seed.runner.write(seed.swarm, &mut w, now, &data).unwrap();
+                    seed.runner.write(seed.swarm, &mut w, local, &data).unwrap();
                 }
                 Op::Flush { next, .. } => {
-                    let got = seed.runner.flush_writer(seed.swarm, &mut w, now).unwrap();
+                    let got = seed.runner.flush_writer(seed.swarm, &mut w, local).unwrap();
                     assert_eq!(got, next, "the flush's next unit");
                 }
             }
@@ -2179,20 +2311,22 @@ impl Sim {
         let mut data = vec![0; len];
         Content::Main.fill(off as u64, &mut data);
         let seed = &mut self.nodes[0];
+        let local = seed.local(now);
         let mut w = seed.writer.take().unwrap();
-        seed.runner.write(seed.swarm, &mut w, now, &data).unwrap();
+        seed.runner.write(seed.swarm, &mut w, local, &data).unwrap();
         if !self.cfg.early.is_empty() {
-            let next = seed.runner.flush_writer(seed.swarm, &mut w, now).unwrap();
+            let next = seed.runner.flush_writer(seed.swarm, &mut w, local).unwrap();
             assert_eq!(next, (off + munro) as u64);
         }
         seed.writer = Some(w);
         if let Some(c) = self.cfg.cross {
             let mut data = vec![0; munro];
             Content::Cross.fill(off as u64, &mut data);
+            let local = self.nodes[c.seed].local(now);
             let Node { runner, cross, .. } = &mut self.nodes[c.seed];
             if let Some(x) = cross.as_mut() {
                 let mut w = x.writer.take().unwrap();
-                runner.write(x.key, &mut w, now, &data).unwrap();
+                runner.write(x.key, &mut w, local, &data).unwrap();
                 x.writer = Some(w);
             }
         }
@@ -2228,7 +2362,9 @@ impl Sim {
             && let Ok(Some(sample)) = self.links[back].path.echo(nonce, now)
         {
             let peer = self.links[back].peer;
-            self.nodes[to].runner.on_path_sample(peer, sample);
+            let n = &mut self.nodes[to];
+            let at = n.local(sample.at);
+            n.runner.on_path_sample(peer, PathSample { at, ..sample });
         }
         if frame.is_empty() {
             return;
@@ -2337,9 +2473,20 @@ impl Sim {
         if node.removed.contains(&rpeer) {
             return;
         }
+        let local = node.local(now);
+        // `Capture::handle_frame`'s steps, the capture in true time.
         let res = match node.cap.as_mut() {
-            Some(c) => c.handle_frame(&mut node.runner, rpeer, now, frame),
-            None => node.runner.handle_frame(rpeer, now, frame),
+            Some(c) => {
+                c.drain(now, &mut node.runner);
+                c.frame(now, Dir::In, rpeer, frame);
+                let r = node.runner.handle_frame(rpeer, local, frame);
+                if let Err(e) = &r {
+                    c.frame_error(now, rpeer, e);
+                }
+                c.drain(now, &mut node.runner);
+                r
+            }
+            None => node.runner.handle_frame(rpeer, local, frame),
         };
         if let Err(e) = res {
             // The driver drops a peer whose frame fails.
@@ -2515,7 +2662,10 @@ impl Sim {
 
     fn sample_alloc(&mut self) {
         let seed = &self.nodes[0];
-        let Some(a) = seed.runner.seed_allocation(seed.swarm, self.now) else {
+        let Some(a) = seed
+            .runner
+            .seed_allocation(seed.swarm, seed.local(self.now))
+        else {
             return;
         };
         let mut held = BTreeMap::new();
@@ -2533,10 +2683,13 @@ impl Sim {
             if nb.barred {
                 barred.insert(id);
             }
+            // A neighbour's lags come from its reports' delays, by its clock
+            // against the seed's timestamps.
+            let off = self.nodes[id].clock - seed.clock;
             let w = nb
                 .lags
                 .iter()
-                .map(|l| l.map_or(STALE, |l| l.max(Duration::ZERO)))
+                .map(|l| l.map_or(STALE, |l| (l - off).max(Duration::ZERO)))
                 .max()
                 .unwrap_or(STALE);
             worst.push(w);
@@ -3194,6 +3347,7 @@ impl Sim {
 
     /// `read` for the cross-traffic swarm.
     fn read_cross(&mut self, i: usize, now: Time) {
+        let local = self.nodes[i].local(now);
         let Node { runner, cross, .. } = &mut self.nodes[i];
         let Some(x) = cross.as_mut() else { return };
         loop {
@@ -3230,7 +3384,7 @@ impl Sim {
                 Err(store::Error::BufferUnderrun) => {
                     x.underruns += 1;
                     let skipped = runner
-                        .swarm_mut(x.key, now)
+                        .swarm_mut(x.key, local)
                         .unwrap()
                         .recover_reader(&mut x.reader)
                         .unwrap_or(0);
@@ -3248,6 +3402,7 @@ impl Sim {
 
     fn read(&mut self, i: usize, now: Time) {
         let node = &mut self.nodes[i];
+        let local = node.local(now);
         loop {
             let swarm = node.runner.swarm(node.swarm).unwrap();
             if node.start.is_none() {
@@ -3312,7 +3467,7 @@ impl Sim {
                     node.underruns += 1;
                     let skipped = node
                         .runner
-                        .swarm_mut(node.swarm, now)
+                        .swarm_mut(node.swarm, local)
                         .unwrap()
                         .recover_reader(&mut node.reader)
                         .unwrap_or(0);
@@ -3359,15 +3514,16 @@ impl Sim {
             if let Some(c) = node.cap.as_mut() {
                 c.drain(now, &mut node.runner);
             }
-            node.runner
-                .set_peer_path(peer, self.links[l].path.reading(now));
+            let reading = node.local_reading(self.links[l].path.reading(now));
+            node.runner.set_peer_path(peer, reading);
             let room = if node.role == Role::Greedy(Greed::Grabber) {
                 GRAB_ROOM
             } else {
                 0
             };
             let len = self.buf.len() - room;
-            let mut n = node.runner.poll_transmit(peer, now, &mut self.buf[..len]);
+            let local = node.local(now);
+            let mut n = node.runner.poll_transmit(peer, local, &mut self.buf[..len]);
             if n == 0 {
                 continue;
             }
@@ -3390,7 +3546,7 @@ impl Sim {
             }
             if let Role::Greedy(g) = node.role {
                 let collusion = self.collusion(i, l);
-                let grabs = self.grabs.get_mut(&l).map(|g| (g, now));
+                let grabs = self.grabs.get_mut(&l).map(|g| (g, local));
                 n = withhold(g, &mut self.buf, n, self.rcfg, collusion.as_deref(), grabs);
                 if n == 0 {
                     continue;
@@ -3884,7 +4040,10 @@ impl Sim {
                 let seed = &self.nodes[0];
                 let mut honest = ReportCounters::default();
                 let mut greedy = ReportCounters::default();
-                if let Some(a) = seed.runner.seed_allocation(seed.swarm, self.now) {
+                if let Some(a) = seed
+                    .runner
+                    .seed_allocation(seed.swarm, seed.local(self.now))
+                {
                     for nb in &a.neighbours {
                         let i = seed.runner.peer_id(nb.peer).map_or(0, id_node);
                         let c = if matches!(self.nodes[i].role, Role::Greedy(_)) {
@@ -4307,6 +4466,82 @@ fn churn_plan(
     }
     plan.sort_by_key(|&(t, i, leaves)| (t, !leaves, i));
     plan
+}
+
+/// `SIM_CLOCK_SKEW`: `off` (or blank) for right clocks, `real` for clocks
+/// off as in the wild, `<ms>` for every clock off by that much either way,
+/// and `+<ms>` or `-<ms>` for every clock off by exactly that
+/// ([`ClockSkew`]); an offset past [`MAX_SKEW`] panics.
+fn clock_skew_knob() -> ClockSkew {
+    let Some(s) = knob::<String>("SIM_CLOCK_SKEW") else {
+        return ClockSkew::Off;
+    };
+    let millis = |s: &str| {
+        let n: i64 = s
+            .parse()
+            .unwrap_or_else(|_| panic!("SIM_CLOCK_SKEW={s}: off, real, <ms>, +<ms> or -<ms>"));
+        let d = Duration::from_millis(n);
+        assert!(
+            d.abs() <= MAX_SKEW,
+            "SIM_CLOCK_SKEW={s}: past the cap, MAX_SKEW ({} ms)",
+            ms(MAX_SKEW)
+        );
+        d
+    };
+    match s.trim() {
+        "" | "off" => ClockSkew::Off,
+        "real" => ClockSkew::Real,
+        t if t.starts_with(['+', '-']) => ClockSkew::All(millis(t)),
+        t => ClockSkew::Either(millis(t).abs()),
+    }
+}
+
+/// Each node's clock offset under `skew`, the seed's first. Only `Real`
+/// and `Either` draw.
+fn clock_offsets(skew: ClockSkew, nodes: usize, rng: &mut DetRng) -> Vec<Duration> {
+    let signed = |rng: &mut DetRng, d: Duration| match rng.next_u64() & 1 {
+        0 => d,
+        _ => -d,
+    };
+    (0..nodes)
+        .map(|_| match skew {
+            ClockSkew::Off => Duration::ZERO,
+            ClockSkew::All(d) => d,
+            ClockSkew::Either(d) => signed(rng, d),
+            ClockSkew::Real => {
+                let mut below = 0.0;
+                let u = unit(rng);
+                let class = CLOCK_SHARES
+                    .iter()
+                    .position(|&s| {
+                        below += s;
+                        u < below
+                    })
+                    .unwrap_or(CLOCK_SHARES.len() - 1);
+                let (lo, hi) = CLOCK_BOUNDS[class];
+                let (lo, hi) = (lo.as_millis() as f64, hi.as_millis() as f64);
+                let x = unit(rng);
+                let ms = match class {
+                    0 => lo + (hi - lo) * x,
+                    _ => lo * (hi / lo).powf(x),
+                };
+                signed(rng, Duration::from_millis(ms.min(hi - 1.0) as i64))
+            }
+        })
+        .collect()
+}
+
+/// A draw uniform in `[0, 1)`.
+fn unit(rng: &mut DetRng) -> f64 {
+    (rng.next_u64() >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// The class of [`CLOCK_CLASSES`] an offset falls in.
+fn clock_class(d: Duration) -> usize {
+    CLOCK_BOUNDS
+        .iter()
+        .position(|&(_, hi)| d.abs() < hi)
+        .unwrap_or(CLOCK_BOUNDS.len() - 1)
 }
 
 /// What a greedy viewer's frame keeps of what its runner wrote: everything
@@ -5150,10 +5385,13 @@ impl Scenario {
 /// `SIM_GREEDY_KINDS` picks a draw's kinds ([`greedy_kinds_knob`]) and
 /// `SIM_GREEDY_SHARE=<percent>` fixes its share. `SIM_CHURN=<percent>`
 /// has that share of any run's honest viewers leave per minute, each place
-/// taken again `SIM_CHURN_AWAY` seconds on ([`Churn`]). `SIM_LOOPS=1` adds
-/// every parent decision, counted by kind, and how push loops formed to a
-/// job's row ([`Loops`]); it changes no trace. A knob that is set but
-/// doesn't parse panics, so a typo can't run the default unnoticed.
+/// taken again `SIM_CHURN_AWAY` seconds on ([`Churn`]). `SIM_CLOCK_SKEW`
+/// sets any run's clocks off: `real` as in the wild, `<ms>` either way,
+/// `+<ms>` or `-<ms>` all alike, at most [`MAX_SKEW`]
+/// ([`clock_skew_knob`]). `SIM_LOOPS=1` adds every parent decision,
+/// counted by kind, and how push loops formed to a job's row ([`Loops`]);
+/// it changes no trace. A knob that is set but doesn't parse panics, so a
+/// typo can't run the default unnoticed.
 #[allow(clippy::disallowed_methods)]
 fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
     let s = std::env::var(name).ok()?;
@@ -7347,6 +7585,9 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             }
         }
     }
+    if sim.cfg.clock_skew != ClockSkew::Off {
+        clock_cols(&mut row, sim);
+    }
     ledger_cols(&mut row, sim, span);
     if let Some(m) = &sim.media {
         media_cols(&mut row, sim, m, r);
@@ -7355,6 +7596,55 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         row.field("series", format_args!("{series}"));
     }
     row.finish()
+}
+
+/// The clocks of a run with skew ([`ClockSkew`]): the knob, every node's
+/// offset (signed ms, by node index), the largest magnitude and the nodes
+/// per class of [`CLOCK_CLASSES`]; and per class with honest viewers that
+/// never left, the share of the stream's chunks they read and their lag
+/// p99 after the warm-up.
+fn clock_cols(row: &mut JsonRow, sim: &Sim) {
+    let offsets: Vec<String> = sim.nodes.iter().map(|n| ms(n.clock).to_string()).collect();
+    let largest = sim.nodes.iter().map(|n| n.clock.abs()).max();
+    row.str("clock_skew", &sim.cfg.clock_skew.to_string())
+        .field("clock_offsets_ms", format_args!("[{}]", offsets.join(",")))
+        .int("clock_max_ms", largest.map_or(0, |d| ms(d) as u64));
+    let warm = t0() + Duration::from_secs(sim.cfg.warm_secs);
+    for (k, name) in CLOCK_CLASSES.iter().enumerate() {
+        let of = |n: &&Node| clock_class(n.clock) == k;
+        row.int(
+            &format!("clock_{name}"),
+            sim.nodes.iter().filter(of).count() as u64,
+        );
+        let viewers: Vec<&Node> = sim
+            .nodes
+            .iter()
+            .filter(|n| n.role == Role::Peer && !n.churned)
+            .filter(of)
+            .collect();
+        if viewers.is_empty() {
+            continue;
+        }
+        let read: usize = viewers
+            .iter()
+            .map(|n| n.read_chunks.iter().filter(|&&r| r).count())
+            .sum();
+        let all: usize = viewers.iter().map(|n| n.read_chunks.len()).sum();
+        let mut lags: Vec<Duration> = viewers
+            .iter()
+            .flat_map(|n| n.lags.iter().filter(|(t, _)| *t > warm).map(|&(_, l)| l))
+            .collect();
+        lags.sort();
+        row.int(&format!("clock_{name}_viewers"), viewers.len() as u64)
+            .num(
+                &format!("clock_{name}_delivery"),
+                read as f64 / all.max(1) as f64,
+            )
+            .int(
+                &format!("clock_{name}_lag_p99_ms"),
+                ms(percentile(&lags, 99)) as u64,
+            );
+    }
 }
 
 /// The uplinks' bytes by layer over every node, in strims-sim's rows'
@@ -7741,6 +8031,137 @@ fn sim_adaptive_seed_same_seed_same_trace() {
     assert!(ha.iter().any(|h| !h.is_empty() && h.len() < 8), "{ha:?}");
     let (c, _) = run(5);
     assert_ne!(a.trace, c.trace);
+}
+
+/// Clocks that all agree change what the runners stamp, not what they do:
+/// a run with every clock [`MAX_SKEW`] ahead sends the frames, at the
+/// times, of the run with right clocks, and captures them at those times.
+/// So the harness hands every call its node's clock and moves the
+/// deadlines it returns back: a call left in true time would see that
+/// node's clock jump. Whole minutes keep the clocks' phase on every grid
+/// the runners align times to, and the timestamps' lengths on the wire.
+#[test]
+fn sim_agreeing_clocks_change_no_timing() {
+    let ahead = ClockSkew::All(MAX_SKEW);
+    // Pushes, losses, churn, a reconnected seed, early signing, grabbers.
+    let mut mesh = Config::new(6, 8);
+    mesh.stream_secs = 6;
+    mesh.degree = 4;
+    mesh.loss = 0.01;
+    mesh.push_mode = PushMode::Hybrid;
+    mesh.stream_count = 4;
+    mesh.munro_chunks = 8;
+    mesh.early = vec![5, 8];
+    mesh.steps = vec![(3, SeedStep::Reconnect)];
+    mesh.churn = Some(Churn {
+        per_min: 2.0,
+        away: Duration::from_secs(1),
+    });
+    mesh.greedy_kinds = vec![Greed::Grabber, Greed::FreeRider];
+    // The adaptive seed on WAN paths, captured.
+    let cities: Vec<(City, u32)> = GLOBAL_AUDIENCE
+        .iter()
+        .copied()
+        .filter(|&(c, _)| matches!(c.region(), Region::NorthAmerica | Region::Europe))
+        .collect();
+    let sites = wan_sites(
+        4,
+        8,
+        Site::new(City::Chicago, Access::Dsl),
+        &cities,
+        RESIDENTIAL,
+    );
+    let mut wan = wan_config(4, sites, 3, 0);
+    wan.stream_secs = 6;
+    wan.push_mode = PushMode::Hybrid;
+    wan.stream_count = 16;
+    wan.seed_policy = ADAPTIVE_QOS;
+    // Per process: test binaries running at once share the directory.
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "sim_agreeing_clocks_change_no_timing-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    // A media run's writes and flushes, and cross traffic's second seed.
+    let media = media_config(3, "1500v", "u8,t200");
+    let mut cross = cross_traffic_config(2, PushMode::Hybrid, 30);
+    cross.stream_secs = 6;
+    for (k, cfg) in [mesh, wan, media, cross].into_iter().enumerate() {
+        let run = |skew| {
+            let mut cfg = cfg.clone();
+            cfg.clock_skew = skew;
+            if k == 1 {
+                cfg.capture = Some(CaptureTo {
+                    dir: dir.join(skew.to_string()),
+                    tap: true,
+                });
+            }
+            let mut sim = Sim::new(cfg);
+            let r = sim.run();
+            let lags: Vec<Vec<(Time, Duration)>> =
+                sim.nodes.iter().map(|n| n.lags.clone()).collect();
+            (r, lags)
+        };
+        let (right, right_lags) = run(ClockSkew::Off);
+        let (skewed, skewed_lags) = run(ahead);
+        assert_ne!(
+            right.trace, skewed.trace,
+            "config {k}: the clocks reach the wire"
+        );
+        let timing = |r: Report| format!("{:?}", Report { trace: 0, ..r });
+        assert_eq!(timing(right), timing(skewed), "config {k}");
+        assert_eq!(right_lags, skewed_lags, "config {k}");
+    }
+    // The captures' records, every frame's included, at the same times.
+    let times = |skew: ClockSkew, i: usize| {
+        let f = std::fs::read(dir.join(skew.to_string()).join(format!("node-{i}.ppcap"))).unwrap();
+        let mut rd = strims_ppspp_capture::Reader::new(&f[..]).unwrap();
+        let mut times = Vec::new();
+        while let Some(e) = rd.next_record() {
+            let e = e.unwrap();
+            if let strims_ppspp_capture::Record::Frame { dir, len, .. } = e.record {
+                times.push((e.time, dir == Dir::Out, len));
+            }
+        }
+        times
+    };
+    for i in 0..=8 {
+        let right = times(ClockSkew::Off, i);
+        assert!(!right.is_empty(), "node {i}");
+        assert_eq!(right, times(ahead, i), "node {i}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Clocks off as in the wild fall in each class at its share, inside its
+/// bounds, in whole milliseconds, ahead as often as behind.
+#[test]
+fn sim_real_clocks_take_their_shares() {
+    let n = 200_000;
+    let offsets = clock_offsets(ClockSkew::Real, n, &mut det_rng(1));
+    let mut counts = [0usize; CLOCK_CLASSES.len()];
+    for &d in &offsets {
+        assert_eq!(d.as_nanos() % Duration::MILLISECOND.as_nanos(), 0, "{d}");
+        let k = clock_class(d);
+        if let Some(&(lo, hi)) = CLOCK_BOUNDS.get(k) {
+            assert!(d.abs() >= lo && d.abs() < hi, "{d}");
+        }
+        counts[k] += 1;
+    }
+    assert!(offsets.iter().all(|d| d.abs() <= MAX_SKEW));
+    for (k, (&c, &p)) in counts.iter().zip(&CLOCK_SHARES).enumerate() {
+        let sd = (p * (1.0 - p) / n as f64).sqrt();
+        let got = c as f64 / n as f64;
+        assert!(
+            (got - p).abs() < 4.0 * sd,
+            "{}: {got} of {p}",
+            CLOCK_CLASSES[k]
+        );
+    }
+    let live = offsets.iter().filter(|&&d| d != Duration::ZERO);
+    let ahead = live.clone().filter(|&&d| d > Duration::ZERO).count() as f64;
+    let share = ahead / live.count() as f64;
+    assert!((share - 0.5).abs() < 0.01, "{share}");
 }
 
 #[test]
