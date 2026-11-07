@@ -7362,7 +7362,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
 /// Then the waste in the honest viewers' inbound data, the wire bytes per
 /// chunk byte they read (the cross swarm's included), each role's overhead
 /// per second over its uplink (relays: honest viewers that accepted a
-/// subscription), the packets (frames, off WAN mode), the frames' mean
+/// subscription), the seed's wire bytes over what it wrote, the packets (frames, off WAN mode), the frames' mean
 /// size and the messages per channel payload.
 fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
     let span = span.max(1e-9);
@@ -7372,7 +7372,9 @@ fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
         let t = n.totals();
         if !n.hostile {
             up.merge(&t.outbound);
-            if i != 0 {
+            // Grabbers' runners count truly, but what they pull isn't
+            // honest viewers' waste.
+            if i != 0 && !matches!(n.role, Role::Greedy(_)) {
                 down.merge(&t.inbound);
             }
         }
@@ -7436,7 +7438,11 @@ fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
     for v in [&mut relays, &mut leaves, &mut pps] {
         v.sort_by(f64::total_cmp);
     }
-    row.num("ovh_seed", share(&sim.nodes[0]));
+    row.num("ovh_seed", share(&sim.nodes[0])).num(
+        "seed_wire_per_written",
+        sim.nodes[0].wire.up_bytes as f64
+            / (sim.nodes[0].wire.up_bytes - sim.nodes[0].sent.transport_bytes).max(1) as f64,
+    );
     for (name, v, p) in [
         ("ovh_relay_p50", &relays, 50),
         ("ovh_leaf_p50", &leaves, 50),
@@ -7449,6 +7455,7 @@ fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
         }
     }
     row.int("packets_up", wire.up_packets)
+        .int("packets_ack", 0)
         .num(
             "small_packet_share",
             wire.small_packets as f64 / wire.up_packets.max(1) as f64,

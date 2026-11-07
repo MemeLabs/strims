@@ -997,6 +997,7 @@ impl Report {
     /// pure ACKs and SACKs alone. Then the waste in the honest viewers'
     /// inbound data, the wire bytes per byte of the stream they read, each
     /// role's overhead per second over its uplink ([`Report::roles`]), the
+    /// seed's wire bytes over what it wrote, the
     /// packets (WAN mode; acknowledgements count as small) and vnic's
     /// frames.
     fn ledger_cols(&self, j: &mut JsonRow) {
@@ -1010,6 +1011,7 @@ impl Report {
         let (mut up, mut down) = (ChannelMetrics::default(), ChannelMetrics::default());
         let (mut ports, mut vnic, mut transport, mut acks, mut hostile_bytes) = (0, 0, 0, 0, 0);
         let (mut wire_down, mut packets, mut small, mut frames, mut frame_bytes) = (0, 0, 0, 0, 0);
+        let mut ack_packets = 0;
         let seeds = self.roles().seeds;
         // A host's bytes through its uplink, framing included, and its
         // packets.
@@ -1041,6 +1043,7 @@ impl Report {
                     wire_down += w.stats.down_bytes;
                     packets += w.stats.up_packets + w.acks;
                     small += w.stats.small_packets + w.acks;
+                    ack_packets += w.acks;
                 }
                 None => wire_down += h.downloaded,
             }
@@ -1111,6 +1114,12 @@ impl Report {
         if let Some(x) = seed.and_then(share) {
             j.num("ovh_seed", x);
         }
+        if let Some(h) = seed.and_then(|s| self.hosts.get(s)) {
+            j.num(
+                "seed_wire_per_written",
+                wire(h).0 as f64 / h.uploaded.max(1) as f64,
+            );
+        }
         for (name, v, p) in [
             ("ovh_relay_p50", &relays, 50),
             ("ovh_leaf_p50", &leaves, 50),
@@ -1131,6 +1140,7 @@ impl Report {
                 .collect();
             pps.sort_by(f64::total_cmp);
             j.int("packets_up", packets)
+                .int("packets_ack", ack_packets)
                 .num("small_packet_share", small as f64 / packets.max(1) as f64);
             for (name, p) in [("pps_p50", 50), ("pps_p90", 90)] {
                 if let Some(x) = at(&pps, p) {
