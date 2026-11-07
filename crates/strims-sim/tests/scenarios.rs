@@ -619,14 +619,19 @@ fn frame_codec_changes_no_trace() {
 
 /// Every host's clock 15 s ahead of true time or behind, through a seed
 /// restart and a writer reset: the trace differs only by the offsets it
-/// logs. The harness measures in true time, nothing compares one node's
-/// clock with another's that closely, and whole seconds keep the phase of
-/// the grids a node lays on its own clock (the upload meter's intervals of
-/// 100 ms from the Unix epoch).
+/// logs and the bytes the hosts count. The harness measures in true time,
+/// nothing compares one node's clock with another's that closely, and
+/// whole seconds keep the phase of the grids a node lays on its own clock
+/// (the upload meter's intervals of 100 ms from the Unix epoch). A
+/// report's delays run by its reporter's clock against the seed's
+/// timestamps, so their sums take more bytes when the two are seconds
+/// apart, and nothing else moves.
 #[test]
 fn whole_second_clock_offsets_change_no_trace() {
     let seed = 1;
-    let plain = strims_sim::run(seed_restart(seed, PushMode::Hybrid), seed).unwrap();
+    let mut s = seed_restart(seed, PushMode::Hybrid);
+    s.clock_skew = ClockSkew::Off;
+    let plain = strims_sim::run(s, seed).unwrap();
     let mut s = seed_restart(seed, PushMode::Hybrid);
     s.clock_skew = ClockSkew::Fixed(strims_base::time::Duration::from_secs(15));
     let skewed = strims_sim::run(s, seed).unwrap();
@@ -635,12 +640,25 @@ fn whole_second_clock_offsets_change_no_trace() {
         .iter()
         .filter(|h| !h.clock_offset.is_negative());
     assert!((1..skewed.hosts.len()).contains(&ahead.count()));
-    let rest: Vec<&String> = skewed
+    // A host's line counts the bytes it sent and received as `up <n> down
+    // <n>`.
+    let unbytes = |l: &String| {
+        let mut words: Vec<&str> = l.split(' ').collect();
+        for i in 1..words.len() {
+            if matches!(words[i - 1], "up" | "down") {
+                words[i] = "_";
+            }
+        }
+        words.join(" ")
+    };
+    let rest: Vec<String> = skewed
         .trace
         .iter()
         .filter(|l| !l.starts_with("0 clock "))
+        .map(unbytes)
         .collect();
-    assert_eq!(rest, plain.trace.iter().collect::<Vec<_>>());
+    let plain: Vec<String> = plain.trace.iter().map(unbytes).collect();
+    assert_eq!(rest, plain);
 }
 
 // --- 6. vpn services over multi-hop paths ----------------------------------

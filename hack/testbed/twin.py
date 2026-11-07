@@ -14,7 +14,8 @@ matrix ran the testbed, and the two compared.
     hack/testbed/twin.py bytes RUN_DIR... --twin TAG [--dir DIR]
 
 `run` runs calibration_star (the strims-sim scenarios test binary
-SCENARIOS) with the window model (STRIMS_SIM_TCP=1) and the
+SCENARIOS) with the window model (STRIMS_SIM_TCP=1), right clocks
+(STRIMS_SIM_CLOCK_SKEW=off: the testbed's containers share one), and the
 STRIMS_SIM_CAL_<KNOB> settings given (a testbed matrix's env: VIEWERS,
 TOPOLOGY, SEED_UP_STEPS, SECS, JOIN_AT, ...) at seeds 1..N (default 8),
 eight at a time, and keeps each seed's series (calibration_series) as
@@ -132,7 +133,7 @@ def cmd_run(args):
         path = os.path.join(tdir, f"{tag}-{seed}.json")
         if os.path.exists(path):
             return
-        env = {**os.environ, "STRIMS_SIM_TCP": "1", "STRIMS_SIM_SEED": str(seed), "STRIMS_SIM_ROWS": "1", **extra}
+        env = {**os.environ, "STRIMS_SIM_TCP": "1", "STRIMS_SIM_CLOCK_SKEW": "off", "STRIMS_SIM_SEED": str(seed), "STRIMS_SIM_ROWS": "1", **extra}
         for kv in knobs:
             k, v = kv.split("=", 1)
             env[f"STRIMS_SIM_CAL_{k}"] = v

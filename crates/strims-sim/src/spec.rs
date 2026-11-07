@@ -498,8 +498,8 @@ pub struct Scenario {
     /// Experiment flags (`STRIMS_SIM_EXP`), each one of [`EXP_FLAGS`].
     pub exp: BTreeSet<&'static str>,
     /// How far each host's clock is off true time ([`ClockSkew`]), at most
-    /// [`MAX_SKEW`](crate::skew::MAX_SKEW); off, drawing nothing, by
-    /// default.
+    /// [`MAX_SKEW`](crate::skew::MAX_SKEW): as user machines' clocks are
+    /// ([`ClockSkew::Real`]) by default.
     pub clock_skew: ClockSkew,
 }
 
@@ -685,7 +685,7 @@ impl Scenario {
             stored_chunks: false,
             discovery: None,
             exp: BTreeSet::new(),
-            clock_skew: ClockSkew::Off,
+            clock_skew: ClockSkew::Real,
         }
     }
 

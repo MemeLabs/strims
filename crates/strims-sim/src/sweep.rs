@@ -64,8 +64,8 @@
 //!   telemetry's distribution ([`SkewClass`](crate::skew::SkewClass)), and
 //!   `<ms>` puts every host that many milliseconds ahead or behind, up to
 //!   [`MAX_SKEW`](crate::skew::MAX_SKEW) (more fails the test); `0` draws
-//!   the signs alone. `off`, like leaving it unset, skews and draws
-//!   nothing.
+//!   the signs alone; `off` skews and draws nothing. Unset, a scenario
+//!   keeps its own, `real` unless it says otherwise.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), so the row carries the run second by
 //!   second ([`Report::series`]).

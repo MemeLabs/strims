@@ -77,10 +77,10 @@
 //! Cross traffic is a second swarm in the same runners, seeded by a peer,
 //! viewed by every other node, sharing every uplink.
 //!
-//! Nodes' clocks can be off ([`ClockSkew`], `SIM_CLOCK_SKEW`), as
-//! production nodes' wall clocks are: each runner then reads its own clock
-//! in every call, and stamps what it writes with it, while every result is
-//! measured in true time.
+//! Nodes' clocks are off ([`ClockSkew`], `SIM_CLOCK_SKEW`), as production
+//! nodes' wall clocks are, unless `SIM_CLOCK_SKEW=off`: each runner reads
+//! its own clock in every call, and stamps what it writes with it, while
+//! every result is measured in true time.
 //!
 //! The seed allocation runs measure how a seed on a constrained uplink
 //! spends it, at 16 streams on WAN paths: the ignored
@@ -4468,13 +4468,13 @@ fn churn_plan(
     plan
 }
 
-/// `SIM_CLOCK_SKEW`: `off` (or blank) for right clocks, `real` for clocks
-/// off as in the wild, `<ms>` for every clock off by that much either way,
+/// `SIM_CLOCK_SKEW`: `real` (or blank, the default) for clocks off as in
+/// the wild, `off` for right clocks, `<ms>` for every clock off by that much either way,
 /// and `+<ms>` or `-<ms>` for every clock off by exactly that
 /// ([`ClockSkew`]); an offset past [`MAX_SKEW`] panics.
 fn clock_skew_knob() -> ClockSkew {
     let Some(s) = knob::<String>("SIM_CLOCK_SKEW") else {
-        return ClockSkew::Off;
+        return ClockSkew::Real;
     };
     let millis = |s: &str| {
         let n: i64 = s
@@ -4489,8 +4489,8 @@ fn clock_skew_knob() -> ClockSkew {
         d
     };
     match s.trim() {
-        "" | "off" => ClockSkew::Off,
-        "real" => ClockSkew::Real,
+        "off" => ClockSkew::Off,
+        "" | "real" => ClockSkew::Real,
         t if t.starts_with(['+', '-']) => ClockSkew::All(millis(t)),
         t => ClockSkew::Either(millis(t).abs()),
     }
@@ -5198,7 +5198,7 @@ fn sim_ledbat_constrained_downlink() {
 
 #[test]
 fn sim_adversaries_dont_stall_honest_peers() {
-    let mut cfg = Config::new(7, 8);
+    let mut cfg = Config::new(8, 8);
     cfg.adversaries = vec![Attack::HaveFlood, Attack::Garbage, Attack::HugeBins];
     cfg.degree = 0;
     cfg.stream_secs = 8;
