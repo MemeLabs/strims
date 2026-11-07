@@ -152,6 +152,9 @@ pub struct HostReport {
     /// stats sample: (time since the start, scenario swarm, transfers),
     /// peers indexed by host.
     pub transfers: Vec<(std::time::Duration, usize, TransferSample)>,
+    /// How far its clock read ahead of true time
+    /// ([`Scenario::clock_skew`]).
+    pub clock_offset: strims_base::time::Duration,
 }
 
 /// vpn probe results (see [`crate::spec::VpnProbes`]).
@@ -838,6 +841,20 @@ impl Report {
             self.trace.len(),
             self.trace_hash.get(..16).unwrap_or_default(),
         );
+        if !self.scenario.clock_skew.is_off() {
+            let (per, max) = self.clock_classes();
+            let per: Vec<String> = crate::skew::SkewClass::ALL
+                .into_iter()
+                .zip(per)
+                .map(|(c, n)| format!("{} {n}", c.name()))
+                .collect();
+            s.push_str(&format!(
+                "\n  clock skew {}: hosts {}, largest {} ms",
+                self.scenario.clock_skew,
+                per.join(", "),
+                max.as_millis()
+            ));
+        }
         for (i, _) in self.scenario.swarms.iter().enumerate() {
             let u = self.uploads(i);
             s.push_str(&format!(

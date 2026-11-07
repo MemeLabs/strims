@@ -67,6 +67,7 @@
 //! | [`stream`] | the self-checking stream format and per-viewer accounting |
 //! | [`report`] | results and summaries |
 //! | [`stats`] | the runner, link and network stats folded over a run |
+//! | [`skew`] | per-node clock skew |
 //! | [`sweep`](mod@sweep) | seed sweeps, replay and the determinism check |
 //! | [`memory`] | per-run heap accounting through a tracking allocator |
 //!
@@ -87,7 +88,10 @@
 //! - scenario builders take the seed and draw topologies and fault times
 //!   from it;
 //! - in WAN mode, the path model's rngs derive from the seed, and each
-//!   end's jitter is a function of the time alone.
+//!   end's jitter is a function of the time alone;
+//! - with [`Scenario::clock_skew`], each host's clock offset comes from the
+//!   rng of the controller's choices, drawn before any of them; without it
+//!   nothing is drawn.
 //!
 //! The schedule stays fixed because every host, the controller and every
 //! task run on the turmoil thread, shared state is `Rc<RefCell<…>>` over
@@ -120,6 +124,7 @@ mod net;
 mod pool;
 pub mod report;
 mod run;
+pub mod skew;
 pub mod spec;
 pub mod stats;
 pub mod stream;
@@ -133,6 +138,7 @@ pub use report::{
     WanReport,
 };
 pub use run::run;
+pub use skew::ClockSkew;
 pub use spec::{
     Binding, Competing, Fault, HostClass, HostIx, HostSpec, Invariants, LinkSpec, MediaSpec,
     NetworkSpec, Scenario, SendBuffer, SwarmSpec, Transport, VpnProbes,

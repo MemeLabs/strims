@@ -43,7 +43,7 @@ use crate::stream::{
     FRAME_LEN, FrameCodec, FrameParser, JoinRewind, MEDIA_HEADER, MediaCodec, MediaParser,
     encode_frame, fill_media, media_header,
 };
-use crate::world::{HASH_TABLE_SALT, PEER_INDEX_KEY, World, epoch, sim_now, sim_now_ms};
+use crate::world::{HASH_TABLE_SALT, PEER_INDEX_KEY, World, sim_now, sim_now_ms};
 use strims_wan::live::Signer;
 
 /// How long a dial may take before the supervisor gives up on it.
@@ -76,7 +76,10 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         .with_wan(w.wan.clone())
         .with_segment(w.spec.segment())
         .with_rtc_stack(rtc_stack.filter(|_| w.spec.window_model()));
-    let (node, events) = Node::spawn(config, net, SimClock::turmoil(epoch())).await?;
+    // The node's clock, off true time by the host's offset
+    // (`Scenario::clock_skew`), as is the transfers' timer below.
+    let clock = SimClock::turmoil(w.clock_epoch(h));
+    let (node, events) = Node::spawn(config, net, clock).await?;
     // Peers may link before the setup below finishes; they must know us.
     w.register_id(h, node.host_id());
 
@@ -145,7 +148,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
             index,
             pool: pool.clone(),
         },
-        NodeTimer(SimClock::turmoil(epoch())),
+        NodeTimer(SimClock::turmoil(w.clock_epoch(h))),
         strims_transfer::Config {
             discovery: index.is_some(),
             ..strims_transfer::Config::default()

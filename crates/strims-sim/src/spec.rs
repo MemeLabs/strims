@@ -17,6 +17,7 @@ use strims_vpn::Routing;
 use strims_wan::live::{Encoder, Sign};
 use strims_wan::{Access, City, Site};
 
+use crate::skew::ClockSkew;
 use crate::stream::FRAME_LEN;
 use crate::wan::SctpProfile;
 
@@ -466,7 +467,8 @@ pub struct Scenario {
     pub tick: Duration,
     /// Capture every node's ppspp traffic, decisions included, into
     /// `<host>-<incarnation>.ppcap` files in this directory. Capture
-    /// changes no trace.
+    /// changes no trace. Records' times are true time, whatever the node's
+    /// clock offset (see [`skew`](crate::skew)).
     pub capture: Option<std::path::PathBuf>,
     /// WAN mode: TCP send buffers, so a sender's sockets push back on
     /// vnic once its uplink queue is full (see [`SendBuffer`]). `None`
@@ -495,6 +497,10 @@ pub struct Scenario {
     pub discovery: Option<usize>,
     /// Experiment flags (`STRIMS_SIM_EXP`), each one of [`EXP_FLAGS`].
     pub exp: BTreeSet<&'static str>,
+    /// How far each host's clock is off true time ([`ClockSkew`]), at most
+    /// [`MAX_SKEW`](crate::skew::MAX_SKEW); off, drawing nothing, by
+    /// default.
+    pub clock_skew: ClockSkew,
 }
 
 /// The experiment flags a scenario takes ([`Scenario::exp`]):
@@ -679,6 +685,7 @@ impl Scenario {
             stored_chunks: false,
             discovery: None,
             exp: BTreeSet::new(),
+            clock_skew: ClockSkew::Off,
         }
     }
 

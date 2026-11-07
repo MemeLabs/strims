@@ -106,6 +106,12 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
             );
         }
     }
+    if !spec.clock_skew.is_off() {
+        for (h, hs) in spec.hosts.iter().enumerate() {
+            let ms = w.clock_offset(h).as_millis();
+            w.log_at(0, "clock", format!("{} {ms} ms", hs.name));
+        }
+    }
 
     let mut faults = spec.faults.clone();
     faults.sort_by_key(|f| f.at);
@@ -314,6 +320,7 @@ fn report(
         .map(|(h, s)| {
             let mut r = s.report();
             r.name = w.name(h).to_owned();
+            r.clock_offset = w.clock_offset(h);
             r
         })
         .collect();

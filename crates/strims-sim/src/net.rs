@@ -351,7 +351,10 @@ struct SimProbe {
 }
 
 impl LinkProbe for SimProbe {
-    fn sample(&mut self, now: Time) -> Option<CaptureSample> {
+    /// Reads the model at true time: the node's `now` is off it by the
+    /// node's clock offset ([`Scenario::clock_skew`](crate::Scenario::clock_skew)).
+    fn sample(&mut self, _: Time) -> Option<CaptureSample> {
+        let now = sim_time(turmoil::sim_elapsed().unwrap_or_default());
         let (unsent, lowat) = self
             .buffers
             .as_ref()

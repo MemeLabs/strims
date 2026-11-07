@@ -48,12 +48,16 @@
 //!   `hack/capture/analyze.py`'s collapse verdicts: each viewer's lag and
 //!   frames read, the viewers' pushes, prunes and parents, and the seed's
 //!   meter, uplink and copies.
+//! - **clock skew** ([`Report::clock_classes`]): with
+//!   [`Scenario::clock_skew`](crate::Scenario::clock_skew), the hosts'
+//!   clock offsets per [`SkewClass`], and the largest.
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::time::Duration;
 
 use crate::report::{HostReport, Percentiles, Report, spearman};
+use crate::skew::SkewClass;
 use crate::spec::{HostClass, HostIx};
 use crate::stats::MeterSample;
 use strims_ppspp::ChannelMetrics;
@@ -682,11 +686,29 @@ impl Report {
         ))
     }
 
+    /// The hosts' clock offsets counted per [`SkewClass`], in
+    /// [`SkewClass::ALL`]'s order, and the largest magnitude.
+    pub fn clock_classes(&self) -> ([u64; SkewClass::ALL.len()], strims_base::time::Duration) {
+        let mut per = [0; SkewClass::ALL.len()];
+        let mut max = strims_base::time::Duration::ZERO;
+        for h in &self.hosts {
+            if let Some(n) = per.get_mut(SkewClass::of(h.clock_offset) as usize) {
+                *n += 1;
+            }
+            max = max.max(h.clock_offset.abs());
+        }
+        (per, max)
+    }
+
     /// The run's measures as one JSON object, for scripts: the test, seed
     /// and knobs, whether the test's check passed (`passed`, 0 or 1, and
-    /// its `failure`, empty when it passed), then per scenario swarm 0 its
-    /// delivery, lag (overall, startup bucket, steady state, per bucket)
-    /// and the meter's measures (see the module docs).
+    /// its `failure`, empty when it passed), with clock skew its hosts'
+    /// offsets (`clock_offsets_ms`, each host's in host order;
+    /// `clock_max_ms`, the largest; `clock_<class>`, the hosts per
+    /// [`SkewClass::name`]), as the ppspp sim's rows name them, then per
+    /// scenario swarm 0 its delivery, lag (overall,
+    /// startup bucket, steady state, per bucket) and the meter's measures
+    /// (see the module docs).
     pub fn row(&self, test: &str, failure: Option<&str>) -> String {
         let mut j = JsonRow::default();
         j.str("test", test)
@@ -709,7 +731,17 @@ impl Report {
                         .iter()
                         .any(|h| h.upload_capacity.is_some()),
                 ),
-            );
+            )
+            .str("clock_skew", &self.scenario.clock_skew.to_string());
+        if !self.scenario.clock_skew.is_off() {
+            let (per, max) = self.clock_classes();
+            let offsets = self.hosts.iter().map(|h| h.clock_offset.as_millis());
+            j.signed_ints("clock_offsets_ms", offsets)
+                .int("clock_max_ms", max.as_millis().unsigned_abs());
+            for (c, n) in SkewClass::ALL.into_iter().zip(per) {
+                j.int(&format!("clock_{}", c.name()), n);
+            }
+        }
         let swarm = 0;
         let lag = self.lag(swarm);
         let steady = self.steady_lag(swarm);
@@ -1849,6 +1881,11 @@ impl JsonRow {
     }
 
     fn ints(&mut self, key: &str, v: impl Iterator<Item = u64>) -> &mut Self {
+        let v: Vec<String> = v.map(|x| x.to_string()).collect();
+        self.field(key, format_args!("[{}]", v.join(",")))
+    }
+
+    fn signed_ints(&mut self, key: &str, v: impl Iterator<Item = i64>) -> &mut Self {
         let v: Vec<String> = v.map(|x| x.to_string()).collect();
         self.field(key, format_args!("[{}]", v.join(",")))
     }

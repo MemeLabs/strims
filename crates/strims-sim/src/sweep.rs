@@ -59,6 +59,13 @@
 //!   viewers leave and rejoin in turn ([`Scenario::churn`]); `off` none.
 //! - `STRIMS_SIM_EXP=<flag>,...` sets experiment flags
 //!   ([`Scenario::exp`]); `off` sets none.
+//! - `STRIMS_SIM_CLOCK_SKEW=<skew>` puts every host's clock off true time
+//!   ([`Scenario::clock_skew`]): `real` draws each host's offset from web
+//!   telemetry's distribution ([`SkewClass`](crate::skew::SkewClass)), and
+//!   `<ms>` puts every host that many milliseconds ahead or behind, up to
+//!   [`MAX_SKEW`](crate::skew::MAX_SKEW) (more fails the test); `0` draws
+//!   the signs alone. `off`, like leaving it unset, skews and draws
+//!   nothing.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), so the row carries the run second by
 //!   second ([`Report::series`]).
@@ -89,6 +96,7 @@ use strims_wan::live::{Encoder, Sign};
 
 use crate::report::Report;
 use crate::run::run;
+use crate::skew::ClockSkew;
 use crate::spec::{HostIx, Scenario, SendBuffer};
 use crate::wan::SctpProfile;
 
@@ -279,6 +287,17 @@ fn churn_knob() -> Option<(f64, Duration)> {
     Some((parse(rate), Duration::from_secs_f64(parse(away))))
 }
 
+/// `STRIMS_SIM_CLOCK_SKEW` ([`Scenario::clock_skew`]), if set and not
+/// blank.
+#[allow(clippy::panic)] // a mistyped setting, or one past the cap, fails its test
+fn clock_skew_knob() -> Option<ClockSkew> {
+    let v = env("STRIMS_SIM_CLOCK_SKEW").filter(|v| !v.trim().is_empty())?;
+    Some(
+        v.parse()
+            .unwrap_or_else(|e| panic!("STRIMS_SIM_CLOCK_SKEW={v}: {e}")),
+    )
+}
+
 /// `STRIMS_SIM_RTC`'s stacks; `off` is none.
 #[allow(clippy::panic)] // a mistyped setting fails its test
 fn rtc_knob() -> Option<Vec<Option<SctpProfile>>> {
@@ -382,6 +401,7 @@ fn sweep_seeds(
     let exp = exp_knob();
     let hostile = hostile_knob();
     let churn = churn_knob();
+    let clock_skew = clock_skew_knob();
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -453,6 +473,9 @@ fn sweep_seeds(
         }
         if let Some((per_min, away)) = churn {
             spec.churn(per_min, away);
+        }
+        if let Some(skew) = clock_skew {
+            spec.clock_skew = skew;
         }
         if let Some(dir) = &capture {
             let run = format!("seed-{seed}{replay}");

@@ -19,9 +19,9 @@ use strims_base::rng::{DetRng, det_rng};
 use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
-    Binding, Competing, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario, SctpProfile,
-    SendBuffer, SwarmSpec, Transport, VpnProbes, knob, stream_minutes, sweep, sweep_at, sweep_from,
-    sweep_n,
+    Binding, ClockSkew, Competing, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario,
+    SctpProfile, SendBuffer, SwarmSpec, Transport, VpnProbes, knob, stream_minutes, sweep,
+    sweep_at, sweep_from, sweep_n,
 };
 use strims_vpn::Routing;
 use strims_wan::live::{Encoder, Sign};
@@ -615,6 +615,32 @@ fn frame_codec_changes_no_trace() {
             peak(&stored)
         );
     }
+}
+
+/// Every host's clock 15 s ahead of true time or behind, through a seed
+/// restart and a writer reset: the trace differs only by the offsets it
+/// logs. The harness measures in true time, nothing compares one node's
+/// clock with another's that closely, and whole seconds keep the phase of
+/// the grids a node lays on its own clock (the upload meter's intervals of
+/// 100 ms from the Unix epoch).
+#[test]
+fn whole_second_clock_offsets_change_no_trace() {
+    let seed = 1;
+    let plain = strims_sim::run(seed_restart(seed, PushMode::Hybrid), seed).unwrap();
+    let mut s = seed_restart(seed, PushMode::Hybrid);
+    s.clock_skew = ClockSkew::Fixed(strims_base::time::Duration::from_secs(15));
+    let skewed = strims_sim::run(s, seed).unwrap();
+    let ahead = skewed
+        .hosts
+        .iter()
+        .filter(|h| !h.clock_offset.is_negative());
+    assert!((1..skewed.hosts.len()).contains(&ahead.count()));
+    let rest: Vec<&String> = skewed
+        .trace
+        .iter()
+        .filter(|l| !l.starts_with("0 clock "))
+        .collect();
+    assert_eq!(rest, plain.trace.iter().collect::<Vec<_>>());
 }
 
 // --- 6. vpn services over multi-hop paths ----------------------------------

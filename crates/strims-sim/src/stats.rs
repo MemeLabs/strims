@@ -29,6 +29,7 @@ use std::time::Duration;
 
 use strims_base::path;
 use strims_base::stats::{WAIT_BUCKETS, WaitHistogram};
+use strims_base::time::Time;
 use strims_node::{HostId, NodeMetrics, SwarmKey};
 use strims_ppspp::PushMode;
 pub use strims_testbed::transfer::{PeerTransfer, TransferSample};
@@ -453,13 +454,15 @@ pub(crate) struct SampleGauges {
 }
 
 impl HostStats {
-    /// Folds one sample of the current incarnation, taken at `t`. `swarms`
-    /// maps the node's swarm keys to scenario swarm indexes.
+    /// Folds one sample of the current incarnation, taken at `t`, when the
+    /// node's clock read `clock` (its own readings' times are by it).
+    /// `swarms` maps the node's swarm keys to scenario swarm indexes.
     pub fn observe(
         &mut self,
         m: &NodeMetrics,
         swarms: &[Option<SwarmKey>],
         t: Duration,
+        clock: Time,
     ) -> SampleGauges {
         let index = |k: SwarmKey| swarms.iter().position(|s| *s == Some(k));
         let mut g = SampleGauges::default();
@@ -598,11 +601,9 @@ impl HostStats {
                 path::node_delays(m.links.iter().filter_map(|l| l.path?.reading));
             ms.path_delay_ms = excess.map(ms_of);
             ms.path_queued_ms = queued.map(ms_of);
-            // The node's clock: the run's epoch plus the simulated time.
-            let now = crate::world::epoch() + strims_base::time::Duration::from(t);
             ms.path_latest_ms = path::latest_excess(
                 m.links.iter().filter_map(|l| l.path?.reading),
-                now,
+                clock,
                 &mut Vec::new(),
             )
             .map(ms_of);

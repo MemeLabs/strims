@@ -30,6 +30,7 @@ use strims_wan::live::Au;
 use crate::memory::{GroupCounters, MemoryGroup};
 use crate::net::SendBuffers;
 use crate::report::{HostReport, MediaLog, VpnReport};
+use crate::skew::OffsetCapture;
 use crate::spec::{HostIx, Scenario, Transport};
 use crate::stats::{HostStats, TransferSample};
 use crate::stream::{FrameParser, JoinRewind, MediaParser, Parsed, SeqSet, ViewerStats};
@@ -214,6 +215,9 @@ pub(crate) struct World {
     /// Each media swarm's access units, by arrival from its stream's
     /// start.
     pub media_traces: Vec<Option<Vec<Au>>>,
+    /// How far each host's clock reads ahead of true time
+    /// ([`Scenario::clock_skew`]); empty without skew.
+    pub clock_offsets: Vec<strims_base::time::Duration>,
     pub st: RefCell<WorldState>,
 }
 
@@ -245,6 +249,7 @@ impl World {
                 s.media.map(|m| m.encoder.trace(&mut rng, span))
             })
             .collect();
+        let clock_offsets = crate::skew::offsets(spec.clock_skew, spec.hosts.len(), &mut rng);
         let st = WorldState {
             trace: Vec::new(),
             hosts: (0..spec.hosts.len())
@@ -279,6 +284,7 @@ impl World {
             send_buffers,
             wan: SharedWan::default(),
             media_traces,
+            clock_offsets,
             st: RefCell::new(st),
         }
     }
@@ -299,6 +305,24 @@ impl World {
     /// A peer's name, or `?` for an unknown host id.
     pub fn label(&self, h: Option<HostIx>) -> &str {
         h.map_or("?", |h| self.name(h))
+    }
+
+    // --- clocks -----------------------------------------------------------
+
+    /// How far host `h`'s clock reads ahead of true time.
+    pub fn clock_offset(&self, h: HostIx) -> strims_base::time::Duration {
+        self.clock_offsets.get(h).copied().unwrap_or_default()
+    }
+
+    /// The time host `h`'s clock reads at the run's start: the run's epoch
+    /// plus its offset.
+    pub fn clock_epoch(&self, h: HostIx) -> Time {
+        epoch() + self.clock_offset(h)
+    }
+
+    /// The time host `h`'s clock reads `t` into the run.
+    pub fn clock_at(&self, h: HostIx, t: Duration) -> Time {
+        self.clock_epoch(h) + strims_base::time::Duration::from(t)
     }
 
     // --- trace ----------------------------------------------------------
@@ -385,11 +409,15 @@ impl World {
         c.vpn.routing = spec.routing.unwrap_or(self.spec.routing);
         if let Some(dir) = &self.spec.capture {
             let path = dir.join(format!("{}-{incarnation}.ppcap", spec.name));
+            let offset = self.clock_offset(h);
             c.ppspp_capture = Some(PpsppCapture {
                 open: Arc::new(move |_, _| {
                     std::fs::create_dir_all(path.parent().unwrap_or(&path))?;
-                    let f = std::fs::File::create(&path)?;
-                    Ok(Box::new(std::io::BufWriter::new(f)))
+                    let f = std::io::BufWriter::new(std::fs::File::create(&path)?);
+                    if offset == strims_base::time::Duration::ZERO {
+                        return Ok(Box::new(f));
+                    }
+                    Ok(Box::new(OffsetCapture::new(f, offset)))
                 }),
                 max_file_bytes: 0,
                 tap: true,
@@ -874,7 +902,9 @@ impl World {
                 return;
             };
             let swarms = std::mem::take(&mut hs.swarms);
-            let g = hs.stats.observe(m, &swarms, sim_now());
+            let g = hs
+                .stats
+                .observe(m, &swarms, sim_now(), self.clock_at(h, sim_now()));
             let linked = m.links.iter().filter_map(|l| l.host_id);
             let mut ns: Vec<HostIx> = linked.filter_map(|id| st.ids.get(&id).copied()).collect();
             ns.sort_unstable();
