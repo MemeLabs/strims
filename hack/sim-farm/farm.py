@@ -442,8 +442,8 @@ SYSTEM_GIB = 4
 DEFAULT_JOB_S = 60
 DEFAULT_BOOT_S = 75
 # The work, in seconds per slot, an instance's queue holds: enough to last
-# PREFETCH_TICKS of the loop's ticks as it measures them (a tick's syncs
-# take their time on top of TICK), and PREFETCH_S at least.
+# PREFETCH_TICKS of the loop's ticks as it measures them (a tick whose work
+# outlasts TICK starts the next late), and PREFETCH_S at least.
 PREFETCH_TICKS = 3
 PREFETCH_S = PREFETCH_TICKS * TICK
 # The concurrent syncs: every instance's in one wave.
@@ -3567,7 +3567,10 @@ class Run:
                     last_progress = now
                 if not self.finished():
                     draining = any(h.state == "ready" and h.deadline is not None for h in self.hosts)
-                    self.wake.wait(2 if self.local else DRAIN_TICK if draining else TICK)
+                    # A tick starts a period after the last one began: its
+                    # work counts in the period, not on top of it.
+                    period = 2 if self.local else DRAIN_TICK if draining else TICK
+                    self.wake.wait(max(0.0, period - (time.time() - now)))
             # Ack what's left, so a kept instance's worker can go idle.
             self.flush_rows()
             for h in self.hosts:
