@@ -5,19 +5,22 @@
 matrix ran the testbed, and the two compared.
 
     hack/testbed/twin.py run TAG --bin SCENARIOS [--seeds N] [--dir DIR]
-                         KNOB=VALUE ...
+                         [--env KEY=VALUE]... KNOB=VALUE ...
     hack/testbed/twin.py lag MATRIX TAG ... --viewers N [--arms A,B]
     hack/testbed/twin.py swarm MATRIX TAG --viewers N [--arm A]
     hack/testbed/twin.py meter MATRIX TAG --viewers N [--arm A]
     hack/testbed/twin.py peers MATRIX TAG --viewers N [--arm A]
     hack/testbed/twin.py socks MATRIX [TAG] --viewers N [--arm A]
+    hack/testbed/twin.py bytes RUN_DIR... --twin TAG [--dir DIR]
 
 `run` runs calibration_star (the strims-sim scenarios test binary
 SCENARIOS) with the window model (STRIMS_SIM_TCP=1) and the
 STRIMS_SIM_CAL_<KNOB> settings given (a testbed matrix's env: VIEWERS,
 TOPOLOGY, SEED_UP_STEPS, SECS, JOIN_AT, ...) at seeds 1..N (default 8),
 eight at a time, and keeps each seed's series (calibration_series) as
-DIR/TAG-<seed>.json (default target/twin); a seed already there is kept.
+DIR/TAG-<seed>.json (default target/twin) and its row as
+DIR/TAG-<seed>.row.json; a seed already there is kept. `--env` sets more
+of strims-sim's settings (STRIMS_SIM_RTC=chromium for browsers).
 
 The others compare twin runs (DIR/TAG-*.json) with a farm testbed matrix's
 runs (MATRIX, its rows.jsonl and runs/) of N viewers, in the phases of the
@@ -35,6 +38,14 @@ testbed's uplink cut (before 35-60 s, cut 60-180 s, after 180-238 s):
   bytes and windows of the links that carried data and the rest; data
   segments in and out, pure acknowledgements and the tbf's drops, against
   the twin's drops and pure acknowledgements.
+
+`bytes` sets testbed runs with PCAP=1 (RUN_DIR: run.sh's out dirs, the
+same settings each) beside the twin's rows: over 5-60 s, the uplinks' IP
+bytes over what the nodes' drivers wrote (the twin's up_wire over its
+hosts' writes), and the seed's alone (a browser's driver counts too little
+of what its data channels send: compare the seed there), the share of
+packets that were pure ACKs and that were small, and the packets a second
+at the seed and the median viewer.
 """
 
 import concurrent.futures as cf
@@ -110,6 +121,10 @@ def cmd_run(args):
     binary = flag(args, "--bin")
     seeds = int(flag(args, "--seeds", "8"))
     tdir = flag(args, "--dir", os.path.join(ROOT, "target", "twin"))
+    extra = {}
+    while "--env" in args:
+        k, v = flag(args, "--env").split("=", 1)
+        extra[k] = v
     tag, knobs = args[0], args[1:]
     os.makedirs(tdir, exist_ok=True)
 
@@ -117,7 +132,7 @@ def cmd_run(args):
         path = os.path.join(tdir, f"{tag}-{seed}.json")
         if os.path.exists(path):
             return
-        env = {**os.environ, "STRIMS_SIM_TCP": "1", "STRIMS_SIM_SEED": str(seed)}
+        env = {**os.environ, "STRIMS_SIM_TCP": "1", "STRIMS_SIM_SEED": str(seed), "STRIMS_SIM_ROWS": "1", **extra}
         for kv in knobs:
             k, v = kv.split("=", 1)
             env[f"STRIMS_SIM_CAL_{k}"] = v
@@ -129,6 +144,10 @@ def cmd_run(args):
             return
         with open(path, "w") as fh:
             fh.write(p.stdout[at + 7:].split("\n", 1)[0])
+        row = p.stdout.find("ROW {")
+        if row >= 0:
+            with open(os.path.join(tdir, f"{tag}-{seed}.row.json"), "w") as fh:
+                fh.write(p.stdout[row + 4:].split("\n", 1)[0])
 
     with cf.ThreadPoolExecutor(8) as ex:
         list(ex.map(one, range(1, seeds + 1)))
@@ -367,9 +386,71 @@ def cmd_socks(args):
                   f"pure acks/s {[round(x.get('acks', 0) / secs) for x in xs]}")
 
 
+# bytes
+
+def tb_bytes(d):
+    """A testbed run's uplinks over 5-60 s: IP bytes over driver bytes, the
+    pure ACKs' and small packets' shares of the packets, and packets a
+    second per node (the seed first)."""
+    sys.path.insert(0, HERE)
+    import pcap
+
+    n = sum(1 for x in os.listdir(d) if re.fullmatch(r"node-\d+\.jsonl", x))
+    ip = wrote = pkts = acks = small = 0
+    pps, seed = [], None
+    for i in range(n):
+        addr = f"10.77.0.{10 + i}"
+        rows = node_rows(d, i)
+        r0 = next(r for r in rows if "rel_ms" in r)
+        t0 = (r0["t_ms"] - r0["rel_ms"]) / 1000
+        out = [p for p in pcap.headers(os.path.join(d, f"pcap-{i}.pcap")) if p[1] == addr and 5 <= p[0] - t0 < 60]
+        w, span = pcap.written(d, i, 5, 60)
+        if not out or not w:
+            continue
+        secs = max(out[-1][0] - out[0][0], 1e-3)
+        if i == 0:
+            seed = sum(p[4] for p in out) / secs / (w / span)
+        ip += sum(p[4] for p in out) / secs
+        wrote += w / span
+        pkts += len(out)
+        acks += sum(1 for p in out if p[6])
+        small += sum(1 for p in out if p[4] <= pcap.SMALL)
+        pps.append(len(out) / secs)
+    return ip / max(wrote, 1), acks / max(pkts, 1), small / max(pkts, 1), pps, seed
+
+
+def tw_bytes(row):
+    """The twin's row in the same terms: its pure ACKs, or a data
+    channel's SACKs alone, which the testbed's pcaps can't tell apart
+    inside DTLS."""
+    wire = row["up_wire"]
+    written = wire - row["up_transport"] - row["up_acks"]
+    acks = row["packets_ack"]
+    return (wire / max(written, 1), acks / max(row["packets_up"], 1), row["small_packet_share"], row.get("seed_pps"),
+            row.get("pps_p50"), row.get("seed_wire_per_written"))
+
+
+def cmd_bytes(args):
+    tag = flag(args, "--twin")
+    tdir = flag(args, "--dir", os.path.join(ROOT, "target", "twin"))
+    print(f"{'':10} {'ip/written':>10} {'seed':>6} {'pure_acks%':>10} {'small%':>7} {'seed_pps':>8} {'viewer_pps':>10}")
+    for d in args:
+        ratio, ackshare, smallshare, pps, seed = tb_bytes(d)
+        print(f"{'testbed':10} {ratio:10.3f} {f(seed, 6) if seed is None else f'{seed:6.3f}'} {100 * ackshare:10.1f}"
+              f" {100 * smallshare:7.1f} {f(pps[0] if pps else None, 8)}"
+              f" {f(q(pps[1:], 0.5) if len(pps) > 1 else None, 10)}  {os.path.basename(d.rstrip('/'))}")
+    for seed in range(1, 65):
+        p = os.path.join(tdir, f"{tag}-{seed}.row.json")
+        if not os.path.exists(p):
+            continue
+        ratio, ackshare, smallshare, seed_pps, pps, sw = tw_bytes(json.load(open(p)))
+        print(f"{'twin':10} {ratio:10.3f} {f(sw, 6) if sw is None else f'{sw:6.3f}'} {100 * ackshare:10.1f}"
+              f" {100 * smallshare:7.1f} {f(seed_pps, 8)} {f(pps, 10)}  seed {seed}")
+
+
 def main():
     cmds = {"run": cmd_run, "lag": cmd_lag, "swarm": cmd_swarm, "meter": cmd_meter, "peers": cmd_peers,
-            "socks": cmd_socks}
+            "socks": cmd_socks, "bytes": cmd_bytes}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         sys.exit(__doc__)
     cmds[sys.argv[1]](sys.argv[2:])
