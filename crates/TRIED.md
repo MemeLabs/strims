@@ -319,13 +319,18 @@ answers' bursts.
 
 ## Sim model
 
-**Ethernet framing on the access links.** (on `tcp-bench`, against
-d416f5c4) Counting 14 bytes more a packet on the window model's access
-links, as if the testbed's tbf charged Ethernet's header, doubled the bare
-TCP bench's drops where two holders share a 5 Mbit/s uplink (152 -> 313,
-the testbed 178-192; the halving 217 -> 292, the testbed 194-238) and
-left the 25-viewer twin of the testbed's uplink cut where it was (39.5
-cut seconds over 1 s against 37.5).
+**Ethernet framing on TCP and UDP links.** (on `tcp-bench`, against
+d416f5c4; again on `TMP-wire` c34a9f77, `DBG_WIRE` eth, against 35abc984)
+Counting 14 bytes more a TCP or UDP packet, as the testbed's tbf counts
+Ethernet's header and the SCTP model charges it, overshoots the testbed.
+The bare TCP bench's drops rose where an uplink is shared: two holders on
+5 Mbit/s 152 -> 313 against the testbed's 178-192 at first, and with
+acknowledgements every two packets bulk 10 -> 29 against 11, holders-10
+65 -> 219 against 64, the halving 244 -> 320 against 250. The bench's fit
+went 0.104 -> 0.141, and the twin's frame bytes over what its hosts wrote
+1.08 -> 1.10 against the testbed's 1.085: the window model sends each write
+in packets of its own, which already charges about what the framing
+would. Robust's limited-15-10 lag p99 x1.54.
 
 ## WebRTC links
 

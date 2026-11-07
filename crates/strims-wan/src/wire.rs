@@ -8,7 +8,10 @@ use strims_base::time::Duration;
 /// TCP payload bytes per packet (a 1500-byte MTU less IPv4, TCP and
 /// timestamp headers).
 pub const MSS: usize = 1448;
-/// IPv4, TCP and timestamp option header bytes per TCP packet.
+/// IPv4, TCP and timestamp option header bytes per TCP packet. No link
+/// framing: a write goes in packets of its own, where TCP fills segments
+/// across writes, which charges about what Ethernet's 14 bytes would (the
+/// SCTP model, whose messages are packets of their own, charges them).
 pub const TCP_HEADER: usize = 52;
 /// IPv4 and UDP header bytes per datagram.
 pub const UDP_HEADER: usize = 28;

@@ -69,7 +69,7 @@
 //! - A segment through the receiver's downlink is acknowledged once the
 //!   acknowledgement crosses back, after the receiver's uplink queue. Pure
 //!   acknowledgements take their turn on the receiver's uplink as Linux
-//!   sends them: one for every second segment received, or 40 ms after a
+//!   sends them: one for every second packet received, or 40 ms after a
 //!   lone one, unless the receiver's own data carries them first. The
 //!   window grows by the bytes acknowledged in slow start, which HyStart's
 //!   delay test ends, and as CUBIC (RFC 8312) past it, only while it
@@ -1276,14 +1276,17 @@ impl Scheduler {
     /// Segment `seg` (its record, sequence number and length) of `conn`
     /// from `from` was through its receiver `to`'s downlink at `t`, which
     /// owes its acknowledgement, as Linux's `__tcp_ack_snd_check` and
-    /// delayed acknowledgements send it: at once for every second segment,
-    /// [`DELACK`] after a lone one, and at once for the first
+    /// delayed acknowledgements send it: at once once two packets wait (a
+    /// full segment is two, so it's acknowledged as it arrives; two small
+    /// ones go as a pair), [`DELACK`] after a lone one, and at once for the
+    /// first
     /// [`QUICKACKS`] segments of a connection or after a gap longer than a
     /// retransmission timeout; unless data the receiver sends back on the
     /// connection first carries it ([`Scheduler::piggyback`]). The
     /// acknowledgement clocks the sender's window, and a pure one takes
     /// its turn on the receiver's uplink: on the testbed, a seed
-    /// acknowledged its viewers' 20-30-byte segments one for every two.
+    /// acknowledged its viewers' 20-30-byte segments one for every two, and
+    /// a viewer its seed's full ones one for every two packets.
     fn owe_ack(
         &mut self,
         t: Time,
@@ -1299,7 +1302,8 @@ impl Scheduler {
         }
         o.last = t;
         o.waiting.push(seg);
-        if o.quick > 0 || o.waiting.len() >= 2 {
+        let packets: u32 = o.waiting.iter().map(|&(_, _, len)| tcp_wire(len).1).sum();
+        if o.quick > 0 || packets >= 2 {
             o.quick = o.quick.saturating_sub(1);
             self.ack_owed(t, conn);
         } else if o.due.is_none() {
@@ -2515,11 +2519,11 @@ mod tests {
     fn site_loss_holds_windows_down() {
         // Over a 30 ms round trip, a connection that loses 1 % of its
         // packets keeps a window of a few segments, as Linux's does
-        // (hack/testbed/bench/lossy-over.sched): 1.45 MB take about 1.2 s
-        // on the bare uplink and twice that or more through the loss.
+        // (hack/testbed/bench/lossy-over.sched): 1.45 MB take about 1.3 s
+        // on the bare uplink and nearly twice that through the loss.
         let (clean, _) = beside_an_upload(1_448_000, (30, 30), 0.0);
         let (lossy, _) = beside_an_upload(1_448_000, (30, 30), 0.01);
-        assert!(lossy > clean * 2, "{lossy} ms against {clean} ms");
+        assert!(lossy * 10 > clean * 18, "{lossy} ms against {clean} ms");
         // An upload from the site loses its packets too.
         let (_, a) = beside_an_upload(0, (0, 30), 0.0);
         let (_, b) = beside_an_upload(0, (0, 30), 0.01);
