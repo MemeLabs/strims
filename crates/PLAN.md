@@ -9,6 +9,9 @@ on it is in `CONVENTIONS.md`.
 - A server for the devtools UI (`src/devtools`): `DevToolsService`, and
   `CapConnService`, which lists, watches and loads ppspp captures (the page
   reads the old `CapConnLog` format, not `.ppcap` dumps).
+- The UI warns a user whose device clock is set far enough wrong to break
+  links and records, judged against the server's or peers' time, and says
+  how to fix it.
 
 ### Video
 - **Services.**
