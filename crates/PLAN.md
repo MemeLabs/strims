@@ -271,13 +271,13 @@ and dropped are in `TRIED.md`.
      which with 32 neighbours is barely what a 6 Mbit/s copy needs. A
      holder's weight should cover its pushes whatever the neighbour
      count.
-   - **Protocol overhead.** Find where the bytes go at the media swarms'
-     4 KiB chunks, from a capture. Request runs of chunks, not one at a
-     time (no wire change). Ping per peer, not per channel: one ping loop
-     per peer in the runner, riding the first channel payload written to
-     it, would feed every channel's controller to that peer (no wire
-     change); it changes what the controllers see, so gate it on the ppspp
-     sim's A/B matrix and strims-sim's WAN cases.
+   - **Protocol overhead.** Score each candidate with `suite.py --rank
+     overhead`. Request runs of chunks, not one at a time (no wire
+     change). Ping per peer, not per channel: one ping loop per peer in
+     the runner, riding the first channel payload written to it, would
+     feed every channel's controller to that peer (no wire change); it
+     changes what the controllers see, so gate it on the ppspp sim's A/B
+     matrix and strims-sim's WAN cases.
 3. **Greedy peers.** Liars and colluders, most of their cost on the
    child side.
    - **Pull from liars.** A liar still gets requests when the channels
@@ -432,8 +432,9 @@ and dropped are in `TRIED.md`.
     later passes, so a sim's sampling cadence changes its trace. Make query
     wakes leave the schedule untouched, or keep treating the cadence as a
     scenario input.
-  - Nodes stop reporting a channel's counters once it closes, so run totals
-    and the clean-input check are lower bounds.
+  - strims-sim's swarm counters and clean-input check read each channel's
+    counters while it's open, so they're lower bounds: move them onto the
+    runner's totals, which keep closed channels'.
   - Close the window model's gaps against the testbed's bare TCP bench
     (`hack/testbed/benchsuite.py`): the holders' losses beside each
     other's bursts, the holders' probe round-trip tails, a HyStart
