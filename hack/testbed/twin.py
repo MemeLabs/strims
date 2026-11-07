@@ -40,7 +40,7 @@ testbed's uplink cut (before 35-60 s, cut 60-180 s, after 180-238 s):
   the twin's drops and pure acknowledgements.
 
 `bytes` sets testbed runs with PCAP=1 (RUN_DIR: run.sh's out dirs, the
-same settings each) beside the twin's rows: over 5-60 s, the uplinks' IP
+same settings each) beside the twin's rows: over 5-60 s, the uplinks' frame
 bytes over what the nodes' drivers wrote (the twin's up_wire over its
 hosts' writes), and the seed's alone (a browser's driver counts too little
 of what its data channels send: compare the seed there), the share of
@@ -389,7 +389,7 @@ def cmd_socks(args):
 # bytes
 
 def tb_bytes(d):
-    """A testbed run's uplinks over 5-60 s: IP bytes over driver bytes, the
+    """A testbed run's uplinks over 5-60 s: frame bytes over driver bytes, the
     pure ACKs' and small packets' shares of the packets, and packets a
     second per node (the seed first)."""
     sys.path.insert(0, HERE)
@@ -433,7 +433,7 @@ def tw_bytes(row):
 def cmd_bytes(args):
     tag = flag(args, "--twin")
     tdir = flag(args, "--dir", os.path.join(ROOT, "target", "twin"))
-    print(f"{'':10} {'ip/written':>10} {'seed':>6} {'pure_acks%':>10} {'small%':>7} {'seed_pps':>8} {'viewer_pps':>10}")
+    print(f"{'':10} {'l2/written':>10} {'seed':>6} {'pure_acks%':>10} {'small%':>7} {'seed_pps':>8} {'viewer_pps':>10}")
     for d in args:
         ratio, ackshare, smallshare, pps, seed = tb_bytes(d)
         print(f"{'testbed':10} {ratio:10.3f} {f(seed, 6) if seed is None else f'{seed:6.3f}'} {100 * ackshare:10.1f}"

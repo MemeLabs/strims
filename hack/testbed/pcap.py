@@ -13,13 +13,14 @@ its queue dropped and on how many flows, its offered peaks over 10, 50 and
 200 ms, and the flows that lost most.
 
 `bytes` says what the transport added, per node and direction over the
-same span, from pcap-<i>.pcap (eth0 holds both): the packets, their IP
-bytes (Ethernet's 14 aside, as the sims' header models count) and payload
-bytes (TCP's or UDP's), TCP's pure ACKs, the packets of SMALL bytes or
-less, and on the way out the IP bytes over what the node's driver wrote
-(node-<i>.jsonl's bytes_written), as a sim row's up_wire stands to what
-its hosts wrote. A data channel's payload is DTLS: its SCTP framing counts
-as payload here.
+same span, from pcap-<i>.pcap (eth0 holds both): the packets, their frame
+bytes (Ethernet's 14 included, as tbf shapes them: the sims' SCTP model
+charges them, and the TCP model's packets per write come to about as much)
+and payload bytes (TCP's or UDP's), TCP's pure ACKs,
+the packets of SMALL bytes or less, and on the way out the frame bytes over
+what the node's driver wrote (node-<i>.jsonl's bytes_written), as a sim
+row's up_wire stands to what its hosts wrote. A data channel's payload is
+DTLS: its SCTP framing counts as payload here.
 """
 import collections, json, os, struct, sys
 
@@ -47,13 +48,13 @@ def packets(path):
             key = bytes(data[l4 + 8:l4 + 8 + 48]) if proto == 17 and len(data) >= l4 + 8 + 24 else None
             yield t, src, sport, dst, dport, proto, orig, key
 
-# Packets of at most this many IP bytes count as small, as the sims count
-# them (strims_wan::wire::SMALL_PACKET).
+# Packets of at most this many frame bytes count as small, as the sims
+# count them (strims_wan::wire::SMALL_PACKET).
 SMALL = 256
 
 
 def headers(path):
-    """(t seconds, src, dst, proto, IP bytes, payload bytes, pure ACK)."""
+    """(t seconds, src, dst, proto, frame bytes, payload bytes, pure ACK)."""
     with open(path, "rb") as f:
         hdr = f.read(24)
         nano = struct.unpack("<I", hdr[:4])[0] == 0xa1b23c4d
@@ -78,7 +79,7 @@ def headers(path):
                 payload, pure = total - ihl - 8, False
             else:
                 continue
-            yield t, src, dst, proto, total, payload, bool(pure)
+            yield t, src, dst, proto, orig, payload, bool(pure)
 
 
 def written(d, i, lo, hi):
@@ -92,7 +93,7 @@ def written(d, i, lo, hi):
 
 def bytes_(d, nodes, lo=5, hi=60):
     print(f"{'node':>4} {'dir':>3} {'pkts/s':>8} {'KB/s':>8} {'payload':>8} {'hdr%':>5} {'pure_acks':>9} {'ack%':>5}"
-          f" {'small%':>6} {'ip/written':>10}")
+          f" {'small%':>6} {'l2/written':>10}")
     for i in nodes:
         ip = f"10.77.0.{10 + i}"
         r0 = next(json.loads(x) for x in open(os.path.join(d, f"node-{i}.jsonl")) if '"rel_ms"' in x)
