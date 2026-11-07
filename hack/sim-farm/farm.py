@@ -177,14 +177,17 @@ speed. A run logs the speeds before its best pools.
   steps when it's ready: running with an address, SSH answering, its
   worker started, ready, each after its launch.
 - Every 15 s the controller syncs each instance over SSH (worker.py
-  sync), at once when an instance's boot ends, and again at once each one
-  with room once the jobs it finished are taken off. A sync fills the
-  instance's free slots, and queues jobs behind them while they're short
-  (45 s or less expected): up to 45 s of expected work per slot (three
-  syncs' worth), but no more work than the instance's share of what's
-  left (a long job queued behind others would start late, and could end
-  the run late). It stores the rows that came back (fsync), and acks them
-  on the next sync.
+  sync), every instance at once over its master connection (opened at
+  its boot), at once when an instance's boot ends, and again at once each
+  one with room once the jobs it finished are taken off. A sync fills the
+  instance's free slots, and queues jobs behind them: up to three ticks'
+  worth of expected work per slot (as the loop's ticks measure, 45 s at
+  least; a running job counts half), but no more work than the
+  instance's share of what's left. A job longer than that stops it once
+  the run has less than twice the job's length left: queued behind
+  others, it would start late and could end the run late. It stores the
+  rows that came back (one fsync'd append a file at each tick's end), and
+  acks them on the next sync.
 - An instance that is gone or fails SSH for 3 minutes is terminated, and
   its jobs go back to the head of the queue. One with a spot interruption
   notice is left for AWS to reclaim (AWS bills nothing for a spot
@@ -416,9 +419,15 @@ SYSTEM_GIB = 4
 # measured.
 DEFAULT_JOB_S = 60
 DEFAULT_BOOT_S = 75
-# The work, in seconds per slot, an instance's queue holds: short jobs
-# enough to last three syncs.
-PREFETCH_S = 3 * TICK
+# The work, in seconds per slot, an instance's queue holds: enough to last
+# PREFETCH_TICKS of the loop's ticks as it measures them (a tick's syncs
+# take their time on top of TICK), and PREFETCH_S at least.
+PREFETCH_TICKS = 3
+PREFETCH_S = PREFETCH_TICKS * TICK
+# The concurrent syncs: every instance's in one wave.
+SYNC_THREADS = 64
+# How long an instance's master SSH connection outlives its last use.
+CONTROL_PERSIST_S = 300
 # The rows a job's expected wall averages, the latest: code and instance
 # types change what a job takes.
 RECENT_ROWS = 64
@@ -1804,6 +1813,8 @@ class Host:
     drop: list[str] = dataclasses.field(default_factory=list)
     given: set[str] = dataclasses.field(default_factory=set)
     drained: int = 0
+    # The jobs its worker ran at the last sync.
+    running: set[str] = dataclasses.field(default_factory=set)
 
     @property
     def slots(self) -> int:
@@ -1847,15 +1858,35 @@ class Ssh:
         self.key = key
         self.known = state / "known_hosts"
         self.known.mkdir(parents=True, exist_ok=True)
+        # The instances' master connections' sockets, under a short path (a
+        # socket's is bounded at 108 bytes).
+        self.control = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / f"strims-farm-{os.getuid()}"
+        self.control.mkdir(mode=0o700, parents=True, exist_ok=True)
 
-    def opts(self, host: Host) -> list[str]:
+    def opts(self, host: Host, master: bool = False) -> list[str]:
+        """A connection's options. It rides the instance's master connection
+        while one is up, and connects alone if not (ssh takes an option's
+        first value, so the master's own comes from here)."""
         return [
             "-i", str(self.key), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
             "-o", "StrictHostKeyChecking=accept-new",
             "-o", f"UserKnownHostsFile={self.known / host.id}",
             "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15",
             "-o", "ServerAliveCountMax=3", "-o", "LogLevel=ERROR",
+            "-o", f"ControlPath={self.control}/%C",
+            "-o", f"ControlMaster={'yes' if master else 'no'}",
         ]
+
+    def master(self, host: Host) -> None:
+        """Starts the instance's master connection in the background, so a
+        sync costs a round trip, not a handshake. It ends CONTROL_PERSIST_S
+        after its last use, or when the instance stops answering."""
+        subprocess.run(
+            ["ssh", *self.opts(host, master=True), "-o", f"ControlPersist={CONTROL_PERSIST_S}", "-fN",
+             f"ubuntu@{host.ip}"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            timeout=60, check=False,
+        )
 
     def run(self, host: Host, cmd: str, input: str | None = None, timeout: float = 120) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -1947,7 +1978,13 @@ class Run:
         self.waiting: dict[str, list[Item]] = {}
         self.derived: dict[str, dict[str, str]] = {}  # job id -> what it took from the row
         self.hosts: list[Host] = []
-        self.pool = cf.ThreadPoolExecutor(max_workers=16)
+        self.pool = cf.ThreadPoolExecutor(max_workers=SYNC_THREADS)
+        # The rows stored since the last flush, by file: written at a tick's
+        # end in one append each (an fsync a row held the loop to ~45 rows
+        # a second), before the next sync acks them.
+        self.pending_rows: dict[Path, list[dict]] = {}
+        # The loop's tick, start to start, as it runs (prefetch_s).
+        self.tick_s = float(TICK)
         # The instances' boots, a thread each from launch to ready, which
         # wake the loop when they end.
         self.booter = cf.ThreadPoolExecutor(max_workers=64)
@@ -2144,7 +2181,7 @@ class Run:
             if recs:
                 rec["from"] = recs[0][0].name
             rec["row"] = res["row"]
-            append_jsonl(m.state / "rows.jsonl", [rec])
+            self.pending_rows.setdefault(m.state / "rows.jsonl", []).append(rec)
             recs.append((m, rec))
         self.done.add(item.wid)
         self.ran += 1
@@ -2163,6 +2200,12 @@ class Run:
                     append_jsonl(m.state / "mismatches.jsonl", [{"first": first, "again": r}])
                 log(f"MISMATCH: job {item.job.id} ({item.job.arm} {dict(item.job.env)}): "
                     f"{key(first)} on {first['host']}, {key(rec)} on {host.id}")
+
+    def flush_rows(self) -> None:
+        """Writes the rows stored since the last flush, one append a file."""
+        for path, recs in self.pending_rows.items():
+            append_jsonl(path, recs)
+        self.pending_rows.clear()
 
     def fail(self, host: Host, item: Item, res: dict) -> None:
         self.attempts[item.wid] += 1
@@ -2216,14 +2259,17 @@ class Run:
         others = sum(1 for h in self.hosts if h is not host and h.state != "lost")
         if self.testbed is not None:
             return self.take_group(host, others)
-        # Its free slots, then jobs queued behind the running ones while
-        # they're short (no longer than PREFETCH_S there), which a sync's
-        # worth couldn't keep busy: up to PREFETCH_S of work per slot, and
-        # no more work than its capacity's share of what's left. A long job queued
-        # behind others would start a job's length late and could end the
-        # run late, so one at the head stops it.
+        # Its free slots, then jobs queued behind the running ones, which a
+        # sync's worth couldn't keep busy: up to prefetch_s of work per slot
+        # (a running job counts half, as in work_left), and no more work
+        # than its capacity's share of what's left. A long job queued
+        # behind others starts late, so one at the head stops it once the
+        # run has less than twice its length left: it could end the run
+        # late.
         ready = sum(h.capacity for h in self.hosts if h.state == "ready")
-        goal = min(host.capacity * PREFETCH_S, self.work_left() * host.capacity / max(ready, 1))
+        prefetch = self.prefetch_s()
+        remaining = self.work_left() / max(ready, 1)
+        goal = min(host.capacity * prefetch, remaining * host.capacity)
         # A draining instance takes only jobs that should end in time, no
         # more work than it has time for.
         left = None
@@ -2232,7 +2278,10 @@ class Run:
             if left <= 0:
                 return []
             goal = min(goal, host.capacity * left)
-        have = sum(self.expected(i) for i in host.assigned.values() if i.copy != "canary")
+        have = sum(
+            self.expected(i) * (0.5 if i.wid in host.running else 1)
+            for i in host.assigned.values() if i.copy != "canary"
+        )
         out, skipped = [], []
         while self.queue and (len(host.assigned) < host.slots or have < goal):
             item = self.queue.popleft()
@@ -2243,7 +2292,8 @@ class Run:
             ):
                 skipped.append(item)
                 continue
-            if len(host.assigned) >= host.slots and self.expected(item) / host.speed > PREFETCH_S:
+            long = self.expected(item) / host.speed
+            if len(host.assigned) >= host.slots and long > prefetch and remaining < 2 * long:
                 self.queue.appendleft(item)
                 break
             out.append(item)
@@ -2351,6 +2401,7 @@ class Run:
                 self.store(host, item, res)
             else:
                 self.fail(host, item, res)
+        host.running = set(reply["running"])
         there = set(reply["queued"]) | set(reply["running"]) | set(reply.get("held", []))
         note = reply.get("note")
         if note != host.note:
@@ -2547,6 +2598,7 @@ class Run:
                 raise RuntimeError(f"no SSH after 10 minutes: {why}")
             time.sleep(2)
         host.ssh_at = time.time()
+        self.ssh.master(host)
         self.ssh.put(host, [HERE / "worker.py"], "farm/")
         self.ssh.put(host, [BIN / b for b in self.bins], "farm/bin/")
         self.start_worker(host)
@@ -2739,6 +2791,10 @@ class Run:
     def speed(self, itype: str) -> float:
         """A type's work per slot (speeds); 1 if no row times its CPU."""
         return self.speeds.get(gen_of(itype), 1.0)
+
+    def prefetch_s(self) -> float:
+        """The work, in seconds per slot, an instance's queue holds."""
+        return max(PREFETCH_S, PREFETCH_TICKS * self.tick_s)
 
     def expected(self, item: Item) -> float:
         """What an item is expected to take, in seconds of a slot at the
@@ -3246,6 +3302,8 @@ class Run:
             self.absorb(h, reply)
         if self.testbed is None:
             self.refill([h for h in ready if h.state == "ready"])
+        # Durable before the next sync acks them.
+        self.flush_rows()
         if not self.local:
             self.retire_idle()
             self.scale(now)
@@ -3316,9 +3374,13 @@ class Run:
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             signal.signal(sig, interrupt)
         try:
+            last_tick = None
             while not self.finished():
                 self.wake.clear()
                 now = time.time()
+                if last_tick is not None:
+                    self.tick_s += 0.3 * (now - last_tick - self.tick_s)
+                last_tick = now
                 self.tick(now)
                 if now - last_progress >= 60 or self.finished():
                     self.progress(now)
@@ -3327,6 +3389,7 @@ class Run:
                     draining = any(h.state == "ready" and h.deadline is not None for h in self.hosts)
                     self.wake.wait(2 if self.local else DRAIN_TICK if draining else TICK)
             # Ack what's left, so a kept instance's worker can go idle.
+            self.flush_rows()
             for h in self.hosts:
                 if h.state != "lost" and h.acks:
                     try:
@@ -3338,6 +3401,7 @@ class Run:
             log("interrupted")
         finally:
             self.stopping.set()
+            self.flush_rows()
             if self.local:
                 # The worker may be one a previous controller started, or
                 # this one's, before it has written its pid.
