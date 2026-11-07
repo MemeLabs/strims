@@ -353,6 +353,16 @@ passphrase, or loaded into ssh-agent). The security group strims-sim-farm,
 in the VPC of each region's public subnets, admits SSH from this host's
 public address.
 
+With --s3-bucket (the config file's s3_bucket and s3_region), a run puts
+its binaries in the bucket under bins/ by their sha256s (those not there
+already) and each boot fetches them by URLs this host
+signs for an hour, checking their sha256s, rather than over this host's
+uplink, which every boot shares; a failed fetch copies them over SSH as
+without it. The user needs s3:PutObject and s3:GetObject on
+arn:aws:s3:::BUCKET/bins/* and s3:ListBucket on the bucket for the
+prefix bins/ (a missing key then reads 404); the instances need no role.
+A lifecycle rule on bins/ (1 day, S3's least) expires them.
+
 What's particular to the person running the farm goes in
 hack/sim-farm/config.toml, which git ignores; flags and the environment
 override it:
@@ -361,6 +371,8 @@ override it:
   aws_profile = "farm"          # else $AWS_PROFILE, or the CLI's default
   aws_region = "us-west-2"      # else $AWS_REGION, or the profile's
   aws_regions = ["us-west-2", "us-east-2"]  # several, instead
+  s3_bucket = "my-farm-bucket"  # binaries by presigned URL
+  s3_region = "us-west-1"
   [run]                         # defaults for run's options
   max_vcpus = 128
   hours = 4
@@ -380,6 +392,7 @@ import json
 import math
 import os
 import re
+import shlex
 import shutil
 import signal
 import statistics
@@ -428,6 +441,8 @@ PREFETCH_S = PREFETCH_TICKS * TICK
 SYNC_THREADS = 64
 # How long an instance's master SSH connection outlives its last use.
 CONTROL_PERSIST_S = 300
+# How long a binary's presigned URL lasts (a boot signs its own).
+BIN_URL_S = 3600
 # The rows a job's expected wall averages, the latest: code and instance
 # types change what a job takes.
 RECENT_ROWS = 64
@@ -1795,6 +1810,9 @@ class Host:
     # started, and ready (its canary passed, for a new one of test jobs).
     running_at: float | None = None
     ssh_at: float | None = None
+    # Its binaries in place, and how they came (s3 or scp).
+    bins_at: float | None = None
+    bins_via: str = ""
     up_at: float | None = None
     ready_at: float | None = None
     busy_s: float = 0.0  # its jobs' walls, summed
@@ -1848,9 +1866,71 @@ class Host:
         """Its boot's steps, in seconds after its launch."""
         marks = [
             ("running", self.running_at), ("SSH", self.ssh_at),
+            (f"binaries ({self.bins_via})", self.bins_at),
             ("started", self.up_at), ("ready", self.ready_at),
         ]
         return ", ".join(f"{name} +{t - self.launched:.0f} s" for name, t in marks if t is not None)
+
+
+class Binaries:
+    """The run's binaries in S3 (--s3-bucket), for instances to fetch by
+    presigned URL rather than over this host's uplink: each uploaded once
+    under bins/ by its sha256 (a name says what a binary was built from,
+    not its bytes: checkouts build it apart), and left for the bucket's
+    lifecycle rule to expire. A URL lasts BIN_URL_S, and each boot signs
+    its own."""
+
+    def __init__(self, bucket: str, region: str) -> None:
+        self.bucket, self.region = bucket, region
+        self.sha: dict[str, str] = {}
+
+    def key(self, name: str) -> str:
+        return f"bins/{self.sha[name]}"
+
+    def s3(self, name: str) -> str:
+        return f"s3://{self.bucket}/{self.key(name)}"
+
+    def upload(self, names: list[str]) -> None:
+        """Puts each binary the bucket lacks, all at once, and notes every
+        one's sha256 for the instances to check."""
+        def one(name: str) -> bool:
+            self.sha[name] = hashlib.sha256((BIN / name).read_bytes()).hexdigest()
+            p = subprocess.run(
+                ["aws", "s3api", "head-object", "--bucket", self.bucket, "--key", self.key(name),
+                 "--region", self.region], capture_output=True, text=True, start_new_session=True,
+            )
+            if p.returncode == 0:
+                return False
+            if "(404)" not in p.stderr and "Not Found" not in p.stderr:
+                raise RuntimeError(f"head {self.s3(name)}: {p.stderr.strip()}")
+            p = subprocess.run(
+                ["aws", "s3", "cp", str(BIN / name), self.s3(name), "--region", self.region,
+                 "--only-show-errors"], capture_output=True, text=True, start_new_session=True,
+            )
+            if p.returncode:
+                raise RuntimeError(f"upload {self.s3(name)}: {p.stderr.strip()}")
+            return True
+
+        with cf.ThreadPoolExecutor(max_workers=max(1, len(names))) as ex:
+            put = sum(ex.map(one, names))
+        log(f"binaries in {self.bucket}: {put} uploaded, {len(names) - put} there already")
+
+    def fetch(self, names: list[str]) -> str:
+        """A shell command that fetches the binaries into farm/bin and checks
+        them, by URLs signed here (no API call)."""
+        steps = []
+        for name in names:
+            p = subprocess.run(
+                ["aws", "s3", "presign", self.s3(name), "--expires-in", str(BIN_URL_S), "--region",
+                 self.region], capture_output=True, text=True, start_new_session=True,
+            )
+            if p.returncode:
+                raise RuntimeError(f"presign {self.s3(name)}: {p.stderr.strip()}")
+            url, part = p.stdout.strip(), f"farm/bin/{name}.part"
+            steps.append(f"curl -fsS --retry 3 --retry-all-errors -o {part} {shlex.quote(url)}")
+            steps.append(f"echo '{self.sha[name]}  {part}' | sha256sum -c --quiet")
+            steps.append(f"chmod +x {part} && mv {part} farm/bin/{name}")
+        return " && ".join(steps)
 
 
 class Ssh:
@@ -1979,6 +2059,8 @@ class Run:
         self.derived: dict[str, dict[str, str]] = {}  # job id -> what it took from the row
         self.hosts: list[Host] = []
         self.pool = cf.ThreadPoolExecutor(max_workers=SYNC_THREADS)
+        # The binaries in S3, when the run puts them there (setup_aws).
+        self.s3_bins: Binaries | None = None
         # The rows stored since the last flush, by file: written at a tick's
         # end in one append each (an fsync a row held the loop to ~45 rows
         # a second), before the next sync acks them.
@@ -2600,7 +2682,7 @@ class Run:
         host.ssh_at = time.time()
         self.ssh.master(host)
         self.ssh.put(host, [HERE / "worker.py"], "farm/")
-        self.ssh.put(host, [BIN / b for b in self.bins], "farm/bin/")
+        self.put_bins(host)
         self.start_worker(host)
         host.up_at = time.time()
         res = None
@@ -2608,6 +2690,22 @@ class Run:
             res = self.run_canary(host)
         host.ready_at = time.time()
         return res
+
+    def put_bins(self, host: Host) -> None:
+        """The binaries onto the instance: from S3 when the run has them
+        there, else (or if that fails) over SSH from here."""
+        if self.s3_bins is not None:
+            try:
+                p = self.ssh.run(host, self.s3_bins.fetch(self.bins), timeout=300)
+                if p.returncode == 0:
+                    host.bins_at, host.bins_via = time.time(), "s3"
+                    return
+                why = (p.stderr or p.stdout).strip()[-300:]
+            except (RuntimeError, subprocess.TimeoutExpired) as e:
+                why = str(e)[-300:]
+            log(f"{host.id}: binaries from S3 failed, copying them from here: {why}")
+        self.ssh.put(host, [BIN / b for b in self.bins], "farm/bin/")
+        host.bins_at, host.bins_via = time.time(), "scp"
 
     def run_canary(self, host: Host) -> dict:
         """The canary's result from the instance, polled a second apart (a
@@ -3117,6 +3215,13 @@ class Run:
         if not key.exists() or not Path(f"{key}.pub").exists():
             sys.exit(f"{key} or its .pub is missing (--ssh-key, $STRIMS_FARM_SSH_KEY, ssh_key in {CONFIG})")
         self.ssh = Ssh(key, self.state)
+        if self.args.s3_bucket:
+            self.s3_bins = Binaries(self.args.s3_bucket, self.args.s3_region)
+            try:
+                self.s3_bins.upload(self.bins)
+            except RuntimeError as e:
+                log(f"binaries stay off S3 (instances copy them from here): {e}")
+                self.s3_bins = None
         names = self.args.regions
         self.sweep = sorted(set(names) | recorded_regions())
         cidr = public_cidr()
@@ -3824,11 +3929,13 @@ def config() -> dict:
     if not CONFIG.exists():
         return {}
     cfg = tomllib.loads(CONFIG.read_text())
-    unknown = set(cfg) - {"ssh_key", "aws_profile", "aws_region", "aws_regions", "run"}
+    unknown = set(cfg) - {"ssh_key", "aws_profile", "aws_region", "aws_regions", "s3_bucket", "s3_region", "run"}
     if unknown:
         sys.exit(f"{CONFIG}: unknown settings {sorted(unknown)}")
     if "aws_region" in cfg and "aws_regions" in cfg:
         sys.exit(f"{CONFIG}: aws_region or aws_regions, not both")
+    if ("s3_bucket" in cfg) != ("s3_region" in cfg):
+        sys.exit(f"{CONFIG}: s3_bucket and s3_region go together")
     if "aws_regions" in cfg:
         regions = cfg["aws_regions"]
         if not isinstance(regions, list) or not regions or not all(isinstance(r, str) and r for r in regions):
@@ -3882,7 +3989,10 @@ def main() -> int:
             "--ssh-key",
             default=os.environ.get("STRIMS_FARM_SSH_KEY") or cfg.get("ssh_key") or "~/.ssh/id_rsa",
         )
-        known = {a.dest for a in r._actions} - {"help", "matrices", "ssh_key", "regions"}
+        r.add_argument("--s3-bucket", default=cfg.get("s3_bucket"),
+                       help="the bucket instances fetch the binaries from")
+        r.add_argument("--s3-region", default=cfg.get("s3_region"))
+        known = {a.dest for a in r._actions} - {"help", "matrices", "ssh_key", "regions", "s3_bucket", "s3_region"}
         if set(defaults) - known:
             sys.exit(f"{CONFIG}: unknown [run] settings {sorted(set(defaults) - known)}")
         r.set_defaults(**defaults)
