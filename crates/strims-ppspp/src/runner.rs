@@ -546,6 +546,9 @@ pub struct Runner {
     tapped_rate: Option<(u64, Option<Duration>)>,
     /// The closed channels' counters.
     closed: ChannelTotals,
+    /// The earliest [`Wake::At`] of a peer whose HAVEs are held (`NIL`
+    /// while none is).
+    next_hold: Time,
 }
 
 /// Hands a swarm's queued events to its scheduler and the driver. Called
@@ -653,11 +656,13 @@ fn handle_payload(
                                 p.useful.add(n, now);
                             }
                         }
+                        let signed = swarm.verifier().signed_at(d.bin);
                         drain_swarm(swarm, Some(sched), key, now, q, readable);
                         sched.handle_data(
                             peer,
                             d.bin,
                             d.timestamp,
+                            signed,
                             true,
                             published.new,
                             now,
@@ -674,6 +679,7 @@ fn handle_payload(
                             peer,
                             d.bin,
                             d.timestamp,
+                            None,
                             false,
                             false,
                             now,
@@ -767,6 +773,7 @@ impl Runner {
             push_waits: Vec::new(),
             tapped_rate: None,
             closed: ChannelTotals::default(),
+            next_hold: Time::NIL,
         }
     }
 
@@ -1572,6 +1579,9 @@ impl Runner {
         };
 
         let mut off = 0;
+        // Channels whose HAVEs wait held, and when the first goes.
+        let mut held_haves: Vec<SwarmKey> = Vec::new();
+        let mut hold_until = Time::NIL;
         while let Some(key) = detached.pop() {
             let ride = off > 0
                 || peers
@@ -1586,6 +1596,16 @@ impl Runner {
                     p.rq.reattach(detached);
                 }
                 break;
+            }
+            if let Some(t) = swarms
+                .get(key)
+                .and_then(|rs| rs.scheduler.as_ref())
+                .and_then(|s| s.haves_held(peer, now))
+            {
+                held_haves.push(key);
+                if hold_until.is_nil() || t < hold_until {
+                    hold_until = t;
+                }
             }
         }
 
@@ -1646,8 +1666,16 @@ impl Runner {
         }
 
         if let Some(p) = peers.get_mut(peer) {
+            for key in held_haves {
+                p.rq.push(key);
+            }
             if p.is_idle() {
                 p.wake = Wake::Idle;
+            } else if off == 0 && !hold_until.is_nil() {
+                p.wake = Wake::At(hold_until);
+                if self.next_hold.is_nil() || hold_until < self.next_hold {
+                    self.next_hold = hold_until;
+                }
             } else if off == 0 {
                 // Nothing fit, or the answer gate holds what's left: wait
                 // for the next tick (or the gate) so the driver doesn't
@@ -1662,6 +1690,25 @@ impl Runner {
             self.observe_upload(now);
         }
         off
+    }
+
+    /// Starts the write cycles of the peers whose held HAVEs are due (all of
+    /// them at the tick, which makes every HAVE due), and keeps the earliest
+    /// of the rest.
+    fn release_held_haves(&mut self, now: Time, tick: bool) {
+        if self.next_hold.is_nil() || (!tick && now < self.next_hold) {
+            return;
+        }
+        self.next_hold = Time::NIL;
+        for (key, p) in self.peers.iter_mut() {
+            let Wake::At(t) = p.wake else { continue };
+            if tick || t <= now {
+                p.wake = Wake::Now;
+                self.events.transmit.insert(key);
+            } else if self.next_hold.is_nil() || t < self.next_hold {
+                self.next_hold = t;
+            }
+        }
     }
 
     /// Wakes the peers whose answers the answer gate held back, once it
@@ -1705,6 +1752,9 @@ impl Runner {
         if !self.held.is_empty() && self.answer_rate.exhausted() {
             t = t.min(self.answer_rate.open_at());
         }
+        if !self.next_hold.is_nil() {
+            t = t.min(self.next_hold);
+        }
         Some(t)
     }
 
@@ -1721,6 +1771,7 @@ impl Runner {
             self.expire_push(now);
         }
         self.reopen(now);
+        self.release_held_haves(now, false);
         if now < self.next_tick {
             self.observe_upload(now);
             return;
@@ -1777,6 +1828,7 @@ impl Runner {
                 events.transmit.insert(key);
             }
         }
+        self.release_held_haves(now, true);
 
         if now >= self.next_weight_update {
             let behind = (now - self.next_weight_update).as_nanos()

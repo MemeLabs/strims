@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The PPSPP wire format: protocol version 2, plus ANNOUNCE (message type
-//! 18), a report on the sender's parents or a request for the receiver's.
+//! 18), a report on the sender's parents and its own first copies, or a
+//! request for the receiver's.
 //!
 //! A frame is a sequence of channel payloads, each behind a
 //! [`ChannelHeader`]. A channel payload is a sequence of messages, each a
@@ -18,8 +19,9 @@
 //!   than its bin, and an option list may lack its end marker.
 //! - Decoding never panics and allocates nothing: [`Reader`] is an iterator
 //!   of [`Message`] views whose byte strings (data, hashes, signatures,
-//!   swarm ids, handshake options, ANNOUNCE entries) borrow from the input,
-//!   and re-encoding a decoded message reproduces its input bytes.
+//!   swarm ids, handshake options, ANNOUNCE entries and items) borrow from
+//!   the input, and re-encoding a decoded message reproduces its input
+//!   bytes.
 //! - Encoders write into caller buffers. A message that doesn't fit fails
 //!   with [`Error::NotEnoughSpace`] and writes nothing, so a frame filler
 //!   can stop at the first message that doesn't fit.
@@ -35,10 +37,11 @@ mod messages_test;
 use core::fmt;
 
 pub use messages::{
-    Ack, Announce, AnnounceEntry, AnnounceIter, Cancel, ChannelHeader, Data, EpochOption,
-    Handshake, HandshakeOptions, Have, Integrity, MAX_ANNOUNCE_ENTRIES, MAX_DATA_LEN, MAX_PEER_ID,
-    Message, Ping, Pong, ProtocolOption, ProtocolOptions, ProtocolOptionsIter, Request,
-    SignedIntegrity, Stream, StreamCancel, StreamClose, StreamOpen, StreamRequest,
+    Ack, Announce, AnnounceEntry, AnnounceIter, AnnounceStream, AnnounceStreams, Cancel,
+    ChannelHeader, Data, Delays, EpochOption, Handshake, HandshakeOptions, Have, Integrity,
+    MAX_ANNOUNCE_ENTRIES, MAX_ANNOUNCE_STREAMS, MAX_DATA_LEN, MAX_PEER_ID, Message, Ping, Pong,
+    ProtocolOption, ProtocolOptions, ProtocolOptionsIter, Request, SignedIntegrity, Stream,
+    StreamCancel, StreamClose, StreamOpen, StreamRequest,
 };
 pub use reader::{FrameReader, Reader, ReaderConfig};
 pub use wire::{uvarint_len, varint_len};
@@ -66,8 +69,9 @@ pub enum Error {
     /// A swarm identifier longer than its 16 bit length prefix allows.
     #[error("swarm identifier too long")]
     SwarmIdentifierTooLong,
-    /// An ANNOUNCE past its bounds: too many entries, a stream past 16
-    /// bits, or a parent id of the wrong length.
+    /// An ANNOUNCE past its bounds: too many entries or stream items, a
+    /// stream past 16 bits, a parent id of the wrong length, or items out of
+    /// increasing stream order.
     #[error("invalid announce")]
     InvalidAnnounce,
     /// A DATA whose bin holds more than

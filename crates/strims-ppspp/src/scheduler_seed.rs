@@ -169,21 +169,47 @@
 //! - **Served holders.** A holder must also serve, which only other
 //!   nodes' observations can show. The seed asks every neighbour for
 //!   reports every [`ASK_INTERVAL`]; a viewer's report says, per parent and
-//!   stream, how many pushes came on time, came late or missed. An entry
-//!   from reporter R about P on stream s counts only if the seed's own
-//!   observations allow it:
+//!   stream, how many pushes came on time, came late or missed, and the
+//!   one-way delays ([`Delays`]) of the hits and of the misses' repairs
+//!   (their first copies, from whomever they came); and per stream, the
+//!   delays of its first copies from anyone. A delay runs from the chunk's
+//!   signing, by the seed's clock, to its arrival, by the reporter's: the
+//!   rules compare only one reporter's delays with each other, so its
+//!   clock's offset from the seed's drops out. An entry from reporter R
+//!   about P on stream s counts only if the seed's own observations, and
+//!   R's own delays, allow it:
 //!   1. R takes s from someone other than the seed, and P takes s from the
 //!      seed: what is judged is P's relay of the seed's copy. A report
 //!      about R itself is invalid.
 //!   2. R announces s ([`CANDIDATE_FRESHNESS`](super::CANDIDATE_FRESHNESS)),
 //!      so a free rider's reports count for nothing.
-//!   3. R's HAVE lag on s is at least P's less P's round trip and
-//!      [`REPORT_JITTER`]: R can't announce what P relays before P could
-//!      have, whatever the paths.
-//!   4. An entry with more misses than hits shows them in R's own HAVE
-//!      timing: R's lag on s is at least P's plus
-//!      [`DEADLINE_MARGIN`](super::DEADLINE_MARGIN), as a child's is that
-//!      pulled what its parent missed.
+//!   3. R's first copies of s arrive on average no more than
+//!      [`REPORT_JITTER`] before P's hits: the hits are first copies P
+//!      relayed, and R can't have the rest of s much sooner unless it takes
+//!      s from elsewhere.
+//!   4. An entry with more misses than hits shows them in R's delays: the
+//!      repairs arrive on average at least [`DEADLINE_MARGIN`] after the
+//!      hits, as a child's do that pulled what its parent missed past the
+//!      deadline.
+//!
+//!   Rules 3 and 4 read R's delays on s over the current [`REPORT_BUCKET`]
+//!   and the one before: its first copies, and P's hits and repairs from
+//!   R's counted entries and this one. Without hits there is nothing in R's
+//!   clock to hold the others against, and the entry counts: a holder that
+//!   relays nothing has no hits at its children, and its own delays, the
+//!   only other reference, run by its clock. A rule whose delays R didn't
+//!   give passes.
+//!
+//!   So the subject has no say in whether the entries about it count. A
+//!   reporter's delays of its own first copies gate only its own entries,
+//!   and what it says about a parent counts only as its vote, one of a
+//!   quorum. Rules 3 and 4 hold a reporter to its own story: they keep out
+//!   an honest reporter's inconsistent entries and a careless liar's, not a
+//!   liar that makes its numbers agree. Rules on HAVE timing would be no
+//!   stronger: a reporter chooses when its HAVEs to the seed go, so it can
+//!   pass any rule on them, and a subject that held back its own would rule
+//!   its reporters out. HAVEs to the seed may then wait as anyone's do (see
+//!   `scheduler_peer`'s hold).
 //!
 //!   Each reporter's entries about a subject are summed over the current
 //!   [`REPORT_BUCKET`] and the one before, and count as one vote once it
@@ -217,21 +243,20 @@
 //!
 //! # The seed's view
 //!
-//! [`SeedAllocationStats`] gives, per neighbour, its HAVE lag per stream
-//! after publishing, whether it is barred, and its reporters and their
-//! verdict at the latest check. A seed samples each stream once per
-//! signature unit, at the unit's last chunk of it with data (a unit signed
-//! early ends in data-less chunks, which nobody announces): a unit is
-//! published at once, so that chunk tells when the neighbour had the
-//! unit's share of the stream whole.
+//! [`SeedAllocationStats`] gives, per neighbour, the mean one-way delay of
+//! its first copies per stream as its reports give them (by its clock;
+//! none while the seed has room for everyone and asks for no reports),
+//! whether it is barred, and its reporters and their verdict at the latest
+//! check.
 //!
 //! # Bounds
 //!
-//! Per channel a fixed record, plus two tallies per stream of the
-//! subjects its reports named, and per holder and stream a spilled
-//! stream's satellite or a release. A report costs O(entries × channels),
-//! and a reporter's entries past [`report_entry_limit`] per check are
-//! invalid. A check costs O(channels × streams × log channels) plus the
+//! Per channel a fixed record, plus per stream the delays of its first
+//! copies and two tallies of the subjects its reports named, and per
+//! holder and stream a spilled stream's satellite or a release. A report
+//! costs O(entries × channels + items), and a reporter's entries past
+//! [`report_entry_limit`] and items past [`report_stream_limit`] per check
+//! are invalid. A check costs O(channels × streams × log channels) plus the
 //! subscribers; an admission O(channels).
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -243,7 +268,7 @@ use super::{
     DEADLINE_MARGIN, PRUNE_MISS_RATE, PRUNE_SILENT_MISSES, PUSH_OVERHEAD, PushChannel,
     SATURATED_BUSY, SHED_UTILIZATION,
 };
-use crate::codec::{Announce, AnnounceEntry, Stream};
+use crate::codec::{Announce, AnnounceEntry, Delays, Stream};
 use crate::controller::RequestController;
 use crate::options::{SeedAllocation, SeedQos};
 use crate::runner::{MAX_PEER_QOS_WEIGHT, MIN_PEER_QOS_WEIGHT, PeerKey};
@@ -340,8 +365,8 @@ pub const MIN_REPORTED: u64 = PRUNE_SILENT_MISSES as u64;
 pub const SERVED_SHARE: f64 = 1.0 - PRUNE_MISS_RATE;
 /// ... and saw it serve nothing when less than this share arrived at all.
 pub const UNSERVED_SHARE: f64 = 0.25;
-/// The slack on a reporter's HAVE lag against its parent's: about twice a
-/// WAN end's jitter.
+/// How much sooner than its parent's hits a reporter's first copies of a
+/// stream may arrive on average: about twice a WAN end's jitter.
 pub const REPORT_JITTER: Duration = Duration::from_millis(40);
 /// The checks in a row at which the seed's pushes to a holder kept up
 /// before its reporters' misses count: a miss is tallied up to a deadline
@@ -353,6 +378,11 @@ pub const KEPT_CHECKS: u32 = 3;
 /// can arrive together.
 pub fn report_entry_limit(streams: u16) -> u32 {
     4 * u32::from(streams)
+}
+
+/// The same for stream items: an honest report holds one per stream.
+pub fn report_stream_limit(streams: u16) -> u32 {
+    2 * u32::from(streams)
 }
 
 /// What became of a push at write time.
@@ -413,13 +443,14 @@ pub(crate) struct Holder {
     /// in the lowest bit.
     kept: u8,
     /// At the latest check: the reporters that voted on it, whether most
-    /// saw it serve (`None`: too few to tell), and their median push
-    /// delay.
+    /// saw it serve (`None`: too few to tell), and the median of their
+    /// hits' mean one-way delay, each by its reporter's clock.
     reporters: u8,
     served: Option<bool>,
     delay: Option<Duration>,
-    /// Its report entries since the last check.
+    /// Its report entries and stream items since the last check.
     entries: u32,
+    items: u32,
     /// When it is asked for reports next.
     ask_at: Time,
     /// What became of its report entries.
@@ -501,65 +532,77 @@ impl Holder {
 }
 
 /// A reporter's vote on a subject: pushes it expected (hits and misses),
-/// got on time, and got at all (hits and late), and the hits' delays in
-/// milliseconds, summed.
+/// got on time, and got at all (hits and late), and the one-way delays of
+/// the hits and of the misses' repairs, by the reporter's clock.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Votes {
     expected: u64,
     hits: u64,
     pushed: u64,
-    delay_ms: u64,
+    hit_delays: Delays,
+    repairs: Delays,
 }
 
 impl Votes {
-    fn add(&mut self, o: Votes) {
-        self.expected = self.expected.saturating_add(o.expected);
-        self.hits = self.hits.saturating_add(o.hits);
-        self.pushed = self.pushed.saturating_add(o.pushed);
-        self.delay_ms = self.delay_ms.saturating_add(o.delay_ms);
-    }
-
     fn from_entry(e: &AnnounceEntry<'_>) -> Votes {
-        let ms = u64::try_from(e.delay.as_millis()).unwrap_or(0);
         Votes {
             expected: e.hits.saturating_add(e.misses),
             hits: e.hits,
             pushed: e.hits.saturating_add(e.late),
-            delay_ms: e.hits.saturating_mul(ms),
+            hit_delays: e.hit_delays,
+            repairs: e.repairs,
         }
     }
 }
 
-/// What a reporter said about one subject on one stream, in the current
-/// [`REPORT_BUCKET`] (its index) and the one before.
-#[derive(Clone, Copy, Debug)]
-struct HeardSlot {
-    subject: PeerKey,
-    bucket: i64,
-    current: Votes,
-    before: Votes,
-    at: Time,
+/// What a [`Buckets`] sums.
+trait Summed: Copy + Default {
+    fn add(&mut self, o: Self);
 }
 
-impl HeardSlot {
-    fn add(&mut self, v: Votes, now: Time) {
+impl Summed for Votes {
+    fn add(&mut self, o: Votes) {
+        self.expected = self.expected.saturating_add(o.expected);
+        self.hits = self.hits.saturating_add(o.hits);
+        self.pushed = self.pushed.saturating_add(o.pushed);
+        self.hit_delays.add(o.hit_delays);
+        self.repairs.add(o.repairs);
+    }
+}
+
+impl Summed for Delays {
+    fn add(&mut self, o: Delays) {
+        Delays::add(self, o);
+    }
+}
+
+/// A sum over the current [`REPORT_BUCKET`] (its index) and the one
+/// before.
+#[derive(Clone, Copy, Debug, Default)]
+struct Buckets<T> {
+    bucket: i64,
+    current: T,
+    before: T,
+}
+
+impl<T: Summed> Buckets<T> {
+    fn add(&mut self, v: T, now: Time) {
         let b = now.unix_nanos() / REPORT_BUCKET.as_nanos();
         if b != self.bucket {
             self.before = if b == self.bucket.saturating_add(1) {
                 self.current
             } else {
-                Votes::default()
+                T::default()
             };
-            self.current = Votes::default();
+            self.current = T::default();
             self.bucket = b;
         }
         self.current.add(v);
-        self.at = now;
     }
 
-    fn window(&self, now: Time) -> Votes {
+    fn window(&self, now: Time) -> T {
         let b = now.unix_nanos() / REPORT_BUCKET.as_nanos();
-        let mut v = Votes::default();
+        let mut v = T::default();
         if b == self.bucket {
             v.add(self.current);
             v.add(self.before);
@@ -570,15 +613,57 @@ impl HeardSlot {
     }
 }
 
+/// What a reporter said about one subject on one stream, and when it last
+/// did.
+#[derive(Clone, Copy, Debug)]
+struct HeardSlot {
+    subject: PeerKey,
+    votes: Buckets<Votes>,
+    at: Time,
+}
+
 /// An adaptive seed's tallies of one neighbour's reports. Bound: two
-/// subjects per stream, allocated at its first counted entry; a third
-/// replaces the one reported least recently.
+/// subjects per stream, allocated at its first counted entry, a third
+/// replacing the one reported least recently; and per stream the delays
+/// of its own first copies, allocated at its first stream item.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Heard {
     slots: Vec<[Option<HeardSlot>; 2]>,
+    first: Vec<Buckets<Delays>>,
 }
 
 impl Heard {
+    /// A stream item: the delays of the reporter's first copies of
+    /// `stream`.
+    fn add_first(&mut self, streams: usize, stream: Stream, d: Delays, now: Time) {
+        if self.first.is_empty() {
+            self.first = vec![Buckets::default(); streams];
+        }
+        if let Some(b) = self.first.get_mut(usize::from(stream)) {
+            b.add(d, now);
+        }
+    }
+
+    /// The delays of the reporter's first copies of `stream` over the
+    /// current bucket and the one before.
+    fn first(&self, stream: Stream, now: Time) -> Delays {
+        self.first
+            .get(usize::from(stream))
+            .map_or_else(Delays::default, |b| b.window(now))
+    }
+
+    /// What it said about `subject` on `stream` over the current bucket and
+    /// the one before.
+    fn about(&self, stream: Stream, subject: PeerKey, now: Time) -> Votes {
+        self.slots
+            .get(usize::from(stream))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .find(|x| x.subject == subject)
+            .map_or_else(Votes::default, |x| x.votes.window(now))
+    }
+
     fn add(&mut self, streams: usize, stream: Stream, subject: PeerKey, v: Votes, now: Time) {
         if self.slots.is_empty() {
             self.slots = vec![[None; 2]; streams];
@@ -606,14 +691,13 @@ impl Heard {
         if slot.is_none_or(|x| x.subject != subject) {
             *slot = Some(HeardSlot {
                 subject,
-                bucket: 0,
-                current: Votes::default(),
-                before: Votes::default(),
+                votes: Buckets::default(),
                 at: now,
             });
         }
         if let Some(x) = slot.as_mut() {
-            x.add(v, now);
+            x.votes.add(v, now);
+            x.at = now;
         }
     }
 
@@ -831,10 +915,11 @@ pub struct ReportCounters {
     pub subject_unfed: u64,
     /// The reporter doesn't announce the stream.
     pub reporter_silent: u64,
-    /// The reporter announces the stream sooner than its parent could
-    /// relay it.
+    /// The reporter's first copies of the stream come well before its
+    /// parent's hits.
     pub too_early: u64,
-    /// More misses than hits, and the reporter's HAVEs don't show them.
+    /// More misses than hits, and the reporter's repairs don't come later
+    /// than the hits.
     pub misses_unseen: u64,
 }
 
@@ -907,8 +992,9 @@ pub struct SeedNeighbour {
     pub peer: PeerKey,
     /// The streams pushed to it.
     pub streams: Vec<Stream>,
-    /// Per stream, its mean HAVE lag after publishing, if it announced the
-    /// stream within [`CANDIDATE_FRESHNESS`](super::CANDIDATE_FRESHNESS).
+    /// Per stream, the mean one-way delay of its first copies over the
+    /// last one or two [`REPORT_BUCKET`]s as its reports give them, by its
+    /// clock: `None` without any.
     pub lags: Vec<Option<Duration>>,
     /// The channel's round trip, and its smallest link round trip lately.
     pub rtt: Duration,
@@ -918,8 +1004,9 @@ pub struct SeedNeighbour {
     /// Barred from holding a copy.
     pub barred: bool,
     /// At an adaptive seed's latest check: the reporters that voted on it,
-    /// whether most saw it serve (`None`: too few to tell), and their
-    /// median push delay; whether the seed's pushes to it kept up.
+    /// whether most saw it serve (`None`: too few to tell), and the median
+    /// of their hits' mean one-way delay, each by its reporter's clock;
+    /// whether the seed's pushes to it kept up.
     pub reporters: usize,
     pub served: Option<bool>,
     pub report_delay: Option<Duration>,
@@ -953,6 +1040,55 @@ pub(crate) fn delivered(pc: &mut Option<PushChannel>, rate: u64) {
     if let Some(pc) = pc.as_mut() {
         pc.holder.delivered = Some(pc.holder.delivered.map_or(rate, |r| r.min(rate)));
     }
+}
+
+/// Report rules 3 and 4 (see the module docs) on a reporter's delays on a
+/// stream, all by its clock: its first copies, a subject's hits to it,
+/// and the repairs of the subject's misses. `missing`: the entry has more
+/// misses than hits.
+fn check_delays(
+    first: Delays,
+    hits: Delays,
+    repairs: Delays,
+    missing: bool,
+) -> Result<(), Unheard> {
+    let Some(h) = hits.mean() else {
+        return Ok(());
+    };
+    if first
+        .mean()
+        .is_some_and(|f| f < h - early_slack(first, hits))
+    {
+        return Err(Unheard::TooEarly);
+    }
+    if missing
+        && repairs
+            .mean()
+            .is_some_and(|r| r < h + repair_lead(hits, repairs))
+    {
+        return Err(Unheard::MissesUnseen);
+    }
+    Ok(())
+}
+
+/// How much sooner than a subject's hits a reporter's first copies may
+/// arrive on average (rule 3), in milliseconds.
+fn early_slack(_first: Delays, _hits: Delays) -> f64 {
+    to_ms(REPORT_JITTER)
+}
+
+/// How much later than a subject's hits the repairs of its misses arrive
+/// on average at least (rule 4), in milliseconds.
+fn repair_lead(_hits: Delays, _repairs: Delays) -> f64 {
+    to_ms(DEADLINE_MARGIN)
+}
+
+fn to_ms(d: Duration) -> f64 {
+    d.as_nanos() as f64 / 1e6
+}
+
+fn from_ms(ms: f64) -> Duration {
+    Duration::from_nanos((ms * 1e6) as i64)
 }
 
 impl PeerSwarmScheduler {
@@ -1475,6 +1611,7 @@ impl PeerSwarmScheduler {
             let (wait, stale) = (h.wait.take(), std::mem::take(&mut h.stale));
             let (fed, starved) = (h.fed.take(), std::mem::take(&mut h.starved));
             h.entries = 0;
+            h.items = 0;
             if !h.holds {
                 h.kept = 0;
                 continue;
@@ -2053,7 +2190,7 @@ impl PeerSwarmScheduler {
                 continue;
             };
             for x in pc.heard.slots.iter().flatten().flatten() {
-                let v = x.window(now);
+                let v = x.votes.window(now);
                 if v != Votes::default() {
                     votes.entry((x.subject, reporter)).or_default().add(v);
                 }
@@ -2084,14 +2221,9 @@ impl PeerSwarmScheduler {
                 .filter(|v| (v.pushed as f64) < UNSERVED_SHARE * v.expected as f64)
                 .count();
             h.served = (n >= REPORT_QUORUM).then_some(served * 2 > n);
-            let mut delays: Vec<u64> = mine
-                .iter()
-                .filter_map(|v| v.delay_ms.checked_div(v.hits))
-                .collect();
-            delays.sort_unstable();
-            h.delay = delays
-                .get(delays.len() / 2)
-                .map(|&ms| Duration::from_millis(i64::try_from(ms).unwrap_or(i64::MAX)));
+            let mut delays: Vec<f64> = mine.iter().filter_map(|v| v.hit_delays.mean()).collect();
+            delays.sort_unstable_by(f64::total_cmp);
+            h.delay = delays.get(delays.len() / 2).copied().map(from_ms);
             if !h.holds {
                 continue;
             }
@@ -2156,10 +2288,11 @@ impl PeerSwarmScheduler {
         }
     }
 
-    /// An ANNOUNCE from `peer`. Without entries it asks for our reports;
-    /// an adaptive seed tallies the entries that pass its checks. False if
-    /// an entry was invalid: about its sender, past the stream count, or
-    /// past [`report_entry_limit`].
+    /// An ANNOUNCE from `peer`. Without entries or stream items it asks for
+    /// our reports; an adaptive seed keeps the items, then tallies the
+    /// entries that pass its checks. False if an entry or item was invalid:
+    /// about its sender, past the stream count, or past
+    /// [`report_entry_limit`] or [`report_stream_limit`].
     pub(crate) fn handle_announce(&mut self, peer: PeerKey, a: Announce<'_>, now: Time) -> bool {
         let Some(c) = self.channels.get_mut(&peer) else {
             return true;
@@ -2167,7 +2300,7 @@ impl PeerSwarmScheduler {
         if !c.handshake_received {
             return true;
         }
-        if a.is_empty() {
+        if a.is_ask() {
             if !self.s.is_seed
                 && let Some(pc) = c.push.as_mut()
             {
@@ -2181,6 +2314,17 @@ impl PeerSwarmScheduler {
         let streams = self.s.stream_count;
         let limit = report_entry_limit(streams);
         let mut valid = true;
+        if let Some(pc) = self.channels.get_mut(&peer).and_then(|c| c.push.as_mut()) {
+            for x in a.streams() {
+                pc.holder.items = pc.holder.items.saturating_add(1);
+                if pc.holder.items > report_stream_limit(streams) || x.stream >= streams {
+                    valid = false;
+                    continue;
+                }
+                pc.heard
+                    .add_first(usize::from(streams), x.stream, x.first, now);
+            }
+        }
         let mut counts = ReportCounters::default();
         for e in a.iter() {
             let Some(h) = self
@@ -2257,33 +2401,22 @@ impl PeerSwarmScheduler {
         if !fed(subject) {
             return Err(Unheard::SubjectUnfed);
         }
-        let lag = |peer: PeerKey| {
-            self.channels
-                .get(&peer)
-                .and_then(|c| c.push.as_ref())
-                .and_then(|pc| pc.have_lag.get(usize::from(e.stream)))
-                .filter(|l| l.fresh(now))
-                .map(|l| l.mean())
-        };
-        let Some(r) = lag(reporter) else {
+        let Some(pc) = self
+            .channels
+            .get(&reporter)
+            .and_then(|c| c.push.as_ref())
+            .filter(|pc| pc.announces(e.stream, now))
+        else {
             return Err(Unheard::ReporterSilent);
         };
-        let Some(p) = lag(subject) else {
-            return Ok(());
-        };
-        let rtt = self
-            .channels
-            .get(&subject)
-            .and_then(|c| c.push.as_ref())
-            .and_then(|pc| pc.holder.min_rtt(now))
-            .unwrap_or_default();
-        if r < p - rtt - REPORT_JITTER {
-            return Err(Unheard::TooEarly);
-        }
-        if e.misses > e.hits && r < p + DEADLINE_MARGIN {
-            return Err(Unheard::MissesUnseen);
-        }
-        Ok(())
+        let mut v = pc.heard.about(e.stream, subject, now);
+        v.add(Votes::from_entry(e));
+        check_delays(
+            pc.heard.first(e.stream, now),
+            v.hit_delays,
+            v.repairs,
+            e.misses > e.hits,
+        )
     }
 
     /// `peer` stops being a holder (`why`): every subscription it has goes.
@@ -2435,9 +2568,8 @@ impl PeerSwarmScheduler {
                     .map(|(i, _)| i as Stream)
                     .collect(),
                 lags: c.push.as_ref().map_or_else(Vec::new, |pc| {
-                    pc.have_lag
-                        .iter()
-                        .map(|l| l.fresh(now).then(|| l.mean()))
+                    (0..s.stream_count)
+                        .map(|i| pc.heard.first(i, now).mean().map(from_ms))
                         .collect()
                 }),
                 rtt: c.controller.rtt(),
@@ -2593,5 +2725,73 @@ mod tests {
         assert!(w.update(signals(1, 0, 0, 1, true), 64, t(2)));
         assert_eq!(w.copies, 2);
         assert!(!w.update(signals(1, 0, 0, 1, true), 64, t(3)));
+    }
+
+    /// The delays of `samples`, each shifted by `shift` milliseconds.
+    fn delays(samples: &[i64], shift: i64) -> Delays {
+        let mut d = Delays::default();
+        for &x in samples {
+            d.sample(x + shift);
+        }
+        d
+    }
+
+    /// A reporter's first copies, hits and repairs, in milliseconds by its
+    /// clock.
+    type Samples<'a> = (&'a [i64], &'a [i64], &'a [i64]);
+
+    /// Rules 3 and 4 on `samples` shifted by `shift`, with more misses
+    /// than hits or not.
+    fn verdict(
+        (first, hits, repairs): Samples<'_>,
+        missing: bool,
+        shift: i64,
+    ) -> Result<(), Unheard> {
+        check_delays(
+            delays(first, shift),
+            delays(hits, shift),
+            delays(repairs, shift),
+            missing,
+        )
+    }
+
+    #[test]
+    fn report_rules_hold_a_reporter_to_its_own_delays() {
+        let hits: &[i64] = &[200, 210, 190, 220];
+        let cases: [(Samples<'_>, bool, Result<(), Unheard>); 9] = [
+            // First copies about as soon as the hits, or later: the parent's
+            // relay, then pulls past its deadlines.
+            ((&[200, 210, 260, 300], hits, &[]), false, Ok(())),
+            ((&[175, 165, 170], hits, &[]), false, Ok(())),
+            // Most of the stream well before the parent's hits: it comes
+            // from elsewhere.
+            (
+                (&[60, 70, 80, 200], hits, &[]),
+                false,
+                Err(Unheard::TooEarly),
+            ),
+            // Misses whose repairs came past the deadline ...
+            ((&[200, 400], hits, &[380, 420]), true, Ok(())),
+            // ... and misses the reporter's delays don't show.
+            (
+                (&[200, 230], hits, &[220, 230]),
+                true,
+                Err(Unheard::MissesUnseen),
+            ),
+            // With fewer misses than hits the repairs aren't held to it.
+            ((&[200, 230], hits, &[220, 230]), false, Ok(())),
+            // Without hits, nothing in the reporter's clock to hold the rest
+            // against: a holder that relays nothing.
+            ((&[30, 40], &[], &[30, 40]), true, Ok(())),
+            // Delays it didn't give.
+            ((&[], hits, &[]), true, Ok(())),
+            ((&[], &[], &[]), true, Ok(())),
+        ];
+        for (i, (d, missing, want)) in cases.into_iter().enumerate() {
+            // The reporter's clock offset from the seed's drops out.
+            for shift in [0, 5_000, -5_000] {
+                assert_eq!(verdict(d, missing, shift), want, "{i} at {shift} ms");
+            }
+        }
     }
 }

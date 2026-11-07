@@ -243,6 +243,11 @@ impl MerkleSwarmVerifier {
         (s.chunks < root.base_length()).then_some((root, s.chunks))
     }
 
+    /// When the stored munro holding `b` was signed.
+    pub(crate) fn signed_at(&self, b: Bin) -> Option<Time> {
+        self.ring.segment(b).map(|s| s.timestamp)
+    }
+
     /// The digest of an all-zero subtree at `layer`.
     fn zero(&self, layer: u64) -> &[u8] {
         let (hs, l) = (

@@ -37,6 +37,9 @@ pub(crate) enum Wake {
     AtTick,
     /// In a write cycle: the driver polls frames.
     Now,
+    /// Start a write cycle then, for HAVEs held
+    /// ([`crate::scheduler_peer::HAVE_HOLD`]).
+    At(Time),
 }
 
 /// Bytes and their rate over a minute.

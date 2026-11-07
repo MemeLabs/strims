@@ -110,9 +110,9 @@ use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_ppspp::codec::{
-    Announce, AnnounceEntry, Cancel, ChannelWriter, Data, FrameReader, Have, MAX_ANNOUNCE_ENTRIES,
-    Message, MessageWriter, Pong, Reader, ReaderConfig, Request, Stream, StreamClose, StreamOpen,
-    StreamRequest,
+    Announce, AnnounceEntry, Cancel, ChannelWriter, Data, Delays, FrameReader, Have,
+    MAX_ANNOUNCE_ENTRIES, Message, MessageWriter, Pong, Reader, ReaderConfig, Request, Stream,
+    StreamClose, StreamOpen, StreamRequest,
 };
 use strims_ppspp::store::{self, BufferReader, ChunkBytes, ChunkCodec};
 use strims_ppspp::{
@@ -1145,8 +1145,8 @@ struct AllocSample {
     /// seed) those it pushes anything to.
     holders: BTreeSet<usize>,
     /// The seed's objective: the p90 over neighbours of the latest stream's
-    /// HAVE lag after publishing, less half the round trip. A stream not
-    /// announced lately counts as [`STALE`].
+    /// mean one-way delay after publishing, as the neighbour's reports give
+    /// it. A stream it reported no copies of lately counts as [`STALE`].
     objective: Duration,
     /// The neighbours barred from holding a copy.
     barred: BTreeSet<usize>,
@@ -1163,8 +1163,8 @@ struct AllocSample {
 /// to count as whole ([`Report::holder_short`]).
 const HOLDER_WHOLE: f64 = 0.95;
 
-/// What a stream a neighbour stopped announcing counts as in the seed's
-/// objective (`push::CANDIDATE_FRESHNESS`).
+/// What a stream a neighbour reported no copies of lately counts as in the
+/// seed's objective.
 const STALE: Duration = Duration::from_secs(2);
 
 // Every field is printed through `Debug`.
@@ -2285,7 +2285,7 @@ impl Sim {
                 }
                 for m in Reader::new(self.rcfg, payload) {
                     match m {
-                        Ok(m @ Message::Announce(a)) if !a.is_empty() => {
+                        Ok(m @ Message::Announce(a)) if !a.is_ask() => {
                             self.announce.0 += 1;
                             self.announce.1 += m.encoded_len() as u64;
                         }
@@ -2533,11 +2533,10 @@ impl Sim {
             if nb.barred {
                 barred.insert(id);
             }
-            let half = nb.rtt / 2;
             let w = nb
                 .lags
                 .iter()
-                .map(|l| l.map_or(STALE, |l| (l - half).max(Duration::ZERO)))
+                .map(|l| l.map_or(STALE, |l| l.max(Duration::ZERO)))
                 .max()
                 .unwrap_or(STALE);
             worst.push(w);
@@ -2819,7 +2818,12 @@ impl Sim {
                     hits: if liar { 8 } else { 0 },
                     late: 0,
                     misses: if liar { 0 } else { 8 },
-                    delay: Duration::from_millis(20),
+                    hit_delays: if liar {
+                        Delays { n: 8, ms: 8 * 20 }
+                    } else {
+                        Delays::default()
+                    },
+                    repairs: Delays::default(),
                     parent: node_id(h),
                 }
             })
@@ -4341,7 +4345,7 @@ fn withhold(
                 }
                 Message::Data(_) | Message::Integrity(_) | Message::SignedIntegrity(_) => {}
                 Message::Have(_) if g == Greed::FreeRider => {}
-                Message::Announce(a) if main && collusion.is_some() && !a.is_empty() => {}
+                Message::Announce(a) if main && collusion.is_some() && !a.is_ask() => {}
                 m => {
                     cw.write(&m).unwrap();
                 }

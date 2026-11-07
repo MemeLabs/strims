@@ -78,6 +78,15 @@ impl SignAllSwarmVerifier {
         self.signatures.get(i * s..(i + 1) * s).unwrap_or_default()
     }
 
+    /// When the stored chunk at `b`'s left was signed.
+    pub(crate) fn signed_at(&self, b: Bin) -> Option<Time> {
+        let l = b.base_left();
+        if l < self.tail || l >= self.head {
+            return None;
+        }
+        self.timestamps.get(self.slot(l)).copied()
+    }
+
     /// One `SignedIntegrity` per chunk of `b`.
     pub fn write_integrity(&self, b: Bin, w: &mut impl MessageWriter) -> Result<usize, Error> {
         if !crate::peer_bin_ok(b, u64::MAX) {

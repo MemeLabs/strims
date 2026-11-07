@@ -77,6 +77,18 @@
 //!   first). The rest get the chunk pushed, and pull only what their
 //!   parent misses, past its deadline.
 //!
+//! Elsewhere, a non-seed's HAVEs that would go alone wait [`HAVE_HOLD`]
+//! for something to ride with: a peer's HAVE starts a write cycle at once to
+//! request what it offers, and so does each chunk pushed to us, and a cycle
+//! that requests nothing carries only our HAVEs, a frame to every
+//! neighbour as each chunk arrives. Held, a neighbour gets them in a frame
+//! that carries something else (a request, a push), or together at most
+//! the hold after the first, so a viewer trades a frame per neighbour per
+//! hold, not per chunk, at no cost to what HAVEs time: the seed's, a new
+//! channel's and a recent requester's stay eager. HAVEs to the seed wait
+//! too: it times its neighbours by the delays their reports give, not by
+//! their HAVEs ([`push::seed`]).
+//!
 //! While a queue holds a relay's uplink (its links' latest round trips
 //! stand [`push::QUEUE_FORMED`] above their bases), its HAVEs wait to every
 //! peer but those the frame pushes to, and only for a frame that carries
@@ -662,6 +674,9 @@ pub(crate) struct PeerChannelScheduler {
     /// `have_bins` go in the next frame, whatever else it carries: one of
     /// them goes at once, or the tick came since they waited.
     haves_due: bool,
+    /// When the HAVEs waiting in `have_bins` began to (`NIL` while none
+    /// waits), for the hold ([`HAVE_HOLD`]).
+    haves_since: Time,
     /// Bins to send CANCELs for. Bound: timed out requests and chunks
     /// released from the peer as a parent, within the window.
     cancel_bins: Map,
@@ -735,6 +750,7 @@ impl PeerChannelScheduler {
             answer_time: AnswerTime::default(),
             have_bins: s.announced(),
             haves_due: false,
+            haves_since: Time::NIL,
             cancel_bins: Map::new(),
             request_bins: BinQueue::default(),
             backoff_bins: Map::new(),
@@ -1090,7 +1106,18 @@ impl PeerChannelScheduler {
         self.haves_due = true;
         write_map_bins(&mut self.have_bins, cw, |bin| Message::Have(Have { bin }))?;
         self.haves_due = false;
+        self.haves_since = Time::NIL;
         Ok(())
+    }
+
+    /// When HAVEs that `write` held go ([`HAVE_HOLD`]): `None` if none
+    /// wait held.
+    fn haves_held(&self, now: Time) -> Option<Time> {
+        if self.have_bins.is_empty() || self.haves_due || self.haves_since.is_nil() {
+            return None;
+        }
+        let at = self.haves_since + HAVE_HOLD;
+        (at > now).then_some(at)
     }
 
     /// The first bin worth requesting from the peer: the start of its live
@@ -1374,6 +1401,20 @@ fn write_map_bins(
     let root = m.root_bin();
     m.reset(root);
     Ok(())
+}
+
+/// How long a non-seed's HAVEs wait for something to ride with before they
+/// go in a frame of their own (see the [module docs](self)): long enough to
+/// gather the HAVEs a viewer would trade with each neighbour as chunks
+/// arrive, short against the margins they feed (parent switches, routes,
+/// reports).
+pub(crate) const HAVE_HOLD: Duration = Duration::from_millis(40);
+
+/// Whether an unqueued node's HAVEs go in a frame of their own: always at
+/// a seed or while the channel is eager, else once the first of them waited
+/// `hold`.
+fn haves_go_alone(seed: bool, eager: bool, since: Time, now: Time, hold: Duration) -> bool {
+    seed || eager || since.is_nil() || now - since >= hold
 }
 
 /// A swarm's scheduler: the shared state and a channel scheduler per peer.
@@ -1733,6 +1774,9 @@ impl PeerSwarmScheduler {
         for c in self.channels.values_mut() {
             if !hidden {
                 for &hb in covers.iter().filter(|b| !b.is_none()).chain(&more) {
+                    if c.haves_since.is_nil() {
+                        c.haves_since = now;
+                    }
                     c.have_bins.set(hb);
                     if !s.unannounced.is_empty() {
                         crate::bin_range::subtract_filled(&mut c.have_bins, &s.unannounced, hb);
@@ -1754,7 +1798,11 @@ impl PeerSwarmScheduler {
             if waits || c.peer_have_bins.filled_at(bin) {
                 q.enqueue(c.peer, s.key);
             } else {
-                c.haves_due = true;
+                // A hybrid write decides: a push queued to the peer carries
+                // them at once, and the hold bounds their wait otherwise.
+                if s.mode != PushMode::Hybrid {
+                    c.haves_due = true;
+                }
                 q.enqueue_now(c.peer, s.key);
             }
         }
@@ -2025,16 +2073,18 @@ impl PeerSwarmScheduler {
     }
 
     /// Data arrived from `peer`: `valid` says whether it verified, `new`
-    /// whether it added chunks we didn't have. Invalid data releases its bin
-    /// (inside our window only) to the other channels, which are queued, and
-    /// this channel leaves it alone for [`REQUEST_BACKOFF`], so the peer
-    /// that sent it can't keep it.
+    /// whether it added chunks we didn't have, `signed` when its integrity
+    /// unit was signed, if known. Invalid data releases its bin (inside our
+    /// window only) to the other channels, which are queued, and this
+    /// channel leaves it alone for [`REQUEST_BACKOFF`], so the peer that
+    /// sent it can't keep it.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_data(
         &mut self,
         peer: PeerKey,
         b: Bin,
         t: Time,
+        signed: Option<Time>,
         valid: bool,
         new: bool,
         now: Time,
@@ -2046,7 +2096,7 @@ impl PeerSwarmScheduler {
         }
         if self.s.push.is_some() {
             if valid {
-                self.push_data(peer, b, new, now, q);
+                self.push_data(peer, b, new, signed, now, q);
             } else {
                 self.push_invalid(peer, b);
             }
@@ -2146,28 +2196,21 @@ impl PeerSwarmScheduler {
             let mut it = c.peer_have_bins.iterate_empty_at(b);
             let mut next = it.next_base_after(b.base_left().max(lo));
             found = next.is_some();
-            // Only the hybrid's per-stream HAVE lag needs every new bin. A
-            // seed samples a stream's last chunk of each signature unit
-            // alone: a unit is published at once, so that chunk tells when
-            // the peer had the unit's share of the stream whole.
-            let unit = 1u64 << s.signature_layer;
-            let last = unit.saturating_sub(u64::from(s.stream_count));
+            // Only the hybrid needs every new bin: a non-seed's per-stream
+            // HAVE lag, and when a seed's neighbour last announced each
+            // stream.
             if s.push.is_some() {
-                // A unit signed early ends each stream's share at its last
-                // chunk of data: a chunk is its stream's last in the unit when
-                // the stream's next chunk is past the unit or data-less.
-                let unit_last = |x: Bin| {
-                    let y = Bin(x.0 + 2 * u64::from(s.stream_count));
-                    x.base_offset() % unit >= last
-                        || (s.have_bins.filled_at(y) && s.announce_bins.empty_at(y))
-                };
                 while let Some(x) = next {
                     let stream = usize::from(s.bin_stream(x));
                     // A bin with no time (pruned, or never published by a
                     // seed) gives no sample.
                     let t = s.bin_time(x);
-                    if t != Time::EPOCH && (!s.is_seed || unit_last(x)) {
-                        Self::push_have_lag(&mut c.push, stream, now - t, now);
+                    if t != Time::EPOCH {
+                        if s.is_seed {
+                            Self::push_announced(&mut c.push, stream, now);
+                        } else {
+                            Self::push_have_lag(&mut c.push, stream, now - t, now);
+                        }
                     }
                     if !s.is_seed
                         && s.streams
@@ -2568,7 +2611,24 @@ impl PeerSwarmScheduler {
         c.write0(swarm, cw)?;
         c.write1(s, now, cw)?;
         c.write_report(cw)?;
-        c.write_haves(cw, ride || !s.uplink_queued() || cw.available() < room)
+        let eager = !s.uplink_queued()
+            && haves_go_alone(
+                s.is_seed,
+                now < c.eager_haves_until,
+                c.haves_since,
+                now,
+                HAVE_HOLD,
+            );
+        c.write_haves(cw, ride || eager || cw.available() < room)
+    }
+
+    /// When `peer`'s HAVEs that the last write held go ([`HAVE_HOLD`]); `None`
+    /// while a queued uplink makes them wait for the tick anyway.
+    pub(crate) fn haves_held(&self, peer: PeerKey, now: Time) -> Option<Time> {
+        if self.s.uplink_queued() {
+            return None;
+        }
+        self.channels.get(&peer)?.haves_held(now)
     }
 
     /// Writes integrity and data for `b`, or for the leftmost part of `b`

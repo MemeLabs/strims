@@ -467,10 +467,65 @@ pub struct StreamClose {
     pub stream: Stream,
 }
 
-/// The most entries an [`Announce`] holds.
+/// The most entries an [`Announce`] holds ...
 pub const MAX_ANNOUNCE_ENTRIES: usize = 32;
+/// ... and the most stream items.
+pub const MAX_ANNOUNCE_STREAMS: usize = 32;
 /// The longest peer id an [`AnnounceEntry`] names.
 pub const MAX_PEER_ID: usize = 32;
+
+/// One-way delays of chunks to the sender: per chunk, its arrival by the
+/// sender's clock less the time its integrity unit was signed (by the
+/// signer's clock, which the signature covers), in whole milliseconds
+/// rounded down; their count and sum. A sender whose clock runs behind the
+/// signer's reads delays below zero, and its offset shifts every delay it
+/// reads alike, so a difference of two means of one sender's delays leaves
+/// it out.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Delays {
+    pub n: u64,
+    pub ms: i64,
+}
+
+impl Delays {
+    /// Adds one delay.
+    pub fn sample(&mut self, ms: i64) {
+        self.n = self.n.saturating_add(1);
+        self.ms = self.ms.saturating_add(ms);
+    }
+
+    /// Adds `o`'s delays.
+    pub fn add(&mut self, o: Delays) {
+        self.n = self.n.saturating_add(o.n);
+        self.ms = self.ms.saturating_add(o.ms);
+    }
+
+    /// The mean delay in milliseconds; `None` without delays.
+    pub fn mean(&self) -> Option<f64> {
+        (self.n > 0).then(|| self.ms as f64 / self.n as f64)
+    }
+
+    fn byte_len(&self) -> usize {
+        uvarint_len(self.n) + varint_len(self.ms)
+    }
+
+    fn write(&self, e: &mut Enc<'_>) -> Result<(), Error> {
+        e.uvarint(self.n)?;
+        e.varint(self.ms)
+    }
+
+    fn decode(d: &mut Dec<'_>) -> Result<Delays, Error> {
+        Ok(Delays {
+            n: d.uvarint()?,
+            ms: d.varint()?,
+        })
+    }
+}
+
+/// A stream from a uvarint: past 16 bits it is invalid.
+fn stream_from_wire(d: &mut Dec<'_>) -> Result<Stream, Error> {
+    Stream::try_from(d.uvarint()?).map_err(|_| Error::InvalidAnnounce)
+}
 
 /// How one parent pushed one stream to the sender over its last report
 /// interval.
@@ -483,9 +538,13 @@ pub struct AnnounceEntry<'a> {
     pub late: u64,
     /// Deadlines that passed; a late push was a miss first.
     pub misses: u64,
-    /// The hits' mean push delay after their unit was first announced to
-    /// the sender, in whole milliseconds on the wire.
-    pub delay: Duration,
+    /// The hits' delays: of those whose unit's signing time the sender
+    /// knew.
+    pub hit_delays: Delays,
+    /// The delays of the first copies of chunks the parent missed, from
+    /// whomever they came: those that arrived over the interval, whenever
+    /// their misses were counted.
+    pub repairs: Delays,
     /// The parent, by the peer id the sender's driver knows it by:
     /// 1..=[`MAX_PEER_ID`] bytes.
     pub parent: &'a [u8],
@@ -503,7 +562,8 @@ impl<'a> AnnounceEntry<'a> {
             + uvarint_len(self.hits)
             + uvarint_len(self.late)
             + uvarint_len(self.misses)
-            + uvarint_len(delay_to_wire(self.delay))
+            + self.hit_delays.byte_len()
+            + self.repairs.byte_len()
             + 1
             + self.parent.len()
     }
@@ -530,17 +590,19 @@ impl<'a> AnnounceEntry<'a> {
         e.uvarint(self.hits)?;
         e.uvarint(self.late)?;
         e.uvarint(self.misses)?;
-        e.uvarint(delay_to_wire(self.delay))?;
+        self.hit_delays.write(e)?;
+        self.repairs.write(e)?;
         e.u8(n)?;
         e.bytes(self.parent)
     }
 
     fn decode(d: &mut Dec<'a>) -> Result<AnnounceEntry<'a>, Error> {
-        let stream = Stream::try_from(d.uvarint()?).map_err(|_| Error::InvalidAnnounce)?;
+        let stream = stream_from_wire(d)?;
         let hits = d.uvarint()?;
         let late = d.uvarint()?;
         let misses = d.uvarint()?;
-        let delay = delay_from_wire(d.uvarint()?);
+        let hit_delays = Delays::decode(d)?;
+        let repairs = Delays::decode(d)?;
         let n = usize::from(d.u8()?);
         if !(1..=MAX_PEER_ID).contains(&n) {
             return Err(Error::InvalidAnnounce);
@@ -550,102 +612,222 @@ impl<'a> AnnounceEntry<'a> {
             hits,
             late,
             misses,
-            delay,
+            hit_delays,
+            repairs,
             parent: d.bytes(n)?,
         })
     }
 }
 
-/// Whole milliseconds, negative as zero.
-fn delay_to_wire(d: Duration) -> u64 {
-    u64::try_from(d.as_millis()).unwrap_or(0)
+/// The delays of the sender's first copies of one stream's chunks over its
+/// last report interval, from any peer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AnnounceStream {
+    pub stream: Stream,
+    pub first: Delays,
 }
 
-/// Saturates past `i64::MAX` milliseconds.
-fn delay_from_wire(ms: u64) -> Duration {
-    Duration::from_millis(i64::try_from(ms).unwrap_or(i64::MAX))
+impl AnnounceStream {
+    pub fn byte_len(&self) -> usize {
+        uvarint_len(u64::from(self.stream)) + self.first.byte_len()
+    }
+
+    /// Writes the item into `buf` and returns its length. Fails with
+    /// [`Error::NotEnoughSpace`] if `buf` is shorter than
+    /// [`AnnounceStream::byte_len`], before writing anything.
+    pub fn encode(&self, buf: &mut [u8]) -> Result<usize, Error> {
+        let buf = buf
+            .get_mut(..self.byte_len())
+            .ok_or(Error::NotEnoughSpace)?;
+        let mut e = Enc::new(buf);
+        self.write(&mut e)?;
+        Ok(e.pos())
+    }
+
+    fn write(&self, e: &mut Enc<'_>) -> Result<(), Error> {
+        e.uvarint(u64::from(self.stream))?;
+        self.first.write(e)
+    }
+
+    fn decode(d: &mut Dec<'_>) -> Result<AnnounceStream, Error> {
+        Ok(AnnounceStream {
+            stream: stream_from_wire(d)?,
+            first: Delays::decode(d)?,
+        })
+    }
+}
+
+/// Scans `count` stream items from `d`: an error unless each decodes and
+/// names a later stream than the one before.
+fn scan_streams(d: &mut Dec<'_>, count: u8) -> Result<(), Error> {
+    let mut last = None;
+    for _ in 0..count {
+        let s = AnnounceStream::decode(d)?.stream;
+        if last.is_some_and(|l| s <= l) {
+            return Err(Error::InvalidAnnounce);
+        }
+        last = Some(s);
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
 enum AnnounceRepr<'a> {
-    List(&'a [AnnounceEntry<'a>]),
-    /// `count` validated entries.
+    List(&'a [AnnounceEntry<'a>], &'a [AnnounceStream]),
+    /// `count` validated entries, then `streams` validated stream items.
     Wire {
         count: u8,
-        bytes: &'a [u8],
+        entries: &'a [u8],
+        streams: u8,
+        items: &'a [u8],
     },
 }
 
-/// A report on the sender's parents, one entry per parent and stream;
-/// without entries, a request for the receiver's reports.
+/// A report on the sender's parents, one entry per parent and stream, and
+/// on its own first copies, an item per stream; without either, a request
+/// for the receiver's reports.
 ///
-/// Built from entries for encoding ([`Announce::new`],
-/// [`Announce::from_entry_bytes`]); a decoded one keeps the validated wire
-/// bytes and parses them on iteration, so decoding allocates nothing and
-/// re-encoding reproduces the input exactly. Equality compares the
-/// entries, not the representation.
+/// On the wire: the entries' count (a byte) and the entries, then the
+/// items' count (a byte) and the items, in increasing stream order. Built
+/// from entries and items for encoding ([`Announce::new`],
+/// [`Announce::with_streams`], [`Announce::from_bytes`]); a decoded one
+/// keeps the validated wire bytes and parses them on iteration, so decoding
+/// allocates nothing and re-encoding reproduces the input exactly.
+/// Equality compares the entries and items, not the representation.
 #[derive(Clone, Copy)]
 pub struct Announce<'a>(AnnounceRepr<'a>);
 
 impl<'a> Announce<'a> {
     /// The request for reports.
-    pub const ASK: Announce<'static> = Announce(AnnounceRepr::List(&[]));
+    pub const ASK: Announce<'static> = Announce(AnnounceRepr::List(&[], &[]));
 
-    /// `None` past [`MAX_ANNOUNCE_ENTRIES`] or with an invalid entry.
+    /// Entries alone; `None` past [`MAX_ANNOUNCE_ENTRIES`] or with an
+    /// invalid entry.
     pub fn new(entries: &'a [AnnounceEntry<'a>]) -> Option<Announce<'a>> {
-        (entries.len() <= MAX_ANNOUNCE_ENTRIES && entries.iter().all(AnnounceEntry::is_valid))
-            .then_some(Announce(AnnounceRepr::List(entries)))
+        Announce::with_streams(entries, &[])
     }
 
-    /// `count` entries in `bytes`, each written by [`AnnounceEntry::encode`];
-    /// `None` unless `bytes` holds exactly that.
-    pub fn from_entry_bytes(count: usize, bytes: &'a [u8]) -> Option<Announce<'a>> {
+    /// Entries and stream items; `None` past [`MAX_ANNOUNCE_ENTRIES`] or
+    /// [`MAX_ANNOUNCE_STREAMS`], with an invalid entry, or with items out
+    /// of increasing stream order.
+    pub fn with_streams(
+        entries: &'a [AnnounceEntry<'a>],
+        streams: &'a [AnnounceStream],
+    ) -> Option<Announce<'a>> {
+        let increasing = streams.windows(2).all(|w| match w {
+            [a, b] => a.stream < b.stream,
+            _ => true,
+        });
+        (entries.len() <= MAX_ANNOUNCE_ENTRIES
+            && entries.iter().all(AnnounceEntry::is_valid)
+            && streams.len() <= MAX_ANNOUNCE_STREAMS
+            && increasing)
+            .then_some(Announce(AnnounceRepr::List(entries, streams)))
+    }
+
+    /// `count` entries in `entries`, each written by
+    /// [`AnnounceEntry::encode`], and `streams` items in `items`, each
+    /// written by [`AnnounceStream::encode`]; `None` unless the bytes hold
+    /// exactly that, within the bounds of [`Announce::with_streams`].
+    pub fn from_bytes(
+        count: usize,
+        entries: &'a [u8],
+        streams: usize,
+        items: &'a [u8],
+    ) -> Option<Announce<'a>> {
         let count = u8::try_from(count)
             .ok()
             .filter(|&n| usize::from(n) <= MAX_ANNOUNCE_ENTRIES)?;
-        let mut d = Dec::new(bytes);
+        let streams = u8::try_from(streams)
+            .ok()
+            .filter(|&n| usize::from(n) <= MAX_ANNOUNCE_STREAMS)?;
+        let mut d = Dec::new(entries);
         for _ in 0..count {
             AnnounceEntry::decode(&mut d).ok()?;
         }
-        d.is_empty()
-            .then_some(Announce(AnnounceRepr::Wire { count, bytes }))
+        let mut s = Dec::new(items);
+        scan_streams(&mut s, streams).ok()?;
+        (d.is_empty() && s.is_empty()).then_some(Announce(AnnounceRepr::Wire {
+            count,
+            entries,
+            streams,
+            items,
+        }))
     }
 
+    /// The entries.
     pub fn len(&self) -> usize {
         match self.0 {
-            AnnounceRepr::List(l) => l.len(),
+            AnnounceRepr::List(l, _) => l.len(),
             AnnounceRepr::Wire { count, .. } => usize::from(count),
         }
     }
 
-    /// A request for reports.
+    /// No entries, though it may carry stream items
+    /// ([`Announce::is_ask`]).
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// The stream items.
+    pub fn stream_len(&self) -> usize {
+        match self.0 {
+            AnnounceRepr::List(_, s) => s.len(),
+            AnnounceRepr::Wire { streams, .. } => usize::from(streams),
+        }
+    }
+
+    /// A request for reports: neither entries nor stream items.
+    pub fn is_ask(&self) -> bool {
+        self.is_empty() && self.stream_len() == 0
+    }
+
     pub fn iter(&self) -> AnnounceIter<'a> {
         AnnounceIter(match self.0 {
-            AnnounceRepr::List(l) => AnnounceIterRepr::List(l.iter()),
-            AnnounceRepr::Wire { count, bytes } => AnnounceIterRepr::Wire {
-                dec: Dec::new(bytes),
+            AnnounceRepr::List(l, _) => AnnounceIterRepr::List(l.iter()),
+            AnnounceRepr::Wire { count, entries, .. } => AnnounceIterRepr::Wire {
+                dec: Dec::new(entries),
                 left: count,
             },
         })
     }
 
+    /// The stream items, in increasing stream order.
+    pub fn streams(&self) -> AnnounceStreams<'a> {
+        AnnounceStreams(match self.0 {
+            AnnounceRepr::List(_, s) => AnnounceStreamsRepr::List(s.iter()),
+            AnnounceRepr::Wire { streams, items, .. } => AnnounceStreamsRepr::Wire {
+                dec: Dec::new(items),
+                left: streams,
+            },
+        })
+    }
+
     fn byte_len(&self) -> usize {
-        1 + match self.0 {
-            AnnounceRepr::List(l) => l.iter().map(AnnounceEntry::byte_len).sum(),
-            AnnounceRepr::Wire { bytes, .. } => bytes.len(),
+        2 + match self.0 {
+            AnnounceRepr::List(l, s) => {
+                l.iter().map(AnnounceEntry::byte_len).sum::<usize>()
+                    + s.iter().map(AnnounceStream::byte_len).sum::<usize>()
+            }
+            AnnounceRepr::Wire { entries, items, .. } => entries.len() + items.len(),
         }
     }
 
     fn encode(&self, e: &mut Enc<'_>) -> Result<(), Error> {
         let n = u8::try_from(self.len()).map_err(|_| Error::InvalidAnnounce)?;
+        let k = u8::try_from(self.stream_len()).map_err(|_| Error::InvalidAnnounce)?;
         e.u8(n)?;
         match self.0 {
-            AnnounceRepr::List(l) => l.iter().try_for_each(|x| x.write(e)),
-            AnnounceRepr::Wire { bytes, .. } => e.bytes(bytes),
+            AnnounceRepr::List(l, s) => {
+                l.iter().try_for_each(|x| x.write(e))?;
+                e.u8(k)?;
+                s.iter().try_for_each(|x| x.write(e))
+            }
+            AnnounceRepr::Wire { entries, items, .. } => {
+                e.bytes(entries)?;
+                e.u8(k)?;
+                e.bytes(items)
+            }
         }
     }
 
@@ -658,16 +840,25 @@ impl<'a> Announce<'a> {
         for _ in 0..count {
             AnnounceEntry::decode(&mut scan)?;
         }
+        let entries = d.bytes(scan.pos())?;
+        let streams = d.u8()?;
+        if usize::from(streams) > MAX_ANNOUNCE_STREAMS {
+            return Err(Error::InvalidAnnounce);
+        }
+        let mut scan = Dec::new(d.rest_peek());
+        scan_streams(&mut scan, streams)?;
         Ok(Announce(AnnounceRepr::Wire {
             count,
-            bytes: d.bytes(scan.pos())?,
+            entries,
+            streams,
+            items: d.bytes(scan.pos())?,
         }))
     }
 }
 
 impl PartialEq for Announce<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.iter().eq(other.iter())
+        self.iter().eq(other.iter()) && self.streams().eq(other.streams())
     }
 }
 
@@ -675,7 +866,10 @@ impl Eq for Announce<'_> {}
 
 impl fmt::Debug for Announce<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.iter()).finish()
+        let mut l = f.debug_list();
+        l.entries(self.iter());
+        l.entries(self.streams());
+        l.finish()
     }
 }
 
@@ -697,6 +891,29 @@ impl<'a> Iterator for AnnounceIter<'a> {
                 *left = left.checked_sub(1)?;
                 // The bytes were validated when the message was decoded.
                 AnnounceEntry::decode(dec).ok()
+            }
+        }
+    }
+}
+
+enum AnnounceStreamsRepr<'a> {
+    List(core::slice::Iter<'a, AnnounceStream>),
+    Wire { dec: Dec<'a>, left: u8 },
+}
+
+/// Iterator over an [`Announce`]'s stream items.
+pub struct AnnounceStreams<'a>(AnnounceStreamsRepr<'a>);
+
+impl Iterator for AnnounceStreams<'_> {
+    type Item = AnnounceStream;
+
+    fn next(&mut self) -> Option<AnnounceStream> {
+        match &mut self.0 {
+            AnnounceStreamsRepr::List(l) => l.next().copied(),
+            AnnounceStreamsRepr::Wire { dec, left } => {
+                *left = left.checked_sub(1)?;
+                // The bytes were validated when the message was decoded.
+                AnnounceStream::decode(dec).ok()
             }
         }
     }

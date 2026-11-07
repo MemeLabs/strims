@@ -32,7 +32,8 @@ const ANNOUNCED: [AnnounceEntry<'static>; 2] = [
         hits: 60,
         late: 2,
         misses: 4,
-        delay: Duration::from_millis(35),
+        hit_delays: Delays { n: 60, ms: 2100 },
+        repairs: Delays { n: 2, ms: -40 },
         parent: &[7],
     },
     AnnounceEntry {
@@ -40,8 +41,23 @@ const ANNOUNCED: [AnnounceEntry<'static>; 2] = [
         hits: 0,
         late: 0,
         misses: 1234,
-        delay: Duration::ZERO,
+        hit_delays: Delays { n: 0, ms: 0 },
+        repairs: Delays {
+            n: u64::MAX,
+            ms: i64::MIN,
+        },
         parent: &FF16,
+    },
+];
+
+const FIRST: [AnnounceStream; 2] = [
+    AnnounceStream {
+        stream: 3,
+        first: Delays { n: 70, ms: 3000 },
+    },
+    AnnounceStream {
+        stream: 0xffff,
+        first: Delays { n: 1, ms: i64::MAX },
     },
 ];
 
@@ -145,6 +161,8 @@ fn message_marshal_unmarshal() {
         Message::StreamClose(StreamClose { stream: 16 }),
         Message::Announce(Announce::ASK),
         Message::Announce(Announce::new(&ANNOUNCED).unwrap()),
+        Message::Announce(Announce::with_streams(&[], &FIRST).unwrap()),
+        Message::Announce(Announce::with_streams(&ANNOUNCED, &FIRST).unwrap()),
         Message::Choke,
         Message::Unchoke,
         Message::Restart,
@@ -439,37 +457,84 @@ fn announce_bounds_are_decode_errors() {
     }
     let entry = |stream: u64, id_len: u8| {
         let mut e = vec![0x80 | (stream & 0x7f) as u8, (stream >> 7) as u8];
-        e.extend([1, 0, 0, 5, id_len]);
+        e.extend([1, 0, 0, 1, 10, 0, 0, id_len]);
         e.extend(std::iter::repeat_n(9u8, usize::from(id_len)));
         e
     };
-    let message = |entries: &[Vec<u8>]| {
+    let item = |stream: u64| vec![0x80 | (stream & 0x7f) as u8, (stream >> 7) as u8, 1, 3];
+    let message = |entries: &[Vec<u8>], items: &[Vec<u8>]| {
         let mut m = vec![MessageType::Announce.as_u8(), entries.len() as u8];
         for e in entries {
             m.extend(e);
         }
+        m.push(items.len() as u8);
+        for x in items {
+            m.extend(x);
+        }
         m
     };
     let ok = entry(5, MAX_PEER_ID as u8);
-    assert!(decode(&message(std::slice::from_ref(&ok))).is_ok());
+    assert!(decode(&message(std::slice::from_ref(&ok), &[])).is_ok());
+    assert!(decode(&message(&[], &[item(1), item(5)])).is_ok());
     assert_eq!(
-        decode(&message(&[entry(5, 0)])),
+        decode(&message(&[entry(5, 0)], &[])),
         Err(Error::InvalidAnnounce)
     );
     assert_eq!(
-        decode(&message(&[entry(5, MAX_PEER_ID as u8 + 1)])),
+        decode(&message(&[entry(5, MAX_PEER_ID as u8 + 1)], &[])),
         Err(Error::InvalidAnnounce)
     );
-    // A stream past 16 bits.
+    // A stream past 16 bits, in an entry or an item.
     let mut wide = vec![0xff, 0xff, 0x04];
-    wide.extend([1, 0, 0, 5, 1, 9]);
-    assert_eq!(decode(&message(&[wide])), Err(Error::InvalidAnnounce));
-    let many = vec![ok; MAX_ANNOUNCE_ENTRIES + 1];
-    assert_eq!(decode(&message(&many)), Err(Error::InvalidAnnounce));
-    // A count past the entries is truncated input.
-    let mut short = message(&[entry(5, 1)]);
+    wide.extend([1, 0, 0, 0, 0, 0, 0, 1, 9]);
+    assert_eq!(decode(&message(&[wide], &[])), Err(Error::InvalidAnnounce));
+    let wide = vec![0xff, 0xff, 0x04, 0, 0];
+    assert_eq!(decode(&message(&[], &[wide])), Err(Error::InvalidAnnounce));
+    let many = vec![ok.clone(); MAX_ANNOUNCE_ENTRIES + 1];
+    assert_eq!(decode(&message(&many, &[])), Err(Error::InvalidAnnounce));
+    let many: Vec<_> = (0..=MAX_ANNOUNCE_STREAMS as u64).map(item).collect();
+    assert_eq!(decode(&message(&[], &many)), Err(Error::InvalidAnnounce));
+    // Items name each stream once, in increasing order.
+    for items in [[item(5), item(5)], [item(5), item(1)]] {
+        assert_eq!(
+            decode(&message(std::slice::from_ref(&ok), &items)),
+            Err(Error::InvalidAnnounce)
+        );
+    }
+    // A count past the entries or items is truncated input, and so is a
+    // message that ends before the items' count.
+    let mut short = message(&[entry(5, 1)], &[]);
     short[1] = 2;
     assert_eq!(decode(&short), Err(Error::Truncated));
+    let mut short = message(&[], &[item(1)]);
+    short[2] = 2;
+    assert_eq!(decode(&short), Err(Error::Truncated));
+    let mut short = message(&[entry(5, 1)], &[]);
+    short.pop();
+    assert_eq!(decode(&short), Err(Error::Truncated));
+}
+
+#[test]
+fn an_ask_is_neither_entries_nor_stream_items() {
+    assert!(Announce::ASK.is_ask());
+    let mut buf = [0u8; 3];
+    let n = Message::Announce(Announce::ASK).encode(&mut buf).unwrap();
+    assert_eq!(&buf[..n], &[MessageType::Announce.as_u8(), 0, 0]);
+    let (m, _) = Message::decode(&config(), &buf[..n]).unwrap();
+    assert!(matches!(m, Message::Announce(a) if a.is_ask()));
+    // A report of first copies alone has no entries, and isn't an ask.
+    let streams = Announce::with_streams(&[], &FIRST).unwrap();
+    assert!(streams.is_empty() && !streams.is_ask());
+    assert_ne!(streams, Announce::ASK);
+    let mut buf = vec![0u8; Message::Announce(streams).encoded_len()];
+    Message::Announce(streams).encode(&mut buf).unwrap();
+    let (m, _) = Message::decode(&config(), &buf).unwrap();
+    let Message::Announce(a) = m else {
+        panic!("{m:?}");
+    };
+    assert!(!a.is_ask());
+    assert_eq!(a.streams().collect::<Vec<_>>(), FIRST);
+    assert!(Announce::new(&ANNOUNCED).is_some_and(|a| !a.is_ask()));
 }
 
 #[test]
@@ -480,10 +545,23 @@ fn announce_entries_are_built_from_their_encodings() {
         bytes.resize(start + e.byte_len(), 0);
         assert_eq!(e.encode(&mut bytes[start..]), Ok(e.byte_len()));
     }
-    let a = Announce::from_entry_bytes(2, &bytes).unwrap();
+    let mut items = Vec::new();
+    for x in &FIRST {
+        let start = items.len();
+        items.resize(start + x.byte_len(), 0);
+        assert_eq!(x.encode(&mut items[start..]), Ok(x.byte_len()));
+    }
+    let a = Announce::from_bytes(2, &bytes, 0, &[]).unwrap();
     assert_eq!(a, Announce::new(&ANNOUNCED).unwrap());
-    assert!(Announce::from_entry_bytes(1, &bytes).is_none());
-    assert!(Announce::from_entry_bytes(3, &bytes).is_none());
+    let a = Announce::from_bytes(2, &bytes, 2, &items).unwrap();
+    assert_eq!(a, Announce::with_streams(&ANNOUNCED, &FIRST).unwrap());
+    assert_ne!(a, Announce::new(&ANNOUNCED).unwrap());
+    assert!(Announce::from_bytes(1, &bytes, 0, &[]).is_none());
+    assert!(Announce::from_bytes(3, &bytes, 0, &[]).is_none());
+    assert!(Announce::from_bytes(2, &bytes, 1, &items).is_none());
+    // Out of order.
+    let swapped = [FIRST[1], FIRST[0]];
+    assert!(Announce::with_streams(&[], &swapped).is_none());
     let unnamed = AnnounceEntry {
         parent: &[],
         ..ANNOUNCED[0]
@@ -493,4 +571,47 @@ fn announce_entries_are_built_from_their_encodings() {
     let mut small = [0u8; 4];
     assert_eq!(ANNOUNCED[0].encode(&mut small), Err(Error::NotEnoughSpace));
     assert_eq!(small, [0; 4]);
+    assert_eq!(FIRST[0].encode(&mut small[..3]), Err(Error::NotEnoughSpace));
+    // The longest entry and item, which a report counts on fitting a frame.
+    let longest = AnnounceEntry {
+        stream: Stream::MAX,
+        hits: u64::MAX,
+        late: u64::MAX,
+        misses: u64::MAX,
+        hit_delays: Delays {
+            n: u64::MAX,
+            ms: i64::MIN,
+        },
+        repairs: Delays {
+            n: u64::MAX,
+            ms: i64::MIN,
+        },
+        parent: &FF64[..MAX_PEER_ID],
+    };
+    assert_eq!(longest.byte_len(), 106);
+    let longest = AnnounceStream {
+        stream: Stream::MAX,
+        first: longest.repairs,
+    };
+    assert_eq!(longest.byte_len(), 23);
+}
+
+#[test]
+fn delays_sum_and_shift_alike() {
+    let mut d = Delays::default();
+    assert_eq!(d.mean(), None);
+    for ms in [100, 120, 140] {
+        d.sample(ms);
+    }
+    assert_eq!(d.mean(), Some(120.0));
+    // A clock 5 s behind reads every delay 5 s lower: the mean moves by
+    // that.
+    let mut behind = Delays::default();
+    for ms in [100, 120, 140] {
+        behind.sample(ms - 5000);
+    }
+    assert_eq!(behind.mean(), Some(120.0 - 5000.0));
+    let mut sum = d;
+    sum.add(behind);
+    assert_eq!((sum.n, sum.ms), (6, 2 * 360 - 15_000));
 }

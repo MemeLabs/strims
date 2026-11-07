@@ -10,7 +10,7 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
-use strims_base::time::{Duration, Time};
+use strims_base::time::Time;
 use strims_binmap::{Bin, Map};
 use strims_ppspp::codec::{
     ChannelWriter, FrameReader, Message, MessageWriter, Reader, ReaderConfig, Writer as CodecWriter,
@@ -332,7 +332,14 @@ proptest! {
                 hits: b,
                 late: b >> 7,
                 misses: b.rotate_left(3),
-                delay: Duration::from_millis((b % 100_000) as i64),
+                hit_delays: strims_ppspp::codec::Delays {
+                    n: b >> 3,
+                    ms: (b % 100_000) as i64 - 50_000,
+                },
+                repairs: strims_ppspp::codec::Delays {
+                    n: b >> 9,
+                    ms: b as i64,
+                },
                 parent: &id[..1 + (b % 4) as usize],
             })
             .collect();

@@ -41,6 +41,21 @@ children aren't the seed's neighbours goes unjudged. Barring one after
 15 s without a reporter, and probing the holders reports leave unjudged,
 both barred honest holders without improving p99.
 
+**Timing the seed's neighbours by a hold ledger.** (`seedtime-ledger`
+613808fd, against 8a3b8ac1) Each report carried, per stream, the timed
+chunks the reporter had announced to the seed since its last report and
+how long their HAVEs waited between verification and write, which the
+seed took off its HAVE lags so the hold could cover HAVEs to it. It tied
+the DATA delays that landed (browsers 91 against 97 of 1024 collapsed;
+216 against 225 of 1408 at 128 seeds on the cells that collapse) with
+smaller reports (1.6 times base's bytes against 2.2), but a holder's own
+HAVE timing still decided whether its children's miss reports counted:
+one that delayed its HAVEs to the seed, or reported no wait, voided them
+alone. Judging a reporter's first copies against the entry's own report
+(8e35b2b6) failed `wan_webrtc_channels_hybrid` seed 5; sending HAVEs that
+fill a hole at once under the hold (5c4ce7e1) failed `seed_outage_hybrid`
+at 6 of 40 seeds against 4.
+
 **Shedding on push queue wait.** (recorded in d1552e65) It catches slow
 parents sooner but hurts `sim_push_parent_dies` and sparse meshes.
 

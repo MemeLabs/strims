@@ -14,7 +14,7 @@ use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_ppspp::codec::{
-    Ack, Announce, AnnounceEntry, Cancel, ChannelWriter, Data, Have, Integrity, Message,
+    Ack, Announce, AnnounceEntry, Cancel, ChannelWriter, Data, Delays, Have, Integrity, Message,
     MessageWriter, Ping, Pong, Request, SignedIntegrity, StreamCancel, StreamClose, StreamOpen,
     StreamRequest,
 };
@@ -311,7 +311,14 @@ fn encode(msgs: &[Msg], channel: u64) -> Vec<u8> {
                         hits: *hits,
                         late: *late,
                         misses: *misses,
-                        delay: Duration::from_millis(*ms as i64),
+                        hit_delays: Delays {
+                            n: *hits,
+                            ms: *ms as i64,
+                        },
+                        repairs: Delays {
+                            n: *misses,
+                            ms: -(*ms as i64),
+                        },
                         parent: id,
                     })
                     .filter(AnnounceEntry::is_valid)

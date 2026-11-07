@@ -35,10 +35,10 @@ use strims_base::time::{Duration, Time};
 use strims_binmap::{Bin, Map};
 use strims_golden::Golden;
 use strims_ppspp::codec::{
-    self, Ack, Announce, AnnounceEntry, Cancel, ChannelHeader, ChannelWriter, Data, EpochOption,
-    FrameReader, Handshake, Have, Integrity, Message, MessageWriter, Ping, Pong, ProtocolOption,
-    ProtocolOptionType, ProtocolOptions, Reader, ReaderConfig, Request, SignedIntegrity,
-    StreamCancel, StreamClose, StreamOpen, StreamRequest, Writer as CodecWriter,
+    self, Ack, Announce, AnnounceEntry, AnnounceStream, Cancel, ChannelHeader, ChannelWriter, Data,
+    Delays, EpochOption, FrameReader, Handshake, Have, Integrity, Message, MessageWriter, Ping,
+    Pong, ProtocolOption, ProtocolOptionType, ProtocolOptions, Reader, ReaderConfig, Request,
+    SignedIntegrity, StreamCancel, StreamClose, StreamOpen, StreamRequest, Writer as CodecWriter,
 };
 use strims_ppspp::integrity::{
     LiveSignatureAlgorithm, MerkleHashTreeFunction, ProtectionMethod, VerifierOptions,
@@ -119,7 +119,8 @@ fn codec_messages() {
             hits: 60,
             late: 2,
             misses: 4,
-            delay: Duration::from_millis(35),
+            hit_delays: Delays { n: 60, ms: 2100 },
+            repairs: Delays { n: 3, ms: 600 },
             parent: &id,
         },
         AnnounceEntry {
@@ -127,8 +128,19 @@ fn codec_messages() {
             hits: 0,
             late: 0,
             misses: 1234,
-            delay: Duration::ZERO,
+            hit_delays: Delays::default(),
+            repairs: Delays::default(),
             parent: &[7],
+        },
+    ];
+    let first = [
+        AnnounceStream {
+            stream: 3,
+            first: Delays { n: 70, ms: 3000 },
+        },
+        AnnounceStream {
+            stream: 300,
+            first: Delays { n: 2, ms: -9000 },
         },
     ];
     let d1 = stream_data(0, 16, 1);
@@ -299,7 +311,7 @@ fn codec_messages() {
         ),
         (
             "announce",
-            Message::Announce(Announce::new(&announced).unwrap()),
+            Message::Announce(Announce::with_streams(&announced, &first).unwrap()),
         ),
         ("announce_ask", Message::Announce(Announce::ASK)),
         ("end", Message::End),

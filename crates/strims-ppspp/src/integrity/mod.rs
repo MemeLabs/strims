@@ -465,6 +465,17 @@ impl SwarmVerifier {
         }
     }
 
+    /// When the verified integrity unit holding `b` (its leftmost chunk's)
+    /// was signed, by the signer's clock: the timestamp its signature
+    /// covers. `None` without integrity, or once the unit left the ring.
+    pub(crate) fn signed_at(&self, b: Bin) -> Option<Time> {
+        match self {
+            SwarmVerifier::Merkle(v) => v.signed_at(b),
+            SwarmVerifier::SignAll(v) => v.signed_at(b),
+            SwarmVerifier::None => None,
+        }
+    }
+
     /// Writes the integrity messages a peer whose have map is `peer_have`
     /// needs to verify `b`: for Merkle, the signed munro root unless the
     /// peer has part of the munro, then uncle hashes up to the first

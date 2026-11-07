@@ -29,6 +29,7 @@
 //! | `delay` | ACK and PONG delays, ns |
 //! | `nonce` | PING and PONG nonces: a pong carries its ping's |
 //! | `count` | on ANNOUNCE, its entries; on `TapLost`, the events lost |
+//! | `streams` | on ANNOUNCE, its stream items |
 //!
 //! A tap row carries its decision's fields, and a sample row its
 //! source's, by their tables' names: a peer as its name in hex, a named
@@ -754,11 +755,17 @@ fn message_row(row: Row, m: &Message<'_>, p: &SwarmParams) -> Row {
             stream: Some(s.stream.into()),
             ..row
         },
-        Message::Announce(a) => Row {
-            kind: "ANNOUNCE",
-            other: count_field(a.len() as i64),
-            ..row
-        },
+        Message::Announce(a) => {
+            let mut other = count_field(a.len() as i64);
+            if let Some(f) = other.get_mut(1) {
+                *f = Some(("streams", Val::Num(a.stream_len() as i64)));
+            }
+            Row {
+                kind: "ANNOUNCE",
+                other,
+                ..row
+            }
+        }
         Message::End => Row { kind: "END", ..row },
     }
 }

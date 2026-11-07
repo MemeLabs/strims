@@ -8,7 +8,7 @@
 
 use super::push::seed::PushFate;
 use super::*;
-use crate::codec::{Announce, AnnounceEntry, Message, Reader};
+use crate::codec::{Announce, AnnounceEntry, AnnounceStream, Delays, Message, Reader};
 use crate::{SwarmId, SwarmOptions};
 use slotmap::SlotMap;
 use std::collections::BTreeMap;
@@ -180,8 +180,17 @@ fn stream_subscription_marks_its_bins_requested() {
     );
 
     f.sched.consume(Bin(64), now(), &f.swarm, &mut q);
-    f.sched
-        .handle_data(p, Bin(64), Time::NIL, true, true, now(), Bin(0), &mut q);
+    f.sched.handle_data(
+        p,
+        Bin(64),
+        Time::NIL,
+        None,
+        true,
+        true,
+        now(),
+        Bin(0),
+        &mut q,
+    );
 
     assert!(
         f.sched
@@ -438,7 +447,7 @@ fn invalid_data_hands_a_source_chunk_to_pull() {
     assert!(f.sched.do_stream_sub(p, 0, Bin(0)));
     f.sched.handle_have(p, Bin::new(1, 0), now());
     f.sched
-        .handle_data(p, Bin(2), now(), false, false, now(), Bin(0), &mut q);
+        .handle_data(p, Bin(2), now(), None, false, false, now(), Bin(0), &mut q);
     assert!(f.sched.s.request_bins.empty_at(Bin(2)));
     f.sched.handle_have(o, Bin::new(1, 0), now());
     assert_eq!(requests_at(&mut f, o, now()), vec![Bin(2)]);
@@ -784,14 +793,23 @@ fn unanswered_requests_filled_elsewhere_leave_the_flight() {
     // Bin 0 is answered by `p` (acked); bin 2 comes from the other peer.
     f.sched.consume(Bin(0), now(), &f.swarm, &mut q);
     f.sched
-        .handle_data(p, Bin(0), now(), true, true, now(), Bin(0), &mut q);
+        .handle_data(p, Bin(0), now(), None, true, true, now(), Bin(0), &mut q);
     f.sched.handle_message_end(p, now(), &mut q);
     f.sched.consume(Bin(2), now(), &f.swarm, &mut q);
-    f.sched
-        .handle_data(other, Bin(2), now(), true, true, now(), Bin(0), &mut q);
+    f.sched.handle_data(
+        other,
+        Bin(2),
+        now(),
+        None,
+        true,
+        true,
+        now(),
+        Bin(0),
+        &mut q,
+    );
     // A duplicate answer from `p` doesn't ack twice.
     f.sched
-        .handle_data(p, Bin(0), now(), true, false, now(), Bin(0), &mut q);
+        .handle_data(p, Bin(0), now(), None, true, false, now(), Bin(0), &mut q);
     f.sched.handle_message_end(p, now(), &mut q);
     assert_eq!(f.sched.channels[&p].controller.in_flight(), 1024);
 
@@ -838,7 +856,7 @@ fn requests_pruned_behind_the_store_leave_the_flight() {
         f.swarm.publish(b, &chunk).unwrap();
         f.sched.consume(b, now(), &f.swarm, &mut q);
         f.sched
-            .handle_data(other, b, now(), true, true, now(), Bin(0), &mut q);
+            .handle_data(other, b, now(), None, true, true, now(), Bin(0), &mut q);
     }
     assert_eq!(f.swarm.store().next(), Bin(4));
     f.sched.gc(&f.swarm, now());
@@ -2759,7 +2777,8 @@ fn hybrid_cancels_unsolicited_pushes() {
     for (i, t) in [(0u64, now()), (1, now()), (2, now() + Duration::SECOND)] {
         let b = Bin(i * 2);
         f.sched.consume(b, t, &f.swarm, &mut q);
-        f.sched.handle_data(p, b, t, true, true, t, Bin(0), &mut q);
+        f.sched
+            .handle_data(p, b, t, None, true, true, t, Bin(0), &mut q);
         let cancels = next_messages(&mut f, p, t)
             .iter()
             .filter(|m| matches!(m, Message::StreamCancel(_)))
@@ -3043,7 +3062,7 @@ fn reports(f: &mut Fixture, peer: PeerKey, t: Time) -> Vec<(u16, u64, u64, u64, 
     next_messages(f, peer, t)
         .iter()
         .filter_map(|m| match m {
-            Message::Announce(a) if !a.is_empty() => Some(
+            Message::Announce(a) if !a.is_ask() => Some(
                 a.iter()
                     .map(|e| (e.stream, e.hits, e.late, e.misses, e.parent.to_vec()))
                     .collect::<Vec<_>>(),
@@ -3073,7 +3092,8 @@ fn a_viewer_reports_its_parents_to_every_neighbour_that_asked() {
         f.sched.handle_have(other, Bin::new(2, first / 4), t);
         let b = Bin(2 * first);
         f.sched.consume(b, t, &f.swarm, q);
-        f.sched.handle_data(parent, b, t, true, true, t, Bin(0), q);
+        f.sched
+            .handle_data(parent, b, t, None, true, true, t, Bin(0), q);
         let deadline = f.sched.next_push_deadline().unwrap();
         f.sched.expire_push(deadline, q);
         deadline
@@ -3114,6 +3134,165 @@ fn a_viewer_reports_its_parents_to_every_neighbour_that_asked() {
     assert_eq!(reports(&mut f, asker, tick), vec![(0, 0, 0, 4, vec![1])]);
 }
 
+/// A report entry's stream, hits, misses, delays and parent.
+type DelayEntry = (u16, u64, u64, Delays, Delays, Vec<u8>);
+
+/// The report `peer`'s channel writes next: its entries and its stream
+/// items.
+fn report_delays(
+    f: &mut Fixture,
+    peer: PeerKey,
+    t: Time,
+) -> (Vec<DelayEntry>, Vec<AnnounceStream>) {
+    let mut entries = Vec::new();
+    let mut streams = Vec::new();
+    for m in next_messages(f, peer, t) {
+        if let Message::Announce(a) = m {
+            entries.extend(a.iter().map(|e| {
+                let id = e.parent.to_vec();
+                (e.stream, e.hits, e.misses, e.hit_delays, e.repairs, id)
+            }));
+            streams.extend(a.streams());
+        }
+    }
+    (entries, streams)
+}
+
+/// A viewer whose clock reads `shift` ms past the seed's: its report on a
+/// parent's hit and miss and its first copies.
+fn viewer_delays(shift: i64) {
+    let mut f = fixture(hybrid(2));
+    let mut q = MockQueue::default();
+    let parent = ready_channel(&mut f, &mut q);
+    let other = add_ready(&mut f, &mut q, 1);
+    let asker = add_ready(&mut f, &mut q, 2);
+    f.sched.s.first_chunk_set = true;
+    assert!(f.sched.do_stream_sub(parent, 0, Bin(0)));
+    assert_eq!(
+        f.sched.handle_stream_open(parent, 0, Bin(0), now(), &mut q),
+        Ok(StreamOpenOutcome::Accepted)
+    );
+    assert!(f.sched.handle_announce(asker, Announce::ASK, now()));
+    let ms = Duration::from_millis;
+    // The seed signed the unit as the viewer's clock read `now()`; its own
+    // read `shift` less.
+    let signed = now() - ms(shift);
+    let data = |f: &mut Fixture, q: &mut MockQueue, from: PeerKey, b: Bin, t: Time, new: bool| {
+        if new {
+            f.sched.consume(b, t, &f.swarm, q);
+        }
+        f.sched
+            .handle_data(from, b, t, Some(signed), true, new, t, Bin(0), q);
+    };
+    // `other` announces chunks 0..4: 0 and 2 of stream 0, expected from
+    // the parent.
+    f.sched.handle_have(other, Bin::new(2, 0), now() + ms(10));
+    // The parent pushes chunk 0, 30 ms after signing: a hit and a first
+    // copy. A second copy is neither.
+    data(&mut f, &mut q, parent, Bin(0), now() + ms(30), true);
+    data(&mut f, &mut q, other, Bin(0), now() + ms(35), false);
+    // `other` sends chunk 1, of stream 1.
+    data(&mut f, &mut q, other, Bin(2), now() + ms(60), true);
+    // Chunk 2 misses its deadline, and comes from `other` 100 ms later: its
+    // repair.
+    let deadline = f.sched.next_push_deadline().unwrap();
+    f.sched.expire_push(deadline, &mut q);
+    let repair = deadline + ms(100);
+    data(&mut f, &mut q, other, Bin(4), repair, true);
+    let r = (repair - now()).as_millis();
+    let tick = now() + push::REPORT_INTERVAL;
+    assert!(repair < tick);
+    f.sched.run_push(tick, &mut q);
+    let at = |samples: &[i64]| {
+        let mut d = Delays::default();
+        for &x in samples {
+            d.sample(x + shift);
+        }
+        d
+    };
+    let (entries, streams) = report_delays(&mut f, asker, tick);
+    assert_eq!(
+        entries,
+        vec![(0, 1, 1, at(&[30]), at(&[r]), vec![1])],
+        "{shift} ms"
+    );
+    assert_eq!(
+        streams,
+        vec![
+            AnnounceStream {
+                stream: 0,
+                first: at(&[30, r]),
+            },
+            AnnounceStream {
+                stream: 1,
+                first: at(&[60]),
+            },
+        ],
+        "{shift} ms"
+    );
+    // Then every sum starts over, and a node with nothing to report sends
+    // nothing.
+    f.sched.run_push(tick + push::REPORT_INTERVAL, &mut q);
+    assert_eq!(
+        report_delays(&mut f, asker, tick + push::REPORT_INTERVAL),
+        (vec![], vec![])
+    );
+}
+
+#[test]
+fn a_viewer_reports_the_one_way_delays_of_its_first_copies() {
+    viewer_delays(0);
+    // Its clock's offset shifts every delay alike.
+    viewer_delays(5_000);
+    viewer_delays(-5_000);
+}
+
+#[test]
+fn a_viewer_without_parents_still_reports_its_first_copies() {
+    let mut f = fixture(hybrid(1));
+    let mut q = MockQueue::default();
+    let from = ready_channel(&mut f, &mut q);
+    let asker = add_ready(&mut f, &mut q, 1);
+    assert!(f.sched.handle_announce(asker, Announce::ASK, now()));
+    let t = now() + Duration::from_millis(80);
+    f.sched.consume(Bin(0), t, &f.swarm, &mut q);
+    f.sched
+        .handle_data(from, Bin(0), t, Some(now()), true, true, t, Bin(0), &mut q);
+    let tick = now() + push::REPORT_INTERVAL;
+    f.sched.run_push(tick, &mut q);
+    let (entries, streams) = report_delays(&mut f, asker, tick);
+    assert!(entries.is_empty());
+    assert_eq!(
+        streams,
+        vec![AnnounceStream {
+            stream: 0,
+            first: delays(1, 80),
+        }]
+    );
+}
+
+#[test]
+fn a_verified_unit_tells_when_it_was_signed() {
+    let signed = now() + Duration::from_millis(1234);
+    let (mut writer, mut swarm) = crate::Writer::new(
+        crate::WriterOptions {
+            swarm_options: SwarmOptions {
+                chunk_size: 1024,
+                chunks_per_signature: 8,
+                ..Default::default()
+            },
+            key: strims_crypto::key_from_seed(&[5; 32]),
+        },
+        now(),
+    )
+    .unwrap();
+    writer.write(&mut swarm, signed, &[7; 8 * 1024]).unwrap();
+    for b in [Bin(0), Bin(14), Bin::new(3, 0)] {
+        assert_eq!(swarm.verifier().signed_at(b), Some(signed), "{b}");
+    }
+    assert_eq!(swarm.verifier().signed_at(Bin(16)), None);
+}
+
 #[test]
 fn an_ask_lapses_after_the_lease() {
     let mut f = fixture(hybrid(1));
@@ -3135,7 +3314,7 @@ fn an_ask_lapses_after_the_lease() {
         f.sched.handle_have(other, b, at);
         f.sched.consume(b, at, &f.swarm, &mut q);
         f.sched
-            .handle_data(parent, b, at, true, true, at, Bin(0), &mut q);
+            .handle_data(parent, b, at, None, true, true, at, Bin(0), &mut q);
         f.sched.run_push(t, &mut q);
         let reported = !reports(&mut f, asker, t).is_empty();
         assert_eq!(reported, t - now() <= push::REPORT_LEASE, "{i}");
@@ -3150,11 +3329,35 @@ fn report_seed() -> (Fixture, MockQueue, Vec<PeerKey>) {
     (f, q, peers)
 }
 
+/// `n` delays of `ms` milliseconds each.
+fn delays(n: u64, ms: i64) -> Delays {
+    let mut d = Delays::default();
+    for _ in 0..n {
+        d.sample(ms);
+    }
+    d
+}
+
+/// An entry about `parent` on stream 0: `hits` that came 30 ms after
+/// signing, and `misses` repaired 200 ms after.
+fn entry(parent: &[u8], hits: u64, misses: u64) -> AnnounceEntry<'_> {
+    AnnounceEntry {
+        stream: 0,
+        hits,
+        late: 0,
+        misses,
+        hit_delays: delays(hits, 30),
+        repairs: delays(misses, 200),
+        parent,
+    }
+}
+
 /// One check interval of an adaptive seed from `t`: unit `u` published at
 /// `t`, the last chunk of each of its streams announced by each of `lags`
 /// that long after; a push to each of `fed` written `wait` after it was
 /// queued; and each of `reports` naming a parent on stream 0 with its
-/// hits and misses.
+/// hits and misses ([`entry`]), with the reporter's first copies of the
+/// stream: those hits and repairs.
 #[allow(clippy::too_many_arguments)]
 fn report_check(
     f: &mut Fixture,
@@ -3182,17 +3385,13 @@ fn report_check(
             .note_push(p, last(0), t, PushFate::Written, t + wait);
     }
     for &(r, parent, hits, misses) in reports {
-        let e = [AnnounceEntry {
-            stream: 0,
-            hits,
-            late: 0,
-            misses,
-            delay: Duration::from_millis(30),
-            parent,
-        }];
+        let e = [entry(parent, hits, misses)];
+        let mut first = e[0].hit_delays;
+        first.add(e[0].repairs);
+        let items = [AnnounceStream { stream: 0, first }];
         f.sched.handle_announce(
             r,
-            Announce::new(&e).unwrap(),
+            Announce::with_streams(&e, &items).unwrap(),
             t + Duration::from_millis(500),
         );
     }
@@ -3290,51 +3489,70 @@ fn a_holder_the_seed_starves_is_not_blamed() {
     assert!(holders(&f).is_empty());
 }
 
-#[test]
-fn reports_the_seeds_observations_rule_out_count_for_nothing() {
+/// The seed's checks on entries from `holder`, `near`, `far` and `silent`
+/// (who announces nothing) about the holder of stream 0 and others, with
+/// every delay the reporters give `shift` milliseconds off: their
+/// clocks' offset from the seed's.
+fn rule_out(shift: i64) {
     const IDS: [[u8; 1]; 6] = [[1], [2], [3], [4], [5], [6]];
     let (mut f, mut q, peers) = report_seed();
     let ms = Duration::from_millis;
     let (holder, near, far, silent) = (peers[0], peers[2], peers[3], peers[5]);
     let lags = [(holder, ms(200)), (near, ms(50)), (far, ms(210))];
     let t = report_check(&mut f, &mut q, now(), 1, &lags, &[holder], ms(5), &[]);
-    let entry = |parent: &'static [u8], hits: u64, misses: u64| AnnounceEntry {
-        stream: 0,
-        hits,
-        late: 0,
-        misses,
-        delay: Duration::ZERO,
-        parent,
-    };
+    let at = |n: u64, ms: i64| delays(n, ms + shift);
+    // `parent`'s hits on stream 0 and the repairs of its misses, in ms.
+    let entry =
+        |parent: &'static [u8], (hits, h): (u64, i64), (misses, m): (u64, i64)| AnnounceEntry {
+            stream: 0,
+            hits,
+            late: 0,
+            misses,
+            hit_delays: at(hits, h),
+            repairs: at(misses, m),
+            parent,
+        };
     let send = |f: &mut Fixture, from: PeerKey, e: AnnounceEntry<'_>| {
         f.sched
             .handle_announce(from, Announce::new(&[e]).unwrap(), t)
     };
+    // What the reporters' first copies of stream 0 took.
+    let first = |f: &mut Fixture, from: PeerKey, n: u64, ms: i64| {
+        let items = [AnnounceStream {
+            stream: 0,
+            first: at(n, ms),
+        }];
+        f.sched
+            .handle_announce(from, Announce::with_streams(&[], &items).unwrap(), t)
+    };
+    assert!(first(&mut f, near, 10, 50));
+    assert!(first(&mut f, far, 10, 250));
     let ids: Vec<&'static [u8]> = IDS.iter().map(|x| &x[..]).collect();
     // The holder takes stream 0 from the seed: its own report on it, and
     // a report naming a parent that doesn't take it from the seed, count
     // for nothing.
-    assert!(send(&mut f, holder, entry(ids[2], 5, 0)));
-    assert!(send(&mut f, far, entry(ids[4], 5, 0)));
+    assert!(send(&mut f, holder, entry(ids[2], (5, 200), (0, 0))));
+    assert!(send(&mut f, far, entry(ids[4], (5, 210), (0, 0))));
     // Nor does one from a neighbour that announces nothing.
-    assert!(send(&mut f, silent, entry(ids[0], 5, 0)));
-    // `near` announces stream 0 sooner than the holder could relay it.
-    assert!(send(&mut f, near, entry(ids[0], 5, 0)));
-    // `far` reports misses its own HAVEs don't show.
-    assert!(send(&mut f, far, entry(ids[0], 0, 5)));
+    assert!(send(&mut f, silent, entry(ids[0], (5, 200), (0, 0))));
+    // `near` has most of stream 0 well before the holder's pushes reach
+    // it.
+    assert!(send(&mut f, near, entry(ids[0], (5, 200), (0, 0))));
+    // `far` reports misses whose repairs came no later than its hits.
+    assert!(send(&mut f, far, entry(ids[0], (2, 210), (5, 230))));
     // ... and its hits count.
-    assert!(send(&mut f, far, entry(ids[0], 5, 0)));
+    assert!(send(&mut f, far, entry(ids[0], (5, 210), (0, 0))));
     // A parent the seed doesn't know.
-    assert!(send(&mut f, far, entry(&[99], 5, 0)));
+    assert!(send(&mut f, far, entry(&[99], (5, 210), (0, 0))));
     // A report about its sender is invalid, and so is one past the
     // stream count.
-    assert!(!send(&mut f, far, entry(ids[3], 5, 0)));
+    assert!(!send(&mut f, far, entry(ids[3], (5, 210), (0, 0))));
     assert!(!send(
         &mut f,
         far,
         AnnounceEntry {
             stream: 4,
-            ..entry(ids[0], 5, 0)
+            ..entry(ids[0], (5, 210), (0, 0))
         }
     ));
     let c = f.sched.seed_allocation(t).unwrap().counters.reports;
@@ -3349,18 +3567,55 @@ fn reports_the_seeds_observations_rule_out_count_for_nothing() {
             reporter_silent: 1,
             too_early: 1,
             misses_unseen: 1,
-        }
+        },
+        "{shift} ms"
     );
     assert_eq!(neighbour(&f, far, t).reports.tallied, 1);
-    // Past the per-check entry limit, entries are invalid.
+    // Misses repaired past the deadline count, and so do misses without
+    // hits to hold them against: a holder that pushed nothing.
+    assert!(send(&mut f, far, entry(ids[0], (2, 210), (5, 400))));
+    assert!(send(&mut f, near, entry(ids[0], (0, 0), (5, 230))));
+    let c = f.sched.seed_allocation(t).unwrap().counters.reports;
+    assert_eq!((c.tallied, c.misses_unseen), (3, 1), "{shift} ms");
+    // The seed's view: each reporter's first copies by its own clock.
+    let lag = |p| neighbour(&f, p, t).lags[0];
+    assert_eq!(lag(far), Some(ms(250 + shift)));
+    assert_eq!(lag(holder), None);
+    // Past the per-check entry and item limits, entries and items are
+    // invalid: `near` sent two entries before these.
     let n = push::seed::report_entry_limit(f.sched.s.stream_count) as usize;
-    let many = vec![entry(ids[0], 5, 0); n];
+    let many = vec![entry(ids[0], (5, 200), (0, 0)); n];
     assert!(
         !f.sched
             .handle_announce(near, Announce::new(&many).unwrap(), t)
     );
     let c = f.sched.seed_allocation(t).unwrap().counters.reports;
-    assert_eq!(c.invalid, 3);
+    assert_eq!(c.invalid, 4);
+    let items: Vec<AnnounceStream> = (0..4)
+        .map(|stream| AnnounceStream {
+            stream,
+            first: at(1, 50),
+        })
+        .collect();
+    let limit = push::seed::report_stream_limit(f.sched.s.stream_count);
+    for k in 1..=limit / 4 {
+        let a = Announce::with_streams(&[], &items).unwrap();
+        // `near` sent an item before these.
+        assert_eq!(f.sched.handle_announce(near, a, t), k < limit / 4, "{k}");
+    }
+    let a = Announce::with_streams(&[], &items[..1]).unwrap();
+    assert!(f.sched.handle_announce(far, a, t));
+}
+
+#[test]
+fn reports_the_seeds_observations_rule_out_count_for_nothing() {
+    rule_out(0);
+}
+
+#[test]
+fn report_rules_read_each_reporter_by_its_own_clock() {
+    rule_out(5_000);
+    rule_out(-5_000);
 }
 
 /// A joiner whose window starts at chunk 512 (1 KiB chunks, a 1024 chunk
@@ -3638,4 +3893,42 @@ fn dataless_chunks_are_held_but_never_pushed_announced_or_sent() {
         );
         assert!(sent.is_empty(), "{sent:?}");
     }
+}
+
+#[test]
+fn lone_haves_wait_the_hold_at_a_non_seed() {
+    let hold = Duration::from_millis(20);
+    let since = Time::from_unix_millis(1_000);
+    let at = |ms| since + Duration::from_millis(ms);
+    // Held at first, then they go alone.
+    assert!(!haves_go_alone(false, false, since, at(5), hold));
+    assert!(haves_go_alone(false, false, since, at(20), hold));
+    // A seed's, an eager channel's and those without a hold never wait.
+    assert!(haves_go_alone(true, false, since, at(5), hold));
+    assert!(haves_go_alone(false, true, since, at(5), hold));
+    assert!(haves_go_alone(false, false, since, at(5), Duration::ZERO));
+}
+
+#[test]
+fn lone_haves_to_the_seed_that_asked_for_reports_wait_the_hold() {
+    let mut f = fixture(hybrid(1));
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    // Past the channel's eager start, the seed asks for our reports.
+    let t = now() + EAGER_HAVES_AFTER_OPEN + Duration::SECOND;
+    assert!(f.sched.handle_announce(p, Announce::ASK, t));
+    let cfg = f.swarm.reader_config();
+    let haves = |f: &mut Fixture, t: Time| {
+        let (sched, swarm) = (&mut f.sched, &f.swarm);
+        written(|cw| sched.write(p, t, swarm, cw, false).unwrap(), cfg)
+            .iter()
+            .filter(|m| matches!(m, Message::Have(_)))
+            .count()
+    };
+    // The first write's handshake and ping go.
+    haves(&mut f, t);
+    f.sched.consume(Bin(0), t, &f.swarm, &mut q);
+    assert_eq!(haves(&mut f, t), 0);
+    assert_eq!(f.sched.haves_held(p, t), Some(t + HAVE_HOLD));
+    assert_eq!(haves(&mut f, t + HAVE_HOLD), 1);
 }
