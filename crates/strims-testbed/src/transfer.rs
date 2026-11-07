@@ -45,6 +45,12 @@ pub struct TransferSample {
     pub parent_lag: Vec<Option<(u64, u64)>>,
     /// Each peer running the swarm, in link order.
     pub peers: Vec<PeerTransfer>,
+    /// The bytes the node wrote to its links that weren't chunk data, every
+    /// swarm's and port's: its driver's bytes written less its runner's data
+    /// bytes sent. The transports' framing isn't in them. The runner counts
+    /// data as it frames it and the driver as it writes it, so while its
+    /// links hold a backlog this reads low.
+    pub overhead: u64,
 }
 
 /// One peer's channel in a [`TransferSample`].
@@ -133,6 +139,10 @@ impl TransferSample {
                 .map(|l| l.map(|(d, dl)| (d.as_millis() as u64, dl.as_millis() as u64)))
                 .collect(),
             peers,
+            overhead: m
+                .driver
+                .bytes_written
+                .saturating_sub(m.runner.totals.outbound.data_bytes),
         })
     }
 
@@ -165,7 +175,7 @@ impl TransferSample {
             .map(|l| l.map_or("null".to_owned(), |(d, dl)| format!("[{d},{dl}]")))
             .collect();
         format!(
-            "{{\"chunks_sent\":{},\"pushed_chunks\":{},\"children\":{},\"parents\":{},\"hits\":{},\"misses\":{},\"late\":{},\"opens\":{},\"declined\":{},\"open_timeouts\":{},\"shed\":{},\"pruned\":{},\"switched\":{},\"accepted\":{},\"rejected\":{},\"sheds_sent\":{},\"stale_drops\":{},\"parent_lag\":[{}],\"peers\":[{}]}}",
+            "{{\"chunks_sent\":{},\"pushed_chunks\":{},\"children\":{},\"parents\":{},\"hits\":{},\"misses\":{},\"late\":{},\"opens\":{},\"declined\":{},\"open_timeouts\":{},\"shed\":{},\"pruned\":{},\"switched\":{},\"accepted\":{},\"rejected\":{},\"sheds_sent\":{},\"stale_drops\":{},\"overhead\":{},\"parent_lag\":[{}],\"peers\":[{}]}}",
             self.chunks_sent,
             self.pushed_chunks,
             self.children,
@@ -183,6 +193,7 @@ impl TransferSample {
             self.rejected,
             self.sheds_sent,
             self.stale_drops,
+            self.overhead,
             lag.join(","),
             peers.join(","),
         )

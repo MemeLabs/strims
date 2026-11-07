@@ -143,6 +143,10 @@ impl HostState {
 fn add_metrics(r: &mut HostReport, m: &NodeMetrics) {
     r.uploaded += m.driver.bytes_written;
     r.downloaded += m.driver.bytes_read;
+    r.ppspp.merge(&m.runner.totals);
+    r.frames_written += m.host.frame_write_count;
+    r.frame_bytes += m.host.frame_write_bytes;
+    r.control_bytes += m.host.keepalive_write_bytes;
     r.transfer_errors += m.driver.transfer_errors;
     r.vpn_frame_errors += m.driver.vpn_frame_errors;
     r.events_dropped += m.driver.events_dropped;

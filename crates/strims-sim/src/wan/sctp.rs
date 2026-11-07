@@ -879,7 +879,10 @@ impl Scheduler {
             }
             None
         } else {
-            Some(self.net.send(at, from, to, wire, 1, Carrier::Datagram))
+            let t = self.net.send(at, from, to, wire, 1, Carrier::Datagram);
+            let app: usize = packet.iter().filter(|c| !c.resend).map(|c| c.len).sum();
+            self.sent(from, app);
+            Some(t)
         };
         if let Some(sack) = sack {
             self.sack_held(back, sack, t.filter(|t| !t.dropped).map(|t| t.arrival));
@@ -1102,9 +1105,7 @@ impl Scheduler {
             return;
         }
         let depart = self.net.occupy_up(t, to, wire);
-        if let Some(n) = self.acks.get_mut(to) {
-            *n += 1;
-        }
+        self.ack_sent(to, wire);
         let at = depart + self.net.one_way(to, from);
         self.sack_held(conn, sack, Some(at));
     }

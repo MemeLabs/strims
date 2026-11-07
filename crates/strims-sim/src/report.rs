@@ -40,6 +40,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
+use strims_ppspp::ChannelTotals;
 use strims_ppspp::scheduler_peer::push::PUSH_OVERHEAD;
 use strims_ppspp::scheduler_peer::push::seed::ALLOC_UTILIZATION;
 use strims_wan::{Access, EndStats, Region, Site};
@@ -140,6 +141,13 @@ pub struct HostReport {
     pub vpn_bad_input: u64,
     /// The runner, link and network stats (see [`crate::stats`]).
     pub runner: RunnerReport,
+    /// Its ppspp runners' channel counters (`RunnerMetrics::totals`), and
+    /// vnic's frames written, their bodies' bytes (every port's) and its
+    /// control frames' bytes, headers included (`HostMetrics`).
+    pub ppspp: ChannelTotals,
+    pub frames_written: u64,
+    pub frame_bytes: u64,
+    pub control_bytes: u64,
     /// With [`Scenario::transfer_samples`], the node's transfers at every
     /// stats sample: (time since the start, scenario swarm, transfers),
     /// peers indexed by host.
@@ -250,10 +258,17 @@ pub struct WanHostReport {
     /// bytes).
     pub competing: Vec<(strims_base::time::Duration, u64)>,
     /// With the window model, the segments its connections lost to a full
-    /// access queue, up or down, and the pure acknowledgements its uplink
-    /// carried.
+    /// access queue, up or down, and the pure acknowledgements (SACKs alone
+    /// on a data channel) its uplink carried, with their wire bytes: they
+    /// take the uplink's time but aren't in `stats.up_bytes`.
     pub queue_drops: u64,
     pub acks: u64,
+    pub ack_bytes: u64,
+    /// The bytes it handed its transports that went out, resends left
+    /// out: `stats.up_bytes` less these are the transports' framing and
+    /// resends. A str0m datagram's payload counts whole, its DTLS and SCTP
+    /// framing included.
+    pub app_bytes: u64,
     /// With competing uploads, their segments lost to the full uplink, and
     /// their windows summed every 100 ms while they run.
     pub competing_drops: u64,

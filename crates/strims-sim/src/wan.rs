@@ -708,9 +708,15 @@ pub(crate) struct Scheduler {
     /// [`Scheduler::cross_sent`] is.
     cross_cwnd: Vec<Vec<(Duration, u64)>>,
     /// Per host, the window model's segments its connections lost to a
-    /// full access queue, and the acknowledgements its uplink carried.
+    /// full access queue, and the acknowledgements its uplink carried
+    /// (pure ACKs and SACKs alone) with their wire bytes.
     drops: Vec<u64>,
     acks: Vec<u64>,
+    ack_bytes: Vec<u64>,
+    /// Per host, the bytes it handed its transports that went out, resends
+    /// left out: its wire bytes less these are the transports' framing and
+    /// resends ([`Scheduler::sent`]).
+    app_bytes: Vec<u64>,
     /// Per host, its competing uploads' segments lost to its full uplink.
     cross_drops: Vec<u64>,
     /// The acknowledgements receivers owe, by the connection whose data
@@ -849,6 +855,8 @@ impl Scheduler {
             cross_cwnd: vec![Vec::new(); spec.hosts.len()],
             drops: vec![0; spec.hosts.len()],
             acks: vec![0; spec.hosts.len()],
+            ack_bytes: vec![0; spec.hosts.len()],
+            app_bytes: vec![0; spec.hosts.len()],
             cross_drops: vec![0; spec.hosts.len()],
             owed: FastMap::default(),
             assocs: FastMap::default(),
@@ -1322,9 +1330,7 @@ impl Scheduler {
             return;
         }
         let depart = self.net.occupy_up(t, to, tcp_wire(0).0);
-        if let Some(a) = self.acks.get_mut(to) {
-            *a += 1;
-        }
+        self.ack_sent(to, tcp_wire(0).0);
         self.acked_at(depart + self.net.one_way(to, from), conn, waiting);
     }
 
@@ -1542,6 +1548,7 @@ impl Scheduler {
             return;
         }
         let t = self.net.send(at, from, to, wire, packets, Carrier::Stream);
+        self.sent(from, if resent { 0 } else { len });
         if t.retransmit > Duration::ZERO {
             // A packet of it was lost on the path: its sender learns so as
             // of a full queue's drop, and resends it.
@@ -1858,7 +1865,16 @@ impl Scheduler {
             let admit = at.max(self.net.up_free(r.from) - Duration::from(q));
             self.admits.insert((admit, id), ((r.src, r.dst), len));
         }
+        let app = match r.what {
+            What::Data { len, .. } | What::Datagram(len) => len,
+            What::Syn | What::Fin(_) | What::Rst => 0,
+        };
+        let from = r.from;
         let t = self.net.send(at, r.from, r.to, r.wire, r.packets, carrier);
+        self.sent(from, app);
+        let Some(r) = self.records.get_mut(&id) else {
+            return;
+        };
         if t.dropped {
             r.state = State::Dropped;
             self.records.dropped += 1;
@@ -1987,6 +2003,21 @@ impl Scheduler {
         });
     }
 
+    /// `h` sent `app` bytes its transport took from it.
+    fn sent(&mut self, h: usize, app: usize) {
+        if let Some(b) = self.app_bytes.get_mut(h) {
+            *b += app as u64;
+        }
+    }
+
+    /// `h`'s uplink carried an acknowledgement alone of `wire` bytes.
+    fn ack_sent(&mut self, h: usize, wire: usize) {
+        if let (Some(n), Some(b)) = (self.acks.get_mut(h), self.ack_bytes.get_mut(h)) {
+            *n += 1;
+            *b += wire as u64;
+        }
+    }
+
     /// Each host's site and counters.
     pub fn report(&self, spec: &Scenario) -> WanReport {
         WanReport {
@@ -2003,6 +2034,8 @@ impl Scheduler {
                         competing: self.cross_sent.get(h).cloned().unwrap_or_default(),
                         queue_drops: self.drops.get(h).copied().unwrap_or(0),
                         acks: self.acks.get(h).copied().unwrap_or(0),
+                        ack_bytes: self.ack_bytes.get(h).copied().unwrap_or(0),
+                        app_bytes: self.app_bytes.get(h).copied().unwrap_or(0),
                         competing_drops: self.cross_drops.get(h).copied().unwrap_or(0),
                         competing_cwnd: self.cross_cwnd.get(h).cloned().unwrap_or_default(),
                     })

@@ -53,9 +53,10 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::time::Duration;
 
-use crate::report::{Percentiles, Report, spearman};
+use crate::report::{HostReport, Percentiles, Report, spearman};
 use crate::spec::{HostClass, HostIx};
 use crate::stats::MeterSample;
+use strims_ppspp::ChannelMetrics;
 
 /// Tree depth counts from this long after a stream starts.
 const DEPTH_WARM: Duration = Duration::from_secs(10);
@@ -980,10 +981,174 @@ impl Report {
             j.int(key, self.exchanges_ended(outcome));
         }
         self.media_cols(swarm, &mut j);
+        self.ledger_cols(&mut j);
         if let Some(series) = self.series(swarm) {
             j.field("series", format_args!("{series}"));
         }
         j.finish()
+    }
+
+    /// The uplinks' bytes by layer over every host, in the ppspp sim's
+    /// rows' terms (`up_*`, adding up to `up_wire`): the ppspp layers from
+    /// the honest hosts' runners; `up_hostile`, what hostile hosts wrote;
+    /// `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame
+    /// headers, control frames and link handshakes; and in WAN mode
+    /// `up_transport`, the transports' framing and resends, and `up_acks`,
+    /// pure ACKs and SACKs alone. Then the waste in the honest viewers'
+    /// inbound data, the wire bytes per byte of the stream they read, each
+    /// role's overhead per second over its uplink ([`Report::roles`]), the
+    /// packets (WAN mode; acknowledgements count as small) and vnic's
+    /// frames.
+    fn ledger_cols(&self, j: &mut JsonRow) {
+        let secs = self.sim_secs.max(1e-9);
+        let wan = |h: &HostReport| {
+            self.wan
+                .as_ref()
+                .and_then(|w| w.hosts.iter().find(|x| x.name == h.name))
+        };
+        let hostile = |h: HostIx| matches!(self.class(h), HostClass::Hostile(_));
+        let (mut up, mut down) = (ChannelMetrics::default(), ChannelMetrics::default());
+        let (mut ports, mut vnic, mut transport, mut acks, mut hostile_bytes) = (0, 0, 0, 0, 0);
+        let (mut wire_down, mut packets, mut small, mut frames, mut frame_bytes) = (0, 0, 0, 0, 0);
+        let seeds = self.roles().seeds;
+        // A host's bytes through its uplink, framing included, and its
+        // packets.
+        let wire = |h: &HostReport| {
+            let w = wan(h);
+            let framing = w.map_or(0, |w| {
+                w.stats.up_bytes.saturating_sub(w.app_bytes) + w.ack_bytes
+            });
+            (h.uploaded + framing, w.map(|w| w.stats.up_packets + w.acks))
+        };
+        for (i, h) in self.hosts.iter().enumerate() {
+            if hostile(i) {
+                hostile_bytes += h.uploaded;
+            } else {
+                let sent = h.ppspp.outbound.wire_bytes();
+                up.merge(&h.ppspp.outbound);
+                ports += h.frame_bytes.saturating_sub(sent);
+                vnic += h.uploaded.saturating_sub(h.frame_bytes.max(sent));
+                frames += h.frames_written;
+                frame_bytes += h.frame_bytes;
+                if !seeds.contains(&i) {
+                    down.merge(&h.ppspp.inbound);
+                }
+            }
+            match wan(h) {
+                Some(w) => {
+                    transport += w.stats.up_bytes.saturating_sub(w.app_bytes);
+                    acks += w.ack_bytes;
+                    wire_down += w.stats.down_bytes;
+                    packets += w.stats.up_packets + w.acks;
+                    small += w.stats.small_packets + w.acks;
+                }
+                None => wire_down += h.downloaded,
+            }
+        }
+        let useful: u64 = self
+            .viewers
+            .iter()
+            .filter(|v| !hostile(v.host))
+            .map(|v| {
+                let media = self.media.get(v.swarm).is_some_and(Option::is_some);
+                let size = match media {
+                    true => self
+                        .scenario
+                        .swarms
+                        .get(v.swarm)
+                        .map_or(0, |s| s.options.chunk_size),
+                    false => crate::stream::FRAME_LEN,
+                };
+                v.stats.received.len() * size as u64
+            })
+            .sum();
+        let up_wire = up.wire_bytes() + ports + vnic + hostile_bytes + transport + acks;
+        let waste = down
+            .data_bytes
+            .saturating_sub(down.new_bytes + down.stale_bytes + down.invalid_bytes);
+        j.int("up_payload", up.data_bytes)
+            .int("up_data_hdr", up.data_header_bytes)
+            .int("up_integrity", up.integrity_bytes)
+            .int("up_signed", up.signed_integrity_bytes)
+            .int("up_have", up.have_bytes)
+            .int("up_ack", up.ack_bytes)
+            .int("up_request", up.request_bytes)
+            .int("up_ping", up.ping_bytes)
+            .int("up_stream", up.stream_bytes)
+            .int("up_announce", up.announce_bytes)
+            .int("up_session", up.session_bytes)
+            .int("up_chan_hdr", up.header_bytes)
+            .int("up_hostile", hostile_bytes)
+            .int("up_vnic", vnic)
+            .int("up_ports", ports)
+            .int("up_transport", transport)
+            .int("up_acks", acks)
+            .int("up_wire", up_wire)
+            .int("down_wire", wire_down)
+            .int("dup_bytes", waste)
+            .int("stale_bytes", down.stale_bytes)
+            .int("useful_bytes", useful)
+            .num("wire_per_useful", up_wire as f64 / useful.max(1) as f64);
+
+        let share = |i: HostIx| {
+            let h = self.hosts.get(i)?;
+            let over = wire(h).0.saturating_sub(h.ppspp.outbound.data_bytes);
+            Some(over as f64 / (self.upload_cap(i)? as f64 * secs))
+        };
+        let roles = self.roles();
+        let shares = |hosts: &[HostIx]| {
+            let mut v: Vec<f64> = hosts
+                .iter()
+                .filter(|&&h| self.class(h) == HostClass::Honest)
+                .filter_map(|&h| share(h))
+                .collect();
+            v.sort_by(f64::total_cmp);
+            v
+        };
+        let at = |v: &[f64], p: usize| v.get(v.len().saturating_sub(1) * p / 100).copied();
+        let (relays, leaves) = (shares(&roles.forwarders), shares(&roles.others));
+        let seed = self.scenario.swarms.first().map(|s| s.seed);
+        if let Some(x) = seed.and_then(share) {
+            j.num("ovh_seed", x);
+        }
+        for (name, v, p) in [
+            ("ovh_relay_p50", &relays, 50),
+            ("ovh_leaf_p50", &leaves, 50),
+            ("ovh_leaf_p90", &leaves, 90),
+        ] {
+            if let Some(x) = at(v, p) {
+                j.num(name, x);
+            }
+        }
+        if self.wan.is_some() {
+            let mut pps: Vec<f64> = roles
+                .forwarders
+                .iter()
+                .chain(&roles.others)
+                .filter(|&&h| self.class(h) == HostClass::Honest)
+                .filter_map(|&h| wire(self.hosts.get(h)?).1)
+                .map(|p| p as f64 / secs)
+                .collect();
+            pps.sort_by(f64::total_cmp);
+            j.int("packets_up", packets)
+                .num("small_packet_share", small as f64 / packets.max(1) as f64);
+            for (name, p) in [("pps_p50", 50), ("pps_p90", 90)] {
+                if let Some(x) = at(&pps, p) {
+                    j.num(name, x);
+                }
+            }
+            if let Some(p) = seed.and_then(|s| wire(self.hosts.get(s)?).1) {
+                j.num("seed_pps", p as f64 / secs);
+            }
+        }
+        j.num(
+            "frame_bytes_mean",
+            frame_bytes as f64 / frames.max(1) as f64,
+        )
+        .num(
+            "msgs_per_payload",
+            up.messages() as f64 / up.payloads.max(1) as f64,
+        );
     }
 
     /// Every swarm's viewers that are honest, each once.
@@ -1414,6 +1579,7 @@ impl Report {
     /// | `capacity`, `busy`, `avail` | the seed's meter at its last reading in the second (capacity, busy in thousandths) and the upload it had then |
     /// | `copies` | the adaptive seed's copies |
     /// | `sent`, `pushed` | chunks the seed sent, and of them pushes |
+    /// | `seed_ovh`, `viewer_ovh` | bytes the seed and the honest viewers (summed) wrote to their links that weren't chunk data ([`crate::TransferSample::overhead`]; the row's `up_transport` and `up_acks` have the transports') |
     /// | `written`, `chunks` | a media swarm's chunks published: those holding media, then with those of padding alone |
     ///
     /// [`Scenario::transfer_samples`]: crate::Scenario::transfer_samples
@@ -1479,6 +1645,7 @@ impl Report {
         let (mut hits, mut misses, mut pruned, mut present) =
             (vec![0; n], vec![0; n], vec![0; n], vec![0; n]);
         let mut parents: Vec<Vec<i64>> = vec![Vec::new(); n];
+        let mut viewer_ovh = vec![0; n];
         // The push counters are the honest viewers'.
         for v in viewers
             .iter()
@@ -1487,19 +1654,22 @@ impl Report {
             let mut last: Option<&crate::TransferSample> = None;
             for (t, x) in sampled(v.host) {
                 if let Some(k) = sample_second(t) {
-                    let (h, m, p) = last.map_or((0, 0, 0), |l| (l.hits, l.misses, l.pruned));
-                    if let (Some(a), Some(b), Some(c), Some(d), Some(e)) = (
+                    let (h, m, p, o) =
+                        last.map_or((0, 0, 0, 0), |l| (l.hits, l.misses, l.pruned, l.overhead));
+                    if let (Some(a), Some(b), Some(c), Some(d), Some(e), Some(f)) = (
                         hits.get_mut(k),
                         misses.get_mut(k),
                         pruned.get_mut(k),
                         present.get_mut(k),
                         parents.get_mut(k),
+                        viewer_ovh.get_mut(k),
                     ) {
                         *a += delta(x.hits, h) as i64;
                         *b += delta(x.misses, m) as i64;
                         *c += delta(x.pruned, p) as i64;
                         *d += 1;
                         e.push(x.parents as i64);
+                        *f += delta(x.overhead, o) as i64;
                     }
                 }
                 last = Some(x);
@@ -1513,15 +1683,18 @@ impl Report {
             })
             .collect();
         let seed = spec.seed;
-        let (mut sent, mut pushed) = (vec![0; n], vec![0; n]);
+        let (mut sent, mut pushed, mut seed_ovh) = (vec![0; n], vec![0; n], vec![0; n]);
         let mut last: Option<&crate::TransferSample> = None;
         for (t, x) in sampled(seed) {
             if let Some(k) = sample_second(t)
-                && let (Some(a), Some(b)) = (sent.get_mut(k), pushed.get_mut(k))
+                && let (Some(a), Some(b), Some(o)) =
+                    (sent.get_mut(k), pushed.get_mut(k), seed_ovh.get_mut(k))
             {
-                let (c, p) = last.map_or((0, 0), |l| (l.chunks_sent, l.pushed_chunks));
+                let (c, p, v) =
+                    last.map_or((0, 0, 0), |l| (l.chunks_sent, l.pushed_chunks, l.overhead));
                 *a += delta(x.chunks_sent, c) as i64;
                 *b += delta(x.pushed_chunks, p) as i64;
+                *o += delta(x.overhead, v) as i64;
             }
             last = Some(x);
         }
@@ -1593,7 +1766,9 @@ impl Report {
             .field("avail", format_args!("{}", ints(&avail)))
             .field("copies", format_args!("{}", ints(&copies)))
             .field("sent", format_args!("{}", ints(&sent)))
-            .field("pushed", format_args!("{}", ints(&pushed)));
+            .field("pushed", format_args!("{}", ints(&pushed)))
+            .field("seed_ovh", format_args!("{}", ints(&seed_ovh)))
+            .field("viewer_ovh", format_args!("{}", ints(&viewer_ovh)));
         // A media swarm's chunks sent each second, those holding media, by
         // their first byte (`written`, what `frames` counts): its other
         // chunks are data-less.

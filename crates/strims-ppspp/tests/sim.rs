@@ -763,6 +763,13 @@ impl Node {
             .up_bytes
             .saturating_sub(self.totals().outbound.data_bytes)
     }
+
+    /// The bytes it wrote to its links that weren't chunk data: its
+    /// overhead less the transport's framing, as strims-sim's series count
+    /// it.
+    fn written_overhead(&self) -> u64 {
+        self.overhead().saturating_sub(self.sent.transport_bytes)
+    }
 }
 
 struct Link {
@@ -947,8 +954,8 @@ struct MediaRun {
 struct SeriesSample {
     /// Per viewer node (from 1), if honest and present: pushes before
     /// their deadline, deadlines released to pull, parents pruned, streams
-    /// with an open parent, and its uplink's overhead bytes so far
-    /// ([`Node::overhead`]).
+    /// with an open parent, and the overhead bytes it wrote so far
+    /// ([`Node::written_overhead`]).
     viewers: Vec<Option<[u64; 5]>>,
     /// The seed's meter capacity and busy thousandths, copies, chunks sent
     /// and pushed, uplink, and overhead bytes so far.
@@ -2364,7 +2371,7 @@ impl Sim {
                             let parents = p.parents.iter().filter(|x| x.is_some()).count();
                             [p.hits, p.misses, p.pruned, parents as u64]
                         });
-                    [hits, misses, pruned, parents, n.overhead()]
+                    [hits, misses, pruned, parents, n.written_overhead()]
                 })
             })
             .collect();
@@ -2383,7 +2390,7 @@ impl Sim {
                 sent,
                 pushed,
                 seed.up_bw,
-                seed.overhead(),
+                seed.written_overhead(),
             ],
         });
     }
@@ -7355,17 +7362,16 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
 /// Then the waste in the honest viewers' inbound data, the wire bytes per
 /// chunk byte they read (the cross swarm's included), each role's overhead
 /// per second over its uplink (relays: honest viewers that accepted a
-/// subscription), and the packets (frames, off WAN mode) and frames.
+/// subscription), the packets (frames, off WAN mode), the frames' mean
+/// size and the messages per channel payload.
 fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
     let span = span.max(1e-9);
     let (mut up, mut down) = (ChannelMetrics::default(), ChannelMetrics::default());
     let (mut sent, mut wire) = (Sent::default(), EndStats::default());
-    let mut frames = 0;
     for (i, n) in sim.nodes.iter().enumerate() {
         let t = n.totals();
         if !n.hostile {
             up.merge(&t.outbound);
-            frames += n.sent.frames;
             if i != 0 {
                 down.merge(&t.inbound);
             }
@@ -7453,8 +7459,8 @@ fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
             sent.frame_bytes as f64 / sent.frames.max(1) as f64,
         )
         .num(
-            "msgs_per_frame",
-            up.messages() as f64 / frames.max(1) as f64,
+            "msgs_per_payload",
+            up.messages() as f64 / up.payloads.max(1) as f64,
         );
 }
 
