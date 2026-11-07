@@ -223,6 +223,17 @@ def notice_time(action: bytes) -> float:
 
 
 @functools.cache
+def mem_available_mb() -> int | None:
+    try:
+        return next(
+            int(line.split()[1]) // 1024
+            for line in Path("/proc/meminfo").read_text().splitlines()
+            if line.startswith("MemAvailable:")
+        )
+    except (OSError, StopIteration):
+        return None
+
+
 def host_info() -> dict:
     """The CPU model, kernel and Docker version, for testbed rows."""
     model = None
@@ -484,6 +495,11 @@ def serve(args: argparse.Namespace) -> None:
                 if others:
                     waits = f"waiting for {others[0]}, another testbed's container, to end"
                     break
+            # A job's slot holds its memory: with less free, the jobs
+            # running took more, and another could run the host out.
+            elif args.min_free_mb and running and (free := mem_available_mb()) is not None and free < args.min_free_mb:
+                waits = f"waiting for memory: {free} MiB free, a job's slot is {args.min_free_mb}"
+                break
             queued.pop(0)
             jid = q.stem
             work = d["work"] / jid
@@ -581,14 +597,7 @@ def sync(args: argparse.Namespace) -> None:
         serving = pid_alive(int((root / "serve.pid").read_text()))
     except (FileNotFoundError, ValueError):
         pass
-    try:
-        mem = next(
-            int(line.split()[1]) // 1024
-            for line in Path("/proc/meminfo").read_text().splitlines()
-            if line.startswith("MemAvailable:")
-        )
-    except (OSError, StopIteration):
-        mem = None
+    mem = mem_available_mb()
     try:
         note = (root / "note").read_text()
     except FileNotFoundError:
@@ -624,6 +633,8 @@ def main() -> None:
     s.add_argument("--idle-minutes", type=float, default=15)
     s.add_argument("--imds", action="store_true")
     s.add_argument("--poweroff", action="store_true")
+    s.add_argument("--min-free-mb", type=int, default=0,
+                   help="start no test job while the host has less memory available")
     y = sub.add_parser("sync")
     y.add_argument("--dir", type=Path, default=here)
     args = p.parse_args()

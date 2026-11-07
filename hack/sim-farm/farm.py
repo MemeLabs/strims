@@ -149,7 +149,16 @@ speed. A run logs the speeds before its best pools.
   have done (1 + k)B from now (a booting one's from when it should be
   ready), would keep busy for kB: a new instance spends at most 1/(1 + k)
   of its time booting. It launches no more slots than jobs, and no
-  instance of twice the capacity it wants or more unless it has none.
+  instance of twice the capacity it wants or more unless it has none. A
+  tick launches all it wants at once (up to 32), so a run's first fleet
+  boots together.
+- An instance with nothing assigned is terminated once nothing is queued
+  or waiting; and also, booting ones too, once nothing is queued, the
+  busy instances should finish the run within 2 minutes (the busiest's
+  own jobs, and what waits on rows over them all) and the run wants no
+  more capacity: a spot interruption gives that much notice, so an
+  instance AWS takes back drains its own, and no spare need stay for its
+  jobs.
 - Each region has a spot quota of its own. A region's budget is its quota
   less the spot vCPUs it counts there outside this run's instances (those
   shutting down count too), at most --max-region-vcpus; the run's
@@ -443,6 +452,13 @@ SYNC_THREADS = 64
 CONTROL_PERSIST_S = 300
 # How long a binary's presigned URL lasts (a boot signs its own).
 BIN_URL_S = 3600
+# The instances a tick may launch, at once.
+MAX_LAUNCHES = 32
+# A spot interruption's notice. Once nothing is queued and the busiest
+# instance's work, and what waits on rows over the busy ones, fits in it,
+# an idle or booting instance is terminated: an instance AWS takes back
+# drains its own jobs in its notice, so no spare need take them.
+RETIRE_WITHIN_S = 120
 # The rows a job's expected wall averages, the latest: code and instance
 # types change what a job takes.
 RECENT_ROWS = 64
@@ -2070,6 +2086,7 @@ class Run:
         # The instances' boots, a thread each from launch to ready, which
         # wake the loop when they end.
         self.booter = cf.ThreadPoolExecutor(max_workers=64)
+        self.launcher = cf.ThreadPoolExecutor(max_workers=MAX_LAUNCHES)
         self.wake = threading.Event()
         self.regions: dict[str, Region] = {}
         self.pools: list[Pool] = []  # every region's, in one ranking
@@ -2611,7 +2628,7 @@ class Run:
             + "--working-directory /home/ubuntu/farm "
             f"python3 /home/ubuntu/farm/worker.py serve --slots {host.slots} "
             f"--job-timeout {self.args.job_timeout} --idle-minutes {self.args.idle_minutes} "
-            "--imds --poweroff"
+            f"--min-free-mb {int(self.slot_mem_gib * 1024)} --imds --poweroff"
         )
         p = self.ssh.run(host, cmd)
         if p.returncode:
@@ -3094,71 +3111,129 @@ class Run:
             deficit = min(demand - sum(h.slots for h in live), self.wanted(now))
         if deficit > 0:
             self.read_budgets(now)
-        launched = 0
-        while deficit > 0 and launched < 3:
+        # The tick's launches, planned first: each counts against the
+        # budgets the next pick reads, as a host not yet launched.
+        plan: list[tuple[Pool, Region, Host]] = []
+        while deficit > 0 and len(plan) < MAX_LAUNCHES:
             pool = self.pick(deficit, now)
             if pool is None:
-                if not live and not launched and now - self.last_stuck > 60:
+                if not live and not plan and now - self.last_stuck > 60:
                     self.last_stuck = now
                     log("no pool fits the budget or has capacity; waiting")
-                return
+                break
             # An instance of twice the capacity wanted or more waits, unless
             # the run has none.
-            if self.testbed is None and deficit < pool.spec.slots * pool.speed / 2 and (live or launched):
-                return
+            if self.testbed is None and deficit < pool.spec.slots * pool.speed / 2 and (live or plan):
+                break
             r = self.regions[pool.region]
             record_region(r.name)
-            try:
-                with self.held():
-                    hid = launch(self.name, pool, r, self.user_data)
-                    # Its launch, not the tick's start: capacity errors can
-                    # take the tick minutes.
-                    self.hosts.append(
-                        Host(hid, pool.type, pool.zone, pool.spec, pool.price, time.time(), region=r.name,
-                             speed=pool.speed)
-                    )
-                    self.start_boot(self.hosts[-1])
-                    log(f"launched {hid}: {pool.type} in {pool.zone}, {pool.spec.slots} slots, "
-                        f"${pool.price:.3f}/h")
-            except AwsError as e:
-                if e.code in CAPACITY_ERRORS:
-                    log(f"{pool.type} in {pool.zone}: {e.code}; skipping it for {POOL_BACKOFF // 60} min")
-                    self.backoff[pool.key] = now + POOL_BACKOFF
-                    continue
-                if e.code in QUOTA_ERRORS:
-                    # The region takes no more until its quota is read again:
-                    # what counts against it can lag what's running.
-                    r.budget = self.live_vcpus(r.name)
-                    r.next_budget = now + BUDGET_REFRESH
-                    log(f"{r.name}: {e.code}: its budget is {r.budget} vCPUs for {BUDGET_REFRESH // 60} min")
-                    continue
-                if e.code == "AuthFailure.ServiceLinkedRoleCreationNotPermitted":
-                    raise SystemExit(
-                        "the account's first spot instance needs the Spot service-linked role; an "
-                        "admin creates it once: aws iam create-service-linked-role "
-                        "--aws-service-name spot.amazonaws.com"
-                    )
-                raise
+            h = Host("", pool.type, pool.zone, pool.spec, pool.price, now, region=r.name, speed=pool.speed)
+            self.hosts.append(h)
+            plan.append((pool, r, h))
             if self.testbed is not None and self.pinned is None:
                 self.pinned = pool.type
             deficit -= pool.spec.slots * pool.speed
-            launched += 1
-
-    def retire_idle(self) -> None:
-        if self.queue or self.waiting:
+        if not plan:
             return
+        # Every launch at once; each launched one is kept before an error
+        # stops the run, so none is left behind.
+        failure = None
+        with self.held():
+            futs = [self.launcher.submit(launch, self.name, pool, r, self.user_data) for pool, r, _ in plan]
+            for (pool, r, h), fut in zip(plan, futs):
+                try:
+                    hid = fut.result()
+                except AwsError as e:
+                    self.hosts.remove(h)
+                    if e.code in CAPACITY_ERRORS:
+                        log(f"{pool.type} in {pool.zone}: {e.code}; skipping it for {POOL_BACKOFF // 60} min")
+                        self.backoff[pool.key] = now + POOL_BACKOFF
+                    elif e.code in QUOTA_ERRORS:
+                        # The region takes no more until its quota is read
+                        # again: what counts against it can lag what's
+                        # running.
+                        r.budget = self.live_vcpus(r.name)
+                        r.next_budget = now + BUDGET_REFRESH
+                        log(f"{r.name}: {e.code}: its budget is {r.budget} vCPUs for {BUDGET_REFRESH // 60} min")
+                    elif e.code == "AuthFailure.ServiceLinkedRoleCreationNotPermitted":
+                        failure = failure or SystemExit(
+                            "the account's first spot instance needs the Spot service-linked role; an "
+                            "admin creates it once: aws iam create-service-linked-role "
+                            "--aws-service-name spot.amazonaws.com"
+                        )
+                    else:
+                        failure = failure or e
+                    continue
+                except Exception as e:
+                    self.hosts.remove(h)
+                    failure = failure or e
+                    continue
+                # Its launch, not the tick's start: the calls take seconds.
+                h.id, h.launched = hid, time.time()
+                self.start_boot(h)
+                log(f"launched {hid}: {pool.type} in {pool.zone}, {pool.spec.slots} slots, "
+                    f"${pool.price:.3f}/h")
+        if failure is not None:
+            raise failure
+
+    def ends_soon(self, now: float) -> bool:
+        """Whether the busy instances alone finish the run within
+        RETIRE_WITHIN_S, with nothing queued for an idle one to take: the
+        busiest's own jobs (over its slots, or its longest, a running one
+        counting half), and what waits on rows (verification copies,
+        derived jobs) over all of theirs; and whether the run wants no more
+        capacity (wanted), so none would be launched back. Queued work
+        counts out: a large fleet's whole run can fit in RETIRE_WITHIN_S,
+        and its instances still booting are what would run it."""
+        if any(i.wid not in self.done for i in self.queue):
+            return False
+        busy = [h for h in self.hosts if h.state == "ready" and h.assigned and h.deadline is None]
+        if not busy or self.wanted(now) > 0:
+            return False
+
+        def drain(h: Host) -> float:
+            rem = [
+                self.expected(i) * (0.5 if i.wid in h.running else 1) / h.speed
+                for i in h.assigned.values() if i.copy != "canary"
+            ]
+            return max(sum(rem) / h.slots, max(rem, default=0.0))
+
+        waiting = sum(self.expected(i) for items in self.waiting.values() for i in items)
+        return max(map(drain, busy)) + waiting / sum(h.capacity for h in busy) < RETIRE_WITHIN_S
+
+    def retire_idle(self, now: float) -> None:
+        """Terminates the instances with nothing to do: once nothing is
+        queued or waiting, and once the run ends soon (ends_soon), booting
+        ones too."""
+        if self.queue or self.waiting:
+            if not self.ends_soon(now):
+                return
+            self.terminate_now(
+                [h for h in self.hosts
+                 if h.state in ("booting", "ready") and not h.assigned and h.deadline is None and h.id],
+                f"the run ends within {RETIRE_WITHIN_S} s without it",
+            )
+            return
+        idle = []
         for h in self.hosts:
             if h.state == "ready" and not h.assigned and h.deadline is not None:
                 self.lose(h, "nothing left for it while it drained; left for AWS to reclaim",
                           terminate_it=False)
             elif h.state == "ready" and not h.assigned:
-                log(f"terminating {h.id}: nothing left for it")
-                h.state = "lost"
-                h.ended = time.time()
-                try:
-                    terminate(h.region, [h.id])
-                except AwsError as e:
-                    log(f"terminating {h.id}: {e}")
+                idle.append(h)
+        self.terminate_now(idle, "nothing left for it")
+
+    def terminate_now(self, hosts: list[Host], why: str) -> None:
+        """Terminates `hosts` at once: each its own call on the launcher's
+        threads, none waited for, so the loop goes on (one call after
+        another, ~1.3 s each, kept an instance billing until its turn), and
+        a failed call is logged."""
+        now = time.time()
+        for h in hosts:
+            log(f"terminating {h.id}: {why}")
+            h.state, h.ended = "lost", now
+            f = self.launcher.submit(terminate, h.region, [h.id])
+            f.add_done_callback(lambda f, hid=h.id: f.exception() and log(f"terminating {hid}: {f.exception()}"))
 
     def terminate_all(self) -> None:
         """Terminates the run's instances: those it tracks, each in its
@@ -3357,7 +3432,7 @@ class Run:
         self.serve = subprocess.Popen(
             [sys.executable, str(HERE / "worker.py"), "serve", "--dir", str(self.local_dir),
              "--slots", str(self.local_slots), "--job-timeout", str(self.args.job_timeout),
-             "--idle-minutes", "5"],
+             "--idle-minutes", "5", "--min-free-mb", str(int(self.slot_mem_gib * 1024))],
             stdin=subprocess.DEVNULL,
         )
 
@@ -3410,7 +3485,7 @@ class Run:
         # Durable before the next sync acks them.
         self.flush_rows()
         if not self.local:
-            self.retire_idle()
+            self.retire_idle(now)
             self.scale(now)
             self.peak_slots = max(self.peak_slots, sum(h.slots for h in self.hosts if h.state != "lost"))
 
