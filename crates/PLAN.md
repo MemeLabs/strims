@@ -229,6 +229,11 @@ and dropped are in `TRIED.md`.
      units the last streams of each half of 16 go 3-18 s without data at
      1500v. Try relay readings that count a unit's data-less chunks, as
      the store rate does.
+   - Emit every stream's chunks at a steady cadence whatever the
+     bitrate, padding what a quiet scene leaves (padding is elided, so a
+     data-less chunk costs little), so a neighbour can predict when a
+     chunk is held: speculative requests to peers that haven't announced
+     a chunk, and declared lag summaries in place of HAVEs, assume it.
    - Without a known capacity the upload meter still trails a known
      uplink. Measure the gap on the robust tier by role
      (`STRIMS_SIM_KNOWN_UPLINK=seed` and `=viewers`) before choosing the
