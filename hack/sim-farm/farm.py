@@ -2500,9 +2500,11 @@ class Run:
         if seq in host.landed:
             return
         host.landed.add(seq)
+        # The record is also the job's first row (`rows`), which a verify
+        # copy is compared with: copied, not taken apart.
         for path, r in host.unlanded.pop(seq, []):
-            row = r.pop("row")
-            self.pending_rows.setdefault(path, []).append({**r, "reads": (rec or {}).get("reads"), "row": row})
+            head = {k: v for k, v in r.items() if k != "row"}
+            self.pending_rows.setdefault(path, []).append({**head, "reads": (rec or {}).get("reads"), "row": r["row"]})
         for wid, s in list(host.stored.items()):
             if s == seq:
                 host.acks.append(wid)
