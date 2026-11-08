@@ -3080,13 +3080,20 @@ class Run:
         wid = self.canary_item.wid
         jobs = [self.canary_item]
         deadline = time.time() + self.args.job_timeout * 60 + 120
+        failing = None
         while time.time() < deadline:
             self.booting(host)
             try:
                 reply = self.sync(host, jobs, [])
-            except Exception:
+            except Exception as e:
+                # A sync that keeps failing fails the boot, rather than
+                # hold the instance till the deadline.
+                failing = failing or time.time()
+                if time.time() - failing > SSH_GRACE:
+                    raise RuntimeError(f"the canary's sync fails: {e}") from e
                 time.sleep(1)
                 continue
+            failing = None
             jobs = []
             res = next((r for r in reply["done"] if r["id"] == wid), None)
             if res is not None:
@@ -3268,7 +3275,9 @@ class Run:
         e = self.prior.get(item.job.id)
         if e is not None:
             return e
-        seen = self.seen.get(self.owners[item.job.id][0][0].name)
+        # The canary is no matrix's: its first matrix's.
+        own = self.owners.get(item.job.id)
+        seen = self.seen.get(own[0][0].name if own else self.ms[0].name)
         return statistics.fmean(seen) if seen else DEFAULT_JOB_S
 
     def work_left(self) -> float:
