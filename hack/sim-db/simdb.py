@@ -79,8 +79,11 @@ selection picks runs: `--src` (cache paths, globs, default every one),
 `--cell`, `--arm` (globs) and `--seed`, and a run's cell and arm are the
 same whatever else it selects. A suite farm run's runs are named by the
 suite cell their matrix ran, <cell>@<run>, which `--cell` matches whole or
-by the cell alone. A key a cell has in two sources counts once (the
-later's).
+by the cell alone, and a farm run's cells hold every row it scored: also
+those the farm reused from other runs or matrices, by its matrices'
+indexes (target/sim-farm/<matrix>/index.jsonl), whose sources' tables
+join the selection (pulled when the cache lacks them). A key a cell has in
+two sources counts once (the later's).
 
   sql      a query over the views (runs, scalars, seconds, viewer_seconds,
            reads, bins, viewers, the derived ones, and macros.sql's)
@@ -718,29 +721,72 @@ def suite_cells(names):
     return got
 
 
+def reused(srcs, stored):
+    """The rows the farm runs of sources `srcs` count by reference: the
+    lines of their matrices' indexes (the main checkout's
+    target/sim-farm/<matrix>/index.jsonl) whose row ran for another matrix
+    (`from`: the farm reused a row of an earlier run, or of a matrix of its
+    own that shares the job), as SQL of (k, src, matrix, arm), else None;
+    and the sources holding those rows. A run's matrices are its state's
+    list, and the cells its rows in `srcs` were `stored` under."""
+    farm = main_checkout() / "target" / "sim-farm"
+    names = set(stored)
+    for run in {s.split("/")[1] for s in srcs if s.startswith("farm/")}:
+        with contextlib.suppress(OSError):
+            names |= set((farm / run / "matrices").read_text().split())
+    paths = sorted(str(farm / n / "index.jsonl") for n in names if n and (farm / n / "index.jsonl").is_file())
+    if not paths:
+        return None, []
+    matrix = r"regexp_extract(filename, '([^/]+)/index\.jsonl$', 1)"
+    cols = struct({"key": "VARCHAR", "src": "VARCHAR", "arm": "VARCHAR", "from": "VARCHAR"})
+    sql = (f"(SELECT key AS k, src, {matrix} AS matrix, arm FROM read_json({plist(paths)}, "
+           f"format='newline_delimited', columns={cols}, filename=true, ignore_errors=true) "
+           f"WHERE src IS NOT NULL AND \"from\" <> {matrix})")
+    held = [r["src"] for r in duck(f"SELECT DISTINCT src FROM {sql};")]
+    return (sql if held else None), held
+
+
 def views(a, derived=True):
     """The SQL that makes the views over selection `a`'s sources, and the
     tables it has. A farm source's runs name the suite cells and arms its
-    matrices ran (suite_cells); `matrix` is the cell a run was stored
-    under."""
+    matrices ran (suite_cells), and a farm run's cells hold the rows it
+    reused (reused: their sources' tables join the views, pulled into the
+    cache when it lacks them); `matrix` is the matrix (or local cell) a run
+    counts for."""
     srcs = sources(a.src)
     if not srcs:
         sys.exit("no runs in the cache match --src")
+    stored = f"read_parquet({plist(files(srcs, 'runs'))}, union_by_name=true)"
+    moved, held = None, []
+    if any(s.startswith("farm/") for s in srcs):
+        moved, held = reused(srcs, [r["cell"] for r in duck(
+            f"SELECT DISTINCT cell FROM {stored} WHERE src LIKE 'farm/%';")])
+    lack = [s for s in held if not have_src(s)]
+    if lack:
+        print(f"pulling the farm runs of {len(lack)} flushes whose rows the selection's runs reused",
+              file=sys.stderr)
+        gone = pull_sources(lack)
+        if gone:
+            print(f"{len(gone)} of them are gone from S3 (a week's): their rows are left out", file=sys.stderr)
+    srcs = sorted({*srcs, *(s for s in held if have_src(s))})
     if derived:
         derive(srcs)
-    read_runs = f"read_parquet({plist(files(srcs, 'runs'))}, union_by_name=true)"
+    read_runs = f"(SELECT *, cell AS matrix FROM {stored})"
+    if moved:
+        read_runs = (f"(SELECT * FROM {read_runs} UNION ALL BY NAME "
+                     f"SELECT r.* REPLACE (m.matrix AS cell, m.arm AS arm), m.matrix "
+                     f"FROM read_parquet({plist(files(srcs, 'runs'))}, union_by_name=true) r "
+                     f"JOIN {moved} m USING (k, src))")
     cells = {}
     if any(s.startswith("farm/") for s in srcs):
-        cells = suite_cells([r["cell"] for r in duck(f"SELECT DISTINCT cell FROM {read_runs};")])
+        cells = suite_cells([r["matrix"] for r in duck(f"SELECT DISTINCT matrix FROM {read_runs};")])
     if cells:
         pairs = ", ".join(f"({q(n)}, {q(c)}, {q(k) if k else 'NULL'})" for n, (c, k) in cells.items())
         read_runs = (
             f"(SELECT r.* REPLACE (coalesce(m.cell, r.cell) AS cell, CASE WHEN m.knob IS NULL THEN r.arm "
-            f"ELSE coalesce(json_extract_string(r.env, '$.' || m.knob), r.arm) END AS arm), r.cell AS matrix "
-            f"FROM {read_runs} r LEFT JOIN (VALUES {pairs}) m(matrix, cell, knob) ON r.cell = m.matrix)"
+            f"ELSE coalesce(json_extract_string(r.env, '$.' || m.knob), r.arm) END AS arm) "
+            f"FROM {read_runs} r LEFT JOIN (VALUES {pairs}) m(matrix, cell, knob) ON r.matrix = m.matrix)"
         )
-    else:
-        read_runs = f"(SELECT *, cell AS matrix FROM {read_runs})"
     where = []
     if a.cell:
         where.append("(" + " OR ".join(f"cell GLOB {q(c)} OR split_part(cell, '@', 1) GLOB {q(c)}"
@@ -751,11 +797,10 @@ def views(a, derived=True):
         where.append(f"seed IN ({', '.join(str(int(s)) for s in a.seed)})")
     sql = [
         f"CREATE VIEW runs_all AS SELECT * FROM {read_runs};",
-        # A key in two cells (a job the farm reused, and its verify copy)
-        # counts in each.
+        # A key in two cells (a job the farm reused) counts in each.
         "CREATE VIEW canon AS SELECT k, src, cell FROM runs_all "
         "QUALIFY row_number() OVER (PARTITION BY k, cell ORDER BY src DESC) = 1;",
-        "CREATE VIEW runs AS SELECT r.* FROM runs_all r SEMI JOIN canon USING (k, src)"
+        "CREATE VIEW runs AS SELECT r.* FROM runs_all r SEMI JOIN canon USING (k, src, cell)"
         + (" WHERE " + " AND ".join(where) if where else "") + ";",
     ]
     have = {"runs"}
