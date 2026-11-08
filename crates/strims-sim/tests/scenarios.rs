@@ -2345,14 +2345,16 @@ fn collapse_seed(r: &Report) -> (HostIx, Duration) {
 /// the first wave now ramps, as a slow start, from two copies until a
 /// queue forms below the runner, and ends on the queue its last doubling
 /// built. Checks that the first wave opens at most twice the copies the
-/// seed's uplink pays for.
+/// seed's uplink pays for, on each of 8 seeds: one seed's timeline hides a
+/// cure that holds only on some.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_first_wave_overshoot() {
-    collapse_sweep(
+    let c = collapse_case(15, 10, 30);
+    sweep_n(
         "collapse_first_wave_overshoot",
-        1,
-        &collapse_case(15, 10, 30),
+        8,
+        |s| calibration_star_scenario(s, &c),
         |r| {
             let (seed, _) = collapse_seed(r);
             let wave = r.hosts[seed]
@@ -2531,7 +2533,7 @@ fn collapse_thin_relays() {
 /// 11-16), and the two healthy viewers lagged 1.1-3 s at p99. An adaptive
 /// seed's budget leaves out the time data waits only for links that hold it
 /// back. Checks that the healthy viewers' frames from 15 s on lag under
-/// 500 ms at p99.
+/// 500 ms at p99, on each of 8 seeds.
 #[test]
 #[ignore = "a collapse mode's case; run in release with --include-ignored"]
 fn collapse_slow_viewer() {
@@ -2547,7 +2549,7 @@ fn collapse_slow_viewer() {
             .collect();
         s
     };
-    sweep_at("collapse_slow_viewer", 1, scenario, |r| {
+    sweep_n("collapse_slow_viewer", 8, scenario, |r| {
         let (_, start) = collapse_seed(r);
         let others = &r.scenario.swarms[0].viewers[1..];
         let late = r
