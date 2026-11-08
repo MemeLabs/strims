@@ -1680,3 +1680,38 @@ fn a_backlog_ends_with_the_last_channel() {
     assert!(events.contains(&Event::Readable(p.leech.swarm)));
     assert_eq!(p.rewind(k), Err(RewindError::Unavailable));
 }
+
+/// A short hybrid transfer to one subscriber, three seconds of it.
+fn pace_pair() -> Pair {
+    let mut p = Pair::with(hybrid(), hybrid());
+    p.tick(100);
+    for _ in 0..30 {
+        p.write(1);
+        p.tick(50);
+        p.tick(50);
+    }
+    p
+}
+
+/// Whether any of the pair's frames carries a HAVE_PACE.
+fn has_pace(p: &Pair) -> bool {
+    let cfg = p.leech.runner.swarm(p.leech.swarm).unwrap().reader_config();
+    p.frames.iter().any(|f| {
+        FrameReader::new(f)
+            .filter_map(Result::ok)
+            .any(|(_, payload)| {
+                Reader::new(cfg, payload).any(|m| matches!(m, Ok(Message::HavePace(_))))
+            })
+    })
+}
+
+#[test]
+fn a_seed_asks_its_viewer_for_lazy_haves_then_prompt_ones_once_it_pushes() {
+    let p = pace_pair();
+    assert!(has_pace(&p));
+    let st = p.seed.runner.push_stats(p.seed.swarm).unwrap();
+    assert_eq!(st.children, 1);
+    assert_eq!((st.pace_channels, st.have_lazy_out), (1, 0));
+    let st = p.leech.runner.push_stats(p.leech.swarm).unwrap();
+    assert_eq!((st.have_lazy_out, st.have_lazy_in), (0, 0));
+}

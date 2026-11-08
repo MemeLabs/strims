@@ -156,6 +156,7 @@ pub struct ChannelMetrics {
     pub stream_open: u64,
     pub stream_close: u64,
     pub announce: u64,
+    pub have_pace: u64,
     pub data_bytes: u64,
     /// `Data`'s type byte, bin, timestamp and zeros.
     pub data_header_bytes: u64,
@@ -170,7 +171,7 @@ pub struct ChannelMetrics {
     /// STREAM_REQUEST, STREAM_CANCEL, STREAM_OPEN and STREAM_CLOSE.
     pub stream_bytes: u64,
     pub announce_bytes: u64,
-    /// HANDSHAKE, RESTART, CHOKE and UNCHOKE.
+    /// HANDSHAKE, RESTART, CHOKE, UNCHOKE and HAVE_PACE.
     pub session_bytes: u64,
     /// Channel payloads, and their headers' bytes.
     pub payloads: u64,
@@ -233,6 +234,7 @@ impl ChannelMetrics {
             Message::StreamOpen(_) => (&mut self.stream_open, &mut self.stream_bytes),
             Message::StreamClose(_) => (&mut self.stream_close, &mut self.stream_bytes),
             Message::Announce(_) => (&mut self.announce, &mut self.announce_bytes),
+            Message::HavePace(_) => (&mut self.have_pace, &mut self.session_bytes),
             Message::End => return,
         };
         add(c, 1);
@@ -267,6 +269,7 @@ impl ChannelMetrics {
             stream_open,
             stream_close,
             announce,
+            have_pace,
             data_bytes,
             data_header_bytes,
             integrity_bytes,
@@ -308,6 +311,7 @@ impl ChannelMetrics {
         add(&mut self.stream_open, *stream_open);
         add(&mut self.stream_close, *stream_close);
         add(&mut self.announce, *announce);
+        add(&mut self.have_pace, *have_pace);
         add(&mut self.data_bytes, *data_bytes);
         add(&mut self.data_header_bytes, *data_header_bytes);
         add(&mut self.integrity_bytes, *integrity_bytes);
@@ -359,6 +363,7 @@ impl ChannelMetrics {
             self.stream_open,
             self.stream_close,
             self.announce,
+            self.have_pace,
         ]
         .into_iter()
         .fold(0, u64::saturating_add)

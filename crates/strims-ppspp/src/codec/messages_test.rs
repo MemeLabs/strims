@@ -163,6 +163,8 @@ fn message_marshal_unmarshal() {
         Message::Announce(Announce::new(&ANNOUNCED).unwrap()),
         Message::Announce(Announce::with_streams(&[], &FIRST).unwrap()),
         Message::Announce(Announce::with_streams(&ANNOUNCED, &FIRST).unwrap()),
+        Message::HavePace(HavePace::Prompt),
+        Message::HavePace(HavePace::Lazy),
         Message::Choke,
         Message::Unchoke,
         Message::Restart,
@@ -443,11 +445,31 @@ fn type_names_and_wire_values() {
     assert_eq!(ProtocolOptionType::End.to_string(), "EndOption");
     assert_eq!(MessageType::from_u8(0), None);
     assert_eq!(MessageType::from_u8(18), Some(MessageType::Announce));
-    assert_eq!(MessageType::from_u8(19), None);
+    assert_eq!(MessageType::from_u8(19), Some(MessageType::HavePace));
+    assert_eq!(MessageType::from_u8(20), None);
     assert_eq!(
         ProtocolOptionType::from_u8(12),
         Some(ProtocolOptionType::Epoch)
     );
+}
+
+#[test]
+fn have_pace_is_one_byte_of_two_values() {
+    let t = MessageType::HavePace.as_u8();
+    for (b, pace) in [(0, HavePace::Prompt), (1, HavePace::Lazy)] {
+        let mut buf = [0u8; 2];
+        assert_eq!(Message::HavePace(pace).encode(&mut buf), Ok(2));
+        assert_eq!(buf, [t, b]);
+        assert_eq!(HavePace::from_u8(b), Some(pace));
+    }
+    assert_eq!(HavePace::default(), HavePace::Prompt);
+    for b in [2, 0x7f, 0xff] {
+        assert_eq!(
+            Message::decode(&config(), &[t, b]),
+            Err(Error::InvalidHavePace)
+        );
+    }
+    assert_eq!(Message::decode(&config(), &[t]), Err(Error::Truncated));
 }
 
 #[test]

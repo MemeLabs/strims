@@ -398,6 +398,34 @@ pub struct Have {
     pub bin: Bin,
 }
 
+/// The pace a HAVE_PACE asks of the receiver's HAVEs to its sender: one
+/// byte on the wire, 0 or 1.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(u8)]
+pub enum HavePace {
+    /// HAVEs that would go alone wait the short hold (a channel's start).
+    #[default]
+    Prompt = 0,
+    /// They wait the long hold unless something else goes to the sender.
+    Lazy = 1,
+}
+
+impl HavePace {
+    /// The wire value.
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    /// The pace for a wire value, if it is defined.
+    pub const fn from_u8(v: u8) -> Option<HavePace> {
+        match v {
+            0 => Some(HavePace::Prompt),
+            1 => Some(HavePace::Lazy),
+            _ => None,
+        }
+    }
+}
+
 /// Withdraws requests for the chunks of `bin`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Cancel {
@@ -942,6 +970,7 @@ pub enum Message<'a> {
     StreamOpen(StreamOpen),
     StreamClose(StreamClose),
     Announce(Announce<'a>),
+    HavePace(HavePace),
     End,
 }
 
@@ -966,6 +995,7 @@ impl<'a> Message<'a> {
             Message::StreamOpen(_) => MessageType::StreamOpen,
             Message::StreamClose(_) => MessageType::StreamClose,
             Message::Announce(_) => MessageType::Announce,
+            Message::HavePace(_) => MessageType::HavePace,
             Message::End => MessageType::End,
         }
     }
@@ -992,6 +1022,7 @@ impl<'a> Message<'a> {
             | Message::StreamOpen(StreamOpen { bin, .. }) => 2 + uvarint_len(bin.0),
             Message::StreamCancel(_) | Message::StreamClose(_) => 2,
             Message::Announce(m) => m.byte_len(),
+            Message::HavePace(_) => 1,
         }
     }
 
@@ -1053,6 +1084,7 @@ impl<'a> Message<'a> {
             Message::StreamCancel(StreamCancel { stream })
             | Message::StreamClose(StreamClose { stream }) => e.u16(stream)?,
             Message::Announce(m) => m.encode(&mut e)?,
+            Message::HavePace(p) => e.u8(p.as_u8())?,
         }
         Ok(e.pos())
     }
@@ -1137,6 +1169,9 @@ impl<'a> Message<'a> {
             }),
             MessageType::StreamClose => Message::StreamClose(StreamClose { stream: d.u16()? }),
             MessageType::Announce => Message::Announce(Announce::decode(&mut d)?),
+            MessageType::HavePace => {
+                Message::HavePace(HavePace::from_u8(d.u8()?).ok_or(Error::InvalidHavePace)?)
+            }
             MessageType::End => Message::End,
         };
         Ok((m, d.pos()))

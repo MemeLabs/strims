@@ -14,9 +14,9 @@ use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_ppspp::codec::{
-    Ack, Announce, AnnounceEntry, Cancel, ChannelWriter, Data, Delays, Have, Integrity, Message,
-    MessageWriter, Ping, Pong, Request, SignedIntegrity, StreamCancel, StreamClose, StreamOpen,
-    StreamRequest,
+    Ack, Announce, AnnounceEntry, Cancel, ChannelWriter, Data, Delays, Have, HavePace, Integrity,
+    Message, MessageWriter, Ping, Pong, Request, SignedIntegrity, StreamCancel, StreamClose,
+    StreamOpen, StreamRequest,
 };
 use strims_ppspp::integrity::{ProtectionMethod, VerifierOptions};
 use strims_ppspp::{
@@ -207,6 +207,8 @@ enum Msg {
     StreamClose(u16),
     /// Entries: stream, hits, late, misses, delay in ms, parent id.
     Announce(Vec<(u16, u64, u64, u64, u64, Vec<u8>)>),
+    /// Lazy, or prompt.
+    HavePace(bool),
     Restart,
     Choke,
     Unchoke,
@@ -253,6 +255,7 @@ fn msg() -> impl Strategy<Value = Msg> {
             0..40,
         )
         .prop_map(Msg::Announce),
+        2 => any::<bool>().prop_map(Msg::HavePace),
         1 => Just(Msg::Restart),
         1 => Just(Msg::Choke),
         1 => Just(Msg::Unchoke),
@@ -326,6 +329,10 @@ fn encode(msgs: &[Msg], channel: u64) -> Vec<u8> {
                     .collect();
                 Message::Announce(Announce::new(&entries).unwrap())
             }
+            Msg::HavePace(lazy) => Message::HavePace(match lazy {
+                true => HavePace::Lazy,
+                false => HavePace::Prompt,
+            }),
             Msg::Restart => Message::Restart,
             Msg::Choke => Message::Choke,
             Msg::Unchoke => Message::Unchoke,

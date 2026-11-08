@@ -91,6 +91,8 @@ fn build_corpus() -> Vec<Vec<u8>> {
             }
             cw.write(&Message::Have(strims_ppspp::codec::Have { bin: Bin(7) }))
                 .unwrap();
+            cw.write(&Message::HavePace(strims_ppspp::codec::HavePace::Lazy))
+                .unwrap();
             let n = cw.finish();
             frame.truncate(n);
             out.push(frame);
@@ -345,7 +347,11 @@ proptest! {
             .collect();
         let msgs: Vec<Message<'_>> = bins.iter().enumerate().map(|(i, &b)| {
             let bin = Bin(b);
-            match i % 7 {
+            match i % 8 {
+                6 => Message::HavePace(match b % 2 {
+                    0 => strims_ppspp::codec::HavePace::Prompt,
+                    _ => strims_ppspp::codec::HavePace::Lazy,
+                }),
                 5 => Message::Announce(
                     strims_ppspp::codec::Announce::new(std::slice::from_ref(&entries[i])).unwrap(),
                 ),

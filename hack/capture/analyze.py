@@ -1288,7 +1288,8 @@ BYTE_CLASSES = {
     "REQUEST": "request", "CANCEL": "request", "PING": "ping", "PONG": "ping",
     "STREAM_REQUEST": "stream", "STREAM_CANCEL": "stream", "STREAM_OPEN": "stream",
     "STREAM_CLOSE": "stream", "ANNOUNCE": "announce", "HANDSHAKE": "session", "RESTART": "session",
-    "CHOKE": "session", "UNCHOKE": "session", "UNKNOWN_CHANNEL": "other", "MALFORMED": "other",
+    "CHOKE": "session", "UNCHOKE": "session", "HAVE_PACE": "session", "UNKNOWN_CHANNEL": "other",
+    "MALFORMED": "other",
 }
 CLASS_ORDER = ("payload", "data_hdr", "integrity", "signed", "have", "ack", "request", "ping", "stream",
                "announce", "session", "headers", "other")

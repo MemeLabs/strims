@@ -1141,6 +1141,11 @@ struct Shape {
     /// Per node at the last sample: its declines so far and its wire
     /// bytes up.
     last: Vec<Option<(u64, u64)>>,
+    /// Over the samples of honest viewers with channels: the shares of
+    /// their channels whose peer they ask for lazy HAVEs, and whose peer
+    /// asked lazy HAVEs of them, summed; and the samples.
+    lazy: [f64; 2],
+    lazy_samples: u64,
 }
 
 /// With `SIM_LOOPS=1`, how push loops (cycles of open parents) form and
@@ -2821,6 +2826,14 @@ impl Sim {
                 continue;
             }
             shape.viewers += 1;
+            if let Some(p) = &push
+                && p.pace_channels > 0
+            {
+                let n = p.pace_channels as f64;
+                shape.lazy[0] += p.have_lazy_out as f64 / n;
+                shape.lazy[1] += p.have_lazy_in as f64 / n;
+                shape.lazy_samples += 1;
+            }
             if let Some(p) = &push
                 && p.children > 0
             {
@@ -7472,6 +7485,12 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         row.num(&name, n as f64 / samples);
     }
     row.num("relay_share", sh.relays as f64 / sh.viewers.max(1) as f64);
+    for (name, x) in ["have_lazy_out_share", "have_lazy_in_share"]
+        .iter()
+        .zip(sh.lazy)
+    {
+        row.num(name, x / sh.lazy_samples.max(1) as f64);
+    }
     let mut fanout = sh.fanout.clone();
     fanout.sort_unstable();
     for p in [50, 90] {

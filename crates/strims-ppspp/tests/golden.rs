@@ -36,8 +36,8 @@ use strims_binmap::{Bin, Map};
 use strims_golden::Golden;
 use strims_ppspp::codec::{
     self, Ack, Announce, AnnounceEntry, AnnounceStream, Cancel, ChannelHeader, ChannelWriter, Data,
-    Delays, EpochOption, FrameReader, Handshake, Have, Integrity, Message, MessageWriter, Ping,
-    Pong, ProtocolOption, ProtocolOptionType, ProtocolOptions, Reader, ReaderConfig, Request,
+    Delays, EpochOption, FrameReader, Handshake, Have, HavePace, Integrity, Message, MessageWriter,
+    Ping, Pong, ProtocolOption, ProtocolOptionType, ProtocolOptions, Reader, ReaderConfig, Request,
     SignedIntegrity, StreamCancel, StreamClose, StreamOpen, StreamRequest, Writer as CodecWriter,
 };
 use strims_ppspp::integrity::{
@@ -314,6 +314,8 @@ fn codec_messages() {
             Message::Announce(Announce::with_streams(&announced, &first).unwrap()),
         ),
         ("announce_ask", Message::Announce(Announce::ASK)),
+        ("have_pace_prompt", Message::HavePace(HavePace::Prompt)),
+        ("have_pace_lazy", Message::HavePace(HavePace::Lazy)),
         ("end", Message::End),
     ];
 

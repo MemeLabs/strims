@@ -307,7 +307,10 @@ impl PathOverhead {
 /// round trip stands above its base (`path_delay_ms`), and how long each
 /// link's queued bytes take at its delivery rate (`path_queued_ms`). And
 /// how far the links' latest round trips stand above their bases
-/// ([`strims_base::path::latest_excess`], `path_latest_ms`).
+/// ([`strims_base::path::latest_excess`], `path_latest_ms`). And over its
+/// hybrid swarms, its channels (`PushStats::pace_channels`) and those whose
+/// peer it asks for lazy HAVEs and whose peer asked them of it
+/// (`have_lazy_out`, `have_lazy_in`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MeterSample {
     /// Simulated time since the start of the run.
@@ -322,6 +325,9 @@ pub struct MeterSample {
     pub children: BTreeMap<usize, usize>,
     pub requests_in: u32,
     pub rejected: u32,
+    pub pace_channels: u32,
+    pub lazy_out: u32,
+    pub lazy_in: u32,
 }
 
 /// An adaptive seed's `PushStats` seed fields.
@@ -551,6 +557,10 @@ impl HostStats {
                     .requests_in
                     .saturating_add(count(push.accepted + push.rejected));
                 ms.rejected = ms.rejected.saturating_add(count(push.rejected));
+                let n = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+                ms.pace_channels = ms.pace_channels.saturating_add(n(push.pace_channels));
+                ms.lazy_out = ms.lazy_out.saturating_add(n(push.have_lazy_out));
+                ms.lazy_in = ms.lazy_in.saturating_add(n(push.have_lazy_in));
                 if push.seed_window > 0 {
                     let seed = SeedSample {
                         budget: push.seed_budget,

@@ -3929,6 +3929,469 @@ fn lone_haves_to_the_seed_that_asked_for_reports_wait_the_hold() {
     haves(&mut f, t);
     f.sched.consume(Bin(0), t, &f.swarm, &mut q);
     assert_eq!(haves(&mut f, t), 0);
+    let hold = HAVE_HOLD;
+    assert_eq!(f.sched.haves_held(p, t), Some(t + hold));
+    assert_eq!(haves(&mut f, t + hold), 1);
+}
+
+// --- HAVE pace ---------------------------------------------------------------
+
+/// The HAVEs and HAVE_PACEs `peer`'s channel writes next; `ride`: the frame
+/// carries something else to it.
+fn haves_and_paces(
+    f: &mut Fixture,
+    peer: PeerKey,
+    t: Time,
+    ride: bool,
+) -> (usize, Vec<codec::HavePace>) {
+    let cfg = f.swarm.reader_config();
+    let (sched, swarm) = (&mut f.sched, &f.swarm);
+    let m = written(|cw| sched.write(peer, t, swarm, cw, ride).unwrap(), cfg);
+    let haves = m.iter().filter(|m| matches!(m, Message::Have(_))).count();
+    let paces = m
+        .iter()
+        .filter_map(|m| match m {
+            Message::HavePace(p) => Some(*p),
+            _ => None,
+        })
+        .collect();
+    (haves, paces)
+}
+
+/// A hybrid viewer with one channel past its eager start, whose peer
+/// asked lazy HAVEs of us; the time and the peer.
+fn lazy_viewer(q: &mut MockQueue) -> (Fixture, Time, PeerKey) {
+    let mut f = fixture(hybrid(1));
+    let p = ready_channel(&mut f, q);
+    f.sched.handle_have_pace(p, codec::HavePace::Lazy);
+    let t = now() + EAGER_HAVES_AFTER_OPEN + Duration::SECOND;
+    // The first write's handshake and ping go.
+    haves_and_paces(&mut f, p, t, false);
+    (f, t, p)
+}
+
+#[test]
+fn a_lazy_channels_lone_haves_wait_the_lazy_hold_and_the_tick_too() {
+    let mut q = MockQueue::default();
+    let (mut f, t, p) = lazy_viewer(&mut q);
+    f.sched.consume(Bin(0), t, &f.swarm, &mut q);
+    assert_eq!(f.sched.haves_held(p, t), Some(t + HAVE_LAZY_HOLD));
+    assert_eq!(haves_and_paces(&mut f, p, t + HAVE_HOLD, false).0, 0);
+    // The tick leaves them held ...
+    let tick = t + Duration::from_millis(100);
+    f.sched.run(tick, &mut f.swarm, &mut q);
+    assert!(!f.sched.channels[&p].haves_due);
+    assert_eq!(haves_and_paces(&mut f, p, tick, false).0, 0);
+    // ... until the first waited the lazy hold, at a tick or a write.
+    f.sched.run(t + HAVE_LAZY_HOLD, &mut f.swarm, &mut q);
+    assert!(f.sched.channels[&p].haves_due);
+    assert_eq!(haves_and_paces(&mut f, p, t + HAVE_LAZY_HOLD, false).0, 1);
+    let t = t + Duration::SECOND;
+    f.sched.consume(Bin(2), t, &f.swarm, &mut q);
+    assert_eq!(haves_and_paces(&mut f, p, t + HAVE_LAZY_HOLD, false).0, 1);
+    // A prompt peer's wait the prompt hold.
+    f.sched.handle_have_pace(p, codec::HavePace::Prompt);
+    let t = t + Duration::SECOND;
+    f.sched.consume(Bin(4), t, &f.swarm, &mut q);
     assert_eq!(f.sched.haves_held(p, t), Some(t + HAVE_HOLD));
-    assert_eq!(haves(&mut f, t + HAVE_HOLD), 1);
+    f.sched
+        .run(t + Duration::from_millis(10), &mut f.swarm, &mut q);
+    assert!(f.sched.channels[&p].haves_due);
+}
+
+#[test]
+fn a_lazy_channels_haves_ride_a_request_or_a_push_at_once() {
+    let mut q = MockQueue::default();
+    let (mut f, t, p) = lazy_viewer(&mut q);
+    f.sched.s.first_chunk_set = true;
+    // A frame with data after it (a push) carries them.
+    f.sched.consume(Bin(0), t, &f.swarm, &mut q);
+    assert_eq!(haves_and_paces(&mut f, p, t, true).0, 1);
+    // So does one with a request: the peer offers a chunk we lack.
+    f.sched.consume(Bin(2), t, &f.swarm, &mut q);
+    assert!(f.sched.handle_have(p, Bin(8), t));
+    let cfg = f.swarm.reader_config();
+    let (sched, swarm) = (&mut f.sched, &f.swarm);
+    let m = written(|cw| sched.write(p, t, swarm, cw, false).unwrap(), cfg);
+    assert!(m.iter().any(|m| matches!(m, Message::Request(_))), "{m:?}");
+    assert!(m.iter().any(|m| matches!(m, Message::Have(_))), "{m:?}");
+}
+
+#[test]
+fn eager_windows_override_a_lazy_pace() {
+    let mut f = fixture(hybrid(1));
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    f.sched.handle_have_pace(p, codec::HavePace::Lazy);
+    // The first write's handshake and ping go; then a new channel's HAVEs
+    // go at once ...
+    haves_and_paces(&mut f, p, now(), false);
+    let t = now() + Duration::from_millis(1);
+    f.sched.consume(Bin(0), t, &f.swarm, &mut q);
+    assert_eq!(haves_and_paces(&mut f, p, t, false).0, 1);
+    f.sched.consume(Bin(2), t, &f.swarm, &mut q);
+    f.sched.run(t, &mut f.swarm, &mut q);
+    assert!(f.sched.channels[&p].haves_due);
+    // ... and so do a recent requester's.
+    let t = now() + EAGER_HAVES_AFTER_OPEN + Duration::SECOND;
+    haves_and_paces(&mut f, p, t, false);
+    f.sched.consume(Bin(4), t, &f.swarm, &mut q);
+    assert_eq!(haves_and_paces(&mut f, p, t, false).0, 0);
+    assert!(f.sched.handle_request(p, Bin(0), t, &mut q));
+    f.sched.consume(Bin(6), t, &f.swarm, &mut q);
+    assert_eq!(haves_and_paces(&mut f, p, t, false).0, 1);
+}
+
+#[test]
+fn a_seeds_haves_stay_eager_to_a_lazy_peer() {
+    let mut f = fixture(seed_hybrid(1));
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    f.sched.handle_have_pace(p, codec::HavePace::Lazy);
+    let t = now() + EAGER_HAVES_AFTER_OPEN + Duration::SECOND;
+    haves_and_paces(&mut f, p, t, false);
+    f.sched.consume(Bin(0), t, &f.swarm, &mut q);
+    assert_eq!(haves_and_paces(&mut f, p, t, false).0, 1);
+    f.sched.consume(Bin(2), t, &f.swarm, &mut q);
+    f.sched.run(t, &mut f.swarm, &mut q);
+    assert!(f.sched.channels[&p].haves_due);
+}
+
+#[test]
+fn a_seed_asks_lazy_haves_of_every_neighbour_it_doesnt_push_to() {
+    let mut f = fixture(seed_hybrid(1));
+    let mut q = MockQueue::default();
+    let a = add_ready(&mut f, &mut q, 0);
+    let b = add_ready(&mut f, &mut q, 1);
+    f.sched.run(now(), &mut f.swarm, &mut q);
+    for p in [a, b] {
+        assert_eq!(f.sched.channels[&p].pace_out, codec::HavePace::Lazy);
+        // The handshake carries it.
+        let (_, paces) = haves_and_paces(&mut f, p, now(), false);
+        assert_eq!(paces, vec![codec::HavePace::Lazy]);
+    }
+    let st = f.sched.push_stats();
+    assert_eq!(
+        (st.pace_channels, st.have_lazy_out, st.have_lazy_in),
+        (2, 2, 0)
+    );
+}
+
+/// A hybrid viewer of `streams` streams whose stream 0 has an open parent:
+/// every munro is announced first by the parent, then `contender_lag`
+/// later by the contender and each bystander its lag later; with `pushes`,
+/// the parent pushes each munro but that one 10 ms after announcing it.
+struct PaceRig {
+    f: Fixture,
+    q: MockQueue,
+    parent: PeerKey,
+    contender: PeerKey,
+    /// Each with its lag.
+    bystanders: Vec<(PeerKey, Duration)>,
+    contender_lag: Duration,
+    /// No more munros come.
+    quiet: bool,
+    /// The parent pushes every munro but this one.
+    pushes: Option<u64>,
+    /// The last tick.
+    now: Time,
+    /// The next munro, and when the parent announces it.
+    munro: u64,
+    next: Time,
+    /// The announcements and pushes due later: time, peer, munro, push.
+    pending: Vec<(Time, PeerKey, u64, bool)>,
+}
+
+/// Munros come every this long.
+const MUNRO_EVERY: Duration = Duration::from_millis(100);
+
+impl PaceRig {
+    fn new(streams: usize, contender_lag: Duration, bystander_ms: &[i64]) -> PaceRig {
+        let key = strims_crypto::key_from_seed(&[5; 32]);
+        let swarm = Swarm::new(SwarmId::new(&key.public), hybrid(streams)).unwrap();
+        let mut f = fixture_peers(swarm, 2 + bystander_ms.len());
+        let mut q = MockQueue::default();
+        let parent = add_ready(&mut f, &mut q, 0);
+        let contender = add_ready(&mut f, &mut q, 1);
+        let bystanders: Vec<(PeerKey, Duration)> = bystander_ms
+            .iter()
+            .enumerate()
+            .map(|(i, &ms)| (add_ready(&mut f, &mut q, 2 + i), Duration::from_millis(ms)))
+            .collect();
+        f.sched.s.first_chunk_set = true;
+        assert!(f.sched.do_stream_sub(parent, 0, Bin(0)));
+        assert_eq!(
+            f.sched.handle_stream_open(parent, 0, Bin(0), now(), &mut q),
+            Ok(StreamOpenOutcome::Accepted)
+        );
+        // The first writes' handshakes and pings go.
+        let peers: Vec<PeerKey> = f.sched.channels.keys().copied().collect();
+        for p in peers {
+            haves_and_paces(&mut f, p, now(), true);
+        }
+        PaceRig {
+            f,
+            q,
+            parent,
+            contender,
+            bystanders,
+            contender_lag,
+            quiet: false,
+            pushes: None,
+            now: now(),
+            munro: 0,
+            next: now(),
+            pending: Vec::new(),
+        }
+    }
+
+    /// Announces what is due by `t`, then runs the tick at `t`.
+    fn run(&mut self, t: Time) {
+        while !self.quiet && self.next <= t {
+            let k = self.munro;
+            self.pending.push((self.next, self.parent, k, false));
+            if self.pushes.is_some_and(|skip| skip != k) {
+                let at = self.next + Duration::from_millis(10);
+                self.pending.push((at, self.parent, k, true));
+            }
+            self.pending
+                .push((self.next + self.contender_lag, self.contender, k, false));
+            for &(b, lag) in &self.bystanders {
+                self.pending.push((self.next + lag, b, k, false));
+            }
+            self.munro += 1;
+            self.next += MUNRO_EVERY;
+        }
+        self.pending.sort();
+        let due = self.pending.iter().take_while(|e| e.0 <= t).count();
+        for (at, peer, k, push) in self.pending.drain(..due) {
+            let (f, q) = (&mut self.f, &mut self.q);
+            let b = Bin::new(6, k);
+            if push {
+                f.sched.consume(b, at, &f.swarm, q);
+                f.sched
+                    .handle_data(peer, b, Time::NIL, None, true, true, at, Bin(0), q);
+            } else {
+                assert!(f.sched.handle_have(peer, b, at));
+            }
+        }
+        if self.pushes.is_some() {
+            self.f.sched.expire_push(t, &mut self.q);
+        }
+        self.f.sched.run(t, &mut self.f.swarm, &mut self.q);
+        self.now = t;
+    }
+
+    /// Runs ticks to `t`, every 100 ms.
+    fn run_to(&mut self, t: Time) {
+        while self.now < t {
+            let at = (self.now + Duration::from_millis(100)).min(t);
+            self.run(at);
+        }
+    }
+
+    fn pace(&self, p: PeerKey) -> codec::HavePace {
+        self.f.sched.channels[&p].pace_out
+    }
+
+    /// The parent's, the contender's and the bystanders' paces.
+    fn paces(&self) -> Vec<codec::HavePace> {
+        [self.parent, self.contender]
+            .into_iter()
+            .chain(self.bystanders.iter().map(|b| b.0))
+            .map(|p| self.pace(p))
+            .collect()
+    }
+}
+
+use codec::HavePace::{Lazy, Prompt};
+
+#[test]
+fn a_viewer_asks_lazy_haves_of_a_bystander_behind_its_parent() {
+    let mut r = PaceRig::new(1, Duration::from_millis(60), &[400]);
+    // Before the first parent check, everyone is prompt.
+    assert_eq!(r.paces(), [Prompt; 3]);
+    // Short of the next ping.
+    let t = now() + Duration::from_millis(900);
+    r.run_to(t);
+    // The parent and a contender within PACE_MARGIN of it stay prompt.
+    assert_eq!(r.paces(), [Prompt, Prompt, Lazy]);
+    let by = r.bystanders[0].0;
+    assert!(r.q.enqueued.contains(&(by, r.f.sched.s.key)));
+    let st = r.f.sched.push_stats();
+    assert_eq!((st.pace_channels, st.have_lazy_out), (3, 1));
+    // The pace rides a frame that carries something else, once.
+    assert_eq!(haves_and_paces(&mut r.f, by, t, false).1, vec![]);
+    assert_eq!(haves_and_paces(&mut r.f, by, t, true).1, vec![Lazy]);
+    assert_eq!(haves_and_paces(&mut r.f, by, t, true).1, vec![]);
+
+    // A neighbour past the margin is lazy too.
+    let mut r = PaceRig::new(1, push::PACE_MARGIN + Duration::from_millis(50), &[400]);
+    r.run_to(now() + Duration::SECOND);
+    assert_eq!(r.paces(), [Prompt, Lazy, Lazy]);
+}
+
+#[test]
+fn a_viewer_asks_prompt_haves_of_everyone_while_a_stream_lacks_a_parent() {
+    // Stream 1 has none: it grafts by every neighbour's lag.
+    let mut r = PaceRig::new(2, Duration::from_millis(60), &[400, 450, 500]);
+    for k in 1..=4 {
+        r.run_to(now() + Duration::from_millis(500) * k);
+        assert_eq!(r.paces(), [Prompt; 5], "{k}");
+    }
+}
+
+#[test]
+fn a_miss_with_no_candidate_but_the_parent_asks_prompt_haves_of_everyone() {
+    // The parent pushes each munro before anyone else announces it, so
+    // nobody else is ahead of us: no neighbour is a candidate, and none
+    // but the parent is prompt.
+    let mut r = PaceRig::new(1, Duration::from_millis(60), &[400, 450, 500]);
+    r.pushes = Some(10);
+    r.run_to(now() + Duration::from_millis(900));
+    assert_eq!(r.paces(), [Prompt, Lazy, Lazy, Lazy, Lazy]);
+    // Munro 10, announced at 1 s, misses at the check after: the contender
+    // announced it before we held it, so it alone is the stream's
+    // candidate ...
+    let missed = now() + Duration::SECOND + push::PARENT_CHECK_INTERVAL / 5;
+    r.run_to(missed);
+    let st = r.f.sched.push_stats();
+    assert!(st.misses > 0);
+    assert_eq!(st.pruned, 0);
+    assert_eq!(r.paces(), [Prompt, Prompt, Lazy, Lazy, Lazy]);
+    // ... until we hold newer munros than anyone announced before us: then
+    // there is none, and everyone is prompt for the rest of the span.
+    r.run_to(missed + push::PARENT_CHECK_INTERVAL);
+    assert_eq!(r.paces(), [Prompt; 5]);
+    r.run_to(missed + push::PACE_MISS_SPAN);
+    assert_eq!(r.paces(), [Prompt, Lazy, Lazy, Lazy, Lazy]);
+}
+
+#[test]
+fn a_miss_asks_prompt_haves_of_its_streams_best_candidates_for_a_span() {
+    let mut r = PaceRig::new(1, Duration::from_millis(60), &[400, 450, 500]);
+    // Short of the parent's silence prune.
+    let t = now() + Duration::from_millis(900);
+    r.run_to(t);
+    assert_eq!(r.paces(), [Prompt, Prompt, Lazy, Lazy, Lazy]);
+    // The parent pushes nothing: its deadlines pass.
+    r.f.sched.expire_push(t, &mut r.q);
+    assert!(r.f.sched.push_stats().misses > 0);
+    assert_eq!(r.f.sched.push_stats().pruned, 0);
+    // The PACE_FALLBACK_K best but the parent: the contender and the first
+    // two bystanders.
+    r.run_to(t + push::PARENT_CHECK_INTERVAL);
+    assert_eq!(r.paces(), [Prompt, Prompt, Prompt, Prompt, Lazy]);
+    r.run_to(t + push::PACE_MISS_SPAN + push::PARENT_CHECK_INTERVAL);
+    assert_eq!(r.paces(), [Prompt, Prompt, Lazy, Lazy, Lazy]);
+}
+
+#[test]
+fn a_lost_parent_makes_every_neighbour_prompt_at_once_and_for_a_span() {
+    let mut r = PaceRig::new(1, Duration::from_millis(60), &[400, 450, 500, 550]);
+    let t = now() + Duration::from_millis(900);
+    r.run_to(t);
+    assert_eq!(r.paces(), [Prompt, Prompt, Lazy, Lazy, Lazy, Lazy]);
+    // The parent sheds us.
+    let parent = r.parent;
+    assert_eq!(
+        r.f.sched
+            .handle_stream_close(parent, 0, Bin(0), t, &mut r.q),
+        Ok(())
+    );
+    assert_eq!(r.paces(), [Prompt; 6]);
+    // The contender is grafted at the next check; the span holds the rest
+    // prompt past it.
+    r.run_to(t + push::PARENT_CHECK_INTERVAL);
+    let opened = r.contender;
+    let at = t + push::PARENT_CHECK_INTERVAL;
+    assert_eq!(
+        r.f.sched
+            .handle_stream_open(opened, 0, Bin(0), at, &mut r.q),
+        Ok(StreamOpenOutcome::Accepted)
+    );
+    r.run_to(at + push::PARENT_CHECK_INTERVAL);
+    assert_eq!(r.paces(), [Prompt; 6]);
+    r.run_to(at + push::PACE_REVIEW_SPAN + push::PARENT_CHECK_INTERVAL * 2);
+    assert!(r.bystanders.iter().all(|b| r.pace(b.0) == Lazy));
+}
+
+#[test]
+fn a_pace_review_asks_prompt_haves_of_everyone_for_its_span() {
+    let mut r = PaceRig::new(1, Duration::from_millis(60), &[400, 450, 500, 550]);
+    // The first check comes at once and sets the review clock.
+    r.run_to(now() + Duration::from_millis(100));
+    let first = now() + Duration::from_millis(100);
+    let review = first + push::PACE_REVIEW;
+    let mut prompt = Vec::new();
+    let mut at = first;
+    while at < review + push::PACE_REVIEW_SPAN * 2 {
+        at += push::PARENT_CHECK_INTERVAL;
+        r.run_to(at);
+        let all = r.paces().iter().all(|&p| p == Prompt);
+        let any = r.bystanders.iter().any(|b| r.pace(b.0) == Prompt);
+        assert_eq!(all, any, "{at:?}");
+        prompt.push((at, all));
+    }
+    let prompt: Vec<Time> = prompt.iter().filter(|x| x.1).map(|x| x.0).collect();
+    let (lo, hi) = (*prompt.first().unwrap(), *prompt.last().unwrap());
+    assert!(
+        lo >= review && lo < review + push::PARENT_CHECK_INTERVAL,
+        "{prompt:?}"
+    );
+    assert!(
+        hi < review + push::PACE_REVIEW_SPAN + push::PARENT_CHECK_INTERVAL,
+        "{prompt:?}"
+    );
+    assert!(r.bystanders.iter().all(|b| r.pace(b.0) == Lazy));
+}
+
+#[test]
+fn a_seed_asks_prompt_haves_of_its_holders_and_lazy_of_the_rest() {
+    let mut f = fixture(seed_hybrid(1));
+    let mut q = MockQueue::default();
+    let holder = add_ready(&mut f, &mut q, 0);
+    let rest = [add_ready(&mut f, &mut q, 1), add_ready(&mut f, &mut q, 2)];
+    f.sched.run(now(), &mut f.swarm, &mut q);
+    assert_eq!(f.sched.channels[&holder].pace_out, Lazy);
+    // Its frames back carry the acknowledgements of our pushes: prompt at
+    // once, and at every tick while it holds a copy.
+    let t = now() + Duration::from_millis(100);
+    assert_eq!(
+        f.sched
+            .handle_stream_request(holder, 0, Bin(0), Bin(0), t, &mut q),
+        Ok(true)
+    );
+    assert_eq!(f.sched.push_stats().children, 1);
+    assert_eq!(f.sched.channels[&holder].pace_out, Prompt);
+    f.sched
+        .run(t + Duration::from_millis(100), &mut f.swarm, &mut q);
+    assert_eq!(f.sched.channels[&holder].pace_out, Prompt);
+    for p in rest {
+        assert_eq!(f.sched.channels[&p].pace_out, Lazy);
+    }
+    // Unsubscribed, it is one of the rest.
+    assert_eq!(f.sched.handle_stream_cancel(holder, 0), Ok(()));
+    f.sched
+        .run(t + Duration::from_millis(200), &mut f.swarm, &mut q);
+    assert_eq!(f.sched.channels[&holder].pace_out, Lazy);
+}
+
+#[test]
+fn a_viewer_asks_prompt_haves_of_its_child() {
+    let mut r = PaceRig::new(1, Duration::from_millis(60), &[400, 450]);
+    let t = now() + Duration::from_millis(900);
+    r.run_to(t);
+    assert_eq!(r.paces(), [Prompt, Prompt, Lazy, Lazy]);
+    // A bystander far behind the parent subscribes to us.
+    let child = r.bystanders[0].0;
+    assert_eq!(
+        r.f.sched
+            .handle_stream_request(child, 0, Bin(0), Bin(0), t, &mut r.q),
+        Ok(true)
+    );
+    assert_eq!(r.f.sched.push_stats().children, 1);
+    assert_eq!(r.pace(child), Prompt);
+    r.run_to(t + Duration::SECOND);
+    assert_eq!(r.paces(), [Prompt, Prompt, Prompt, Lazy]);
 }

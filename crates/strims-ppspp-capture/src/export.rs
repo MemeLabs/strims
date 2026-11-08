@@ -15,7 +15,7 @@
 //! | `frame` | the frame's number in the dump, from 1; on a tap or sample row, the last frame's |
 //! | `swarm` | the swarm's id in the dump |
 //! | `channel` | the wire channel id |
-//! | `type` | `FRAME`, a message type (`DATA`, `HAVE`, `ACK`, `REQUEST`, `CANCEL`, `INTEGRITY`, `SIGNED_INTEGRITY`, `HANDSHAKE`, `RESTART`, `CHOKE`, `UNCHOKE`, `PING`, `PONG`, `STREAM_REQUEST`, `STREAM_CANCEL`, `STREAM_OPEN`, `STREAM_CLOSE`, `ANNOUNCE`), `UNKNOWN_CHANNEL`, `MALFORMED`, `FRAME_ERROR`, `TapLost`, a tap kind's name ([`TAP_KINDS`](crate::TAP_KINDS)), or a sample source's ([`SAMPLE_KINDS`](crate::SAMPLE_KINDS)) |
+//! | `type` | `FRAME`, a message type (`DATA`, `HAVE`, `ACK`, `REQUEST`, `CANCEL`, `INTEGRITY`, `SIGNED_INTEGRITY`, `HANDSHAKE`, `RESTART`, `CHOKE`, `UNCHOKE`, `PING`, `PONG`, `STREAM_REQUEST`, `STREAM_CANCEL`, `STREAM_OPEN`, `STREAM_CLOSE`, `ANNOUNCE`, `HAVE_PACE`), `UNKNOWN_CHANNEL`, `MALFORMED`, `FRAME_ERROR`, `TapLost`, a tap kind's name ([`TAP_KINDS`](crate::TAP_KINDS)), or a sample source's ([`SAMPLE_KINDS`](crate::SAMPLE_KINDS)) |
 //! | `bin` | the bin |
 //! | `first`, `last` | its first and last chunk |
 //! | `stream` | the stream: a message's, or a single chunk's (`chunk % stream_count`) |
@@ -30,6 +30,7 @@
 //! | `nonce` | PING and PONG nonces: a pong carries its ping's |
 //! | `count` | on ANNOUNCE, its entries; on `TapLost`, the events lost |
 //! | `streams` | on ANNOUNCE, its stream items |
+//! | `pace` | on HAVE_PACE, `prompt` or `lazy` |
 //!
 //! A tap row carries its decision's fields, and a sample row its
 //! source's, by their tables' names: a peer as its name in hex, a named
@@ -44,7 +45,7 @@ use std::fmt::Write as _;
 use std::io::{self, Read, Write};
 
 use strims_binmap::Bin;
-use strims_ppspp::codec::{FrameReader, Message, Reader as MessageReader, ReaderConfig};
+use strims_ppspp::codec::{FrameReader, HavePace, Message, Reader as MessageReader, ReaderConfig};
 
 use crate::capture::{FieldKind, KindInfo, tap_kind};
 use crate::format::{Dir, MAX_TAP_FIELDS, Record, SampleRecord, SwarmParams, TapRecord};
@@ -762,6 +763,21 @@ fn message_row(row: Row, m: &Message<'_>, p: &SwarmParams) -> Row {
             }
             Row {
                 kind: "ANNOUNCE",
+                other,
+                ..row
+            }
+        }
+        Message::HavePace(pace) => {
+            let mut other = [None; MAX_TAP_FIELDS];
+            if let Some(f) = other.first_mut() {
+                let name = match pace {
+                    HavePace::Prompt => "prompt",
+                    HavePace::Lazy => "lazy",
+                };
+                *f = Some(("pace", Val::Name(name)));
+            }
+            Row {
+                kind: "HAVE_PACE",
                 other,
                 ..row
             }

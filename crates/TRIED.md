@@ -56,6 +56,24 @@ alone. Judging a reporter's first copies against the entry's own report
 fill a hole at once under the hold (5c4ce7e1) failed `seed_outage_hybrid`
 at 6 of 40 seeds against 4.
 
+**Prompt HAVEs from only an unparented stream's three best candidates.**
+(`TMP-pace` 7168e3bc, against 342b144d) A stream without an open parent
+asked prompt HAVEs of its three lowest announcement lags, not of every
+neighbour. Its graft reads lazy neighbours late, and they fail the
+`ahead` test, so it chose among the prompt few: trees deepened and parent
+changes doubled (cable-seed seed 1: 26 -> 58 a minute, packets back at
+off's).
+
+**Lazy HAVEs from the peers we push to.** (`TMP-pace` 019aab70) On TCP
+their frames back carry the acknowledgements of our pushes. With the
+reverse path quiet, each push burst's last segment waited for the 40 ms
+delayed ACK: halve-7-20's lag p99 213 -> ~830 ms, star-7-20's p50
+71 -> 118 ms.
+
+**A lazy hold of 250 ms, and a prompt hold of 150 ms.** (`TMP-pace`
+1d0693cd) Each failed a CI-range seed of the catch-up sweeps:
+`wan_webrtc_channels_hybrid` seed 5 and `seed_outage_hybrid` seed 5.
+
 **Shedding on push queue wait.** (recorded in d1552e65) It catches slow
 parents sooner but hurts `sim_push_parent_dies` and sparse meshes.
 

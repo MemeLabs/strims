@@ -3,7 +3,8 @@
 
 //! The PPSPP wire format: protocol version 2, plus ANNOUNCE (message type
 //! 18), a report on the sender's parents and its own first copies, or a
-//! request for the receiver's.
+//! request for the receiver's, and HAVE_PACE (19), the pace the sender asks
+//! of the receiver's HAVEs to it.
 //!
 //! A frame is a sequence of channel payloads, each behind a
 //! [`ChannelHeader`]. A channel payload is a sequence of messages, each a
@@ -38,10 +39,10 @@ use core::fmt;
 
 pub use messages::{
     Ack, Announce, AnnounceEntry, AnnounceIter, AnnounceStream, AnnounceStreams, Cancel,
-    ChannelHeader, Data, Delays, EpochOption, Handshake, HandshakeOptions, Have, Integrity,
-    MAX_ANNOUNCE_ENTRIES, MAX_ANNOUNCE_STREAMS, MAX_DATA_LEN, MAX_PEER_ID, Message, Ping, Pong,
-    ProtocolOption, ProtocolOptions, ProtocolOptionsIter, Request, SignedIntegrity, Stream,
-    StreamCancel, StreamClose, StreamOpen, StreamRequest,
+    ChannelHeader, Data, Delays, EpochOption, Handshake, HandshakeOptions, Have, HavePace,
+    Integrity, MAX_ANNOUNCE_ENTRIES, MAX_ANNOUNCE_STREAMS, MAX_DATA_LEN, MAX_PEER_ID, Message,
+    Ping, Pong, ProtocolOption, ProtocolOptions, ProtocolOptionsIter, Request, SignedIntegrity,
+    Stream, StreamCancel, StreamClose, StreamOpen, StreamRequest,
 };
 pub use reader::{FrameReader, Reader, ReaderConfig};
 pub use wire::{uvarint_len, varint_len};
@@ -79,6 +80,9 @@ pub enum Error {
     /// zeros it leaves out.
     #[error("invalid data length")]
     InvalidDataLength,
+    /// A HAVE_PACE whose pace byte names no [`HavePace`].
+    #[error("invalid have pace")]
+    InvalidHavePace,
 }
 
 macro_rules! wire_enum {
@@ -139,6 +143,7 @@ wire_enum! {
         StreamOpen = 16 => "StreamOpen",
         StreamClose = 17 => "StreamClose",
         Announce = 18 => "Announce",
+        HavePace = 19 => "HavePace",
         /// Ends a channel payload early. The reader stops at it.
         End = 255 => "End",
     }

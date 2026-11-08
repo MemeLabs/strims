@@ -340,6 +340,26 @@ impl Report {
         deciles(&mut v)[1]
     }
 
+    /// The honest viewers' mean shares of their channels whose peer they
+    /// ask for lazy HAVEs, and whose peer asked them of them, over their
+    /// meter samples with channels while a swarm streams.
+    pub fn lazy_shares(&self) -> [f64; 2] {
+        let (mut sum, mut n) = ([0.0; 2], 0u64);
+        for m in self
+            .honest_viewers()
+            .into_iter()
+            .filter_map(|h| self.hosts.get(h))
+            .flat_map(|h| h.runner.meter.iter())
+            .filter(|m| self.live(m.t) && m.pace_channels > 0)
+        {
+            let c = f64::from(m.pace_channels);
+            sum[0] += f64::from(m.lazy_out) / c;
+            sum[1] += f64::from(m.lazy_in) / c;
+            n += 1;
+        }
+        sum.map(|x| x / n.max(1) as f64)
+    }
+
     /// The share of `hosts`' uplink queue samples while a swarm streams
     /// that wait longer than [`STANDING_QUEUE`]; 0 outside WAN mode.
     pub fn standing_queue(&self, hosts: &[HostIx]) -> f64 {
@@ -784,6 +804,9 @@ impl Report {
                 self.standing_queue(&roles.forwarders),
             )
             .num("peak_committed", self.peak_committed());
+        let [lazy_out, lazy_in] = self.lazy_shares();
+        j.num("have_lazy_out_share", lazy_out)
+            .num("have_lazy_in_share", lazy_in);
         type Reading = fn(&MeterSample) -> Option<u32>;
         let readings: [(&str, QueueTruth, Reading); 5] = [
             ("qd", QueueTruth::Standing, |m| m.queue_delay_ms),

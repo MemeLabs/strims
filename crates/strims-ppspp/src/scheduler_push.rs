@@ -59,7 +59,8 @@
 //!   elsewhere can be ahead of us while its chain of parents passes
 //!   through us; its parent's pushes then come after its pulls, and it
 //!   prunes that parent. The seed never subscribes: it has every chunk
-//!   first.
+//!   first. While a stream has no open parent, every neighbour announces
+//!   to us at the prompt pace (below), so the lags compared are true.
 //! - **Switch.** A candidate that beats the parent at [`SWITCH_CHECKS`]
 //!   checks in a row, outside [`SWITCH_HOLD`] after the parent opened, is
 //!   grafted; the old parent is cancelled only once the new one opens.
@@ -67,7 +68,28 @@
 //!   it ([`SWITCH_MARGIN`]), or sooner than the parent's pushes arrive
 //!   ([`SLOW_PARENT_MARGIN`]). Announcements are compared with
 //!   announcements: a parent's pushes queue behind its other children's,
-//!   and a bystander's HAVEs don't.
+//!   and a bystander's HAVEs don't. The parent and the candidates near
+//!   enough to beat it announce at the prompt pace; the others are timed
+//!   at it in each review span.
+//! - **Pace.** At each parent check a viewer asks of each neighbour's
+//!   HAVEs the pace its decisions need (HAVE_PACE; the sender's side is
+//!   `scheduler_peer`'s). Prompt from every neighbour while a stream has
+//!   no open parent: it grafts by their lags, and a lazy neighbour's read
+//!   high and fail the `ahead` test, so a graft among the prompt few would
+//!   pass over closer peers. Otherwise prompt from every peer it pushes to
+//!   (their frames back carry the acknowledgements of our pushes; the
+//!   seed asks this too, and lazy of the rest), from its open and pending
+//!   parents, from its contenders (candidates whose announcement lag for a
+//!   stream comes under the parent's announcement or push lag plus
+//!   [`PACE_MARGIN`]), and from the [`PACE_FALLBACK_K`] best candidates of
+//!   each stream within [`PACE_MISS_SPAN`] of a miss (pull repairs by
+//!   their announcements); lazy from the rest. A miss on one stream so
+//!   leaves most neighbours lazy, and one with no candidate but its
+//!   parents makes every neighbour prompt. Since a lazy neighbour's lag
+//!   reads high by the lazy hold, it could never win its way back: every
+//!   [`PACE_REVIEW`] all go prompt for [`PACE_REVIEW_SPAN`] before the
+//!   rule applies again, and a prune or a lost parent makes them prompt at
+//!   once and starts a span.
 //! - **Prune.** A parent that went silent ([`PRUNE_SILENCE`]) or whose miss
 //!   rate is too high ([`PRUNE_MISS_RATE`]) is cancelled (STREAM_CANCEL).
 //!   Misses in a row alone prune nothing: one lost frame carries a dozen
@@ -108,7 +130,9 @@
 //!   for them (an ANNOUNCE with neither) within [`REPORT_LEASE`], leaving
 //!   out the entries about that neighbour, and start over: a node that
 //!   tallies no parent still reports its own delays. A parent is named by
-//!   the id its driver gave it. Only an adaptive seed asks ([`seed`]).
+//!   the id its driver gave it. Only an adaptive seed asks ([`seed`]). A
+//!   seed times its neighbours by these, not by their HAVEs, so it asks
+//!   lazy HAVEs of every neighbour it doesn't push to.
 //!
 //! # Parent side
 //!
@@ -170,8 +194,10 @@
 //! - The expected and released chunk maps, and a channel's cancelled
 //!   chunks, are bounded by the window and pruned at GC. A release walks
 //!   only the expected map, once per event.
-//! - Parent checks cost O(streams × channels) per [`PARENT_CHECK_INTERVAL`];
-//!   shedding sorts the subscribers at most once per [`SHED_INTERVAL`].
+//! - Parent checks, the pace's included, cost O(streams × channels) per
+//!   [`PARENT_CHECK_INTERVAL`] (the pace's fallback keeps
+//!   [`PACE_FALLBACK_K`] candidates per stream); shedding sorts the subscribers at most once
+//!   per [`SHED_INTERVAL`].
 //! - Per-stream state is fixed: one subscription and one sum of first
 //!   copies' delays per stream; one lag, announce time, backoff, prune
 //!   count, cancel time and tally per channel and stream; one subscriber
@@ -184,8 +210,9 @@
 //!
 //! STREAM_REQUEST/OPEN/CANCEL/CLOSE are used with their v2 meanings
 //! (CLOSE from a provider: not, or no longer, pushing this stream), so the
-//! hybrid mixes with nodes in any mode, and ANNOUNCE carries reports to
-//! whoever asked for them. CANCEL of a chunk covers its push as well as its
+//! hybrid mixes with nodes in any mode, ANNOUNCE carries reports to
+//! whoever asked for them, and HAVE_PACE the pace the sender asks of the
+//! receiver's HAVEs to it. CANCEL of a chunk covers its push as well as its
 //! request. The child side assumes nothing more of a parent: one that never
 //! declines or sheds, or keeps pushing after STREAM_CANCEL or CANCEL, is
 //! contained by deadlines, silence pruning and repeated cancels.
@@ -207,7 +234,7 @@ use super::{
 use crate::bin_queue::BinQueue;
 use crate::channel::MeteredWriter;
 use crate::codec::{
-    self, Announce, AnnounceEntry, AnnounceStream, Delays, MAX_ANNOUNCE_ENTRIES,
+    self, Announce, AnnounceEntry, AnnounceStream, Delays, HavePace, MAX_ANNOUNCE_ENTRIES,
     MAX_ANNOUNCE_STREAMS, MESSAGE_TYPE_LEN, Message, MessageWriter, Stream,
 };
 use crate::options::PushMode;
@@ -299,6 +326,30 @@ pub const SWITCH_HOLD: Duration = Duration::from_secs(5);
 /// A candidate's announcement lag counts only if it announced the stream
 /// this recently.
 pub const CANDIDATE_FRESHNESS: Duration = Duration::from_secs(2);
+/// A viewer asks prompt HAVEs of a neighbour that announces a stream less
+/// than this past its parent's announcement or push lag: twice
+/// [`SWITCH_MARGIN`], so a neighbour drifting toward the switch test's
+/// margin is timed at its true pace before it can beat the parent.
+pub const PACE_MARGIN: Duration = Duration::from_millis(2 * SWITCH_MARGIN.as_millis());
+/// Every this long a viewer asks prompt HAVEs of every neighbour for
+/// [`PACE_REVIEW_SPAN`]: a lazy neighbour's announcement lag reads high by
+/// the lazy hold, so it could never show that it came closer to the source
+/// than the parent. Short against the parent changes it may miss, long
+/// against the span, so neighbours stay lazy most of the time.
+pub const PACE_REVIEW: Duration = Duration::from_secs(20);
+/// How long a review, a prune or a lost parent keeps every neighbour
+/// prompt: [`CANDIDATE_FRESHNESS`], so the lags read in it are the prompt
+/// pace's, and long enough for [`SWITCH_CHECKS`] parent checks.
+pub const PACE_REVIEW_SPAN: Duration = Duration::from_secs(2);
+/// A stream within [`PACE_MISS_SPAN`] of a missed push asks prompt HAVEs of
+/// this many of its best candidates (the lowest announcement lags, its
+/// parents aside): those its repairs are pulled from, timed at their true
+/// pace, while a miss on one stream leaves the other neighbours lazy.
+pub const PACE_FALLBACK_K: usize = 3;
+/// How long a missed push keeps its stream's best candidates prompt: the
+/// repairs of a burst of misses are pulled within it, and a parent that
+/// keeps missing is pruned, which makes every neighbour prompt.
+pub const PACE_MISS_SPAN: Duration = Duration::SECOND;
 /// A provider drops pushes that waited in its queue longer than this: the
 /// child has released them to pull long since.
 pub const PUSH_STALE: Duration = Duration::SECOND;
@@ -945,6 +996,15 @@ pub(crate) struct PushState {
     /// The upload measurement the tap last reported; set only while the
     /// tap is on.
     tapped_upload: Option<Upload>,
+    /// When the next pace review starts ([`PACE_REVIEW`]): `NIL` before
+    /// the first parent check; one at the next check once it passed.
+    pace_review: Time,
+    /// Until then every neighbour is asked for prompt HAVEs: a review, a
+    /// prune or a lost parent.
+    pace_prompt_until: Time,
+    /// Per stream, until when a miss keeps its best candidates prompt
+    /// ([`PACE_MISS_SPAN`]). Bound: one per stream.
+    pace_missed: Vec<Time>,
 }
 
 impl PushState {
@@ -971,6 +1031,9 @@ impl PushState {
             pin: None,
             alloc: None,
             tapped_upload: None,
+            pace_review: Time::NIL,
+            pace_prompt_until: Time::NIL,
+            pace_missed: vec![Time::NIL; streams],
         }
     }
 
@@ -1049,6 +1112,44 @@ pub struct PushStats {
     pub seed_copies: usize,
     pub seed_first_wave: usize,
     pub seed_first_wave_capacity: u64,
+    /// Channels, and those whose peer we ask for lazy HAVEs and those whose
+    /// peer asked lazy HAVEs of us.
+    pub pace_channels: usize,
+    pub have_lazy_out: usize,
+    pub have_lazy_in: usize,
+}
+
+/// The fresh announcement lag of `c`'s peer for stream `i` if it is a
+/// candidate for the stream: it has a handshake, doesn't choke us, isn't
+/// backed off for the stream, announced it within [`CANDIDATE_FRESHNESS`],
+/// and announced a chunk at least as new as `head`, the newest we hold,
+/// before we held it. Our own subscribers aside (the caller's).
+fn candidate_lag(
+    c: &PeerChannelScheduler,
+    i: usize,
+    head: Option<Bin>,
+    now: Time,
+) -> Option<Duration> {
+    if !c.handshake_received || c.choked {
+        return None;
+    }
+    let pc = c.push.as_ref()?;
+    if pc.backoff.get(i).is_some_and(|&t| t > now) {
+        return None;
+    }
+    let lag = pc.have_lag.get(i).filter(|l| l.fresh(now))?;
+    pc.ahead_of(i, head).then(|| lag.mean())
+}
+
+/// The peers we push any of `streams` to, sorted. Bound: the subscribers.
+fn pushed_to(streams: &[super::PeerSchedulerStream]) -> Vec<PeerKey> {
+    let mut v: Vec<PeerKey> = streams
+        .iter()
+        .flat_map(|st| st.subscribers.iter().map(|sub| sub.channel))
+        .collect();
+    v.sort_unstable();
+    v.dedup();
+    v
 }
 
 /// The first bin of `stream` after chunk `b`'s.
@@ -1336,6 +1437,11 @@ impl PeerSwarmScheduler {
             // Chunks before the parent's start were expected from the one
             // it replaced.
             let stream = ((x.0 >> 1) & s.stream_bits) as Stream;
+            // Pull repairs by announcements: the stream's best candidates'
+            // are prompt for a span.
+            if let Some(t) = p.pace_missed.get_mut(usize::from(stream)) {
+                *t = (*t).max(now + PACE_MISS_SPAN);
+            }
             let mut parent = None;
             let mut counted = false;
             if let Some(sub) = p.sub(stream) {
@@ -1505,6 +1611,14 @@ impl PeerSwarmScheduler {
             .is_some_and(|st| st.source.is_some())
         {
             s.reset_stream_source(stream);
+        }
+        // The stream grafts again: every neighbour's HAVEs are prompt at
+        // once, and for a review span from the next check.
+        if let Some(p) = s.push.as_mut() {
+            p.pace_review = Time::EPOCH;
+            for c in self.channels.values_mut() {
+                c.ask_pace(HavePace::Prompt, s.key, q);
+            }
         }
         let cancel =
             parent.and_then(|(o, now)| self.channels.get_mut(&o.peer).map(|c| (o.start, c, now)));
@@ -2111,30 +2225,144 @@ impl PeerSwarmScheduler {
         let i = usize::from(stream);
         let mut best: Option<(PeerKey, Duration)> = None;
         for (&peer, c) in &self.channels {
-            if Some(peer) == exclude || !c.handshake_received || c.choked {
+            if Some(peer) == exclude {
                 continue;
             }
             if st.subscribers.iter().any(|sub| sub.channel == peer) {
                 continue;
             }
-            let Some(pc) = c.push.as_ref() else {
+            let Some(m) = candidate_lag(c, i, st.head, now) else {
                 continue;
             };
-            if pc.backoff.get(i).is_some_and(|&t| t > now) {
-                continue;
-            }
-            let Some(lag) = pc.have_lag.get(i).filter(|l| l.fresh(now)) else {
-                continue;
-            };
-            if !pc.ahead_of(i, st.head) {
-                continue;
-            }
-            let m = lag.mean();
             if best.is_none_or(|(_, b)| m < b) {
                 best = Some((peer, m));
             }
         }
         best
+    }
+
+    /// A seed asks prompt HAVEs of the neighbours it pushes to (their
+    /// frames back carry the acknowledgements of its pushes) and lazy ones
+    /// of the rest: it times its neighbours by their reports, and reads
+    /// from their HAVEs only that they announce ([`SILENT`]), which the
+    /// lazy hold leaves in time.
+    fn seed_pace(&mut self, q: &mut impl PeerTaskQueue) {
+        let pushed = pushed_to(&self.s.streams);
+        let key = self.s.key;
+        for c in self.channels.values_mut() {
+            let pace = match pushed.binary_search(&c.peer) {
+                Ok(_) => HavePace::Prompt,
+                Err(_) => HavePace::Lazy,
+            };
+            c.ask_pace(pace, key, q);
+        }
+    }
+
+    /// The pace a viewer asks of each neighbour's HAVEs, at a parent check.
+    /// Prompt from every neighbour while a stream has no open parent (it
+    /// grafts by their lags, which a lazy pace leaves high), and in the
+    /// spans of reviews, prunes and lost parents. Otherwise prompt from a
+    /// neighbour we push to (its frames back carry the acknowledgements of
+    /// our pushes, which a quiet reverse path leaves to the transport's
+    /// delayed-ACK timer), one that is an open or pending parent (the
+    /// switch test reads its announcements), a contender (on a stream with
+    /// an open parent, a candidate the graft would weigh whose announcement
+    /// lag is under the parent's announcement or push lag plus
+    /// [`PACE_MARGIN`]), or one of the [`PACE_FALLBACK_K`] best candidates
+    /// of a stream within [`PACE_MISS_SPAN`] of a miss (pull repairs by
+    /// them), the stream's parents aside. Lazy from the rest. A stream
+    /// within its miss span with no candidate but its parents makes every
+    /// neighbour prompt, so its repairs can't starve. O(streams × channels)
+    /// (a stream has at most a subscriber per channel).
+    fn check_pace(&mut self, now: Time, q: &mut impl PeerTaskQueue) {
+        let PeerSwarmScheduler { s, channels } = self;
+        let Some(p) = s.push.as_mut() else {
+            return;
+        };
+        if p.pace_review.is_nil() {
+            p.pace_review = now + PACE_REVIEW;
+        } else if now >= p.pace_review {
+            p.pace_review = now + PACE_REVIEW;
+            p.pace_prompt_until = p.pace_prompt_until.max(now + PACE_REVIEW_SPAN);
+        }
+        let p = &*p;
+        let mut all = now < p.pace_prompt_until || p.subs.iter().any(|sub| sub.open.is_none());
+        // The best candidates of each stream that repairs. Bound:
+        // PACE_FALLBACK_K per stream.
+        let mut best: Vec<PeerKey> = Vec::new();
+        for (i, sub) in p.subs.iter().enumerate() {
+            let missed = p.pace_missed.get(i).is_some_and(|&t| now < t);
+            if all || !missed {
+                continue;
+            }
+            let head = s.streams.get(i).and_then(|st| st.head);
+            let parents = [sub.open, sub.pending];
+            // The lowest lags so far, lowest first, ties in channel order.
+            let mut top: Vec<(Duration, PeerKey)> = Vec::with_capacity(PACE_FALLBACK_K + 1);
+            for (&peer, c) in channels.iter() {
+                if parents.iter().flatten().any(|x| x.peer == peer) {
+                    continue;
+                }
+                let Some(l) = candidate_lag(c, i, head, now) else {
+                    continue;
+                };
+                let at = top.partition_point(|&(m, _)| m <= l);
+                if at < PACE_FALLBACK_K {
+                    top.insert(at, (l, peer));
+                    top.truncate(PACE_FALLBACK_K);
+                }
+            }
+            if top.is_empty() {
+                all = true;
+            }
+            best.extend(top.iter().map(|&(_, peer)| peer));
+        }
+        // Per stream with an open parent: the parent, and the lag a
+        // contender must come under. Bound: one per stream.
+        let bars: Vec<Option<(PeerKey, Duration)>> = p
+            .subs
+            .iter()
+            .enumerate()
+            .map(|(i, sub)| {
+                let open = sub.open?;
+                let have = channels
+                    .get(&open.peer)
+                    .and_then(|c| c.push.as_ref())
+                    .and_then(|pc| pc.have_lag.get(i))
+                    .filter(|l| l.fresh(now))
+                    .map(|l| l.mean());
+                let push = (sub.pushes >= 4).then(|| sub.lag.mean());
+                let bar = have.max(push)?;
+                Some((open.peer, bar + PACE_MARGIN))
+            })
+            .collect();
+        let pushed = pushed_to(&s.streams);
+        let key = s.key;
+        for (&peer, c) in channels.iter_mut() {
+            let child = pushed.binary_search(&peer).is_ok();
+            let parent = p.subs.iter().any(|sub| {
+                [sub.open, sub.pending]
+                    .iter()
+                    .flatten()
+                    .any(|x| x.peer == peer)
+            });
+            let contender = || {
+                bars.iter().enumerate().any(|(i, bar)| {
+                    bar.is_some_and(|(open, bar)| {
+                        open != peer
+                            && s.streams.get(i).is_some_and(|st| {
+                                candidate_lag(c, i, st.head, now).is_some_and(|l| l < bar)
+                            })
+                    })
+                })
+            };
+            let pace = if all || child || parent || best.contains(&peer) || contender() {
+                HavePace::Prompt
+            } else {
+                HavePace::Lazy
+            };
+            c.ask_pace(pace, key, q);
+        }
     }
 
     /// Reports a parent check of `stream` that did `action`: the
@@ -2265,6 +2493,7 @@ impl PeerSwarmScheduler {
         self.release_idle_interior(now);
         // The seed has every chunk first: it is a parent only.
         if self.s.is_seed {
+            self.seed_pace(q);
             return;
         }
         self.report(now, q);
@@ -2279,6 +2508,7 @@ impl PeerSwarmScheduler {
         for stream in 0..self.s.stream_count {
             self.check_parent(stream, now, q);
         }
+        self.check_pace(now, q);
     }
 
     fn check_parent(&mut self, stream: Stream, now: Time, q: &mut impl PeerTaskQueue) {
@@ -2610,6 +2840,12 @@ impl PeerSwarmScheduler {
             if let Some(a) = p.alloc.as_ref() {
                 a.push_stats(&mut out);
             }
+        }
+        out.pace_channels = self.channels.len();
+        let lazy = |p: HavePace| usize::from(p == HavePace::Lazy);
+        for c in self.channels.values() {
+            out.have_lazy_out += lazy(c.pace_out);
+            out.have_lazy_in += lazy(c.pace_in);
         }
         out
     }

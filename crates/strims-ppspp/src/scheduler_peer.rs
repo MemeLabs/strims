@@ -89,6 +89,23 @@
 //! too: it times its neighbours by the delays their reports give, not by
 //! their HAVEs ([`push::seed`]).
 //!
+//! The hold is the receiver's call. Each channel has a pace each way,
+//! prompt or lazy ([`HavePace`]): the one the peer asked of our HAVEs to
+//! it with HAVE_PACE, and the one we ask of its HAVEs to us. A channel
+//! starts prompt, and a HAVE_PACE goes only when ours changes, in a frame
+//! that carries something else to the peer. To a peer that asked for lazy
+//! HAVEs, lone HAVEs wait [`HAVE_LAZY_HOLD`] in place of [`HAVE_HOLD`],
+//! the tick's included; they still ride any frame to the peer, and the
+//! eager windows and the seed's rule still send them at once. A node
+//! asks prompt HAVEs of every peer it pushes to: the peer's
+//! frames back carry the acknowledgements of our pushes, and a reverse
+//! path gone quiet leaves them to the transport's delayed-ACK timers, so
+//! each push burst's last segment would wait for one. A viewer also asks
+//! them of the neighbours whose timing its grafts, switches and pulls
+//! read, and both ask lazy HAVEs of the rest ([`push`], Pace). A pace
+//! changes only what its asker receives, so a wrong one harms only the
+//! peer that asked for it.
+//!
 //! While a queue holds a relay's uplink (its links' latest round trips
 //! stand [`push::QUEUE_FORMED`] above their bases), its HAVEs wait to every
 //! peer but those the frame pushes to, and only for a frame that carries
@@ -173,8 +190,8 @@ use crate::MAX_BIN;
 use crate::bin_queue::BinQueue;
 use crate::channel::MeteredWriter;
 use crate::codec::{
-    self, Announce, Cancel, Have, MAX_PEER_ID, Message, MessageWriter, Ping, Pong, Request, Stream,
-    StreamCancel, StreamClose, StreamOpen, StreamRequest,
+    self, Announce, Cancel, Have, HavePace, MAX_PEER_ID, Message, MessageWriter, Ping, Pong,
+    Request, Stream, StreamCancel, StreamClose, StreamOpen, StreamRequest,
 };
 use crate::controller::RequestController;
 use crate::integrity::ProtectionMethod;
@@ -719,6 +736,13 @@ pub(crate) struct PeerChannelScheduler {
     ping_nonce: u64,
     /// Until then a hybrid frame's HAVEs go to the peer at once.
     eager_haves_until: Time,
+    /// The pace we ask of the peer's HAVEs to us, and the one it last
+    /// heard from us (prompt until we said otherwise): a HAVE_PACE goes
+    /// while they differ, in a frame that carries something else.
+    pub(crate) pace_out: HavePace,
+    pace_told: HavePace,
+    /// The pace the peer asked of our HAVEs to it.
+    pub(crate) pace_in: HavePace,
     /// The first chunk we sent the peer since it last announced one or
     /// sent one valid ([`push::SILENT`]); `NIL` while none went ...
     pub(crate) quiet_since: Time,
@@ -772,6 +796,9 @@ impl PeerChannelScheduler {
             next_ping_time: Time::EPOCH,
             ping_nonce: 0,
             eager_haves_until: now + EAGER_HAVES_AFTER_OPEN,
+            pace_out: HavePace::Prompt,
+            pace_told: HavePace::Prompt,
+            pace_in: HavePace::Prompt,
             quiet_since: Time::NIL,
             asked_since: Time::NIL,
             unanswered: 0,
@@ -1014,6 +1041,8 @@ impl PeerChannelScheduler {
             .any(|sub| sub.channel == self.peer && sub.start_bin <= b);
         st.add_subscriber(self.peer, b, extra, now);
         s.subscribers_changed = true;
+        // Its frames back carry the acknowledgements of our pushes.
+        self.ask_pace(HavePace::Prompt, s.key, q);
         if !resubscribed && !b.is_none() {
             // The stream's chunks are every `stream_count`th: the walk
             // visits only those.
@@ -1110,14 +1139,59 @@ impl PeerChannelScheduler {
         Ok(())
     }
 
-    /// When HAVEs that `write` held go ([`HAVE_HOLD`]): `None` if none
-    /// wait held.
+    /// When HAVEs that `write` held go ([`hold`](Self::hold)): `None` if
+    /// none wait held.
     fn haves_held(&self, now: Time) -> Option<Time> {
         if self.have_bins.is_empty() || self.haves_due || self.haves_since.is_nil() {
             return None;
         }
-        let at = self.haves_since + HAVE_HOLD;
+        let at = self.haves_since + self.hold();
         (at > now).then_some(at)
+    }
+
+    /// How long the channel's HAVEs that would go alone wait:
+    /// [`HAVE_LAZY_HOLD`] if the peer asked for lazy HAVEs, else
+    /// [`HAVE_HOLD`].
+    fn hold(&self) -> Duration {
+        match self.pace_in {
+            HavePace::Lazy => HAVE_LAZY_HOLD,
+            HavePace::Prompt => HAVE_HOLD,
+        }
+    }
+
+    /// Whether the peer's lazy pace keeps our HAVEs past the tick: until
+    /// the first of them waited [`HAVE_LAZY_HOLD`], outside the eager
+    /// windows, at a non-seed.
+    fn lazy_holds(&self, s: &SwarmState, now: Time) -> bool {
+        self.pace_in == HavePace::Lazy
+            && !haves_go_alone(
+                s.is_seed,
+                now < self.eager_haves_until,
+                self.haves_since,
+                now,
+                HAVE_LAZY_HOLD,
+            )
+    }
+
+    /// Asks `pace` of the peer's HAVEs: the HAVE_PACE goes with the next
+    /// frame to it, which the peer is queued for.
+    pub(crate) fn ask_pace(&mut self, pace: HavePace, key: SwarmKey, q: &mut impl PeerTaskQueue) {
+        if self.pace_out != pace {
+            self.pace_out = pace;
+            q.enqueue(self.peer, key);
+        }
+    }
+
+    /// Writes a HAVE_PACE if the pace we ask isn't the one the peer last
+    /// heard, and only if the frame carries something else to the peer
+    /// (`ride`): the pace never costs a frame of its own.
+    fn write_pace(&mut self, cw: &mut MeteredWriter<'_>, ride: bool) -> Result<(), codec::Error> {
+        if !ride || self.pace_out == self.pace_told {
+            return Ok(());
+        }
+        cw.write(&Message::HavePace(self.pace_out))?;
+        self.pace_told = self.pace_out;
+        Ok(())
     }
 
     /// The first bin worth requesting from the peer: the start of its live
@@ -1404,11 +1478,22 @@ fn write_map_bins(
 }
 
 /// How long a non-seed's HAVEs wait for something to ride with before they
-/// go in a frame of their own (see the [module docs](self)): long enough to
-/// gather the HAVEs a viewer would trade with each neighbour as chunks
-/// arrive, short against the margins they feed (parent switches, routes,
-/// reports).
-pub(crate) const HAVE_HOLD: Duration = Duration::from_millis(40);
+/// go in a frame of their own, to a peer that asked for prompt ones (see
+/// the [module docs](self)): long enough to gather the HAVEs a viewer
+/// would trade with each neighbour as chunks arrive into one frame per
+/// hold, short against what their timing decides. Every prompt
+/// neighbour's announcements wait it alike, so the lags a switch compares
+/// move together, and a peer pulling from us gets them at once
+/// ([`EAGER_HAVES_AFTER_REQUEST`]).
+pub(crate) const HAVE_HOLD: Duration = Duration::from_millis(80);
+
+/// How long they wait to a peer that asked for lazy ones: it reads no
+/// timing from them, only that they come. Until our prompt ask reaches a
+/// peer we began to push to, its HAVEs of our first pushes come at this
+/// pace, and a seed wants a holder's HAVE of a push within
+/// [`push::seed::ANNOUNCE_TIMEOUT`]; well inside a candidate's freshness
+/// and a peer's silence ([`push::SILENT`]) too.
+pub(crate) const HAVE_LAZY_HOLD: Duration = Duration::from_millis(500);
 
 /// Whether an unqueued node's HAVEs go in a frame of their own: always at
 /// a seed or while the channel is eager, else once the first of them waited
@@ -1528,7 +1613,7 @@ impl PeerSwarmScheduler {
         for c in self.channels.values_mut() {
             timed_out |= c.time_out_requests(&mut self.s, now, q);
             c.try_restart(&self.s, now, q);
-            if !c.have_bins.is_empty() {
+            if !c.have_bins.is_empty() && !c.lazy_holds(&self.s, now) {
                 c.haves_due = true;
                 q.enqueue(c.peer, self.s.key);
             }
@@ -2069,6 +2154,15 @@ impl PeerSwarmScheduler {
         if let Some((s, c)) = self.channel(peer) {
             c.extra.handshake = true;
             c.have_bins = s.announced();
+            // Its channel may be a new one, at the prompt pace.
+            c.pace_told = HavePace::Prompt;
+        }
+    }
+
+    /// The peer asks `pace` of our HAVEs to it.
+    pub(crate) fn handle_have_pace(&mut self, peer: PeerKey, pace: HavePace) {
+        if let Some(c) = self.channels.get_mut(&peer) {
+            c.pace_in = pace;
         }
     }
 
@@ -2580,9 +2674,10 @@ impl PeerSwarmScheduler {
 
     /// Writes a ping when due, then
     /// [`write0`](PeerChannelScheduler::write0), requests, the report due
-    /// to the peer and the HAVEs that go: `ride` says the frame carries
-    /// something else to the peer already, or data after this. A full frame
-    /// returns [`codec::Error::NotEnoughSpace`] with what fit left in `cw`.
+    /// to the peer, the HAVEs that go and the pace we ask of the peer if it
+    /// changed: `ride` says the frame carries something else to the peer
+    /// already, or data after this. A full frame returns
+    /// [`codec::Error::NotEnoughSpace`] with what fit left in `cw`.
     pub(crate) fn write(
         &mut self,
         peer: PeerKey,
@@ -2617,13 +2712,15 @@ impl PeerSwarmScheduler {
                 now < c.eager_haves_until,
                 c.haves_since,
                 now,
-                HAVE_HOLD,
+                c.hold(),
             );
-        c.write_haves(cw, ride || eager || cw.available() < room)
+        c.write_haves(cw, ride || eager || cw.available() < room)?;
+        c.write_pace(cw, ride || cw.available() < room)
     }
 
-    /// When `peer`'s HAVEs that the last write held go ([`HAVE_HOLD`]); `None`
-    /// while a queued uplink makes them wait for the tick anyway.
+    /// When `peer`'s HAVEs that the last write held go (the channel's
+    /// hold); `None` while a queued uplink makes them wait for the tick
+    /// anyway.
     pub(crate) fn haves_held(&self, peer: PeerKey, now: Time) -> Option<Time> {
         if self.s.uplink_queued() {
             return None;

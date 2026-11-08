@@ -742,6 +742,7 @@ fn handle_payload(
                     ch.metrics_in.rejected = ch.metrics_in.rejected.saturating_add(1);
                 }
             }
+            Message::HavePace(p) => sched.handle_have_pace(peer, p),
             // The reader stops at End.
             Message::End => {}
         }
