@@ -1649,6 +1649,12 @@ impl Report {
     ///
     /// [`Scenario::transfer_samples`]: crate::Scenario::transfer_samples
     pub fn series(&self, swarm: usize) -> Option<String> {
+        self.series_data(swarm).map(|s| s.json())
+    }
+
+    /// [`Report::series`]'s values, for its JSON object and for the
+    /// tables ([`Report::write_tables`]).
+    pub(crate) fn series_data(&self, swarm: usize) -> Option<SeriesData> {
         let spec = self.scenario.swarms.get(swarm)?;
         let viewers: Vec<_> = self.viewers.iter().filter(|v| v.swarm == swarm).collect();
         let sampled = |h: HostIx| {
@@ -1676,10 +1682,6 @@ impl Report {
             let k = (t.checked_sub(start)?.as_millis() + 500) / 1000;
             (k >= 1 && (k as usize) <= n).then(|| k as usize - 1)
         };
-        let ints = |v: &[i64]| {
-            let v: Vec<String> = v.iter().map(i64::to_string).collect();
-            format!("[{}]", v.join(","))
-        };
         let mut lags = Vec::new();
         let mut frames = Vec::new();
         for v in &viewers {
@@ -1692,8 +1694,8 @@ impl Report {
                     b.push(lag);
                 }
             }
-            lags.push(ints(
-                &by.iter()
+            lags.push(
+                by.iter()
                     .map(|b| {
                         if b.is_empty() {
                             -1
@@ -1702,8 +1704,8 @@ impl Report {
                         }
                     })
                     .collect::<Vec<_>>(),
-            ));
-            frames.push(ints(&by.iter().map(|b| b.len() as i64).collect::<Vec<_>>()));
+            );
+            frames.push(by.iter().map(|b| b.len() as i64).collect::<Vec<_>>());
         }
         // Counters restart from 0 with a restarted node.
         let delta = |now: u64, before: u64| if now >= before { now - before } else { now };
@@ -1812,28 +1814,21 @@ impl Report {
             .filter(|(_, v)| matches!(self.class(v.host), HostClass::Hostile(_)))
             .map(|(i, _)| i as i64)
             .collect();
-        let mut j = JsonRow::default();
-        j.int("rate", self.swarm_rate(swarm) as u64)
-            .int("chunk", spec.options.chunk_size as u64)
-            .int("frame", frame)
-            .int("secs", spec.stop.saturating_sub(start).as_secs())
-            .field("seed_up", format_args!("[{}]", seed_up.join(",")))
-            .int("viewer_up", viewer_up)
-            .field("lag", format_args!("[{}]", lags.join(",")))
-            .field("frames", format_args!("[{}]", frames.join(",")))
-            .field("present", format_args!("{}", ints(&present)))
-            .field("hits", format_args!("{}", ints(&hits)))
-            .field("misses", format_args!("{}", ints(&misses)))
-            .field("pruned", format_args!("{}", ints(&pruned)))
-            .field("parents", format_args!("{}", ints(&parents)))
-            .field("capacity", format_args!("{}", ints(&capacity)))
-            .field("busy", format_args!("{}", ints(&busy)))
-            .field("avail", format_args!("{}", ints(&avail)))
-            .field("copies", format_args!("{}", ints(&copies)))
-            .field("sent", format_args!("{}", ints(&sent)))
-            .field("pushed", format_args!("{}", ints(&pushed)))
-            .field("seed_ovh", format_args!("{}", ints(&seed_ovh)))
-            .field("viewer_ovh", format_args!("{}", ints(&viewer_ovh)));
+        let mut cols = vec![
+            ("present", present),
+            ("hits", hits),
+            ("misses", misses),
+            ("pruned", pruned),
+            ("parents", parents),
+            ("capacity", capacity),
+            ("busy", busy),
+            ("avail", avail),
+            ("copies", copies),
+            ("sent", sent),
+            ("pushed", pushed),
+            ("seed_ovh", seed_ovh),
+            ("viewer_ovh", viewer_ovh),
+        ];
         // A media swarm's chunks sent each second, those holding media, by
         // their first byte (`written`, what `frames` counts): its other
         // chunks are data-less.
@@ -1844,14 +1839,20 @@ impl Report {
                     *w += 1;
                 }
             }
-            j.field("written", format_args!("{}", ints(&written)));
+            cols.push(("written", written));
         }
-        // The hostile viewers' places in `lag` and `frames`, if any: `hits`,
-        // `misses`, `pruned`, `present` and `parents` leave them out.
-        if !hostile.is_empty() {
-            j.field("hostile", format_args!("{}", ints(&hostile)));
-        }
-        Some(j.finish())
+        Some(SeriesData {
+            rate: self.swarm_rate(swarm) as u64,
+            chunk: spec.options.chunk_size as u64,
+            frame,
+            secs: spec.stop.saturating_sub(start).as_secs(),
+            seed_up,
+            viewer_up,
+            lag: lags,
+            frames,
+            cols,
+            hostile,
+        })
     }
 
     /// A media swarm's columns ([`crate::MediaSpec`]): its encoder and
@@ -1885,6 +1886,60 @@ impl Report {
                 "wire_per_media",
                 uploaded as f64 / (m.media_bytes.max(1) as f64 * viewers),
             );
+    }
+}
+
+/// A swarm's run second by second ([`Report::series`]): its stream, each
+/// viewer's `lag` and `frames` by second, and the per-second columns in
+/// the JSON object's order.
+pub(crate) struct SeriesData {
+    pub rate: u64,
+    pub chunk: u64,
+    pub frame: u64,
+    pub secs: u64,
+    /// `[s, bytes per second]` pairs, as the JSON object writes them.
+    pub seed_up: Vec<String>,
+    pub viewer_up: u64,
+    pub lag: Vec<Vec<i64>>,
+    pub frames: Vec<Vec<i64>>,
+    pub cols: Vec<(&'static str, Vec<i64>)>,
+    /// The hostile viewers' places in `lag` and `frames`.
+    pub hostile: Vec<i64>,
+}
+
+impl SeriesData {
+    /// The seconds in the series.
+    pub fn len(&self) -> usize {
+        self.cols.first().map_or(0, |(_, v)| v.len())
+    }
+
+    fn json(&self) -> String {
+        let ints = |v: &[i64]| {
+            let v: Vec<String> = v.iter().map(i64::to_string).collect();
+            format!("[{}]", v.join(","))
+        };
+        let nested = |v: &[Vec<i64>]| {
+            let v: Vec<String> = v.iter().map(|x| ints(x)).collect();
+            format!("[{}]", v.join(","))
+        };
+        let mut j = JsonRow::default();
+        j.int("rate", self.rate)
+            .int("chunk", self.chunk)
+            .int("frame", self.frame)
+            .int("secs", self.secs)
+            .field("seed_up", format_args!("[{}]", self.seed_up.join(",")))
+            .int("viewer_up", self.viewer_up)
+            .field("lag", format_args!("{}", nested(&self.lag)))
+            .field("frames", format_args!("{}", nested(&self.frames)));
+        for (name, v) in &self.cols {
+            j.field(name, format_args!("{}", ints(v)));
+        }
+        // The hostile viewers' places in `lag` and `frames`, if any: `hits`,
+        // `misses`, `pruned`, `present` and `parents` leave them out.
+        if !self.hostile.is_empty() {
+            j.field("hostile", format_args!("{}", ints(&self.hostile)));
+        }
+        j.finish()
     }
 }
 
@@ -2008,6 +2063,7 @@ mod tests {
             memory: None,
             violations: Vec::new(),
             wan: None,
+            wire_bins: Vec::new(),
         }
     }
 

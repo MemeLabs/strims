@@ -2022,6 +2022,13 @@ impl Scheduler {
         }
     }
 
+    /// Host `h`'s uplink counters so far: wire bytes, packets, and the
+    /// small packets among them.
+    pub fn up_counters(&self, h: HostIx) -> [u64; 3] {
+        let s = self.net.stats(h);
+        [s.up_bytes, s.up_packets, s.small_packets]
+    }
+
     /// Each host's site and counters.
     pub fn report(&self, spec: &Scenario) -> WanReport {
         WanReport {

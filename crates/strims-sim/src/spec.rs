@@ -478,6 +478,15 @@ pub struct Scenario {
     /// ([`crate::HostReport::transfers`]), as `calibration_star` does to
     /// compare with the testbed's nodes. Changes no trace.
     pub transfer_samples: bool,
+    /// WAN mode: read the network's uplink counters at every edge of bins
+    /// this wide from the first swarm's start ([`Report::wire_bins`]), for
+    /// the tables ([`Report::write_tables`]). The run loop reads them
+    /// between steps and adds nothing to the schedule, so it changes no
+    /// trace.
+    ///
+    /// [`Report::wire_bins`]: crate::Report::wire_bins
+    /// [`Report::write_tables`]: crate::Report::write_tables
+    pub wire_bins: Option<Duration>,
     /// TCP writes in pieces of at most this many bytes, as segments: the
     /// window model ([`SendBuffer::window`]) then fills a window segment by
     /// segment, as real TCP does, where a whole write of up to a GSO
@@ -681,6 +690,7 @@ impl Scenario {
             capture: None,
             send_buffer: None,
             transfer_samples: false,
+            wire_bins: None,
             tcp_segment: None,
             stored_chunks: false,
             discovery: None,

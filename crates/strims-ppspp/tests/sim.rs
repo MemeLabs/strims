@@ -788,6 +788,8 @@ struct Node {
     underruns: u64,
     resets: u64,
     lags: Vec<(Time, Duration)>,
+    /// With the tables ([`Sim::keep_tables`]), the chunk of each of `lags`.
+    read_seqs: Vec<u32>,
     /// In a media run, each media chunk's read time and its lag from its
     /// unit's signing.
     sign_lags: Vec<(Time, Duration)>,
@@ -1025,9 +1027,11 @@ struct Sim {
     viewer_bytes: u64,
     /// With `SIM_COLLUDE`, when each greedy viewer reports next.
     collude_at: Vec<Time>,
-    /// With `SIM_SERIES=1`, the honest viewers' and the seed's counters
-    /// once a second ([`Sim::series`]).
+    /// With `SIM_SERIES=1` or the tables, the honest viewers' and the
+    /// seed's counters once a second ([`Sim::series`]).
     series: Option<Vec<SeriesSample>>,
+    /// With the tables, the same counters at every edge of the fine bins.
+    bins: Option<Bins>,
     /// The churn's leaves and returns ([`churn_plan`]), and how many are
     /// done.
     churn: Vec<(Time, usize, bool)>,
@@ -1053,6 +1057,102 @@ struct MediaRun {
     start: Time,
     padded: Arc<Padded>,
     signed: Vec<Time>,
+}
+
+/// The fine bins of the tables ([`Sim::keep_tables`], [`Sim::write_tables`]):
+/// the series' counters read at every edge of bins `width` wide from the
+/// stream's start, and each bin's row.
+struct Bins {
+    width: Duration,
+    /// The next edge.
+    next: Time,
+    /// The counters at the last edge.
+    last: Option<BinSample>,
+    rows: Vec<[i64; BIN_COLS.len()]>,
+}
+
+/// The counters at one bin edge.
+#[derive(Clone)]
+struct BinSample {
+    /// Per viewer node (from 1), if honest and present: pushes before
+    /// their deadline, deadlines released to pull, parents pruned, streams
+    /// with an open parent, the overhead bytes it wrote so far
+    /// ([`Node::written_overhead`]), and its uplink's bytes, packets and
+    /// small packets ([`Node::wire`]).
+    viewers: Vec<Option<[u64; 8]>>,
+    /// The seed's meter capacity and busy thousandths, copies, chunks sent
+    /// and pushed, uplink, overhead bytes, and its uplink's bytes, packets
+    /// and small packets.
+    seed: [u64; 10],
+}
+
+/// The `bins` table's columns ([`Sim::write_tables`]).
+const BIN_COLS: [&str; 21] = [
+    "bin",
+    "t_ms",
+    "present",
+    "hits",
+    "misses",
+    "pruned",
+    "parents",
+    "viewer_ovh",
+    "viewer_up_bytes",
+    "viewer_up_packets",
+    "viewer_small_packets",
+    "capacity",
+    "busy",
+    "avail",
+    "copies",
+    "sent",
+    "pushed",
+    "seed_ovh",
+    "seed_up_bytes",
+    "seed_up_packets",
+    "seed_small_packets",
+];
+
+/// The `bins` row of bin `k`, from the counters at its edges: what the
+/// viewers present at both did (summed, and their median open parents at
+/// its end), and the seed's.
+fn bin_row(k: usize, width: Duration, a: &BinSample, b: &BinSample) -> [i64; BIN_COLS.len()] {
+    let both: Vec<(&[u64; 8], &[u64; 8])> = b
+        .viewers
+        .iter()
+        .zip(&a.viewers)
+        .filter_map(|(x, y)| Some((x.as_ref()?, y.as_ref()?)))
+        .collect();
+    let sum = |f: usize| -> i64 {
+        both.iter()
+            .map(|(x, y)| x[f].saturating_sub(y[f]) as i64)
+            .sum()
+    };
+    let mut parents: Vec<u64> = both.iter().map(|(x, _)| x[3]).collect();
+    parents.sort_unstable();
+    let gauge = |f: usize| b.seed[f] as i64;
+    let delta = |f: usize| b.seed[f].saturating_sub(a.seed[f]) as i64;
+    [
+        k as i64,
+        k as i64 * width.as_millis(),
+        both.len() as i64,
+        sum(0),
+        sum(1),
+        sum(2),
+        parents.get(parents.len() / 2).map_or(-1, |&x| x as i64),
+        sum(4),
+        sum(5),
+        sum(6),
+        sum(7),
+        gauge(0),
+        gauge(1),
+        gauge(5),
+        gauge(2),
+        delta(3),
+        delta(4),
+        delta(6),
+        delta(7),
+        delta(8),
+        delta(9),
+    ]
 }
 
 /// One second's sample for [`Sim::series`].
@@ -1614,6 +1714,7 @@ impl Sim {
                 underruns: 0,
                 resets: 0,
                 lags: vec![],
+                read_seqs: vec![],
                 sign_lags: vec![],
                 read_chunks: vec![],
                 arrived: vec![],
@@ -1793,6 +1894,7 @@ impl Sim {
             viewer_bytes: 0,
             collude_at,
             series: (knob::<u32>("SIM_SERIES") == Some(1)).then(Vec::new),
+            bins: None,
             churn,
             churn_done: 0,
             joins: Vec::new(),
@@ -1938,6 +2040,7 @@ impl Sim {
             if t > self.end {
                 break;
             }
+            self.sample_bins(t);
             self.now = self.now.max(t);
             self.step();
             if self.now >= self.next_alloc {
@@ -2507,6 +2610,88 @@ impl Sim {
         }
     }
 
+    /// Keeps what the tables need ([`Sim::write_tables`], `SIM_OUT`): the
+    /// series, each read's chunk, and the series' counters at every edge of
+    /// bins `width` wide (`SIM_BIN_MS`). Set before the run; outside the
+    /// config, so the run's tag stays the same, and it changes no trace.
+    fn keep_tables(&mut self, width: Duration) {
+        self.series.get_or_insert_with(Vec::new);
+        self.bins = Some(Bins {
+            width: width.max(Duration::from_millis(1)),
+            next: t0() + Duration::SECOND,
+            last: None,
+            rows: Vec::new(),
+        });
+    }
+
+    /// With the tables, the counters at each bin edge up to `t`, the time
+    /// of the next event: read before it runs, they stand as they did at
+    /// every edge since the last event, and the first edge's row takes
+    /// what changed since the edge before. Only getters run, so the run
+    /// is the same.
+    fn sample_bins(&mut self, t: Time) {
+        if self.bins.as_ref().is_none_or(|b| t < b.next) {
+            return;
+        }
+        let viewers = self
+            .nodes
+            .iter()
+            .skip(1)
+            .map(|n| {
+                (n.role == Role::Peer).then(|| {
+                    let [hits, misses, pruned, parents] =
+                        n.runner.push_stats(n.swarm).map_or([0; 4], |p| {
+                            let parents = p.parents.iter().filter(|x| x.is_some()).count();
+                            [p.hits, p.misses, p.pruned, parents as u64]
+                        });
+                    [
+                        hits,
+                        misses,
+                        pruned,
+                        parents,
+                        n.written_overhead(),
+                        n.wire.up_bytes,
+                        n.wire.up_packets,
+                        n.wire.small_packets,
+                    ]
+                })
+            })
+            .collect();
+        let seed = &self.nodes[0];
+        let p = seed.runner.push_stats(seed.swarm).unwrap_or_default();
+        let (sent, pushed) = seed
+            .runner
+            .swarm_stats(seed.swarm)
+            .map_or((0, 0), |s| (s.chunks_sent, s.pushed_chunks));
+        let sample = BinSample {
+            viewers,
+            seed: [
+                p.upload_capacity,
+                u64::from(p.upload_busy_permille),
+                p.seed_copies as u64,
+                sent,
+                pushed,
+                seed.up_bw,
+                seed.written_overhead(),
+                seed.wire.up_bytes,
+                seed.wire.up_packets,
+                seed.wire.small_packets,
+            ],
+        };
+        let Some(b) = self.bins.as_mut() else {
+            return;
+        };
+        let mut from = b.last.take();
+        while t >= b.next {
+            if let Some(a) = &from {
+                b.rows.push(bin_row(b.rows.len(), b.width, a, &sample));
+            }
+            from = Some(sample.clone());
+            b.next += b.width;
+        }
+        b.last = from;
+    }
+
     /// Records the seed's allocation and objective.
     fn sample_series(&mut self) {
         let Some(series) = self.series.as_mut() else {
@@ -2552,19 +2737,25 @@ impl Sim {
     /// `Report::series`. A chunk is a frame here (lags are per chunk), and
     /// the meter's and the seed's readings are at each second's end.
     fn series(&self) -> Option<String> {
-        let samples = self.series.as_ref()?;
-        let start = t0() + Duration::SECOND;
-        let n = samples.len().saturating_sub(1);
-        let ints = |v: &mut dyn Iterator<Item = i64>| {
-            let v: Vec<String> = v.map(|x| x.to_string()).collect();
-            format!("[{}]", v.join(","))
-        };
-        let honest: Vec<&Node> = self
-            .nodes
+        self.series_data().map(|s| s.json())
+    }
+
+    /// The honest viewers at the run's end, in the series' order (`lag`,
+    /// `frames`) and the tables' numbering.
+    fn honest(&self) -> Vec<&Node> {
+        self.nodes
             .iter()
             .skip(1)
             .filter(|n| n.role == Role::Peer)
-            .collect();
+            .collect()
+    }
+
+    /// [`Sim::series`]'s values, for its JSON object and the tables.
+    fn series_data(&self) -> Option<SeriesData> {
+        let samples = self.series.as_ref()?;
+        let start = t0() + Duration::SECOND;
+        let n = samples.len().saturating_sub(1);
+        let honest = self.honest();
         let (mut lags, mut frames) = (Vec::new(), Vec::new());
         for v in &honest {
             let mut by: Vec<Vec<Duration>> = vec![Vec::new(); n];
@@ -2575,12 +2766,16 @@ impl Sim {
                     b.push(lag);
                 }
             }
-            lags.push(ints(&mut by.iter_mut().map(|b| {
-                b.sort_unstable();
-                let i = ((b.len().max(1) - 1) as f64 * 0.99).round() as usize;
-                b.get(i).map_or(-1, |d| d.as_millis())
-            })));
-            frames.push(ints(&mut by.iter().map(|b| b.len() as i64)));
+            lags.push(
+                by.iter_mut()
+                    .map(|b| {
+                        b.sort_unstable();
+                        let i = ((b.len().max(1) - 1) as f64 * 0.99).round() as usize;
+                        b.get(i).map_or(-1, |d| d.as_millis())
+                    })
+                    .collect::<Vec<i64>>(),
+            );
+            frames.push(by.iter().map(|b| b.len() as i64).collect::<Vec<i64>>());
         }
         // Sample k + 1 closes second k, over the viewers present at both.
         let pairs = || samples.windows(2);
@@ -2591,22 +2786,29 @@ impl Sim {
                 .filter_map(|(a, b)| Some(((*a)?, (*b)?)))
                 .collect()
         };
-        let pooled = |f: usize| {
-            ints(&mut pairs().map(|w| {
-                both(w)
-                    .iter()
-                    .map(|(a, b)| a[f].saturating_sub(b[f]) as i64)
-                    .sum()
-            }))
+        let pooled = |f: usize| -> Vec<i64> {
+            pairs()
+                .map(|w| {
+                    both(w)
+                        .iter()
+                        .map(|(a, b)| a[f].saturating_sub(b[f]) as i64)
+                        .sum()
+                })
+                .collect()
         };
-        let parents = ints(&mut pairs().map(|w| {
-            let mut p: Vec<u64> = both(w).iter().map(|(a, _)| a[3]).collect();
-            p.sort_unstable();
-            p.get(p.len() / 2).map_or(-1, |&x| x as i64)
-        }));
-        let seed = |f: usize| ints(&mut pairs().map(|w| w[1].seed[f] as i64));
-        let seed_delta =
-            |f: usize| ints(&mut pairs().map(|w| w[1].seed[f].saturating_sub(w[0].seed[f]) as i64));
+        let parents: Vec<i64> = pairs()
+            .map(|w| {
+                let mut p: Vec<u64> = both(w).iter().map(|(a, _)| a[3]).collect();
+                p.sort_unstable();
+                p.get(p.len() / 2).map_or(-1, |&x| x as i64)
+            })
+            .collect();
+        let seed = |f: usize| -> Vec<i64> { pairs().map(|w| w[1].seed[f] as i64).collect() };
+        let seed_delta = |f: usize| -> Vec<i64> {
+            pairs()
+                .map(|w| w[1].seed[f].saturating_sub(w[0].seed[f]) as i64)
+                .collect()
+        };
         let mut seed_up = Vec::new();
         for (k, w) in pairs().enumerate() {
             if k == 0 || w[1].seed[5] != w[0].seed[5] {
@@ -2614,35 +2816,25 @@ impl Sim {
             }
         }
         let viewer_up: u64 = honest.iter().map(|v| v.up_bw).sum();
-        let mut j = JsonRow::default();
         let rate = match &self.media {
             Some(m) => m.plan.sent_bytes / self.cfg.stream_secs.max(1),
             None => self.cfg.stream_rate,
         };
-        j.int("rate", rate)
-            .int("chunk", self.cfg.chunk_size as u64)
-            .int("frame", self.cfg.chunk_size as u64)
-            .int("secs", self.cfg.stream_secs)
-            .field("seed_up", format_args!("[{}]", seed_up.join(",")))
-            .int("viewer_up", viewer_up)
-            .field("lag", format_args!("[{}]", lags.join(",")))
-            .field("frames", format_args!("[{}]", frames.join(",")))
-            .field(
-                "present",
-                format_args!("{}", ints(&mut pairs().map(|w| both(w).len() as i64))),
-            )
-            .field("hits", format_args!("{}", pooled(0)))
-            .field("misses", format_args!("{}", pooled(1)))
-            .field("pruned", format_args!("{}", pooled(2)))
-            .field("parents", format_args!("{parents}"))
-            .field("capacity", format_args!("{}", seed(0)))
-            .field("busy", format_args!("{}", seed(1)))
-            .field("avail", format_args!("{}", seed(5)))
-            .field("copies", format_args!("{}", seed(2)))
-            .field("sent", format_args!("{}", seed_delta(3)))
-            .field("pushed", format_args!("{}", seed_delta(4)))
-            .field("seed_ovh", format_args!("{}", seed_delta(6)))
-            .field("viewer_ovh", format_args!("{}", pooled(4)));
+        let mut cols = vec![
+            ("present", pairs().map(|w| both(w).len() as i64).collect()),
+            ("hits", pooled(0)),
+            ("misses", pooled(1)),
+            ("pruned", pooled(2)),
+            ("parents", parents),
+            ("capacity", seed(0)),
+            ("busy", seed(1)),
+            ("avail", seed(5)),
+            ("copies", seed(2)),
+            ("sent", seed_delta(3)),
+            ("pushed", seed_delta(4)),
+            ("seed_ovh", seed_delta(6)),
+            ("viewer_ovh", pooled(4)),
+        ];
         // A media run's chunks sent each second, by their signing: those
         // holding media (`written`, what `frames` counts), as its other
         // chunks are data-less.
@@ -2657,12 +2849,118 @@ impl Sim {
                     *w += i64::from(!self.publish_times[c].is_nil());
                 }
             }
-            j.field(
-                "written",
-                format_args!("{}", ints(&mut written.into_iter())),
+            cols.push(("written", written));
+        }
+        Some(SeriesData {
+            rate,
+            chunk: self.cfg.chunk_size as u64,
+            secs: self.cfg.stream_secs,
+            seed_up,
+            viewer_up,
+            lag: lags,
+            frames,
+            cols,
+        })
+    }
+
+    /// With `SIM_OUT=<dir>` (and `SIM_BIN_MS`, [`Sim::keep_tables`]), the
+    /// run's tables, as strims-sim writes them (its `tables` module) for
+    /// `hack/sim-db`: CSV files each with a `<table>.schema.json` of its
+    /// columns' names and types, times true time in ms from the stream's
+    /// start, and the honest viewers at the run's end numbered as the
+    /// series has them ([`Sim::honest`]).
+    ///
+    /// | table | one row per | columns |
+    /// |---|---|---|
+    /// | `seconds` | second of [`Sim::series`] | `sec`, then the series' per-second fields (`present`, `hits`, `misses`, `pruned`, `parents`, `capacity`, `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, and `written` in a media run) |
+    /// | `viewer_seconds` | viewer and second | `viewer`, `sec`, `lag_ms` (the series' `lag`, -1 without a read), `frames` |
+    /// | `reads` | chunk a viewer read | `viewer`, `t_ms` (when it read it), `seq` (the chunk), `lag_ms` (from its publishing) |
+    /// | `bins` | bin of [`Sim::keep_tables`]' width | [`BIN_COLS`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), and the seed's meter, uplink and copies at its end and what it sent in it |
+    /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink in bytes per second), `churned` (it left at least once), `clock_ms` (its clock's offset) |
+    ///
+    /// `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
+    /// `secs`, the seed's `seed_up` steps and the viewers' `viewer_up` as
+    /// the series has them, the number of `seconds` and `viewers`, and the
+    /// bins' `bin_ms`.
+    ///
+    /// The bins read the counters the series reads, at each edge rather
+    /// than each second's first event ([`Sim::sample_bins`]), so a bin's
+    /// sums can differ from its second's at the edges.
+    fn write_tables(&self, dir: &Path) -> io::Result<()> {
+        use std::fmt::Write;
+        std::fs::create_dir_all(dir)?;
+        let start = t0() + Duration::SECOND;
+        let series = self.series_data();
+        let honest = self.honest();
+        if let Some(s) = &series {
+            let mut names = vec!["sec"];
+            names.extend(s.cols.iter().map(|(n, _)| *n));
+            let mut t = Table::new("seconds", &names);
+            for k in 0..s.len() {
+                let mut row = vec![k as i64];
+                row.extend(s.cols.iter().map(|(_, v)| v.get(k).copied().unwrap_or(-1)));
+                t.ints(&row);
+            }
+            t.write(dir)?;
+            let mut t = Table::new("viewer_seconds", &["viewer", "sec", "lag_ms", "frames"]);
+            for (i, (lag, frames)) in s.lag.iter().zip(&s.frames).enumerate() {
+                for (k, (l, f)) in lag.iter().zip(frames).enumerate() {
+                    t.ints(&[i as i64, k as i64, *l, *f]);
+                }
+            }
+            t.write(dir)?;
+        }
+        let mut t = Table::new("reads", &["viewer", "t_ms", "seq", "lag_ms"]);
+        for (i, v) in honest.iter().enumerate() {
+            for (&(at, lag), &seq) in v.lags.iter().zip(&v.read_seqs) {
+                t.ints(&[
+                    i as i64,
+                    (at - start).as_millis(),
+                    i64::from(seq),
+                    lag.as_millis(),
+                ]);
+            }
+        }
+        t.write(dir)?;
+        let mut t = Table::new("bins", &BIN_COLS);
+        for row in self.bins.iter().flat_map(|b| &b.rows) {
+            t.ints(row);
+        }
+        t.write(dir)?;
+        let mut t = Table::new("viewers", &["viewer", "node", "up", "churned", "clock_ms"]);
+        for (i, v) in honest.iter().enumerate() {
+            let node = self
+                .nodes
+                .iter()
+                .position(|n| std::ptr::eq(n, *v))
+                .unwrap_or(0);
+            t.ints(&[
+                i as i64,
+                node as i64,
+                v.up_bw as i64,
+                i64::from(v.churned),
+                v.clock.as_millis(),
+            ]);
+        }
+        t.write(dir)?;
+        let mut meta = String::from("{\"sim\":\"ppspp\"");
+        if let Some(s) = &series {
+            let _ = write!(
+                meta,
+                ",\"rate\":{},\"chunk\":{},\"frame\":{},\"secs\":{},\"seed_up\":[{}],\"viewer_up\":{},\"seconds\":{}",
+                s.rate,
+                s.chunk,
+                s.chunk,
+                s.secs,
+                s.seed_up.join(","),
+                s.viewer_up,
+                s.len(),
             );
         }
-        Some(j.finish())
+        let width = self.bins.as_ref().map_or(0, |b| b.width.as_millis());
+        let _ = write!(meta, ",\"viewers\":{},\"bin_ms\":{width}}}", honest.len());
+        meta.push('\n');
+        std::fs::write(dir.join("series_meta.json"), meta)
     }
 
     fn sample_alloc(&mut self) {
@@ -3458,6 +3756,9 @@ impl Sim {
                             && !pt.is_nil()
                         {
                             node.lags.push((now, now - pt));
+                            if self.bins.is_some() {
+                                node.read_seqs.push(c as u32);
+                            }
                             if let Some(&st) =
                                 self.media.as_ref().and_then(|m| m.signed.get(c as usize))
                             {
@@ -5051,6 +5352,45 @@ fn sim_chunk_codecs_change_no_trace() {
             );
         }
     }
+}
+
+/// The tables ([`Sim::write_tables`]) leave the run as it was, at any bin
+/// width, and their seconds are the series': read through getters, their
+/// counters change nothing.
+#[test]
+fn sim_tables_change_no_trace() {
+    let mut cfg = Config::new(5, 8);
+    cfg.stream_secs = 4;
+    cfg.degree = 4;
+    cfg.push_mode = PushMode::Hybrid;
+    cfg.stream_count = 4;
+    let plain = Sim::new(cfg.clone()).run();
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("sim_tables_change_no_trace-{}", std::process::id()));
+    for ms in [1000, 1] {
+        let mut sim = Sim::new(cfg.clone());
+        sim.keep_tables(Duration::from_millis(ms));
+        let r = sim.run();
+        assert_eq!(
+            (r.trace, r.frames, r.bytes),
+            (plain.trace, plain.frames, plain.bytes),
+            "{ms} ms bins"
+        );
+        let d = dir.join(ms.to_string());
+        sim.write_tables(&d).unwrap();
+        let s = sim.series_data().unwrap();
+        let seconds = std::fs::read_to_string(d.join("seconds.csv")).unwrap();
+        assert_eq!(seconds.lines().count(), s.len() + 1);
+        let bins = std::fs::read_to_string(d.join("bins.csv")).unwrap();
+        assert!(bins.lines().count() > s.len(), "{ms} ms");
+        let reads = std::fs::read_to_string(d.join("reads.csv")).unwrap();
+        let read: usize = sim.honest().iter().map(|v| v.lags.len()).sum();
+        assert_eq!(reads.lines().count(), read + 1);
+        for t in ["seconds", "viewer_seconds", "reads", "bins", "viewers"] {
+            assert!(d.join(format!("{t}.schema.json")).exists(), "{t}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A media run of `encoder` signed under `sign`: 8 viewers in a full mesh,
@@ -7223,7 +7563,9 @@ fn wan_cable_seed() {
 /// from `SIM_SLOTS`: the `seed_slots` of the `Admission` job's row, rounded,
 /// which a matrix's `[[derive]]` table gives it. `SIM_SEED` (1) is the sim
 /// seed. With `SIM_SERIES=1` the row carries the run second by second
-/// (`series`, [`Sim::series`]). [`media_knobs`] apply to either.
+/// (`series`, [`Sim::series`]). With `SIM_OUT=<dir>` the run's tables go
+/// into `<dir>` ([`Sim::write_tables`]), in bins of `SIM_BIN_MS` (default
+/// 100); neither changes the trace. [`media_knobs`] apply to either.
 #[test]
 #[ignore = "one sim farm job; run in release with --ignored --nocapture"]
 fn sim_job() {
@@ -7263,9 +7605,20 @@ fn sim_job() {
         )
     };
     media_knobs(&mut cfg);
+    let out = knob::<String>("SIM_OUT").filter(|s| !s.is_empty());
     let mut sim = Sim::new(cfg);
+    if out.is_some() {
+        sim.keep_tables(Duration::from_millis(
+            knob::<i64>("SIM_BIN_MS").unwrap_or(100).max(1),
+        ));
+    }
     let r = sim.run();
     println!("ROW {}", job_row(&scenario, &case, &sim, &r));
+    if let Some(dir) = out
+        && let Err(e) = sim.write_tables(Path::new(&dir))
+    {
+        panic!("SIM_OUT: writing {dir}: {e}");
+    }
 }
 
 /// [`sim_job`]'s row: the run's config, including the knobs its run tag
@@ -7611,7 +7964,9 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     if let Some(m) = &sim.media {
         media_cols(&mut row, sim, m, r);
     }
-    if let Some(series) = sim.series() {
+    if knob::<u32>("SIM_SERIES") == Some(1)
+        && let Some(series) = sim.series()
+    {
         row.field("series", format_args!("{series}"));
     }
     row.finish()
@@ -7813,6 +8168,96 @@ fn media_cols(row: &mut JsonRow, sim: &Sim, m: &MediaRun, r: &Report) {
             wire as f64 / (p.media_bytes.max(1) as f64 * sim.cfg.peers.max(1) as f64),
         )
         .int("dataless_msgs", sim.dataless_on_wire);
+}
+
+/// The run second by second ([`Sim::series`]): the stream, each honest
+/// viewer's `lag` and `frames` by second, and the per-second columns in the
+/// JSON object's order.
+struct SeriesData {
+    rate: u64,
+    chunk: u64,
+    secs: u64,
+    /// `[k, bytes per second]` pairs, as the JSON object writes them.
+    seed_up: Vec<String>,
+    viewer_up: u64,
+    lag: Vec<Vec<i64>>,
+    frames: Vec<Vec<i64>>,
+    cols: Vec<(&'static str, Vec<i64>)>,
+}
+
+impl SeriesData {
+    /// The seconds in the series.
+    fn len(&self) -> usize {
+        self.cols.first().map_or(0, |(_, v)| v.len())
+    }
+
+    fn json(&self) -> String {
+        let ints = |v: &[i64]| {
+            let v: Vec<String> = v.iter().map(i64::to_string).collect();
+            format!("[{}]", v.join(","))
+        };
+        let nested = |v: &[Vec<i64>]| {
+            let v: Vec<String> = v.iter().map(|x| ints(x)).collect();
+            format!("[{}]", v.join(","))
+        };
+        let mut j = JsonRow::default();
+        j.int("rate", self.rate)
+            .int("chunk", self.chunk)
+            .int("frame", self.chunk)
+            .int("secs", self.secs)
+            .field("seed_up", format_args!("[{}]", self.seed_up.join(",")))
+            .int("viewer_up", self.viewer_up)
+            .field("lag", format_args!("{}", nested(&self.lag)))
+            .field("frames", format_args!("{}", nested(&self.frames)));
+        for (name, v) in &self.cols {
+            j.field(name, format_args!("{}", ints(v)));
+        }
+        j.finish()
+    }
+}
+
+/// One of [`Sim::write_tables`]' tables: integer columns, as CSV.
+struct Table {
+    name: &'static str,
+    cols: Vec<&'static str>,
+    csv: String,
+}
+
+impl Table {
+    fn new(name: &'static str, cols: &[&'static str]) -> Table {
+        let mut csv = cols.join(",");
+        csv.push('\n');
+        Table {
+            name,
+            cols: cols.to_vec(),
+            csv,
+        }
+    }
+
+    fn ints(&mut self, row: &[i64]) {
+        use std::fmt::Write;
+        for (i, x) in row.iter().enumerate() {
+            if i > 0 {
+                self.csv.push(',');
+            }
+            write!(self.csv, "{x}").unwrap();
+        }
+        self.csv.push('\n');
+    }
+
+    /// Writes `<name>.csv` and `<name>.schema.json` into `dir`.
+    fn write(&self, dir: &Path) -> io::Result<()> {
+        std::fs::write(dir.join(format!("{}.csv", self.name)), &self.csv)?;
+        let cols: Vec<String> = self
+            .cols
+            .iter()
+            .map(|n| format!("{{\"name\":\"{n}\",\"type\":\"BIGINT\"}}"))
+            .collect();
+        std::fs::write(
+            dir.join(format!("{}.schema.json", self.name)),
+            format!("{{\"columns\":[{}]}}\n", cols.join(",")),
+        )
+    }
 }
 
 /// A flat JSON object, field by field: numbers and plain tokens.

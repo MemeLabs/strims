@@ -340,6 +340,11 @@ pub struct Report {
     pub violations: Vec<(u64, String)>,
     /// The access links, in WAN mode.
     pub wan: Option<WanReport>,
+    /// With [`Scenario::wire_bins`] in WAN mode, the uplink counters
+    /// ([`strims_wan::network::EndStats`]) at each bin edge from the first
+    /// swarm's start, summed over its seed and over its honest viewers:
+    /// the seed's bytes, packets and small packets, then the viewers'.
+    pub wire_bins: Vec<[u64; 6]>,
 }
 
 /// What a media swarm's seed wrote ([`crate::MediaSpec`]), over its

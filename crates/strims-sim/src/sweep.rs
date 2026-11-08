@@ -69,6 +69,12 @@
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), so the row carries the run second by
 //!   second ([`Report::series`]).
+//! - `STRIMS_SIM_OUT=<dir>` writes each run's tables ([`crate::tables`],
+//!   [`Report::write_tables`]) into `<dir>`, or into `<dir>/seed-<s>/`
+//!   when the sweep runs more than one seed; it samples transfers as
+//!   `STRIMS_SIM_SERIES=1` does. `STRIMS_SIM_BIN_MS=<ms>` (default 100)
+//!   sets the width of the `bins` table's bins ([`Scenario::wire_bins`]).
+//!   Neither changes the trace.
 //! - `STRIMS_SIM_ROWS=1` prints each run's measures as one line,
 //!   `ROW {json}`, on stdout ([`Report::row`]).
 //! - `STRIMS_SIM_JOB=1` runs the sweep as one sim farm job
@@ -391,6 +397,11 @@ fn sweep_seeds(
     );
     let window = env("STRIMS_SIM_TCP").is_some_and(|s| s.trim() == "1");
     let series = env("STRIMS_SIM_SERIES").is_some_and(|s| s.trim() == "1");
+    let out = env("STRIMS_SIM_OUT")
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
+        .map(std::path::PathBuf::from);
+    let bin = Duration::from_millis(knob::<u64>("STRIMS_SIM_BIN_MS").unwrap_or(100).max(1));
     let chunk: Option<usize> = knob("STRIMS_SIM_CHUNK");
     let munro: Option<usize> = knob("STRIMS_SIM_MUNRO");
     let stream_secs: Option<u64> = knob("STRIMS_SIM_STREAM_SECS");
@@ -415,8 +426,11 @@ fn sweep_seeds(
         if window && let Some(b) = &mut spec.send_buffer {
             b.window = true;
         }
-        if series {
+        if series || out.is_some() {
             spec.transfer_samples = true;
+        }
+        if out.is_some() {
+            spec.wire_bins = Some(bin);
         }
         if segment.is_some() {
             spec.tcp_segment = segment;
@@ -519,6 +533,20 @@ fn sweep_seeds(
                 "ROW {}",
                 r.row(test, verdict.as_ref().err().map(String::as_str))
             );
+        }
+        if let Some(dir) = &out {
+            let dir = match seeds.len() {
+                1 => dir.clone(),
+                _ => dir.join(format!("seed-{seed}")),
+            };
+            if let Err(e) = r.write_tables(&dir, bin) {
+                fail(
+                    test,
+                    seed,
+                    &format!("STRIMS_SIM_OUT: writing {}: {e}", dir.display()),
+                    &[],
+                );
+            }
         }
         reports.push(r);
         verdicts.push(verdict);

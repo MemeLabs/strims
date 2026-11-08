@@ -12,7 +12,7 @@ use turmoil::Sim;
 
 use crate::memory::MemoryGroup;
 use crate::report::{MemoryReport, Report, ViewerReport, WanReport};
-use crate::spec::{Fault, HostIx, Scenario};
+use crate::spec::{Fault, HostClass, HostIx, Scenario};
 use crate::wan::{Scheduler, sim_time};
 use crate::world::World;
 use crate::{EPOCH_MS, control, host};
@@ -116,12 +116,43 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
     let mut faults = spec.faults.clone();
     faults.sort_by_key(|f| f.at);
     let mut next = 0;
+    // The bins' width, the first swarm and the next bin edge
+    // ([`Scenario::wire_bins`]).
+    let mut bins = spec
+        .wire_bins
+        .filter(|_| has_wan)
+        .zip(spec.swarms.first())
+        .map(|(width, s)| (width.max(Duration::from_millis(1)), s, s.start));
     loop {
         while let Some(f) = faults.get(next)
             && sim.elapsed() >= f.at
         {
             apply(&mut sim, w, w.wan.lock().as_mut(), &f.fault);
             next += 1;
+        }
+        // The counters as they stood at each edge passed: before this
+        // walk's sends, and without adding to the schedule.
+        if let Some((width, swarm, next_edge)) = bins.as_mut()
+            && sim.elapsed() >= *next_edge
+            && let Some(s) = w.wan.lock().as_ref()
+        {
+            let mut c = [0u64; 6];
+            c[..3].copy_from_slice(&s.up_counters(swarm.seed));
+            let honest = |h: &&HostIx| {
+                !matches!(
+                    spec.hosts.get(**h).map(|x| x.class),
+                    Some(HostClass::Hostile(_))
+                )
+            };
+            for &v in swarm.viewers.iter().filter(honest) {
+                for (x, y) in c[3..].iter_mut().zip(s.up_counters(v)) {
+                    *x += y;
+                }
+            }
+            while sim.elapsed() >= *next_edge {
+                w.record_wire_bin(c);
+                *next_edge += *width;
+            }
         }
         if let Some(s) = w.wan.lock().as_mut() {
             s.walk(&sim)?;
@@ -337,6 +368,7 @@ fn report(
     let written = std::mem::take(&mut st.written);
     let media = std::mem::take(&mut st.media);
     let violations = std::mem::take(&mut st.violations);
+    let wire_bins = std::mem::take(&mut st.wire_bins);
     drop(st);
     if w.spec.probes.is_some() {
         vpn.unicast_by_phase = control::unicast_phases(w);
@@ -362,6 +394,7 @@ fn report(
         memory,
         violations,
         wan,
+        wire_bins,
     };
     r.scenario.faults.sort_by_key(|f| f.at);
     r

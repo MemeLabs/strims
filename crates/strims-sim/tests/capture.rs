@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! A run with ppspp capture on: the trace a run without it gives, and a
-//! dump per host that reads back.
+//! dump per host that reads back. And a run's tables
+//! ([`strims_sim::tables`]): the same trace at any bin width, and seconds
+//! that are the series'.
 
 #![allow(
     clippy::unwrap_used,
@@ -162,6 +164,48 @@ fn a_captured_wan_run_samples_every_link() {
         assert_eq!(sampled["Path"], sampled["Queues"], "{name}");
         assert_eq!(echoed, sampled["Queues"], "{name}");
         assert!(windowed, "{name}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_run_with_tables_keeps_its_trace() {
+    let mut spec = wan_mesh();
+    spec.transfer_samples = true;
+    let plain = run(spec, 1).unwrap();
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "a_run_with_tables_keeps_its_trace-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    for ms in [1000, 1] {
+        let bin = Duration::from_millis(ms);
+        let mut spec = wan_mesh();
+        spec.transfer_samples = true;
+        spec.wire_bins = Some(bin);
+        let r = run(spec, 1).unwrap();
+        assert_eq!(plain.trace_hash, r.trace_hash, "{ms} ms bins");
+        let d = dir.join(ms.to_string());
+        r.write_tables(&d, bin).unwrap();
+        let lines = |t: &str| {
+            std::fs::read_to_string(d.join(format!("{t}.csv")))
+                .unwrap()
+                .lines()
+                .count()
+        };
+        // The stream starts at 2 s and the run ends at 10 s.
+        assert_eq!(lines("seconds"), 8 + 1);
+        assert_eq!(lines("viewer_seconds"), 3 * 8 + 1);
+        let reads: usize = r.viewers.iter().map(|v| v.stats.lags.len()).sum();
+        assert_eq!(lines("reads"), reads + 1);
+        assert!(lines("bins") as u64 + 1 >= 7_000 / ms, "{ms} ms");
+        let bins = std::fs::read_to_string(d.join("bins.csv")).unwrap();
+        let seed_bytes: u64 = bins
+            .lines()
+            .skip(1)
+            .map(|l| l.split(',').nth(2).unwrap().parse::<u64>().unwrap())
+            .sum();
+        assert!(seed_bytes > 64 * 1024 * 6, "{seed_bytes}");
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

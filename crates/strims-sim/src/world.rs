@@ -193,6 +193,8 @@ pub(crate) struct WorldState {
     pub progress: BTreeMap<(usize, HostIx), u64>,
     /// The controller's choices (probe pairs).
     pub rng: DetRng,
+    /// The uplink counters at each bin edge ([`crate::Report::wire_bins`]).
+    pub wire_bins: Vec<[u64; 6]>,
 }
 
 /// One run.
@@ -271,6 +273,7 @@ impl World {
             violations: Vec::new(),
             progress: BTreeMap::new(),
             rng,
+            wire_bins: Vec::new(),
         };
         let send_buffers = spec.wan.and(spec.send_buffer).map(SendBuffers::new);
         World {
@@ -296,6 +299,12 @@ impl World {
         let mut group = self.records.borrow_mut();
         let _counted = group.as_mut().map(MemoryGroup::enter);
         f(&mut self.st.borrow_mut())
+    }
+
+    /// Records the uplink counters at a bin edge
+    /// ([`crate::Report::wire_bins`]), in the records' group.
+    pub(crate) fn record_wire_bin(&self, counters: [u64; 6]) {
+        self.record(|st| st.wire_bins.push(counters));
     }
 
     pub fn name(&self, h: HostIx) -> &str {
