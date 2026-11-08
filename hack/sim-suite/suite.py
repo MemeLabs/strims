@@ -119,16 +119,22 @@ shows whether it does). It prints each set's collapses and lag
 p99 by cell, then its scorecard, against `off` or the set `--against`
 names.
 With `--refs` the arms are commits instead (the matrices' arms, no knob
-axis), scored against the first.
+axis), scored against the first. `--no-run` writes the matrices
+(target/sim-suite/farm/RUN-NN.toml) and reports the rows the farm has
+without launching anything: to quote them (`farm.py estimate`), or to run
+several tiers' in one farm run (`farm.py run`) and report each after.
 
 `score` scores arm B of one farm run against arm A of another (or the
 same) run, paired by cell and seed: a new arm against base rows an earlier
 run holds, without running the base again. RUN is the run's name as
 `farm` prints it, ARM a `--refs` name or a `--sets` set (`off` for none).
 `farm` keeps each run's cells in the main checkout's
-target/sim-suite/farm-runs/RUN.json; a run without one is read as the
-cells of `--tier` and `--only` in the order `farm` wrote them, which must
-be the run's.
+target/sim-suite/farm-runs/RUN.json once the farm has started the run, and
+in farm-runs/pending/ until then (`--no-run`): the first `farm` or `score`
+after the farm starts it moves it into place, and one whose run hasn't
+started within a week is dropped. A run without one is read as the cells
+of `--tier` and `--only` in the order `farm` wrote them, which must be the
+run's.
 """
 
 import argparse
@@ -1239,8 +1245,50 @@ def farm_rows(name, cells, knob):
     return rows
 
 
-def farm_index(name):
-    return farm_root() / "target" / "sim-suite" / "farm-runs" / f"{name}.json"
+def farm_indexes(pending=False):
+    """The main checkout's farm-runs/, where farm runs' indexes of their
+    cells are (simdb's suite_index reads them too), or its pending/, where
+    one waits for the farm to start its run."""
+    runs = farm_root() / "target" / "sim-suite" / "farm-runs"
+    return runs / "pending" if pending else runs
+
+
+def farm_index(name, pending=False):
+    return farm_indexes(pending) / f"{name}.json"
+
+
+def farm_started(name, n):
+    """Whether the farm has started any of farm run `name`'s `n` matrices:
+    its run makes their state dirs, and an estimate doesn't."""
+    state = farm_root() / "target" / "sim-farm"
+    return any((state / f"{name}-{i:02d}").is_dir() for i in range(n))
+
+
+def place_index(name, text, started):
+    """Writes farm run `name`'s index in place once the farm has started the
+    run, apart until then, so a run only quoted, or relaunched under another
+    name, leaves none in place."""
+    path, other = farm_index(name), farm_index(name, pending=True)
+    if not started:
+        path, other = other, path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    other.unlink(missing_ok=True)
+
+
+def settle_indexes(days=7):
+    """Moves each pending index whose run the farm has since started (by
+    hand, `farm.py run`) into place, and drops one whose run hasn't started
+    within `days`."""
+    for p in farm_indexes(pending=True).glob("*.json"):
+        try:
+            n = len(json.loads(p.read_text())["cells"])
+            if farm_started(p.stem, n):
+                p.replace(farm_index(p.stem))
+            elif time.time() - p.stat().st_mtime > days * 86400:
+                p.unlink()
+        except (OSError, ValueError, KeyError):
+            continue
 
 
 def farm(a, cells):
@@ -1297,18 +1345,20 @@ def farm(a, cells):
         path = out / f"{name}-{i:02d}.toml"
         path.write_text(text)
         paths.append(path)
-    index = farm_index(name)
-    index.parent.mkdir(parents=True, exist_ok=True)
+    settle_indexes()
     keep = ("name", "sim", "test", "why")
     # A `--sets` run's arms are its knob's values, which hack/sim-db labels
     # its runs by.
-    index.write_text(json.dumps({"cells": [{k: c[k] for k in keep} for c in cells],
-                                 **({} if a.refs else {"knob": knob, "values": values})}) + "\n")
+    index = json.dumps({"cells": [{k: c[k] for k in keep} for c in cells],
+                        **({} if a.refs else {"knob": knob, "values": values})}) + "\n"
+    place_index(name, index, not a.no_run or farm_started(name, len(cells)))
     farm_py = farm_root() / "hack" / "sim-farm" / "farm.py"
     if not a.no_run:
         print(f"farm run {name}: {len(cells)} matrices, {len(values)} arms x {len(seeds)} seeds", file=sys.stderr)
         # One run for the tier: one boot of its instances, and one tail.
         subprocess.run([sys.executable, str(farm_py), "run", *map(str, paths), *shlex.split(a.farm_args)])
+        if not farm_started(name, len(cells)):
+            place_index(name, index, False)
     rows = farm_rows(name, cells, knob)
     base = a.against.strip() if a.against else values[0]
     if base not in values:
@@ -1331,6 +1381,7 @@ def print_arm_score(title, sc):
 
 def score(a, cells):
     knob = dict(zip((PPSPP, SIM), (k.strip() for k in a.knob.split(","))))
+    settle_indexes()
     picked = []
     for arg in (a.a, a.b):
         run, sep, arm = arg.rpartition(":")
@@ -1400,7 +1451,8 @@ def main():
     fc.add_argument("--only", help="cells, comma-separated")
     fc.add_argument("--all", action="store_true", help="every metric, ties too")
     fc.add_argument("--farm-args", default="", help="more arguments for farm.py run")
-    fc.add_argument("--no-run", action="store_true", help="report the rows the farm has")
+    fc.add_argument("--no-run", action="store_true",
+                    help="write the matrices and report the rows the farm has, launching nothing")
     fc.add_argument("--no-off", action="store_true", help="run only the sets given, not `off` beside them")
     sc = sub.add_parser("score")
     sc.add_argument("a", metavar="RUN:ARM", help="the base: a farm run's name and one of its arms")

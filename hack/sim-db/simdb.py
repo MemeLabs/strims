@@ -76,8 +76,11 @@ it), `verdicts` (a run's verdict and analyze.run_metrics), `episodes`
 (healthy, unhealthy and collapse spells) and `derived_events` (start,
 seed_down, seed_up, join, leave, onset, recovered, collapse). A
 selection picks runs: `--src` (cache paths, globs, default every one),
-`--cell`, `--arm` (globs) and `--seed`. A key in two sources counts once
-(the later's).
+`--cell`, `--arm` (globs) and `--seed`, and a run's cell and arm are the
+same whatever else it selects. A suite farm run's runs are named by the
+suite cell their matrix ran, <cell>@<run>, which `--cell` matches whole or
+by the cell alone. A key a cell has in two sources counts once (the
+later's).
 
   sql      a query over the views (runs, scalars, seconds, viewer_seconds,
            reads, bins, viewers, the derived ones, and macros.sql's)
@@ -679,38 +682,47 @@ def sources(patterns):
     return sorted(out)
 
 
+def suite_index(run):
+    """Suite farm run `run`'s index: the main checkout's
+    target/sim-suite/farm-runs/<run>.json, or while suite.py keeps it apart
+    (written by `farm --no-run`, the run started by hand) pending/<run>.json
+    there; {} if neither."""
+    d = main_checkout() / "target" / "sim-suite" / "farm-runs"
+    for p in (d / f"{run}.json", d / "pending" / f"{run}.json"):
+        try:
+            return json.loads(p.read_text())
+        except (OSError, ValueError):
+            continue
+    return {}
+
+
 def suite_cells(names):
     """The suite cells that farm matrices named `names` run: a suite farm
-    run's matrices are <run>-<i>, the i-th cell of its index (the main
-    checkout's target/sim-suite/farm-runs/<run>.json), the arm of a `--sets`
-    run is the value of the knob its index names. By matrix: (cell, knob);
-    a cell that two suite runs in `names` share (a farm run of several
-    tiers) is <cell>@<run>. Names no index tells are left out."""
+    run's matrices are <run>-<i>, the i-th cell of its index (suite_index),
+    the arm of a `--sets` run is the value of the knob its index names. By
+    matrix: (<cell>@<run>, knob), a name of the matrix alone, so a cell that
+    two suite runs share (a farm run of several tiers, an A/B and its
+    confirmation) is apart whichever of them a selection holds. Names no
+    index tells are left out."""
     idx, got = {}, {}
     for n in names:
         run, _, i = (n or "").rpartition("-")
         if not (len(run) == 6 and run[0] == "s" and i.isdigit()):
             continue
         if run not in idx:
-            try:
-                idx[run] = json.loads((main_checkout() / "target" / "sim-suite" / "farm-runs"
-                                       / f"{run}.json").read_text())
-            except (OSError, ValueError):
-                idx[run] = {}
+            idx[run] = suite_index(run)
         cells = idx[run].get("cells") or []
         if int(i) < len(cells):
             c = cells[int(i)]
-            got[n] = (run, c["name"], (idx[run].get("knob") or {}).get(c.get("sim")))
-    runs_of = collections.defaultdict(set)
-    for run, cell, _ in got.values():
-        runs_of[cell].add(run)
-    return {n: (cell if len(runs_of[cell]) == 1 else f"{cell}@{run}", knob) for n, (run, cell, knob) in got.items()}
+            got[n] = (f"{c['name']}@{run}", (idx[run].get("knob") or {}).get(c.get("sim")))
+    return got
 
 
 def views(a, derived=True):
     """The SQL that makes the views over selection `a`'s sources, and the
     tables it has. A farm source's runs name the suite cells and arms its
-    matrices ran (suite_cells), their matrices as `matrix`."""
+    matrices ran (suite_cells); `matrix` is the cell a run was stored
+    under."""
     srcs = sources(a.src)
     if not srcs:
         sys.exit("no runs in the cache match --src")
@@ -727,17 +739,22 @@ def views(a, derived=True):
             f"ELSE coalesce(json_extract_string(r.env, '$.' || m.knob), r.arm) END AS arm), r.cell AS matrix "
             f"FROM {read_runs} r LEFT JOIN (VALUES {pairs}) m(matrix, cell, knob) ON r.cell = m.matrix)"
         )
+    else:
+        read_runs = f"(SELECT *, cell AS matrix FROM {read_runs})"
     where = []
     if a.cell:
-        where.append("(" + " OR ".join(f"cell GLOB {q(c)}" for c in a.cell) + ")")
+        where.append("(" + " OR ".join(f"cell GLOB {q(c)} OR split_part(cell, '@', 1) GLOB {q(c)}"
+                                       for c in a.cell) + ")")
     if a.arm:
         where.append("(" + " OR ".join(f"arm GLOB {q(x)}" for x in a.arm) + ")")
     if a.seed:
         where.append(f"seed IN ({', '.join(str(int(s)) for s in a.seed)})")
     sql = [
         f"CREATE VIEW runs_all AS SELECT * FROM {read_runs};",
-        "CREATE VIEW canon AS SELECT k, src FROM runs_all "
-        "QUALIFY row_number() OVER (PARTITION BY k ORDER BY src DESC) = 1;",
+        # A key in two cells (a job the farm reused, and its verify copy)
+        # counts in each.
+        "CREATE VIEW canon AS SELECT k, src, cell FROM runs_all "
+        "QUALIFY row_number() OVER (PARTITION BY k, cell ORDER BY src DESC) = 1;",
         "CREATE VIEW runs AS SELECT r.* FROM runs_all r SEMI JOIN canon USING (k, src)"
         + (" WHERE " + " AND ".join(where) if where else "") + ";",
     ]

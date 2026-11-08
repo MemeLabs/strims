@@ -43,8 +43,10 @@ CREATE OR REPLACE VIEW ev AS
     UNION ALL
     SELECT k, src, t_us / 1000.0 AS t_ms, kind, value::DOUBLE, node, detail FROM events;
 
--- The runs of some cells and arms (empty lists for all).
+-- The runs of some cells and arms (empty lists for all): a farm run's
+-- cell by its name or by the suite cell alone (<cell>@<run>).
 -- needs: runs
 CREATE OR REPLACE MACRO pick(cells, arms) AS TABLE
     SELECT * FROM runs
-    WHERE (len(cells) = 0 OR list_contains(cells, cell)) AND (len(arms) = 0 OR list_contains(arms, arm));
+    WHERE (len(cells) = 0 OR list_contains(cells, cell) OR list_contains(cells, split_part(cell, '@', 1)))
+      AND (len(arms) = 0 OR list_contains(arms, arm));
