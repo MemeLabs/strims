@@ -173,11 +173,24 @@ The verdicts, judged over the stream's seconds (not the run's tail):
   stream with OVERHEAD and the seed's spare plus the viewers' uplinks
   carry every viewer's copy: a collapse no tree could avoid isn't the
   protocol's. `map` marks cells feasible only at full uplink as "step".
+- A run collapsed (sim-suite's scorecard, `collapsed`) when COLLAPSED_SECS
+  seconds in a row are unhealthy and they last past STARTUP_SECS.
+
+Over time, for hack/sim-db's tables and sim-suite's paired metrics:
+`phases` names each second (startup, after an uplink step down or up, or
+steady), `events` lists a run's (its start, the uplink's steps, viewers
+coming and going, onset, recovery, collapses), `episodes` its healthy,
+unhealthy and collapse spells, and `run_metrics` sums them up per run
+(collapses, flaps, dwell times, onset after a drop, recovery after a
+rise, excess lag, the lag's oscillation). VERDICT_VERSION hashes all of
+it, so the tables made under another are stale.
 """
 
 import argparse
 import collections
+import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -502,6 +515,18 @@ LAG_SLOPE_SECS = 20
 LAG_SLOPE_FLOOR_MS = DELIVERY_TARGET_MS
 RECOVER_SECS = 20
 ABSORB_SECS = 60
+# A run collapsed when this many seconds in a row are unhealthy and they
+# last past its startup (the real stack's trees take about 10 s to form).
+STARTUP_SECS = 15
+COLLAPSED_SECS = 8
+# How long after an uplink step its seconds belong to it (`phases`), and
+# the window its onset and recovery are measured in (`run_metrics`) when
+# no later step ends it first.
+STEP_SECS = 60
+# An oscillation: the lag series' autocorrelation peaks past this at some
+# period of at least OSC_MIN_PERIOD seconds (`run_metrics`).
+OSC_ACF = 0.3
+OSC_MIN_PERIOD = 3
 # The wire's bytes beyond the stream's, as a share of them, by chunk size:
 # a lone viewer of a 100 Mbit seed in calibration_star (64 KiB munros at
 # 1 KiB, 32 KiB at 4 KiB), its data, HAVEs, requests and integrity, with
@@ -874,7 +899,186 @@ def verdict(s):
         "unhealthy": 1 - sum(healthy) / n if n else None,
         "lag_max": max((x for x in lag if x is not None), default=None),
         "healthy": healthy,
+        # Second by second, what the verdicts read and which tests failed.
+        "onset": onset, "hit_share": smooth, "delivery_share": deliv, "lag_q": lag,
+        "trees_bad": trees_bad, "deliv_bad": deliv_bad, "lag_high": high, "lag_rise": rise,
     }
+
+
+def collapsed(v):
+    """Whether a run collapsed, by its verdict `v`: COLLAPSED_SECS unhealthy
+    seconds in a row lasting past STARTUP_SECS."""
+    run = 0
+    for k, h in enumerate(v["healthy"]):
+        run = 0 if h else run + 1
+        if run >= COLLAPSED_SECS and k >= STARTUP_SECS:
+            return True
+    return False
+
+
+def steps(s):
+    """The seed's uplink steps: (second, "seed_down" or "seed_up", the new
+    uplink over the old)."""
+    out = []
+    for (t, u), (_, before) in zip(s["seed_up"][1:], s["seed_up"]):
+        if u != before and before:
+            out.append((t, "seed_down" if u < before else "seed_up", u / before))
+    return out
+
+
+def phases(s, v):
+    """Each second's phase: `startup` (the first STARTUP_SECS), `after_down`
+    or `after_up` (within STEP_SECS of the latest uplink step), else
+    `steady`."""
+    out = []
+    st = steps(s)
+    for k in range(len(v["healthy"])):
+        last = [(t, kind) for t, kind, _ in st if t <= k + 0.5 and k < t + STEP_SECS]
+        if k < STARTUP_SECS:
+            out.append("startup")
+        elif last:
+            out.append("after_down" if last[-1][1] == "seed_down" else "after_up")
+        else:
+            out.append("steady")
+    return out
+
+
+def events(s, v):
+    """A run's events, (second from the stream's start, kind, value): its
+    `start`; the seed's uplink steps (`seed_down`, `seed_up`, the new
+    uplink over the old); viewers arriving and going (`join`, `leave`,
+    how many, from `present`); the verdict's `onset` and `recovered`; and
+    each `collapse` (`episodes`), with its length."""
+    out = [(0, "start", None)]
+    out += [(t, kind, ratio) for t, kind, ratio in steps(s)]
+    present = s["present"][: len(v["healthy"])]
+    for k in range(1, len(present)):
+        d = present[k] - present[k - 1]
+        if d:
+            out.append((k, "join" if d > 0 else "leave", abs(d)))
+    if v["onset"] is not None:
+        out.append((v["onset"], "onset", None))
+    if v["recovered"] is not None:
+        out.append((v["recovered"], "recovered", None))
+    out += [(a, "collapse", b - a) for kind, a, b in episodes(v) if kind == "collapse"]
+    return sorted(out, key=lambda e: (e[0], e[1]))
+
+
+def episodes(v):
+    """A run's spells, (kind, first second, the second after the last):
+    every run of `healthy` and of `unhealthy` seconds, and the unhealthy
+    ones that make a collapse (`collapsed`'s rule) again as `collapse`."""
+    out = []
+    h = v["healthy"]
+    a = 0
+    for k in range(1, len(h) + 1):
+        if k == len(h) or h[k] != h[a]:
+            kind = "healthy" if h[a] else "unhealthy"
+            out.append((kind, a, k))
+            if not h[a] and k - a >= COLLAPSED_SECS and k - 1 >= STARTUP_SECS:
+                out.append(("collapse", a, k))
+            a = k
+    return out
+
+
+def acf(x, lag):
+    """`x`'s autocorrelation at `lag`."""
+    n = len(x)
+    m = sum(x) / n
+    den = sum((y - m) ** 2 for y in x)
+    if not den or lag >= n:
+        return None
+    return sum((x[i] - m) * (x[i + lag] - m) for i in range(n - lag)) / den
+
+
+def run_metrics(s, v):
+    """A run's dynamics, from its series `s` and verdict `v`, as scalars
+    that pair by seed:
+
+      collapses               collapse spells (`episodes`)
+      flaps_per_min           changes between healthy and unhealthy seconds
+                              after STARTUP_SECS, a minute
+      healthy_dwell_p50_s     ... and p90: how long healthy spells last
+      unhealthy_dwell_p50_s   ... and p90: unhealthy ones
+      onset_after_drop_s      seconds from the first uplink step down to
+                              its first unhealthy second, at most the
+                              window (the next step, STEP_SECS, or the
+                              stream's end), `_censored` when none came
+      recover_after_rise_s    seconds from the first step up after a step
+                              down to a healthy spell of RECOVER_SECS, at
+                              most the stream's end (`_censored`)
+      excess_lag_area_ms_s    the lag past DELIVERY_TARGET_MS summed over
+                              seconds (ms x s); `excess_lag_peak_ms` its
+                              largest
+      osc_amp_ms              half the p10-p90 spread of the lag after
+                              STARTUP_SECS; `osc_period_s` and `osc_acf`
+                              the autocorrelation's highest peak past
+                              OSC_ACF at a period of OSC_MIN_PERIOD or
+                              more, when one is"""
+    h = v["healthy"]
+    n = len(h)
+    eps = episodes(v)
+    spells = lambda kind: [b - a for k, a, b in eps if k == kind]
+    after = h[STARTUP_SECS:]
+    flaps = sum(1 for a, b in zip(after, after[1:]) if a != b)
+    out = {
+        "collapses": len(spells("collapse")),
+        "flaps_per_min": flaps * 60 / len(after) if after else None,
+        "healthy_dwell_p50_s": quantile(spells("healthy"), 0.5),
+        "healthy_dwell_p90_s": quantile(spells("healthy"), 0.9),
+        "unhealthy_dwell_p50_s": quantile(spells("unhealthy"), 0.5),
+        "unhealthy_dwell_p90_s": quantile(spells("unhealthy"), 0.9),
+    }
+    st = steps(s)
+    down = next(((i, t) for i, (t, kind, _) in enumerate(st) if kind == "seed_down"), None)
+    out["onset_after_drop_s"] = out["onset_after_drop_censored"] = None
+    out["recover_after_rise_s"] = out["recover_after_rise_censored"] = None
+    if down is not None:
+        i, t = down
+        end = min(n, t + STEP_SECS, *(t2 for t2, _, _ in st[i + 1:]))
+        k0 = int(math.ceil(t - 0.5))
+        bad = next((k for k in range(max(0, k0), int(end)) if not h[k]), None)
+        out["onset_after_drop_s"] = (bad if bad is not None else end) - t
+        out["onset_after_drop_censored"] = bad is None
+        up = next((t2 for t2, kind, _ in st[i + 1:] if kind == "seed_up"), None)
+        if up is not None:
+            k1 = max(0, int(math.ceil(up - 0.5)))
+            ok = next((k for k in range(k1, n - RECOVER_SECS + 1) if all(h[k: k + RECOVER_SECS])), None)
+            out["recover_after_rise_s"] = (ok if ok is not None else n) - up
+            out["recover_after_rise_censored"] = ok is None
+    lag = v["lag_q"]
+    excess = [max(0, x - DELIVERY_TARGET_MS) for x in lag if x is not None]
+    out["excess_lag_area_ms_s"] = sum(excess) if excess else None
+    out["excess_lag_peak_ms"] = max(excess) if excess else None
+    tail = [x for x in lag[STARTUP_SECS:] if x is not None]
+    out["osc_amp_ms"] = out["osc_period_s"] = out["osc_acf"] = None
+    if len(tail) >= 4 * OSC_MIN_PERIOD:
+        out["osc_amp_ms"] = (quantile(tail, 0.9) - quantile(tail, 0.1)) / 2
+        best = None
+        r = [acf(tail, p) for p in range(len(tail) // 2 + 2)]
+        for p in range(OSC_MIN_PERIOD, len(tail) // 2 + 1):
+            if r[p] is None or r[p] < OSC_ACF or (r[p - 1] or 0) > r[p] or (r[p + 1] or 0) > r[p]:
+                continue
+            if best is None or r[p] > best[1]:
+                best = (p, r[p])
+        if best:
+            out["osc_period_s"], out["osc_acf"] = best
+    return out
+
+
+def verdict_version():
+    """A hash of everything that defines the verdicts and the run metrics:
+    a derived table made under another is stale."""
+    import inspect
+
+    parts = [inspect.getsource(f) for f in (lags, measures, slope, runs_of, quantile, med, verdict, feasible,
+                                            collapsed, steps, phases, events, episodes, acf, run_metrics)]
+    parts.append(repr([TREES_SHARE, TREES_SMOOTH, TREES_SECS, DELIVERY_SHARE, DELIVERY_SECS, LAG_QUANTILE,
+                       LAG_HIGH_MS, LAG_HIGH_SECS, LAG_SLOPE, LAG_SLOPE_SECS, LAG_SLOPE_FLOOR_MS, RECOVER_SECS,
+                       ABSORB_SECS, STARTUP_SECS, COLLAPSED_SECS, STEP_SECS, OSC_ACF, OSC_MIN_PERIOD,
+                       DELIVERY_TARGET_MS, OVERHEAD]))
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
+
 
 
 def feasible(s):
@@ -884,6 +1088,10 @@ def feasible(s):
     ok = lambda up: up >= copy and up + s["viewer_up"] >= viewers * copy
     lo, hi = min(u for _, u in s["seed_up"]), s["seed_up"][0][1]
     return True if ok(lo) else ("step" if ok(hi) else False)
+
+
+# Derived tables (hack/sim-db) are made under this.
+VERDICT_VERSION = verdict_version()
 
 
 def series(a):

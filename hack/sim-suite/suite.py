@@ -31,8 +31,14 @@ reuses the rest; later runs against the same base run only the working
 tree, and a sim the working tree leaves as the base's isn't run twice.
 Rows are the sims' `ROW` objects with each run's wall time and peak
 memory; runs are deterministic, so a cell and seed always give the same
-row. `--env` sets a variable for every arm's runs as part of each cell,
-so the rows of one setting never stand for another's.
+row. Each run also writes its tables (hack/sim-db: its seconds, every
+read, finer bins), which fold into a store of the invocation's and go to
+the cache every worktree shares (the main checkout's target/sim-db),
+where `simdb.py` queries them; a run's line in target/sim-suite/rows/
+names its source there, and the verdicts read its series from them. A
+run whose tables have left the cache runs again. `--env` sets a variable
+for every arm's runs as part of each cell, so the rows of one setting
+never stand for another's.
 
 Tiers:
 
@@ -137,6 +143,7 @@ import os
 import random
 import re
 import shlex
+import shutil
 import statistics
 import subprocess
 import sys
@@ -427,14 +434,23 @@ def depth_mean(r):
     return sum(k * v for k, v in hops if v) / w if w else None
 
 
+def derived(r):
+    """A row's verdict and run metrics (analyze.py's): those its tables'
+    series gave (`_verdict`, `_metrics`: a local run's, hack/sim-db), else,
+    once, those of the series a farm row still carries."""
+    if "_verdict" not in r:
+        r["_verdict"], r["_metrics"] = simdb().judge(r.get("series"))
+    return r["_verdict"], r["_metrics"]
+
+
 def unhealthy(r):
-    s = r.get("series")
-    if not s:
-        return None
-    try:
-        return analyze().verdict(s)["unhealthy"]
-    except Exception:
-        return None
+    v = derived(r)[0]
+    return v["unhealthy"] if v else None
+
+
+def metric(name):
+    """A run metric (analyze.run_metrics) of a row."""
+    return lambda r: (derived(r)[1] or {}).get(name)
 
 
 def share(num, den):
@@ -456,6 +472,14 @@ METRICS = [
     ("lag_p50_ms", lambda r: r.get("lag_p50_ms_honest", r.get("lag_p50_ms")), LOWER, "ratio", 0.05),
     ("lag_p99_ms", lambda r: r.get("lag_p99_ms_honest", r.get("lag_p99_ms")), LOWER, "ratio", 0.05),
     ("unhealthy", unhealthy, LOWER, "diff", 0.03),
+    # The run's health over time (analyze.run_metrics).
+    ("collapses", metric("collapses"), LOWER, "diff", 0.5),
+    ("flaps_per_min", metric("flaps_per_min"), LOWER, "diff", 0.2),
+    ("unhealthy_dwell_p90_s", metric("unhealthy_dwell_p90_s"), LOWER, "diff", 2),
+    ("onset_after_drop_s", metric("onset_after_drop_s"), HIGHER, "diff", 2),
+    ("recover_after_rise_s", metric("recover_after_rise_s"), LOWER, "diff", 2),
+    ("excess_lag_area", metric("excess_lag_area_ms_s"), LOWER, "ratio", 0.10),
+    ("osc_amp_ms", metric("osc_amp_ms"), LOWER, "ratio", 0.10),
     ("delivery", lambda r: r.get("delivery_honest", r.get("delivery")), HIGHER, "diff", 0.002),
     ("timeouts", lambda r: r.get("timeouts"), LOWER, "ratio", 0.10),
     ("wasted/read", lambda r: (r.get("wasted") or 0) / r["chunks_read"] if r.get("chunks_read") else None,
@@ -526,17 +550,23 @@ METRICS = [
     ("wall_s", lambda r: r.get("_wall_s"), LOWER, "ratio", 0.20),
 ]
 
-_analyze = None
+_simdb = None
+
+
+def simdb():
+    """hack/sim-db/simdb.py: the runs' tables, and analyze.py's verdicts
+    over them."""
+    global _simdb
+    if _simdb is None:
+        spec = importlib.util.spec_from_file_location("simdb", ROOT / "hack" / "sim-db" / "simdb.py")
+        _simdb = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_simdb)
+    return _simdb
 
 
 def analyze():
     """hack/capture/analyze.py, for its per-second verdicts."""
-    global _analyze
-    if _analyze is None:
-        spec = importlib.util.spec_from_file_location("analyze", ROOT / "hack" / "capture" / "analyze.py")
-        _analyze = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(_analyze)
-    return _analyze
+    return simdb().analyze()
 
 
 def git(*args, cwd=ROOT):
@@ -743,22 +773,11 @@ def effect(kind, pairs):
     return t_interval(v)
 
 
-# A run collapsed when this many seconds in a row are unhealthy and they
-# last past its startup (the real stack's trees take about 10 s to form).
-STARTUP_SECS = 15
-COLLAPSED_SECS = 8
-
-
 def collapsed(r):
-    s = r.get("series")
-    if not s:
-        return None
-    run = 0
-    for k, h in enumerate(analyze().verdict(s)["healthy"]):
-        run = 0 if h else run + 1
-        if run >= COLLAPSED_SECS and k >= STARTUP_SECS:
-            return True
-    return False
+    """Whether a row's run collapsed (analyze.collapsed: COLLAPSED_SECS
+    unhealthy seconds in a row lasting past STARTUP_SECS)."""
+    v = derived(r)[0]
+    return None if v is None else analyze().collapsed(v)
 
 
 def fisher(k, n, m, n2):
@@ -1011,56 +1030,157 @@ def race(a, cells, count, sha, base, sims, union):
     play(best, fresh, "confirmation at fresh seeds", per_cell=True)
 
 
+# Each sim's output dir knob (hack/sim-db): the run writes its tables there.
+OUT_KNOB = {PPSPP: "SIM_OUT", SIM: "STRIMS_SIM_OUT"}
+# Finished jobs fold into the invocation's store this many at a time, or
+# this long after the first waits.
+FOLD_BATCH = 16
+FOLD_SECS = 5
+
+
+class Invocation:
+    """One run_cells' store of its jobs' tables (hack/sim-db):
+    target/sim-suite/store/<inv>.duckdb, held by a lock while the
+    invocation lives, and exported to the cache, source
+    suite/<worktree>/<inv>, when it ends. A store no process holds is a
+    crashed invocation's, exported when the next one starts."""
+
+    count = itertools.count()
+
+    def __init__(self):
+        self.dir = WORK / "store"
+        self.dir.mkdir(parents=True, exist_ok=True)
+        simdb().recover(self.dir, self.dest)
+        for d in (WORK / "out").glob("*"):
+            if not (self.dir / f"{d.name}.lock").exists():
+                shutil.rmtree(d, ignore_errors=True)
+        self.inv = f"{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}-{next(Invocation.count)}"
+        self.lock = simdb().locked(self.dir / f"{self.inv}.lock")
+        self.lock.__enter__()
+        self.db = self.dir / f"{self.inv}.duckdb"
+        self.out = WORK / "out" / self.inv
+        self.src = f"suite/{ROOT.name}/{self.inv}"
+
+    @staticmethod
+    def dest(inv):
+        return simdb().cache_root() / "cache" / "suite" / ROOT.name / inv
+
+    def close(self):
+        if self.db.exists():
+            simdb().export(self.db, self.dest(self.inv))
+        for p in (self.db, self.db.with_suffix(".duckdb.wal")):
+            p.unlink(missing_ok=True)
+        shutil.rmtree(self.out, ignore_errors=True)
+        self.lock.__exit__(None, None, None)
+        (self.dir / f"{self.inv}.lock").unlink(missing_ok=True)
+
+
+def kept_rows(path):
+    """A label's kept runs by id: the lines of rows/<label>.jsonl whose
+    tables the cache still holds (a line names its source, `src`); the
+    others' jobs run again."""
+    return {i: r for i, r in load_rows(path).items() if r.get("src") and simdb().have_src(r["src"])}
+
+
 def run_cells(cells, runs, slots, mem_gib):
     """Runs every binary of `runs` ({label: (bin_dir, seeds, sim, env)})
     at its seeds for the cells of its sim, with `env` added to every job's
-    environment, skipping rows kept (per label, in
-    target/sim-suite/rows/<label>.jsonl); returns each label's rows by
-    (cell, seed) and the failures."""
+    environment, skipping runs kept (per label, in
+    target/sim-suite/rows/<label>.jsonl, a line a run naming the cache
+    source of its tables); returns each label's rows by (cell, seed) and
+    the failures. Each job writes its tables into an output dir, folded
+    into the invocation's store (Invocation) as jobs end; its line is
+    written once they are."""
     store = lambda label: WORK / "rows" / f"{label}.jsonl"
-    have = {label: load_rows(store(label)) for label in runs}
-    jobs = [
-        (label, bin_dir, c, s, env)
-        for label, (bin_dir, seeds, sim, env) in runs.items()
-        for c in cells
-        if c["sim"] == sim
-        for s in seeds(c)
-        if job_id(label, c, s) not in have[label]
-    ]
+    inv = Invocation()
+    have = {label: kept_rows(store(label)) for label in runs}
+    jobs = []
+    for label, (bin_dir, seeds, sim, env) in runs.items():
+        for c in cells:
+            if c["sim"] != sim:
+                continue
+            for s in seeds(c):
+                jid = job_id(label, c, s)
+                if jid in have[label]:
+                    continue
+                out = inv.out / hashlib.sha1(jid.encode()).hexdigest()[:16]
+                out.mkdir(parents=True, exist_ok=True)
+                jobs.append((label, bin_dir, c, s, {**env, OUT_KNOB[sim]: str(out)}))
     # A job takes its cell's peak memory in kept rows, a quarter over, and
     # the declared budget until the cell has rows: budgets are worst cases,
     # and holding to them left most cores idle while the heavy cells ran.
     peaks = {}
     for kept in have.values():
         for rec in kept.values():
-            if rec["row"].get("_rss_mb"):
-                peaks[rec["cell"]] = max(peaks.get(rec["cell"], 0), rec["row"]["_rss_mb"])
+            if rec.get("_rss_mb"):
+                peaks[rec["cell"]] = max(peaks.get(rec["cell"], 0), rec["_rss_mb"])
     need = lambda c: min(c["mem_gib"], 1.25 * peaks[c["name"]] / 1024) if c["name"] in peaks else c["mem_gib"]
     failures = []
     t0 = time.monotonic()
     files = {label: open(store(label), "a") for label in runs}
-    for done, ((label, _, c, s, _), row, err) in enumerate(run_jobs(jobs, slots, mem_gib, need), 1):
-        if err:
-            failures.append(f"{label} {c['name']} seed {s}: {err}")
-        if row is not None:
-            rec = {"id": job_id(label, c, s), "cell": c["name"], "seed": s, "row": row}
+    pending = []
+    first = [None]
+
+    def fold():
+        batch = [{"k": job_id(label, c, s), "dir": extra[OUT_KNOB[c["sim"]]], "sim": c["sim"], "test": c["test"],
+                  "cell": c["name"], "arm": label, "seed": s, "env": c["env"], "row": row,
+                  "wall_s": row.get("_wall_s"), "rss_mb": row.get("_rss_mb")}
+                 for (label, _, c, s, extra), row in pending]
+        try:
+            simdb().fold(inv.db, batch, inv.src)
+        except simdb().FoldError:
+            # A job without tables: fold the others, and fail it.
+            for j in batch:
+                try:
+                    simdb().fold(inv.db, [j], inv.src)
+                except simdb().FoldError as e:
+                    failures.append(f"{j['arm']} {j['cell']} seed {j['seed']}: {e}")
+                    j["failed"] = True
+        for j, ((label, _, c, s, _), row) in zip(batch, pending):
+            shutil.rmtree(j["dir"], ignore_errors=True)
+            if j.get("failed"):
+                continue
+            rec = {"id": j["k"], "cell": c["name"], "seed": s, "src": inv.src,
+                   **{f: row[f] for f in ("trace", "frames", "bytes") if f in row},
+                   "_wall_s": row.get("_wall_s"), "_rss_mb": row.get("_rss_mb")}
             have[label][rec["id"]] = rec
             files[label].write(json.dumps(rec) + "\n")
             files[label].flush()
-        print(f"\r{done}/{len(jobs)} runs, {time.monotonic() - t0:.0f} s", end="", file=sys.stderr)
-    print(file=sys.stderr)
-    for f in files.values():
-        f.close()
-    rows = {
-        label: {
-            (c["name"], s): have[label][job_id(label, c, s)]["row"]
+        pending.clear()
+        first[0] = None
+
+    try:
+        for done, (job, row, err) in enumerate(run_jobs(jobs, slots, mem_gib, need), 1):
+            label, _, c, s, _ = job
+            if err:
+                failures.append(f"{label} {c['name']} seed {s}: {err}")
+            if row is not None:
+                pending.append((job, row))
+                first[0] = first[0] or time.monotonic()
+            if pending and (len(pending) >= FOLD_BATCH or time.monotonic() - first[0] >= FOLD_SECS):
+                fold()
+            print(f"\r{done}/{len(jobs)} runs, {time.monotonic() - t0:.0f} s", end="", file=sys.stderr)
+        if pending:
+            fold()
+    finally:
+        print(file=sys.stderr)
+        for f in files.values():
+            f.close()
+        inv.close()
+    want = {(label, c["name"], s): have[label][job_id(label, c, s)]
+            for label, (_, seeds, sim, _) in runs.items()
             for c in cells
             if c["sim"] == sim
             for s in seeds(c)
-            if job_id(label, c, s) in have[label]
-        }
-        for label, (_, seeds, sim, _) in runs.items()
-    }
+            if job_id(label, c, s) in have[label]}
+    got = simdb().rows([(rec["src"], rec["id"]) for rec in want.values()])
+    rows = {label: {} for label in runs}
+    for (label, cell_name, s), rec in want.items():
+        row = got.get((rec["src"], rec["id"]))
+        if row is None:
+            failures.append(f"{label} {cell_name} seed {s}: no tables in {rec['src']}")
+            continue
+        rows[label][(cell_name, s)] = row
     return rows, failures
 
 
@@ -1083,7 +1203,7 @@ def peak_gib(sha):
                    for k in keys):
             continue
         for rec in load_rows(path).values():
-            m = rec["row"].get("_rss_mb")
+            m = rec.get("_rss_mb") or rec.get("row", {}).get("_rss_mb")
             if m:
                 peaks[rec["cell"]] = max(peaks.get(rec["cell"], 0), m / 1024)
     return peaks
