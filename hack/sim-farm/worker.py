@@ -70,7 +70,10 @@ rest at that long after the notice; it folds what finished, closes the
 generation and exports and uploads every closed one with all the cores,
 the tables first, so it is uploading well within 90 s of the notice;
 an upload still going NOTICE_ABORT_S before the notice's time is cut off.
-A killed job's result says `requeue`. With nothing running, queued or
+A killed job's result says `requeue`. The controller winding down (an
+exception, a signal: its sync's `wind_down`, a time) takes the same path
+to that time, but as no interruption, so it's not told back as one. With
+nothing running, queued or
 left to fold or upload and no sync for --idle-minutes it exits, and with
 --poweroff it powers the host off first; farm.py launches instances that
 terminate on shutdown, so a host whose controller went away stops costing
@@ -78,11 +81,12 @@ money.
 
 `sync` is the controller's one round trip per tick. It reads one JSON
 object from stdin, {"ack": [ids], "jobs": [jobs], "drop": [ids],
-"ack_flushes": [seqs], "flush": bool}: it deletes the acked results and
-flush records (the controller has stored them), queues the jobs, deletes
-the dropped ones from the queue if serve hasn't started them, and with
-`flush` asks serve to close the open generation once nothing is left to
-run. It prints one JSON object: the results not yet acked, the queued,
+"ack_flushes": [seqs], "flush": bool, "wind_down": time or null}: it
+deletes the acked results and flush records (the controller has stored
+them), queues the jobs, deletes the dropped ones from the queue if serve
+hasn't started them, with `flush` asks serve to close the open generation
+once nothing is left to run, and with `wind_down` to stop and flush by
+then. It prints one JSON object: the results not yet acked, the queued,
 running and folding ids, when each running job started, the flushes that
 landed and the store's state, the store's S3 POSTs by flush (each attempt,
 the bytes it sent, and those that landed: `s3`, which farm.py prices),
@@ -805,7 +809,7 @@ def serve(args: argparse.Namespace) -> None:
     except BlockingIOError:
         sys.exit("serve is already running")
     write_atomic(pidfile, str(os.getpid()))
-    for name in ("interrupting", "ending", "note", "flush-wanted"):
+    for name in ("interrupting", "ending", "note", "flush-wanted", "wind-down"):
         (root / name).unlink(missing_ok=True)
     (root / "last_sync").touch()
     # A job a previous serve left running goes back to the queue.
@@ -823,6 +827,7 @@ def serve(args: argparse.Namespace) -> None:
     noticed: float | None = None
     deadline: float | None = None
     ending = False
+    winding = False
     next_notice = 0.0
     stop = False
     note = None
@@ -900,6 +905,14 @@ def serve(args: argparse.Namespace) -> None:
                 write_atomic(root / "interrupting", str(at))
                 if store is not None:
                     store.hurry(at - NOTICE_ABORT_S)
+        if noticed is None and not ending and (root / "wind-down").exists():
+            try:
+                at = float((root / "wind-down").read_text())
+            except (OSError, ValueError):
+                at = time.time() + NOTICE_FINISH_S
+            noticed, deadline, winding = now, at, True
+            if store is not None:
+                store.hurry(at - NOTICE_ABORT_S)
         if args.end_at and noticed is None and not ending and time.time() >= args.end_at:
             # The controller takes it as an interruption due at the
             # shutdown, END_GRACE_S on, and gives back what's queued here.
@@ -915,7 +928,8 @@ def serve(args: argparse.Namespace) -> None:
             for jid, r in list(running.items()):
                 late = r.started + float(r.job.get("expected_s") or 0) > now + NOTICE_FINISH_S
                 if ending or late or now - noticed >= NOTICE_FINISH_S:
-                    why = "interrupted: past --end-at" if ending else "interrupted: a spot interruption notice"
+                    why = ("interrupted: past --end-at" if ending else "interrupted: the controller winds down"
+                           if winding else "interrupted: a spot interruption notice")
                     end_job(jid, r, kill(r), None, now, killed=why)
             if store is not None and not running and not store.want_rotate and store.open_jobs:
                 store.rotate()
@@ -1036,6 +1050,8 @@ def sync(args: argparse.Namespace) -> None:
             write_atomic(d["queue"] / f"{job['id']}.json", json.dumps(job))
     if req.get("flush"):
         (root / "flush-wanted").touch()
+    if req.get("wind_down"):
+        write_atomic(root / "wind-down", str(float(req["wind_down"])))
     (root / "last_sync").touch()
 
     # Queued, then running, then folding, then done: a job moves the same

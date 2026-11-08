@@ -679,14 +679,54 @@ def sources(patterns):
     return sorted(out)
 
 
+def suite_cells(names):
+    """The suite cells that farm matrices named `names` run: a suite farm
+    run's matrices are <run>-<i>, the i-th cell of its index (the main
+    checkout's target/sim-suite/farm-runs/<run>.json), the arm of a `--sets`
+    run is the value of the knob its index names. By matrix: (cell, knob);
+    a cell that two suite runs in `names` share (a farm run of several
+    tiers) is <cell>@<run>. Names no index tells are left out."""
+    idx, got = {}, {}
+    for n in names:
+        run, _, i = (n or "").rpartition("-")
+        if not (len(run) == 6 and run[0] == "s" and i.isdigit()):
+            continue
+        if run not in idx:
+            try:
+                idx[run] = json.loads((main_checkout() / "target" / "sim-suite" / "farm-runs"
+                                       / f"{run}.json").read_text())
+            except (OSError, ValueError):
+                idx[run] = {}
+        cells = idx[run].get("cells") or []
+        if int(i) < len(cells):
+            c = cells[int(i)]
+            got[n] = (run, c["name"], (idx[run].get("knob") or {}).get(c.get("sim")))
+    runs_of = collections.defaultdict(set)
+    for run, cell, _ in got.values():
+        runs_of[cell].add(run)
+    return {n: (cell if len(runs_of[cell]) == 1 else f"{cell}@{run}", knob) for n, (run, cell, knob) in got.items()}
+
+
 def views(a, derived=True):
     """The SQL that makes the views over selection `a`'s sources, and the
-    tables it has."""
+    tables it has. A farm source's runs name the suite cells and arms its
+    matrices ran (suite_cells), their matrices as `matrix`."""
     srcs = sources(a.src)
     if not srcs:
         sys.exit("no runs in the cache match --src")
     if derived:
         derive(srcs)
+    read_runs = f"read_parquet({plist(files(srcs, 'runs'))}, union_by_name=true)"
+    cells = {}
+    if any(s.startswith("farm/") for s in srcs):
+        cells = suite_cells([r["cell"] for r in duck(f"SELECT DISTINCT cell FROM {read_runs};")])
+    if cells:
+        pairs = ", ".join(f"({q(n)}, {q(c)}, {q(k) if k else 'NULL'})" for n, (c, k) in cells.items())
+        read_runs = (
+            f"(SELECT r.* REPLACE (coalesce(m.cell, r.cell) AS cell, CASE WHEN m.knob IS NULL THEN r.arm "
+            f"ELSE coalesce(json_extract_string(r.env, '$.' || m.knob), r.arm) END AS arm), r.cell AS matrix "
+            f"FROM {read_runs} r LEFT JOIN (VALUES {pairs}) m(matrix, cell, knob) ON r.cell = m.matrix)"
+        )
     where = []
     if a.cell:
         where.append("(" + " OR ".join(f"cell GLOB {q(c)}" for c in a.cell) + ")")
@@ -695,7 +735,7 @@ def views(a, derived=True):
     if a.seed:
         where.append(f"seed IN ({', '.join(str(int(s)) for s in a.seed)})")
     sql = [
-        f"CREATE VIEW runs_all AS SELECT * FROM read_parquet({plist(files(srcs, 'runs'))}, union_by_name=true);",
+        f"CREATE VIEW runs_all AS SELECT * FROM {read_runs};",
         "CREATE VIEW canon AS SELECT k, src FROM runs_all "
         "QUALIFY row_number() OVER (PARTITION BY k ORDER BY src DESC) = 1;",
         "CREATE VIEW runs AS SELECT r.* FROM runs_all r SEMI JOIN canon USING (k, src)"

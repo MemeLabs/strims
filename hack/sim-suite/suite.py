@@ -1300,7 +1300,10 @@ def farm(a, cells):
     index = farm_index(name)
     index.parent.mkdir(parents=True, exist_ok=True)
     keep = ("name", "sim", "test", "why")
-    index.write_text(json.dumps({"cells": [{k: c[k] for k in keep} for c in cells]}) + "\n")
+    # A `--sets` run's arms are its knob's values, which hack/sim-db labels
+    # its runs by.
+    index.write_text(json.dumps({"cells": [{k: c[k] for k in keep} for c in cells],
+                                 **({} if a.refs else {"knob": knob, "values": values})}) + "\n")
     farm_py = farm_root() / "hack" / "sim-farm" / "farm.py"
     if not a.no_run:
         print(f"farm run {name}: {len(cells)} matrices, {len(values)} arms x {len(seeds)} seeds", file=sys.stderr)

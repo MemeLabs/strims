@@ -215,6 +215,16 @@ speed. A run logs the speeds before its best pools.
   others, it would start late and could end the run late. It stores the
   rows that came back (one fsync'd append a file at each tick's end), and
   acks them on the next sync.
+- A controller that stops short (an exception, ^C, a SIGTERM such as a
+  timeout's) winds down before it terminates anything: its instances
+  that hold data or run jobs take no more, kill the running jobs that
+  can't end within 20 s, and flush what they hold as on an interruption
+  notice, and it syncs them (every 5 s) until their flushes land, 2
+  minutes at most, a flush not seen to land then looked for in S3. A
+  stored job's index line waits for its flush in its matrix's
+  pending.jsonl too, so one a controller that died hard left (an
+  instance it left flushes once idle) goes into the index at the next
+  run of the matrix, once its flush is in place.
 - An instance that is gone or fails SSH for 3 minutes is terminated, and
   its jobs go back to the head of the queue. One with a spot interruption
   notice is left for AWS to reclaim (AWS bills nothing for a spot
@@ -420,7 +430,10 @@ week.
 
 What's particular to the person running the farm goes in
 hack/sim-farm/config.toml, which git ignores; flags and the environment
-override it:
+override it. The config and target/sim-farm are the main checkout's, also
+for a worktree's farm.py (whose worker.py and modules still go to its
+instances): its runs reuse, time and price by the farm's state, and
+add to it.
 
   ssh_key = "~/.ssh/id_rsa-me"
   aws_profile = "farm"          # else $AWS_PROFILE, or the CLI's default
@@ -458,6 +471,7 @@ import tempfile
 import threading
 import time
 import tomllib
+import traceback
 import urllib.request
 import uuid
 from pathlib import Path
@@ -465,9 +479,25 @@ from pathlib import Path
 import worker
 
 HERE = Path(__file__).resolve().parent
-CONFIG = HERE / "config.toml"
 ROOT = HERE.parent.parent
-FARM = ROOT / "target" / "sim-farm"
+
+
+def main_checkout(root: Path) -> Path:
+    """The checkout whose config and target/sim-farm the farm keeps: the
+    main one, which a worktree's git common dir is in."""
+    try:
+        common = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=root, check=True, capture_output=True, text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return root
+    return Path(common).parent
+
+
+MAIN = main_checkout(ROOT)
+CONFIG = MAIN / "hack" / "sim-farm" / "config.toml"
+FARM = MAIN / "target" / "sim-farm"
 BIN = FARM / "bin"
 # Every region this checkout's farm has launched in, a line each: status,
 # down and a run's adoption and cleanup look there too.
@@ -588,6 +618,14 @@ S3_LEDGER = FARM / "s3.jsonl"
 BIN_HASHES = FARM / "bin-hashes.json"
 # A test matrix's index of its jobs' data, a line a job (store).
 INDEX = "index.jsonl"
+# A test matrix's journal of the index lines its jobs' flushes have yet to
+# land (store), which a controller that dies hard leaves for the next run
+# of the matrix (recover_pending): an instance it left flushes what it
+# holds once idle.
+PENDING = "pending.jsonl"
+# How long a controller that stops early (an exception, a signal) waits
+# for its instances to flush what they hold (wind_down): a notice's span.
+WIND_DOWN_S = 120
 # Each sim's knob naming the dir it writes its tables to (hack/sim-db).
 OUT_KNOBS = {"strims-ppspp": "SIM_OUT", "strims-sim": "STRIMS_SIM_OUT"}
 # Every test index line's key, matrix, offset in its index.jsonl, job id
@@ -982,6 +1020,16 @@ def past_ratios() -> tuple[float, float, int]:
         statistics.median(r["cost"] / c for r, (_, c) in zip(past, model)),
         len(past),
     )
+
+
+def past_stored_per_job() -> float:
+    """The bytes of tables a test job put in S3, the median over the last
+    few runs that tell (costs.jsonl's s3 over their jobs)."""
+    per = [
+        r["s3"]["stored"] / r["jobs"] for r in read_jsonl(COSTS)
+        if r.get("kind") == "test" and r.get("jobs") and (r.get("s3") or {}).get("stored")
+    ][-5:]
+    return statistics.median(per) if per else 0.0
 
 
 def run_matrices(run: str) -> list[str]:
@@ -1877,6 +1925,8 @@ class Host:
     flush_acks: list[int] = dataclasses.field(default_factory=list)
     flush_wanted: bool = False
     store_error: str | None = None
+    # The run stopping short (wind_down): when it's to have flushed by.
+    wind_down: float | None = None
     # Its worker's S3 POSTs by flush (sync's `s3`, and a lost one's landed
     # flushes by their manifests), and what the ledger has of them.
     s3_flushes: dict[str, dict] = dataclasses.field(default_factory=dict)
@@ -2144,6 +2194,81 @@ class Ssh:
 # --- run ----------------------------------------------------------------
 
 
+def manifest_at(data: str, region: str | None, use: S3Use) -> dict | None:
+    """The manifest of the flush whose data is at `data` (an index line's:
+    s3://<bucket>/<prefix>/, or --local's dir), if it's in place, which it
+    is once the flush's tables are (written after them): one GET, counted
+    in `use`."""
+    if not data.startswith("s3://"):
+        try:
+            return json.loads((Path(data) / "manifest.json").read_text())
+        except (OSError, ValueError):
+            return None
+    bucket, _, prefix = data[len("s3://"):].partition("/")
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "manifest.json"
+        p = subprocess.run(
+            ["aws", "s3api", "get-object", "--bucket", bucket, "--key", f"{prefix}manifest.json",
+             *(["--region", region] if region else []), str(out)],
+            capture_output=True, text=True, start_new_session=True,
+        )
+        use.tier2["manifest_get"] += 1
+        if p.returncode:
+            return None
+        use.down["internet"] += out.stat().st_size
+        return json.loads(out.read_text())
+
+
+def recover_pending(matrices: list[Matrix], run: str, region: str | None) -> None:
+    """What a controller that died hard left in its matrices' journals
+    (PENDING): a line whose flush has landed since (an instance it left
+    flushes what it holds once idle) goes into its matrix's index, as land
+    would have written it, unless the matrix has indexed the job since; one
+    whose flush hasn't landed waits for a later run, until its data would
+    be past RETAIN_S."""
+    use = S3Use(region or "")
+    found: dict[str, dict | None] = {}
+    fresh = time.time() - RETAIN_S
+    for m in matrices:
+        path = m.state / PENDING
+        recs = read_jsonl(path)
+        if not recs:
+            continue
+        have = {(r.get("id"), r.get("key")) for r in read_jsonl(m.state / INDEX)}
+        landed, keep = [], []
+        for r in recs:
+            if (r.get("id"), r.get("key")) in have:
+                continue
+            if datetime.datetime.fromisoformat(r["at"]).timestamp() < fresh:
+                continue
+            data = r.get("data") or ""
+            if data not in found:
+                found[data] = manifest_at(data, region, use) if data else None
+            (landed if found[data] is not None else keep).append(r)
+            have.add((r.get("id"), r.get("key")))
+        # The index first: a journal rewritten before it would lose them.
+        append_jsonl(m.state / INDEX, [
+            {**{k: v for k, v in r.items() if k != "row"}, "reads": None, "row": r["row"]} for r in landed
+        ])
+        write_jsonl(path, keep)
+        if landed or keep:
+            print(f"{m.name}: {len(landed)} jobs a controller that stopped short left were in place and are "
+                  f"indexed now" + (f"; {len(keep)} wait for their flushes" if keep else ""), file=sys.stderr)
+    if use:
+        s3_record(run, "controller", use)
+
+
+def write_jsonl(path: Path, recs: list[dict]) -> None:
+    """Replaces a JSON-lines file with `recs` (none: removes it), by a
+    rename."""
+    if not recs:
+        path.unlink(missing_ok=True)
+        return
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text("".join(json.dumps(r) + "\n" for r in recs))
+    os.replace(tmp, path)
+
+
 class Run:
     def __init__(self, matrices: list[Matrix], args: argparse.Namespace) -> None:
         self.ms = matrices
@@ -2175,6 +2300,7 @@ class Run:
                 self.have[m.name] = set(c)
                 counts |= c
         else:
+            recover_pending(matrices, self.name, args.s3_region)
             first, mine = row_index({m.name for m in matrices})
             bad = bad_keys()
             for m in matrices:
@@ -2469,6 +2595,8 @@ class Run:
         else:
             host.unlanded.setdefault(seq, []).extend((self.lines(m), rec) for m, rec in recs)
             host.stored[item.wid] = seq
+            for m, rec in recs:
+                self.pending_rows.setdefault(m.state / PENDING, []).append(rec)
         self.done.add(item.wid)
         self.ran += 1
         if res.get("wall_s"):
@@ -2515,19 +2643,10 @@ class Run:
     def flush_landed(self, host: Host, seq: int) -> dict | None:
         """Flush `seq` of `host`'s manifest, if it's where it goes (written
         after its tables): one GET."""
-        if self.local:
-            path = self.sink_dir / self.name / host.id / str(seq) / "manifest.json"
-            return json.loads(path.read_text()) if path.exists() else None
-        with tempfile.TemporaryDirectory() as d:
-            out = Path(d) / "manifest.json"
-            p = subprocess.run(
-                ["aws", "s3api", "get-object", "--bucket", self.args.s3_bucket,
-                 "--key", f"sim-data/{self.name}/{host.id}/{seq}/manifest.json", "--region", self.args.s3_region,
-                 str(out)], capture_output=True, text=True, start_new_session=True,
-            )
-            self.s3_count(tier2={"manifest_get": 1},
-                          down={"internet": out.stat().st_size if p.returncode == 0 else 0})
-            return json.loads(out.read_text()) if p.returncode == 0 else None
+        use = S3Use()
+        found = manifest_at(self.data_of(host, seq), self.args.s3_region, use)
+        self.s3_count(tier2=use.tier2, down=use.down)
+        return found
 
     def recover(self, host: Host) -> None:
         """A lost instance's flushes not seen to land: those whose manifest
@@ -2701,10 +2820,10 @@ class Run:
         return []
 
     def exchange(self, host: Host, jobs: list[Item], acks: list[str], flush_acks: list[int] = (),
-                 flush: bool = False) -> dict:
+                 flush: bool = False, wind_down: float | None = None) -> dict:
         """A sync, then the fetch of the testbed runs it reports done: one
         that didn't come is held back from absorb until a later sync."""
-        reply = self.sync(host, jobs, acks, flush_acks, flush)
+        reply = self.sync(host, jobs, acks, flush_acks, flush, wind_down)
         if self.testbed is not None:
             done = []
             for res in reply["done"]:
@@ -2746,10 +2865,10 @@ class Run:
             shutil.rmtree(tmp, ignore_errors=True)
 
     def sync(self, host: Host, jobs: list[Item], acks: list[str], flush_acks: list[int] = (),
-             flush: bool = False) -> dict:
+             flush: bool = False, wind_down: float | None = None) -> dict:
         drop = list(host.drop)
         req = json.dumps({"ack": acks, "jobs": [self.wire(i, host) for i in jobs], "drop": drop,
-                          "ack_flushes": list(flush_acks), "flush": flush})
+                          "ack_flushes": list(flush_acks), "flush": flush, "wind_down": wind_down})
         if self.local:
             p = subprocess.run(
                 [sys.executable, str(HERE / "worker.py"), "sync", "--dir", str(host.dir)],
@@ -2891,6 +3010,66 @@ class Run:
             back.append(host.assigned.pop(wid))
         self.queue.extendleft(reversed(back))
         return len(back)
+
+    def wind_down(self, why: str) -> None:
+        """The run stops short (`why`: an exception, a signal): before its
+        instances go, each that holds data or runs jobs takes its queued
+        jobs back, kills those running that can't end in time and flushes
+        what it holds, as on an interruption notice but by WIND_DOWN_S from
+        now (or its own notice's time, if sooner). Its syncs, a DRAIN_TICK
+        apart, take what ends and land what lands (index lines written)
+        until nothing is left or that time; a flush not seen to land then
+        is looked for in S3 (recover), and what isn't there is lost with its
+        instance."""
+        live = [h for h in self.hosts
+                if h.state == "ready" and (h.stored or any(i.copy != "canary" for i in h.assigned.values()))]
+        if not live:
+            return
+        until = time.time() + WIND_DOWN_S
+        for h in live:
+            h.wind_down = min(until, h.deadline) if h.deadline is not None else until
+            for wid in [w for w in h.assigned if w not in h.running]:
+                h.drop.append(wid)
+                h.assigned.pop(wid)
+        log(f"{why}: {len(live)} instances flush what they hold within {WIND_DOWN_S} s: "
+            f"{sum(len(h.stored) for h in live)} jobs' data not landed, "
+            f"{sum(len(h.assigned) for h in live)} jobs running")
+        while True:
+            now = time.time()
+            left = [h for h in live if h.state == "ready" and (h.stored or h.assigned) and now < h.wind_down]
+            if not left:
+                break
+            batches = {h.id: (list(h.acks), list(h.flush_acks)) for h in left}
+            futs = {h.id: self.pool.submit(self.exchange, h, [], *batches[h.id], False, h.wind_down) for h in left}
+            for h in left:
+                try:
+                    reply = futs[h.id].result()
+                    sent, sent_flushes = batches[h.id]
+                    h.acks = h.acks[len(sent):]
+                    h.flush_acks = h.flush_acks[len(sent_flushes):]
+                    self.absorb(h, reply)
+                except Exception as e:
+                    log(f"{h.id}: winding down: {e!r}")
+            self.flush_rows()
+            self.flush_s3()
+            time.sleep(max(0.0, (2 if self.local else DRAIN_TICK) - (time.time() - now)))
+        held = sum(len(h.stored) for h in live if h.state == "ready")
+        for h in live:
+            if h.state == "ready" and h.unlanded:
+                self.recover(h)
+        self.flush_rows()
+        log("wound down" + (f"; {held} jobs' data wasn't seen to land in time (looked for in S3 above)"
+                            if held else ": every stored job's data landed"))
+
+    def close_journals(self) -> None:
+        """Its matrices' journals (PENDING) without the run's lines, once its
+        instances are gone: what landed is indexed, and the rest went with
+        them. A kept instance's (--keep) stay for the next run."""
+        mine = f"farm/{self.name}/"
+        for m in self.ms:
+            if m.kind == "test":
+                path = m.state / PENDING
+                write_jsonl(path, [r for r in read_jsonl(path) if not str(r.get("src", "")).startswith(mine)])
 
     def drained(self, now: float) -> None:
         """Interrupted instances whose deadline has passed: left for AWS,
@@ -3344,6 +3523,20 @@ class Run:
         by_region = collections.Counter()
         for p in fleet:
             by_region[p.region] += p.spec.slots
+        # S3: each instance outside the bucket's region fetches the run's
+        # binaries across regions (one not built yet weighs as its
+        # package's built ones), and the jobs' tables go up, across regions
+        # by their slots' share and kept a week, as many bytes a job as the
+        # last runs' did.
+        names = list(dict.fromkeys([*self.bins, self.duckdb]))
+        built = {b: (BIN / b).stat().st_size for b in names if (BIN / b).exists()}
+        sizes = [s for b, s in built.items() if b != self.duckdb]
+        bins = sum(built.get(b, statistics.fmean(sizes) if sizes else 0) for b in names)
+        far = sum(1 for p in fleet if p.region != self.args.s3_region)
+        far_share = sum(n for r, n in by_region.items() if r != self.args.s3_region) / slots if slots else 0.0
+        up = len(items) * past_stored_per_job()
+        s3 = ((far * bins + up * far_share) / GB * S3_INTER_REGION_GB
+              + up / GB * S3_STORAGE_GB_MONTH * S3_KEPT_DAYS / 30) if slots else None
         return {
             "jobs": len(items),
             "have_rows": sum(1 for i in self.items.values() if not i.copy and i.wid in self.done),
@@ -3358,6 +3551,7 @@ class Run:
             "past_runs": runs,
             "wall_s": round(wall * wall_x) if wall else None,
             "cost": round(cost * cost_x, 2) if wall else None,
+            "s3_cost": round(s3, 3) if s3 is not None else None,
         }
 
     def say_estimate(self, est: dict) -> str:
@@ -3373,6 +3567,7 @@ class Run:
         out = (
             f"{est['instances']} instances with {est['slots']} slots ({where}), about "
             f"{est['wall_s'] / 60:.1f} min and ${est['cost']:.2f}"
+            + (f" of EC2 and ${est['s3_cost']:.2f} of S3" if est.get("s3_cost") is not None else "")
         )
         if est["past_runs"]:
             out += (
@@ -3847,7 +4042,8 @@ class Run:
         self.serves.append(subprocess.Popen(
             [sys.executable, str(HERE / "worker.py"), "serve", "--dir", str(h.dir),
              "--slots", str(self.local_slots), "--job-timeout", str(self.args.job_timeout),
-             "--idle-minutes", "5", "--min-free-mb", str(int(self.slot_mem_gib * 1024)),
+             "--idle-minutes", str(min(5.0, self.args.idle_minutes)),
+             "--min-free-mb", str(int(self.slot_mem_gib * 1024)),
              *imds, *self.store_args(h, h.dir, None)],
             stdin=subprocess.DEVNULL,
         ))
@@ -3964,6 +4160,7 @@ class Run:
         else:
             self.setup_aws()
         interrupted = False
+        crashed: Exception | None = None
         last_progress = 0.0
 
         # No log() here: the handler runs on the main thread, which may hold
@@ -4012,10 +4209,21 @@ class Run:
         except KeyboardInterrupt:
             interrupted = True
             log("interrupted")
+        except Exception as e:
+            crashed, interrupted = e, True
+            log(f"CRASHED: {e!r}\n{traceback.format_exc().rstrip()}")
         finally:
             self.stopping.set()
             self.flush_rows()
             self.flush_s3()
+            # What the instances hold goes up before they do; kept ones
+            # (--keep) are the next run's to sync.
+            if not (interrupted and self.args.keep):
+                try:
+                    self.wind_down("the controller crashed" if crashed else "interrupted" if interrupted
+                                   else "the run ends")
+                except Exception as e:
+                    log(f"winding down: {e!r}")
             if self.local:
                 # A worker may be one a previous controller started, or
                 # this one's, before it has written its pid.
@@ -4043,7 +4251,11 @@ class Run:
                 used = collections.Counter(f"{h.type} in {h.zone}" for h in self.hosts)
                 log("instances: " + ", ".join(f"{k} x{n}" for k, n in sorted(used.items())))
             self.flush_s3()  # the terminations' manifest checks
+            if not (interrupted and self.args.keep):
+                self.close_journals()
             self.account(time.time(), interrupted)
+        if crashed is not None:
+            raise crashed
         if interrupted:
             return 130
         for m in self.ms:
