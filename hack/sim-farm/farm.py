@@ -275,18 +275,39 @@ its estimate, and each instance AWS interrupted (its id, type, zone,
 launch, notice and how it ended, which the run asks once more as it
 ends) as a line of target/sim-farm/costs.jsonl.
 
+A run's S3 use goes to target/sim-farm/s3.jsonl (S3_LEDGER) as it goes,
+priced by the bucket region's list prices (S3_TIER1 and the rest):
+- the controller's requests, a line a tick that made some: a HEAD for
+  each binary and an upload of each the bucket lacks (a request, or past
+  CLI_PART a part each and two more), the presigned GET of each binary by
+  each instance's boot (with its bytes, which cross regions from one
+  outside the bucket's), and the GET of each manifest it checks;
+- each instance's POSTs (its worker's count by flush, every attempt, the
+  bytes sent and those stored, a lost one's landed flushes by their
+  manifests), a line each time its count grows: its running total, so a
+  controller that restarts counts none twice;
+- each pull of the run's data to this host (hack/sim-db/simdb.py's): a
+  LIST a thousand keys of a prefix, a GET a file (a part each past
+  CLI_PART), and its bytes, out to the internet; a pull after the run
+  adds its line to the same run.
+
+A run's end logs its S3 so far, and its costs.jsonl line holds it (`s3`);
+`status MATRIX` shows the S3 of each run of the matrix.
+
 spend reads what the farm has spent from the matrices' farm.log files:
 each run once (each of its matrices' logs holds all of it), and its
-running cost at each status line from its start. It prints each local day
-from the first run to the last, with the day's spend, its runs and the
-one that spent most, then the total. A run's first line is the date it
+running cost at each status line from its start, and S3's from its ledger,
+on the day of each line. It prints each local day from the first run to
+the last, with the day's spend on EC2 and on S3, its runs and the one
+that spent most on EC2, then the totals, and S3's requests and bytes. A run's first line is the date it
 started, as the log's times are local times of day; a run without it is
 dated by the first row one of its instances wrote, and a run with neither
 is left out and counted. A run whose matrices' state is gone
 isn't there, but for those costs.jsonl lists, taken as spending evenly
 from the first launch to the end. --csv DIR also writes runs.csv (a run a
-row: name, start, end, cost, instances, the logs it's in, and whether it
-came from farm.log or costs.jsonl) and steps.csv (each run's running cost
+row: name, start, end, cost, instances, the logs it's in, whether it came
+from farm.log or costs.jsonl, and its S3 cost, Tier1 and Tier2 requests,
+and bytes across regions and out to here) and steps.csv (each run's running cost
 at each of its status lines), times in UTC. Like the run's own figures
 these are estimates, not what AWS bills, whose days are UTC.
 
@@ -432,6 +453,7 @@ import statistics
 import subprocess
 import sys
 import tarfile
+import tempfile
 import threading
 import time
 import tomllib
@@ -526,6 +548,36 @@ SPOT_TERMINATION = "Server.SpotInstanceTermination"
 WALLS = FARM / "walls.jsonl"
 WALLS_READ = FARM / "walls-read.json"
 COSTS = FARM / "costs.jsonl"
+# S3's prices for the farm's bucket (us-west-1, US West (N. California)),
+# from AWS's public price list (pricing.us-east-1.amazonaws.com/offers/
+# v1.0/aws/AmazonS3/current/us-west-1/index.json and .../AWSDataTransfer/
+# current/index.json), read 2026-11-08:
+# - per request: PUT, COPY, POST and LIST (Requests-Tier1), and GET, HEAD
+#   and the rest (Requests-Tier2);
+# - storage per GB-month (the first 50 TB), of which the data takes its
+#   week (S3_KEPT_DAYS, the lifecycle rule);
+# - data transfer per GB between regions: an instance's uploads to the
+#   bucket from another region (billed to the sender) and its fetches of
+#   the binaries from it, eu-north-1, us-west-2 and us-west-1 alike; free
+#   within the bucket's region;
+# - out of the bucket to the internet (pulls to this host): the first
+#   10 TB a month, past AWS's free 100 GB, which is left out.
+# Uploads from this host are free. A GB is 2^30 bytes, as AWS bills.
+S3_TIER1 = 0.0055 / 1000
+S3_TIER2 = 0.0044 / 10000
+S3_STORAGE_GB_MONTH = 0.026
+S3_KEPT_DAYS = 7
+S3_INTER_REGION_GB = 0.02
+S3_INTERNET_GB = 0.09
+GB = 1 << 30
+# The aws CLI's multipart threshold and part size (its defaults): it
+# uploads a file past it a part a request, and two more to start and end.
+CLI_PART = 8 * 1024 * 1024
+# Every run's S3 use (S3Use), a line each: the controller's requests at
+# each tick that made some, an instance's own (its POSTs, by its count)
+# each time that count grows, as its running total, and each pull of the
+# run's data to this host (hack/sim-db/simdb.py's).
+S3_LEDGER = FARM / "s3.jsonl"
 # Each test binary's sha256 by its name in bin/, with the size and mtime it
 # was hashed at.
 BIN_HASHES = FARM / "bin-hashes.json"
@@ -1820,6 +1872,10 @@ class Host:
     flush_acks: list[int] = dataclasses.field(default_factory=list)
     flush_wanted: bool = False
     store_error: str | None = None
+    # Its worker's S3 POSTs by flush (sync's `s3`, and a lost one's landed
+    # flushes by their manifests), and what the ledger has of them.
+    s3_flushes: dict[str, dict] = dataclasses.field(default_factory=dict)
+    s3_counted: tuple | None = None
     # --local: its worker's dir.
     dir: Path | None = None
 
@@ -1861,6 +1917,99 @@ class Host:
         return ", ".join(f"{name} +{t - self.launched:.0f} s" for name, t in marks if t is not None)
 
 
+@dataclasses.dataclass
+class S3Use:
+    """S3 requests and bytes: Requests-Tier1 (PUT, POST, LIST, a multipart
+    upload's parts) and Tier2 (GET, HEAD) by what made them, the bytes into
+    the bucket by the region they came from ("here": this host), the bytes
+    out of it by where they went ("internet": this host), and the bytes it
+    keeps (S3_KEPT_DAYS). `region` is the bucket's."""
+
+    region: str = ""
+    tier1: collections.Counter = dataclasses.field(default_factory=collections.Counter)
+    tier2: collections.Counter = dataclasses.field(default_factory=collections.Counter)
+    up: collections.Counter = dataclasses.field(default_factory=collections.Counter)
+    down: collections.Counter = dataclasses.field(default_factory=collections.Counter)
+    stored: int = 0
+
+    @staticmethod
+    def of(rec: dict) -> "S3Use":
+        return S3Use(rec.get("region", ""), *(collections.Counter(rec.get(k) or {})
+                                              for k in ("tier1", "tier2", "up", "down")), rec.get("stored", 0))
+
+    def rec(self) -> dict:
+        return {"region": self.region, "tier1": dict(self.tier1), "tier2": dict(self.tier2),
+                "up": dict(self.up), "down": dict(self.down), "stored": self.stored}
+
+    def add(self, o: "S3Use") -> None:
+        self.region = self.region or o.region
+        for a, b in ((self.tier1, o.tier1), (self.tier2, o.tier2), (self.up, o.up), (self.down, o.down)):
+            a.update(b)
+        self.stored += o.stored
+
+    def __bool__(self) -> bool:
+        return any((self.tier1, self.tier2, self.up, self.down, self.stored))
+
+    def cross(self) -> int:
+        """The bytes that crossed regions, either way."""
+        return (sum(n for r, n in self.up.items() if r not in ("here", self.region))
+                + sum(n for r, n in self.down.items() if r not in ("internet", self.region)))
+
+    def cost(self) -> float:
+        return (sum(self.tier1.values()) * S3_TIER1 + sum(self.tier2.values()) * S3_TIER2
+                + self.cross() / GB * S3_INTER_REGION_GB + self.down["internet"] / GB * S3_INTERNET_GB
+                + self.stored / GB * S3_STORAGE_GB_MONTH * S3_KEPT_DAYS / 30)
+
+    def text(self) -> str:
+        mb = lambda n: f"{n / 1e6:.1f} MB"
+        return (f"${self.cost():.4f}: {sum(self.tier1.values())} PUT/POST/LIST, {sum(self.tier2.values())} GET/HEAD; "
+                f"{mb(sum(self.up.values()))} in ({mb(sum(n for r, n in self.up.items() if r not in ('here', self.region)))} "
+                f"from other regions), {mb(self.down['internet'])} out to here, "
+                f"{mb(sum(n for r, n in self.down.items() if r not in ('internet', self.region)))} to other regions")
+
+
+def s3_record(run: str, source: str, use: S3Use, host: str | None = None) -> None:
+    """A line of the S3 ledger (S3_LEDGER)."""
+    rec = {"run": run, "at": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"), "source": source}
+    if host is not None:
+        rec["host"] = host
+    append_jsonl(S3_LEDGER, [{**rec, **use.rec()}])
+
+
+def s3_uses() -> dict[str, list[tuple[datetime.datetime, S3Use]]]:
+    """Each run's S3 use from the ledger, (when, use) a line: the
+    controller's and the pulls' lines as they are, and an instance's last
+    (largest) running total."""
+    by: dict[str, list] = collections.defaultdict(list)
+    hosts: dict[tuple[str, str], tuple] = {}
+    for r in read_jsonl(S3_LEDGER):
+        at = datetime.datetime.fromisoformat(r["at"]).astimezone()
+        use = S3Use.of(r)
+        if r.get("source") == "host":
+            key = (r["run"], r.get("host", ""))
+            size = sum(use.tier1.values()) + sum(use.up.values())
+            if key not in hosts or size >= hosts[key][0]:
+                hosts[key] = (size, at, use)
+        else:
+            by[r["run"]].append((at, use))
+    for (run, _), (_, at, use) in hosts.items():
+        by[run].append((at, use))
+    return by
+
+
+def s3_total(run: str) -> S3Use:
+    total = S3Use()
+    for _, use in s3_uses().get(run, []):
+        total.add(use)
+    return total
+
+
+def cli_parts(size: int) -> int:
+    """The requests the aws CLI makes to move a file of `size` bytes: one,
+    or past CLI_PART a part each."""
+    return 1 if size < CLI_PART else math.ceil(size / CLI_PART)
+
+
 class Binaries:
     """The run's binaries in S3 (--s3-bucket), for instances to fetch by
     presigned URL rather than over this host's uplink: each uploaded once
@@ -1869,9 +2018,12 @@ class Binaries:
     lifecycle rule to expire. A URL lasts BIN_URL_S, and each boot signs
     its own."""
 
-    def __init__(self, bucket: str, region: str) -> None:
+    def __init__(self, bucket: str, region: str, count) -> None:
         self.bucket, self.region = bucket, region
         self.sha: dict[str, str] = {}
+        # count(**S3Use's counters): the requests it makes and the bytes it
+        # moves, the run's (Run.s3_count).
+        self.count = count
 
     def key(self, name: str) -> str:
         return f"bins/{self.sha[name]}"
@@ -1888,14 +2040,18 @@ class Binaries:
                 ["aws", "s3api", "head-object", "--bucket", self.bucket, "--key", self.key(name),
                  "--region", self.region], capture_output=True, text=True, start_new_session=True,
             )
+            self.count(tier2={"bin_head": 1})
             if p.returncode == 0:
                 return False
             if "(404)" not in p.stderr and "Not Found" not in p.stderr:
                 raise RuntimeError(f"head {self.s3(name)}: {p.stderr.strip()}")
+            size = (BIN / name).stat().st_size
             p = subprocess.run(
                 ["aws", "s3", "cp", str(BIN / name), self.s3(name), "--region", self.region,
                  "--only-show-errors"], capture_output=True, text=True, start_new_session=True,
             )
+            # A multipart upload: its parts, and its start and end.
+            self.count(tier1={"bin_put": cli_parts(size) + (2 if size >= CLI_PART else 0)}, up={"here": size})
             if p.returncode:
                 raise RuntimeError(f"upload {self.s3(name)}: {p.stderr.strip()}")
             return True
@@ -2096,6 +2252,10 @@ class Run:
         # --local's workers, and where their flushes go.
         self.serves: list[subprocess.Popen] = []
         self.sink_dir = Path()
+        # The controller's S3 requests and bytes not yet in the ledger
+        # (s3_count, flush_s3).
+        self.s3_use = S3Use(args.s3_region or "")
+        self.s3_lock = threading.Lock()
 
         def add(item: Item, done: bool) -> None:
             self.items[item.wid] = item
@@ -2345,30 +2505,41 @@ class Run:
         if rec is not None:
             host.flush_acks.append(seq)
 
-    def flush_landed(self, host: Host, seq: int) -> bool:
-        """Whether flush `seq` of `host` is where it goes, by its manifest
-        (written after its tables)."""
+    def flush_landed(self, host: Host, seq: int) -> dict | None:
+        """Flush `seq` of `host`'s manifest, if it's where it goes (written
+        after its tables): one GET."""
         if self.local:
-            return (self.sink_dir / self.name / host.id / str(seq) / "manifest.json").exists()
-        p = subprocess.run(
-            ["aws", "s3api", "head-object", "--bucket", self.args.s3_bucket,
-             "--key", f"sim-data/{self.name}/{host.id}/{seq}/manifest.json", "--region", self.args.s3_region],
-            capture_output=True, text=True, start_new_session=True,
-        )
-        return p.returncode == 0
+            path = self.sink_dir / self.name / host.id / str(seq) / "manifest.json"
+            return json.loads(path.read_text()) if path.exists() else None
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "manifest.json"
+            p = subprocess.run(
+                ["aws", "s3api", "get-object", "--bucket", self.args.s3_bucket,
+                 "--key", f"sim-data/{self.name}/{host.id}/{seq}/manifest.json", "--region", self.args.s3_region,
+                 str(out)], capture_output=True, text=True, start_new_session=True,
+            )
+            self.s3_count(tier2={"manifest_get": 1},
+                          down={"internet": out.stat().st_size if p.returncode == 0 else 0})
+            return json.loads(out.read_text()) if p.returncode == 0 else None
 
     def recover(self, host: Host) -> None:
         """A lost instance's flushes not seen to land: those whose manifest
         is in place land, the others' jobs are queued again (their rows came
-        back, but their data is gone)."""
+        back, but their data is gone). A landed flush whose POSTs its worker
+        didn't get to tell counts them from its manifest: a file each, sent
+        once."""
         if not host.unlanded:
             return
         seqs = sorted(host.unlanded)
         with cf.ThreadPoolExecutor(max_workers=len(seqs)) as ex:
             found = dict(zip(seqs, ex.map(lambda s: self.flush_landed(host, s), seqs)))
         for seq in seqs:
-            if found[seq]:
+            if found[seq] is not None:
                 self.land(host, seq, None)
+                if str(seq) not in host.s3_flushes and not self.local:
+                    size = sum(t["bytes"] for t in found[seq]["tables"].values())
+                    host.s3_flushes[str(seq)] = {"posts": len(found[seq]["tables"]) + 1, "sent": size, "stored": size}
+        self.count_host(host)
         back = []
         for wid, seq in list(host.stored.items()):
             del host.stored[wid]
@@ -2378,8 +2549,37 @@ class Run:
                 back.append(item)
         host.unlanded.clear()
         self.queue.extendleft(reversed(back))
-        log(f"{host.id}: {sum(found.values())} of its {len(seqs)} flushes not seen to land were in place"
-            + (f"; {len(back)} jobs whose data was lost queued again" if back else ""))
+        log(f"{host.id}: {sum(m is not None for m in found.values())} of its {len(seqs)} flushes not seen to "
+            "land were in place" + (f"; {len(back)} jobs whose data was lost queued again" if back else ""))
+
+    def count_host(self, host: Host) -> None:
+        """An instance's own S3 use, its POSTs by flush (its worker's count,
+        sync's `s3`), as a running total in the ledger when it has grown."""
+        use = S3Use(self.args.s3_region or "")
+        for f in host.s3_flushes.values():
+            use.tier1["post"] += f["posts"]
+            use.up[host.region] += f["sent"]
+            use.stored += f["stored"]
+        key = (sum(use.tier1.values()), sum(use.up.values()), use.stored)
+        if use and key != host.s3_counted:
+            host.s3_counted = key
+            s3_record(self.name, "host", use, host.id)
+
+    def s3_count(self, tier1: dict | None = None, tier2: dict | None = None, up: dict | None = None,
+                 down: dict | None = None) -> None:
+        """Counts the controller's S3 requests and bytes (from any thread)."""
+        with self.s3_lock:
+            for a, b in ((self.s3_use.tier1, tier1), (self.s3_use.tier2, tier2), (self.s3_use.up, up),
+                         (self.s3_use.down, down)):
+                a.update({k: v for k, v in (b or {}).items() if v})
+
+    def flush_s3(self) -> None:
+        """The controller's S3 requests since the last, a line of the
+        ledger."""
+        with self.s3_lock:
+            use, self.s3_use = self.s3_use, S3Use(self.args.s3_region or "")
+        if use:
+            s3_record(self.name, "controller", use)
 
     def fail(self, host: Host, item: Item, res: dict) -> None:
         self.attempts[item.wid] += 1
@@ -2591,6 +2791,9 @@ class Run:
                 self.fail(host, item, res)
         for f in reply.get("flushes", []):
             self.land(host, f["seq"], f)
+        if reply.get("s3"):
+            host.s3_flushes.update(reply["s3"].get("flushes", {}))
+            self.count_host(host)
         st = reply.get("store") or {}
         if st.get("error") != host.store_error:
             if st.get("error"):
@@ -2857,6 +3060,10 @@ class Run:
         if self.s3_bins is not None:
             try:
                 p = self.ssh.run(host, self.s3_bins.fetch(self.bins), timeout=300)
+                # A presigned GET a binary (curl's retries uncounted), from
+                # the bucket to the instance's region.
+                self.s3_count(tier2={"bin_get": len(self.bins)},
+                              down={host.region: sum((BIN / b).stat().st_size for b in self.bins)})
                 if p.returncode == 0:
                     host.bins_at, host.bins_via = time.time(), "s3"
                     return
@@ -3208,6 +3415,11 @@ class Run:
             "work_per_boot": self.args.work_per_boot,
             "estimate": self.estimated,
         }
+        # S3, from the ledger: this controller's and any earlier one's of
+        # the run, and its pulls so far (spend adds later ones).
+        s3 = s3_total(self.name)
+        if s3:
+            rec["s3"] = {**s3.rec(), "cost": round(s3.cost(), 4)}
         append_jsonl(COSTS, [rec])
         msg = (
             f"{self.ran} jobs in {rec['wall_s'] / 60:.1f} min on {len(self.hosts)} instances "
@@ -3224,6 +3436,8 @@ class Run:
         if est and est.get("wall_s"):
             msg += f"; estimated {est['wall_s'] / 60:.1f} min, ${est['cost']:.2f}"
         log(msg)
+        if s3:
+            log(f"S3 {s3.text()}")
 
     @contextlib.contextmanager
     def held(self):
@@ -3443,7 +3657,7 @@ class Run:
                 sys.exit(f"a run of test matrices puts its data in S3: --s3-bucket (s3_bucket in {CONFIG})")
             self.ship_duckdb()
         if self.args.s3_bucket:
-            self.s3_bins = Binaries(self.args.s3_bucket, self.args.s3_region)
+            self.s3_bins = Binaries(self.args.s3_bucket, self.args.s3_region, self.s3_count)
             try:
                 self.s3_bins.upload(self.bins)
             except RuntimeError as e:
@@ -3678,6 +3892,7 @@ class Run:
             self.refill([h for h in ready if h.state == "ready"])
         # Durable before the next sync acks them.
         self.flush_rows()
+        self.flush_s3()
         if not self.local:
             self.retire_idle(now)
             self.scale(now)
@@ -3784,6 +3999,7 @@ class Run:
         finally:
             self.stopping.set()
             self.flush_rows()
+            self.flush_s3()
             if self.local:
                 # A worker may be one a previous controller started, or
                 # this one's, before it has written its pid.
@@ -3810,6 +4026,7 @@ class Run:
             if not self.local and self.hosts:
                 used = collections.Counter(f"{h.type} in {h.zone}" for h in self.hosts)
                 log("instances: " + ", ".join(f"{k} x{n}" for k, n in sorted(used.items())))
+            self.flush_s3()  # the terminations' manifest checks
             self.account(time.time(), interrupted)
         if interrupted:
             return 130
@@ -4099,7 +4316,16 @@ def spend(farm: Path, csv_dir: Path | None) -> int:
     runs += costs_spends(farm, runs)
     undated = [r for r in runs if r.start is None]
     runs = sorted((r for r in runs if r.start is not None), key=lambda r: r.start)
-    if not runs:
+    # S3, from its ledger: each run's requests and bytes, on the day of each
+    # line.
+    uses = s3_uses()
+    s3_days: dict[datetime.date, float] = collections.defaultdict(float)
+    s3_runs: dict[str, S3Use] = collections.defaultdict(S3Use)
+    for name, lines in uses.items():
+        for at, use in lines:
+            s3_days[at.date()] += use.cost()
+            s3_runs[name].add(use)
+    if not runs and not uses:
         print("no run has spent anything")
         return 0
     # What each run spent each local day, by its index.
@@ -4109,21 +4335,27 @@ def spend(farm: Path, csv_dir: Path | None) -> int:
         for s, c in r.points:
             days[(r.start + datetime.timedelta(seconds=s)).astimezone().date()][n] += c - prev
             prev = c
-    print(f"{'day':10}  {'spend':>8}  {'runs':>4}  costliest run that day")
-    day = min(days)
-    while day <= max(days):
+    print(f"{'day':10}  {'spend':>8}  {'S3':>8}  {'runs':>4}  costliest run that day")
+    day = min([*days, *s3_days])
+    while day <= max([*days, *s3_days]):
         by = days.get(day, {})
-        line = f"{day}  {f'${sum(by.values()):.2f}':>8}  {len(by):4}"
+        line = f"{day}  {f'${sum(by.values()):.2f}':>8}  {f'${s3_days.get(day, 0.0):.2f}':>8}  {len(by):4}"
         if by:
             n = max(by, key=by.get)
             line += f"  {run_label(runs[n].name)} ${by[n]:.2f}"
         print(line)
         day += datetime.timedelta(days=1)
-    note = f"{len(runs)} runs, ${sum(r.cost for r in runs):.2f} (farm.py's estimates, not billed amounts)"
+    total = S3Use()
+    for use in s3_runs.values():
+        total.add(use)
+    note = (f"{len(runs)} runs, ${sum(r.cost for r in runs):.2f} on EC2 and ${total.cost():.4f} on S3 "
+            "(farm.py's estimates, not billed amounts)")
     if undated:
         note += (f"; {len(undated)} undated left out, ${sum(r.cost for r in undated):.2f}: "
                  + ", ".join(run_label(r.name) for r in undated))
     print(note)
+    if total:
+        print(f"S3 over {len(s3_runs)} runs, {total.text()}")
     if csv_dir is not None:
         csv_dir.mkdir(parents=True, exist_ok=True)
 
@@ -4132,12 +4364,15 @@ def spend(farm: Path, csv_dir: Path | None) -> int:
 
         with (csv_dir / "runs.csv").open("w", newline="") as f, (csv_dir / "steps.csv").open("w", newline="") as g:
             rw, sw = csv.writer(f, lineterminator="\n"), csv.writer(g, lineterminator="\n")
-            rw.writerow(["run_id", "run", "start", "end", "cost_usd", "instances", "matrices", "logged_in"])
+            rw.writerow(["run_id", "run", "start", "end", "cost_usd", "instances", "matrices", "logged_in",
+                         "s3_usd", "s3_tier1", "s3_tier2", "s3_cross_region_bytes", "s3_internet_bytes"])
             sw.writerow(["run_id", "t", "run_cost_usd"])
             for n, r in enumerate(runs, 1):
                 rid = f"r{n:03d}"
+                u = s3_runs.get(r.name, S3Use())
                 rw.writerow([rid, r.name, utc(r.start), utc(r.end), f"{r.cost:.4f}", r.instances, r.logs or "",
-                             r.source])
+                             r.source, f"{u.cost():.4f}", sum(u.tier1.values()), sum(u.tier2.values()), u.cross(),
+                             u.down["internet"]])
                 for s, c in r.points:
                     sw.writerow([rid, utc(r.start + datetime.timedelta(seconds=s)), f"{c:.4f}"])
         print(f"wrote {csv_dir / 'runs.csv'} and {csv_dir / 'steps.csv'}")
@@ -4181,6 +4416,8 @@ def status(arg: str | None, regions: list[str]) -> int:
         ids = {j.id for j in m.jobs()}
         have = {r["id"] for r in read_jsonl(m.state / ("rows.jsonl" if m.kind == "testbed" else INDEX))} & ids
         print(f"{m.name}: {len(have)}/{len(ids)} jobs have rows")
+        for run in sorted(r for r in s3_uses() if m.name in r.split("+") or m.name in run_matrices(r)):
+            print(f"{run_label(run)}: S3 {s3_total(run).text()}")
     return 1 if failed else 0
 
 

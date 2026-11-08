@@ -83,7 +83,9 @@ the dropped ones from the queue if serve hasn't started them, and with
 `flush` asks serve to close the open generation once nothing is left to
 run. It prints one JSON object: the results not yet acked, the queued,
 running and folding ids, when each running job started, the flushes that
-landed and the store's state, whether serve is up, when the host will be
+landed and the store's state, the store's S3 POSTs by flush (each attempt,
+the bytes it sent, and those that landed: `s3`, which farm.py prices),
+whether serve is up, when the host will be
 interrupted (the notice's time, or null), and why serve waits, if it
 does. A result stays until it is acked, which the controller does for a
 stored job once its flush has landed, so a sync whose reply is lost, or a
@@ -96,6 +98,7 @@ and sync can run at once.
 import argparse
 import collections
 import datetime
+import fcntl
 import functools
 import importlib.util
 import json
@@ -310,9 +313,12 @@ class Sink:
     policies ({"data": ..., "samples": ...}), or a directory ({"dir": D},
     each flush made whole there by a rename)."""
 
-    def __init__(self, policy: dict, run: str, instance: str) -> None:
+    def __init__(self, policy: dict, run: str, instance: str, count=None) -> None:
         self.p = policy
         self.run, self.instance = run, instance
+        # count(seq, posts, sent, stored): each POST it makes (S3 bills the
+        # request, failed or not), the bytes it sent, and those it stored.
+        self.count = count or (lambda *_: None)
 
     def put(self, seq: int, files: list[tuple[str, Path]], abort_at: float | None) -> bool:
         """Puts `files` ((name, path), in order: the tables, manifest.json,
@@ -332,21 +338,23 @@ class Sink:
         for name, path in files:
             pol = self.p["samples" if name == "reads.parquet" else "data"]
             try:
-                self.post(pol, f"{pol['prefix']}{seq}/{name}", path, abort_at)
+                self.post(seq, pol, f"{pol['prefix']}{seq}/{name}", path, abort_at)
             except Exception:
                 if name != "reads.parquet":
                     raise
                 reads = False
         return reads
 
-    @staticmethod
-    def post(pol: dict, key: str, path: Path, abort_at: float | None) -> None:
+    def post(self, seq: int, pol: dict, key: str, path: Path, abort_at: float | None) -> None:
+        sent = s3sign().body_size(pol, key, path)
         for delay in (*UPLOAD_RETRIES, None):
             left = None if abort_at is None else abort_at - time.time()
             if left is not None and left <= 0:
                 raise TimeoutError(f"{key}: cut off at the interruption")
             try:
+                self.count(seq, 1, sent, 0)
                 s3sign().post(pol, key, path, timeout=min(120, left) if left else 120)
+                self.count(seq, 0, 0, path.stat().st_size)
                 return
             except Exception:
                 if delay is None or (abort_at is not None and time.time() + delay >= abort_at):
@@ -364,9 +372,16 @@ class Store:
     def __init__(self, root: Path, args: argparse.Namespace) -> None:
         self.root = root
         self.run, self.instance = args.run, args.instance
-        self.sink = Sink(json.loads(Path(args.policy).read_text()), args.run, args.instance)
+        self.sink = Sink(json.loads(Path(args.policy).read_text()), args.run, args.instance, self.count)
         self.rotate_bytes = args.rotate_mb * 1024 * 1024
         self.dir, self.fold_dir = root / "store", root / "fold"
+        # Its S3 requests and bytes by flush (sync's `s3`), kept across
+        # serves.
+        self.ops_lock = threading.Lock()
+        try:
+            self.ops = json.loads((self.dir / "ops.json").read_text())
+        except (OSError, ValueError):
+            self.ops = {"flushes": {}}
         self.flush_dir, self.landed_dir = root / "flush", root / "flushes"
         # simdb's spill and the DuckDB it runs.
         os.environ["SIM_DB_ROOT"] = str(self.dir)
@@ -410,6 +425,16 @@ class Store:
 
     def folds(self) -> list[str]:
         return sorted(p.stem for p in self.fold_dir.glob("*.json"))
+
+    def count(self, seq: int, posts: int, sent: int, stored: int) -> None:
+        """Counts flush `seq`'s S3 POSTs, the bytes they sent, and those
+        that landed (ops.json)."""
+        with self.ops_lock:
+            f = self.ops["flushes"].setdefault(str(seq), {"posts": 0, "sent": 0, "stored": 0})
+            f["posts"] += posts
+            f["sent"] += sent
+            f["stored"] += stored
+            write_atomic(self.dir / "ops.json", json.dumps(self.ops))
 
     def add(self, jid: str, job: dict, result: dict, row: dict, out: Path) -> None:
         """A finished job: its out dir and result wait in fold/."""
@@ -769,12 +794,13 @@ def serve(args: argparse.Namespace) -> None:
     root = args.dir
     d = dirs(root)
     pidfile = root / "serve.pid"
-    if pidfile.exists():
-        try:
-            if pid_alive(int(pidfile.read_text())):
-                sys.exit("serve is already running")
-        except ValueError:
-            pass
+    # One serve a dir, for as long as it lives: a second, started before the
+    # first wrote its pid (a sync that came first), would share its store.
+    lock = (root / "serve.lock").open("w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        sys.exit("serve is already running")
     write_atomic(pidfile, str(os.getpid()))
     for name in ("interrupting", "ending", "note", "flush-wanted"):
         (root / name).unlink(missing_ok=True)
@@ -1040,6 +1066,10 @@ def sync(args: argparse.Namespace) -> None:
         store = json.loads((d["store"] / "status.json").read_text())
     except (FileNotFoundError, json.JSONDecodeError):
         store = None
+    try:
+        s3 = json.loads((d["store"] / "ops.json").read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        s3 = None
     serving = False
     try:
         serving = pid_alive(int((root / "serve.pid").read_text()))
@@ -1068,6 +1098,7 @@ def sync(args: argparse.Namespace) -> None:
         "started": started,
         "flushes": sorted(flushes, key=lambda f: f["seq"]),
         "store": store,
+        "s3": s3,
         "serving": serving,
         "interrupting": interrupting,
         "ending": ending,

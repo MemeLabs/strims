@@ -92,18 +92,30 @@ def policy(bucket: str, region: str, prefix: str, expires: datetime.datetime, cr
     }
 
 
+def body_size(pol: dict, key: str, path: Path) -> int:
+    """The bytes a POST of `path` as `key` sends: the form and the file."""
+    return len(form_head(pol, key, path.name, "x" * 32)) + os.path.getsize(path) + len(form_tail("x" * 32))
+
+
+def form_head(pol: dict, key: str, name: str, boundary: str) -> bytes:
+    head = b""
+    for field, value in [("key", key), *pol["fields"].items()]:
+        head += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"{field}\"\r\n\r\n{value}\r\n").encode()
+    return head + (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\n"
+                   "Content-Type: application/octet-stream\r\n\r\n").encode()
+
+
+def form_tail(boundary: str) -> bytes:
+    return f"\r\n--{boundary}--\r\n".encode()
+
+
 def post(pol: dict, key: str, path: Path, timeout: float = 120) -> None:
     """Uploads the file `path` as `key` (under the policy's prefix) by the
     policy `pol`, streamed. Raises RuntimeError on a refusal."""
     if not key.startswith(pol["prefix"]):
         raise ValueError(f"{key} is outside the policy's prefix {pol['prefix']}")
     boundary = uuid.uuid4().hex
-    head = b""
-    for name, value in [("key", key), *pol["fields"].items()]:
-        head += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n").encode()
-    head += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{path.name}\"\r\n"
-             "Content-Type: application/octet-stream\r\n\r\n").encode()
-    tail = f"\r\n--{boundary}--\r\n".encode()
+    head, tail = form_head(pol, key, path.name, boundary), form_tail(boundary)
     size = os.path.getsize(path)
     scheme, _, rest = pol["url"].partition("://")
     host, _, base = rest.partition("/")

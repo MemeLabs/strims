@@ -938,19 +938,56 @@ def farm_bucket():
     return c["s3_bucket"], c.get("s3_region"), c.get("aws_profile")
 
 
+# The aws CLI's multipart size: it downloads a file past it a ranged GET a
+# part (farm.py's CLI_PART).
+CLI_PART = 8 * 1024 * 1024
+
+
 def pull(run, reads=False):
     """Copies farm run `run`'s flushes from S3 into the cache
-    (farm/<run>/<instance>/<seq>/), and with `reads` their reads too."""
+    (farm/<run>/<instance>/<seq>/), and with `reads` their reads too. What
+    it cost S3 goes to the run's line of the farm's S3 ledger
+    (target/sim-farm/s3.jsonl, farm.py's S3_LEDGER): a LIST a thousand of a
+    prefix's keys, a GET a file it downloaded (a part each past CLI_PART),
+    and the bytes, out to the internet."""
     bucket, region, profile = farm_bucket()
     dest = cache_root() / "cache" / "farm" / run
+    lists = gets = got = 0
     for prefix in ["sim-data"] + (["sim-samples"] if reads else []):
-        cmd = ["aws", "s3", "sync", f"s3://{bucket}/{prefix}/{run}/", str(dest), "--only-show-errors"]
+        cmd = ["aws", "s3", "sync", f"s3://{bucket}/{prefix}/{run}/", str(dest), "--no-progress"]
         if region:
             cmd += ["--region", region]
         if profile:
             cmd += ["--profile", profile]
-        subprocess.run(cmd, check=True)
+        p = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        for line in p.stdout.splitlines():
+            if line.startswith("download: ") and " to " in line:
+                size = Path(line.rsplit(" to ", 1)[1]).stat().st_size
+                gets += 1 if size < CLI_PART else math.ceil(size / CLI_PART)
+                got += size
+        keys = sum(1 for f in dest.glob("**/*") if f.is_file() and (f.name == "reads.parquet") == (prefix == "sim-samples"))
+        lists += max(1, math.ceil(keys / 1000))
+    farm_ledger(run, {"region": region or "", "tier1": {"pull_list": lists}, "tier2": {"pull_get": gets},
+                      "up": {}, "down": {"internet": got}, "stored": 0})
     return dest
+
+
+def farm_ledger(run, use):
+    """A pull's line of the farm's S3 ledger, appended under its lock as
+    farm.py appends (append_jsonl)."""
+    path = main_checkout() / "target" / "sim-farm" / "s3.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rec = {"run": run, "at": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()), "source": "pull", **use}
+    with open(path, "ab+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        end = f.seek(0, os.SEEK_END)
+        torn = False
+        if end:
+            f.seek(end - 1)
+            torn = f.read(1) != b"\n"
+        f.write((("\n" if torn else "") + json.dumps(rec) + "\n").encode())
+        f.flush()
+        os.fsync(f.fileno())
 
 
 def pull_sources(srcs, reads=False):
