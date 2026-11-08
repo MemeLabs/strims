@@ -123,7 +123,10 @@ pub use scheduler_peer::push::PushStats;
 pub use scheduler_peer::push::seed::{
     AllocCounters, ReportCounters, SeedAllocationStats, SeedNeighbour,
 };
-pub use scheduler_peer::{ChannelSchedulerStats, SwarmSchedulerStats};
+pub use scheduler_peer::{
+    ChannelSchedulerStats, FORECAST_CAP, LagForecast, LagSnapshot, SwarmCounters,
+    SwarmSchedulerStats,
+};
 pub use store::RewindError;
 pub use tap::{
     Admission, AdmitRule, HolderLeft, LagEstimate, ParentAction, ParentChoice, Prune, RequestRound,

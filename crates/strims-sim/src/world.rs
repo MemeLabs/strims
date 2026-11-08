@@ -29,7 +29,7 @@ use strims_wan::live::Au;
 
 use crate::memory::{GroupCounters, MemoryGroup};
 use crate::net::SendBuffers;
-use crate::report::{HostReport, MediaLog, VpnReport};
+use crate::report::{ForecastRecord, HostReport, MediaLog, NodeBinRecord, VpnReport};
 use crate::skew::OffsetCapture;
 use crate::spec::{HostIx, Scenario, Transport};
 use crate::stats::{HostStats, TransferSample};
@@ -111,6 +111,11 @@ pub(crate) struct HostState {
     pub transfers: Vec<(Duration, usize, TransferSample)>,
     /// Runner invariants this host already broke (each is logged once).
     pub broken: BTreeSet<&'static str>,
+    /// See [`HostReport::node_bins`] and [`HostReport::forecasts`].
+    pub node_bins: Vec<NodeBinRecord>,
+    pub forecasts: Vec<ForecastRecord>,
+    pub forecasts_lost: u64,
+    pub held: Vec<(u64, Duration)>,
 }
 
 impl HostState {
@@ -124,6 +129,10 @@ impl HostState {
         r.runner = self.stats.report();
         r.transfers = self.transfers.clone();
         r.neighbours = self.neighbours.clone();
+        r.node_bins = self.node_bins.clone();
+        r.forecasts = self.forecasts.clone();
+        r.forecasts_lost = self.forecasts_lost;
+        r.held = self.held.clone();
         r
     }
 
@@ -194,7 +203,7 @@ pub(crate) struct WorldState {
     /// The controller's choices (probe pairs).
     pub rng: DetRng,
     /// The uplink counters at each bin edge ([`crate::Report::wire_bins`]).
-    pub wire_bins: Vec<[u64; 6]>,
+    pub wire_bins: Vec<Vec<[u64; crate::wan::UP_COUNTERS.len()]>>,
 }
 
 /// One run.
@@ -303,7 +312,7 @@ impl World {
 
     /// Records the uplink counters at a bin edge
     /// ([`crate::Report::wire_bins`]), in the records' group.
-    pub(crate) fn record_wire_bin(&self, counters: [u64; 6]) {
+    pub(crate) fn record_wire_bin(&self, counters: Vec<[u64; crate::wan::UP_COUNTERS.len()]>) {
         self.record(|st| st.wire_bins.push(counters));
     }
 
@@ -416,6 +425,13 @@ impl World {
         }
         c.upload_capacity = spec.upload_capacity;
         c.vpn.routing = spec.routing.unwrap_or(self.spec.routing);
+        if let (Some(width), Some(s)) = (self.spec.wire_bins, self.spec.swarms.first()) {
+            c.stats_bins = Some(strims_node::config::StatsBins {
+                origin: self.clock_at(h, s.start),
+                width: width.max(Duration::from_millis(1)).into(),
+            });
+            c.forecast_log = self.spec.forecast_log;
+        }
         if let Some(dir) = &self.spec.capture {
             let path = dir.join(format!("{}-{incarnation}.ppcap", spec.name));
             let offset = self.clock_offset(h);
@@ -882,6 +898,94 @@ impl World {
 
     // --- samples --------------------------------------------------------
 
+    /// Keeps a snapshot's stats bins and forecast log for the tables
+    /// ([`HostReport::node_bins`], [`HostReport::forecasts`]): each snapshot
+    /// hands them over once, so every caller of `Node::metrics` passes its
+    /// snapshot here.
+    pub fn observe_bins(&self, h: HostIx, m: &NodeMetrics) {
+        let (Some(width), Some(swarm)) = (self.spec.wire_bins, self.spec.swarms.first()) else {
+            return;
+        };
+        if m.bins.is_empty() && m.forecasts.is_empty() && m.held.is_empty() && m.forecasts_lost == 0
+        {
+            return;
+        }
+        let origin = self.clock_at(h, swarm.start);
+        let width = width.max(Duration::from_millis(1)).as_millis() as i64;
+        let epoch = self.clock_epoch(h);
+        self.record(|st| {
+            let ids = &st.ids;
+            let Some(hs) = st.hosts.get_mut(h) else {
+                return;
+            };
+            let key = hs.swarms.first().copied().flatten();
+            for b in &m.bins {
+                let Some(sw) = b.swarms.iter().find(|s| Some(s.swarm) == key) else {
+                    continue;
+                };
+                let since = (b.at - origin).as_millis();
+                if since < 0 {
+                    continue;
+                }
+                let o = &b.outbound;
+                let c = &sw.counters;
+                hs.node_bins.push(NodeBinRecord {
+                    bin: (since / width) as u64,
+                    incarnation: hs.incarnation,
+                    counters: [
+                        sw.hits,
+                        sw.misses,
+                        sw.pruned,
+                        sw.parents,
+                        sw.upload_capacity,
+                        sw.upload_busy_permille,
+                        sw.seed_copies,
+                        c.chunks_sent,
+                        c.pushed_chunks,
+                        c.requests_timed_out,
+                        c.wasted_chunks,
+                        o.have_bytes,
+                        o.ack_bytes,
+                        o.request_bytes,
+                        o.announce_bytes,
+                        o.stream_bytes,
+                        o.session_bytes,
+                        o.ping_bytes,
+                        o.header_bytes,
+                        o.integrity_bytes + o.signed_integrity_bytes,
+                        o.data_bytes,
+                        o.payloads,
+                        o.have_only_payloads,
+                        b.bytes_written.saturating_sub(o.data_bytes),
+                    ],
+                    waits: [c.push_wait, c.answer_wait],
+                });
+            }
+            for f in &m.forecasts {
+                if Some(f.swarm) != key {
+                    continue;
+                }
+                let at = (f.forecast.at - epoch).to_std().unwrap_or_default();
+                let opened = (f.forecast.channel_open - epoch)
+                    .to_std()
+                    .unwrap_or_default();
+                hs.forecasts.push(ForecastRecord {
+                    at,
+                    opened,
+                    peer: f.peer.and_then(|id| ids.get(&id).copied()),
+                    forecast: f.forecast,
+                });
+            }
+            for c in &m.held {
+                if Some(c.swarm) == key {
+                    let at = (c.at - epoch).to_std().unwrap_or_default();
+                    hs.held.push((c.bin.base_offset(), at));
+                }
+            }
+            hs.forecasts_lost += m.forecasts_lost;
+        });
+    }
+
     pub fn store_metrics(&self, h: HostIx, m: NodeMetrics) {
         self.record(|st| {
             if let Some(s) = st.hosts.get_mut(h) {
@@ -904,6 +1008,7 @@ impl World {
     /// runner invariants (see [`crate::Invariants`]). Each broken invariant
     /// is logged once per host.
     pub fn observe_stats(&self, h: HostIx, m: &NodeMetrics) {
+        self.observe_bins(h, m);
         let inv = &self.spec.invariants;
         let mut found = Vec::new();
         self.record(|st| {

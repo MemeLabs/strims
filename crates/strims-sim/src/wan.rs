@@ -299,6 +299,20 @@ pub(crate) const BETA: f64 = 0.7;
 const HYSTART_SAMPLES: u32 = 8;
 const HYSTART_LOW_WINDOW: f64 = 16.0 * MSS;
 
+/// [`Scheduler::up_counters`]' counters, as the tables name them: wire
+/// bytes, packets and small packets through the uplink, stream messages
+/// that lost a packet, packets lost (the network's and the window model's
+/// full access queues'), and the window model's window falls and timeouts.
+pub const UP_COUNTERS: [&str; 7] = [
+    "up_bytes",
+    "up_packets",
+    "small_packets",
+    "retransmits",
+    "drops",
+    "window_cuts",
+    "rtos",
+];
+
 /// One TCP connection in the window model, or a competing upload.
 #[derive(Debug)]
 struct Flow {
@@ -719,6 +733,11 @@ pub(crate) struct Scheduler {
     app_bytes: Vec<u64>,
     /// Per host, its competing uploads' segments lost to its full uplink.
     cross_drops: Vec<u64>,
+    /// Per host, the window model's falls of its connections' windows on a
+    /// loss (one per recovery), and the timeouts among them that restarted
+    /// a window from a segment.
+    cuts: Vec<u64>,
+    rtos: Vec<u64>,
     /// The acknowledgements receivers owe, by the connection whose data
     /// they acknowledge. Bound: one per connection with data received.
     owed: FastMap<(SocketAddr, SocketAddr), Owed>,
@@ -858,6 +877,8 @@ impl Scheduler {
             ack_bytes: vec![0; spec.hosts.len()],
             app_bytes: vec![0; spec.hosts.len()],
             cross_drops: vec![0; spec.hosts.len()],
+            cuts: vec![0; spec.hosts.len()],
+            rtos: vec![0; spec.hosts.len()],
             owed: FastMap::default(),
             assocs: FastMap::default(),
             rcvs: FastMap::default(),
@@ -1135,6 +1156,9 @@ impl Scheduler {
                     f.sent_at.remove(&seq);
                     if f.cut.is_nil() || seq >= f.recover {
                         f.fall(t);
+                        if let Some(n) = self.cuts.get_mut(r.from) {
+                            *n += 1;
+                        }
                     }
                     if matches!(event, Event::Timeout) && f.timed_out != t {
                         // Linux's loss state: the window restarts from a
@@ -1143,6 +1167,9 @@ impl Scheduler {
                         f.cwnd = MSS;
                         f.backoff = f.backoff.saturating_add(1);
                         f.timed_out = t;
+                        if let Some(n) = self.rtos.get_mut(r.from) {
+                            *n += 1;
+                        }
                     }
                     f.retx.insert(seq);
                     f.pending.push_front(id);
@@ -2022,11 +2049,19 @@ impl Scheduler {
         }
     }
 
-    /// Host `h`'s uplink counters so far: wire bytes, packets, and the
-    /// small packets among them.
-    pub fn up_counters(&self, h: HostIx) -> [u64; 3] {
+    /// Host `h`'s uplink counters so far ([`UP_COUNTERS`]).
+    pub fn up_counters(&self, h: HostIx) -> [u64; UP_COUNTERS.len()] {
         let s = self.net.stats(h);
-        [s.up_bytes, s.up_packets, s.small_packets]
+        let at = |v: &Vec<u64>| v.get(h).copied().unwrap_or(0);
+        [
+            s.up_bytes,
+            s.up_packets,
+            s.small_packets,
+            s.retransmits,
+            s.drops + at(&self.drops),
+            at(&self.cuts),
+            at(&self.rtos),
+        ]
     }
 
     /// Each host's site and counters.

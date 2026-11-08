@@ -593,6 +593,7 @@ impl Pool {
             let Ok(m) = self.node.metrics().await else {
                 return;
             };
+            self.w.observe_bins(self.h, &m);
             let infra = self.observe(&m);
             self.control(&m);
             let max = {

@@ -893,6 +893,18 @@ impl PushChannel {
             .is_some_and(|a| head.is_none_or(|h| a >= h))
     }
 
+    /// The peer's announcement-lag estimate for `stream`, as the forecast
+    /// log records it; `None` before its first sample.
+    pub(crate) fn lag_estimate(&self, stream: usize, now: Time) -> Option<super::LagSnapshot> {
+        let l = self.have_lag.get(stream).filter(|l| l.n > 0)?;
+        Some(super::LagSnapshot {
+            mean: l.mean(),
+            horizon: l.horizon(),
+            samples: l.n,
+            fresh: l.fresh(now),
+        })
+    }
+
     /// Appends to `lags` the peer's announcement lag per stream, where
     /// fresh: its mean, and how late it still fits.
     pub(crate) fn fresh_lags(&self, now: Time, lags: &mut Vec<Option<(Duration, Duration)>>) {

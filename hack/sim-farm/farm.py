@@ -164,7 +164,8 @@ speed. A run logs the speeds before its best pools.
 - An instance keeps its test jobs' tables (worker.py's store) and uploads
   them in rolling flushes as it goes, each a few large zstd Parquet files
   under S3 prefixes it alone can write: one presigned POST policy each for
-  sim-data/<run>/<instance>/ and sim-samples/<run>/<instance>/ (the reads),
+  sim-data/<run>/<instance>/ and sim-samples/<run>/<instance>/ (the reads
+  and forecast logs),
   signed at its boot with this host's credentials (s3sign.py) to expire
   --hours and 30 minutes after its launch. A generation closes at
   --rotate-mb (sized so one exports and uploads within a minute from the

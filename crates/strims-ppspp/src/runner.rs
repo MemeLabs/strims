@@ -34,8 +34,8 @@ use crate::scheduler::PeerPriority;
 use crate::scheduler_peer::push::seed::SeedAllocationStats;
 use crate::scheduler_peer::push::{PushStats, UploadInfo};
 use crate::scheduler_peer::{
-    ChannelSchedulerStats, PeerSwarmScheduler, SchedulerError, StreamOpenOutcome,
-    SwarmSchedulerStats, WriteDataError,
+    ChannelSchedulerStats, LagForecast, PeerSwarmScheduler, SchedulerError, StreamOpenOutcome,
+    SwarmCounters, SwarmSchedulerStats, WriteDataError,
 };
 use crate::store::{self, BufferReader, RewindError};
 use crate::swarm::{Swarm, SwarmError, SwarmEvent};
@@ -534,6 +534,8 @@ pub struct Runner {
     /// Lifecycle events; the schedulers keep their own.
     tap: Tap,
     tap_level: TapLevel,
+    /// The schedulers keep a forecast log ([`Runner::set_forecasts`]).
+    forecasts: bool,
     /// Peers whose hybrid answers the answer gate held back at their last
     /// poll ([`crate::answer_gate`]). Bound: one per peer.
     held: BTreeSet<PeerKey>,
@@ -604,9 +606,12 @@ fn handle_payload(
     };
 
     ch.metrics_in.payload(header);
+    // This payload's messages alone, to tell one of HAVEs alone.
+    let mut kinds = ChannelMetrics::default();
     for m in Reader::new(ch.reader_config, payload) {
         let m = m?;
         ch.metrics_in.count(&m);
+        kinds.count(&m);
         match m {
             Message::Handshake(h) => {
                 let o = validate_handshake(swarm, &h.options)?;
@@ -747,6 +752,9 @@ fn handle_payload(
             Message::End => {}
         }
     }
+    if kinds.only_haves() {
+        ch.metrics_in.have_only_payloads += 1;
+    }
     Ok(())
 }
 
@@ -769,6 +777,7 @@ impl Runner {
             committed: 0.0,
             tap: Tap::default(),
             tap_level: TapLevel::Off,
+            forecasts: false,
             held: BTreeSet::new(),
             answer_rate: AnswerRate::new(),
             push_waits: Vec::new(),
@@ -1288,6 +1297,7 @@ impl Runner {
             next_tick,
             tap,
             tap_level,
+            forecasts,
             ..
         } = self;
         let p = peers.get_mut(peer).ok_or(RunnerError::UnknownPeer)?;
@@ -1310,6 +1320,7 @@ impl Runner {
             .scheduler
             .get_or_insert_with(|| PeerSwarmScheduler::new(&rs.swarm, swarm, &mut fork(rng), now));
         sched.tap_mut().set(*tap_level == TapLevel::All);
+        sched.set_forecasts(*forecasts);
         tap.push(TapEvent {
             swarm: Some(swarm),
             peer: Some(peer),
@@ -2045,6 +2056,47 @@ impl Runner {
     /// The swarm scheduler's state, while it has channels.
     pub fn swarm_stats(&self, swarm: SwarmKey) -> Option<SwarmSchedulerStats> {
         Some(self.swarms.get(swarm)?.scheduler.as_ref()?.stats())
+    }
+
+    /// [`Self::swarm_stats`]' counters alone, while the swarm has
+    /// channels: cheap enough to read often.
+    pub fn swarm_counters(&self, swarm: SwarmKey) -> Option<SwarmCounters> {
+        Some(self.swarms.get(swarm)?.scheduler.as_ref()?.counters())
+    }
+
+    /// Turns every swarm's forecast log on or off (it starts off): each
+    /// sample of a neighbour's announcement lag, with the estimate it
+    /// updates as it stood ([`LagForecast`]), kept until
+    /// [`Self::take_forecasts`]. It changes no decision.
+    pub fn set_forecasts(&mut self, on: bool) {
+        self.forecasts = on;
+        for rs in self.swarms.values_mut() {
+            if let Some(s) = rs.scheduler.as_mut() {
+                s.set_forecasts(on);
+            }
+        }
+    }
+
+    /// With the forecast log on, the swarm's chunks stored since the last
+    /// call, each with the time it was: when this node first held it, the
+    /// truth its neighbours' forecasts aim at. It changes no decision.
+    pub fn take_held(&mut self, swarm: SwarmKey) -> Vec<(Bin, Time)> {
+        self.swarms
+            .get_mut(swarm)
+            .and_then(|rs| rs.scheduler.as_mut())
+            .map(|s| s.take_held())
+            .unwrap_or_default()
+    }
+
+    /// The swarm's forecast log since the last call, and how many samples
+    /// its cap ([`crate::FORECAST_CAP`]) left out (stored chunks' too,
+    /// [`Self::take_held`]).
+    pub fn take_forecasts(&mut self, swarm: SwarmKey) -> (Vec<LagForecast>, u64) {
+        self.swarms
+            .get_mut(swarm)
+            .and_then(|rs| rs.scheduler.as_mut())
+            .map(|s| s.take_forecasts())
+            .unwrap_or_default()
     }
 
     /// The swarm's push/pull state and counters, while it has channels.

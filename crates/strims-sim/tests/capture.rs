@@ -183,15 +183,26 @@ fn a_run_with_tables_keeps_its_trace() {
         let mut spec = wan_mesh();
         spec.transfer_samples = true;
         spec.wire_bins = Some(bin);
+        spec.forecast_log = true;
         let r = run(spec, 1).unwrap();
         assert_eq!(plain.trace_hash, r.trace_hash, "{ms} ms bins");
         let d = dir.join(ms.to_string());
-        r.write_tables(&d, bin).unwrap();
+        r.write_tables(&d, bin, true).unwrap();
         let lines = |t: &str| {
             std::fs::read_to_string(d.join(format!("{t}.csv")))
                 .unwrap()
                 .lines()
                 .count()
+        };
+        // A column of a table, summed.
+        let sum = |t: &str, col: &str| -> i64 {
+            let csv = std::fs::read_to_string(d.join(format!("{t}.csv"))).unwrap();
+            let mut rows = csv.lines();
+            let head: Vec<&str> = rows.next().unwrap().split(',').collect();
+            let i = head.iter().position(|&c| c == col).unwrap();
+            // An empty field is a reading the run doesn't have.
+            rows.filter_map(|l| l.split(',').nth(i).unwrap().parse::<i64>().ok())
+                .sum()
         };
         // The stream starts at 2 s and the run ends at 10 s.
         assert_eq!(lines("seconds"), 8 + 1);
@@ -199,13 +210,15 @@ fn a_run_with_tables_keeps_its_trace() {
         let reads: usize = r.viewers.iter().map(|v| v.stats.lags.len()).sum();
         assert_eq!(lines("reads"), reads + 1);
         assert!(lines("bins") as u64 + 1 >= 7_000 / ms, "{ms} ms");
-        let bins = std::fs::read_to_string(d.join("bins.csv")).unwrap();
-        let seed_bytes: u64 = bins
-            .lines()
-            .skip(1)
-            .map(|l| l.split(',').nth(2).unwrap().parse::<u64>().unwrap())
-            .sum();
+        let seed_bytes = sum("bins", "seed_up_bytes");
         assert!(seed_bytes > 64 * 1024 * 6, "{seed_bytes}");
+        // The nodes' own bins: their pushes and their messages' bytes.
+        assert!(sum("bins", "hits") > 0, "{ms} ms");
+        assert!(sum("bins", "viewer_have_bytes") > 0, "{ms} ms");
+        assert!(sum("bins", "sent") > 0, "{ms} ms");
+        assert!(lines("node_bins") > lines("bins"), "{ms} ms");
+        assert!(lines("events") > 3, "{ms} ms: a join per viewer");
+        assert!(lines("forecast") > 1, "{ms} ms");
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

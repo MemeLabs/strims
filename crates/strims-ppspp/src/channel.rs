@@ -176,6 +176,9 @@ pub struct ChannelMetrics {
     /// Channel payloads, and their headers' bytes.
     pub payloads: u64,
     pub header_bytes: u64,
+    /// Payloads that carried HAVEs and nothing else: what a HAVE costs in
+    /// payloads (and frames) of its own.
+    pub have_only_payloads: u64,
     /// Inbound `Data` messages that failed verification.
     pub invalid_data: u64,
     /// The chunks those messages spanned.
@@ -247,6 +250,31 @@ impl ChannelMetrics {
         add(&mut self.header_bytes, len as u64);
     }
 
+    /// Whether the messages counted are HAVEs and nothing else.
+    pub(crate) fn only_haves(&self) -> bool {
+        let others = [
+            self.handshake,
+            self.restart,
+            self.data,
+            self.integrity,
+            self.signed_integrity,
+            self.ack,
+            self.request,
+            self.cancel,
+            self.choke,
+            self.unchoke,
+            self.ping,
+            self.pong,
+            self.stream_request,
+            self.stream_cancel,
+            self.stream_open,
+            self.stream_close,
+            self.announce,
+            self.have_pace,
+        ];
+        self.have > 0 && others.iter().all(|&n| n == 0)
+    }
+
     /// Adds `o`'s counters to these.
     pub fn merge(&mut self, o: &ChannelMetrics) {
         let ChannelMetrics {
@@ -283,6 +311,7 @@ impl ChannelMetrics {
             session_bytes,
             payloads,
             header_bytes,
+            have_only_payloads,
             invalid_data,
             invalid_chunk,
             invalid_bytes,
@@ -325,6 +354,7 @@ impl ChannelMetrics {
         add(&mut self.session_bytes, *session_bytes);
         add(&mut self.payloads, *payloads);
         add(&mut self.header_bytes, *header_bytes);
+        add(&mut self.have_only_payloads, *have_only_payloads);
         add(&mut self.invalid_data, *invalid_data);
         add(&mut self.invalid_chunk, *invalid_chunk);
         add(&mut self.invalid_bytes, *invalid_bytes);
@@ -430,6 +460,9 @@ impl<'b> MeteredWriter<'b> {
             return (0, 0);
         }
         self.pending.payload(header);
+        if self.pending.only_haves() {
+            self.pending.have_only_payloads = 1;
+        }
         out.merge(&self.pending);
         (n, self.pending.data_bytes)
     }

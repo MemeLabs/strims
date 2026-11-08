@@ -32,8 +32,9 @@ each closed one, one at a time, to zstd Parquet with a manifest
 (hack/sim-db's export) and uploads its files by the --policy file's
 presigned POST policies (s3sign.py) while jobs run on: the tables to
 sim-data/<run>/<instance>/<seq>/<table>.parquet, then manifest.json, then
-the reads to sim-samples/.../reads.parquet. A flush that lands leaves
-D/flushes/<seq>.json for the controller, and its generation is deleted.
+the bulky tables (reads, forecast) to sim-samples/.../<table>.parquet. A
+flush that lands leaves D/flushes/<seq>.json for the controller, and its
+generation is deleted.
 A job of `"store": false` (the canary) keeps its whole row and no tables.
 The policy file is {"data": policy, "samples": policy}, or {"dir": D2}
 to copy flushes into D2/<run>/<instance>/<seq>/ instead (--local: the
@@ -322,8 +323,9 @@ class Sink:
 
     def put(self, seq: int, files: list[tuple[str, Path]], abort_at: float | None) -> bool:
         """Puts `files` ((name, path), in order: the tables, manifest.json,
-        then reads.parquet) as flush `seq`'s; returns whether the reads
-        landed too. Raises if a table or the manifest didn't."""
+        then the bulky ones, simdb's SAMPLE_TABLES) as flush `seq`'s;
+        returns whether the bulky ones landed too. Raises if a table or the
+        manifest didn't."""
         if "dir" in self.p:
             dest = Path(self.p["dir"]) / self.run / self.instance / str(seq)
             tmp = dest.with_name(f".{dest.name}.tmp{os.getpid()}")
@@ -335,12 +337,13 @@ class Sink:
             os.replace(tmp, dest)
             return True
         reads = True
+        samples = {f"{t}.parquet" for t in simdb().SAMPLE_TABLES}
         for name, path in files:
-            pol = self.p["samples" if name == "reads.parquet" else "data"]
+            pol = self.p["samples" if name in samples else "data"]
             try:
                 self.post(seq, pol, f"{pol['prefix']}{seq}/{name}", path, abort_at)
             except Exception:
-                if name != "reads.parquet":
+                if name not in samples:
                     raise
                 reads = False
         return reads
@@ -597,10 +600,10 @@ class Store:
             manifest = None
         if manifest is not None:
             tables = manifest["tables"]
-            files = [(f"{t}.parquet", dest / f"{t}.parquet") for t in tables if t != "reads"]
+            bulky = simdb().SAMPLE_TABLES
+            files = [(f"{t}.parquet", dest / f"{t}.parquet") for t in tables if t not in bulky]
             files.append(("manifest.json", dest / "manifest.json"))
-            if "reads" in tables:
-                files.append(("reads.parquet", dest / "reads.parquet"))
+            files += [(f"{t}.parquet", dest / f"{t}.parquet") for t in bulky if t in tables]
             reads = self.sink.put(seq, files, self.abort_at)
             write_atomic(self.landed_dir / f"{seq}.json", json.dumps({
                 "seq": seq, "src": self.src(seq), "jobs": len(manifest["keys"]), "reads": reads and "reads" in tables,

@@ -40,9 +40,10 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
-use strims_ppspp::ChannelTotals;
+use strims_base::stats::WaitHistogram;
 use strims_ppspp::scheduler_peer::push::PUSH_OVERHEAD;
 use strims_ppspp::scheduler_peer::push::seed::ALLOC_UTILIZATION;
+use strims_ppspp::{ChannelTotals, LagForecast};
 use strims_wan::{Access, EndStats, Region, Site};
 
 use crate::spec::{HostIx, Scenario};
@@ -155,6 +156,77 @@ pub struct HostReport {
     /// How far its clock read ahead of true time
     /// ([`Scenario::clock_skew`]).
     pub clock_offset: strims_base::time::Duration,
+    /// With [`Scenario::wire_bins`], the node's counters at every edge of
+    /// the tables' bins, every incarnation ([`NodeBinRecord`]).
+    pub node_bins: Vec<NodeBinRecord>,
+    /// With [`Scenario::wire_bins`], its ppspp runner's forecast log, every
+    /// incarnation ([`ForecastRecord`]), and the samples its caps left out.
+    pub forecasts: Vec<ForecastRecord>,
+    pub forecasts_lost: u64,
+    /// With the forecast log, every chunk of its first scenario swarm it
+    /// first held, every incarnation: the chunk's index and when (true time
+    /// from the run's start).
+    pub held: Vec<(u64, Duration)>,
+}
+
+/// A node's counters at an edge of the tables' bins
+/// ([`HostReport::node_bins`], `strims_node::event::NodeBin`), for its first
+/// scenario swarm.
+#[derive(Clone, Debug)]
+pub struct NodeBinRecord {
+    /// The edge's number, from the swarm's start.
+    pub bin: u64,
+    /// Its incarnation: the counters restart with each.
+    pub incarnation: u32,
+    /// [`NODE_BIN_COUNTERS`]' values so far.
+    pub counters: [u64; NODE_BIN_COUNTERS.len()],
+    /// Its push and answer waits so far.
+    pub waits: [WaitHistogram; 2],
+}
+
+/// [`NodeBinRecord::counters`]: pushes before their deadline, deadlines
+/// released to pull, parents pruned and streams with an open parent; the
+/// upload meter's capacity and busy thousandths and a seed's copies; chunks
+/// sent and pushed; requests timed out and chunks wasted; its outbound
+/// messages' bytes by kind, its payloads and those of HAVEs alone
+/// ([`strims_ppspp::ChannelMetrics`]); and the bytes it wrote that weren't
+/// chunk data (the series' overhead).
+pub const NODE_BIN_COUNTERS: [&str; 24] = [
+    "hits",
+    "misses",
+    "pruned",
+    "parents",
+    "capacity",
+    "busy",
+    "copies",
+    "sent",
+    "pushed",
+    "timeouts",
+    "wasted",
+    "have_bytes",
+    "ack_bytes",
+    "request_bytes",
+    "announce_bytes",
+    "stream_bytes",
+    "session_bytes",
+    "ping_bytes",
+    "header_bytes",
+    "integrity_bytes",
+    "data_bytes",
+    "payloads",
+    "have_only_payloads",
+    "ovh",
+];
+
+/// A forecast log sample of a node's ([`HostReport::forecasts`]): when it
+/// was taken and when its channel opened (true time from the run's start),
+/// the host it sampled, and the sample, its times by the node's clock.
+#[derive(Clone, Copy, Debug)]
+pub struct ForecastRecord {
+    pub at: Duration,
+    pub opened: Duration,
+    pub peer: Option<HostIx>,
+    pub forecast: LagForecast,
 }
 
 /// vpn probe results (see [`crate::spec::VpnProbes`]).
@@ -340,11 +412,10 @@ pub struct Report {
     pub violations: Vec<(u64, String)>,
     /// The access links, in WAN mode.
     pub wan: Option<WanReport>,
-    /// With [`Scenario::wire_bins`] in WAN mode, the uplink counters
-    /// ([`strims_wan::network::EndStats`]) at each bin edge from the first
-    /// swarm's start, summed over its seed and over its honest viewers:
-    /// the seed's bytes, packets and small packets, then the viewers'.
-    pub wire_bins: Vec<[u64; 6]>,
+    /// With [`Scenario::wire_bins`] in WAN mode, every host's uplink
+    /// counters ([`crate::wan::UP_COUNTERS`]) at each bin edge from the first
+    /// swarm's start.
+    pub wire_bins: Vec<Vec<[u64; crate::wan::UP_COUNTERS.len()]>>,
 }
 
 /// What a media swarm's seed wrote ([`crate::MediaSpec`]), over its

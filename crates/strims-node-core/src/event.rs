@@ -3,11 +3,12 @@
 
 //! Node events and metrics.
 
+use strims_base::time::Time;
 use strims_binmap::Bin;
 use strims_kademlia::ID;
 use strims_ppspp::{
-    ChannelStats, ChannelTotals, MetricsSnapshot, PeerStats, PushStats, SwarmId, SwarmKey,
-    SwarmSchedulerStats,
+    ChannelMetrics, ChannelStats, ChannelTotals, LagForecast, MetricsSnapshot, PeerStats,
+    PushStats, SwarmCounters, SwarmId, SwarmKey, SwarmSchedulerStats,
 };
 use strims_vnic::{HostMetrics, LinkKind, LinkMetrics, LinkPath};
 use strims_vpn::{Delivery, ExchangeOutcome, NetworkId};
@@ -178,6 +179,70 @@ pub struct NodeMetrics {
     pub runner: RunnerMetrics,
     /// vpn routing state per joined network, in network order.
     pub networks: Vec<NetworkInfo>,
+    /// With [`crate::NodeConfig::stats_bins`], the counters at each bin
+    /// edge passed since the last snapshot; empty otherwise.
+    pub bins: Vec<NodeBin>,
+    /// With [`crate::NodeConfig::forecast_log`], the ppspp runner's
+    /// forecast log since the last snapshot (`Runner::take_forecasts`), and
+    /// the samples its caps left out; empty otherwise.
+    pub forecasts: Vec<ForecastInfo>,
+    pub forecasts_lost: u64,
+    /// With [`crate::NodeConfig::forecast_log`], the chunks the runner
+    /// stored since the last snapshot (`Runner::take_held`).
+    pub held: Vec<HeldInfo>,
+}
+
+/// A chunk the node first held ([`NodeMetrics::held`]): its swarm, its
+/// bin, and when, by the node's clock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HeldInfo {
+    pub swarm: SwarmKey,
+    pub bin: Bin,
+    pub at: Time,
+}
+
+/// The node's counters at one edge of its stats bins
+/// ([`crate::NodeConfig::stats_bins`]): read with getters only, before the
+/// first pass past the edge, so they stand as they did at the edge.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NodeBin {
+    /// The edge, by the node's clock.
+    pub at: Time,
+    /// Each swarm with a scheduler, in key order.
+    pub swarms: Vec<SwarmBin>,
+    /// Every channel's outbound message counters so far
+    /// ([`RunnerMetrics::totals`]).
+    pub outbound: ChannelMetrics,
+    /// Bytes the driver wrote to its links so far
+    /// ([`DriverMetrics::bytes_written`]).
+    pub bytes_written: u64,
+}
+
+/// A swarm's counters at a bin edge ([`NodeBin`]): ppspp's `PushStats`'
+/// pushes before their deadline (`hits`), deadlines released to pull
+/// (`misses`), parents pruned, streams with an open parent, the upload
+/// meter's capacity and busy thousandths and a seed's copies, and the
+/// scheduler's counters.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SwarmBin {
+    pub swarm: SwarmKey,
+    pub hits: u64,
+    pub misses: u64,
+    pub pruned: u64,
+    pub parents: u64,
+    pub upload_capacity: u64,
+    pub upload_busy_permille: u64,
+    pub seed_copies: u64,
+    pub counters: SwarmCounters,
+}
+
+/// One sample of the ppspp runner's forecast log ([`NodeMetrics::forecasts`]),
+/// its peer named by host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ForecastInfo {
+    pub swarm: SwarmKey,
+    pub peer: Option<ID>,
+    pub forecast: LagForecast,
 }
 
 /// The ppspp runner's state.

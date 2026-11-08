@@ -112,6 +112,7 @@ use std::sync::{Arc, OnceLock};
 use rand_core::Rng;
 use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter, PathReading, PathSample};
 use strims_base::rng::{DetRng, det_rng, fork};
+use strims_base::stats::WaitHistogram;
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_ppspp::codec::{
@@ -121,9 +122,9 @@ use strims_ppspp::codec::{
 };
 use strims_ppspp::store::{self, BufferReader, ChunkBytes, ChunkCodec};
 use strims_ppspp::{
-    ChannelMetrics, ChannelTotals, DATA_QUEUE_CAP, DeliveryMode, Event, MAX_BIN, ParentAction,
-    PeerKey, PushMode, PushStats, ReportCounters, Runner, SeedAllocation, SeedPolicy, SeedQos,
-    SwarmId, SwarmKey, SwarmOptions, TapKind, TapLevel, Writer, WriterOptions,
+    ChannelMetrics, ChannelTotals, DATA_QUEUE_CAP, DeliveryMode, Event, LagForecast, MAX_BIN,
+    ParentAction, PeerKey, PushMode, PushStats, ReportCounters, Runner, SeedAllocation, SeedPolicy,
+    SeedQos, SwarmId, SwarmKey, SwarmOptions, TapKind, TapLevel, Writer, WriterOptions,
 };
 use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
 use strims_wan::live::{self, Encoder, Op, Plan, Sign, Signer};
@@ -819,6 +820,8 @@ struct Node {
     churned: bool,
     /// When it last took a place again, until it reads its first chunk.
     rejoined: Option<Time>,
+    /// Its incarnation read a chunk ([`Sim::write_tables`]' `first_read`).
+    read_once: bool,
     /// How far its clock is off ([`ClockSkew`]): its runner reads the true
     /// time plus this.
     clock: Duration,
@@ -1032,6 +1035,12 @@ struct Sim {
     series: Option<Vec<SeriesSample>>,
     /// With the tables, the same counters at every edge of the fine bins.
     bins: Option<Bins>,
+    /// With the tables, the run's timed events ([`TimedEvent`]).
+    timeline: Option<Vec<TimedEvent>>,
+    /// With the tables, every node's forecast log ([`Runner::set_forecasts`]),
+    /// and the samples the logs' caps left out.
+    forecasts: Option<Vec<Forecast>>,
+    forecasts_lost: u64,
     /// The churn's leaves and returns ([`churn_plan`]), and how many are
     /// done.
     churn: Vec<(Time, usize, bool)>,
@@ -1060,15 +1069,19 @@ struct MediaRun {
 }
 
 /// The fine bins of the tables ([`Sim::keep_tables`], [`Sim::write_tables`]):
-/// the series' counters read at every edge of bins `width` wide from the
-/// stream's start, and each bin's row.
+/// the series' counters and more read at every edge of bins `width` wide
+/// from the stream's start, and each bin's row.
 struct Bins {
     width: Duration,
     /// The next edge.
     next: Time,
     /// The counters at the last edge.
     last: Option<BinSample>,
-    rows: Vec<[i64; BIN_COLS.len()]>,
+    /// The `bins` table's rows ([`bin_cols`]).
+    rows: Vec<Vec<i64>>,
+    /// With `SIM_BIN_NODES=1`, the `node_bins` table's rows
+    /// ([`node_bin_cols`]): each node's in each bin.
+    node_rows: Option<Vec<Vec<i64>>>,
 }
 
 /// The counters at one bin edge.
@@ -1078,44 +1091,158 @@ struct BinSample {
     /// their deadline, deadlines released to pull, parents pruned, streams
     /// with an open parent, the overhead bytes it wrote so far
     /// ([`Node::written_overhead`]), and its uplink's bytes, packets and
-    /// small packets ([`Node::wire`]).
-    viewers: Vec<Option<[u64; 8]>>,
+    /// small packets ([`Node::wire`]); and the rest of its counters.
+    viewers: Vec<Option<([u64; 8], NodeCounts)>>,
     /// The seed's meter capacity and busy thousandths, copies, chunks sent
     /// and pushed, uplink, overhead bytes, and its uplink's bytes, packets
-    /// and small packets.
-    seed: [u64; 10],
+    /// and small packets; and the rest of its counters.
+    seed: ([u64; 10], NodeCounts),
 }
 
-/// The `bins` table's columns ([`Sim::write_tables`]).
-const BIN_COLS: [&str; 21] = [
-    "bin",
-    "t_ms",
-    "present",
-    "hits",
-    "misses",
-    "pruned",
-    "parents",
-    "viewer_ovh",
-    "viewer_up_bytes",
-    "viewer_up_packets",
-    "viewer_small_packets",
-    "capacity",
-    "busy",
-    "avail",
-    "copies",
-    "sent",
-    "pushed",
-    "seed_ovh",
-    "seed_up_bytes",
-    "seed_up_packets",
-    "seed_small_packets",
+/// A node's counters at a bin edge beyond the series': [`NODE_COLS`]' so
+/// far, and its push and answer waits' histograms so far.
+#[derive(Clone)]
+struct NodeCounts {
+    c: [u64; NODE_COLS.len()],
+    waits: [WaitHistogram; 2],
+}
+
+/// [`NodeCounts`]' counters: requests timed out and chunks wasted
+/// ([`strims_ppspp::SwarmCounters`]), its outbound messages' bytes by kind,
+/// its payloads and those of HAVEs alone ([`ChannelMetrics`]), and its
+/// stream messages that lost a packet and datagrams lost
+/// ([`Sim::wan_stats`]).
+const NODE_COLS: [&str; 16] = [
+    "timeouts",
+    "wasted",
+    "have_bytes",
+    "ack_bytes",
+    "request_bytes",
+    "announce_bytes",
+    "stream_bytes",
+    "session_bytes",
+    "ping_bytes",
+    "header_bytes",
+    "integrity_bytes",
+    "data_bytes",
+    "payloads",
+    "have_only_payloads",
+    "retransmits",
+    "drops",
 ];
+
+/// What a bin's waits give: pushes written and answers sent in it, and the
+/// p50 and p99 of their waits (empty without any: [`NONE`]).
+const WAIT_COLS: [&str; 6] = [
+    "push_waits",
+    "push_wait_p50_ms",
+    "push_wait_p99_ms",
+    "answer_waits",
+    "answer_wait_p50_ms",
+    "answer_wait_p99_ms",
+];
+
+/// The `bins` table's columns ([`Sim::write_tables`]): the series' and the
+/// network's, then [`NODE_COLS`] and [`WAIT_COLS`] summed over the viewers
+/// (`viewer_`) and the seed's (`seed_`).
+fn bin_cols() -> Vec<String> {
+    let mut cols: Vec<String> = [
+        "bin",
+        "t_ms",
+        "present",
+        "hits",
+        "misses",
+        "pruned",
+        "parents",
+        "viewer_ovh",
+        "viewer_up_bytes",
+        "viewer_up_packets",
+        "viewer_small_packets",
+        "capacity",
+        "busy",
+        "avail",
+        "copies",
+        "sent",
+        "pushed",
+        "seed_ovh",
+        "seed_up_bytes",
+        "seed_up_packets",
+        "seed_small_packets",
+    ]
+    .map(String::from)
+    .to_vec();
+    for who in ["viewer", "seed"] {
+        cols.extend(
+            NODE_COLS
+                .iter()
+                .chain(&WAIT_COLS)
+                .map(|c| format!("{who}_{c}")),
+        );
+    }
+    cols
+}
+
+/// The `node_bins` table's columns: a node's in one bin.
+fn node_bin_cols() -> Vec<String> {
+    let mut cols: Vec<String> = [
+        "bin",
+        "t_ms",
+        "node",
+        "viewer",
+        "hits",
+        "misses",
+        "pruned",
+        "parents",
+        "ovh",
+        "up_bytes",
+        "up_packets",
+        "small_packets",
+    ]
+    .map(String::from)
+    .to_vec();
+    cols.extend(NODE_COLS.iter().chain(&WAIT_COLS).map(|c| c.to_string()));
+    cols
+}
+
+/// What a node's counters at `b` add to `a`'s ([`NODE_COLS`]), and its
+/// waits' histograms in between.
+fn counts_delta(a: &NodeCounts, b: &NodeCounts) -> ([i64; NODE_COLS.len()], [WaitHistogram; 2]) {
+    let mut c = [0; NODE_COLS.len()];
+    for (x, (p, q)) in c.iter_mut().zip(b.c.iter().zip(&a.c)) {
+        *x = p.saturating_sub(*q) as i64;
+    }
+    let mut waits = [WaitHistogram::default(); 2];
+    for (w, (p, q)) in waits.iter_mut().zip(b.waits.iter().zip(&a.waits)) {
+        for (x, (m, n)) in w.buckets.iter_mut().zip(p.buckets.iter().zip(&q.buckets)) {
+            *x = m.saturating_sub(*n);
+        }
+    }
+    (c, waits)
+}
+
+/// An integer [`Table::ints`] writes as an empty field (`NULL` to
+/// `hack/sim-db`): a reading a run doesn't have.
+const NONE: i64 = i64::MIN;
+
+/// [`WAIT_COLS`]' values for the waits `w`.
+fn wait_cols(w: &[WaitHistogram; 2]) -> [i64; WAIT_COLS.len()] {
+    let p = |h: &WaitHistogram, q: f64| h.percentile(q).map_or(NONE, ms);
+    [
+        w[0].count() as i64,
+        p(&w[0], 0.5),
+        p(&w[0], 0.99),
+        w[1].count() as i64,
+        p(&w[1], 0.5),
+        p(&w[1], 0.99),
+    ]
+}
 
 /// The `bins` row of bin `k`, from the counters at its edges: what the
 /// viewers present at both did (summed, and their median open parents at
 /// its end), and the seed's.
-fn bin_row(k: usize, width: Duration, a: &BinSample, b: &BinSample) -> [i64; BIN_COLS.len()] {
-    let both: Vec<(&[u64; 8], &[u64; 8])> = b
+fn bin_row(k: usize, width: Duration, a: &BinSample, b: &BinSample) -> Vec<i64> {
+    type Counts = ([u64; 8], NodeCounts);
+    let both: Vec<(&Counts, &Counts)> = b
         .viewers
         .iter()
         .zip(&a.viewers)
@@ -1123,21 +1250,21 @@ fn bin_row(k: usize, width: Duration, a: &BinSample, b: &BinSample) -> [i64; BIN
         .collect();
     let sum = |f: usize| -> i64 {
         both.iter()
-            .map(|(x, y)| x[f].saturating_sub(y[f]) as i64)
+            .map(|(x, y)| x.0[f].saturating_sub(y.0[f]) as i64)
             .sum()
     };
-    let mut parents: Vec<u64> = both.iter().map(|(x, _)| x[3]).collect();
+    let mut parents: Vec<u64> = both.iter().map(|(x, _)| x.0[3]).collect();
     parents.sort_unstable();
-    let gauge = |f: usize| b.seed[f] as i64;
-    let delta = |f: usize| b.seed[f].saturating_sub(a.seed[f]) as i64;
-    [
+    let gauge = |f: usize| b.seed.0[f] as i64;
+    let delta = |f: usize| b.seed.0[f].saturating_sub(a.seed.0[f]) as i64;
+    let mut row = vec![
         k as i64,
         k as i64 * width.as_millis(),
         both.len() as i64,
         sum(0),
         sum(1),
         sum(2),
-        parents.get(parents.len() / 2).map_or(-1, |&x| x as i64),
+        parents.get(parents.len() / 2).map_or(NONE, |&x| x as i64),
         sum(4),
         sum(5),
         sum(6),
@@ -1152,7 +1279,76 @@ fn bin_row(k: usize, width: Duration, a: &BinSample, b: &BinSample) -> [i64; BIN
         delta(7),
         delta(8),
         delta(9),
-    ]
+    ];
+    let mut counts = [0i64; NODE_COLS.len()];
+    let mut waits = [WaitHistogram::default(); 2];
+    for (x, y) in &both {
+        let (c, w) = counts_delta(&y.1, &x.1);
+        for (s, v) in counts.iter_mut().zip(c) {
+            *s += v;
+        }
+        for (s, v) in waits.iter_mut().zip(&w) {
+            s.merge(v);
+        }
+    }
+    row.extend(counts);
+    row.extend(wait_cols(&waits));
+    let (c, w) = counts_delta(&a.seed.1, &b.seed.1);
+    row.extend(c);
+    row.extend(wait_cols(&w));
+    row
+}
+
+/// Node `node`'s `node_bins` row in bin `k`, from its counters at the
+/// bin's edges (`a`, `b`: the series' in [`BinSample::viewers`]' order, and
+/// the rest); its `viewer` is filled in by [`Sim::write_tables`].
+fn node_bin_row(
+    k: usize,
+    width: Duration,
+    node: usize,
+    a: (&[u64; 8], &NodeCounts),
+    b: (&[u64; 8], &NodeCounts),
+) -> Vec<i64> {
+    let d = |f: usize| b.0[f].saturating_sub(a.0[f]) as i64;
+    let mut row = vec![
+        k as i64,
+        k as i64 * width.as_millis(),
+        node as i64,
+        -1,
+        d(0),
+        d(1),
+        d(2),
+        b.0[3] as i64,
+        d(4),
+        d(5),
+        d(6),
+        d(7),
+    ];
+    let (c, w) = counts_delta(a.1, b.1);
+    row.extend(c);
+    row.extend(wait_cols(&w));
+    row
+}
+
+/// One timed event of the run for the `events` table: true time, what it
+/// was, the node it happened to (or -1), the other node (or -1), a value
+/// and a detail by kind ([`Sim::write_tables`]).
+struct TimedEvent {
+    at: Time,
+    kind: &'static str,
+    node: i64,
+    peer: i64,
+    value: i64,
+    detail: &'static str,
+}
+
+/// A forecast log sample ([`Runner::set_forecasts`]) as the harness keeps
+/// it: the node that took it, the node it sampled (`usize::MAX` if its
+/// peer key named no link), and the sample in the node's clock.
+struct Forecast {
+    node: usize,
+    peer: usize,
+    f: LagForecast,
 }
 
 /// One second's sample for [`Sim::series`].
@@ -1715,6 +1911,7 @@ impl Sim {
                 resets: 0,
                 lags: vec![],
                 read_seqs: vec![],
+                read_once: false,
                 sign_lags: vec![],
                 read_chunks: vec![],
                 arrived: vec![],
@@ -1895,6 +2092,9 @@ impl Sim {
             collude_at,
             series: (knob::<u32>("SIM_SERIES") == Some(1)).then(Vec::new),
             bins: None,
+            timeline: None,
+            forecasts: None,
+            forecasts_lost: 0,
             churn,
             churn_done: 0,
             joins: Vec::new(),
@@ -2105,6 +2305,9 @@ impl Sim {
                 }
             }
         }
+        for i in 0..self.nodes.len() {
+            self.take_forecasts(i);
+        }
         for n in &mut self.nodes {
             if let Some(c) = n.cap.as_mut() {
                 c.drain(self.now, &mut n.runner);
@@ -2178,8 +2381,14 @@ impl Sim {
         {
             let victim = self.busiest_relay();
             match what {
-                Incident::Dies => self.nodes[victim].role = Role::Dead,
-                Incident::Slows(bw) => self.nodes[victim].up_bw = bw,
+                Incident::Dies => {
+                    self.log("incident", victim as i64, -1, 0, "dies");
+                    self.nodes[victim].role = Role::Dead;
+                }
+                Incident::Slows(bw) => {
+                    self.log("incident", victim as i64, -1, bw as i64, "slows");
+                    self.nodes[victim].up_bw = bw;
+                }
             }
             self.incident = Some((now, victim));
             self.touch(victim);
@@ -2192,8 +2401,12 @@ impl Sim {
             self.steps_done += 1;
             self.touch(0);
             match step {
-                SeedStep::Uplink(bw) => self.nodes[0].up_bw = bw,
+                SeedStep::Uplink(bw) => {
+                    self.log("uplink", 0, -1, bw as i64, "");
+                    self.nodes[0].up_bw = bw;
+                }
                 SeedStep::Latency(d) => {
+                    self.log("latency", 0, -1, ms(d), "");
                     for l in &mut self.links {
                         if l.from == 0 || l.to == 0 {
                             l.latency = d;
@@ -2204,6 +2417,7 @@ impl Sim {
                     }
                 }
                 SeedStep::Reconnect => {
+                    self.log("reconnect", 0, -1, 0, "");
                     for l in 0..self.links.len() {
                         let (from, to, peer) =
                             (self.links[l].from, self.links[l].to, self.links[l].peer);
@@ -2271,6 +2485,7 @@ impl Sim {
 
     /// Viewer `i` leaves: its neighbours see its links close.
     fn leave(&mut self, i: usize) {
+        self.log("leave", i as i64, -1, 0, "");
         let n = &mut self.nodes[i];
         n.role = Role::Dead;
         n.churned = true;
@@ -2297,6 +2512,11 @@ impl Sim {
         if self.loops.is_some() {
             runner.set_tap(TapLevel::All);
         }
+        if self.forecasts.is_some() {
+            self.take_forecasts(i);
+            runner.set_forecasts(true);
+        }
+        self.log("join", i as i64, -1, 0, "");
         let swarm = strims_ppspp::Swarm::new(self.swarm_id.clone(), self.options.clone()).unwrap();
         let reader = swarm.reader();
         let key = runner.add_swarm(swarm);
@@ -2317,6 +2537,7 @@ impl Sim {
         n.removed.clear();
         n.vtime.values_mut().for_each(|v| *v = 0);
         n.rejoined = Some(now);
+        n.read_once = false;
         if let Some(last) = self.shape.last.get_mut(i) {
             *last = None;
         }
@@ -2611,17 +2832,106 @@ impl Sim {
     }
 
     /// Keeps what the tables need ([`Sim::write_tables`], `SIM_OUT`): the
-    /// series, each read's chunk, and the series' counters at every edge of
-    /// bins `width` wide (`SIM_BIN_MS`). Set before the run; outside the
-    /// config, so the run's tag stays the same, and it changes no trace.
-    fn keep_tables(&mut self, width: Duration) {
+    /// series, each read's chunk, the series' counters and more at every
+    /// edge of bins `width` wide (`SIM_BIN_MS`), each node's too with
+    /// `nodes` (`SIM_BIN_NODES=1`), the run's timed events, and with
+    /// `forecasts` (`SIM_FORECAST=1`; a row per neighbour per chunk
+    /// announced, tens of MB a run) every node's forecast log. Set before
+    /// the run; outside the config, so the run's tag stays the same, and it
+    /// changes no trace.
+    fn keep_tables(&mut self, width: Duration, nodes: bool, forecasts: bool) {
         self.series.get_or_insert_with(Vec::new);
         self.bins = Some(Bins {
             width: width.max(Duration::from_millis(1)),
             next: t0() + Duration::SECOND,
             last: None,
             rows: Vec::new(),
+            node_rows: nodes.then(Vec::new),
         });
+        // Every viewer links at the start.
+        let joins = (1..self.nodes.len()).map(|i| TimedEvent {
+            at: t0(),
+            kind: "join",
+            node: i as i64,
+            peer: -1,
+            value: 0,
+            detail: "",
+        });
+        self.timeline = Some(joins.collect());
+        if forecasts {
+            self.forecasts = Some(Vec::new());
+            for n in &mut self.nodes {
+                n.runner.set_forecasts(true);
+            }
+        }
+    }
+
+    /// With the tables, records an event at the current time.
+    fn log(&mut self, kind: &'static str, node: i64, peer: i64, value: i64, detail: &'static str) {
+        if let Some(t) = self.timeline.as_mut() {
+            t.push(TimedEvent {
+                at: self.now,
+                kind,
+                node,
+                peer,
+                value,
+                detail,
+            });
+        }
+    }
+
+    /// With the tables, moves node `i`'s forecast log into the harness's.
+    fn take_forecasts(&mut self, i: usize) {
+        let Some(all) = self.forecasts.as_mut() else {
+            return;
+        };
+        let n = &mut self.nodes[i];
+        let (log, lost) = n.runner.take_forecasts(n.swarm);
+        // The harness's own truth is `arrived`.
+        n.runner.take_held(n.swarm);
+        self.forecasts_lost += lost;
+        if log.is_empty() {
+            return;
+        }
+        let peers: BTreeMap<PeerKey, usize> = n
+            .links
+            .iter()
+            .map(|(&to, &l)| (self.links[l].peer, to))
+            .collect();
+        all.extend(log.into_iter().map(|f| Forecast {
+            node: i,
+            peer: peers.get(&f.peer).copied().unwrap_or(usize::MAX),
+            f,
+        }));
+    }
+
+    /// Node `i`'s [`NodeCounts`] now.
+    fn node_counts(&self, i: usize) -> NodeCounts {
+        let n = &self.nodes[i];
+        let o = n.totals().outbound;
+        let s = n.runner.swarm_counters(n.swarm).unwrap_or_default();
+        let path = self.wan.as_ref().map(|w| w.stats(i)).unwrap_or_default();
+        NodeCounts {
+            c: [
+                s.requests_timed_out,
+                s.wasted_chunks,
+                o.have_bytes,
+                o.ack_bytes,
+                o.request_bytes,
+                o.announce_bytes,
+                o.stream_bytes,
+                o.session_bytes,
+                o.ping_bytes,
+                o.header_bytes,
+                o.integrity_bytes + o.signed_integrity_bytes,
+                o.data_bytes,
+                o.payloads,
+                o.have_only_payloads,
+                path.retransmits,
+                path.drops,
+            ],
+            waits: [s.push_wait, s.answer_wait],
+        }
     }
 
     /// With the tables, the counters at each bin edge up to `t`, the time
@@ -2633,18 +2943,16 @@ impl Sim {
         if self.bins.as_ref().is_none_or(|b| t < b.next) {
             return;
         }
-        let viewers = self
-            .nodes
-            .iter()
-            .skip(1)
-            .map(|n| {
+        let viewers = (1..self.nodes.len())
+            .map(|i| {
+                let n = &self.nodes[i];
                 (n.role == Role::Peer).then(|| {
                     let [hits, misses, pruned, parents] =
                         n.runner.push_stats(n.swarm).map_or([0; 4], |p| {
                             let parents = p.parents.iter().filter(|x| x.is_some()).count();
                             [p.hits, p.misses, p.pruned, parents as u64]
                         });
-                    [
+                    let series = [
                         hits,
                         misses,
                         pruned,
@@ -2653,7 +2961,8 @@ impl Sim {
                         n.wire.up_bytes,
                         n.wire.up_packets,
                         n.wire.small_packets,
-                    ]
+                    ];
+                    (series, self.node_counts(i))
                 })
             })
             .collect();
@@ -2661,30 +2970,54 @@ impl Sim {
         let p = seed.runner.push_stats(seed.swarm).unwrap_or_default();
         let (sent, pushed) = seed
             .runner
-            .swarm_stats(seed.swarm)
+            .swarm_counters(seed.swarm)
             .map_or((0, 0), |s| (s.chunks_sent, s.pushed_chunks));
         let sample = BinSample {
             viewers,
-            seed: [
-                p.upload_capacity,
-                u64::from(p.upload_busy_permille),
-                p.seed_copies as u64,
-                sent,
-                pushed,
-                seed.up_bw,
-                seed.written_overhead(),
-                seed.wire.up_bytes,
-                seed.wire.up_packets,
-                seed.wire.small_packets,
-            ],
+            seed: (
+                [
+                    p.upload_capacity,
+                    u64::from(p.upload_busy_permille),
+                    p.seed_copies as u64,
+                    sent,
+                    pushed,
+                    seed.up_bw,
+                    seed.written_overhead(),
+                    seed.wire.up_bytes,
+                    seed.wire.up_packets,
+                    seed.wire.small_packets,
+                ],
+                self.node_counts(0),
+            ),
         };
+        for i in 0..self.nodes.len() {
+            self.take_forecasts(i);
+        }
         let Some(b) = self.bins.as_mut() else {
             return;
         };
         let mut from = b.last.take();
         while t >= b.next {
             if let Some(a) = &from {
-                b.rows.push(bin_row(b.rows.len(), b.width, a, &sample));
+                let k = b.rows.len();
+                b.rows.push(bin_row(k, b.width, a, &sample));
+                if let Some(rows) = b.node_rows.as_mut() {
+                    // The seed's overhead and uplink, in the viewers' order.
+                    let seed = |c: &[u64; 10]| [0, 0, 0, 0, c[6], c[7], c[8], c[9]];
+                    let (x, y) = (seed(&a.seed.0), seed(&sample.seed.0));
+                    rows.push(node_bin_row(
+                        k,
+                        b.width,
+                        0,
+                        (&x, &a.seed.1),
+                        (&y, &sample.seed.1),
+                    ));
+                    for (j, (x, y)) in a.viewers.iter().zip(&sample.viewers).enumerate() {
+                        if let (Some(x), Some(y)) = (x, y) {
+                            rows.push(node_bin_row(k, b.width, j + 1, (&x.0, &x.1), (&y.0, &y.1)));
+                        }
+                    }
+                }
             }
             from = Some(sample.clone());
             b.next += b.width;
@@ -2870,13 +3203,18 @@ impl Sim {
     /// | `seconds` | second of [`Sim::series`] | `sec`, then the series' per-second fields (`present`, `hits`, `misses`, `pruned`, `parents`, `capacity`, `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, and `written` in a media run) |
     /// | `viewer_seconds` | viewer and second | `viewer`, `sec`, `lag_ms` (the series' `lag`, -1 without a read), `frames` |
     /// | `reads` | chunk a viewer read | `viewer`, `t_ms` (when it read it), `seq` (the chunk), `lag_ms` (from its publishing) |
-    /// | `bins` | bin of [`Sim::keep_tables`]' width | [`BIN_COLS`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), and the seed's meter, uplink and copies at its end and what it sent in it |
-    /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink in bytes per second), `churned` (it left at least once), `clock_ms` (its clock's offset) |
+    /// | `bins` | bin of [`Sim::keep_tables`]' width | [`bin_cols`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), the seed's meter, uplink and copies at its end and what it sent in it, then [`NODE_COLS`] and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`) |
+    /// | `node_bins` | node and bin, with `SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node`, `viewer` (its number here, -1 for none), what it did in the bin |
+    /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink in bytes per second), `hostile`, `churned` (it left at least once), `clock_ms` (its clock's offset) |
+    /// | `events` | timed event ([`TimedEvent`]) | `t_us`, `kind`, `node`, `peer` (-1 for none), `value`, `detail`: each viewer's `join` (at the start, and on taking a place again), `first_read` (`value` its ms from the join), churn's `leave`, the seed's steps (`uplink` in bytes per second, `latency` in ms, `reconnect`) and an `incident` (`detail` dies or slows, `value` the new uplink) |
+    /// | `forecast` | sample of a node's forecast log ([`Runner::set_forecasts`]), with `SIM_FORECAST=1` | `t_ms`, `node`, `viewer`, `peer` (nodes), `peer_honest` (the seed, or an honest viewer at the end: a greedy one's HAVEs can claim what it never held), `stream`, `seq` (the chunk), `sample_ms`, `mean_ms`, `horizon_ms` (-1 before the estimate's first sample), `samples`, `fresh`, `lazy`, `first_sight`, `run` ([`LagForecast`]), `seen_ms` (our first sight of the chunk) and `held_ms` (when the peer first held it: its first data from an honest node, the seed's publishing; -1 if never, or not in the incarnation that announced it), `channel_open_ms` (when our channel with the peer opened), `live` (it was held after both nodes took their places and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
     ///
     /// `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
     /// `secs`, the seed's `seed_up` steps and the viewers' `viewer_up` as
-    /// the series has them, the number of `seconds` and `viewers`, and the
-    /// bins' `bin_ms`.
+    /// the series has them, the number of `seconds` and `viewers`, the
+    /// bins' `bin_ms`, and the forecast samples the logs' caps left out
+    /// (`forecasts_lost`). An empty field is a reading the run doesn't
+    /// have ([`NONE`]).
     ///
     /// The bins read the counters the series reads, at each edge rather
     /// than each second's first event ([`Sim::sample_bins`]), so a bin's
@@ -2917,27 +3255,88 @@ impl Sim {
             }
         }
         t.write(dir)?;
-        let mut t = Table::new("bins", &BIN_COLS);
+        let mut t = Table::new("bins", &bin_cols());
         for row in self.bins.iter().flat_map(|b| &b.rows) {
             t.ints(row);
         }
         t.write(dir)?;
-        let mut t = Table::new("viewers", &["viewer", "node", "up", "churned", "clock_ms"]);
+        // Each node's number in the tables, if an honest viewer at the end.
+        let mut viewer = vec![-1i64; self.nodes.len()];
+        for (i, v) in honest.iter().enumerate() {
+            if let Some(n) = self.nodes.iter().position(|n| std::ptr::eq(n, *v)) {
+                viewer[n] = i as i64;
+            }
+        }
+        if let Some(rows) = self.bins.as_ref().and_then(|b| b.node_rows.as_ref()) {
+            let mut t = Table::new("node_bins", &node_bin_cols());
+            for row in rows {
+                let mut row = row.clone();
+                row[3] = viewer.get(row[2] as usize).copied().unwrap_or(-1);
+                t.ints(&row);
+            }
+            t.write(dir)?;
+        }
+        let mut t = Table::typed(
+            "viewers",
+            &[
+                ("viewer", "BIGINT"),
+                ("node", "BIGINT"),
+                ("up", "BIGINT"),
+                ("hostile", "BOOLEAN"),
+                ("churned", "BOOLEAN"),
+                ("clock_ms", "BIGINT"),
+            ],
+        );
         for (i, v) in honest.iter().enumerate() {
             let node = self
                 .nodes
                 .iter()
                 .position(|n| std::ptr::eq(n, *v))
                 .unwrap_or(0);
-            t.ints(&[
-                i as i64,
-                node as i64,
-                v.up_bw as i64,
-                i64::from(v.churned),
-                v.clock.as_millis(),
+            t.fields(&[
+                i.to_string(),
+                node.to_string(),
+                v.up_bw.to_string(),
+                v.hostile.to_string(),
+                v.churned.to_string(),
+                v.clock.as_millis().to_string(),
             ]);
         }
         t.write(dir)?;
+        let us = |at: Time| -> i64 {
+            if at >= start {
+                (at - start).as_micros()
+            } else {
+                -(start - at).as_micros()
+            }
+        };
+        if let Some(events) = &self.timeline {
+            let mut t = Table::typed(
+                "events",
+                &[
+                    ("t_us", "BIGINT"),
+                    ("kind", "VARCHAR"),
+                    ("node", "BIGINT"),
+                    ("peer", "BIGINT"),
+                    ("value", "BIGINT"),
+                    ("detail", "VARCHAR"),
+                ],
+            );
+            for e in events {
+                t.fields(&[
+                    us(e.at).to_string(),
+                    e.kind.to_owned(),
+                    e.node.to_string(),
+                    e.peer.to_string(),
+                    e.value.to_string(),
+                    e.detail.to_owned(),
+                ]);
+            }
+            t.write(dir)?;
+        }
+        if let Some(forecasts) = &self.forecasts {
+            self.forecast_table(forecasts, &viewer, &us).write(dir)?;
+        }
         let mut meta = String::from("{\"sim\":\"ppspp\"");
         if let Some(s) = &series {
             let _ = write!(
@@ -2953,9 +3352,109 @@ impl Sim {
             );
         }
         let width = self.bins.as_ref().map_or(0, |b| b.width.as_millis());
-        let _ = write!(meta, ",\"viewers\":{},\"bin_ms\":{width}}}", honest.len());
+        let _ = write!(
+            meta,
+            ",\"viewers\":{},\"bin_ms\":{width},\"forecasts_lost\":{}}}",
+            honest.len(),
+            self.forecasts_lost
+        );
         meta.push('\n');
         std::fs::write(dir.join("series_meta.json"), meta)
+    }
+
+    /// The `forecast` table: each forecast log sample, with the true times
+    /// it implies and when the sampled node truly first held the chunk
+    /// (its first data from an honest node, or the seed's publishing),
+    /// `-1` if it never did (censored). `us` maps a true time to the
+    /// tables' µs.
+    fn forecast_table(
+        &self,
+        forecasts: &[Forecast],
+        viewer: &[i64],
+        us: &dyn Fn(Time) -> i64,
+    ) -> Table {
+        let mut t = Table::typed(
+            "forecast",
+            &[
+                ("t_ms", "BIGINT"),
+                ("node", "BIGINT"),
+                ("viewer", "BIGINT"),
+                ("peer", "BIGINT"),
+                ("peer_honest", "BOOLEAN"),
+                ("stream", "BIGINT"),
+                ("seq", "BIGINT"),
+                ("sample_ms", "BIGINT"),
+                ("mean_ms", "BIGINT"),
+                ("horizon_ms", "BIGINT"),
+                ("samples", "BIGINT"),
+                ("fresh", "BOOLEAN"),
+                ("lazy", "BOOLEAN"),
+                ("first_sight", "BOOLEAN"),
+                ("run", "BIGINT"),
+                ("seen_ms", "BIGINT"),
+                ("held_ms", "BIGINT"),
+                ("channel_open_ms", "BIGINT"),
+                ("live", "BOOLEAN"),
+            ],
+        );
+        let ms_of = |at: Time| us(at).div_euclid(1000);
+        // When each node took its place, every time: a peer's first data
+        // for a chunk ([`Node::arrived`]) is its first incarnation's, so a
+        // sample of a later incarnation's has no truth to meet; and a chunk
+        // held before the other's place was taken, or before the channel
+        // opened, comes in the HAVEs of a channel's start, not as it
+        // arrives (not `live`).
+        let mut joined: BTreeMap<usize, Vec<Time>> = BTreeMap::new();
+        for e in self.timeline.iter().flatten().filter(|e| e.kind == "join") {
+            joined.entry(e.node as usize).or_default().push(e.at);
+        }
+        for r in forecasts {
+            let f = &r.f;
+            let node = &self.nodes[r.node];
+            let at = node.true_time(f.at);
+            let seen = at - f.sample;
+            let seq = f.bin.base_offset() as usize;
+            let place = |n: usize| {
+                joined
+                    .get(&n)
+                    .and_then(|j| j.iter().rev().find(|&&t| t <= at).copied())
+                    .unwrap_or(t0())
+            };
+            let held = match r.peer {
+                0 => self.publish_times.get(seq).copied(),
+                p => self.nodes.get(p).and_then(|n| n.arrived.get(seq).copied()),
+            }
+            .filter(|h| !h.is_nil() && *h >= place(r.peer));
+            let opened = node.true_time(f.channel_open);
+            let live = held.is_some_and(|h| h >= place(r.node) && h >= opened);
+            let est = f.estimate;
+            t.fields(&[
+                ms_of(at).to_string(),
+                r.node.to_string(),
+                viewer.get(r.node).copied().unwrap_or(-1).to_string(),
+                if r.peer == usize::MAX {
+                    "-1".to_owned()
+                } else {
+                    r.peer.to_string()
+                },
+                (r.peer == 0 || viewer.get(r.peer).is_some_and(|&v| v >= 0)).to_string(),
+                f.stream.to_string(),
+                seq.to_string(),
+                ms(f.sample).to_string(),
+                est.map_or(-1, |e| ms(e.mean)).to_string(),
+                est.map_or(-1, |e| ms(e.horizon)).to_string(),
+                est.map_or(0, |e| e.samples).to_string(),
+                est.is_some_and(|e| e.fresh).to_string(),
+                f.lazy.to_string(),
+                f.first_sight.to_string(),
+                f.run.to_string(),
+                ms_of(seen).to_string(),
+                held.map_or(-1, ms_of).to_string(),
+                ms_of(opened).to_string(),
+                live.to_string(),
+            ]);
+        }
+        t
     }
 
     fn sample_alloc(&mut self) {
@@ -3762,6 +4261,20 @@ impl Sim {
                         }
                         if let Some(r) = node.read_chunks.get_mut(c as usize) {
                             *r = true;
+                        }
+                    }
+                    if end > first && !node.read_once {
+                        node.read_once = true;
+                        let since = node.rejoined.unwrap_or(t0());
+                        if let Some(t) = self.timeline.as_mut() {
+                            t.push(TimedEvent {
+                                at: now,
+                                kind: "first_read",
+                                node: i as i64,
+                                peer: -1,
+                                value: ms(now - since),
+                                detail: "",
+                            });
                         }
                     }
                     if end > first
@@ -5362,9 +5875,9 @@ fn sim_tables_change_no_trace() {
     let plain = Sim::new(cfg.clone()).run();
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
         .join(format!("sim_tables_change_no_trace-{}", std::process::id()));
-    for ms in [1000, 1] {
+    for (ms, nodes) in [(1000, false), (1, true)] {
         let mut sim = Sim::new(cfg.clone());
-        sim.keep_tables(Duration::from_millis(ms));
+        sim.keep_tables(Duration::from_millis(ms), nodes, true);
         let r = sim.run();
         assert_eq!(
             (r.trace, r.frames, r.bytes),
@@ -5378,6 +5891,12 @@ fn sim_tables_change_no_trace() {
         assert_eq!(seconds.lines().count(), s.len() + 1);
         let bins = std::fs::read_to_string(d.join("bins.csv")).unwrap();
         assert!(bins.lines().count() > s.len(), "{ms} ms");
+        let lines = |t: &str| {
+            std::fs::read_to_string(d.join(format!("{t}.csv"))).map_or(0, |c| c.lines().count())
+        };
+        assert!(lines("events") > 4, "{ms} ms: a join per viewer");
+        assert!(lines("forecast") > 1, "{ms} ms");
+        assert_eq!(lines("node_bins") > 0, nodes, "{ms} ms");
         let reads = std::fs::read_to_string(d.join("reads.csv")).unwrap();
         let read: usize = sim.honest().iter().map(|v| v.lags.len()).sum();
         assert_eq!(reads.lines().count(), read + 1);
@@ -7602,9 +8121,11 @@ fn sim_job() {
     let out = knob::<String>("SIM_OUT").filter(|s| !s.is_empty());
     let mut sim = Sim::new(cfg);
     if out.is_some() {
-        sim.keep_tables(Duration::from_millis(
-            knob::<i64>("SIM_BIN_MS").unwrap_or(100).max(1),
-        ));
+        sim.keep_tables(
+            Duration::from_millis(knob::<i64>("SIM_BIN_MS").unwrap_or(100).max(1)),
+            knob::<u32>("SIM_BIN_NODES") == Some(1),
+            knob::<u32>("SIM_FORECAST") == Some(1),
+        );
     }
     let r = sim.run();
     println!("ROW {}", job_row(&scenario, &case, &sim, &r));
@@ -8184,28 +8705,46 @@ impl SeriesData {
 /// One of [`Sim::write_tables`]' tables: integer columns, as CSV.
 struct Table {
     name: &'static str,
-    cols: Vec<&'static str>,
+    /// Each column's name and type, as `hack/sim-db` names it.
+    cols: Vec<(String, &'static str)>,
     csv: String,
 }
 
 impl Table {
-    fn new(name: &'static str, cols: &[&'static str]) -> Table {
-        let mut csv = cols.join(",");
+    /// A table of integer columns.
+    fn new(name: &'static str, cols: &[impl AsRef<str>]) -> Table {
+        let cols: Vec<(&str, &'static str)> = cols.iter().map(|c| (c.as_ref(), "BIGINT")).collect();
+        Table::typed(name, &cols)
+    }
+
+    /// A table of columns with their types (`BIGINT`, `BOOLEAN`, `VARCHAR`).
+    fn typed(name: &'static str, cols: &[(&str, &'static str)]) -> Table {
+        let names: Vec<&str> = cols.iter().map(|(n, _)| *n).collect();
+        let mut csv = names.join(",");
         csv.push('\n');
         Table {
             name,
-            cols: cols.to_vec(),
+            cols: cols.iter().map(|&(n, t)| (n.to_owned(), t)).collect(),
             csv,
         }
     }
 
+    /// Appends a row already formatted as CSV fields.
+    fn fields(&mut self, row: &[String]) {
+        self.csv.push_str(&row.join(","));
+        self.csv.push('\n');
+    }
+
+    /// Appends a row of integers, [`NONE`] an empty field.
     fn ints(&mut self, row: &[i64]) {
         use std::fmt::Write;
         for (i, x) in row.iter().enumerate() {
             if i > 0 {
                 self.csv.push(',');
             }
-            write!(self.csv, "{x}").unwrap();
+            if *x != NONE {
+                write!(self.csv, "{x}").unwrap();
+            }
         }
         self.csv.push('\n');
     }
@@ -8216,7 +8755,7 @@ impl Table {
         let cols: Vec<String> = self
             .cols
             .iter()
-            .map(|n| format!("{{\"name\":\"{n}\",\"type\":\"BIGINT\"}}"))
+            .map(|(n, t)| format!("{{\"name\":\"{n}\",\"type\":\"{t}\"}}"))
             .collect();
         std::fs::write(
             dir.join(format!("{}.schema.json", self.name)),

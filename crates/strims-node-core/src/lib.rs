@@ -120,7 +120,7 @@ pub mod vpn_port;
 
 pub use config::{
     BufferConfig, CaptureOpen, DEFAULT_NOTSENT_LOWAT, HostileEgress, NetworkOptions, NodeConfig,
-    PeerRpcConfig, PpsppCapture, TcpSocketConfig, VpnPortConfig, WebRtcConfig,
+    PeerRpcConfig, PpsppCapture, StatsBins, TcpSocketConfig, VpnPortConfig, WebRtcConfig,
 };
 pub use driver::{
     IdleOk, Input, Inputs, Interfaces, LinkChannels, LinkProbe, LinkTasks, NodeIo, NodeSetup,
@@ -128,8 +128,9 @@ pub use driver::{
 };
 pub use error::{NodeError, ReadError};
 pub use event::{
-    ChannelInfo, DriverMetrics, LinkInfo, NetworkInfo, NodeEvent, NodeMetrics, PeerInfo,
-    RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmInfo, WriterInfo,
+    ChannelInfo, DriverMetrics, ForecastInfo, HeldInfo, LinkInfo, NetworkInfo, NodeBin, NodeEvent,
+    NodeMetrics, PeerInfo, RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmBin,
+    SwarmInfo, WriterInfo,
 };
 pub use handle::{
     HashTableGet, Node, NodeEvents, NodeInfo, PeerIndexSearch, SpawnNode, SwarmReader, SwarmWriter,

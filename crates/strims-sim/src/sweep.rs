@@ -73,8 +73,10 @@
 //!   [`Report::write_tables`]) into `<dir>`, or into `<dir>/seed-<s>/`
 //!   when the sweep runs more than one seed; it samples transfers as
 //!   `STRIMS_SIM_SERIES=1` does. `STRIMS_SIM_BIN_MS=<ms>` (default 100)
-//!   sets the width of the `bins` table's bins ([`Scenario::wire_bins`]).
-//!   Neither changes the trace.
+//!   sets the width of the `bins` table's bins ([`Scenario::wire_bins`]),
+//!   `STRIMS_SIM_BIN_NODES=1` adds each node's bins (`node_bins`), and
+//!   `STRIMS_SIM_FORECAST=1` the nodes' forecast logs (`forecast`, large:
+//!   [`Scenario::forecast_log`]). None of them changes the trace.
 //! - `STRIMS_SIM_ROWS=1` prints each run's measures as one line,
 //!   `ROW {json}`, on stdout ([`Report::row`]).
 //! - `STRIMS_SIM_JOB=1` runs the sweep as one sim farm job
@@ -402,6 +404,8 @@ fn sweep_seeds(
         .filter(|s| !s.is_empty())
         .map(std::path::PathBuf::from);
     let bin = Duration::from_millis(knob::<u64>("STRIMS_SIM_BIN_MS").unwrap_or(100).max(1));
+    let bin_nodes = knob::<u32>("STRIMS_SIM_BIN_NODES") == Some(1);
+    let forecast = knob::<u32>("STRIMS_SIM_FORECAST") == Some(1);
     let chunk: Option<usize> = knob("STRIMS_SIM_CHUNK");
     let munro: Option<usize> = knob("STRIMS_SIM_MUNRO");
     let stream_secs: Option<u64> = knob("STRIMS_SIM_STREAM_SECS");
@@ -431,6 +435,7 @@ fn sweep_seeds(
         }
         if out.is_some() {
             spec.wire_bins = Some(bin);
+            spec.forecast_log = forecast;
         }
         if segment.is_some() {
             spec.tcp_segment = segment;
@@ -539,7 +544,7 @@ fn sweep_seeds(
                 1 => dir.clone(),
                 _ => dir.join(format!("seed-{seed}")),
             };
-            if let Err(e) = r.write_tables(&dir, bin) {
+            if let Err(e) = r.write_tables(&dir, bin, bin_nodes) {
                 fail(
                     test,
                     seed,

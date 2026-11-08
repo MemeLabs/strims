@@ -115,6 +115,10 @@ fn node(m: NodeMetrics) -> v1::NodeMetrics {
         links,
         runner: r,
         networks,
+        bins: _,
+        forecasts: _,
+        forecasts_lost: _,
+        held: _,
     } = m;
     v1::NodeMetrics {
         host: Some(host(h)),
@@ -698,6 +702,7 @@ fn channel_metrics(m: ChannelMetrics) -> v1::ChannelMetrics {
         session_bytes,
         payloads,
         header_bytes,
+        have_only_payloads: _,
         invalid_data,
         invalid_chunk,
         invalid_bytes,

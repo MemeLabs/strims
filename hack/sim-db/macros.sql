@@ -30,10 +30,18 @@ CREATE OR REPLACE MACRO bins_by(bin_ms) AS TABLE
 CREATE OR REPLACE VIEW sec AS
     SELECT * FROM seconds JOIN verdict_seconds USING (k, src, sec);
 
--- Every event, the sims' and the verdicts'.
+-- Every event, the verdicts' (derived from the series) and, where the
+-- runs wrote them, the sims' own (`events`: times in µs, with the node).
 -- needs: derived_events
 CREATE OR REPLACE VIEW ev AS
-    SELECT k, src, sec, sec * 1000 AS t_ms, kind, value FROM derived_events;
+    SELECT k, src, sec * 1000 AS t_ms, kind, value, -1::BIGINT AS node, NULL::VARCHAR AS detail
+    FROM derived_events;
+-- needs: derived_events events
+CREATE OR REPLACE VIEW ev AS
+    SELECT k, src, sec * 1000 AS t_ms, kind, value, -1::BIGINT AS node, NULL::VARCHAR AS detail
+    FROM derived_events
+    UNION ALL
+    SELECT k, src, t_us / 1000.0 AS t_ms, kind, value::DOUBLE, node, detail FROM events;
 
 -- The runs of some cells and arms (empty lists for all).
 -- needs: runs

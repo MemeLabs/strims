@@ -456,6 +456,16 @@ pub(crate) struct SwarmState {
     push: Option<PushState>,
     /// Decisions for the driver's capture.
     pub(crate) tap: Tap,
+    /// With the forecast log on ([`crate::Runner::set_forecasts`]), each
+    /// announcement-lag sample since the driver last took them. Bound:
+    /// [`FORECAST_CAP`], past which samples are counted in
+    /// `forecasts_lost` instead.
+    pub(crate) forecasts: Option<Vec<LagForecast>>,
+    pub(crate) forecasts_lost: u64,
+    /// With the forecast log on, each chunk stored since the driver last
+    /// took them, and when: what the log's samples forecast. Bound: as
+    /// `forecasts`.
+    pub(crate) held_log: Option<Vec<(Bin, Time)>>,
     /// Our subscribers changed since the runner last asked.
     subscribers_changed: bool,
 
@@ -750,6 +760,9 @@ pub(crate) struct PeerChannelScheduler {
     /// valid, whatever it announced, and the requests to it that timed out
     /// since.
     pub(crate) asked_since: Time,
+    /// When the channel opened: a chunk the peer held before, its HAVEs
+    /// announce as a backlog, not as it arrives ([`LagForecast`]).
+    opened: Time,
     pub(crate) unanswered: u32,
 
     /// Scratch for `write1`. Bound: one frame of requests plus a request
@@ -793,6 +806,7 @@ impl PeerChannelScheduler {
             controller: Self::new_controller(s),
             next_restart_time: now + SCHEDULER_RESTART_COOLDOWN,
             handshake_received: false,
+            opened: now,
             next_ping_time: Time::EPOCH,
             ping_nonce: 0,
             eager_haves_until: now + EAGER_HAVES_AFTER_OPEN,
@@ -1593,6 +1607,9 @@ impl PeerSwarmScheduler {
                     PushState::new(usize::from(stream_count), now, report_at)
                 }),
                 tap: Tap::default(),
+                forecasts: None,
+                forecasts_lost: 0,
+                held_log: None,
                 subscribers_changed: false,
                 backlog: None,
                 unannounced: Map::new(),
@@ -1759,6 +1776,13 @@ impl PeerSwarmScheduler {
             let mut it = s.have_bins.iterate_empty_at(bin);
             while let Some(x) = it.next_base() {
                 wasted = wasted.saturating_sub(1);
+                if let Some(log) = s.held_log.as_mut() {
+                    if log.len() < FORECAST_CAP {
+                        log.push((x, now));
+                    } else {
+                        s.forecasts_lost += 1;
+                    }
+                }
                 if s.in_backlog(x) {
                     backlog_new += 1;
                     continue;
@@ -2294,6 +2318,9 @@ impl PeerSwarmScheduler {
             // HAVE lag, and when a seed's neighbour last announced each
             // stream.
             if s.push.is_some() {
+                // The sample's place in this HAVE's run of its stream's
+                // bins, for the forecast log.
+                let mut run = (usize::MAX, 0u32);
                 while let Some(x) = next {
                     let stream = usize::from(s.bin_stream(x));
                     // A bin with no time (pruned, or never published by a
@@ -2303,6 +2330,31 @@ impl PeerSwarmScheduler {
                         if s.is_seed {
                             Self::push_announced(&mut c.push, stream, now);
                         } else {
+                            if let Some(log) = s.forecasts.as_mut() {
+                                run = if run.0 == stream {
+                                    (stream, run.1 + 1)
+                                } else {
+                                    (stream, 0)
+                                };
+                                let lag =
+                                    c.push.as_ref().and_then(|pc| pc.lag_estimate(stream, now));
+                                if log.len() < FORECAST_CAP {
+                                    log.push(LagForecast {
+                                        at: now,
+                                        peer,
+                                        stream: stream as u16,
+                                        bin: x,
+                                        sample: now - t,
+                                        estimate: lag,
+                                        lazy: c.pace_out == HavePace::Lazy,
+                                        first_sight: t == now,
+                                        channel_open: c.opened,
+                                        run: run.1,
+                                    });
+                                } else {
+                                    s.forecasts_lost += 1;
+                                }
+                            }
                             Self::push_have_lag(&mut c.push, stream, now - t, now);
                         }
                     }
@@ -2864,6 +2916,52 @@ impl PeerSwarmScheduler {
             answer_wait: s.answer_wait,
         }
     }
+
+    /// The counters of [`Self::stats`] alone, without its map sizes (which
+    /// render the maps): cheap enough to read at every edge of fine bins.
+    pub(crate) fn counters(&self) -> SwarmCounters {
+        let s = &self.s;
+        SwarmCounters {
+            wasted_chunks: s.wasted_chunks,
+            requests_timed_out: s.requests_timed_out,
+            chunks_sent: s.chunks_sent,
+            pushed_chunks: s.pushed_chunks,
+            push_wait: s.push_wait,
+            answer_wait: s.answer_wait,
+        }
+    }
+
+    /// Turns the forecast log on or off ([`crate::Runner::set_forecasts`]).
+    pub(crate) fn set_forecasts(&mut self, on: bool) {
+        if on != self.s.forecasts.is_some() {
+            self.s.forecasts = on.then(Vec::new);
+            self.s.held_log = on.then(Vec::new);
+        }
+    }
+
+    /// The chunks stored since the last call, and when (the forecast log's
+    /// [`crate::Runner::take_held`]).
+    pub(crate) fn take_held(&mut self) -> Vec<(Bin, Time)> {
+        self.s
+            .held_log
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    }
+
+    /// The forecast log's samples since the last call, and how many the
+    /// cap left out.
+    pub(crate) fn take_forecasts(&mut self) -> (Vec<LagForecast>, u64) {
+        let lost = std::mem::take(&mut self.s.forecasts_lost);
+        (
+            self.s
+                .forecasts
+                .as_mut()
+                .map(std::mem::take)
+                .unwrap_or_default(),
+            lost,
+        )
+    }
 }
 
 /// Writes the integrity for a peer that has `peer_have`, then the data, for
@@ -2955,6 +3053,61 @@ pub struct SwarmSchedulerStats {
     /// answers from their request's arrival.
     pub push_wait: WaitHistogram,
     pub answer_wait: WaitHistogram,
+}
+
+/// [`SwarmSchedulerStats`]' counters ([`crate::Runner::swarm_counters`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SwarmCounters {
+    pub wasted_chunks: u64,
+    pub requests_timed_out: u64,
+    pub chunks_sent: u64,
+    pub pushed_chunks: u64,
+    pub push_wait: WaitHistogram,
+    pub answer_wait: WaitHistogram,
+}
+
+/// Samples the forecast log holds per swarm between the driver's takes.
+pub const FORECAST_CAP: usize = 1 << 16;
+
+/// One sample of a neighbour's announcement lag for a stream (the HAVE
+/// lag a hybrid viewer keeps per channel), with the estimate it updates
+/// as it stood before: how well the estimate forecast when the neighbour
+/// would announce the chunk. Times are the node's clock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LagForecast {
+    /// When the HAVE arrived.
+    pub at: Time,
+    pub peer: PeerKey,
+    pub stream: u16,
+    /// The chunk announced.
+    pub bin: Bin,
+    /// From our first sight of the chunk's unit to the HAVE.
+    pub sample: Duration,
+    /// The estimate before this sample: its mean, how late a sample still
+    /// fits it (its decaying peak or its mean plus two deviations,
+    /// whichever is later), its samples so far, and whether it was fresh;
+    /// `None` before its first sample.
+    pub estimate: Option<LagSnapshot>,
+    /// We asked the peer for lazy HAVEs ([`HavePace::Lazy`]).
+    pub lazy: bool,
+    /// This HAVE set the unit's first-sight time: the sample is zero.
+    pub first_sight: bool,
+    /// When our channel with the peer opened: a chunk it held before then
+    /// comes in the channel's first HAVEs, a backlog rather than an
+    /// arrival.
+    pub channel_open: Time,
+    /// The sample's place in the HAVE's run of bins of its stream: a HAVE
+    /// of a whole unit gives one per chunk, the same lag each.
+    pub run: u32,
+}
+
+/// An announcement-lag estimate as [`LagForecast`] records it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LagSnapshot {
+    pub mean: Duration,
+    pub horizon: Duration,
+    pub samples: u32,
+    pub fresh: bool,
 }
 
 #[cfg(test)]

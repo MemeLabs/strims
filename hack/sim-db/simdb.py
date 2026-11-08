@@ -28,12 +28,27 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   start), seq, lag_ms
   bins            finer bins (SIM_BIN_MS / STRIMS_SIM_BIN_MS wide, 100 ms
                   by default), one wide row a bin: t_ms, then counters
-                  summed over it and gauges at its end. The ppspp sim's
-                  have the series' fields and the uplinks' bytes and
-                  packets; strims-sim's only the WAN uplinks' (its
-                  runners' counters read finer than its 1 s samples would
-                  change the run)
-  viewers         the viewers, numbered as the others number them
+                  summed over it and gauges at its end: the series'
+                  fields, the uplinks' bytes and packets, and per viewers
+                  (`viewer_`) and seed (`seed_`) timeouts, wasted chunks,
+                  message bytes by kind, payloads and HAVE-only ones,
+                  retransmits, drops and push and answer waits (strims-sim
+                  also the window model's window cuts and timeouts); -1
+                  where a run has no reading
+  node_bins       with SIM_BIN_NODES=1 / STRIMS_SIM_BIN_NODES=1, each
+                  node's bins
+  viewers         the viewers, numbered as the others number them, with
+                  hostile and churned
+  events          the sims' timed events: t_us, kind, node, peer, value,
+                  detail
+  forecast        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 (large: a
+                  row per neighbour per chunk announced), every sample of
+                  a neighbour's announcement lag, with the estimate it
+                  updated: t_ms, node, viewer, peer, stream,
+                  seq, sample_ms, mean_ms, horizon_ms, samples, fresh,
+                  lazy, first_sight, run, seen_ms, held_ms (when the peer
+                  first held the chunk: -1 where never), live (held after
+                  both nodes took their places)
 
 A run's `bin_ms` is its bins' width: `--bin` over a bins column is a
 multiple of every selected run's. The CLI's cache root is `SIM_DB_ROOT`
@@ -74,13 +89,29 @@ selection picks runs: `--src` (cache paths, globs, default every one),
            seconds, the median and p10/p90 over runs of `--field`: a read
            lag (lag_p50, lag_p99, lag_max, reads), a verdict column (healthy,
            lag_q, hit_share, delivery), a `seconds` column, or a `bins` one
-           (summed over the bin)
+           (summed over the bin). The events are the derived ones and the
+           sims' own (`events`: faults, uplink steps, competing uploads,
+           joins, first reads or frames, churn leaves, seed steps and
+           copies; `--node` picks one node's)
   events   the run metrics pooled: collapses, onset after a step down and
            recovery after a step up (with how many runs they censored),
            excess lag, flaps
   osc      oscillation: spells and their dwell times, flaps, the lag's
            autocorrelation period and amplitude
   rows     the selected runs' rows (JSON lines), with their verdicts
+  forecast the forecast logs pooled, by sim, cell, arm and the pace asked
+           of the HAVEs: the error of each neighbour's announcement-lag
+           estimate against the HAVE (sample - mean) and its horizon's
+           coverage, and where the sim knows when an honest neighbour
+           truly held the chunk as it arrived (`live`), the error against
+           that
+           (held - (seen + mean)), the HAVE's lateness over it (seen +
+           sample - held: the HAVE's hold and its one-way delay), the
+           share never held (censored), and the share the peer held before
+           our channel with it opened (backlog: its first HAVEs announce
+           them, so they don't count as forecasts of arrival).
+           Only each HAVE's first sample of a stream counts, and not those
+           that set the chunk's first sight (they are zero)
 
 Every query takes `--json`. The DuckDB CLI is pinned (DUCKDB_VERSION, its
 sha256s) and fetched once into ~/.cache/strims/duckdb/ by `duckdb`, or by
@@ -114,7 +145,10 @@ DUCKDB_GZ_SHA256 = "cce2687a38681db644c248198b99ecd86170ff47e324c5f33e50c0042f14
 DUCKDB_SHA256 = "61238cfbe9dfeaad4bcfcd8a48f6f7123dae2e9603aaadb1f77a4217aeb8980c"
 
 # The sims' tables, and the store's own.
-TABLES = ("seconds", "viewer_seconds", "reads", "bins", "viewers")
+TABLES = ("seconds", "viewer_seconds", "reads", "bins", "viewers", "events", "node_bins", "forecast")
+# The bulky tables: the farm uploads them under sim-samples/, and a pull
+# fetches them only when asked (`--reads`).
+SAMPLE_TABLES = ("reads", "forecast")
 RUN_COLS = {
     "k": "VARCHAR", "src": "VARCHAR", "sim": "VARCHAR", "test": "VARCHAR", "cell": "VARCHAR", "arm": "VARCHAR",
     "seed": "BIGINT", "env": "VARCHAR", "trace": "VARCHAR", "frames": "BIGINT", "bytes": "BIGINT",
@@ -705,7 +739,8 @@ def need(have, *tables):
     missing = [t for t in tables if t not in have]
     if missing:
         sys.exit(f"the selection has no {', '.join(missing)}"
-                 + (" (pull --reads, or run with the reads)" if "reads" in missing else ""))
+                 + (" (pull --reads, or run with the reads)" if "reads" in missing else "")
+                 + (" (pull --reads, or run with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1)" if "forecast" in missing else ""))
 
 
 def emit(a, rows_, text):
@@ -813,13 +848,14 @@ def cmd_aligned(a):
     need(have, "derived_events")
     table, tcol, agg = field_source(a, v, have)
     lo, hi = int(-a.before * 1000), int(a.after * 1000)
+    node = "" if a.node is None else f" AND node = {int(a.node)}"
     sql = f"""
-WITH ev AS (SELECT k, src, sec * 1000 AS e_ms FROM
-              (SELECT *, row_number() OVER (PARTITION BY k, src ORDER BY sec) AS nth
-               FROM derived_events WHERE kind = {q(a.event)}) WHERE nth = {int(a.nth)}),
-x AS (SELECT x.k, x.src, floor(({tcol} - ev.e_ms) / {a.bin}) * {a.bin} AS rel, x.*
-      FROM {table} x JOIN ev USING (k, src)
-      WHERE {tcol} - ev.e_ms >= {lo} AND {tcol} - ev.e_ms < {hi}),
+WITH e AS (SELECT k, src, t_ms AS e_ms FROM
+              (SELECT *, row_number() OVER (PARTITION BY k, src ORDER BY t_ms) AS nth
+               FROM ev WHERE kind = {q(a.event)}{node}) WHERE nth = {int(a.nth)}),
+x AS (SELECT x.k, x.src, floor(({tcol} - e.e_ms) / {a.bin}) * {a.bin} AS rel, x.*
+      FROM {table} x JOIN e USING (k, src)
+      WHERE {tcol} - e.e_ms >= {lo} AND {tcol} - e.e_ms < {hi}),
 per AS (SELECT * FROM (SELECT k, src, rel, {agg} AS v FROM x GROUP BY ALL) WHERE v IS NOT NULL)
 SELECT r.cell, r.arm, rel::BIGINT AS rel_ms, count(*) AS n, quantile_cont(v, [0.1, 0.5, 0.9]) AS q
 FROM per JOIN runs r USING (k, src) GROUP BY ALL ORDER BY r.cell, rel_ms, r.arm;"""
@@ -910,6 +946,44 @@ SELECT * FROM m JOIN d USING (cell, arm) ORDER BY ALL;"""
     emit(a, out, text)
 
 
+def cmd_forecast(a):
+    v, have = views(a, derived=False)
+    need(have, "forecast")
+    w = " AND ".join(["run = 0", "NOT first_sight", "mean_ms >= 0", *time_filter(a)])
+    sql = f"""
+WITH f AS (SELECT r.sim, r.cell, r.arm, CASE WHEN lazy THEN 'lazy' ELSE 'prompt' END AS pace,
+                  sample_ms - mean_ms AS err, sample_ms <= horizon_ms AS covered, held_ms,
+                  peer_honest,
+                  peer_honest AND held_ms >= 0 AND held_ms < channel_open_ms AS backlog,
+                  CASE WHEN peer_honest AND live THEN held_ms - (seen_ms + mean_ms) END AS truth_err,
+                  CASE WHEN peer_honest AND live THEN seen_ms + sample_ms - held_ms END AS late
+           FROM forecast x JOIN runs r USING (k, src) WHERE {w})
+SELECT sim, cell, arm, pace, count(*) AS n,
+       quantile_cont(err, [0.1, 0.5, 0.9, 0.99]) AS err_q, avg(covered::INT) AS coverage,
+       count(truth_err) AS held, quantile_cont(truth_err, [0.1, 0.5, 0.9, 0.99]) AS truth_q,
+       quantile_cont(late, [0.1, 0.5, 0.9, 0.99]) AS late_q,
+       avg((held_ms < 0)::INT) FILTER (WHERE peer_honest) AS censored,
+       avg(backlog::INT) FILTER (WHERE peer_honest) AS backlog
+FROM f GROUP BY ALL ORDER BY ALL;"""
+    out = duck(v + sql)
+
+    def q4(x):
+        return "-" if not x else " ".join(fmt(y) for y in x)
+
+    def text():
+        lines = [f"{'sim':10} {'cell':20} {'arm':24} {'pace':6} {'n':>8} {'err ms p10 p50 p90 p99':>23} "
+                 f"{'cover':>5} {'held':>7} {'truth err p10 p50 p90 p99':>26} {'HAVE late p10 p50 p90 p99':>26} "
+                 f"{'cens':>5} {'backlog':>7}"]
+        for r in out:
+            lines.append(
+                f"{r['sim'] or '-':10} {r['cell'] or '-':20} {short(r['arm']) or '-':24} {r['pace']:6} {r['n']:8d} "
+                f"{q4(r['err_q']):>23} {fmt(r['coverage'], 2):>5} {r['held']:7d} {q4(r['truth_q']):>26} "
+                f"{q4(r['late_q']):>26} {fmt(r['censored'], 3):>5} {fmt(r['backlog'], 3):>7}")
+        return "\n".join(lines)
+
+    emit(a, out, text)
+
+
 def cmd_rows(a):
     v, _ = views(a, derived=False)
     keys = duck(v + "\nSELECT src, k, cell, arm, seed FROM runs ORDER BY cell, arm, seed;")
@@ -965,7 +1039,8 @@ def pull(run, reads=False):
                 size = Path(line.rsplit(" to ", 1)[1]).stat().st_size
                 gets += 1 if size < CLI_PART else math.ceil(size / CLI_PART)
                 got += size
-        keys = sum(1 for f in dest.glob("**/*") if f.is_file() and (f.name == "reads.parquet") == (prefix == "sim-samples"))
+        keys = sum(1 for f in dest.glob("**/*")
+                   if f.is_file() and (f.stem in SAMPLE_TABLES) == (prefix == "sim-samples"))
         lists += max(1, math.ceil(keys / 1000))
     farm_ledger(run, {"region": region or "", "tier1": {"pull_list": lists}, "tier2": {"pull_get": gets},
                       "up": {}, "down": {"internet": got}, "stored": 0})
@@ -995,7 +1070,8 @@ def pull_sources(srcs, reads=False):
     cache lacks, a run at a time; returns those still missing (expired
     from S3, or never uploaded)."""
     def missing(s):
-        return not have_src(s) or (reads and not (cache_root() / "cache" / s / "reads.parquet").exists())
+        return not have_src(s) or (reads and not any((cache_root() / "cache" / s / f"{t}.parquet").exists()
+                                                     for t in SAMPLE_TABLES))
 
     want = sorted({s for s in srcs if s.startswith("farm/") and missing(s)})
     for run in sorted({s.split("/")[1] for s in want}):
@@ -1045,7 +1121,7 @@ def main():
     e.add_argument("dest")
     p = sub.add_parser("pull")
     p.add_argument("--run", required=True)
-    p.add_argument("--reads", action="store_true", help="the reads too (sim-samples/)")
+    p.add_argument("--reads", action="store_true", help="the reads and forecast logs too (sim-samples/)")
     g = sub.add_parser("gc")
     g.add_argument("--days", type=float, default=7)
     qs = {}
@@ -1054,13 +1130,16 @@ def main():
     qs["pooled"] = sub.add_parser("pooled")
     qs["pooled"].add_argument("--by", choices=("none", "phase", "bin", "viewer"), default="none")
     qs["aligned"] = sub.add_parser("aligned")
-    qs["aligned"].add_argument("event", help="start, seed_down, seed_up, join, leave, onset, recovered, collapse")
+    qs["aligned"].add_argument("event", help="a derived event (start, seed_down, seed_up, join, leave, onset, "
+                               "recovered, collapse) or a sim's (its events table's kinds)")
+    qs["aligned"].add_argument("--node", type=int, help="only events of this node (the sims' events)")
     qs["aligned"].add_argument("--field", default="lag_p99")
     qs["aligned"].add_argument("--before", type=float, default=10)
     qs["aligned"].add_argument("--after", type=float, default=60)
     qs["aligned"].add_argument("--nth", type=int, default=1)
     qs["events"] = sub.add_parser("events")
     qs["osc"] = sub.add_parser("osc")
+    qs["forecast"] = sub.add_parser("forecast")
     qs["rows"] = sub.add_parser("rows")
     qs["rows"].add_argument("--fields", help="the row's fields to print, comma-separated (all by default)")
     for x in qs.values():
@@ -1089,7 +1168,7 @@ def main():
         cmd_gc(a)
     else:
         {"sql": cmd_sql, "pooled": cmd_pooled, "aligned": cmd_aligned, "events": cmd_events, "osc": cmd_osc,
-         "rows": cmd_rows}[a.cmd](a)
+         "rows": cmd_rows, "forecast": cmd_forecast}[a.cmd](a)
 
 
 if __name__ == "__main__":

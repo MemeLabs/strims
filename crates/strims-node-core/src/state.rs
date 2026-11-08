@@ -34,7 +34,7 @@ use std::task::Poll;
 use rand_core::SeedableRng;
 use slotmap::{SecondaryMap, SlotMap};
 use strims_base::rng::{DetRng, det_rng, fork};
-use strims_base::time::Time;
+use strims_base::time::{Duration, Time};
 use strims_kademlia::ID;
 use strims_ppspp::store::{self, BufferReader};
 use strims_ppspp::{
@@ -58,9 +58,14 @@ use crate::config::{NetworkOptions, NodeConfig, PeerRpcConfig, PpsppCapture, Vpn
 use crate::driver::{IdleOk, Interfaces, LinkProbe, TaskGuard};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
-    ChannelInfo, DriverMetrics, LinkInfo, NetworkInfo, NodeEvent, NodeMetrics, PeerInfo,
-    RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmInfo, WriterInfo,
+    ChannelInfo, DriverMetrics, ForecastInfo, HeldInfo, LinkInfo, NetworkInfo, NodeBin, NodeEvent,
+    NodeMetrics, PeerInfo, RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmBin,
+    SwarmInfo, WriterInfo,
 };
+
+/// Bin edges [`NodeConfig::stats_bins`] keeps between snapshots; past it the
+/// oldest go.
+const MAX_BINS: usize = 1 << 16;
 use crate::exchange::{Candidate, CandidateState};
 use crate::rpc::Outgoing;
 use crate::rtc::{RtcConn, RtcFactory};
@@ -368,6 +373,13 @@ pub(crate) struct State {
     publishers: SlotMap<PublisherId, PublisherSlot>,
     events: mpsc::Sender<NodeEvent>,
     pub(crate) metrics: DriverMetrics,
+    /// With [`NodeConfig::stats_bins`]: the bins, the next edge, and the
+    /// counters at the edges passed since the last snapshot. Bound:
+    /// [`MAX_BINS`], past which the oldest go.
+    bins: Option<(crate::config::StatsBins, Time, VecDeque<NodeBin>)>,
+    /// With [`NodeConfig::forecast_log`], the runner's log since the last
+    /// snapshot. Bound: the runner's cap per swarm and snapshot.
+    forecast_log: bool,
     /// Reused by `drain_transmit`.
     scratch_links: Vec<LinkKey>,
     /// ppspp frame errors seen inside vnic's dispatch, handled after it.
@@ -462,6 +474,7 @@ impl State {
         let broker_class = vnic.add_qos_class(vnic.qos_root(), rpc::BROKER_QOS_WEIGHT)?;
         let mut runner = Runner::new(fork(&mut rng));
         runner.set_upload_capacity(upload_hint(config.upload_capacity, config.rate_limit));
+        runner.set_forecasts(config.forecast_log);
         let capture = config
             .ppspp_capture
             .as_ref()
@@ -506,6 +519,8 @@ impl State {
             publishers: SlotMap::with_key(),
             events,
             metrics: DriverMetrics::default(),
+            bins: config.stats_bins.map(|b| (b, b.origin, VecDeque::new())),
+            forecast_log: config.forecast_log,
             scratch_links: Vec::new(),
             frame_errors: Vec::new(),
             rtc,
@@ -1485,6 +1500,7 @@ impl State {
     /// Every counter, in a fixed order (see [`NodeMetrics`]). `&mut` and
     /// `now` because the runner's rates advance their windows to `now`.
     pub(crate) fn metrics(&mut self, now: Time) -> NodeMetrics {
+        let (forecasts, forecasts_lost, held) = self.take_forecasts();
         NodeMetrics {
             host: self.vnic.metrics(),
             vpn: self.vpn.metrics(),
@@ -1492,7 +1508,95 @@ impl State {
             links: self.link_metrics(now),
             runner: self.runner_metrics(now),
             networks: self.network_metrics(),
+            bins: self
+                .bins
+                .as_mut()
+                .map_or(Vec::new(), |(_, _, b)| b.drain(..).collect()),
+            forecasts,
+            forecasts_lost,
+            held,
         }
+    }
+
+    /// With [`NodeConfig::stats_bins`], reads the counters if `now` is past
+    /// the next edge, for every edge passed: before the pass at `now`
+    /// changes them, they stand as they did at each edge since the last
+    /// pass. Getters only.
+    pub(crate) fn sample_bins(&mut self, now: Time) {
+        let Some((bins, next, _)) = self.bins.as_ref() else {
+            return;
+        };
+        if now < *next {
+            return;
+        }
+        let (width, mut next) = (bins.width.max(Duration::MILLISECOND), *next);
+        let swarms: Vec<SwarmBin> = self
+            .swarms
+            .iter()
+            .filter_map(|&key| {
+                let push = self.runner.push_stats(key)?;
+                Some(SwarmBin {
+                    swarm: key,
+                    hits: push.hits,
+                    misses: push.misses,
+                    pruned: push.pruned,
+                    parents: push.parents.iter().filter(|p| p.is_some()).count() as u64,
+                    upload_capacity: push.upload_capacity,
+                    upload_busy_permille: u64::from(push.upload_busy_permille),
+                    seed_copies: push.seed_copies as u64,
+                    counters: self.runner.swarm_counters(key).unwrap_or_default(),
+                })
+            })
+            .collect();
+        let outbound = self.runner.channel_totals().outbound;
+        let bytes_written = self.metrics.bytes_written;
+        let Some((_, at, kept)) = self.bins.as_mut() else {
+            return;
+        };
+        while now >= next {
+            if kept.len() >= MAX_BINS {
+                kept.pop_front();
+            }
+            kept.push_back(NodeBin {
+                at: next,
+                swarms: swarms.clone(),
+                outbound,
+                bytes_written,
+            });
+            next += width;
+        }
+        *at = next;
+    }
+
+    /// The runner's forecast log since the last call, peers named by host,
+    /// how many samples its caps left out, and the chunks it stored.
+    fn take_forecasts(&mut self) -> (Vec<ForecastInfo>, u64, Vec<HeldInfo>) {
+        if !self.forecast_log {
+            return (Vec::new(), 0, Vec::new());
+        }
+        let hosts: BTreeMap<PpsppPeer, ID> =
+            self.peers.values().map(|ps| (ps.pp, ps.host_id)).collect();
+        let (mut out, mut lost, mut held) = (Vec::new(), 0, Vec::new());
+        for &key in &self.swarms {
+            let (log, n) = self.runner.take_forecasts(key);
+            lost += n;
+            out.extend(log.into_iter().map(|forecast| ForecastInfo {
+                swarm: key,
+                peer: hosts.get(&forecast.peer).copied(),
+                forecast,
+            }));
+            held.extend(
+                self.runner
+                    .take_held(key)
+                    .into_iter()
+                    .map(|(bin, at)| HeldInfo {
+                        swarm: key,
+                        bin,
+                        at,
+                    }),
+            );
+        }
+        (out, lost, held)
     }
 
     fn link_metrics(&mut self, now: Time) -> Vec<LinkInfo> {

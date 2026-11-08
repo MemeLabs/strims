@@ -487,6 +487,10 @@ pub struct Scenario {
     /// [`Report::wire_bins`]: crate::Report::wire_bins
     /// [`Report::write_tables`]: crate::Report::write_tables
     pub wire_bins: Option<Duration>,
+    /// With [`Scenario::wire_bins`], every node keeps its ppspp runner's
+    /// forecast log for the tables' `forecast` (a row per neighbour per
+    /// chunk announced: tens of MB a run). Changes no trace.
+    pub forecast_log: bool,
     /// TCP writes in pieces of at most this many bytes, as segments: the
     /// window model ([`SendBuffer::window`]) then fills a window segment by
     /// segment, as real TCP does, where a whole write of up to a GSO
@@ -691,6 +695,7 @@ impl Scenario {
             send_buffer: None,
             transfer_samples: false,
             wire_bins: None,
+            forecast_log: false,
             tcp_segment: None,
             stored_chunks: false,
             discovery: None,

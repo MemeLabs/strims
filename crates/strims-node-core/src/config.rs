@@ -8,7 +8,7 @@ use std::io;
 use std::net::IpAddr;
 use std::sync::Arc;
 
-use strims_base::time::Duration;
+use strims_base::time::{Duration, Time};
 use strims_proto::types::Key;
 use strims_vnic::TcpOptions;
 use strims_vnic::ws::WsOptions;
@@ -127,6 +127,25 @@ pub struct NodeConfig {
     /// Rewrites the ppspp frames the node sends; `None` (the default, and
     /// every real node's) sends them as the runner wrote them.
     pub hostile_egress: Option<HostileEgress>,
+    /// Reads the node's counters at every edge of bins `width` wide from
+    /// `origin` (by the node's clock) and keeps them for the next
+    /// `Node::metrics` (`NodeMetrics::bins`), for a simulation to see finer
+    /// than it samples; `None` (the default, and every real node's) keeps
+    /// none. They are read with getters only, before the first pass past
+    /// an edge, so the node does the same with them or without.
+    pub stats_bins: Option<StatsBins>,
+    /// Keeps the ppspp runner's forecast log (`Runner::set_forecasts`) for
+    /// the next `Node::metrics` (`NodeMetrics::forecasts`); off by default
+    /// and on every real node. It changes no decision.
+    pub forecast_log: bool,
+}
+
+/// The bins of [`NodeConfig::stats_bins`]: edges every `width` from
+/// `origin`, by the node's clock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StatsBins {
+    pub origin: Time,
+    pub width: Duration,
 }
 
 /// What a hostile node does to each ppspp frame it sends, for adversarial
@@ -269,6 +288,8 @@ impl NodeConfig {
             command_queue: 256,
             input_queue: 256,
             query_delay: Duration::from_millis(200),
+            stats_bins: None,
+            forecast_log: false,
             node_platform: String::new(),
             node_version: "dev".to_owned(),
             ppspp_capture: None,

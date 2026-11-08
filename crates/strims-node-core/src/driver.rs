@@ -466,6 +466,7 @@ impl<I: NodeIo> NodeTask<I> {
                 // The pump stopped with work left: let the link tasks run,
                 // then continue without waiting.
                 self.io.yield_now().await;
+                self.state.sample_bins(self.io.now());
             } else {
                 if let Some(t) = deadline
                     && armed != Some(t)
@@ -473,26 +474,36 @@ impl<I: NodeIo> NodeTask<I> {
                     self.io.reset_sleep(sleep.as_mut(), t);
                     armed = Some(t);
                 }
+                // Each arm reads the stats bins before it changes anything
+                // (`NodeConfig::stats_bins`).
                 tokio::select! {
                     biased;
-                    Some(input) = self.input_rx.recv() => self.handle_input(input),
+                    Some(input) = self.input_rx.recv() => {
+                        self.state.sample_bins(self.io.now());
+                        self.handle_input(input);
+                    }
                     cmd = self.cmd_rx.recv() => match cmd {
                         // No pass, and `last` stays, so the wait resumes
                         // with the same deadline. A timer that came due
                         // meanwhile fires on the next select.
                         Some(c @ Command::Wake) => {
+                            self.state.sample_bins(self.io.now());
                             self.handle_command(c);
                             continue;
                         }
                         Some(c) => {
+                            self.state.sample_bins(self.io.now());
                             if self.handle_command(c) {
                                 break;
                             }
                         }
                         None => break,
                     },
-                    Some(o) = self.rpc_rx.recv() => self.state.outgoing(o),
-                    () = &mut sleep, if deadline.is_some() => {}
+                    Some(o) = self.rpc_rx.recv() => {
+                        self.state.sample_bins(self.io.now());
+                        self.state.outgoing(o);
+                    }
+                    () = &mut sleep, if deadline.is_some() => self.state.sample_bins(self.io.now()),
                 }
             }
             for _ in 0..BATCH {
