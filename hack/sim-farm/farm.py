@@ -510,7 +510,11 @@ RETIRE_WITHIN_S = 75
 # for a day less, which leaves a run's data a day to be pulled.
 RETAIN_S = 6 * 86400
 # A generation of an instance's store closes at this size: one exports and
-# uploads well within a minute, from the farthest region too.
+# uploads well within a minute, from the farthest region too. A 1 GiB POST
+# from eu-north-1 to the us-west-1 bucket took 70 s (15 MB/s, 2026-11-08),
+# and a store exports at about 40 MB/s at 2 threads to Parquet 0.7 its
+# size: 512 MB takes about 13 s and 23 s, and an interruption that finds
+# one uploading and another open still uploads both within its window.
 ROTATE_MB = 512
 # What farm.py puts beside the worker on a host: the store's (sim-db's)
 # and the uploads' modules.
@@ -4204,6 +4208,9 @@ class Spent:
     # start, instance id): what dates it by rows.
     tod: int = 0
     launches: list[tuple[float, str]] = dataclasses.field(default_factory=list)
+    # When a log it ends was last written, the earliest such log's: when it
+    # ended, give or take a write.
+    ended_at: float | None = None
 
     @property
     def cost(self) -> float:
@@ -4236,6 +4243,7 @@ def log_spends(farm: Path) -> list[Spent]:
             if LOG_DATE.fullmatch(msg) or LOG_MATRIX.match(msg) and not (
                 i and (LOG_DATE.fullmatch(lines[i - 1][1]) or LOG_MATRIX.match(lines[i - 1][1])))
         ]
+        mtime = path.stat().st_mtime
         for a, b in zip(heads, heads[1:] + [len(lines)]):
             seg = lines[a:b]
             offs, at, prev = [], 0, seg[0][0]
@@ -4246,8 +4254,11 @@ def log_spends(farm: Path) -> list[Spent]:
                 prev = t
             launches = [(float(s), m[1]) for s, (_, msg) in zip(offs, seg) if (m := LOG_LAUNCH.match(msg))]
             key = (seg[0], tuple(i for _, i in launches))
+            last = b == len(lines)
             if key in runs:
                 runs[key].logs += 1
+                if last:
+                    runs[key].ended_at = min(runs[key].ended_at or mtime, mtime)
                 continue
             points, cost = [(0.0, 0.0)], 0.0
             for s, (_, msg) in zip(offs, seg):
@@ -4264,7 +4275,8 @@ def log_spends(farm: Path) -> list[Spent]:
                 start = datetime.datetime.combine(
                     datetime.date.fromisoformat(d[1]), datetime.time(t // 3600, t // 60 % 60, t % 60)
                 ).astimezone()
-            runs[key] = Spent(name, start, points, float(offs[-1]), len(launches), 1, seg[0][0], launches)
+            runs[key] = Spent(name, start, points, float(offs[-1]), len(launches), 1, seg[0][0], launches,
+                              mtime if last else None)
     return list(runs.values())
 
 
@@ -4297,6 +4309,34 @@ def date_by_rows(farm: Path, runs: list[Spent]) -> None:
         r.start = (launch - datetime.timedelta(seconds=s)).astimezone()
 
 
+def date_by_costs(farm: Path, runs: list[Spent]) -> None:
+    """Dates the runs still undated (test matrices keep an index now, and
+    the old rows that dated them are gone) by their ends: of a run's name,
+    the costs.jsonl line whose wall is closest to the log's, else the last
+    write of a log the run ends; its first line's time of day on the latest
+    date that fits."""
+    costs = collections.defaultdict(list)
+    for c in read_jsonl(farm / "costs.jsonl"):
+        costs[c["run"]].append(c)
+    for r in runs:
+        if r.start is not None:
+            continue
+        if costs.get(r.name):
+            c = min(costs[r.name], key=lambda c: abs(float(c.get("wall_s") or 0) - r.secs))
+            end = datetime.datetime.fromisoformat(c["at"]).astimezone()
+        elif r.ended_at is not None:
+            end = datetime.datetime.fromtimestamp(r.ended_at).astimezone()
+        else:
+            continue
+        guess = end - datetime.timedelta(seconds=r.secs)
+        start = guess.replace(hour=r.tod // 3600, minute=r.tod // 60 % 60, second=r.tod % 60, microsecond=0)
+        if start > guess + datetime.timedelta(hours=12):
+            start -= datetime.timedelta(days=1)
+        elif start < guess - datetime.timedelta(hours=12):
+            start += datetime.timedelta(days=1)
+        r.start = start
+
+
 def costs_spends(farm: Path, runs: list[Spent]) -> list[Spent]:
     """The runs costs.jsonl lists that no dated log holds (their matrices'
     state is gone), each spending evenly from its first launch to its end."""
@@ -4322,6 +4362,7 @@ def run_label(name: str) -> str:
 def spend(farm: Path, csv_dir: Path | None) -> int:
     runs = log_spends(farm)
     date_by_rows(farm, runs)
+    date_by_costs(farm, runs)
     runs += costs_spends(farm, runs)
     undated = [r for r in runs if r.start is None]
     runs = sorted((r for r in runs if r.start is not None), key=lambda r: r.start)
@@ -4376,9 +4417,11 @@ def spend(farm: Path, csv_dir: Path | None) -> int:
             rw.writerow(["run_id", "run", "start", "end", "cost_usd", "instances", "matrices", "logged_in",
                          "s3_usd", "s3_tier1", "s3_tier2", "s3_cross_region_bytes", "s3_internet_bytes"])
             sw.writerow(["run_id", "t", "run_cost_usd"])
+            # A run's S3 is its name's, every attempt's: on its last row.
+            last = {r.name: n for n, r in enumerate(runs, 1)}
             for n, r in enumerate(runs, 1):
                 rid = f"r{n:03d}"
-                u = s3_runs.get(r.name, S3Use())
+                u = s3_runs.get(r.name, S3Use()) if last[r.name] == n else S3Use()
                 rw.writerow([rid, r.name, utc(r.start), utc(r.end), f"{r.cost:.4f}", r.instances, r.logs or "",
                              r.source, f"{u.cost():.4f}", sum(u.tier1.values()), sum(u.tier2.values()), u.cross(),
                              u.down["internet"]])
