@@ -88,10 +88,11 @@ lag p99 ratio.
 `--rank overhead` (race, farm, score) spends latency on bytes: arms rank
 by collapsed runs, then by the geometric mean over cells of their wire
 bytes per byte of the stream read (`wire_per_useful`, the sims' `up_*`
-ledger). The lag guardrails take `--lag-budget` (1.25) for 1.10, and a
-cell whose median lag p99 the base kept under `--lag-ceiling` (1000 ms)
-is out when the arm's isn't: the budget stops a slow creep, and the
-ceiling spends only the headroom the cell has.
+ledger). Lag up to the delivery target is the room a trade may spend: a
+cell whose median lag p99 the base kept under `--lag-ceiling` (analyze.py's
+DELIVERY_TARGET_MS, delivery's share of the 2 s glass-to-glass target) is
+out when the arm's isn't, and no ratio guards lag below it unless
+`--lag-budget` sets one.
 
 `calibrate` scores the base against itself at other seeds (seeds 1..N
 against N+1..2N, paired in order): what moves there is seed noise, an
@@ -883,9 +884,9 @@ def arm_score(cells, base_rows, arm_rows, rank=None):
     """An arm against the base on the same seeds: its collapsed runs and the
     base's, the geometric means over cells of its lag p99 ratio and its
     wire bytes per useful byte, and the guardrails it broke. Ranked for
-    overhead (`rank`: --lag-budget, --lag-ceiling), its lag guardrails take
-    the budget, and a cell whose median lag p99 the base kept under the
-    ceiling breaks one when the arm's isn't."""
+    overhead (`rank`: --lag-ceiling, --lag-budget), a cell whose median lag
+    p99 the base kept under the ceiling breaks one when the arm's isn't, and
+    its lag ratios are guarded only by the budget, when one is given."""
     overhead = rank is not None and rank.rank == "overhead"
     guard = rank.lag_budget if overhead else GUARD_RATIO
     ka_all = kb_all = 0
@@ -927,7 +928,7 @@ def arm_score(cells, base_rows, arm_rows, rank=None):
         fn, better, kind, tie = get["delivery"]
         if mark(better, kind, tie, effect(kind, pairs("delivery"))) == "-":
             broken.append(f"{c['name']} delivery")
-        if ka == 0:
+        if ka == 0 and guard is not None:
             for name in ("lag_p99_ms", "startup_p99_ms", "lag_p99_ms_weak"):
                 e = effect("ratio", pairs(name))
                 if e is not None and e[1] > guard:
@@ -1281,10 +1282,11 @@ def main():
     for p in (rc, fc, sc):
         p.add_argument("--rank", choices=("lag", "overhead"), default="lag",
                        help="rank arms after collapses by lag p99, or by wire bytes per useful byte")
-        p.add_argument("--lag-budget", type=float, default=1.25,
-                       help="with --rank overhead: the lag guardrails' ratio")
-        p.add_argument("--lag-ceiling", type=float, default=1000,
-                       help="with --rank overhead: the lag p99 (ms) a cell under it must stay under")
+        p.add_argument("--lag-budget", type=float, default=None,
+                       help="with --rank overhead: a ratio guarding lag below the ceiling (none by default)")
+        p.add_argument("--lag-ceiling", type=float, default=analyze().DELIVERY_TARGET_MS,
+                       help="with --rank overhead: the lag p99 (ms) a cell under it must stay under "
+                            "(delivery's share of the latency target, analyze.py)")
     a = ap.parse_args()
 
     cells = TIERS[a.tier]

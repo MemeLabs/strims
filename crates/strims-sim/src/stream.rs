@@ -411,8 +411,10 @@ pub struct JoinRewind {
     pub back: u64,
 }
 
-/// A viewer has caught up once a frame arrives this fresh.
-pub const CAUGHT_UP_MS: u64 = 1000;
+/// A viewer has caught up once a frame arrives this fresh: within
+/// delivery's share of the 2 s glass-to-glass target, the sim suite's
+/// `DELIVERY_TARGET_MS` (`hack/capture/analyze.py`).
+pub const CAUGHT_UP_MS: u64 = 1250;
 
 impl ViewerStats {
     /// A new incarnation of the viewer's host starts reading.

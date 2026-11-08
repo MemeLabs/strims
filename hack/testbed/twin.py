@@ -27,7 +27,8 @@ The others compare twin runs (DIR/TAG-*.json) with a farm testbed matrix's
 runs (MATRIX, its rows.jsonl and runs/) of N viewers, in the phases of the
 testbed's uplink cut (before 35-60 s, cut 60-180 s, after 180-238 s):
 
-- `lag`: seconds whose viewers' p99 lag passes 1 s (the testbed: the worst
+- `lag`: seconds whose viewers' p99 lag passes the delivery target
+  (hack/capture/analyze.py's DELIVERY_TARGET_MS; the testbed: the worst
   viewer's second, a viewer without frames counted over), per run.
 - `swarm`: the seed's copies, children, rate, pushes and pull answers, and
   the viewers' opens, prunes, switches, misses and pull requests a second.
@@ -50,6 +51,7 @@ at the seed and the median viewer.
 """
 
 import concurrent.futures as cf
+import functools
 import json
 import os
 import re
@@ -156,13 +158,24 @@ def cmd_run(args):
 
 # lag
 
+@functools.cache
+def delivery_target():
+    """Delivery's share of the latency target, as the sim suite's verdicts
+    take it (hack/capture/analyze.py)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("analyze", os.path.join(ROOT, "hack", "capture", "analyze.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m.DELIVERY_TARGET_MS
+
+
 def tb_over(d, n):
     lags = []
     for i in range(1, n + 1):
         lags.append({r["rel_ms"] // 1000: (r["lag_p99_ms"] if r["frames"] else None) for r in node_rows(d, i)})
 
     def over(lo, hi):
-        return sum(1 for t in range(lo, hi) if any(lg.get(t) is None or lg[t] > 1000 for lg in lags))
+        return sum(1 for t in range(lo, hi) if any(lg.get(t) is None or lg[t] > delivery_target() for lg in lags))
     return over(35, 240), over(60, 180)
 
 
@@ -170,7 +183,7 @@ def tw_over(series):
     d = dict((int(a), b) for a, b in series["lag_p99"])
 
     def over(lo, hi):
-        return sum(1 for t in range(lo, hi) if d.get(t, 0) > 1000 or d.get(t, 0) < 0)
+        return sum(1 for t in range(lo, hi) if d.get(t, 0) > delivery_target() or d.get(t, 0) < 0)
     return over(35, 240), over(60, 180)
 
 
@@ -179,7 +192,7 @@ def cmd_lag(args):
     arms = flag(args, "--arms", "main,floor").split(",")
     tdir = flag(args, "--dir", os.path.join(ROOT, "target", "twin"))
     matrix, tags = args[0], args[1:]
-    print(f"{n} viewers: seconds over 1 s at p99, 35-240 s (of 205) | cut 60-180 s (of 120), per run")
+    print(f"{n} viewers: seconds over {delivery_target() / 1000:g} s at p99, 35-240 s (of 205) | cut 60-180 s (of 120), per run")
     rows = [(f"testbed {a}", [tb_over(d, n) for d in testbed_runs(matrix, a, n)]) for a in arms]
     rows += [(f"twin {t}", [tw_over(s) for s in twin_runs(tdir, t)]) for t in tags]
     for name, xs in rows:

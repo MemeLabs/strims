@@ -158,7 +158,11 @@ The verdicts, judged over the stream's seconds (not the run's tail):
 - Latency collapses when the swarm's lag stays over LAG_HIGH_MS for
   LAG_HIGH_SECS, or for LAG_HIGH_SECS in a row its least-squares slope over
   the last LAG_SLOPE_SECS passes LAG_SLOPE ms a second with the lag over
-  LAG_SLOPE_FLOOR_MS (a spike that turns back sooner is no rise).
+  LAG_SLOPE_FLOOR_MS (a spike that turns back sooner is no rise). The two
+  are delivery's share of the latency budget (DELIVERY_MAX_MS and
+  DELIVERY_TARGET_MS): Amazon IVS's 5 s maximum and 2 s target from the
+  broadcaster's screen to the viewer's, less PIPELINE_MS, the stages the
+  sims don't model.
 - A verdict's onset is the first second of its run of bad seconds, or for
   delivery the first second whose window falls short.
 - A collapsed run recovers once all three are healthy for RECOVER_SECS. It
@@ -465,6 +469,25 @@ def node(a):
         print(f"  {r['t'] / 1000:7.3f} {fields(r)}")
 
 
+# The latency budget: Amazon IVS's low-latency figures, glass to glass
+# (an OBS broadcaster's screen to the viewer's), less what the sims don't
+# model. Their lag runs from the seed's publish to the viewer's node
+# holding the data.
+E2E_TARGET_MS = 2000
+E2E_MAX_MS = 5000
+PIPELINE_MS = {
+    "capture and encode": 150,  # a hardware encoder (NVENC, QuickSync, VideoToolbox)
+    "ingest": 100,  # the RTMP leg; the ingest node writes units as they arrive
+    "signing": 100,  # a unit's sign wait at 3 Mbit/s; the default cells publish whole writes
+    "player": 333,  # the MSE player's margin over its p98 lateness, and the remuxer's frame
+    "decode and display": 50,
+}
+# Delivery's share of the budget, rounded down to 50 ms: lag up to the
+# target is the room an overhead trade may spend, and past the maximum a
+# viewer is behind the product's worst case.
+DELIVERY_TARGET_MS = (E2E_TARGET_MS - sum(PIPELINE_MS.values())) // 50 * 50
+DELIVERY_MAX_MS = (E2E_MAX_MS - sum(PIPELINE_MS.values())) // 50 * 50
+
 # The verdicts' thresholds (see the module docs).
 TREES_SHARE = 0.5
 TREES_SMOOTH = 3
@@ -472,11 +495,11 @@ TREES_SECS = 10
 DELIVERY_SHARE = 0.95
 DELIVERY_SECS = 10
 LAG_QUANTILE = 0.9
-LAG_HIGH_MS = 3000
+LAG_HIGH_MS = DELIVERY_MAX_MS
 LAG_HIGH_SECS = 5
 LAG_SLOPE = 50
 LAG_SLOPE_SECS = 20
-LAG_SLOPE_FLOOR_MS = 1000
+LAG_SLOPE_FLOOR_MS = DELIVERY_TARGET_MS
 RECOVER_SECS = 20
 ABSORB_SECS = 60
 # The wire's bytes beyond the stream's, as a share of them, by chunk size:
