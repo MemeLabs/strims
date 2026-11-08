@@ -167,7 +167,10 @@ def analyze():
 
 
 def duckdb_bin(fetch=True):
-    """The pinned DuckDB CLI, fetched and checked once."""
+    """The pinned DuckDB CLI, fetched and checked once; `SIM_DUCKDB` when
+    set (a farm worker's, shipped as one of its run's binaries)."""
+    if os.environ.get("SIM_DUCKDB"):
+        return Path(os.environ["SIM_DUCKDB"])
     home = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
     path = home / "strims" / "duckdb" / DUCKDB_VERSION / "duckdb"
     if path.exists():
@@ -306,8 +309,10 @@ def fold(db, jobs, src, threads=2, memory="1GB"):
     keeps of it (`sim`, `test`, `cell`, `arm`, `seed`, `env`, `row`,
     `wall_s`, `rss_mb`). A job whose dir holds no tables while its row has
     a series ran a binary that writes none: FoldError. Returns the tables
-    each job wrote, by key."""
-    jobs = list(jobs)
+    each job wrote, by key. Two jobs of one key in the batch (a farm job and
+    its verify copy, whose tables are the same) fold once, as a refold
+    would replace the first."""
+    jobs = list({j["k"]: j for j in jobs}.values())
     if not jobs:
         return {}
     work = Path(tempfile.mkdtemp(prefix=f"{Path(db).stem}.fold-", dir=Path(db).parent))
@@ -933,16 +938,36 @@ def farm_bucket():
     return c["s3_bucket"], c.get("s3_region"), c.get("aws_profile")
 
 
-def cmd_pull(a):
+def pull(run, reads=False):
+    """Copies farm run `run`'s flushes from S3 into the cache
+    (farm/<run>/<instance>/<seq>/), and with `reads` their reads too."""
     bucket, region, profile = farm_bucket()
-    dest = cache_root() / "cache" / "farm" / a.run
-    for prefix in ["sim-data"] + (["sim-samples"] if a.reads else []):
-        cmd = ["aws", "s3", "sync", f"s3://{bucket}/{prefix}/{a.run}/", str(dest), "--only-show-errors"]
+    dest = cache_root() / "cache" / "farm" / run
+    for prefix in ["sim-data"] + (["sim-samples"] if reads else []):
+        cmd = ["aws", "s3", "sync", f"s3://{bucket}/{prefix}/{run}/", str(dest), "--only-show-errors"]
         if region:
             cmd += ["--region", region]
         if profile:
             cmd += ["--profile", profile]
         subprocess.run(cmd, check=True)
+    return dest
+
+
+def pull_sources(srcs, reads=False):
+    """Pulls the farm runs of the sources `srcs` (farm/<run>/...) that the
+    cache lacks, a run at a time; returns those still missing (expired
+    from S3, or never uploaded)."""
+    def missing(s):
+        return not have_src(s) or (reads and not (cache_root() / "cache" / s / "reads.parquet").exists())
+
+    want = sorted({s for s in srcs if s.startswith("farm/") and missing(s)})
+    for run in sorted({s.split("/")[1] for s in want}):
+        pull(run, reads)
+    return [s for s in want if not have_src(s)]
+
+
+def cmd_pull(a):
+    dest = pull(a.run, a.reads)
     print(f"{a.run}: {len(sources([f'farm/{a.run}']))} sources in {dest}")
 
 

@@ -44,7 +44,8 @@
 //!   count) and with no path to their swarm's seed through honest hosts
 //!   (cut off) ([`Report::eclipse`]).
 //! - **series** ([`Report::series`]): with transfer samples, a swarm's run
-//!   second by second from its stream's start to the run's end, for
+//!   second by second from its stream's start to the run's end, which the
+//!   tables carry ([`Report::write_tables`]) for
 //!   `hack/capture/analyze.py`'s collapse verdicts: each viewer's lag and
 //!   frames read, the viewers' pushes, prunes and parents, and the seed's
 //!   meter, uplink and copies.
@@ -1037,9 +1038,6 @@ impl Report {
         }
         self.media_cols(swarm, &mut j);
         self.ledger_cols(&mut j);
-        if let Some(series) = self.series(swarm) {
-            j.field("series", format_args!("{series}"));
-        }
         j.finish()
     }
 

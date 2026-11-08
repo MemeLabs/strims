@@ -67,8 +67,8 @@
 //!   the signs alone; `off` skews and draws nothing. Unset, a scenario
 //!   keeps its own, `real` unless it says otherwise.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
-//!   ([`Scenario::transfer_samples`]), so the row carries the run second by
-//!   second ([`Report::series`]).
+//!   ([`Scenario::transfer_samples`]), which the run second by second
+//!   ([`Report::series`]) and the tables' `seconds` take.
 //! - `STRIMS_SIM_OUT=<dir>` writes each run's tables ([`crate::tables`],
 //!   [`Report::write_tables`]) into `<dir>`, or into `<dir>/seed-<s>/`
 //!   when the sweep runs more than one seed; it samples transfers as

@@ -435,12 +435,10 @@ def depth_mean(r):
 
 
 def derived(r):
-    """A row's verdict and run metrics (analyze.py's): those its tables'
-    series gave (`_verdict`, `_metrics`: a local run's, hack/sim-db), else,
-    once, those of the series a farm row still carries."""
-    if "_verdict" not in r:
-        r["_verdict"], r["_metrics"] = simdb().judge(r.get("series"))
-    return r["_verdict"], r["_metrics"]
+    """A row's verdict and run metrics (analyze.py's), from its tables'
+    series: simdb's rows, local or the farm's, carry them (`_verdict`,
+    `_metrics`)."""
+    return r.get("_verdict"), r.get("_metrics")
 
 
 def unhealthy(r):
@@ -1212,18 +1210,32 @@ def peak_gib(sha):
 def farm_rows(name, cells, knob):
     """Farm run `name`'s rows (its matrices are `cells`, in order) by
     arm: a `--refs` name, or a `--sets` set as its knob's value, each by
-    (cell, seed)."""
+    (cell, seed). A matrix's index names each job's tables (`src`), which
+    are pulled into the cache from S3 (hack/sim-db) and read as local
+    runs' are; a job whose data has expired is left out, to run again."""
     rows = collections.defaultdict(dict)
+    want = []
     for i, c in enumerate(cells):
         seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
-        state = farm_root() / "target" / "sim-farm" / f"{name}-{i:02d}" / "rows.jsonl"
-        for rec in load_rows(state).values() if state.exists() else ():
+        index = farm_root() / "target" / "sim-farm" / f"{name}-{i:02d}" / "index.jsonl"
+        for rec in load_rows(index).values():
             if rec["test"] != c["test"]:
                 sys.exit(f"{name}-{i:02d} ran {rec['test']}, not {c['name']}'s {c['test']}: "
                          "pass the run's --tier and --only")
-            row = {**rec["row"], "_rss_mb": rec.get("max_rss_mb"), "_wall_s": rec.get("wall_s")}
-            for v in {rec["arm"], rec["env"].get(knob[c["sim"]])} - {None}:
-                rows[v][(c["name"], int(rec["env"][seed_key]))] = row
+            if rec.get("src"):
+                want.append((c, seed_key, rec))
+    gone = set(simdb().pull_sources({rec["src"] for _, _, rec in want}))
+    if gone:
+        print(f"{name}: {len(gone)} flushes' tables are gone from S3 (a week's): rerun their jobs",
+              file=sys.stderr)
+    got = simdb().rows([(rec["src"], rec["key"]) for _, _, rec in want if rec["src"] not in gone])
+    for c, seed_key, rec in want:
+        row = got.get((rec["src"], rec["key"]))
+        if row is None:
+            continue
+        row = {**row, "_rss_mb": rec.get("max_rss_mb"), "_wall_s": rec.get("wall_s")}
+        for v in {rec["arm"], rec["env"].get(knob[c["sim"]])} - {None}:
+            rows[v][(c["name"], int(rec["env"][seed_key]))] = row
     return rows
 
 

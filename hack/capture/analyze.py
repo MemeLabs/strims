@@ -94,13 +94,15 @@ Runs, second by second (no capture needed):
                                    [--runs]
   hack/capture/analyze.py delays   RUNS... [--where K=V...] [--group K,...]
 
-RUNS are farm matrix dirs (`target/sim-farm/<matrix>`: its rows.jsonl, and
-a testbed matrix's run dirs), rows.jsonl files, stdout with `ROW {json}`
-lines, or testbed run dirs (`hack/testbed/run.sh`'s out dir). A sim row
-carries `series` with `STRIMS_SIM_SERIES=1` (strims-sim, where
-`calibration_star` always has it; `Report::series` documents the fields)
-or `SIM_SERIES=1` (the ppspp sim's `sim_job`); a testbed run's comes from
-its nodes' lines. `--where` keeps the runs whose env (or row field) has
+RUNS are farm matrix dirs (`target/sim-farm/<matrix>`: a test matrix's
+index.jsonl, whose jobs' tables hack/sim-db pulls into its cache and
+reads, the rows and series there; a testbed matrix's rows.jsonl and run
+dirs), index.jsonl or rows.jsonl files, or testbed run dirs
+(`hack/testbed/run.sh`'s out dir). A sim run's series is its tables'
+(`seconds` and `viewer_seconds`, which `Report::series` documents), with
+`STRIMS_SIM_SERIES=1` (strims-sim, where `calibration_star` always has
+it) or `SIM_SERIES=1` (the ppspp sim's `sim_job`); a testbed run's comes
+from its nodes' lines. `--where` keeps the runs whose env (or row field) has
 the value (a blank value matches a setting the run lacks); keys match
 with or without the STRIMS_SIM_CAL_, STRIMS_SIM_ or SIM_ prefix.
 
@@ -608,11 +610,54 @@ def testbed_series(d, env):
     return s
 
 
+_simdb = None
+
+
+def simdb():
+    """hack/sim-db/simdb.py: the farm's tables, in its cache."""
+    global _simdb
+    if _simdb is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "simdb", Path(__file__).resolve().parents[1] / "sim-db" / "simdb.py")
+        _simdb = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_simdb)
+    return _simdb
+
+
+def index_of(p):
+    """A test matrix's index.jsonl, if `p` is one or its dir."""
+    index = p / "index.jsonl" if p.is_dir() else p
+    return index if index.name == "index.jsonl" and index.exists() else None
+
+
+def index_rows(index):
+    """(line, row, series) per job of a farm matrix's index: its row and
+    series from its tables, pulled into hack/sim-db's cache; a job whose
+    tables are gone (S3 keeps them a week) is left out."""
+    recs = [r for r in map(json.loads, filter(str.strip, index.read_text().splitlines())) if r.get("src")]
+    gone = set(simdb().pull_sources({r["src"] for r in recs}))
+    got = simdb().rows([(r["src"], r["key"]) for r in recs if r["src"] not in gone], series=True)
+    for r in recs:
+        row = got.get((r["src"], r["key"]))
+        if row is not None:
+            row = dict(row)  # a verify copy's line shares its original's
+            yield r, row, row.pop("_series")
+
+
+def line_env(r):
+    return {**r.get("env", {}), "arm": r.get("arm", ""), "commit": r.get("commit", "")[:8], "test": r.get("test", "")}
+
+
 def runs(paths):
     """(label, env, row, series) per run in `paths` (see the module docs)."""
     for p in map(Path, paths):
         if p.is_dir() and (p / "node-0.jsonl").exists():
             yield p.name, {}, {}, testbed_series(p, {})
+            continue
+        if (index := index_of(p)) is not None:
+            for r, row, s in index_rows(index):
+                yield r["id"], line_env(r), row, s
             continue
         rows = p / "rows.jsonl" if p.is_dir() else p
         with open(rows) as f:
@@ -718,6 +763,10 @@ def delay_rows(paths):
     for p in map(Path, paths):
         if p.is_dir() and (p / "node-0.jsonl").exists():
             yield settings(p / "settings"), testbed_delays(p)
+            continue
+        if (index := index_of(p)) is not None:
+            for r, row, _ in index_rows(index):
+                yield line_env(r), row
             continue
         rows = p / "rows.jsonl" if p.is_dir() else p
         with open(rows) as f:

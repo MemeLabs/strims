@@ -2732,14 +2732,6 @@ impl Sim {
         });
     }
 
-    /// With `SIM_SERIES=1`, the run second by second from the stream's
-    /// start, as one JSON object with the fields of strims-sim's
-    /// `Report::series`. A chunk is a frame here (lags are per chunk), and
-    /// the meter's and the seed's readings are at each second's end.
-    fn series(&self) -> Option<String> {
-        self.series_data().map(|s| s.json())
-    }
-
     /// The honest viewers at the run's end, in the series' order (`lag`,
     /// `frames`) and the tables' numbering.
     fn honest(&self) -> Vec<&Node> {
@@ -2750,7 +2742,10 @@ impl Sim {
             .collect()
     }
 
-    /// [`Sim::series`]'s values, for its JSON object and the tables.
+    /// The run second by second from the stream's start ([`Sim::series`]),
+    /// for the tables: the fields of strims-sim's `Report::series`, a chunk
+    /// a frame here (lags are per chunk), and the meter's and the seed's
+    /// readings at each second's end.
     fn series_data(&self) -> Option<SeriesData> {
         let samples = self.series.as_ref()?;
         let start = t0() + Duration::SECOND;
@@ -7562,10 +7557,9 @@ fn wan_cable_seed() {
 /// or `bbr`). A case that [takes slots](AllocCase::takes_slots) takes them
 /// from `SIM_SLOTS`: the `seed_slots` of the `Admission` job's row, rounded,
 /// which a matrix's `[[derive]]` table gives it. `SIM_SEED` (1) is the sim
-/// seed. With `SIM_SERIES=1` the row carries the run second by second
-/// (`series`, [`Sim::series`]). With `SIM_OUT=<dir>` the run's tables go
-/// into `<dir>` ([`Sim::write_tables`]), in bins of `SIM_BIN_MS` (default
-/// 100); neither changes the trace. [`media_knobs`] apply to either.
+/// seed. With `SIM_OUT=<dir>` the run's tables go into `<dir>`
+/// ([`Sim::write_tables`]), in bins of `SIM_BIN_MS` (default 100); neither
+/// changes the trace. [`media_knobs`] apply to either.
 #[test]
 #[ignore = "one sim farm job; run in release with --ignored --nocapture"]
 fn sim_job() {
@@ -7964,11 +7958,6 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     if let Some(m) = &sim.media {
         media_cols(&mut row, sim, m, r);
     }
-    if knob::<u32>("SIM_SERIES") == Some(1)
-        && let Some(series) = sim.series()
-    {
-        row.field("series", format_args!("{series}"));
-    }
     row.finish()
 }
 
@@ -8189,30 +8178,6 @@ impl SeriesData {
     /// The seconds in the series.
     fn len(&self) -> usize {
         self.cols.first().map_or(0, |(_, v)| v.len())
-    }
-
-    fn json(&self) -> String {
-        let ints = |v: &[i64]| {
-            let v: Vec<String> = v.iter().map(i64::to_string).collect();
-            format!("[{}]", v.join(","))
-        };
-        let nested = |v: &[Vec<i64>]| {
-            let v: Vec<String> = v.iter().map(|x| ints(x)).collect();
-            format!("[{}]", v.join(","))
-        };
-        let mut j = JsonRow::default();
-        j.int("rate", self.rate)
-            .int("chunk", self.chunk)
-            .int("frame", self.chunk)
-            .int("secs", self.secs)
-            .field("seed_up", format_args!("[{}]", self.seed_up.join(",")))
-            .int("viewer_up", self.viewer_up)
-            .field("lag", format_args!("{}", nested(&self.lag)))
-            .field("frames", format_args!("{}", nested(&self.frames)));
-        for (name, v) in &self.cols {
-            j.field(name, format_args!("{}", ints(v)));
-        }
-        j.finish()
     }
 }
 

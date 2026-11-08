@@ -8,7 +8,8 @@
                                [--regions R,...] [--max-region-vcpus N]
                                [--max-instance-cores N] [--work-per-boot K]
                                [--hours H] [--verify N] [--job-timeout MIN]
-                               [--keep] [--local [--slots N]]
+                               [--rotate-mb MB] [--keep]
+                               [--local [--slots N] [--imds-url URL]]
   hack/sim-farm/farm.py estimate MATRIX... [run's options]
   hack/sim-farm/farm.py status [MATRIX] [--regions R,...]
   hack/sim-farm/farm.py down   [MATRIX] [--regions R,...]
@@ -58,10 +59,16 @@ binary's sha256, hashed when it's built or first needed, and again only
 if its size or mtime changes.
 
 run builds what's missing, then keeps spot instances busy until every job
-has a row. A matrix's state is target/sim-farm/<matrix>/: rows.jsonl (a
-row per finished job, with its arm, commit, binary's sha256, key,
-environment, host and its zone, wall and CPU time and peak RSS),
-failures.jsonl, mismatches.jsonl and farm.log. A test job's id hashes its
+has a row. A test job's data is its tables (hack/sim-db), which the
+instances keep and upload to S3 (below); what the run keeps here is an
+index of them. A test matrix's state is target/sim-farm/<matrix>/:
+index.jsonl (a line per finished job, with its arm, commit, binary's
+sha256, key, environment, host and its zone, wall and CPU time, peak RSS,
+the cache source and S3 location of its tables, `src` and `data`, and in
+`row` the few fields of its row the controller reads: trace, frames and
+bytes, and its matrix's [report] columns and [[derive]] fields),
+failures.jsonl, mismatches.jsonl and farm.log; a testbed matrix's keeps
+rows.jsonl, its whole rows, instead. A test job's id hashes its
 arm's source, the package, target and test, its environment and its
 [[derive]] table, and names the job: in the matrix, to the workers, and in
 what waits on it. Its key hashes the same with, for the source, the
@@ -70,32 +77,27 @@ TEST_ENV), which covers what the source doesn't (the compiler, as
 rust-toolchain.toml names a channel and not a release, the linker, build
 scripts' C, the test's command line), and commits whose binaries are the
 same bytes (a change to a crate the test doesn't link) share keys. A job
-is done once a row of its key is in any matrix here, unless a
-mismatches.jsonl holds its key (such a row isn't a function of the binary
-and the job), and a derived job only once the job it waits on is done as
-well: a rerun skips the jobs that have rows, a job whose binary or
-invocation changed runs again, and the rows of other matrices are copied
-in (below). target/sim-farm/row-keys.jsonl indexes every test row by key
-(a line of key, matrix, offset in its rows.jsonl and job id; the first row
-of a key is the one taken, and only if the line there is that job's), and
-each run first takes in what the matrices' rows.jsonl have added since
-(row-keys-read.json keeps how far). A row with its binary's sha256 has its
-key; one without gets it from its commit's source, a binary in bin/ built
-from it, and the package, target and [[derive]] table that give its id
-(from bin/'s names and the matrix's toml, if it's still in matrices/ or
-target/sim-suite/farm/), run as OLD_TEST, and one that doesn't name its
-test (one of the farm's first, whose worker ran --ignored) gets none. The
-first index here took in 287,823 test rows of 3.6k matrices in 9 s, 18.0
-MB, all but 4,200 (those that don't name their test); a run's update of it
-takes 0.5 s.
+is done once an index line of its key younger than RETAIN_S (S3 keeps the
+data a week) is in any matrix here, unless a mismatches.jsonl holds its
+key (such a row isn't a function of the binary and the job), and a derived
+job only once the job it waits on is done as well: a rerun skips the jobs
+that have rows, a job whose binary or invocation changed runs again, as
+does one whose data has expired (the sims are deterministic: it's
+reproduced), and the lines of other matrices are copied in (below).
+target/sim-farm/index-keys.jsonl indexes every test line by key (a line
+of key, matrix, offset in its index.jsonl, job id and when it ran; the
+newest line of a key is the one taken, and only if the line there is that
+job's), and each run first takes in what the matrices' index.jsonl have
+added since (index-keys-read.json keeps how far).
 
 run takes several matrices at once: one queue holds their jobs, and one
 set of instances runs them. A job two matrices share (the same source and
-environment) runs once, and its row goes to each under that matrix's arm,
+environment) runs once, and its line goes to each under that matrix's arm,
 all but the first's with `from` naming the first. As the run starts, each
-matrix gets a copy of the row of each of its jobs that it lacks and
+matrix gets a copy of the line of each of its jobs that it lacks and
 another matrix, in the run or not, has: with the matrix's own id, arm,
-commit and key, and `from` the matrix whose row ran. The run is named
+commit and key, and `from` the matrix whose job ran; the copy points at
+the same data, which isn't copied. The run is named
 for its matrices, their names sorted and joined with "+" (past EC2's
 256-character tag value, the first's, "+<n>more-" and a hash of them all),
 and keeps its own files (the list of its matrices, the canary's trace, SSH
@@ -112,7 +114,7 @@ variables (a knob it doesn't name); else, once some have run, the mean of
 its matrix's jobs this run; else a minute. target/sim-farm/walls.jsonl
 holds the test, environment, wall and time of every test row but those
 with `from` (each run of a job once), and each run
-first takes in what the matrices' rows.jsonl have added since
+first takes in what the matrices' index.jsonl have added since
 (walls-read.json keeps how far). The queue runs the longest jobs first,
 and before them those no earlier row times, which may be long, so a run
 ends on short jobs; jobs expected alike keep their matrices' order.
@@ -153,12 +155,27 @@ speed. A run logs the speeds before its best pools.
   tick launches all it wants at once (up to 32), so a run's first fleet
   boots together.
 - An instance with nothing assigned is terminated once nothing is queued
-  or waiting; and also, booting ones too, once nothing is queued, the
-  busy instances should finish the run within 2 minutes (the busiest's
+  or waiting, and once its data has landed (below): it's asked to flush
+  first; and also, booting ones too, once nothing is queued, the busy
+  instances should finish the run within RETIRE_WITHIN_S (the busiest's
   own jobs, and what waits on rows over them all) and the run wants no
-  more capacity: a spot interruption gives that much notice, so an
-  instance AWS takes back drains its own, and no spare need stay for its
-  jobs.
+  more capacity: a spot interruption gives about that much notice to an
+  instance's jobs, so no spare need stay for them.
+- An instance keeps its test jobs' tables (worker.py's store) and uploads
+  them in rolling flushes as it goes, each a few large zstd Parquet files
+  under S3 prefixes it alone can write: one presigned POST policy each for
+  sim-data/<run>/<instance>/ and sim-samples/<run>/<instance>/ (the reads),
+  signed at its boot with this host's credentials (s3sign.py) to expire
+  --hours and 30 minutes after its launch. A generation closes at
+  --rotate-mb (sized so one exports and uploads within a minute from the
+  farthest region), when the controller asks for a flush, and at the end
+  of its --hours (10 minutes before its shutdown). A job counts as done
+  once its row comes back, but its index lines are written, and its
+  result acked, only once its flush has landed (the sync tells, or else
+  the flush's manifest in S3); the jobs of an instance that's lost with
+  flushes not landed are queued again. The run ends once every flush has
+  landed, and pulls nothing: `hack/sim-db/simdb.py pull` (or suite.py)
+  copies a run's data into the cache when a query wants it.
 - Each region has a spot quota of its own. A region's budget is its quota
   less the spot vCPUs it counts there outside this run's instances (those
   shutting down count too), at most --max-region-vcpus; the run's
@@ -202,13 +219,15 @@ speed. A run logs the speeds before its best pools.
   notice is left for AWS to reclaim (AWS bills nothing for a spot
   instance it interrupts in its first hour, and by the second for one the
   run terminates), and terminated only if it's still running 5 minutes
-  later. One of test jobs drains till then: until the notice's time it
-  syncs on (every 5 s while one drains) and takes only jobs expected to
-  end 15 s before it, no more work than it has time for, and gives back
-  at once those it holds that shouldn't (its queue drops those not
-  started; one running runs on, and a row it still sends is a copy's). At
-  the notice's time what it holds goes back to the queue; a testbed
-  instance gives its jobs back at the notice. Costs count it as unbilled until it
+  later. One of test jobs takes no more jobs and gives back at once all
+  it holds but the running ones expected to end within 20 s (its queue
+  drops those not started, and its worker kills the running ones and
+  sends them back as `requeue`, which spends no attempt), while its
+  worker flushes and uploads what it holds, all within 90 s of the
+  notice; until the notice's time it syncs on (every 5 s while one
+  drains), and at that time what's left goes back to the queue, its
+  flushes not landed checked in S3 first. A testbed instance gives its
+  jobs back at the notice. Costs count it as unbilled until it
   ends, and after only if it ended as a spot termination
   (Server.SpotInstanceTermination; an AWS FIS interruption ends as the
   user's). Runs are deterministic, so a reissued job must print the same
@@ -217,7 +236,7 @@ speed. A run logs the speeds before its best pools.
   id) twice on purpose, on different instances: one whose row came from
   another matrix runs once more, against that row, which checks it on
   today's instances (the binaries take libm from the image). A job that
-  fails twice is recorded in failures.jsonl, not rows.jsonl, and dropped.
+  fails twice is recorded in failures.jsonl, not the index, and dropped.
 - A job that waits goes to the head of the queue once the job it waits
   on has a row, and fails for good when that job does. Waiting jobs count
   towards the instances the run wants, and keep them from being retired.
@@ -233,8 +252,9 @@ speed. A run logs the speeds before its best pools.
   regions and adopts their jobs.
 
 --local runs the jobs here instead, --slots at a time (default half the
-cores), with no AWS: for small matrices and for measuring one job.
-Testbed jobs run here one at a time.
+cores), with no AWS: for small matrices and for measuring one job. Its
+flushes go straight into the cache (hack/sim-db's farm/<run>/local/...)
+rather than to S3. Testbed jobs run here one at a time.
 
 What a run costs is its instances' spot prices, plus each one's public
 IPv4 address and root volume, from its launch call to its terminate call,
@@ -362,15 +382,19 @@ passphrase, or loaded into ssh-agent). The security group strims-sim-farm,
 in the VPC of each region's public subnets, admits SSH from this host's
 public address.
 
-With --s3-bucket (the config file's s3_bucket and s3_region), a run puts
-its binaries in the bucket under bins/ by their sha256s (those not there
-already) and each boot fetches them by URLs this host
-signs for an hour, checking their sha256s, rather than over this host's
-uplink, which every boot shares; a failed fetch copies them over SSH as
-without it. The user needs s3:PutObject and s3:GetObject on
-arn:aws:s3:::BUCKET/bins/* and s3:ListBucket on the bucket for the
-prefix bins/ (a missing key then reads 404); the instances need no role.
-A lifecycle rule on bins/ (1 day, S3's least) expires them.
+A run of test matrices needs --s3-bucket (the config file's s3_bucket and
+s3_region): its instances' data goes there (above), and it puts its
+binaries in the bucket under bins/ by their sha256s (those not there
+already, the pinned DuckDB CLI among them) and each boot fetches them by
+URLs this host signs for an hour, checking their sha256s, rather than
+over this host's uplink, which every boot shares; a failed fetch copies
+them over SSH as without it. The user needs s3:PutObject and
+s3:GetObject on arn:aws:s3:::BUCKET/bins/*, sim-data/* and sim-samples/*
+and s3:ListBucket on the bucket for those prefixes (a missing key then
+reads 404), with long-lived keys (a policy signed with a session's dies
+with the session); the instances need no role. Lifecycle rules expire
+bins/ after a day (S3's least), and sim-data/ and sim-samples/ after a
+week.
 
 What's particular to the person running the farm goes in
 hack/sim-farm/config.toml, which git ignores; flags and the environment
@@ -454,11 +478,22 @@ CONTROL_PERSIST_S = 300
 BIN_URL_S = 3600
 # The instances a tick may launch, at once.
 MAX_LAUNCHES = 32
-# A spot interruption's notice. Once nothing is queued and the busiest
-# instance's work, and what waits on rows over the busy ones, fits in it,
-# an idle or booting instance is terminated: an instance AWS takes back
-# drains its own jobs in its notice, so no spare need take them.
-RETIRE_WITHIN_S = 120
+# What of a spot interruption's 2-minute notice an instance's jobs get
+# before it uploads (worker.py's NOTICE_FINISH_S, and its flush within
+# 90 s). Once nothing is queued and the busiest instance's work, and what
+# waits on rows over the busy ones, fits in it, an idle or booting
+# instance is terminated: no spare need take an interrupted one's jobs.
+RETIRE_WITHIN_S = 75
+# A job's index line is reused while S3 still holds its data (a week):
+# for a day less, which leaves a run's data a day to be pulled.
+RETAIN_S = 6 * 86400
+# A generation of an instance's store closes at this size: one exports and
+# uploads well within a minute, from the farthest region too.
+ROTATE_MB = 512
+# What farm.py puts beside the worker on a host: the store's (sim-db's)
+# and the uploads' modules.
+SIMDB = ROOT / "hack" / "sim-db" / "simdb.py"
+HOST_FILES = [HERE / "worker.py", HERE / "s3sign.py", SIMDB]
 # The rows a job's expected wall averages, the latest: code and instance
 # types change what a job takes.
 RECENT_ROWS = 64
@@ -476,17 +511,17 @@ INSTANCE_EXTRA_HOURLY = 0.005 + 16 * 0.08 / 730
 # left for AWS to reclaim (2 minutes after its notice), and terminated only
 # if it's still running this long after.
 RECLAIM_GRACE = 300
-# An interrupted instance of test jobs drains until its notice's time: it
-# takes only jobs expected to end this long before it (their rows come
-# back by a sync), and the loop ticks this often while one drains.
-DRAIN_MARGIN = 15
+# An interrupted instance of test jobs drains until its notice's time,
+# taking nothing, and the loop ticks this often while one drains; it keeps
+# the running jobs expected to end this soon (worker.py's NOTICE_FINISH_S).
 DRAIN_TICK = 5
+NOTICE_FINISH_S = 20
 # How an instance AWS reclaimed ends (a fault injection's ends as the
 # user's, and is billed).
 SPOT_TERMINATION = "Server.SpotInstanceTermination"
 # Every test row's test, environment, wall, time, type and commit
 # (index_walls), how far
-# each matrix's rows.jsonl has been read into it, and a line per finished
+# each matrix's index.jsonl has been read into it, and a line per finished
 # run.
 WALLS = FARM / "walls.jsonl"
 WALLS_READ = FARM / "walls-read.json"
@@ -494,17 +529,15 @@ COSTS = FARM / "costs.jsonl"
 # Each test binary's sha256 by its name in bin/, with the size and mtime it
 # was hashed at.
 BIN_HASHES = FARM / "bin-hashes.json"
-# Every test row's key, matrix, offset in its rows.jsonl and job id, a line
-# each (row_index), and how far each matrix's rows.jsonl has been read into
-# it, with the rows that got no key and why.
-ROW_KEYS = FARM / "row-keys.jsonl"
-ROW_KEYS_READ = FARM / "row-keys-read.json"
-# Where a matrix's toml may still be, by its name: what gives an old row's
-# [[derive]] table.
-MATRIX_DIRS = [HERE / "matrices", ROOT / "target" / "sim-suite" / "farm"]
-# How the worker ran the tests of rows that name their test but record no
-# binary's hash (worker.TEST_ARGS and TEST_ENV then).
-OLD_TEST = (["--exact", "<test>", "--include-ignored", "--nocapture", "--test-threads", "1"], {"RUST_BACKTRACE": "1"})
+# A test matrix's index of its jobs' data, a line a job (store).
+INDEX = "index.jsonl"
+# Each sim's knob naming the dir it writes its tables to (hack/sim-db).
+OUT_KNOBS = {"strims-ppspp": "SIM_OUT", "strims-sim": "STRIMS_SIM_OUT"}
+# Every test index line's key, matrix, offset in its index.jsonl, job id
+# and time, a line each (row_index), and how far each matrix's index.jsonl
+# has been read into it.
+ROW_KEYS = FARM / "index-keys.jsonl"
+ROW_KEYS_READ = FARM / "index-keys-read.json"
 # The seed knobs, which reports don't group by.
 SEED_KEYS = {"SIM_SEED", "STRIMS_SIM_SEED"}
 # What a test binary is built from: commits that change none of it share
@@ -728,6 +761,16 @@ class Matrix:
                 bad(f"set {k} = {spec!r}: a row field, or field:round")
         return Derive(when, src, sets)
 
+    def row_fields(self) -> list[str]:
+        """The fields of its rows the controller reads, which a test job's
+        index line keeps: its [report] columns' and [[derive]] tables'."""
+        out = []
+        for spec in self.columns:
+            out += spec.partition(":")[0].split("/")
+        for d in self.derives:
+            out += [s.partition(":")[0] for _, s in d.set]
+        return list(dict.fromkeys(out))
+
     def derive_of(self, env: dict[str, str]) -> Derive | None:
         hits = [d for d in self.derives if d.matches(env)]
         if len(hits) > 1:
@@ -936,8 +979,8 @@ def append_jsonl(path: Path, recs: list[dict]) -> None:
 
 
 def row_head(line: bytes) -> dict | None:
-    """A rows.jsonl line's fields but its `row`, which comes last and can
-    be large."""
+    """An index.jsonl or rows.jsonl line's fields but its `row`, which
+    comes last and can be large."""
     i = line.find(b', "row": ')
     for text in ([line[:i] + b"}"] if i > 0 else []) + [line]:
         try:
@@ -950,7 +993,7 @@ def row_head(line: bytes) -> dict | None:
 def index_walls() -> list[dict]:
     """Every test row's test, environment, wall, time, instance type and
     commit here, a row copied from another matrix aside: walls.jsonl,
-    after it takes in what each matrix's rows.jsonl has added since it was
+    after it takes in what each matrix's index.jsonl has added since it was
     last read (all of it the first time). A pass cut off before it saved how
     far it read takes the same rows in again, as the same lines: a line
     counts once."""
@@ -962,8 +1005,8 @@ def index_walls() -> list[dict]:
         except (OSError, ValueError):
             read = {}
         new = []
-        for path in sorted(FARM.glob("*/rows.jsonl")):
-            key = path.parent.name
+        for path in sorted(FARM.glob(f"*/{INDEX}")):
+            key = f"{path.parent.name}/{INDEX}"
             at = read.get(key, 0)
             if at > path.stat().st_size:
                 at = 0  # rewritten
@@ -991,93 +1034,30 @@ def index_walls() -> list[dict]:
 # --- rows across runs ---------------------------------------------------
 
 
-class Keyer:
-    """The keys of rows that record none with their binary's hash: the
-    row's commit gives its source, the source the binaries in bin/ built
-    from it, and the one (package, target) and [[derive]] table, if any,
-    that give the row's id give its key with that binary's hash, run as
-    OLD_TEST. A row that doesn't name its test (one of the farm's first,
-    whose worker ran it with --ignored) gets none."""
-
-    def __init__(self) -> None:
-        self.sources: dict[str, str | None] = {}
-        self.bins: dict[str, list[tuple[str, str]]] = collections.defaultdict(list)
-        for p in BIN.iterdir() if BIN.is_dir() else ():
-            m = re.fullmatch(r"(.+)-([0-9a-f]{12})", p.name)
-            if m and not p.name.startswith(("testbed-", "file-")):
-                parts = m[1].split("-")
-                for i in range(1, len(parts)):
-                    self.bins[m[2]].append(("-".join(parts[:i]), "-".join(parts[i:])))
-        self.tomls: dict[str, Matrix | None] = {}
-
-    def source(self, commit: str) -> str | None:
-        if commit not in self.sources:
-            try:
-                tree = git("ls-tree", commit, *SOURCES)
-                self.sources[commit] = hashlib.sha256(tree.encode()).hexdigest()[:12]
-            except subprocess.CalledProcessError:
-                self.sources[commit] = None
-        return self.sources[commit]
-
-    def toml(self, matrix: str) -> Matrix | None:
-        """The matrix's toml, if it's still here."""
-        if matrix not in self.tomls:
-            self.tomls[matrix] = None
-            for d in MATRIX_DIRS:
-                if (d / f"{matrix}.toml").is_file():
-                    try:
-                        m = Matrix(str(d / f"{matrix}.toml"))
-                    except (SystemExit, Exception):
-                        continue
-                    self.tomls[matrix] = m if m.kind == "test" else None
-                    break
-        return self.tomls[matrix]
-
-    def key(self, rec: dict, matrix: str) -> tuple[str | None, str]:
-        """The key of a test row of the matrix, else None and why: "test"
-        (it doesn't name its test), "commit" (its commit is gone), "binary"
-        (no binary of its source is here) or "id" (none gives its id)."""
-        if rec.get("key") and rec.get("binary"):
-            return rec["key"], ""
-        if not rec.get("test"):
-            return None, "test"
-        source = self.source(rec.get("commit") or "")
-        if source is None:
-            return None, "commit"
-        if not self.bins.get(source):
-            return None, "binary"
-        env = rec.get("env", {})
-        m = self.toml(matrix)
-        for d in [None, *(m.derives if m else [])]:
-            set_ = {k for k, _ in d.set} if d is not None else set()
-            env_t = tuple(sorted((k, v) for k, v in env.items() if k not in set_))
-            for package, target in self.bins[source]:
-                if job_hash(source, package, target, rec["test"], env_t, d) == rec.get("id"):
-                    h = bin_hash(f"{package}-{target}-{source}")
-                    if h is None:
-                        return None, "binary"
-                    return job_hash([h, *OLD_TEST], package, target, rec["test"], env_t, d), ""
-        return None, "id"
+def at_epoch(at: str | None) -> float:
+    """An index line's `at`, as seconds since the epoch (0 without one)."""
+    try:
+        return datetime.datetime.fromisoformat(at).timestamp() if at else 0.0
+    except ValueError:
+        return 0.0
 
 
-def row_index(mine: set[str]) -> tuple[dict[str, tuple[str, int, str]], dict[str, collections.Counter]]:
-    """The row index, row-keys.jsonl, after it takes in what each matrix's
-    rows.jsonl has added since it was last read (all of it the first time):
-    each key's first row, as its matrix, offset and job id, and for the
-    matrices `mine` how many rows of each key they have."""
+def row_index(mine: set[str]) -> tuple[dict[str, tuple[str, int, str, float]], dict[str, collections.Counter]]:
+    """The index of lines by key, index-keys.jsonl, after it takes in what
+    each matrix's index.jsonl has added since it was last read (all of it
+    the first time): each key's newest line, as its matrix, offset, job id
+    and time, and for the matrices `mine` how many lines of each key they
+    have."""
     FARM.mkdir(parents=True, exist_ok=True)
-    with (FARM / "row-keys.lock").open("w") as lock:
+    with (FARM / "index-keys.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         try:
             state = json.loads(ROW_KEYS_READ.read_text())
         except (OSError, ValueError):
             state = {}
         read = state.setdefault("read", {})
-        unkeyed = collections.Counter(state.get("unkeyed", {}))
-        left = collections.Counter()
-        keyer = None
         new = []
-        for path in sorted(FARM.glob("*/rows.jsonl")):
+        for path in sorted(FARM.glob(f"*/{INDEX}")):
             name = path.parent.name
             at = read.get(name, 0)
             size = path.stat().st_size
@@ -1093,63 +1073,44 @@ def row_index(mine: set[str]) -> tuple[dict[str, tuple[str, int, str]], dict[str
                     off = at
                     at += len(line)
                     rec = row_head(line)
-                    if not rec or rec.get("kind", "test") != "test" or not rec.get("id"):
-                        continue
-                    keyer = keyer or Keyer()
-                    key, why = keyer.key(rec, name)
-                    if key is None:
-                        left[why] += 1
-                        continue
-                    new.append([key, name, off, rec["id"]])
+                    if rec and rec.get("id") and rec.get("key"):
+                        new.append([rec["key"], name, off, rec["id"], at_epoch(rec.get("at"))])
             read[name] = at
         append_jsonl(ROW_KEYS, new)
-        if left:
-            unkeyed += left
-            log(f"row index: {sum(left.values())} rows left out, with no key: " + ", ".join(
-                f"{n} {UNKEYED[why]}" for why, n in sorted(left.items())))
-        state["unkeyed"] = dict(unkeyed)
         tmp = ROW_KEYS_READ.with_suffix(".tmp")
         tmp.write_text(json.dumps(state))
         os.replace(tmp, ROW_KEYS_READ)
-        # A pass cut off before it saved how far it read leaves its rows to
-        # be indexed again: a row counts once, by where it is.
-        first: dict[str, tuple[str, int, str]] = {}
+        # A pass cut off before it saved how far it read leaves its lines to
+        # be indexed again: a line counts once, by where it is.
+        newest: dict[str, tuple[str, int, str, float]] = {}
         have = {m: collections.Counter() for m in mine}
         seen = set()
-        for key, name, off, jid in read_jsonl(ROW_KEYS):
-            first.setdefault(key, (name, off, jid))
+        for key, name, off, jid, t in read_jsonl(ROW_KEYS):
+            if key not in newest or t >= newest[key][3]:
+                newest[key] = (name, off, jid, t)
             if name in have and (name, off) not in seen:
                 seen.add((name, off))
                 have[name][key] += 1
-        return first, have
-
-
-UNKEYED = {"test": "that don't name their test", "commit": "whose commit is gone",
-           "binary": "with no binary of their source", "id": "whose id no binary and [[derive]] table gives"}
+        return newest, have
 
 
 def bad_keys() -> set[str]:
     """The keys of the jobs in any matrix's mismatches.jsonl, whose rows
     aren't a function of their binary and job."""
-    out, keyer = set(), None
-    for path in FARM.glob("*/mismatches.jsonl"):
-        for m in read_jsonl(path):
-            for rec in (m["first"], m["again"]):
-                keyer = keyer or Keyer()
-                key, _ = keyer.key(rec, path.parent.name)
-                if key:
-                    out.add(key)
-    return out
+    return {
+        rec["key"] for path in FARM.glob("*/mismatches.jsonl") for m in read_jsonl(path)
+        for rec in (m["first"], m["again"]) if rec.get("key")
+    }
 
 
 def rows_at(places: list[tuple[str, int, str]]) -> list[dict | None]:
-    """The rows at (matrix, offset, job id) in the matrices' rows.jsonl, in
-    order; None where the line there isn't that job's."""
+    """The index lines at (matrix, offset, job id) in the matrices'
+    index.jsonl, in order; None where the line there isn't that job's."""
     out: list[dict | None] = [None] * len(places)
     order = sorted(range(len(places)), key=lambda i: places[i][:2])
     for name, idx in itertools.groupby(order, key=lambda i: places[i][0]):
         try:
-            f = (FARM / name / "rows.jsonl").open("rb")
+            f = (FARM / name / INDEX).open("rb")
         except OSError:
             continue
         with f:
@@ -1165,9 +1126,10 @@ def rows_at(places: list[tuple[str, int, str]]) -> list[dict | None]:
 
 
 def copy_row(rec: dict, job: Job, src: str) -> dict:
-    """A row as the copy of `job`'s matrix: its own id, arm, commit, test,
-    binary and key, not a verify copy's, and `from` the matrix of the row
-    that ran, with `row` last."""
+    """An index line as the copy of `job`'s matrix: its own id, arm,
+    commit, test, binary and key, not a verify copy's, and `from` the
+    matrix of the job that ran; its data is the one it points at. `row`
+    goes last."""
     head = {k: v for k, v in rec.items() if k != "row"}
     return {
         **head, "id": job.id, "arm": job.arm, "commit": job.commit, "test": job.test, "copy": "",
@@ -1849,6 +1811,17 @@ class Host:
     drained: int = 0
     # The jobs its worker ran at the last sync.
     running: set[str] = dataclasses.field(default_factory=set)
+    # Its store (worker.py): the stored jobs whose flush hasn't landed, by
+    # wid, each flush's index lines waiting for it, the flushes landed, and
+    # those to ack; whether it's asked to flush; its store's last error.
+    stored: dict[str, int] = dataclasses.field(default_factory=dict)
+    unlanded: dict[int, list] = dataclasses.field(default_factory=dict)
+    landed: set[int] = dataclasses.field(default_factory=set)
+    flush_acks: list[int] = dataclasses.field(default_factory=list)
+    flush_wanted: bool = False
+    store_error: str | None = None
+    # --local: its worker's dir.
+    dir: Path | None = None
 
     @property
     def slots(self) -> int:
@@ -2047,11 +2020,13 @@ class Run:
                 self.have[m.name] = set(mine[m.name])
                 counts |= mine[m.name]
             hits = {}
+            # Only lines whose data S3 still holds: older jobs run again.
+            fresh = time.time() - RETAIN_S
             for m in matrices:
                 for j in jobs[m.name]:
-                    if j.key in first and j.key not in bad:
+                    if j.key in first and j.key not in bad and first[j.key][3] >= fresh:
                         hits.setdefault(j.id, j)
-            places = [first[j.key] for j in hits.values()]
+            places = [first[j.key][:3] for j in hits.values()]
             for j, place, rec in zip(hits.values(), places, rows_at(places)):
                 if rec is not None:
                     self.rows[j.id] = copy_row(rec, j, place[0])
@@ -2118,6 +2093,9 @@ class Run:
         self.seqs: dict[str, int] = {}
         self.order: dict[str, int] = {}
         self.pinned: str | None = None
+        # --local's workers, and where their flushes go.
+        self.serves: list[subprocess.Popen] = []
+        self.sink_dir = Path()
 
         def add(item: Item, done: bool) -> None:
             self.items[item.wid] = item
@@ -2143,9 +2121,16 @@ class Run:
             for j in sorted(jobs[m.name], key=lambda j: j.id)[: args.verify if m.kind == "test" else 0]:
                 item = Item(self.owners[j.id][0][1], "v")
                 if item.wid not in self.items:
-                    add(item, counts[self.ident(j)] >= 2)
+                    add(item, counts[self.ident(j)] >= 2 and (m.kind == "testbed" or j.id in self.rows))
         firsts = [own[0][1] for own in self.owners.values()]
         self.bins = sorted({j.bin for j in firsts} | {name for j in firsts for _, name in j.files})
+        # A test job's index line keeps the fields of its row its matrices
+        # read; its tables go to its instance's store, which runs the
+        # pinned DuckDB CLI, shipped as one of the run's binaries.
+        self.fields = {
+            jid: list(dict.fromkeys(f for m, _ in own for f in m.row_fields())) for jid, own in self.owners.items()
+        }
+        self.duckdb = f"duckdb-{worker.simdb().DUCKDB_VERSION}"
         # job id -> its expected wall, from past rows. Test jobs run longest
         # first, and before them those no row says, which may be long, so
         # the last to finish are short (a stable sort: otherwise matrix by
@@ -2166,8 +2151,13 @@ class Run:
         """What a matrix has rows of: a testbed job's id, a test job's key."""
         return job.id if job.kind == "testbed" else job.key
 
+    def lines(self, m: Matrix) -> Path:
+        """A matrix's file of its jobs' lines: a test matrix's index, a
+        testbed matrix's rows."""
+        return m.state / ("rows.jsonl" if m.kind == "testbed" else INDEX)
+
     def share_rows(self) -> None:
-        """Copies into each matrix the rows it lacks of its jobs, from the
+        """Copies into each matrix the lines it lacks of its jobs, from the
         run's other matrices, and a test job's from any matrix: runs are
         deterministic, so a job runs once for every matrix."""
         n = 0
@@ -2182,7 +2172,7 @@ class Run:
             for r in recs:
                 if r.get("kind") == "testbed":
                     self.share_run(r["id"], m)
-            append_jsonl(m.state / "rows.jsonl", recs)
+            append_jsonl(self.lines(m), recs)
             n += len(recs)
         if n:
             log(f"copied {n} rows from earlier runs into the run's matrices" + (
@@ -2198,12 +2188,22 @@ class Run:
     def env_of(self, job: Job) -> dict[str, str]:
         return {**dict(job.env), **self.derived.get(job.id, {})}
 
-    def wire(self, item: Item) -> dict:
+    def wire(self, item: Item, host: Host | None = None) -> dict:
+        """A job as its worker takes it: a test job's with its key, its
+        first owner's matrix and arm, its sim's tables knob, the row fields
+        its index line keeps, and how long it's expected to take on
+        `host`; the canary keeps its whole row, and stores nothing."""
         j = item.job
         w = {"id": item.wid, "kind": j.kind, "bin": j.bin, "test": j.test, "env": self.env_of(j)}
         if j.kind == "testbed":
             w["files"] = dict(j.files)
             w["seq"] = self.seqs.get(item.wid, 0)
+            return w
+        m = self.owners[j.id][0][0] if j.id in self.owners else self.ms[0]
+        w.update(key=j.key, matrix=m.name, arm=j.arm, sim=f"{m.package}:{m.target}", out=OUT_KNOBS.get(m.package),
+                 fields=self.fields.get(j.id, []), store=item.copy != "canary")
+        if host is not None:
+            w["expected_s"] = round(self.expected(item) / host.speed, 1)
         return w
 
     def release(self, jid: str) -> None:
@@ -2253,11 +2253,26 @@ class Run:
             self.seen[self.owners[jid][0][0].name].append(res["wall_s"])
         self.release(jid)
 
+    def src_of(self, host: Host, seq: int) -> str:
+        """Flush `seq` of `host` as a cache source (hack/sim-db): its
+        worker's Store.src."""
+        return f"farm/{self.name}/{host.id}/{seq}"
+
+    def data_of(self, host: Host, seq: int) -> str:
+        """Where flush `seq` of `host` lands: S3, or --local's dir."""
+        if self.local:
+            return str(self.sink_dir / self.name / host.id / str(seq))
+        return f"s3://{self.args.s3_bucket}/sim-data/{self.name}/{host.id}/{seq}/"
+
     def store(self, host: Host, item: Item, res: dict) -> None:
+        """A test job's row: done now (what waits on it is released, a
+        second row is compared), its index lines written once its flush
+        lands (land)."""
         if item.job.kind == "testbed":
             self.store_testbed(host, item, res)
             return
         at = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+        seq = res.get("flush")
         recs = []
         for m, j in self.owners[item.job.id]:
             rec = {
@@ -2277,11 +2292,18 @@ class Run:
                 "max_rss_mb": res.get("max_rss_mb"),
                 "at": at,
             }
+            if seq is not None:
+                rec["src"], rec["data"] = self.src_of(host, seq), self.data_of(host, seq)
             if recs:
                 rec["from"] = recs[0][0].name
             rec["row"] = res["row"]
-            self.pending_rows.setdefault(m.state / "rows.jsonl", []).append(rec)
             recs.append((m, rec))
+        if seq is None:
+            for m, rec in recs:
+                self.pending_rows.setdefault(self.lines(m), []).append(rec)
+        else:
+            host.unlanded.setdefault(seq, []).extend((self.lines(m), rec) for m, rec in recs)
+            host.stored[item.wid] = seq
         self.done.add(item.wid)
         self.ran += 1
         if res.get("wall_s"):
@@ -2301,10 +2323,63 @@ class Run:
                     f"{key(first)} on {first['host']}, {key(rec)} on {host.id}")
 
     def flush_rows(self) -> None:
-        """Writes the rows stored since the last flush, one append a file."""
+        """Writes the lines stored since the last flush, one append a file."""
         for path, recs in self.pending_rows.items():
             append_jsonl(path, recs)
         self.pending_rows.clear()
+
+    def land(self, host: Host, seq: int, rec: dict | None) -> None:
+        """Flush `seq` of `host` has landed (its record `rec`, None when its
+        manifest in S3 tells): its jobs' index lines are written, and their
+        results acked."""
+        if seq in host.landed:
+            return
+        host.landed.add(seq)
+        for path, r in host.unlanded.pop(seq, []):
+            row = r.pop("row")
+            self.pending_rows.setdefault(path, []).append({**r, "reads": (rec or {}).get("reads"), "row": row})
+        for wid, s in list(host.stored.items()):
+            if s == seq:
+                host.acks.append(wid)
+                del host.stored[wid]
+        if rec is not None:
+            host.flush_acks.append(seq)
+
+    def flush_landed(self, host: Host, seq: int) -> bool:
+        """Whether flush `seq` of `host` is where it goes, by its manifest
+        (written after its tables)."""
+        if self.local:
+            return (self.sink_dir / self.name / host.id / str(seq) / "manifest.json").exists()
+        p = subprocess.run(
+            ["aws", "s3api", "head-object", "--bucket", self.args.s3_bucket,
+             "--key", f"sim-data/{self.name}/{host.id}/{seq}/manifest.json", "--region", self.args.s3_region],
+            capture_output=True, text=True, start_new_session=True,
+        )
+        return p.returncode == 0
+
+    def recover(self, host: Host) -> None:
+        """A lost instance's flushes not seen to land: those whose manifest
+        is in place land, the others' jobs are queued again (their rows came
+        back, but their data is gone)."""
+        if not host.unlanded:
+            return
+        seqs = sorted(host.unlanded)
+        with cf.ThreadPoolExecutor(max_workers=len(seqs)) as ex:
+            found = dict(zip(seqs, ex.map(lambda s: self.flush_landed(host, s), seqs)))
+        for seq in seqs:
+            if found[seq]:
+                self.land(host, seq, None)
+        back = []
+        for wid, seq in list(host.stored.items()):
+            del host.stored[wid]
+            item = self.items.get(wid)
+            if item is not None:
+                self.done.discard(wid)
+                back.append(item)
+        host.unlanded.clear()
+        self.queue.extendleft(reversed(back))
+        log(f"{host.id}: {sum(found.values())} of its {len(seqs)} flushes not seen to land were in place"
+            + (f"; {len(back)} jobs whose data was lost queued again" if back else ""))
 
     def fail(self, host: Host, item: Item, res: dict) -> None:
         self.attempts[item.wid] += 1
@@ -2341,9 +2416,12 @@ class Run:
         if host.deadline is not None:
             why += f"; {host.drained} jobs ran while it drained"
         log(f"lost {host.id} ({host.type} in {host.zone}): {why}; {len(host.assigned)} jobs requeued")
+        self.recover(host)
         self.requeue(host)
         host.state = "lost"
         host.ended = time.time()
+        if self.local:
+            self.replace_local()
         if terminate_it and not self.local:
             try:
                 terminate(host.region, [host.id])
@@ -2365,18 +2443,13 @@ class Run:
         # behind others starts late, so one at the head stops it once the
         # run has less than twice its length left: it could end the run
         # late.
+        # An interrupted instance takes nothing: its worker uploads.
+        if host.deadline is not None:
+            return []
         ready = sum(h.capacity for h in self.hosts if h.state == "ready")
         prefetch = self.prefetch_s()
         remaining = self.work_left() / max(ready, 1)
         goal = min(host.capacity * prefetch, remaining * host.capacity)
-        # A draining instance takes only jobs that should end in time, no
-        # more work than it has time for.
-        left = None
-        if host.deadline is not None:
-            left = host.deadline - time.time() - DRAIN_MARGIN
-            if left <= 0:
-                return []
-            goal = min(goal, host.capacity * left)
         have = sum(
             self.expected(i) * (0.5 if i.wid in host.running else 1)
             for i in host.assigned.values() if i.copy != "canary"
@@ -2386,9 +2459,7 @@ class Run:
             item = self.queue.popleft()
             if item.wid in self.done or item.wid in host.assigned:
                 continue
-            if host.id in self.took[item.job.id] and others or (
-                left is not None and self.expected(item) / host.speed > left
-            ):
+            if host.id in self.took[item.job.id] and others:
                 skipped.append(item)
                 continue
             long = self.expected(item) / host.speed
@@ -2422,10 +2493,11 @@ class Run:
             return items
         return []
 
-    def exchange(self, host: Host, jobs: list[Item], acks: list[str]) -> dict:
+    def exchange(self, host: Host, jobs: list[Item], acks: list[str], flush_acks: list[int] = (),
+                 flush: bool = False) -> dict:
         """A sync, then the fetch of the testbed runs it reports done: one
         that didn't come is held back from absorb until a later sync."""
-        reply = self.sync(host, jobs, acks)
+        reply = self.sync(host, jobs, acks, flush_acks, flush)
         if self.testbed is not None:
             done = []
             for res in reply["done"]:
@@ -2451,7 +2523,7 @@ class Run:
         tar = dest.with_name(f".{jid}.tar.gz")
         try:
             if self.local:
-                shutil.copyfile(self.local_dir / "done" / f"{res['id']}.tar.gz", tar)
+                shutil.copyfile(host.dir / "done" / f"{res['id']}.tar.gz", tar)
             else:
                 self.ssh.get(host, f"farm/done/{res['id']}.tar.gz", tar)
             shutil.rmtree(tmp, ignore_errors=True)
@@ -2466,12 +2538,14 @@ class Run:
             tar.unlink(missing_ok=True)
             shutil.rmtree(tmp, ignore_errors=True)
 
-    def sync(self, host: Host, jobs: list[Item], acks: list[str]) -> dict:
+    def sync(self, host: Host, jobs: list[Item], acks: list[str], flush_acks: list[int] = (),
+             flush: bool = False) -> dict:
         drop = list(host.drop)
-        req = json.dumps({"ack": acks, "jobs": [self.wire(i) for i in jobs], "drop": drop})
+        req = json.dumps({"ack": acks, "jobs": [self.wire(i, host) for i in jobs], "drop": drop,
+                          "ack_flushes": list(flush_acks), "flush": flush})
         if self.local:
             p = subprocess.run(
-                [sys.executable, str(HERE / "worker.py"), "sync", "--dir", str(self.local_dir)],
+                [sys.executable, str(HERE / "worker.py"), "sync", "--dir", str(host.dir)],
                 input=req, capture_output=True, text=True, timeout=60,
             )
         else:
@@ -2485,23 +2559,46 @@ class Run:
     def absorb(self, host: Host, reply: dict) -> None:
         for res in reply["done"]:
             wid = res["id"]
-            host.acks.append(wid)
+            # A stored job's result is acked once its flush lands (land).
+            if wid in host.stored:
+                continue
             item = host.assigned.pop(wid, None)
             if item is None:
                 item = self.items.get(wid)
                 if item is None or wid in self.done:
+                    host.acks.append(wid)
                     continue
             if item.copy == "canary":
+                host.acks.append(wid)
                 continue  # the boot's, whose ack didn't arrive
+            if res.get("requeue"):
+                # Killed for an interruption or the host's end: no attempt
+                # spent, and back to the queue unless given back already.
+                host.acks.append(wid)
+                if wid not in host.given and item not in self.queue:
+                    self.queue.appendleft(item)
+                host.given.discard(wid)
+                continue
             host.busy_s += res.get("wall_s") or 0
             if res.get("row") is not None:
                 if host.deadline is not None:
                     host.drained += 1
                 self.store(host, item, res)
+                if res.get("flush") is None:
+                    host.acks.append(wid)
             else:
+                host.acks.append(wid)
                 self.fail(host, item, res)
+        for f in reply.get("flushes", []):
+            self.land(host, f["seq"], f)
+        st = reply.get("store") or {}
+        if st.get("error") != host.store_error:
+            if st.get("error"):
+                log(f"{host.id}: its store: {st['error'].strip().splitlines()[-1]}")
+            host.store_error = st.get("error")
         host.running = set(reply["running"])
-        there = set(reply["queued"]) | set(reply["running"]) | set(reply.get("held", []))
+        there = (set(reply["queued"]) | set(reply["running"]) | set(reply.get("folding", []))
+                 | set(reply.get("held", [])))
         note = reply.get("note")
         if note != host.note:
             if note:
@@ -2527,7 +2624,16 @@ class Run:
             log(f"{host.id} lost track of {len(back)} jobs; requeued")
             self.queue.extendleft(reversed(back))
         deadline = reply.get("interrupting")
-        if deadline and host.deadline is None:
+        ending = reply.get("ending")
+        if ending and not deadline and host.deadline is None:
+            # Its --hours end: drained as an interrupted one is, until its
+            # shutdown.
+            now = time.time()
+            host.deadline = ending
+            back = self.give_back(host, reply.get("started", {}), now)
+            log(f"{host.id} ({host.type} in {host.zone}): its --hours end; it flushes and shuts down within "
+                f"{host.deadline - now:.0f} s, {back} jobs given back")
+        elif deadline and host.deadline is None:
             # A pool AWS takes instances back from is one to stay out of,
             # and the instance is AWS's to reclaim (RECLAIM_GRACE); one of
             # test jobs drains until then.
@@ -2542,9 +2648,9 @@ class Run:
                           terminate_it=False)
             else:
                 back = self.give_back(host, reply.get("started", {}), now)
-                log(f"{host.id} ({host.type} in {host.zone}): spot interruption notice; draining it "
-                    f"for {host.deadline - now:.0f} s, {back} jobs given back, {len(host.assigned)} kept; "
-                    f"{skip}")
+                log(f"{host.id} ({host.type} in {host.zone}): spot interruption notice; it flushes "
+                    f"within {host.deadline - now:.0f} s, {back} jobs given back, {len(host.assigned)} kept "
+                    f"to end within {NOTICE_FINISH_S} s, {len(host.stored)} jobs' data still to land; {skip}")
         elif host.deadline is not None and host.state == "ready":
             back = self.give_back(host, reply.get("started", {}), time.time())
             if back:
@@ -2552,36 +2658,38 @@ class Run:
         elif not reply.get("serving") and host.assigned:
             log(f"{host.id}: the worker isn't running; restarting it")
             if self.local:
-                self.start_local()
+                self.start_local(host)
             else:
                 self.pool.submit(self.start_worker, host)
 
     def give_back(self, host: Host, started: dict[str, float], now: float) -> int:
-        """A draining instance's jobs that shouldn't end DRAIN_MARGIN before
-        its deadline, back to the head of the queue: queued ones to be
-        dropped from its queue at the next sync, running ones left to run (a
-        row they still send is a copy's)."""
-        left = host.deadline - now - DRAIN_MARGIN
+        """An interrupted instance's jobs, back to the head of the queue, but
+        the running ones expected to end within NOTICE_FINISH_S: queued ones
+        to be dropped from its queue at the next sync, running ones left to
+        its worker, which kills them (they come back as `requeue`; a row one
+        still sends is a copy's)."""
         back = []
         for wid, item in list(host.assigned.items()):
             if item.copy == "canary":
                 continue
-            need = self.expected(item) / host.speed - (now - started[wid] if wid in started else 0)
-            if need > left:
-                back.append(host.assigned.pop(wid))
-                if wid in started:
-                    host.given.add(wid)
-                else:
-                    host.drop.append(wid)
+            if wid in started:
+                if self.expected(item) / host.speed - (now - started[wid]) <= NOTICE_FINISH_S:
+                    continue
+                host.given.add(wid)
+            else:
+                host.drop.append(wid)
+            back.append(host.assigned.pop(wid))
         self.queue.extendleft(reversed(back))
         return len(back)
 
     def drained(self, now: float) -> None:
-        """Draining instances whose deadline has passed: left for AWS, what
-        they hold back to the queue."""
+        """Interrupted instances whose deadline has passed: left for AWS,
+        their flushes not seen to land checked in S3 (recover), what they
+        hold back to the queue."""
         for h in self.hosts:
             if h.state == "ready" and h.deadline is not None and now >= h.deadline:
-                self.lose(h, "its interruption is due; left for AWS to reclaim", terminate_it=False)
+                self.lose(h, "its interruption is due; left for AWS to reclaim" if h.interrupted is not None
+                          else "its --hours end is due", terminate_it=False)
 
     # -- the canary
 
@@ -2619,7 +2727,33 @@ class Run:
 
     # -- instances
 
+    def store_args(self, host: Host, home: Path, end_at: float | None) -> list[str]:
+        """serve's store options for a host of test jobs whose farm dir is
+        `home` (its policy file and binaries there)."""
+        if self.testbed is not None:
+            return []
+        out = ["--run", self.name, "--instance", host.id, "--policy", str(home / "policy.json"),
+               "--rotate-mb", str(self.args.rotate_mb), "--duckdb", str(home / "bin" / self.duckdb)]
+        if end_at is not None:
+            out += ["--end-at", f"{end_at:.0f}"]
+        return out
+
+    def policies(self, host: Host) -> dict:
+        """The presigned POST policies for `host`'s flushes (s3sign.py), each
+        good for its --hours and half an hour more."""
+        expires = datetime.datetime.fromtimestamp(host.launched + self.args.hours * 3600 + 1800, datetime.UTC)
+        creds = worker.s3sign().credentials()
+        return {
+            name: worker.s3sign().policy(self.args.s3_bucket, self.args.s3_region,
+                                         f"{prefix}/{self.name}/{host.id}/", expires, creds)
+            for name, prefix in (("data", "sim-data"), ("samples", "sim-samples"))
+        }
+
     def start_worker(self, host: Host) -> None:
+        # Its --hours end, 10 minutes before the shutdown user-data
+        # schedules: time to flush.
+        end_at = host.launched + self.args.hours * 3600 - 600
+        store = " ".join(shlex.quote(a) for a in self.store_args(host, Path("/home/ubuntu/farm"), end_at))
         cmd = (
             "sudo systemctl reset-failed sim-farm-worker 2>/dev/null; "
             "systemctl is-active --quiet sim-farm-worker || "
@@ -2628,7 +2762,7 @@ class Run:
             + "--working-directory /home/ubuntu/farm "
             f"python3 /home/ubuntu/farm/worker.py serve --slots {host.slots} "
             f"--job-timeout {self.args.job_timeout} --idle-minutes {self.args.idle_minutes} "
-            f"--min-free-mb {int(self.slot_mem_gib * 1024)} --imds --poweroff"
+            f"--min-free-mb {int(self.slot_mem_gib * 1024)} --imds --poweroff {store}"
         )
         p = self.ssh.run(host, cmd)
         if p.returncode:
@@ -2698,7 +2832,16 @@ class Run:
             time.sleep(2)
         host.ssh_at = time.time()
         self.ssh.master(host)
-        self.ssh.put(host, [HERE / "worker.py"], "farm/")
+        files = HOST_FILES
+        if self.testbed is None:
+            policy = self.state / "policies" / f"{host.id}.json"
+            policy.parent.mkdir(parents=True, exist_ok=True)
+            policy.write_text(json.dumps(self.policies(host)))
+            try:
+                self.ssh.put(host, [policy], "farm/policy.json")
+            finally:
+                policy.unlink(missing_ok=True)
+        self.ssh.put(host, files, "farm/")
         self.put_bins(host)
         self.start_worker(host)
         host.up_at = time.time()
@@ -2949,7 +3092,7 @@ class Run:
         can = 0.0
         for h in self.hosts:
             if h.state == "ready" and h.deadline is not None:
-                can += h.capacity * min(d, max(0.0, h.deadline - now - DRAIN_MARGIN))
+                continue  # an interrupted instance takes nothing more
             elif h.state == "ready":
                 can += h.capacity * d
             elif h.state != "lost":
@@ -3210,16 +3353,21 @@ class Run:
                 return
             self.terminate_now(
                 [h for h in self.hosts
-                 if h.state in ("booting", "ready") and not h.assigned and h.deadline is None and h.id],
+                 if h.state in ("booting", "ready") and not h.assigned and not h.stored and h.deadline is None
+                 and h.id],
                 f"the run ends within {RETIRE_WITHIN_S} s without it",
             )
             return
+        # One whose data hasn't all landed is asked to flush (tick), and
+        # waits.
         idle = []
         for h in self.hosts:
-            if h.state == "ready" and not h.assigned and h.deadline is not None:
+            if h.state != "ready" or h.assigned or h.stored:
+                continue
+            if h.deadline is not None:
                 self.lose(h, "nothing left for it while it drained; left for AWS to reclaim",
                           terminate_it=False)
-            elif h.state == "ready" and not h.assigned:
+            else:
                 idle.append(h)
         self.terminate_now(idle, "nothing left for it")
 
@@ -3290,6 +3438,10 @@ class Run:
         if not key.exists() or not Path(f"{key}.pub").exists():
             sys.exit(f"{key} or its .pub is missing (--ssh-key, $STRIMS_FARM_SSH_KEY, ssh_key in {CONFIG})")
         self.ssh = Ssh(key, self.state)
+        if self.testbed is None:
+            if not self.args.s3_bucket:
+                sys.exit(f"a run of test matrices puts its data in S3: --s3-bucket (s3_bucket in {CONFIG})")
+            self.ship_duckdb()
         if self.args.s3_bucket:
             self.s3_bins = Binaries(self.args.s3_bucket, self.args.s3_region)
             try:
@@ -3413,28 +3565,62 @@ class Run:
         )
         self.priced = time.time()
 
+    def ship_duckdb(self) -> None:
+        """The pinned DuckDB CLI as one of the run's binaries, for its
+        hosts' stores."""
+        dst = BIN / self.duckdb
+        if not dst.exists():
+            BIN.mkdir(parents=True, exist_ok=True)
+            tmp = dst.with_suffix(".tmp")
+            shutil.copy2(worker.simdb().duckdb_bin(), tmp)
+            os.replace(tmp, dst)
+        if self.duckdb not in self.bins:
+            self.bins.append(self.duckdb)
+
     def setup_local(self) -> None:
-        self.local_dir = self.state / "local"
+        if self.testbed is None:
+            self.ship_duckdb()
+            # Flushes go straight into the cache, as `pull` would put them.
+            self.sink_dir = worker.simdb().cache_root() / "cache" / "farm"
+        if self.testbed is not None:
+            slots = 1
+        else:
+            slots = self.args.slots or max(1, (os.cpu_count() or 2) // 2)
+        self.local_slots = slots
+        self.local_hosts = 0
+        self.replace_local()
+
+    def replace_local(self) -> None:
+        """--local's host: a new one at the start, and for one lost (an
+        interruption's test, --imds-url), as an instance would be launched."""
+        if self.stopping.is_set():
+            return
+        n = self.local_hosts
+        self.local_hosts += 1
+        hid = "local" if n == 0 else f"local-{n}"
+        self.local_dir = self.state / hid
         (self.local_dir / "bin").mkdir(parents=True, exist_ok=True)
         for b in self.bins:
             dst = self.local_dir / "bin" / b
             if not dst.exists():
                 shutil.copy2(BIN / b, dst)
-        if self.testbed is not None:
-            slots = 1
-        else:
-            slots = self.args.slots or max(1, (os.cpu_count() or 2) // 2)
-        self.hosts.append(Host("local", "local", "-", Spec(slots, slots, 0, slots), 0.0, time.time(), state="ready"))
-        self.local_slots = slots
-        self.start_local()
+        slots = self.local_slots
+        h = Host(hid, "local", "-", Spec(slots, slots, 0, slots), 0.0, time.time(), state="ready", dir=self.local_dir)
+        if self.testbed is None:
+            (self.local_dir / "policy.json").write_text(json.dumps({"dir": str(self.sink_dir)}))
+        self.hosts.append(h)
+        self.start_local(h)
 
-    def start_local(self) -> None:
-        self.serve = subprocess.Popen(
-            [sys.executable, str(HERE / "worker.py"), "serve", "--dir", str(self.local_dir),
+    def start_local(self, h: Host) -> None:
+        # Only the first polls --imds-url: its replacement isn't interrupted.
+        imds = ["--imds", "--imds-url", self.args.imds_url] if self.args.imds_url and h.id == "local" else []
+        self.serves.append(subprocess.Popen(
+            [sys.executable, str(HERE / "worker.py"), "serve", "--dir", str(h.dir),
              "--slots", str(self.local_slots), "--job-timeout", str(self.args.job_timeout),
-             "--idle-minutes", "5", "--min-free-mb", str(int(self.slot_mem_gib * 1024))],
+             "--idle-minutes", "5", "--min-free-mb", str(int(self.slot_mem_gib * 1024)),
+             *imds, *self.store_args(h, h.dir, None)],
             stdin=subprocess.DEVNULL,
-        )
+        ))
 
     def progress(self, now: float) -> None:
         total = sum(1 for i in self.items.values() if i.copy != "canary")
@@ -3466,7 +3652,14 @@ class Run:
             self.boots()
         self.drained(now)
         ready = [h for h in self.hosts if h.state == "ready"]
-        batches = {h.id: (self.take(h), list(h.acks)) for h in ready}
+        # An instance with nothing left to run and data not landed is asked
+        # to flush, once nothing waits in the queue for it.
+        nothing = not any(i.wid not in self.done for i in self.queue)
+        batches = {}
+        for h in ready:
+            jobs = self.take(h)
+            h.flush_wanted = bool(h.stored) and not h.assigned and nothing
+            batches[h.id] = (jobs, list(h.acks), list(h.flush_acks), h.flush_wanted)
         futs = {h.id: self.pool.submit(self.exchange, h, *batches[h.id]) for h in ready}
         for h in ready:
             try:
@@ -3477,8 +3670,9 @@ class Run:
                     self.lose(h, f"no sync for {SSH_GRACE // 60} min: {e}", terminate_it=h.deadline is None)
                 continue
             h.failing_since = None
-            sent = batches[h.id][1]
+            _, sent, sent_flushes, _ = batches[h.id]
             h.acks = h.acks[len(sent):]
+            h.flush_acks = h.flush_acks[len(sent_flushes):]
             self.absorb(h, reply)
         if self.testbed is None:
             self.refill([h for h in ready if h.state == "ready"])
@@ -3509,9 +3703,11 @@ class Run:
             self.absorb(h, reply)
 
     def finished(self) -> bool:
+        """Every job has a row, and every row's data has landed."""
+        live = [h for h in self.hosts if h.state != "lost"]
         return not self.queue and not self.waiting and not any(
-            i.copy != "canary" for h in self.hosts if h.state != "lost" for i in h.assigned.values()
-        )
+            i.copy != "canary" for h in live for i in h.assigned.values()
+        ) and not any(h.stored for h in live)
 
     def run(self) -> int:
         self.state.mkdir(parents=True, exist_ok=True)
@@ -3566,7 +3762,10 @@ class Run:
                     self.progress(now)
                     last_progress = now
                 if not self.finished():
-                    draining = any(h.state == "ready" and h.deadline is not None for h in self.hosts)
+                    # Interrupted instances, and those flushing at the end,
+                    # are synced the sooner.
+                    draining = any(h.state == "ready" and (h.deadline is not None or h.stored and not h.assigned)
+                                   for h in self.hosts)
                     # A tick starts a period after the last one began: its
                     # work counts in the period, not on top of it.
                     period = 2 if self.local else DRAIN_TICK if draining else TICK
@@ -3574,9 +3773,9 @@ class Run:
             # Ack what's left, so a kept instance's worker can go idle.
             self.flush_rows()
             for h in self.hosts:
-                if h.state != "lost" and h.acks:
+                if h.state != "lost" and (h.acks or h.flush_acks):
                     try:
-                        self.sync(h, [], h.acks)
+                        self.sync(h, [], h.acks, h.flush_acks)
                     except Exception:
                         pass
         except KeyboardInterrupt:
@@ -3586,14 +3785,17 @@ class Run:
             self.stopping.set()
             self.flush_rows()
             if self.local:
-                # The worker may be one a previous controller started, or
+                # A worker may be one a previous controller started, or
                 # this one's, before it has written its pid.
-                try:
-                    os.kill(int((self.local_dir / "serve.pid").read_text()), signal.SIGTERM)
-                except (OSError, ValueError):
-                    pass
-                self.serve.terminate()
-                self.serve.wait()
+                for h in self.hosts:
+                    try:
+                        os.kill(int((h.dir / "serve.pid").read_text()), signal.SIGTERM)
+                    except (OSError, ValueError, TypeError):
+                        pass
+                for p in self.serves:
+                    p.terminate()
+                for p in self.serves:
+                    p.wait()
             elif not (interrupted and self.args.keep):
                 self.terminate_all()
                 self.settle_interrupted()
@@ -3649,7 +3851,7 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
     jobs = matrix.jobs()
     ids = {j.id for j in jobs}
     keys = {j.id: j.key for j in jobs if j.key}
-    recs = read_jsonl(matrix.state / "rows.jsonl")
+    recs = read_jsonl(matrix.state / ("rows.jsonl" if matrix.kind == "testbed" else INDEX))
     # A job's first row of its key, else its first.
     first: dict[str, dict] = {}
     for r in recs:
@@ -3849,7 +4051,7 @@ def date_by_rows(farm: Path, runs: list[Spent]) -> None:
     if not hosts:
         return
     first: dict[str, str] = {}
-    for path in farm.glob("*/rows.jsonl"):
+    for path in [*farm.glob("*/rows.jsonl"), *farm.glob(f"*/{INDEX}")]:
         with path.open("rb") as f:
             for line in f:
                 rec = row_head(line) or {}
@@ -3977,7 +4179,7 @@ def status(arg: str | None, regions: list[str]) -> int:
     if m:
         m.resolve()
         ids = {j.id for j in m.jobs()}
-        have = {r["id"] for r in read_jsonl(m.state / "rows.jsonl")} & ids
+        have = {r["id"] for r in read_jsonl(m.state / ("rows.jsonl" if m.kind == "testbed" else INDEX))} & ids
         print(f"{m.name}: {len(have)}/{len(ids)} jobs have rows")
     return 1 if failed else 0
 
@@ -4068,9 +4270,14 @@ def main() -> int:
             default=os.environ.get("STRIMS_FARM_SSH_KEY") or cfg.get("ssh_key") or "~/.ssh/id_rsa",
         )
         r.add_argument("--s3-bucket", default=cfg.get("s3_bucket"),
-                       help="the bucket instances fetch the binaries from")
+                       help="the bucket instances fetch the binaries from, and put their data in")
         r.add_argument("--s3-region", default=cfg.get("s3_region"))
-        known = {a.dest for a in r._actions} - {"help", "matrices", "ssh_key", "regions", "s3_bucket", "s3_region"}
+        r.add_argument("--rotate-mb", type=float, default=ROTATE_MB,
+                       help="an instance's store flushes a generation this big")
+        r.add_argument("--imds-url", help="--local: the instance metadata its worker polls for an "
+                       "interruption notice (tests)")
+        known = {a.dest for a in r._actions} - {"help", "matrices", "ssh_key", "regions", "s3_bucket", "s3_region",
+                                                "imds_url"}
         if set(defaults) - known:
             sys.exit(f"{CONFIG}: unknown [run] settings {sorted(set(defaults) - known)}")
         r.set_defaults(**defaults)
