@@ -1,0 +1,9 @@
+# A receiver's acknowledgements, by why Linux sends them (pcap.py acks):
+# the seed sends two links 64 KiB every 250 ms in 4 KiB writes (two full
+# packets and a short one each), half a period apart; link 1's reverse
+# path is quiet, link 2's carries a 40-byte write every 15 ms, as a
+# viewer's HAVEs would.
+# env: VIEWERS=2 SEED_UP_MBIT=10 SECS=30 PCAP=1
+burst 0 1 0 250 65536 4096
+burst 0 2 125 250 65536 4096
+burst 2 0 5 15 40 40
