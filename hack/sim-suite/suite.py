@@ -1546,11 +1546,14 @@ def farm(a, cells):
     if base not in values:
         sys.exit(f"--against {base!r} is none of the sets")
     others = [v for v in values if v != base]
+    # A --refs arm is its own commit; a --sets arm runs the one commit.
+    label = (lambda v: f"{arms[v][:8]} {v}") if a.refs else (lambda v: f"{sha[:8]} {v}")
     for v in others:
-        print_arm_score(f"{v} against {base} at {sha[:8]}", arm_score(cells, rows[base], rows[v], a))
+        title = f"{label(v)} against {label(base)}" if a.refs else f"{v} against {base} at {sha[:8]}"
+        print_arm_score(title, arm_score(cells, rows[base], rows[v], a))
     for v in others:
         print()
-        scorecard(cells, rows[base], rows[v], f"{sha[:8]} {base}", f"{sha[:8]} {v}", a.all)
+        scorecard(cells, rows[base], rows[v], label(base), label(v), a.all)
 
 
 def print_arm_score(title, sc):
