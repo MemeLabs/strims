@@ -55,7 +55,7 @@
 //!   association's `cwnd` and `in_flight` and the `upq`.
 //!
 //! In the sim a WebRTC bench's links are the window model's data channels
-//! (see [`crate::wan`]) on the links' TCP connections, with no signalling,
+//! (see `wan`) on the links' TCP connections, with no signalling,
 //! or with [`Bench::str0m`] str0m's stack on the sim's UDP sockets.
 //!
 //! [`simulate`] adds a `{"ev":"q","t":..,"wait":..}` line per sample of

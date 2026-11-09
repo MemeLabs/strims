@@ -124,7 +124,7 @@ pub struct HostReport {
     /// `Rejected`.
     pub offers_refused: u64,
     /// Offers to link it, answered or refused, in the run's first
-    /// [`EARLY_OFFERS`](crate::world::EARLY_OFFERS).
+    /// `EARLY_OFFERS`.
     pub offers_early: u64,
     /// Its pool's probes whose trials ended, and those whose link stayed
     /// (`pool-probe`).

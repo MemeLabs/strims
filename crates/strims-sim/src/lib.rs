@@ -58,7 +58,7 @@
 //!
 //! | module | role |
 //! |---|---|
-//! | [`bench`] | a bare TCP bench, on the testbed's real sockets and the WAN model's |
+//! | [`bench`](mod@bench) | a bare TCP bench, on the testbed's real sockets and the WAN model's |
 //! | [`spec`] | the scenario description and its builder helpers |
 //! | [`arrivals`] | when the first swarm's viewers arrive and leave |
 //! | [`topology`] | seeded link layouts |

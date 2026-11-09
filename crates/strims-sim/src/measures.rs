@@ -2210,7 +2210,7 @@ impl Report {
     }
 
     /// The push trees' depth over the viewers' (viewer, stream) pairs,
-    /// once a second from [`DEPTH_WARM`] after the stream's start, from the
+    /// once a second from `DEPTH_WARM` after the stream's start, from the
     /// transfer samples (each host's latest by then): the shares with no
     /// open parent, `h` hops from the seed (1 to 6), deeper, in a cycle,
     /// and in a chain that ends at a viewer with no open parent. `None`
