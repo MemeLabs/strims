@@ -21,7 +21,9 @@
 //!   dials the [`LinkSpec`]s it is `from` while they are down (the only
 //!   reconnect, so links heal after partitions and restarts), and the
 //!   writer or readers of its swarms. A restart re-runs all of it from the
-//!   spec.
+//!   spec. Every host exists from the run's start; one with
+//!   [`HostSpec::arrive_at`] starts its software then, and no host dials
+//!   one that departed ([`Fault::Depart`]).
 //! - The controller is a turmoil client. It samples every node, checks the
 //!   [`Invariants`], generates the [`VpnProbes`] and takes a final
 //!   snapshot at [`Scenario::duration`].
@@ -58,6 +60,7 @@
 //! |---|---|
 //! | [`bench`] | a bare TCP bench, on the testbed's real sockets and the WAN model's |
 //! | [`spec`] | the scenario description and its builder helpers |
+//! | [`arrivals`] | when the first swarm's viewers arrive and leave |
 //! | [`topology`] | seeded link layouts |
 //! | `world` | one run's shared state (keys, host registry, stats) |
 //! | `host` | each host's software: node, event policy, redials, writer and readers |
@@ -91,7 +94,11 @@
 //!   end's jitter is a function of the time alone;
 //! - with [`Scenario::clock_skew`], each host's clock offset comes from the
 //!   rng of the controller's choices, drawn before any of them; without it
-//!   nothing is drawn.
+//!   nothing is drawn;
+//! - with [`Scenario::arrivals`] or [`Scenario::departures`], the viewers'
+//!   arrival order and times, then who leaves and when, come from the same
+//!   rng after the clock offsets, before the controller's choices
+//!   ([`arrivals::resolve`]); without them nothing is drawn.
 //!
 //! The schedule stays fixed because every host, the controller and every
 //! task run on the turmoil thread, shared state is `Rc<RefCell<…>>` over
@@ -113,6 +120,7 @@
 //! wire size, and the sizes of STUN messages and DTLS handshake records
 //! depend on key material, so they are charged a fixed size.
 
+pub mod arrivals;
 pub mod bench;
 mod control;
 mod fast_map;
@@ -135,14 +143,15 @@ mod wan;
 mod world;
 
 pub use report::{
-    HostReport, LookupPhase, MediaLog, Percentiles, Report, ViewerReport, VpnReport, WanHostReport,
-    WanReport,
+    HostReport, LookupPhase, MediaLog, ParentLoss, Percentiles, Report, ViewerReport, VpnReport,
+    WanHostReport, WanReport,
 };
 pub use run::run;
 pub use skew::ClockSkew;
 pub use spec::{
-    Binding, Competing, Fault, HostClass, HostIx, HostSpec, Invariants, LinkSpec, MediaSpec,
-    NetworkSpec, Scenario, SendBuffer, SwarmSpec, Transport, VpnProbes,
+    Arrivals, Binding, Competing, Departure, Departures, Fault, HostClass, HostIx, HostSpec,
+    Invariants, LinkSpec, MediaSpec, NetworkSpec, Scenario, SendBuffer, SwarmSpec, Transport,
+    VpnProbes,
 };
 pub use stats::{Peaks, PeerTransfer, RunnerReport, SwarmCounters, TransferSample};
 pub use sweep::{knob, seeds, stream_minutes, sweep, sweep_at, sweep_from, sweep_n};

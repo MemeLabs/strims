@@ -29,7 +29,7 @@ use strims_wan::live::Au;
 
 use crate::memory::{GroupCounters, MemoryGroup};
 use crate::net::SendBuffers;
-use crate::report::{ForecastRecord, HostReport, MediaLog, NodeBinRecord, VpnReport};
+use crate::report::{ForecastRecord, HostReport, MediaLog, NodeBinRecord, ParentLoss, VpnReport};
 use crate::skew::OffsetCapture;
 use crate::spec::{HostIx, Scenario, Transport};
 use crate::stats::{HostStats, TransferSample};
@@ -116,6 +116,15 @@ pub(crate) struct HostState {
     pub forecasts: Vec<ForecastRecord>,
     pub forecasts_lost: u64,
     pub held: Vec<(u64, Duration)>,
+    /// When it left for good ([`crate::Fault::Depart`]), in ms.
+    pub departed: Option<u64>,
+    /// Crashed, and not restarted yet.
+    pub down: bool,
+    /// Its last crash found no host (see [`World::skips_crash`]).
+    pub crash_skipped: bool,
+    /// With [`Scenario::departures`], the hosts its first swarm's streams
+    /// had as push parents at its last stats sample, one per stream.
+    pub parents: Vec<HostIx>,
 }
 
 impl HostState {
@@ -204,6 +213,8 @@ pub(crate) struct WorldState {
     pub rng: DetRng,
     /// The uplink counters at each bin edge ([`crate::Report::wire_bins`]).
     pub wire_bins: Vec<Vec<[u64; crate::wan::UP_COUNTERS.len()]>>,
+    /// See [`crate::Report::parent_losses`].
+    pub parent_losses: Vec<ParentLoss>,
 }
 
 /// One run.
@@ -234,7 +245,7 @@ pub(crate) struct World {
 
 impl World {
     pub fn new(
-        spec: Scenario,
+        mut spec: Scenario,
         seed: u64,
         memory: Option<GroupCounters>,
         records: Option<MemoryGroup>,
@@ -261,6 +272,7 @@ impl World {
             })
             .collect();
         let clock_offsets = crate::skew::offsets(spec.clock_skew, spec.hosts.len(), &mut rng);
+        crate::arrivals::resolve(&mut spec, &mut rng);
         let st = WorldState {
             trace: Vec::new(),
             hosts: (0..spec.hosts.len())
@@ -283,6 +295,7 @@ impl World {
             progress: BTreeMap::new(),
             rng,
             wire_bins: Vec::new(),
+            parent_losses: Vec::new(),
         };
         let send_buffers = spec.wan.and(spec.send_buffer).map(SendBuffers::new);
         World {
@@ -569,8 +582,145 @@ impl World {
             if let Some(s) = st.hosts.get_mut(h) {
                 s.retire();
                 s.totals.restarts += 1;
+                s.down = true;
             }
         });
+    }
+
+    /// `h` restarted.
+    pub fn restarted(&self, h: HostIx) {
+        self.record(|st| {
+            if let Some(s) = st.hosts.get_mut(h) {
+                s.down = false;
+            }
+        });
+    }
+
+    /// Whether a crash of `h` at `now` finds no host: before its
+    /// [`HostSpec::arrive_at`](crate::HostSpec::arrive_at), or after it
+    /// departed. The restart that follows a skipped crash is skipped too
+    /// ([`World::skips_restart`]).
+    pub fn skips_crash(&self, h: HostIx, now: Duration) -> bool {
+        let early = self
+            .spec
+            .hosts
+            .get(h)
+            .and_then(|s| s.arrive_at)
+            .is_some_and(|at| now < at);
+        let skip = early || self.departed(h);
+        if skip
+            || self
+                .st
+                .borrow()
+                .hosts
+                .get(h)
+                .is_some_and(|s| s.crash_skipped)
+        {
+            self.record(|st| {
+                if let Some(s) = st.hosts.get_mut(h) {
+                    s.crash_skipped = skip;
+                }
+            });
+        }
+        skip
+    }
+
+    /// Whether a restart of `h` is skipped: it departed, or its crash was.
+    pub fn skips_restart(&self, h: HostIx) -> bool {
+        self.departed(h)
+            || self
+                .st
+                .borrow()
+                .hosts
+                .get(h)
+                .is_some_and(|s| s.crash_skipped)
+    }
+
+    /// Whether `h` is down from a crash it hasn't restarted from.
+    pub fn is_down(&self, h: HostIx) -> bool {
+        self.st.borrow().hosts.get(h).is_some_and(|s| s.down)
+    }
+
+    /// Whether `h` left for good ([`crate::Fault::Depart`]).
+    pub fn departed(&self, h: HostIx) -> bool {
+        self.st
+            .borrow()
+            .hosts
+            .get(h)
+            .is_some_and(|s| s.departed.is_some())
+    }
+
+    /// `h` leaves for good at `ms`; `stopped` when it stops with it (an
+    /// abrupt departure), which retires its incarnation without counting
+    /// a restart. Every viewer whose last stats sample had `h` as a push
+    /// parent loses it ([`World::parent_gone`]).
+    pub fn depart(&self, h: HostIx, ms: u64, stopped: bool) {
+        self.record(|st| {
+            match st.hosts.get_mut(h) {
+                Some(s) if s.departed.is_none() => {
+                    s.departed = Some(ms);
+                    if stopped {
+                        s.retire();
+                    }
+                }
+                _ => return,
+            }
+            let lost: Vec<ParentLoss> = st
+                .hosts
+                .iter()
+                .enumerate()
+                .filter(|&(v, x)| v != h && x.departed.is_none())
+                .filter_map(|(v, x)| {
+                    let streams = x.parents.iter().filter(|&&p| p == h).count();
+                    (streams > 0).then_some(ParentLoss {
+                        viewer: v,
+                        parent: h,
+                        departed_ms: ms,
+                        noticed_ms: None,
+                        streams,
+                    })
+                })
+                .collect();
+            st.parent_losses.extend(lost);
+        });
+    }
+
+    /// `h` stopped counting on push parent `parent` at `now`: its link to
+    /// it closed, or a stats sample named no stream of it. Notes the loss
+    /// of a parent that departed, once, and logs it.
+    fn parent_gone(&self, h: HostIx, parent: HostIx, now: u64) {
+        let pending = self
+            .st
+            .borrow()
+            .parent_losses
+            .iter()
+            .any(|l| l.viewer == h && l.parent == parent && l.noticed_ms.is_none());
+        if !pending {
+            return;
+        }
+        let after = self.record(|st| {
+            let l = st
+                .parent_losses
+                .iter_mut()
+                .find(|l| l.viewer == h && l.parent == parent && l.noticed_ms.is_none())?;
+            l.noticed_ms = Some(now);
+            Some(now.saturating_sub(l.departed_ms))
+        });
+        if let Some(after) = after {
+            self.log(
+                self.name(h),
+                format!("parent lost {} after {after} ms", self.name(parent)),
+            );
+        }
+    }
+
+    /// `h`'s link to `peer` went ([`NodeEvent::PeerRemoved`]).
+    ///
+    /// [`NodeEvent::PeerRemoved`]: strims_node::NodeEvent::PeerRemoved
+    pub fn peer_removed(&self, h: HostIx, peer: Option<HostIx>) {
+        if let Some(p) = peer {
+            self.parent_gone(h, p, sim_now_ms());
+        }
     }
 
     pub fn set_reading_paused(&self, h: HostIx, paused: bool, now_ms: u64) {
@@ -1014,6 +1164,9 @@ impl World {
     /// is logged once per host.
     pub fn observe_stats(&self, h: HostIx, m: &NodeMetrics) {
         self.observe_bins(h, m);
+        if self.spec.departures.is_some() {
+            self.observe_parents(h, m);
+        }
         let inv = &self.spec.invariants;
         let mut found = Vec::new();
         self.record(|st| {
@@ -1103,6 +1256,41 @@ impl World {
         }
     }
 
+    /// Keeps the push parents of `h`'s first scenario swarm from a stats
+    /// sample ([`HostState::parents`]), and notes the departed ones it no
+    /// longer has ([`World::parent_gone`]).
+    fn observe_parents(&self, h: HostIx, m: &NodeMetrics) {
+        let now = sim_now_ms();
+        let gone = self.record(|st| {
+            let ids = &st.ids;
+            let hs = st.hosts.get_mut(h)?;
+            let key = hs.swarms.first().copied().flatten()?;
+            let parents: Vec<HostIx> = m
+                .runner
+                .swarms
+                .iter()
+                .find(|s| s.swarm == key)
+                .map(|s| {
+                    s.parent_hosts
+                        .iter()
+                        .filter_map(|p| p.as_ref().and_then(|id| ids.get(id).copied()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let gone: Vec<HostIx> = hs
+                .parents
+                .iter()
+                .copied()
+                .filter(|p| !parents.contains(p))
+                .collect();
+            hs.parents = parents;
+            Some(gone)
+        });
+        for p in gone.unwrap_or_default() {
+            self.parent_gone(h, p, now);
+        }
+    }
+
     /// Samples the heap and checks the invariants (see
     /// [`crate::Invariants`]).
     pub fn check_invariants(&self) {
@@ -1136,6 +1324,7 @@ impl World {
                     && now.saturating_sub(hs.resumed_ms) > 10_000;
                 if in_window
                     && hs.node.is_some()
+                    && hs.departed.is_none()
                     && !hs.reading_paused
                     && settled
                     && before.is_some_and(|b| b >= v.frames)

@@ -11,12 +11,12 @@
 //! | table | one row per | columns |
 //! |---|---|---|
 //! | `seconds` | second of [`Report::series`] | `sec`, then the series' per-second fields (`present`, `hits`, `misses`, `pruned`, `parents`, `capacity`, `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, and `written` for a media swarm) |
-//! | `viewer_seconds` | viewer and second | `viewer`, `sec`, `lag_ms` (the series' `lag`: the p99 of the frames read in the second, -1 without any), `frames` |
+//! | `viewer_seconds` | viewer and second it was there ([`Report::presence`]) | `viewer`, `sec`, `lag_ms` (the series' `lag`: the p99 of the frames read in the second, -1 without any), `frames` |
 //! | `reads` | frame a viewer read (duplicates too) | `viewer`, `t_ms` (when it was read: its write time plus its lag), `seq`, `lag_ms` |
 //! | `bins` | bin of [`Scenario::wire_bins`] | [`bin_cols`]: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`), then [`ACK_COLS`], the acknowledgements alone their uplinks carried, packets and wire bytes, summed over those viewers and the seed's: TCP's pure ACKs (`*_up_ack_packets`, `*_up_ack_bytes`) and the data channels' SACKs (`*_up_sack_packets`, `*_up_sack_bytes`), none of them in `*_up_bytes`, `*_up_packets` or `*_small_packets` |
 //! | `node_bins` | node and bin, with `STRIMS_SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node` (its host), `viewer` (its number in `viewers`, -1 for the seed and hostile hosts), what it did in the bin |
-//! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink in bytes per second, -1 without a limit), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset) |
-//! | `events` | timed event | `t_us`, `kind`, `node` (the host it happened to, -1 for none), `peer` (another host, -1 for none), `value`, `detail`: every fault of the scenario (`partition`, `repair`, `hold`, `release` with `node` and `peer` the groups' first hosts and `value` the groups' sizes' product, `crash`, `restart`, `latency` in ms, `pause_reading`, `resume_reading`, `reset_writer` with `node` the swarm, `uplink` in bytes per second, `connect`), every host's uplink steps (`up_step`), competing uploads (`competing_start`, `competing_stop`), each viewer incarnation's `join`, `first_frame` (`value` its ms from the join) and `caught_up`, and the seed's `copies` changes |
+//! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink in bytes per second, -1 without a limit), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset), `arrive_ms` (when it booted, [`HostSpec::arrive_at`]: the run's start, negative, for one that came with it) and `depart_ms` (when it left for good, [`Fault::Depart`]; empty if it stayed) |
+//! | `events` | timed event | `t_us`, `kind`, `node` (the host it happened to, -1 for none), `peer` (another host, -1 for none), `value`, `detail`: every fault of the scenario (`partition`, `repair`, `hold`, `release` with `node` and `peer` the groups' first hosts and `value` the groups' sizes' product, `crash`, `restart`, `latency` in ms, `pause_reading`, `resume_reading`, `reset_writer` with `node` the swarm, `uplink` in bytes per second, `connect`), `depart` with `value` 1 for an abrupt departure, 0 for a graceful one, every host's uplink steps (`up_step`), competing uploads (`competing_start`, `competing_stop`), each arriving viewer's `arrive` ([`HostSpec::arrive_at`]), each viewer incarnation's `join`, `first_frame` (`value` its ms from the join) and `caught_up` (the same), each `parent_lost` ([`Report::parent_losses`]: `node` the viewer, `peer` the parent that departed, `value` the ms from its departure until the viewer stopped counting on it, -1 if it never did, at its departure then) and the seed's `copies` changes |
 //! | `forecast` | sample of a node's forecast log ([`strims_ppspp::LagForecast`]), with `STRIMS_SIM_FORECAST=1` | `t_ms`, `node`, `viewer`, `peer` (the hosts), `peer_honest` (not a hostile host), `stream`, `seq` (the chunk), `sample_ms`, `mean_ms`, `horizon_ms` (-1 before the estimate's first sample), `samples`, `fresh`, `lazy`, `first_sight`, `run`, and `seen_ms` (our first sight), `held_ms` (when the peer first stored the chunk, in the incarnation that announced it, `Runner::take_held`; -1 if never) `channel_open_ms` (when our channel with the peer opened) and `live` (it was held after both hosts' incarnations started and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
 //!
 //! `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
@@ -35,6 +35,7 @@
 //!
 //! [`Scenario::wire_bins`]: crate::Scenario::wire_bins
 //! [`Scenario::stats_every`]: crate::Scenario::stats_every
+//! [`HostSpec::arrive_at`]: crate::HostSpec::arrive_at
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -45,7 +46,7 @@ use std::time::Duration;
 use strims_base::stats::WaitHistogram;
 
 use crate::report::{NODE_BIN_COUNTERS, NodeBinRecord, Report};
-use crate::spec::{Fault, HostClass, HostIx};
+use crate::spec::{Departure, Fault, HostClass, HostIx};
 pub use crate::wan::UP_COUNTERS;
 
 /// A column's type, as `hack/sim-db` names it.
@@ -393,6 +394,10 @@ impl Report {
             );
             for (i, (lag, frames)) in s.lag.iter().zip(&s.frames).enumerate() {
                 for (k, (l, f)) in lag.iter().zip(frames).enumerate() {
+                    // A second it wasn't there in (see `Report::series`).
+                    if *f < 0 {
+                        continue;
+                    }
                     t.ints(&[i as i64, k as i64, *l, *f]);
                 }
             }
@@ -454,10 +459,14 @@ impl Report {
                 ("hostile", Col::Bool),
                 ("churned", Col::Bool),
                 ("clock_ms", Col::Int),
+                ("arrive_ms", Col::Int),
+                ("depart_ms", Col::Int),
             ],
         );
         for (i, v) in viewers.iter().enumerate() {
             let h = self.hosts.get(v.host);
+            let (arrive, _) = self.presence(v.host);
+            let depart = self.scenario.departure(v.host);
             t.fields(&[
                 i.to_string(),
                 v.host.to_string(),
@@ -466,6 +475,8 @@ impl Report {
                 hostile(v.host).to_string(),
                 h.is_some_and(|h| h.restarts > 0).to_string(),
                 h.map_or(0, |h| h.clock_offset.as_millis()).to_string(),
+                ms_from(arrive).to_string(),
+                depart.map_or(String::new(), |(at, _)| ms_from(at).to_string()),
             ]);
         }
         t.write(dir)?;
@@ -686,7 +697,33 @@ impl Report {
                 Fault::Connect { from, to, network } => {
                     push(at, "connect", *from as i64, *to as i64, *network as i64, "")
                 }
+                Fault::Depart(h, how) => {
+                    let (value, detail) = match how {
+                        Departure::Graceful => (0, "graceful"),
+                        Departure::Abrupt => (1, "abrupt"),
+                    };
+                    push(at, "depart", *h as i64, -1, value, detail)
+                }
             }
+        }
+        for (h, spec) in self.scenario.hosts.iter().enumerate() {
+            if let Some(at) = spec.arrive_at {
+                push(at, "arrive", h as i64, -1, 0, "");
+            }
+        }
+        for l in &self.parent_losses {
+            let (at, value) = match l.noticed_ms {
+                Some(n) => (n, n.saturating_sub(l.departed_ms) as i64),
+                None => (l.departed_ms, -1),
+            };
+            push(
+                Duration::from_millis(at),
+                "parent_lost",
+                l.viewer as i64,
+                l.parent as i64,
+                value,
+                "",
+            );
         }
         for (h, spec) in self.scenario.hosts.iter().enumerate() {
             for &(at, bps) in &spec.up_steps {

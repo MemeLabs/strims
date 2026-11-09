@@ -66,10 +66,11 @@ pub(crate) async fn controller(w: Rc<World>) -> turmoil::Result {
 /// Folds every running node's runner, link and network stats. A `full`
 /// sample also stores the metrics, samples the heap, checks the
 /// invariants, and logs two lines per host (with more counters on the
-/// `last` one).
+/// `last` one). A host that departed isn't sampled: its counters stay as
+/// they were when it left.
 async fn sample(w: &World, full: bool, last: bool) {
     for h in 0..w.spec.hosts.len() {
-        let Some(node) = w.node(h) else {
+        let Some(node) = w.node(h).filter(|_| !w.departed(h)) else {
             continue;
         };
         let Ok(Ok(m)) = tokio::time::timeout(CALL_TIMEOUT, node.metrics()).await else {
@@ -189,7 +190,7 @@ fn members(w: &World, p: &VpnProbes) -> Vec<Member> {
         .filter_map(|&h| {
             Some(Member {
                 h,
-                node: w.node(h)?,
+                node: w.node(h).filter(|_| !w.departed(h))?,
                 net: w.net(h, p.network)?,
             })
         })

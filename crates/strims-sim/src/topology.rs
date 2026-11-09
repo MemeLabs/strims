@@ -11,7 +11,10 @@ use crate::spec::{HostIx, Scenario, Transport};
 /// Links each of `hosts[1..]` to up to `degree` distinct hosts that come
 /// before it (the first always to `hosts[0]`'s side of the graph), so the
 /// graph is connected and every host has at least one path to `hosts[0]`.
-/// Each link is WebSocket with probability `ws_share`, else TCP.
+/// Each link is WebSocket with probability `ws_share`, else TCP. With
+/// arrivals ([`Scenario::arrivals`]) the run lays the links out in arrival
+/// order ([`crate::arrivals`]), so "before" is "arrived earlier": each
+/// viewer dials hosts already there.
 pub fn random_mesh(
     s: &mut Scenario,
     rng: &mut DetRng,

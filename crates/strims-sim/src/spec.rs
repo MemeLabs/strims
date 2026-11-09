@@ -17,6 +17,7 @@ use strims_vpn::Routing;
 use strims_wan::live::{Encoder, Sign};
 use strims_wan::{Access, City, Site};
 
+pub use crate::arrivals::{Arrivals, Departure, Departures};
 use crate::skew::ClockSkew;
 use crate::stream::FRAME_LEN;
 use crate::wan::SctpProfile;
@@ -98,7 +99,22 @@ pub struct HostSpec {
     /// redialed together. `None`: every link at once, from the host's
     /// start.
     pub serial_links: Option<Duration>,
+    /// When the host boots: its node starts, joins its swarms and dials its
+    /// links then ([`Scenario::arrivals`] sets it for the first swarm's
+    /// viewers). A viewer that arrives joins at the live edge, as a player
+    /// does: its swarms read from the newest chunk its peers have
+    /// (`DeliveryMode::LOW_LATENCY`), and a media swarm's reader moves back
+    /// to its GOP's start within [`ARRIVAL_REWIND`], as egress joins, where
+    /// reading from the stream's start would put the backlog of a live
+    /// window into its lag. `None`: with the run, reading as the swarm's
+    /// options say.
+    pub arrive_at: Option<Duration>,
 }
+
+/// How long an arriving media viewer's join waits for its rewind to its
+/// GOP's start ([`HostSpec::arrive_at`]): `strims-video`'s default
+/// `rewind_timeout`.
+pub const ARRIVAL_REWIND: Duration = Duration::from_secs(10);
 
 /// A bulk upload that isn't the node's: a TCP connection that always has
 /// data, from `start` to `stop`, to a sink `rtt` away.
@@ -337,7 +353,15 @@ pub enum Fault {
     /// same profile key (so the same URIs) and a new host key. Repairs every
     /// partition between the host and the others first, including those of
     /// a [`Fault::Partition`].
+    ///
+    /// A crash before the host's [`HostSpec::arrive_at`], or after it
+    /// departed, finds no host and is skipped, and so is the restart that
+    /// follows a skipped crash.
     Restart(HostIx),
+    /// The host leaves for good ([`Departure`]), and takes part in no
+    /// fault after. An abrupt departure is a crash that leaves the host
+    /// cut off and stopped, and counts no restart.
+    Depart(HostIx, Departure),
     /// Fixed one-way latency between the groups (`Sim::set_link_latency`).
     /// In WAN mode it replaces the paths' base latency, and jitter, loss
     /// and bandwidth still apply.
@@ -514,6 +538,14 @@ pub struct Scenario {
     /// [`MAX_SKEW`](crate::skew::MAX_SKEW): as user machines' clocks are
     /// ([`ClockSkew::Real`]) by default.
     pub clock_skew: ClockSkew,
+    /// When the first swarm's viewers arrive ([`crate::arrivals`]): with
+    /// the run by default ([`Arrivals::T0`]). The run resolves it into
+    /// [`HostSpec::arrive_at`] and lays the links out in arrival order.
+    pub arrivals: Arrivals,
+    /// A share of the first swarm's viewers leaving for good
+    /// ([`crate::arrivals`]), resolved by the run into
+    /// [`Fault::Depart`]s; `None`: no one leaves.
+    pub departures: Option<Departures>,
 }
 
 /// The experiment flags a scenario takes ([`Scenario::exp`]):
@@ -701,7 +733,24 @@ impl Scenario {
             discovery: None,
             exp: BTreeSet::new(),
             clock_skew: ClockSkew::Real,
+            arrivals: Arrivals::T0,
+            departures: None,
         }
+    }
+
+    /// Whether viewers arrive after the run's start or leave it
+    /// ([`Scenario::arrivals`], [`Scenario::departures`]): the row's
+    /// measures then follow each viewer's own presence.
+    pub fn profiled(&self) -> bool {
+        !self.arrivals.is_t0() || self.departures.is_some()
+    }
+
+    /// When host `h` leaves for good ([`Fault::Depart`]), and how.
+    pub fn departure(&self, h: HostIx) -> Option<(Duration, Departure)> {
+        self.faults.iter().find_map(|f| match f.fault {
+            Fault::Depart(x, how) if x == h => Some((f.at, how)),
+            _ => None,
+        })
     }
 
     /// Adds a node and returns its index.
@@ -720,6 +769,7 @@ impl Scenario {
             up_steps: Vec::new(),
             competing: Vec::new(),
             serial_links: None,
+            arrive_at: None,
         });
         self.hosts.len() - 1
     }

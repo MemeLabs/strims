@@ -426,6 +426,24 @@ pub struct Report {
     /// counters ([`crate::tables::UP_COUNTERS`]) at each bin edge from the
     /// first swarm's start.
     pub wire_bins: Vec<Vec<[u64; crate::wan::UP_COUNTERS.len()]>>,
+    /// With [`Scenario::departures`], every viewer's push parent that
+    /// departed, in departure order.
+    pub parent_losses: Vec<ParentLoss>,
+}
+
+/// A host that departed ([`crate::Fault::Depart`]) while it was a push
+/// parent of one of `viewer`'s streams of the first swarm, at the viewer's
+/// last stats sample before: when it left, how many streams it parented,
+/// and when the viewer stopped counting on it (its link to it closed, or a
+/// stats sample named it parent of no stream), in ms of run time; `None`
+/// if it never did (it left first, or the run ended).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParentLoss {
+    pub viewer: HostIx,
+    pub parent: HostIx,
+    pub departed_ms: u64,
+    pub noticed_ms: Option<u64>,
+    pub streams: usize,
 }
 
 /// What a media swarm's seed wrote ([`crate::MediaSpec`]), over its
@@ -523,8 +541,8 @@ impl Report {
     }
 
     /// Delivered over written frames, summed over `swarm`'s viewers: each
-    /// viewer is owed every frame the seed wrote during the run, including
-    /// those written while the viewer was down.
+    /// viewer is owed every frame the seed wrote while it was there
+    /// ([`Report::owed`]), including those written while it was down.
     /// A media swarm's viewer is owed the frames from its first one on:
     /// where it joins turns on the unit size, which the startup lag
     /// measures.
@@ -535,23 +553,26 @@ impl Report {
         let media = self.media.get(swarm).is_some_and(Option::is_some);
         let (mut got, mut want) = (0, 0);
         for v in self.viewers.iter().filter(|v| v.swarm == swarm) {
+            let range = self.owed(v);
             let from = match media {
                 true => v
                     .stats
                     .joins
                     .iter()
                     .find_map(|j| j.first_seq)
-                    .unwrap_or(w.bound()),
-                false => 0,
+                    .unwrap_or(w.bound())
+                    .max(range.start),
+                false => range.start,
             };
-            let owed = w.count_in(from..w.bound());
+            let owed = w.count_in(from..range.end);
             want += owed;
-            got += owed - w.missing_from(&v.stats.received, from..w.bound());
+            got += owed - w.missing_from(&v.stats.received, from..range.end);
         }
         ratio(got, want)
     }
 
-    /// [`Report::delivery`] over the viewers among `hosts`.
+    /// [`Report::delivery`] over the viewers among `hosts`, each owed every
+    /// frame written while it was there ([`Report::owed`]).
     pub fn delivery_of(&self, swarm: usize, hosts: &[HostIx]) -> f64 {
         let Some(w) = self.written.get(swarm) else {
             return 0.0;
@@ -562,11 +583,65 @@ impl Report {
             .iter()
             .filter(|v| v.swarm == swarm && hosts.contains(&v.host))
         {
-            let owed = w.count_in(0..w.bound());
+            let range = self.owed(v);
+            let owed = w.count_in(range.clone());
             want += owed;
-            got += owed - w.missing_from(&v.stats.received, 0..w.bound());
+            got += owed - w.missing_from(&v.stats.received, range);
         }
         ratio(got, want)
+    }
+
+    /// When host `h` was there: from its arrival ([`HostSpec::arrive_at`],
+    /// the run's start without one) to its departure
+    /// ([`crate::Fault::Depart`], the run's end without one).
+    ///
+    /// [`HostSpec::arrive_at`]: crate::HostSpec::arrive_at
+    pub fn presence(&self, h: HostIx) -> (Duration, Duration) {
+        let from = self
+            .scenario
+            .hosts
+            .get(h)
+            .and_then(|s| s.arrive_at)
+            .unwrap_or_default();
+        let to = self
+            .scenario
+            .departure(h)
+            .map_or(self.scenario.duration, |(at, _)| at);
+        (from, to)
+    }
+
+    /// The frames of its swarm viewer `v` is owed. A viewer that arrived
+    /// ([`HostSpec::arrive_at`]) is owed them from its first frame on, or
+    /// from its arrival if it read none: where a join at the live edge
+    /// lands is its join's measure (the row's `join_*`). One that departed
+    /// is owed those written [`CAUGHT_UP_MS`] before it left, which a
+    /// viewer that kept up has read. The rest are owed every frame.
+    ///
+    /// [`HostSpec::arrive_at`]: crate::HostSpec::arrive_at
+    /// [`CAUGHT_UP_MS`]: crate::stream::CAUGHT_UP_MS
+    pub fn owed(&self, v: &ViewerReport) -> std::ops::Range<u64> {
+        let bound = self.written.get(v.swarm).map_or(0, SeqSet::bound);
+        let arrival = self.scenario.hosts.get(v.host).and_then(|s| s.arrive_at);
+        let from = match arrival {
+            Some(at) => v
+                .stats
+                .joins
+                .first()
+                .and_then(|j| j.first_seq)
+                .unwrap_or_else(|| {
+                    self.frames_between(v.swarm, at, self.scenario.duration)
+                        .start
+                }),
+            None => 0,
+        };
+        let to = match self.scenario.departure(v.host) {
+            Some((at, _)) => {
+                let kept = at.saturating_sub(Duration::from_millis(crate::stream::CAUGHT_UP_MS));
+                self.frames_between(v.swarm, Duration::ZERO, kept).end
+            }
+            None => bound,
+        };
+        from.min(to)..to
     }
 
     /// Upload of the swarm's seed, and the viewers' min, median and max.
@@ -997,6 +1072,9 @@ impl Report {
             s.push_str(&line);
         }
         if let Some(line) = self.tracking_line() {
+            s.push_str(&line);
+        }
+        if let Some(line) = self.profile_line() {
             s.push_str(&line);
         }
         let p = self.peaks();

@@ -432,8 +432,12 @@ impl Pool {
     }
 
     /// A search found `host`: it becomes a candidate, dialed at once if
-    /// the node is under its budget. Returns whether an exchange started.
+    /// the node is under its budget. Returns whether an exchange started;
+    /// a node that departed starts none.
     pub(crate) async fn offer(&self, host: HostId) -> Result<bool, NodeError> {
+        if self.w.departed(self.h) {
+            return Ok(false);
+        }
         let room = {
             let mut st = self.st.borrow_mut();
             let now = sim_now();
@@ -530,7 +534,6 @@ impl Pool {
         }
     }
 
-    /// Ticks every [`TICK`] for as long as the node runs.
     /// `pool-find`: looks up the sources of the swarms the node views,
     /// each until it is found or [`JOIN_GRACE`] has passed, and makes each
     /// found one a candidate the node dials first.
@@ -586,10 +589,15 @@ impl Pool {
         }
     }
 
+    /// Ticks every [`TICK`] for as long as the node runs, until it
+    /// departs.
     pub(crate) async fn run(&self) {
         let headroom = u32::from(self.cfg.evict);
         loop {
             tokio::time::sleep(TICK).await;
+            if self.w.departed(self.h) {
+                return;
+            }
             let Ok(m) = self.node.metrics().await else {
                 return;
             };

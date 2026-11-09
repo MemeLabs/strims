@@ -9,7 +9,10 @@
 //! starts from the spec and the shared registry: a restarted host joins the
 //! same networks and swarms with a new host key, its seed continues the
 //! stream from the current time, and its viewers keep accumulating into the
-//! same statistics.
+//! same statistics. A host with [`HostSpec::arrive_at`] starts at its
+//! arrival, and one that departs gracefully leaves through [`depart`].
+//!
+//! [`HostSpec::arrive_at`]: crate::HostSpec::arrive_at
 //!
 //! Every node's stores keep each chunk of a stream as its frames' sequence
 //! number and write time ([`FrameCodec`]), or a media chunk's
@@ -29,16 +32,18 @@ use strims_node::{
     PeerIndexPublisherId, PeerIndexSearch, PeerInfo, ReadError, SimClock, SwarmId, SwarmKey,
     SwarmReader, SwarmWriter, WriterOptions,
 };
-use strims_ppspp::SwarmOptions;
 use strims_ppspp::store::ChunkBytes;
+use strims_ppspp::{DeliveryMode, SwarmOptions};
 use strims_rpc::{Client, Router};
-use strims_transfer::TransferControl;
+use strims_transfer::{TransferControl, TransferId};
 use tokio::task::spawn_local;
 
 use crate::APP_PORT;
 use crate::net::SimNet;
 use crate::pool::{Pool, PoolConfig};
-use crate::spec::{Binding, Fault, HostIx, LinkSpec, MediaSpec, SwarmSpec, Transport};
+use crate::spec::{
+    ARRIVAL_REWIND, Binding, Departure, Fault, HostIx, LinkSpec, MediaSpec, SwarmSpec, Transport,
+};
 use crate::stream::{
     FRAME_LEN, FrameCodec, FrameParser, JoinRewind, MEDIA_HEADER, MediaCodec, MediaParser,
     encode_frame, fill_media, media_header,
@@ -49,13 +54,17 @@ use strims_wan::live::Signer;
 /// How long a dial may take before the supervisor gives up on it.
 const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Swarm `s`'s options at every node: its stores keep [`FrameCodec`]
+/// Swarm `s`'s options at host `h`: its stores keep [`FrameCodec`]
 /// state, or a media swarm's [`MediaCodec`] state, unless the scenario
 /// keeps the bytes
 /// ([`Scenario::stored_chunks`](crate::Scenario::stored_chunks)) or the
-/// chunks aren't whole frames.
-fn swarm_options(w: &World, s: usize, spec: &SwarmSpec) -> SwarmOptions {
+/// chunks aren't whole frames. A viewer that arrives reads from the live
+/// edge ([`arrives`]).
+fn swarm_options(w: &World, s: usize, spec: &SwarmSpec, h: HostIx) -> SwarmOptions {
     let mut o = spec.options.clone();
+    if arrives(w, h, spec) {
+        o.delivery_mode = DeliveryMode::LOW_LATENCY;
+    }
     let swarm = u32::try_from(s).unwrap_or(u32::MAX);
     if w.spec.stored_chunks {
         return o;
@@ -68,7 +77,19 @@ fn swarm_options(w: &World, s: usize, spec: &SwarmSpec) -> SwarmOptions {
     o
 }
 
+/// Whether host `h` is a viewer of `spec` that arrives
+/// ([`HostSpec::arrive_at`](crate::HostSpec::arrive_at)), and so joins at
+/// the live edge.
+fn arrives(w: &World, h: HostIx, spec: &SwarmSpec) -> bool {
+    spec.viewers.contains(&h) && w.spec.hosts.get(h).is_some_and(|x| x.arrive_at.is_some())
+}
+
 pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
+    if let Some(at) = w.spec.hosts.get(h).and_then(|s| s.arrive_at)
+        && at > sim_now()
+    {
+        tokio::time::sleep(at - sim_now()).await;
+    }
     let inc = w.begin_incarnation(h);
     let config = w.node_config(h, inc).ok_or("unknown host")?;
     let rtc_stack = w.spec.hosts.get(h).and_then(|s| s.rtc_stack);
@@ -159,12 +180,13 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         async move { transfers.run().await }
     });
     let mut swarms: Vec<Option<SwarmKey>> = vec![None; w.spec.swarms.len()];
+    let mut held: Vec<(TransferId, SwarmKey)> = Vec::new();
     for (s, spec) in w.spec.swarms.iter().enumerate() {
         let key = w.swarm_keys.get(s).ok_or("swarm key")?;
         let swarm = if spec.seed == h {
             let (swarm, _, writer) = node
                 .create_swarm(WriterOptions {
-                    swarm_options: swarm_options(&w, s, spec),
+                    swarm_options: swarm_options(&w, s, spec, h),
                     key: key.clone(),
                 })
                 .await?;
@@ -184,7 +206,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
             swarm
         } else if spec.member(h) {
             let swarm = node
-                .add_swarm(SwarmId::new(&key.public), swarm_options(&w, s, spec))
+                .add_swarm(SwarmId::new(&key.public), swarm_options(&w, s, spec, h))
                 .await?;
             if spec.viewers.contains(&h) {
                 spawn_local(reader_task(w.clone(), h, s, node.clone(), swarm));
@@ -195,12 +217,23 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         };
         let t = transfers.add(swarm, &SwarmId::new(&key.public), Vec::new());
         transfers.publish(t, ());
+        held.push((t, swarm));
         if let Some(slot) = swarms.get_mut(s) {
             *slot = Some(swarm);
         }
     }
 
     w.register(h, &node, nets.clone(), swarms);
+    if let Some((at, Departure::Graceful)) = w.spec.departure(h) {
+        spawn_local(depart(
+            w.clone(),
+            h,
+            node.clone(),
+            transfers.clone(),
+            held,
+            at,
+        ));
+    }
     let services = PeerServices::new(node.clone()).with(Rc::new(SimTransfers(transfers)));
     spawn_local(event_task(
         w.clone(),
@@ -387,6 +420,12 @@ async fn event_task(
                 let peer = w.ix_of(&p.host_id);
                 let dir = if p.dialed { "to" } else { "from" };
                 w.log(&me, format!("peer+ {dir} {} {:?}", w.label(peer), p.kind));
+                // A host that left takes no link: one a dial started before
+                // it left, or a peer's that came in, closes at once.
+                if w.departed(h) {
+                    let _ = node.close_peer(p.host_id).await;
+                    continue;
+                }
                 let Some(px) = peer else {
                     continue;
                 };
@@ -406,7 +445,9 @@ async fn event_task(
             }
             NodeEvent::PeerRemoved { host_id } => {
                 w.peer_changed(h, false);
-                w.log(&me, format!("peer- {}", w.label(w.ix_of(&host_id))));
+                let peer = w.ix_of(&host_id);
+                w.log(&me, format!("peer- {}", w.label(peer)));
+                w.peer_removed(h, peer);
             }
             NodeEvent::Message(d) => {
                 let body = String::from_utf8_lossy(&d.body);
@@ -451,7 +492,8 @@ async fn event_task(
 
 /// Dials this host's links that are down, now and every
 /// `Scenario::redial_every`. It is a run's only reconnect: links heal
-/// after partitions and restarts through it.
+/// after partitions and restarts through it. A host that departed dials
+/// nothing, and no host dials it.
 async fn supervisor(w: Rc<World>, h: HostIx, node: Node) {
     let links: Vec<(usize, LinkSpec)> = w
         .spec
@@ -477,11 +519,17 @@ async fn supervisor(w: Rc<World>, h: HostIx, node: Node) {
         ));
     }
     loop {
+        if w.departed(h) {
+            return;
+        }
         let Ok(peers) = node.peers().await else {
             return;
         };
         for &(l, spec) in &links {
             if !serial_done.get() && matches!(spec.transport, Transport::WebRtc(_)) {
+                continue;
+            }
+            if w.departed(spec.to) {
                 continue;
             }
             let Some(key) = w.profile_key(spec.to) else {
@@ -494,6 +542,36 @@ async fn supervisor(w: Rc<World>, h: HostIx, node: Node) {
         }
         tokio::time::sleep(w.spec.redial_every).await;
     }
+}
+
+/// Leaves for good at `at` ([`Departure::Graceful`]), as a closed tab
+/// does: the swarms' transfers stop (and with them their searches and
+/// publications), the swarms go (their readers close), and every link
+/// closes, so its peers see the links close. The event task closes any
+/// link that comes up later.
+async fn depart(
+    w: Rc<World>,
+    h: HostIx,
+    node: Node,
+    transfers: TransferControl<SimTransferHost, NodeTimer<SimClock>>,
+    held: Vec<(TransferId, SwarmKey)>,
+    at: Duration,
+) {
+    let now = sim_now();
+    if at > now {
+        tokio::time::sleep(at - now).await;
+    }
+    for (t, swarm) in held {
+        transfers.remove(t);
+        let _ = node.remove_swarm(swarm).await;
+    }
+    let Ok(peers) = node.peers().await else {
+        return;
+    };
+    for p in &peers {
+        let _ = node.close_peer(p.host_id).await;
+    }
+    w.log(w.name(h), format!("left, closing {} links", peers.len()));
 }
 
 /// Applies `Fault::Uplink` and `Fault::Connect` to the node.
@@ -867,7 +945,11 @@ async fn reader_task(w: Rc<World>, h: HostIx, s: usize, node: Node, swarm: Swarm
 async fn media_reader(w: &World, h: HostIx, s: usize, reader: &mut SwarmReader, buf: &mut [u8]) {
     let me = w.name(h).to_owned();
     let mut parser = MediaParser::default();
-    let mut rewind = w.spec.swarms.get(s).and_then(|x| x.join_rewind);
+    let mut rewind = w
+        .spec
+        .swarms
+        .get(s)
+        .and_then(|x| x.join_rewind.or(arrives(w, h, x).then_some(ARRIVAL_REWIND)));
     loop {
         while w.reading_paused(h) {
             tokio::time::sleep(Duration::from_millis(20)).await;

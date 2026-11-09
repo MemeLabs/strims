@@ -12,7 +12,7 @@ use turmoil::Sim;
 
 use crate::memory::MemoryGroup;
 use crate::report::{MemoryReport, Report, ViewerReport, WanReport};
-use crate::spec::{Fault, HostIx, Scenario};
+use crate::spec::{Departure, Fault, HostIx, Scenario};
 use crate::wan::{Scheduler, sim_time};
 use crate::world::World;
 use crate::{EPOCH_MS, control, host};
@@ -200,6 +200,24 @@ fn others(w: &World, h: HostIx) -> Vec<HostIx> {
     (0..w.spec.hosts.len()).filter(|&x| x != h).collect()
 }
 
+/// Crashes host `h` (`Sim::crash`), cut off from every other host first:
+/// the sockets the crash drops then close in tokio's task order, which
+/// depends on process-wide task ids and isn't reproducible. Their FINs are
+/// dropped, as a power loss would; peers notice by timeouts, or by an RST
+/// once the address answers again.
+fn cut_off(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, h: HostIx) {
+    for x in others(w, h) {
+        sim.partition(w.name(h), w.name(x));
+    }
+    if let Some(s) = wan {
+        for x in others(w, h) {
+            s.partition(h, x);
+        }
+        s.crashed(h, sim_time(sim.elapsed()));
+    }
+    sim.crash(w.name(h));
+}
+
 /// Applies a fault. In WAN mode the scheduler holds every link between
 /// hosts, so turmoil's own hold, release and latency never apply to them:
 /// the scheduler freezes pairs, takes new latencies, and is told of every
@@ -248,24 +266,16 @@ fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) {
                 d.as_millis()
             )
         }
+        Fault::Crash(h) if w.skips_crash(*h, sim.elapsed()) => {
+            format!("crash {} skipped: not there", w.name(*h))
+        }
         Fault::Crash(h) => {
-            // Cut the host off first: the sockets the crash drops then
-            // close in tokio's task order, which depends on process-wide
-            // task ids and isn't reproducible. Their FINs are dropped, as
-            // a power loss would; peers notice by timeouts, or by an RST
-            // once the address answers again.
-            for x in others(w, *h) {
-                sim.partition(w.name(*h), w.name(x));
-            }
-            if let Some(s) = wan {
-                for x in others(w, *h) {
-                    s.partition(*h, x);
-                }
-                s.crashed(*h, sim_time(sim.elapsed()));
-            }
-            sim.crash(w.name(*h));
+            cut_off(sim, w, wan, *h);
             w.crashed(*h);
             format!("crash {}", w.name(*h))
+        }
+        Fault::Restart(h) if w.skips_restart(*h) => {
+            format!("restart {} skipped: not there", w.name(*h))
         }
         Fault::Restart(h) => {
             for x in others(w, *h) {
@@ -278,7 +288,22 @@ fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) {
                 }
             }
             sim.bounce(w.name(*h));
+            w.restarted(*h);
             format!("restart {}", w.name(*h))
+        }
+        // The host's own task leaves its swarms and closes its links
+        // (`host::depart`); from here on no host dials it.
+        Fault::Depart(h, Departure::Graceful) => {
+            w.depart(*h, ms, false);
+            format!("depart {} graceful", w.name(*h))
+        }
+        Fault::Depart(h, Departure::Abrupt) => {
+            let up = !w.departed(*h) && !w.is_down(*h);
+            if up {
+                cut_off(sim, w, wan, *h);
+            }
+            w.depart(*h, ms, up);
+            format!("depart {} abrupt", w.name(*h))
         }
         Fault::PauseReading(h) => {
             w.set_reading_paused(*h, true, ms);
@@ -356,6 +381,7 @@ fn report(
     let media = std::mem::take(&mut st.media);
     let violations = std::mem::take(&mut st.violations);
     let wire_bins = std::mem::take(&mut st.wire_bins);
+    let parent_losses = std::mem::take(&mut st.parent_losses);
     drop(st);
     if w.spec.probes.is_some() {
         vpn.unicast_by_phase = control::unicast_phases(w);
@@ -382,6 +408,7 @@ fn report(
         violations,
         wan,
         wire_bins,
+        parent_losses,
     };
     r.scenario.faults.sort_by_key(|f| f.at);
     r

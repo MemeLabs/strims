@@ -57,6 +57,17 @@
 //!   swarm's viewers hostile ([`Scenario::hostile`]).
 //! - `STRIMS_SIM_CHURN=<viewers/min>:<away s>` makes the first swarm's
 //!   viewers leave and rejoin in turn ([`Scenario::churn`]); `off` none.
+//! - `STRIMS_SIM_ARRIVALS=<profile>` sets when the first swarm's viewers
+//!   arrive ([`Scenario::arrivals`], [`crate::arrivals`]), in the ppspp
+//!   sim's `SIM_ARRIVALS` forms, times in seconds from the stream's start:
+//!   `t0` (the default) with the run; `trickle` within the stream's first
+//!   third, in random order, or `trickle:<per s>` as a Poisson stream at
+//!   that rate; `event:<warm %>:<at s>:<window s>` that percentage of them
+//!   over the stream's first `at`, the rest within `window` from `at`.
+//! - `STRIMS_SIM_DEPART=<share %>:<at s>:<window s>[:abrupt]` makes that
+//!   percentage of them, among those there by `at`, leave for good within
+//!   `window` from `at` ([`Scenario::departures`]): gracefully, closing
+//!   their links, or with `abrupt` going silent; `off` none.
 //! - `STRIMS_SIM_EXP=<flag>,...` sets experiment flags
 //!   ([`Scenario::exp`]); `off` sets none.
 //! - `STRIMS_SIM_CLOCK_SKEW=<skew>` puts every host's clock off true time
@@ -105,7 +116,7 @@ use strims_wan::live::{Encoder, Sign};
 use crate::report::Report;
 use crate::run::run;
 use crate::skew::ClockSkew;
-use crate::spec::{HostIx, Scenario, SendBuffer};
+use crate::spec::{Arrivals, Departures, HostIx, Scenario, SendBuffer};
 use crate::wan::SctpProfile;
 
 /// A media swarm's chunk size without `STRIMS_SIM_CHUNK`: a video swarm's.
@@ -295,6 +306,17 @@ fn churn_knob() -> Option<(f64, Duration)> {
     Some((parse(rate), Duration::from_secs_f64(parse(away))))
 }
 
+/// `STRIMS_SIM_DEPART=<share>:<at>:<window>[:abrupt]`
+/// ([`Scenario::departures`]); `off` none.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn depart_knob() -> Option<Departures> {
+    let v = env("STRIMS_SIM_DEPART").filter(|v| !matches!(v.trim(), "off" | ""))?;
+    Some(
+        v.parse()
+            .unwrap_or_else(|e| panic!("STRIMS_SIM_DEPART={v}: {e}")),
+    )
+}
+
 /// `STRIMS_SIM_CLOCK_SKEW` ([`Scenario::clock_skew`]), if set and not
 /// blank.
 #[allow(clippy::panic)] // a mistyped setting, or one past the cap, fails its test
@@ -416,6 +438,8 @@ fn sweep_seeds(
     let exp = exp_knob();
     let hostile = hostile_knob();
     let churn = churn_knob();
+    let arrivals: Option<Arrivals> = knob("STRIMS_SIM_ARRIVALS");
+    let departures = depart_knob();
     let clock_skew = clock_skew_knob();
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
@@ -492,6 +516,12 @@ fn sweep_seeds(
         }
         if let Some((per_min, away)) = churn {
             spec.churn(per_min, away);
+        }
+        if let Some(a) = arrivals {
+            spec.arrivals = a;
+        }
+        if departures.is_some() {
+            spec.departures = departures;
         }
         if let Some(skew) = clock_skew {
             spec.clock_skew = skew;

@@ -19,9 +19,9 @@ use strims_base::rng::{DetRng, det_rng};
 use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
-    Binding, ClockSkew, Competing, Fault, HostIx, Invariants, NetworkSpec, Report, Scenario,
-    SctpProfile, SendBuffer, SwarmSpec, Transport, VpnProbes, knob, stream_minutes, sweep,
-    sweep_at, sweep_from, sweep_n,
+    Arrivals, Binding, ClockSkew, Competing, Fault, HostIx, Invariants, NetworkSpec, ParentLoss,
+    Report, Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport, VpnProbes, knob,
+    stream_minutes, sweep, sweep_at, sweep_from, sweep_n,
 };
 use strims_vpn::Routing;
 use strims_wan::live::{Encoder, Sign};
@@ -111,7 +111,8 @@ fn complete(r: &Report, who: &[HostIx], from: Duration, to: Duration) -> Result<
     complete_swarm(r, 0, who, from, to)
 }
 
-/// Every frame of swarm `sw` written in `[from, to)` reached each of `who`.
+/// Every frame of swarm `sw` written in `[from, to)` reached each of `who`,
+/// of those it was owed while it was there (`Report::owed`).
 fn complete_swarm(
     r: &Report,
     sw: usize,
@@ -119,11 +120,13 @@ fn complete_swarm(
     from: Duration,
     to: Duration,
 ) -> Result<(), String> {
-    let range = r.frames_between(sw, from, to);
+    let written = r.frames_between(sw, from, to);
     for &h in who {
         let v = r
             .viewer(sw, h)
             .ok_or_else(|| format!("{} never read swarm {sw}", r.scenario.name_of(h)))?;
+        let owed = r.owed(v);
+        let range = written.start.max(owed.start)..written.end.min(owed.end);
         let missing = r.missing(v, range.clone());
         if missing > 0 {
             let first: Vec<String> = r.written[sw]
@@ -454,6 +457,220 @@ fn viewer_churn_hybrid() {
         "viewer_churn_hybrid",
         |s| viewer_churn(s, PushMode::Hybrid),
         check_viewer_churn,
+    );
+}
+
+// --- 3a. arrivals and departures --------------------------------------------
+
+/// After its arrival, each viewer reads every frame written from `after`
+/// past it (from the stream's start for one that came with the run) to
+/// its departure or the stream's stop, its first join catches up, and no
+/// viewer is linked to a host that wasn't there yet or had left.
+fn arrived_whole(r: &Report, after: Duration) -> Result<(), String> {
+    let spec = &r.scenario.swarms[0];
+    for h in all_viewers(r) {
+        let (arrive, _) = r.presence(h);
+        let from = match r.scenario.hosts[h].arrive_at {
+            Some(_) => arrive + after,
+            None => spec.start,
+        };
+        complete(r, &[h], from, spec.stop)?;
+        let v = r.viewer(0, h).ok_or("a viewer never read")?;
+        let first = v.stats.joins.first().ok_or("no join")?;
+        if first.caught_up_ms.is_none() {
+            return Err(format!("{} never caught up: {first:?}", v.name));
+        }
+    }
+    for (h, host) in r.hosts.iter().enumerate() {
+        for (t, ns) in &host.neighbours {
+            for &n in ns {
+                let (a, d) = r.presence(n);
+                // A sample lists the links up when the node answered; a
+                // departure's closes reach its peers a round trip later.
+                if *t < a || *t > d + secs(2) {
+                    return Err(format!(
+                        "{} linked to {} at {} ms, there {}-{} ms",
+                        r.scenario.name_of(h),
+                        r.scenario.name_of(n),
+                        ms(*t),
+                        ms(a),
+                        ms(d)
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The live mesh's 10 viewers arriving as `arrivals` says, in a random
+/// mesh laid out in their arrival order.
+fn arriving_mesh(seed: u64, arrivals: &str, viewers: usize, stop: u64) -> Scenario {
+    let mut m = streaming(
+        &format!("arriving_mesh {arrivals}"),
+        seed,
+        viewers,
+        (2048 * KIB, 1024 * KIB),
+        PushMode::Hybrid,
+        (3, stop),
+    );
+    m.s.arrivals = arrivals.parse().unwrap();
+    m.s.invariants.max_heap = Some(96 * MIB);
+    m.s.invariants.progress = vec![(secs(3), secs(stop))];
+    m.s
+}
+
+/// A trickle of viewers into a random mesh: each dials only hosts already
+/// there, reads from the live edge, catches up and then reads everything.
+#[test]
+fn arrivals_trickle_into_a_mesh() {
+    sweep(
+        "arrivals_trickle_into_a_mesh",
+        |s| arriving_mesh(s, "trickle", 10, 33),
+        |r| {
+            sound(r)?;
+            arrived_whole(r, secs(CATCH_UP))?;
+            let at: Vec<Duration> = all_viewers(r)
+                .iter()
+                .map(|&h| r.scenario.hosts[h].arrive_at.unwrap())
+                .collect();
+            if at.iter().any(|&t| t < secs(3) || t >= secs(13)) {
+                return Err(format!("arrivals outside the first third: {at:?}"));
+            }
+            Ok(())
+        },
+    );
+}
+
+/// A scheduled event: a quarter of the viewers trickle in over 12 s, the
+/// rest arrive within 4 s at 12 s, into the warm swarm.
+#[test]
+fn arrivals_burst_into_a_warm_swarm() {
+    sweep(
+        "arrivals_burst_into_a_warm_swarm",
+        |s| arriving_mesh(s, "event:25:12:4", 16, 40),
+        |r| {
+            sound(r)?;
+            arrived_whole(r, secs(CATCH_UP))?;
+            let burst = all_viewers(r)
+                .iter()
+                .filter(|&&h| r.scenario.hosts[h].arrive_at.unwrap() >= secs(15))
+                .count();
+            if burst != 12 {
+                return Err(format!("{burst} of 16 viewers arrived in the burst"));
+            }
+            Ok(())
+        },
+    );
+}
+
+/// The organic mesh's viewers trickling in: each finds the others through
+/// the relay's index as it arrives.
+#[test]
+fn arrivals_trickle_into_an_organic_mesh() {
+    sweep(
+        "arrivals_trickle_into_an_organic_mesh",
+        |s| {
+            let mut sc = organic_mesh(s);
+            sc.arrivals = Arrivals::Trickle { rate: None };
+            sc
+        },
+        |r| {
+            sound(r)?;
+            arrived_whole(r, secs(CATCH_UP))
+        },
+    );
+}
+
+/// The live mesh's 10 viewers in an organic mesh, `depart` of them
+/// leaving within 4 s from 12 s.
+fn departing_mesh(seed: u64, depart: &str) -> Scenario {
+    let mut m = streaming(
+        &format!("departing_mesh {depart}"),
+        seed,
+        10,
+        (2048 * KIB, 1024 * KIB),
+        PushMode::Hybrid,
+        (3, 40),
+    );
+    m.s.organic();
+    m.s.departures = Some(depart.parse().unwrap());
+    m.s.invariants.max_heap = Some(96 * MIB);
+    m.s.invariants.progress = vec![(secs(8), secs(40))];
+    m.s
+}
+
+/// The viewers that stay read every frame written from `recover` after
+/// the departures' window closed, none is stranded, their per-second lag
+/// p90 is under `CAUGHT_UP_MS` from then on (`Report::departure_recovery`),
+/// and they noticed every departed parent; the leavers read every frame
+/// until they left.
+fn stayers_recover(r: &Report, recover: Duration) -> Result<(), String> {
+    sound(r)?;
+    let spec = &r.scenario.swarms[0];
+    let d = r.scenario.departures.unwrap();
+    let close = spec.start + d.at + d.window;
+    let leaving: Vec<HostIx> = all_viewers(r)
+        .into_iter()
+        .filter(|&h| r.scenario.departure(h).is_some())
+        .collect();
+    if leaving.len() != 6 {
+        return Err(format!("{} viewers left, not 6", leaving.len()));
+    }
+    let stayers: Vec<HostIx> = all_viewers(r)
+        .into_iter()
+        .filter(|h| !leaving.contains(h))
+        .collect();
+    complete(r, &stayers, close + recover, spec.stop)?;
+    complete(r, &leaving, spec.start + secs(CATCH_UP), spec.stop)?;
+    let rec = r.departure_recovery(0).unwrap();
+    if rec.stayed != 4
+        || rec.stranded > 0
+        || rec.censored
+        || rec.recover_ms > ms(d.window + recover)
+    {
+        return Err(format!("the stayers didn't recover: {rec:?}"));
+    }
+    for l in &r.parent_losses {
+        if !leaving.contains(&l.parent) || (l.noticed_ms.is_none() && !leaving.contains(&l.viewer))
+        {
+            return Err(format!("parent loss {l:?}"));
+        }
+    }
+    Ok(())
+}
+
+/// Six of ten viewers leave as closed tabs do: their peers see the links
+/// close, and the stayers lose no frame.
+#[test]
+fn departures_graceful_leave_the_rest_whole() {
+    sweep(
+        "departures_graceful_leave_the_rest_whole",
+        |s| departing_mesh(s, "60:9:4"),
+        |r| {
+            stayers_recover(r, secs(2))?;
+            let late: Vec<&ParentLoss> = r
+                .parent_losses
+                .iter()
+                .filter(|l| r.scenario.departure(l.viewer).is_none())
+                .filter(|l| l.noticed_ms.is_none_or(|n| n > l.departed_ms + 1000))
+                .collect();
+            if !late.is_empty() {
+                return Err(format!("losses noticed late: {late:?}"));
+            }
+            Ok(())
+        },
+    );
+}
+
+/// Six of ten viewers go silent: their peers notice by timeouts, and the
+/// stayers recover.
+#[test]
+fn departures_abrupt_leave_the_rest_recovering() {
+    sweep(
+        "departures_abrupt_leave_the_rest_recovering",
+        |s| departing_mesh(s, "60:9:4:abrupt"),
+        |r| stayers_recover(r, secs(10)),
     );
 }
 
@@ -1833,6 +2050,32 @@ fn wan_residential_seed_adaptive_uncapped() {
             ))
         },
         check_wan_residential_seed,
+    );
+}
+
+/// [`wan_residential_seed_adaptive_uncapped`]'s viewers trickling in over
+/// its first 20 s, into its random mesh laid out in their arrival order:
+/// each joins at the live edge and catches up, and then reads every frame
+/// from 10 s after its arrival.
+#[test]
+#[ignore = "WAN, 17 hosts at 2 Mbit/s; run in release with --include-ignored"]
+fn wan_residential_seed_adaptive_uncapped_trickle() {
+    sweep(
+        "wan_residential_seed_adaptive_uncapped_trickle",
+        |s| {
+            let mut sc = uncapped(striped(
+                wan_residential_seed(s, PushMode::Hybrid),
+                STRIPES,
+                ADAPTIVE,
+            ));
+            sc.arrivals = Arrivals::Trickle { rate: None };
+            sc
+        },
+        |r| {
+            sound(r)?;
+            arrived_whole(r, secs(10))?;
+            queues_within(r, secs(2))
+        },
     );
 }
 

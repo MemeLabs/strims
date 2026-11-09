@@ -52,6 +52,15 @@
 //! - **clock skew** ([`Report::clock_classes`]): with
 //!   [`Scenario::clock_skew`](crate::Scenario::clock_skew), the hosts'
 //!   clock offsets per [`SkewClass`], and the largest.
+//! - **arrivals and departures** ([`crate::arrivals`]): with either, the
+//!   measures follow each viewer's own stay ([`Report::presence`]): its
+//!   startup and steady state ([`Report::viewer_spans`]), the frames it is
+//!   owed ([`Report::owed`]), the rates per minute it was there for
+//!   ([`Report::viewer_minutes`]), its link counts and depths from its own
+//!   arrival; every join's time to its first frame and to catching up
+//!   ([`Report::joins`]); and how the viewers that stayed came through the
+//!   departures ([`Report::departure_recovery`]). Without them the row
+//!   reads as it always has, and the new columns are left out.
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -59,14 +68,66 @@ use std::time::Duration;
 
 use sha2::{Digest, Sha256};
 
-use crate::report::{HostReport, Percentiles, Report, spearman};
+use crate::report::{HostReport, Percentiles, Report, ViewerReport, spearman};
 use crate::skew::SkewClass;
 use crate::spec::{HostClass, HostIx};
 use crate::stats::{MeterSample, WindowSamples};
+use crate::stream::CAUGHT_UP_MS;
 use strims_ppspp::ChannelMetrics;
 
-/// Tree depth counts from this long after a stream starts.
+/// Tree depth counts from this long after a stream starts, or a viewer
+/// arrives.
 const DEPTH_WARM: Duration = Duration::from_secs(10);
+/// A viewer that joins a running stream ([`crate::HostSpec::arrive_at`])
+/// is in its startup for this long, its steady state after
+/// ([`Report::viewer_spans`]): long enough to find its peers, join at the
+/// live edge and catch up, as its join's `caught_up_*` measures.
+pub const JOIN_WARM: Duration = Duration::from_secs(10);
+
+/// A part of a viewer's stay ([`Report::viewer_spans`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Phase {
+    Startup,
+    Steady,
+}
+
+/// A swarm's joins ([`Report::joins`]): how many, and the ms each took to
+/// its first frame and to catch up, ascending, of those that did.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Joins {
+    pub n: u64,
+    pub first: Vec<u64>,
+    pub caught_up: Vec<u64>,
+}
+
+/// How the viewers that stayed came through departures
+/// ([`Report::departure_recovery`]), from the departures' window's opening
+/// on.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Recovery {
+    /// The viewers measured, and those of them whose last stats sample had
+    /// no link to a host of the swarm still there (a static topology links
+    /// nothing anew).
+    pub stayed: usize,
+    pub stranded: usize,
+    /// The worst lag of their reads.
+    pub peak_ms: u32,
+    /// Over the stream's seconds, the seconds' lag's excess over
+    /// [`CAUGHT_UP_MS`], summed (ms × s), and the time to the end of the
+    /// last second it was over (zero if none was); `censored` if that was
+    /// the stream's last, so they never recovered in it.
+    pub excess_ms_s: u64,
+    pub recover_ms: u64,
+    pub censored: bool,
+}
+
+impl Joins {
+    /// The `p`-th percentile of `v`, which is sorted.
+    pub fn at(v: &[u64], p: u32) -> Option<u64> {
+        let i = ((v.len() as f64 - 1.0) * f64::from(p) / 100.0).round() as usize;
+        v.get(i).copied()
+    }
+}
 /// The network measures start this long into the run, once the first
 /// links had their time to form.
 pub const NET_WARM: Duration = Duration::from_secs(10);
@@ -250,6 +311,367 @@ impl Report {
             return Percentiles::default();
         };
         self.lag_between(swarm, s.start + BUCKET, s.stop)
+    }
+
+    /// Viewer `v`'s startup and steady state in run time, while it was
+    /// there ([`Report::presence`]) and the stream ran: a viewer there at
+    /// the stream's start waits out the swarm's own startup, its first
+    /// [`BUCKET`], and one that arrives later its own first [`JOIN_WARM`];
+    /// its steady state runs from there to its departure.
+    pub fn viewer_spans(&self, v: &ViewerReport) -> [(Duration, Duration); 2] {
+        let Some(spec) = self.scenario.swarms.get(v.swarm) else {
+            return [(Duration::ZERO, Duration::ZERO); 2];
+        };
+        let (arrive, leave) = self.presence(v.host);
+        let from = arrive.max(spec.start);
+        let to = leave.min(spec.stop).max(from);
+        let warm = match arrive <= spec.start {
+            true => spec.start + BUCKET,
+            false => arrive + JOIN_WARM,
+        };
+        let warm = warm.clamp(from, to);
+        [(from, warm), (warm, to)]
+    }
+
+    /// The lag of the frames `swarm`'s viewers (those among `hosts`, if
+    /// given) read that were written in their own `phase`
+    /// ([`Report::viewer_spans`]).
+    pub fn lag_in_spans(
+        &self,
+        swarm: usize,
+        hosts: Option<&[HostIx]>,
+        phase: Phase,
+    ) -> Percentiles {
+        let mut lags = Vec::new();
+        for v in self
+            .viewers
+            .iter()
+            .filter(|v| v.swarm == swarm && hosts.is_none_or(|h| h.contains(&v.host)))
+        {
+            let [startup, steady] = self.viewer_spans(v);
+            let (from, to) = match phase {
+                Phase::Startup => startup,
+                Phase::Steady => steady,
+            };
+            let range = self.frames_between(swarm, from, to);
+            lags.extend(
+                v.stats
+                    .lags
+                    .iter()
+                    .filter(|(seq, _)| range.contains(seq))
+                    .map(|&(_, l)| l),
+            );
+        }
+        Percentiles::of(lags)
+    }
+
+    /// How long host `h` was there while the first swarm streamed
+    /// ([`Report::presence`]).
+    pub fn streamed(&self, h: HostIx) -> Duration {
+        let Some(spec) = self.scenario.swarms.first() else {
+            return Duration::ZERO;
+        };
+        let (arrive, leave) = self.presence(h);
+        leave.min(spec.stop).saturating_sub(arrive.max(spec.start))
+    }
+
+    /// The minutes of run `hosts` were there for, summed
+    /// ([`Report::presence`]): the run's length each without arrivals or
+    /// departures.
+    pub fn viewer_minutes(&self, hosts: &[HostIx]) -> f64 {
+        if !self.scenario.profiled() {
+            return hosts.len() as f64 * self.scenario.duration.as_secs_f64() / 60.0;
+        }
+        let ms: u128 = hosts
+            .iter()
+            .map(|&h| {
+                let (a, b) = self.presence(h);
+                b.saturating_sub(a).as_millis()
+            })
+            .sum();
+        ms as f64 / 60_000.0
+    }
+
+    /// Whether host `h` was there at `t`, for `warm` at least
+    /// ([`Report::presence`]).
+    fn there(&self, h: HostIx, t: Duration, warm: Duration) -> bool {
+        let arrive = self
+            .scenario
+            .hosts
+            .get(h)
+            .and_then(|s| s.arrive_at)
+            .unwrap_or_default();
+        t >= arrive + warm && self.scenario.departure(h).is_none_or(|(at, _)| t < at)
+    }
+
+    /// Every join of `swarm`'s honest viewers, the first included: the ms
+    /// from the join to its first frame and to its first under
+    /// [`CAUGHT_UP_MS`], a join's clock starting when it opened its reader
+    /// or the stream started, whichever came last.
+    pub fn joins(&self, swarm: usize) -> Joins {
+        let start = self
+            .scenario
+            .swarms
+            .get(swarm)
+            .map_or(0, |s| s.start.as_millis() as u64);
+        let mut out = Joins::default();
+        for jn in self
+            .viewers
+            .iter()
+            .filter(|v| v.swarm == swarm && self.class(v.host) == HostClass::Honest)
+            .flat_map(|v| v.stats.joins.iter())
+        {
+            out.n += 1;
+            let from = jn.start_ms.max(start);
+            out.first
+                .extend(jn.first_frame_ms.map(|t| t.saturating_sub(from)));
+            out.caught_up
+                .extend(jn.caught_up_ms.map(|t| t.saturating_sub(from)));
+        }
+        out.first.sort_unstable();
+        out.caught_up.sort_unstable();
+        out
+    }
+
+    /// The row's columns of a run with arrivals or departures, named as the
+    /// ppspp sim's rows name them:
+    /// - `arrived`, `arrived_honest`: the viewers that arrived after the
+    ///   run's start ([`HostSpec::arrive_at`](crate::HostSpec::arrive_at)),
+    ///   and of them the honest; `departed`, `departed_honest`, those that
+    ///   left for good;
+    /// - over every join ([`Report::joins`]), the ms to its first frame
+    ///   (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
+    ///   nothing) and to catching up (`caught_up_p50_ms`,
+    ///   `caught_up_p90_ms`; `caught_up_never`);
+    /// - the honest viewers' push parents that departed
+    ///   ([`Report::parent_losses`], counted per departure: `parent_lost`)
+    ///   and the streams they parented (`parent_lost_streams`), and how
+    ///   long the viewers took to notice (`parent_lost_noticed_p50_ms`,
+    ///   `parent_lost_noticed_p90_ms`; `parent_lost_unnoticed`, never);
+    /// - with departures, the stayers' recovery
+    ///   ([`Report::departure_recovery`]): `depart_stayed`,
+    ///   `depart_stranded`, `depart_lag_peak_ms`,
+    ///   `depart_excess_lag_area_ms_s`, `depart_recover_ms` and
+    ///   `depart_recover_censored`.
+    fn audience_cols(&self, swarm: usize, j: &mut JsonRow) {
+        let viewers = self
+            .scenario
+            .swarms
+            .get(swarm)
+            .map_or(&[][..], |s| &s.viewers[..]);
+        let honest = |h: &&HostIx| self.class(**h) == HostClass::Honest;
+        let arrived: Vec<HostIx> = viewers
+            .iter()
+            .copied()
+            .filter(|&h| {
+                self.scenario
+                    .hosts
+                    .get(h)
+                    .is_some_and(|x| x.arrive_at.is_some())
+            })
+            .collect();
+        let departed: Vec<HostIx> = viewers
+            .iter()
+            .copied()
+            .filter(|&h| self.scenario.departure(h).is_some())
+            .collect();
+        j.int("arrived", arrived.len() as u64)
+            .int(
+                "arrived_honest",
+                arrived.iter().filter(honest).count() as u64,
+            )
+            .int("departed", departed.len() as u64)
+            .int(
+                "departed_honest",
+                departed.iter().filter(honest).count() as u64,
+            );
+        let s = self.joins(swarm);
+        for (name, v) in [("join", &s.first), ("caught_up", &s.caught_up)] {
+            for p in [50, 90] {
+                if let Some(x) = Joins::at(v, p) {
+                    j.int(&format!("{name}_p{p}_ms"), x);
+                }
+            }
+        }
+        j.int("join_unread", s.n - s.first.len() as u64)
+            .int("caught_up_never", s.n - s.caught_up.len() as u64);
+        let losses: Vec<&crate::ParentLoss> = self
+            .parent_losses
+            .iter()
+            .filter(|l| self.class(l.viewer) == HostClass::Honest)
+            .collect();
+        let mut took: Vec<u64> = losses
+            .iter()
+            .filter_map(|l| Some(l.noticed_ms?.saturating_sub(l.departed_ms)))
+            .collect();
+        took.sort_unstable();
+        j.int("parent_lost", losses.len() as u64)
+            .int(
+                "parent_lost_streams",
+                losses.iter().map(|l| l.streams as u64).sum(),
+            )
+            .int("parent_lost_unnoticed", (losses.len() - took.len()) as u64);
+        for p in [50, 90] {
+            if let Some(x) = Joins::at(&took, p) {
+                j.int(&format!("parent_lost_noticed_p{p}_ms"), x);
+            }
+        }
+        if let Some(r) = self.departure_recovery(swarm) {
+            j.int("depart_stayed", r.stayed as u64)
+                .int("depart_stranded", r.stranded as u64)
+                .int("depart_lag_peak_ms", u64::from(r.peak_ms))
+                .int("depart_excess_lag_area_ms_s", r.excess_ms_s)
+                .int("depart_recover_ms", r.recover_ms)
+                .int("depart_recover_censored", u64::from(r.censored));
+        }
+    }
+
+    /// With arrivals or departures, their line of the summary.
+    pub(crate) fn profile_line(&self) -> Option<String> {
+        if !self.scenario.profiled() {
+            return None;
+        }
+        let s = self.joins(0);
+        let q = |v: &[u64]| {
+            let at = |p| Joins::at(v, p).map_or("-".to_owned(), |x| x.to_string());
+            format!("{}/{}", at(50), at(90))
+        };
+        let mut line = format!(
+            "\n  arrivals {}: {} joins, first frame p50/p90 {} ms, caught up {} ms, {} read nothing, {} never caught up",
+            self.scenario.arrivals,
+            s.n,
+            q(&s.first),
+            q(&s.caught_up),
+            s.n - s.first.len() as u64,
+            s.n - s.caught_up.len() as u64,
+        );
+        if let (Some(d), Some(r)) = (self.scenario.departures, self.departure_recovery(0)) {
+            let mut took: Vec<u64> = self
+                .parent_losses
+                .iter()
+                .filter_map(|l| Some(l.noticed_ms?.saturating_sub(l.departed_ms)))
+                .collect();
+            took.sort_unstable();
+            line.push_str(&format!(
+                "\n  departures {d}: {} stayed, {} stranded; lag peak {} ms, {} ms s past {CAUGHT_UP_MS} ms, recovered {} ms after the window opened{}; {} parents lost, noticed p50/p90 {} ms, {} never",
+                r.stayed,
+                r.stranded,
+                r.peak_ms,
+                r.excess_ms_s,
+                r.recover_ms,
+                if r.censored { " (not by the stream's end)" } else { "" },
+                self.parent_losses.len(),
+                q(&took),
+                self.parent_losses.len() - took.len(),
+            ));
+        }
+        Some(line)
+    }
+
+    /// Viewer `v`'s lag in each second of `swarm`'s stream, in ms: the p99
+    /// of the frames it read in the second, or a second more than the last
+    /// second's in one it read none in (`None` before its first read), as
+    /// `hack/capture/analyze.py` reads the series and the ppspp sim's rows
+    /// measure recovery.
+    pub fn lag_by_second(&self, swarm: usize, v: &ViewerReport) -> Vec<Option<u32>> {
+        let Some(spec) = self.scenario.swarms.get(swarm) else {
+            return Vec::new();
+        };
+        let secs = spec.stop.saturating_sub(spec.start).as_secs() as usize;
+        let mut by: Vec<Vec<u32>> = vec![Vec::new(); secs];
+        for &(seq, lag) in &v.stats.lags {
+            let read = self.written_at(swarm, seq) + Duration::from_millis(u64::from(lag));
+            if let Some(k) = read.checked_sub(spec.start).map(|d| d.as_secs() as usize)
+                && let Some(b) = by.get_mut(k)
+            {
+                b.push(lag);
+            }
+        }
+        let mut cur: Option<u32> = None;
+        by.into_iter()
+            .map(|b| {
+                cur = match b.is_empty() {
+                    false => Some(Percentiles::of(b).p99),
+                    true => cur.map(|l| l.saturating_add(1000)),
+                };
+                cur
+            })
+            .collect()
+    }
+
+    /// With departures ([`crate::Scenario::departures`]), how the viewers
+    /// that stayed came through them ([`Recovery`]): `swarm`'s honest
+    /// viewers there before the departures' window opened that didn't
+    /// leave. Each second's lag is the p90 over them of each one's
+    /// ([`Report::lag_by_second`]), from the second the window opens in to
+    /// the stream's stop, as the ppspp sim's rows measure it.
+    pub fn departure_recovery(&self, swarm: usize) -> Option<Recovery> {
+        let d = self.scenario.departures?;
+        let spec = self.scenario.swarms.get(swarm)?;
+        let open = spec.start + d.at;
+        let stayers: Vec<&ViewerReport> = self
+            .viewers
+            .iter()
+            .filter(|v| {
+                v.swarm == swarm
+                    && self.class(v.host) == HostClass::Honest
+                    && self.scenario.departure(v.host).is_none()
+                    && self.presence(v.host).0 < open
+            })
+            .collect();
+        let per: Vec<Vec<Option<u32>>> = stayers
+            .iter()
+            .map(|v| self.lag_by_second(swarm, v))
+            .collect();
+        let secs = spec.stop.saturating_sub(spec.start).as_secs() as usize;
+        let k0 = open.saturating_sub(spec.start).as_secs() as usize;
+        let target = u32::try_from(CAUGHT_UP_MS).unwrap_or(u32::MAX);
+        let (mut excess, mut bad) = (0u64, None);
+        for k in k0..secs {
+            let mut v: Vec<u32> = per
+                .iter()
+                .filter_map(|p| p.get(k).copied().flatten())
+                .collect();
+            v.sort_unstable();
+            let Some(&q) = v.get(((v.len().max(1) - 1) as f64 * 0.9).round() as usize) else {
+                continue;
+            };
+            excess += u64::from(q.saturating_sub(target));
+            if q > target {
+                bad = Some(k);
+            }
+        }
+        let peak_ms = stayers
+            .iter()
+            .flat_map(|v| v.stats.lags.iter())
+            .filter(|&&(seq, lag)| {
+                self.written_at(swarm, seq) + Duration::from_millis(u64::from(lag)) >= open
+            })
+            .map(|&(_, lag)| lag)
+            .max()
+            .unwrap_or(0);
+        // Whether `h` still had a link to a member of the swarm that was
+        // there at its last stats sample.
+        let linked = |h: HostIx| {
+            self.hosts
+                .get(h)
+                .and_then(|r| r.neighbours.last())
+                .is_some_and(|(_, ns)| {
+                    ns.iter()
+                        .any(|&n| spec.member(n) && self.scenario.departure(n).is_none())
+                })
+        };
+        Some(Recovery {
+            stayed: stayers.len(),
+            stranded: stayers.iter().filter(|v| !linked(v.host)).count(),
+            peak_ms,
+            excess_ms_s: excess,
+            recover_ms: bad.map_or(0, |k| {
+                let end = spec.start + Duration::from_secs(k as u64 + 1);
+                end.saturating_sub(open).as_millis() as u64
+            }),
+            censored: bad.is_some_and(|k| k + 1 == secs),
+        })
     }
 
     pub fn roles(&self) -> Roles {
@@ -732,7 +1154,20 @@ impl Report {
     /// [`SkewClass::name`]), as the ppspp sim's rows name them, then per
     /// scenario swarm 0 its delivery, lag (overall,
     /// startup bucket, steady state, per bucket) and the meter's measures
-    /// (see the module docs).
+    /// (see the module docs). With arrivals or departures, in the ppspp
+    /// sim's rows' names: their profiles (`arrivals`, `depart`), the
+    /// startup and steady state each viewer's own
+    /// ([`Report::viewer_spans`]), the viewers that arrived and departed
+    /// (`arrived`, `departed`, each with `_honest`), the joins
+    /// ([`Report::joins`]: `join_p50_ms`, `join_p90_ms`, `join_unread`,
+    /// `caught_up_p50_ms`, `caught_up_p90_ms`, `caught_up_never`), the
+    /// push parents lost to departures (`parent_lost`,
+    /// `parent_lost_streams`, and how soon they were noticed:
+    /// `parent_lost_noticed_p50_ms`, `parent_lost_noticed_p90_ms`,
+    /// `parent_lost_unnoticed`) and, with departures, the stayers' recovery
+    /// ([`Report::departure_recovery`]: `depart_stayed`, `depart_stranded`,
+    /// `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`,
+    /// `depart_recover_ms`, `depart_recover_censored`).
     pub fn row(&self, test: &str, failure: Option<&str>) -> String {
         let reads = self.reads_hash();
         let mut j = JsonRow::default();
@@ -769,10 +1204,24 @@ impl Report {
             }
         }
         let swarm = 0;
+        if !self.scenario.arrivals.is_t0() {
+            j.str("arrivals", &self.scenario.arrivals.to_string());
+        }
+        if let Some(d) = self.scenario.departures {
+            j.str("depart", &d.to_string());
+        }
         let lag = self.lag(swarm);
-        let steady = self.steady_lag(swarm);
         let buckets = self.lag_buckets(swarm);
-        let startup = buckets.first().copied().unwrap_or_default();
+        let (startup, steady) = match self.scenario.profiled() {
+            true => (
+                self.lag_in_spans(swarm, None, Phase::Startup),
+                self.lag_in_spans(swarm, None, Phase::Steady),
+            ),
+            false => (
+                buckets.first().copied().unwrap_or_default(),
+                self.steady_lag(swarm),
+            ),
+        };
         j.num("delivery", self.delivery(swarm))
             .int("lag_p50_ms", u64::from(lag.p50))
             .int("lag_p99_ms", u64::from(lag.p99))
@@ -900,15 +1349,21 @@ impl Report {
             }
         }
         // The viewers' uplink use: bytes written to sockets over the run
-        // against their uplink for the stream's span.
+        // against their uplink for the stream's span (with arrivals or
+        // departures, the span each was there for).
         if let Some(spec) = self.scenario.swarms.get(swarm) {
             let secs = spec.stop.saturating_sub(spec.start).as_secs_f64().max(1e-9);
+            let profiled = self.scenario.profiled();
             let mut util: Vec<f64> = spec
                 .viewers
                 .iter()
                 .chain(&spec.relays)
                 .filter_map(|&h| {
                     let cap = self.upload_cap(h)? as f64;
+                    let secs = match profiled {
+                        true => self.streamed(h).as_secs_f64().max(1e-9),
+                        false => secs,
+                    };
                     Some(self.hosts.get(h)?.uploaded as f64 / (cap * secs))
                 })
                 .collect();
@@ -943,12 +1398,24 @@ impl Report {
                     j.num(name, v);
                 }
             }
-            // Parent changes (prunes and switches) per viewer-minute.
+            // Parent changes (prunes and switches) per viewer-minute (with
+            // arrivals or departures, per minute each viewer was there).
             let c = self.swarm_counters(swarm);
             let viewers = spec.viewers.len().max(1) as f64;
+            let minutes = match profiled {
+                true => {
+                    let ms: u128 = spec
+                        .viewers
+                        .iter()
+                        .map(|&h| self.streamed(h).as_millis())
+                        .sum();
+                    (ms as f64 / 60_000.0).max(1e-9)
+                }
+                false => viewers * secs / 60.0,
+            };
             j.num(
                 "parent_changes_per_min",
-                (c.pruned + c.switched) as f64 / (viewers * secs / 60.0),
+                (c.pruned + c.switched) as f64 / minutes,
             );
         }
         let c = self.swarm_counters(swarm);
@@ -988,7 +1455,10 @@ impl Report {
                 .map_or(Duration::ZERO, |s| s.stop);
             for (name, hosts) in [("honest", &honest), ("hostile", &hostile)] {
                 let lag = self.lag_of_between(swarm, hosts, s, e);
-                let startup = self.lag_of_between(swarm, hosts, s, (s + BUCKET).min(e));
+                let startup = match self.scenario.profiled() {
+                    true => self.lag_in_spans(swarm, Some(hosts), Phase::Startup),
+                    false => self.lag_of_between(swarm, hosts, s, (s + BUCKET).min(e)),
+                };
                 j.int(&format!("lag_p99_ms_{name}"), u64::from(lag.p99))
                     .int(&format!("lag_p50_ms_{name}"), u64::from(lag.p50))
                     .int(&format!("startup_p99_ms_{name}"), u64::from(startup.p99))
@@ -1012,7 +1482,7 @@ impl Report {
             .fold((0, 0), |(t, w), r| {
                 (t + r.pool_trials, w + r.pool_trial_wins)
             });
-        let minutes = viewers.len() as f64 * self.scenario.duration.as_secs_f64() / 60.0;
+        let minutes = self.viewer_minutes(&viewers);
         if trials > 0 && minutes > 0.0 {
             j.num("pool_trials_per_host_min", trials as f64 / minutes)
                 .num("pool_trial_wins", wins as f64 / trials as f64);
@@ -1029,7 +1499,10 @@ impl Report {
         }
         let mut resolved: Vec<u64> = viewers
             .iter()
-            .filter_map(|&h| self.hosts.get(h)?.source_resolved_ms)
+            .filter_map(|&h| {
+                let at = self.hosts.get(h)?.source_resolved_ms?;
+                Some(at.saturating_sub(self.presence(h).0.as_millis() as u64))
+            })
             .collect();
         resolved.sort_unstable();
         if let Some(&p90) = resolved.get(((resolved.len() as f64 - 1.0) * 0.9).round() as usize) {
@@ -1044,6 +1517,9 @@ impl Report {
         rejoins.sort_unstable();
         if let Some(&p90) = rejoins.get(((rejoins.len() as f64 - 1.0) * 0.9).round() as usize) {
             j.int("rejoin_p90_ms", p90);
+        }
+        if self.scenario.profiled() {
+            self.audience_cols(swarm, &mut j);
         }
         for (key, outcome) in EXCHANGE_COLS {
             j.int(key, self.exchanges_ended(outcome));
@@ -1365,15 +1841,16 @@ impl Report {
     }
 
     /// p50 and p90 of the honest viewers' link counts over their stats
-    /// samples from [`NET_WARM`] on.
+    /// samples from [`NET_WARM`] after their arrival on, while they were
+    /// there ([`Report::presence`]).
     pub fn link_counts(&self) -> [u64; 2] {
         let mut v: Vec<u64> = self
             .honest_viewers()
             .into_iter()
-            .filter_map(|h| self.hosts.get(h))
-            .flat_map(|r| r.neighbours.iter())
-            .filter(|(t, _)| *t >= NET_WARM)
-            .map(|(_, ns)| ns.len() as u64)
+            .filter_map(|h| Some((h, self.hosts.get(h)?)))
+            .flat_map(|(h, r)| r.neighbours.iter().map(move |x| (h, x)))
+            .filter(|&(h, (t, _))| *t >= NET_WARM && self.there(h, *t, NET_WARM))
+            .map(|(_, (_, ns))| ns.len() as u64)
             .collect();
         v.sort_unstable();
         let at = |q: f64| {
@@ -1383,10 +1860,11 @@ impl Report {
         [at(0.5), at(0.9)]
     }
 
-    /// Links the honest viewers made and lost, per viewer-minute of run.
+    /// Links the honest viewers made and lost, per minute of run they were
+    /// there for ([`Report::viewer_minutes`]).
     pub fn link_churn(&self) -> [f64; 2] {
         let viewers = self.honest_viewers();
-        let minutes = viewers.len() as f64 * self.scenario.duration.as_secs_f64() / 60.0;
+        let minutes = self.viewer_minutes(&viewers);
         let (mut added, mut removed) = (0, 0);
         for r in viewers.iter().filter_map(|&h| self.hosts.get(h)) {
             added += r.peers_added;
@@ -1398,10 +1876,11 @@ impl Report {
         [added as f64 / minutes, removed as f64 / minutes]
     }
 
-    /// Over the honest viewers' stats samples from [`NET_WARM`] on, in
-    /// rounds of a second: the share with no honest neighbour, and the
-    /// share with no path to their swarm's seed through honest hosts. A
-    /// link counts in a round when either end reported it.
+    /// Over the honest viewers' stats samples from [`NET_WARM`] after their
+    /// arrival on, while they were there ([`Report::presence`]), in rounds
+    /// of a second: the share with no honest neighbour, and the share with
+    /// no path to their swarm's seed through honest hosts. A link counts in
+    /// a round when either end reported it.
     pub fn eclipse(&self) -> [f64; 2] {
         let n = self.hosts.len();
         let honest: Vec<bool> = (0..n).map(|h| self.class(h) == HostClass::Honest).collect();
@@ -1414,13 +1893,13 @@ impl Report {
             .filter(|&(v, _)| honest.get(v).copied().unwrap_or(false))
             .collect();
         let (mut samples, mut eclipsed, mut cut) = (0u64, 0u64, 0u64);
-        for g in rounds.values() {
+        for (&sec, g) in &rounds {
             let mut reach: BTreeMap<HostIx, Vec<bool>> = BTreeMap::new();
             for &(v, seed) in &viewers {
                 let Some(ns) = g.get(v) else {
                     continue;
                 };
-                if ns.is_empty() {
+                if ns.is_empty() || !self.there(v, Duration::from_secs(sec), NET_WARM) {
                     continue;
                 }
                 samples += 1;
@@ -1483,7 +1962,8 @@ impl Report {
     ///   seed's neighbours, and of the viewers it pushes to, each second's
     ///   median over the run;
     /// - `top_seed_link_s`: when the strongest viewer first neighbours the
-    ///   seed, seconds after the stream's start (its length if never);
+    ///   seed, seconds after the stream's start or its arrival, whichever
+    ///   came last (the stream's length if never);
     /// - `lag_p99_ms_weak`: the lag p99 of the weakest quarter;
     /// - `seed_offers_per_min`: offers to link the seed answered and
     ///   refused, per minute of run.
@@ -1616,8 +2096,9 @@ impl Report {
             out.push(("seed_nbr_up_p50", m));
         }
         let length = spec.stop.saturating_sub(spec.start).as_secs_f64();
+        let came = top.map_or(spec.start, |h| self.presence(h).0.max(spec.start));
         let linked = top_linked.map_or(length, |t| {
-            (t as f64 - spec.start.as_secs_f64()).clamp(0.0, length)
+            (t as f64 - came.as_secs_f64()).clamp(0.0, length)
         });
         out.push(("top_seed_link_s", linked));
         let mut by_up: Vec<(f64, HostIx)> = up.iter().map(|(&h, &u)| (u, h)).collect();
@@ -1652,10 +2133,11 @@ impl Report {
     }
 
     /// Each viewer's push-tree depth per stream, once a second from
-    /// [`DEPTH_WARM`] after the stream's start, from the transfer samples
-    /// (each host's latest by then): `(second, viewer, k)`, `k` the hops to
-    /// the seed (1-6), 7 deeper, 0 no parent, 8 a cycle, 9 a chain that
-    /// ends at a viewer with no parent. `None` without transfer samples.
+    /// [`DEPTH_WARM`] after the stream's start (and its arrival) while it
+    /// was there, from the transfer samples (each host's latest by then): `(second,
+    /// viewer, k)`, `k` the hops to the seed (1-6), 7 deeper, 0 no parent,
+    /// 8 a cycle, 9 a chain that ends at a viewer with no parent (or one
+    /// that departed). `None` without transfer samples.
     fn depth_walk(&self, swarm: usize) -> Option<Vec<(Duration, HostIx, usize)>> {
         let spec = self.scenario.swarms.get(swarm)?;
         let hosts: Vec<HostIx> = spec.viewers.iter().chain(&spec.relays).copied().collect();
@@ -1679,14 +2161,27 @@ impl Report {
         let from = spec.start + DEPTH_WARM;
         let mut next = from;
         let mut it = samples.iter().peekable();
+        // A host that departed parents no one from then on.
+        let left: Vec<Option<Duration>> = (0..self.hosts.len())
+            .map(|h| self.scenario.departure(h).map(|(at, _)| at))
+            .collect();
+        let gone = |x: usize, t: Duration| left.get(x).copied().flatten().is_some_and(|at| at <= t);
         while let Some(&&(t, h, p)) = it.peek() {
             if t >= next {
-                // A second's snapshot: every viewer's chain per stream.
+                // A second's snapshot: every viewer's chain per stream,
+                // from its own DEPTH_WARM after its arrival.
                 for &v in &hosts {
                     let Some(pv) = latest.get(&v) else { continue };
+                    if !self.there(v, next, DEPTH_WARM) {
+                        continue;
+                    }
                     for st in 0..streams {
-                        let parent =
-                            |x: usize| latest.get(&x).and_then(|p| p.get(st).copied().flatten());
+                        let parent = |x: usize| {
+                            latest
+                                .get(&x)
+                                .filter(|_| !gone(x, next))
+                                .and_then(|p| p.get(st).copied().flatten())
+                        };
                         let mut at = pv.get(st).copied().flatten();
                         let mut seen = vec![v];
                         let k = loop {
@@ -1764,7 +2259,7 @@ impl Report {
     /// | `secs` | the stream's length in seconds; the seconds after it are the run's tail |
     /// | `seed_up` | `[s, bytes per second]`: the seed's uplink from the start and at each step, `s` from the stream's start |
     /// | `viewer_up` | the viewers' uplinks, summed |
-    /// | `lag`, `frames` | per viewer, the p99 lag in ms of the frames it read in each second (-1 without any) and how many it read |
+    /// | `lag`, `frames` | per viewer, the p99 lag in ms of the frames it read in each second (-1 without any) and how many it read; with arrivals or departures, `frames` is -1 in a second it wasn't there in ([`Report::presence`]) |
     /// | `present` | viewers with a transfer sample in the second |
     /// | `hits`, `misses`, `pruned` | over the viewers, pushes before their deadline, deadlines released to pull, and parents pruned |
     /// | `parents` | the viewers' median count of streams with an open parent |
@@ -1821,6 +2316,13 @@ impl Report {
                     b.push(lag);
                 }
             }
+            // The seconds the viewer was there for (with arrivals or
+            // departures); `frames` is -1 in the others.
+            let (arrive, leave) = self.presence(v.host);
+            let there = |k: usize| {
+                let a = start + Duration::from_secs(k as u64);
+                !self.scenario.profiled() || (a + Duration::from_secs(1) > arrive && a < leave)
+            };
             lags.push(
                 by.iter()
                     .map(|b| {
@@ -1832,7 +2334,12 @@ impl Report {
                     })
                     .collect::<Vec<_>>(),
             );
-            frames.push(by.iter().map(|b| b.len() as i64).collect::<Vec<_>>());
+            frames.push(
+                by.iter()
+                    .enumerate()
+                    .map(|(k, b)| if there(k) { b.len() as i64 } else { -1 })
+                    .collect::<Vec<_>>(),
+            );
         }
         // Counters restart from 0 with a restarted node.
         let delta = |now: u64, before: u64| if now >= before { now - before } else { now };
@@ -2138,7 +2645,7 @@ impl JsonRow {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::indexing_slicing)]
+    #![allow(clippy::indexing_slicing, clippy::unwrap_used)]
 
     use super::*;
     use crate::report::HostReport;
@@ -2191,6 +2698,7 @@ mod tests {
             violations: Vec::new(),
             wan: None,
             wire_bins: Vec::new(),
+            parent_losses: Vec::new(),
         }
     }
 
@@ -2290,6 +2798,46 @@ mod tests {
         // Links reported by one end count for both.
         let r = linked([&[], &[0], &[1], &[2], &[]]);
         assert_eq!(r.eclipse(), [0.0, 0.0]);
+    }
+
+    /// A viewer reads a frame every 250 ms 100 ms after its write, for
+    /// 10 s, then nothing for 10 s, then again to the stream's end.
+    #[test]
+    fn a_viewer_that_reads_nothing_falls_behind_each_second() {
+        let mut r = seed_reading(|_| 0);
+        r.scenario.swarms[0] =
+            SwarmSpec::live(0, vec![1], 4096, Duration::ZERO, Duration::from_secs(100));
+        let mut stats = crate::stream::ViewerStats::default();
+        stats.lags = (0..40).chain(80..400).map(|seq| (seq, 100)).collect();
+        let v = crate::report::ViewerReport {
+            host: 1,
+            name: "v".into(),
+            swarm: 0,
+            stats,
+        };
+        let lag = r.lag_by_second(0, &v);
+        assert_eq!(lag.len(), 100);
+        assert_eq!(lag[9], Some(100));
+        assert_eq!(lag[10], Some(1100));
+        assert_eq!(lag[19], Some(10_100));
+        assert_eq!(lag[20], Some(100));
+        // It stays through departures from 8 s: over the target from 11 s
+        // to 19 s.
+        r.viewers = vec![v];
+        r.scenario.departures = Some("50:8:2".parse().unwrap());
+        let rec = r.departure_recovery(0).unwrap();
+        let over: u64 = (2..=10).map(|j| j * 1000 + 100 - 1250).sum();
+        assert_eq!(
+            rec,
+            Recovery {
+                stayed: 1,
+                stranded: 1,
+                peak_ms: 100,
+                excess_ms_s: over,
+                recover_ms: 12_000,
+                censored: false,
+            }
+        );
     }
 
     #[test]
