@@ -89,8 +89,10 @@
 //! scheduled event brings a burst into a warm swarm; each arrival links to
 //! viewers already there, as a tracker's answer would, and reads from the
 //! live edge. With `SIM_DEPART` a share of them leaves for good, closing its
-//! links or going silent. Results then measure each viewer from its own
-//! arrival to its departure.
+//! links or going silent, and a viewer whose link to one closes asks for
+//! another neighbour the same way. Results then measure each viewer from
+//! its own arrival to its departure. The knobs' times count from the
+//! stream's start.
 //!
 //! The seed allocation runs measure how a seed on a constrained uplink
 //! spends it, at 16 streams on WAN paths: the ignored
@@ -161,6 +163,15 @@ const ECHO_HOLD: Duration = Duration::from_millis(300);
 /// (`hack/capture/analyze.py`). Recovery from departures is measured
 /// against it too ([`Sim::audience_report`]).
 const CAUGHT_UP: Duration = Duration::from_millis(1250);
+
+/// How long a node's link to a viewer that left abruptly ([`Depart`])
+/// stays open: node-core's read timeout on TCP and WebSocket links
+/// (`strims_vnic::TcpOptions::read_timeout`, 25 s; vnic's keepalives keep a
+/// live link from reaching it), the transport noticing a peer gone silent
+/// (WebRTC's consent checks lapse at about 30 s). A client asks for another
+/// neighbour once that link closes ([`Sim::relink`]): it can't know sooner
+/// which silent peer is gone, nor have its tracker know.
+const READ_TIMEOUT: Duration = Duration::from_secs(25);
 
 /// A control frame's header, and each of its records
 /// (`strims_vnic::control`).
@@ -710,15 +721,18 @@ impl std::fmt::Display for Arrivals {
 
 /// Viewers leaving for good: `share` of the viewers there `at` into the
 /// stream ([`stream_start`]; honest, greedy and adversaries alike, drawn at
-/// random) leave within `window` from it, as that many Poisson departures in it, and the rest keep
-/// watching. A departure is graceful, its links closing at once as a
-/// closed tab's transport does (its neighbours' `remove_peer`), or with
-/// `abrupt` silent, as a lost connection is: its frames stop and its
-/// neighbours notice only by the silence, as [`Incident::Dies`]. Nobody
-/// links anew as its neighbours leave (this sim discovers no peers): the
-/// trees repair over the mesh that's left, and a viewer whose neighbours
-/// all left is stranded. A viewer that leaves counts in every result up to
-/// its departure. Drawn after the arrivals, from the run's rng; departures
+/// random) leave within `window` from it, as that many Poisson departures
+/// in it, and the rest keep watching. A departure is graceful, its links
+/// closing at once as a closed tab's transport does (its neighbours'
+/// `remove_peer`), or with `abrupt` silent, as a lost connection is: its
+/// frames stop, its neighbours' trees notice only by the silence, as
+/// [`Incident::Dies`], and their links to it close at their read timeouts
+/// ([`READ_TIMEOUT`]). A viewer whose link to one that left closes asks
+/// for another neighbour, as a tracker would answer it ([`Sim::relink`]),
+/// so the trees repair over the mesh that's left and the links it gains: a
+/// viewer is left with no neighbour there only while its links to viewers
+/// that went silent wait out their timeouts. A viewer that leaves counts in
+/// every result up to its departure. Drawn after the arrivals, from the run's rng; departures
 /// take what [`Arrivals`] do not.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Depart {
@@ -1266,6 +1280,13 @@ struct Sim {
     arrivals_done: usize,
     departures: Vec<(Time, usize)>,
     departures_done: usize,
+    /// The links to viewers that left abruptly, each closing at its
+    /// neighbour's read timeout ([`READ_TIMEOUT`]): `(at, neighbour,
+    /// viewer gone)`.
+    closing: BTreeSet<(Time, usize, usize)>,
+    /// The links viewers made asking again for neighbours that left
+    /// ([`Sim::relink`]).
+    relinks: u64,
     /// The honest viewers whose open parent left ([`Sim::depart`]), counted
     /// per departure, and their streams it was the parent of.
     parent_lost: (u64, u64),
@@ -1993,8 +2014,8 @@ struct AudienceReport {
 /// start on.
 #[derive(Debug)]
 struct Recovery {
-    /// The viewers measured, and those of them left with no link to a node
-    /// still there ([`Depart`]: nobody links anew).
+    /// The viewers measured, and those of them left at the end with no
+    /// link to a node still there ([`Sim::relink`]).
     stayed: usize,
     stranded: usize,
     /// The worst lag of their reads.
@@ -2451,6 +2472,8 @@ impl Sim {
             arrivals_done: 0,
             departures,
             departures_done: 0,
+            closing: BTreeSet::new(),
+            relinks: 0,
             parent_lost: (0, 0),
             joins: Vec::new(),
             swarm_id: SwarmId::new(&key.public),
@@ -2506,6 +2529,9 @@ impl Sim {
             t = t.min(at);
         }
         if let Some(&(at, _)) = self.departures.get(self.departures_done) {
+            t = t.min(at);
+        }
+        if let Some(&(at, _, _)) = self.closing.first() {
             t = t.min(at);
         }
         self.refresh_wakes();
@@ -2844,6 +2870,13 @@ impl Sim {
             self.departures_done += 1;
             self.depart(i);
         }
+        while let Some(&(at, j, i)) = self.closing.first() {
+            if now < at {
+                break;
+            }
+            self.closing.pop_first();
+            self.timed_out(j, i);
+        }
 
         // Only a runner called since its last drain holds events.
         for i in std::mem::take(&mut self.undrained) {
@@ -2985,6 +3018,13 @@ impl Sim {
         if matches!(kind, Role::Adversary(_)) && !to.contains(&0) {
             to.push(0);
         }
+        self.link_to(i, to);
+    }
+
+    /// Links node `i` to each of `to` (in node order), each link's latency
+    /// drawn as the mesh's are (the WAN's paths, in WAN mode).
+    fn link_to(&mut self, i: usize, mut to: Vec<usize>) {
+        let now = self.now;
         to.sort_unstable();
         let span = (self.cfg.latency_ms.1 - self.cfg.latency_ms.0).max(1) as u64;
         for j in to {
@@ -3010,9 +3050,11 @@ impl Sim {
     }
 
     /// Viewer `i` leaves for good ([`Depart`]): gracefully, its neighbours
-    /// see its links close and drop them; abruptly, it goes silent. Each
-    /// neighbour whose open parent it was on some stream logs a
-    /// `parent_lost`.
+    /// see its links close and drop them, and each viewer among them asks
+    /// for another at once ([`Sim::relink`]); abruptly, it goes silent, and
+    /// its neighbours' links to it close at their read timeouts
+    /// ([`READ_TIMEOUT`], [`Sim::timed_out`]). Each neighbour whose open
+    /// parent it was on some stream logs a `parent_lost`.
     fn depart(&mut self, i: usize) {
         if self.nodes[i].role.off() {
             return;
@@ -3045,17 +3087,102 @@ impl Sim {
         let n = &mut self.nodes[i];
         n.role = Role::Gone;
         n.left = Some(self.now);
-        if !abrupt {
-            for (j, l) in links {
-                let rpeer = self.links[l].rpeer;
-                let n = &mut self.nodes[j];
-                n.runner.remove_peer(rpeer);
-                n.links.remove(&i);
-                n.vtime.remove(&(l ^ 1));
-                self.touch(j);
+        if abrupt {
+            let at = self.now + READ_TIMEOUT;
+            for &(j, _) in &links {
+                if !self.nodes[j].role.off() {
+                    self.closing.insert((at, j, i));
+                }
+            }
+        } else {
+            for &(j, l) in &links {
+                self.unlink(j, i, l ^ 1);
+            }
+            for &(j, _) in &links {
+                self.relink(j);
             }
         }
         self.touch(i);
+    }
+
+    /// Node `j` drops its link `l` to node `i`, gone, as its transport
+    /// closes: its runner forgets the peer.
+    fn unlink(&mut self, j: usize, i: usize, l: usize) {
+        let rpeer = self.links[l].peer;
+        let n = &mut self.nodes[j];
+        n.runner.remove_peer(rpeer);
+        n.links.remove(&i);
+        n.vtime.remove(&l);
+        self.touch(j);
+    }
+
+    /// Node `j`'s link to viewer `i`, which left abruptly, reaches its read
+    /// timeout ([`READ_TIMEOUT`]): it closes, and `j` asks for another
+    /// neighbour ([`Sim::relink`]).
+    fn timed_out(&mut self, j: usize, i: usize) {
+        if self.nodes[j].role.off() {
+            return;
+        }
+        let Some(&l) = self.nodes[j].links.get(&i) else {
+            return;
+        };
+        self.unlink(j, i, l);
+        self.relink(j);
+    }
+
+    /// Viewer `j` lost a neighbour to a departure ([`Depart`]) and, left
+    /// with fewer than an arrival takes ([`Config::degree`] viewers there;
+    /// with [`Config::dial`], that many nodes), asks for another, as a
+    /// client keeping that many peers asks its tracker again once a link
+    /// closes; every link it has counts, those others made to it too. By
+    /// the rule an arrival's links follow ([`Sim::arrive`]), it links to one
+    /// random viewer there it has no link to, and to the seed while the
+    /// seed has under [`Config::seed_degree`] viewers there (with
+    /// [`Config::dial`], to one random node there it has no link to, the
+    /// seed among them); in a full mesh it has a link to every one already.
+    /// So a viewer that kept enough neighbours asks for none, and the mesh
+    /// that's left keeps the arrivals' degree rather than filling in. The
+    /// seed asks nobody: viewers link to it. The draw is the run's rng's.
+    fn relink(&mut self, j: usize) {
+        if j == 0 || self.nodes[j].role.off() {
+            return;
+        }
+        let here = |k: usize| !self.nodes[k].role.off();
+        let free = |k: usize| k != j && here(k) && !self.nodes[j].links.contains_key(&k);
+        let linked = |seed: bool| {
+            self.nodes[j]
+                .links
+                .keys()
+                .filter(|&&k| here(k) && (seed || k != 0))
+                .count()
+        };
+        let mut viewers: Vec<usize> = (1..self.nodes.len()).filter(|&k| free(k)).collect();
+        let mut to = Vec::new();
+        if self.cfg.dial > 0 {
+            if linked(true) >= self.cfg.dial {
+                return;
+            }
+            if free(0) {
+                viewers.push(0);
+            }
+        } else {
+            if self.cfg.degree > 0 && linked(false) >= self.cfg.degree {
+                return;
+            }
+            let seed_has = self.nodes[0].links.keys().filter(|&&k| here(k)).count();
+            if free(0) && (self.cfg.seed_degree == 0 || seed_has < self.cfg.seed_degree) {
+                to.push(0);
+            }
+        }
+        if !viewers.is_empty() {
+            let k = (self.rng.next_u64() % viewers.len() as u64) as usize;
+            to.push(viewers[k]);
+        }
+        self.relinks += to.len() as u64;
+        for &k in &to {
+            self.log("relink", j as i64, k as i64, 0, "");
+        }
+        self.link_to(j, to);
     }
 
     /// Whether the seed has written the whole stream.
@@ -3722,7 +3849,7 @@ impl Sim {
     /// | `bins` | bin of [`Sim::keep_tables`]' width | [`bin_cols`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), the seed's meter, uplink and copies at its end and what it sent in it, then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`) |
     /// | `node_bins` | node and bin, with `SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node`, `viewer` (its number here, -1 for none), what it did in the bin |
     /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink in bytes per second), `hostile`, `churned` (it left at least once), `clock_ms` (its clock's offset), `arrive_ms` (when it arrived, -1000 for the start; [`Arrivals`]), `depart_ms` (when it left for good, empty if it stayed; [`Depart`]) |
-    /// | `events` | timed event ([`TimedEvent`]) | `t_us`, `kind`, `node`, `peer` (-1 for none), `value`, `detail`: each viewer's `join` (at the start or its arrival, and on taking a place again), `first_read` and `caught_up` (its first chunk read within [`CAUGHT_UP`] of its publishing; `value` each one's ms from the join), churn's `leave`, a viewer's `depart` (`detail` graceful or abrupt), `parent_lost` (`node` a viewer whose open parent `peer` departed, `value` the streams it was the parent of, `detail` the departure's), the seed's steps (`uplink` in bytes per second, `latency` in ms, `reconnect`) and an `incident` (`detail` dies or slows, `value` the new uplink) |
+    /// | `events` | timed event ([`TimedEvent`]) | `t_us`, `kind`, `node`, `peer` (-1 for none), `value`, `detail`: each viewer's `join` (at the start or its arrival, and on taking a place again), `first_read` and `caught_up` (its first chunk read within [`CAUGHT_UP`] of its publishing; `value` each one's ms from the join), churn's `leave`, a viewer's `depart` (`detail` graceful or abrupt), `parent_lost` (`node` a viewer whose open parent `peer` departed, `value` the streams it was the parent of, `detail` the departure's), `relink` (`node` a viewer that lost a neighbour to a departure linking to `peer`, [`Sim::relink`]), the seed's steps (`uplink` in bytes per second, `latency` in ms, `reconnect`) and an `incident` (`detail` dies or slows, `value` the new uplink) |
     /// | `forecast` | sample of a node's forecast log ([`Runner::set_forecasts`]), with `SIM_FORECAST=1` | `t_ms`, `node`, `viewer`, `peer` (nodes), `peer_honest` (the seed, or an honest viewer at the end: a greedy one's HAVEs can claim what it never held), `stream`, `seq` (the chunk), `sample_ms`, `mean_ms`, `horizon_ms` (-1 before the estimate's first sample), `samples`, `fresh`, `lazy`, `first_sight`, `run` ([`LagForecast`]), `seen_ms` (our first sight of the chunk) and `held_ms` (when the peer first held it: its first data from an honest node, the seed's publishing; -1 if never, or not in the incarnation that announced it), `channel_open_ms` (when our channel with the peer opened), `live` (it was held after both nodes took their places and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
     ///
     /// `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
@@ -7771,7 +7898,8 @@ fn sim_departures_leave_the_rest_watching() {
             assert_eq!(n.pos, r.total, "abrupt {abrupt}: node {i} incomplete");
             let p = n.runner.push_stats(n.swarm).unwrap();
             for &g in &gone {
-                // Gracefully, its link closed; abruptly it stays, silent.
+                // Gracefully, its link closed; abruptly it stays, silent,
+                // short of its read timeout.
                 let link = n.links.get(&g);
                 assert!(abrupt || link.is_none(), "node {i} kept its link to {g}");
                 let key = link.map(|&l| sim.links[l].peer);
@@ -7816,8 +7944,97 @@ fn sim_departures_leave_the_rest_watching() {
             rec.recover < Duration::from_secs(if abrupt { 8 } else { 5 }),
             "abrupt {abrupt}: {rec:?}"
         );
+        // Gracefully, the viewers that lost a neighbour asked for another
+        // at once; abruptly, their links wait out the read timeout, past
+        // the stream's end.
+        assert_eq!(sim.relinks > 0, !abrupt, "abrupt {abrupt}");
+        assert_eq!(sim.closing.is_empty(), !abrupt, "abrupt {abrupt}");
     }
     assert_ne!(traces[0], traces[1]);
+}
+
+#[test]
+fn sim_departures_relink_as_a_tracker_answers() {
+    // 24 honest viewers on 3 links each trickle in over the stream's first
+    // 15 s, and 60 % of them leave within 2 s from 16 s in. Each viewer
+    // whose link to one that left closes asks for another neighbour: at
+    // the departure gracefully, at its read timeout abruptly, linking to
+    // a viewer there it had no link to (and the seed, while it has room).
+    // Every stayer ends linked only to nodes there. Gracefully, each reads
+    // every chunk. Abruptly, the stream stops reaching stayers whose links
+    // toward the seed went silent until those links close and the viewers
+    // asking again link to the seed (it has room by then); each stayer
+    // reads again once they do, some too far behind by then to read every
+    // chunk by the stream's end. (Without the timeouts, 8 of the 10 stall
+    // from the departures to the run's end.)
+    for abrupt in [false, true] {
+        let mut cfg = audience_config(24, 24, 45, Arrivals::Trickle(None));
+        cfg.greedy = Greedy::Nodes(vec![]);
+        cfg.depart = Some(Depart {
+            share: 0.6,
+            at: Duration::from_secs(16),
+            window: Duration::from_secs(2),
+            abrupt,
+        });
+        let mut sim = Sim::new(cfg);
+        sim.keep_tables(Duration::from_millis(1000), false, false);
+        let r = sim.run();
+        let a = match abrupt {
+            false => check_arrivals(&sim, &r),
+            true => sim.audience_report(),
+        };
+        let events = sim.timeline.as_ref().unwrap();
+        let departs: BTreeMap<i64, Time> = events
+            .iter()
+            .filter(|e| e.kind == "depart")
+            .map(|e| (e.node, e.at))
+            .collect();
+        let relinks: Vec<&TimedEvent> = events.iter().filter(|e| e.kind == "relink").collect();
+        assert_eq!(relinks.len() as u64, sim.relinks, "abrupt {abrupt}");
+        assert!(!relinks.is_empty(), "abrupt {abrupt}");
+        let there = |i: i64, at: Time| {
+            let n = &sim.nodes[i as usize];
+            n.arrival <= at && n.left.is_none_or(|t| t > at)
+        };
+        let delay = if abrupt { READ_TIMEOUT } else { Duration::ZERO };
+        for e in &relinks {
+            assert!(
+                there(e.node, e.at) && there(e.peer, e.at),
+                "abrupt {abrupt}: {} to {} at {:?}",
+                e.node,
+                e.peer,
+                e.at - stream_start()
+            );
+            assert!(
+                departs.values().any(|&t| t + delay == e.at),
+                "abrupt {abrupt}: a relink at {:?}, none due",
+                e.at - stream_start()
+            );
+        }
+        assert!(sim.closing.is_empty(), "abrupt {abrupt}");
+        let closed = departs.values().max().copied().unwrap() + delay;
+        for (i, n) in sim.nodes.iter().enumerate().skip(1) {
+            if n.role != Role::Peer {
+                continue;
+            }
+            assert!(
+                !n.links.is_empty() && n.links.keys().all(|&j| !sim.nodes[j].role.off()),
+                "abrupt {abrupt}: node {i} links {:?}",
+                n.links.keys().collect::<Vec<_>>()
+            );
+            match abrupt {
+                false => assert_eq!(n.pos, r.total, "node {i} incomplete"),
+                // Reading again once the links closed.
+                true => assert!(
+                    n.lags.last().is_some_and(|&(t, _)| t > closed),
+                    "node {i} read last at {:?}",
+                    n.lags.last().map(|&(t, _)| t - stream_start())
+                ),
+            }
+        }
+        let rec = a.recovery.unwrap();
+        assert_eq!(rec.stranded, 0, "abrupt {abrupt}");
+    }
 }
 
 #[test]
@@ -9730,10 +9947,12 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
 /// departure) and their streams it was the parent of; and with departures
 /// the recovery from them ([`Recovery`]): the viewers measured
 /// (`depart_stayed`) and those left without a neighbour
-/// (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their
-/// per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`)
-/// and the time back under [`CAUGHT_UP`] (`depart_recover_ms`;
-/// `depart_recover_censored`, still over at the stream's end).
+/// at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`),
+/// and by their per-second lag p90 its excess summed
+/// (`depart_excess_lag_area_ms_s`) and the time back under [`CAUGHT_UP`]
+/// (`depart_recover_ms`; `depart_recover_censored`, still over at the
+/// stream's end), and the links viewers made asking again for neighbours
+/// that left (`relinks`, [`Sim::relink`]).
 fn audience_cols(row: &mut JsonRow, sim: &Sim) {
     let a = sim.audience_report();
     row.str("arrivals", &sim.cfg.arrivals.to_string());
@@ -9761,7 +9980,8 @@ fn audience_cols(row: &mut JsonRow, sim: &Sim) {
             .int("depart_lag_peak_ms", ms(r.peak) as u64)
             .int("depart_excess_lag_area_ms_s", r.excess_ms_s as u64)
             .int("depart_recover_ms", ms(r.recover) as u64)
-            .int("depart_recover_censored", u64::from(r.censored));
+            .int("depart_recover_censored", u64::from(r.censored))
+            .int("relinks", sim.relinks);
     }
 }
 
