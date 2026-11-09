@@ -67,6 +67,8 @@ and the paired effect over seeds: the geometric mean ratio of B to A for
 rates and times, the mean difference for shares, with a 95 % t-interval. A metric moved when the interval excludes no change and the
 effect passes its tie band; it is then marked better (+) or worse (-) by
 the metric's direction, or changed (~) where no direction is better.
+Wall time and memory move with whatever else loads the machine: they are
+marked h when they move and left out of the totals.
 Last, how many runs give
 the same trace as A's at the same cell and seed, and the same reads where
 both rows carry their digest (`reads_hash`: the trace covers what the nodes
@@ -473,6 +475,8 @@ def per_useful(*fields):
     return get
 
 
+HOST_METRICS = ("rss_mb", "wall_s")
+
 METRICS = [
     # A row with hostile viewers scores its honest ones'.
     ("lag_p50_ms", lambda r: r.get("lag_p50_ms_honest", r.get("lag_p50_ms")), LOWER, "ratio", 0.05),
@@ -552,6 +556,8 @@ METRICS = [
     ("defector_gain", lambda r: r["lag_p99_ms_hostile"] / r["lag_p99_ms_honest"]
      if r.get("lag_p99_ms_hostile") and r.get("lag_p99_ms_honest") else None, HIGHER, "ratio", 0.05),
     ("exch_rejected", lambda r: r.get("exch_rejected"), None, "diff", 1),
+    # What the machine running a job sets as much as the change: shown,
+    # marked h, and kept out of the scorecard's totals (HOST_METRICS).
     ("rss_mb", lambda r: r.get("_rss_mb"), LOWER, "diff", 100),
     ("wall_s", lambda r: r.get("_wall_s"), LOWER, "ratio", 0.20),
 ]
@@ -856,7 +862,10 @@ def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False, traces=Tr
                 continue
             e = effect(kind, pairs)
             m = mark(better, kind, tie, e)
-            totals[m] += 1
+            if name in HOST_METRICS:
+                m = " " if m == " " else "h"
+            else:
+                totals[m] += 1
             key = name in ("lag_p50_ms", "lag_p99_ms", "unhealthy", "delivery")
             if m == " " and not key and not show_all:
                 continue
