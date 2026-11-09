@@ -413,6 +413,25 @@ class Queries(unittest.TestCase):
             self.assertEqual(got[0]["n"], n, src)
         self.assertEqual({r["host"] for r in self.sql("SELECT host FROM viewers", [S])}, {3, 5})
 
+    def test_aligned_anchors_on_the_departures(self):
+        # kp1's viewers leave at 2.5 s (node 1, gracefully) and 3.5 s (node
+        # 2, abruptly): a run's first departure opens the window, each
+        # node's its own, and --detail picks a kind.
+        departs = [("kp1", 2500, "depart", 1, "graceful"), ("kp1", 3500, "depart", 2, "abrupt")]
+        self.put(P, "events", ["t_us", "kind", "node", "peer", "value", "detail"],
+                 [(k, t * 1000, kind, n, -1, 0, DETAILS.get((k, t, kind), ""))
+                  for k in ("kp1", "kp2") for t, kind, n in EVENTS[k]]
+                 + [(k, t * 1000, kind, n, -1, 0, d) for k, t, kind, n, d in departs])
+        # the 1 s after 2.5 s: viewer 0's ten reads and viewer 1's first
+        # five; after 3.5 s, ten each
+        self.assertEqual(self.aligned("depart", "reads", "run", before=0, after=1), {("c", 0): (1, 15.0, 15.0, 15.0)})
+        self.assertEqual(self.aligned("depart", "reads", "run", nth=0, before=0, after=1),
+                         {("c", 0): (2, 15.5, 17.5, 19.5)})
+        self.assertEqual(self.aligned("depart", "lag_p50", "node", before=0, after=1),
+                         {("c", 0): (2, 120.0, 200.0, 280.0)})
+        self.assertEqual(self.aligned("depart", "lag_p50", "run", before=0, after=1, detail="abrupt"),
+                         {("c", 0): (1, 200.0, 200.0, 200.0)})
+
     def test_aligned_takes_every_occurrence_and_picks_events(self):
         # cell c's first reads, a window each: kp1's at 1 s (its first
         # viewer's ten reads in the second after) and at 3 s (both viewers'
@@ -690,6 +709,139 @@ class SamplesPull(unittest.TestCase):
         self.assertEqual(self.ledger()[-1]["down"],
                          {"internet": sum(self.size(i, "reads") for i in ("i-1", "i-2", "i-3"))
                           + self.size("i-2", "forecast")})
+
+
+def audience(secs, stays, sim="ppspp", tree_secs=3, stay_info=True):
+    """A series of `secs` seconds whose viewers come and go by `stays`, each
+    (arrive_s, depart_s): arrive_s None for one there from the start,
+    depart_s None for one that stays. A viewer there reads its 10 chunks a
+    second at 200 ms (300 ms in its first `tree_secs`, where its pushes
+    don't come yet: its tree forming), as `sim` encodes a second it isn't
+    there: the ppspp sim's -1 lag and 0 frames, strims-sim's -1 frames
+    (and lag). With `stay_info`, the viewers table's arrive_ms and
+    depart_ms (-1000 for the start, None for no departure)."""
+    s = {"rate": 10 * 4096, "chunk": 4096, "frame": 4096, "secs": secs, "seed_up": [[0, 10 ** 9]],
+         "viewer_up": 10 ** 9, "lag": [], "frames": [], "present": [0] * secs, "hits": [0] * secs}
+    for a, d in stays:
+        lag, frames = [], []
+        for k in range(secs):
+            there = (a is None or a <= k + 1) and (d is None or k < d)
+            settled = there and (a is None and k >= tree_secs or a is not None and k >= a + tree_secs)
+            if not there or a is not None and k < a:
+                # Not there, or there only from part-way through its second.
+                lag.append(-1)
+                frames.append(-1 if sim == "strims-sim" and not there else 0)
+                continue
+            lag.append(200 if settled else 300)
+            frames.append(10)
+            # ppspp counts a viewer present at both of a second's edges.
+            if (a is None or a <= k) and (d is None or d >= k + 1):
+                s["present"][k] += 1
+                s["hits"][k] += 10 if settled else 0
+        s["lag"].append(lag)
+        s["frames"].append(frames)
+    if stay_info:
+        s["arrive_ms"] = [-1000 if a is None else a * 1000 for a, _ in stays]
+        s["depart_ms"] = [None if d is None else d * 1000 for _, d in stays]
+    return s
+
+
+class PerViewerVerdict(unittest.TestCase):
+    """analyze.py's verdict counts each viewer only while it is there and
+    past its own startup (analyze.presence)."""
+
+    a = simdb.analyze()
+
+    def verdict(self, s):
+        v = self.a.verdict(s)
+        return v, self.a.collapsed(v)
+
+    def test_t0_reads_as_without_stays(self):
+        # Viewers there from the start, as every t0 run's are: the stays
+        # change nothing, and the run's startup is STARTUP_SECS.
+        stays = [(None, None)] * 12
+        for sim in ("ppspp", "strims-sim"):
+            with_stays = self.a.verdict(audience(60, stays, sim))
+            without = self.a.verdict(audience(60, stays, sim, stay_info=False))
+            self.assertEqual(with_stays, without, sim)
+            self.assertEqual(with_stays["startup"], self.a.STARTUP_SECS)
+            # Its first seconds are judged as ever: trees forming.
+            self.assertFalse(all(with_stays["healthy"]))
+
+    def test_trickle_reads_healthy_throughout(self):
+        # 20 viewers arrive a second apart from 0.5 s: none counts before
+        # its first frame plus the grace, so trees forming around arrivals
+        # read as nothing, where counting them from their arrival reads the
+        # first seconds' trees as failing.
+        stays = [(k + 0.5, None) for k in range(20)]
+        for sim in ("ppspp", "strims-sim"):
+            v, collapsed = self.verdict(audience(60, stays, sim))
+            self.assertTrue(all(v["healthy"]), sim)
+            self.assertFalse(collapsed, sim)
+            self.assertEqual(v["startup"], 0, sim)
+            first = [since for _, since, _ in self.a.presence(audience(60, stays, sim))]
+            self.assertEqual(first[:2], [1 + self.a.JOIN_GRACE_SECS, 2 + self.a.JOIN_GRACE_SECS], sim)
+        v, _ = self.verdict(audience(60, stays, "ppspp", stay_info=False))
+        self.assertFalse(all(v["healthy"]))
+        # strims-sim's -1 frames carry the arrivals without the table.
+        self.assertEqual(self.a.verdict(audience(60, stays, "strims-sim", stay_info=False))["healthy"],
+                         [True] * 60)
+
+    def test_a_burst_of_joins_into_a_warm_swarm_reads_healthy(self):
+        # 5 viewers there from the start, 30 more within 5 s at 30 s: the
+        # burst's trees forming would read as the warm swarm's trees
+        # failing.
+        stays = [(None, None)] * 5 + [(30 + k / 6, None) for k in range(30)]
+        v, collapsed = self.verdict(audience(70, stays))
+        self.assertTrue(all(v["healthy"][self.a.STARTUP_SECS:]))
+        self.assertFalse(collapsed)
+        old, _ = self.verdict(audience(70, stays, stay_info=False))
+        self.assertFalse(all(old["healthy"][self.a.STARTUP_SECS:]))
+
+    def test_a_mass_departure_is_no_collapse_by_construction(self):
+        # 70 % of 20 viewers leave between 30 and 37 s and the rest keep
+        # reading: the leavers' seconds after they left don't count, where
+        # reading them as falling behind live collapses the run.
+        stays = [(None, 30 + k / 2) for k in range(14)] + [(None, None)] * 6
+        for sim in ("ppspp", "strims-sim"):
+            v, collapsed = self.verdict(audience(60, stays, sim))
+            self.assertTrue(all(v["healthy"][self.a.STARTUP_SECS:]), sim)
+            self.assertFalse(collapsed, sim)
+        _, collapsed = self.verdict(audience(60, stays, stay_info=False))
+        self.assertTrue(collapsed)
+        # strims-sim's -1 frames carry the departures without the table.
+        _, collapsed = self.verdict(audience(60, stays, "strims-sim", stay_info=False))
+        self.assertFalse(collapsed)
+        # A stayer left behind still counts: one that stops reading at 40 s
+        # falls behind live, and the swarm's lag p90 with it.
+        s = audience(60, stays[:14] + [(None, None)] * 2)
+        for k in range(40, 60):
+            s["lag"][-1][k] = s["lag"][-2][k] = -1
+            s["frames"][-1][k] = s["frames"][-2][k] = 0
+        _, collapsed = self.verdict(s)
+        self.assertTrue(collapsed)
+
+    def test_present_join_and_leave_count_every_viewer(self):
+        # The events read the viewers present as the series counts them,
+        # arrivals in their grace and all.
+        stays = [(None, None)] * 4 + [(10.5, None), (11.5, 40)]
+        s = audience(60, stays)
+        got = {(t, kind, x) for t, kind, x in self.a.events(s, self.a.verdict(s)) if kind.startswith("present")}
+        self.assertEqual(got, {(11, "present_join", 1), (12, "present_join", 1), (40, "present_leave", 1)})
+
+    def test_series_of_lays_each_viewer_out_by_second(self):
+        # strims-sim's viewer_seconds has no row for a second its viewer
+        # wasn't there in; the viewers table carries the stays.
+        secs = [{"k": "k", "src": "s", "sec": k, "present": 1} for k in range(4)]
+        vs = [{"viewer": 0, "sec": [0, 1, 2, 3], "lag": [5, 5, 5, 5], "frames": [1, 1, 1, 1]},
+              {"viewer": 1, "sec": [2, 3], "lag": [7, 7], "frames": [2, 2]}]
+        stays = [{"viewer": 0, "arrive_ms": -3000, "depart_ms": None},
+                 {"viewer": 1, "arrive_ms": 1500, "depart_ms": None}]
+        s = simdb.series_of({"secs": 4}, secs, vs, stays)
+        self.assertEqual(s["frames"], [[1, 1, 1, 1], [-1, -1, 2, 2]])
+        self.assertEqual(s["lag"], [[5, 5, 5, 5], [-1, -1, 7, 7]])
+        self.assertEqual((s["arrive_ms"], s["depart_ms"]), ([-3000, 1500], [None, None]))
+        self.assertNotIn("arrive_ms", simdb.series_of({"secs": 4}, secs, vs))
 
 
 if __name__ == "__main__":

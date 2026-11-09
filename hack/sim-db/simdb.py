@@ -23,7 +23,8 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
 `Sim::write_tables`):
 
   seconds         the run second by second, as the row's `series` has it
-  viewer_seconds  each viewer's p99 lag and reads each second
+  viewer_seconds  each viewer's p99 lag and reads each second (strims-sim
+                  writes none for a second its viewer wasn't there in)
   reads           every read: viewer, t_ms (true time from the stream's
                   start), seq, lag_ms
   bins            finer bins (SIM_BIN_MS / STRIMS_SIM_BIN_MS wide, 100 ms
@@ -44,7 +45,9 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
   node_bins       with SIM_BIN_NODES=1 / STRIMS_SIM_BIN_NODES=1, each
                   node's bins
   viewers         the viewers, numbered as the others number them, with
-                  hostile and churned
+                  hostile and churned, and when each arrived and left for
+                  good (arrive_ms, negative for one there from the start,
+                  and depart_ms), which the verdicts' series carry
   events          the sims' timed events: t_us, kind, node, peer, value,
                   detail
   forecast        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 (large: a
@@ -118,9 +121,13 @@ job's): the one holding the most of them, the later on a tie.
            lag_q, hit_share, delivery), a `seconds` column, or a `bins` one
            (summed over the bin). The events are the derived ones and the
            sims' own (`events`: faults, uplink steps, competing uploads,
-           joins, first reads or frames, churn leaves, seed steps and
-           copies; `--node` picks one node's), a kind the selection
-           lacks refused with the kinds it has. With `--per node` each
+           arrivals, joins, first reads or frames, churn leaves, seed steps
+           and copies, departures and the losses and re-links after them;
+           `--node` picks one node's), a kind the selection lacks refused
+           with the kinds it has. `aligned depart` anchors a run on its
+           first departure, which opens the departures' window
+           (`SIM_DEPART`, `STRIMS_SIM_DEPART`), `--nth 0` on each one, and
+           `--per node` each viewer that left on its own. With `--per node` each
            node's own series is aligned on its own `--nth` occurrence of
            a sim's per-node event (a viewer's join, first read or frame,
            churn leave), the bands over every run's nodes (n counts
@@ -685,10 +692,12 @@ def plist(paths):
     return "[" + ", ".join(q(p) for p in paths) + "]"
 
 
-def series_of(meta, seconds, viewer_seconds):
+def series_of(meta, seconds, viewer_seconds, stays=None):
     """A run's series as its row's `series` has it, from its tables: the
     meta's fields, each `seconds` column (a list by second), and per viewer
-    `lag` and `frames`."""
+    `lag` and `frames`; with `stays` (the viewers table's rows: viewer,
+    arrive_ms, depart_ms), per viewer `arrive_ms` and `depart_ms`, the
+    stays analyze.presence reads (None for a departure that didn't come)."""
     if not seconds:
         return None
     # A row's series leaves `hostile` out without any.
@@ -701,8 +710,22 @@ def series_of(meta, seconds, viewer_seconds):
         if any(x is not None for x in v):
             s[c] = v
     by = sorted(viewer_seconds, key=lambda r: r["viewer"])
-    s["lag"] = [r["lag"] for r in by]
-    s["frames"] = [r["frames"] for r in by]
+    # strims-sim writes no viewer_seconds row for a second its viewer
+    # wasn't there in: the series' -1 frames (and lag) there.
+    n = len(seconds)
+    def by_sec(r, f):
+        out = [-1] * n
+        for k, x in zip(r.get("sec") or range(len(r[f])), r[f]):
+            if 0 <= k < n:
+                out[k] = x
+        return out
+    s["lag"] = [by_sec(r, "lag") for r in by]
+    s["frames"] = [by_sec(r, "frames") for r in by]
+    if stays:
+        at = {r["viewer"]: r for r in stays}
+        if all(r["viewer"] in at for r in by):
+            s["arrive_ms"] = [at[r["viewer"]]["arrive_ms"] for r in by]
+            s["depart_ms"] = [at[r["viewer"]]["depart_ms"] for r in by]
     return s
 
 
@@ -728,11 +751,23 @@ def load_series(pairs):
             secs[(r["src"], r["k"])].append(r)
     vs = collections.defaultdict(list)
     if files(srcs, "viewer_seconds"):
-        for r in duck(f"SELECT src, k, viewer, list(lag_ms ORDER BY sec) AS lag, list(frames ORDER BY sec) AS frames "
+        for r in duck(f"SELECT src, k, viewer, list(sec ORDER BY sec) AS sec, list(lag_ms ORDER BY sec) AS lag, "
+                      f"list(frames ORDER BY sec) AS frames "
                       f"FROM read_parquet({plist(files(srcs, 'viewer_seconds'))}, union_by_name=true) "
                       f"SEMI JOIN {want} USING (src, k) GROUP BY ALL;"):
             vs[(r["src"], r["k"])].append(r)
-    return {p: (m, series_of(m, secs.get(p, []), vs.get(p, []))) for p, m in meta.items()}
+    # The viewers' stays, where the tables have them (both sims' since
+    # their arrivals and departures).
+    stays = collections.defaultdict(list)
+    viewers = files(srcs, "viewers")
+    if viewers:
+        table = f"read_parquet({plist(viewers)}, union_by_name=true)"
+        cols = {r["column_name"] for r in duck(f"DESCRIBE SELECT * FROM {table};")}
+        if {"arrive_ms", "depart_ms"} <= cols:
+            for r in duck(f"SELECT src, k, viewer, arrive_ms, depart_ms FROM {table} "
+                          f"SEMI JOIN {want} USING (src, k);"):
+                stays[(r["src"], r["k"])].append(r)
+    return {p: (m, series_of(m, secs.get(p, []), vs.get(p, []), stays.get(p))) for p, m in meta.items()}
 
 
 def judge(s):

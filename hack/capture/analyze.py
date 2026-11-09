@@ -147,6 +147,16 @@ with or without the STRIMS_SIM_CAL_, STRIMS_SIM_ or SIM_ prefix.
 
 The verdicts, judged over the stream's seconds (not the run's tail):
 
+- Each viewer counts while it is there and past its own startup
+  (`presence`): one there from the start from the stream's start, one
+  that arrived later from its first frame plus JOIN_GRACE_SECS (its join
+  plus that if it never reads), and either to its departure. Outside its
+  span it is in no measure: neither the viewers present that trees count
+  against, nor the lag, nor delivery. A series knows a viewer's stay by
+  its `arrive_ms` and `depart_ms` (the viewers table's, from the stream's
+  start: hack/sim-db's series carry them), else by strims-sim's -1 frames
+  in the seconds it wasn't there; the ppspp sim's series alone (a viewer
+  absent reads nothing) can't tell, and reads as one there throughout.
 - A viewer's lag in a second is the p99 of the frames it read then; in a
   second it reads none, its lag from the last second grows by a second (it
   falls behind live). The swarm's lag is the LAG_QUANTILE of its viewers'.
@@ -176,7 +186,10 @@ The verdicts, judged over the stream's seconds (not the run's tail):
   carry every viewer's copy: a collapse no tree could avoid isn't the
   protocol's. `map` marks cells feasible only at full uplink as "step".
 - A run collapsed (sim-suite's scorecard, `collapsed`) when COLLAPSED_SECS
-  seconds in a row are unhealthy and they last past STARTUP_SECS.
+  seconds in a row are unhealthy and they last past its startup: the
+  first STARTUP_SECS when viewers were there from the start (their own
+  first seconds), none when every viewer arrived later (each arrival's
+  are out of the measures already).
 
 Over time, for hack/sim-db's tables and sim-suite's paired metrics:
 `phases` names each second (startup, after an uplink step down or up, or
@@ -521,6 +534,11 @@ ABSORB_SECS = 60
 # last past its startup (the real stack's trees take about 10 s to form).
 STARTUP_SECS = 15
 COLLAPSED_SECS = 8
+# A viewer that arrived after the start counts in the verdicts from its
+# first frame plus this: an arrival's own startup, as the sims' rows leave
+# its first 10 s out of its steady lag (the ppspp sim's SIM_WARM,
+# strims-sim's JOIN_WARM).
+JOIN_GRACE_SECS = 10
 # How long after an uplink step its seconds belong to it (`phases`), and
 # the window its onset and recovery are measured in (`run_metrics`) when
 # no later step ends it first.
@@ -853,28 +871,78 @@ def lags(s):
     return out
 
 
+def presence(s):
+    """Each viewer's stay, as the verdicts count it (see the module docs):
+    (join, since, until), the second it is first among the viewers present
+    (None for one there from the start), and the seconds k it counts in,
+    since <= k < until. One there from the start counts from 0, one that
+    arrived later from its first frame's second plus JOIN_GRACE_SECS (its
+    arrival's, if it never reads); either until its departure's second,
+    which it left part-way through."""
+    arrive, depart = s.get("arrive_ms") or [], s.get("depart_ms") or []
+    out = []
+    for i, frames in enumerate(s["frames"]):
+        a = arrive[i] if i < len(arrive) else None
+        d = depart[i] if i < len(depart) else None
+        # strims-sim's frames are -1 in the seconds a viewer wasn't there.
+        there = [k for k, f in enumerate(frames) if f >= 0]
+        if a is None and there and frames[0] < 0:
+            a = there[0] * 1000
+        if d is None and there and frames[-1] < 0:
+            d = there[-1] * 1000
+        until = len(frames) if d is None else max(0, int(d // 1000))
+        if a is None or a < 0:
+            out.append((None, 0, until))
+            continue
+        join = math.ceil(a / 1000)
+        first = next((k for k in range(int(a // 1000), len(frames)) if frames[k] > 0), int(a // 1000))
+        out.append((join, first + JOIN_GRACE_SECS, until))
+    return out
+
+
+def startup(s):
+    """The run's startup, the seconds a collapse must last past: STARTUP_SECS
+    when an honest viewer was there from the start, else none (each
+    arrival's own startup is out of the measures, `presence`)."""
+    hostile = set(s.get("hostile", []))
+    stays = [p for i, p in enumerate(presence(s)) if i not in hostile]
+    return STARTUP_SECS if not stays or any(join is None for join, _, _ in stays) else 0
+
+
 def measures(s):
     """The per-second measures the verdicts read, over the stream's seconds.
     A series whose stream varies in rate (a media run's) carries the chunks
     sent each second that `frames` counts (`written`), which on-time pushes
     count against, and is measured against those; older rows carry the
     chunks published (`chunks`), padding alone included. Delivery and lag
-    leave out the viewers a series marks hostile (`hostile`)."""
+    leave out the viewers a series marks hostile (`hostile`), and every
+    measure the seconds a viewer doesn't count in (`presence`): its hits
+    are the series' sum over the viewers present, so an arrival's before it
+    counts stay in it (the share then held to 1)."""
     n = min(s["secs"], len(s["present"]))
     per_s = s["rate"] / s["chunk"]
     chunks, written = s.get("chunks"), s.get("written")
     need = lambda k: chunks[k] if chunks else written[k] if written else per_s
-    share = [s["hits"][k] / (s["present"][k] * need(k)) if s["present"][k] and need(k) else None for k in range(n)]
+    hostile = set(s.get("hostile", []))
+    stays = presence(s)
+    # The honest arrivals present (`present` counts them) that don't count
+    # yet.
+    early = [sum(1 for i, (join, since, until) in enumerate(stays)
+                 if i not in hostile and join is not None and join <= k < min(since, until)) for k in range(n)]
+    share = []
+    for k in range(n):
+        present = s["present"][k] - early[k]
+        x = s["hits"][k] / (present * need(k)) if present > 0 and need(k) else None
+        share.append(min(x, 1.0) if x is not None and early[k] else x)
     smooth = []
     for k in range(n):
         w = [x for x in share[max(0, k - TREES_SMOOTH // 2): k + TREES_SMOOTH // 2 + 1] if x is not None]
         smooth.append(sum(w) / len(w) if w else None)
-    hostile = set(s.get("hostile", []))
-    viewers = [f for i, f in enumerate(s["frames"]) if i not in hostile]
-    firsts = [next((i for i, f in enumerate(frames) if f), None) for frames in viewers]
+    viewers = [(f, stays[i]) for i, f in enumerate(s["frames"]) if i not in hostile]
+    firsts = [next((i for i, f in enumerate(frames) if f > 0), None) for frames, _ in viewers]
 
     def window(frames, k):
-        got = sum(frames[k - DELIVERY_SECS + 1: k + 1])
+        got = sum(max(0, f) for f in frames[k - DELIVERY_SECS + 1: k + 1])
         if written:
             due = sum(written[k - DELIVERY_SECS + 1: k + 1])
             return got / due if due else None
@@ -883,12 +951,13 @@ def measures(s):
     deliv = []
     for k in range(n):
         d = [
-            x for frames, first in zip(viewers, firsts)
-            if first is not None and k >= first + DELIVERY_SECS - 1
+            x for (frames, (_, since, until)), first in zip(viewers, firsts)
+            if first is not None and k >= first + DELIVERY_SECS - 1 and since <= k < until
             for x in [window(frames, k)] if x is not None
         ]
         deliv.append(med(d))
-    vl = [v for i, v in enumerate(lags(s)) if i not in hostile]
+    vl = [[x if since <= k < until else None for k, x in enumerate(v)]
+          for i, (v, (_, since, until)) in enumerate(zip(lags(s), stays)) if i not in hostile]
     lag = [quantile([v[k] for v in vl if v[k] is not None], LAG_QUANTILE) for k in range(n)]
     return n, smooth, deliv, lag
 
@@ -946,6 +1015,8 @@ def verdict(s):
         "trees": trees, "delivery": delivery, "latency": latency, "recovered": recovered,
         "absorbing": absorbing, "feasible": feasible(s), "lag_p50": med([x for x in lag if x is not None]),
         "unhealthy": 1 - sum(healthy) / n if n else None,
+        # The seconds a collapse must last past (`startup`).
+        "startup": startup(s),
         "lag_max": max((x for x in lag if x is not None), default=None),
         "healthy": healthy,
         # Second by second, what the verdicts read and which tests failed.
@@ -954,13 +1025,19 @@ def verdict(s):
     }
 
 
+def run_startup(v):
+    """A verdict's startup (`startup`): STARTUP_SECS for one made without."""
+    return v.get("startup", STARTUP_SECS)
+
+
 def collapsed(v):
     """Whether a run collapsed, by its verdict `v`: COLLAPSED_SECS unhealthy
-    seconds in a row lasting past STARTUP_SECS."""
+    seconds in a row lasting past its startup (`startup`)."""
     run = 0
+    first = run_startup(v)
     for k, h in enumerate(v["healthy"]):
         run = 0 if h else run + 1
-        if run >= COLLAPSED_SECS and k >= STARTUP_SECS:
+        if run >= COLLAPSED_SECS and k >= first:
             return True
     return False
 
@@ -976,14 +1053,15 @@ def steps(s):
 
 
 def phases(s, v):
-    """Each second's phase: `startup` (the first STARTUP_SECS), `after_down`
-    or `after_up` (within STEP_SECS of the latest uplink step), else
-    `steady`."""
+    """Each second's phase: `startup` (the run's, `startup`: none when every
+    viewer arrived later), `after_down` or `after_up` (within STEP_SECS of
+    the latest uplink step), else `steady`."""
     out = []
     st = steps(s)
+    first = run_startup(v)
     for k in range(len(v["healthy"])):
         last = [(t, kind) for t, kind, _ in st if t <= k + 0.5 and k < t + STEP_SECS]
-        if k < STARTUP_SECS:
+        if k < first:
             out.append("startup")
         elif last:
             out.append("after_down" if last[-1][1] == "seed_down" else "after_up")
@@ -1021,11 +1099,12 @@ def episodes(v):
     out = []
     h = v["healthy"]
     a = 0
+    first = run_startup(v)
     for k in range(1, len(h) + 1):
         if k == len(h) or h[k] != h[a]:
             kind = "healthy" if h[a] else "unhealthy"
             out.append((kind, a, k))
-            if not h[a] and k - a >= COLLAPSED_SECS and k - 1 >= STARTUP_SECS:
+            if not h[a] and k - a >= COLLAPSED_SECS and k - 1 >= first:
                 out.append(("collapse", a, k))
             a = k
     return out
@@ -1047,7 +1126,7 @@ def run_metrics(s, v):
 
       collapses               collapse spells (`episodes`)
       flaps_per_min           changes between healthy and unhealthy seconds
-                              after STARTUP_SECS, a minute
+                              after the run's startup (`startup`), a minute
       healthy_dwell_p50_s     ... and p90: how long healthy spells last
       unhealthy_dwell_p50_s   ... and p90: unhealthy ones
       onset_after_drop_s      seconds from the first uplink step down to
@@ -1061,7 +1140,7 @@ def run_metrics(s, v):
                               seconds (ms x s); `excess_lag_peak_ms` its
                               largest
       osc_amp_ms              half the p10-p90 spread of the lag after
-                              STARTUP_SECS; `osc_period_s` and `osc_acf`
+                              the startup; `osc_period_s` and `osc_acf`
                               the autocorrelation's highest peak past
                               OSC_ACF at a period of OSC_MIN_PERIOD or
                               more, when one is"""
@@ -1069,7 +1148,8 @@ def run_metrics(s, v):
     n = len(h)
     eps = episodes(v)
     spells = lambda kind: [b - a for k, a, b in eps if k == kind]
-    after = h[STARTUP_SECS:]
+    first = run_startup(v)
+    after = h[first:]
     flaps = sum(1 for a, b in zip(after, after[1:]) if a != b)
     out = {
         "collapses": len(spells("collapse")),
@@ -1100,7 +1180,7 @@ def run_metrics(s, v):
     excess = [max(0, x - DELIVERY_TARGET_MS) for x in lag if x is not None]
     out["excess_lag_area_ms_s"] = sum(excess) if excess else None
     out["excess_lag_peak_ms"] = max(excess) if excess else None
-    tail = [x for x in lag[STARTUP_SECS:] if x is not None]
+    tail = [x for x in lag[first:] if x is not None]
     out["osc_amp_ms"] = out["osc_period_s"] = out["osc_acf"] = None
     if len(tail) >= 4 * OSC_MIN_PERIOD:
         out["osc_amp_ms"] = (quantile(tail, 0.9) - quantile(tail, 0.1)) / 2
@@ -1121,12 +1201,13 @@ def verdict_version():
     a derived table made under another is stale."""
     import inspect
 
-    parts = [inspect.getsource(f) for f in (lags, measures, slope, runs_of, quantile, med, verdict, feasible,
-                                            collapsed, steps, phases, events, episodes, acf, run_metrics)]
+    parts = [inspect.getsource(f) for f in (lags, presence, startup, measures, slope, runs_of, quantile, med,
+                                            verdict, feasible, run_startup, collapsed, steps, phases, events,
+                                            episodes, acf, run_metrics)]
     parts.append(repr([TREES_SHARE, TREES_SMOOTH, TREES_SECS, DELIVERY_SHARE, DELIVERY_SECS, LAG_QUANTILE,
                        LAG_HIGH_MS, LAG_HIGH_SECS, LAG_SLOPE, LAG_SLOPE_SECS, LAG_SLOPE_FLOOR_MS, RECOVER_SECS,
-                       ABSORB_SECS, STARTUP_SECS, COLLAPSED_SECS, STEP_SECS, OSC_ACF, OSC_MIN_PERIOD,
-                       DELIVERY_TARGET_MS, OVERHEAD]))
+                       ABSORB_SECS, STARTUP_SECS, COLLAPSED_SECS, JOIN_GRACE_SECS, STEP_SECS, OSC_ACF,
+                       OSC_MIN_PERIOD, DELIVERY_TARGET_MS, OVERHEAD]))
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
 
 
