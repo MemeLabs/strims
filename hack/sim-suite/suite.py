@@ -19,6 +19,7 @@ working tree's sims against the base's, cell by cell, paired by seed.
                                [--farm-args ARGS] [--no-run] [--env KEY=VALUE ...]
   hack/sim-suite/suite.py score RUN:ARM RUN:ARM [--tier ...] [--only CELL,...]
                                 [--knob SIM_EXP,STRIMS_SIM_EXP] [--all]
+  hack/sim-suite/suite.py list [--tier ...] [--only CELL,...]
 
 `run` builds the ppspp sim and strims-sim's scenarios from the working
 tree (the checkout this script is in, changes and all) and from `--base`
@@ -58,10 +59,28 @@ Tiers:
           channels, three hosts in four on Chromium's SCTP and one on
           Firefox's. Its cells keep robust's names, so `score` pairs a
           browsers run with a robust one.
+  startup today's cells with every viewer starting with the seed, as the
+          cells the audience default (below) moved ran before: the
+          near-pathological start, as an explicit stress test, under the
+          names and settings those cells had, so their rows still pair.
+
+The audience: a cell's viewers trickle in (`SIM_ARRIVALS`,
+`STRIMS_SIM_ARRIVALS` = trickle: all of them within the stream's first
+third, at random) where its scripted events come after they're in
+(TRICKLE), as a broadcast's audience does; the collapse reproducers, the
+fixed-fault cells and churn keep every viewer at the start (t0), and the
+sims' tests keep it by default (the testbed twin, CI and the sweeps). The
+audience cells (`audience_cells`, in peers, robust, browsers and net) add
+a scheduled event's burst into a warm swarm, an event's end (60 % leaving
+within 10 s, gracefully and abruptly, as separate cells) and the two
+together; strims-sim's run on stars and organic networks, where those
+leaving can't strand the rest. The verdicts count each viewer from its own
+join (analyze.py), so trickle cells need the stream to run past the last
+arrival and its grace: the ppspp sim's 30 s cells run 45 s.
 
 The scorecard, per cell, shows the seeds whose runs collapsed (8 unhealthy
-seconds in a row, lasting past the first 15) under each, with a Fisher
-exact test,
+seconds in a row, lasting past the first 15 when viewers start with the
+seed) under each, with a Fisher exact test,
 then each metric's base and working-tree medians
 and the paired effect over seeds: the geometric mean ratio of B to A for
 rates and times, the mean difference for shares, with a 95 % t-interval. A metric moved when the interval excludes no change and the
@@ -89,9 +108,10 @@ the base on the same seeds, by its collapsed runs over all cells, then by
 the geometric mean over cells of its lag p99 ratio; it is out if a cell's
 delivery falls significantly, a cell collapses more often (Fisher p under
 0.05: a sum over cells would let one cell's losses buy another's gains),
-a cell where the base never collapsed gets a lag p99, startup p99 or weak
-viewers' lag p99 ratio whose interval lies past 1.10, or defecting comes
-to pay more (`defector_gain`). Rounds print their tables, round 0
+a cell where the base never collapsed gets a lag p99, weak viewers' lag
+p99, join p90 or caught-up p90 ratio (the viewers' own joins, with
+arrivals) whose interval lies past 1.10, or defecting comes to pay more
+(`defector_gain`). Rounds print their tables, round 0
 each flag's main effects, and the confirmation each cell's collapses and
 lag p99 ratio.
 
@@ -138,7 +158,12 @@ in farm-runs/pending/ until then (`--no-run`): the first `farm` or `score`
 after the farm starts it moves it into place, and one whose run hasn't
 started within a week is dropped. A run without one is read as the cells
 of `--tier` and `--only` in the order `farm` wrote them, which must be the
-run's.
+run's. A farm canary runs a ppspp cell's stream for 2 s and a strims-sim
+cell's for 5 s, so it starts every viewer with the seed and lets none
+leave when the cell's audience wouldn't fit in it (an event, departures).
+
+`list` prints a tier's cells: each one's sim, test, audience (arrivals
+and departures), seeds and settings.
 """
 
 import argparse
@@ -197,13 +222,103 @@ CHEAP = 12
 # seeds only a huge effect shows.
 TIPPING = 8
 
+# Each sim's audience knobs (see the module docs): when the viewers arrive,
+# and who leaves for good.
+ARRIVALS = {PPSPP: "SIM_ARRIVALS", SIM: "STRIMS_SIM_ARRIVALS"}
+DEPART = {PPSPP: "SIM_DEPART", SIM: "STRIMS_SIM_DEPART"}
+# The cells whose viewers trickle in (the audience default), by sim and
+# name, and how: every scripted event of theirs comes after the last
+# arrival and its grace. The rest keep every viewer at the start: the
+# collapse reproducers (lock-in, star-31-5, the halvings, thin, the slow
+# viewer), the fixed-fault cells (seed-starved, latency-step, seed-restart,
+# viewer-churn, capped-seed, the capped hybrid) and churn. The 30 s ppspp
+# cells stream for 45 s (TRICKLE_SECS) so their last arrivals count for
+# 20 s; the uplink step's arrivals come at a second each, done well before
+# it, as its stream's first third would not be.
+TRICKLE = {
+    **{(PPSPP, n): "trickle" for n in ("large-2mbit", "large-4mbit", "overload", "grabbers", "no-greedy",
+                                        "wan-global", "wan-mobile", "sparse-lossy", "residential")},
+    **{(SIM, n): "trickle" for n in ("star-15", "residential-uncapped", "residential-varying", "two-streams",
+                                      "mobile-uncapped")},
+    **{(SIM, f"star-{v}-{m}"): "trickle" for v in (3, 7, 15, 31) for m in (5, 10, 20) if (v, m) != (31, 5)},
+    **{(SIM, n): "trickle" for n in ("mesh6-31-10", "mesh6-15-5", "jitter-15-10", "limited-15-10",
+                                      "wan-residential-seed-adaptive", "wan-super-peer-adaptive",
+                                      "wan-residential-seed", "wan-super-peer", "wan-global-audience",
+                                      "wan-mobile-viewers", "wan-residential-two-streams",
+                                      "wan-residential-seed-varying", "wan-super-peer-varying")},
+    (SIM, "wan-residential-seed-step"): "trickle:1",
+}
+TRICKLE_SECS = {"30": "45"}
+
+
+def audience(c, arrivals=None, depart=None, **env):
+    """Cell `c` with its viewers arriving by `arrivals` (TRICKLE's by
+    default; "t0" drops the knob) and `depart` leaving."""
+    env = {**c["env"], **env}
+    arrivals = arrivals or TRICKLE.get((c["sim"], c["name"]))
+    if arrivals == "t0":
+        env.pop(ARRIVALS[c["sim"]], None)
+    elif arrivals:
+        env[ARRIVALS[c["sim"]]] = arrivals
+        if c["sim"] == PPSPP and env.get("SIM_SECS") in TRICKLE_SECS:
+            env["SIM_SECS"] = TRICKLE_SECS[env["SIM_SECS"]]
+    if depart:
+        env[DEPART[c["sim"]]] = depart
+    return {**c, "env": env}
+
+
+# The audience cells' profiles (see the module docs): a scheduled event's
+# burst (a fifth of the viewers trickling in over its first 20 s, the rest
+# within 10 s from there), its end (60 % of those there by 40 s leaving
+# within 10 s, gracefully or abruptly), and both, the end 30 s after the
+# burst, each with the stream it needs to run on past them.
+EVENT = "event:20:20:10"
+END = "60:40:10"
+EVENT_END = "60:60:10"
+
+
+def audience_cells(c, secs_key, name=None, why=None):
+    """The audience cells of `c` (its name, or `name`): the event, the end
+    gracefully and abruptly, and both, at the tier's seeds. `secs_key` is
+    the knob for its stream's length."""
+    name = name or c["name"]
+    why = why or c["why"]
+    out = []
+    for suffix, arrivals, depart, secs, what in (
+            ("event", EVENT, None, "60", "a scheduled event's burst into a warm fifth"),
+            ("end", "trickle", END, "90", "60 % leaving within 10 s from 40 s in"),
+            ("end-abrupt", "trickle", f"{END}:abrupt", "90", "60 % going silent within 10 s from 40 s in"),
+            ("combined", EVENT, EVENT_END, "90", "an event's burst at 20 s, then 60 % leaving within 10 s from 60 s")):
+        x = audience(c, arrivals, depart, **{secs_key: secs})
+        out.append({**x, "name": f"{name}-{suffix}", "why": f"{why}: {what}", "seeds": None})
+    return out
+
 
 def robust_tier():
     """The real stack across shapes, for a change that must hold in
     general: stars of 3 to 31 viewers behind 5 to 20 Mbit/s seeds, steady
     and with the seed's uplink halved, sparse meshes, jitter, rate limits,
     small relay uplinks, and every WAN, step, starvation, churn and restart
-    case of strims-sim's Hybrid streams."""
+    case of strims-sim's Hybrid streams, their viewers trickling in where
+    TRICKLE says; then the audience cells (`audience_cells`) of a star of
+    15 behind a 10 Mbit/s seed (a full mesh, which no departure can
+    strand), a residential seed's event and the thin relays' shape
+    trickling in (thin-15-10 itself reproduces a collapse)."""
+    cells = robust_t0()
+    by = {c["name"]: c for c in cells}
+    star = by["star-15-10"]
+    thin = audience(by["thin-15-10"], "trickle")
+    out = [audience(c) for c in cells]
+    out.append({**thin, "name": "thin-15-10-trickle", "why": f"{thin['why']}, trickling in"})
+    out += audience_cells(star, "STRIMS_SIM_CAL_SECS")
+    wan = by["wan-residential-seed"]
+    out.append({**audience(wan, EVENT), "name": "wan-residential-seed-event",
+                "why": f"{wan['why']}: a scheduled event's burst into a warm fifth"})
+    return out
+
+
+def robust_t0():
+    """robust_tier's cells as they are with every viewer at the start."""
     star = lambda v, m, **env: {**SS_STAR, "STRIMS_SIM_CAL_VIEWERS": str(v), "STRIMS_SIM_CAL_SEED_UP_MBIT": str(m),
                                 "STRIMS_SIM_CAL_SECS": "60", **env}
     cells = [cell(f"star-{v}-{m}", SIM, "calibration_star", star(v, m), 1, f"{v} viewers, a {m} Mbit/s seed")
@@ -253,7 +368,8 @@ def browsers_tier():
 # The net tier's cells, robust's names: as browsers, and these over TCP.
 NET_RTC = ["star-7-5", "star-15-10", "star-15-20", "star-31-10", "star-31-20", "halve-15-10", "halve-31-20",
            "jitter-15-10", "thin-15-10", "wan-residential-seed", "wan-global-audience", "wan-mobile-viewers",
-           "wan-residential-two-streams", "wan-slow-viewer", "wan-super-peer-varying", "wan-residential-seed-step"]
+           "wan-residential-two-streams", "wan-slow-viewer", "wan-super-peer-varying", "wan-residential-seed-step",
+           "star-15-10-event", "star-15-10-end", "star-15-10-end-abrupt", "star-15-10-combined"]
 NET_TCP = ["star-15-10", "star-31-10", "thin-15-10", "wan-global-audience", "wan-residential-two-streams"]
 
 
@@ -262,13 +378,20 @@ def net_tier():
     link to the signalling relay and finds the others through transfer
     discovery, then links by peer exchange; robust's window-model stars and
     uncapped WAN cases across the conditions, as browsers (BROWSERS) and,
-    some, over TCP."""
+    some, over TCP; and a residential seed's event ending, gracefully and
+    abruptly, where discovery replaces the neighbours that left (a static
+    mesh would strand the viewers whose every link left)."""
     robust = {c["name"]: c for c in TIERS["robust"]}
     org = {"STRIMS_SIM_DISCOVERY": "1"}
     cells = [{**robust[n], "name": f"org-{n}", "env": {**robust[n]["env"], **org, "STRIMS_SIM_RTC": BROWSERS},
               "why": f"{robust[n]['why']}, as browsers, organic"} for n in NET_RTC]
     cells += [{**robust[n], "name": f"org-{n}-tcp", "env": {**robust[n]["env"], **org},
                "why": f"{robust[n]['why']}, organic"} for n in NET_TCP]
+    wan = robust["wan-residential-seed"]
+    ends = audience_cells(wan, "STRIMS_SIM_STREAM_SECS", "org-wan-residential-seed",
+                          f"{wan['why']}, as browsers, organic")
+    cells += [{**c, "env": {**c["env"], **org, "STRIMS_SIM_RTC": BROWSERS}} for c in ends
+              if c["name"].endswith(("-end", "-end-abrupt"))]
     return cells
 
 
@@ -394,16 +517,36 @@ TIERS = {
         cell("scale-1000", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "1000", "SIM_MBIT": "2", "SIM_SECS": "30"}, 10,
              "1000 viewers"),
     ],
-    "robust": robust_tier(),
+    "robust": robust_t0(),
 }
+
+
+def peers_audience(peers):
+    """The peers tier's audience cells (`audience_cells`): the churn cell's
+    swarm (a cable seed's 100 viewers at 4 Mbit/s) and the real stack's
+    healthy star (`peers`: the tier's cells)."""
+    cable = cell("cable", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "100", "SIM_MBIT": "4"}, 3,
+                 "100 viewers of a cable seed at 4 Mbit/s")
+    star = next(c for c in peers if c["name"] == "star-15")
+    return audience_cells(cable, "SIM_SECS") + audience_cells(star, "STRIMS_SIM_CAL_SECS")
+
+
+# Today's cells that the audience default moves, as an explicit stress test
+# under their names, then the default and the audience cells.
+TIERS["startup"] = [c for t in ("peers", "robust") for c in TIERS[t] if (c["sim"], c["name"]) in TRICKLE]
+TIERS["peers"] = [audience(c) for c in TIERS["peers"]] + peers_audience(TIERS["peers"])
+TIERS["robust"] = robust_tier()
+
+
 def recip_tier():
     """Organic browsers whose uplinks differ, for where strong ones sit
     (reciprocal topology): the super-peer cells, a residential crowd of 31
-    and of 63, and the stars and WAN cells the pool touches most."""
+    and of 63, and the stars and WAN cells the pool touches most; the
+    crowds trickle in, as organic cells do."""
     net = {c["name"]: c for c in TIERS["net"]}
     cells = [net[n] for n in ("org-wan-super-peer-varying", "org-star-31-10", "org-thin-15-10",
                               "org-wan-global-audience")]
-    org = {"STRIMS_SIM_DISCOVERY": "1", "STRIMS_SIM_RTC": BROWSERS}
+    org = {"STRIMS_SIM_DISCOVERY": "1", "STRIMS_SIM_RTC": BROWSERS, "STRIMS_SIM_ARRIVALS": "trickle"}
     for test, name, crowd in (("wan_residential_crowd_adaptive_uncapped", "org-crowd-31", "31"),
                               ("wan_residential_crowd_adaptive_uncapped", "org-crowd-63", "63"),
                               ("wan_super_peer_crowd_adaptive_uncapped_varying", "org-super-peer-crowd-31", "31")):
@@ -414,11 +557,13 @@ def recip_tier():
 
 def recip_hostile_tier():
     """The residential crowd of 31 with a fifth of its viewers each kind of
-    defector, and with viewers leaving and rejoining."""
+    defector, and with viewers leaving and rejoining (churn: every viewer
+    there from the start, as churn's cells keep them)."""
     crowd = next(c for c in TIERS["recip"] if c["name"] == "org-crowd-31")
     cells = [{**crowd, "name": f"org-crowd-31-{k}", "env": {**crowd["env"], "STRIMS_SIM_HOSTILE": f"{k}:0.2"},
               "why": f"{crowd['why']}, a fifth {k}s"} for k in ("free-rider", "liar", "whitewasher", "hog")]
-    cells.append({**crowd, "name": "org-crowd-31-churn", "env": {**crowd["env"], "STRIMS_SIM_CHURN": "0.5:5"},
+    churn = audience(crowd, "t0", STRIMS_SIM_CHURN="0.5:5")
+    cells.append({**churn, "name": "org-crowd-31-churn",
                   "why": f"{crowd['why']}, a viewer leaving for 5 s every 2 minutes"})
     return cells
 
@@ -513,8 +658,23 @@ METRICS = [
     ("meter_others_p50", lambda r: r.get("meter_others_p50") or (r.get("meter_others") or [None] * 3)[1],
      None, "ratio", 0.10),
     ("holder_short", lambda r: r.get("holder_short"), LOWER, "diff", 0.03),
+    # Each viewer from its own join (with arrivals or departures): to its
+    # first read or frame, to its first under the delivery target, the
+    # viewers that never did.
     ("join_p50_ms", lambda r: r.get("join_p50_ms"), LOWER, "ratio", 0.10),
     ("join_p90_ms", lambda r: r.get("join_p90_ms"), LOWER, "ratio", 0.10),
+    ("caught_up_p50_ms", lambda r: r.get("caught_up_p50_ms"), LOWER, "ratio", 0.10),
+    ("caught_up_p90_ms", lambda r: r.get("caught_up_p90_ms"), LOWER, "ratio", 0.10),
+    ("caught_up_never", lambda r: r.get("caught_up_never"), LOWER, "diff", 0.5),
+    # The viewers that stayed through departures: their worst lag, their lag
+    # p90's excess over the delivery target summed, the time back under it,
+    # those left with no neighbour; and how soon a child noticed its parent
+    # gone (strims-sim).
+    ("depart_lag_peak_ms", lambda r: r.get("depart_lag_peak_ms"), LOWER, "ratio", 0.10),
+    ("depart_excess_area", lambda r: r.get("depart_excess_lag_area_ms_s"), LOWER, "ratio", 0.10),
+    ("depart_recover_ms", lambda r: r.get("depart_recover_ms"), LOWER, "diff", 2000),
+    ("depart_stranded", lambda r: r.get("depart_stranded"), LOWER, "diff", 0.5),
+    ("parent_lost_noticed_p90_ms", lambda r: r.get("parent_lost_noticed_p90_ms"), LOWER, "ratio", 0.10),
     ("startup_p99_ms", lambda r: r.get("startup_p99_ms_honest", r.get("startup_p99_ms")), LOWER, "ratio", 0.10),
     ("signed_lag_p99_ms", lambda r: r.get("signed_lag_p99_ms"), LOWER, "ratio", 0.05),
     ("wire/media", lambda r: r.get("wire_per_media"), LOWER, "ratio", 0.02),
@@ -787,7 +947,7 @@ def effect(kind, pairs):
 
 def collapsed(r):
     """Whether a row's run collapsed (analyze.collapsed: COLLAPSED_SECS
-    unhealthy seconds in a row lasting past STARTUP_SECS)."""
+    unhealthy seconds in a row lasting past its startup)."""
     v = derived(r)[0]
     return None if v is None else analyze().collapsed(v)
 
@@ -970,7 +1130,7 @@ def arm_score(cells, base_rows, arm_rows, rank=None):
         if mark(better, kind, tie, effect(kind, pairs("delivery"))) == "-":
             broken.append(f"{c['name']} delivery")
         if ka == 0 and guard is not None:
-            for name in ("lag_p99_ms", "startup_p99_ms", "lag_p99_ms_weak"):
+            for name in ("lag_p99_ms", "lag_p99_ms_weak", "join_p90_ms", "caught_up_p90_ms"):
                 e = effect("ratio", pairs(name))
                 if e is not None and e[1] > guard:
                     broken.append(f"{c['name']} {name} x{e[0]:.2f}")
@@ -1342,6 +1502,10 @@ def farm(a, cells):
         if c["name"] in peaks:
             mem = min(mem, math.ceil(1.25 * peaks[c["name"]] * 2) / 2)
         canary = {"SIM_SECS": "2"} if c["sim"] == PPSPP else {"STRIMS_SIM_STREAM_SECS": "5"}
+        # An audience that doesn't fit in the canary's stream starts with
+        # the seed and stays (the module docs).
+        if c["env"].get(ARRIVALS[c["sim"]], "trickle") != "trickle" or c["env"].get(DEPART[c["sim"]]):
+            canary |= {ARRIVALS[c["sim"]]: "t0", DEPART[c["sim"]]: "" if c["sim"] == PPSPP else "off"}
         q = json.dumps
         text = "\n".join([
             f"# sim-suite farm {name}: {c['name']}, {c['why']}",
@@ -1395,6 +1559,32 @@ def print_arm_score(title, sc):
     for cname, ka, kb, n, e in sc["cells"]:
         p = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
         print(f"   {cname:22} collapsed {ka:>3} -> {kb:>3} of {n:<3} Fisher p={fisher(ka, n, kb, n):.2f}  lag p99 {p}")
+
+
+def list_cells(a):
+    """`list`: each cell of the tier (every tier's without one), with its
+    audience and settings, the base envs' common keys left out."""
+    common = {**PP_BASE, **SS_BASE}
+    for tier in [a.tier] if a.tier else TIERS:
+        cells = TIERS[tier]
+        if a.only:
+            cells = [c for c in cells if c["name"] in set(a.only.split(","))]
+        print(f"{tier}: {len(cells)} cells")
+        for c in cells:
+            env = dict(c["env"])
+            arrivals = env.pop(ARRIVALS[c["sim"]], "t0")
+            depart = env.pop(DEPART[c["sim"]], "")
+            rest = " ".join(f"{short(k)}={v}" for k, v in sorted(env.items()) if common.get(k) != v)
+            print(f"   {c['name']:32} {c['sim']:10} {c['test']:46} {arrivals:15} {depart or '-':16} "
+                  f"seeds {c['seeds'] or '-':<3} {rest}")
+
+
+def short(k):
+    """A knob's name without its sim's prefix."""
+    for p in ("STRIMS_SIM_CAL_", "STRIMS_SIM_", "SIM_"):
+        if k.startswith(p):
+            return k[len(p):]
+    return k
 
 
 def score(a, cells):
@@ -1481,6 +1671,9 @@ def main():
     sc.add_argument("--knob", default="SIM_EXP,STRIMS_SIM_EXP",
                     help="the knobs that took a --sets run's sets: the ppspp sim's, then strims-sim's")
     sc.add_argument("--all", action="store_true", help="every metric, ties too")
+    ls = sub.add_parser("list")
+    ls.add_argument("--tier", choices=sorted(TIERS), help="one tier (default: every one)")
+    ls.add_argument("--only", help="cells, comma-separated")
     for p in (cal, r, rc, fc):
         p.add_argument("--env", action="append", default=[], metavar="KEY=VALUE",
                        help="set for every arm's runs, as part of each cell")
@@ -1494,6 +1687,9 @@ def main():
                             "(delivery's share of the latency target, analyze.py)")
     a = ap.parse_args()
 
+    if a.cmd == "list":
+        list_cells(a)
+        return
     cells = TIERS[a.tier]
     if getattr(a, "only", None):
         want = set(a.only.split(","))
