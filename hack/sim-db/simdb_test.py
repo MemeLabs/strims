@@ -202,6 +202,9 @@ READS = {k: [(v, t, lag) for v, start, lag in rs for t in range(start, 5000, 100
 # (k, sec): phase; a second without one is the tail's
 PHASES = {**{("kp1", s): "startup" for s in range(3)}, **{("kp1", s): "steady" for s in (3, 4)},
           **{("kp2", s): "startup" for s in range(5)}}
+# k: the viewers present each second (analyze.events' present_join and
+# present_leave): kp1's second viewer counts from 2 s
+PRESENT = {"kp1": [1, 1, 2, 2, 2], "kp2": [1] * 5, "kd": [1] * 5, "ks1": [2] * 5}
 
 
 def qc(xs, p):
@@ -230,7 +233,10 @@ class Queries(unittest.TestCase):
             keys = [r[0] for r in rows]
             self.put(src, "reads", ["viewer", "t_ms", "seq", "lag_ms"],
                      [(k, v, t, t // 100, lag) for k in keys for v, t, lag in READS[k]])
-            self.derived(src, "derived_events", [[k, src, 0, "start", None] for k in keys])
+            self.derived(src, "derived_events", [
+                [k, src, t, kind, value] for k in keys for t, kind, value in simdb.analyze().events(
+                    {"present": PRESENT[k], "seed_up": [(0, 1000)]},
+                    {"healthy": [True] * 5, "onset": None, "recovered": None})])
         self.put(P, "viewers", ["viewer", "node"], [(k, v, n) for k in ("kp1", "kp2", "kd") for v, n in VIEWERS[k]])
         self.put(S, "viewers", ["viewer", "host"], [("ks1", v, n) for v, n in VIEWERS["ks1"]])
         for src, keys in ((P, ("kp1", "kp2")), (S, ("ks1",))):
@@ -341,6 +347,30 @@ class Queries(unittest.TestCase):
         for field, table in (("frames", "viewer_seconds"), ("hits", "node_bins")):
             self.assertIn(f"{field} is a node's (a {table} column): align it --per node",
                           self.refused("first_read", field, "run"))
+
+    def test_derived_kinds_are_apart_from_the_sims(self):
+        # every kind analyze.events makes: a viewer joins at 5 s and one
+        # leaves at 15, the seed's uplink halves at 20 s and comes back at
+        # 30, and 16-25 s are unhealthy, a collapse
+        healthy = [True] * 16 + [False] * 10 + [True] * 14
+        got = simdb.analyze().events({"present": [3] * 5 + [5] * 10 + [4] * 25,
+                                      "seed_up": [(0, 1000), (20, 500), (30, 1000)]},
+                                     {"healthy": healthy, "onset": 16, "recovered": 26})
+        self.assertEqual({kind for _, kind, _ in got}, set(simdb.DERIVED_KINDS))
+        self.assertIn((5, "present_join", 2), got)
+        self.assertIn((15, "present_leave", 1), got)
+        # a run's nth join is the sims' (kp1's node 2 again at 4 s), not the
+        # viewers present rising (kp1 at 2 s)
+        self.assertEqual(self.aligned("join", "lag_p50", "run", nth=3, before=0, after=1),
+                         {("c", 0): (1, 200.0, 200.0, 200.0)})
+        self.assertEqual(self.aligned("present_join", "lag_p50", "run", before=0, after=1),
+                         {("c", 0): (1, 100.0, 100.0, 100.0)})
+        self.assertIn("present_join is run-wide", self.refused("present_join", "lag_p50", "node"))
+        msg = self.refused("nope", "lag_p50", "run")
+        self.assertIn("no nope event; its kinds: first_read, join, latency, present_join, start", msg)
+        # a kind both made would mix again
+        self.derived(S, "derived_events", [["ks1", S, 1, "first_read", None]])
+        self.assertIn("first_read is both a derived event and a sim's", self.refused("first_read", "lag_p50", "run"))
 
     def test_views_join_on_k_as_on_k_src(self):
         # kd's tables come from one source in both its cells: the fuller one

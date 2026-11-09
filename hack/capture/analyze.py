@@ -995,16 +995,17 @@ def phases(s, v):
 def events(s, v):
     """A run's events, (second from the stream's start, kind, value): its
     `start`; the seed's uplink steps (`seed_down`, `seed_up`, the new
-    uplink over the old); viewers arriving and going (`join`, `leave`,
-    how many, from `present`); the verdict's `onset` and `recovered`; and
-    each `collapse` (`episodes`), with its length."""
+    uplink over the old); the viewers present rising and falling
+    (`present_join`, `present_leave`, by how many, from `present`; the
+    sims' own `join` and `leave` are a node's); the verdict's `onset` and
+    `recovered`; and each `collapse` (`episodes`), with its length."""
     out = [(0, "start", None)]
     out += [(t, kind, ratio) for t, kind, ratio in steps(s)]
     present = s["present"][: len(v["healthy"])]
     for k in range(1, len(present)):
         d = present[k] - present[k - 1]
         if d:
-            out.append((k, "join" if d > 0 else "leave", abs(d)))
+            out.append((k, "present_join" if d > 0 else "present_leave", abs(d)))
     if v["onset"] is not None:
         out.append((v["onset"], "onset", None))
     if v["recovered"] is not None:

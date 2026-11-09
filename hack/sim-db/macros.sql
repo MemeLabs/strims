@@ -32,8 +32,11 @@ CREATE OR REPLACE MACRO bins_by(bin_ms) AS TABLE
 CREATE OR REPLACE VIEW sec AS
     SELECT * FROM seconds JOIN verdict_seconds USING (k, src, sec);
 
--- Every event, the verdicts' (derived from the series) and, where the
--- runs wrote them, the sims' own (`events`: times in µs, with the node).
+-- Every event, the verdicts' (derived from the series, node -1:
+-- simdb.py's DERIVED_KINDS, the viewers present rising and falling
+-- present_join and present_leave) and, where the runs wrote them, the
+-- sims' own (`events`: times in µs, with the node; join and leave a
+-- node's). No kind is both.
 -- needs: derived_events
 CREATE OR REPLACE VIEW ev AS
     SELECT k, src, sec * 1000 AS t_ms, kind, value, -1::BIGINT AS node, NULL::VARCHAR AS detail

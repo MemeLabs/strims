@@ -74,7 +74,10 @@ analyze.py's VERDICT_VERSION and kept under derived/, the verdicts'
 tables: `verdict_seconds` (each second's phase, health and what judged
 it), `verdicts` (a run's verdict and analyze.run_metrics), `episodes`
 (healthy, unhealthy and collapse spells) and `derived_events` (start,
-seed_down, seed_up, join, leave, onset, recovered, collapse). A
+seed_down, seed_up, present_join, present_leave, onset, recovered,
+collapse: DERIVED_KINDS, none of them a kind the sims' events have; the
+viewers present rising or falling are present_join and present_leave,
+the sims' join and leave a node's). A
 selection picks runs: `--src` (cache paths, globs, default every one),
 `--cell`, `--arm` (globs) and `--seed`, and a run's cell and arm are the
 same whatever else it selects. A suite farm run's runs are named by the
@@ -102,7 +105,8 @@ job's): the one holding the most of them, the later on a tie.
            (summed over the bin). The events are the derived ones and the
            sims' own (`events`: faults, uplink steps, competing uploads,
            joins, first reads or frames, churn leaves, seed steps and
-           copies; `--node` picks one node's). With `--per node` each
+           copies; `--node` picks one node's), a kind the selection
+           lacks refused with the kinds it has. With `--per node` each
            node's own series is aligned on its own `--nth` occurrence of
            a sim's per-node event (a viewer's join, first read or frame,
            churn leave), the bands over every run's nodes (n counts
@@ -632,6 +636,8 @@ DERIVED = {
                  "len": "BIGINT"},
     "derived_events": {"k": "VARCHAR", "src": "VARCHAR", "sec": "DOUBLE", "kind": "VARCHAR", "value": "DOUBLE"},
 }
+# derived_events' kinds (analyze.events'), none of them the sims'.
+DERIVED_KINDS = ("start", "seed_down", "seed_up", "present_join", "present_leave", "onset", "recovered", "collapse")
 VERDICT_COLS = {"k": "VARCHAR", "src": "VARCHAR", "onset": "BIGINT", "trees": "BIGINT", "delivery": "BIGINT",
                 "latency": "BIGINT", "recovered": "BIGINT", "absorbing": "BOOLEAN", "feasible": "VARCHAR",
                 "unhealthy": "DOUBLE", "lag_p50": "DOUBLE", "lag_max": "DOUBLE", "collapsed": "BOOLEAN"}
@@ -1047,11 +1053,21 @@ def cmd_aligned(a):
     lo, hi = int(-a.before * 1000), int(a.after * 1000)
     node = "" if a.node is None else f" AND node = {int(a.node)}"
     keys = "k, src, node" if per_node else "k, src"
+    kind = f"kind = {q(a.event)}"
+    sims = (f"(SELECT count(*) FROM events WHERE {kind}{node}) AS sims, "
+            f"(SELECT count(*) FROM events WHERE {kind}{node} AND node >= 0) AS nodes"
+            if "events" in have else "0 AS sims, 0 AS nodes")
+    # A derived event has no node.
+    derived = f"(SELECT count(*) FROM derived_events WHERE {kind}{'' if a.node is None else ' AND false'})"
+    got = duck(v + f"\nSELECT {derived} AS derived, {sims}, "
+                   "(SELECT list(DISTINCT kind ORDER BY kind) FROM ev) AS kinds;")[0]
+    if got["derived"] and got["sims"]:
+        sys.exit(f"{a.event} is both a derived event and a sim's: analyze.events must name its own apart "
+                 "(DERIVED_KINDS)")
+    if not got["derived"] and not got["sims"]:
+        sys.exit(f"the selection has no {a.event} event" + (f" of node {a.node}" if a.node is not None else "")
+                 + f"; its kinds: {', '.join(got['kinds'] or [])}")
     if per_node:
-        got = duck(v + f"\nSELECT count(*) AS n, count(*) FILTER (WHERE node >= 0) AS nodes FROM ev "
-                       f"WHERE kind = {q(a.event)}{node};")[0]
-        if not got["n"]:
-            sys.exit(f"the selection has no {a.event} event" + (f" of node {a.node}" if a.node is not None else ""))
         if not got["nodes"]:
             sys.exit(f"{a.event} is run-wide (a derived event, or a sim's with no node): align it --per run")
         node += " AND node >= 0"
@@ -1341,8 +1357,9 @@ def main():
     qs["pooled"] = sub.add_parser("pooled")
     qs["pooled"].add_argument("--by", choices=("none", "phase", "bin", "viewer"), default="none")
     qs["aligned"] = sub.add_parser("aligned")
-    qs["aligned"].add_argument("event", help="a derived event (start, seed_down, seed_up, join, leave, onset, "
-                               "recovered, collapse) or a sim's (its events table's kinds)")
+    qs["aligned"].add_argument("event", help=f"a derived event ({', '.join(DERIVED_KINDS)}) or a sim's (its "
+                               "events table's kinds: join, leave, first_read, first_frame, ...; join and leave "
+                               "a node's)")
     qs["aligned"].add_argument("--node", type=int, help="only events of this node (the sims' events)")
     qs["aligned"].add_argument("--per", choices=("run", "node"), default="run",
                                help="align each run's series on its event (run), or each node's own series on "
