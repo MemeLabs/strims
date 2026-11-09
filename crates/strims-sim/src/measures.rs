@@ -952,6 +952,9 @@ impl Report {
             );
         }
         let c = self.swarm_counters(swarm);
+        // Requests timed out ([`Report::timeouts`]): the honest viewers',
+        // the seed's, and with hostile hosts theirs below.
+        let (timeouts, seed_timeouts, hostile_timeouts) = self.timeouts(swarm);
         j.num("seed_data_share", self.data_share(swarm))
             .num("seed_share", self.uploads(swarm).seed_share)
             .num("duplicates", self.duplicates(swarm))
@@ -960,7 +963,8 @@ impl Report {
             .int("pruned", c.pruned)
             .int("shed", c.shed)
             .int("switched", c.switched)
-            .int("timeouts", c.timeouts)
+            .int("timeouts", timeouts)
+            .int("seed_timeouts", seed_timeouts)
             .num("sim_secs", self.sim_secs)
             .num("wall_secs", self.wall_secs);
         self.window_cols(swarm, &mut j);
@@ -990,6 +994,7 @@ impl Report {
                     .int(&format!("startup_p99_ms_{name}"), u64::from(startup.p99))
                     .num(&format!("delivery_{name}"), self.delivery_of(swarm, hosts));
             }
+            j.int("timeouts_hostile", hostile_timeouts);
         }
         j.int("links_p50", links_p50)
             .int("links_p90", links_p90)
@@ -1337,6 +1342,26 @@ impl Report {
             .hosts
             .get(h)
             .map_or(HostClass::Infra, |s| s.class)
+    }
+
+    /// The requests of swarm `swarm` that timed out unanswered
+    /// ([`crate::stats::SwarmCounters::timeouts`], every incarnation), as
+    /// the ppspp sim's rows count them: the honest viewers' (every host but
+    /// the seed and the hostile ones), the seed's, and the hostile hosts'.
+    pub fn timeouts(&self, swarm: usize) -> (u64, u64, u64) {
+        let seed = self.scenario.swarms.get(swarm).map(|s| s.seed);
+        let (mut honest, mut seeds, mut hostile) = (0, 0, 0);
+        for (h, r) in self.hosts.iter().enumerate() {
+            let t = r.runner.swarm(swarm).timeouts;
+            if Some(h) == seed {
+                seeds += t;
+            } else if matches!(self.class(h), HostClass::Hostile(_)) {
+                hostile += t;
+            } else {
+                honest += t;
+            }
+        }
+        (honest, seeds, hostile)
     }
 
     /// p50 and p90 of the honest viewers' link counts over their stats

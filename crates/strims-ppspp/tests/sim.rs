@@ -822,6 +822,9 @@ struct Node {
     sent: Sent,
     /// Its runners' counters from before it last took a place.
     past: ChannelTotals,
+    /// The requests its runners timed out before it last took a place, over
+    /// the incarnations [`Node::past`] counts.
+    past_timeouts: u64,
     /// A greedy viewer (not a grabber) or an adversary, whose runner counts
     /// frames the harness rewrites, until an honest viewer takes its place.
     hostile: bool,
@@ -2008,6 +2011,7 @@ impl Sim {
                 wire: EndStats::default(),
                 sent: Sent::default(),
                 past: ChannelTotals::default(),
+                past_timeouts: 0,
                 hostile: matches!(role, Role::Greedy(g) if g != Greed::Grabber)
                     || matches!(role, Role::Adversary(_)),
                 cap: None,
@@ -2611,6 +2615,10 @@ impl Sim {
         let n = &mut self.nodes[i];
         if !n.hostile {
             n.past.merge(&n.runner.channel_totals());
+            n.past_timeouts += n
+                .runner
+                .swarm_counters(n.swarm)
+                .map_or(0, |s| s.requests_timed_out);
         }
         n.hostile = false;
         n.role = Role::Peer;
@@ -5169,14 +5177,24 @@ impl Sim {
             .unwrap_or_default()
     }
 
-    /// Requests honest viewers timed out.
-    fn timeouts(&self) -> u64 {
-        self.nodes
-            .iter()
-            .filter(|n| n.role == Role::Peer)
-            .filter_map(|n| n.runner.swarm_stats(n.swarm))
-            .map(|s| s.requests_timed_out)
-            .sum()
+    /// The requests that timed out unanswered, as strims-sim's rows count
+    /// them: the honest viewers' over every incarnation
+    /// ([`Node::past_timeouts`]; a viewer gone for good was an honest
+    /// one), the seed's, and the greedy viewers' and adversaries'.
+    fn timeouts(&self) -> (u64, u64, u64) {
+        let (mut honest, mut seed, mut hostile) = (0, 0, 0);
+        for n in &self.nodes {
+            let t = n.past_timeouts
+                + n.runner
+                    .swarm_counters(n.swarm)
+                    .map_or(0, |s| s.requests_timed_out);
+            match n.role {
+                Role::Seed => seed += t,
+                Role::Peer | Role::Dead => honest += t,
+                Role::Greedy(_) | Role::Adversary(_) => hostile += t,
+            }
+        }
+        (honest, seed, hostile)
     }
 
     /// How long after `at` seconds the stream took to settle: the publish
@@ -7247,7 +7265,7 @@ fn node_sim_row(name: &str, sim: &Sim, r: &Report) -> String {
         ms(sim.max_lag_from(30)),
         r.seed_share,
         r.wasted,
-        sim.timeouts(),
+        sim.timeouts().0,
         r.frames,
         count_invalid(sim),
     )
@@ -8480,11 +8498,17 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         )
         .num("announce_share", r.announce.2)
         .int("asks", r.asks);
-    // Requests honest viewers timed out; and the path measure against
-    // greedy viewers: honest nodes' echoes of probes never sent, and the
-    // seed's latest round trips to honest and to greedy viewers (median
-    // ms), with the links it has no reading for.
-    let timeouts = sim.timeouts();
+    // Requests timed out ([`Sim::timeouts`]): the honest viewers' over
+    // every incarnation, the seed's, and with greedy viewers or adversaries
+    // theirs; and the path measure against greedy viewers: honest nodes'
+    // echoes of probes never sent, and the seed's latest round trips to
+    // honest and to greedy viewers (median ms), with the links it has no
+    // reading for.
+    let (timeouts, seed_timeouts, hostile_timeouts) = sim.timeouts();
+    let hostile = sim
+        .nodes
+        .iter()
+        .any(|n| matches!(n.role, Role::Greedy(_) | Role::Adversary(_)));
     let honest = |i: usize| matches!(sim.nodes[i].role, Role::Seed | Role::Peer);
     let forged: u64 = sim
         .links
@@ -8515,7 +8539,12 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             .filter(|l| l.path.reading(sim.now).is_none())
             .count()
     };
-    row.int("timeouts", timeouts).int("echo_forged", forged);
+    row.int("timeouts", timeouts)
+        .int("seed_timeouts", seed_timeouts);
+    if hostile {
+        row.int("timeouts_hostile", hostile_timeouts);
+    }
+    row.int("echo_forged", forged);
     sim.windows.cols(&mut row);
     if let Some(ms) = median_rtt(false) {
         row.int("seed_rtt_honest_ms", ms as u64);
