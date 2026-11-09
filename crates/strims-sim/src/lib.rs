@@ -143,8 +143,8 @@ mod wan;
 mod world;
 
 pub use report::{
-    HostReport, LookupPhase, MediaLog, ParentLoss, Percentiles, Report, ViewerReport, VpnReport,
-    WanHostReport, WanReport,
+    ACK_WHYS, AckWaits, HostReport, LookupPhase, MediaLog, ParentLoss, Percentiles, Report,
+    ViewerReport, VpnReport, WanHostReport, WanReport,
 };
 pub use run::run;
 pub use skew::ClockSkew;

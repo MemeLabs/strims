@@ -64,8 +64,11 @@
 //! the wire bytes its competing uploads sent and their windows (as
 //! `run.sh`'s `COMPETE` runs them, on the testbed in `compete-<s>.json`),
 //! and a `{"ev":"drops",..}` line with the segments the window model lost
-//! to its full access queues, the connections' and the uploads', and the
-//! pure acknowledgements and SACKs the node's uplink carried (`acks`).
+//! to its full access queues, the connections' and the uploads', the pure
+//! acknowledgements and SACKs the node's uplink carried (`acks`), and its
+//! TCP receivers' acknowledgements by why (`ack_now`, `ack_quick`,
+//! `ack_read`, `ack_timer`, `ack_data`: [`crate::ACK_WHYS`]) with the
+//! delayed ones' mean and p90 wait (`delack_mean_ms`, `delack_p90_ms`).
 
 // The bench's nodes share their state between their tasks on one thread.
 #![allow(clippy::disallowed_types)]
@@ -1140,12 +1143,23 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     let mut logs = logs.take();
     let start = Duration::from(SIM_START);
     for (h, l) in report.iter().flat_map(|r| &r.hosts).zip(logs.iter_mut()) {
+        let whys: Vec<String> = crate::ACK_WHYS
+            .iter()
+            .zip(h.ack_whys)
+            .map(|(why, n)| format!(r#","ack_{why}":{n}"#))
+            .collect();
+        let waits = &h.ack_waits;
         l.push(format!(
-            r#"{{"ev":"drops","up_packets":{},"queue_drops":{},"competing_drops":{},"acks":{}}}"#,
+            r#"{{"ev":"drops","up_packets":{},"queue_drops":{},"competing_drops":{},"acks":{}{},"delack_mean_ms":{},"delack_p90_ms":{}}}"#,
             h.stats.up_bytes / 1500,
             h.queue_drops,
             h.competing_drops,
-            h.acks
+            h.acks,
+            whys.concat(),
+            waits.mean_ms().map_or("null".to_owned(), |m| format!("{m:.2}")),
+            waits
+                .quantile_ms(0.9)
+                .map_or("null".to_owned(), |p| p.to_string()),
         ));
         for &(t, bytes) in &h.competing {
             let cwnd = h

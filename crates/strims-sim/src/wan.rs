@@ -106,7 +106,7 @@ use turmoil::{Protocol, Segment, Sim};
 
 use crate::fast_map::FastMap;
 use crate::net::{ConnKey, SendBuffers};
-use crate::report::{WanHostReport, WanReport};
+use crate::report::{ACK_WHYS, AckWaits, WanHostReport, WanReport};
 use crate::spec::{HostIx, Scenario};
 use crate::world::epoch;
 
@@ -752,6 +752,10 @@ pub(crate) struct Scheduler {
     /// The acknowledgements receivers owe, by the connection whose data
     /// they acknowledge. Bound: one per connection with data received.
     owed: FastMap<(SocketAddr, SocketAddr), Owed>,
+    /// Per host, the acknowledgements its receivers sent by why
+    /// ([`AckWhy`]), and its delayed ones' waits.
+    ack_whys: Vec<[u64; ACK_WHYS.len()]>,
+    ack_waits: Vec<AckWaits>,
     /// The data channels' senders and receivers, by the connection that
     /// carries the channel's data. Bound: one per channel opened.
     assocs: FastMap<(SocketAddr, SocketAddr), sctp::Assoc>,
@@ -759,15 +763,26 @@ pub(crate) struct Scheduler {
 }
 
 /// What a receiver owes its sender: the segments it hasn't acknowledged
-/// (their records, sequence numbers and lengths), when its delayed
-/// acknowledgement is due, when it last received, and how many segments it
-/// still acknowledges at once (quickack).
+/// (their records, sequence numbers and lengths) and when the first of
+/// them arrived, when its delayed acknowledgement is due, when it last
+/// received, and how many segments it still acknowledges at once
+/// (quickack).
 #[derive(Clone, Debug, Default)]
 struct Owed {
     waiting: Vec<(u64, u64, usize)>,
+    since: Time,
     due: Option<Time>,
     last: Time,
     quick: u32,
+}
+
+/// Why a receiver sent an acknowledgement, its index in [`ACK_WHYS`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AckWhy {
+    Now = 0,
+    Quick = 1,
+    Timer = 3,
+    Data = 4,
 }
 
 /// The segments a receiver acknowledges at once after a gap longer than
@@ -893,6 +908,8 @@ impl Scheduler {
             cuts: vec![0; spec.hosts.len()],
             rtos: vec![0; spec.hosts.len()],
             owed: FastMap::default(),
+            ack_whys: vec![[0; ACK_WHYS.len()]; spec.hosts.len()],
+            ack_waits: vec![AckWaits::default(); spec.hosts.len()],
             assocs: FastMap::default(),
             rcvs: FastMap::default(),
         })
@@ -1033,7 +1050,7 @@ impl Scheduler {
                 }
                 Event::DelAck { conn } => {
                     if self.owed.get(&conn).is_some_and(|o| o.due == Some(t)) {
-                        self.ack_owed(t, conn);
+                        self.ack_owed(t, conn, AckWhy::Timer);
                     }
                     continue;
                 }
@@ -1341,11 +1358,19 @@ impl Scheduler {
             o.quick = QUICKACKS;
         }
         o.last = t;
+        if o.waiting.is_empty() {
+            o.since = t;
+        }
         o.waiting.push(seg);
         let packets: u32 = o.waiting.iter().map(|&(_, _, len)| tcp_wire(len).1).sum();
         if o.quick > 0 || packets >= 2 {
+            let why = if packets >= 2 {
+                AckWhy::Now
+            } else {
+                AckWhy::Quick
+            };
             o.quick = o.quick.saturating_sub(1);
-            self.ack_owed(t, conn);
+            self.ack_owed(t, conn, why);
         } else if o.due.is_none() {
             o.due = Some(t + DELACK);
             let key = self.next;
@@ -1356,9 +1381,9 @@ impl Scheduler {
     }
 
     /// The receiver of `conn` sends a pure acknowledgement at `t` of the
-    /// segments it owes: it takes its turn on the receiver's uplink and
-    /// reaches the sender a one-way trip after.
-    fn ack_owed(&mut self, t: Time, conn: (SocketAddr, SocketAddr)) {
+    /// segments it owes, for `why`: it takes its turn on the receiver's
+    /// uplink and reaches the sender a one-way trip after.
+    fn ack_owed(&mut self, t: Time, conn: (SocketAddr, SocketAddr), why: AckWhy) {
         let (Some(&from), Some(&to)) = (
             self.ip_host.get(&conn.0.ip()),
             self.ip_host.get(&conn.1.ip()),
@@ -1373,6 +1398,8 @@ impl Scheduler {
         if waiting.is_empty() {
             return;
         }
+        let since = o.since;
+        self.ack_counted(to, why, t - since);
         let depart = self.net.occupy_up(t, to, tcp_wire(0).0);
         self.ack_sent(to, tcp_wire(0).0);
         self.acked_at(depart + self.net.one_way(to, from), conn, waiting);
@@ -1400,7 +1427,29 @@ impl Scheduler {
         };
         o.due = None;
         let waiting = std::mem::take(&mut o.waiting);
+        if !waiting.is_empty()
+            && let Some(&h) = self.ip_host.get(&conn.0.ip())
+        {
+            self.ack_counted(h, AckWhy::Data, Duration::ZERO);
+        }
         self.acked_at(arrival, back, waiting);
+    }
+
+    /// Host `h`'s receiver sent an acknowledgement for `why`, the first
+    /// byte it acknowledges having waited `wait`.
+    fn ack_counted(&mut self, h: HostIx, why: AckWhy, wait: Duration) {
+        if let Some(n) = self
+            .ack_whys
+            .get_mut(h)
+            .and_then(|w| w.get_mut(why as usize))
+        {
+            *n += 1;
+        }
+        if why == AckWhy::Timer
+            && let Some(w) = self.ack_waits.get_mut(h)
+        {
+            w.add(wait);
+        }
     }
 
     /// The base round trip of `conn`'s path.
@@ -2108,6 +2157,8 @@ impl Scheduler {
                         queue_drops: self.drops.get(h).copied().unwrap_or(0),
                         acks: self.acks.get(h).copied().unwrap_or(0),
                         ack_bytes: self.ack_bytes.get(h).copied().unwrap_or(0),
+                        ack_whys: self.ack_whys.get(h).copied().unwrap_or_default(),
+                        ack_waits: self.ack_waits.get(h).cloned().unwrap_or_default(),
                         app_bytes: self.app_bytes.get(h).copied().unwrap_or(0),
                         competing_drops: self.cross_drops.get(h).copied().unwrap_or(0),
                         competing_cwnd: self.cross_cwnd.get(h).cloned().unwrap_or_default(),

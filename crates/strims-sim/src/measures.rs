@@ -1526,7 +1526,54 @@ impl Report {
         }
         self.media_cols(swarm, &mut j);
         self.ledger_cols(&mut j);
+        self.ack_cols(&mut j);
         j.finish()
+    }
+
+    /// With the window model, the acknowledgements the seed's TCP
+    /// receivers sent, of what its viewers sent it, and the honest
+    /// viewers' (summed), of what reached them, by why
+    /// ([`crate::ACK_WHYS`]: `seed_ack_now`, `viewer_ack_timer`, ...),
+    /// pure ones and those data carried alike; and the mean and p90 of the
+    /// delayed ones' waits (`*_delack_mean_ms`, `*_delack_p90_ms`, to the
+    /// millisecond below), from the first byte owed to the timer's send.
+    fn ack_cols(&self, j: &mut JsonRow) {
+        let Some(wan) = &self.wan else {
+            return;
+        };
+        if !wan.hosts.iter().any(|w| w.ack_whys.iter().any(|&n| n > 0)) {
+            return;
+        }
+        let seeds = self.roles().seeds;
+        let (mut seed, mut viewer) = (
+            ([0u64; crate::ACK_WHYS.len()], crate::AckWaits::default()),
+            ([0u64; crate::ACK_WHYS.len()], crate::AckWaits::default()),
+        );
+        for (i, h) in self.hosts.iter().enumerate() {
+            let Some(w) = wan.hosts.iter().find(|x| x.name == h.name) else {
+                continue;
+            };
+            let into = if seeds.contains(&i) {
+                &mut seed
+            } else if self.class(i) == HostClass::Honest {
+                &mut viewer
+            } else {
+                continue;
+            };
+            for (a, b) in into.0.iter_mut().zip(w.ack_whys) {
+                *a += b;
+            }
+            into.1.merge(&w.ack_waits);
+        }
+        for (role, (whys, waits)) in [("seed", seed), ("viewer", viewer)] {
+            for (why, n) in crate::ACK_WHYS.iter().zip(whys) {
+                j.int(&format!("{role}_ack_{why}"), n);
+            }
+            if let (Some(mean), Some(p90)) = (waits.mean_ms(), waits.quantile_ms(0.9)) {
+                j.num(&format!("{role}_delack_mean_ms"), mean)
+                    .int(&format!("{role}_delack_p90_ms"), p90);
+            }
+        }
     }
 
     /// The uplinks' bytes by layer over every host, in the ppspp sim's

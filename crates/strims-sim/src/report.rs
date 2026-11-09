@@ -328,6 +328,78 @@ impl MemoryReport {
     }
 }
 
+/// Why the window model's TCP receivers acknowledged data
+/// ([`WanHostReport::ack_whys`]), each acknowledgement once: at once (more
+/// than a segment unacknowledged, or data out of order), in quickack mode,
+/// as the reader drained a short segment, on the delayed acknowledgement's
+/// timer, or carried by data the receiver sent back.
+pub const ACK_WHYS: [&str; 5] = ["now", "quick", "read", "timer", "data"];
+
+/// The waits of a host's delayed acknowledgements, from the first byte
+/// they acknowledge reaching the receiver to the acknowledgement leaving
+/// it, in whole milliseconds to [`AckWaits::LONGEST_MS`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AckWaits {
+    /// How many waited each whole millisecond, the last bin the longer.
+    bins: Vec<u64>,
+    sum_us: u64,
+}
+
+impl AckWaits {
+    pub const LONGEST_MS: usize = 1000;
+
+    pub fn add(&mut self, wait: strims_base::time::Duration) {
+        let us = u64::try_from(wait.as_micros()).unwrap_or(0);
+        let bin = usize::try_from(us / 1000)
+            .unwrap_or(usize::MAX)
+            .min(Self::LONGEST_MS);
+        if self.bins.len() <= bin {
+            self.bins.resize(bin + 1, 0);
+        }
+        if let Some(n) = self.bins.get_mut(bin) {
+            *n += 1;
+        }
+        self.sum_us += us;
+    }
+
+    pub fn merge(&mut self, other: &AckWaits) {
+        if self.bins.len() < other.bins.len() {
+            self.bins.resize(other.bins.len(), 0);
+        }
+        for (a, b) in self.bins.iter_mut().zip(&other.bins) {
+            *a += b;
+        }
+        self.sum_us += other.sum_us;
+    }
+
+    pub fn count(&self) -> u64 {
+        self.bins.iter().sum()
+    }
+
+    /// The mean wait (ms), if any waited.
+    pub fn mean_ms(&self) -> Option<f64> {
+        let n = self.count();
+        (n > 0).then(|| self.sum_us as f64 / 1000.0 / n as f64)
+    }
+
+    /// The `q` quantile of the waits, to the millisecond below.
+    pub fn quantile_ms(&self, q: f64) -> Option<u64> {
+        let n = self.count();
+        if n == 0 {
+            return None;
+        }
+        let rank = ((q * n as f64).ceil() as u64).clamp(1, n);
+        let mut seen = 0;
+        for (ms, &k) in self.bins.iter().enumerate() {
+            seen += k;
+            if seen >= rank {
+                return Some(ms as u64);
+            }
+        }
+        None
+    }
+}
+
 /// One host's access link in WAN mode.
 #[derive(Clone, Debug)]
 pub struct WanHostReport {
@@ -349,6 +421,11 @@ pub struct WanHostReport {
     pub queue_drops: u64,
     pub acks: u64,
     pub ack_bytes: u64,
+    /// With the window model, the acknowledgements its TCP receivers sent
+    /// by why they sent them ([`ACK_WHYS`]), pure ones and those its data
+    /// carried, and the delayed ones' waits.
+    pub ack_whys: [u64; ACK_WHYS.len()],
+    pub ack_waits: AckWaits,
     /// The bytes it handed its transports that went out, resends left
     /// out: `stats.up_bytes` less these are the transports' framing and
     /// resends. A str0m datagram's payload counts whole, its DTLS and SCTP
