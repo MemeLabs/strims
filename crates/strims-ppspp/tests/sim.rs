@@ -190,6 +190,14 @@ fn t0() -> Time {
     Time::from_unix_millis(1_700_000_000_000)
 }
 
+/// When the seed's stream starts: its first write, a second after the
+/// start. The audience's knobs ([`Arrivals`], [`Depart`]) count from it,
+/// as strims-sim's count from its swarm's start, so a profile lands at
+/// the same point of the stream in both sims.
+fn stream_start() -> Time {
+    t0() + Duration::SECOND
+}
+
 /// `t` moved by `d`, [`Time::NIL`] and [`Time::MAX`] left as they are.
 fn shift(t: Time, d: Duration) -> Time {
     if t.is_nil() || t == Time::MAX {
@@ -659,18 +667,22 @@ struct Churn {
 /// rng once the rest of the setup has drawn, the mesh's draws included (its
 /// edges then go unused), so a seed's run keeps its viewers, clocks and
 /// stream under every profile. Arrivals take no churn, cross traffic or
-/// pinned allocation, and all come before the stream's last write.
+/// pinned allocation, and all come before the stream's last write. Times
+/// count from the stream's start ([`stream_start`]), a second after the
+/// seed's, as strims-sim's count from its swarm's.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Arrivals {
     /// Every viewer links at the start, with the seed.
     T0,
     /// The seed starts alone, and the viewers arrive in random order as a
-    /// Poisson stream at this many a second; with `None`, all of them
-    /// within the stream's first third (that many Poisson arrivals in it).
+    /// Poisson stream at this many a second from the stream's start; with
+    /// `None`, all of them within the stream's first third (that many
+    /// Poisson arrivals in it).
     Trickle(Option<f64>),
     /// A scheduled event: this share of the viewers (`warm`) trickles in
-    /// from the start until `at`, and the rest arrive within `window` from
-    /// `at`, each phase as that many Poisson arrivals in its span.
+    /// from the stream's start until `at`, and the rest arrive within
+    /// `window` from `at`, each phase as that many Poisson arrivals in its
+    /// span.
     Event {
         warm: f64,
         at: Duration,
@@ -696,9 +708,9 @@ impl std::fmt::Display for Arrivals {
     }
 }
 
-/// Viewers leaving for good: `share` of the viewers there at `at` (honest,
-/// greedy and adversaries alike, drawn at random) leave within `window`
-/// from it, as that many Poisson departures in it, and the rest keep
+/// Viewers leaving for good: `share` of the viewers there `at` into the
+/// stream ([`stream_start`]; honest, greedy and adversaries alike, drawn at
+/// random) leave within `window` from it, as that many Poisson departures in it, and the rest keep
 /// watching. A departure is graceful, its links closing at once as a
 /// closed tab's transport does (its neighbours' `remove_peer`), or with
 /// `abrupt` silent, as a lost connection is: its frames stop and its
@@ -5508,7 +5520,10 @@ impl Sim {
             caught_up,
             behind,
             parent_lost: self.parent_lost,
-            recovery: self.cfg.depart.map(|d| self.recovery(t0() + d.at)),
+            recovery: self
+                .cfg
+                .depart
+                .map(|d| self.recovery(stream_start() + d.at)),
         }
     }
 
@@ -5999,7 +6014,8 @@ impl Arrivals {
     /// `t0` for every viewer at the start, `trickle` for all of them within
     /// the stream's first third, `trickle:<per s>` for a Poisson stream at
     /// that rate, and `event:<warm %>:<at s>:<window s>` for a scheduled
-    /// event, times in seconds after the start: the `Display` form.
+    /// event, times in seconds after the stream's start: the `Display`
+    /// form.
     fn parse(s: &str) -> Option<Arrivals> {
         match s.trim().split(':').collect::<Vec<_>>()[..] {
             ["t0"] => Some(Arrivals::T0),
@@ -6017,7 +6033,7 @@ impl Arrivals {
 
 impl Depart {
     /// `<share %>:<at s>:<window s>`, then `:abrupt` for silent departures,
-    /// times in seconds after the start: the `Display` form.
+    /// times in seconds after the stream's start: the `Display` form.
     fn parse(s: &str) -> Option<Depart> {
         let (share, at, window, abrupt) = match s.trim().split(':').collect::<Vec<_>>()[..] {
             [share, at, window] => (share, at, window, false),
@@ -6038,9 +6054,9 @@ fn secs_f64(s: f64) -> Duration {
     Duration::from_nanos((s * 1e9).round() as i64)
 }
 
-/// A time uniform in `[from, from + len)` after the start.
+/// A time uniform in `[from, from + len)` after the stream's start.
 fn uniform_in(rng: &mut DetRng, from: Duration, len: Duration) -> Time {
-    t0() + from + secs_f64(unit(rng) * len.as_secs_f64())
+    stream_start() + from + secs_f64(unit(rng) * len.as_secs_f64())
 }
 
 /// When `cfg`'s viewers arrive after the start ([`Arrivals`]): `(at,
@@ -6055,7 +6071,7 @@ fn arrival_plan(cfg: &Config, nodes: usize, rng: &mut DetRng) -> Vec<(Time, usiz
             .map(|_| uniform_in(rng, Duration::ZERO, secs_f64(stream.as_secs_f64() / 3.0)))
             .collect(),
         Arrivals::Trickle(Some(rate)) => {
-            let mut at = t0();
+            let mut at = stream_start();
             (0..n)
                 .map(|_| {
                     let u = (rng.next_u64() as f64 / u64::MAX as f64).max(f64::MIN_POSITIVE);
@@ -6078,19 +6094,20 @@ fn arrival_plan(cfg: &Config, nodes: usize, rng: &mut DetRng) -> Vec<(Time, usiz
     shuffle(&mut order, rng);
     let mut plan: Vec<(Time, usize)> = times.into_iter().zip(order).collect();
     plan.sort_unstable();
-    let end = t0() + Duration::SECOND + stream;
+    let end = stream_start() + stream;
     assert!(
         plan.last().is_none_or(|&(t, _)| t < end),
-        "SIM_ARRIVALS={}: the last of {n} viewers arrives {} s after the start, past the stream's end",
+        "SIM_ARRIVALS={}: the last of {n} viewers arrives {} s into the stream, past its end",
         cfg.arrivals,
-        plan.last().map_or(0.0, |&(t, _)| (t - t0()).as_secs_f64()),
+        plan.last()
+            .map_or(0.0, |&(t, _)| (t - stream_start()).as_secs_f64()),
     );
     plan
 }
 
 /// When viewers leave for good ([`Depart`]): `(at, node)`, sorted, for
-/// `d.share` of the nodes but the seed there at `d.at` (by `arrivals`, the
-/// rest there from the start), drawn at random.
+/// `d.share` of the nodes but the seed there `d.at` into the stream (by
+/// `arrivals`, the rest there from the start), drawn at random.
 fn depart_plan(
     cfg: &Config,
     d: Depart,
@@ -6098,9 +6115,9 @@ fn depart_plan(
     nodes: usize,
     rng: &mut DetRng,
 ) -> Vec<(Time, usize)> {
-    let from = t0() + d.at;
+    let from = stream_start() + d.at;
     assert!(
-        from + d.window <= t0() + Duration::SECOND + Duration::from_secs(cfg.stream_secs as i64),
+        from + d.window <= stream_start() + Duration::from_secs(cfg.stream_secs as i64),
         "SIM_DEPART={d}: past the stream's end"
     );
     let mut arrive = vec![t0(); nodes];
@@ -7616,7 +7633,7 @@ fn check_arrivals(sim: &Sim, r: &Report) -> AudienceReport {
     eprintln!("{a:?}\n{r:?}");
     assert_eq!((a.unread, a.behind), (0, 0), "{a:?}");
     for (i, n) in sim.nodes.iter().enumerate().filter(|(_, n)| n.watched()) {
-        let by = n.joined.max(t0() + Duration::SECOND) + Duration::SECOND;
+        let by = n.joined.max(stream_start()) + Duration::SECOND;
         assert!(
             n.first_read.is_some_and(|t| t < by) && n.caught_up.is_some_and(|t| t < by),
             "node {i} joined at {:?}: first read {:?}, caught up {:?}",
@@ -7643,9 +7660,9 @@ fn sim_trickle_arrivals_catch_up() {
         let mut sim = Sim::new(cfg);
         assert_eq!(sim.arrivals.len(), 12);
         assert!(
-            sim.arrivals
-                .iter()
-                .all(|&(t, _)| t < t0() + Duration::from_secs(5))
+            sim.arrivals.iter().all(|&(t, _)| (stream_start()
+                ..stream_start() + Duration::from_secs(5))
+                .contains(&t))
         );
         let r = run_checking_links(&mut sim);
         let a = check_arrivals(&sim, &r);
@@ -7691,9 +7708,17 @@ fn sim_event_burst_joins_a_warm_swarm() {
         window,
     };
     let mut sim = Sim::new(audience_config(22, 16, 16, event));
-    let warm = sim.arrivals.iter().filter(|&&(t, _)| t < t0() + at).count();
+    let warm = sim
+        .arrivals
+        .iter()
+        .filter(|&&(t, _)| t < stream_start() + at)
+        .count();
     assert_eq!(warm, 4);
-    assert!(sim.arrivals.iter().all(|&(t, _)| t < t0() + at + window));
+    assert!(
+        sim.arrivals
+            .iter()
+            .all(|&(t, _)| (stream_start()..stream_start() + at + window).contains(&t))
+    );
     let r = run_checking_links(&mut sim);
     check_arrivals(&sim, &r);
     for (i, n) in sim
@@ -7708,11 +7733,11 @@ fn sim_event_burst_joins_a_warm_swarm() {
 
 #[test]
 fn sim_departures_leave_the_rest_watching() {
-    // 16 honest viewers trickle in over the first 7 s, and half of them
-    // leave for good within 2 s from 8 s, closing their links or going
-    // silent. The rest read every chunk to the end and none of them keeps
-    // a viewer gone as a parent; every viewer whose open parent left logs
-    // it at that departure, as the row counts.
+    // 16 honest viewers trickle in over the stream's first 7 s, and half
+    // of them leave for good within 2 s from 8 s in, closing their links
+    // or going silent. The rest read every chunk to the end and none of
+    // them keeps a viewer gone as a parent; every viewer whose open parent
+    // left logs it at that departure, as the row counts.
     let mut traces = Vec::new();
     for abrupt in [false, true] {
         let mut cfg = audience_config(23, 16, 20, Arrivals::Trickle(None));
@@ -7734,7 +7759,7 @@ fn sim_departures_leave_the_rest_watching() {
             .collect();
         assert_eq!(gone.len(), 8);
         for &i in &gone {
-            let left = sim.nodes[i].left.unwrap() - t0();
+            let left = sim.nodes[i].left.unwrap() - stream_start();
             assert!(left >= Duration::from_secs(8) && left < Duration::from_secs(10));
         }
         for (i, n) in sim
@@ -7785,8 +7810,10 @@ fn sim_departures_leave_the_rest_watching() {
         );
         let rec = a.recovery.unwrap();
         assert_eq!((rec.stayed, rec.stranded), (8, 0));
+        // Abruptly, the children first wait out a silent parent's push
+        // deadlines and silence (5 s).
         assert!(
-            rec.recover < Duration::from_secs(5),
+            rec.recover < Duration::from_secs(if abrupt { 8 } else { 5 }),
             "abrupt {abrupt}: {rec:?}"
         );
     }
