@@ -513,6 +513,7 @@ FAMILIES = "c6a,c7a,c8a,m6a,m7a,m8a,r6a,r7a,r8a,c6i,c7i,c8i,m6i,m7i,m8i,r6i,r7i,
 TICK = 15
 SSH_GRACE = 180
 POOL_BACKOFF = 600
+THROTTLE_BACKOFF = 60
 PRICE_REFRESH = 600
 BUDGET_REFRESH = 120
 SYSTEM_GIB = 4
@@ -653,6 +654,9 @@ CAPACITY_ERRORS = {
     "Unsupported",
 }
 QUOTA_ERRORS = {"MaxSpotInstanceCountExceeded", "VcpuLimitExceeded"}
+# The account's API request rate in a region ran out: its launches wait
+# THROTTLE_BACKOFF while the tick plans the deficit elsewhere.
+THROTTLE_ERRORS = {"RequestLimitExceeded", "Throttling", "ThrottlingException"}
 
 
 class Log:
@@ -1488,10 +1492,13 @@ class AwsError(Exception):
 def aws(region: str, *args: str) -> dict:
     """An aws CLI call in `region`. It runs in a session of its own, so a ^C
     at the terminal reaches the controller alone, which lets a launch
-    finish (Run.held) and terminates the run's instances before it exits."""
+    finish (Run.held) and terminates the run's instances before it exits.
+    The CLI retries a throttled call 4 times, not its default 2, so a busy
+    account's terminations and describes go through."""
+    env = {**os.environ, "AWS_MAX_ATTEMPTS": os.environ.get("AWS_MAX_ATTEMPTS", "5")}
     p = subprocess.run(
         ["aws", *args, "--region", region, "--output", "json"],
-        capture_output=True, text=True, start_new_session=True,
+        capture_output=True, text=True, start_new_session=True, env=env,
     )
     if p.returncode:
         m = re.search(r"An error occurred \(([^)]+)\)", p.stderr)
@@ -3729,6 +3736,11 @@ class Run:
                         r.budget = self.live_vcpus(r.name)
                         r.next_budget = now + BUDGET_REFRESH
                         log(f"{r.name}: {e.code}: its budget is {r.budget} vCPUs for {BUDGET_REFRESH // 60} min")
+                    elif e.code in THROTTLE_ERRORS:
+                        until = now + THROTTLE_BACKOFF
+                        for p in r.pools:
+                            self.backoff[p.key] = max(self.backoff.get(p.key, 0), until)
+                        log(f"{r.name}: {e.code}; no launches there for {THROTTLE_BACKOFF} s")
                     elif e.code == "AuthFailure.ServiceLinkedRoleCreationNotPermitted":
                         failure = failure or SystemExit(
                             "the account's first spot instance needs the Spot service-linked role; an "
