@@ -956,6 +956,18 @@ impl PeerChannelScheduler {
         n > 0
     }
 
+    /// Whether a request round may ask the peer for chunk `b`: not while
+    /// the peer is backed off it ([`REQUEST_BACKOFF`]), and not while a
+    /// request for it is out to the peer. The channel keeps one request
+    /// time per chunk, which the first answer, settle or time out clears,
+    /// so a second request's bytes would never leave the flight, and a
+    /// flight that never drains stops the channel. The swarm's requested
+    /// bins don't rule it out: invalid data releases a chunk, and so does
+    /// another channel's deadline, while it is still asked of this one.
+    fn may_ask(&self, b: Bin) -> bool {
+        !self.backoff_bins.filled_at(b) && self.request_times.get(b).is_none()
+    }
+
     /// Releases the channel's outstanding requests to the other channels.
     fn clear_requests(&mut self, s: &mut SwarmState) {
         while let Some(b) = self.request_bins.pop_le(Time::MAX) {
@@ -1363,7 +1375,7 @@ impl PeerChannelScheduler {
         'walk: while let Some(x) = next {
             let (mut b, br) = x.base();
             while b <= br {
-                if !self.backoff_bins.filled_at(b) && !yields(b) {
+                if self.may_ask(b) && !yields(b) {
                     let v = &self.candidate_bins;
                     let open = v.len() < n
                         || v.get(n - 1)
@@ -1463,7 +1475,7 @@ impl PeerChannelScheduler {
                 if b >= bl.to {
                     break 'walk;
                 }
-                if !self.backoff_bins.filled_at(b) {
+                if self.may_ask(b) {
                     let v = self.candidate_bins.get(live..).unwrap_or_default();
                     let open = v.len() < k
                         || v.get(k - 1)

@@ -871,6 +871,35 @@ fn requests_pruned_behind_the_store_leave_the_flight() {
 }
 
 #[test]
+fn a_chunk_asked_of_a_peer_isnt_asked_of_it_again() {
+    // Invalid data from another peer releases a chunk this channel has a
+    // request out for. Asked for it again, the channel would keep the
+    // second request's bytes in its flight once the chunk came.
+    let mut f = fixture(pull());
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    let o = add_ready(&mut f, &mut q, 1);
+    f.sched.s.first_chunk_set = true;
+    f.sched.handle_have(p, Bin::new(1, 0), now());
+    assert_eq!(requests_at(&mut f, p, now()), vec![Bin(0), Bin(2)]);
+    assert_eq!(f.sched.channels[&p].controller.in_flight(), 2048);
+    f.sched
+        .handle_data(o, Bin(0), now(), None, false, false, now(), Bin(0), &mut q);
+    assert!(f.sched.s.request_bins.empty_at(Bin(0)));
+
+    let later = now() + Duration::from_millis(100);
+    assert_eq!(requests_at(&mut f, p, later), vec![]);
+    assert_eq!(f.sched.channels[&p].controller.in_flight(), 2048);
+    for b in [Bin(0), Bin(2)] {
+        f.sched.consume(b, later, &f.swarm, &mut q);
+        f.sched
+            .handle_data(p, b, later, None, true, true, later, Bin(0), &mut q);
+    }
+    f.sched.handle_message_end(p, later, &mut q);
+    assert_eq!(f.sched.channels[&p].controller.in_flight(), 0);
+}
+
+#[test]
 fn channels_ping_once_a_second() {
     let mut f = fixture(SwarmOptions {
         push_mode: PushMode::Hybrid,
