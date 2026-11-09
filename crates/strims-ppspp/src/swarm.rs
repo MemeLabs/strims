@@ -340,6 +340,14 @@ impl Swarm {
         }
     }
 
+    /// Moves the read offset on past chunks readers wait on; see
+    /// [`Buffer::skip_to`](crate::store::Buffer::skip_to).
+    pub(crate) fn skip_to(&mut self, b: Bin) {
+        if b < crate::MAX_BIN {
+            self.store.skip_to(b);
+        }
+    }
+
     /// Loads a cache, whose URI must match this swarm's and whose epoch the
     /// swarm key signed. A refused URI or epoch leaves the swarm unchanged.
     /// The store takes only the data the cache's signatures cover.

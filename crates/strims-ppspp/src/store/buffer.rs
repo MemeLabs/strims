@@ -662,26 +662,51 @@ impl Buffer {
     /// before the offset can still be sent ([`Buffer::write_data`]) until
     /// newer chunks take their slots.
     ///
-    /// The walk back over stored chunks stops at the window's start, so the
-    /// tail never moves back over chunks the ring has overwritten.
+    /// The tail never moves back over chunks the ring has overwritten
+    /// ([`Buffer::run_at`]).
     pub fn set_offset(&mut self, b: Bin) {
         self.backlog = None;
         self.sem += 1;
 
+        let (from, next) = self.run_at(b);
+        self.next = next;
+        self.read_from = from;
+        self.prune();
+        self.set_ready();
+    }
+
+    /// Moves the read offset on to the start of the run of stored chunks
+    /// that contains `b`, as [`Buffer::set_offset`] does, but for readers
+    /// that may have read before it: one before the new tail gets
+    /// [`Error::BufferUnderrun`] and recovers to it
+    /// ([`BufferReader::recover`]), told how much it skipped. The window
+    /// stays. It never moves the offset back, nor with a backlog open.
+    pub(crate) fn skip_to(&mut self, b: Bin) {
+        let (from, next) = self.run_at(b);
+        if self.backlog.is_some() || self.tail().is_none() || from <= self.tail() {
+            return;
+        }
+        self.next = next;
+        self.read_from = from;
+        self.prune();
+        self.push_readable();
+    }
+
+    /// The start of the run of stored chunks that contains `b` (or `b`
+    /// itself if it isn't stored), and the first missing chunk after `b`.
+    /// The walk back stops at the window's start, so the run never reaches
+    /// back over chunks the ring has overwritten.
+    fn run_at(&self, b: Bin) -> (Bin, Bin) {
         let start = self.window_start();
         let mut b = b.base_left();
         let next = self.find_empty_after(b);
-        let mut prev = next;
+        let mut from = next;
         while b >= start && self.bins.filled_at(b) {
             b = self.bins.cover(b).base_left().max(start);
-            prev = b;
+            from = b;
             b = b.layer_left();
         }
-
-        self.next = next;
-        self.read_from = prev;
-        self.prune();
-        self.set_ready();
+        (from, next)
     }
 
     /// After an underrun, moves the window to the first stored chunk after

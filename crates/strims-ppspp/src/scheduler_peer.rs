@@ -212,6 +212,11 @@ use push::{PushChannel, PushState};
 
 /// How often the scheduler prunes state behind the window.
 pub(crate) const SCHEDULER_GC_INTERVAL: Duration = Duration::from_secs(5);
+/// How long a low latency reader waits on the first chunk missing after its
+/// first read position before it moves on to its newest stored run
+/// ([`PeerSwarmScheduler::settle_first_read`]): past the seconds such a
+/// gap takes to fill when some neighbour fetches it, however slow the start.
+pub(crate) const FIRST_GAP_WAIT: Duration = Duration::from_secs(5);
 /// How long a channel waits for the peer's handshake before it sends
 /// RESTART (again).
 pub(crate) const SCHEDULER_RESTART_COOLDOWN: Duration = Duration::from_secs(1);
@@ -440,6 +445,10 @@ pub(crate) struct SwarmState {
     delivery_mode: DeliveryMode,
 
     pub(crate) first_chunk_set: bool,
+    /// The chunk a low latency reader waits on after its first read
+    /// position, and since when, until it comes
+    /// ([`PeerSwarmScheduler::settle_first_read`]).
+    first_gap: Option<(Bin, Time)>,
 
     next_gc_time: Time,
 
@@ -1609,6 +1618,7 @@ impl PeerSwarmScheduler {
                 delivery_mode: o.delivery_mode,
                 first_chunk_set: o.scheduling_method == SchedulingMethod::SEED
                     || !swarm.store().is_empty(),
+                first_gap: None,
                 next_gc_time: now + rand_millis(rng, 5000),
                 request_order,
                 mode: o.push_mode,
@@ -1671,12 +1681,48 @@ impl PeerSwarmScheduler {
             }
             self.s.request_bins.fill_before(b);
             swarm.set_offset(b);
+            if self.s.delivery_mode == DeliveryMode::LOW_LATENCY {
+                self.s.first_gap = Some((swarm.store().next(), now));
+            }
 
             for &peer in self.channels.keys() {
                 q.enqueue(peer, self.s.key);
             }
         }
+        self.settle_first_read(now, swarm, q);
         self.check_backlog(now, swarm);
+    }
+
+    /// A low latency read position starts at the newest run of chunks we
+    /// stored, but a neighbour may have sent us those from before its own
+    /// read position, which it set at a newer chunk that arrived meanwhile
+    /// and from which on it fetches. If every neighbour we have did, none
+    /// fetches the chunks after our run (an announcement can lie), and the
+    /// reader would wait on them until the window passes them. So when the
+    /// first chunk missing after the first read position hasn't come in
+    /// [`FIRST_GAP_WAIT`], and newer chunks are stored, the read position
+    /// moves on to the newest run ([`Swarm::skip_to`]: readers learn what
+    /// they skipped), and the wait starts over there; it ends once the
+    /// chunk it waits on comes.
+    fn settle_first_read(&mut self, now: Time, swarm: &mut Swarm, q: &mut impl PeerTaskQueue) {
+        let Some((gap, since)) = self.s.first_gap else {
+            return;
+        };
+        let next = swarm.store().next();
+        if next != gap || next.is_none() {
+            self.s.first_gap = None;
+            return;
+        }
+        if now - since < FIRST_GAP_WAIT || self.s.have_bin_max < next {
+            return;
+        }
+        let b = self.s.have_bin_max;
+        self.s.request_bins.fill_before(b);
+        swarm.skip_to(b);
+        self.s.first_gap = Some((swarm.store().next(), now));
+        for &peer in self.channels.keys() {
+            q.enqueue(peer, self.s.key);
+        }
     }
 
     /// Prunes bin times, the request map, the hybrid's maps and request
@@ -1750,6 +1796,7 @@ impl PeerSwarmScheduler {
         s.subscribers_changed = true;
         s.stream_sources = 0;
         s.first_chunk_set = false;
+        s.first_gap = None;
         // The new stream starts at bin 0; see `PeerChannelScheduler::reset`.
         s.peer_max_have_bin = Bin(0);
         s.backlog = None;

@@ -791,6 +791,38 @@ fn chunks_before_the_read_offset_stay_sendable() {
     b.write_data(Bin::new(0, 14), Time::EPOCH, &mut w).unwrap();
 }
 
+/// A reader stuck on a chunk that never comes: skipping on to a later run
+/// gives it an underrun, its recovery says how much it skipped, and it
+/// reads on from the run's start. The window stays, and the offset never
+/// moves back.
+#[test]
+fn a_skip_moves_the_offset_on_and_readers_learn_it() {
+    let cs = 8;
+    let mut b = Buffer::new(16, cs).unwrap();
+    b.consume(Bin::new(0, 7), &chunk_bytes(7, cs)).unwrap();
+    b.set_offset(Bin::new(0, 7));
+    let mut r = BufferReader::new(&b);
+    assert_eq!(read_n(&mut r, &b, 1000), stream_bytes(7..8, cs));
+    for o in 15..18 {
+        b.consume(Bin::new(0, o), &chunk_bytes(o, cs)).unwrap();
+    }
+    assert_eq!(r.read(&b, &mut [0; 8]), Err(Error::WouldBlock));
+
+    let seq = b.readable_seq();
+    b.skip_to(Bin::new(0, 17));
+    assert_eq!(b.tail(), Bin::new(0, 15));
+    assert_eq!(b.next(), Bin::new(0, 18));
+    assert_ne!(b.readable_seq(), seq, "waiting readers wake");
+    assert_eq!(r.read(&b, &mut [0; 8]), Err(Error::BufferUnderrun));
+    assert_eq!(r.recover(&mut b), Ok(7 * 8));
+    assert_eq!(read_n(&mut r, &b, 1000), stream_bytes(15..18, cs));
+    let mut w = DataRecorder::default();
+    b.write_data(Bin::new(0, 7), Time::EPOCH, &mut w).unwrap();
+
+    b.skip_to(Bin::new(0, 7));
+    assert_eq!(b.tail(), Bin::new(0, 15), "never back");
+}
+
 /// A rewind within the window moves only its reader, to the start of the
 /// offset's chunk, and the bytes from there come again in order. An
 /// offset past the reader's position or before the tail stays refused.

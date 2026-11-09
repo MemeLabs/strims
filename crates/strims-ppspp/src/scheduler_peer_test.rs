@@ -3690,6 +3690,73 @@ fn a_joiner_answers_for_chunks_before_its_read_offset() {
     assert!(f.sched.s.sent_bins.filled_at(Bin(2 * 100)));
 }
 
+/// A joiner whose first chunk came from a neighbour that reads from later
+/// on: the chunks after it never come, so after [`FIRST_GAP_WAIT`] its read
+/// position moves on to the newest run it stored, and only the first wait
+/// counts.
+#[test]
+fn a_first_read_position_no_neighbour_continues_moves_on() {
+    let mut f = fixture(SwarmOptions {
+        live_window: 1 << 10,
+        integrity: crate::integrity::VerifierOptions {
+            protection_method: ProtectionMethod::NONE,
+            ..Default::default()
+        },
+        ..pull()
+    });
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    f.swarm.publish(Bin(2 * 7), &[7; 1024]).unwrap();
+    drain(&mut f, &mut q);
+    f.sched.run(now(), &mut f.swarm, &mut q);
+    assert_eq!(f.swarm.store().tail(), Bin(2 * 7));
+    assert!(f.sched.handle_have(p, Bin::new(3, 2), now()));
+    for o in 16..24u64 {
+        f.swarm.publish(Bin(2 * o), &[o as u8; 1024]).unwrap();
+    }
+    drain(&mut f, &mut q);
+
+    let wait = now() + FIRST_GAP_WAIT;
+    f.sched
+        .run(wait - Duration::MILLISECOND, &mut f.swarm, &mut q);
+    assert_eq!(f.swarm.store().tail(), Bin(2 * 7), "it waits");
+    f.sched.run(wait, &mut f.swarm, &mut q);
+    assert_eq!(f.swarm.store().tail(), Bin(2 * 16));
+    assert_eq!(f.swarm.store().next(), Bin(2 * 24));
+    assert!(f.sched.s.request_bins.filled_at(Bin(2 * 8)));
+
+    // Waiting at the live edge with nothing newer stored moves nothing.
+    f.sched.run(wait + FIRST_GAP_WAIT * 2, &mut f.swarm, &mut q);
+    assert_eq!(f.swarm.store().tail(), Bin(2 * 16));
+}
+
+/// A first gap that fills in time leaves the read position where it was,
+/// and later gaps never move it.
+#[test]
+fn a_first_gap_that_fills_settles_the_read_position() {
+    let mut f = fixture(SwarmOptions {
+        live_window: 1 << 10,
+        integrity: crate::integrity::VerifierOptions {
+            protection_method: ProtectionMethod::NONE,
+            ..Default::default()
+        },
+        ..pull()
+    });
+    let mut q = MockQueue::default();
+    ready_channel(&mut f, &mut q);
+    f.swarm.publish(Bin(2 * 7), &[7; 1024]).unwrap();
+    drain(&mut f, &mut q);
+    f.sched.run(now(), &mut f.swarm, &mut q);
+    for o in [8, 16] {
+        f.swarm.publish(Bin(2 * o), &[o as u8; 1024]).unwrap();
+    }
+    drain(&mut f, &mut q);
+    f.sched.run(now() + Duration::SECOND, &mut f.swarm, &mut q);
+    f.sched
+        .run(now() + FIRST_GAP_WAIT * 3, &mut f.swarm, &mut q);
+    assert_eq!(f.swarm.store().tail(), Bin(2 * 7));
+}
+
 /// Hands the swarm's published chunks to the scheduler.
 fn drain(f: &mut Fixture, q: &mut MockQueue) {
     while let Some(e) = f.swarm.poll_event() {
