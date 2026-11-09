@@ -1135,13 +1135,13 @@ impl Runner {
     /// moves.
     ///
     /// [`Rewind::Done`] once every chunk from there to the reader's
-    /// position is stored. While chunks before the store's window must come
-    /// from peers, [`Rewind::Pending`]: the swarm fetches them as a
-    /// backlog, after its live chunks, from the channels that announced
-    /// them (from the start of its munro for a chunk none announced), and
-    /// stores them for local readers alone (they are never announced,
-    /// pushed or counted in the store rate). Call again at the swarm's
-    /// next [`Event::Readable`]. So too before the swarm's first
+    /// position is stored. While chunks before the store's tail that it
+    /// lacks must come from peers, [`Rewind::Pending`]: the swarm fetches
+    /// them as a backlog, after its live chunks, from the channels that
+    /// announced them (from the start of its munro for a chunk none
+    /// announced), and stores them for local readers alone (they are never
+    /// announced, pushed or counted in the store rate). Call again at the
+    /// swarm's next [`Event::Readable`]. So too before the swarm's first
     /// read position. Readers asking for chunks one backlog holds share it;
     /// an earlier chunk extends it.
     ///
@@ -1209,7 +1209,7 @@ impl Runner {
         if !sched.backlog_servable(from, to, now) {
             return Err(RewindError::Unavailable);
         }
-        swarm.open_backlog(from, &sched.s.have_bins)?;
+        swarm.open_backlog(from)?;
         let mut q = Queues {
             peers,
             transmit: &mut events.transmit,
@@ -1222,7 +1222,7 @@ impl Runner {
         if pending {
             return Ok(Rewind::Pending);
         }
-        // every chunk was stored before the window moved past it
+        // the window holds every chunk of it
         swarm.rewind_reader(reader, offset).map(Rewind::Done)
     }
 

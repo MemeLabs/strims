@@ -273,7 +273,7 @@ impl Swarm {
         SwarmHandshake { options, len }
     }
 
-    /// A reader at the start of the window.
+    /// A reader at the store's tail.
     pub fn reader(&self) -> BufferReader {
         BufferReader::new(&self.store)
     }
@@ -321,9 +321,9 @@ impl Swarm {
 
     /// Opens or extends the store's backlog down to `from`; see
     /// [`Buffer::open_backlog`].
-    pub(crate) fn open_backlog(&mut self, from: Bin, had: &Map) -> Result<(), RewindError> {
+    pub(crate) fn open_backlog(&mut self, from: Bin) -> Result<(), RewindError> {
         self.backlog_fits(from)?;
-        self.store.open_backlog(from, had)
+        self.store.open_backlog(from)
     }
 
     /// Closes the store's backlog.

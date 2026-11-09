@@ -3618,7 +3618,7 @@ fn report_rules_read_each_reporter_by_its_own_clock() {
     rule_out(-5_000);
 }
 
-/// A joiner whose window starts at chunk 512 (1 KiB chunks, a 1024 chunk
+/// A joiner whose read offset is at chunk 512 (1 KiB chunks, a 1024 chunk
 /// window): it holds chunks 512..520, its peer announces chunks 0..520,
 /// and a backlog of chunks 384..512 is open.
 fn rewound(options: SwarmOptions) -> (Fixture, MockQueue, PeerKey) {
@@ -3643,10 +3643,51 @@ fn rewound(options: SwarmOptions) -> (Fixture, MockQueue, PeerKey) {
     assert!(f.sched.handle_have(p, Bin::new(9, 0), now()));
     assert!(f.sched.handle_have(p, Bin::new(3, 64), now()));
     assert!(f.sched.backlog_servable(Bin(2 * 384), Bin(2 * 512), now()));
-    let had = f.sched.s.have_bins.clone();
-    f.swarm.open_backlog(Bin(2 * 384), &had).unwrap();
+    f.swarm.open_backlog(Bin(2 * 384)).unwrap();
     f.sched.open_backlog(Bin(2 * 384), Bin(2 * 512), &mut q);
     (f, q, p)
+}
+
+/// A joiner reads from its newest run of chunks on: a peer's request for a
+/// chunk it announced before that run is answered all the same.
+#[test]
+fn a_joiner_answers_for_chunks_before_its_read_offset() {
+    let mut f = fixture(SwarmOptions {
+        live_window: 1 << 10,
+        integrity: crate::integrity::VerifierOptions {
+            protection_method: ProtectionMethod::NONE,
+            ..Default::default()
+        },
+        ..pull()
+    });
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    for o in [100].into_iter().chain(512..520u64) {
+        f.swarm.publish(Bin(2 * o), &[o as u8; 1024]).unwrap();
+    }
+    drain(&mut f, &mut q);
+    assert!(f.sched.s.have_bins.filled_at(Bin(2 * 100)));
+    f.sched.run(now(), &mut f.swarm, &mut q);
+    assert!(f.sched.s.first_chunk_set);
+    assert_eq!(f.swarm.store().tail(), Bin(2 * 512));
+
+    assert!(f.sched.handle_request(p, Bin(2 * 100), now(), &mut q));
+    let mut buf = vec![0u8; 4096];
+    let mut cw = MeteredWriter::new(&mut buf, 1);
+    let pri = f.sched.s.answer_priority();
+    let r = f.sched.write_data(
+        p,
+        Bin(2 * 100),
+        now(),
+        pri,
+        now(),
+        &f.swarm,
+        &mut cw,
+        true,
+        &mut q,
+    );
+    assert_eq!(r, Ok(()));
+    assert!(f.sched.s.sent_bins.filled_at(Bin(2 * 100)));
 }
 
 /// Hands the swarm's published chunks to the scheduler.
@@ -3773,10 +3814,12 @@ fn gc_keeps_a_backlogs_request_times() {
 fn a_reopened_backlog_asks_only_from_its_start() {
     let (mut f, mut q, p) = rewound(pull());
     f.sched.close_backlog(&mut f.swarm);
-    let had = f.sched.s.have_bins.clone();
-    f.swarm.open_backlog(Bin(2 * 448), &had).unwrap();
+    f.swarm.open_backlog(Bin(2 * 448)).unwrap();
     f.sched.open_backlog(Bin(2 * 448), Bin(2 * 512), &mut q);
-    assert_eq!(f.swarm.store().store_from(), Bin(2 * 448));
+    assert_eq!(
+        f.swarm.store().backlog(),
+        Some((Bin(2 * 448), Bin(2 * 512)))
+    );
     let requests = requests_at(&mut f, p, now());
     assert!(!requests.is_empty());
     assert!(

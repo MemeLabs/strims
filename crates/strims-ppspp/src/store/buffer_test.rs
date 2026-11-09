@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use strims_base::time::Time;
-use strims_binmap::{Bin, Map};
+use strims_binmap::Bin;
 
 use super::*;
 use crate::codec::{self, Message, MessageWriter};
@@ -741,21 +741,54 @@ fn stream_bytes(chunks: core::ops::Range<u64>, cs: usize) -> Vec<u8> {
 }
 
 /// A joiner's buffer of 16 chunks of 8 bytes: chunk 13 came first, then
-/// chunks 20..24, the read offset is at 20 (the window starts there), and
+/// chunks 20..24, the read offset is at 20 (the window starts at 8), and
 /// the reader has read to the end.
-fn joined() -> (Buffer, BufferReader, Map) {
+fn joined() -> (Buffer, BufferReader) {
     let cs = 8;
     let mut b = Buffer::new(16, cs).unwrap();
-    let mut had = Map::new();
     for o in [13].into_iter().chain(20..24) {
         b.consume(Bin::new(0, o), &chunk_bytes(o, cs)).unwrap();
-        had.set(Bin::new(0, o));
     }
     b.set_offset(Bin::new(0, 23));
     assert_eq!(b.tail(), Bin::new(0, 20));
+    assert_eq!(b.window_start(), Bin::new(0, 8));
     let mut r = BufferReader::new(&b);
     assert_eq!(read_n(&mut r, &b, 1000), stream_bytes(20..24, cs));
-    (b, r, had)
+    (b, r)
+}
+
+/// A read offset leaves the window where it was: a chunk stored, and so
+/// announced, before the offset can still be sent, and one that arrives
+/// late there is stored and sent too, while readers start at the offset.
+/// Only a newer chunk in its slot puts it out of reach.
+#[test]
+fn chunks_before_the_read_offset_stay_sendable() {
+    let cs = 8;
+    let (mut b, mut r) = joined();
+    let mut w = DataRecorder::default();
+    b.write_data(Bin::new(0, 13), Time::EPOCH, &mut w).unwrap();
+    b.consume(Bin::new(0, 14), &chunk_bytes(14, cs)).unwrap();
+    b.write_data(Bin::new(0, 14), Time::EPOCH, &mut w).unwrap();
+    assert_eq!(
+        w.0,
+        vec![
+            (Bin::new(0, 13), chunk_bytes(13, cs)),
+            (Bin::new(0, 14), chunk_bytes(14, cs))
+        ]
+    );
+    assert_eq!(b.tail(), Bin::new(0, 20));
+    assert!(
+        b.bins().empty_at(Bin::new(1, 7)),
+        "readers' chunks start at the tail"
+    );
+    assert_eq!(r.read(&b, &mut [0; 8]), Err(Error::WouldBlock));
+
+    b.consume(Bin::new(0, 29), &chunk_bytes(29, cs)).unwrap();
+    assert_eq!(
+        b.write_data(Bin::new(0, 13), Time::EPOCH, &mut w),
+        Err(Error::BinDataNotSet)
+    );
+    b.write_data(Bin::new(0, 14), Time::EPOCH, &mut w).unwrap();
 }
 
 /// A rewind within the window moves only its reader, to the start of the
@@ -798,7 +831,7 @@ fn a_rewind_moves_its_reader_alone_to_the_chunk_start() {
     assert_eq!(r.rewind(&b, 23 * 8), Err(RewindError::OutsideWindow));
     assert_eq!(r.rewind(&b, 24 * 8), Ok(24 * 8));
     assert_eq!(
-        b.open_backlog(Bin::new(0, 23), &Map::new()),
+        b.open_backlog(Bin::new(0, 23)),
         Err(RewindError::OutsideWindow),
         "a sliding window's backlog shares its slots"
     );
@@ -807,7 +840,7 @@ fn a_rewind_moves_its_reader_alone_to_the_chunk_start() {
 /// A reader whose next read fails keeps that error for the read.
 #[test]
 fn a_rewind_leaves_a_pending_error_to_the_next_read() {
-    let (mut b, mut r, _) = joined();
+    let (mut b, mut r) = joined();
     b.reset();
     assert_eq!(
         r.rewind(&b, 160),
@@ -817,21 +850,25 @@ fn a_rewind_leaves_a_pending_error_to_the_next_read() {
 }
 
 /// A backlog before the tail stores its chunks while the tail, `next` and
-/// every reader stay, new readers included. Chunks stored before the
-/// window moved past them count as stored. Once all are stored the window
-/// starts at the backlog, and a reader moves back into it.
+/// every reader stay, new readers included. Chunks the window holds count
+/// as stored. Once all are stored the tail moves back to the backlog's
+/// start, and a reader moves back into it.
 #[test]
-fn a_backlog_becomes_the_window_once_it_is_whole() {
+fn a_backlog_becomes_the_tail_once_it_is_whole() {
     let cs = 8;
-    let (mut b, mut r, had) = joined();
+    let (mut b, mut r) = joined();
     let seq = b.readable_seq();
-    b.open_backlog(Bin::new(0, 12), &had).unwrap();
+    b.open_backlog(Bin::new(0, 12)).unwrap();
     assert_eq!(b.backlog(), Some((Bin::new(0, 12), Bin::new(0, 20))));
-    assert_eq!(b.store_from(), Bin::new(0, 12));
+    assert_eq!(
+        b.store_from(),
+        Bin::new(0, 8),
+        "the window holds the backlog"
+    );
     assert_eq!(b.tail(), Bin::new(0, 20));
     assert!(b.bins_filled_at(Bin::new(0, 13)));
     assert!(!b.bins_filled_at(Bin::new(0, 12)));
-    assert!(b.bins_filled_at(Bin::new(0, 11)), "before the backlog");
+    assert!(b.bins_filled_at(Bin::new(0, 7)), "before the window");
     assert_eq!(b.readable_seq(), seq);
 
     for o in [12, 14, 15, 16, 17, 18] {
@@ -866,17 +903,17 @@ fn a_backlog_becomes_the_window_once_it_is_whole() {
     assert_eq!(b.tail(), Bin::new(0, 13));
 }
 
-/// A backlog extends down to an earlier chunk, and one its chunks already
-/// fill is whole at once.
+/// A backlog extends down to an earlier chunk, and one the window already
+/// holds whole is whole at once.
 #[test]
 fn a_backlog_extends_and_completes_from_what_the_buffer_had() {
     let cs = 8;
-    let (mut b, _, had) = joined();
-    b.open_backlog(Bin::new(0, 16), &had).unwrap();
+    let (mut b, _) = joined();
+    b.open_backlog(Bin::new(0, 16)).unwrap();
     b.consume(Bin::new(0, 17), &chunk_bytes(17, cs)).unwrap();
-    b.open_backlog(Bin::new(0, 18), &had).unwrap();
+    b.open_backlog(Bin::new(0, 18)).unwrap();
     assert_eq!(b.backlog(), Some((Bin::new(0, 16), Bin::new(0, 20))));
-    b.open_backlog(Bin::new(0, 14), &had).unwrap();
+    b.open_backlog(Bin::new(0, 14)).unwrap();
     assert_eq!(b.backlog(), Some((Bin::new(0, 14), Bin::new(0, 20))));
     assert!(
         b.bins_filled_at(Bin::new(0, 17)),
@@ -884,8 +921,8 @@ fn a_backlog_extends_and_completes_from_what_the_buffer_had() {
     );
     assert!(!b.bins_filled_at(Bin::new(0, 14)));
 
-    let (mut b, mut r, had) = joined();
-    b.open_backlog(Bin::new(0, 13), &had).unwrap();
+    let (mut b, mut r) = joined();
+    b.open_backlog(Bin::new(0, 13)).unwrap();
     for o in 14..20 {
         assert!(b.backlog().is_some());
         b.consume(Bin::new(0, o), &chunk_bytes(o, cs)).unwrap();
@@ -894,12 +931,16 @@ fn a_backlog_extends_and_completes_from_what_the_buffer_had() {
     assert_eq!(r.rewind(&b, 13 * 8), Ok(13 * 8));
     assert_eq!(read_n(&mut r, &b, 1000), stream_bytes(13..24, cs));
 
-    let mut whole = had.clone();
-    whole.set(Bin::new(1, 7)); // chunks 14 and 15
-    let (mut b, _, _) = joined();
-    b.open_backlog(Bin::new(0, 14), &whole).unwrap();
+    // chunks that arrive late, before the read offset, are stored in the
+    // window and count for a backlog opened after them
+    let (mut b, _) = joined();
+    b.consume(Bin::new(1, 7), &stream_bytes(14..16, cs))
+        .unwrap();
     b.consume(Bin::new(2, 4), &stream_bytes(16..20, cs))
         .unwrap();
+    assert_eq!(b.tail(), Bin::new(0, 20));
+    b.open_backlog(Bin::new(0, 14)).unwrap();
+    assert_eq!(b.backlog(), None);
     assert_eq!(b.tail(), Bin::new(0, 14));
 }
 
@@ -909,13 +950,13 @@ fn a_backlog_extends_and_completes_from_what_the_buffer_had() {
 fn a_backlog_that_stops_fitting_is_closed() {
     let cs = 8;
     // a backlog a window or more behind the newest chunk never fits
-    let (mut b, _, had) = joined();
+    let (mut b, _) = joined();
     assert_eq!(
-        b.open_backlog(Bin::new(0, 7), &had),
+        b.open_backlog(Bin::new(0, 7)),
         Err(RewindError::OutsideWindow)
     );
     assert_eq!(b.backlog(), None);
-    b.open_backlog(Bin::new(0, 8), &had).unwrap();
+    b.open_backlog(Bin::new(0, 8)).unwrap();
 
     // the chunk sharing chunk 8's slot closes it
     let seq = b.readable_seq();
@@ -923,14 +964,14 @@ fn a_backlog_that_stops_fitting_is_closed() {
     b.consume(Bin::new(0, 24), &chunk_bytes(24, cs)).unwrap();
     assert_eq!(b.backlog(), None);
     assert_ne!(b.readable_seq(), seq);
-    assert!(b.bins_filled_at(Bin::new(0, 10)));
+    assert!(b.bins_filled_at(Bin::new(0, 8)), "before the window");
     assert_eq!(b.tail(), Bin::new(0, 20));
-    assert_eq!(b.store_from(), Bin::new(0, 20));
+    assert_eq!(b.store_from(), Bin::new(0, 9));
 
     // a reset, a recovery, a close, and a new read offset drop it too
     for end in 0..4 {
-        let (mut b, mut r, had) = joined();
-        b.open_backlog(Bin::new(0, 12), &had).unwrap();
+        let (mut b, mut r) = joined();
+        b.open_backlog(Bin::new(0, 12)).unwrap();
         match end {
             0 => b.reset(),
             1 => {
@@ -948,7 +989,7 @@ fn a_backlog_that_stops_fitting_is_closed() {
 
 /// Data-less chunks are held and read as zeros, whatever the buffer keeps
 /// of chunks, after data written into their slots before; they are never
-/// written to a peer, and they leave the map a window after the window.
+/// written to a peer, and they leave the map as they leave the window.
 #[test]
 fn dataless_chunks_read_as_zeros_and_are_never_sent() {
     let cs = 16;
@@ -1006,20 +1047,19 @@ fn dataless_chunks_read_as_zeros_and_are_never_sent() {
         b.write_data(Bin(16), Time::EPOCH, &mut w).unwrap();
         assert_eq!(w.0, vec![(Bin(16), stream(Bin(16), cs))]);
 
-        // the window moves on: the data-less chunks behind it stay for a
-        // window, as a backlog may take them, then go
-        b.consume(Bin::new(3, 2), &stream(Bin::new(3, 2), cs))
+        // the window moves on past them: they go
+        b.consume(Bin::new(0, 19), &stream(Bin::new(0, 19), cs))
             .unwrap();
-        assert!(b.is_dataless(Bin::new(2, 3)));
-        b.consume(Bin::new(3, 3), &stream(Bin::new(3, 3), cs))
+        assert!(!b.has_dataless(Bin::new(1, 5)) && b.is_dataless(Bin::new(2, 3)));
+        b.consume(Bin::new(3, 2), &stream(Bin::new(3, 2), cs))
             .unwrap();
         assert!(!b.has_dataless(Bin::new(4, 0)));
     }
 }
 
-/// A data-less chunk stored before the read offset stays data-less in a
-/// backlog that takes it as had: a codec's buffer, which keeps no bytes,
-/// reads it as zeros after the rewind and never sends it.
+/// A data-less chunk the window holds before the read offset stays
+/// data-less in a backlog that takes it: a codec's buffer, which keeps no
+/// bytes, reads it as zeros after the rewind and never sends it.
 #[test]
 fn a_backlog_keeps_its_dataless_chunks() {
     let cs = 16;
@@ -1030,20 +1070,17 @@ fn a_backlog_keeps_its_dataless_chunks() {
         ChunkBytes::Codec(Arc::new(OffsetCodec(cs))),
     )
     .unwrap();
-    let mut had = Map::new();
     b.consume_dataless(Bin::new(0, 13)).unwrap();
-    had.set(Bin::new(0, 13));
     for o in 20..24 {
         b.consume(Bin::new(0, o), &stream(Bin::new(0, o), cs))
             .unwrap();
-        had.set(Bin::new(0, o));
     }
     b.set_offset(Bin::new(0, 23));
     assert_eq!(b.tail(), Bin::new(0, 20));
     let mut r = BufferReader::new(&b);
     read_n(&mut r, &b, 10_000);
 
-    b.open_backlog(Bin::new(0, 12), &had).unwrap();
+    b.open_backlog(Bin::new(0, 12)).unwrap();
     for o in [12].into_iter().chain(14..20) {
         b.consume(Bin::new(0, o), &stream(Bin::new(0, o), cs))
             .unwrap();

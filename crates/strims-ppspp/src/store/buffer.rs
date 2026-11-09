@@ -11,6 +11,13 @@
 //! yet received after the read position; everything from the tail up to
 //! `next` is readable.
 //!
+//! The tail is the read offset ([`Buffer::set_offset`]), or the window's
+//! start once the window has moved past it. Where the node reads never
+//! moves the window: the window moves only as newer chunks arrive, so a
+//! chunk stored, and announced to peers, can be sent until a newer chunk
+//! takes its slot, though it is before the read offset; one that arrives
+//! late there is stored and announced too.
+//!
 //! The bin map stays bounded: whenever the head advances, everything before
 //! the window collapses into one filled prefix, so the map tracks at most a
 //! window of gaps.
@@ -43,11 +50,12 @@
 //!
 //! Chunks before the tail come back as a *backlog* (`open_backlog`):
 //! chunks `[from, to)`, `to` being the tail, that the buffer stores as they
-//! arrive while the tail, `next` and every reader stay where they were. A
-//! chunk's ring slot is shared with the chunk a window on, so a backlog
-//! fits only while nothing is stored from `from` plus a window on: a chunk
-//! that arrives there closes it. Once all of `[from, to)` is stored the
-//! window starts at `from` and readers may move back into it.
+//! arrive while the tail, `next` and every reader stay where they were.
+//! The chunks of it the window holds already count. A chunk's ring slot is
+//! shared with the chunk a window on, so a backlog fits only while nothing
+//! is stored from `from` plus a window on: a chunk that arrives there
+//! closes it. Once all of `[from, to)` is stored the tail moves back to
+//! `from` and readers may move back into it.
 
 use core::fmt;
 use std::sync::Arc;
@@ -144,9 +152,9 @@ pub struct Buffer {
     /// Bound: chunks before the window are collapsed into one filled
     /// prefix, so the map tracks at most a window of gaps.
     pub(super) bins: Map,
-    /// The stored chunks that are data-less. Bound: two windows; emptied a
-    /// window before the window as the head advances, which a backlog that
-    /// fits the ring never reaches past.
+    /// The stored chunks that are data-less. Bound: a window, and a
+    /// backlog's chunks before it; emptied before them as the head
+    /// advances.
     dataless: Map,
     /// Bound: `window * chunk_size` bytes; empty with a codec.
     pub(super) buf: Vec<u8>,
@@ -159,6 +167,9 @@ pub struct Buffer {
     window_bytes: usize,
     ready: bool,
     next: Bin,
+    /// Where readers start until the window moves past it: the read
+    /// offset, or a whole backlog's start.
+    read_from: Bin,
     sem: u64,
     /// The current error, which new and resynced readers start with.
     err: Option<Error>,
@@ -231,6 +242,7 @@ impl Buffer {
             window_bytes,
             ready: false,
             next: Bin::NONE,
+            read_from: Bin(0),
             sem: 0,
             err: None,
             signal_seq: 0,
@@ -278,42 +290,42 @@ impl Buffer {
 
     /// The backlog being stored for a rewind
     /// ([`Runner::rewind`](crate::Runner::rewind)): base bins `[from, to)`
-    /// before the window.
+    /// before the tail.
     pub fn backlog(&self) -> Option<(Bin, Bin)> {
         self.backlog
     }
 
     /// Opens a backlog from base bin `from` up to the tail, or extends the
-    /// open one down to `from`. Its chunks `had` holds count as stored:
-    /// they were stored before the window moved past them, and their slots
-    /// still hold them while the backlog fits. A backlog `had` fills is
-    /// complete at once.
+    /// open one down to `from`. What the window holds of it counts as
+    /// stored, so a backlog the window holds whole is complete at once;
+    /// its chunks before the window are fetched again.
     ///
-    /// Fails as [`Buffer::backlog_fits`] does. Costs O(runs of `had` in
-    /// the backlog).
-    pub(crate) fn open_backlog(&mut self, from: Bin, had: &Map) -> Result<(), RewindError> {
+    /// Fails as [`Buffer::backlog_fits`] does.
+    pub(crate) fn open_backlog(&mut self, from: Bin) -> Result<(), RewindError> {
         let tail = self.tail();
         let from = from.base_left();
         if !tail.is_none() && from >= tail {
             return Ok(());
         }
         self.backlog_fits(from)?;
-        let (lim, to) = match self.backlog {
+        let to = match self.backlog {
             Some((f, _)) if from >= f => return Ok(()),
-            Some((f, t)) => (f, t),
-            None => (tail, tail),
+            Some((_, t)) => t,
+            None => tail,
         };
-        self.bins.reset_before(lim);
-        self.bins.fill_before(from);
-        crate::bin_range::copy_filled(&mut self.bins, had, from, lim);
+        // the map is one filled prefix before what the buffer stores
+        let lim = self.store_from();
+        if from < lim {
+            self.bins.reset_before(lim);
+            self.bins.fill_before(from);
+        }
         self.backlog = Some((from, to));
         self.complete_backlog();
         Ok(())
     }
 
     /// Whether a backlog from base bin `from` fits the ring: nothing is
-    /// stored from `from` plus a window on (always so once the window has
-    /// slid past the first read position), and the layout moves its
+    /// stored from `from` plus a window on, and the layout moves its
     /// window. [`Error::WouldBlock`] before the first read offset.
     pub(crate) fn backlog_fits(&self, from: Bin) -> Result<(), RewindError> {
         if self.tail().is_none() {
@@ -340,15 +352,19 @@ impl Buffer {
         }
     }
 
-    /// Once every chunk of the backlog is stored, starts the window at its
-    /// first: nothing is stored from there plus a window on.
+    /// Once every chunk of the backlog is stored, moves the tail back to its
+    /// first, and the window with it if it starts before the window:
+    /// nothing is stored from there plus a window on.
     fn complete_backlog(&mut self) {
         let Some((from, to)) = self.backlog else {
             return;
         };
         let gap = self.bins.find_empty_after(from);
         if gap.is_none() || gap >= to {
-            self.head = Bin(from.0.saturating_add(self.size.0));
+            if from < self.window_start() {
+                self.head = Bin(from.0.saturating_add(self.size.0));
+            }
+            self.read_from = from;
             self.backlog = None;
             self.readable_seq += 1;
         }
@@ -366,6 +382,7 @@ impl Buffer {
         self.bins = Map::new();
         self.dataless = Map::new();
         self.next = Bin(0);
+        self.read_from = Bin(0);
         self.sem += 1;
         self.ready = false;
 
@@ -408,13 +425,11 @@ impl Buffer {
     }
 
     /// Collapses the bin map before the window, and empties the data-less
-    /// map a window before that: chunks stored before the window still
-    /// count as stored for a backlog ([`Buffer::open_backlog`]).
+    /// map before what the buffer stores: a backlog fetches again what it
+    /// takes from before the window ([`Buffer::open_backlog`]).
     fn prune(&mut self) {
-        let start = self.window_start();
-        self.bins.fill_before(start);
-        self.dataless
-            .reset_before(Bin(start.0.saturating_sub(self.size.0)));
+        self.bins.fill_before(self.window_start());
+        self.dataless.reset_before(self.store_from());
     }
 
     /// Closes the buffer: readers get [`Error::Closed`].
@@ -643,26 +658,28 @@ impl Buffer {
 
     /// Sets the read offset to the start of the run of stored chunks that
     /// contains `b` (or `b` itself if it isn't stored), and `next` to the
-    /// first missing chunk after `b`.
+    /// first missing chunk after `b`. The window stays: the chunks stored
+    /// before the offset can still be sent ([`Buffer::write_data`]) until
+    /// newer chunks take their slots.
     ///
-    /// The walk back over stored chunks stops at the tail, so the window
-    /// never moves back over chunks the ring has overwritten.
+    /// The walk back over stored chunks stops at the window's start, so the
+    /// tail never moves back over chunks the ring has overwritten.
     pub fn set_offset(&mut self, b: Bin) {
         self.backlog = None;
         self.sem += 1;
 
-        let tail = self.window_start();
+        let start = self.window_start();
         let mut b = b.base_left();
         let next = self.find_empty_after(b);
         let mut prev = next;
-        while b >= tail && self.bins.filled_at(b) {
-            b = self.bins.cover(b).base_left().max(tail);
+        while b >= start && self.bins.filled_at(b) {
+            b = self.bins.cover(b).base_left().max(start);
             prev = b;
             b = b.layer_left();
         }
 
         self.next = next;
-        self.head = prev + self.size.0;
+        self.read_from = prev;
         self.prune();
         self.set_ready();
     }
@@ -700,14 +717,14 @@ impl Buffer {
         self.bins.is_empty()
     }
 
-    /// The stored chunks in the window. Allocates a copy.
+    /// The stored chunks from the tail on. Allocates a copy.
     pub fn bins(&self) -> Map {
         let mut b = self.bins.clone();
         b.reset_before(self.tail());
         b
     }
 
-    /// The stored chunks in the window that hold data. Allocates a copy.
+    /// The stored chunks from the tail on that hold data. Allocates a copy.
     pub(crate) fn data_bins(&self) -> Map {
         let mut b = self.bins();
         for x in self.dataless.iterate_filled() {
@@ -720,16 +737,19 @@ impl Buffer {
         ((b.base_offset() & self.mask) * self.chunk_size) as usize
     }
 
-    /// The first bin of the window, or `NONE` before a read offset is set.
+    /// Where readers start: the read offset, or the window's start once the
+    /// window has moved past it; `NONE` before a read offset is set.
     pub fn tail(&self) -> Bin {
         if self.next.is_none() {
             return Bin::NONE;
         }
-        self.window_start()
+        self.window_start().max(self.read_from)
     }
 
+    /// True if every chunk of `b` is stored in the window, before the read
+    /// offset or not.
     fn contains(&self, b: Bin) -> bool {
-        self.tail() <= b.base_left() && b.base_right() < self.head && self.bins.filled_at(b)
+        self.window_start() <= b.base_left() && b.base_right() < self.head && self.bins.filled_at(b)
     }
 
     /// The first missing chunk after the read offset.
