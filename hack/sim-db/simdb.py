@@ -6,9 +6,9 @@
   hack/sim-db/simdb.py duckdb
   hack/sim-db/simdb.py fold DB JOB_DIR... [--src SRC]
   hack/sim-db/simdb.py export DB DEST
-  hack/sim-db/simdb.py pull --run RUN [--reads]
+  hack/sim-db/simdb.py pull --run RUN [--reads [--cell C] [--arm A] [--seed N]] [--dry-run]
   hack/sim-db/simdb.py gc [--days N]
-  hack/sim-db/simdb.py sql QUERY [selection] [--json]
+  hack/sim-db/simdb.py sql QUERY [selection] [--reads] [--json]
   hack/sim-db/simdb.py pooled [selection] [--by none|phase|bin|viewer] [--bin MS] [--json]
   hack/sim-db/simdb.py aligned EVENT [selection] [--field F] [--bin MS] [--per run|node]
                                      [--before S] [--after S] [--nth N] [--json]
@@ -67,7 +67,15 @@ writes (`ADD COLUMN IF NOT EXISTS`); folding a job again replaces it.
 invocation's store into the cache, `<main checkout>/target/sim-db/cache/`
 (suite/<worktree>/<invocation>/), which every worktree shares; the farm
 puts its instances' flushes in S3, and `pull` copies a run's into the
-cache (farm/<run>/...). Nothing in the cache is kept for long: a run is
+cache (farm/<run>/...). Its reads and forecast logs (the bulky tables,
+sim-samples/) come with `--reads`: the whole run's, or with `--cell`,
+`--arm` and `--seed` only the flushes holding those jobs (the manifests'
+keys; a job held twice, a verify copy, from the fewest flushes), and the
+queries that read them (pooled, aligned on a read lag, forecast, and sql
+with `--reads`) pull their selection's that way when the cache lacks
+them, noting the size, at most `--pull-mb`. `--dry-run` lists what a pull
+would fetch, asking S3 nothing. What a pull costs S3 goes to the farm's
+S3 ledger (pull). Nothing in the cache is kept for long: a run is
 reproduced when it's wanted again, and `gc` deletes what's older than
 `--days` (7).
 
@@ -190,8 +198,10 @@ DUCKDB_SHA256 = "61238cfbe9dfeaad4bcfcd8a48f6f7123dae2e9603aaadb1f77a4217aeb8980
 # The sims' tables, and the store's own.
 TABLES = ("seconds", "viewer_seconds", "reads", "bins", "viewers", "events", "node_bins", "forecast")
 # The bulky tables: the farm uploads them under sim-samples/, and a pull
-# fetches them only when asked (`--reads`).
+# fetches them only when asked (`--reads`, or a query that reads them).
 SAMPLE_TABLES = ("reads", "forecast")
+# The most a query pulls of them by default (`--pull-mb`).
+PULL_MB = 1000
 RUN_COLS = {
     "k": "VARCHAR", "src": "VARCHAR", "sim": "VARCHAR", "test": "VARCHAR", "cell": "VARCHAR", "arm": "VARCHAR",
     "seed": "BIGINT", "env": "VARCHAR", "trace": "VARCHAR", "frames": "BIGINT", "bytes": "BIGINT",
@@ -785,13 +795,13 @@ def reused(srcs, stored):
     return (sql if held else None), held
 
 
-def views(a, derived=True):
+def views(a, derived=True, fetch=True):
     """The SQL that makes the views over selection `a`'s sources, and the
     tables it has. A farm source's runs name the suite cells and arms its
     matrices ran (suite_cells), and a farm run's cells hold the rows it
     reused (reused: their sources' tables join the views, pulled into the
-    cache when it lacks them); `matrix` is the matrix (or local cell) a run
-    counts for."""
+    cache when it lacks them, unless not `fetch`); `matrix` is the matrix
+    (or local cell) a run counts for."""
     srcs = sources(a.src)
     if not srcs:
         sys.exit("no runs in the cache match --src")
@@ -801,7 +811,10 @@ def views(a, derived=True):
         moved, held = reused(srcs, [r["cell"] for r in duck(
             f"SELECT DISTINCT cell FROM {stored} WHERE src LIKE 'farm/%';")])
     lack = [s for s in held if not have_src(s)]
-    if lack:
+    if lack and not fetch:
+        print(f"the cache lacks {len(lack)} flushes whose rows the selection's runs reused: left out",
+              file=sys.stderr)
+    elif lack:
         print(f"pulling the farm runs of {len(lack)} flushes whose rows the selection's runs reused",
               file=sys.stderr)
         gone = pull_sources(lack)
@@ -898,8 +911,16 @@ def need(have, *tables):
     missing = [t for t in tables if t not in have]
     if missing:
         sys.exit(f"the selection has no {', '.join(missing)}"
-                 + (" (pull --reads, or run with the reads)" if "reads" in missing else "")
-                 + (" (pull --reads, or run with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1)" if "forecast" in missing else ""))
+                 + (" (nor does S3: run with the reads)" if "reads" in missing else "")
+                 + (" (nor does S3: run with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1)" if "forecast" in missing else ""))
+
+
+def with_samples(a, v, have, tables, derived=True):
+    """The views of selection `a` (`v`, `have`) once the cache holds what S3
+    has of its jobs' sample `tables` (pull_samples, at most `--pull-mb`)."""
+    if pull_samples(v, tables, limit_mb=getattr(a, "pull_mb", PULL_MB)):
+        return views(a, derived)
+    return v, have
 
 
 def emit(a, rows_, text):
@@ -927,7 +948,9 @@ def time_filter(a, col="t_ms"):
 
 
 def cmd_sql(a):
-    v, _ = views(a)
+    v, have = views(a)
+    if getattr(a, "reads", False):
+        v, _ = with_samples(a, v, have, SAMPLE_TABLES)
     out = duck(v + "\n" + a.query + ("" if a.query.rstrip().endswith(";") else ";"),
                out="json" if a.json else "text")
     print(json.dumps(out) if a.json else out, end="" if not a.json else "\n")
@@ -942,7 +965,7 @@ def fmt(x, nd=0):
 
 
 def cmd_pooled(a):
-    v, have = views(a)
+    v, have = with_samples(a, *views(a), ("reads",))
     need(have, "reads")
     group = {"none": "NULL", "bin": f"(t_ms // {a.bin}) * {a.bin}", "viewer": "viewer",
              "phase": "coalesce(vs.phase, 'tail')"}[a.by]
@@ -1047,6 +1070,8 @@ def field_source(a, v, have):
 
 def cmd_aligned(a):
     v, have = views(a)
+    if a.field in READ_FIELDS:
+        v, have = with_samples(a, v, have, ("reads",))
     need(have, "derived_events")
     per_node = a.per == "node"
     if per_node:
@@ -1175,7 +1200,7 @@ SELECT * FROM m JOIN d USING (cell, arm) ORDER BY ALL;"""
 
 
 def cmd_forecast(a):
-    v, have = views(a, derived=False)
+    v, have = with_samples(a, *views(a, derived=False), ("forecast",), derived=False)
     need(have, "forecast")
     w = " AND ".join(["run = 0", "NOT first_sight", "mean_ms >= 0", *time_filter(a)])
     sql = f"""
@@ -1240,6 +1265,13 @@ def farm_bucket():
     return c["s3_bucket"], c.get("s3_region"), c.get("aws_profile")
 
 
+def aws(args, region, profile):
+    """Runs the aws CLI's `args` in the farm bucket's region, as its
+    profile."""
+    return subprocess.run(["aws", *args, *(["--region", region] if region else []),
+                           *(["--profile", profile] if profile else [])], capture_output=True, text=True)
+
+
 # The aws CLI's multipart size: it downloads a file past it a ranged GET a
 # part (farm.py's CLI_PART).
 CLI_PART = 8 * 1024 * 1024
@@ -1256,12 +1288,8 @@ def pull(run, reads=False):
     dest = cache_root() / "cache" / "farm" / run
     lists = gets = got = 0
     for prefix in ["sim-data"] + (["sim-samples"] if reads else []):
-        cmd = ["aws", "s3", "sync", f"s3://{bucket}/{prefix}/{run}/", str(dest), "--no-progress"]
-        if region:
-            cmd += ["--region", region]
-        if profile:
-            cmd += ["--profile", profile]
-        p = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        p = aws(["s3", "sync", f"s3://{bucket}/{prefix}/{run}/", str(dest), "--no-progress"], region, profile)
+        p.check_returncode()
         for line in p.stdout.splitlines():
             if line.startswith("download: ") and " to " in line:
                 size = Path(line.rsplit(" to ", 1)[1]).stat().st_size
@@ -1293,23 +1321,199 @@ def farm_ledger(run, use):
         os.fsync(f.fileno())
 
 
-def pull_sources(srcs, reads=False):
+def pull_sources(srcs):
     """Pulls the farm runs of the sources `srcs` (farm/<run>/...) that the
-    cache lacks, a run at a time; returns those still missing (expired
-    from S3, or never uploaded)."""
-    def missing(s):
-        return not have_src(s) or (reads and not any((cache_root() / "cache" / s / f"{t}.parquet").exists()
-                                                     for t in SAMPLE_TABLES))
-
-    want = sorted({s for s in srcs if s.startswith("farm/") and missing(s)})
+    cache lacks, a run at a time, less their samples (pull_samples);
+    returns those still missing (expired from S3, or never uploaded)."""
+    want = sorted({s for s in srcs if s.startswith("farm/") and not have_src(s)})
     for run in sorted({s.split("/")[1] for s in want}):
-        pull(run, reads)
+        pull(run)
     return [s for s in want if not have_src(s)]
 
 
+def manifest_of(src):
+    """Source `src`'s manifest in the cache (export's: its keys, and its
+    tables' rows, bytes and sha256), or {}."""
+    try:
+        return json.loads((cache_root() / "cache" / src / "manifest.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def unlanded(srcs):
+    """The farm flushes among `srcs` whose samples never landed in S3, as
+    their runs' matrices' indexes say (a line's `reads` false; a run's
+    matrices its state's list)."""
+    farm = main_checkout() / "target" / "sim-farm"
+    names = set()
+    for run in {s.split("/")[1] for s in srcs if s.startswith("farm/")}:
+        with contextlib.suppress(OSError):
+            names |= set((farm / run / "matrices").read_text().split())
+    out = set()
+    for n in sorted(names):
+        with contextlib.suppress(OSError):
+            for line in (farm / n / "index.jsonl").read_text().splitlines():
+                with contextlib.suppress(ValueError):
+                    r = json.loads(line)
+                    if isinstance(r, dict) and r.get("reads") is False and r.get("src") in srcs:
+                        out.add(r["src"])
+    return out
+
+
+def sample_plan(v, tables, gone=()):
+    """What the jobs the views `v` select lack of the sample `tables` that
+    S3 holds: {src: (tables, bytes, jobs)}, a farm flush each, and how many
+    jobs no flush in S3 gives them. A key's tables come from the source
+    holding the most of them (views' canon), so a job lacks nothing once a
+    source of it at the top holds what its manifest lists of `tables`; else
+    one of those is fetched, and then holds the most. The flushes are the
+    fewest that give every such job, picked greedily (the one giving the
+    most of those left, the fewer bytes on a tie), so a verify copy's
+    flush comes only for a job its original's doesn't give. A flush gives
+    none once `gone` from S3, nor when its matrices' indexes say its
+    samples never landed (unlanded)."""
+    root = cache_root() / "cache"
+    cands = collections.defaultdict(set)
+    for r in duck(v + "\nSELECT DISTINCT k, src FROM runs_all SEMI JOIN runs USING (k);"):
+        cands[r["k"]].add(r["src"])
+    farm = {s for ss in cands.values() for s in ss if s.startswith("farm/")}
+    if not farm:
+        return {}, 0
+    held = {s: sum((root / s / f"{t}.parquet").exists() for t in TABLES) for ss in cands.values() for s in ss}
+    listed = {s: manifest_of(s).get("tables") or {} for s in farm}
+    lack = {s: [t for t in tables if t in listed.get(s, {}) and not (root / s / f"{t}.parquet").exists()]
+            for s in held}
+    bad = unlanded(farm) | set(gone)
+    need, lost = {}, 0
+    for k, ss in cands.items():
+        most = max(held[s] for s in ss)
+        top = [s for s in ss if held[s] == most]
+        if any(not lack[s] for s in top):
+            continue
+        if can := [s for s in top if s not in bad]:
+            need[k] = can
+        else:
+            lost += 1
+    size = {s: sum(listed[s][t].get("bytes", 0) for t in lack[s]) for s in farm}
+    plan = {}
+    while need:
+        score = collections.Counter(s for ss in need.values() for s in ss)
+        s = max(score, key=lambda s: (score[s], -size[s], s))
+        plan[s] = (lack[s], size[s], score[s])
+        need = {k: ss for k, ss in need.items() if s not in ss}
+    return plan, lost
+
+
+def fetch_samples(plan, gets, got):
+    """Fetches `plan`'s tables (sample_plan's) from S3 into the cache, a
+    GET a file (s3api get-object: one request whatever the size), each
+    checked against its flush's manifest and put in place whole; returns
+    the flushes S3 no longer holds. Counts each run's GETs (a missing
+    key's too) in `gets` and their bytes in `got`, however it ends."""
+    bucket, region, profile = farm_bucket()
+    root = cache_root() / "cache"
+    gone = set()
+    for src, (tables, _, _) in plan.items():
+        _, run, flush = src.split("/", 2)
+        want = manifest_of(src)["tables"]
+        for t in tables:
+            dest = root / src / f"{t}.parquet"
+            part = dest.with_name(f".{dest.name}.tmp{os.getpid()}")
+            gets[run] += 1
+            try:
+                try:
+                    p = aws(["s3api", "get-object", "--bucket", bucket, "--key",
+                             f"sim-samples/{run}/{flush}/{t}.parquet", str(part)], region, profile)
+                finally:
+                    got[run] += part.stat().st_size if part.exists() else 0
+                if p.returncode:
+                    if "NoSuchKey" in p.stderr or "(404)" in p.stderr:
+                        gone.add(src)
+                        break
+                    sys.exit(f"{src}: {t}: {p.stderr.strip()}")
+                if part.stat().st_size != want[t]["bytes"] or sha256(part) != want[t]["sha256"]:
+                    sys.exit(f"{src}: S3's {t}.parquet ({part.stat().st_size} bytes) isn't its manifest's")
+                part.replace(dest)
+            finally:
+                part.unlink(missing_ok=True)
+    return gone
+
+
+def pull_samples(v, tables, limit_mb=None):
+    """Pulls what the jobs the views `v` select lack of the sample `tables`
+    (sample_plan), noting its size on stderr, and refusing it past
+    `limit_mb`; where S3 no longer holds a flush, another copy of its jobs
+    stands in. Each run's GETs and bytes go to its line of the farm's S3
+    ledger, however the pull ends. Returns whether it fetched any."""
+    plan, lost = sample_plan(v, tables)
+    if plan:
+        total = sum(b for _, b, _ in plan.values())
+        what = (f"the {' and '.join(tables)} of {sum(n for *_, n in plan.values())} jobs the selection lacks: "
+                f"{len(plan)} flushes, {total / 1e6:.1f} MB")
+        if limit_mb is not None and total > limit_mb * 1e6:
+            sys.exit(f"{what}, past --pull-mb {limit_mb:g}: narrow the selection, or raise --pull-mb")
+        print(f"pulling {what}", file=sys.stderr)
+    fetched, gone = bool(plan), set()
+    gets, got = collections.Counter(), collections.Counter()
+    try:
+        while plan:
+            gone |= fetch_samples(plan, gets, got)
+            plan, lost = sample_plan(v, tables, gone)
+    finally:
+        region = farm_bucket()[1] if gets else None
+        for run in gets:
+            farm_ledger(run, {"region": region or "", "tier1": {}, "tier2": {"pull_get": gets[run]}, "up": {},
+                              "down": {"internet": got[run]}, "stored": 0})
+    if lost:
+        print(f"S3 holds none of the {' or '.join(tables)} of {lost} of the selection's jobs (expired, or never "
+              "landed): left out", file=sys.stderr)
+    return fetched
+
+
 def cmd_pull(a):
-    dest = pull(a.run, a.reads)
-    print(f"{a.run}: {len(sources([f'farm/{a.run}']))} sources in {dest}")
+    picked = a.cell or a.arm or a.seed
+    if (picked or a.dry_run) and not a.reads:
+        sys.exit("--cell, --arm, --seed and --dry-run are of a pull's reads: give --reads")
+    if not a.dry_run and not picked:
+        dest = pull(a.run, a.reads)
+        print(f"{a.run}: {len(sources([f'farm/{a.run}']))} sources in {dest}")
+        return
+    srcs = sources([f"farm/{a.run}"])
+    if not srcs:
+        if a.dry_run:
+            sys.exit(f"the cache lacks farm/{a.run}: pull --run {a.run} copies the tables that name its jobs")
+        pull(a.run)
+    if picked:
+        sel = argparse.Namespace(src=[f"farm/{a.run}"], cell=a.cell, arm=a.arm, seed=a.seed)
+        v, _ = views(sel, derived=False, fetch=not a.dry_run)
+        if not a.dry_run:
+            pull_samples(v, SAMPLE_TABLES)
+            print(f"{a.run}: the selection's {' and '.join(SAMPLE_TABLES)} in {cache_root() / 'cache' / 'farm'}")
+            return
+        plan, lost = sample_plan(v, SAMPLE_TABLES)
+    else:
+        # The whole run's, as `pull --reads` syncs them: each flush's.
+        root, bad = cache_root() / "cache", unlanded(srcs)
+        plan, lost = {}, 0
+        for s in srcs:
+            m = manifest_of(s)
+            listed, jobs = m.get("tables") or {}, len(m.get("keys") or [])
+            lack = [t for t in SAMPLE_TABLES if t in listed and not (root / s / f"{t}.parquet").exists()]
+            if lack and s in bad:
+                lost += jobs
+            elif lack:
+                plan[s] = (lack, sum(listed[t].get("bytes", 0) for t in lack), jobs)
+    bucket, _, _ = farm_bucket()
+    files = [(f"s3://{bucket}/sim-samples/{s.split('/', 1)[1]}/{t}.parquet", manifest_of(s)["tables"][t]["bytes"], n)
+             for s, (tables, _, n) in plan.items() for t in tables]
+    gone = f"; S3 holds none for {lost} jobs (expired, or never landed)" if lost else ""
+    if not files:
+        print(f"{a.run}: nothing to pull: the cache holds what S3 has of the jobs' samples{gone}")
+        return
+    print(f"{a.run}: would GET {len(files)} files, {sum(b for _, b, _ in files) / 1e6:.1f} MB, for "
+          f"{sum(n for *_, n in plan.values())} jobs' {' and '.join(SAMPLE_TABLES)}{gone}")
+    for url, b, n in files:
+        print(f"  {url}  {b / 1e6:.1f} MB  {n} jobs")
 
 
 def cmd_gc(a):
@@ -1351,11 +1555,17 @@ def main():
     p = sub.add_parser("pull")
     p.add_argument("--run", required=True)
     p.add_argument("--reads", action="store_true", help="the reads and forecast logs too (sim-samples/)")
+    p.add_argument("--cell", action="append", help="only these cells' reads, globs")
+    p.add_argument("--arm", action="append", help="only these arms' reads, globs")
+    p.add_argument("--seed", action="append", type=int, help="only these seeds' reads")
+    p.add_argument("--dry-run", action="store_true", help="list the reads' files a pull would fetch, asking S3 nothing")
     g = sub.add_parser("gc")
     g.add_argument("--days", type=float, default=7)
     qs = {}
     qs["sql"] = sub.add_parser("sql", help="a query over the views", description=SQL_DOC, formatter_class=raw)
     qs["sql"].add_argument("query")
+    qs["sql"].add_argument("--reads", action="store_true",
+                           help="pull the selection's reads and forecast logs first, where the cache lacks them")
     qs["pooled"] = sub.add_parser("pooled")
     qs["pooled"].add_argument("--by", choices=("none", "phase", "bin", "viewer"), default="none")
     qs["aligned"] = sub.add_parser("aligned")
@@ -1384,6 +1594,8 @@ def main():
         x.add_argument("--bin", type=int, default=1000, help="ms")
         x.add_argument("--since", type=float, help="s from the stream's start")
         x.add_argument("--until", type=float, help="s from the stream's start")
+        x.add_argument("--pull-mb", type=float, default=PULL_MB,
+                       help="the most of the reads it pulls from S3 for the selection, MB")
         x.add_argument("--json", action="store_true")
     a = ap.parse_args()
     if a.cmd == "duckdb":

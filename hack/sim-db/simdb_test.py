@@ -4,8 +4,9 @@
 """simdb.py's selections over a scratch cache, suite indexes and farm state,
 as two farm runs of several suite tiers leave them (an A/B and its
 confirmation, each a browsers and a net tier, their cells sharing names,
-the A/B reusing rows of the confirmation's); and its queries and joins over
-a scratch cache of both sims' tables (Queries):
+the A/B reusing rows of the confirmation's); its queries and joins over
+a scratch cache of both sims' tables (Queries); and its pulls of a farm
+run's samples from a scratch S3, the aws CLI stubbed (SamplesPull):
 
   python3 hack/sim-db/simdb_test.py
 
@@ -17,6 +18,8 @@ import io
 import json
 import math
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -399,6 +402,202 @@ class Queries(unittest.TestCase):
                   self.assertRaises(SystemExit)):
                 simdb.main()
             self.assertIn("JOIN runs USING (k, src)", out.getvalue(), argv)
+
+
+# A farm run's flushes, (k, cell) each: i-3 holds a verify copy of k1, i-2
+# a forecast log too, and i-4's samples never landed (its index says so,
+# and S3 lacks them).
+RUN = "sz0001-00+1more-zzzz"
+C0, C1 = "sz0001-00", "sz0001-01"
+FLUSHES = {"i-1": [("k1", C0), ("k2", C0)], "i-2": [("k3", C0), ("k4", C0), ("k5", C1)],
+           "i-3": [("k1", C0), ("k6", C1)], "i-4": [("k7", C1)]}
+FORECAST, UNLANDED = {"i-2"}, {"i-4"}
+
+
+def src_of(inst):
+    return f"farm/{RUN}/{inst}/0"
+
+
+class SamplesPull(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        self.s3, self.calls = root / "s3", []
+        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
+                  mock.patch.object(simdb, "derive", lambda srcs: None),
+                  mock.patch.object(simdb, "aws", self.aws),
+                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
+                                  clear=True)):
+            p.start()
+            self.addCleanup(p.stop)
+        (root / "hack" / "sim-farm").mkdir(parents=True)
+        (root / "hack" / "sim-farm" / "config.toml").write_text('s3_bucket = "bkt"\ns3_region = "us-west-1"\n')
+        farm = root / "target" / "sim-farm"
+        (farm / RUN).mkdir(parents=True)
+        (farm / RUN / "matrices").write_text(f"{C0}\n{C1}\n")
+        index = {}
+        q = simdb.q
+        for inst, jobs in FLUSHES.items():
+            src = src_of(inst)
+            data, samples = self.s3 / "sim-data" / RUN / inst / "0", self.s3 / "sim-samples" / RUN / inst / "0"
+            data.mkdir(parents=True)
+            samples.mkdir(parents=True)
+            runs = ", ".join(f"({q(k)}, {q(src)}, {q(c)}, 'main', {int(k[1:])}, '{{}}')" for k, c in jobs)
+            reads = ", ".join(f"({q(k)}, {q(src)}, 0, {t}, {t // 100}, {int(k[1:]) * 10})"
+                              for k, _ in jobs for t in range(0, int(k[1:]) * 1000, 100))
+            tables = {"runs": (data, f"SELECT * FROM (VALUES {runs}) t(k, src, cell, arm, seed, env)", len(jobs)),
+                      "reads": (samples, f"SELECT * FROM (VALUES {reads}) t(k, src, viewer, t_ms, seq, lag_ms)",
+                                sum(int(k[1:]) * 10 for k, _ in jobs))}
+            if inst in FORECAST:
+                tables["forecast"] = (samples, f"SELECT k, src, 0 AS node, 1.5 AS sample_ms FROM (VALUES {runs}) "
+                                               "t(k, src, cell, arm, seed, env)", len(jobs))
+            manifest = {"keys": sorted(k for k, _ in jobs), "tables": {}}
+            for t, (d, sql, n) in tables.items():
+                simdb.duck(f"COPY ({sql}) TO {q(d / f'{t}.parquet')} (FORMAT parquet);", out=None)
+                manifest["tables"][t] = {"rows": n, "bytes": (d / f"{t}.parquet").stat().st_size,
+                                         "sha256": simdb.sha256(d / f"{t}.parquet")}
+            (data / "manifest.json").write_text(json.dumps(manifest))
+            if inst in UNLANDED:
+                shutil.rmtree(samples)
+            for k, c in jobs:
+                index.setdefault(c, []).append({"key": k, "src": src, "arm": "main", "reads": inst not in UNLANDED,
+                                                "copy": "v" if inst == "i-3" and k == "k1" else "", "row": {}})
+        for m, lines in index.items():
+            (farm / m).mkdir()
+            (farm / m / "index.jsonl").write_text("".join(json.dumps(r) + "\n" for r in lines))
+
+    def aws(self, args, region, profile):
+        """The aws CLI over the scratch S3: `s3 sync` and `s3api get-object`."""
+        self.assertEqual((region, profile), ("us-west-1", None))
+        self.calls.append(args)
+        if args[:2] == ["s3", "sync"]:
+            prefix, dest, out = self.s3 / args[2].removeprefix("s3://bkt/"), Path(args[3]), []
+            for f in sorted(prefix.rglob("*")):
+                to = dest / f.relative_to(prefix)
+                if f.is_file() and not to.exists():
+                    to.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(f, to)
+                    out.append(f"download: s3://bkt/{f.relative_to(self.s3)} to {to}\n")
+            return subprocess.CompletedProcess(args, 0, "".join(out), "")
+        if args[:2] == ["s3api", "get-object"]:
+            f = self.s3 / args[args.index("--key") + 1]
+            if not f.exists():
+                return subprocess.CompletedProcess(args, 254, "", "An error occurred (NoSuchKey) when calling the "
+                                                   "GetObject operation: The specified key does not exist.")
+            shutil.copyfile(f, args[-1])
+            return subprocess.CompletedProcess(args, 0, "{}", "")
+        raise AssertionError(args)
+
+    def gets(self):
+        """The objects fetched one at a time, and forgets them."""
+        got = {a[a.index("--key") + 1] for a in self.calls if a[:2] == ["s3api", "get-object"]}
+        self.calls.clear()
+        return got
+
+    def size(self, inst, *tables):
+        return sum((self.s3 / "sim-samples" / RUN / inst / "0" / f"{t}.parquet").stat().st_size for t in tables)
+
+    def ledger(self):
+        path = simdb.main_checkout() / "target" / "sim-farm" / "s3.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def cli(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with (mock.patch.object(sys, "argv", ["simdb.py", *argv]), mock.patch.object(sys, "stdout", out),
+              mock.patch.object(sys, "stderr", err)):
+            simdb.main()
+        return out.getvalue(), err.getvalue()
+
+    def args(self, cell, **kw):
+        return argparse.Namespace(**{"src": [f"farm/{RUN}"], "cell": [cell], "arm": None, "seed": None, "bin": 1000,
+                                     "since": None, "until": None, "json": True, "by": "none", **kw})
+
+    def served(self, cell):
+        """{k: (its reads' source's instance, reads)} in `cell`'s views."""
+        v, _ = simdb.views(self.args(cell))
+        return {r["k"]: (r["src"].split("/")[2], r["n"]) for r in simdb.duck(
+            v + "\nSELECT k, src, count(*) AS n FROM reads GROUP BY ALL;")}
+
+    def key(self, inst, t):
+        return f"sim-samples/{RUN}/{inst}/0/{t}.parquet"
+
+    def test_a_selection_pulls_the_fewest_flushes_holding_its_jobs(self):
+        # The cache lacks the run: its core tables first (sim-data), then
+        # the cell's samples from i-1 and i-2 alone, i-3's verify copy of
+        # k1 left, and i-2's forecast with its reads.
+        out, err = self.cli("pull", "--run", RUN, "--reads", "--cell", C0)
+        self.assertEqual([a[:3] for a in self.calls if a[1] == "sync"], [["s3", "sync", f"s3://bkt/sim-data/{RUN}/"]])
+        self.assertEqual(self.gets(), {self.key("i-1", "reads"), self.key("i-2", "reads"), self.key("i-2", "forecast")})
+        self.assertIn("pulling the reads and forecast of 4 jobs the selection lacks: 2 flushes", err)
+        sync, picked = self.ledger()
+        self.assertEqual((sync["run"], sync["source"], sync["tier2"]["pull_get"]), (RUN, "pull", 8))
+        self.assertEqual((picked["run"], picked["source"], picked["tier1"], picked["tier2"], picked["down"]),
+                         (RUN, "pull", {}, {"pull_get": 3}, {"internet": self.size("i-1", "reads")
+                                                             + self.size("i-2", "reads", "forecast")}))
+        self.assertEqual(self.served(C0), {"k1": ("i-1", 10), "k2": ("i-1", 20), "k3": ("i-2", 30),
+                                           "k4": ("i-2", 40)})
+        # Pulled again: nothing to fetch.
+        self.cli("pull", "--run", RUN, "--reads", "--cell", C0)
+        out, _ = self.cli("pull", "--run", RUN, "--reads", "--cell", C0, "--dry-run")
+        self.assertIn("nothing to pull", out)
+        self.assertEqual((self.gets(), len(self.ledger())), (set(), 2))
+        # The other cell: k5 is in place (i-2), k6 is i-3's, and k7's never
+        # landed. A dry run asks S3 nothing.
+        out, _ = self.cli("pull", "--run", RUN, "--reads", "--cell", C1, "--dry-run")
+        self.assertIn(f"would GET 1 files, {self.size('i-3', 'reads') / 1e6:.1f} MB, for 1 jobs' reads and forecast; "
+                      "S3 holds none for 1 jobs", out)
+        self.assertIn(f"s3://bkt/{self.key('i-3', 'reads')}", out)
+        self.assertEqual((self.calls, len(self.ledger())), ([], 2))
+        # A query pulls what it reads of its selection, noting the size,
+        # within --pull-mb.
+        err = io.StringIO()
+        with (mock.patch.object(sys, "stdout", io.StringIO()), mock.patch.object(sys, "stderr", err),
+              self.assertRaises(SystemExit) as cm):
+            simdb.cmd_pooled(self.args(C1, pull_mb=0.0001))
+        self.assertIn("past --pull-mb", str(cm.exception.code))
+        self.assertEqual(self.calls, [])
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err):
+            simdb.cmd_pooled(self.args(C1, pull_mb=simdb.PULL_MB))
+        self.assertEqual({(r["cell"], r["runs"], r["reads"]) for r in json.loads(out.getvalue())}, {(C1, 2, 110)})
+        self.assertEqual(self.gets(), {self.key("i-3", "reads")})
+        self.assertIn(f"pulling the reads of 1 jobs the selection lacks: 1 flushes, "
+                      f"{self.size('i-3', 'reads') / 1e6:.1f} MB", err.getvalue())
+        self.assertIn("S3 holds none of the reads of 1 of the selection's jobs", err.getvalue())
+        self.assertEqual(self.ledger()[-1]["tier2"], {"pull_get": 1})
+        self.assertEqual(self.ledger()[-1]["down"], {"internet": self.size("i-3", "reads")})
+
+    def test_a_flush_gone_from_s3_gives_way_to_a_copy(self):
+        self.cli("pull", "--run", RUN)
+        self.calls.clear()
+        (self.s3 / self.key("i-1", "reads")).unlink()
+        _, err = self.cli("pull", "--run", RUN, "--reads", "--cell", C0)
+        self.assertEqual(self.gets(), {self.key("i-1", "reads"), self.key("i-2", "reads"), self.key("i-2", "forecast"),
+                                       self.key("i-3", "reads")})
+        self.assertIn("S3 holds none of the reads or forecast of 1 of the selection's jobs", err)
+        # the missing key's GET counts too
+        self.assertEqual(self.ledger()[-1]["tier2"], {"pull_get": 4})
+        self.assertEqual(self.ledger()[-1]["down"],
+                         {"internet": self.size("i-2", "reads", "forecast") + self.size("i-3", "reads")})
+        self.assertEqual(self.served(C0), {"k1": ("i-3", 10), "k3": ("i-2", 30), "k4": ("i-2", 40)})
+
+    def test_a_whole_run_pull_still_syncs_every_flush(self):
+        self.cli("pull", "--run", RUN)
+        out, _ = self.cli("pull", "--run", RUN, "--reads", "--dry-run")
+        self.assertIn("would GET 4 files", out)
+        self.calls.clear()
+        self.cli("pull", "--run", RUN, "--reads")
+        self.assertEqual([a[2] for a in self.calls], [f"s3://bkt/sim-data/{RUN}/", f"s3://bkt/sim-samples/{RUN}/"])
+        cache = simdb.cache_root() / "cache"
+        self.assertEqual({p.relative_to(cache).as_posix() for p in cache.glob("farm/**/*.parquet")
+                          if p.stem in simdb.SAMPLE_TABLES},
+                         {f"{src_of(i)}/{t}.parquet" for i, t in (("i-1", "reads"), ("i-2", "reads"),
+                                                                  ("i-2", "forecast"), ("i-3", "reads"))})
+        self.assertEqual(self.ledger()[-1]["tier2"], {"pull_get": 4})
+        self.assertEqual(self.ledger()[-1]["down"],
+                         {"internet": sum(self.size(i, "reads") for i in ("i-1", "i-2", "i-3"))
+                          + self.size("i-2", "forecast")})
 
 
 if __name__ == "__main__":
