@@ -81,6 +81,8 @@ pub struct Ledbat {
 
     last_data_loss: Time,
     last_ack_time: Time,
+    /// When bytes last went into an empty flight.
+    flight_start: Time,
     rtt_mean: Ema,
     rtt_var: Ema,
     /// Ping round trips over [`MIN_RTT_WINDOW`], nanoseconds, and the
@@ -120,6 +122,7 @@ impl Ledbat {
             cto: Duration::SECOND,
             last_data_loss: Time::NIL,
             last_ack_time: Time::MAX,
+            flight_start: Time::NIL,
             rtt_mean: Ema::new(COEF_ALPHA),
             rtt_var: Ema::new(COEF_BETA),
             rtt_min: WindowedMin::new(MIN_RTT_WINDOW),
@@ -229,8 +232,13 @@ impl Ledbat {
         Duration::from_nanos(self.rtt_var.value() as i64)
     }
 
-    /// Puts `size` requested bytes in flight.
-    pub fn add_sent(&mut self, size: i64) {
+    /// Puts `size` bytes requested at `now` in flight. Into an empty flight
+    /// (acks not yet digested count as out of it), they start the
+    /// congestion timeout's timer again.
+    pub fn add_sent(&mut self, size: i64, now: Time) {
+        if self.flight_size.saturating_sub(self.ack_size) <= 0 {
+            self.flight_start = now;
+        }
         self.flight_size = self.flight_size.saturating_add(size);
     }
 
@@ -278,9 +286,21 @@ impl Ledbat {
     /// while the queuing delay is under the 100 ms target and shrinks above
     /// it.
     /// With bytes in flight and no ack for a congestion timeout, the window
-    /// collapses and the timeout doubles (up to 1 s).
+    /// collapses and the timeout doubles (up to 1 s). The timer runs only
+    /// while bytes are in flight, as RFC 6298's retransmission timer does:
+    /// from the latest ack, or from the request that put bytes in flight
+    /// after none were if that came later. A spell with nothing in flight
+    /// doesn't count against the request that ends it.
+    ///
+    /// Before the channel's first ack the timer doesn't run. The
+    /// scheduler times each request out at [`Ledbat::cto`], a loss
+    /// ([`Ledbat::add_data_loss`]), which takes the window down as well,
+    /// and a collapse would back off the timeout of a peer that never
+    /// answers: every chunk asked of it would wait that much longer to go
+    /// elsewhere.
     pub fn digest_delay_samples(&mut self, now: Time) {
-        if self.flight_size > 0 && now - self.last_ack_time > self.cto {
+        let timer = self.last_ack_time.max(self.flight_start);
+        if self.flight_size > 0 && now - timer > self.cto {
             self.floor_held_until = now + FLOOR_LOSS_HOLD;
             self.cwnd = MIN_CWND * MSS;
             self.cto = (self.cto * 2).min(Duration::SECOND);
@@ -368,7 +388,7 @@ mod tests {
         let mut l = Ledbat::new();
         // Constant 20 ms delay: no queuing, the window grows.
         for i in 0..100 {
-            l.add_sent(1024);
+            l.add_sent(1024, t(i));
             l.add_delay_sample(Duration::from_millis(20), 1024, t(i));
             l.digest_delay_samples(t(i));
         }
@@ -378,7 +398,7 @@ mod tests {
 
         // Delays rise 300 ms over the base: the window shrinks.
         for i in 100..200 {
-            l.add_sent(1024);
+            l.add_sent(1024, t(i));
             l.add_delay_sample(Duration::from_millis(320), 1024, t(i));
             l.digest_delay_samples(t(i));
         }
@@ -392,7 +412,7 @@ mod tests {
         // the differences matter.
         let mut l = Ledbat::new();
         for i in 0..50 {
-            l.add_sent(1024);
+            l.add_sent(1024, t(i));
             l.add_delay_sample(Duration::from_millis(-10_000), 1024, t(i));
             l.digest_delay_samples(t(i));
         }
@@ -402,7 +422,7 @@ mod tests {
     #[test]
     fn extreme_delays_saturate() {
         let mut l = Ledbat::new();
-        l.add_sent(1 << 20);
+        l.add_sent(1 << 20, t(0));
         l.add_delay_sample(Duration::MIN, 1 << 20, t(0));
         l.add_delay_sample(Duration::MAX, 1 << 20, t(0));
         l.digest_delay_samples(t(0));
@@ -425,7 +445,7 @@ mod tests {
         l.add_delay_sample(Duration::from_millis(10), 1024, t(0));
         l.digest_delay_samples(t(0));
         for i in 1..500 {
-            l.add_sent(8192);
+            l.add_sent(8192, t(i));
             l.add_delay_sample(Duration::from_millis(150), 8192, t(i));
             l.digest_delay_samples(t(i));
         }
@@ -440,7 +460,7 @@ mod tests {
         assert_eq!(l.cwnd(), 10 * MSS);
 
         // So does a congestion timeout.
-        l.add_sent(4096);
+        l.add_sent(4096, t(8_000));
         l.digest_delay_samples(t(10_000));
         assert_eq!(l.cwnd(), MIN_CWND * MSS);
         l.set_min_cwnd(10 * MSS, t(11_000));
@@ -489,7 +509,7 @@ mod tests {
     fn loss_halves_once_per_rtt() {
         let mut l = Ledbat::new();
         l.add_rtt_sample(Duration::from_millis(100), t(0));
-        l.add_sent(10 * 1024);
+        l.add_sent(10 * 1024, t(0));
         l.add_data_loss(1024, false, t(0));
         assert_eq!(l.cwnd(), 16 * 1024);
         assert_eq!(l.flight_size(), 9 * 1024);
@@ -502,13 +522,45 @@ mod tests {
     #[test]
     fn congestion_timeout_collapses_window() {
         let mut l = Ledbat::new();
-        l.add_sent(4096);
+        l.add_sent(4096, t(0));
         l.add_delay_sample(Duration::from_millis(10), 1024, t(0));
         l.digest_delay_samples(t(0));
-        l.add_sent(4096);
+        l.add_sent(4096, t(0));
         // No ack for more than the 1 s timeout.
         l.digest_delay_samples(t(2_000));
         assert_eq!(l.cwnd(), MIN_CWND * MSS);
+        assert_eq!(l.cto(), Duration::SECOND);
+    }
+
+    #[test]
+    fn idle_spell_doesnt_age_the_next_request() {
+        let mut l = Ledbat::new();
+        l.add_rtt_sample(Duration::from_millis(100), t(0));
+        let cto = l.cto();
+        l.add_sent(4096, t(0));
+        l.add_delay_sample(Duration::from_millis(10), 4096, t(50));
+        l.digest_delay_samples(t(50));
+        assert_eq!(l.flight_size(), 0);
+        let cwnd = l.cwnd();
+
+        // Nothing in flight for longer than the timeout, then a request:
+        // younger than the timeout, it hasn't timed out ...
+        let sent = t(50) + cto * 3;
+        l.add_sent(4096, sent);
+        l.digest_delay_samples(sent + cto / 2);
+        assert_eq!(l.cwnd(), cwnd);
+        assert_eq!(l.cto(), cto);
+        // ... until it is older.
+        l.digest_delay_samples(sent + cto + Duration::MILLISECOND);
+        assert_eq!(l.cwnd(), MIN_CWND * MSS);
+    }
+
+    #[test]
+    fn no_congestion_timeout_before_the_first_ack() {
+        let mut l = Ledbat::new();
+        l.add_sent(4096, t(0));
+        l.digest_delay_samples(t(10_000));
+        assert_eq!(l.cwnd(), INIT_CWND * MSS);
         assert_eq!(l.cto(), Duration::SECOND);
     }
 }

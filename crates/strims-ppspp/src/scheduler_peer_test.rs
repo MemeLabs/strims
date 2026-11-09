@@ -1145,7 +1145,7 @@ fn window_floor_carries_the_stream() {
         l.add_delay_sample(Duration::from_millis(10), 1024, t);
         l.digest_delay_samples(t);
         for _ in 0..500 {
-            l.add_sent(8192);
+            l.add_sent(8192, t);
             l.add_delay_sample(Duration::from_millis(150), 8192, t);
             l.digest_delay_samples(t);
         }
@@ -1198,7 +1198,7 @@ fn a_window_at_its_floor_still_asks_for_a_chunk() {
         l.add_delay_sample(Duration::from_millis(10), 1024, t);
         l.digest_delay_samples(t);
         for _ in 0..500 {
-            l.add_sent(8192);
+            l.add_sent(8192, t);
             l.add_delay_sample(Duration::from_millis(150), 8192, t);
             l.digest_delay_samples(t);
         }

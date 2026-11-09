@@ -122,8 +122,8 @@ impl RequestController for Ledbat {
         self.set_min_cwnd(bytes, now);
     }
 
-    fn on_sent(&mut self, _now: Time, bytes: i64) {
-        self.add_sent(bytes);
+    fn on_sent(&mut self, now: Time, bytes: i64) {
+        self.add_sent(bytes, now);
     }
 
     fn on_delivered(&mut self, _now: Time, _bytes: i64) {}
