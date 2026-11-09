@@ -365,6 +365,16 @@ went 0.104 -> 0.141, and the twin's frame bytes over what its hosts wrote
 in packets of its own, which already charges about what the framing
 would. Robust's limited-15-10 lag p99 x1.54.
 
+**A replacement for every neighbour that left (ppspp sim).** (against
+e7b83b6c, before 1b50e842) Each viewer whose link to a departed one closed
+asked for a neighbour once per link lost, however many it still had. It
+was also picked by the others asking, so the stayers filled in towards a
+full mesh: the cable-seed departure demo (50 viewers, 60 % leaving from
+40 s in, seeds 1-4) made 390-437 links a run, against 51-76 asking only
+below the arrivals' degree, for no better recovery (graceful, 90 s: lag
+peak 571/3008/1913/1536 against 597/2580/2359/2460 ms, back under 1250 ms
+in 0/14/50+/9 against 0/14/26/12 s).
+
 ## WebRTC links
 
 **A smaller data channel cap.** (`browsers-exp`, against 226a5d43)
