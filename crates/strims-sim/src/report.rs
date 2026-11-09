@@ -344,7 +344,8 @@ pub struct WanHostReport {
     /// With the window model, the segments its connections lost to a full
     /// access queue, up or down, and the pure acknowledgements (SACKs alone
     /// on a data channel) its uplink carried, with their wire bytes: they
-    /// take the uplink's time but aren't in `stats.up_bytes`.
+    /// take the uplink's time but aren't in `stats.up_bytes`. The tables'
+    /// bins count the two kinds apart ([`crate::tables::ACK_COLS`]).
     pub queue_drops: u64,
     pub acks: u64,
     pub ack_bytes: u64,
@@ -422,8 +423,8 @@ pub struct Report {
     /// The access links, in WAN mode.
     pub wan: Option<WanReport>,
     /// With [`Scenario::wire_bins`] in WAN mode, every host's uplink
-    /// counters ([`crate::wan::UP_COUNTERS`]) at each bin edge from the first
-    /// swarm's start.
+    /// counters ([`crate::tables::UP_COUNTERS`]) at each bin edge from the
+    /// first swarm's start.
     pub wire_bins: Vec<Vec<[u64; crate::wan::UP_COUNTERS.len()]>>,
 }
 

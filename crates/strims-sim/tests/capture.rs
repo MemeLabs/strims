@@ -3,8 +3,9 @@
 
 //! A run with ppspp capture on: the trace a run without it gives, and a
 //! dump per host that reads back. And a run's tables
-//! ([`strims_sim::tables`]): the same trace at any bin width, and seconds
-//! that are the series'.
+//! ([`strims_sim::tables`]): the same trace at any bin width, over TCP and
+//! as browsers, seconds that are the series', and bins that add up to the
+//! row's totals.
 
 #![allow(
     clippy::unwrap_used,
@@ -21,8 +22,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use strims_base::rng::det_rng;
 use strims_ppspp::PushMode;
 use strims_ppspp_capture::{Dir, Reader, Record, sample_kind};
+use strims_sim::tables::UP_COUNTERS;
 use strims_sim::topology::random_mesh;
-use strims_sim::{Scenario, SendBuffer, SwarmSpec, Transport, run};
+use strims_sim::{Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport, WanHostReport, run};
 use strims_wan::{Access, City, Site};
 
 #[global_allocator]
@@ -168,84 +170,147 @@ fn a_captured_wan_run_samples_every_link() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// [`wan_mesh`] as browsers link: over WebRTC, each link a data channel of
+/// the window model on Chromium's or Firefox's SCTP, and to a signalling
+/// relay over TCP.
+fn wan_browsers() -> Scenario {
+    let mut s = wan_mesh();
+    s.over_webrtc(&[Some(SctpProfile::CHROMIUM), Some(SctpProfile::FIREFOX)]);
+    s
+}
+
 #[test]
 fn a_run_with_tables_keeps_its_trace() {
-    let mut spec = wan_mesh();
-    spec.transfer_samples = true;
-    let plain = run(spec, 1).unwrap();
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
         "a_run_with_tables_keeps_its_trace-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);
-    for ms in [1000, 1] {
-        let bin = Duration::from_millis(ms);
-        let mut spec = wan_mesh();
+    let tcp = wan_mesh as fn() -> Scenario;
+    for (name, build) in [("tcp", tcp), ("browsers", wan_browsers)] {
+        let mut spec = build();
         spec.transfer_samples = true;
-        spec.wire_bins = Some(bin);
-        spec.forecast_log = true;
-        let r = run(spec, 1).unwrap();
-        assert_eq!(
-            (&plain.trace_hash, plain.reads_hash()),
-            (&r.trace_hash, r.reads_hash()),
-            "{ms} ms bins"
-        );
-        let d = dir.join(ms.to_string());
-        r.write_tables(&d, bin, true).unwrap();
-        let lines = |t: &str| {
-            std::fs::read_to_string(d.join(format!("{t}.csv")))
-                .unwrap()
-                .lines()
-                .count()
-        };
-        // A column of a table, summed.
-        let sum = |t: &str, col: &str| -> i64 {
-            let csv = std::fs::read_to_string(d.join(format!("{t}.csv"))).unwrap();
-            let mut rows = csv.lines();
-            let head: Vec<&str> = rows.next().unwrap().split(',').collect();
-            let i = head.iter().position(|&c| c == col).unwrap();
-            // An empty field is a reading the run doesn't have.
-            rows.filter_map(|l| l.split(',').nth(i).unwrap().parse::<i64>().ok())
-                .sum()
-        };
-        // The stream starts at 2 s and the run ends at 10 s.
-        assert_eq!(lines("seconds"), 8 + 1);
-        assert_eq!(lines("viewer_seconds"), 3 * 8 + 1);
-        let reads: usize = r.viewers.iter().map(|v| v.stats.lags.len()).sum();
-        assert_eq!(lines("reads"), reads + 1);
-        assert!(lines("bins") as u64 + 1 >= 7_000 / ms, "{ms} ms");
-        let seed_bytes = sum("bins", "seed_up_bytes");
-        assert!(seed_bytes > 64 * 1024 * 6, "{seed_bytes}");
-        // The nodes' own bins: their pushes and their messages' bytes.
-        assert!(sum("bins", "hits") > 0, "{ms} ms");
-        assert!(sum("bins", "viewer_have_bytes") > 0, "{ms} ms");
-        assert!(sum("bins", "sent") > 0, "{ms} ms");
-        // The bins' parent changes, sheds and dropped answers add up to the
-        // runners' totals (every host's, none of them hostile here).
-        let c = r.swarm_counters(0);
-        let both =
-            |col: &str| sum("bins", &format!("viewer_{col}")) + sum("bins", &format!("seed_{col}"));
-        assert_eq!(
-            [
-                both("switched"),
-                both("shed"),
-                both("sheds_sent"),
-                both("answers_refused"),
-                both("answers_dropped"),
-            ],
-            [
-                c.switched,
-                c.shed,
-                c.sheds_sent,
-                c.answers_refused,
-                c.answers_dropped,
-            ]
-            .map(|x| x as i64),
-            "{ms} ms"
-        );
-        assert!(lines("node_bins") > lines("bins"), "{ms} ms");
-        assert!(lines("events") > 3, "{ms} ms: a join per viewer");
-        assert!(lines("forecast") > 1, "{ms} ms");
+        let plain = run(spec, 1).unwrap();
+        for ms in [1000, 1] {
+            let bin = Duration::from_millis(ms);
+            let mut spec = build();
+            spec.transfer_samples = true;
+            spec.wire_bins = Some(bin);
+            spec.forecast_log = true;
+            let r = run(spec, 1).unwrap();
+            assert_eq!(
+                (&plain.trace_hash, plain.reads_hash()),
+                (&r.trace_hash, r.reads_hash()),
+                "{name}: {ms} ms bins"
+            );
+            let d = dir.join(format!("{name}-{ms}"));
+            r.write_tables(&d, bin, true).unwrap();
+            let lines = |t: &str| {
+                std::fs::read_to_string(d.join(format!("{t}.csv")))
+                    .unwrap()
+                    .lines()
+                    .count()
+            };
+            // A column of a table, summed.
+            let sum = |t: &str, col: &str| -> i64 {
+                let csv = std::fs::read_to_string(d.join(format!("{t}.csv"))).unwrap();
+                let mut rows = csv.lines();
+                let head: Vec<&str> = rows.next().unwrap().split(',').collect();
+                let i = head.iter().position(|&c| c == col).unwrap();
+                // An empty field is a reading the run doesn't have.
+                rows.filter_map(|l| l.split(',').nth(i).unwrap().parse::<i64>().ok())
+                    .sum()
+            };
+            let both = |col: &str| {
+                sum("bins", &format!("viewer_{col}")) + sum("bins", &format!("seed_{col}"))
+            };
+            // The stream starts at 2 s and the run ends at 10 s.
+            assert_eq!(lines("seconds"), 8 + 1);
+            assert_eq!(lines("viewer_seconds"), 3 * 8 + 1);
+            let reads: usize = r.viewers.iter().map(|v| v.stats.lags.len()).sum();
+            assert_eq!(lines("reads"), reads + 1);
+            assert!(lines("bins") as u64 + 1 >= 7_000 / ms, "{name}: {ms} ms");
+            let seed_bytes = sum("bins", "seed_up_bytes");
+            assert!(seed_bytes > 64 * 1024 * 6, "{name}: {seed_bytes}");
+            // The nodes' own bins: their pushes and their messages' bytes.
+            assert!(sum("bins", "hits") > 0, "{name}: {ms} ms");
+            assert!(sum("bins", "viewer_have_bytes") > 0, "{name}: {ms} ms");
+            assert!(sum("bins", "sent") > 0, "{name}: {ms} ms");
+            // The bins' parent changes, sheds and dropped answers add up to
+            // the runners' totals (every host's, none of them hostile here).
+            let c = r.swarm_counters(0);
+            assert_eq!(
+                [
+                    both("switched"),
+                    both("shed"),
+                    both("sheds_sent"),
+                    both("answers_refused"),
+                    both("answers_dropped"),
+                ],
+                [
+                    c.switched,
+                    c.shed,
+                    c.sheds_sent,
+                    c.answers_refused,
+                    c.answers_dropped,
+                ]
+                .map(|x| x as i64),
+                "{name}: {ms} ms"
+            );
+            // The bins' acknowledgements alone (TCP's pure ACKs, the data
+            // channels' SACKs) are the seed's and the viewers' between the
+            // first edge and the last; with theirs before and after it, and
+            // the relay's, they are the row's: every host's, the run through.
+            let row: serde_json::Value = serde_json::from_str(&r.row(name, None)).unwrap();
+            let wan = r.wan.as_ref().unwrap();
+            assert_eq!(wan.hosts.len(), r.scenario.hosts.len());
+            let (first, last) = (r.wire_bins.first().unwrap(), r.wire_bins.last().unwrap());
+            let swarm = &r.scenario.swarms[0];
+            let binned: BTreeSet<usize> = std::iter::once(swarm.seed)
+                .chain(swarm.viewers.iter().copied())
+                .collect();
+            let ix = |c: &str| UP_COUNTERS.iter().position(|&n| n == c).unwrap();
+            for (cols, key) in [
+                (["up_ack_packets", "up_sack_packets"], "packets_ack"),
+                (["up_ack_bytes", "up_sack_bytes"], "up_acks"),
+            ] {
+                let total = |w: &WanHostReport| match key {
+                    "packets_ack" => w.acks,
+                    _ => w.ack_bytes,
+                };
+                let at = |edge: &[u64]| -> u64 { cols.iter().map(|c| edge[ix(c)]).sum() };
+                let in_bins: i64 = cols.iter().map(|c| both(c)).sum();
+                let between: u64 = binned.iter().map(|&h| at(&last[h]) - at(&first[h])).sum();
+                assert_eq!(in_bins as u64, between, "{name}: {ms} ms: {key}");
+                let outside: u64 = wan
+                    .hosts
+                    .iter()
+                    .enumerate()
+                    .map(|(h, w)| match binned.contains(&h) {
+                        true => at(&first[h]) + total(w).checked_sub(at(&last[h])).unwrap(),
+                        false => total(w),
+                    })
+                    .sum();
+                assert_eq!(
+                    in_bins as u64 + outside,
+                    row[key].as_u64().unwrap(),
+                    "{name}: {ms} ms: {key}"
+                );
+            }
+            // TCP links carry pure ACKs alone, data channels SACKs too.
+            assert!(both("up_ack_packets") > 0, "{name}: {ms} ms");
+            assert!(sum("node_bins", "up_ack_bytes") > 0, "{name}: {ms} ms");
+            if name == "tcp" {
+                assert_eq!(both("up_sack_packets") + both("up_sack_bytes"), 0);
+            } else {
+                assert!(both("up_sack_packets") > 0, "{name}: {ms} ms");
+                assert!(sum("bins", "seed_up_sack_bytes") > 0, "{name}: {ms} ms");
+                assert!(sum("node_bins", "up_sack_bytes") > 0, "{name}: {ms} ms");
+            }
+            assert!(lines("node_bins") > lines("bins"), "{name}: {ms} ms");
+            assert!(lines("events") > 3, "{name}: {ms} ms: a join per viewer");
+            assert!(lines("forecast") > 1, "{name}: {ms} ms");
+        }
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

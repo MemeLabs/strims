@@ -13,7 +13,7 @@
 //! | `seconds` | second of [`Report::series`] | `sec`, then the series' per-second fields (`present`, `hits`, `misses`, `pruned`, `parents`, `capacity`, `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, and `written` for a media swarm) |
 //! | `viewer_seconds` | viewer and second | `viewer`, `sec`, `lag_ms` (the series' `lag`: the p99 of the frames read in the second, -1 without any), `frames` |
 //! | `reads` | frame a viewer read (duplicates too) | `viewer`, `t_ms` (when it was read: its write time plus its lag), `seq`, `lag_ms` |
-//! | `bins` | bin of [`Scenario::wire_bins`] | [`bin_cols`]: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`) |
+//! | `bins` | bin of [`Scenario::wire_bins`] | [`bin_cols`]: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`), then [`ACK_COLS`], the acknowledgements alone their uplinks carried, packets and wire bytes, summed over those viewers and the seed's: TCP's pure ACKs (`*_up_ack_packets`, `*_up_ack_bytes`) and the data channels' SACKs (`*_up_sack_packets`, `*_up_sack_bytes`), none of them in `*_up_bytes`, `*_up_packets` or `*_small_packets` |
 //! | `node_bins` | node and bin, with `STRIMS_SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node` (its host), `viewer` (its number in `viewers`, -1 for the seed and hostile hosts), what it did in the bin |
 //! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink in bytes per second, -1 without a limit), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset) |
 //! | `events` | timed event | `t_us`, `kind`, `node` (the host it happened to, -1 for none), `peer` (another host, -1 for none), `value`, `detail`: every fault of the scenario (`partition`, `repair`, `hold`, `release` with `node` and `peer` the groups' first hosts and `value` the groups' sizes' product, `crash`, `restart`, `latency` in ms, `pause_reading`, `resume_reading`, `reset_writer` with `node` the swarm, `uplink` in bytes per second, `connect`), every host's uplink steps (`up_step`), competing uploads (`competing_start`, `competing_stop`), each viewer incarnation's `join`, `first_frame` (`value` its ms from the join) and `caught_up`, and the seed's `copies` changes |
@@ -46,7 +46,7 @@ use strims_base::stats::WaitHistogram;
 
 use crate::report::{NODE_BIN_COUNTERS, NodeBinRecord, Report};
 use crate::spec::{Fault, HostClass, HostIx};
-use crate::wan::UP_COUNTERS;
+pub use crate::wan::UP_COUNTERS;
 
 /// A column's type, as `hack/sim-db` names it.
 #[derive(Clone, Copy)]
@@ -186,6 +186,17 @@ pub const WAIT_COLS: [&str; 6] = [
     "answer_wait_p99_ms",
 ];
 
+/// The window model's acknowledgements alone through a host's uplink, as
+/// [`UP_COUNTERS`] names them: TCP's pure ACKs and the data channels'
+/// SACKs, packets and wire bytes of each. The row's `packets_ack` and
+/// `up_acks` count both kinds, over the whole run and every host.
+pub const ACK_COLS: [&str; 4] = [
+    "up_ack_packets",
+    "up_ack_bytes",
+    "up_sack_packets",
+    "up_sack_bytes",
+];
+
 /// The `bins` table's columns ([`Report::write_tables`]).
 pub fn bin_cols() -> Vec<String> {
     let mut cols: Vec<String> = [
@@ -225,6 +236,9 @@ pub fn bin_cols() -> Vec<String> {
         cols.push(format!("{who}_window_cuts"));
         cols.push(format!("{who}_rtos"));
     }
+    for who in ["viewer", "seed"] {
+        cols.extend(ACK_COLS.iter().map(|c| format!("{who}_{c}")));
+    }
     cols
 }
 
@@ -249,6 +263,7 @@ pub fn node_bin_cols() -> Vec<String> {
     cols.extend(NODE_COLS.iter().chain(&WAIT_COLS).map(|c| c.to_string()));
     cols.push("window_cuts".into());
     cols.push("rtos".into());
+    cols.extend(ACK_COLS.iter().map(|c| c.to_string()));
     cols
 }
 
@@ -570,6 +585,8 @@ impl Report {
             row.push(wire_sum(honest, ku, uc("rtos")));
             row.push(self.wire_delta(seed, ku, uc("window_cuts")));
             row.push(self.wire_delta(seed, ku, uc("rtos")));
+            row.extend(ACK_COLS.iter().map(|c| wire_sum(honest, ku, uc(c))));
+            row.extend(ACK_COLS.iter().map(|c| self.wire_delta(seed, ku, uc(c))));
             t.opt_ints(&row);
         }
         Ok(t)
@@ -614,6 +631,7 @@ impl Report {
                 row.extend(wait_cols(&s.waits()));
                 row.push(self.wire_delta(h, ku, uc("window_cuts")));
                 row.push(self.wire_delta(h, ku, uc("rtos")));
+                row.extend(ACK_COLS.iter().map(|c| self.wire_delta(h, ku, uc(c))));
                 t.opt_ints(&row);
             }
         }

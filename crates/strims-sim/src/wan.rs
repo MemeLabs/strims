@@ -299,11 +299,15 @@ pub(crate) const BETA: f64 = 0.7;
 const HYSTART_SAMPLES: u32 = 8;
 const HYSTART_LOW_WINDOW: f64 = 16.0 * MSS;
 
-/// [`Scheduler::up_counters`]' counters, as the tables name them: wire
-/// bytes, packets and small packets through the uplink, stream messages
-/// that lost a packet, packets lost (the network's and the window model's
-/// full access queues'), and the window model's window falls and timeouts.
-pub const UP_COUNTERS: [&str; 7] = [
+/// A host's uplink counters in WAN mode (`Scheduler::up_counters`), as the
+/// tables name them: wire bytes, packets and small packets through the
+/// uplink, stream messages that lost a packet, packets lost (the network's
+/// and the window model's full access queues'), the window model's window
+/// falls and timeouts, and the acknowledgements alone its uplink carried,
+/// packets and wire bytes: TCP's pure ACKs, then the data channels' SACKs.
+/// The acknowledgements aren't in the first three; the two kinds add up to
+/// a host's [`WanHostReport::acks`] and [`WanHostReport::ack_bytes`].
+pub const UP_COUNTERS: [&str; 11] = [
     "up_bytes",
     "up_packets",
     "small_packets",
@@ -311,6 +315,10 @@ pub const UP_COUNTERS: [&str; 7] = [
     "drops",
     "window_cuts",
     "rtos",
+    "up_ack_packets",
+    "up_ack_bytes",
+    "up_sack_packets",
+    "up_sack_bytes",
 ];
 
 /// One TCP connection in the window model, or a competing upload.
@@ -722,11 +730,14 @@ pub(crate) struct Scheduler {
     /// [`Scheduler::cross_sent`] is.
     cross_cwnd: Vec<Vec<(Duration, u64)>>,
     /// Per host, the window model's segments its connections lost to a
-    /// full access queue, and the acknowledgements its uplink carried
-    /// (pure ACKs and SACKs alone) with their wire bytes.
+    /// full access queue, the acknowledgements its uplink carried (pure
+    /// ACKs and SACKs alone) with their wire bytes, and the SACKs among
+    /// them with theirs.
     drops: Vec<u64>,
     acks: Vec<u64>,
     ack_bytes: Vec<u64>,
+    sacks: Vec<u64>,
+    sack_bytes: Vec<u64>,
     /// Per host, the bytes it handed its transports that went out, resends
     /// left out: its wire bytes less these are the transports' framing and
     /// resends ([`Scheduler::sent`]).
@@ -875,6 +886,8 @@ impl Scheduler {
             drops: vec![0; spec.hosts.len()],
             acks: vec![0; spec.hosts.len()],
             ack_bytes: vec![0; spec.hosts.len()],
+            sacks: vec![0; spec.hosts.len()],
+            sack_bytes: vec![0; spec.hosts.len()],
             app_bytes: vec![0; spec.hosts.len()],
             cross_drops: vec![0; spec.hosts.len()],
             cuts: vec![0; spec.hosts.len()],
@@ -2049,6 +2062,16 @@ impl Scheduler {
         }
     }
 
+    /// `h`'s uplink carried a SACK alone of `wire` bytes: an
+    /// acknowledgement ([`Scheduler::ack_sent`]) the tables tell apart.
+    fn sack_sent(&mut self, h: usize, wire: usize) {
+        self.ack_sent(h, wire);
+        if let (Some(n), Some(b)) = (self.sacks.get_mut(h), self.sack_bytes.get_mut(h)) {
+            *n += 1;
+            *b += wire as u64;
+        }
+    }
+
     /// Host `h`'s uplink counters so far ([`UP_COUNTERS`]).
     pub fn up_counters(&self, h: HostIx) -> [u64; UP_COUNTERS.len()] {
         let s = self.net.stats(h);
@@ -2061,6 +2084,10 @@ impl Scheduler {
             s.drops + at(&self.drops),
             at(&self.cuts),
             at(&self.rtos),
+            at(&self.acks).saturating_sub(at(&self.sacks)),
+            at(&self.ack_bytes).saturating_sub(at(&self.sack_bytes)),
+            at(&self.sacks),
+            at(&self.sack_bytes),
         ]
     }
 
