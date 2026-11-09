@@ -67,10 +67,12 @@
 //!   [`BETA`] of itself once a recovery: losses of segments sent before
 //!   it fell don't cut it again.
 //! - A segment through the receiver's downlink is acknowledged once the
-//!   acknowledgement crosses back, after the receiver's uplink queue. Pure
-//!   acknowledgements take their turn on the receiver's uplink as Linux
-//!   sends them: one for every second packet received, or 40 ms after a
-//!   lone one, unless the receiver's own data carries them first. The
+//!   acknowledgement crosses back, after the receiver's uplink queue. The
+//!   receiver acknowledges as Linux's does ([`ack`]): at once past a
+//!   segment's worth of bytes (every two full packets), as quickacks, as
+//!   its reader drains a short packet outside pingpong mode, else on its
+//!   delayed acknowledgement's timer, unless data it sends back carries the
+//!   acknowledgement first; pure ones take their turn on its uplink. The
 //!   window grows by the bytes acknowledged in slow start, which HyStart's
 //!   delay test ends, and as CUBIC (RFC 8312) past it, only while it
 //!   limits the connection and outside a recovery; a connection idle for
@@ -110,8 +112,10 @@ use crate::report::{ACK_WHYS, AckWaits, WanHostReport, WanReport};
 use crate::spec::{HostIx, Scenario};
 use crate::world::epoch;
 
+mod ack;
 mod sctp;
 
+use ack::{AckWhy, Owed, RcvClock};
 pub(crate) use sctp::Chunking;
 pub use sctp::SctpProfile;
 
@@ -275,9 +279,6 @@ enum Event {
         last: bool,
         immediate: bool,
     },
-    /// The receiver of competing upload `i` acknowledges its lone segment
-    /// `seq`, unless a second one came first.
-    CrossDelAck { i: usize, seq: u64 },
 }
 
 /// The window model's segment size, for the window's growth.
@@ -626,10 +627,6 @@ struct Cross {
     rtt: Duration,
     flow: Flow,
     started: bool,
-    /// A segment through the uplink whose acknowledgement its receiver
-    /// delays for a second one: its sequence number, when it went out and
-    /// when it left the uplink.
-    odd: Option<(u64, Time, Time)>,
 }
 
 /// Whether a segment taking `tx` to send overflows an access queue that
@@ -762,37 +759,6 @@ pub(crate) struct Scheduler {
     rcvs: FastMap<(SocketAddr, SocketAddr), sctp::Rcv>,
 }
 
-/// What a receiver owes its sender: the segments it hasn't acknowledged
-/// (their records, sequence numbers and lengths) and when the first of
-/// them arrived, when its delayed acknowledgement is due, when it last
-/// received, and how many segments it still acknowledges at once
-/// (quickack).
-#[derive(Clone, Debug, Default)]
-struct Owed {
-    waiting: Vec<(u64, u64, usize)>,
-    since: Time,
-    due: Option<Time>,
-    last: Time,
-    quick: u32,
-}
-
-/// Why a receiver sent an acknowledgement, its index in [`ACK_WHYS`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AckWhy {
-    Now = 0,
-    Quick = 1,
-    Timer = 3,
-    Data = 4,
-}
-
-/// The segments a receiver acknowledges at once after a gap longer than
-/// a retransmission timeout, as Linux's `TCP_MAX_QUICKACKS`.
-const QUICKACKS: u32 = 16;
-
-/// How long a receiver delays the acknowledgement of a lone segment, as
-/// Linux's `TCP_DELACK_MIN`.
-const DELACK: Duration = Duration::from_millis(40);
-
 /// How often the scheduler samples each host's uplink queue, by default,
 /// and its competing uploads.
 const QUEUE_SAMPLE_EVERY: Duration = Duration::from_millis(100);
@@ -835,7 +801,6 @@ impl Scheduler {
                     rtt: Duration::from(c.rtt),
                     flow: Flow::default(),
                     started: false,
-                    odd: None,
                 })
             })
             .collect();
@@ -1049,8 +1014,9 @@ impl Scheduler {
                     continue;
                 }
                 Event::DelAck { conn } => {
-                    if self.owed.get(&conn).is_some_and(|o| o.due == Some(t)) {
-                        self.ack_owed(t, conn, AckWhy::Timer);
+                    let rto = self.rcv_clock(conn).rto;
+                    if let Some(a) = self.owed.get_mut(&conn).and_then(|o| o.timer(t, rto)) {
+                        self.send_ack(t, conn, a);
                     }
                     continue;
                 }
@@ -1082,19 +1048,6 @@ impl Scheduler {
                     immediate,
                 } => {
                     self.sctp_copy_arrived(t, conn, seq, wire, (last, immediate));
-                    continue;
-                }
-                Event::CrossDelAck { i, seq } => {
-                    let odd = self.cross.get_mut(i).and_then(|c| match c.odd {
-                        Some((s, sent, _)) if s == seq => {
-                            c.odd = None;
-                            Some(sent)
-                        }
-                        _ => None,
-                    });
-                    if let Some(sent) = odd {
-                        self.cross_acked(t, i, seq, t - sent);
-                    }
                     continue;
                 }
                 _ => {}
@@ -1157,17 +1110,24 @@ impl Scheduler {
                         continue;
                     }
                     let done = self.net.receive(t, r.to, r.wire);
-                    if done <= now {
+                    // The window model's receiver takes a segment as it is
+                    // through, in time order with the rest.
+                    if done <= now && (window.is_none() || data.is_none()) {
                         r.state = State::Due;
                     } else {
-                        self.events.insert((done, id), Event::Deliver);
-                    }
-                    if let (Some(_), Some((seq, len))) = (window, data) {
-                        let (conn, from, to) = ((r.src, r.dst), r.from, r.to);
-                        self.owe_ack(done.max(t), conn, from, to, (id, seq, len));
+                        self.events.insert((done.max(t), id), Event::Deliver);
                     }
                 }
-                Event::Deliver => r.state = State::Due,
+                Event::Deliver => {
+                    r.state = State::Due;
+                    let conn = (r.src, r.dst);
+                    if let (Some(_), What::Data { seq, len }) = (window, r.what)
+                        && !self.assocs.contains_key(&conn)
+                    {
+                        let packets = r.packets;
+                        self.owe_ack(t, conn, (id, seq, len, packets));
+                    }
+                }
                 Event::Lost | Event::Timeout => {
                     let conn = (r.src, r.dst);
                     let (seq, len) = match r.what {
@@ -1210,7 +1170,6 @@ impl Scheduler {
                 | Event::DelAck { .. }
                 | Event::CrossAck { .. }
                 | Event::CrossLost { .. }
-                | Event::CrossDelAck { .. }
                 | Event::SctpSack { .. }
                 | Event::SctpTimeout { .. }
                 | Event::SctpDelSack { .. }
@@ -1330,109 +1289,87 @@ impl Scheduler {
         }
     }
 
-    /// Segment `seg` (its record, sequence number and length) of `conn`
-    /// from `from` was through its receiver `to`'s downlink at `t`, which
-    /// owes its acknowledgement, as Linux's `__tcp_ack_snd_check` and
-    /// delayed acknowledgements send it: at once once two packets wait (a
-    /// full segment is two, so it's acknowledged as it arrives; two small
-    /// ones go as a pair), [`DELACK`] after a lone one, and at once for the
-    /// first
-    /// [`QUICKACKS`] segments of a connection or after a gap longer than a
-    /// retransmission timeout; unless data the receiver sends back on the
-    /// connection first carries it ([`Scheduler::piggyback`]). The
-    /// acknowledgement clocks the sender's window, and a pure one takes
-    /// its turn on the receiver's uplink: on the testbed, a seed
-    /// acknowledged its viewers' 20-30-byte segments one for every two, and
-    /// a viewer its seed's full ones one for every two packets.
-    fn owe_ack(
-        &mut self,
-        t: Time,
-        conn: (SocketAddr, SocketAddr),
-        from: HostIx,
-        to: HostIx,
-        seg: (u64, u64, usize),
-    ) {
-        let gap = RTO_MIN + self.net.rtt(from, to);
+    /// Segment `seg` (its record, sequence number, length and packets) of
+    /// `conn` is through its receiver's downlink at `t`, which owes its
+    /// acknowledgement and sends it as Linux does ([`ack`]): the pure ones
+    /// it sends now take their turn on its uplink. The acknowledgement
+    /// clocks the sender's window.
+    fn owe_ack(&mut self, t: Time, conn: (SocketAddr, SocketAddr), seg: (u64, u64, usize, u32)) {
+        let clock = self.rcv_clock(conn);
+        let mut fresh = self.next;
         let o = self.owed.entry(conn).or_default();
-        if o.last.is_nil() || t - o.last > gap {
-            o.quick = QUICKACKS;
+        let before = o.due();
+        let acks = o.arrive(t, seg.0, (seg.1, seg.2, seg.3), clock, &mut fresh);
+        let due = o.due();
+        self.next = fresh;
+        for a in acks {
+            self.send_ack(t, conn, a);
         }
-        o.last = t;
-        if o.waiting.is_empty() {
-            o.since = t;
-        }
-        o.waiting.push(seg);
-        let packets: u32 = o.waiting.iter().map(|&(_, _, len)| tcp_wire(len).1).sum();
-        if o.quick > 0 || packets >= 2 {
-            let why = if packets >= 2 {
-                AckWhy::Now
-            } else {
-                AckWhy::Quick
-            };
-            o.quick = o.quick.saturating_sub(1);
-            self.ack_owed(t, conn, why);
-        } else if o.due.is_none() {
-            o.due = Some(t + DELACK);
+        if let Some(at) = due.filter(|_| due != before) {
             let key = self.next;
             self.next += 1;
-            self.events
-                .insert((t + DELACK, key), Event::DelAck { conn });
+            self.events.insert((at, key), Event::DelAck { conn });
         }
     }
 
-    /// The receiver of `conn` sends a pure acknowledgement at `t` of the
-    /// segments it owes, for `why`: it takes its turn on the receiver's
-    /// uplink and reaches the sender a one-way trip after.
-    fn ack_owed(&mut self, t: Time, conn: (SocketAddr, SocketAddr), why: AckWhy) {
+    /// The receiver of `conn` sends pure acknowledgement `a` at `t`: it
+    /// takes its turn on the receiver's uplink and reaches the sender a
+    /// one-way trip after.
+    fn send_ack(&mut self, t: Time, conn: (SocketAddr, SocketAddr), a: ack::Ack) {
         let (Some(&from), Some(&to)) = (
             self.ip_host.get(&conn.0.ip()),
             self.ip_host.get(&conn.1.ip()),
         ) else {
             return;
         };
-        let Some(o) = self.owed.get_mut(&conn) else {
-            return;
-        };
-        o.due = None;
-        let waiting = std::mem::take(&mut o.waiting);
-        if waiting.is_empty() {
+        if a.pieces.is_empty() {
             return;
         }
-        let since = o.since;
-        self.ack_counted(to, why, t - since);
+        self.ack_counted(to, a.why, a.wait);
         let depart = self.net.occupy_up(t, to, tcp_wire(0).0);
         self.ack_sent(to, tcp_wire(0).0);
-        self.acked_at(depart + self.net.one_way(to, from), conn, waiting);
+        self.acked_at(depart + self.net.one_way(to, from), conn, a.pieces);
     }
 
-    /// The acknowledgement of `waiting` (segments of `conn`) reaches the
-    /// sender at `at`.
-    fn acked_at(
-        &mut self,
-        at: Time,
-        conn: (SocketAddr, SocketAddr),
-        waiting: Vec<(u64, u64, usize)>,
-    ) {
-        for (id, seq, len) in waiting {
-            self.events.insert((at, id), Event::Ack { conn, seq, len });
+    /// The receiver of `conn` as a sender: its smoothed round trip and
+    /// retransmission timeout on the connection, or failing a sample, the
+    /// handshake's, the path's round trip.
+    fn rcv_clock(&self, conn: (SocketAddr, SocketAddr)) -> RcvClock {
+        match self.flows.get(&(conn.1, conn.0)) {
+            Some(f) if f.srtt > Duration::ZERO => RcvClock {
+                srtt: f.srtt,
+                rto: f.rto(),
+            },
+            _ => {
+                let rtt = self.conn_rtt(conn);
+                RcvClock {
+                    srtt: rtt,
+                    rto: rtt + (rtt * 2).max(RTO_MIN),
+                }
+            }
         }
     }
 
-    /// Data of `conn` leaves its sender and reaches the peer at `arrival`:
-    /// it acknowledges what its sender owes on the reverse connection.
-    fn piggyback(&mut self, conn: (SocketAddr, SocketAddr), arrival: Time) {
+    /// The acknowledgement of `pieces` (of segments of `conn`) reaches the
+    /// sender at `at`.
+    fn acked_at(&mut self, at: Time, conn: (SocketAddr, SocketAddr), pieces: Vec<ack::Piece>) {
+        for (key, seq, len) in pieces {
+            self.events.insert((at, key), Event::Ack { conn, seq, len });
+        }
+    }
+
+    /// Data of `conn` leaves its sender at `at` and reaches the peer at
+    /// `arrival`: it carries what its sender owes on the reverse
+    /// connection.
+    fn piggyback(&mut self, conn: (SocketAddr, SocketAddr), at: Time, arrival: Time) {
         let back = (conn.1, conn.0);
-        let Some(o) = self.owed.get_mut(&back) else {
+        let Some(a) = self.owed.get_mut(&back).and_then(|o| o.data_sent(at)) else {
             return;
         };
-        o.due = None;
-        let waiting = std::mem::take(&mut o.waiting);
-        if !waiting.is_empty()
-            && let Some(&h) = self.ip_host.get(&conn.0.ip())
-        {
-            self.ack_counted(h, AckWhy::Data, Duration::ZERO);
+        if let Some(&h) = self.ip_host.get(&conn.0.ip()) {
+            self.ack_counted(h, AckWhy::Data, a.wait);
         }
-        self.acked_at(arrival, back, waiting);
+        self.acked_at(arrival, back, a.pieces);
     }
 
     /// Host `h`'s receiver sent an acknowledgement for `why`, the first
@@ -1532,36 +1469,17 @@ impl Scheduler {
                     .insert((depart + rtt, id), Event::CrossLost { i, seq });
                 continue;
             }
-            // The receiver acknowledges every second segment, and a lone one
-            // after DELACK.
-            match c.odd.take() {
-                Some((first, sent, _)) => {
-                    let ack = depart + rtt;
-                    let key = self.next;
-                    self.next += 1;
-                    self.events.insert(
-                        (ack, key),
-                        Event::CrossAck {
-                            i,
-                            seq: first,
-                            rtt: ack - sent,
-                        },
-                    );
-                    self.events.insert(
-                        (ack, id),
-                        Event::CrossAck {
-                            i,
-                            seq,
-                            rtt: ack - at,
-                        },
-                    );
-                }
-                None => {
-                    c.odd = Some((seq, at, depart));
-                    self.events
-                        .insert((depart + rtt + DELACK, id), Event::CrossDelAck { i, seq });
-                }
-            }
+            // Its two packets are more than the receiver's rcv_mss, which
+            // acknowledges them at once (`ack::Owed`).
+            let ack = depart + rtt;
+            self.events.insert(
+                (ack, id),
+                Event::CrossAck {
+                    i,
+                    seq,
+                    rtt: ack - at,
+                },
+            );
         }
     }
 
@@ -1648,7 +1566,7 @@ impl Scheduler {
             self.dropped(at, conn, seq, id);
             return;
         }
-        self.piggyback(conn, t.arrival);
+        self.piggyback(conn, at, t.arrival);
         self.events.insert((t.arrival, id), Event::Arrive);
     }
 
@@ -2644,12 +2562,13 @@ mod tests {
         let (clean, _) = beside_an_upload(1_448_000, (30, 30), 0.0);
         let (lossy, _) = beside_an_upload(1_448_000, (30, 30), 0.01);
         assert!(lossy * 10 > clean * 18, "{lossy} ms against {clean} ms");
-        // An upload from the site loses its packets too.
+        // An upload from the site loses its packets too, and sends about
+        // half as much.
         let (_, a) = beside_an_upload(0, (0, 30), 0.0);
         let (_, b) = beside_an_upload(0, (0, 30), 0.01);
         let rate = |r: &WanHostReport| competing_sent(r, 6) - competing_sent(r, 2);
         assert!(
-            rate(&b) < rate(&a) / 2,
+            rate(&b) * 5 < rate(&a) * 3,
             "{} bytes in 4 s against {} without the loss",
             rate(&b),
             rate(&a)
