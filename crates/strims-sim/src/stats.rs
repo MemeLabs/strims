@@ -8,6 +8,9 @@
 //! - **Gauges** (data queue lengths, request deadlines, LEDBAT's window,
 //!   flight size and CTO, the bytes vnic holds for a link, vpn's queued
 //!   copies) keep their extremes over the samples ([`Peaks`]).
+//! - **Request windows** (LEDBAT's window, flight, queuing delay and CTO,
+//!   and the requests out, of every open channel) go into histograms per
+//!   scenario swarm, over the samples while it streams ([`WindowSamples`]).
 //! - **Counters** (data bytes and rejected input per channel, queue
 //!   refusals per peer, push/pull counters and duplicates per swarm) are
 //!   cumulative per channel, peer or swarm scheduler, and restart at zero
@@ -28,10 +31,10 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use strims_base::path;
-use strims_base::stats::{WAIT_BUCKETS, WaitHistogram};
+use strims_base::stats::{ValueHistogram, WAIT_BUCKETS, WaitHistogram};
 use strims_base::time::Time;
 use strims_node::{HostId, NodeMetrics, SwarmKey};
-use strims_ppspp::PushMode;
+use strims_ppspp::{ChannelSchedulerStats, PushMode};
 pub use strims_testbed::transfer::{PeerTransfer, TransferSample};
 
 /// Extremes of the gauges over every sample of a host (all incarnations).
@@ -82,6 +85,47 @@ impl Peaks {
         self.link_pending = self.link_pending.max(o.link_pending);
         self.write_blocked += o.write_blocked;
         self.vpn_queued = self.vpn_queued.max(o.vpn_queued);
+    }
+}
+
+/// One host's open channels' request windows at its stats samples, the
+/// channels whose peer's handshake came (`ChannelSchedulerStats`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WindowSamples {
+    /// LEDBAT's window and flight, in bytes.
+    pub cwnd: ValueHistogram,
+    pub flight: ValueHistogram,
+    /// Requests out (`ChannelSchedulerStats::requests_out`).
+    pub requests_out: ValueHistogram,
+    /// LEDBAT's queuing delay (channels that had a delay sample) and the
+    /// request timeout, in microseconds.
+    pub queuing_delay: ValueHistogram,
+    pub cto: ValueHistogram,
+}
+
+impl WindowSamples {
+    /// Counts one channel's sample.
+    pub fn add(&mut self, s: &ChannelSchedulerStats) {
+        if !s.handshake_received {
+            return;
+        }
+        let us = |d: strims_base::time::Duration| d.as_micros().max(0) as u64;
+        self.cwnd.add(s.cwnd.max(0) as u64);
+        self.flight.add(s.flight_size.max(0) as u64);
+        self.requests_out.add(s.requests_out as u64);
+        if let Some(d) = s.queuing_delay {
+            self.queuing_delay.add(us(d));
+        }
+        self.cto.add(us(s.cto));
+    }
+
+    /// Adds `o`'s samples.
+    pub fn merge(&mut self, o: &WindowSamples) {
+        self.cwnd.merge(&o.cwnd);
+        self.flight.merge(&o.flight);
+        self.requests_out.merge(&o.requests_out);
+        self.queuing_delay.merge(&o.queuing_delay);
+        self.cto.merge(&o.cto);
     }
 }
 
@@ -273,6 +317,8 @@ pub struct RunnerReport {
     /// Per scenario swarm, how long pushes and answers waited in the
     /// runner's queues (`SwarmSchedulerStats::push_wait`, `answer_wait`).
     pub waits: BTreeMap<usize, [WaitHistogram; 2]>,
+    /// Per scenario swarm, its channels' request windows while it streamed.
+    pub windows: BTreeMap<usize, WindowSamples>,
 }
 
 /// What a host wrote to measure its paths, and its links' time to share it
@@ -369,6 +415,9 @@ impl RunnerReport {
                 a.merge(b);
             }
         }
+        for (&s, w) in &o.windows {
+            self.windows.entry(s).or_default().merge(w);
+        }
     }
 }
 
@@ -437,6 +486,8 @@ pub(crate) struct HostStats {
     swarms: BTreeMap<usize, Tracked<SWARM_COUNTERS>>,
     /// Push and answer wait histograms by scenario swarm.
     waits: BTreeMap<usize, Tracked<WAIT_COUNTERS>>,
+    /// Request windows by scenario swarm.
+    windows: BTreeMap<usize, WindowSamples>,
     /// The upload meter, one entry per sample (a run takes tens to
     /// hundreds).
     meter: Vec<MeterSample>,
@@ -467,11 +518,13 @@ pub(crate) struct SampleGauges {
 impl HostStats {
     /// Folds one sample of the current incarnation, taken at `t`, when the
     /// node's clock read `clock` (its own readings' times are by it).
-    /// `swarms` maps the node's swarm keys to scenario swarm indexes.
+    /// `swarms` maps the node's swarm keys to scenario swarm indexes, and
+    /// `live` says which scenario swarms stream at `t`.
     pub fn observe(
         &mut self,
         m: &NodeMetrics,
         swarms: &[Option<SwarmKey>],
+        live: &[bool],
         t: Duration,
         clock: Time,
     ) -> SampleGauges {
@@ -523,6 +576,9 @@ impl HostStats {
                     p.rtt_max_ms = p.rtt_max_ms.max(sc.rtt_mean.as_millis());
                     p.pending_requests = p.pending_requests.max(sc.pending_requests);
                     g.pending_requests = g.pending_requests.max(sc.pending_requests);
+                    if live.get(s).copied().unwrap_or(false) {
+                        self.windows.entry(s).or_default().add(sc);
+                    }
                     let invalid = st.inbound.invalid_data + st.inbound.invalid_chunk;
                     g.invalid += invalid;
                     g.rejected += st.inbound.rejected;
@@ -656,6 +712,7 @@ impl HostStats {
         self.peers.clear();
         self.swarms.clear();
         self.waits.clear();
+        self.windows.clear();
         self.meter.clear();
         self.seeds.clear();
         self.seed_changes.clear();
@@ -705,6 +762,7 @@ impl HostStats {
             }
             r.waits.insert(s, w);
         }
+        r.windows = self.windows.clone();
         r.queue_drops = self.peers.values().map(|t| t.total()[0]).sum();
         r.meter = self.meter.clone();
         r.seeds = self.seeds.clone();

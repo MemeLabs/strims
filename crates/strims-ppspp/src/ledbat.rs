@@ -210,6 +210,15 @@ impl Ledbat {
         self.flight_size
     }
 
+    /// The queuing delay the window follows, as
+    /// [`Ledbat::digest_delay_samples`] reads it: the least of the latest
+    /// one-way delays over the least of the base history. `None` before the
+    /// first delay sample.
+    pub fn queuing_delay(&self) -> Option<Duration> {
+        let current = filter(&self.current_delays);
+        (current != MAX_DELAY_SAMPLE).then(|| current - filter(&self.base_delays))
+    }
+
     /// The smoothed round trip from ping samples.
     pub fn rtt_mean(&self) -> Duration {
         Duration::from_nanos(self.rtt_mean.value() as i64)

@@ -62,7 +62,7 @@ use sha2::{Digest, Sha256};
 use crate::report::{HostReport, Percentiles, Report, spearman};
 use crate::skew::SkewClass;
 use crate::spec::{HostClass, HostIx};
-use crate::stats::MeterSample;
+use crate::stats::{MeterSample, WindowSamples};
 use strims_ppspp::ChannelMetrics;
 
 /// Tree depth counts from this long after a stream starts.
@@ -963,6 +963,7 @@ impl Report {
             .int("timeouts", c.timeouts)
             .num("sim_secs", self.sim_secs)
             .num("wall_secs", self.wall_secs);
+        self.window_cols(swarm, &mut j);
         let [links_p50, links_p90] = self.link_counts();
         let [formed, dropped] = self.link_churn();
         let [eclipsed, cut] = self.eclipse();
@@ -1218,6 +1219,79 @@ impl Report {
             "msgs_per_payload",
             up.messages() as f64 / up.payloads.max(1) as f64,
         );
+    }
+
+    /// The request windows of the honest hosts' open channels of `swarm`
+    /// at every stats sample while it streamed ([`WindowSamples`]), as the
+    /// ppspp sim's rows name them: the window's p10, p50 and p90 and the
+    /// flight's p50 and p90 in KiB, the requests out's p50, p90 and most,
+    /// and the queuing delay's and the request timeout's p50 and p90 in
+    /// ms. Most samples of a push channel have nothing out, so the flight
+    /// and the requests out also read over the samples with any
+    /// (`*_busy_*`), with the share of samples with requests out
+    /// (`reqs_out_share`). Then in WAN mode the honest hosts' uplink
+    /// queues' waits over their samples while a swarm streams, in ms
+    /// (`upq_ms_*`: p50, p90 and the longest). Columns without samples are
+    /// left out.
+    fn window_cols(&self, swarm: usize, j: &mut JsonRow) {
+        let honest = |i: HostIx| self.class(i) == HostClass::Honest;
+        let mut w = WindowSamples::default();
+        for (i, h) in self.hosts.iter().enumerate() {
+            if honest(i)
+                && let Some(x) = h.runner.windows.get(&swarm)
+            {
+                w.merge(x);
+            }
+        }
+        let (flight, requests) = (w.flight.nonzero(), w.requests_out.nonzero());
+        for (name, h, unit, ps) in [
+            ("cwnd_kib", &w.cwnd, 1024.0, &[10, 50, 90][..]),
+            ("flight_kib", &w.flight, 1024.0, &[50, 90]),
+            ("flight_kib_busy", &flight, 1024.0, &[50, 90]),
+            ("reqs_out", &w.requests_out, 1.0, &[50, 90]),
+            ("reqs_out_busy", &requests, 1.0, &[50, 90]),
+            ("ledbat_qd_ms", &w.queuing_delay, 1e3, &[50, 90]),
+            ("cto_ms", &w.cto, 1e3, &[50, 90]),
+        ] {
+            for &p in ps {
+                if let Some(x) = h.percentile(f64::from(p)) {
+                    j.num(&format!("{name}_p{p}"), x as f64 / unit);
+                }
+            }
+        }
+        if let Some(n) = w.requests_out.max() {
+            j.int("reqs_out_max", n).num(
+                "reqs_out_share",
+                requests.count() as f64 / w.requests_out.count() as f64,
+            );
+        }
+        let Some(wan) = &self.wan else {
+            return;
+        };
+        let mut waits: Vec<i64> = Vec::new();
+        for (i, spec) in self.scenario.hosts.iter().enumerate() {
+            if !honest(i) {
+                continue;
+            }
+            let Some(up) = wan.hosts.iter().find(|x| x.name == spec.name) else {
+                continue;
+            };
+            waits.extend(
+                up.up_queue
+                    .iter()
+                    .filter(|(t, _)| t.to_std().is_some_and(|t| self.live(t)))
+                    .map(|(_, d)| d.as_micros().max(0)),
+            );
+        }
+        waits.sort_unstable();
+        for p in [50, 90] {
+            if let Some(&x) = waits.get(waits.len().saturating_sub(1) * p / 100) {
+                j.num(&format!("upq_ms_p{p}"), x as f64 / 1e3);
+            }
+        }
+        if let Some(&x) = waits.last() {
+            j.num("upq_ms_max", x as f64 / 1e3);
+        }
     }
 
     /// A digest (SHA-256, in hex) of the honest viewers' reads: each

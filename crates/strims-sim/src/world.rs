@@ -1021,9 +1021,16 @@ impl World {
                 return;
             };
             let swarms = std::mem::take(&mut hs.swarms);
+            let now = sim_now();
+            let live: Vec<bool> = self
+                .spec
+                .swarms
+                .iter()
+                .map(|s| now >= s.start && now <= s.stop)
+                .collect();
             let g = hs
                 .stats
-                .observe(m, &swarms, sim_now(), self.clock_at(h, sim_now()));
+                .observe(m, &swarms, &live, now, self.clock_at(h, now));
             let linked = m.links.iter().filter_map(|l| l.host_id);
             let mut ns: Vec<HostIx> = linked.filter_map(|id| st.ids.get(&id).copied()).collect();
             ns.sort_unstable();

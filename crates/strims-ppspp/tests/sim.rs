@@ -113,7 +113,7 @@ use std::sync::{Arc, OnceLock};
 use rand_core::Rng;
 use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter, PathReading, PathSample};
 use strims_base::rng::{DetRng, det_rng, fork};
-use strims_base::stats::WaitHistogram;
+use strims_base::stats::{ValueHistogram, WaitHistogram};
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_ppspp::codec::{
@@ -123,9 +123,10 @@ use strims_ppspp::codec::{
 };
 use strims_ppspp::store::{self, BufferReader, ChunkBytes, ChunkCodec};
 use strims_ppspp::{
-    ChannelMetrics, ChannelTotals, DATA_QUEUE_CAP, DeliveryMode, Event, LagForecast, MAX_BIN,
-    ParentAction, PeerKey, PushMode, PushStats, ReportCounters, Runner, SeedAllocation, SeedPolicy,
-    SeedQos, SwarmId, SwarmKey, SwarmOptions, TapKind, TapLevel, Writer, WriterOptions,
+    ChannelMetrics, ChannelSchedulerStats, ChannelTotals, DATA_QUEUE_CAP, DeliveryMode, Event,
+    LagForecast, MAX_BIN, ParentAction, PeerKey, PushMode, PushStats, ReportCounters, Runner,
+    SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey, SwarmOptions, TapKind, TapLevel,
+    Writer, WriterOptions,
 };
 use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
 use strims_wan::live::{self, Encoder, Op, Plan, Sign, Signer};
@@ -1017,6 +1018,8 @@ struct Sim {
     /// The push trees' shape and the upload meters, once a second after
     /// the warm-up.
     shape: Shape,
+    /// The channels' request windows, once a second.
+    windows: Windows,
     /// Each live node's next wake time ([`Sim::wake_time`]), by time and
     /// node, and its entry per node. Only `stale` nodes' times are
     /// recomputed (and those that came due), so the event loop costs what
@@ -1459,6 +1462,71 @@ struct Shape {
     /// asked lazy HAVEs of them, summed; and the samples.
     lazy: [f64; 2],
     lazy_samples: u64,
+}
+
+/// Every open channel's request window, sampled once a second over the
+/// run on every honest node's main swarm ([`Sim::sample_windows`]): the
+/// channels whose peer's handshake came.
+#[derive(Default)]
+struct Windows {
+    /// LEDBAT's window and flight, in bytes.
+    cwnd: ValueHistogram,
+    flight: ValueHistogram,
+    /// Requests out (`ChannelSchedulerStats::requests_out`).
+    requests_out: ValueHistogram,
+    /// LEDBAT's queuing delay (channels that had a delay sample) and the
+    /// request timeout, in microseconds.
+    queuing_delay: ValueHistogram,
+    cto: ValueHistogram,
+}
+
+impl Windows {
+    fn add(&mut self, s: &ChannelSchedulerStats) {
+        if !s.handshake_received {
+            return;
+        }
+        let us = |d: Duration| d.as_micros().max(0) as u64;
+        self.cwnd.add(s.cwnd.max(0) as u64);
+        self.flight.add(s.flight_size.max(0) as u64);
+        self.requests_out.add(s.requests_out as u64);
+        if let Some(d) = s.queuing_delay {
+            self.queuing_delay.add(us(d));
+        }
+        self.cto.add(us(s.cto));
+    }
+
+    /// The row's columns, as strims-sim's rows name them: the window's
+    /// p10, p50 and p90 and the flight's p50 and p90 in KiB, the requests
+    /// out's p50, p90 and most, and the queuing delay's and the request
+    /// timeout's p50 and p90 in ms. Most samples of a push channel have
+    /// nothing out, so the flight and the requests out also read over the
+    /// samples with any (`*_busy_*`), with the share of samples with
+    /// requests out (`reqs_out_share`). Columns without samples are left
+    /// out.
+    fn cols(&self, row: &mut JsonRow) {
+        let (flight, requests) = (self.flight.nonzero(), self.requests_out.nonzero());
+        for (name, h, unit, ps) in [
+            ("cwnd_kib", &self.cwnd, 1024.0, &[10, 50, 90][..]),
+            ("flight_kib", &self.flight, 1024.0, &[50, 90]),
+            ("flight_kib_busy", &flight, 1024.0, &[50, 90]),
+            ("reqs_out", &self.requests_out, 1.0, &[50, 90]),
+            ("reqs_out_busy", &requests, 1.0, &[50, 90]),
+            ("ledbat_qd_ms", &self.queuing_delay, 1e3, &[50, 90]),
+            ("cto_ms", &self.cto, 1e3, &[50, 90]),
+        ] {
+            for &p in ps {
+                if let Some(x) = h.percentile(f64::from(p)) {
+                    row.num(&format!("{name}_p{p}"), x as f64 / unit);
+                }
+            }
+        }
+        if let Some(n) = self.requests_out.max() {
+            row.int("reqs_out_max", n).num(
+                "reqs_out_share",
+                requests.count() as f64 / self.requests_out.count() as f64,
+            );
+        }
+    }
 }
 
 /// With `SIM_LOOPS=1`, how push loops (cycles of open parents) form and
@@ -2098,6 +2166,7 @@ impl Sim {
             next_alloc: t0() + Duration::SECOND,
             grafts: Grafts::default(),
             shape: Shape::default(),
+            windows: Windows::default(),
             wakes: BTreeSet::new(),
             wake_of,
             stale: every.clone(),
@@ -2267,6 +2336,7 @@ impl Sim {
                 self.sample_grafts();
                 self.sample_series();
                 self.sample_shape();
+                self.sample_windows();
             }
             if let Some(every) = progress
                 && self.now >= next_progress
@@ -3700,6 +3770,25 @@ impl Sim {
                 };
                 if let Some(c) = shape.depth.get_mut(k) {
                     *c += 1;
+                }
+            }
+        }
+    }
+
+    /// Samples [`Sim::windows`]: every channel of every honest node's main
+    /// swarm.
+    fn sample_windows(&mut self) {
+        for n in self
+            .nodes
+            .iter()
+            .filter(|n| matches!(n.role, Role::Seed | Role::Peer))
+        {
+            for (peer, swarm, _, _) in n.runner.channels() {
+                if swarm != n.swarm {
+                    continue;
+                }
+                if let Some(cs) = n.runner.channel_stats(peer, swarm) {
+                    self.windows.add(&cs.scheduler);
                 }
             }
         }
@@ -8427,6 +8516,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             .count()
     };
     row.int("timeouts", timeouts).int("echo_forged", forged);
+    sim.windows.cols(&mut row);
     if let Some(ms) = median_rtt(false) {
         row.int("seed_rtt_honest_ms", ms as u64);
     }

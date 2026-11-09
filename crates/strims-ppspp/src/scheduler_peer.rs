@@ -2948,9 +2948,11 @@ impl PeerSwarmScheduler {
             cwnd: c.controller.in_flight_cap(),
             flight_size: c.controller.in_flight(),
             cto: c.controller.request_timeout(),
+            queuing_delay: c.controller.queuing_delay(),
             rtt_mean: c.controller.rtt(),
             min_rtt: c.controller.min_rtt(),
             pending_requests: c.request_bins.len(),
+            requests_out: usize::try_from(c.request_times.timed()).unwrap_or(usize::MAX),
             request_time_nodes: c.request_times.size(),
             extra_messages: c.extra.len(),
             peer_max_have_bin: c.peer_max_have_bin,
@@ -3077,12 +3079,20 @@ pub struct ChannelSchedulerStats {
     pub flight_size: i64,
     /// The request timeout (LEDBAT's congestion timeout).
     pub cto: Duration,
+    /// LEDBAT's queuing delay ([`Ledbat::queuing_delay`]), `None` before
+    /// the channel's first delay sample.
+    pub queuing_delay: Option<Duration>,
     /// The smoothed ping round trip.
     pub rtt_mean: Duration,
     /// The smallest recent ping round trip.
     pub min_rtt: Duration,
-    /// Outstanding request deadlines.
+    /// Request deadlines still to come: requests sent within their request
+    /// timeout, answered or not.
     pub pending_requests: usize,
+    /// Requests out to the peer: the chunks asked of it that keep a request
+    /// time, which its answer, its time out or its settle clears, or the
+    /// store's window passing it.
+    pub requests_out: usize,
     pub request_time_nodes: usize,
     pub extra_messages: usize,
     pub peer_max_have_bin: Bin,

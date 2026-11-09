@@ -169,6 +169,12 @@ impl TimeSet {
         self.root.as_ref().map_or(0, |n| n.size())
     }
 
+    /// The base chunks with a time, counted over the tree: exact after a
+    /// prune, which leaves stale counts.
+    pub(crate) fn timed(&self) -> u64 {
+        self.root.as_ref().map_or(0, |n| n.timed())
+    }
+
     /// Records `time` for `bin` unless it already has one, and returns the
     /// time it has. Bins at or past [`MAX_BIN`] are ignored.
     pub(crate) fn set(&mut self, bin: Bin, time: Time) -> Time {
