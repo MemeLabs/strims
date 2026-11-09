@@ -65,8 +65,9 @@ index of them. A test matrix's state is target/sim-farm/<matrix>/:
 index.jsonl (a line per finished job, with its arm, commit, binary's
 sha256, key, environment, host and its zone, wall and CPU time, peak RSS,
 the cache source and S3 location of its tables, `src` and `data`, and in
-`row` the few fields of its row the controller reads: trace, frames and
-bytes, and its matrix's [report] columns and [[derive]] fields),
+`row` the few fields of its row the controller reads: trace, frames,
+bytes and reads_hash, and its matrix's [report] columns and [[derive]]
+fields),
 failures.jsonl, mismatches.jsonl and farm.log; a testbed matrix's keeps
 rows.jsonl, its whole rows, instead. A test job's id hashes its
 arm's source, the package, target and test, its environment and its
@@ -243,7 +244,9 @@ speed. A run logs the speeds before its best pools.
   (Server.SpotInstanceTermination; an AWS FIS interruption ends as the
   user's). Runs are deterministic, so a reissued job must print the same
   row: a job whose row arrives twice is compared on (trace, frames,
-  bytes), and --verify N (2) runs N jobs of each matrix (the first by
+  bytes) and, where both rows carry it, reads_hash (a digest of the
+  viewers' reads, which a change to readers alone moves without the
+  trace), and --verify N (2) runs N jobs of each matrix (the first by
   id) twice on purpose, on different instances: one whose row came from
   another matrix runs once more, against that row, which checks it on
   today's instances (the binaries take libm from the image). A job that
@@ -2606,14 +2609,17 @@ class Run:
         self.release(item.job.id)
         if first is not rec:
             key = lambda r: tuple(r["row"].get(k) for k in ("trace", "frames", "bytes"))
-            if key(first) == key(rec):
+            reads = lambda r: r["row"].get("reads_hash")
+            same_reads = not (reads(first) and reads(rec)) or reads(first) == reads(rec)
+            if key(first) == key(rec) and same_reads:
                 self.verified += 1
             else:
                 self.mismatches += 1
                 for m, r in recs:
                     append_jsonl(m.state / "mismatches.jsonl", [{"first": first, "again": r}])
                 log(f"MISMATCH: job {item.job.id} ({item.job.arm} {dict(item.job.env)}): "
-                    f"{key(first)} on {first['host']}, {key(rec)} on {host.id}")
+                    f"{key(first)} reads {reads(first)} on {first['host']}, "
+                    f"{key(rec)} reads {reads(rec)} on {host.id}")
 
     def flush_rows(self) -> None:
         """Writes the lines stored since the last flush, one append a file."""

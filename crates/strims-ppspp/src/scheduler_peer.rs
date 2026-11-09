@@ -403,9 +403,11 @@ pub(crate) struct SwarmState {
     /// Chunks written to peers, pushes included, and the pushes alone.
     chunks_sent: u64,
     pushed_chunks: u64,
-    /// Requests queued to answer, and those a full queue refused.
+    /// Requests queued to answer, those a full queue refused, and answers
+    /// dropped at write time ([`TapKind::DataDropped`]).
     answers_queued: u64,
     answers_refused: u64,
+    answers_dropped: u64,
     /// How long pushes (hybrid only) and answers waited from queued, or the
     /// request's arrival, to written.
     push_wait: WaitHistogram,
@@ -547,6 +549,16 @@ impl SwarmState {
         } else {
             PeerPriority::Low
         }
+    }
+
+    /// Reports `bin`, queued for `peer`, dropped at write time
+    /// ([`TapKind::DataDropped`]), and counts an answer's.
+    fn drop_data(&mut self, peer: PeerKey, bin: Bin, push: bool) {
+        if !push {
+            self.answers_dropped = self.answers_dropped.saturating_add(1);
+        }
+        self.tap
+            .emit(self.key, Some(peer), || TapKind::DataDropped { bin, push });
     }
 
     /// Counts the chunks of `b`, written to a peer at `pri` at `now`, and
@@ -1583,6 +1595,7 @@ impl PeerSwarmScheduler {
                 pushed_chunks: 0,
                 answers_queued: 0,
                 answers_refused: 0,
+                answers_dropped: 0,
                 push_wait: WaitHistogram::default(),
                 answer_wait: WaitHistogram::default(),
                 sent_bins: Map::new(),
@@ -2810,8 +2823,7 @@ impl PeerSwarmScheduler {
             // parts, and its parts without data are dropped.
             if swarm.store().has_dataless(b) {
                 if b.is_base() || swarm.store().is_dataless(b) {
-                    s.tap
-                        .emit(s.key, Some(peer), || TapKind::DataDropped { bin: b, push });
+                    s.drop_data(peer, b, push);
                     return Err(WriteDataError::Dropped);
                 }
                 q.push_front_data(peer, s.key, b.right(), t, pri);
@@ -2846,16 +2858,14 @@ impl PeerSwarmScheduler {
                     }
                     Err(WriteDataError::NotEnoughSpace) => cw.reset(),
                     Err(e) => {
-                        s.tap
-                            .emit(s.key, Some(peer), || TapKind::DataDropped { bin: b, push });
+                        s.drop_data(peer, b, push);
                         return Err(e);
                     }
                 }
             }
             if b.is_base() {
                 if frame_empty {
-                    s.tap
-                        .emit(s.key, Some(peer), || TapKind::DataDropped { bin: b, push });
+                    s.drop_data(peer, b, push);
                     return Err(WriteDataError::Dropped);
                 }
                 q.push_front_data(peer, s.key, b, t, pri);
@@ -2912,6 +2922,7 @@ impl PeerSwarmScheduler {
             distinct_chunks_sent: s.distinct_chunks_sent,
             answers_queued: s.answers_queued,
             answers_refused: s.answers_refused,
+            answers_dropped: s.answers_dropped,
             push_wait: s.push_wait,
             answer_wait: s.answer_wait,
         }
@@ -2926,6 +2937,8 @@ impl PeerSwarmScheduler {
             requests_timed_out: s.requests_timed_out,
             chunks_sent: s.chunks_sent,
             pushed_chunks: s.pushed_chunks,
+            answers_refused: s.answers_refused,
+            answers_dropped: s.answers_dropped,
             push_wait: s.push_wait,
             answer_wait: s.answer_wait,
         }
@@ -3046,9 +3059,13 @@ pub struct SwarmSchedulerStats {
     /// Chunks written to anyone at least once (a seed's count of distinct
     /// chunks uploaded).
     pub distinct_chunks_sent: u64,
-    /// Requests queued to answer, and those a full queue refused.
+    /// Requests queued to answer, those a full queue refused, and answers
+    /// dropped at write time ([`TapKind::DataDropped`]): a part with no
+    /// data to write, a chunk no longer stored, or one too big for an empty
+    /// frame.
     pub answers_queued: u64,
     pub answers_refused: u64,
+    pub answers_dropped: u64,
     /// How long pushes waited from queued to written (hybrid only), and
     /// answers from their request's arrival.
     pub push_wait: WaitHistogram,
@@ -3062,6 +3079,8 @@ pub struct SwarmCounters {
     pub requests_timed_out: u64,
     pub chunks_sent: u64,
     pub pushed_chunks: u64,
+    pub answers_refused: u64,
+    pub answers_dropped: u64,
     pub push_wait: WaitHistogram,
     pub answer_wait: WaitHistogram,
 }

@@ -136,10 +136,12 @@ pub struct SwarmCounters {
     /// Requests that timed out unanswered
     /// (`SwarmSchedulerStats::requests_timed_out`).
     pub timeouts: u64,
-    /// Requests queued to answer, and those a full queue refused
-    /// (`SwarmSchedulerStats::answers_queued`, `answers_refused`).
+    /// Requests queued to answer, those a full queue refused, and answers
+    /// dropped at write time (`SwarmSchedulerStats::answers_queued`,
+    /// `answers_refused`, `answers_dropped`).
     pub answers_queued: u64,
     pub answers_refused: u64,
+    pub answers_dropped: u64,
 }
 
 impl SwarmCounters {
@@ -185,6 +187,7 @@ impl SwarmCounters {
             self.timeouts,
             self.answers_queued,
             self.answers_refused,
+            self.answers_dropped,
         ]
     }
 
@@ -215,6 +218,7 @@ impl SwarmCounters {
             timeouts,
             answers_queued,
             answers_refused,
+            answers_dropped,
         ] = a;
         SwarmCounters {
             data_sent,
@@ -242,6 +246,7 @@ impl SwarmCounters {
             timeouts,
             answers_queued,
             answers_refused,
+            answers_dropped,
         }
     }
 }
@@ -408,7 +413,7 @@ impl<const N: usize> Tracked<N> {
 }
 
 /// Swarm counters, in [`SwarmCounters`]' field order.
-const SWARM_COUNTERS: usize = 25;
+const SWARM_COUNTERS: usize = 26;
 
 /// Wait histogram counters: pushes' buckets, then answers'.
 const WAIT_COUNTERS: usize = 2 * WAIT_BUCKETS;
@@ -594,6 +599,7 @@ impl HostStats {
                 timeouts: sched.requests_timed_out,
                 answers_queued: sched.answers_queued,
                 answers_refused: sched.answers_refused,
+                answers_dropped: sched.answers_dropped,
                 ..SwarmCounters::default()
             };
             self.swarms.entry(s).or_default().observe(c.to_array());

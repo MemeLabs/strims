@@ -185,7 +185,11 @@ fn a_run_with_tables_keeps_its_trace() {
         spec.wire_bins = Some(bin);
         spec.forecast_log = true;
         let r = run(spec, 1).unwrap();
-        assert_eq!(plain.trace_hash, r.trace_hash, "{ms} ms bins");
+        assert_eq!(
+            (&plain.trace_hash, plain.reads_hash()),
+            (&r.trace_hash, r.reads_hash()),
+            "{ms} ms bins"
+        );
         let d = dir.join(ms.to_string());
         r.write_tables(&d, bin, true).unwrap();
         let lines = |t: &str| {
@@ -216,6 +220,29 @@ fn a_run_with_tables_keeps_its_trace() {
         assert!(sum("bins", "hits") > 0, "{ms} ms");
         assert!(sum("bins", "viewer_have_bytes") > 0, "{ms} ms");
         assert!(sum("bins", "sent") > 0, "{ms} ms");
+        // The bins' parent changes, sheds and dropped answers add up to the
+        // runners' totals (every host's, none of them hostile here).
+        let c = r.swarm_counters(0);
+        let both =
+            |col: &str| sum("bins", &format!("viewer_{col}")) + sum("bins", &format!("seed_{col}"));
+        assert_eq!(
+            [
+                both("switched"),
+                both("shed"),
+                both("sheds_sent"),
+                both("answers_refused"),
+                both("answers_dropped"),
+            ],
+            [
+                c.switched,
+                c.shed,
+                c.sheds_sent,
+                c.answers_refused,
+                c.answers_dropped,
+            ]
+            .map(|x| x as i64),
+            "{ms} ms"
+        );
         assert!(lines("node_bins") > lines("bins"), "{ms} ms");
         assert!(lines("events") > 3, "{ms} ms: a join per viewer");
         assert!(lines("forecast") > 1, "{ms} ms");

@@ -136,7 +136,7 @@ STORE_THREADS = 2
 STORE_MEMORY = "1GB"
 # What a stored job's result keeps of its row: the controller compares
 # reruns on these; a job's `fields` add what it reads ([[derive]], report).
-THIN = ("trace", "frames", "bytes", "passed", "failure")
+THIN = ("trace", "frames", "bytes", "reads_hash", "passed", "failure")
 # Retries of an upload that fails, a delay before each.
 UPLOAD_RETRIES = (2, 5, 15, 30, 60)
 # --end-at is this long before the host's shutdown (farm.py's start_worker).

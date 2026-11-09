@@ -187,11 +187,15 @@ pub struct NodeBinRecord {
 /// [`NodeBinRecord::counters`]: pushes before their deadline, deadlines
 /// released to pull, parents pruned and streams with an open parent; the
 /// upload meter's capacity and busy thousandths and a seed's copies; chunks
-/// sent and pushed; requests timed out and chunks wasted; its outbound
+/// sent and pushed; requests timed out and chunks wasted; answers a full
+/// queue refused and answers dropped at write time
+/// ([`strims_ppspp::SwarmCounters`]); parents replaced, parents lost to
+/// their closing the subscription and subscribers closed for a saturated
+/// uplink (`PushStats`' `switched`, `shed`, `sheds_sent`); its outbound
 /// messages' bytes by kind, its payloads and those of HAVEs alone
 /// ([`strims_ppspp::ChannelMetrics`]); and the bytes it wrote that weren't
 /// chunk data (the series' overhead).
-pub const NODE_BIN_COUNTERS: [&str; 24] = [
+pub const NODE_BIN_COUNTERS: [&str; 29] = [
     "hits",
     "misses",
     "pruned",
@@ -203,6 +207,11 @@ pub const NODE_BIN_COUNTERS: [&str; 24] = [
     "pushed",
     "timeouts",
     "wasted",
+    "answers_refused",
+    "answers_dropped",
+    "switched",
+    "shed",
+    "sheds_sent",
     "have_bytes",
     "ack_bytes",
     "request_bytes",

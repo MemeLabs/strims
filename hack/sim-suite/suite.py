@@ -68,10 +68,12 @@ rates and times, the mean difference for shares, with a 95 % t-interval. A metri
 effect passes its tie band; it is then marked better (+) or worse (-) by
 the metric's direction, or changed (~) where no direction is better.
 Last, how many runs give
-the same trace as A's at the same cell and seed: all of them for a change
-that leaves the sims' behaviour alone, and which cells differ when only
-some do. Hard failures (a run without a row, a panic, memory past the cell's
-budget) are listed first. Four seeds show direction, not effect sizes:
+the same trace as A's at the same cell and seed, and the same reads where
+both rows carry their digest (`reads_hash`: the trace covers what the nodes
+did, so a change that moves only readers keeps it): all of them for a
+change that leaves the sims' behaviour alone, and which cells differ when
+only some do. Hard failures (a run without a row, a panic, memory past the
+cell's budget) are listed first. Four seeds show direction, not effect sizes:
 take what moves to the farm. Cheap cells run more seeds, and so do cells
 that tip between healthy and collapsed by seed.
 
@@ -827,6 +829,13 @@ def fmt(x):
     return f"{x:.0f}"
 
 
+def same_run(a, b):
+    """Whether rows `a` and `b` ran the same: their traces, and their
+    reads' digests where both carry one."""
+    reads = a.get("reads_hash") and b.get("reads_hash")
+    return a["trace"] == b["trace"] and (not reads or a["reads_hash"] == b["reads_hash"])
+
+
 def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False, traces=True):
     print(f"A = {a_label}   B = {b_label}")
     print("legend: + better  - worse  ~ moved  (ratio B/A or difference B-A, 95 % t-interval over seeds)")
@@ -870,7 +879,7 @@ def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False, traces=Tr
         print(f"\n{c['name']}, {n} seeds ({c['why']})")
         print("\n".join(lines) if lines else "   (no rows)")
     print(f"\nmoved: {totals['+']} better, {totals['-']} worse, {totals['~']} changed; {totals[' ']} ties")
-    pairs = [(k[0], ra["trace"] == b_rows[k]["trace"]) for k, ra in a_rows.items()
+    pairs = [(k[0], same_run(ra, b_rows[k])) for k, ra in a_rows.items()
              if k in b_rows and ra.get("trace") and b_rows[k].get("trace")]
     if traces and pairs:
         same = sum(1 for _, eq in pairs if eq)

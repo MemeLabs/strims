@@ -13,7 +13,7 @@
 //! | `seconds` | second of [`Report::series`] | `sec`, then the series' per-second fields (`present`, `hits`, `misses`, `pruned`, `parents`, `capacity`, `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, and `written` for a media swarm) |
 //! | `viewer_seconds` | viewer and second | `viewer`, `sec`, `lag_ms` (the series' `lag`: the p99 of the frames read in the second, -1 without any), `frames` |
 //! | `reads` | frame a viewer read (duplicates too) | `viewer`, `t_ms` (when it was read: its write time plus its lag), `seq`, `lag_ms` |
-//! | `bins` | bin of [`Scenario::wire_bins`] | [`bin_cols`]: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`) |
+//! | `bins` | bin of [`Scenario::wire_bins`] | [`bin_cols`]: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`) |
 //! | `node_bins` | node and bin, with `STRIMS_SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node` (its host), `viewer` (its number in `viewers`, -1 for the seed and hostile hosts), what it did in the bin |
 //! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink in bytes per second, -1 without a limit), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset) |
 //! | `events` | timed event | `t_us`, `kind`, `node` (the host it happened to, -1 for none), `peer` (another host, -1 for none), `value`, `detail`: every fault of the scenario (`partition`, `repair`, `hold`, `release` with `node` and `peer` the groups' first hosts and `value` the groups' sizes' product, `crash`, `restart`, `latency` in ms, `pause_reading`, `resume_reading`, `reset_writer` with `node` the swarm, `uplink` in bytes per second, `connect`), every host's uplink steps (`up_step`), competing uploads (`competing_start`, `competing_stop`), each viewer incarnation's `join`, `first_frame` (`value` its ms from the join) and `caught_up`, and the seed's `copies` changes |
@@ -143,13 +143,22 @@ fn text(s: &str) -> String {
 }
 
 /// A node's counters in the bins beyond the series', as the ppspp sim's
-/// tables name them too: requests timed out and chunks wasted, outbound
+/// tables name them too: requests timed out and chunks wasted, answers a
+/// full queue refused (`answers_refused`) and answers dropped at write time
+/// (`answers_dropped`, ppspp's `DataDropped`), parents replaced
+/// (`switched`), parents lost to their closing the subscription (`shed`)
+/// and subscribers closed for a saturated uplink (`sheds_sent`), outbound
 /// message bytes by kind, payloads and those of HAVEs alone (from the
 /// node's [`NODE_BIN_COUNTERS`]), then stream messages that lost a packet
 /// and packets lost (the network's [`UP_COUNTERS`]).
-pub const NODE_COLS: [&str; 16] = [
+pub const NODE_COLS: [&str; 21] = [
     "timeouts",
     "wasted",
+    "answers_refused",
+    "answers_dropped",
+    "switched",
+    "shed",
+    "sheds_sent",
     "have_bytes",
     "ack_bytes",
     "request_bytes",

@@ -430,6 +430,7 @@ fn swarm_scheduler(s: SwarmSchedulerStats) -> v1::SwarmSchedulerStats {
         distinct_chunks_sent,
         answers_queued: _,
         answers_refused: _,
+        answers_dropped: _,
         push_wait: _,
         answer_wait: _,
     } = s;

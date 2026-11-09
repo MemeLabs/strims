@@ -31,6 +31,8 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   summed over it and gauges at its end: the series'
                   fields, the uplinks' bytes and packets, and per viewers
                   (`viewer_`) and seed (`seed_`) timeouts, wasted chunks,
+                  answers refused (a full queue) and dropped (at write
+                  time), parent switches, sheds taken and sent,
                   message bytes by kind, payloads and HAVE-only ones,
                   retransmits, drops and push and answer waits (strims-sim
                   also the window model's window cuts and timeouts); -1

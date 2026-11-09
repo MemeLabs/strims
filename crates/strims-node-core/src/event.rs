@@ -220,15 +220,20 @@ pub struct NodeBin {
 
 /// A swarm's counters at a bin edge ([`NodeBin`]): ppspp's `PushStats`'
 /// pushes before their deadline (`hits`), deadlines released to pull
-/// (`misses`), parents pruned, streams with an open parent, the upload
-/// meter's capacity and busy thousandths and a seed's copies, and the
-/// scheduler's counters.
+/// (`misses`), parents pruned, replaced (`switched`) and lost to their
+/// closing the subscription (`shed`), subscribers closed for a saturated
+/// uplink (`sheds_sent`), streams with an open parent, the upload meter's
+/// capacity and busy thousandths and a seed's copies, and the scheduler's
+/// counters.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SwarmBin {
     pub swarm: SwarmKey,
     pub hits: u64,
     pub misses: u64,
     pub pruned: u64,
+    pub switched: u64,
+    pub shed: u64,
+    pub sheds_sent: u64,
     pub parents: u64,
     pub upload_capacity: u64,
     pub upload_busy_permille: u64,

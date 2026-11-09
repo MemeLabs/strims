@@ -57,6 +57,8 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::time::Duration;
 
+use sha2::{Digest, Sha256};
+
 use crate::report::{HostReport, Percentiles, Report, spearman};
 use crate::skew::SkewClass;
 use crate::spec::{HostClass, HostIx};
@@ -721,9 +723,10 @@ impl Report {
         (per, max)
     }
 
-    /// The run's measures as one JSON object, for scripts: the test, seed
-    /// and knobs, whether the test's check passed (`passed`, 0 or 1, and
-    /// its `failure`, empty when it passed), with clock skew its hosts'
+    /// The run's measures as one JSON object, for scripts: the test, seed,
+    /// trace, reads' digest ([`Report::reads_hash`]) and knobs, whether the
+    /// test's check passed (`passed`, 0 or 1, and its `failure`, empty when
+    /// it passed), with clock skew its hosts'
     /// offsets (`clock_offsets_ms`, each host's in host order;
     /// `clock_max_ms`, the largest; `clock_<class>`, the hosts per
     /// [`SkewClass::name`]), as the ppspp sim's rows name them, then per
@@ -731,11 +734,13 @@ impl Report {
     /// startup bucket, steady state, per bucket) and the meter's measures
     /// (see the module docs).
     pub fn row(&self, test: &str, failure: Option<&str>) -> String {
+        let reads = self.reads_hash();
         let mut j = JsonRow::default();
         j.str("test", test)
             .str("scenario", &self.scenario.name)
             .int("seed", self.seed)
             .str("trace", self.trace_hash.get(..16).unwrap_or_default())
+            .str("reads_hash", reads.get(..16).unwrap_or_default())
             .int("passed", u64::from(failure.is_none()))
             .str("failure", failure.unwrap_or_default())
             .int(
@@ -868,8 +873,8 @@ impl Report {
                 .int("seed_budget", seed.budget as u64)
                 .int("seed_copies", seed.copies as u64);
         }
-        // The seed's answers queued and refused, and how long its pushes
-        // and answers waited in its runner's queues.
+        // The seed's answers queued, refused and dropped, and how long its
+        // pushes and answers waited in its runner's queues.
         if let Some(r) = self
             .scenario
             .swarms
@@ -879,7 +884,8 @@ impl Report {
         {
             let c = r.swarm(swarm);
             j.int("seed_answers_queued", c.answers_queued)
-                .int("seed_answers_refused", c.answers_refused);
+                .int("seed_answers_refused", c.answers_refused)
+                .int("seed_answers_dropped", c.answers_dropped);
             if let Some(w) = r.waits.get(&swarm) {
                 for (name, h) in [("push", &w[0]), ("answer", &w[1])] {
                     for p in [50, 99] {
@@ -1212,6 +1218,30 @@ impl Report {
             "msgs_per_payload",
             up.messages() as f64 / up.payloads.max(1) as f64,
         );
+    }
+
+    /// A digest (SHA-256, in hex) of the honest viewers' reads: each
+    /// viewer's swarm, host and frames read, then each frame's seq and lag,
+    /// which with its write time ([`Report::written_at`]) is when it was
+    /// read. The trace records the run's events and few of its reads, so a
+    /// change that moves only readers (where one starts, what it skips) can
+    /// keep the trace and changes this.
+    pub fn reads_hash(&self) -> String {
+        let mut h = Sha256::new();
+        let honest = self
+            .viewers
+            .iter()
+            .filter(|v| self.class(v.host) == HostClass::Honest);
+        for v in honest {
+            h.update((v.swarm as u64).to_be_bytes());
+            h.update((v.host as u64).to_be_bytes());
+            h.update((v.stats.lags.len() as u64).to_be_bytes());
+            for &(seq, lag) in &v.stats.lags {
+                h.update(seq.to_be_bytes());
+                h.update(lag.to_be_bytes());
+            }
+        }
+        hex::encode(h.finalize())
     }
 
     /// Every swarm's viewers that are honest, each once.

@@ -16,7 +16,8 @@
 //!
 //! Peers verify the bytes they read against the generator the seed writes
 //! from, and record each chunk's delivery lag (read time minus the time the
-//! seed published it). No store keeps the stream's bytes, only which chunks
+//! seed published it). A run's row carries a digest of those reads
+//! ([`Sim::reads_hash`]) beside the trace, which hashes frames alone. No store keeps the stream's bytes, only which chunks
 //! it holds: its codec ([`Content`]) copies their bytes from one copy of the
 //! stream for the whole run ([`Prefix`]) when it sends or reads them.
 //! Chunks still travel as real data that peers verify, and the frames, so
@@ -784,6 +785,11 @@ struct Node {
     vtime: BTreeMap<usize, u128>,
     weights: BTreeMap<PeerKey, u64>,
     start: Option<u64>,
+    /// Where its reader's next read starts as of its last read or recovery
+    /// ([`BufferReader::position`]). The store moves readers on its own (a
+    /// read offset set again, a recovery) and a read resyncs before it
+    /// copies, so each read's start, and the chunks it labels, come from
+    /// the reader.
     pos: u64,
     mismatches: u64,
     underruns: u64,
@@ -791,6 +797,9 @@ struct Node {
     lags: Vec<(Time, Duration)>,
     /// With the tables ([`Sim::keep_tables`]), the chunk of each of `lags`.
     read_seqs: Vec<u32>,
+    /// A digest of the reads `lags` records: each one's chunk and read
+    /// time ([`Sim::reads_hash`]).
+    reads_hash: u64,
     /// In a media run, each media chunk's read time and its lag from its
     /// unit's signing.
     sign_lags: Vec<(Time, Duration)>,
@@ -1107,14 +1116,22 @@ struct NodeCounts {
     waits: [WaitHistogram; 2],
 }
 
-/// [`NodeCounts`]' counters: requests timed out and chunks wasted
-/// ([`strims_ppspp::SwarmCounters`]), its outbound messages' bytes by kind,
-/// its payloads and those of HAVEs alone ([`ChannelMetrics`]), and its
-/// stream messages that lost a packet and datagrams lost
-/// ([`Sim::wan_stats`]).
-const NODE_COLS: [&str; 16] = [
+/// [`NodeCounts`]' counters: requests timed out, chunks wasted, answers a
+/// full queue refused and answers dropped at write time
+/// ([`strims_ppspp::SwarmCounters`]), parents replaced, parents lost to
+/// their closing the subscription and subscribers closed for a saturated
+/// uplink ([`PushStats`]' `switched`, `shed`, `sheds_sent`), its outbound
+/// messages' bytes by kind, its payloads and those of HAVEs alone
+/// ([`ChannelMetrics`]), and its stream messages that lost a packet and
+/// datagrams lost ([`Sim::wan_stats`]).
+const NODE_COLS: [&str; 21] = [
     "timeouts",
     "wasted",
+    "answers_refused",
+    "answers_dropped",
+    "switched",
+    "shed",
+    "sheds_sent",
     "have_bytes",
     "ack_bytes",
     "request_bytes",
@@ -1911,6 +1928,7 @@ impl Sim {
                 resets: 0,
                 lags: vec![],
                 read_seqs: vec![],
+                reads_hash: 0xcbf2_9ce4_8422_2325,
                 read_once: false,
                 sign_lags: vec![],
                 read_chunks: vec![],
@@ -2905,8 +2923,8 @@ impl Sim {
         }));
     }
 
-    /// Node `i`'s [`NodeCounts`] now.
-    fn node_counts(&self, i: usize) -> NodeCounts {
+    /// Node `i`'s [`NodeCounts`] now, with its push stats `p`.
+    fn node_counts(&self, i: usize, p: &PushStats) -> NodeCounts {
         let n = &self.nodes[i];
         let o = n.totals().outbound;
         let s = n.runner.swarm_counters(n.swarm).unwrap_or_default();
@@ -2915,6 +2933,11 @@ impl Sim {
             c: [
                 s.requests_timed_out,
                 s.wasted_chunks,
+                s.answers_refused,
+                s.answers_dropped,
+                p.switched,
+                p.shed,
+                p.sheds_sent,
                 o.have_bytes,
                 o.ack_bytes,
                 o.request_bytes,
@@ -2947,22 +2970,19 @@ impl Sim {
             .map(|i| {
                 let n = &self.nodes[i];
                 (n.role == Role::Peer).then(|| {
-                    let [hits, misses, pruned, parents] =
-                        n.runner.push_stats(n.swarm).map_or([0; 4], |p| {
-                            let parents = p.parents.iter().filter(|x| x.is_some()).count();
-                            [p.hits, p.misses, p.pruned, parents as u64]
-                        });
+                    let p = n.runner.push_stats(n.swarm).unwrap_or_default();
+                    let parents = p.parents.iter().filter(|x| x.is_some()).count();
                     let series = [
-                        hits,
-                        misses,
-                        pruned,
-                        parents,
+                        p.hits,
+                        p.misses,
+                        p.pruned,
+                        parents as u64,
                         n.written_overhead(),
                         n.wire.up_bytes,
                         n.wire.up_packets,
                         n.wire.small_packets,
                     ];
-                    (series, self.node_counts(i))
+                    (series, self.node_counts(i, &p))
                 })
             })
             .collect();
@@ -2987,7 +3007,7 @@ impl Sim {
                     seed.wire.up_packets,
                     seed.wire.small_packets,
                 ],
-                self.node_counts(0),
+                self.node_counts(0, &p),
             ),
         };
         for i in 0..self.nodes.len() {
@@ -3063,6 +3083,21 @@ impl Sim {
                 seed.written_overhead(),
             ],
         });
+    }
+
+    /// A digest of the honest viewers' reads at the run's end, each
+    /// viewer's ([`Node::reads_hash`]) in node order. The trace hashes what
+    /// the nodes sent, so a change that moves only readers (where one
+    /// starts, what it skips) keeps it and changes this.
+    fn reads_hash(&self) -> u64 {
+        let mut h = 0xcbf2_9ce4_8422_2325;
+        for (i, n) in self.nodes.iter().enumerate() {
+            if n.role == Role::Peer {
+                fnv(&mut h, &(i as u64).to_be_bytes());
+                fnv(&mut h, &n.reads_hash.to_be_bytes());
+            }
+        }
+        h
     }
 
     /// The honest viewers at the run's end, in the series' order (`lag`,
@@ -3203,7 +3238,7 @@ impl Sim {
     /// | `seconds` | second of [`Sim::series`] | `sec`, then the series' per-second fields (`present`, `hits`, `misses`, `pruned`, `parents`, `capacity`, `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, and `written` in a media run) |
     /// | `viewer_seconds` | viewer and second | `viewer`, `sec`, `lag_ms` (the series' `lag`, -1 without a read), `frames` |
     /// | `reads` | chunk a viewer read | `viewer`, `t_ms` (when it read it), `seq` (the chunk), `lag_ms` (from its publishing) |
-    /// | `bins` | bin of [`Sim::keep_tables`]' width | [`bin_cols`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), the seed's meter, uplink and copies at its end and what it sent in it, then [`NODE_COLS`] and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`) |
+    /// | `bins` | bin of [`Sim::keep_tables`]' width | [`bin_cols`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), the seed's meter, uplink and copies at its end and what it sent in it, then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`) |
     /// | `node_bins` | node and bin, with `SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node`, `viewer` (its number here, -1 for none), what it did in the bin |
     /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink in bytes per second), `hostile`, `churned` (it left at least once), `clock_ms` (its clock's offset) |
     /// | `events` | timed event ([`TimedEvent`]) | `t_us`, `kind`, `node`, `peer` (-1 for none), `value`, `detail`: each viewer's `join` (at the start, and on taking a place again), `first_read` (`value` its ms from the join), churn's `leave`, the seed's steps (`uplink` in bytes per second, `latency` in ms, `reconnect`) and an `incident` (`detail` dies or slows, `value` the new uplink) |
@@ -4168,6 +4203,7 @@ impl Sim {
             }
             match swarm.read(&mut x.reader, &mut self.read_buf) {
                 Ok(n) => {
+                    x.pos = x.reader.position() - n as u64;
                     for (k, &b) in self.read_buf[..n].iter().enumerate() {
                         if b != cross_byte(x.pos + k as u64) {
                             x.mismatches += 1;
@@ -4188,12 +4224,11 @@ impl Sim {
                 Err(store::Error::WouldBlock) => return,
                 Err(store::Error::BufferUnderrun) => {
                     x.underruns += 1;
-                    let skipped = runner
+                    let _ = runner
                         .swarm_mut(x.key, local)
                         .unwrap()
-                        .recover_reader(&mut x.reader)
-                        .unwrap_or(0);
-                    x.pos += skipped;
+                        .recover_reader(&mut x.reader);
+                    x.pos = x.reader.position();
                 }
                 Err(store::Error::StreamReset) => {
                     x.resets += 1;
@@ -4221,6 +4256,7 @@ impl Sim {
             }
             match swarm.read(&mut node.reader, &mut self.read_buf) {
                 Ok(n) => {
+                    node.pos = node.reader.position() - n as u64;
                     if let Some(m) = &self.media {
                         let mut want = vec![0; n];
                         m.padded.fill(node.pos, &mut want);
@@ -4250,6 +4286,8 @@ impl Sim {
                             && !pt.is_nil()
                         {
                             node.lags.push((now, now - pt));
+                            fnv(&mut node.reads_hash, &c.to_be_bytes());
+                            fnv(&mut node.reads_hash, &now.unix_nanos().to_be_bytes());
                             if self.bins.is_some() {
                                 node.read_seqs.push(c as u32);
                             }
@@ -4287,13 +4325,12 @@ impl Sim {
                 Err(store::Error::WouldBlock) => return,
                 Err(store::Error::BufferUnderrun) => {
                     node.underruns += 1;
-                    let skipped = node
+                    let _ = node
                         .runner
                         .swarm_mut(node.swarm, local)
                         .unwrap()
-                        .recover_reader(&mut node.reader)
-                        .unwrap_or(0);
-                    node.pos += skipped;
+                        .recover_reader(&mut node.reader);
+                    node.pos = node.reader.position();
                 }
                 Err(store::Error::StreamReset) => {
                     node.resets += 1;
@@ -5872,7 +5909,9 @@ fn sim_tables_change_no_trace() {
     cfg.degree = 4;
     cfg.push_mode = PushMode::Hybrid;
     cfg.stream_count = 4;
-    let plain = Sim::new(cfg.clone()).run();
+    let mut plain = Sim::new(cfg.clone());
+    let r = plain.run();
+    let plain = (r.trace, r.frames, r.bytes, plain.reads_hash());
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
         .join(format!("sim_tables_change_no_trace-{}", std::process::id()));
     for (ms, nodes) in [(1000, false), (1, true)] {
@@ -5880,8 +5919,8 @@ fn sim_tables_change_no_trace() {
         sim.keep_tables(Duration::from_millis(ms), nodes, true);
         let r = sim.run();
         assert_eq!(
-            (r.trace, r.frames, r.bytes),
-            (plain.trace, plain.frames, plain.bytes),
+            (r.trace, r.frames, r.bytes, sim.reads_hash()),
+            plain,
             "{ms} ms bins"
         );
         let d = dir.join(ms.to_string());
@@ -5891,6 +5930,34 @@ fn sim_tables_change_no_trace() {
         assert_eq!(seconds.lines().count(), s.len() + 1);
         let bins = std::fs::read_to_string(d.join("bins.csv")).unwrap();
         assert!(bins.lines().count() > s.len(), "{ms} ms");
+        // A column of the bins, summed: the counters the bins take at
+        // their edges add up to the run's at its end.
+        let sum = |col: &str| -> u64 {
+            let mut rows = bins.lines();
+            let head: Vec<&str> = rows.next().unwrap().split(',').collect();
+            let i = head.iter().position(|&c| c == col).unwrap();
+            rows.filter_map(|l| l.split(',').nth(i).unwrap().parse::<u64>().ok())
+                .sum()
+        };
+        let seed = &sim.nodes[0];
+        let st = seed.runner.swarm_stats(seed.swarm).unwrap();
+        assert_eq!(
+            [
+                sum("viewer_switched"),
+                sum("viewer_shed"),
+                sum("viewer_sheds_sent") + sum("seed_sheds_sent"),
+                sum("seed_answers_refused"),
+                sum("seed_answers_dropped"),
+            ],
+            [
+                r.push.switched,
+                r.push.shed,
+                r.push.sheds_sent,
+                st.answers_refused,
+                st.answers_dropped,
+            ],
+            "{ms} ms"
+        );
         let lines = |t: &str| {
             std::fs::read_to_string(d.join(format!("{t}.csv"))).map_or(0, |c| c.lines().count())
         };
@@ -5905,6 +5972,50 @@ fn sim_tables_change_no_trace() {
         }
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The harness labels each read with the chunks the reader truly read
+/// when the store moves the reader on its own: a read offset set again
+/// after reads, past every chunk written, resyncs the viewer's reader to
+/// its new tail at its next read with no error. The bytes it reads from
+/// there match the stream at their offsets, its reads' chunks jump to the
+/// new offset and climb from it, and the viewer reads to the stream's end.
+#[test]
+fn sim_follows_a_moved_reader() {
+    let mut cfg = Config::new(5, 8);
+    cfg.stream_secs = 6;
+    cfg.degree = 4;
+    cfg.push_mode = PushMode::Hybrid;
+    cfg.stream_count = 4;
+    let mut sim = Sim::new(cfg);
+    sim.keep_tables(Duration::from_millis(1000), false, false);
+    while sim.now < t0() + Duration::from_secs(3) {
+        let t = sim.next_time();
+        sim.sample_bins(t);
+        sim.now = sim.now.max(t);
+        sim.step();
+    }
+    let i = (1..sim.nodes.len())
+        .find(|&i| sim.nodes[i].role == Role::Peer && !sim.nodes[i].lags.is_empty())
+        .unwrap();
+    // Two munros past the last written: stored nowhere yet.
+    let to = ((sim.written + 2) * sim.cfg.munro_chunks) as u32;
+    let read = sim.nodes[i].read_seqs.len();
+    let now = sim.now;
+    let n = &mut sim.nodes[i];
+    let local = n.local(now);
+    n.runner
+        .swarm_mut(n.swarm, local)
+        .unwrap()
+        .set_offset(Bin(2 * u64::from(to)));
+    let r = sim.run();
+    let n = &sim.nodes[i];
+    assert_eq!((n.mismatches, r.mismatches), (0, 0), "{r:?}");
+    let (before, after) = n.read_seqs.split_at(read);
+    assert!(before.last().is_some_and(|&c| c + 1 < to), "{before:?}");
+    assert_eq!(after.first(), Some(&to), "{after:?}");
+    assert!(n.read_seqs.windows(2).all(|w| w[0] < w[1]));
+    assert_eq!(n.pos, r.total, "node {i} read to the end");
 }
 
 /// A media run of `encoder` signed under `sign`: 8 viewers in a full mesh,
@@ -8137,8 +8248,9 @@ fn sim_job() {
 }
 
 /// [`sim_job`]'s row: the run's config, including the knobs its run tag
-/// misses, the trace that a rerun must reproduce, and its measurements,
-/// with counts left raw so rows can be summed before taking shares.
+/// misses, the trace that a rerun must reproduce and the digest of its
+/// reads ([`Sim::reads_hash`]), and its measurements, with counts left raw
+/// so rows can be summed before taking shares.
 fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     let cfg = &sim.cfg;
     let seed = &sim.nodes[0];
@@ -8182,6 +8294,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         )
         .str("run_tag", &run_tag(cfg))
         .str("trace", &format!("{:016x}", r.trace))
+        .str("reads_hash", &format!("{:016x}", sim.reads_hash()))
         .int("frames", r.frames)
         .int("bytes", r.bytes)
         .int("payload_bytes", sim.chunks_read() * cfg.chunk_size as u64)
@@ -8323,12 +8436,14 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     row.int("seed_unmeasured_honest", unmeasured(false) as u64)
         .int("seed_unmeasured_greedy", unmeasured(true) as u64);
     // The seed's chunks pushed and answered, the requests it queued and
-    // refused, and how long pushes and answers waited in its queues.
+    // refused and the answers it dropped, and how long pushes and answers
+    // waited in its queues.
     if let Some(st) = seed.runner.swarm_stats(seed.swarm) {
         row.int("seed_pushed", st.pushed_chunks)
             .int("seed_answered", st.chunks_sent - st.pushed_chunks)
             .int("seed_answers_queued", st.answers_queued)
-            .int("seed_answers_refused", st.answers_refused);
+            .int("seed_answers_refused", st.answers_refused)
+            .int("seed_answers_dropped", st.answers_dropped);
         for (name, h) in [("push", st.push_wait), ("answer", st.answer_wait)] {
             for p in [50, 99] {
                 if let Some(d) = h.percentile(f64::from(p)) {
