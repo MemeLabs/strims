@@ -1298,7 +1298,7 @@ FROM per JOIN runs r USING (k, src) GROUP BY ALL ORDER BY r.cell, rel_ms, r.arm;
             over = "the windows' pooled rows (the pool's value thrice)"
         for cell in sorted({r["cell"] for r in out}):
             lines.append(f"\n{cell}: {a.field} around {around}, median [p10, p90] over {over} (n)")
-            lines.append(f"{'rel_s':>8} " + " ".join(f"{short(x):>34}" for x in arms))
+            lines.append(f"{'rel_s':>8} " + " ".join(f"{short(x) or '-':>34}" for x in arms))
             by = {(r["rel_ms"], r["arm"]): r for r in out if r["cell"] == cell}
             for rel in sorted({k for k, _ in by}):
                 cells = []
