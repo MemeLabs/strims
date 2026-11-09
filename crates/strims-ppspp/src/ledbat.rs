@@ -81,8 +81,9 @@ pub struct Ledbat {
 
     last_data_loss: Time,
     last_ack_time: Time,
-    /// When bytes last went into an empty flight.
-    flight_start: Time,
+    /// When the congestion timeout's timer last started other than at an
+    /// ack: as bytes went into an empty flight, or as the timeout fired.
+    timer_start: Time,
     rtt_mean: Ema,
     rtt_var: Ema,
     /// Ping round trips over [`MIN_RTT_WINDOW`], nanoseconds, and the
@@ -122,7 +123,7 @@ impl Ledbat {
             cto: Duration::SECOND,
             last_data_loss: Time::NIL,
             last_ack_time: Time::MAX,
-            flight_start: Time::NIL,
+            timer_start: Time::NIL,
             rtt_mean: Ema::new(COEF_ALPHA),
             rtt_var: Ema::new(COEF_BETA),
             rtt_min: WindowedMin::new(MIN_RTT_WINDOW),
@@ -237,7 +238,7 @@ impl Ledbat {
     /// congestion timeout's timer again.
     pub fn add_sent(&mut self, size: i64, now: Time) {
         if self.flight_size.saturating_sub(self.ack_size) <= 0 {
-            self.flight_start = now;
+            self.timer_start = now;
         }
         self.flight_size = self.flight_size.saturating_add(size);
     }
@@ -290,7 +291,10 @@ impl Ledbat {
     /// while bytes are in flight, as RFC 6298's retransmission timer does:
     /// from the latest ack, or from the request that put bytes in flight
     /// after none were if that came later. A spell with nothing in flight
-    /// doesn't count against the request that ends it.
+    /// doesn't count against the request that ends it. As the timeout
+    /// fires the timer starts again (RFC 6298's 5.5 and 5.6), so a peer
+    /// that answers nothing collapses the window once a timeout, the
+    /// timeout doubling each time, not at every frame it sends.
     ///
     /// Before the channel's first ack the timer doesn't run. The
     /// scheduler times each request out at [`Ledbat::cto`], a loss
@@ -299,11 +303,12 @@ impl Ledbat {
     /// answers: every chunk asked of it would wait that much longer to go
     /// elsewhere.
     pub fn digest_delay_samples(&mut self, now: Time) {
-        let timer = self.last_ack_time.max(self.flight_start);
+        let timer = self.last_ack_time.max(self.timer_start);
         if self.flight_size > 0 && now - timer > self.cto {
             self.floor_held_until = now + FLOOR_LOSS_HOLD;
             self.cwnd = MIN_CWND * MSS;
             self.cto = (self.cto * 2).min(Duration::SECOND);
+            self.timer_start = now;
         }
 
         if self.ack_size == 0 {
@@ -553,6 +558,27 @@ mod tests {
         // ... until it is older.
         l.digest_delay_samples(sent + cto + Duration::MILLISECOND);
         assert_eq!(l.cwnd(), MIN_CWND * MSS);
+    }
+
+    #[test]
+    fn congestion_timeout_restarts_its_timer() {
+        let mut l = Ledbat::new();
+        l.add_rtt_sample(Duration::from_millis(100), t(0));
+        let cto = l.cto();
+        l.add_sent(8192, t(0));
+        l.add_delay_sample(Duration::from_millis(10), 1024, t(10));
+        l.digest_delay_samples(t(10));
+        let fired = t(10) + cto + Duration::MILLISECOND;
+        l.digest_delay_samples(fired);
+        assert_eq!(l.cwnd(), MIN_CWND * MSS);
+        assert_eq!(l.cto(), cto * 2);
+
+        // Frames without an ack inside the doubled timeout leave it be ...
+        l.digest_delay_samples(fired + cto);
+        assert_eq!(l.cto(), cto * 2);
+        // ... and it fires again once it has passed.
+        l.digest_delay_samples(fired + cto * 2 + Duration::MILLISECOND);
+        assert_eq!(l.cto(), Duration::SECOND);
     }
 
     #[test]
