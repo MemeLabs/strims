@@ -436,8 +436,8 @@ pub(crate) struct UploadInfo {
     /// at their stream rates), in bytes per second: this swarm's
     /// admission, shedding and seed budget leave it room.
     pub(crate) others: f64,
-    /// The queueing delay past the runner, from the peers' ping round
-    /// trips; `None` with too few peers.
+    /// The queueing delay past the runner, from the driver's probes of
+    /// the peers' links ([`crate::queue_delay`]); `None` with too few peers.
     pub(crate) queue_delay: Option<Duration>,
     /// The same from the links' latest round trips, which see a queue as
     /// it forms; `None` without fresh readings.
