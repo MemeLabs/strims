@@ -198,6 +198,19 @@ EVENTS = {"kp1": [(-1000, "join", 1), (-1000, "join", 2), (4000, "join", 2),
                   (1000, "first_read", 1), (3000, "first_read", 2)],
           "kp2": [(2000, "first_read", 1)],
           "ks1": [(1500, "first_read", 3), (2500, "first_read", 5), (0, "latency", 0)]}
+# (k, t_ms, kind): an event's detail, else empty
+DETAILS = {("kp1", 3000, "first_read"): "late"}
+# kp1's forecast log: (t_ms, node, viewer, peer, peer_honest, live, run,
+# first_sight, mean_ms, held_ms, seen_ms, sample_ms); the error held -
+# (seen + mean) is node 1's 50 and -120, node 2's 90, the rest left out (a
+# hostile peer, an arrival the sim didn't see, a first sight, a second run)
+FORECASTS = [(1200, 1, 0, 2, True, True, 0, False, 50, 1100, 1000, 60),
+            (1500, 1, 0, 2, True, True, 0, False, 20, 1300, 1400, 30),
+            (1600, 1, 0, 0, False, True, 0, False, 10, 1500, 1500, 10),
+            (1700, 1, 0, 2, True, False, 0, False, 10, 1500, 1500, 10),
+            (1800, 1, 0, 2, True, True, 0, True, 10, 1500, 1500, 10),
+            (1900, 1, 0, 2, True, True, 1, False, 10, 1500, 1500, 10),
+            (3500, 2, 1, 1, True, True, 0, False, 10, 3600, 3500, 20)]
 # k: (viewer, first read's t_ms, lag_ms): a read every 100 ms to 4900
 READ_RUNS = {"kp1": [(0, 1000, 100), (1, 3000, 300)], "kp2": [(0, 2000, 200)], "kd": [(0, 0, 50)],
              "ks1": [(0, 1500, 150), (1, 2500, 250)]}
@@ -244,7 +257,10 @@ class Queries(unittest.TestCase):
         self.put(S, "viewers", ["viewer", "host"], [("ks1", v, n) for v, n in VIEWERS["ks1"]])
         for src, keys in ((P, ("kp1", "kp2")), (S, ("ks1",))):
             self.put(src, "events", ["t_us", "kind", "node", "peer", "value", "detail"],
-                     [(k, t * 1000, kind, n, -1, 0, "") for k in keys for t, kind, n in EVENTS[k]])
+                     [(k, t * 1000, kind, n, -1, 0, DETAILS.get((k, t, kind), ""))
+                      for k in keys for t, kind, n in EVENTS[k]])
+        self.put(P, "forecast", ["t_ms", "node", "viewer", "peer", "peer_honest", "live", "run", "first_sight",
+                                 "mean_ms", "held_ms", "seen_ms", "sample_ms"], [("kp1", *f) for f in FORECASTS])
         self.put(P, "seconds", ["sec", "present"], [("kp1", s, 2) for s in range(5)])
         self.put(P, "viewer_seconds", ["viewer", "sec", "lag_ms", "frames"],
                  [("kp1", v, s, lag if s * 1000 >= start else -1, 10 if s * 1000 >= start else 0)
@@ -269,7 +285,8 @@ class Queries(unittest.TestCase):
 
     def args(self, **kw):
         return argparse.Namespace(**{"src": None, "cell": None, "arm": None, "seed": None, "bin": 1000,
-                                     "since": None, "until": None, "json": True, **kw})
+                                     "since": None, "until": None, "json": True, "detail": None, "pool": False,
+                                     **kw})
 
     def run_cmd(self, cmd, **kw):
         out = io.StringIO()
@@ -281,14 +298,15 @@ class Queries(unittest.TestCase):
         v, _ = simdb.views(self.args(src=src))
         return simdb.duck(v + "\n" + query + ";")
 
-    def aligned(self, event, field, per, nth=1, before=1, after=2, node=None):
+    def aligned(self, event, field, per, nth=1, before=1, after=2, node=None, **kw):
         got = self.run_cmd(simdb.cmd_aligned, event=event, field=field, per=per, nth=nth, before=before,
-                           after=after, node=node)
+                           after=after, node=node, **kw)
         return {(r["cell"], r["rel_ms"]): (r["n"], r["p10"], r["p50"], r["p90"]) for r in got}
 
-    def refused(self, event, field, per):
+    def refused(self, event, field, per, **kw):
         with self.assertRaises(SystemExit) as cm:
-            self.run_cmd(simdb.cmd_aligned, event=event, field=field, per=per, nth=1, before=1, after=2, node=None)
+            self.run_cmd(simdb.cmd_aligned, event=event, field=field, per=per, nth=1, before=1, after=2, node=None,
+                         **kw)
         return str(cm.exception.code)
 
     def test_pooled_columns_are_each_groups(self):
@@ -394,6 +412,80 @@ class Queries(unittest.TestCase):
             got = self.sql("SELECT count(*) AS n FROM events JOIN viewers USING (k, src, node)", src)
             self.assertEqual(got[0]["n"], n, src)
         self.assertEqual({r["host"] for r in self.sql("SELECT host FROM viewers", [S])}, {3, 5})
+
+    def test_aligned_takes_every_occurrence_and_picks_events(self):
+        # cell c's first reads, a window each: kp1's at 1 s (its first
+        # viewer's ten reads in the second after) and at 3 s (both viewers'
+        # twenty), kp2's at 2 s (ten), ks1's at 1.5 s (ten) and 2.5 s (twenty)
+        self.assertEqual(self.aligned("first_read", "reads", "run", nth=0, before=0, after=1),
+                         {("c", 0): (5, 10.0, 10.0, 20.0)})
+        self.assertEqual(self.aligned("first_read", "reads", "run", before=0, after=1),
+                         {("c", 0): (3, 10.0, 10.0, 10.0)})
+        # --since and --until pick the events by time: a run's first from 2 s
+        # on, and every one before 2 s
+        self.assertEqual(self.aligned("first_read", "reads", "run", before=0, after=1, since=2),
+                         {("c", 0): (3, 12.0, 20.0, 20.0)})
+        self.assertEqual(self.aligned("first_read", "reads", "run", nth=0, before=0, after=1, until=2),
+                         {("c", 0): (2, 10.0, 10.0, 10.0)})
+        # --detail by their detail (a glob): kp1's late one alone
+        self.assertEqual(self.aligned("first_read", "reads", "run", before=0, after=1, detail="la*"),
+                         {("c", 0): (1, 20.0, 20.0, 20.0)})
+        self.assertEqual(self.aligned("first_read", "reads", "run", before=0, after=1, detail="nope"), {})
+        # per node, each node's own: kp1's node 2 joins twice, a window each
+        self.assertEqual(self.aligned("join", "lag_p50", "node", nth=0, before=0, after=1),
+                         {("c", 0): (1, 300.0, 300.0, 300.0)})
+
+    def test_aligned_pools_the_windows_rows(self):
+        def pooled(field, **kw):
+            got = self.run_cmd(simdb.cmd_aligned, event="first_read", field=field, per="run", nth=0, before=0,
+                               after=1, node=None, pool=True, **kw)
+            return [(r["cell"], r["rel_ms"], r["n"], r["p10"], r["p50"], r["p90"]) for r in got]
+
+        # the five windows' 70 reads in one pool: 20 of lag 100 (kp1's), 20
+        # of 150 (ks1's), 10 each of 200, 250 and 300
+        self.assertEqual(pooled("reads"), [("c", 0, 70, 70, 70, 70)])
+        self.assertEqual(pooled("lag_p50"), [("c", 0, 70, 150.0, 150.0, 150.0)])
+        # in half-second bins, half of each window's reads a bin
+        self.assertEqual(pooled("reads", bin=500), [("c", 0, 35, 35, 35, 35), ("c", 500, 35, 35, 35, 35)])
+
+    def test_aligned_takes_the_forecast_logs_fields(self):
+        # kp1's node 1 forecasts in the second after its first read: two of
+        # its samples count, their errors 50 and -120
+        self.assertEqual(self.aligned("first_read", "forecast_n", "run", before=0, after=1),
+                         {("c", 0): (1, 2.0, 2.0, 2.0)})
+        self.assertEqual(self.aligned("first_read", "forecast_err_p50", "run", before=0, after=1),
+                         {("c", 0): (1, -35.0, -35.0, -35.0)})
+        self.assertEqual(self.aligned("first_read", "forecast_abs_err_p90", "run", before=0, after=1)[("c", 0)][2],
+                         qc([50, 120], 0.9))
+        # per node, node 2's sample after its own first read counts too
+        got = self.aligned("first_read", "forecast_n", "node", before=0, after=1)
+        self.assertEqual({k: (n, p50) for k, (n, _, p50, _) in got.items()}, {("c", 0): (2, 1.5)})
+        self.assertIn("no forecast", self.refused("first_read", "forecast_n", "run", src=[S]))
+
+    def test_json_gives_numbers_as_numbers(self):
+        # DuckDB's CLI prints HUGEINT (sum() of integers), UBIGINT and
+        # DECIMAL values as strings; a text column stays text
+        got = self.run_cmd(simdb.cmd_sql, query="SELECT sum(seq) AS s, avg(seq)::DECIMAL(10, 2) AS d, "
+                           "count(*)::UBIGINT AS u, NULL::HUGEINT AS n, '45' AS t, 'a;b' AS semi, [sum(seq)] AS l "
+                           "FROM reads WHERE k = 'kd' -- the reads; all of them")
+        self.assertEqual(got, [{"s": 1225, "d": 24.5, "u": 50, "n": None, "t": "45", "semi": "a;b", "l": [1225]}])
+        self.assertIsInstance(got[0]["s"], int)
+        # the last statement's rows, and a name the result repeats
+        got = self.run_cmd(simdb.cmd_sql, query="CREATE TEMP TABLE x AS SELECT sum(seq) AS s FROM reads "
+                           "WHERE k = 'kd'; SELECT s AS a, s * 2 AS a, 'x' AS b FROM x;")
+        self.assertEqual(got, [{"a": 2450, "b": "x"}])
+        # what DESCRIBE and SUMMARIZE give, and no rows
+        summary = self.run_cmd(simdb.cmd_sql, query="SUMMARIZE SELECT seq FROM reads WHERE k = 'kd'")
+        self.assertEqual((summary[0]["count"], summary[0]["null_percentage"]), (50, 0.0))
+        self.assertEqual(self.run_cmd(simdb.cmd_sql, query="SELECT sum(seq) AS s FROM reads WHERE false "
+                                      "GROUP BY k"), [])
+        self.assertIn({"column_name": "seq", "column_type": "INTEGER", "null": "YES", "key": None, "default": None,
+                       "extra": None}, self.run_cmd(simdb.cmd_sql, query="DESCRIBE reads"))
+        # a statement that isn't a query runs as it is
+        self.assertEqual(simdb.duck("SET threads = 1;"), [])
+        # the commands' own queries
+        got = self.run_cmd(simdb.cmd_pooled, by="none")
+        self.assertTrue(all(isinstance(r["reads"], int) for r in got), got)
 
     def test_sql_help_documents_the_joins(self):
         for argv in (["sql", "--help"], ["--help"]):

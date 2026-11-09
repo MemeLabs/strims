@@ -10,8 +10,8 @@
   hack/sim-db/simdb.py gc [--days N]
   hack/sim-db/simdb.py sql QUERY [selection] [--reads] [--json]
   hack/sim-db/simdb.py pooled [selection] [--by none|phase|bin|viewer] [--bin MS] [--json]
-  hack/sim-db/simdb.py aligned EVENT [selection] [--field F] [--bin MS] [--per run|node]
-                                     [--before S] [--after S] [--nth N] [--json]
+  hack/sim-db/simdb.py aligned EVENT [selection] [--field F] [--bin MS] [--per run|node] [--node N]
+                                     [--detail GLOB] [--pool] [--before S] [--after S] [--nth N] [--json]
   hack/sim-db/simdb.py events [selection] [--json]
   hack/sim-db/simdb.py osc [selection] [--json]
   hack/sim-db/simdb.py rows [selection] [--fields A,B,...]
@@ -35,8 +35,12 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   time), parent switches, sheds taken and sent,
                   message bytes by kind, payloads and HAVE-only ones,
                   retransmits, drops and push and answer waits (strims-sim
-                  also the window model's window cuts and timeouts); -1
-                  where a run has no reading
+                  also the window model's window cuts and timeouts, and
+                  the acknowledgements alone it sends, packets and bytes
+                  the uplinks' leave out: TCP's pure ACKs
+                  (*_up_ack_packets, *_up_ack_bytes) and the data
+                  channels' SACKs (*_up_sack_packets, *_up_sack_bytes));
+                  -1 where a run has no reading
   node_bins       with SIM_BIN_NODES=1 / STRIMS_SIM_BIN_NODES=1, each
                   node's bins
   viewers         the viewers, numbered as the others number them, with
@@ -125,7 +129,16 @@ job's): the one holding the most of them, the later on a tie.
            `viewer_seconds` lag_ms (the bin's worst second) and frames
            (summed). The verdict, `seconds` and `bins` columns are
            run-wide, as are the derived events: `--per node` refuses
-           them, as `--per run` refuses a field only a node has
+           them, as `--per run` refuses a field only a node has. The
+           forecast log's fields (LOG_FIELDS: forecast_n,
+           forecast_err_p50, forecast_err_p90, forecast_abs_err_p50,
+           forecast_abs_err_p90) are a bin's samples, per run or per node
+           (the forecasting node's), as `forecast` judges them against
+           the truth. `--nth 0` aligns on every occurrence, a window
+           each (n counts windows); `--pool` takes the field over every
+           window's rows of a cell and arm together, a bin, rather than
+           a band over windows; `--detail` (a glob) and `--since` /
+           `--until` pick the events by their detail and time
   events   the run metrics pooled: collapses, onset after a step down and
            recovery after a step up (with how many runs they censored),
            excess lag, flaps
@@ -146,9 +159,10 @@ job's): the one holding the most of them, the later on a tie.
            Only each HAVE's first sample of a stream counts, and not those
            that set the chunk's first sight (they are zero)
 
-Every query takes `--json`. The DuckDB CLI is pinned (DUCKDB_VERSION, its
-sha256s) and fetched once into ~/.cache/strims/duckdb/ by `duckdb`, or by
-whatever needs it first.
+Every query takes `--json`: its rows, integer and decimal values (HUGEINT,
+which sum() of integers gives, too) as numbers. The DuckDB CLI is pinned
+(DUCKDB_VERSION, its sha256s) and fetched once into ~/.cache/strims/duckdb/
+by `duckdb`, or by whatever needs it first.
 """
 
 import argparse
@@ -162,6 +176,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -286,7 +301,14 @@ class DuckError(RuntimeError):
 def duck(script, db=None, out="json", threads=None, memory=None):
     """Runs a SQL script in the DuckDB CLI, over `db` (a file) or in
     memory, and returns its last statement's rows (`out` "json"), its text
-    (`out` "text": DuckDB's tables), or nothing (None)."""
+    (`out` "text": DuckDB's tables), or nothing (None).
+
+    The CLI prints the values of some integer types (HUGEINT, which sum()
+    of integers gives, UBIGINT, UHUGEINT) and of DECIMAL as JSON strings,
+    to keep their precision. Rows come back with them as numbers: before
+    a last statement that is a query (QUERY_WORDS) the script DESCRIBEs
+    it, and its columns' types say which strings are numbers. A script
+    the DESCRIBE fails runs as it is, its rows as the CLI prints them."""
     pre = []
     if threads:
         pre.append(f"SET threads={int(threads)};")
@@ -304,22 +326,137 @@ def duck(script, db=None, out="json", threads=None, memory=None):
     else:
         args.append("-noheader")
     args.append(str(db) if db else ":memory:")
-    p = subprocess.run(args, input="\n".join(pre) + "\n" + script, capture_output=True, text=True)
+
+    def run(s):
+        return subprocess.run(args, input="\n".join(pre) + "\n" + s, capture_output=True, text=True)
+
+    typed = described(script) if out == "json" else None
+    p = run(typed or script)
+    if p.returncode != 0 and typed:
+        typed = None
+        p = run(script)
     if p.returncode != 0:
         raise DuckError(p.stderr.strip() or p.stdout.strip()[-2000:])
     if out == "json":
-        # Each statement with rows prints its own array: the last one's.
-        dec, at, last = json.JSONDecoder(), 0, []
+        # Each statement with rows prints its own array (an empty one
+        # without any): the last one's, after the DESCRIBE's.
+        dec, at, arrays = json.JSONDecoder(object_pairs_hook=Pairs), 0, []
         text = p.stdout
         while True:
             while at < len(text) and text[at].isspace():
                 at += 1
             if at >= len(text):
-                return last
-            last, at = dec.raw_decode(text, at)
+                break
+            x, at = dec.raw_decode(text, at)
+            arrays.append(x)
+        if not arrays:
+            return []
+        if typed and len(arrays) >= 2:
+            cols = [(c["column_name"], c["column_type"]) for c in plain(arrays[-2])]
+            return [typed_row(r, cols) for r in arrays[-1]]
+        return plain(arrays[-1])
     if out == "text":
         return p.stdout
     return None
+
+
+# The statements duck() DESCRIBEs: queries, which a subquery can wrap.
+QUERY_WORDS = {"SELECT", "WITH", "FROM", "VALUES", "DESCRIBE", "SUMMARIZE", "SHOW", "PIVOT", "UNPIVOT", "("}
+# Integer types, some of which the CLI prints as JSON strings.
+INT_TYPES = {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UTINYINT", "USMALLINT", "UINTEGER",
+             "UBIGINT", "UHUGEINT", "BIGNUM", "VARINT"}
+SQL_SPECIAL = re.compile(r"""['";$]|--|/\*""")
+DOLLAR_QUOTE = re.compile(r"\$[A-Za-z_]*\$")
+FIRST_WORD = re.compile(r"(?:\s|--[^\n]*(?:\n|$)|/\*.*?\*/)*(\(|[A-Za-z]+)", re.S)
+
+
+def statements(script):
+    """The spans (start, end) of `script`'s statements, their semicolons
+    left out, but those holding only whitespace and comments: quotes,
+    quoted identifiers, dollar-quoted strings and comments read past."""
+    spans, start, seen, i, n = [], 0, False, 0, len(script)
+    while True:
+        m = SQL_SPECIAL.search(script, i)
+        j = m.start() if m else n
+        seen |= j > i and not script[i:j].isspace()
+        if not m:
+            break
+        tok = m.group()
+        if tok in ("'", '"'):
+            k = j + 1
+            while 0 <= (k := script.find(tok, k)) and script.startswith(tok, k + 1):
+                k += 2
+            i, seen = (n if k < 0 else k + 1), True
+        elif tok == "--":
+            k = script.find("\n", j)
+            i = n if k < 0 else k + 1
+        elif tok == "/*":
+            k = script.find("*/", j + 2)
+            i = n if k < 0 else k + 2
+        elif tok == "$":
+            d = DOLLAR_QUOTE.match(script, j)
+            k = script.find(d.group(), d.end()) if d else j
+            i, seen = (n if k < 0 else k + (len(d.group()) if d else 1)), True
+        else:
+            if seen:
+                spans.append((start, j))
+            start, seen, i = j + 1, False, j + 1
+    if seen:
+        spans.append((start, n))
+    return spans
+
+
+def described(script):
+    """`script` with its last statement, a query, DESCRIBEd before it
+    runs; None when it isn't one."""
+    spans = statements(script)
+    if not spans:
+        return None
+    start, end = spans[-1]
+    last = script[start:end]
+    m = FIRST_WORD.match(last)
+    if not m or m.group(1).upper() not in QUERY_WORDS:
+        return None
+    return f"{script[:start]}\nDESCRIBE SELECT * FROM (\n{last}\n);\n{script[start:]}"
+
+
+class Pairs(list):
+    """A JSON object's members in order, a name the CLI repeats (a join's
+    result can have two columns of one name) kept twice."""
+
+
+def plain(x):
+    """`x` with its objects (Pairs) as dicts, as json.loads gives them."""
+    if isinstance(x, Pairs):
+        return {k: plain(v) for k, v in x}
+    if isinstance(x, list):
+        return [plain(v) for v in x]
+    return x
+
+
+def number(v, typ):
+    """A value of a column of type `typ` the CLI printed as a string, as a
+    number when it is one."""
+    if not isinstance(v, str):
+        return v
+    try:
+        if typ in INT_TYPES:
+            return int(v)
+        if typ.startswith("DECIMAL"):
+            return float(v) if "." in v else int(v)
+    except ValueError:
+        pass
+    return v
+
+
+def typed_row(row, cols):
+    """A row the CLI printed (Pairs) as a dict, its values numbers where
+    its columns' types (`cols`, the DESCRIBE's (name, type) in order) are
+    integer or decimal ones."""
+    if len(row) == len(cols):
+        return {k: plain(number(v, t)) for (k, v), (_, t) in zip(row, cols)}
+    types = dict(cols)
+    return {k: plain(number(v, types.get(k, ""))) for k, v in row}
 
 
 def q(s):
@@ -1010,6 +1147,21 @@ VERDICT_FIELDS = {"healthy": "avg(healthy::INT)", "lag_q": "avg(lag_q)", "hit_sh
 VIEWER_SECOND_FIELDS = {"lag_ms": "max(lag_ms) FILTER (WHERE lag_ms >= 0)::DOUBLE", "frames": "sum(frames)::DOUBLE"}
 # The series' own columns, not fields.
 ID_COLS = {"k", "src", "bin", "t_ms", "sec", "node", "viewer"}
+# The forecast log's fields: (table, aggregate) over a bin's samples (a
+# forecast's node is a viewer), as cmd_forecast judges them against the
+# truth: each HAVE's first sample of its stream that didn't set the chunk's
+# first sight, from an honest peer the sim saw hold the chunk as it arrived
+# (`live`); the error is held - (seen + mean).
+FORECAST_LIVE = "peer_honest AND live AND run = 0 AND NOT first_sight AND mean_ms >= 0 AND held_ms >= 0"
+LOG_FIELDS = {
+    "forecast_n": ("forecast", f"count(*) FILTER (WHERE {FORECAST_LIVE})::DOUBLE"),
+    "forecast_err_p50": ("forecast", f"quantile_cont(held_ms - (seen_ms + mean_ms), 0.5) FILTER (WHERE {FORECAST_LIVE})"),
+    "forecast_err_p90": ("forecast", f"quantile_cont(held_ms - (seen_ms + mean_ms), 0.9) FILTER (WHERE {FORECAST_LIVE})"),
+    "forecast_abs_err_p50": ("forecast",
+                             f"quantile_cont(abs(held_ms - (seen_ms + mean_ms)), 0.5) FILTER (WHERE {FORECAST_LIVE})"),
+    "forecast_abs_err_p90": ("forecast",
+                             f"quantile_cont(abs(held_ms - (seen_ms + mean_ms)), 0.9) FILTER (WHERE {FORECAST_LIVE})"),
+}
 
 
 def field_source(a, v, have):
@@ -1025,6 +1177,10 @@ def field_source(a, v, have):
     if f in READ_FIELDS:
         need(have, "reads")
         return (by_node("reads") if per_node else "reads"), "t_ms", READ_FIELDS[f]
+    if f in LOG_FIELDS:
+        t, agg = LOG_FIELDS[f]
+        need(have, t)
+        return t, "t_ms", agg
 
     def columns(t):
         return {r["column_name"] for r in duck(v + f"\nDESCRIBE {t};")} - ID_COLS if t in have else set()
@@ -1072,6 +1228,8 @@ def cmd_aligned(a):
     v, have = views(a)
     if a.field in READ_FIELDS:
         v, have = with_samples(a, v, have, ("reads",))
+    elif a.field in LOG_FIELDS:
+        v, have = with_samples(a, v, have, (LOG_FIELDS[a.field][0],))
     need(have, "derived_events")
     per_node = a.per == "node"
     if per_node:
@@ -1098,27 +1256,46 @@ def cmd_aligned(a):
         if not got["nodes"]:
             sys.exit(f"{a.event} is run-wide (a derived event, or a sim's with no node): align it --per run")
         node += " AND node >= 0"
+    if a.detail is not None:
+        node += f" AND detail GLOB {q(a.detail)}"
+    node += "".join(f" AND {w}" for w in time_filter(a))
+    # The nth occurrence, or every one (`--nth 0`), each its own window.
+    pick = "" if int(a.nth) == 0 else f" WHERE nth = {int(a.nth)}"
     sql = f"""
-WITH e AS (SELECT {keys}, t_ms AS e_ms FROM
+WITH e AS (SELECT {keys}, t_ms AS e_ms, nth AS eid FROM
               (SELECT *, row_number() OVER (PARTITION BY {keys} ORDER BY t_ms) AS nth
-               FROM ev WHERE kind = {q(a.event)}{node}) WHERE nth = {int(a.nth)}),
-x AS (SELECT x.*, floor(({tcol} - e.e_ms) / {a.bin}) * {a.bin} AS rel
+               FROM ev WHERE kind = {q(a.event)}{node}){pick}),
+x AS (SELECT x.*, e.eid, floor(({tcol} - e.e_ms) / {a.bin}) * {a.bin} AS rel
       FROM {series} x JOIN e USING ({keys})
-      WHERE {tcol} - e.e_ms >= {lo} AND {tcol} - e.e_ms < {hi}),
-per AS (SELECT * FROM (SELECT {keys}, rel, {agg} AS v FROM x GROUP BY ALL) WHERE v IS NOT NULL)
+      WHERE {tcol} - e.e_ms >= {lo} AND {tcol} - e.e_ms < {hi}),"""
+    if a.pool:
+        # Every window's rows of a cell and arm in one pool a bin.
+        sql += f"""
+pool AS (SELECT r.cell, r.arm, x.rel, count(*) AS n, {agg} AS v FROM x JOIN runs r USING (k, src) GROUP BY ALL)
+SELECT cell, arm, rel::BIGINT AS rel_ms, n, v AS p10, v AS p50, v AS p90 FROM pool WHERE v IS NOT NULL
+ORDER BY cell, rel_ms, arm;"""
+        out = duck(v + sql)
+    else:
+        sql += f"""
+per AS (SELECT * FROM (SELECT {keys}, eid, rel, {agg} AS v FROM x GROUP BY ALL) WHERE v IS NOT NULL)
 SELECT r.cell, r.arm, rel::BIGINT AS rel_ms, count(*) AS n, quantile_cont(v, [0.1, 0.5, 0.9]) AS q
 FROM per JOIN runs r USING (k, src) GROUP BY ALL ORDER BY r.cell, rel_ms, r.arm;"""
-    out = duck(v + sql)
-    for r in out:
-        r["p10"], r["p50"], r["p90"] = r.pop("q")
+        out = duck(v + sql)
+        for r in out:
+            r["p10"], r["p50"], r["p90"] = r.pop("q")
     if per_node and not out:
         print(f"no node with a {a.event} event has a {a.field} series around it", file=sys.stderr)
 
     def text():
         arms = sorted({r["arm"] for r in out})
         lines = []
-        around = f"each node's own {a.event} (#{a.nth})" if per_node else f"{a.event} (#{a.nth})"
+        nth = "every one" if int(a.nth) == 0 else f"#{a.nth}"
+        around = f"each node's own {a.event} ({nth})" if per_node else f"{a.event} ({nth})"
         over = "nodes of runs" if per_node else "runs"
+        if int(a.nth) == 0:
+            over = f"windows ({over}' every event)"
+        if a.pool:
+            over = "the windows' pooled rows (the pool's value thrice)"
         for cell in sorted({r["cell"] for r in out}):
             lines.append(f"\n{cell}: {a.field} around {around}, median [p10, p90] over {over} (n)")
             lines.append(f"{'rel_s':>8} " + " ".join(f"{short(x):>34}" for x in arms))
@@ -1573,6 +1750,9 @@ def main():
                                "events table's kinds: join, leave, first_read, first_frame, ...; join and leave "
                                "a node's)")
     qs["aligned"].add_argument("--node", type=int, help="only events of this node (the sims' events)")
+    qs["aligned"].add_argument("--detail", help="only events whose detail matches this glob (the sims' events)")
+    qs["aligned"].add_argument("--pool", action="store_true",
+                               help="the field over every window's rows pooled a bin, not a band over windows")
     qs["aligned"].add_argument("--per", choices=("run", "node"), default="run",
                                help="align each run's series on its event (run), or each node's own series on "
                                     "its own event (node: a sim's per-node event; the fields its reads', "
@@ -1580,7 +1760,7 @@ def main():
     qs["aligned"].add_argument("--field", default="lag_p99")
     qs["aligned"].add_argument("--before", type=float, default=10)
     qs["aligned"].add_argument("--after", type=float, default=60)
-    qs["aligned"].add_argument("--nth", type=int, default=1)
+    qs["aligned"].add_argument("--nth", type=int, default=1, help="the occurrence to align on; 0: every one")
     qs["events"] = sub.add_parser("events")
     qs["osc"] = sub.add_parser("osc")
     qs["forecast"] = sub.add_parser("forecast")
