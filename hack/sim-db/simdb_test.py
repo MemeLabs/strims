@@ -4,7 +4,8 @@
 """simdb.py's selections over a scratch cache, suite indexes and farm state,
 as two farm runs of several suite tiers leave them (an A/B and its
 confirmation, each a browsers and a net tier, their cells sharing names,
-the A/B reusing rows of the confirmation's):
+the A/B reusing rows of the confirmation's); and its queries and joins over
+a scratch cache of both sims' tables (Queries):
 
   python3 hack/sim-db/simdb_test.py
 
@@ -14,6 +15,7 @@ import argparse
 import importlib.util
 import io
 import json
+import math
 import os
 import sys
 import tempfile
@@ -176,6 +178,197 @@ class Selection(unittest.TestCase):
         self.assertEqual(set(self.pulled), {GONE})
         self.assertEqual(self.cells([f"{B}*"])["star-7-5@sb0001"], {("kz", "main")})
         self.assertNotIn("halve-7-10@sa0001", self.cells([f"{B}*"]))
+
+
+# Queries' sources: a ppspp run's (its viewers name their node `node`), a
+# strims-sim run's (`host`), and a second copy of a key the first holds in
+# another cell, with fewer of its tables (as a farm run reuses a row).
+P, S, Q = "suite/wt/p", "suite/wt/s", "suite/wt/q"
+# source: (k, cell, arm, seed)
+RUNS = {P: [("kp1", "c", "x", 1), ("kp2", "c", "x", 2), ("kd", "d1", "x", 3)],
+        S: [("ks1", "c", "x", 4)],
+        Q: [("kd", "d2", "x", 3)]}
+# k: (viewer, node)
+VIEWERS = {"kp1": [(0, 1), (1, 2)], "kp2": [(0, 1)], "kd": [(0, 1)], "ks1": [(0, 3), (1, 5)]}
+# k: (t_ms, kind, node); node 0 is a seed, no viewer
+EVENTS = {"kp1": [(-1000, "join", 1), (-1000, "join", 2), (4000, "join", 2),
+                  (1000, "first_read", 1), (3000, "first_read", 2)],
+          "kp2": [(2000, "first_read", 1)],
+          "ks1": [(1500, "first_read", 3), (2500, "first_read", 5), (0, "latency", 0)]}
+# k: (viewer, first read's t_ms, lag_ms): a read every 100 ms to 4900
+READ_RUNS = {"kp1": [(0, 1000, 100), (1, 3000, 300)], "kp2": [(0, 2000, 200)], "kd": [(0, 0, 50)],
+             "ks1": [(0, 1500, 150), (1, 2500, 250)]}
+READS = {k: [(v, t, lag) for v, start, lag in rs for t in range(start, 5000, 100)] for k, rs in READ_RUNS.items()}
+# (k, sec): phase; a second without one is the tail's
+PHASES = {**{("kp1", s): "startup" for s in range(3)}, **{("kp1", s): "steady" for s in (3, 4)},
+          **{("kp2", s): "startup" for s in range(5)}}
+
+
+def qc(xs, p):
+    """quantile_cont"""
+    xs = sorted(xs)
+    at = p * (len(xs) - 1)
+    i = math.floor(at)
+    return xs[i] + (xs[min(i + 1, len(xs) - 1)] - xs[i]) * (at - i)
+
+
+class Queries(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
+                  mock.patch.object(simdb, "derive", lambda srcs: None),
+                  mock.patch.object(sys, "stderr", io.StringIO()),
+                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
+                                  clear=True)):
+            p.start()
+            self.addCleanup(p.stop)
+        for src, rows in RUNS.items():
+            self.put(src, "runs", ["cell", "arm", "seed", "env", "bin_ms"],
+                     [(k, cell, arm, seed, "{}", 100) for k, cell, arm, seed in rows])
+            keys = [r[0] for r in rows]
+            self.put(src, "reads", ["viewer", "t_ms", "seq", "lag_ms"],
+                     [(k, v, t, t // 100, lag) for k in keys for v, t, lag in READS[k]])
+            self.derived(src, "derived_events", [[k, src, 0, "start", None] for k in keys])
+        self.put(P, "viewers", ["viewer", "node"], [(k, v, n) for k in ("kp1", "kp2", "kd") for v, n in VIEWERS[k]])
+        self.put(S, "viewers", ["viewer", "host"], [("ks1", v, n) for v, n in VIEWERS["ks1"]])
+        for src, keys in ((P, ("kp1", "kp2")), (S, ("ks1",))):
+            self.put(src, "events", ["t_us", "kind", "node", "peer", "value", "detail"],
+                     [(k, t * 1000, kind, n, -1, 0, "") for k in keys for t, kind, n in EVENTS[k]])
+        self.put(P, "seconds", ["sec", "present"], [("kp1", s, 2) for s in range(5)])
+        self.put(P, "viewer_seconds", ["viewer", "sec", "lag_ms", "frames"],
+                 [("kp1", v, s, lag if s * 1000 >= start else -1, 10 if s * 1000 >= start else 0)
+                  for v, start, lag in READ_RUNS["kp1"] for s in range(5)])
+        # each viewer's node hits a chunk a bin from its first read; the seed none
+        self.put(P, "node_bins", ["bin", "t_ms", "node", "viewer", "hits"],
+                 [("kp1", t // 100, t, n, v, int(v >= 0 and t >= start))
+                  for n, v, start in ((1, 0, 1000), (2, 1, 3000), (0, -1, 0)) for t in range(0, 5000, 100)])
+        self.derived(P, "verdict_seconds", [[k, P, s, ph, True, False, False, False, False, 1.0, 1.0, 0.0]
+                                            for (k, s), ph in PHASES.items()])
+
+    def put(self, src, table, cols, rows):
+        d = simdb.cache_root() / "cache" / src
+        d.mkdir(parents=True, exist_ok=True)
+        lit = lambda x: simdb.q(x) if isinstance(x, str) else repr(x)
+        vals = ", ".join("(" + ", ".join(lit(x) for x in (r[0], src, *r[1:])) + ")" for r in rows)
+        simdb.duck(f"COPY (SELECT * FROM (VALUES {vals}) t({', '.join(['k', 'src', *cols])})) "
+                   f"TO {simdb.q(d / f'{table}.parquet')} (FORMAT parquet);", out=None)
+
+    def derived(self, src, table, rows):
+        simdb.write_table(simdb.derived_dir(table) / (src.replace("/", "~") + ".parquet"), simdb.DERIVED[table], rows)
+
+    def args(self, **kw):
+        return argparse.Namespace(**{"src": None, "cell": None, "arm": None, "seed": None, "bin": 1000,
+                                     "since": None, "until": None, "json": True, **kw})
+
+    def run_cmd(self, cmd, **kw):
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out):
+            cmd(self.args(**kw))
+        return json.loads(out.getvalue())
+
+    def sql(self, query, src=None):
+        v, _ = simdb.views(self.args(src=src))
+        return simdb.duck(v + "\n" + query + ";")
+
+    def aligned(self, event, field, per, nth=1, before=1, after=2, node=None):
+        got = self.run_cmd(simdb.cmd_aligned, event=event, field=field, per=per, nth=nth, before=before,
+                           after=after, node=node)
+        return {(r["cell"], r["rel_ms"]): (r["n"], r["p10"], r["p50"], r["p90"]) for r in got}
+
+    def refused(self, event, field, per):
+        with self.assertRaises(SystemExit) as cm:
+            self.run_cmd(simdb.cmd_aligned, event=event, field=field, per=per, nth=1, before=1, after=2, node=None)
+        return str(cm.exception.code)
+
+    def test_pooled_columns_are_each_groups(self):
+        cells = {}
+        for rows in RUNS.values():
+            for k, cell, arm, _ in rows:
+                cells.setdefault((cell, arm), set()).add(k)
+        group = {"none": lambda k, v, t: None, "bin": lambda k, v, t: t // 1000 * 1000,
+                 "viewer": lambda k, v, t: v, "phase": lambda k, v, t: PHASES.get((k, t // 1000), "tail")}
+        for by, g in group.items():
+            want = {}
+            for (cell, arm), keys in cells.items():
+                for k in keys:
+                    for v, t, lag in READS[k]:
+                        want.setdefault((cell, arm, g(k, v, t)), {}).setdefault(k, []).append(lag)
+            want = {key: (len(runs), sum(map(len, runs.values())),
+                          sum(qc(x, 0.99) for x in runs.values()) / len(runs)) for key, runs in want.items()}
+            got = {(r["cell"], r["arm"], r["g"]): (r["runs"], r["reads"], r["mean_run_p99"])
+                   for r in self.run_cmd(simdb.cmd_pooled, by=by)}
+            self.assertEqual(set(got), set(want), by)
+            for key, (runs, reads, p99) in want.items():
+                self.assertEqual(got[key][:2], (runs, reads), (by, key))
+                self.assertAlmostEqual(got[key][2], p99, 6, (by, key))
+            if by == "bin":
+                # the 1000 ms bin of cell c has reads of kp1 and ks1 only
+                self.assertEqual(got[("c", "x", 1000)][0], 2)
+
+    def test_aligned_per_node_on_each_nodes_own_event(self):
+        # every node of cell c reads its own lag from its own first read on
+        self.assertEqual(self.aligned("first_read", "lag_p50", "node"),
+                         {("c", 0): (5, 120.0, 200.0, 280.0), ("c", 1000): (5, 120.0, 200.0, 280.0)})
+        # a run's first first read: kp1's second viewer reads after 2 s
+        run = self.aligned("first_read", "lag_p50", "run")
+        self.assertEqual({rel: n for (_, rel), (n, *_) in run.items()}, {0: 3, 1000: 3})
+        self.assertEqual(run[("c", 0)][2], 150.0)
+        # a node's own second join: kp1's node 2 joins again at 4 s
+        self.assertEqual(self.aligned("join", "lag_p50", "node", nth=2),
+                         {("c", -1000): (1, 300.0, 300.0, 300.0), ("c", 0): (1, 300.0, 300.0, 300.0)})
+        self.assertEqual(self.aligned("join", "lag_p50", "node", nth=1, node=2, before=0, after=1), {})
+        # node_bins: each viewer's node from its own first read; the seed has none
+        self.assertEqual(self.aligned("first_read", "hits", "node", after=1),
+                         {("c", -1000): (2, 0.0, 0.0, 0.0), ("c", 0): (2, 10.0, 10.0, 10.0)})
+        # viewer_seconds by node: frames summed, lag_ms the bin's worst second with a frame
+        self.assertEqual(self.aligned("first_read", "frames", "node"),
+                         {("c", -1000): (2, 0.0, 0.0, 0.0), ("c", 0): (2, 10.0, 10.0, 10.0),
+                          ("c", 1000): (2, 10.0, 10.0, 10.0)})
+        self.assertEqual(self.aligned("first_read", "lag_ms", "node", after=1),
+                         {("c", 0): (2, 120.0, 200.0, 280.0)})
+        # the seed's node reads nothing
+        self.assertEqual(self.aligned("latency", "lag_p50", "node"), {})
+
+    def test_aligned_per_node_refuses_run_wide_fields_and_events(self):
+        for field, what in (("healthy", "a verdict column"), ("present", "a seconds column")):
+            msg = self.refused("first_read", field, "node")
+            self.assertIn(f"{field} is run-wide ({what})", msg)
+            self.assertIn("node_bins", msg)
+        self.assertIn("start is run-wide", self.refused("start", "lag_p99", "node"))
+        self.assertIn("no nope event", self.refused("nope", "lag_p99", "node"))
+        for field, table in (("frames", "viewer_seconds"), ("hits", "node_bins")):
+            self.assertIn(f"{field} is a node's (a {table} column): align it --per node",
+                          self.refused("first_read", field, "run"))
+
+    def test_views_join_on_k_as_on_k_src(self):
+        # kd's tables come from one source in both its cells: the fuller one
+        self.assertEqual({(r["cell"], r["src"]) for r in self.sql("SELECT cell, src FROM runs WHERE k = 'kd'")},
+                         {("d1", P), ("d2", P)})
+        for using in ("k", "k, src"):
+            got = self.sql(f"SELECT r.cell, count(*) AS n FROM reads JOIN runs r USING ({using}) "
+                           "WHERE k = 'kd' GROUP BY ALL")
+            self.assertEqual({r["cell"]: r["n"] for r in got}, {"d1": 50, "d2": 50}, using)
+        # every view and macro joins runs on (k, src)
+        v, have = simdb.views(self.args())
+        made = {"sec": {"seconds", "verdict_seconds"}, "ev": {"derived_events"}, "read_bins(1000)": {"reads"},
+                "run_read_bins(1000)": {"reads"}, "bins_by(1000)": {"bins"}}
+        for t in [*(have - {"runs"}), *(m for m, needs in made.items() if needs <= have)]:
+            simdb.duck(v + f"\nSELECT * FROM {t} JOIN runs USING (k, src) LIMIT 1;")
+        # viewers name a node `node` in both sims, strims-sim's `host` kept
+        for src, n in (([S], 2), ([P, S], 8)):
+            got = self.sql("SELECT count(*) AS n FROM events JOIN viewers USING (k, src, node)", src)
+            self.assertEqual(got[0]["n"], n, src)
+        self.assertEqual({r["host"] for r in self.sql("SELECT host FROM viewers", [S])}, {3, 5})
+
+    def test_sql_help_documents_the_joins(self):
+        for argv in (["sql", "--help"], ["--help"]):
+            out = io.StringIO()
+            with (mock.patch.object(sys, "argv", ["simdb.py", *argv]), mock.patch.object(sys, "stdout", out),
+                  self.assertRaises(SystemExit)):
+                simdb.main()
+            self.assertIn("JOIN runs USING (k, src)", out.getvalue(), argv)
 
 
 if __name__ == "__main__":

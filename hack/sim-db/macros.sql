@@ -3,6 +3,8 @@
 --
 -- Views and macros over simdb.py's views (its module docs). A statement
 -- runs only when the selection has the tables its `-- needs:` line names.
+-- Each keeps the views' `k` and `src`, so it joins them USING (k, src)
+-- (simdb.py sql --help).
 
 -- A run's reads in bins of `bin_ms`, per viewer: how many, and their lag.
 -- needs: reads

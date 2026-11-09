@@ -10,7 +10,7 @@
   hack/sim-db/simdb.py gc [--days N]
   hack/sim-db/simdb.py sql QUERY [selection] [--json]
   hack/sim-db/simdb.py pooled [selection] [--by none|phase|bin|viewer] [--bin MS] [--json]
-  hack/sim-db/simdb.py aligned EVENT [selection] [--field F] [--bin MS]
+  hack/sim-db/simdb.py aligned EVENT [selection] [--field F] [--bin MS] [--per run|node]
                                      [--before S] [--after S] [--nth N] [--json]
   hack/sim-db/simdb.py events [selection] [--json]
   hack/sim-db/simdb.py osc [selection] [--json]
@@ -82,14 +82,18 @@ suite cell their matrix ran, <cell>@<run>, which `--cell` matches whole or
 by the cell alone, and a farm run's cells hold every row it scored: also
 those the farm reused from other runs or matrices, by its matrices'
 indexes (target/sim-farm/<matrix>/index.jsonl), whose sources' tables
-join the selection (pulled when the cache lacks them). A key a cell has in
-two sources counts once (the later's).
+join the selection (pulled when the cache lacks them). A key's tables come
+from one of its sources whatever cells it counts in (its copies are one
+job's): the one holding the most of them, the later on a tie.
 
   sql      a query over the views (runs, scalars, seconds, viewer_seconds,
-           reads, bins, viewers, the derived ones, and macros.sql's)
+           reads, bins, viewers, events, node_bins, forecast, the derived
+           ones, and macros.sql's), their keys and joins below
   pooled   read lags pooled over the selected runs, by cell and arm: the
            quantiles of every read, beside the mean of the runs' own p99s;
-           `--by` splits them by phase, by `--bin` of read time, or by viewer
+           `--by` splits them by phase, by `--bin` of read time, or by
+           viewer, each group's columns its own (its runs those with a read
+           in it, their p99s of those reads)
   aligned  bands across runs around an event (`--nth` occurrence, the
            first by default): per `--bin` from `--before` to `--after`
            seconds, the median and p10/p90 over runs of `--field`: a read
@@ -98,7 +102,16 @@ two sources counts once (the later's).
            (summed over the bin). The events are the derived ones and the
            sims' own (`events`: faults, uplink steps, competing uploads,
            joins, first reads or frames, churn leaves, seed steps and
-           copies; `--node` picks one node's)
+           copies; `--node` picks one node's). With `--per node` each
+           node's own series is aligned on its own `--nth` occurrence of
+           a sim's per-node event (a viewer's join, first read or frame,
+           churn leave), the bands over every run's nodes (n counts
+           them); the per-node fields are a node's reads' lags, its
+           `node_bins` columns (summed over the bin) and its
+           `viewer_seconds` lag_ms (the bin's worst second) and frames
+           (summed). The verdict, `seconds` and `bins` columns are
+           run-wide, as are the derived events: `--per node` refuses
+           them, as `--per run` refuses a field only a node has
   events   the run metrics pooled: collapses, onset after a step down and
            recovery after a step up (with how many runs they censored),
            excess lag, flaps
@@ -145,6 +158,24 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+# The views' keys and joins: `sql --help`, and the end of `--help`.
+SQL_DOC = """\
+Every view (macros.sql's too) has a run's key `k` and its source `src`, and
+a key's tables come from one source, so any two views join on them:
+`JOIN runs USING (k, src)` gives a row its run's cell, arm and seed, once a
+cell (a key the farm reused counts in each of its cells). USING (k) joins
+the same rows but keeps both `src` columns, to name as runs.src. Beside
+(k, src) the views join on their own columns: reads and viewer_seconds to
+viewers USING (k, src, viewer); events, node_bins and forecast to viewers
+USING (k, src, node) (`node` in both sims; strims-sim's viewers also name it
+`host`); seconds to verdict_seconds USING (k, src, sec) (macros.sql's
+`sec`). runs' frames and bytes are its row's: beside viewer_seconds' frames,
+name them runs.frames and runs.bytes.
+
+  simdb.py sql "SELECT r.cell, r.arm, w.up, quantile_cont(lag_ms, 0.99) AS p99
+    FROM reads JOIN viewers w USING (k, src, viewer) JOIN runs r USING (k, src)
+    GROUP BY ALL ORDER BY ALL"
+"""
 DUCKDB_VERSION = "v1.5.6"
 DUCKDB_URL = f"https://github.com/duckdb/duckdb/releases/download/{DUCKDB_VERSION}/duckdb_cli-linux-amd64.gz"
 DUCKDB_GZ_SHA256 = "cce2687a38681db644c248198b99ecd86170ff47e324c5f33e50c0042f142839"
@@ -795,19 +826,37 @@ def views(a, derived=True):
         where.append("(" + " OR ".join(f"arm GLOB {q(x)}" for x in a.arm) + ")")
     if a.seed:
         where.append(f"seed IN ({', '.join(str(int(s)) for s in a.seed)})")
+    root = cache_root() / "cache"
+    held_tables = ", ".join(f"({q(s)}, {sum((root / s / f'{t}.parquet').exists() for t in TABLES)})"
+                            for s in srcs)
     sql = [
         f"CREATE VIEW runs_all AS SELECT * FROM {read_runs};",
-        # A key in two cells (a job the farm reused) counts in each.
-        "CREATE VIEW canon AS SELECT k, src, cell FROM runs_all "
-        "QUALIFY row_number() OVER (PARTITION BY k, cell ORDER BY src DESC) = 1;",
-        "CREATE VIEW runs AS SELECT r.* FROM runs_all r SEMI JOIN canon USING (k, src, cell)"
+        # A key's tables come from one source, whatever cells it counts in
+        # (the copies are one job's): the source holding the most of them
+        # (a farm run's reads come with `pull --reads`), the later on a tie.
+        # So (k) is a key's whole identity in the views, and USING (k)
+        # joins the rows USING (k, src) does.
+        f"CREATE VIEW canon AS SELECT k, src FROM runs_all LEFT JOIN (VALUES {held_tables}) h(src, tables) "
+        "USING (src) QUALIFY row_number() OVER (PARTITION BY k ORDER BY coalesce(tables, 0) DESC, src DESC) = 1;",
+        # A key in two cells (a job the farm reused) counts in each, with the
+        # cell's own row (its copy in the key's source, else its latest).
+        "CREATE VIEW runs AS SELECT * FROM (SELECT r.* REPLACE (c.src AS src) FROM runs_all r JOIN canon c USING (k) "
+        "QUALIFY row_number() OVER (PARTITION BY r.k, r.cell ORDER BY r.src = c.src DESC, r.src DESC) = 1)"
         + (" WHERE " + " AND ".join(where) if where else "") + ";",
     ]
     have = {"runs"}
     for t in ("scalars", *TABLES):
         f = files(srcs, t)
         if f:
-            sql.append(f"CREATE VIEW {t} AS SELECT x.* FROM read_parquet({plist(f)}, union_by_name=true) x "
+            cols = "x.*"
+            if t == "viewers":
+                # strims-sim names a viewer's node its host: `node` in both
+                # sims, as events, node_bins and forecast name it.
+                got = {r["column_name"] for r in duck(f"DESCRIBE SELECT * FROM read_parquet({plist(f)}, "
+                                                      "union_by_name=true);")}
+                if "host" in got:
+                    cols = "x.* REPLACE (coalesce(x.node, x.host) AS node)" if "node" in got else "x.*, x.host AS node"
+            sql.append(f"CREATE VIEW {t} AS SELECT {cols} FROM read_parquet({plist(f)}, union_by_name=true) x "
                        "SEMI JOIN runs USING (k, src);")
             have.add(t)
     if derived:
@@ -892,16 +941,19 @@ def cmd_pooled(a):
     join = ("LEFT JOIN verdict_seconds vs ON vs.k = x.k AND vs.src = x.src AND vs.sec = x.t_ms // 1000"
             if a.by == "phase" else "")
     where = time_filter(a, "x.t_ms")
+    # Every column is the group's: its runs are those with a read in it,
+    # and each run's p99 is of its reads there.
+    same = " AND ".join(f"pool.{c} IS NOT DISTINCT FROM runp.{c}" for c in ("cell", "arm", "g"))
     sql = f"""
-WITH x AS (SELECT r.cell, r.arm, x.* FROM reads x JOIN runs r USING (k, src)),
-per AS (SELECT cell, arm, k, quantile_cont(lag_ms, 0.99) AS p99 FROM x {"WHERE " + " AND ".join(where) if where else ""}
-        GROUP BY ALL),
-runp AS (SELECT cell, arm, avg(p99) AS mean_run_p99, count(*) AS runs FROM per GROUP BY ALL),
-pool AS (SELECT x.cell, x.arm, {group} AS g, count(*) AS reads, quantile_cont(x.lag_ms, [0.5, 0.9, 0.99]) AS q,
-                max(x.lag_ms) AS lag_max
-         FROM x {join} {"WHERE " + " AND ".join(where) if where else ""} GROUP BY ALL)
-SELECT pool.cell, pool.arm, g, runs, reads, q[1] AS lag_p50, q[2] AS lag_p90, q[3] AS lag_p99, lag_max, mean_run_p99
-FROM pool JOIN runp USING (cell, arm) ORDER BY pool.cell, pool.arm, g;"""
+WITH x AS (SELECT r.cell, r.arm, {group} AS g, x.* FROM reads x JOIN runs r USING (k, src) {join}
+           {"WHERE " + " AND ".join(where) if where else ""}),
+per AS (SELECT cell, arm, g, k, src, quantile_cont(lag_ms, 0.99) AS p99 FROM x GROUP BY ALL),
+runp AS (SELECT cell, arm, g, avg(p99) AS mean_run_p99, count(*) AS runs FROM per GROUP BY ALL),
+pool AS (SELECT cell, arm, g, count(*) AS reads, quantile_cont(lag_ms, [0.5, 0.9, 0.99]) AS q, max(lag_ms) AS lag_max
+         FROM x GROUP BY ALL)
+SELECT pool.cell, pool.arm, pool.g, runs, reads, q[1] AS lag_p50, q[2] AS lag_p90, q[3] AS lag_p99, lag_max,
+       mean_run_p99
+FROM pool JOIN runp ON {same} ORDER BY pool.cell, pool.arm, pool.g;"""
     out = duck(v + sql)
 
     def text():
@@ -922,54 +974,110 @@ VERDICT_FIELDS = {"healthy": "avg(healthy::INT)", "lag_q": "avg(lag_q)", "hit_sh
                   "delivery": "avg(delivery)"}
 
 
+# viewer_seconds' fields over a bin: lag_ms the worst second's with a frame,
+# frames (and any other) summed.
+VIEWER_SECOND_FIELDS = {"lag_ms": "max(lag_ms) FILTER (WHERE lag_ms >= 0)::DOUBLE", "frames": "sum(frames)::DOUBLE"}
+# The series' own columns, not fields.
+ID_COLS = {"k", "src", "bin", "t_ms", "sec", "node", "viewer"}
+
+
 def field_source(a, v, have):
-    """Where `--field` comes from: (table, time column in ms, aggregate)."""
-    f = a.field
+    """Where `--field` comes from: (series, a table or a query; time column
+    in ms; aggregate). Per node (`--per node`) each of the series' rows has
+    its `node`: a viewer's reads and viewer_seconds by `viewers`."""
+    f, per_node = a.field, a.per == "node"
+
+    def by_node(t):
+        need(have, "viewers")
+        return f"(SELECT x.*, w.node FROM {t} x JOIN viewers w USING (k, src, viewer))"
+
     if f in READ_FIELDS:
         need(have, "reads")
-        return "reads", "t_ms", READ_FIELDS[f]
-    if f in VERDICT_FIELDS:
-        if a.bin % 1000:
-            sys.exit(f"{f} is per second: --bin must be a multiple of 1000")
-        return "verdict_seconds", "sec * 1000", VERDICT_FIELDS[f]
-    for t, tcol in (("bins", "t_ms"), ("seconds", "sec * 1000")):
-        if t in have:
-            cols = {r["column_name"] for r in duck(v + f"\nDESCRIBE {t};")}
-            if f in cols:
-                unit = 1000 if t == "seconds" else duck(v + "\nSELECT max(bin_ms) AS b FROM runs;")[0]["b"] or 1
-                if a.bin % unit:
-                    sys.exit(f"{f} comes in {unit} ms bins: --bin must be a multiple of {unit} "
-                             "(or rerun with a smaller SIM_BIN_MS / STRIMS_SIM_BIN_MS)")
+        return (by_node("reads") if per_node else "reads"), "t_ms", READ_FIELDS[f]
+
+    def columns(t):
+        return {r["column_name"] for r in duck(v + f"\nDESCRIBE {t};")} - ID_COLS if t in have else set()
+
+    def check_bin(t):
+        unit = 1000 if t in ("seconds", "viewer_seconds") else (
+            duck(v + "\nSELECT max(bin_ms) AS b FROM runs;")[0]["b"] or 1)
+        if a.bin % unit:
+            sys.exit(f"{f} comes in {unit} ms bins: --bin must be a multiple of {unit} "
+                     "(or rerun with a smaller SIM_BIN_MS / STRIMS_SIM_BIN_MS)")
+
+    nodes = [t for t in ("node_bins", "viewer_seconds") if f in columns(t)]
+    if per_node:
+        if nodes:
+            t = nodes[0]
+            check_bin(t)
+            if t == "node_bins":
+                return "node_bins", "t_ms", f"sum({ident(f)})::DOUBLE"
+            return by_node("viewer_seconds"), "sec * 1000", VIEWER_SECOND_FIELDS.get(f, f"sum({ident(f)})::DOUBLE")
+        wide = "a verdict" if f in VERDICT_FIELDS else next(
+            (f"a {t}" for t in ("bins", "seconds") if f in columns(t)), None)
+        if wide:
+            sys.exit(f"{f} is run-wide ({wide} column): --per node aligns a node's own fields, its reads' "
+                     f"({', '.join(READ_FIELDS)}), viewer_seconds' ({', '.join(VIEWER_SECOND_FIELDS)}) and "
+                     "node_bins' columns"
+                     + ("" if "node_bins" in have else
+                        " (the selection has no node_bins: SIM_BIN_NODES=1 / STRIMS_SIM_BIN_NODES=1 write them)"))
+    else:
+        if f in VERDICT_FIELDS:
+            if a.bin % 1000:
+                sys.exit(f"{f} is per second: --bin must be a multiple of 1000")
+            return "verdict_seconds", "sec * 1000", VERDICT_FIELDS[f]
+        for t, tcol in (("bins", "t_ms"), ("seconds", "sec * 1000")):
+            if f in columns(t):
+                check_bin(t)
                 return t, tcol, f"sum({ident(f)})::DOUBLE"
-    sys.exit(f"no field {f!r}: a read lag ({', '.join(READ_FIELDS)}), a verdict column "
-             f"({', '.join(VERDICT_FIELDS)}), or a seconds or bins column")
+        if nodes:
+            sys.exit(f"{f} is a node's (a {nodes[0]} column): align it --per node")
+    sys.exit(f"no field {f!r}: a read lag ({', '.join(READ_FIELDS)}), "
+             + ("a viewer_seconds column or a node_bins one" if per_node else
+                f"a verdict column ({', '.join(VERDICT_FIELDS)}), or a seconds or bins column"))
 
 
 def cmd_aligned(a):
     v, have = views(a)
     need(have, "derived_events")
-    table, tcol, agg = field_source(a, v, have)
+    per_node = a.per == "node"
+    if per_node:
+        need(have, "events")
+    series, tcol, agg = field_source(a, v, have)
     lo, hi = int(-a.before * 1000), int(a.after * 1000)
     node = "" if a.node is None else f" AND node = {int(a.node)}"
+    keys = "k, src, node" if per_node else "k, src"
+    if per_node:
+        got = duck(v + f"\nSELECT count(*) AS n, count(*) FILTER (WHERE node >= 0) AS nodes FROM ev "
+                       f"WHERE kind = {q(a.event)}{node};")[0]
+        if not got["n"]:
+            sys.exit(f"the selection has no {a.event} event" + (f" of node {a.node}" if a.node is not None else ""))
+        if not got["nodes"]:
+            sys.exit(f"{a.event} is run-wide (a derived event, or a sim's with no node): align it --per run")
+        node += " AND node >= 0"
     sql = f"""
-WITH e AS (SELECT k, src, t_ms AS e_ms FROM
-              (SELECT *, row_number() OVER (PARTITION BY k, src ORDER BY t_ms) AS nth
+WITH e AS (SELECT {keys}, t_ms AS e_ms FROM
+              (SELECT *, row_number() OVER (PARTITION BY {keys} ORDER BY t_ms) AS nth
                FROM ev WHERE kind = {q(a.event)}{node}) WHERE nth = {int(a.nth)}),
-x AS (SELECT x.k, x.src, floor(({tcol} - e.e_ms) / {a.bin}) * {a.bin} AS rel, x.*
-      FROM {table} x JOIN e USING (k, src)
+x AS (SELECT x.*, floor(({tcol} - e.e_ms) / {a.bin}) * {a.bin} AS rel
+      FROM {series} x JOIN e USING ({keys})
       WHERE {tcol} - e.e_ms >= {lo} AND {tcol} - e.e_ms < {hi}),
-per AS (SELECT * FROM (SELECT k, src, rel, {agg} AS v FROM x GROUP BY ALL) WHERE v IS NOT NULL)
+per AS (SELECT * FROM (SELECT {keys}, rel, {agg} AS v FROM x GROUP BY ALL) WHERE v IS NOT NULL)
 SELECT r.cell, r.arm, rel::BIGINT AS rel_ms, count(*) AS n, quantile_cont(v, [0.1, 0.5, 0.9]) AS q
 FROM per JOIN runs r USING (k, src) GROUP BY ALL ORDER BY r.cell, rel_ms, r.arm;"""
     out = duck(v + sql)
     for r in out:
         r["p10"], r["p50"], r["p90"] = r.pop("q")
+    if per_node and not out:
+        print(f"no node with a {a.event} event has a {a.field} series around it", file=sys.stderr)
 
     def text():
         arms = sorted({r["arm"] for r in out})
         lines = []
+        around = f"each node's own {a.event} (#{a.nth})" if per_node else f"{a.event} (#{a.nth})"
+        over = "nodes of runs" if per_node else "runs"
         for cell in sorted({r["cell"] for r in out}):
-            lines.append(f"\n{cell}: {a.field} around {a.event} (#{a.nth}), median [p10, p90] over runs (n)")
+            lines.append(f"\n{cell}: {a.field} around {around}, median [p10, p90] over {over} (n)")
             lines.append(f"{'rel_s':>8} " + " ".join(f"{short(x):>34}" for x in arms))
             by = {(r["rel_ms"], r["arm"]): r for r in out if r["cell"] == cell}
             for rel in sorted({k for k, _ in by}):
@@ -1211,7 +1319,8 @@ def cmd_gc(a):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    raw = argparse.RawDescriptionHelpFormatter
+    ap = argparse.ArgumentParser(description=__doc__, epilog=SQL_DOC, formatter_class=raw)
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("duckdb", help="fetch the pinned DuckDB CLI")
     f = sub.add_parser("fold", help="fold job dirs into a store (each a dir holding the tables and a job.json)")
@@ -1227,7 +1336,7 @@ def main():
     g = sub.add_parser("gc")
     g.add_argument("--days", type=float, default=7)
     qs = {}
-    qs["sql"] = sub.add_parser("sql")
+    qs["sql"] = sub.add_parser("sql", help="a query over the views", description=SQL_DOC, formatter_class=raw)
     qs["sql"].add_argument("query")
     qs["pooled"] = sub.add_parser("pooled")
     qs["pooled"].add_argument("--by", choices=("none", "phase", "bin", "viewer"), default="none")
@@ -1235,6 +1344,10 @@ def main():
     qs["aligned"].add_argument("event", help="a derived event (start, seed_down, seed_up, join, leave, onset, "
                                "recovered, collapse) or a sim's (its events table's kinds)")
     qs["aligned"].add_argument("--node", type=int, help="only events of this node (the sims' events)")
+    qs["aligned"].add_argument("--per", choices=("run", "node"), default="run",
+                               help="align each run's series on its event (run), or each node's own series on "
+                                    "its own event (node: a sim's per-node event; the fields its reads', "
+                                    "viewer_seconds' and node_bins')")
     qs["aligned"].add_argument("--field", default="lag_p99")
     qs["aligned"].add_argument("--before", type=float, default=10)
     qs["aligned"].add_argument("--after", type=float, default=60)
