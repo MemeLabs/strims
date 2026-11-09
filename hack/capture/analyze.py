@@ -227,7 +227,22 @@ def reduce(a):
         cmd += ["--until", str(a.until)]
     if not a.all:
         cmd += ["--types", TYPES]
-    sys.exit(subprocess.call(cmd + a.dumps))
+    sys.exit(subprocess.call(cmd + [d for x in a.dumps for d in run_dumps(x)]))
+
+
+def run_dumps(x):
+    """`x`, or the one run under it: a STRIMS_SIM_CAPTURE root holds a run
+    per `<test>/seed-<s>` (and its replay's), and one swarm view is one run's
+    dumps, so a root with several runs names them and exits."""
+    p = Path(x)
+    if not p.is_dir() or any(p.glob("*.ppcap")):
+        return [x]
+    runs = sorted({str(f.parent) for f in p.glob("**/*.ppcap")})
+    if len(runs) == 1:
+        return runs
+    if not runs:
+        sys.exit(f"{x}: no .ppcap dumps under it")
+    sys.exit(f"{x} holds {len(runs)} runs; reduce one of them:\n  " + "\n  ".join(runs))
 
 
 def load(a):
