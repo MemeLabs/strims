@@ -727,6 +727,12 @@ def audience(secs, stays, sim="ppspp", tree_secs=3, stay_info=True):
         for k in range(secs):
             there = (a is None or a <= k + 1) and (d is None or k < d)
             settled = there and (a is None and k >= tree_secs or a is not None and k >= a + tree_secs)
+            # ppspp counts a viewer present at both of a second's edges,
+            # strims-sim from the second it boots in.
+            arrived = a is None or (a < k + 1 if sim == "strims-sim" else a <= k)
+            if arrived and (d is None or d >= k + 1):
+                s["present"][k] += 1
+                s["hits"][k] += 10 if settled else 0
             if not there or a is not None and k < a:
                 # Not there, or there only from part-way through its second.
                 lag.append(-1)
@@ -734,10 +740,6 @@ def audience(secs, stays, sim="ppspp", tree_secs=3, stay_info=True):
                 continue
             lag.append(200 if settled else 300)
             frames.append(10)
-            # ppspp counts a viewer present at both of a second's edges.
-            if (a is None or a <= k) and (d is None or d >= k + 1):
-                s["present"][k] += 1
-                s["hits"][k] += 10 if settled else 0
         s["lag"].append(lag)
         s["frames"].append(frames)
     if stay_info:
@@ -783,8 +785,11 @@ class PerViewerVerdict(unittest.TestCase):
             self.assertEqual(first[:2], [1 + self.a.JOIN_GRACE_SECS, 2 + self.a.JOIN_GRACE_SECS], sim)
         v, _ = self.verdict(audience(60, stays, "ppspp", stay_info=False))
         self.assertFalse(all(v["healthy"]))
-        # strims-sim's -1 frames carry the arrivals without the table.
-        self.assertEqual(self.a.verdict(audience(60, stays, "strims-sim", stay_info=False))["healthy"],
+        # strims-sim's -1 frames carry the arrivals without the table, those
+        # after the stream's first second (one within it reads as there from
+        # the start).
+        later = [(a + 1, d) for a, d in stays]
+        self.assertEqual(self.a.verdict(audience(60, later, "strims-sim", stay_info=False))["healthy"],
                          [True] * 60)
 
     def test_a_burst_of_joins_into_a_warm_swarm_reads_healthy(self):

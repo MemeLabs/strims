@@ -873,7 +873,7 @@ def lags(s):
 
 def presence(s):
     """Each viewer's stay, as the verdicts count it (see the module docs):
-    (join, since, until), the second it is first among the viewers present
+    (join, since, until), the first second `present` may count it in
     (None for one there from the start), and the seconds k it counts in,
     since <= k < until. One there from the start counts from 0, one that
     arrived later from its first frame's second plus JOIN_GRACE_SECS (its
@@ -894,8 +894,10 @@ def presence(s):
         if a is None or a < 0:
             out.append((None, 0, until))
             continue
-        join = math.ceil(a / 1000)
-        first = next((k for k in range(int(a // 1000), len(frames)) if frames[k] > 0), int(a // 1000))
+        # strims-sim samples an arrival first in the second it boots in,
+        # the ppspp sim in the next: `present` may count it from either.
+        join = int(a // 1000)
+        first = next((k for k in range(join, len(frames)) if frames[k] > 0), join)
         out.append((join, first + JOIN_GRACE_SECS, until))
     return out
 
