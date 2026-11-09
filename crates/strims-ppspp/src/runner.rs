@@ -34,8 +34,8 @@ use crate::scheduler::PeerPriority;
 use crate::scheduler_peer::push::seed::SeedAllocationStats;
 use crate::scheduler_peer::push::{PushStats, UploadInfo};
 use crate::scheduler_peer::{
-    ChannelSchedulerStats, LagForecast, PeerSwarmScheduler, SchedulerError, StreamOpenOutcome,
-    SwarmCounters, SwarmSchedulerStats, WriteDataError,
+    ChannelSchedulerStats, FORECAST_CAP, LagForecast, PeerSwarmScheduler, SchedulerError,
+    StreamOpenOutcome, SwarmCounters, SwarmSchedulerStats, WriteDataError,
 };
 use crate::store::{self, BufferReader, RewindError};
 use crate::swarm::{Swarm, SwarmError, SwarmEvent};
@@ -142,6 +142,51 @@ struct RunnerSwarm {
     seed_pin: Option<Vec<Vec<PeerKey>>>,
     /// The push rate its subscriptions committed at the last tick.
     committed: f64,
+    /// The forecast log of the swarm's schedulers that went with its last
+    /// channel, until the driver takes it.
+    forecast_log: ForecastLog,
+}
+
+/// A forecast log ([`Runner::set_forecasts`]) the runner keeps for the
+/// driver once the scheduler that recorded it went: its samples, its
+/// stored chunks, and how many of either the caps left out. Bound:
+/// [`FORECAST_CAP`] samples and as many chunks, past which they're
+/// counted in `lost`.
+#[derive(Debug, Default)]
+struct ForecastLog {
+    forecasts: Vec<LagForecast>,
+    held: Vec<(Bin, Time)>,
+    lost: u64,
+}
+
+impl ForecastLog {
+    /// Moves the log of `sched`, which goes, in behind what it holds.
+    fn absorb(&mut self, sched: &mut PeerSwarmScheduler) {
+        let (forecasts, lost) = sched.take_forecasts();
+        self.lost += lost;
+        extend_capped(&mut self.forecasts, forecasts, &mut self.lost);
+        extend_capped(&mut self.held, sched.take_held(), &mut self.lost);
+    }
+
+    /// Its samples, and how many samples and chunks the caps left out.
+    fn take_forecasts(&mut self) -> (Vec<LagForecast>, u64) {
+        (
+            std::mem::take(&mut self.forecasts),
+            std::mem::take(&mut self.lost),
+        )
+    }
+
+    fn is_empty(&self) -> bool {
+        self.forecasts.is_empty() && self.held.is_empty() && self.lost == 0
+    }
+}
+
+/// Appends `from` to `to` up to [`FORECAST_CAP`], counting the rest in
+/// `lost`.
+fn extend_capped<T>(to: &mut Vec<T>, from: Vec<T>, lost: &mut u64) {
+    let room = FORECAST_CAP.saturating_sub(to.len());
+    *lost += from.len().saturating_sub(room) as u64;
+    to.extend(from.into_iter().take(room));
 }
 
 #[derive(Debug, Default)]
@@ -536,6 +581,9 @@ pub struct Runner {
     tap_level: TapLevel,
     /// The schedulers keep a forecast log ([`Runner::set_forecasts`]).
     forecasts: bool,
+    /// The forecast logs of removed swarms, until the driver takes them.
+    /// Bound: one per swarm removed with a log the driver hasn't taken.
+    removed_logs: BTreeMap<SwarmKey, ForecastLog>,
     /// Peers whose hybrid answers the answer gate held back at their last
     /// poll ([`crate::answer_gate`]). Bound: one per peer.
     held: BTreeSet<PeerKey>,
@@ -778,6 +826,7 @@ impl Runner {
             tap: Tap::default(),
             tap_level: TapLevel::Off,
             forecasts: false,
+            removed_logs: BTreeMap::new(),
             held: BTreeSet::new(),
             answer_rate: AnswerRate::new(),
             push_waits: Vec::new(),
@@ -963,6 +1012,7 @@ impl Runner {
             channels: IndexMap::new(),
             seed_pin: None,
             committed: 0.0,
+            forecast_log: ForecastLog::default(),
         });
         self.tap.push(TapEvent {
             swarm: Some(key),
@@ -972,14 +1022,19 @@ impl Runner {
         key
     }
 
-    /// Stops the swarm's channels and returns it.
+    /// Stops the swarm's channels and returns it. Its forecast log stays
+    /// for [`Self::take_forecasts`] and [`Self::take_held`].
     pub fn remove_swarm(&mut self, key: SwarmKey) -> Option<Swarm> {
         let peers: Vec<PeerKey> = self.swarms.get(key)?.channels.keys().copied().collect();
         for peer in peers {
             self.stop_channel(key, peer);
         }
         self.events.readable.remove(&key);
-        let swarm = self.swarms.remove(key).map(|rs| rs.swarm)?;
+        let rs = self.swarms.remove(key)?;
+        if !rs.forecast_log.is_empty() {
+            self.removed_logs.insert(key, rs.forecast_log);
+        }
+        let swarm = rs.swarm;
         self.tap.push(TapEvent {
             swarm: Some(key),
             peer: None,
@@ -1401,6 +1456,7 @@ impl Runner {
             && let Some(mut sched) = rs.scheduler.take()
         {
             tap.absorb(sched.tap_mut());
+            rs.forecast_log.absorb(&mut sched);
             // nothing fetches the backlog without channels
             if rs.swarm.store().backlog().is_some() {
                 rs.swarm.close_backlog();
@@ -2080,23 +2136,57 @@ impl Runner {
     /// With the forecast log on, the swarm's chunks stored since the last
     /// call, each with the time it was: when this node first held it, the
     /// truth its neighbours' forecasts aim at. It changes no decision.
+    /// The log outlives the swarm's schedulers, which go with its last
+    /// channel, and the swarm.
     pub fn take_held(&mut self, swarm: SwarmKey) -> Vec<(Bin, Time)> {
-        self.swarms
-            .get_mut(swarm)
-            .and_then(|rs| rs.scheduler.as_mut())
-            .map(|s| s.take_held())
-            .unwrap_or_default()
+        let (kept, sched) = self.forecast_logs(swarm);
+        let mut out = kept
+            .map(|l| std::mem::take(&mut l.held))
+            .unwrap_or_default();
+        if let Some(s) = sched {
+            out.extend(s.take_held());
+        }
+        self.forget_removed(swarm);
+        out
     }
 
     /// The swarm's forecast log since the last call, and how many samples
     /// its cap ([`crate::FORECAST_CAP`]) left out (stored chunks' too,
-    /// [`Self::take_held`]).
+    /// [`Self::take_held`]). The log outlives the swarm's schedulers and
+    /// the swarm.
     pub fn take_forecasts(&mut self, swarm: SwarmKey) -> (Vec<LagForecast>, u64) {
-        self.swarms
-            .get_mut(swarm)
-            .and_then(|rs| rs.scheduler.as_mut())
-            .map(|s| s.take_forecasts())
-            .unwrap_or_default()
+        let (kept, sched) = self.forecast_logs(swarm);
+        let mut out = kept.map(ForecastLog::take_forecasts).unwrap_or_default();
+        if let Some(s) = sched {
+            let (log, lost) = s.take_forecasts();
+            out.0.extend(log);
+            out.1 += lost;
+        }
+        self.forget_removed(swarm);
+        out
+    }
+
+    /// The forecast log the runner keeps for `swarm`, a removed one's
+    /// included, and its scheduler.
+    fn forecast_logs(
+        &mut self,
+        swarm: SwarmKey,
+    ) -> (Option<&mut ForecastLog>, Option<&mut PeerSwarmScheduler>) {
+        match self.swarms.get_mut(swarm) {
+            Some(rs) => (Some(&mut rs.forecast_log), rs.scheduler.as_mut()),
+            None => (self.removed_logs.get_mut(&swarm), None),
+        }
+    }
+
+    /// Drops a removed swarm's forecast log once the driver took it all.
+    fn forget_removed(&mut self, swarm: SwarmKey) {
+        if self
+            .removed_logs
+            .get(&swarm)
+            .is_some_and(ForecastLog::is_empty)
+        {
+            self.removed_logs.remove(&swarm);
+        }
     }
 
     /// The swarm's push/pull state and counters, while it has channels.

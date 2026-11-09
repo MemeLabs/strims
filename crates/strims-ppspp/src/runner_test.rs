@@ -339,6 +339,74 @@ fn scheduler_lives_with_its_channels() {
     assert!(p.leech.runner.peer_stats(p.leech.peer).is_none());
 }
 
+/// Subscribes a hybrid leech to the seed's stream (the seed's allocation
+/// pinned to it) and pushes it `munros`.
+fn push_to_leech(p: &mut Pair, munros: usize) {
+    p.seed
+        .runner
+        .pin_seed_allocation(p.seed.swarm, Some(vec![vec![p.seed.peer]]))
+        .unwrap();
+    p.tick(100);
+    p.leech
+        .runner
+        .request_stream(p.leech.peer, p.leech.swarm, 0, Bin(0))
+        .unwrap();
+    for _ in 0..munros {
+        p.write(1);
+        for _ in 0..5 {
+            p.tick(50);
+        }
+    }
+}
+
+/// A hybrid transfer with the leech's forecast log on.
+fn forecast_transfer() -> Pair {
+    let mut p = Pair::with(hybrid(), hybrid());
+    p.leech.runner.set_forecasts(true);
+    push_to_leech(&mut p, 4);
+    p
+}
+
+#[test]
+fn the_forecast_log_outlives_its_scheduler_and_swarm() {
+    let take = |n: &mut Node| {
+        (
+            n.runner.take_forecasts(n.swarm),
+            n.runner.take_held(n.swarm),
+        )
+    };
+    let mut p = forecast_transfer();
+    let want = take(&mut p.leech);
+    assert!(!want.0.0.is_empty() && !want.1.is_empty());
+    assert_eq!(take(&mut p.leech), Default::default());
+
+    // The scheduler goes with the last channel.
+    let mut p = forecast_transfer();
+    p.leech.runner.stop_swarm(p.leech.peer, p.leech.swarm);
+    assert!(p.leech.runner.swarm_stats(p.leech.swarm).is_none());
+    assert_eq!(take(&mut p.leech), want);
+    assert_eq!(take(&mut p.leech), Default::default());
+
+    // A new scheduler's log follows the old one's.
+    let mut p = forecast_transfer();
+    for (n, ids) in [(&mut p.seed, (1, 2)), (&mut p.leech, (2, 1))] {
+        n.runner.stop_swarm(n.peer, n.swarm);
+        n.runner
+            .run_swarm(n.peer, n.swarm, ids.0, ids.1, p.now)
+            .unwrap();
+    }
+    push_to_leech(&mut p, 2);
+    let ((forecasts, _), held) = take(&mut p.leech);
+    assert!(forecasts.len() > want.0.0.len() && forecasts.starts_with(&want.0.0));
+    assert!(held.len() > want.1.len() && held.starts_with(&want.1));
+
+    // The swarm goes.
+    let mut p = forecast_transfer();
+    assert!(p.leech.runner.remove_swarm(p.leech.swarm).is_some());
+    assert_eq!(take(&mut p.leech), want);
+    assert!(p.leech.runner.removed_logs.is_empty());
+}
+
 #[test]
 fn unknown_channels_are_skipped() {
     let mut p = Pair::new(options());

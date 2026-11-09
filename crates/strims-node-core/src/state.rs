@@ -380,6 +380,9 @@ pub(crate) struct State {
     /// With [`NodeConfig::forecast_log`], the runner's log since the last
     /// snapshot. Bound: the runner's cap per swarm and snapshot.
     forecast_log: bool,
+    /// With the forecast log, the swarms removed since the last snapshot,
+    /// whose logs the runner keeps for it. Bound: the app's calls.
+    removed_swarms: Vec<SwarmKey>,
     /// Reused by `drain_transmit`.
     scratch_links: Vec<LinkKey>,
     /// ppspp frame errors seen inside vnic's dispatch, handled after it.
@@ -521,6 +524,7 @@ impl State {
             metrics: DriverMetrics::default(),
             bins: config.stats_bins.map(|b| (b, b.origin, VecDeque::new())),
             forecast_log: config.forecast_log,
+            removed_swarms: Vec::new(),
             scratch_links: Vec::new(),
             frame_errors: Vec::new(),
             rtc,
@@ -1577,7 +1581,8 @@ impl State {
         let hosts: BTreeMap<PpsppPeer, ID> =
             self.peers.values().map(|ps| (ps.pp, ps.host_id)).collect();
         let (mut out, mut lost, mut held) = (Vec::new(), 0, Vec::new());
-        for &key in &self.swarms {
+        let removed = std::mem::take(&mut self.removed_swarms);
+        for &key in self.swarms.iter().chain(&removed) {
             let (log, n) = self.runner.take_forecasts(key);
             lost += n;
             out.extend(log.into_iter().map(|forecast| ForecastInfo {
@@ -2002,6 +2007,9 @@ impl State {
             .remove_swarm(swarm)
             .ok_or(NodeError::UnknownSwarm)?;
         self.swarms.remove(&swarm);
+        if self.forecast_log {
+            self.removed_swarms.push(swarm);
+        }
         self.publishers.retain(|_, p| p.swarm != swarm);
         for (_, r) in self.readers.iter_mut() {
             if r.swarm != swarm {
