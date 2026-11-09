@@ -83,6 +83,15 @@
 //! its own clock in every call, and stamps what it writes with it, while
 //! every result is measured in true time.
 //!
+//! Viewers come and go as an audience does ([`Arrivals`], [`Depart`]): by
+//! default every viewer links at the start, with the seed. With
+//! `SIM_ARRIVALS` the seed starts alone and the viewers trickle in, or a
+//! scheduled event brings a burst into a warm swarm; each arrival links to
+//! viewers already there, as a tracker's answer would, and reads from the
+//! live edge. With `SIM_DEPART` a share of them leaves for good, closing its
+//! links or going silent. Results then measure each viewer from its own
+//! arrival to its departure.
+//!
 //! The seed allocation runs measure how a seed on a constrained uplink
 //! spends it, at 16 streams on WAN paths: the ignored
 //! `seed_allocation_bounds` pins allocations the seed can't know (random
@@ -145,6 +154,14 @@ const MUNRO: usize = 64 * CHUNK;
 const KEEPALIVE: Duration = Duration::from_secs(10);
 /// How long a free rider holds its echoes with `SIM_ECHO_GREED=1`.
 const ECHO_HOLD: Duration = Duration::from_millis(300);
+
+/// A viewer has caught up once it reads a chunk this soon after the
+/// chunk's publishing: delivery's share of the 2 s glass-to-glass target,
+/// strims-sim's `CAUGHT_UP_MS` and the sim suite's `DELIVERY_TARGET_MS`
+/// (`hack/capture/analyze.py`). Recovery from departures is measured
+/// against it too ([`Sim::audience_report`]).
+const CAUGHT_UP: Duration = Duration::from_millis(1250);
+
 /// A control frame's header, and each of its records
 /// (`strims_vnic::control`).
 const CONTROL_HEADER: usize = 4;
@@ -468,6 +485,19 @@ enum Role {
     Adversary(Attack),
     /// A peer that disappeared mid-stream: it sends and receives nothing.
     Dead,
+    /// A viewer that hasn't arrived yet ([`Arrivals`]): unlinked, it sends
+    /// and receives nothing. [`Node::kind`] holds the role it arrives in.
+    Absent,
+    /// A viewer that left for good ([`Depart`]): it sends and receives
+    /// nothing. [`Node::kind`] holds the role it had.
+    Gone,
+}
+
+impl Role {
+    /// Whether a node in this role sends and receives nothing.
+    fn off(self) -> bool {
+        matches!(self, Role::Dead | Role::Absent | Role::Gone)
+    }
 }
 
 /// A change to the seed's network at a given time.
@@ -582,6 +612,10 @@ struct Config {
     /// How far the nodes' clocks are off (`SIM_CLOCK_SKEW`,
     /// [`clock_skew_knob`]).
     clock_skew: ClockSkew,
+    /// When the viewers arrive (`SIM_ARRIVALS`, [`arrivals_knob`]).
+    arrivals: Arrivals,
+    /// Viewers leaving for good (`SIM_DEPART`, [`depart_knob`]).
+    depart: Option<Depart>,
 }
 
 /// A media run: the seed writes `encoder`'s access units as they arrive,
@@ -609,6 +643,91 @@ struct Churn {
     per_min: f64,
     /// How long a place stays empty.
     away: Duration,
+}
+
+/// When the viewers (every node but the seed) arrive. Each arrival links,
+/// as a tracker's answer would, to up to [`Config::degree`] random viewers
+/// already there (every one in a full mesh), and to the seed while it has
+/// under [`Config::seed_degree`] viewers (an adversary always, as at the
+/// start); with [`Config::dial`], to that many random nodes already there,
+/// the seed among them. Later arrivals link to it the same way, so no
+/// viewer waits on links to one that hasn't come. An arrival keeps its
+/// role, greedy or adversary, and reads from the live edge, as a player
+/// does: its swarm reads at [`DeliveryMode::LOW_LATENCY`] whatever the
+/// config's mode, so a [`DeliveryMode::MANDATORY`] cell's arrivals don't
+/// backfill the window either. The times and the order come from the run's
+/// rng once the rest of the setup has drawn, the mesh's draws included (its
+/// edges then go unused), so a seed's run keeps its viewers, clocks and
+/// stream under every profile. Arrivals take no churn, cross traffic or
+/// pinned allocation, and all come before the stream's last write.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Arrivals {
+    /// Every viewer links at the start, with the seed.
+    T0,
+    /// The seed starts alone, and the viewers arrive in random order as a
+    /// Poisson stream at this many a second; with `None`, all of them
+    /// within the stream's first third (that many Poisson arrivals in it).
+    Trickle(Option<f64>),
+    /// A scheduled event: this share of the viewers (`warm`) trickles in
+    /// from the start until `at`, and the rest arrive within `window` from
+    /// `at`, each phase as that many Poisson arrivals in its span.
+    Event {
+        warm: f64,
+        at: Duration,
+        window: Duration,
+    },
+}
+
+/// The knob's form ([`arrivals_knob`]).
+impl std::fmt::Display for Arrivals {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Arrivals::T0 => f.write_str("t0"),
+            Arrivals::Trickle(None) => f.write_str("trickle"),
+            Arrivals::Trickle(Some(r)) => write!(f, "trickle:{r}"),
+            Arrivals::Event { warm, at, window } => write!(
+                f,
+                "event:{}:{}:{}",
+                warm * 100.0,
+                at.as_secs_f64(),
+                window.as_secs_f64()
+            ),
+        }
+    }
+}
+
+/// Viewers leaving for good: `share` of the viewers there at `at` (honest,
+/// greedy and adversaries alike, drawn at random) leave within `window`
+/// from it, as that many Poisson departures in it, and the rest keep
+/// watching. A departure is graceful, its links closing at once as a
+/// closed tab's transport does (its neighbours' `remove_peer`), or with
+/// `abrupt` silent, as a lost connection is: its frames stop and its
+/// neighbours notice only by the silence, as [`Incident::Dies`]. Nobody
+/// links anew as its neighbours leave (this sim discovers no peers): the
+/// trees repair over the mesh that's left, and a viewer whose neighbours
+/// all left is stranded. A viewer that leaves counts in every result up to
+/// its departure. Drawn after the arrivals, from the run's rng; departures
+/// take what [`Arrivals`] do not.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Depart {
+    share: f64,
+    at: Duration,
+    window: Duration,
+    abrupt: bool,
+}
+
+/// The knob's form ([`depart_knob`]).
+impl std::fmt::Display for Depart {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}:{}:{}{}",
+            self.share * 100.0,
+            self.at.as_secs_f64(),
+            self.window.as_secs_f64(),
+            if self.abrupt { ":abrupt" } else { "" }
+        )
+    }
 }
 
 /// How far the nodes' clocks are off: one offset per node for the run, the
@@ -750,6 +869,8 @@ impl Config {
             keep: Keep::Nothing,
             media: None,
             clock_skew: clock_skew_knob(),
+            arrivals: arrivals_knob(),
+            depart: depart_knob(),
         }
     }
 }
@@ -772,6 +893,10 @@ struct Side {
 
 struct Node {
     role: Role,
+    /// Its role while there: `role`'s but [`Role::Absent`] and
+    /// [`Role::Gone`]. An honest viewer taking its place makes it
+    /// [`Role::Peer`].
+    kind: Role,
     runner: Runner,
     swarm: SwarmKey,
     writer: Option<Writer>,
@@ -833,8 +958,19 @@ struct Node {
     churned: bool,
     /// When it last took a place again, until it reads its first chunk.
     rejoined: Option<Time>,
-    /// Its incarnation read a chunk ([`Sim::write_tables`]' `first_read`).
-    read_once: bool,
+    /// When it arrived ([`Arrivals`]): the start for a viewer there from
+    /// it. A place taken again keeps it.
+    arrival: Time,
+    /// When its incarnation joined: its arrival, or its taking a place
+    /// again.
+    joined: Time,
+    /// When it left for good ([`Depart`]).
+    left: Option<Time>,
+    /// When its incarnation read its first chunk ([`Sim::write_tables`]'
+    /// `first_read`), and its first within [`CAUGHT_UP`] of the chunk's
+    /// publishing (`caught_up`).
+    first_read: Option<Time>,
+    caught_up: Option<Time>,
     /// How far its clock is off ([`ClockSkew`]): its runner reads the true
     /// time plus this.
     clock: Duration,
@@ -892,6 +1028,18 @@ impl Node {
             at: self.local(r.at),
             ..r
         })
+    }
+
+    /// Whether the results count it as an honest viewer: one watching now,
+    /// or one that watched until it left for good.
+    fn watched(&self) -> bool {
+        self.role == Role::Peer || (self.role == Role::Gone && self.kind == Role::Peer)
+    }
+
+    /// The seconds it was there, from its arrival to its departure or to
+    /// `end`.
+    fn present_secs(&self, end: Time) -> f64 {
+        (self.left.unwrap_or(end) - self.arrival).as_secs_f64()
     }
 }
 
@@ -956,6 +1104,46 @@ impl Link {
     fn probe_alone(&self, now: Time) -> bool {
         self.path.can_probe()
             && (self.path.bytes_written() == 0 || now - self.last_send >= KEEPALIVE)
+    }
+}
+
+/// Links nodes `a` and `b` (`a < b`) at `now`: each runner's peer and
+/// channels (the cross-traffic swarm's too), and the two directed links,
+/// `a`'s first. A new link's fair-queue time starts at the least of its
+/// node's others, the floor [`Sim::send`] lifts a link to.
+fn link_nodes(
+    nodes: &mut [Node],
+    links: &mut Vec<Link>,
+    (a, b): (usize, usize),
+    latency: Duration,
+    loss: f64,
+    now: Time,
+) {
+    let (ta, tb) = (nodes[a].local(now), nodes[b].local(now));
+    let pa = nodes[a].runner.add_peer(node_id(b), ta);
+    let pb = nodes[b].runner.add_peer(node_id(a), tb);
+    let (ca, cb) = (a as u64 + 1, b as u64 + 1);
+    let sa = nodes[a].swarm;
+    let sb = nodes[b].swarm;
+    nodes[a].runner.run_swarm(pa, sa, cb, ca, ta).unwrap();
+    nodes[b].runner.run_swarm(pb, sb, ca, cb, tb).unwrap();
+    if let (Some(xa), Some(xb)) = (
+        nodes[a].cross.as_ref().map(|x| x.key),
+        nodes[b].cross.as_ref().map(|x| x.key),
+    ) {
+        let (ka, kb) = (ca + 1000, cb + 1000);
+        nodes[a].runner.run_swarm(pa, xa, kb, ka, ta).unwrap();
+        nodes[b].runner.run_swarm(pb, xb, ka, kb, tb).unwrap();
+    }
+    let la = links.len();
+    links.push(Link::new(a, b, latency, loss, pa, ca, pb));
+    links.push(Link::new(b, a, latency, loss, pb, cb, pa));
+    for (from, to, l) in [(a, b, la), (b, a, la + 1)] {
+        links[l].last_send = now;
+        let n = &mut nodes[from];
+        let v = n.vtime.values().copied().min().unwrap_or(0);
+        n.links.insert(to, l);
+        n.vtime.insert(l, v);
     }
 }
 
@@ -1060,6 +1248,15 @@ struct Sim {
     /// done.
     churn: Vec<(Time, usize, bool)>,
     churn_done: usize,
+    /// The viewers' arrivals after the start ([`arrival_plan`]) and their
+    /// departures ([`depart_plan`]), sorted, and how many of each are done.
+    arrivals: Vec<(Time, usize)>,
+    arrivals_done: usize,
+    departures: Vec<(Time, usize)>,
+    departures_done: usize,
+    /// The honest viewers whose open parent left ([`Sim::depart`]), counted
+    /// per departure, and their streams it was the parent of.
+    parent_lost: (u64, u64),
     /// From each place taken again to its viewer's first chunk read.
     joins: Vec<Duration>,
     /// What a new viewer's swarm is made from.
@@ -1669,7 +1866,7 @@ struct Report {
     frames: u64,
     bytes: u64,
     total: u64,
-    /// Per honest peer: start offset, final position.
+    /// Per honest viewer there at the end: start offset, final position.
     positions: Vec<(u64, u64)>,
     /// The share of all chunks that honest peers read.
     delivery: f64,
@@ -1758,6 +1955,47 @@ struct Report {
     report_counts: (ReportCounters, ReportCounters),
 }
 
+/// The run's arrivals and departures ([`Arrivals`], [`Depart`]), measured
+/// over its honest viewers, those that left included.
+#[derive(Debug, Default)]
+struct AudienceReport {
+    /// Viewers that arrived after the start, and that left for good: all of
+    /// them, and the honest ones.
+    arrived: (usize, usize),
+    departed: (usize, usize),
+    /// From each honest viewer's join to its first read (sorted), and the
+    /// viewers that never read; to its first read within [`CAUGHT_UP`],
+    /// and the viewers that never caught up.
+    joins: Vec<Duration>,
+    unread: usize,
+    caught_up: Vec<Duration>,
+    behind: usize,
+    /// Honest viewers whose open parent left ([`Sim::parent_lost`]).
+    parent_lost: (u64, u64),
+    /// With departures, the recovery from them.
+    recovery: Option<Recovery>,
+}
+
+/// How the honest viewers there before the departures started, and that
+/// stayed, came through them ([`Sim::recovery`]), from the departures'
+/// start on.
+#[derive(Debug)]
+struct Recovery {
+    /// The viewers measured, and those of them left with no link to a node
+    /// still there ([`Depart`]: nobody links anew).
+    stayed: usize,
+    stranded: usize,
+    /// The worst lag of their reads.
+    peak: Duration,
+    /// Over the stream's seconds, their per-second lag p90's excess over
+    /// [`CAUGHT_UP`], summed (ms × s), and the time to the end of the last
+    /// second it was over (zero if none was); `censored` if that was the
+    /// stream's last, so they never recovered in it.
+    excess_ms_s: i64,
+    recover: Duration,
+    censored: bool,
+}
+
 /// The cross-traffic swarm, measured like the main one.
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -1823,7 +2061,7 @@ impl Sim {
         // The run's draws come before the runners' first calls, which take
         // each node's clock: each node's runner, the mesh and its
         // latencies, the churn and the media trace, then the clocks
-        // ([`ClockSkew`]).
+        // ([`ClockSkew`]), then the arrivals and departures ([`Arrivals`]).
         let runners: Vec<Runner> = roles.iter().map(|_| Runner::new(fork(&mut rng))).collect();
 
         // The mesh: the seed's peers, then each peer's.
@@ -1913,6 +2151,24 @@ impl Sim {
             }
         });
         let clocks = clock_offsets(cfg.clock_skew, roles.len(), &mut rng);
+        if cfg.arrivals != Arrivals::T0 || cfg.depart.is_some() {
+            assert!(
+                cfg.churn.is_none() && cfg.cross.is_none() && cfg.pin.is_none(),
+                "arrivals and departures take no churn, cross traffic or pinned allocation"
+            );
+        }
+        let arrivals = arrival_plan(&cfg, roles.len(), &mut rng);
+        let departures = cfg.depart.map_or_else(Vec::new, |d| {
+            depart_plan(&cfg, d, &arrivals, roles.len(), &mut rng)
+        });
+        // Arrivals link as they come ([`Sim::arrive`]).
+        let mut arriving = vec![false; roles.len()];
+        for &(_, i) in &arrivals {
+            arriving[i] = true;
+        }
+        if !arrivals.is_empty() {
+            edges.clear();
+        }
 
         let mut nodes = Vec::new();
         for ((i, &role), mut runner) in roles.iter().enumerate().zip(runners) {
@@ -1928,9 +2184,17 @@ impl Sim {
                 .unwrap();
                 (Some(w), s)
             } else {
+                // An arrival reads from the live edge.
+                let options = match arriving[i] {
+                    true => SwarmOptions {
+                        delivery_mode: DeliveryMode::LOW_LATENCY,
+                        ..options.clone()
+                    },
+                    false => options.clone(),
+                };
                 (
                     None,
-                    strims_ppspp::Swarm::new(SwarmId::new(&key.public), options.clone()).unwrap(),
+                    strims_ppspp::Swarm::new(SwarmId::new(&key.public), options).unwrap(),
                 )
             };
             let reader = swarm.reader();
@@ -1980,7 +2244,8 @@ impl Sim {
                 (up, down) = (p.up, p.down);
             }
             nodes.push(Node {
-                role,
+                role: if arriving[i] { Role::Absent } else { role },
+                kind: role,
                 runner,
                 swarm,
                 writer,
@@ -2000,7 +2265,8 @@ impl Sim {
                 lags: vec![],
                 read_seqs: vec![],
                 reads_hash: 0xcbf2_9ce4_8422_2325,
-                read_once: false,
+                first_read: None,
+                caught_up: None,
                 sign_lags: vec![],
                 read_chunks: vec![],
                 arrived: vec![],
@@ -2017,35 +2283,16 @@ impl Sim {
                 cap: None,
                 churned: false,
                 rejoined: None,
+                arrival: t0(),
+                joined: t0(),
+                left: None,
                 clock: clocks[i],
             });
         }
 
         let mut links = Vec::new();
         for (&(a, b), &latency) in edges.iter().zip(&latencies) {
-            let (ta, tb) = (nodes[a].local(t0()), nodes[b].local(t0()));
-            let pa = nodes[a].runner.add_peer(node_id(b), ta);
-            let pb = nodes[b].runner.add_peer(node_id(a), tb);
-            let (ca, cb) = (a as u64 + 1, b as u64 + 1);
-            let sa = nodes[a].swarm;
-            let sb = nodes[b].swarm;
-            nodes[a].runner.run_swarm(pa, sa, cb, ca, ta).unwrap();
-            nodes[b].runner.run_swarm(pb, sb, ca, cb, tb).unwrap();
-            if let (Some(xa), Some(xb)) = (
-                nodes[a].cross.as_ref().map(|x| x.key),
-                nodes[b].cross.as_ref().map(|x| x.key),
-            ) {
-                let (ka, kb) = (ca + 1000, cb + 1000);
-                nodes[a].runner.run_swarm(pa, xa, kb, ka, ta).unwrap();
-                nodes[b].runner.run_swarm(pb, xb, ka, kb, tb).unwrap();
-            }
-            let la = links.len();
-            links.push(Link::new(a, b, latency, cfg.loss, pa, ca, pb));
-            links.push(Link::new(b, a, latency, cfg.loss, pb, cb, pa));
-            nodes[a].links.insert(b, la);
-            nodes[b].links.insert(a, la + 1);
-            nodes[a].vtime.insert(la, 0);
-            nodes[b].vtime.insert(la + 1, 0);
+            link_nodes(&mut nodes, &mut links, (a, b), latency, cfg.loss, t0());
         }
 
         let wan = cfg.wan.as_ref().map(|w| {
@@ -2077,9 +2324,9 @@ impl Sim {
             for (i, n) in nodes.iter_mut().enumerate() {
                 let mut label = match &cfg.wan {
                     Some(w) => {
-                        format!("{:?} {:?} {:?}", n.role, w.sites[i].city, w.sites[i].access)
+                        format!("{:?} {:?} {:?}", n.kind, w.sites[i].city, w.sites[i].access)
                     }
-                    None => format!("{:?}", n.role),
+                    None => format!("{:?}", n.kind),
                 };
                 // Its decisions' times are its clock's.
                 if cfg.clock_skew != ClockSkew::Off {
@@ -2188,6 +2435,11 @@ impl Sim {
             forecasts_lost: 0,
             churn,
             churn_done: 0,
+            arrivals,
+            arrivals_done: 0,
+            departures,
+            departures_done: 0,
+            parent_lost: (0, 0),
             joins: Vec::new(),
             swarm_id: SwarmId::new(&key.public),
             options,
@@ -2204,6 +2456,7 @@ impl Sim {
     fn done(&self) -> bool {
         let total = (self.munros * self.munro) as u64;
         self.writes_done()
+            && self.arrivals_done == self.arrivals.len()
             && self
                 .nodes
                 .iter()
@@ -2237,6 +2490,12 @@ impl Sim {
         if let Some(&(at, _, _)) = self.churn.get(self.churn_done) {
             t = t.min(at);
         }
+        if let Some(&(at, _)) = self.arrivals.get(self.arrivals_done) {
+            t = t.min(at);
+        }
+        if let Some(&(at, _)) = self.departures.get(self.departures_done) {
+            t = t.min(at);
+        }
         self.refresh_wakes();
         if let Some(&(wt, _)) = self.wakes.first() {
             t = t.min(wt);
@@ -2246,8 +2505,8 @@ impl Sim {
 
     /// When node `i` next has something to do as of now: its runner's
     /// timeout, its uplink freeing up while it has frames or control due,
-    /// or its links' echoes and keepalives coming due. `None` for a dead
-    /// node.
+    /// or its links' echoes and keepalives coming due. `None` for a node
+    /// that sends and receives nothing ([`Role::off`]).
     ///
     /// The time only grows as the clock moves on while the node's state
     /// stays as it was, and while it lies ahead it stays exact: so a node's
@@ -2255,7 +2514,7 @@ impl Sim {
     /// the time comes.
     fn wake_time(&self, i: usize) -> Option<Time> {
         let n = &self.nodes[i];
-        if n.role == Role::Dead {
+        if n.role.off() {
             return None;
         }
         let mut t = Time::MAX;
@@ -2443,7 +2702,7 @@ impl Sim {
         // Only nodes due now can have a timeout due.
         for i in self.due_nodes() {
             let n = &mut self.nodes[i];
-            if n.role != Role::Dead
+            if !n.role.off()
                 && n.runner
                     .poll_timeout()
                     .is_some_and(|t| n.true_time(t) <= now)
@@ -2513,7 +2772,11 @@ impl Sim {
                     for l in 0..self.links.len() {
                         let (from, to, peer) =
                             (self.links[l].from, self.links[l].to, self.links[l].peer);
-                        if from != 0 && to != 0 {
+                        // A viewer gone for good has no link to redial.
+                        if (from != 0 && to != 0)
+                            || self.nodes[from].role == Role::Gone
+                            || self.nodes[to].role == Role::Gone
+                        {
                             continue;
                         }
                         let rchannel = self.links[l ^ 1].channel;
@@ -2553,6 +2816,21 @@ impl Sim {
                 true => self.leave(i),
                 false => self.take_place(i),
             }
+        }
+
+        while let Some(&(at, i)) = self.arrivals.get(self.arrivals_done) {
+            if now < at {
+                break;
+            }
+            self.arrivals_done += 1;
+            self.arrive(i);
+        }
+        while let Some(&(at, i)) = self.departures.get(self.departures_done) {
+            if now < at {
+                break;
+            }
+            self.departures_done += 1;
+            self.depart(i);
         }
 
         // Only a runner called since its last drain holds events.
@@ -2622,6 +2900,7 @@ impl Sim {
         }
         n.hostile = false;
         n.role = Role::Peer;
+        n.kind = Role::Peer;
         n.runner = runner;
         n.swarm = key;
         n.reader = reader;
@@ -2633,7 +2912,9 @@ impl Sim {
         n.removed.clear();
         n.vtime.values_mut().for_each(|v| *v = 0);
         n.rejoined = Some(now);
-        n.read_once = false;
+        n.joined = now;
+        n.first_read = None;
+        n.caught_up = None;
         if let Some(last) = self.shape.last.get_mut(i) {
             *last = None;
         }
@@ -2654,6 +2935,113 @@ impl Sim {
                 self.links[l].last_send = now;
             }
             self.touch(j);
+        }
+        self.touch(i);
+    }
+
+    /// Viewer `i` arrives ([`Arrivals`]): it takes its role and links to
+    /// nodes already there, as a tracker would answer it.
+    fn arrive(&mut self, i: usize) {
+        let now = self.now;
+        self.log("join", i as i64, -1, 0, "");
+        let n = &mut self.nodes[i];
+        n.role = n.kind;
+        n.arrival = now;
+        n.joined = now;
+        n.rejoined = Some(now);
+        let kind = n.kind;
+        let here = |j: usize| j != i && !self.nodes[j].role.off();
+        let mut viewers: Vec<usize> = (1..self.nodes.len()).filter(|&j| here(j)).collect();
+        let mut to = Vec::new();
+        if self.cfg.dial > 0 {
+            viewers.push(0);
+            shuffle(&mut viewers, &mut self.rng);
+            viewers.truncate(self.cfg.dial);
+            to = viewers;
+        } else {
+            if self.cfg.degree > 0 {
+                shuffle(&mut viewers, &mut self.rng);
+                viewers.truncate(self.cfg.degree);
+            }
+            let seed_has = self.nodes[0].links.keys().filter(|&&j| here(j)).count();
+            if self.cfg.seed_degree == 0 || seed_has < self.cfg.seed_degree {
+                to.push(0);
+            }
+            to.extend(viewers);
+        }
+        // Adversaries also reach the seed so they hold real data.
+        if matches!(kind, Role::Adversary(_)) && !to.contains(&0) {
+            to.push(0);
+        }
+        to.sort_unstable();
+        let span = (self.cfg.latency_ms.1 - self.cfg.latency_ms.0).max(1) as u64;
+        for j in to {
+            let latency =
+                Duration::from_millis(self.cfg.latency_ms.0 + (self.rng.next_u64() % span) as i64);
+            let (a, b) = (i.min(j), i.max(j));
+            let la = self.links.len();
+            link_nodes(
+                &mut self.nodes,
+                &mut self.links,
+                (a, b),
+                latency,
+                self.cfg.loss,
+                now,
+            );
+            if let Some(net) = &self.wan {
+                self.links[la].latency = net.one_way(a, b);
+                self.links[la + 1].latency = net.one_way(b, a);
+            }
+            self.touch(j);
+        }
+        self.touch(i);
+    }
+
+    /// Viewer `i` leaves for good ([`Depart`]): gracefully, its neighbours
+    /// see its links close and drop them; abruptly, it goes silent. Each
+    /// neighbour whose open parent it was on some stream logs a
+    /// `parent_lost`.
+    fn depart(&mut self, i: usize) {
+        if self.nodes[i].role.off() {
+            return;
+        }
+        let abrupt = self.cfg.depart.is_some_and(|d| d.abrupt);
+        let how = if abrupt { "abrupt" } else { "graceful" };
+        self.log("depart", i as i64, -1, 0, how);
+        let links: Vec<(usize, usize)> =
+            self.nodes[i].links.iter().map(|(&j, &l)| (j, l)).collect();
+        for &(j, l) in &links {
+            let n = &self.nodes[j];
+            if n.role.off() {
+                continue;
+            }
+            // `i`'s peer key at `j`.
+            let key = self.links[l].rpeer;
+            let lost = n
+                .runner
+                .push_stats(n.swarm)
+                .map_or(0, |p| p.parents.iter().filter(|&&p| p == Some(key)).count());
+            if lost == 0 {
+                continue;
+            }
+            if n.role == Role::Peer {
+                self.parent_lost.0 += 1;
+                self.parent_lost.1 += lost as u64;
+            }
+            self.log("parent_lost", j as i64, i as i64, lost as i64, how);
+        }
+        let n = &mut self.nodes[i];
+        n.role = Role::Gone;
+        n.left = Some(self.now);
+        if !abrupt {
+            for (j, l) in links {
+                let rpeer = self.links[l].rpeer;
+                let n = &mut self.nodes[j];
+                n.runner.remove_peer(rpeer);
+                n.links.remove(&i);
+                n.vtime.remove(&(l ^ 1));
+                self.touch(j);
+            }
         }
         self.touch(i);
     }
@@ -2767,7 +3155,7 @@ impl Sim {
         let (to, rpeer) = (self.links[link].to, self.links[link].rpeer);
         let from = self.links[link].from;
         let now = self.now;
-        if self.nodes[to].role == Role::Dead || self.nodes[from].role == Role::Dead {
+        if self.nodes[to].role.off() || self.nodes[from].role.off() {
             return;
         }
         self.touch(to);
@@ -2944,8 +3332,10 @@ impl Sim {
             rows: Vec::new(),
             node_rows: nodes.then(Vec::new),
         });
-        // Every viewer links at the start.
-        let joins = (1..self.nodes.len()).map(|i| TimedEvent {
+        // The viewers there from the start; arrivals log theirs as they
+        // come ([`Sim::arrive`]).
+        let at_start = (1..self.nodes.len()).filter(|&i| self.nodes[i].role != Role::Absent);
+        let joins = at_start.map(|i| TimedEvent {
             at: t0(),
             kind: "join",
             node: i as i64,
@@ -3163,14 +3553,15 @@ impl Sim {
         });
     }
 
-    /// A digest of the honest viewers' reads at the run's end, each
-    /// viewer's ([`Node::reads_hash`]) in node order. The trace hashes what
-    /// the nodes sent, so a change that moves only readers (where one
-    /// starts, what it skips) keeps it and changes this.
+    /// A digest of the honest viewers' reads at the run's end
+    /// ([`Node::watched`]), each viewer's ([`Node::reads_hash`]) in node
+    /// order. The trace hashes what the nodes sent, so a change that moves
+    /// only readers (where one starts, what it skips) keeps it and changes
+    /// this.
     fn reads_hash(&self) -> u64 {
         let mut h = 0xcbf2_9ce4_8422_2325;
         for (i, n) in self.nodes.iter().enumerate() {
-            if n.role == Role::Peer {
+            if n.watched() {
                 fnv(&mut h, &(i as u64).to_be_bytes());
                 fnv(&mut h, &n.reads_hash.to_be_bytes());
             }
@@ -3178,14 +3569,11 @@ impl Sim {
         h
     }
 
-    /// The honest viewers at the run's end, in the series' order (`lag`,
+    /// The honest viewers at the run's end, those that left for good
+    /// included ([`Node::watched`]), in the series' order (`lag`,
     /// `frames`) and the tables' numbering.
     fn honest(&self) -> Vec<&Node> {
-        self.nodes
-            .iter()
-            .skip(1)
-            .filter(|n| n.role == Role::Peer)
-            .collect()
+        self.nodes.iter().skip(1).filter(|n| n.watched()).collect()
     }
 
     /// The run second by second from the stream's start ([`Sim::series`]),
@@ -3308,8 +3696,11 @@ impl Sim {
     /// run's tables, as strims-sim writes them (its `tables` module) for
     /// `hack/sim-db`: CSV files each with a `<table>.schema.json` of its
     /// columns' names and types, times true time in ms from the stream's
-    /// start, and the honest viewers at the run's end numbered as the
-    /// series has them ([`Sim::honest`]).
+    /// start, and the honest viewers at the run's end, those that left for
+    /// good included, numbered as the series has them ([`Sim::honest`]).
+    /// The series counts a viewer only while it is there: before its
+    /// arrival and after its departure ([`Arrivals`], [`Depart`]) it is
+    /// in no `present`, and its `lag` is -1.
     ///
     /// | table | one row per | columns |
     /// |---|---|---|
@@ -3318,8 +3709,8 @@ impl Sim {
     /// | `reads` | chunk a viewer read | `viewer`, `t_ms` (when it read it), `seq` (the chunk), `lag_ms` (from its publishing) |
     /// | `bins` | bin of [`Sim::keep_tables`]' width | [`bin_cols`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), the seed's meter, uplink and copies at its end and what it sent in it, then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`) |
     /// | `node_bins` | node and bin, with `SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node`, `viewer` (its number here, -1 for none), what it did in the bin |
-    /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink in bytes per second), `hostile`, `churned` (it left at least once), `clock_ms` (its clock's offset) |
-    /// | `events` | timed event ([`TimedEvent`]) | `t_us`, `kind`, `node`, `peer` (-1 for none), `value`, `detail`: each viewer's `join` (at the start, and on taking a place again), `first_read` (`value` its ms from the join), churn's `leave`, the seed's steps (`uplink` in bytes per second, `latency` in ms, `reconnect`) and an `incident` (`detail` dies or slows, `value` the new uplink) |
+    /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink in bytes per second), `hostile`, `churned` (it left at least once), `clock_ms` (its clock's offset), `arrive_ms` (when it arrived, -1000 for the start; [`Arrivals`]), `depart_ms` (when it left for good, empty if it stayed; [`Depart`]) |
+    /// | `events` | timed event ([`TimedEvent`]) | `t_us`, `kind`, `node`, `peer` (-1 for none), `value`, `detail`: each viewer's `join` (at the start or its arrival, and on taking a place again), `first_read` and `caught_up` (its first chunk read within [`CAUGHT_UP`] of its publishing; `value` each one's ms from the join), churn's `leave`, a viewer's `depart` (`detail` graceful or abrupt), `parent_lost` (`node` a viewer whose open parent `peer` departed, `value` the streams it was the parent of, `detail` the departure's), the seed's steps (`uplink` in bytes per second, `latency` in ms, `reconnect`) and an `incident` (`detail` dies or slows, `value` the new uplink) |
     /// | `forecast` | sample of a node's forecast log ([`Runner::set_forecasts`]), with `SIM_FORECAST=1` | `t_ms`, `node`, `viewer`, `peer` (nodes), `peer_honest` (the seed, or an honest viewer at the end: a greedy one's HAVEs can claim what it never held), `stream`, `seq` (the chunk), `sample_ms`, `mean_ms`, `horizon_ms` (-1 before the estimate's first sample), `samples`, `fresh`, `lazy`, `first_sight`, `run` ([`LagForecast`]), `seen_ms` (our first sight of the chunk) and `held_ms` (when the peer first held it: its first data from an honest node, the seed's publishing; -1 if never, or not in the incarnation that announced it), `channel_open_ms` (when our channel with the peer opened), `live` (it was held after both nodes took their places and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
     ///
     /// `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
@@ -3389,6 +3780,13 @@ impl Sim {
             }
             t.write(dir)?;
         }
+        let us = |at: Time| -> i64 {
+            if at >= start {
+                (at - start).as_micros()
+            } else {
+                -(start - at).as_micros()
+            }
+        };
         let mut t = Table::typed(
             "viewers",
             &[
@@ -3398,6 +3796,8 @@ impl Sim {
                 ("hostile", "BOOLEAN"),
                 ("churned", "BOOLEAN"),
                 ("clock_ms", "BIGINT"),
+                ("arrive_ms", "BIGINT"),
+                ("depart_ms", "BIGINT"),
             ],
         );
         for (i, v) in honest.iter().enumerate() {
@@ -3413,16 +3813,11 @@ impl Sim {
                 v.hostile.to_string(),
                 v.churned.to_string(),
                 v.clock.as_millis().to_string(),
+                (us(v.arrival) / 1000).to_string(),
+                v.left.map_or(String::new(), |t| (us(t) / 1000).to_string()),
             ]);
         }
         t.write(dir)?;
-        let us = |at: Time| -> i64 {
-            if at >= start {
-                (at - start).as_micros()
-            } else {
-                -(start - at).as_micros()
-            }
-        };
         if let Some(events) = &self.timeline {
             let mut t = Table::typed(
                 "events",
@@ -3618,7 +4013,7 @@ impl Sim {
                         (false, true) => "!",
                         _ => "",
                     };
-                    let greed = match self.nodes[id].role {
+                    let greed = match self.nodes[id].kind {
                         Role::Greedy(Greed::FreeRider) => "F",
                         Role::Greedy(Greed::Liar) => "L",
                         Role::Greedy(Greed::Grabber) => "G",
@@ -3698,17 +4093,7 @@ impl Sim {
         }
         let streams = self.cfg.stream_count;
         // Each node's open parent per stream, by node index.
-        let parents: Vec<Vec<Option<usize>>> = self
-            .nodes
-            .iter()
-            .map(|n| {
-                let ps = n.runner.push_stats(n.swarm).map(|p| p.parents);
-                ps.unwrap_or_default()
-                    .iter()
-                    .map(|p| p.and_then(|k| n.runner.peer_id(k)).map(id_node))
-                    .collect()
-            })
-            .collect();
+        let parents = self.parents();
         if self.loops.is_some() {
             self.sample_loops(&parents);
         }
@@ -3902,7 +4287,7 @@ impl Sim {
             .iter()
             .filter(|&&h| h != i)
             .map(|&h| {
-                let liar = self.nodes[h].role == Role::Greedy(Greed::Liar);
+                let liar = self.nodes[h].kind == Role::Greedy(Greed::Liar);
                 AnnounceEntry {
                     stream: (h % streams) as Stream,
                     hits: if liar { 8 } else { 0 },
@@ -3921,11 +4306,15 @@ impl Sim {
         (!entries.is_empty()).then_some(entries)
     }
 
-    /// Every node's open parent per stream, by node index.
+    /// Every node's open parent per stream, by node index: none for a
+    /// viewer not there ([`Role::Absent`], [`Role::Gone`]).
     fn parents(&self) -> Vec<Vec<Option<usize>>> {
         self.nodes
             .iter()
             .map(|n| {
+                if matches!(n.role, Role::Absent | Role::Gone) {
+                    return Vec::new();
+                }
                 n.runner.push_stats(n.swarm).map_or_else(Vec::new, |s| {
                     s.parents
                         .iter()
@@ -3954,7 +4343,7 @@ impl Sim {
             }
         }
         for &h in &holders {
-            if self.nodes[h].role == Role::Greedy(Greed::Liar) {
+            if self.nodes[h].kind == Role::Greedy(Greed::Liar) {
                 *self.liar_runs.entry(h).or_default() += 1;
             }
         }
@@ -3981,7 +4370,7 @@ impl Sim {
         for nb in &a.neighbours {
             let h = id(nb.peer);
             let kids = children(h);
-            if nb.barred && !was.contains(&h) && !matches!(self.nodes[h].role, Role::Greedy(_)) {
+            if nb.barred && !was.contains(&h) && !matches!(self.nodes[h].kind, Role::Greedy(_)) {
                 let had = self
                     .alloc
                     .last()
@@ -3993,7 +4382,7 @@ impl Sim {
             }
             let judged = nb.served.is_some();
             let served = nb.served == Some(true);
-            match self.nodes[h].role {
+            match self.nodes[h].kind {
                 Role::Greedy(Greed::Liar) => {
                     v.liars += 1;
                     v.liars_judged += u64::from(judged);
@@ -4030,7 +4419,7 @@ impl Sim {
         for a in &self.alloc {
             for &i in a.barred.difference(&was) {
                 all += 1;
-                if !matches!(self.nodes[i].role, Role::Greedy(_)) {
+                if !matches!(self.nodes[i].kind, Role::Greedy(_)) {
                     honest += 1;
                 }
             }
@@ -4055,7 +4444,7 @@ impl Sim {
             for (s, parent) in p.parents.iter().enumerate() {
                 let liar = parent
                     .and_then(|k| n.runner.peer_id(k))
-                    .is_some_and(|id| self.nodes[id_node(id)].role == Role::Greedy(Greed::Liar));
+                    .is_some_and(|id| self.nodes[id_node(id)].kind == Role::Greedy(Greed::Liar));
                 g.samples += 1;
                 if liar {
                     g.to_liars += 1;
@@ -4378,10 +4767,12 @@ impl Sim {
                     }
                     let first = node.pos.div_ceil(self.cfg.chunk_size as u64);
                     let end = (node.pos + n as u64) / self.cfg.chunk_size as u64;
+                    let mut fresh = false;
                     for c in first..end {
                         if let Some(&pt) = self.publish_times.get(c as usize)
                             && !pt.is_nil()
                         {
+                            fresh |= now - pt < CAUGHT_UP;
                             node.lags.push((now, now - pt));
                             fnv(&mut node.reads_hash, &c.to_be_bytes());
                             fnv(&mut node.reads_hash, &now.unix_nanos().to_be_bytes());
@@ -4398,18 +4789,26 @@ impl Sim {
                             *r = true;
                         }
                     }
-                    if end > first && !node.read_once {
-                        node.read_once = true;
-                        let since = node.rejoined.unwrap_or(t0());
-                        if let Some(t) = self.timeline.as_mut() {
-                            t.push(TimedEvent {
-                                at: now,
-                                kind: "first_read",
-                                node: i as i64,
-                                peer: -1,
-                                value: ms(now - since),
-                                detail: "",
-                            });
+                    let first_read = end > first && node.first_read.is_none();
+                    let caught_up = fresh && node.caught_up.is_none();
+                    if first_read {
+                        node.first_read = Some(now);
+                    }
+                    if caught_up {
+                        node.caught_up = Some(now);
+                    }
+                    if let Some(t) = self.timeline.as_mut() {
+                        for (kind, new) in [("first_read", first_read), ("caught_up", caught_up)] {
+                            if new {
+                                t.push(TimedEvent {
+                                    at: now,
+                                    kind,
+                                    node: i as i64,
+                                    peer: -1,
+                                    value: ms(now - node.joined),
+                                    detail: "",
+                                });
+                            }
                         }
                     }
                     if end > first
@@ -4441,7 +4840,7 @@ impl Sim {
 
     fn transmit(&mut self, i: usize) {
         let now = self.now;
-        if self.nodes[i].role == Role::Dead {
+        if self.nodes[i].role.off() {
             return;
         }
         loop {
@@ -4720,8 +5119,8 @@ impl Sim {
         let mut lags: Vec<Duration> = self
             .nodes
             .iter()
-            .filter(|n| n.role == Role::Peer)
-            .flat_map(|n| n.lags.iter().filter(|(t, _)| *t > warm).map(|&(_, l)| l))
+            .filter(|n| n.watched())
+            .flat_map(|n| self.steady(n, &n.lags))
             .collect();
         lags.sort();
         let pct = |p: usize| {
@@ -4732,16 +5131,11 @@ impl Sim {
         let mut sign_lags: Vec<Duration> = self
             .nodes
             .iter()
-            .filter(|n| n.role == Role::Peer)
-            .flat_map(|n| {
-                n.sign_lags
-                    .iter()
-                    .filter(|(t, _)| *t > warm)
-                    .map(|&(_, l)| l)
-            })
+            .filter(|n| n.watched())
+            .flat_map(|n| self.steady(n, &n.sign_lags))
             .collect();
         sign_lags.sort();
-        let peers = self.nodes.iter().filter(|n| n.role == Role::Peer);
+        let peers = self.nodes.iter().filter(|n| n.watched());
         let data_bytes: u64 = (0..self.nodes.len()).map(|i| self.uploaded(i)).sum();
         let seed_share = self.uploaded(0) as f64 / data_bytes.max(1) as f64;
         let mut push = PushStats::default();
@@ -4760,13 +5154,16 @@ impl Sim {
                 push.shed += p.shed;
                 push.pruned += p.pruned;
                 push.switched += p.switched;
-                push.children += p.children;
+                // Children it has at the end.
+                if n.role == Role::Peer {
+                    push.children += p.children;
+                }
             }
         }
         for n in self
             .nodes
             .iter()
-            .filter(|n| !matches!(n.role, Role::Greedy(_)))
+            .filter(|n| !matches!(n.kind, Role::Greedy(_)))
         {
             if let Some(p) = n.runner.push_stats(n.swarm) {
                 push.accepted += p.accepted;
@@ -4802,7 +5199,7 @@ impl Sim {
         });
         let cross = self.cfg.cross.map(|c| self.cross_report(c, warm));
         let stripe = self.munro_lags();
-        let greed = |i: usize| match self.nodes[i].role {
+        let greed = |i: usize| match self.nodes[i].kind {
             Role::Greedy(g) => Some(g),
             _ => None,
         };
@@ -4853,34 +5250,18 @@ impl Sim {
             total,
             positions: peers
                 .clone()
+                .filter(|n| n.role == Role::Peer)
                 .map(|n| (n.start.unwrap_or(u64::MAX), n.pos))
                 .collect(),
-            // Over the viewers that never left: a place taken again misses
-            // what was written while it stood empty. A media run counts the
-            // chunks that hold media from each viewer's first read on: where
-            // a viewer joins turns on the unit size, which the join's lag
-            // measures.
+            // Over the viewers whose places were never taken again
+            // ([`Churn`]): one taken again misses what was written while it
+            // stood empty. Each viewer's chunks due ([`Sim::delivered`]).
             delivery: {
-                let media = |n: &Node, c: usize| match &self.media {
-                    None => true,
-                    Some(_) => {
-                        let first = n.start.map_or(u64::MAX, |o| o / self.cfg.chunk_size as u64);
-                        c as u64 >= first && self.publish_times.get(c).is_some_and(|t| !t.is_nil())
-                    }
-                };
                 let (read, all) = peers
                     .clone()
                     .filter(|n| !n.churned)
-                    .fold((0, 0), |(r, a), n| {
-                        let chunks = n
-                            .read_chunks
-                            .iter()
-                            .enumerate()
-                            .filter(|&(c, _)| media(n, c));
-                        let (rn, an) =
-                            chunks.fold((0, 0), |(r, a), (_, &x)| (r + usize::from(x), a + 1));
-                        (r + rn, a + an)
-                    });
+                    .map(|n| self.delivered(n))
+                    .fold((0, 0), |(r, a), (rn, an)| (r + rn, a + an));
                 read as f64 / all.max(1) as f64
             },
             mismatches: peers.clone().map(|n| n.mismatches).sum(),
@@ -5002,7 +5383,7 @@ impl Sim {
                 {
                     for nb in &a.neighbours {
                         let i = seed.runner.peer_id(nb.peer).map_or(0, id_node);
-                        let c = if matches!(self.nodes[i].role, Role::Greedy(_)) {
+                        let c = if matches!(self.nodes[i].kind, Role::Greedy(_)) {
                             &mut greedy
                         } else {
                             &mut honest
@@ -5020,16 +5401,16 @@ impl Sim {
         }
     }
 
-    /// Per peer and munro published after the warm-up, sorted: how long
-    /// after it was published its last chunk arrived. A peer reads in
-    /// order, so that is the lag of the munro's slowest stripe. Munros
-    /// before the peer's start, and ones it never received whole (which
-    /// delivery counts), are left out.
+    /// Per peer and munro published after its warm-up ([`Sim::steady`]),
+    /// sorted: how long after it was published its last chunk arrived. A
+    /// peer reads in order, so that is the lag of the munro's slowest
+    /// stripe. Munros before the peer's start, and ones it never received
+    /// whole (which delivery counts), are left out.
     fn munro_lags(&self) -> Vec<Duration> {
-        let warm = t0() + Duration::from_secs(self.cfg.warm_secs);
         let per = self.cfg.munro_chunks;
         let mut out = Vec::new();
-        for n in self.nodes.iter().filter(|n| n.role == Role::Peer) {
+        for n in self.nodes.iter().filter(|n| n.watched()) {
+            let warm = n.arrival + Duration::from_secs(self.cfg.warm_secs);
             let Some(start) = n.start else { continue };
             let first = (start / self.cfg.chunk_size as u64).div_ceil(per as u64) as usize;
             for m in first..self.publish_times.len() / per {
@@ -5046,6 +5427,162 @@ impl Sim {
         out
     }
 
+    /// The lags of `n`'s reads in `lags` after its warm-up: from its own
+    /// arrival plus [`Config::warm_secs`] (the run's warm-up for a viewer
+    /// there from the start) to its departure, which ends its reads.
+    fn steady<'a>(
+        &self,
+        n: &Node,
+        lags: &'a [(Time, Duration)],
+    ) -> impl Iterator<Item = Duration> + 'a {
+        let warm = n.arrival + Duration::from_secs(self.cfg.warm_secs);
+        lags.iter().filter(move |(t, _)| *t > warm).map(|&(_, l)| l)
+    }
+
+    /// Honest viewer `n`'s delivery: the chunks it read of those due, and
+    /// those due. A viewer there from the start is due every chunk (in a
+    /// media run, the chunks holding media from its first read on: where a
+    /// viewer joins turns on the unit size, which the join's lag measures).
+    /// An arrival ([`Arrivals`]) is due the chunks holding media from its
+    /// reader's start on, at the live edge it read from (the chunks
+    /// published since it arrived while it hasn't started), and a viewer
+    /// that left for good ([`Depart`]) those published at least
+    /// [`CAUGHT_UP`] before it left: one further behind then misses the
+    /// rest, as one stalled until it left misses what it waited on.
+    fn delivered(&self, n: &Node) -> (usize, usize) {
+        let first = n.start.map_or(u64::MAX, |o| o / self.cfg.chunk_size as u64);
+        let published = |c: usize| self.publish_times.get(c).copied().filter(|t| !t.is_nil());
+        let due = |c: usize| {
+            let from = match (n.arrival > t0(), &self.media) {
+                (false, None) => true,
+                (false, Some(_)) => c as u64 >= first && published(c).is_some(),
+                (true, _) => published(c).is_some_and(|pt| match n.start {
+                    Some(_) => c as u64 >= first,
+                    None => pt >= n.arrival,
+                }),
+            };
+            from && n
+                .left
+                .is_none_or(|left| published(c).is_some_and(|pt| pt + CAUGHT_UP <= left))
+        };
+        n.read_chunks
+            .iter()
+            .enumerate()
+            .filter(|&(c, _)| due(c))
+            .fold((0, 0), |(r, a), (_, &x)| (r + usize::from(x), a + 1))
+    }
+
+    /// Whether the run has viewers arriving after the start or leaving for
+    /// good: the rows' columns of [`Sim::audience_report`] come with them.
+    fn audience(&self) -> bool {
+        self.cfg.arrivals != Arrivals::T0 || self.cfg.depart.is_some()
+    }
+
+    /// The run's arrivals and departures, measured ([`AudienceReport`]).
+    fn audience_report(&self) -> AudienceReport {
+        let viewers = || self.nodes.iter().skip(1);
+        let both = |f: &dyn Fn(&Node) -> bool| {
+            (
+                viewers().filter(|n| f(n)).count(),
+                viewers().filter(|n| f(n) && n.watched()).count(),
+            )
+        };
+        // From each honest viewer's join to `at`, sorted, and the viewers
+        // without one.
+        let since = |at: &dyn Fn(&Node) -> Option<Time>| {
+            let mut v: Vec<Duration> = viewers()
+                .filter(|n| n.watched())
+                .filter_map(|n| Some(at(n)? - n.joined))
+                .collect();
+            v.sort();
+            let none = viewers().filter(|n| n.watched()).count() - v.len();
+            (v, none)
+        };
+        let (joins, unread) = since(&|n| n.first_read);
+        let (caught_up, behind) = since(&|n| n.caught_up);
+        AudienceReport {
+            arrived: both(&|n| n.arrival > t0()),
+            departed: both(&|n| n.left.is_some()),
+            joins,
+            unread,
+            caught_up,
+            behind,
+            parent_lost: self.parent_lost,
+            recovery: self.cfg.depart.map(|d| self.recovery(t0() + d.at)),
+        }
+    }
+
+    /// The recovery from the departures that start at `from`, over the
+    /// honest viewers there before it that stayed ([`Recovery`]). Each
+    /// viewer's lag per second of the stream is its reads' p99 in it, or a
+    /// second more than the last one's in a second it reads nothing (none
+    /// before its first read), as `hack/capture/analyze.py` reads the
+    /// series; the seconds' lag is the viewers' p90 of theirs.
+    fn recovery(&self, from: Time) -> Recovery {
+        let start = t0() + Duration::SECOND;
+        let secs = self.cfg.stream_secs as usize;
+        let stayed: Vec<&Node> = self
+            .nodes
+            .iter()
+            .filter(|n| n.role == Role::Peer && n.arrival < from)
+            .collect();
+        let mut per: Vec<Vec<Option<i64>>> = Vec::new();
+        for n in &stayed {
+            let mut by: Vec<Vec<i64>> = vec![Vec::new(); secs];
+            for &(at, lag) in &n.lags {
+                if at >= start
+                    && let Some(b) = by.get_mut(((at - start).as_millis() / 1000) as usize)
+                {
+                    b.push(lag.as_millis());
+                }
+            }
+            let mut cur = None;
+            per.push(
+                by.iter_mut()
+                    .map(|b| {
+                        b.sort_unstable();
+                        cur = match b.get(((b.len().max(1) - 1) as f64 * 0.99).round() as usize) {
+                            Some(&l) => Some(l),
+                            None => cur.map(|l| l + 1000),
+                        };
+                        cur
+                    })
+                    .collect(),
+            );
+        }
+        let k0 = (from.max(start) - start).as_millis() as usize / 1000;
+        let target = ms(CAUGHT_UP);
+        let (mut excess, mut bad) = (0, None);
+        for k in k0..secs {
+            let mut v: Vec<i64> = per.iter().filter_map(|p| p[k]).collect();
+            v.sort_unstable();
+            let Some(&q) = v.get(((v.len().max(1) - 1) as f64 * 0.9).round() as usize) else {
+                continue;
+            };
+            excess += (q - target).max(0);
+            if q > target {
+                bad = Some(k);
+            }
+        }
+        Recovery {
+            stayed: stayed.len(),
+            stranded: stayed
+                .iter()
+                .filter(|n| n.links.keys().all(|&j| self.nodes[j].role.off()))
+                .count(),
+            peak: stayed
+                .iter()
+                .flat_map(|n| n.lags.iter().filter(|(t, _)| *t >= from).map(|&(_, l)| l))
+                .max()
+                .unwrap_or_default(),
+            excess_ms_s: excess,
+            recover: bad.map_or(Duration::ZERO, |k| {
+                (start + Duration::from_secs(k as i64 + 1) - from).max(Duration::ZERO)
+            }),
+            censored: bad.is_some_and(|k| k + 1 == secs),
+        }
+    }
+
     /// See [`Report::settled`].
     fn alloc_settled(&self) -> Duration {
         let start = t0() + Duration::SECOND;
@@ -5055,21 +5592,20 @@ impl Sim {
             .map_or(Duration::ZERO, |w| (w[1].at - start).max(Duration::ZERO))
     }
 
-    /// In WAN mode, the lag p99 after the warm-up of the peers in each
-    /// region.
+    /// In WAN mode, the lag p99 after their warm-ups ([`Sim::steady`]) of
+    /// the peers in each region.
     fn region_p99(&self) -> Vec<(Region, Duration)> {
         let Some(w) = &self.cfg.wan else {
             return vec![];
         };
-        let warm = t0() + Duration::from_secs(self.cfg.warm_secs);
         let mut by: BTreeMap<Region, Vec<Duration>> = BTreeMap::new();
         for (i, n) in self.nodes.iter().enumerate() {
-            if n.role != Role::Peer {
+            if !n.watched() {
                 continue;
             }
             by.entry(w.sites[i].city.region())
                 .or_default()
-                .extend(n.lags.iter().filter(|(t, _)| *t > warm).map(|&(_, l)| l));
+                .extend(self.steady(n, &n.lags));
         }
         by.into_iter()
             .map(|(r, mut v)| {
@@ -5154,7 +5690,7 @@ impl Sim {
     /// runner counts what the harness drops.
     fn uploaded(&self, i: usize) -> u64 {
         let n = &self.nodes[i];
-        if matches!(n.role, Role::Greedy(g) if g != Greed::Grabber) {
+        if matches!(n.kind, Role::Greedy(g) if g != Greed::Grabber) {
             return 0;
         }
         n.links
@@ -5188,10 +5724,12 @@ impl Sim {
                 + n.runner
                     .swarm_counters(n.swarm)
                     .map_or(0, |s| s.requests_timed_out);
-            match n.role {
-                Role::Seed => seed += t,
-                Role::Peer | Role::Dead => honest += t,
-                Role::Greedy(_) | Role::Adversary(_) => hostile += t,
+            match (n.role, n.kind) {
+                (Role::Seed, _) => seed += t,
+                (Role::Peer | Role::Dead, _) | (Role::Absent | Role::Gone, Role::Peer) => {
+                    honest += t
+                }
+                _ => hostile += t,
             }
         }
         (honest, seed, hostile)
@@ -5216,7 +5754,7 @@ impl Sim {
     fn chunks_read(&self) -> u64 {
         self.nodes
             .iter()
-            .filter(|n| n.role == Role::Peer)
+            .filter(|n| n.watched())
             .map(|n| n.read_chunks.iter().filter(|&&r| r).count() as u64)
             .sum()
     }
@@ -5431,6 +5969,152 @@ fn churn_plan(
         plan.push((back[i], i, false));
     }
     plan.sort_by_key(|&(t, i, leaves)| (t, !leaves, i));
+    plan
+}
+
+/// `SIM_ARRIVALS` ([`Arrivals::parse`]); unset or blank, `t0`.
+fn arrivals_knob() -> Arrivals {
+    let Some(s) = knob::<String>("SIM_ARRIVALS").filter(|s| !s.trim().is_empty()) else {
+        return Arrivals::T0;
+    };
+    Arrivals::parse(&s).unwrap_or_else(|| {
+        panic!("SIM_ARRIVALS={s}: t0, trickle, trickle:<per s> or event:<warm %>:<at s>:<window s>")
+    })
+}
+
+/// `SIM_DEPART` ([`Depart::parse`]); unset or blank, none leave.
+fn depart_knob() -> Option<Depart> {
+    let s = knob::<String>("SIM_DEPART").filter(|s| !s.trim().is_empty())?;
+    Some(Depart::parse(&s).unwrap_or_else(|| {
+        panic!("SIM_DEPART={s}: <share %>:<at s>:<window s>, then :abrupt to go silent")
+    }))
+}
+
+/// A knob's number: finite, not negative.
+fn knob_num(x: &str) -> Option<f64> {
+    x.parse::<f64>().ok().filter(|v| v.is_finite() && *v >= 0.0)
+}
+
+impl Arrivals {
+    /// `t0` for every viewer at the start, `trickle` for all of them within
+    /// the stream's first third, `trickle:<per s>` for a Poisson stream at
+    /// that rate, and `event:<warm %>:<at s>:<window s>` for a scheduled
+    /// event, times in seconds after the start: the `Display` form.
+    fn parse(s: &str) -> Option<Arrivals> {
+        match s.trim().split(':').collect::<Vec<_>>()[..] {
+            ["t0"] => Some(Arrivals::T0),
+            ["trickle"] => Some(Arrivals::Trickle(None)),
+            ["trickle", r] => Some(Arrivals::Trickle(Some(knob_num(r).filter(|&r| r > 0.0)?))),
+            ["event", w, at, window] => Some(Arrivals::Event {
+                warm: knob_num(w).filter(|&w| w <= 100.0)? / 100.0,
+                at: secs_f64(knob_num(at)?),
+                window: secs_f64(knob_num(window)?),
+            }),
+            _ => None,
+        }
+    }
+}
+
+impl Depart {
+    /// `<share %>:<at s>:<window s>`, then `:abrupt` for silent departures,
+    /// times in seconds after the start: the `Display` form.
+    fn parse(s: &str) -> Option<Depart> {
+        let (share, at, window, abrupt) = match s.trim().split(':').collect::<Vec<_>>()[..] {
+            [share, at, window] => (share, at, window, false),
+            [share, at, window, "abrupt"] => (share, at, window, true),
+            _ => return None,
+        };
+        Some(Depart {
+            share: knob_num(share).filter(|&p| p <= 100.0)? / 100.0,
+            at: secs_f64(knob_num(at)?),
+            window: secs_f64(knob_num(window)?),
+            abrupt,
+        })
+    }
+}
+
+/// `s` seconds, to the nanosecond.
+fn secs_f64(s: f64) -> Duration {
+    Duration::from_nanos((s * 1e9).round() as i64)
+}
+
+/// A time uniform in `[from, from + len)` after the start.
+fn uniform_in(rng: &mut DetRng, from: Duration, len: Duration) -> Time {
+    t0() + from + secs_f64(unit(rng) * len.as_secs_f64())
+}
+
+/// When `cfg`'s viewers arrive after the start ([`Arrivals`]): `(at,
+/// node)` for every node but the seed, sorted; none at [`Arrivals::T0`],
+/// which draws nothing. The times are drawn first, then the order.
+fn arrival_plan(cfg: &Config, nodes: usize, rng: &mut DetRng) -> Vec<(Time, usize)> {
+    let n = nodes - 1;
+    let stream = Duration::from_secs(cfg.stream_secs as i64);
+    let times: Vec<Time> = match cfg.arrivals {
+        Arrivals::T0 => return Vec::new(),
+        Arrivals::Trickle(None) => (0..n)
+            .map(|_| uniform_in(rng, Duration::ZERO, secs_f64(stream.as_secs_f64() / 3.0)))
+            .collect(),
+        Arrivals::Trickle(Some(rate)) => {
+            let mut at = t0();
+            (0..n)
+                .map(|_| {
+                    let u = (rng.next_u64() as f64 / u64::MAX as f64).max(f64::MIN_POSITIVE);
+                    at += secs_f64(-u.ln() / rate);
+                    at
+                })
+                .collect()
+        }
+        Arrivals::Event { warm, at, window } => {
+            let k = (warm * n as f64).round() as usize;
+            (0..n)
+                .map(|j| match j < k {
+                    true => uniform_in(rng, Duration::ZERO, at),
+                    false => uniform_in(rng, at, window),
+                })
+                .collect()
+        }
+    };
+    let mut order: Vec<usize> = (1..nodes).collect();
+    shuffle(&mut order, rng);
+    let mut plan: Vec<(Time, usize)> = times.into_iter().zip(order).collect();
+    plan.sort_unstable();
+    let end = t0() + Duration::SECOND + stream;
+    assert!(
+        plan.last().is_none_or(|&(t, _)| t < end),
+        "SIM_ARRIVALS={}: the last of {n} viewers arrives {} s after the start, past the stream's end",
+        cfg.arrivals,
+        plan.last().map_or(0.0, |&(t, _)| (t - t0()).as_secs_f64()),
+    );
+    plan
+}
+
+/// When viewers leave for good ([`Depart`]): `(at, node)`, sorted, for
+/// `d.share` of the nodes but the seed there at `d.at` (by `arrivals`, the
+/// rest there from the start), drawn at random.
+fn depart_plan(
+    cfg: &Config,
+    d: Depart,
+    arrivals: &[(Time, usize)],
+    nodes: usize,
+    rng: &mut DetRng,
+) -> Vec<(Time, usize)> {
+    let from = t0() + d.at;
+    assert!(
+        from + d.window <= t0() + Duration::SECOND + Duration::from_secs(cfg.stream_secs as i64),
+        "SIM_DEPART={d}: past the stream's end"
+    );
+    let mut arrive = vec![t0(); nodes];
+    for &(t, i) in arrivals {
+        arrive[i] = t;
+    }
+    let mut here: Vec<usize> = (1..nodes).filter(|&i| arrive[i] < from).collect();
+    shuffle(&mut here, rng);
+    here.truncate((d.share * here.len() as f64).round() as usize);
+    let mut plan: Vec<(Time, usize)> = here
+        .into_iter()
+        .map(|i| (uniform_in(rng, d.at, d.window), i))
+        .collect();
+    plan.sort_unstable();
     plan
 }
 
@@ -6470,7 +7154,10 @@ impl Scenario {
 /// `SIM_GREEDY_KINDS` picks a draw's kinds ([`greedy_kinds_knob`]) and
 /// `SIM_GREEDY_SHARE=<percent>` fixes its share. `SIM_CHURN=<percent>`
 /// has that share of any run's honest viewers leave per minute, each place
-/// taken again `SIM_CHURN_AWAY` seconds on ([`Churn`]). `SIM_CLOCK_SKEW`
+/// taken again `SIM_CHURN_AWAY` seconds on ([`Churn`]). `SIM_ARRIVALS`
+/// brings any run's viewers in after the start ([`Arrivals::parse`]), and
+/// `SIM_DEPART` sends a share of them away for good ([`Depart::parse`]).
+/// `SIM_CLOCK_SKEW`
 /// sets any run's clocks off: `real` as in the wild, `<ms>` either way,
 /// `+<ms>` or `-<ms>` all alike, at most [`MAX_SKEW`]
 /// ([`clock_skew_knob`]). `SIM_LOOPS=1` adds every parent decision,
@@ -6838,6 +7525,272 @@ fn sim_push_churn() {
             assert!(n.runner.peer_id(*parent).is_some(), "node {i}: {p:?}");
         }
     }
+}
+
+/// The knobs' forms read back as they print, and malformed ones don't
+/// read.
+#[test]
+fn sim_audience_knobs_parse() {
+    let secs = |s: i64| Duration::from_secs(s);
+    for (s, want) in [
+        ("t0", Arrivals::T0),
+        ("trickle", Arrivals::Trickle(None)),
+        ("trickle:2.5", Arrivals::Trickle(Some(2.5))),
+        (
+            "event:20:20:10",
+            Arrivals::Event {
+                warm: 0.2,
+                at: secs(20),
+                window: secs(10),
+            },
+        ),
+    ] {
+        assert_eq!(Arrivals::parse(s), Some(want), "{s}");
+        assert_eq!(want.to_string(), s);
+    }
+    for s in [
+        "",
+        "trickle:0",
+        "trickle:-1",
+        "event:120:20:10",
+        "event:20:20",
+        "burst",
+    ] {
+        assert_eq!(Arrivals::parse(s), None, "{s}");
+    }
+    for (s, abrupt) in [("60:40:10", false), ("60:40:10:abrupt", true)] {
+        let want = Depart {
+            share: 0.6,
+            at: secs(40),
+            window: secs(10),
+            abrupt,
+        };
+        assert_eq!(Depart::parse(s), Some(want), "{s}");
+        assert_eq!(want.to_string(), s);
+    }
+    for s in ["60:40", "60:40:10:quiet", "101:40:10", "60:40:10:abrupt:x"] {
+        assert_eq!(Depart::parse(s), None, "{s}");
+    }
+}
+
+/// A Hybrid swarm of `peers` viewers, 3 links each and 4 at the seed, on 4
+/// streams for `secs` s, under `arrivals`.
+fn audience_config(seed: u64, peers: usize, secs: u64, arrivals: Arrivals) -> Config {
+    let mut cfg = Config::new(seed, peers);
+    cfg.degree = 3;
+    cfg.seed_degree = 4;
+    cfg.seed_up = 8 * cfg.stream_rate;
+    cfg.push_mode = PushMode::Hybrid;
+    cfg.stream_count = 4;
+    cfg.stream_secs = secs;
+    cfg.arrivals = arrivals;
+    cfg
+}
+
+/// Runs `sim`, checking at every step that no node links before it
+/// arrives or to one that hasn't.
+fn run_checking_links(sim: &mut Sim) -> Report {
+    while sim.arrivals_done < sim.arrivals.len() {
+        let t = sim.next_time();
+        sim.now = sim.now.max(t);
+        sim.step();
+        for (i, n) in sim.nodes.iter().enumerate() {
+            assert!(
+                n.role != Role::Absent || n.links.is_empty(),
+                "node {i} linked before it arrived"
+            );
+            for &j in n.links.keys() {
+                assert_ne!(sim.nodes[j].role, Role::Absent, "{i} linked to {j}");
+            }
+        }
+    }
+    sim.run()
+}
+
+/// The checks every audience test makes of its honest viewers: none
+/// stranded (each read and caught up within a second of its join, or of
+/// the stream's start for one there before it), the stream's bytes right,
+/// and the full delivery due ([`Sim::delivered`]).
+fn check_arrivals(sim: &Sim, r: &Report) -> AudienceReport {
+    let a = sim.audience_report();
+    eprintln!("{a:?}\n{r:?}");
+    assert_eq!((a.unread, a.behind), (0, 0), "{a:?}");
+    for (i, n) in sim.nodes.iter().enumerate().filter(|(_, n)| n.watched()) {
+        let by = n.joined.max(t0() + Duration::SECOND) + Duration::SECOND;
+        assert!(
+            n.first_read.is_some_and(|t| t < by) && n.caught_up.is_some_and(|t| t < by),
+            "node {i} joined at {:?}: first read {:?}, caught up {:?}",
+            n.joined - t0(),
+            n.first_read.map(|t| t - t0()),
+            n.caught_up.map(|t| t - t0())
+        );
+    }
+    assert_eq!((r.mismatches, r.underruns, r.resets), (0, 0, 0), "{r:?}");
+    assert!(r.delivery > 0.999, "{r:?}");
+    a
+}
+
+#[test]
+fn sim_trickle_arrivals_catch_up() {
+    // The seed starts alone and the viewers trickle in over the stream's
+    // first third: each links on arrival to nodes already there, keeps its
+    // role, reads from the live edge (a mandatory-delivery cell's arrivals
+    // too) and catches up at once, and every honest one reads to the end.
+    for mode in [DeliveryMode::LOW_LATENCY, DeliveryMode::MANDATORY] {
+        let mut cfg = audience_config(21, 12, 15, Arrivals::Trickle(None));
+        cfg.delivery_mode = mode;
+        let greedy = greedy(&cfg);
+        let mut sim = Sim::new(cfg);
+        assert_eq!(sim.arrivals.len(), 12);
+        assert!(
+            sim.arrivals
+                .iter()
+                .all(|&(t, _)| t < t0() + Duration::from_secs(5))
+        );
+        let r = run_checking_links(&mut sim);
+        let a = check_arrivals(&sim, &r);
+        assert_eq!(a.arrived, (12, 12 - greedy.len()), "{mode:?}");
+        // The seed took its 4, and nobody is left without links.
+        assert_eq!(sim.nodes[0].links.len(), 4, "{mode:?}");
+        for (i, n) in sim.nodes.iter().enumerate().skip(1) {
+            assert!(!n.links.is_empty(), "{mode:?}: node {i} stranded");
+            assert_eq!(n.role, n.kind, "{mode:?}: node {i}");
+            assert_eq!(
+                greedy
+                    .get(&i)
+                    .map(|&g| Role::Greedy(g))
+                    .unwrap_or(Role::Peer),
+                n.kind
+            );
+            if n.role != Role::Peer {
+                continue;
+            }
+            assert_eq!(n.pos, r.total, "{mode:?}: node {i} incomplete");
+            // From the live edge: a chunk published at most a second before
+            // it arrived.
+            let c = (n.start.unwrap() / sim.cfg.chunk_size as u64) as usize;
+            assert!(
+                sim.publish_times[c] + Duration::SECOND >= n.arrival,
+                "{mode:?}: node {i} arrived at {:?} and read from chunk {c}",
+                n.arrival - t0()
+            );
+        }
+    }
+}
+
+#[test]
+fn sim_event_burst_joins_a_warm_swarm() {
+    // A scheduled event: a quarter of 16 viewers trickles in over the
+    // first 6 s, the rest within 3 s from there. Every honest one catches
+    // up and reads to the end.
+    let at = Duration::from_secs(6);
+    let window = Duration::from_secs(3);
+    let event = Arrivals::Event {
+        warm: 0.25,
+        at,
+        window,
+    };
+    let mut sim = Sim::new(audience_config(22, 16, 16, event));
+    let warm = sim.arrivals.iter().filter(|&&(t, _)| t < t0() + at).count();
+    assert_eq!(warm, 4);
+    assert!(sim.arrivals.iter().all(|&(t, _)| t < t0() + at + window));
+    let r = run_checking_links(&mut sim);
+    check_arrivals(&sim, &r);
+    for (i, n) in sim
+        .nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| n.role == Role::Peer)
+    {
+        assert_eq!(n.pos, r.total, "node {i} incomplete");
+    }
+}
+
+#[test]
+fn sim_departures_leave_the_rest_watching() {
+    // 16 honest viewers trickle in over the first 7 s, and half of them
+    // leave for good within 2 s from 8 s, closing their links or going
+    // silent. The rest read every chunk to the end and none of them keeps
+    // a viewer gone as a parent; every viewer whose open parent left logs
+    // it at that departure, as the row counts.
+    let mut traces = Vec::new();
+    for abrupt in [false, true] {
+        let mut cfg = audience_config(23, 16, 20, Arrivals::Trickle(None));
+        cfg.greedy = Greedy::Nodes(vec![]);
+        cfg.depart = Some(Depart {
+            share: 0.5,
+            at: Duration::from_secs(8),
+            window: Duration::from_secs(2),
+            abrupt,
+        });
+        let mut sim = Sim::new(cfg);
+        sim.keep_tables(Duration::from_millis(1000), false, false);
+        let r = sim.run();
+        traces.push(r.trace);
+        let a = check_arrivals(&sim, &r);
+        assert_eq!(a.departed, (8, 8), "abrupt {abrupt}");
+        let gone: BTreeSet<usize> = (1..sim.nodes.len())
+            .filter(|&i| sim.nodes[i].role == Role::Gone)
+            .collect();
+        assert_eq!(gone.len(), 8);
+        for &i in &gone {
+            let left = sim.nodes[i].left.unwrap() - t0();
+            assert!(left >= Duration::from_secs(8) && left < Duration::from_secs(10));
+        }
+        for (i, n) in sim
+            .nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| n.role == Role::Peer)
+        {
+            assert_eq!(n.pos, r.total, "abrupt {abrupt}: node {i} incomplete");
+            let p = n.runner.push_stats(n.swarm).unwrap();
+            for &g in &gone {
+                // Gracefully, its link closed; abruptly it stays, silent.
+                let link = n.links.get(&g);
+                assert!(abrupt || link.is_none(), "node {i} kept its link to {g}");
+                let key = link.map(|&l| sim.links[l].peer);
+                assert!(
+                    key.is_none_or(|k| !p.parents.contains(&Some(k))),
+                    "abrupt {abrupt}: node {i} keeps {g} as a parent: {p:?}"
+                );
+            }
+        }
+        let events = sim.timeline.as_ref().unwrap();
+        let departs: BTreeMap<i64, Time> = events
+            .iter()
+            .filter(|e| e.kind == "depart")
+            .map(|e| (e.node, e.at))
+            .collect();
+        let lost: Vec<&TimedEvent> = events.iter().filter(|e| e.kind == "parent_lost").collect();
+        assert!(!lost.is_empty(), "abrupt {abrupt}: no parent left");
+        for e in &lost {
+            // At the parent's departure, by a child still there.
+            assert_eq!(
+                departs.get(&e.peer),
+                Some(&e.at),
+                "abrupt {abrupt}: {}",
+                e.peer
+            );
+            let child = &sim.nodes[e.node as usize];
+            assert!(
+                e.value > 0 && child.left.is_none_or(|t| t > e.at),
+                "abrupt {abrupt}"
+            );
+        }
+        assert_eq!(lost.len() as u64, sim.parent_lost.0);
+        assert_eq!(
+            lost.iter().map(|e| e.value as u64).sum::<u64>(),
+            sim.parent_lost.1
+        );
+        let rec = a.recovery.unwrap();
+        assert_eq!((rec.stayed, rec.stranded), (8, 0));
+        assert!(
+            rec.recover < Duration::from_secs(5),
+            "abrupt {abrupt}: {rec:?}"
+        );
+    }
+    assert_ne!(traces[0], traces[1]);
 }
 
 #[test]
@@ -8508,8 +9461,8 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     let hostile = sim
         .nodes
         .iter()
-        .any(|n| matches!(n.role, Role::Greedy(_) | Role::Adversary(_)));
-    let honest = |i: usize| matches!(sim.nodes[i].role, Role::Seed | Role::Peer);
+        .any(|n| matches!(n.kind, Role::Greedy(_) | Role::Adversary(_)));
+    let honest = |i: usize| sim.nodes[i].role == Role::Seed || sim.nodes[i].watched();
     let forged: u64 = sim
         .links
         .iter()
@@ -8607,23 +9560,43 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         );
     }
     // Parent changes (prunes and switches) per honest viewer-minute after
-    // the warm-up.
-    let minutes = ((r.finish - t0()).as_secs_f64() - cfg.warm_secs as f64).max(1.0) / 60.0;
-    let viewers = sim
-        .nodes
-        .iter()
-        .filter(|n| n.role == Role::Peer)
-        .count()
-        .max(1) as f64;
+    // the warm-up: with arrivals or departures, per minute each viewer was
+    // there after its own.
+    let viewer_minutes = if sim.audience() {
+        let warm = Duration::from_secs(cfg.warm_secs);
+        let secs: f64 = sim
+            .nodes
+            .iter()
+            .filter(|n| n.watched())
+            .map(|n| {
+                (n.left.unwrap_or(r.finish) - (n.arrival + warm))
+                    .as_secs_f64()
+                    .max(0.0)
+            })
+            .sum();
+        secs.max(60.0) / 60.0
+    } else {
+        let minutes = ((r.finish - t0()).as_secs_f64() - cfg.warm_secs as f64).max(1.0) / 60.0;
+        let viewers = sim
+            .nodes
+            .iter()
+            .filter(|n| n.role == Role::Peer)
+            .count()
+            .max(1) as f64;
+        viewers * minutes
+    };
     row.num(
         "parent_changes_per_min",
-        (p.pruned + p.switched) as f64 / (viewers * minutes),
+        (p.pruned + p.switched) as f64 / viewer_minutes,
     );
+    // Each viewer's uplink use while it was there.
     let mut util: Vec<f64> = sim
         .nodes
         .iter()
-        .filter(|n| n.role == Role::Peer)
-        .map(|n| n.wire.up_bytes as f64 / (n.up_bw.max(1) as f64 * span.max(1e-9)))
+        .filter(|n| n.watched())
+        .map(|n| {
+            n.wire.up_bytes as f64 / (n.up_bw.max(1) as f64 * n.present_secs(r.finish).max(1e-9))
+        })
         .collect();
     util.sort_by(f64::total_cmp);
     for p in [50, 90, 95] {
@@ -8632,7 +9605,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         }
     }
     let (mut acc, mut rej, mut shed) = (0, 0, 0);
-    for n in sim.nodes.iter().filter(|n| n.role == Role::Peer) {
+    for n in sim.nodes.iter().filter(|n| n.watched()) {
         if let Some(p) = n.runner.push_stats(n.swarm) {
             acc += p.accepted;
             rej += p.rejected;
@@ -8706,6 +9679,9 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             }
         }
     }
+    if sim.audience() {
+        audience_cols(&mut row, sim);
+    }
     if sim.cfg.clock_skew != ClockSkew::Off {
         clock_cols(&mut row, sim);
     }
@@ -8716,18 +9692,64 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     row.finish()
 }
 
+/// The columns of a run with arrivals or departures ([`Sim::audience`],
+/// [`AudienceReport`]): the knobs; the viewers that arrived after the
+/// start and that left for good (`_honest` of them); over every honest
+/// viewer, from its join (its arrival, the start for one there from it) to
+/// its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that
+/// never read) and to its first read within [`CAUGHT_UP`]
+/// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the
+/// honest viewers whose open parent left (`parent_lost`, counted per
+/// departure) and their streams it was the parent of; and with departures
+/// the recovery from them ([`Recovery`]): the viewers measured
+/// (`depart_stayed`) and those left without a neighbour
+/// (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their
+/// per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`)
+/// and the time back under [`CAUGHT_UP`] (`depart_recover_ms`;
+/// `depart_recover_censored`, still over at the stream's end).
+fn audience_cols(row: &mut JsonRow, sim: &Sim) {
+    let a = sim.audience_report();
+    row.str("arrivals", &sim.cfg.arrivals.to_string());
+    if let Some(d) = sim.cfg.depart {
+        row.str("depart", &d.to_string());
+    }
+    row.int("arrived", a.arrived.0 as u64)
+        .int("arrived_honest", a.arrived.1 as u64)
+        .int("departed", a.departed.0 as u64)
+        .int("departed_honest", a.departed.1 as u64);
+    for (name, v) in [("join", &a.joins), ("caught_up", &a.caught_up)] {
+        for p in [50, 90] {
+            if !v.is_empty() {
+                row.int(&format!("{name}_p{p}_ms"), ms(percentile(v, p)) as u64);
+            }
+        }
+    }
+    row.int("join_unread", a.unread as u64)
+        .int("caught_up_never", a.behind as u64)
+        .int("parent_lost", a.parent_lost.0)
+        .int("parent_lost_streams", a.parent_lost.1);
+    if let Some(r) = &a.recovery {
+        row.int("depart_stayed", r.stayed as u64)
+            .int("depart_stranded", r.stranded as u64)
+            .int("depart_lag_peak_ms", ms(r.peak) as u64)
+            .int("depart_excess_lag_area_ms_s", r.excess_ms_s as u64)
+            .int("depart_recover_ms", ms(r.recover) as u64)
+            .int("depart_recover_censored", u64::from(r.censored));
+    }
+}
+
 /// The clocks of a run with skew ([`ClockSkew`]): the knob, every node's
 /// offset (signed ms, by node index), the largest magnitude and the nodes
-/// per class of [`CLOCK_CLASSES`]; and per class with honest viewers that
-/// never left, the share of the stream's chunks they read and their lag
-/// p99 after the warm-up.
+/// per class of [`CLOCK_CLASSES`]; and per class with honest viewers whose
+/// places were never taken again, the share of the stream's chunks they
+/// read (of those due them, [`Sim::delivered`], with arrivals or
+/// departures) and their lag p99 after their warm-ups.
 fn clock_cols(row: &mut JsonRow, sim: &Sim) {
     let offsets: Vec<String> = sim.nodes.iter().map(|n| ms(n.clock).to_string()).collect();
     let largest = sim.nodes.iter().map(|n| n.clock.abs()).max();
     row.str("clock_skew", &sim.cfg.clock_skew.to_string())
         .field("clock_offsets_ms", format_args!("[{}]", offsets.join(",")))
         .int("clock_max_ms", largest.map_or(0, |d| ms(d) as u64));
-    let warm = t0() + Duration::from_secs(sim.cfg.warm_secs);
     for (k, name) in CLOCK_CLASSES.iter().enumerate() {
         let of = |n: &&Node| clock_class(n.clock) == k;
         row.int(
@@ -8737,20 +9759,29 @@ fn clock_cols(row: &mut JsonRow, sim: &Sim) {
         let viewers: Vec<&Node> = sim
             .nodes
             .iter()
-            .filter(|n| n.role == Role::Peer && !n.churned)
+            .filter(|n| n.watched() && !n.churned)
             .filter(of)
             .collect();
         if viewers.is_empty() {
             continue;
         }
-        let read: usize = viewers
-            .iter()
-            .map(|n| n.read_chunks.iter().filter(|&&r| r).count())
-            .sum();
-        let all: usize = viewers.iter().map(|n| n.read_chunks.len()).sum();
+        // With arrivals or departures, each viewer's chunks due.
+        let (read, all) = match sim.audience() {
+            true => viewers
+                .iter()
+                .map(|n| sim.delivered(n))
+                .fold((0, 0), |(r, a), (rn, an)| (r + rn, a + an)),
+            false => (
+                viewers
+                    .iter()
+                    .map(|n| n.read_chunks.iter().filter(|&&r| r).count())
+                    .sum(),
+                viewers.iter().map(|n| n.read_chunks.len()).sum(),
+            ),
+        };
         let mut lags: Vec<Duration> = viewers
             .iter()
-            .flat_map(|n| n.lags.iter().filter(|(t, _)| *t > warm).map(|&(_, l)| l))
+            .flat_map(|n| sim.steady(n, &n.lags))
             .collect();
         lags.sort();
         row.int(&format!("clock_{name}_viewers"), viewers.len() as u64)
@@ -8786,7 +9817,7 @@ fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
             up.merge(&t.outbound);
             // Grabbers' runners count truly, but what they pull isn't
             // honest viewers' waste.
-            if i != 0 && !matches!(n.role, Role::Greedy(_)) {
+            if i != 0 && !matches!(n.kind, Role::Greedy(_)) {
                 down.merge(&t.inbound);
             }
         }
@@ -8838,14 +9869,19 @@ fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
             wire.up_bytes as f64 / useful.max(1) as f64,
         );
 
-    let share = |n: &Node| n.overhead() as f64 / (n.up_bw.max(1) as f64 * span);
+    // A viewer's rates over the time it was there.
+    let secs = |n: &Node| match sim.audience() {
+        true => n.present_secs(sim.now).max(1e-9),
+        false => span,
+    };
+    let share = |n: &Node| n.overhead() as f64 / (n.up_bw.max(1) as f64 * secs(n));
     let (mut relays, mut leaves, mut pps) = (Vec::new(), Vec::new(), Vec::new());
-    for n in sim.nodes.iter().filter(|n| n.role == Role::Peer) {
+    for n in sim.nodes.iter().filter(|n| n.watched()) {
         match n.totals().outbound.stream_open > 0 {
             true => relays.push(share(n)),
             false => leaves.push(share(n)),
         }
-        pps.push(n.wire.up_packets as f64 / span);
+        pps.push(n.wire.up_packets as f64 / secs(n));
     }
     for v in [&mut relays, &mut leaves, &mut pps] {
         v.sort_by(f64::total_cmp);
