@@ -11,11 +11,12 @@ import { Listing, ListingContentType } from "../apis/strims/network/v1/directory
 import VideoPlayer from "../components/VideoPlayer";
 import { useClient } from "../contexts/FrontendApi";
 import { PlayerContext, Provider as PlayerProvider } from "../contexts/Player";
+import { useSession } from "../contexts/Session";
 import { useListings } from "../hooks/directory";
 import { swarmId } from "../lib/media/renditions";
 import { InvitationError, fetchInvitation } from "./api";
 import { useBootstrapListings } from "./listings";
-import { ensureMember } from "./membership";
+import { joinNetwork } from "./membership";
 import { AnonymousSession } from "./session";
 import Status from "./Status";
 
@@ -35,19 +36,36 @@ type Membership =
   | { status: "member" }
   | { status: "failed"; error: Error; retryable: boolean };
 
-/** Joins the stream's network unless the node holds it already. */
+// Waits `ms`, resolving early once `signal` aborts.
+const sleep = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => (clearTimeout(timer), resolve()), { once: true });
+  });
+
+/**
+ * Joins the stream's network unless the node holds it already: a member as
+ * soon as the node holds it, failed if the network's CA then refuses it.
+ */
 const useMembership = (key: Uint8Array): [Membership, () => void] => {
   const client = useClient();
+  const [{ profile }] = useSession();
   const [membership, setMembership] = useState<Membership>({ status: "joining" });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const aborter = new AbortController();
+    const { signal } = aborter;
     setMembership({ status: "joining" });
-    ensureMember(client.network, key, () => fetchInvitation(key, aborter.signal)).then(
-      () => !aborter.signal.aborted && setMembership({ status: "member" }),
+    joinNetwork(client.network, key, {
+      invite: () => fetchInvitation(key, signal),
+      name: profile?.name ?? "",
+      onMember: () => setMembership({ status: "member" }),
+      sleep: (ms) => sleep(ms, signal),
+      signal,
+    }).catch(
       (error: Error) =>
-        !aborter.signal.aborted &&
+        !signal.aborted &&
         setMembership({
           status: "failed",
           error,
