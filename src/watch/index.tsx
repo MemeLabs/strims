@@ -8,9 +8,12 @@ import "../lib/i18n";
 
 import React from "react";
 import { createRoot } from "react-dom/client";
+import registerServiceWorker from "service-worker-loader!../web/sw";
 
 import { apiDialer } from "../web/dialer";
 import App from "./App";
+
+void registerServiceWorker({ scope: "/" });
 
 const rootElement = document.createElement("div");
 rootElement.setAttribute("id", "root");
