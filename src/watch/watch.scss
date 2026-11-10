@@ -16,6 +16,7 @@
 .watch_tiles {
   position: absolute;
   inset: 0;
+  background: var(--color-slate);
   overflow-y: auto;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
