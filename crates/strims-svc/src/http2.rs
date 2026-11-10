@@ -164,10 +164,16 @@ fn head(answer: &Answer) -> Response<()> {
         (header::CONTENT_TYPE, r.content_type),
         (header::CACHE_CONTROL, r.cache_control),
         (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
     ] {
         if let Ok(value) = HeaderValue::from_str(value) {
             headers.insert(name, value);
         }
+    }
+    if let Some(policy) = answer.policy
+        && let Ok(value) = HeaderValue::from_str(policy)
+    {
+        headers.insert(header::CONTENT_SECURITY_POLICY, value);
     }
     if answer.has_length() {
         headers.insert(header::CONTENT_LENGTH, HeaderValue::from(r.body.len()));
@@ -373,6 +379,11 @@ mod tests {
                 "application/octet-stream"
             );
             assert_eq!(header(&head.headers, "access-control-allow-origin"), "*");
+            assert_eq!(header(&head.headers, "x-content-type-options"), "nosniff");
+            assert_eq!(
+                header(&head.headers, "content-security-policy"),
+                "default-src 'none'; sandbox"
+            );
             let mut got = Vec::new();
             while got.len() < 3 {
                 let chunk = body.data().await.unwrap().unwrap();
@@ -515,6 +526,8 @@ mod tests {
             assert_eq!(header(&h, "cache-control"), "no-cache");
             assert_eq!(header(&h, "content-length"), playlist.len().to_string());
             assert_eq!(header(&h, "access-control-allow-origin"), "*");
+            assert_eq!(header(&h, "x-content-type-options"), "nosniff");
+            assert!(h.get("content-security-policy").is_none());
             assert!(h.get("connection").is_none());
 
             // A segment larger than the stream's window, and several at

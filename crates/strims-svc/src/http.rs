@@ -10,8 +10,11 @@
 //! Either way, `GET` and `HEAD` are answered from the routes, at the
 //! node's clock; any other method answers 405, and a path (its query
 //! included) over [`HlsSettings::max_path_bytes`] 414. Every response
-//! carries a content type, a cache control, a content length and
-//! `Access-Control-Allow-Origin: *`; a HEAD's has no body.
+//! carries a content type, a cache control, a content length,
+//! `Access-Control-Allow-Origin: *` and `X-Content-Type-Options: nosniff`,
+//! so a browser takes a body as its type says; a HEAD's has no body. The
+//! bootstrap API's answers carry its content security policy
+//! ([`bootstrap::POLICY`]) too.
 //!
 //! A streamed answer ([`Answer::stream`]) has no content length: its body
 //! goes out as it comes, until it ends or the client goes. Each of its
@@ -165,6 +168,8 @@ pub(crate) struct Answer {
     /// The body, sent as it comes in place of the response's, which is
     /// then empty: the head carries no content length.
     pub(crate) stream: Option<BodyStream>,
+    /// The `Content-Security-Policy` the head carries, if any.
+    pub(crate) policy: Option<&'static str>,
 }
 
 impl std::fmt::Debug for Answer {
@@ -173,6 +178,7 @@ impl std::fmt::Debug for Answer {
             .field("response", &self.response)
             .field("body", &self.body)
             .field("stream", &self.stream.is_some())
+            .field("policy", &self.policy)
             .finish()
     }
 }
@@ -184,6 +190,7 @@ impl Answer {
             response,
             body,
             stream: None,
+            policy: None,
         }
     }
 
@@ -235,12 +242,16 @@ impl Answer {
             "HTTP/1.1 {} {}\r\n\
              Content-Type: {}\r\n\
              Cache-Control: {}\r\n\
-             Access-Control-Allow-Origin: *\r\n",
+             Access-Control-Allow-Origin: *\r\n\
+             X-Content-Type-Options: nosniff\r\n",
             r.status,
             reason(r.status),
             r.content_type,
             r.cache_control,
         );
+        if let Some(policy) = self.policy {
+            let _ = write!(head, "Content-Security-Policy: {policy}\r\n");
+        }
         if length {
             let _ = write!(head, "Content-Length: {}\r\n", r.body.len());
         }
@@ -341,9 +352,16 @@ impl Http {
             return Answer::error(414);
         }
         if bootstrap::routes(path) {
-            return match &self.bootstrap {
+            let answer = match &self.bootstrap {
                 Some(b) => b.request(path, body).await,
-                None => Answer::error(503),
+                None => Answer {
+                    body,
+                    ..Answer::error(503)
+                },
+            };
+            return Answer {
+                policy: Some(bootstrap::POLICY),
+                ..answer
             };
         }
         let response = match self.routes.request(self.timer.now(), path) {
@@ -1100,13 +1118,26 @@ mod tests {
         let f = fixture();
         let h = http(&f.routes, limits());
         for path in ["/api/v1/directory/events", "/api/v1/invitation/x"] {
-            assert_eq!(
-                answer(&h, &get(path)).unwrap().response.status,
-                503,
-                "{path}"
+            let a = answer(&h, &get(path)).unwrap();
+            assert_eq!(a.response.status, 503, "{path}");
+            let head = a.head();
+            assert!(
+                head.contains("X-Content-Type-Options: nosniff\r\n"),
+                "{head}"
+            );
+            assert!(
+                head.contains("Content-Security-Policy: default-src 'none'; sandbox\r\n"),
+                "{head}"
             );
         }
-        assert_eq!(answer(&h, &get("/api/v2/x")).unwrap().response.status, 404);
+        let a = answer(&h, &get("/api/v2/x")).unwrap();
+        assert_eq!(a.response.status, 404);
+        let head = a.head();
+        assert!(
+            head.contains("X-Content-Type-Options: nosniff\r\n"),
+            "{head}"
+        );
+        assert!(!head.contains("Content-Security-Policy"), "{head}");
     }
 
     /// The bytes of `s` up to the end of a response head, and the head.
@@ -1136,6 +1167,14 @@ mod tests {
             assert!(!head.contains("Content-Length"), "{head}");
             assert!(
                 head.contains("Access-Control-Allow-Origin: *\r\n"),
+                "{head}"
+            );
+            assert!(
+                head.contains("X-Content-Type-Options: nosniff\r\n"),
+                "{head}"
+            );
+            assert!(
+                head.contains("Content-Security-Policy: default-src 'none'; sandbox\r\n"),
                 "{head}"
             );
             assert!(head.ends_with("Connection: close\r\n\r\n"), "{head}");

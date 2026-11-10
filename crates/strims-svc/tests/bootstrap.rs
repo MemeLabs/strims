@@ -11,13 +11,20 @@
 //! publisher streams to the channel. The event stream, over HTTP/2 and
 //! over HTTP/1.1, carries the channel's media listing with its thumbnail
 //! as the API's path, never the other network's listing, and pings while
-//! nothing changes; the path answers the thumbnail's bytes. The API's
+//! nothing changes; the path answers the thumbnail's bytes. The channel's
+//! SVG logo, which the owner's own directory holds, is neither in the
+//! stream nor served. Every answer carries `nosniff` and the API's
+//! sandboxing content security policy, over both protocols. The API's
 //! invitation dials the node's WebSocket listener, and more profiles than
 //! an inviter's quota join through it and are renewed, each recorded as
 //! the owner's invitee, the owner's quota unspent.
 //!
-//! A service whose bootstrap network the profile doesn't own, whose
-//! profile can't sign in, or whose API has no profile doesn't start.
+//! Event streams take at most half the listener's connections: past them
+//! a stream answers 503, and other requests are still answered.
+//!
+//! A service whose bootstrap network the profile doesn't own (one it
+//! joined, or none it has), whose profile isn't in the store or can't sign
+//! in, or whose API has no profile doesn't start.
 //!
 //! Each step prints how long it took.
 
@@ -51,12 +58,13 @@ use strims_proto::network::v1::directory::frontend_watch_listings_response::even
 use strims_proto::network::v1::directory::listing::{Content, Media};
 use strims_proto::network::v1::directory::listing_snippet_image::SourceOneof;
 use strims_proto::network::v1::directory::{
-    DirectoryFrontendClient, FrontendPublishRequest, FrontendWatchListingsResponse, Listing,
-    ListingSnippet, ListingSnippetImage,
+    DirectoryFrontendClient, FrontendGetListingsRequest, FrontendPublishRequest,
+    FrontendWatchListingsResponse, Listing, ListingContentType, ListingSnippet,
+    ListingSnippetImage,
 };
 use strims_proto::network::v1::{
-    CreateNetworkFromInvitationRequest, CreateServerRequest, Invitation, InvitationV0,
-    ListNetworksRequest, ListPeersRequest, Network, NetworkFrontendClient,
+    CreateInvitationRequest, CreateNetworkFromInvitationRequest, CreateServerRequest, Invitation,
+    InvitationV0, ListNetworksRequest, ListPeersRequest, Network, NetworkFrontendClient,
 };
 use strims_proto::types::{Image, ImageType};
 use strims_proto::video::v1::{
@@ -84,6 +92,12 @@ const PNG: &[u8] = &[
     0x42, 0x60, 0x82,
 ];
 
+/// An SVG that runs script.
+const SVG: &[u8] = b"<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>";
+
+/// The content security policy of the API's answers.
+const POLICY: &str = "default-src 'none'; sandbox";
+
 /// How many profiles join through the API's invitation: more than an
 /// inviter's quota.
 const VIEWERS: usize = DEFAULT_INVITE_QUOTA as usize + 1;
@@ -105,6 +119,18 @@ fn db_file(name: &str) -> (PathBuf, PathBuf) {
     let dir = dir(name);
     let db = dir.join("strims.redb");
     (dir, db)
+}
+
+/// The channel's logo: [`SVG`].
+fn svg_logo() -> ListingSnippetImage {
+    ListingSnippetImage {
+        source_oneof: Some(SourceOneof::Image(Image {
+            r#type: ImageType::Svg as i32,
+            height: 1,
+            width: 1,
+            data: SVG.to_vec(),
+        })),
+    }
 }
 
 /// What the owner's first run left in the store.
@@ -168,6 +194,7 @@ async fn first_run(db: &Path) -> Owned {
                         data: PNG.to_vec(),
                     })),
                 }),
+                channel_logo: Some(svg_logo()),
                 ..Default::default()
             }),
             network_key: net.clone(),
@@ -266,7 +293,7 @@ impl Events {
 
     /// Reads until a change lists the media listing of swarm `uri` with a
     /// thumbnail that is a URL: its id and the URL. Every change is of
-    /// network `net`, and no listing is `hidden`'s.
+    /// network `net`, no listing is `hidden`'s, and none has a logo.
     async fn media_thumbnail(&mut self, net: &[u8], uri: &str, hidden: &str) -> (u64, String) {
         loop {
             let msg = self.next().await;
@@ -284,8 +311,11 @@ impl Events {
                     if media.swarm_uri != uri {
                         continue;
                     }
-                    let thumbnail = item.snippet.and_then(|s| s.thumbnail);
-                    if let Some(SourceOneof::Url(url)) = thumbnail.and_then(|t| t.source_oneof) {
+                    let snippet = item.snippet.unwrap_or_default();
+                    assert_eq!(snippet.channel_logo, None, "the SVG logo in the stream");
+                    if let Some(SourceOneof::Url(url)) =
+                        snippet.thumbnail.and_then(|t| t.source_oneof)
+                    {
                         return (item.id, url);
                     }
                 }
@@ -320,6 +350,8 @@ async fn events_h2(cert: &TestCert, addr: std::net::SocketAddr) -> Events {
     );
     assert_eq!(h("cache-control").as_deref(), Some("no-store"));
     assert_eq!(h("access-control-allow-origin").as_deref(), Some("*"));
+    assert_eq!(h("x-content-type-options").as_deref(), Some("nosniff"));
+    assert_eq!(h("content-security-policy").as_deref(), Some(POLICY));
     assert_eq!(h("content-length"), None);
     Events {
         source: Source::H2(body),
@@ -349,6 +381,12 @@ async fn events_h1(cert: &TestCert, addr: std::net::SocketAddr) -> Events {
     );
     assert!(!head.contains("Content-Length"), "{head}");
     assert!(head.contains("Connection: close\r\n"), "{head}");
+    assert!(
+        head.contains("X-Content-Type-Options: nosniff\r\n"),
+        "{head}"
+    );
+    let policy = format!("Content-Security-Policy: {POLICY}\r\n");
+    assert!(head.contains(&policy), "{head}");
     Events {
         source: Source::H1(Box::new(s)),
         frames: Frames::default(),
@@ -523,13 +561,41 @@ fn the_bootstrap_api_serves_an_owned_networks_streams_and_invitations() {
                 "public, max-age=31536000, immutable",
             );
             assert_eq!(image.body, PNG);
+            assert_eq!(image.header("x-content-type-options"), Some("nosniff"));
+            assert_eq!(image.header("content-security-policy"), Some(POLICY));
             let digest = thumbnail.rsplit('/').next().unwrap();
             let wrong = thumbnail.replace(digest, &"0".repeat(64));
             assert_eq!(get(wrong).await.status, 404);
             let other = BASE64URL_NOPAD.encode(&owned.other);
             let elsewhere = thumbnail.replace(&net, &other);
             assert_eq!(get(elsewhere).await.status, 404);
-            steps.done("the thumbnail's path answers its bytes");
+
+            // The owner's directory holds the SVG logo; the API serves none.
+            let held = directory
+                .get_listings(&FrontendGetListingsRequest {
+                    content_types: vec![ListingContentType::Media as i32],
+                    network_keys: vec![owned.net.clone()],
+                })
+                .await
+                .unwrap()
+                .listings;
+            let logo = held
+                .iter()
+                .flat_map(|n| &n.listings)
+                .find(|item| item.id == id)
+                .and_then(|item| item.snippet.as_ref()?.channel_logo.clone());
+            assert_eq!(logo, Some(svg_logo()));
+            let svg = strims_directory::snippet::digest(&svg_logo().encode_to_vec());
+            let svg = HEXLOWER.encode(&svg);
+            let svg = get(format!("{prefix}{svg}")).await;
+            assert_eq!(svg.status, 404);
+            assert_eq!(svg.header("x-content-type-options"), Some("nosniff"));
+            assert_eq!(svg.header("content-security-policy"), Some(POLICY));
+            let hls = get("/hls/x".into()).await;
+            assert_eq!(hls.status, 400);
+            assert_eq!(hls.header("x-content-type-options"), Some("nosniff"));
+            assert_eq!(hls.header("content-security-policy"), None);
+            steps.done("the thumbnail's path answers its bytes, and the SVG logo's none");
 
             let reply = get(format!("/api/v1/invitation/{net}")).await;
             assert_eq!(reply.status, 200);
@@ -586,10 +652,28 @@ fn the_bootstrap_api_serves_an_owned_networks_streams_and_invitations() {
     });
 }
 
+/// Opens an event stream over plain HTTP/1.1: its head, and the
+/// connection carrying its body.
+async fn open_events(addr: std::net::SocketAddr) -> (String, tokio::net::TcpStream) {
+    let mut s = tokio::net::TcpStream::connect(addr).await.unwrap();
+    s.write_all(b"GET /api/v1/directory/events HTTP/1.1\r\nHost: x\r\n\r\n")
+        .await
+        .unwrap();
+    let mut raw = Vec::new();
+    let mut byte = [0u8; 1];
+    while !raw.ends_with(b"\r\n\r\n") {
+        if s.read(&mut byte).await.unwrap() == 0 {
+            break;
+        }
+        raw.push(byte[0]);
+    }
+    (String::from_utf8(raw).unwrap(), s)
+}
+
 #[test]
-fn a_bootstrap_api_the_profile_cant_serve_fails_the_start() {
+fn event_streams_leave_the_listener_room_for_other_requests() {
     run(async {
-        let (dir, db) = db_file("bootstrap-start");
+        let (dir, db) = db_file("bootstrap-cap");
         let svc = Svc::start(Config {
             db: Db::File(db.clone()),
             ..local_config()
@@ -601,11 +685,99 @@ fn a_bootstrap_api_the_profile_cant_serve_fails_the_start() {
         let net = network_key(network.certificate.as_ref().unwrap());
         svc.stop().await;
 
-        let config = |password: &str, networks: Vec<Vec<u8>>| Config {
+        let mut app = local_config().app;
+        app.video.hls.max_connections = 4;
+        let svc = Svc::start(Config {
             db: Db::File(db.clone()),
             hls_listen: Some("127.0.0.1:0".into()),
             profile: Some(ProfileLogin {
                 name: OWNER.into(),
+                password: PASSWORD.into(),
+            }),
+            bootstrap: Some(BootstrapConfig {
+                networks: vec![net.clone()],
+                ws_url: "wss://node.example".into(),
+            }),
+            app,
+            ..local_config()
+        })
+        .await
+        .unwrap();
+        let addr = svc.hls_addr().unwrap();
+        let mut open = Vec::new();
+        for _ in 0..2 {
+            let (head, s) = open_events(addr).await;
+            assert!(head.starts_with("HTTP/1.1 200 OK\r\n"), "{head}");
+            open.push(s);
+        }
+        let past = request(addr, "GET", "/api/v1/directory/events").await;
+        assert_eq!(past.status, 503);
+        let invitation = format!("/api/v1/invitation/{}", BASE64URL_NOPAD.encode(&net));
+        assert_eq!(request(addr, "GET", &invitation).await.status, 200);
+        assert_eq!(request(addr, "GET", "/hls/x").await.status, 400);
+
+        // A stream whose client goes makes room for another.
+        open.pop();
+        eventually("a stream in the freed place", STEP, || async {
+            let (head, s) = open_events(addr).await;
+            head.starts_with("HTTP/1.1 200 OK\r\n").then_some(s)
+        })
+        .await;
+        svc.stop().await;
+        let _ = std::fs::remove_dir_all(&dir);
+    });
+}
+
+#[test]
+fn a_bootstrap_api_the_profile_cant_serve_fails_the_start() {
+    run(async {
+        // Another profile's network, which the owner joins as a member.
+        let host = service().await;
+        let host_client = sign_up(&host, "host").await;
+        let theirs = create_network(&host_client, "theirs").await;
+        let theirs_key = network_key(theirs.certificate.as_ref().unwrap());
+        let invitation = NetworkFrontendClient::new(host_client.clone())
+            .create_invitation(&CreateInvitationRequest {
+                network_id: theirs.id,
+                bootstrap_client_id: 0,
+            })
+            .await
+            .unwrap()
+            .invitation
+            .unwrap();
+
+        let (dir, db) = db_file("bootstrap-start");
+        let svc = Svc::start(Config {
+            db: Db::File(db.clone()),
+            ..local_config()
+        })
+        .await
+        .unwrap();
+        let client = sign_up(&svc, OWNER).await;
+        let network = create_network(&client, "streams").await;
+        let net = network_key(network.certificate.as_ref().unwrap());
+        let joined = NetworkFrontendClient::new(client.clone())
+            .create_network_from_invitation(&CreateNetworkFromInvitationRequest {
+                alias: String::new(),
+                invitation: Some(InvitationField::InvitationBytes(invitation.encode_to_vec())),
+            })
+            .await
+            .unwrap()
+            .network
+            .unwrap();
+        assert!(joined.server_config.is_none());
+        assert_eq!(
+            network_key(joined.certificate.as_ref().unwrap()),
+            theirs_key
+        );
+        svc.stop().await;
+        host.stop().await;
+
+        let config = |name: &str, password: &str, networks: Vec<Vec<u8>>| Config {
+            db: Db::File(db.clone()),
+            hls_listen: Some("127.0.0.1:0".into()),
+            profile: Some(ProfileLogin {
+                name: name.into(),
                 password: password.into(),
             }),
             bootstrap: Some(BootstrapConfig {
@@ -615,20 +787,30 @@ fn a_bootstrap_api_the_profile_cant_serve_fails_the_start() {
             ..local_config()
         };
         let err = |c: Config| async { Svc::start(c).await.err().unwrap() };
-        assert!(matches!(
-            err(config(PASSWORD, vec![vec![3; 32]])).await,
-            SvcError::NotOwner(_)
-        ));
-        assert!(matches!(
-            err(config("wrong", vec![net.clone()])).await,
-            SvcError::SignIn(..)
-        ));
+        for networks in [
+            vec![theirs_key.clone()],
+            vec![net.clone(), theirs_key.clone()],
+            vec![vec![3; 32]],
+        ] {
+            assert!(matches!(
+                err(config(OWNER, PASSWORD, networks)).await,
+                SvcError::NotOwner(_)
+            ));
+        }
+        for (name, password) in [(OWNER, "wrong"), ("nobody", PASSWORD)] {
+            assert!(matches!(
+                err(config(name, password, vec![net.clone()])).await,
+                SvcError::SignIn(..)
+            ));
+        }
         let no_profile = Config {
             profile: None,
-            ..config(PASSWORD, vec![net.clone()])
+            ..config(OWNER, PASSWORD, vec![net.clone()])
         };
         assert!(matches!(err(no_profile).await, SvcError::BootstrapConfig));
-        let svc = Svc::start(config(PASSWORD, vec![net])).await.unwrap();
+        let svc = Svc::start(config(OWNER, PASSWORD, vec![net]))
+            .await
+            .unwrap();
         assert!(svc.node_info().is_some());
         svc.stop().await;
         let _ = std::fs::remove_dir_all(&dir);

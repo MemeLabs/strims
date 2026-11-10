@@ -12,17 +12,21 @@
 //!   as [`DirectoryFrontend`]'s `WatchListings` has them: a `Change` per
 //!   network with its listings, then their changes. Each message is a
 //!   uvarint length and an encoded `FrontendWatchListingsResponse`
-//!   (`application/octet-stream`). A snippet's inline images become `url`
-//!   sources naming their thumbnail route; images that are URLs stay
+//!   (`application/octet-stream`). A snippet's inline raster images
+//!   ([`raster_type`]) become `url` sources naming their thumbnail route,
+//!   and its other inline images are left out; images that are URLs stay
 //!   them. An empty message (one zero byte) follows [`PING_INTERVAL`]
 //!   without another, so a client and the proxies before it see the
 //!   stream live. While the profile holds none of the networks, the stream
 //!   carries pings alone and ends after [`IDLE_STREAM`], so the client's
 //!   next one names those that started since. The client reconnects
 //!   whenever a stream ends, and starts its view over. At most
-//!   [`Bootstrap::max_streams`] are open at once; past them, 503.
+//!   [`Bootstrap::max_streams`] are open at once, half the listener's
+//!   connections: over HTTP/1.1 each holds one, so the other routes keep
+//!   the rest, and a stream past the bound answers 503 rather than finding
+//!   the listener full.
 //! - `GET /api/v1/directory/thumbnails/<network>/<listing id>/<digest>`
-//!   answers the image of the listing's snippet whose SHA-256
+//!   answers the raster image of the listing's snippet whose SHA-256
 //!   ([`digest`] of its encoded `ListingSnippetImage`) the path names, in
 //!   hex, with its type's MIME and an immutable cache control; 404 for
 //!   any other. It reads the one listing from the network's view, so its
@@ -36,7 +40,15 @@
 //! A network in a path is its key in unpadded URL-safe base64. Other
 //! paths under the prefix answer 404. Every answer allows any origin
 //! ([`http`](crate::http)), so a page on another origin reads it with
-//! simple `GET`s.
+//! simple `GET`s, and carries [`POLICY`].
+//!
+//! # Images
+//!
+//! A snippet's images come from whichever member published its listing,
+//! and the API may share an origin with the UI, whose storage holds
+//! profile keys. So only raster images, which run no script, are served;
+//! with `nosniff` on every answer of the listener, a browser takes each as
+//! its type says, and [`POLICY`] sandboxes an answer opened as a page.
 
 use std::cell::Cell;
 use std::pin::Pin;
@@ -71,6 +83,10 @@ use crate::{BootstrapConfig, SvcRuntime};
 /// The paths the bootstrap API answers start with this.
 pub(crate) const PREFIX: &str = "/api/v1/";
 
+/// The content security policy of the API's answers: an answer opened as
+/// a page loads nothing and runs in a sandbox, without its origin.
+pub(crate) const POLICY: &str = "default-src 'none'; sandbox";
+
 const EVENTS: &str = "directory/events";
 const THUMBNAILS: &str = "directory/thumbnails/";
 const INVITATION: &str = "invitation/";
@@ -101,26 +117,32 @@ pub(crate) struct Bootstrap {
     client_url: String,
     /// The event streams open. Bound: `max_streams`.
     streams: Rc<Cell<usize>>,
-    /// The most event streams open at once.
+    /// The most event streams open at once: [`max_streams`].
     max_streams: usize,
+}
+
+/// The most event streams open at once on a listener that serves at most
+/// `connections`: half of them, and one at least.
+pub(crate) fn max_streams(connections: usize) -> usize {
+    (connections / 2).max(1)
 }
 
 impl Bootstrap {
     /// The API of the profile whose public key is `profile_key`, running
-    /// as `runtime`, under `config`, with at most `max_streams` event
-    /// streams open at once.
+    /// as `runtime`, under `config`, on a listener that serves at most
+    /// `connections` at once.
     pub(crate) fn new(
         runtime: Rc<SvcRuntime>,
         profile_key: &[u8],
         config: &BootstrapConfig,
-        max_streams: usize,
+        connections: usize,
     ) -> Bootstrap {
         Bootstrap {
             runtime,
             networks: config.networks.clone(),
             client_url: client_url(&config.ws_url, profile_key),
             streams: Rc::new(Cell::new(0)),
-            max_streams,
+            max_streams: max_streams(connections),
         }
     }
 
@@ -224,7 +246,7 @@ impl Bootstrap {
             .and_then(|l| l.snippet)
             .and_then(|s| find_image(s, &want));
         match image {
-            Some((ty, data)) => Answer::whole(ok(image_type(ty), IMMUTABLE, Rc::from(data)), true),
+            Some((ty, data)) => Answer::whole(ok(ty, IMMUTABLE, Rc::from(data)), true),
             None => Answer::error(404),
         }
     }
@@ -391,12 +413,12 @@ fn link_images(snippet: &mut ListingSnippet, network: &str, id: u64) {
     }
 }
 
-/// `image` as a source the event stream carries: an inline one as the
-/// thumbnail route's path, a URL as it is, and none for one without a
-/// source.
+/// `image` as a source the event stream carries: an inline raster one as
+/// the thumbnail route's path, a URL as it is, and none for another inline
+/// one or one without a source.
 fn link(image: ListingSnippetImage, network: &str, id: u64) -> Option<ListingSnippetImage> {
     match &image.source_oneof {
-        Some(SourceOneof::Image(_)) => {
+        Some(SourceOneof::Image(i)) if raster_type(i.r#type).is_some() => {
             let digest = HEXLOWER.encode(&digest(&image.encode_to_vec()));
             Some(ListingSnippetImage {
                 source_oneof: Some(SourceOneof::Url(format!(
@@ -405,7 +427,7 @@ fn link(image: ListingSnippetImage, network: &str, id: u64) -> Option<ListingSni
             })
         }
         Some(SourceOneof::Url(_)) => Some(image),
-        None => None,
+        Some(SourceOneof::Image(_)) | None => None,
     }
 }
 
@@ -424,29 +446,30 @@ fn thumbnail_path(rest: &str) -> Option<(Vec<u8>, u64, Vec<u8>)> {
     Some((key, id, digest))
 }
 
-/// The type and bytes of `snippet`'s inline image whose digest is `want`.
-fn find_image(snippet: ListingSnippet, want: &[u8]) -> Option<(i32, Vec<u8>)> {
+/// The MIME type and bytes of `snippet`'s inline raster image whose digest
+/// is `want`.
+fn find_image(snippet: ListingSnippet, want: &[u8]) -> Option<(&'static str, Vec<u8>)> {
     [snippet.thumbnail, snippet.channel_logo]
         .into_iter()
         .flatten()
         .find(|i| digest(&i.encode_to_vec()).as_slice() == want)
         .and_then(|i| match i.source_oneof {
-            Some(SourceOneof::Image(image)) => Some((image.r#type, image.data)),
+            Some(SourceOneof::Image(image)) => Some((raster_type(image.r#type)?, image.data)),
             _ => None,
         })
 }
 
-/// The MIME type of an image of type `ty`.
-fn image_type(ty: i32) -> &'static str {
+/// The MIME type of a raster image of type `ty`; `None` for SVG, which
+/// can run script, and for a type it doesn't know.
+fn raster_type(ty: i32) -> Option<&'static str> {
     match ImageType::try_from(ty) {
-        Ok(ImageType::Apng) => "image/apng",
-        Ok(ImageType::Avif) => "image/avif",
-        Ok(ImageType::Gif) => "image/gif",
-        Ok(ImageType::Jpeg) => "image/jpeg",
-        Ok(ImageType::Png) => "image/png",
-        Ok(ImageType::Webp) => "image/webp",
-        Ok(ImageType::Svg) => "image/svg+xml",
-        Ok(ImageType::Undefined) | Err(_) => "application/octet-stream",
+        Ok(ImageType::Apng) => Some("image/apng"),
+        Ok(ImageType::Avif) => Some("image/avif"),
+        Ok(ImageType::Gif) => Some("image/gif"),
+        Ok(ImageType::Jpeg) => Some("image/jpeg"),
+        Ok(ImageType::Png) => Some("image/png"),
+        Ok(ImageType::Webp) => Some("image/webp"),
+        Ok(ImageType::Svg | ImageType::Undefined) | Err(_) => None,
     }
 }
 
@@ -465,9 +488,13 @@ mod tests {
     use super::*;
 
     fn inline(data: &[u8]) -> ListingSnippetImage {
+        inline_of(ImageType::Jpeg, data)
+    }
+
+    fn inline_of(ty: ImageType, data: &[u8]) -> ListingSnippetImage {
         ListingSnippetImage {
             source_oneof: Some(SourceOneof::Image(Image {
-                r#type: ImageType::Jpeg as i32,
+                r#type: ty as i32,
                 height: 1,
                 width: 1,
                 data: data.to_vec(),
@@ -556,8 +583,57 @@ mod tests {
             ..Default::default()
         };
         let found = find_image(original.clone(), &want).unwrap();
-        assert_eq!(found, (ImageType::Jpeg as i32, b"jpeg".to_vec()));
+        assert_eq!(found, ("image/jpeg", b"jpeg".to_vec()));
         assert_eq!(find_image(original, &[0; 32]), None);
+    }
+
+    #[test]
+    fn images_that_can_run_script_are_neither_linked_nor_served() {
+        let svg = inline_of(ImageType::Svg, b"<svg><script>alert(1)</script></svg>");
+        let unknown = ListingSnippetImage {
+            source_oneof: Some(SourceOneof::Image(Image {
+                r#type: 99,
+                data: b"?".to_vec(),
+                ..Default::default()
+            })),
+        };
+        for image in [svg, unknown, inline_of(ImageType::Undefined, b"?")] {
+            let mut snippet = ListingSnippet {
+                thumbnail: Some(image.clone()),
+                channel_logo: Some(image.clone()),
+                ..Default::default()
+            };
+            link_images(&mut snippet, "net", 1);
+            assert_eq!((snippet.thumbnail, snippet.channel_logo), (None, None));
+            let held = ListingSnippet {
+                thumbnail: Some(image.clone()),
+                ..Default::default()
+            };
+            assert_eq!(find_image(held, &digest(&image.encode_to_vec())), None);
+        }
+        for ty in [
+            ImageType::Apng,
+            ImageType::Avif,
+            ImageType::Gif,
+            ImageType::Jpeg,
+            ImageType::Png,
+            ImageType::Webp,
+        ] {
+            let mut snippet = ListingSnippet {
+                thumbnail: Some(inline_of(ty, b"x")),
+                ..Default::default()
+            };
+            link_images(&mut snippet, "net", 1);
+            assert!(snippet.thumbnail.is_some(), "{ty:?}");
+        }
+    }
+
+    #[test]
+    fn event_streams_take_half_the_listeners_connections() {
+        assert_eq!(max_streams(32), 16);
+        assert_eq!(max_streams(5), 2);
+        assert_eq!(max_streams(1), 1);
+        assert_eq!(max_streams(0), 1);
     }
 
     #[test]
@@ -602,10 +678,11 @@ mod tests {
     }
 
     #[test]
-    fn image_types_map_to_mime_types() {
-        assert_eq!(image_type(ImageType::Jpeg as i32), "image/jpeg");
-        assert_eq!(image_type(ImageType::Svg as i32), "image/svg+xml");
-        assert_eq!(image_type(99), "application/octet-stream");
+    fn raster_image_types_map_to_mime_types() {
+        assert_eq!(raster_type(ImageType::Jpeg as i32), Some("image/jpeg"));
+        assert_eq!(raster_type(ImageType::Webp as i32), Some("image/webp"));
+        assert_eq!(raster_type(ImageType::Svg as i32), None);
+        assert_eq!(raster_type(99), None);
         assert!(routes("/api/v1/invitation/x"));
         assert!(!routes("/api/v2/invitation/x"));
         assert!(!routes("/hls/x"));
