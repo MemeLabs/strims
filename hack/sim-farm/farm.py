@@ -51,10 +51,21 @@ waits on fixes those.
 An arm's source is the tree of what its binary is built from (Cargo.toml,
 Cargo.lock, rust-toolchain.toml and crates/ at its commit), so commits
 elsewhere change nothing. build checks an arm's commit out in a worktree
-under target/sim-farm/src, builds the test's release binary into the
-shared target directory, and keeps it as
-target/sim-farm/bin/<crate>-<target>-<source>. Arms build from commits,
-never from the working tree. target/sim-farm/bin-hashes.json keeps each
+under target/sim-farm/src, builds the test's release binary there with
+CARGO_TARGET_DIR at target/sim-farm/cargo, which only farm builds use,
+and CARGO_INCREMENTAL=0, and keeps it as
+target/sim-farm/bin/<crate>-<target>-<source>. A build holds
+target/sim-farm/build.lock from before its checkout until it keeps the
+binary, so farm builds, of any checkout's farm.py, run one at a time (a
+waiting one says so). Cargo names a workspace crate's artifacts the same
+in every checkout and takes them as fresh while their sources are no
+newer than their last build: under the lock a checkout is newer than
+everything built in target/sim-farm/cargo before it, so every workspace
+crate builds from it. The checkouts aren't under that target dir, where
+cargo would record a crate's sources by their path there, in the last
+build's checkout, and take the crate as fresh while that checkout is
+there. Arms build from commits, never from the working tree.
+target/sim-farm/bin-hashes.json keeps each
 binary's sha256, hashed when it's built or first needed, and again only
 if its size or mtime changes.
 
@@ -341,13 +352,14 @@ containers in real time. Its jobs are its arms by its axes by `repeats`:
   [files]     TOPOLOGY = "mesh3"
   [arms] [env] [axes] [report]  as above; [report] over the row below
 
-build runs the commands with bash in the arm's worktree, with
-CARGO_TARGET_DIR at target/sim-farm/cargo (in the shared target/, an old
-arm's build would replace the example run.sh finds by default),
-CARGO_INCREMENTAL=0, and STRIMS_ROOT at this checkout. It packs the
-worktree's hack/testbed and each artifact (a file or a directory at a
-path in the worktree, where $VAR and ${VAR} take the build's environment)
-into the arm's bundle, target/sim-farm/bin/testbed-<hash>.tar.gz, which
+build runs the commands with bash in the arm's worktree, under
+target/sim-farm/build.lock and with a test arm's CARGO_TARGET_DIR and
+CARGO_INCREMENTAL (above; in target/, an arm's build would also replace
+the example run.sh finds by default), and STRIMS_ROOT at this checkout.
+It packs the worktree's hack/testbed and each artifact (a file or a
+directory at a path in the worktree, where $VAR and ${VAR} take the
+build's environment) into the arm's bundle,
+target/sim-farm/bin/testbed-<hash>.tar.gz, which
 hashes the arm's source, the commands and the artifacts. A host runs
 run.sh from the bundle's hack/testbed with each artifact's variable set
 to its path there, and each [files] variable (a file relative to the
@@ -502,6 +514,10 @@ MAIN = main_checkout(ROOT)
 CONFIG = MAIN / "hack" / "sim-farm" / "config.toml"
 FARM = MAIN / "target" / "sim-farm"
 BIN = FARM / "bin"
+# Every farm build's target dir, which nothing else builds in, and the lock
+# it builds under (`building`).
+CARGO = FARM / "cargo"
+BUILD_LOCK = FARM / "build.lock"
 # Every region this checkout's farm has launched in, a line each: status,
 # down and a run's adoption and cleanup look there too.
 REGIONS = FARM / "regions"
@@ -1394,6 +1410,27 @@ def checkout(commit: str):
         subprocess.run(["git", "worktree", "remove", "--force", str(src)], cwd=ROOT)
 
 
+@contextlib.contextmanager
+def building(out: Path, arm: str, commit: str):
+    """The arm's checkout for its build into CARGO, holding BUILD_LOCK
+    from before the checkout until the block ends; None if `out` is there
+    once the lock is. A checkout made under the lock is newer than
+    everything built in CARGO before it, so cargo builds every workspace
+    crate from it (the module docs)."""
+    with BUILD_LOCK.open("w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            log(f"waiting for another farm build ({BUILD_LOCK.relative_to(MAIN)})")
+            fcntl.flock(lock, fcntl.LOCK_EX)
+        if out.exists():
+            yield None
+            return
+        log(f"building {arm} at {commit[:12]}")
+        with checkout(commit) as src:
+            yield src
+
+
 def build(matrix: Matrix) -> None:
     matrix.resolve()
     BIN.mkdir(parents=True, exist_ok=True)
@@ -1404,9 +1441,10 @@ def build(matrix: Matrix) -> None:
         out = BIN / matrix.bin_name(matrix.sources[arm])
         if out.exists():
             continue
-        log(f"building {arm} at {commit[:12]}")
-        with checkout(commit) as src:
-            env = {**os.environ, "CARGO_TARGET_DIR": str(ROOT / "target"), "CARGO_INCREMENTAL": "0"}
+        with building(out, arm, commit) as src:
+            if src is None:
+                continue
+            env = {**os.environ, "CARGO_TARGET_DIR": str(CARGO), "CARGO_INCREMENTAL": "0"}
             cmd = [
                 "cargo", "test", "--release", "--locked", "-p", matrix.package,
                 "--test", matrix.target, "--no-run", "--message-format=json",
@@ -1457,10 +1495,11 @@ def build_testbed(matrix: Matrix) -> None:
         out = BIN / matrix.bin_name(matrix.sources[arm])
         if out.exists():
             continue
-        log(f"building {arm} at {commit[:12]}")
-        with checkout(commit) as src:
+        with building(out, arm, commit) as src:
+            if src is None:
+                continue
             env = {
-                **os.environ, "CARGO_TARGET_DIR": str(FARM / "cargo"), "CARGO_INCREMENTAL": "0",
+                **os.environ, "CARGO_TARGET_DIR": str(CARGO), "CARGO_INCREMENTAL": "0",
                 "STRIMS_ROOT": str(ROOT),
             }
             for cmd in matrix.commands:
