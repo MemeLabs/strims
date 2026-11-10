@@ -250,6 +250,13 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
     }) {
         spawn_local(control(w.clone(), h, node.clone()));
     }
+    if w.spec
+        .hosts
+        .get(h)
+        .is_some_and(|s| !s.upload_capacity_steps.is_empty())
+    {
+        spawn_local(capacity_steps(w.clone(), h, node.clone()));
+    }
     spawn_local(supervisor(w.clone(), h, node));
     std::future::pending::<()>().await;
     Ok(())
@@ -594,6 +601,32 @@ async fn control(w: Rc<World>, h: HostIx, node: Node) {
             }
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// Tells the node each of its [`HostSpec::upload_capacity_steps`] still to
+/// come, at its time (`Node::set_upload_capacity`); the node booted with
+/// the one in effect then.
+///
+/// [`HostSpec::upload_capacity_steps`]: crate::HostSpec::upload_capacity_steps
+async fn capacity_steps(w: Rc<World>, h: HostIx, node: Node) {
+    let mut steps = w
+        .spec
+        .hosts
+        .get(h)
+        .map(|s| s.upload_capacity_steps.clone())
+        .unwrap_or_default();
+    steps.sort_by_key(|&(at, _)| at);
+    for (at, rate) in steps {
+        let now = sim_now();
+        if at <= now {
+            continue;
+        }
+        tokio::time::sleep(at - now).await;
+        if node.set_upload_capacity(Some(rate)).await.is_err() {
+            return;
+        }
+        w.log(w.name(h), format!("knows its upload capacity: {rate} B/s"));
     }
 }
 

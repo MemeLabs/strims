@@ -436,7 +436,7 @@ impl World {
         if self.spec.exp.contains("index-sample") {
             c.vpn.peer_index_answers = strims_vpn::IndexAnswers::Sample;
         }
-        c.upload_capacity = spec.upload_capacity;
+        c.upload_capacity = spec.upload_capacity_at(sim_now());
         c.vpn.routing = spec.routing.unwrap_or(self.spec.routing);
         if let (Some(width), Some(s)) = (self.spec.wire_bins, self.spec.swarms.first()) {
             c.stats_bins = Some(strims_node::config::StatsBins {

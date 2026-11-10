@@ -544,6 +544,15 @@ impl State {
             .set_upload_capacity(upload_hint(self.upload_capacity, Some(bytes_per_sec)));
     }
 
+    /// Replaces [`NodeConfig::upload_capacity`]: ppspp's known upload
+    /// capacity, or with `None` the upload cap's, as at startup.
+    pub(crate) fn set_upload_capacity(&mut self, bytes_per_sec: Option<u64>) {
+        self.upload_capacity = bytes_per_sec;
+        let limit = self.vnic.qos().rate_limit();
+        self.runner
+            .set_upload_capacity(upload_hint(self.upload_capacity, Some(limit)));
+    }
+
     fn emit(&mut self, e: NodeEvent) {
         if self.events.try_send(e).is_err() {
             self.metrics.events_dropped += 1;

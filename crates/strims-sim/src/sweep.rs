@@ -23,9 +23,13 @@
 //!   window model's two packets
 //!   ([`WINDOW_SEGMENT`](crate::spec::WINDOW_SEGMENT)).
 //! - `STRIMS_SIM_KNOWN_UPLINK=1` tells every WAN host its site's uplink
-//!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)): the
-//!   oracle the upload meter is measured against. `=seed` tells only the
-//!   hosts that seed a swarm, `=viewers` only the others.
+//!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)) as it
+//!   is at each time, its steps included
+//!   ([`HostSpec::upload_capacity_steps`](crate::HostSpec::upload_capacity_steps)):
+//!   the oracle the upload meter is measured against. `=seed` tells only the
+//!   hosts that seed a swarm, `=viewers` only the others. With `-static`
+//!   (`=1-static`, `=seed-static`, `=viewers-static`) each is told only the
+//!   uplink it starts with.
 //! - `STRIMS_SIM_MINUTES=<m>` sets the stream length of the scenarios that
 //!   take one ([`stream_minutes`]).
 //! - `STRIMS_SIM_CHUNK=<bytes>` and `STRIMS_SIM_MUNRO=<bytes>` give every
@@ -491,6 +495,10 @@ fn sweep_seeds(
         }
         if let Some(which) = known_uplink.as_deref() {
             let seeds: Vec<HostIx> = spec.swarms.iter().map(|s| s.seed).collect();
+            let (which, live) = match which.strip_suffix("-static") {
+                Some(w) => (w, false),
+                None => (which, true),
+            };
             for (i, h) in spec.hosts.iter_mut().enumerate() {
                 let seed = seeds.contains(&i);
                 let told = match which {
@@ -501,6 +509,9 @@ fn sweep_seeds(
                 };
                 if told && let Some(site) = h.site {
                     h.upload_capacity = Some(site.profile.up);
+                    if live {
+                        h.upload_capacity_steps = h.up_steps.clone();
+                    }
                 }
             }
         }

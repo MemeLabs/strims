@@ -248,6 +248,14 @@ impl Node {
         self.call(move |s, _| s.set_rate_limit(bytes_per_sec)).await
     }
 
+    /// Changes the upload capacity ppspp takes as known (see
+    /// [`NodeConfig::upload_capacity`]); `None` leaves it to the upload cap
+    /// and the measurement.
+    pub async fn set_upload_capacity(&self, bytes_per_sec: Option<u64>) -> Result<(), NodeError> {
+        self.call(move |s, _| s.set_upload_capacity(bytes_per_sec))
+            .await
+    }
+
     /// Changes vnic's peer budget (see [`NodeConfig::max_peers`]). Peers
     /// past a lowered budget stay connected.
     pub async fn set_max_peers(&self, n: u32) -> Result<(), NodeError> {
