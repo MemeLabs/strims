@@ -219,6 +219,7 @@ async fn sleep_until<C: BenchClock>(clock: &C, us: i64) {
     }
 }
 
+pub mod meter;
 mod rtc;
 
 pub use rtc::{RtcPlan, read_signal, write_signal};
