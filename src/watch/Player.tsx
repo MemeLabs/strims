@@ -228,7 +228,12 @@ const PlayerPage: React.FC<PlayerPageProps> = ({ session }) => {
     );
   }
   if (session.error) {
-    return <Status message={t("watch.Couldn't start")} />;
+    return (
+      <Status
+        message={t("watch.Couldn't start")}
+        action={{ label: t("watch.Retry"), onClick: session.retry }}
+      />
+    );
   }
   if (!session.ready) {
     return <Status message={t("watch.Starting")} />;

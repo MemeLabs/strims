@@ -47,6 +47,8 @@ export interface Ops {
   createProfile: (serverAddress: string, req: ISignUpRequest) => Promise<LinkedProfile | null>;
   /** Resolves to whether the sign-in succeeded; a failure sets `error`. */
   signIn: (serverAddress: string, req: ISignInRequest) => Promise<boolean>;
+  /** Reads the stored linked profiles again, those another tab added included. */
+  loadLinkedProfiles: () => Promise<LinkedProfile[]>;
 }
 
 const initialState: State = {
@@ -223,7 +225,13 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
     return true;
   };
 
-  const actions = useStableCallbacks({ createProfile, signIn });
+  const loadLinkedProfiles = async () => {
+    const profiles = await db.getAll();
+    mergeProfiles(...profiles);
+    return profiles;
+  };
+
+  const actions = useStableCallbacks({ createProfile, signIn, loadLinkedProfiles });
   const value = useMemo<[State, Ops]>(() => [state, actions], [state]);
 
   return (

@@ -22,8 +22,12 @@ const state: State = {
 
 const createProfile = (serverAddress: string, req: ISignUpRequest) => Promise.resolve(null);
 const signIn = (serverAddress: string, req: ISignInRequest) => Promise.resolve(true);
+const loadLinkedProfiles = () => Promise.resolve([]);
 
 export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
-  const value = useMemo<[State, Ops]>(() => [state, { createProfile, signIn }], []);
+  const value = useMemo<[State, Ops]>(
+    () => [state, { createProfile, signIn, loadLinkedProfiles }],
+    []
+  );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 };

@@ -126,7 +126,10 @@ describe("reading a delimited stream", () => {
   it("closes the request and its body when a message or its handler throws", async () => {
     // A stream the server keeps open, as its pings do.
     const held = (chunk: number[]) => {
-      const seen = { cancelled: false, signal: null as AbortSignal | null };
+      const seen: { cancelled: boolean; signal: AbortSignal | null } = {
+        cancelled: false,
+        signal: null,
+      };
       const fetchImpl = (_url: string | URL | Request, init?: RequestInit) => {
         seen.signal = init?.signal ?? null;
         const body = new ReadableStream<Uint8Array>({
@@ -137,7 +140,7 @@ describe("reading a delimited stream", () => {
         });
         return Promise.resolve(new Response(body, { status: 200 }));
       };
-      return { seen, fetch: fetchImpl as typeof fetch };
+      return { seen, fetch: fetchImpl };
     };
 
     const thrown = held(frame([1]));

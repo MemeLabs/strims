@@ -4,9 +4,16 @@
 import { Base64 } from "js-base64";
 
 import { LinkedProfile } from "../apis/strims/auth/v1/auth";
+import type { Ops } from "../contexts/Session";
 
 /** The local storage key of the linked profile the watch page signs in with. */
 export const PROFILE_ID_KEY = "watch.profileId";
+
+/** Sign-ups tried under fresh names before giving up. */
+const SIGN_UP_ATTEMPTS = 3;
+
+/** The lock every tab of the page's origin takes to pick or make its profile. */
+const PROFILE_LOCK = "strims.watch.profile";
 
 const NAME_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const NAME_SUFFIX_LENGTH = 10;
@@ -66,3 +73,46 @@ export const signInCandidates = (
       if (ra !== rb) return ra ? -1 : 1;
       return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
     });
+
+/** Runs `f` holding the profile lock, where the browser has locks. */
+export const withProfileLock = <T>(f: () => Promise<T>): Promise<T> =>
+  typeof navigator !== "undefined" && navigator.locks?.request
+    ? navigator.locks.request(PROFILE_LOCK, f)
+    : f();
+
+export type SessionOps = Pick<Ops, "signIn" | "createProfile" | "loadLinkedProfiles">;
+
+/**
+ * Signs the page's node in without asking: with a stored local profile it
+ * has the key of (the one remembered first), else with a new anonymous one,
+ * which the main UI then lists like any other. Tabs opened together take
+ * turns under `lock`, and each reads the stored profiles inside it, so the
+ * later ones sign in with the profile the first made. Rejects when it can't
+ * sign in, an error thrown by the node or the store included.
+ */
+export const startAnonymousSession = (
+  { signIn, createProfile, loadLinkedProfiles }: SessionOps,
+  lock: <T>(f: () => Promise<T>) => Promise<T> = withProfileLock
+): Promise<void> =>
+  lock(async () => {
+    const stored = await loadLinkedProfiles();
+    for (const p of signInCandidates(stored, rememberedProfileId())) {
+      if (p.credentials.case !== LinkedProfile.CredentialsCase.KEY) continue;
+      if (await signIn("", { credentials: { key: p.credentials.key } })) {
+        rememberProfileId(p.id);
+        return;
+      }
+    }
+    for (let i = 0; i < SIGN_UP_ATTEMPTS; i++) {
+      const p = await createProfile("", {
+        name: viewerName(),
+        password: throwawayPassword(),
+        persistLogin: true,
+      });
+      if (p) {
+        rememberProfileId(p.id);
+        return;
+      }
+    }
+    throw new Error("couldn't create a profile");
+  });
