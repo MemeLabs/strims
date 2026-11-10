@@ -49,7 +49,7 @@ use crate::NetworkEvent;
 use crate::ca::{self, CaError};
 use crate::control::NetworkControl;
 use crate::host::Host;
-use crate::membership::{network_from_invitation_v0, new_invitation_v0, new_network};
+use crate::membership::{network_from_invitation_v0, new_network};
 
 /// The longest invitation accepted.
 const MAX_INVITATION_BYTES: usize = 64 * 1024;
@@ -222,30 +222,21 @@ impl<K: Kv, H: Host, T: Timer> NetworkFrontendService for NetworkFrontend<K, H, 
     ) -> Result<CreateInvitationResponse, RpcError> {
         let s = &self.control.shared;
         let network = self.get_network(req.network_id).await?;
-        let membership = network
-            .certificate
-            .ok_or_else(|| rpc_error("network has no certificate"))?;
         let mut bootstrap_clients = Vec::new();
         if req.bootstrap_client_id != 0 {
             let mut tx = s.store.read().await.map_err(rpc_error)?;
-            let mut c = BootstrapClients::get(&mut tx, req.bootstrap_client_id)
+            let c = BootstrapClients::get(&mut tx, req.bootstrap_client_id)
                 .await
                 .map_err(rpc_error)?
                 .ok_or_else(|| not_found("bootstrap client"))?;
-            c.id = 0;
             bootstrap_clients.push(c);
         }
-        let mut rng = fork(&mut s.rng.borrow_mut());
-        let invitation = InvitationV0 {
-            bootstrap_clients,
-            ..new_invitation_v0(&s.profile, &membership, s.timer.now(), &mut rng)
-                .map_err(rpc_error)?
-        };
+        let invitation = self
+            .control
+            .invitation(&network, bootstrap_clients)
+            .map_err(rpc_error)?;
         Ok(CreateInvitationResponse {
-            invitation: Some(Invitation {
-                version: 0,
-                data: invitation.encode_to_vec(),
-            }),
+            invitation: Some(invitation),
         })
     }
 

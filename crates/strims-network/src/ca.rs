@@ -20,8 +20,12 @@
 //!
 //! A key the CA hasn't seen joins as a new peer. Its certificate must have
 //! been issued under an invitation: four certificates, the third the
-//! inviter's membership. The inviter must be a peer that isn't banned and
-//! has invitations left, and spends one. A peer's alias is its request's
+//! inviter's membership. The inviter must be a peer that isn't banned and,
+//! unless it is the owner, has invitations left, and spends one. The
+//! owner's invitations spend nothing: the owner holds the root key and
+//! could grant itself any quota, so its own quota would bound nothing, and
+//! an owner can hand one invitation to any number of newcomers (a bootstrap
+//! node's vended invitations). A peer's alias is its request's
 //! subject: it takes the alias's reservation, which another key holds
 //! until [`ALIAS_RESERVATION_COOLDOWN`] after giving it up, and a peer
 //! changes it at most once per [`ALIAS_CHANGE_COOLDOWN`].
@@ -135,6 +139,11 @@ pub(crate) async fn renew<K: Kv>(
         return Err(CaError::Invalid("subject too long"));
     }
     let inviter_key = chain.bodies().get(2).map(|c| c.key.clone());
+    let owner_key = network
+        .certificate
+        .as_ref()
+        .and_then(|c| certificate_body(c).ok())
+        .map(|b| b.key);
     let issued =
         sign_certificate_request_with_network(&csr, key, &config.name, DEFAULT_CERT_TTL, now, rng)
             .map_err(|_| CaError::Invalid("signing failed"))?;
@@ -154,7 +163,8 @@ pub(crate) async fn renew<K: Kv>(
             let inviter_key = inviter_key
                 .filter(|_| chain.bodies().len() == 4)
                 .ok_or(CaError::Invalid("malformed invite certificate chain"))?;
-            insert_peer(&mut tx, id, &body, &inviter_key, now).await?;
+            let by_owner = owner_key.as_deref() == Some(inviter_key.as_slice());
+            insert_peer(&mut tx, id, &body, &inviter_key, by_owner, now).await?;
         }
     }
     let log_id = tx.generate_id().await?;
@@ -187,11 +197,14 @@ async fn update_peer<K: Kv>(
     Ok(())
 }
 
+/// Records the new peer of `cert`, invited by the peer of `inviter_key`,
+/// who spends an invitation unless it is the owner (`by_owner`).
 async fn insert_peer<K: Kv>(
     tx: &mut WriteTx<K>,
     network_id: u64,
     cert: &CertificateBody,
     inviter_key: &[u8],
+    by_owner: bool,
     now: Time,
 ) -> Result<(), CaError> {
     reserve_alias(tx, network_id, &cert.subject, &cert.key, now).await?;
@@ -205,12 +218,14 @@ async fn insert_peer<K: Kv>(
     if inviter.is_banned {
         return Err(CaError::InviterBanned);
     }
-    if inviter.invite_quota == 0 {
-        return Err(CaError::QuotaExceeded);
-    }
-    inviter.invite_quota -= 1;
     let inviter_id = inviter.id;
-    NetworkPeers::update(tx, inviter).await?;
+    if !by_owner {
+        if inviter.invite_quota == 0 {
+            return Err(CaError::QuotaExceeded);
+        }
+        inviter.invite_quota -= 1;
+        NetworkPeers::update(tx, inviter).await?;
+    }
     let id = tx.generate_id().await?;
     let peer = new_network_peer(id, network_id, &cert.key, &cert.subject, inviter_id, now);
     NetworkPeers::insert(tx, peer).await?;
@@ -346,7 +361,7 @@ mod tests {
         Issuer, certificate_parent, generate_key, new_certificate_request,
         new_self_signed_certificate, sign_certificate_request,
     };
-    use strims_dao::schema::network::Networks;
+    use strims_dao::schema::network::{DEFAULT_INVITE_QUOTA, Networks};
     use strims_dao::schema::profile::Profile as ProfileRecord;
     use strims_dao::seal::StorageKey;
     use strims_dao::{ProfileStore, Singleton};
@@ -513,7 +528,8 @@ mod tests {
         let peer = ca.peer(&key_of(&alice).public);
         let inviter = ca.peer(&key_of(&owner).public);
         assert_eq!(peer.inviter_peer_id, inviter.id);
-        assert_eq!((peer.alias.as_str(), inviter.invite_quota), ("alice", 2));
+        assert_eq!(peer.alias, "alice");
+        assert_eq!(inviter.invite_quota, DEFAULT_INVITE_QUOTA);
 
         // the log holds the certificate without its parent
         let logged = Certificate {
@@ -596,20 +612,52 @@ mod tests {
     fn invitations_need_an_inviter_with_quota_who_isnt_banned() {
         let mut ca = Ca::new();
         let owner = ca.owner.clone();
-        let mut inviter = ca.peer(&key_of(&owner).public);
+        let m = profile(2);
+        let provisional = ca.invited(&owner, &ca.owner_cert(), &m);
+        let member_cert = ca.renew(&provisional, key_of(&m), "m", T0).unwrap();
+        let mut inviter = ca.peer(&key_of(&m).public);
         inviter.invite_quota = 0;
         ca.set_peer(inviter.clone());
-        let a = profile(2);
-        let provisional = ca.invited(&owner, &ca.owner_cert(), &a);
+        let a = profile(3);
+        let provisional = ca.invited(&m, &member_cert, &a);
         assert!(matches!(
             ca.renew(&provisional, key_of(&a), "a", T0),
             Err(CaError::QuotaExceeded)
         ));
         inviter.invite_quota = 1;
         inviter.is_banned = true;
-        ca.set_peer(inviter);
+        ca.set_peer(inviter.clone());
         assert!(matches!(
             ca.renew(&provisional, key_of(&a), "a", T0),
+            Err(CaError::InviterBanned)
+        ));
+        inviter.is_banned = false;
+        ca.set_peer(inviter);
+        ca.renew(&provisional, key_of(&a), "a", T0).unwrap();
+        assert_eq!(ca.peer(&key_of(&m).public).invite_quota, 0);
+    }
+
+    #[test]
+    fn the_owners_invitations_spend_no_quota() {
+        let mut ca = Ca::new();
+        let owner = ca.owner.clone();
+        let mut record = ca.peer(&key_of(&owner).public);
+        record.invite_quota = 0;
+        ca.set_peer(record.clone());
+        for i in 0..4 {
+            let p = profile(10 + i);
+            let provisional = ca.invited(&owner, &ca.owner_cert(), &p);
+            ca.renew(&provisional, key_of(&p), &format!("viewer{i}"), T0)
+                .unwrap();
+            assert_eq!(ca.peer(&key_of(&p).public).inviter_peer_id, record.id);
+        }
+        assert_eq!(ca.peer(&key_of(&owner).public).invite_quota, 0);
+        record.is_banned = true;
+        ca.set_peer(record);
+        let p = profile(20);
+        let provisional = ca.invited(&owner, &ca.owner_cert(), &p);
+        assert!(matches!(
+            ca.renew(&provisional, key_of(&p), "banned", T0),
             Err(CaError::InviterBanned)
         ));
     }

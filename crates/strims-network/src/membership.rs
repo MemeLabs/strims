@@ -28,6 +28,8 @@ pub const INVITATION_TTL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 pub enum MembershipError {
     #[error("profile has no key")]
     NoProfileKey,
+    #[error("network has no certificate")]
+    NoCertificate,
     #[error("invitation incomplete")]
     InvalidInvitation,
     #[error(transparent)]

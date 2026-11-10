@@ -20,7 +20,7 @@ use futures_util::{FutureExt, StreamExt};
 use strims_base::rng::det_rng;
 use strims_crypto::{certificate_parent, generate_key};
 use strims_dao::events::Record;
-use strims_dao::schema::network::{NetworkPeers, network_scoped_key};
+use strims_dao::schema::network::{DEFAULT_INVITE_QUOTA, NetworkPeers, network_scoped_key};
 use strims_dao::schema::notification::network_subject;
 use strims_dao::{Recv, StoreEvent, Subscription, Table};
 use strims_network::NetworkEvent;
@@ -207,7 +207,8 @@ fn a_relinked_peer_binds_again() {
 
 /// A profile invited to its network renews its provisional certificate
 /// through the owner, whose CA signs it: then both bind, the CA records
-/// the new peer under its inviter, and the invitee is notified.
+/// the new peer under its inviter, whose quota an owner doesn't spend,
+/// and the invitee is notified.
 #[test]
 fn an_invitee_renews_through_its_inviter_and_binds() {
     run(async {
@@ -257,7 +258,7 @@ fn an_invitee_renews_through_its_inviter_and_binds() {
         .unwrap()
         .unwrap();
         assert_eq!(peer.inviter_peer_id, owner_peer.id);
-        assert_eq!(owner_peer.invite_quota, 2);
+        assert_eq!(owner_peer.invite_quota, DEFAULT_INVITE_QUOTA);
     });
 }
 

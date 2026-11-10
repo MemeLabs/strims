@@ -20,6 +20,7 @@ use std::task::{Poll, Waker};
 use futures_util::future::LocalBoxFuture;
 use futures_util::stream::FuturesUnordered;
 use futures_util::{FutureExt, SinkExt, StreamExt};
+use prost::Message as _;
 use strims_base::rng::{DetRng, fork};
 use strims_base::time::Time;
 use strims_dao::events::Record;
@@ -27,11 +28,13 @@ use strims_dao::schema::network::{Networks, network_key};
 use strims_dao::{Broadcast, Recv, ReplicatedStore, StoreEvent, Subscription, Table};
 use strims_kademlia::ID;
 use strims_kv::Kv;
+use strims_proto::network::v1::bootstrap::BootstrapClient;
 use strims_proto::network::v1::ca::ca_find_request::Query;
 use strims_proto::network::v1::ca::{CaPeerClient, register_ca_peer_service};
 use strims_proto::network::v1::{
-    Network, NetworkPeerClient, NetworkPeerCloseRequest, NetworkPeerNegotiateRequest,
-    NetworkPeerOpenRequest, NetworkPeerUpdateCertificateRequest, register_network_peer_service,
+    Invitation, InvitationV0, Network, NetworkPeerClient, NetworkPeerCloseRequest,
+    NetworkPeerNegotiateRequest, NetworkPeerOpenRequest, NetworkPeerUpdateCertificateRequest,
+    register_network_peer_service,
 };
 use strims_proto::profile::v1::Profile;
 use strims_proto::service::Error as RpcError;
@@ -40,6 +43,7 @@ use strims_rpc::{Client, RetryClient, Router, Timer};
 
 use crate::events::NetworkEvent;
 use crate::host::Host;
+use crate::membership::{MembershipError, new_invitation_v0};
 use crate::peer::PeerService;
 use crate::psi::PsiEngine;
 use crate::services::{self, Forwards, Services, renew_time};
@@ -497,6 +501,34 @@ impl<K: Kv, H: Host, T: Timer> NetworkControl<K, H, T> {
     /// failed to join it, or for a profile without a key.
     pub fn host_certificate(&self, key: &[u8]) -> Option<Certificate> {
         self.shared.host_certificate(key)
+    }
+
+    /// An invitation to `network`, a network record of the profile's,
+    /// carrying `bootstrap_clients` (with their ids cleared), signed under
+    /// the record's membership certificate: [`new_invitation_v0`], encoded
+    /// as version 0.
+    pub fn invitation(
+        &self,
+        network: &Network,
+        bootstrap_clients: Vec<BootstrapClient>,
+    ) -> Result<Invitation, MembershipError> {
+        let s = &self.shared;
+        let membership = network
+            .certificate
+            .as_ref()
+            .ok_or(MembershipError::NoCertificate)?;
+        let mut rng = fork(&mut s.rng.borrow_mut());
+        let invitation = InvitationV0 {
+            bootstrap_clients: bootstrap_clients
+                .into_iter()
+                .map(|c| BootstrapClient { id: 0, ..c })
+                .collect(),
+            ..new_invitation_v0(&s.profile, membership, s.timer.now(), &mut rng)?
+        };
+        Ok(Invitation {
+            version: 0,
+            data: invitation.encode_to_vec(),
+        })
     }
 
     /// The certificate the CA of the network whose key is `key` issued
