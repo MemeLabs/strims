@@ -3,13 +3,11 @@
 
 import React, { ReactNode, createContext, useContext, useEffect, useState } from "react";
 
-import {
-  FrontendWatchListingsResponse,
-  ListingSnippetImage,
-} from "../apis/strims/network/v1/directory/directory";
+import { FrontendWatchListingsResponse } from "../apis/strims/network/v1/directory/directory";
 import { readDelimited } from "../lib/delimited";
 import { NetworkListingsMap, foldListingEvents } from "../lib/listings";
-import { apiUrl, eventsUrl } from "./api";
+import { apiOrigin, eventsUrl } from "./api";
+import { resolveImages } from "./images";
 
 /** The stream pings every 15 s; one silent for this long has gone. */
 const IDLE_TIMEOUT_MS = 45 * 1000;
@@ -29,27 +27,6 @@ const initialListings: BootstrapListings = {
   networkListings: new Map(),
   connected: false,
   error: null,
-};
-
-// Points an image the API names by path at the API.
-const resolveImage = (image: ListingSnippetImage | undefined) => {
-  if (image?.sourceOneof.case === ListingSnippetImage.SourceOneofCase.URL) {
-    image.sourceOneof = new ListingSnippetImage.SourceOneof({
-      url: apiUrl(image.sourceOneof.url),
-    });
-  }
-};
-
-const resolveImages = (events: FrontendWatchListingsResponse.Event[]) => {
-  for (const { event } of events) {
-    if (event.case === FrontendWatchListingsResponse.Event.EventCase.CHANGE) {
-      for (const { snippet } of event.change.listings.listings) {
-        resolveImage(snippet?.thumbnail);
-        resolveImage(snippet?.channelLogo);
-      }
-    }
-  }
-  return events;
 };
 
 const sleep = (ms: number, signal: AbortSignal) =>
@@ -96,7 +73,7 @@ const useBootstrapListingsStream = (): BootstrapListings => {
                 error: null,
                 networkListings: foldListingEvents(
                   fresh ? new Map() : prev.networkListings,
-                  resolveImages(events)
+                  resolveImages(events, apiOrigin())
                 ),
               }));
             },
