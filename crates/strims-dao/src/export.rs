@@ -8,10 +8,14 @@
 //! The store's values stay sealed under the profile's key and the record
 //! under its password, so a file is as safe as the store it came from, no
 //! safer. An import is the same device as its original: running both
-//! makes one device's replicas diverge. A second device pairs instead
-//! ([`import_pairing_token`](crate::auth::import_pairing_token)).
+//! makes one device's replicas diverge. A second device of a profile comes
+//! from pairing ([`import_pairing_token`](crate::auth::import_pairing_token)).
+//!
+//! A file carries its entries' count and digest after them, so a file cut
+//! short, or changed, imports nothing.
 
 use prost::Message;
+use sha2::{Digest as _, Sha256};
 use strims_base::rng::DetRng;
 use strims_kv::{Kv, ReadTx as _, WriteTx as _};
 use strims_proto::auth::v1::ServerUserThing;
@@ -42,6 +46,21 @@ pub struct ProfileExport {
     /// Every entry of the store's table, in key order, as stored.
     #[prost(message, repeated, tag = "5")]
     pub entries: Vec<ExportEntry>,
+    /// How many [`entries`](ProfileExport::entries) there are.
+    #[prost(uint64, tag = "6")]
+    pub entry_count: u64,
+    /// [`entries_digest`] of the entries.
+    #[prost(bytes = "vec", tag = "7")]
+    pub entries_digest: Vec<u8>,
+}
+
+/// The SHA-256 of `entries`' length-delimited encodings, in order.
+pub fn entries_digest(entries: &[ExportEntry]) -> Vec<u8> {
+    let mut h = Sha256::new();
+    for e in entries {
+        h.update(e.encode_length_delimited_to_vec());
+    }
+    h.finalize().to_vec()
 }
 
 /// One entry of an exported store's table.
@@ -73,7 +92,7 @@ pub async fn export_profile<K: Kv + Clone>(
     // the store must open at this build's version
     ProfileStore::open(kv.clone(), pk.id, pk.storage_key(), rng).await?;
     let mut tx = kv.begin_read(&profile_table(pk.id)).await?;
-    let entries = tx
+    let entries: Vec<_> = tx
         .scan("", None, usize::MAX)
         .await?
         .into_iter()
@@ -84,6 +103,8 @@ pub async fn export_profile<K: Kv + Clone>(
         store_version: STORE_VERSION,
         profile_id: pk.id,
         user: Some(user),
+        entry_count: entries.len() as u64,
+        entries_digest: entries_digest(&entries),
         entries,
     }
     .encode_to_vec())
@@ -92,12 +113,18 @@ pub async fn export_profile<K: Kv + Clone>(
 /// Adds the profile an encoded [`ProfileExport`] holds, under the user
 /// name it was exported with, which it returns. Fails with
 /// [`Error::NameTaken`] if the name has a record, [`Error::StoreExists`] if
-/// the profile has a store, and [`Error::UnsupportedStoreVersion`] for an
-/// export at another store version; a failed import leaves no store.
+/// the profile has a store, [`Error::UnsupportedStoreVersion`] for an
+/// export at another store version, and [`Error::Invalid`] for a file cut
+/// short or changed; a failed import leaves no store.
 pub async fn import_profile<K: Kv>(kv: &K, file: &[u8]) -> Result<String, Error> {
     let export = ProfileExport::decode(file)?;
     if export.format != EXPORT_FORMAT {
         return Err(Error::Invalid("profile export"));
+    }
+    if export.entry_count != export.entries.len() as u64
+        || export.entries_digest != entries_digest(&export.entries)
+    {
+        return Err(Error::Invalid("profile export: cut short or changed"));
     }
     if export.store_version != STORE_VERSION {
         return Err(Error::UnsupportedStoreVersion {
@@ -242,6 +269,66 @@ mod tests {
             Err(Error::Invalid(_))
         ));
         assert!(block(list_users(&other)).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_file_cut_short_or_changed_imports_nothing() {
+        let kv = MemoryKv::new();
+        alice(&kv);
+        let file = block(export_profile(&kv, "alice", "pw", det_rng(4))).unwrap();
+        let export = ProfileExport::decode(file.as_slice()).unwrap();
+        assert!(export.entries.len() > 2);
+
+        // cut after each whole entry: the count and digest go with the tail
+        let head = ProfileExport {
+            entries: Vec::new(),
+            entry_count: 0,
+            entries_digest: Vec::new(),
+            ..export.clone()
+        }
+        .encode_to_vec();
+        let mut cut = head.clone();
+        let mut cuts = vec![cut.clone()];
+        for e in &export.entries {
+            let mut field = Vec::new();
+            prost::encoding::message::encode(5, e, &mut field);
+            cut.extend(field);
+            cuts.push(cut.clone());
+        }
+        for (n, cut) in cuts.iter().enumerate() {
+            let other = MemoryKv::new();
+            assert!(
+                matches!(block(import_profile(&other, cut)), Err(Error::Invalid(_))),
+                "cut after {n} entries"
+            );
+            assert!(block(list_users(&other)).unwrap().is_empty());
+        }
+
+        // a count or digest that doesn't match
+        let mut dropped = export.clone();
+        dropped.entries.pop();
+        let mut changed = export.clone();
+        if let Some(v) = changed.entries.last_mut().and_then(|e| e.value.last_mut()) {
+            *v ^= 1;
+        }
+        for bad in [dropped, changed] {
+            let other = MemoryKv::new();
+            assert!(matches!(
+                block(import_profile(&other, &bad.encode_to_vec())),
+                Err(Error::Invalid(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn a_removal_cut_short_completes_when_run_again() {
+        let kv = MemoryKv::new();
+        alice(&kv);
+        // the store gone, the sign-in record still there
+        let pk = block(sign_in(&kv, "alice", "pw")).unwrap();
+        block(kv.delete_table(&profile_table(pk.id))).unwrap();
+        block(remove_profile(&kv, "alice", "pw")).unwrap();
+        assert!(block(list_users(&kv)).unwrap().is_empty());
     }
 
     #[test]

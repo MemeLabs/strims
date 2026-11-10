@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The command line as a person or a script runs it: the built binary, on
-//! a store of its own, then against a service running on that store.
+//! a store of its own, then against a service running on that store, and
+//! over a `wss://` API.
 
 #![allow(
     clippy::unwrap_used,
@@ -11,10 +12,15 @@
     clippy::indexing_slicing
 )]
 
+mod support;
+
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
 use serde_json::Value;
-use strims_svc::{Config, Db, Svc};
+use strims_svc::{Config, Db, Svc, TlsConfig};
+use support::tls::TestCert;
+use tokio::io::AsyncWriteExt as _;
 use tokio::process::Command;
 use tokio::task::LocalSet;
 
@@ -58,6 +64,26 @@ async fn run(args: &[&str]) -> Out {
         .output()
         .await
         .unwrap();
+    Out {
+        code: out.status.code().unwrap(),
+        stdout: String::from_utf8(out.stdout).unwrap(),
+        stderr: String::from_utf8(out.stderr).unwrap(),
+    }
+}
+
+/// [`run`], with `input` on stdin.
+async fn run_with_stdin(args: &[&str], input: &str) -> Out {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_strims-svc"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    stdin.write_all(input.as_bytes()).await.unwrap();
+    drop(stdin);
+    let out = child.wait_with_output().await.unwrap();
     Out {
         code: out.status.code().unwrap(),
         stdout: String::from_utf8(out.stdout).unwrap(),
@@ -200,6 +226,11 @@ fn a_profile_is_added_called_on_exported_removed_and_imported_from_the_command_l
 
         let profile = call(on_db(&["ProfileFrontend.Get"])).await.json();
         assert_eq!(profile["profile"]["name"], "alice");
+        // the request from stdin
+        let args = on_db(&["ProfileFrontend.Get", "-"]);
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        let piped = run_with_stdin(&args, "{}\n").await.json();
+        assert_eq!(piped, profile);
 
         // a service on the store holds it; the command line reaches it by
         // its API
@@ -257,6 +288,15 @@ fn a_profile_is_added_called_on_exported_removed_and_imported_from_the_command_l
         call(export_args.clone()).await.ok();
         // never over a file
         call(export_args).await.fails(1, "writing");
+        // a copy cut short imports nothing
+        let file = std::fs::read(&export).unwrap();
+        let cut = s.path("cut.export");
+        std::fs::write(&cut, &file[..file.len() - 40]).unwrap();
+        let other = s.path("other.redb");
+        run(&["profiles", "import", "--db", &other, "--in", &cut])
+            .await
+            .fails(1, "importing");
+        assert_eq!(run(&["profiles", "list", "--db", &other]).await.ok(), "");
         call(profile_args("remove", &pw)).await.ok();
         assert_eq!(run(&["profiles", "list", "--db", &db]).await.ok(), "");
         call(on_db(&["NetworkFrontend.List"]))
@@ -311,12 +351,65 @@ fn malformed_calls_exit_2_and_say_why() {
                 "needs a profile",
             ),
             (vec!["call".into(), "--nope".into()], "unknown argument"),
+            (
+                vec![
+                    "call".into(),
+                    "NetworkFrontend.List".into(),
+                    "--timeout".into(),
+                    "1e20".into(),
+                ],
+                "too long",
+            ),
+            (
+                vec![
+                    "call".into(),
+                    "--api".into(),
+                    "http://127.0.0.1:1/api".into(),
+                    "NetworkFrontend.List".into(),
+                ],
+                "ws://",
+            ),
+            (
+                vec![
+                    "profiles".into(),
+                    "list".into(),
+                    "--db".into(),
+                    db.clone(),
+                    "--out".into(),
+                    "x".into(),
+                ],
+                "isn't a flag of profiles list",
+            ),
         ] {
             let args: Vec<&str> = args.iter().map(String::as_str).collect();
             run(&args).await.fails(2, says);
         }
-        // nothing reached the store
+        // a store that isn't there isn't made
+        run(&["profiles", "list", "--db", &db])
+            .await
+            .fails(1, "no store");
+        let mut v = vec!["call", "--db", db.as_str()];
+        v.extend(login);
+        v.push("NetworkFrontend.List");
+        run(&v).await.fails(1, "no store");
         assert!(!Path::new(&db).exists());
+
+        // a message to bytes and back
+        let encoded = run(&[
+            "encode",
+            "strims.network.v1.CreateServerRequest",
+            r#"{"name": "x"}"#,
+        ])
+        .await
+        .ok();
+        let decoded = run(&[
+            "decode",
+            "strims.network.v1.CreateServerRequest",
+            encoded.trim(),
+        ])
+        .await
+        .json();
+        assert_eq!(decoded["name"], "x");
 
         let methods = run(&["methods", "network"]).await.ok();
         assert!(
@@ -334,5 +427,51 @@ fn malformed_calls_exit_2_and_say_why() {
                 .ok()
                 .contains("strims-svc profiles")
         );
+    });
+}
+
+#[test]
+fn a_wss_api_answers_with_its_ca() {
+    local(async {
+        let s = Scratch::new("wss");
+        let cert = TestCert::new(&["localhost", "127.0.0.1"]);
+        let (cert_path, key_path) = cert.write(&s.dir, 0);
+        let svc = Svc::start(Config {
+            api_listen: "127.0.0.1:0".into(),
+            db: Db::Memory,
+            tls: Some(TlsConfig {
+                api: true,
+                ..TlsConfig::new(&cert_path, &key_path)
+            }),
+            ..Config::default()
+        })
+        .await
+        .unwrap();
+        let api = format!("wss://localhost:{}/api", svc.api_addr().port());
+        let (ca, pw) = (cert_path.to_str().unwrap(), s.path("pw"));
+        run(&[
+            "call",
+            "--api",
+            &api,
+            "--ca",
+            ca,
+            "AuthFrontend.SignUp",
+            r#"{"name": "bob", "password": "a password"}"#,
+        ])
+        .await
+        .ok();
+        let login = ["--profile", "bob", "--profile-password-file", pw.as_str()];
+        let mut with_ca = vec!["call", "--api", api.as_str(), "--ca", ca];
+        with_ca.extend(login);
+        with_ca.push("ProfileFrontend.Get");
+        let profile = run(&with_ca).await.json();
+        assert_eq!(profile["profile"]["name"], "bob");
+
+        // the public roots alone don't trust it
+        let mut without = vec!["call", "--api", api.as_str()];
+        without.extend(login);
+        without.push("ProfileFrontend.Get");
+        run(&without).await.fails(1, "connecting");
+        svc.stop().await;
     });
 }

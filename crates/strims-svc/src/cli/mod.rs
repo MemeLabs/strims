@@ -63,6 +63,8 @@ integers as strings (numbers too on input), enums by name.
                             when it ends, or at ctrl-c); fail a unary call
                             after secs (default 30)
   --defaults                print fields at their default values too
+Connecting and signing in fail after 30 s. A call made with --db needs an
+existing store; profiles add makes one.
 
 methods: the frontend methods, with their request and response types;
 those whose Service.Method contains <filter>, in any case.
@@ -75,7 +77,8 @@ and back: a signed envelope's body (a strims.type.Certificate's is a
 strims.type.CertificateBody; a network's key is its root certificate's
 body's key), an invitation's data (strims.network.v1.InvitationV0).
 
-profiles: a store's profiles, while no service runs on it.
+profiles: a store's profiles, while no service or command holds it. Every
+action but add and import needs an existing store.
   list                      its profiles' names, one a line
   add                       signs --profile up with the password in
                             --profile-password-file
@@ -86,12 +89,14 @@ profiles: a store's profiles, while no service runs on it.
                             password and key, so as sensitive as the store
   import --in <path>        adds an exported profile, and prints its name
 An export is a backup or a move: an import running beside its original is
-the same device. A second device pairs: ReplicationFrontend.
-CreatePairingToken, then AuthFrontend.SignIn with the token where the new
-device's store is.
+the same device. A second device pairs: call
+ReplicationFrontend.CreatePairingToken, then AuthFrontend.SignIn with the
+token where the new device's store is.
 
-A usage error (an unknown method, a request that isn't its type) exits 2;
-a failure (connecting, signing in, an RPC error) exits 1.
+Each command takes only the flags listed for it; -- ends them, so a
+positional argument after it may start with --. A usage error (an unknown
+flag or method, a request that isn't its type) exits 2; a failure
+(connecting, signing in, an RPC error) exits 1.
 
 examples:
   strims-svc profiles add --db strims.redb --profile alice --profile-password-file pw
@@ -119,6 +124,9 @@ impl std::fmt::Debug for ProfileLogin {
 
 /// The longest a unary call waits without `--timeout`.
 const UNARY_TIMEOUT: StdDuration = StdDuration::from_secs(30);
+
+/// The longest connecting, and signing in, each take.
+const CONNECT_TIMEOUT: StdDuration = StdDuration::from_secs(30);
 
 /// What the command line asks for beside running a node.
 #[derive(Debug)]
@@ -174,10 +182,32 @@ pub fn is_subcommand(arg: &str) -> bool {
     )
 }
 
+/// The flags `command` (with its `profiles` action) takes.
+fn flags_of(command: &str, action: Option<&str>) -> &'static [&'static str] {
+    match (command, action) {
+        ("call", _) => &[
+            "--api",
+            "--ca",
+            "--db",
+            "--profile",
+            "--profile-password-file",
+            "--limit",
+            "--timeout",
+            "--defaults",
+        ],
+        ("profiles", Some("list")) => &["--db"],
+        ("profiles", Some("add" | "remove")) => &["--db", "--profile", "--profile-password-file"],
+        ("profiles", Some("export")) => &["--db", "--profile", "--profile-password-file", "--out"],
+        ("profiles", Some("import")) => &["--db", "--in"],
+        _ => &[],
+    }
+}
+
 /// Parses the arguments after subcommand `command`. Flags take their
-/// value as the next argument or after `=`.
+/// value as the next argument or after `=`; `--` ends them.
 pub fn parse(command: &str, args: impl IntoIterator<Item = String>) -> Result<Command, String> {
     let mut positional = Vec::new();
+    let mut given: Vec<String> = Vec::new();
     let mut api = None;
     let mut ca = None;
     let mut db = None;
@@ -190,6 +220,10 @@ pub fn parse(command: &str, args: impl IntoIterator<Item = String>) -> Result<Co
     let mut input = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
+        if arg == "--" {
+            positional.extend(args.by_ref());
+            break;
+        }
         if arg == "-h" {
             return Ok(Command::Help);
         }
@@ -201,6 +235,9 @@ pub fn parse(command: &str, args: impl IntoIterator<Item = String>) -> Result<Co
             Some((f, v)) => (f.to_owned(), Some(v.to_owned())),
             None => (arg, None),
         };
+        if flag != "--help" {
+            given.push(flag.clone());
+        }
         let mut value = || {
             inline
                 .clone()
@@ -230,7 +267,13 @@ pub fn parse(command: &str, args: impl IntoIterator<Item = String>) -> Result<Co
                     .ok()
                     .filter(|s| s.is_finite() && *s > 0.0)
                     .ok_or_else(|| format!("--timeout takes seconds over 0: {v}"))?;
-                timeout = Some(StdDuration::from_secs_f64(secs));
+                timeout = Some(
+                    StdDuration::try_from_secs_f64(secs)
+                        .map_err(|_| format!("--timeout is too long: {v}"))?,
+                );
+            }
+            "--defaults" if inline.is_some() => {
+                return Err("--defaults takes no value".to_owned());
             }
             "--defaults" => defaults = true,
             "--out" => out = Some(PathBuf::from(value()?)),
@@ -247,6 +290,17 @@ pub fn parse(command: &str, args: impl IntoIterator<Item = String>) -> Result<Co
         _ => return Err("--profile and --profile-password-file go together".to_owned()),
     };
     let mut positional = positional.into_iter();
+    let action = (command == "profiles").then(|| positional.next()).flatten();
+    if let Some(flag) = given
+        .iter()
+        .find(|f| !flags_of(command, action.as_deref()).contains(&f.as_str()))
+    {
+        let on = match &action {
+            Some(a) => format!("{command} {a}"),
+            None => command.to_owned(),
+        };
+        return Err(format!("{flag} isn't a flag of {on}"));
+    }
     let command = match command {
         "call" => {
             let method = positional
@@ -259,10 +313,19 @@ pub fn parse(command: &str, args: impl IntoIterator<Item = String>) -> Result<Co
                     return Err(format!("--ca goes with --api, not --db {}", db.display()));
                 }
                 (_, Some(db)) => Target::Db(db),
-                (url, None) => Target::Api {
-                    url: url.unwrap_or_else(|| DEFAULT_API.to_owned()),
-                    ca,
-                },
+                (url, None) => {
+                    let url = url.unwrap_or_else(|| DEFAULT_API.to_owned());
+                    let scheme = url.split_once("://").map(|(s, _)| s.to_ascii_lowercase());
+                    match scheme.as_deref() {
+                        Some("wss") => {}
+                        Some("ws") if ca.is_some() => {
+                            return Err(format!("--ca goes with a wss:// --api: {url}"));
+                        }
+                        Some("ws") => {}
+                        _ => return Err(format!("--api takes a ws:// or wss:// URL: {url}")),
+                    }
+                    Target::Api { url, ca }
+                }
             };
             Command::Call(CallArgs {
                 method,
@@ -291,9 +354,7 @@ pub fn parse(command: &str, args: impl IntoIterator<Item = String>) -> Result<Co
             input: positional.next(),
         },
         "profiles" => {
-            let action = positional
-                .next()
-                .ok_or("profiles needs list, add, remove, export or import")?;
+            let action = action.ok_or("profiles needs list, add, remove, export or import")?;
             let db = db.ok_or("profiles needs --db <path>")?;
             let login = || {
                 login.clone().ok_or(format!(
@@ -454,12 +515,21 @@ async fn call(args: CallArgs) -> Result<(), Failure> {
             "{name} needs a profile: pass --profile and --profile-password-file"
         )));
     }
-    let conn = Connection::open(&args.target)
+    if args.limit.is_some() && !method.is_server_streaming() {
+        return Err(Failure::Usage(format!(
+            "--limit bounds a streaming method's responses; {name} answers once"
+        )));
+    }
+    let conn = tokio::time::timeout(CONNECT_TIMEOUT, Connection::open(&args.target))
         .await
+        .map_err(|_| Failure::Failed("connecting: timed out".to_owned()))?
         .map_err(Failure::Failed)?;
     let done = async {
         if let Some(login) = args.login.as_ref().filter(|_| !auth) {
-            conn.sign_in(login).await.map_err(Failure::Failed)?;
+            tokio::time::timeout(CONNECT_TIMEOUT, conn.sign_in(login))
+                .await
+                .map_err(|_| Failure::Failed(format!("signing in as {}: timed out", login.name)))?
+                .map_err(Failure::Failed)?;
         }
         let failed = |e: &dyn std::fmt::Display| Failure::Failed(format!("{name}: {e}"));
         let output = method.output();
@@ -480,7 +550,7 @@ async fn call(args: CallArgs) -> Result<(), Failure> {
             .client
             .call_streaming_encoded(method.full_name(), &req)
             .map_err(|e| failed(&e))?;
-        let deadline = args.timeout.map(|t| Instant::now() + t);
+        let deadline = deadline(args.timeout);
         let style = Style {
             pretty: false,
             defaults: args.defaults,
@@ -511,6 +581,12 @@ async fn call(args: CallArgs) -> Result<(), Failure> {
     .await;
     conn.close().await;
     done
+}
+
+/// When a call bounded by `timeout` from now ends: `None` for never, as
+/// for a timeout past what the clock counts to.
+fn deadline(timeout: Option<StdDuration>) -> Option<Instant> {
+    timeout.and_then(|t| Instant::now().checked_add(t))
 }
 
 /// Resolves at `deadline`, or never.
@@ -579,6 +655,26 @@ mod tests {
     }
 
     #[test]
+    fn arguments_after_a_double_dash_are_positional() {
+        let Command::Decode { message, input } =
+            parse("decode", args(&["--", "M", "--a-base64-string"])).unwrap()
+        else {
+            panic!("not a decode");
+        };
+        assert_eq!(
+            (message.as_str(), input.as_deref()),
+            ("M", Some("--a-base64-string"))
+        );
+    }
+
+    #[test]
+    fn timeouts_past_the_clock_set_no_deadline() {
+        assert!(deadline(Some(StdDuration::MAX)).is_none());
+        assert!(deadline(None).is_none());
+        assert!(deadline(Some(StdDuration::from_secs(1))).is_some());
+    }
+
+    #[test]
     fn help_follows_any_subcommand() {
         for (command, list) in [
             ("call", &["--help"][..]),
@@ -602,6 +698,18 @@ mod tests {
             ("call", &["X.Y", "{}", "extra"][..]),
             ("call", &["X.Y", "--limit", "0"][..]),
             ("call", &["X.Y", "--timeout", "-1"][..]),
+            ("call", &["X.Y", "--timeout", "1e20"][..]),
+            ("call", &["X.Y", "--defaults=false"][..]),
+            ("call", &["X.Y", "--api", "http://a"][..]),
+            ("call", &["X.Y", "--api", "ws://a", "--ca", "c"][..]),
+            ("call", &["X.Y", "--out", "o"][..]),
+            ("methods", &["--db", "a"][..]),
+            ("decode", &["M", "--defaults"][..]),
+            ("profiles", &["list", "--db", "a", "--api", "ws://a"][..]),
+            (
+                "profiles",
+                &["import", "--db", "a", "--in", "f", "--out", "o"][..],
+            ),
             ("call", &["X.Y", "--profile", "alice"][..]),
             ("describe", &[][..]),
             ("decode", &[][..]),

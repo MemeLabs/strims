@@ -16,7 +16,7 @@
 )]
 
 use prost::Message;
-use strims_dao::export::{EXPORT_FORMAT, ExportEntry, ProfileExport};
+use strims_dao::export::{EXPORT_FORMAT, ExportEntry, ProfileExport, entries_digest};
 use strims_dao::key::index_hash;
 use strims_dao::schema::chat::profile_peer_key;
 use strims_dao::schema::directory::listing_key;
@@ -159,10 +159,21 @@ fn stream_keys_parse_to_their_ids_and_signatures() {
     assert_eq!((accepted, rejected), (3, 11));
 }
 
-/// The profile export file's encoding: its fields' tags and types.
+/// The profile export file's encoding: its fields' tags and types, and
+/// its entries' digest.
 #[test]
 fn profile_exports_encode_as_pinned() {
     let mut g = open();
+    let entries = vec![
+        ExportEntry {
+            key: "a".into(),
+            value: vec![1, 2],
+        },
+        ExportEntry {
+            key: "b".into(),
+            value: Vec::new(),
+        },
+    ];
     let export = ProfileExport {
         format: EXPORT_FORMAT.to_owned(),
         store_version: 8,
@@ -175,16 +186,9 @@ fn profile_exports_encode_as_pinned() {
                 profile_key: vec![0xab; 4],
             })),
         }),
-        entries: vec![
-            ExportEntry {
-                key: "a".into(),
-                value: vec![1, 2],
-            },
-            ExportEntry {
-                key: "b".into(),
-                value: Vec::new(),
-            },
-        ],
+        entry_count: entries.len() as u64,
+        entries_digest: entries_digest(&entries),
+        entries,
     };
     let e = g.entry("profile_export");
     g.check_hex(e, 0, export.encode_to_vec());

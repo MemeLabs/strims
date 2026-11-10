@@ -15,7 +15,7 @@ use strims_kv_redb::RedbKv;
 use strims_node::{Clock as _, SystemClock};
 
 use super::{Failure, ProfileLogin, stdout_line};
-use crate::cli::connect::store_error;
+use crate::cli::connect::missing_store;
 
 /// A `profiles` command, on the store at its path.
 #[derive(Debug)]
@@ -39,7 +39,7 @@ pub enum ProfilesCommand {
 pub(crate) async fn run(command: ProfilesCommand) -> Result<(), Failure> {
     match command {
         ProfilesCommand::List { db } => {
-            for name in list_users(&open(&db)?).await.map_err(failed)? {
+            for name in list_users(&open(&db, false)?).await.map_err(failed)? {
                 stdout_line(&name)?;
             }
         }
@@ -47,7 +47,7 @@ pub(crate) async fn run(command: ProfilesCommand) -> Result<(), Failure> {
             if login.name.trim().is_empty() {
                 return Err(Failure::Usage("a profile needs a name".into()));
             }
-            let kv = open(&db)?;
+            let kv = open(&db, true)?;
             let mut rng = os_rng()?;
             sign_up(
                 &kv,
@@ -61,12 +61,12 @@ pub(crate) async fn run(command: ProfilesCommand) -> Result<(), Failure> {
             .map_err(|e| Failure::Failed(format!("adding {}: {e}", login.name)))?;
         }
         ProfilesCommand::Remove { db, login } => {
-            remove_profile(&open(&db)?, &login.name, &login.password)
+            remove_profile(&open(&db, false)?, &login.name, &login.password)
                 .await
                 .map_err(|e| Failure::Failed(format!("removing {}: {e}", login.name)))?;
         }
         ProfilesCommand::Export { db, login, out } => {
-            let file = export_profile(&open(&db)?, &login.name, &login.password, os_rng()?)
+            let file = export_profile(&open(&db, false)?, &login.name, &login.password, os_rng()?)
                 .await
                 .map_err(|e| Failure::Failed(format!("exporting {}: {e}", login.name)))?;
             write_new(&out, &file)
@@ -75,7 +75,7 @@ pub(crate) async fn run(command: ProfilesCommand) -> Result<(), Failure> {
         ProfilesCommand::Import { db, input } => {
             let file = std::fs::read(&input)
                 .map_err(|e| Failure::Failed(format!("reading {}: {e}", input.display())))?;
-            let name = import_profile(&open(&db)?, &file)
+            let name = import_profile(&open(&db, true)?, &file)
                 .await
                 .map_err(|e| Failure::Failed(format!("importing {}: {e}", input.display())))?;
             stdout_line(&name)?;
@@ -88,8 +88,17 @@ fn failed(e: strims_dao::Error) -> Failure {
     Failure::Failed(e.to_string())
 }
 
-fn open(db: &Path) -> Result<RedbKv, Failure> {
-    RedbKv::open(db).map_err(|e| Failure::Failed(store_error(db, &e.to_string())))
+/// The store at `db`, made there if `create`.
+fn open(db: &Path, create: bool) -> Result<RedbKv, Failure> {
+    if !create && !db.exists() {
+        return Err(Failure::Failed(missing_store(db)));
+    }
+    RedbKv::open(db).map_err(|e| {
+        Failure::Failed(format!(
+            "opening the store {}: {e} (while a service or another command holds it, stop that first)",
+            db.display()
+        ))
+    })
 }
 
 /// An rng seeded from the OS, as the service's own.
@@ -101,15 +110,28 @@ fn os_rng() -> Result<DetRng, Failure> {
 
 /// Writes `bytes` to `path`, which mustn't exist, readable by its owner
 /// alone where the OS has modes: an export is as sensitive as its store.
+/// The file appears whole or not at all: written beside `path` under
+/// another name, then linked there, which fails if `path` exists by then.
 fn write_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        options.mode(0o600);
+    if path.exists() {
+        return Err(std::io::ErrorKind::AlreadyExists.into());
     }
-    let mut f = options.open(path)?;
-    f.write_all(bytes)?;
-    f.sync_all()
+    let mut partial = path.as_os_str().to_owned();
+    partial.push(format!(".partial-{}", std::process::id()));
+    let partial = PathBuf::from(partial);
+    let written = (|| {
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt as _;
+            options.mode(0o600);
+        }
+        let mut f = options.open(&partial)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+        std::fs::hard_link(&partial, path)
+    })();
+    let _ = std::fs::remove_file(&partial);
+    written
 }

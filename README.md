@@ -186,9 +186,9 @@ $ svc call --api ws://127.0.0.1:8083/manage --profile alice \
 
 `profiles export` writes a profile and its store, still sealed, to a file
 that `profiles import` adds to another store: a backup or a move, since the
-import is the same device. A second device pairs instead
-(`ReplicationFrontend.CreatePairingToken`, then `AuthFrontend.SignIn` with
-the token).
+import is the same device. A second device of a profile pairs: call
+`ReplicationFrontend.CreatePairingToken`, then `AuthFrontend.SignIn` with
+the token where the new device's store is.
 
 ## checks
 

@@ -276,16 +276,17 @@ pub async fn list_users<K: Kv>(kv: &K) -> Result<Vec<String>, Error> {
     Ok(users.into_iter().map(|(name, _)| name).collect())
 }
 
-/// Deletes the profile `name` signs in to with `password`: its sign-in
-/// record, then its store. Fails with [`Error::Credentials`] as
+/// Deletes the profile `name` signs in to with `password`: its store, then
+/// its sign-in record, so a removal that fails between the two signs in
+/// and completes when run again. Fails with [`Error::Credentials`] as
 /// [`sign_in`] does. Its persisted sessions open no store once it's gone,
 /// and expire.
 pub async fn remove_profile<K: Kv>(kv: &K, name: &str, password: &str) -> Result<(), Error> {
     let pk = sign_in(kv, name, password).await?;
+    kv.delete_table(&profile_table(pk.id)).await?;
     let mut tx = kv.begin_write(PROFILES).await?;
     tx.delete(name).await?;
-    tx.commit().await?;
-    Ok(kv.delete_table(&profile_table(pk.id)).await?)
+    Ok(tx.commit().await?)
 }
 
 /// Adds the profile a pairing token carries, as a new device of it: its

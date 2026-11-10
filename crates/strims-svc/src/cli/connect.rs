@@ -14,6 +14,7 @@ use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, RootCertStore};
 use strims_proto::auth::v1::sign_in_request::{Credentials, Password};
 use strims_proto::auth::v1::{AuthFrontendClient, SignInRequest};
+use strims_rpc::wire::MAX_VARINT_LEN;
 use strims_rpc::{Client, Config as RpcConfig, connect};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
@@ -56,15 +57,21 @@ impl Connection {
                 svc: None,
             }),
             Target::Db(path) => {
+                if !path.exists() {
+                    return Err(missing_store(path));
+                }
                 let config = Config {
                     api_listen: "127.0.0.1:0".into(),
                     db: Db::File(path.clone()),
                     ..Config::default()
                 };
                 let api_path = config.api_path.clone();
-                let svc = Svc::start(config)
-                    .await
-                    .map_err(|e| store_error(path, &e.to_string()))?;
+                let svc = Svc::start(config).await.map_err(|e| {
+                    format!(
+                        "{}: {e} (while a service runs on the store, call it with --api)",
+                        path.display()
+                    )
+                })?;
                 let client = dial(&format!("ws://{}{api_path}", svc.api_addr()), None).await?;
                 Ok(Connection {
                     client,
@@ -99,11 +106,10 @@ impl Connection {
     }
 }
 
-/// What a store the command line can't open says, with what to do when a
-/// service holds it.
-pub(crate) fn store_error(path: &Path, error: &str) -> String {
+/// What a path with no store at it says.
+pub(crate) fn missing_store(path: &Path) -> String {
     format!(
-        "opening the store {}: {error} (while a service runs on it, reach it with --api)",
+        "no store at {} (strims-svc profiles add makes one)",
         path.display()
     )
 }
@@ -146,9 +152,10 @@ async fn dial(url: &str, ca: Option<&Path>) -> Result<Client, String> {
     }
 }
 
-/// The API's frames: one RPC message each, at most a frontend message.
+/// The API's frames: one RPC message each, at most a frontend message
+/// and its length, as the API takes them.
 fn ws_config() -> WebSocketConfig {
-    let max = RpcConfig::frontend().max_message_bytes + 16;
+    let max = RpcConfig::frontend().max_message_bytes + MAX_VARINT_LEN;
     WebSocketConfig::default()
         .max_message_size(Some(max))
         .max_frame_size(Some(max))

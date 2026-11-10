@@ -100,8 +100,8 @@
 //!
 //! [`cli`] calls the frontend API the way the UI does, over a running
 //! service's API or one it runs on a store for the call, and manages a
-//! store's profiles: `strims-svc call`, `methods`, `describe` and
-//! `profiles` ([`cli::USAGE`]).
+//! store's profiles: `strims-svc call`, `methods`, `describe`, `decode`,
+//! `encode` and `profiles` ([`cli::USAGE`]).
 //!
 //! # Threads
 //!
