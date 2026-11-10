@@ -187,6 +187,77 @@ the budget at one or two copies, and trees deepened: at 16 local seeds
 star-3-10's lag p99 went ×2.06, halve-7-10 collapsed 12 times against 7
 and halve-15-10 9 against 5; only halve-7-20 gained (×0.42).
 
+**The seed window's test read below the runner.** (`seed-window-below`
+ba47a6c1, against dee2b155) A holder's push wait added its link's queue
+over the check (its least round trip over its smallest, spilling's reading)
+to its wait in the runner, and the cut's saturation also read a latest
+floor at `QUEUE_FORMED`. Trace-identical on star-15 seeds 1-4,
+star-15-10-end-abrupt and collapse_slow_viewer: the queue below the runner
+drains between munro bursts (a holder's least over a check stood p50 0-2
+ms, p90 1-57 ms above its smallest), and when the uplink fills the 100 ms
+access queue and TCP's loss response hold what stands to 14-60 ms, so no
+check read a majority past `PUSH_WAIT_TARGET`. That wait sits mostly in the
+access queue, in flight (star-15: 78 % of a byte's wait in the uplink
+queue, 22 % unsent behind the window), where `tcpi_notsent_bytes` or a data
+channel's `bufferedAmount` can't see it.
+
+**Ending a seed window's doubling at the first queue that forms.**
+(`seed-window-below` 1bec065d, on ba47a6c1) Once the budget was measured, a
+latest floor at `QUEUE_FORMING` ended the window's doubling at its copies,
+as HyStart ends a slow start, so the budget's growth fell to
+`SEED_GROWTH`. It ended star-15's budget sawtooth (main's budget swung
+16-465 slots, copies 1-8; here 17-102, copies 1-2), but held the budget
+near what the seed wrote (`SEED_GROWTH` × `ALLOC_UTILIZATION` is 1.05),
+1-2 copies where 70 % of the uplink pays for 2.7: at 4 local seeds
+star-15-10-end-abrupt collapsed 1 → 4 of 4, and collapse_slow_viewer
+failed 6 of 8 seeds against main's 3.
+
+**A seed's budget from what its links delivered as a queue formed.**
+(`seed-window-below`, local screens against ba47a6c1 and 1bec065d) The
+links' summed delivery rates, taken while the latest floor stood (the
+meter's drained reading at `QUEUE_FORMED`; or, once the window stopped
+doubling, the budget's capacity at `QUEUE_FORMING`, growing by
+`DRAIN_PROBE` a `DRAIN_PROBE_PERIOD` since), were to be what the uplink
+carries. The floor reads the seed's own munro bursts, which its probes
+ride, at a third to a half of its uplink (star-15: its uplink queue 0 ms at
+p50, its viewers' echoes held 0 ms), so the rate then is what it wrote (405
+against 404 kB/s, 439 against 438), not the 1.25 MB/s uplink. Without the
+doubling's end the budget kept its sawtooth (p90 109/465/124/110 slots
+against main's 211/465/130/159); with it, it sat at 1-2 copies, p50
+20/16/40/16 slots against 1bec065d's 33/20/20/27.
+
+**A burst drain rate from vnic's probes.** (`seed-window-below`, local
+screen against 1bec065d) For each echo of a probe that waited, the bytes
+the host wrote on every link in the probe's excess before it (or since its
+previous probe on any link) over that excess, kept as a maximum over a
+span, was to be the rate the uplink drains a burst at. vnic can't tell
+which of those bytes are still ahead of the probe: the earlier burst in the
+window drained, and other connections' bytes held behind their windows
+leave after it. So the samples run high: star-15 seeds 1-4, probes that
+waited 25-100 ms read 1.4 MB/s at p50 and 1.8-2.3 MB/s at p90 against the
+1.2 MB/s its 10 Mbit/s uplink carries in payload, the maximum over 1 s
+1.3-2.4 MB/s and over 10 s 1.5-2.8 MB/s; since the previous probe, 2.3-3.9
+MB/s over 1 s.
+
+**Delay-based AIMD on a seed's copies.** (`seed-window-below` bf92a4cd, on
+1bec065d, against 7707b1e7) Past the doubling's end the window halved at a
+latest floor of `QUEUE_FORMED`, held from `QUEUE_FORMING` and took a copy
+per `WINDOW_PROBE` under it, and the budget was the copies' slots, with no
+capacity read. At 32 seeds the peers tier collapsed 85 → 92 (lock-in
+0 → 3, star-15-end-abrupt 5 → 10); robust 75 → 82, lag p99 ×1.016,
+latency-step ×1.56 [1.32, 1.85] past its guardrail, halve-15-10 ×1.23,
+halve-31-10 ×1.17, star-31-10 ×1.18, star-15-10-end-abrupt 5 → 10 (better:
+halve-7-20 ×0.74, halve-31-20 ×0.87); browsers 123 → 108
+(star-15-10-end-abrupt 29 → 10), but lag p99 ×1.058, with star-7-10 ×1.34,
+halve-7-20 ×1.25, halve-15-10 ×1.62 and thin-15-10's delivery past their
+guardrails. A path's latency step reads as a standing queue until its
+10-minute base rolls over; a competing bulk upload holds the floor at 34-68
+ms and the copies at one while it runs (star-15: lag p99 ×1.9 and ×3.5 at
+two of four seeds), as a delay-based window yields to a loss-based one; and
+a probe riding the HAVE frames sent with each munro waits behind its
+pushes, so one 32 KiB munro through a 10 Mbit/s uplink (26 ms) reads past
+`QUEUE_FORMED`, and such a seed holds one copy.
+
 **Admitting by count until the uplink saturates.** (`idle-count`,
 `idle-count-all`, against 5d81aaf6) An idle relay reads twenty times its
 control traffic, short of one subscriber. Until its meter had seen
