@@ -133,7 +133,6 @@ on it is in `CONVENTIONS.md`.
     connects, and the API refuse another;
   - WebSocket pings on API connections, so a UI that goes without
     closing its connection releases it;
-  - headless sessions started at boot, for bootstrap nodes;
   - an HTTP health check;
   - a Prometheus `/metrics` endpoint rendering the Debug service's
     snapshot. infra's `mock-stream-exporter` scrapes `:1971/metrics` for
@@ -143,9 +142,10 @@ on it is in `CONVENTIONS.md`.
   - on the HLS listener: keep-alive over HTTP/1.1, Range requests, CORS
     preflight, and a cap per address, so one client's slow or idle
     connections can't hold every slot.
-  - invite shortlinks: a server for `InviteLink.GetInvitation` at
-    `/api/invite` (the UI's `/invite/<code>` page already asks it), sign-up
-    in the same step for a newcomer, and a way to mint codes;
+  - invite shortlinks: the UI's `/invite/<code>` page asks
+    `InviteLink.GetInvitation` at `/api/invite`, which nothing serves:
+    serve it from codes the owner mints, or point the page at the
+    bootstrap API's invitations;
   - a container image, for infra's leader, seeder and invites
     deployments.
 - Desktop: the Electron app (`src/desktop`) spawns its node from

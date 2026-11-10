@@ -190,6 +190,44 @@ import is the same device. A second device of a profile pairs: call
 `ReplicationFrontend.CreatePairingToken`, then `AuthFrontend.SignIn` with
 the token where the new device's store is.
 
+## one-click watch page
+
+The watch page lists a network's streams and plays one in a click, without a
+profile set up first: the page's node makes a profile of its own and joins the
+network from an invitation the headless service vends. The service serves this
+for networks its profile owns, over the bootstrap API on its HLS listener
+(`/api/v1/directory/events`, `/api/v1/directory/thumbnails/...`,
+`/api/v1/invitation/<network key>`).
+
+1. Sign up on the headless service and create a network, as above. The
+   network's key is in the web ui's directory URL, `/directory/<network key>`.
+
+1. Stop the service, put the profile's password in a file, and run it again
+   with the profile signed in at start and the bootstrap API on:
+
+   ```sh
+   $ printf %s '<password>' > ./owner.password
+   $ cargo run --release -p strims-svc -- --db ./strims.redb \
+       --api-path /manage --ws-listen 127.0.0.1:8082 --allow-insecure-ws \
+       --hls-listen 127.0.0.1:8084 \
+       --profile <name> --profile-password-file ./owner.password \
+       --bootstrap-network <network key> \
+       --bootstrap-ws-url wss://<dev machine IP>:8080
+   ```
+
+   The webpack dev server proxies `https://<dev machine IP>:8080/api/v1` to
+   the HLS listener on port 8084. The invitations' bootstrap client dials
+   `--bootstrap-ws-url` and the profile's key, the URL the dev server proxies
+   to the node's WebSocket listener: a browser dials only `wss://`.
+
+1. Open the watch page from the dev server and click a stream.
+
+Outside the dev server, give the HLS listener a certificate (`--tls-cert`,
+`--tls-key`) so browsers reach the API over HTTP/2, and put a TLS proxy in
+front of `--ws-listen` for the `--bootstrap-ws-url`. Every invitation the API
+vends is the owner's, and the owner's invitations admit any number of
+newcomers until they expire.
+
 ## checks
 
 `crates/CONVENTIONS.md` lists the checks to run from the repo root before
