@@ -23,6 +23,7 @@ use std::time::Duration;
 use futures_core::Stream;
 use futures_sink::Sink;
 use futures_util::StreamExt;
+use prost::Message;
 use strims_proto::rpc::fixture::{
     EchoRequest, EchoResponse, FixtureClient, FixtureService, GetRequest, GetResponse, ReadRequest,
     ReadResponse, WatchRequest, WatchResponse, register_fixture_service,
@@ -336,6 +337,53 @@ async fn streams_deliver_every_item_then_end() {
             Some(Err(CallError::Remote(Error::new(3, "negative interval"))))
         );
         assert_eq!(failed.next().await, None);
+    })
+    .await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn encoded_calls_take_and_give_encoded_messages() {
+    local(async {
+        let (client, ..) = serve(router_for(Rc::default()), Config::default());
+        let req = EchoRequest {
+            name: "raw".into(),
+            flag: true,
+            other_flag: false,
+        };
+        let res = client
+            .call_encoded("strims.rpc.fixture.Fixture.Echo", &req.encode_to_vec())
+            .await
+            .unwrap();
+        let res = EchoResponse::decode(res.as_slice()).unwrap();
+        assert_eq!((res.name.as_str(), res.data.len()), ("raw@1", 1000));
+
+        assert_eq!(
+            client
+                .call_encoded("strims.rpc.fixture.Fixture.Get", &[])
+                .await,
+            Err(CallError::Remote(Error::new(7, "no config")))
+        );
+        assert!(matches!(
+            client
+                .call_encoded("strims.rpc.fixture.Fixture.Nope", &[])
+                .await,
+            Err(CallError::Remote(_))
+        ));
+
+        let watch = WatchRequest {
+            interval_ms: 3,
+            ..Default::default()
+        };
+        let items: Vec<_> = client
+            .call_streaming_encoded("strims.rpc.fixture.Fixture.Watch", &watch.encode_to_vec())
+            .unwrap()
+            .collect()
+            .await;
+        let items: Vec<_> = items
+            .into_iter()
+            .map(|i| WatchResponse::decode(i.unwrap().as_slice()).unwrap().data)
+            .collect();
+        assert_eq!(items, [0u32, 1, 2].map(|n| n.to_be_bytes().to_vec()));
     })
     .await;
 }

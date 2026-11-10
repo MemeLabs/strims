@@ -278,8 +278,30 @@ async fn start_profile<K: Kv, P: AppPlatform>(
     })
 }
 
+/// The full names of the services [`bind_profile`] serves: every service a
+/// UI calls once signed in. The auth service it calls first belongs to the
+/// frontend connection, not the profile.
+pub const FRONTEND_SERVICES: &[&str] = &[
+    "strims.profile.v1.ProfileFrontend",
+    "strims.replication.v1.ReplicationFrontend",
+    "strims.notification.v1.NotificationFrontend",
+    "strims.vnic.v1.VNICFrontend",
+    "strims.network.v1.NetworkFrontend",
+    "strims.network.v1.bootstrap.BootstrapFrontend",
+    "strims.network.v1.directory.DirectoryFrontend",
+    "strims.chat.v1.ChatFrontend",
+    "strims.chat.v1.ChatServerFrontend",
+    "strims.video.v1.VideoChannelFrontend",
+    "strims.video.v1.VideoIngress",
+    "strims.video.v1.HLSEgress",
+    "strims.video.v1.Egress",
+    "strims.video.v1.Capture",
+    "strims.autoseed.v1.AutoseedFrontend",
+    "strims.debug.v1.Debug",
+];
+
 /// Serves `session`'s frontends on a frontend connection's `router`: the
-/// profile's own, and those of `runtime`'s controls.
+/// profile's own, and those of `runtime`'s controls ([`FRONTEND_SERVICES`]).
 pub fn bind_profile<K: Kv, T: Timer, V: VideoHost, S: Spawn>(
     runtime: &ProfileRuntime<K, T, V, S>,
     session: &Rc<Session<K>>,

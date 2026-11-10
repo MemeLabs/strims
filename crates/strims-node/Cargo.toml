@@ -64,7 +64,9 @@ rcgen.workspace = true
 sha2.workspace = true
 # `synth`: the turmoil tests publish a synthetic RTMP stream.
 strims-video = { workspace = true, features = ["test-support"] }
-strims-proto = { workspace = true, features = ["services"] }
+strims-proto = { workspace = true, features = ["services", "descriptors"] }
+# the factory test lists the frontend services' methods from the descriptors
+prost-reflect.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util", "sync", "test-util"] }
 
 [lints]

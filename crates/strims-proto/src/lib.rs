@@ -39,6 +39,12 @@ pub mod service;
 
 include!(concat!(env!("OUT_DIR"), "/tree.rs"));
 
+/// The encoded `google.protobuf.FileDescriptorSet` of every message and
+/// service here and the well-known types they import, with the schema's
+/// comments as source info.
+#[cfg(feature = "descriptors")]
+pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/descriptors.bin"));
+
 pub use r#type as types;
 
 #[cfg(test)]

@@ -44,8 +44,8 @@ use strims_video::hls::HlsRoutes;
 use tokio::time::Sleep;
 
 pub use strims_node_core::app::{
-    AppPlatform, IndexHosts, MemoryMetrics, NodeHost, PeerHandler, ProfileRuntime, ProfileSlot,
-    ServicesConfig, Spawn, StartError, TaskHandle, bind_profile,
+    AppPlatform, FRONTEND_SERVICES, IndexHosts, MemoryMetrics, NodeHost, PeerHandler,
+    ProfileRuntime, ProfileSlot, ServicesConfig, Spawn, StartError, TaskHandle, bind_profile,
 };
 
 use crate::codec::{FfmpegConfig, NodeVideoHost};

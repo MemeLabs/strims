@@ -9,6 +9,7 @@
 pub mod auth;
 mod error;
 pub mod events;
+pub mod export;
 pub mod ids;
 pub mod key;
 pub mod lease;

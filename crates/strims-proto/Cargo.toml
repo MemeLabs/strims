@@ -11,12 +11,17 @@ build = "build/main.rs"
 # RPC service interfaces (`service` and the generated per-service items).
 # Off in core crates; the app layer turns it on through `strims-rpc`.
 services = ["dep:futures-core"]
+# `FILE_DESCRIPTOR_SET`, the schema's descriptors with their comments, for
+# tools that read or write messages by name (strims-svc's command line).
+# Off in core and browser builds, which needn't carry them.
+descriptors = []
 
 [dependencies]
 prost.workspace = true
 futures-core = { workspace = true, optional = true }
 
 [build-dependencies]
+prost.workspace = true
 prost-build.workspace = true
 prost-types.workspace = true
 protox.workspace = true

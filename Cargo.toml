@@ -134,6 +134,7 @@ prost = "0.14"
 prost-types = "0.14"
 prost-build = "0.14"
 protox = "0.10"
+prost-reflect = "0.16"
 
 # crypto
 ed25519-dalek = "3"

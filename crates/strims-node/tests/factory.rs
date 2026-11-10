@@ -11,12 +11,13 @@
 use std::future::Future;
 use std::rc::Rc;
 
+use prost_reflect::DescriptorPool;
 use strims_base::rng::det_rng;
 use strims_dao::auth::{self, ProfileKey};
 use strims_dao::schema::vnic::{DEFAULT_MAX_PEERS, VnicConfig};
 use strims_dao::{ProfileStore, Singleton};
 use strims_kv::MemoryKv;
-use strims_node::app::{AppConfig, NodeFactory, NodeTimer, StartError};
+use strims_node::app::{AppConfig, FRONTEND_SERVICES, NodeFactory, NodeTimer, StartError};
 use strims_node::{Clock, Node, SystemClock, TokioNet};
 use strims_proto::vnic::v1::Config as VnicRecord;
 use strims_qos::DEFAULT_RATE_LIMIT;
@@ -70,25 +71,15 @@ fn one_profile_runs_per_process_with_every_frontend_bound() {
 
         let router = Router::new();
         manager.factory().bind(&runtime, &session, &router);
-        for method in [
-            "strims.profile.v1.ProfileFrontend.Get",
-            "strims.vnic.v1.VNICFrontend.GetConfig",
-            "strims.notification.v1.NotificationFrontend.Watch",
-            "strims.network.v1.NetworkFrontend.CreateServer",
-            "strims.network.v1.bootstrap.BootstrapFrontend.GetConfig",
-            "strims.network.v1.directory.DirectoryFrontend.WatchListings",
-            "strims.chat.v1.ChatFrontend.OpenClient",
-            "strims.chat.v1.ChatServerFrontend.CreateServer",
-            "strims.video.v1.VideoChannelFrontend.Create",
-            "strims.video.v1.VideoIngress.GetChannelURL",
-            "strims.video.v1.HLSEgress.OpenStream",
-            "strims.video.v1.Egress.OpenStream",
-            "strims.video.v1.Capture.Open",
-            "strims.autoseed.v1.AutoseedFrontend.CreateRule",
-            "strims.debug.v1.Debug.WatchMetrics",
-            "strims.debug.v1.Debug.StartMockStream",
-        ] {
-            assert!(router.contains(method), "{method} isn't bound");
+        let pool = DescriptorPool::decode(strims_proto::FILE_DESCRIPTOR_SET).unwrap();
+        for name in FRONTEND_SERVICES {
+            let service = pool
+                .get_service_by_name(name)
+                .unwrap_or_else(|| panic!("{name} isn't in the schema"));
+            for method in service.methods() {
+                let method = method.full_name();
+                assert!(router.contains(method), "{method} isn't bound");
+            }
         }
     }));
 }

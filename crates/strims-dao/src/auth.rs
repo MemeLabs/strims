@@ -23,6 +23,7 @@ use strims_proto::profile::v1::{self as profile, Device};
 
 use crate::error::Error;
 use crate::ids;
+use crate::key::profile_table;
 use crate::schema::network::{BootstrapClients, Networks};
 use crate::schema::profile::{Devices, Profile, ProfileIds};
 use crate::seal::{KEY_SIZE, StorageKey};
@@ -262,6 +263,29 @@ pub fn open_user(user: &ServerUserThing, password: &str) -> Result<ProfileKey, E
 pub async fn sign_in<K: Kv>(kv: &K, name: &str, password: &str) -> Result<ProfileKey, Error> {
     let user = get_user(kv, name).await?.ok_or(Error::Credentials)?;
     open_user(&user, password)
+}
+
+/// The user names with sign-in records, in order.
+pub async fn list_users<K: Kv>(kv: &K) -> Result<Vec<String>, Error> {
+    let mut tx = match kv.begin_read(PROFILES).await {
+        Ok(tx) => tx,
+        Err(strims_kv::Error::NoTable) => return Ok(Vec::new()),
+        Err(e) => return Err(e.into()),
+    };
+    let users = tx.scan("", None, usize::MAX).await?;
+    Ok(users.into_iter().map(|(name, _)| name).collect())
+}
+
+/// Deletes the profile `name` signs in to with `password`: its sign-in
+/// record, then its store. Fails with [`Error::Credentials`] as
+/// [`sign_in`] does. Its persisted sessions open no store once it's gone,
+/// and expire.
+pub async fn remove_profile<K: Kv>(kv: &K, name: &str, password: &str) -> Result<(), Error> {
+    let pk = sign_in(kv, name, password).await?;
+    let mut tx = kv.begin_write(PROFILES).await?;
+    tx.delete(name).await?;
+    tx.commit().await?;
+    Ok(kv.delete_table(&profile_table(pk.id)).await?)
 }
 
 /// Adds the profile a pairing token carries, as a new device of it: its

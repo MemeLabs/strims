@@ -5,7 +5,6 @@
 
 use std::fmt;
 use std::future::Future;
-use std::marker::PhantomData;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll};
@@ -16,7 +15,7 @@ use strims_proto::service::{CallError, Caller, StreamingMethod, UnaryMethod};
 
 use crate::endpoint::{CallId, RemoteId, Response};
 use crate::shared::{SharedRef, with_endpoint};
-use crate::wire::Argument;
+use crate::wire::{Argument, Encoded};
 
 /// Makes calls through a connection; see [`crate::connect`]. Clones share
 /// the connection and call the same remote: the connection's peer, or the
@@ -69,6 +68,43 @@ impl Client {
             done: false,
         })
     }
+
+    /// Calls the unary method named `method` (its full name, as
+    /// [`Method::NAME`](strims_proto::service::Method::NAME) gives it) with
+    /// the encoded request `req`: the encoded response. For a caller that
+    /// knows methods only by name, such as one that reads and writes
+    /// messages through the schema's descriptors.
+    pub fn call_encoded(
+        &self,
+        method: &str,
+        req: &[u8],
+    ) -> impl Future<Output = Result<Vec<u8>, CallError>> + use<> {
+        let (call, error) = match self.start(method, false, &Encoded(req)) {
+            Ok(call) => (Some(call), None),
+            Err(e) => (None, Some(e)),
+        };
+        UnaryCall {
+            call,
+            error,
+            decode: Ok,
+        }
+    }
+
+    /// Calls the server-streaming method named `method` with the encoded
+    /// request `req`: its encoded responses. See [`Client::call_encoded`].
+    pub fn call_streaming_encoded(
+        &self,
+        method: &str,
+        req: &[u8],
+    ) -> Result<ClientStream<Vec<u8>>, CallError> {
+        self.start(method, true, &Encoded(req))
+            .map(|call| ClientStream { call, decode: Ok })
+    }
+}
+
+/// A typed call's response decoder.
+fn decode<T: Message + Default>(b: Vec<u8>) -> Result<T, prost::DecodeError> {
+    T::decode(b.as_slice())
 }
 
 impl Caller for Client {
@@ -85,7 +121,7 @@ impl Caller for Client {
         UnaryCall {
             call,
             error,
-            _response: PhantomData,
+            decode: decode::<M::Response>,
         }
     }
 
@@ -95,7 +131,7 @@ impl Caller for Client {
     ) -> impl Future<Output = Result<Self::Stream<M::Response>, CallError>> + use<M> {
         let stream = self.start(M::NAME, true, req).map(|call| ClientStream {
             call,
-            _item: PhantomData,
+            decode: decode::<M::Response>,
         });
         std::future::ready(stream)
     }
@@ -134,9 +170,18 @@ impl Call {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<T, CallError>> {
+        self.poll_unary_with(cx, decode::<T>)
+    }
+
+    /// A unary call's result, its response decoded by `decode`.
+    fn poll_unary_with<T>(
+        &mut self,
+        cx: &mut Context<'_>,
+        decode: fn(Vec<u8>) -> Result<T, prost::DecodeError>,
+    ) -> Poll<Result<T, CallError>> {
         let res = match self.poll_response(cx) {
             Poll::Pending => return Poll::Pending,
-            Poll::Ready(Response::Item(b)) => T::decode(b.as_slice()).map_err(CallError::Decode),
+            Poll::Ready(Response::Item(b)) => decode(b).map_err(CallError::Decode),
             Poll::Ready(Response::End) => Err(CallError::Closed),
             Poll::Ready(Response::Failed(e)) => Err(e),
         };
@@ -188,21 +233,23 @@ struct UnaryCall<T> {
     call: Option<Call>,
     /// Why the call couldn't start.
     error: Option<CallError>,
-    _response: PhantomData<fn() -> T>,
+    /// Turns the encoded response into the call's result.
+    decode: fn(Vec<u8>) -> Result<T, prost::DecodeError>,
 }
 
-impl<T: Message + Default> Future for UnaryCall<T> {
+impl<T> Future for UnaryCall<T> {
     type Output = Result<T, CallError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if let Some(e) = self.error.take() {
             return Poll::Ready(Err(e));
         }
+        let decode = self.decode;
         // polled again after resolving
         let Some(call) = self.call.as_mut() else {
             return Poll::Ready(Err(CallError::Disconnected));
         };
-        let res = std::task::ready!(call.poll_unary(cx));
+        let res = std::task::ready!(call.poll_unary_with(cx, decode));
         self.call = None;
         Poll::Ready(res)
     }
@@ -215,7 +262,8 @@ impl<T: Message + Default> Future for UnaryCall<T> {
 /// [`CallError::Decode`] and cancels the call.
 pub struct ClientStream<T> {
     call: Call,
-    _item: PhantomData<fn() -> T>,
+    /// Turns each encoded response into an item.
+    decode: fn(Vec<u8>) -> Result<T, prost::DecodeError>,
 }
 
 impl<T> fmt::Debug for ClientStream<T> {
@@ -227,7 +275,7 @@ impl<T> fmt::Debug for ClientStream<T> {
     }
 }
 
-impl<T: Message + Default> Stream for ClientStream<T> {
+impl<T> Stream for ClientStream<T> {
     type Item = Result<T, CallError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -236,7 +284,7 @@ impl<T: Message + Default> Stream for ClientStream<T> {
         }
         match self.call.poll_response(cx) {
             Poll::Pending => Poll::Pending,
-            Poll::Ready(Response::Item(b)) => match T::decode(b.as_slice()) {
+            Poll::Ready(Response::Item(b)) => match (self.decode)(b) {
                 Ok(item) => Poll::Ready(Some(Ok(item))),
                 Err(e) => {
                     self.call.cancel();

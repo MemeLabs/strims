@@ -3,7 +3,8 @@
 
 //! Golden vectors (`golden/vectors.hex`) for the keys and hashes this crate
 //! derives: password keys, sealed values, index hashes, directory listing
-//! and chat profile index keys, and video stream keys. `STRIMS_GOLDEN=update`
+//! and chat profile index keys, video stream keys, and the profile export
+//! file's encoding. `STRIMS_GOLDEN=update`
 //! rewrites them from the code (see `strims-golden`).
 
 // Tests panic on failure by design.
@@ -15,12 +16,15 @@
 )]
 
 use prost::Message;
+use strims_dao::export::{EXPORT_FORMAT, ExportEntry, ProfileExport};
 use strims_dao::key::index_hash;
 use strims_dao::schema::chat::profile_peer_key;
 use strims_dao::schema::directory::listing_key;
 use strims_dao::schema::video::{format_stream_key, parse_stream_key};
 use strims_dao::seal::StorageKey;
 use strims_golden::Golden;
+use strims_proto::auth::v1::ServerUserThing;
+use strims_proto::auth::v1::server_user_thing::{Credentials, Unencrypted};
 use strims_proto::network::v1::directory::Listing;
 use strims_proto::profile::v1 as profile;
 
@@ -153,4 +157,35 @@ fn stream_keys_parse_to_their_ids_and_signatures() {
         }
     }
     assert_eq!((accepted, rejected), (3, 11));
+}
+
+/// The profile export file's encoding: its fields' tags and types.
+#[test]
+fn profile_exports_encode_as_pinned() {
+    let mut g = open();
+    let export = ProfileExport {
+        format: EXPORT_FORMAT.to_owned(),
+        store_version: 8,
+        profile_id: 0x0102_0304_0506_0708,
+        user: Some(ServerUserThing {
+            id: 0,
+            name: "alice".into(),
+            credentials: Some(Credentials::Unencrypted(Unencrypted {
+                profile_id: 9,
+                profile_key: vec![0xab; 4],
+            })),
+        }),
+        entries: vec![
+            ExportEntry {
+                key: "a".into(),
+                value: vec![1, 2],
+            },
+            ExportEntry {
+                key: "b".into(),
+                value: Vec::new(),
+            },
+        ],
+    };
+    let e = g.entry("profile_export");
+    g.check_hex(e, 0, export.encode_to_vec());
 }

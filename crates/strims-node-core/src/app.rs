@@ -70,4 +70,4 @@ mod profile;
 pub use host::{IndexHosts, NodeHost};
 pub use peers::{PeerHandler, PeerServices};
 pub use platform::{AppPlatform, MemoryMetrics, ServicesConfig, Spawn, StartError, TaskHandle};
-pub use profile::{ProfileRuntime, ProfileSlot, bind_profile};
+pub use profile::{FRONTEND_SERVICES, ProfileRuntime, ProfileSlot, bind_profile};

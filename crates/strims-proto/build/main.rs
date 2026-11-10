@@ -11,12 +11,17 @@
 //!    `strims_proto::vnic::v1`.
 //! 4. With the `services` feature, generates RPC service interfaces into
 //!    each package's file (`build/rpc.rs`).
+//! 5. Writes the parsed `FileDescriptorSet`, source info and imports
+//!    included, to `descriptors.bin`, which the `descriptors` feature
+//!    embeds.
 
 use std::cell::RefCell;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::{env, fs};
+
+use prost::Message as _;
 
 mod ident;
 mod rpc;
@@ -57,6 +62,7 @@ fn main() -> Result<(), BoxError> {
             Rc::clone(&rpc_errors),
         )));
     }
+    fs::write(out_dir.join("descriptors.bin"), fds.encode_to_vec())?;
     config.compile_fds(fds.clone())?;
     let rpc_errors = rpc_errors.take();
     if !rpc_errors.is_empty() {
