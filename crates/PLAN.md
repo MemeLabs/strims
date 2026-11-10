@@ -140,8 +140,9 @@ on it is in `CONVENTIONS.md`.
     gauge `strims_debug_mock_stream_latency_ms{id,swarm_id}`, each mock
     stream reader's last segment latency;
   - on the HLS listener: keep-alive over HTTP/1.1, Range requests, CORS
-    preflight, and a cap per address, so one client's slow or idle
-    connections can't hold every slot.
+    preflight, and a cap per address, the bootstrap API's event streams
+    included, so one client's slow, idle or streaming connections can't
+    hold every slot.
   - invite shortlinks: the UI's `/invite/<code>` page asks
     `InviteLink.GetInvitation` at `/api/invite`, which nothing serves:
     serve it from codes the owner mints, or point the page at the
