@@ -122,6 +122,25 @@ module.exports = (env, argv) => {
     },
   };
 
+  // Emits the named pages as their HtmlWebpackPlugin made them, without
+  // what other plugins add as they're emitted: WebpackPwaManifest puts the
+  // app's manifest and icons in every page.
+  const bareHtmlPlugin = (filenames) => ({
+    apply: (compiler) =>
+      compiler.hooks.compilation.tap("BareHtmlPlugin", (compilation) => {
+        const hooks = HtmlWebpackPlugin.getHooks(compilation);
+        const made = new Map();
+        hooks.beforeEmit.tap({ name: "BareHtmlPlugin", stage: -100 }, (data) => {
+          if (filenames.includes(data.outputName)) made.set(data.outputName, data.html);
+          return data;
+        });
+        hooks.beforeEmit.tap({ name: "BareHtmlPlugin", stage: 100 }, (data) => {
+          if (made.has(data.outputName)) data.html = made.get(data.outputName);
+          return data;
+        });
+      }),
+  });
+
   const providePlugin = () =>
     new webpack.ProvidePlugin({
       process: "process/browser",
@@ -155,13 +174,14 @@ module.exports = (env, argv) => {
       ...htmlWebpackPluginOptions,
     }),
     // The one-click watch page, served at /watch: tiles and a player, no
-    // branding, so no favicon or title of its own.
+    // branding, so no favicon, title or app manifest of its own.
     new HtmlWebpackPlugin({
       filename: "watch.html",
       chunks: ["watch"],
       title: "",
       ...htmlWebpackPluginOptions,
     }),
+    bareHtmlPlugin(["watch.html"]),
     new WebpackPwaManifest({
       name: "Strims",
       short_name: "Strims",
