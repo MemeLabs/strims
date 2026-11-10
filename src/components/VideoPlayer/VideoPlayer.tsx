@@ -58,7 +58,9 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   const rootRef = useRef();
   const [controlsHidden, renewControlsTimeout, clearControlsTimeout] = useIdleTimeout();
   const [isFullscreen, toggleFullscreen] = useFullscreen();
-  const { theaterMode, toggleTheaterMode } = useLayout();
+  // A player outside the app's layout (the watch page's) has no theater
+  // mode, and closes by its close button.
+  const layout = useLayout();
   const videoRef = useRef<HTMLVideoElement>();
   const [videoState, videoProps, videoControls] = useVideo(videoRef);
   const remote = useRemotePlayback({ networkKey, swarmUri, mimeType, videoRef });
@@ -125,8 +127,9 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
           showPlayButton: true,
           showVolume: true,
           showPiPButton: true,
-          showTheaterButton: true,
+          showTheaterButton: !!layout,
           showFullscreenButton: true,
+          showCloseButton: !layout,
         };
 
   return (
@@ -175,8 +178,8 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         visible={(!controlsHidden || defaultControlsVisible) && !disableControls}
         fullscreen={isFullscreen}
         toggleFullscreen={handleToggleFullscreen}
-        theaterMode={theaterMode}
-        toggleTheaterMode={toggleTheaterMode}
+        theaterMode={layout?.theaterMode ?? false}
+        toggleTheaterMode={layout?.toggleTheaterMode}
         close={handleClose}
         remoteButtons={
           <>

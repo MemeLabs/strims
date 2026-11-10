@@ -20,8 +20,8 @@ const state: State = {
   loading: false,
 };
 
-const createProfile = (serverAddress: string, req: ISignUpRequest) => Promise.resolve();
-const signIn = (serverAddress: string, req: ISignInRequest) => Promise.resolve();
+const createProfile = (serverAddress: string, req: ISignUpRequest) => Promise.resolve(null);
+const signIn = (serverAddress: string, req: ISignInRequest) => Promise.resolve(true);
 
 export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
   const value = useMemo<[State, Ops]>(() => [state, { createProfile, signIn }], []);

@@ -43,8 +43,10 @@ export interface State {
 }
 
 export interface Ops {
-  createProfile: (serverAddress: string, req: ISignUpRequest) => Promise<void>;
-  signIn: (serverAddress: string, req: ISignInRequest) => Promise<void>;
+  /** Resolves to the profile it stored, or null when the sign-up failed (`error`). */
+  createProfile: (serverAddress: string, req: ISignUpRequest) => Promise<LinkedProfile | null>;
+  /** Resolves to whether the sign-in succeeded; a failure sets `error`. */
+  signIn: (serverAddress: string, req: ISignInRequest) => Promise<boolean>;
 }
 
 const initialState: State = {
@@ -162,7 +164,7 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
         error,
       }));
     });
-    if (!res) return;
+    if (!res) return null;
 
     const profile = new LinkedProfile({
       ...res.linkedProfile,
@@ -178,6 +180,7 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
       profile: res.profile,
       client,
     }));
+    return profile;
   };
 
   const signIn = async (serverAddress: string, req: ISignInRequest) => {
@@ -195,7 +198,7 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
         error,
       }));
     });
-    if (!res) return;
+    if (!res) return false;
 
     const prev = (await db.getAll()).find(
       (p) => p.name === res.linkedProfile.name && p.serverAddress === serverAddress
@@ -217,6 +220,7 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
       profile: res.profile,
       client,
     }));
+    return true;
   };
 
   const actions = useStableCallbacks({ createProfile, signIn });
