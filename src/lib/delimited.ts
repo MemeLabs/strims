@@ -133,11 +133,13 @@ export const readDelimited = async (
       throw new Error("stream ended inside a message");
     }
   } catch (e) {
-    if (aborter.signal.aborted) throw stopped();
-    throw e;
+    throw aborter.signal.aborted ? stopped() : e;
   } finally {
     clearTimeout(timer);
     signal.removeEventListener("abort", abort);
+    // However the read ended, its request and body end with it: a stream
+    // the server keeps alive with pings would otherwise stay open.
+    if (!aborter.signal.aborted) aborter.abort(new Error("stream closed"));
     aborter.signal.removeEventListener("abort", cancel);
   }
 };

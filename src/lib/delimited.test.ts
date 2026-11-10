@@ -122,4 +122,48 @@ describe("reading a delimited stream", () => {
     await assert.rejects(read);
     assert.equal(aborter.signal.aborted, true);
   });
+
+  it("closes the request and its body when a message or its handler throws", async () => {
+    // A stream the server keeps open, as its pings do.
+    const held = (chunk: number[]) => {
+      const seen = { cancelled: false, signal: null as AbortSignal | null };
+      const fetchImpl = (_url: string | URL | Request, init?: RequestInit) => {
+        seen.signal = init?.signal ?? null;
+        const body = new ReadableStream<Uint8Array>({
+          start: (c) => c.enqueue(new Uint8Array(chunk)),
+          cancel: () => {
+            seen.cancelled = true;
+          },
+        });
+        return Promise.resolve(new Response(body, { status: 200 }));
+      };
+      return { seen, fetch: fetchImpl as typeof fetch };
+    };
+
+    const thrown = held(frame([1]));
+    await assert.rejects(
+      readDelimited("http://x/events", {
+        signal: new AbortController().signal,
+        idleTimeoutMs: 10_000,
+        onMessage: () => {
+          throw new Error("bad message");
+        },
+        fetch: thrown.fetch,
+      }),
+      /bad message/
+    );
+    assert.deepEqual([thrown.seen.cancelled, thrown.seen.signal?.aborted], [true, true]);
+
+    const tooLong = held([0xff, 0xff, 0xff, 0xff, 0x01]);
+    await assert.rejects(
+      readDelimited("http://x/events", {
+        signal: new AbortController().signal,
+        idleTimeoutMs: 10_000,
+        onMessage: () => undefined,
+        fetch: tooLong.fetch,
+      }),
+      /too long/
+    );
+    assert.deepEqual([tooLong.seen.cancelled, tooLong.seen.signal?.aborted], [true, true]);
+  });
 });
