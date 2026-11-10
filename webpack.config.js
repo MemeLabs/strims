@@ -450,6 +450,15 @@ module.exports = (env, argv) => {
                 // (--hls-listen 127.0.0.1:8084).
                 context: "/api/v1",
                 target: "http://localhost:8084",
+                // http-proxy ends the upstream request only on the client
+                // request's "aborted", which Node doesn't emit once a GET's
+                // request has ended: a closed event stream would hold its
+                // upstream connection, and one of the API's stream slots.
+                onProxyReq: (proxyReq, req, res) => {
+                  res.on("close", () => {
+                    if (!res.writableFinished) proxyReq.destroy();
+                  });
+                },
               },
               {
                 // A local native node's WS listener, which a node in the page
