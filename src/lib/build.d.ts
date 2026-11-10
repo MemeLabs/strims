@@ -7,5 +7,7 @@ declare const GIT_HASH: string;
 declare const VERSION: string;
 declare const I18N_LANG: string[];
 declare const EMOJI_LANG: string[];
+/** The watch page's native node bootstrap API origin; empty for the page's own. */
+declare const WATCH_API_URL: string;
 
 declare const MANIFEST: string[];

@@ -160,5 +160,17 @@
     "Reject invitation": "Reject invitation",
     "Loading": "Loading...",
     "error": "An error occurred while loading the invitation."
+  },
+  "watch": {
+    "title": "Live streams",
+    "No streams are live": "No streams are live",
+    "Can't reach the directory": "Can't reach the directory. Retrying…",
+    "Starting": "Starting…",
+    "Joining": "Joining…",
+    "Couldn't start": "This browser couldn't set up a profile.",
+    "Couldn't join": "Couldn't join this stream's network.",
+    "Not offered": "This stream isn't open to visitors.",
+    "Retry": "Retry",
+    "Back": "Back"
   }
 }

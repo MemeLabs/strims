@@ -1,0 +1,80 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+#root {
+  position: fixed;
+  inset: 0;
+}
+
+.watch {
+  position: absolute;
+  inset: 0;
+  background: black;
+  color: var(--body-color);
+}
+
+.watch_tiles {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.watch_player {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  background: black;
+
+  .video_player {
+    position: relative;
+  }
+}
+
+.watch_status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1rem;
+  text-align: center;
+
+  &__message {
+    font-size: 1rem;
+    opacity: 0.8;
+  }
+
+  &__spinner {
+    height: 2rem;
+    width: 2rem;
+    opacity: 0.6;
+    animation: watch_spin 2s linear infinite;
+  }
+
+  &__action {
+    cursor: pointer;
+    color: inherit;
+    background: rgba(255, 255, 255, 0.12);
+    border: 0;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    font: inherit;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  }
+}
+
+@keyframes watch_spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
