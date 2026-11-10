@@ -220,11 +220,15 @@ for networks its profile owns, over the bootstrap API on its HLS listener
    `--bootstrap-ws-url` and the profile's key, the URL the dev server proxies
    to the node's WebSocket listener: a browser dials only `wss://`.
 
-1. Open the watch page from the dev server and click a stream.
+1. Open `https://<dev machine IP>:8080/watch` and click a stream.
 
 Outside the dev server, give the HLS listener a certificate (`--tls-cert`,
 `--tls-key`) so browsers reach the API over HTTP/2, and put a TLS proxy in
-front of `--ws-listen` for the `--bootstrap-ws-url`. Every invitation the API
+front of `--ws-listen` for the `--bootstrap-ws-url`. The page (`watch.html`
+in `dist/web`, served for `/watch` and every path under it) asks the API on
+its own origin; one served from another origin is built with
+`WATCH_API_URL=https://<the HLS listener's host:port> npx webpack --mode
+production`. Every invitation the API
 vends is the owner's, and the owner's invitations admit any number of
 newcomers until they expire.
 
