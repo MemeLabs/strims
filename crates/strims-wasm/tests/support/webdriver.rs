@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! A WebDriver session in headless Firefox through geckodriver, with only
-//! the commands the UI smoke test sends: navigate, find, type, click, and
-//! read the URL or an element's text.
+//! the commands the UI tests send: navigate, find, type, click, read the
+//! URL or an element's text, and run a script in the page.
 //!
 //! [`Session::start`] runs `$GECKODRIVER`, else `/snap/bin/geckodriver`,
 //! else `geckodriver` on PATH, on ports the OS picked, and skips with a
@@ -107,6 +107,13 @@ impl Session {
     /// A session in a new headless Firefox with `prefs`. `None` after
     /// printing why geckodriver can't run here.
     pub async fn start(prefs: Value) -> Option<Session> {
+        Session::start_with(prefs, false).await
+    }
+
+    /// [`start`](Session::start), and with `accept_insecure_certs` the
+    /// browser takes any certificate, a self-signed one included, on every
+    /// connection: the pages', their workers' and their WebSockets'.
+    pub async fn start_with(prefs: Value, accept_insecure_certs: bool) -> Option<Session> {
         let Some(bin) = geckodriver() else {
             eprintln!("skipping: no geckodriver (set GECKODRIVER)");
             return None;
@@ -152,6 +159,7 @@ impl Session {
             "capabilities": {
                 "alwaysMatch": {
                     "browserName": "firefox",
+                    "acceptInsecureCerts": accept_insecure_certs,
                     "moz:firefoxOptions": {"args": ["-headless"], "prefs": prefs},
                 },
             },
@@ -241,6 +249,21 @@ impl Session {
         let path = self.path(&format!("/element/{element}/text"));
         let v = self.command("GET", &path, None).await;
         v.as_str().unwrap().to_owned()
+    }
+
+    /// What `script`, a function body run in the page, returns.
+    pub async fn execute(&self, script: &str) -> Value {
+        let body = json!({"script": script, "args": []});
+        self.command("POST", &self.path("/execute/sync"), Some(&body))
+            .await
+    }
+
+    /// What `script`, a function body run in the page, passes to the
+    /// callback that is its last argument.
+    pub async fn execute_async(&self, script: &str) -> Value {
+        let body = json!({"script": script, "args": []});
+        self.command("POST", &self.path("/execute/async"), Some(&body))
+            .await
     }
 
     /// Ends the session, which closes Firefox.
