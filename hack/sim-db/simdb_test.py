@@ -4,9 +4,10 @@
 """simdb.py's selections over a scratch cache, suite indexes and farm state,
 as two farm runs of several suite tiers leave them (an A/B and its
 confirmation, each a browsers and a net tier, their cells sharing names,
-the A/B reusing rows of the confirmation's); its queries and joins over
-a scratch cache of both sims' tables (Queries); and its pulls of a farm
-run's samples from a scratch S3, the aws CLI stubbed (SamplesPull):
+the A/B reusing rows of the confirmation's); the arms simdb and suite.py
+name a suite farm run's jobs by, alike (ArmLabels); its queries and joins
+over a scratch cache of both sims' tables (Queries); and its pulls of a
+farm run's samples from a scratch S3, the aws CLI stubbed (SamplesPull):
 
   python3 hack/sim-db/simdb_test.py
 
@@ -29,6 +30,11 @@ from unittest import mock
 spec = importlib.util.spec_from_file_location("simdb", Path(__file__).with_name("simdb.py"))
 simdb = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(simdb)
+spec = importlib.util.spec_from_file_location("suite", Path(__file__).parents[1] / "sim-suite" / "suite.py")
+suite = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(suite)
+# suite.py's simdb is this one, so the tests' patches reach it.
+suite._simdb = simdb
 
 A, B = "farm/sa0001-00+3more-aaaa", "farm/sb0001-00+3more-bbbb"
 GONE = "farm/sc0001-00/i-1/0"
@@ -181,6 +187,145 @@ class Selection(unittest.TestCase):
         self.assertEqual(set(self.pulled), {GONE})
         self.assertEqual(self.cells([f"{B}*"])["star-7-5@sb0001"], {("kz", "main")})
         self.assertNotIn("halve-7-10@sa0001", self.cells([f"{B}*"]))
+
+
+# Suite farm runs, as suite.py's `farm` leaves them: a --sets run (the
+# knob its index names, set apart from SIM_EXP for strims-sim), a --refs
+# run whose --env sets the default knob, one ref named as a set ("off"),
+# and two runs without an index: one of sets (the matrices' lone arm, x,
+# the default knob an axis), and one of refs whose env gives each the
+# other's name.
+LABEL_CELLS = [{"name": "star-3-5", "sim": "strims-sim", "test": "calibration_star"},
+               {"name": "org-star-7-5", "sim": "ppspp", "test": "sim_job"}]
+SETS_KNOB = {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_KNOWN_UPLINK"}
+LABEL_INDEXES = {"sd0001": {"cells": LABEL_CELLS, "knob": SETS_KNOB, "values": ["off", "seed", "1"]},
+                 "sd0002": {"cells": LABEL_CELLS}}
+# run: [(arm, {sim: (knob, value)})]
+LABEL_ARMS = {
+    "sd0001": [("x", {"ppspp": ("SIM_EXP", v), "strims-sim": ("STRIMS_SIM_KNOWN_UPLINK", v)})
+               for v in ("off", "seed", "1")],
+    "sd0002": [(r, {"ppspp": ("SIM_EXP", "off"), "strims-sim": ("STRIMS_SIM_EXP", "off")}) for r in ("main", "off")],
+    "sd0003": [("x", {"ppspp": ("SIM_EXP", v), "strims-sim": ("STRIMS_SIM_EXP", v)}) for v in ("off", "a")],
+    "sd0004": [(r, {"ppspp": ("SIM_EXP", v), "strims-sim": ("STRIMS_SIM_EXP", v)})
+               for r, v in (("off", "on"), ("on", "off"))],
+}
+LABEL_SEEDS = (1, 2)
+
+
+class ArmLabels(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = root = Path(tmp.name)
+        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
+                  mock.patch.object(suite, "farm_root", lambda: root),
+                  mock.patch.object(simdb, "pull_sources", lambda s, reads=False: []),
+                  mock.patch.object(simdb, "rows", lambda pairs, series=False: {(s, k): {"key": k} for s, k in pairs}),
+                  mock.patch.object(sys, "stderr", io.StringIO()),
+                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
+                                  clear=True)):
+            p.start()
+            self.addCleanup(p.stop)
+        runs = root / "target" / "sim-suite" / "farm-runs"
+        runs.mkdir(parents=True)
+        for run, idx in LABEL_INDEXES.items():
+            (runs / f"{run}.json").write_text(json.dumps(idx))
+        # key: (run, cell, arm, knob value, seed)
+        self.jobs = {}
+        for run, arms in LABEL_ARMS.items():
+            src = f"farm/{run}-00+1more-cccc/i-1/0"
+            stored = []
+            for i, c in enumerate(LABEL_CELLS):
+                lines = []
+                for arm, env in arms:
+                    knob, value = env[c["sim"]]
+                    for s in LABEL_SEEDS:
+                        k = f"{run}-{i}-{arm}-{value}-{s}"
+                        self.jobs[k] = (run, c["name"], arm, value, s)
+                        e = {knob: value, "SIM_SEED" if c["sim"] == "ppspp" else "STRIMS_SIM_SEED": str(s)}
+                        lines.append({"id": k, "key": k, "arm": arm, "test": c["test"], "env": e, "src": src,
+                                      "row": {}})
+                        stored.append((k, f"{run}-{i:02d}", arm, s, e))
+                d = root / "target" / "sim-farm" / f"{run}-{i:02d}"
+                d.mkdir(parents=True)
+                (d / "index.jsonl").write_text("".join(json.dumps(r) + "\n" for r in lines))
+            q = simdb.q
+            d = simdb.cache_root() / "cache" / src
+            d.mkdir(parents=True)
+            vals = ", ".join(f"({q(k)}, {q(src)}, {q(m)}, {q(arm)}, {s}, {q(json.dumps(env))})"
+                             for k, m, arm, s, env in stored)
+            simdb.duck(f"COPY (SELECT * FROM (VALUES {vals}) t(k, src, cell, arm, seed, env)) "
+                       f"TO {q(d / 'runs.parquet')} (FORMAT parquet);", out=None)
+
+    def farm_rows(self, run):
+        """{arm: {(cell, seed): key}}"""
+        rows = suite.farm_rows(run, LABEL_CELLS, LABEL_INDEXES[run].get("knob"))
+        return {arm: {at: r["key"] for at, r in rs.items()} for arm, rs in rows.items()}
+
+    def score(self, arg, knob=None):
+        """`score`'s rows of RUN:ARM `arg`, {(cell, seed): key}."""
+        got = {}
+        args = argparse.Namespace(a=arg, b=arg, knob=knob, only=None, rank="lag", all=False)
+        with mock.patch.object(suite, "scorecard", lambda cells, a_rows, b_rows, *_: got.update(a_rows)):
+            suite.score(args, LABEL_CELLS)
+        return {at: r["key"] for at, r in got.items()}
+
+    def want(self, run, pick):
+        """{(cell, seed): key} of `run`'s jobs `pick(arm, value)` takes."""
+        return {(c, s): k for k, (r, c, arm, v, s) in self.jobs.items() if r == run and pick(arm, v)}
+
+    def test_a_sets_run_scores_each_set_apart(self):
+        got = self.farm_rows("sd0001")
+        self.assertEqual(set(got), {"off", "seed", "1"})
+        for v in ("off", "seed", "1"):
+            self.assertEqual(got[v], self.want("sd0001", lambda arm, x: x == v), v)
+            self.assertEqual(self.score(f"sd0001:{v}"), got[v], v)
+        with self.assertRaises(SystemExit) as cm:
+            self.score("sd0001:x")
+        self.assertIn("its arms are sets: 1, off, seed", str(cm.exception.code))
+        with self.assertRaises(SystemExit) as cm:
+            self.score("sd0001:off", knob="SIM_EXP,STRIMS_SIM_EXP")
+        self.assertIn("index's knob", str(cm.exception.code))
+        self.assertEqual(self.score("sd0001:off", knob="SIM_EXP,STRIMS_SIM_KNOWN_UPLINK"), got["off"])
+
+    def test_a_refs_run_is_named_by_its_refs_alone(self):
+        # Its env's knob value names no arm, and its ref named "off" holds
+        # its own rows alone.
+        got = self.farm_rows("sd0002")
+        self.assertEqual(set(got), {"main", "off"})
+        for r in ("main", "off"):
+            self.assertEqual(got[r], self.want("sd0002", lambda arm, _: arm == r), r)
+            self.assertEqual(self.score(f"sd0002:{r}"), got[r], r)
+
+    def test_a_run_without_an_index_is_read_both_ways(self):
+        self.assertEqual(self.score("sd0003:a"), self.want("sd0003", lambda _, v: v == "a"))
+        self.assertEqual(self.score("sd0003:off"), self.want("sd0003", lambda _, v: v == "off"))
+        # x holds every set's jobs at a cell and seed: no arm.
+        with self.assertRaises(SystemExit) as cm:
+            self.score("sd0003:x")
+        self.assertIn("no rows of arm 'x' (it has a, off)", str(cm.exception.code))
+        # Each ref's env names the other: either name is ambiguous.
+        for r in ("off", "on"):
+            with self.assertRaises(SystemExit) as cm:
+                self.score(f"sd0004:{r}")
+            self.assertIn("names both a set", str(cm.exception.code))
+
+    def test_a_label_holding_two_jobs_is_refused(self):
+        with self.assertRaises(SystemExit) as cm:
+            suite.farm_rows("sd0001", LABEL_CELLS, None)
+        self.assertIn("arm x holds two jobs at one cell and seed", str(cm.exception.code))
+
+    def test_simdb_names_the_arms_as_suite_does(self):
+        v, _ = simdb.views(argparse.Namespace(src=None, cell=None, arm=None, seed=None), derived=False)
+        views = {r["k"]: (r["cell"], r["arm"]) for r in simdb.duck(v + "\nSELECT k, cell, arm FROM runs;")}
+        for run in LABEL_INDEXES:
+            for arm, rows in self.farm_rows(run).items():
+                for (cell, _), k in rows.items():
+                    self.assertEqual(views[k], (f"{cell}@{run}", arm), k)
+        self.assertEqual(simdb.arm_label(SETS_KNOB, "strims-sim", "x", {"STRIMS_SIM_KNOWN_UPLINK": "1"}), "1")
+        self.assertEqual(simdb.arm_label(None, "strims-sim", "main", {"STRIMS_SIM_EXP": "off"}), "main")
+
+
 
 
 # Queries' sources: a ppspp run's (its viewers name their node `node`), a

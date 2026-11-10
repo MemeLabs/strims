@@ -99,7 +99,10 @@ selection picks runs: `--src` (cache paths, globs, default every one),
 `--cell`, `--arm` (globs) and `--seed`, and a run's cell and arm are the
 same whatever else it selects. A suite farm run's runs are named by the
 suite cell their matrix ran, <cell>@<run>, which `--cell` matches whole or
-by the cell alone, and a farm run's cells hold every row it scored: also
+by the cell alone, and by the arm suite.py names them by (arm_label): a
+`--sets` run's (its index has a knob) by its set, the value its env gives
+the knob, else by its matrix's arm, a `--refs` name. A farm run's cells
+hold every row it scored: also
 those the farm reused from other runs or matrices, by its matrices'
 indexes (target/sim-farm/<matrix>/index.jsonl), whose sources' tables
 join the selection (pulled when the cache lacks them). A key's tables come
@@ -920,12 +923,21 @@ def suite_index(run):
     return {}
 
 
+def arm_label(knob, sim, arm, env):
+    """A suite farm job's arm, as simdb and suite.py both name it: when its
+    run's index names a knob (`knob`, by sim: a `--sets` run's), the value
+    the job's `env` gives its sim's, its set; else `arm`, its matrix's arm
+    (a `--refs` name). views names its runs' arms this way in SQL."""
+    k = (knob or {}).get(sim)
+    return arm if k is None else (env or {}).get(k, arm)
+
+
 def suite_cells(names):
     """The suite cells that farm matrices named `names` run: a suite farm
     run's matrices are <run>-<i>, the i-th cell of its index (suite_index),
-    the arm of a `--sets` run is the value of the knob its index names. By
-    matrix: (<cell>@<run>, knob), a name of the matrix alone, so a cell that
-    two suite runs share (a farm run of several tiers, an A/B and its
+    and a run's arms are named by arm_label, from the knob its index names.
+    By matrix: (<cell>@<run>, knob), a name of the matrix alone, so a cell
+    that two suite runs share (a farm run of several tiers, an A/B and its
     confirmation) is apart whichever of them a selection holds. Names no
     index tells are left out."""
     idx, got = {}, {}
@@ -1006,6 +1018,7 @@ def views(a, derived=True, fetch=True):
         cells = suite_cells([r["matrix"] for r in duck(f"SELECT DISTINCT matrix FROM {read_runs};")])
     if cells:
         pairs = ", ".join(f"({q(n)}, {q(c)}, {q(k) if k else 'NULL'})" for n, (c, k) in cells.items())
+        # The arm as arm_label names it.
         read_runs = (
             f"(SELECT r.* REPLACE (coalesce(m.cell, r.cell) AS cell, CASE WHEN m.knob IS NULL THEN r.arm "
             f"ELSE coalesce(json_extract_string(r.env, '$.' || m.knob), r.arm) END AS arm) "

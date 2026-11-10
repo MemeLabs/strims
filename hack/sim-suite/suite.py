@@ -156,11 +156,17 @@ run holds, without running the base again. RUN is the run's name as
 target/sim-suite/farm-runs/RUN.json once the farm has started the run, and
 in farm-runs/pending/ until then (`--no-run`): the first `farm` or `score`
 after the farm starts it moves it into place, and one whose run hasn't
-started within a week is dropped. A run without one is read as the cells
-of `--tier` and `--only` in the order `farm` wrote them, which must be the
-run's. A farm canary runs a ppspp cell's stream for 2 s and a strims-sim
-cell's for 5 s, so it starts every viewer with the seed and lets none
-leave when the cell's audience wouldn't fit in it (an event, departures).
+started within a week is dropped. A job's arm is named as hack/sim-db
+names it (simdb's arm_label): in a run whose index has a knob, its set,
+the value its env gives the knob; else its matrix's arm, a `--refs` name.
+So a `--sets` run's arms are its sets alone, and a ref name never stands
+for one. A run without an index is read as the cells of `--tier` and
+`--only` in the order `farm` wrote them, which must be the run's, and its
+arms both ways, its sets by `--knob`'s value: an ARM naming a set and a
+ref with other rows is refused as ambiguous. A farm canary runs a ppspp
+cell's stream for 2 s and a strims-sim cell's for 5 s, so it starts every
+viewer with the seed and lets none leave when the cell's audience
+wouldn't fit in it (an event, departures).
 
 `list` prints a tier's cells: each one's sim, test, audience (arrivals
 and departures), seeds and settings.
@@ -221,6 +227,10 @@ CHEAP = 12
 # Cells whose seeds split between healthy runs and collapsed ones: at 4
 # seeds only a huge effect shows.
 TIPPING = 8
+
+# The knobs that take a race's flags and a farm run's sets: the ppspp sim's,
+# then strims-sim's.
+DEFAULT_KNOB = "SIM_EXP,STRIMS_SIM_EXP"
 
 # Each sim's audience knobs (see the module docs): when the viewers arrive,
 # and who leaves for good.
@@ -1391,13 +1401,12 @@ def peak_gib(sha):
     return peaks
 
 
-def farm_rows(name, cells, knob):
-    """Farm run `name`'s rows (its matrices are `cells`, in order) by
-    arm: a `--refs` name, or a `--sets` set as its knob's value, each by
-    (cell, seed). A matrix's index names each job's tables (`src`), which
-    are pulled into the cache from S3 (hack/sim-db) and read as local
-    runs' are; a job whose data has expired is left out, to run again."""
-    rows = collections.defaultdict(dict)
+def farm_jobs(name, cells):
+    """Farm run `name`'s jobs (its matrices are `cells`, in order) with
+    their rows: (cell, seed, index line, row) each. A matrix's index names
+    each job's tables (`src`), which are pulled into the cache from S3
+    (hack/sim-db) and read as local runs' are; a job whose data has expired
+    is left out, to run again."""
     want = []
     for i, c in enumerate(cells):
         seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
@@ -1413,13 +1422,40 @@ def farm_rows(name, cells, knob):
         print(f"{name}: {len(gone)} flushes' tables are gone from S3 (a week's): rerun their jobs",
               file=sys.stderr)
     got = simdb().rows([(rec["src"], rec["key"]) for _, _, rec in want if rec["src"] not in gone])
+    out = []
     for c, seed_key, rec in want:
         row = got.get((rec["src"], rec["key"]))
-        if row is None:
-            continue
-        row = {**row, "_rss_mb": rec.get("max_rss_mb"), "_wall_s": rec.get("wall_s")}
-        for v in {rec["arm"], rec["env"].get(knob[c["sim"]])} - {None}:
-            rows[v][(c["name"], int(rec["env"][seed_key]))] = row
+        if row is not None:
+            out.append((c, int(rec["env"][seed_key]), rec,
+                        {**row, "_rss_mb": rec.get("max_rss_mb"), "_wall_s": rec.get("wall_s")}))
+    return out
+
+
+def by_arm(jobs, knob):
+    """`jobs`' rows (farm_jobs') by arm, each by (cell, seed), the arm as
+    hack/sim-db names it (simdb.arm_label): with `knob` (a `--sets` run's,
+    by sim) a set, the value its job's env gives the knob, else its
+    matrix's arm, a `--refs` name; and the arms that would hold two jobs at
+    one cell and seed, which that naming doesn't keep apart."""
+    rows, keys, clash = collections.defaultdict(dict), {}, set()
+    for c, seed, rec, row in jobs:
+        arm = simdb().arm_label(knob, c["sim"], rec["arm"], rec["env"])
+        if keys.setdefault((arm, c["name"], seed), rec["key"]) != rec["key"]:
+            clash.add(arm)
+        rows[arm][(c["name"], seed)] = row
+    return rows, clash
+
+
+def farm_rows(name, cells, knob):
+    """Farm run `name`'s rows (its matrices are `cells`, in order) by arm,
+    each by (cell, seed): by_arm's, `knob` a `--sets` run's (its index's)
+    and None for a `--refs` run's. An arm holding two jobs at one cell and
+    seed is refused."""
+    rows, clash = by_arm(farm_jobs(name, cells), knob)
+    if clash:
+        sys.exit(f"{name}: arm {', '.join(sorted(clash))} holds two jobs at one cell and seed: "
+                 + ("its knob " + ", ".join(knob.values()) + " doesn't" if knob else "its matrices' arms don't")
+                 + " name the run's arms")
     return rows
 
 
@@ -1543,7 +1579,7 @@ def farm(a, cells):
         subprocess.run([sys.executable, str(farm_py), "run", *map(str, paths), *shlex.split(a.farm_args)])
         if not farm_started(name, len(cells)):
             place_index(name, index, False)
-    rows = farm_rows(name, cells, knob)
+    rows = farm_rows(name, cells, None if a.refs else knob)
     base = a.against.strip() if a.against else values[0]
     if base not in values:
         sys.exit(f"--against {base!r} is none of the sets")
@@ -1592,8 +1628,41 @@ def short(k):
     return k
 
 
+def arm_rows(run, cells, arm, index, knob):
+    """Arm `arm`'s rows of farm run `run` (its matrices are `cells`), by
+    (cell, seed): by its `index`, a `--sets` run's arm is a set (its
+    index's knob's value) and a `--refs` run's a name. A run without an
+    index is read both ways, the sets by `knob`, each way only where it
+    keeps the jobs of a cell and seed apart; an arm both ways name, with
+    other rows, is refused as ambiguous."""
+    if index:
+        if knob and index.get("knob") and knob != index["knob"]:
+            sys.exit(f"run {run}'s sets are its index's knob ({', '.join(index['knob'].values())}), "
+                     f"not --knob's ({', '.join(knob.values())})")
+        rows = farm_rows(run, cells, index.get("knob"))
+        if arm not in rows:
+            kind = "sets" if index.get("knob") else "--refs names"
+            sys.exit(f"run {run} has no rows of arm {arm!r} (its arms are {kind}: "
+                     f"{', '.join(sorted(rows)) or 'none'})")
+        return rows[arm]
+    jobs = farm_jobs(run, cells)
+    named, have = [], set()
+    for k in (knob or dict(zip((PPSPP, SIM), DEFAULT_KNOB.split(","))), None):
+        rows, clash = by_arm(jobs, k)
+        have |= set(rows) - clash
+        if arm in rows and arm not in clash:
+            named.append(rows[arm])
+    if not named:
+        sys.exit(f"run {run} has no rows of arm {arm!r} (it has {', '.join(sorted(have)) or 'none'})")
+    jobs_of = lambda rows: {at: id(row) for at, row in rows.items()}
+    if len(named) > 1 and jobs_of(named[0]) != jobs_of(named[1]):
+        sys.exit(f"run {run} has no index, and {arm!r} names both a set (--knob's value) and a --refs name, "
+                 "with other rows")
+    return named[0]
+
+
 def score(a, cells):
-    knob = dict(zip((PPSPP, SIM), (k.strip() for k in a.knob.split(","))))
+    knob = dict(zip((PPSPP, SIM), (k.strip() for k in a.knob.split(",")))) if a.knob else None
     settle_indexes()
     picked = []
     for arg in (a.a, a.b):
@@ -1601,11 +1670,9 @@ def score(a, cells):
         if not sep or not run:
             sys.exit(f"{arg!r} isn't RUN:ARM")
         index = farm_index(run)
-        run_cells = json.loads(index.read_text())["cells"] if index.exists() else cells
-        rows = farm_rows(run, run_cells, knob)
-        if arm not in rows:
-            sys.exit(f"run {run} has no rows of arm {arm!r} (it has {', '.join(sorted(rows)) or 'none'})")
-        picked.append((run_cells, rows[arm]))
+        index = json.loads(index.read_text()) if index.exists() else None
+        run_cells = index["cells"] if index else cells
+        picked.append((run_cells, arm_rows(run, run_cells, arm, index, knob)))
     (a_cells, a_rows), (b_cells, b_rows) = picked
     names = {c["name"] for c in a_cells}
     both = [c for c in b_cells if c["name"] in names]
@@ -1641,7 +1708,7 @@ def main():
                    help="set for the working tree's runs only, e.g. a knob that turns a change on")
     rc = sub.add_parser("race")
     rc.add_argument("--flags", required=True, help="the flags to race, comma-separated")
-    rc.add_argument("--knob", default="SIM_EXP,STRIMS_SIM_EXP",
+    rc.add_argument("--knob", default=DEFAULT_KNOB,
                     help="the environment knobs that take the flags, comma-separated")
     rc.add_argument("--base", default="main")
     rc.add_argument("--tier", default="peers", choices=sorted(TIERS))
@@ -1654,7 +1721,7 @@ def main():
     fc = sub.add_parser("farm")
     fc.add_argument("--sets", help="flag sets, ;-separated, each comma-separated")
     fc.add_argument("--refs", help="commits instead, name=ref,...: the matrices' arms, the first the base")
-    fc.add_argument("--knob", default="SIM_EXP,STRIMS_SIM_EXP",
+    fc.add_argument("--knob", default=DEFAULT_KNOB,
                     help="the knobs that take a set: the ppspp sim's, then strims-sim's")
     fc.add_argument("--ref", default="HEAD", help="the commit the farm builds")
     fc.add_argument("--tier", default="peers", choices=sorted(TIERS))
@@ -1673,8 +1740,8 @@ def main():
     sc.add_argument("--tier", default="peers", choices=sorted(TIERS),
                     help="a run's cells when it has no index: the tier it ran")
     sc.add_argument("--only", help="cells, comma-separated (the run's, when it has no index)")
-    sc.add_argument("--knob", default="SIM_EXP,STRIMS_SIM_EXP",
-                    help="the knobs that took a --sets run's sets: the ppspp sim's, then strims-sim's")
+    sc.add_argument("--knob", help="the knobs that took the sets of a --sets run without an index: the ppspp "
+                                   f"sim's, then strims-sim's (default {DEFAULT_KNOB}; an index names its own)")
     sc.add_argument("--all", action="store_true", help="every metric, ties too")
     ls = sub.add_parser("list")
     ls.add_argument("--tier", choices=sorted(TIERS), help="one tier (default: every one)")
