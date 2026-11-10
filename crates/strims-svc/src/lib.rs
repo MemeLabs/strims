@@ -112,13 +112,23 @@
 //!
 //! # Bootstrap API
 //!
-//! With [`Config::bootstrap`], the HLS listener also answers the
-//! [bootstrap API](bootstrap) for the headless profile: a stream of its
-//! networks' media listings, their thumbnails, and invitations to the
-//! networks, so a browser opens a stream of a network it isn't a member of
-//! yet in one step. Each network it names must be one whose CA the profile
-//! holds, or the service doesn't start. Without the config, the API's
-//! paths answer 503.
+//! With [`Config::bootstrap`], the HLS listener also answers the bootstrap
+//! API under `/api/v1/` for the headless profile, so a browser opens a
+//! stream of a network it isn't a member of yet in one step:
+//!
+//! - `GET /api/v1/directory/events`: a stream of the networks' media
+//!   listings, uvarint-delimited `FrontendWatchListingsResponse`s as the
+//!   directory frontend's `WatchListings` has them, each snippet's inline
+//!   images as the paths of the thumbnail route, and an empty message
+//!   after 15 s without another;
+//! - `GET /api/v1/directory/thumbnails/<network>/<listing id>/<digest>`:
+//!   the image of the listing's snippet with that SHA-256, in hex;
+//! - `GET /api/v1/invitation/<network>`: a new `Invitation` to the network,
+//!   whose bootstrap client dials [`BootstrapConfig::ws_url`].
+//!
+//! A network in a path is its key in unpadded URL-safe base64. Each
+//! network it names must be one whose CA the profile holds, or the service
+//! doesn't start. Without the config, the API's paths answer 503.
 //!
 //! # Threads
 //!
