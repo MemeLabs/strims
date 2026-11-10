@@ -190,6 +190,9 @@ pub fn parse(command: &str, args: impl IntoIterator<Item = String>) -> Result<Co
     let mut input = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
+        if arg == "-h" {
+            return Ok(Command::Help);
+        }
         if !arg.starts_with("--") {
             positional.push(arg);
             continue;
@@ -351,6 +354,8 @@ pub(crate) enum Failure {
     Usage(String),
     /// It failed: exit 1.
     Failed(String),
+    /// Whatever reads stdout closed it, so the command stops, quietly.
+    StdoutClosed,
 }
 
 /// Runs `command` on a runtime of its own; logs go to stderr.
@@ -366,7 +371,7 @@ pub fn run(command: Command) -> ExitCode {
         }
     };
     match rt.block_on(LocalSet::new().run_until(dispatch(command))) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(()) | Err(Failure::StdoutClosed) => ExitCode::SUCCESS,
         Err(Failure::Usage(e)) => {
             eprintln!("strims-svc: {e}");
             ExitCode::from(2)
@@ -521,7 +526,10 @@ pub(crate) fn stdout_line(s: &str) -> Result<(), Failure> {
     let mut out = std::io::stdout().lock();
     writeln!(out, "{s}")
         .and_then(|()| out.flush())
-        .map_err(|e| Failure::Failed(format!("writing to stdout: {e}")))
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::BrokenPipe => Failure::StdoutClosed,
+            _ => Failure::Failed(format!("writing to stdout: {e}")),
+        })
 }
 
 #[cfg(test)]
@@ -568,6 +576,21 @@ mod tests {
         assert_eq!(c.limit, Some(2));
         assert_eq!(c.timeout, Some(StdDuration::from_millis(1500)));
         assert!(c.defaults);
+    }
+
+    #[test]
+    fn help_follows_any_subcommand() {
+        for (command, list) in [
+            ("call", &["--help"][..]),
+            ("call", &["NetworkFrontend.List", "-h"][..]),
+            ("profiles", &["-h"][..]),
+            ("decode", &["--help"][..]),
+        ] {
+            assert!(
+                matches!(parse(command, args(list)), Ok(Command::Help)),
+                "{command} {list:?}"
+            );
+        }
     }
 
     #[test]

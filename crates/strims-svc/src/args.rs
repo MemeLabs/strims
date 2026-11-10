@@ -16,7 +16,8 @@ use strims_video::codec::{MAX_RENDITIONS, RenditionPlan};
 
 pub(crate) const USAGE: &str = "\
 usage: strims-svc (--db <path> | --db-memory) [options]
-       strims-svc (call | methods | describe | profiles) ... (see --help after one)
+       strims-svc (call | methods | describe | decode | encode | profiles) ...
+                                  (`strims-svc call --help` describes them)
 
 Runs a profile's node, serves the UI's frontend RPC over WebSocket, and
 serves the node's HLS streams to players over HTTP, or HTTPS with a
