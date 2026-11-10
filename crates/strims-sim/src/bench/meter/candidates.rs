@@ -111,7 +111,7 @@ struct Sample {
 /// [`CLEAN_SHARE`] of the span of the link's [`CLEAN_BASE`] quantile over
 /// the window ([`TRAIN_WINDOW`]).
 /// Each link reads the largest of its clean samples, and the node the
-/// largest a third of liars can't raise ([`robust_high`]).
+/// largest a third of liars can't raise (`robust_high`).
 pub struct Train {
     name: String,
     /// Keep samples whatever their first frame's delay.
