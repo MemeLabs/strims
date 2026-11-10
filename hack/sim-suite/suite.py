@@ -152,21 +152,24 @@ several tiers' in one farm run (`farm.py run`) and report each after.
 same) run, paired by cell and seed: a new arm against base rows an earlier
 run holds, without running the base again. RUN is the run's name as
 `farm` prints it, ARM a `--refs` name or a `--sets` set (`off` for none).
-`farm` keeps each run's cells in the main checkout's
+`farm` keeps each run's index in the main checkout's
 target/sim-suite/farm-runs/RUN.json once the farm has started the run, and
 in farm-runs/pending/ until then (`--no-run`): the first `farm` or `score`
 after the farm starts it moves it into place, and one whose run hasn't
-started within a week is dropped. A job's arm is named as hack/sim-db
-names it (simdb's arm_label): in a run whose index has a knob, its set,
-the value its env gives the knob; else its matrix's arm, a `--refs` name.
-So a `--sets` run's arms are its sets alone, and a ref name never stands
-for one. A run without an index is read as the cells of `--tier` and
-`--only` in the order `farm` wrote them, which must be the run's, and its
-arms both ways, its sets by `--knob`'s value: an ARM naming a set and a
-ref with other rows is refused as ambiguous. A farm canary runs a ppspp
-cell's stream for 2 s and a strims-sim cell's for 5 s, so it starts every
-viewer with the seed and lets none leave when the cell's audience
-wouldn't fit in it (an event, departures).
+started within a week is dropped. The index holds its cells as their
+matrices ran them (name, sim, test, why, env and the slot's mem_gib), the
+matrices' arms (name: commit) and the seeds, and for a `--sets` run its
+knob and sets. A job's arm is named as hack/sim-db names it (simdb's
+arm_label): in a run whose index has a knob, its set, the value its env
+gives the knob; else its matrix's arm, a `--refs` name. So a `--sets`
+run's arms are its sets alone, and a ref name never stands for one. A
+run without an index is read as the cells of `--tier` and `--only` in the
+order `farm` wrote them, which must be the run's, and its arms both ways,
+its sets by `--knob`'s value: an ARM naming a set and a ref with other
+rows is refused as ambiguous. A farm canary runs a ppspp cell's stream
+for 2 s and a strims-sim cell's for 5 s, so it starts every viewer with
+the seed and lets none leave when the cell's audience wouldn't fit in it
+(an event, departures).
 
 `list` prints a tier's cells: each one's sim, test, audience (arrivals
 and departures), seeds and settings.
@@ -1532,13 +1535,14 @@ def farm(a, cells):
             peaks[cell_] = max(peaks.get(cell_, 0), g)
     out = WORK / "farm"
     out.mkdir(parents=True, exist_ok=True)
-    paths = []
+    paths, mems = [], []
     for i, c in enumerate(cells):
         package, target, _ = BINARIES[c["sim"]]
         seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
         mem = c["mem_gib"]
         if c["name"] in peaks:
             mem = min(mem, math.ceil(1.25 * peaks[c["name"]] * 2) / 2)
+        mems.append(mem)
         canary = {"SIM_SECS": "2"} if c["sim"] == PPSPP else {"STRIMS_SIM_STREAM_SECS": "5"}
         # An audience that doesn't fit in the canary's stream starts with
         # the seed and stays (the module docs).
@@ -1566,11 +1570,14 @@ def farm(a, cells):
         path.write_text(text)
         paths.append(path)
     settle_indexes()
-    keep = ("name", "sim", "test", "why")
+    keep = ("name", "sim", "test", "why", "env")
     # A `--sets` run's arms are its knob's values, which hack/sim-db labels
-    # its runs by.
-    index = json.dumps({"cells": [{k: c[k] for k in keep} for c in cells],
-                        **({} if a.refs else {"knob": knob, "values": values})}) + "\n"
+    # its runs by (arm_label).
+    index = json.dumps({
+        "cells": [{**{k: c[k] for k in keep}, "mem_gib": mem} for c, mem in zip(cells, mems)],
+        "arms": arms, "seeds": [int(s) for s in seeds],
+        **({} if a.refs else {"knob": knob, "values": values}),
+    }) + "\n"
     place_index(name, index, not a.no_run or farm_started(name, len(cells)))
     farm_py = farm_root() / "hack" / "sim-farm" / "farm.py"
     if not a.no_run:

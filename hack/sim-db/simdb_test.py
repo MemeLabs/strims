@@ -5,9 +5,10 @@
 as two farm runs of several suite tiers leave them (an A/B and its
 confirmation, each a browsers and a net tier, their cells sharing names,
 the A/B reusing rows of the confirmation's); the arms simdb and suite.py
-name a suite farm run's jobs by, alike (ArmLabels); its queries and joins
-over a scratch cache of both sims' tables (Queries); and its pulls of a
-farm run's samples from a scratch S3, the aws CLI stubbed (SamplesPull):
+name a suite farm run's jobs by, alike, and the index suite.py's `farm`
+writes (ArmLabels); its queries and joins over a scratch cache of both
+sims' tables (Queries); and its pulls of a farm run's samples from a
+scratch S3, the aws CLI stubbed (SamplesPull):
 
   python3 hack/sim-db/simdb_test.py
 
@@ -309,6 +310,35 @@ class ArmLabels(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 self.score(f"sd0004:{r}")
             self.assertIn("names both a set", str(cm.exception.code))
+
+    def test_the_index_describes_what_ran(self):
+        # `farm --no-run`'s index, kept apart until the run starts: each
+        # cell as its matrix runs it, the arms, the seeds and the sets. The
+        # fixture's own indexes, cells without env, load as ever (above).
+        cells = [{**suite.cell("star-3-5", suite.SIM, "calibration_star", {"STRIMS_SIM_CAL_VIEWERS": "3"}, 2,
+                               "3 viewers"), "seeds": 12},
+                 suite.cell("large", suite.PPSPP, "sim_job", {"SIM_PEERS": "200"}, 3, "a large swarm")]
+        args = argparse.Namespace(refs=None, sets="seed;1", ref="HEAD", no_off=False, knob="SIM_EXP,STRIMS_SIM_EXP",
+                                  first_seed=2001, seeds=3, env=[], no_run=True, farm_args="", against=None,
+                                  all=False, rank="lag")
+        sha = "a" * 40
+        with mock.patch.object(suite, "git", lambda *a, **kw: sha), \
+                mock.patch.object(suite, "peak_gib", lambda r: {"star-3-5": 0.5}), \
+                mock.patch.object(suite, "WORK", self.root / "work"), \
+                mock.patch.object(suite, "print_arm_score", lambda *a: None), \
+                mock.patch.object(suite, "scorecard", lambda *a, **kw: None):
+            suite.farm(args, cells)
+        [path] = (self.root / "target" / "sim-suite" / "farm-runs" / "pending").glob("*.json")
+        idx = simdb.suite_index(path.stem)
+        self.assertEqual(idx["cells"], [
+            {"name": "star-3-5", "sim": "strims-sim", "test": "calibration_star", "why": "3 viewers",
+             "env": {"STRIMS_SIM_CAL_VIEWERS": "3"}, "mem_gib": 1.0},
+            {"name": "large", "sim": "ppspp", "test": "sim_job", "why": "a large swarm",
+             "env": {"SIM_PEERS": "200"}, "mem_gib": 3}])
+        self.assertEqual((idx["arms"], idx["seeds"], idx["knob"], idx["values"]),
+                         ({"x": sha}, [2001, 2002, 2003], {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_EXP"},
+                          ["off", "seed", "1"]))
+        self.assertEqual(simdb.suite_cells([f"{path.stem}-01"]), {f"{path.stem}-01": (f"large@{path.stem}", "SIM_EXP")})
 
     def test_a_label_holding_two_jobs_is_refused(self):
         with self.assertRaises(SystemExit) as cm:
