@@ -107,7 +107,9 @@ those the farm reused from other runs or matrices, by its matrices'
 indexes (target/sim-farm/<matrix>/index.jsonl), whose sources' tables
 join the selection (pulled when the cache lacks them). A key's tables come
 from one of its sources whatever cells it counts in (its copies are one
-job's): the one holding the most of them, the later on a tie.
+job's): the one holding the most of them, then the later flush (its
+manifest's `at`), then a farm flush's later seq, by number
+(source_ranks).
 
   sql      a query over the views (runs, scalars, seconds, viewer_seconds,
            reads, bins, viewers, events, node_bins, forecast, the derived
@@ -979,6 +981,22 @@ def reused(srcs, stored):
     return (sql if held else None), held
 
 
+def source_ranks(srcs):
+    """{src: rank} over the cache's sources `srcs`, the higher the rank the
+    sooner the views take a key's tables from it: the source holding the
+    most of the sims' tables (a farm run's reads come with `pull --reads`),
+    then the later flush (its manifest's `at`), then a farm flush's later
+    seq (farm/<run>/<instance>/<seq>, by number), then the name."""
+    root = cache_root() / "cache"
+
+    def key(s):
+        last = s.rsplit("/", 1)[-1]
+        seq = int(last) if s.startswith("farm/") and last.isdigit() else -1
+        return sum((root / s / f"{t}.parquet").exists() for t in TABLES), manifest_of(s).get("at") or "", seq, s
+
+    return {s: n for n, s in enumerate(sorted(srcs, key=key))}
+
+
 def views(a, derived=True, fetch=True):
     """The SQL that makes the views over selection `a`'s sources, and the
     tables it has. A farm source's runs name the suite cells and arms its
@@ -1032,22 +1050,20 @@ def views(a, derived=True, fetch=True):
         where.append("(" + " OR ".join(f"arm GLOB {q(x)}" for x in a.arm) + ")")
     if a.seed:
         where.append(f"seed IN ({', '.join(str(int(s)) for s in a.seed)})")
-    root = cache_root() / "cache"
-    held_tables = ", ".join(f"({q(s)}, {sum((root / s / f'{t}.parquet').exists() for t in TABLES)})"
-                            for s in srcs)
+    rank = "(VALUES " + ", ".join(f"({q(s)}, {n})" for s, n in source_ranks(srcs).items()) + ") h(src, rank)"
     sql = [
         f"CREATE VIEW runs_all AS SELECT * FROM {read_runs};",
         # A key's tables come from one source, whatever cells it counts in
-        # (the copies are one job's): the source holding the most of them
-        # (a farm run's reads come with `pull --reads`), the later on a tie.
-        # So (k) is a key's whole identity in the views, and USING (k)
-        # joins the rows USING (k, src) does.
-        f"CREATE VIEW canon AS SELECT k, src FROM runs_all LEFT JOIN (VALUES {held_tables}) h(src, tables) "
-        "USING (src) QUALIFY row_number() OVER (PARTITION BY k ORDER BY coalesce(tables, 0) DESC, src DESC) = 1;",
+        # (the copies are one job's): the top of source_ranks. So (k) is a
+        # key's whole identity in the views, and USING (k) joins the rows
+        # USING (k, src) does.
+        f"CREATE VIEW canon AS SELECT k, src FROM runs_all LEFT JOIN {rank} USING (src) "
+        "QUALIFY row_number() OVER (PARTITION BY k ORDER BY coalesce(rank, -1) DESC) = 1;",
         # A key in two cells (a job the farm reused) counts in each, with the
-        # cell's own row (its copy in the key's source, else its latest).
-        "CREATE VIEW runs AS SELECT * FROM (SELECT r.* REPLACE (c.src AS src) FROM runs_all r JOIN canon c USING (k) "
-        "QUALIFY row_number() OVER (PARTITION BY r.k, r.cell ORDER BY r.src = c.src DESC, r.src DESC) = 1)"
+        # cell's own row (its copy in the key's source, else its top one).
+        f"CREATE VIEW runs AS SELECT * FROM (SELECT r.* REPLACE (c.src AS src) FROM runs_all r JOIN canon c USING (k) "
+        f"LEFT JOIN {rank} ON h.src = r.src QUALIFY row_number() OVER (PARTITION BY r.k, r.cell "
+        "ORDER BY r.src = c.src DESC, coalesce(h.rank, -1) DESC) = 1)"
         + (" WHERE " + " AND ".join(where) if where else "") + ";",
     ]
     have = {"runs"}

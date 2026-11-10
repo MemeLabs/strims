@@ -6,9 +6,10 @@ as two farm runs of several suite tiers leave them (an A/B and its
 confirmation, each a browsers and a net tier, their cells sharing names,
 the A/B reusing rows of the confirmation's); the arms simdb and suite.py
 name a suite farm run's jobs by, alike, and the index suite.py's `farm`
-writes (ArmLabels); its queries and joins over a scratch cache of both
-sims' tables (Queries); and its pulls of a farm run's samples from a
-scratch S3, the aws CLI stubbed (SamplesPull):
+writes (ArmLabels); which copy of a key the views take (Canon); its
+queries and joins over a scratch cache of both sims' tables (Queries);
+and its pulls of a farm run's samples from a scratch S3, the aws CLI
+stubbed (SamplesPull):
 
   python3 hack/sim-db/simdb_test.py
 
@@ -356,6 +357,52 @@ class ArmLabels(unittest.TestCase):
         self.assertEqual(simdb.arm_label(None, "strims-sim", "main", {"STRIMS_SIM_EXP": "off"}), "main")
 
 
+class Canon(unittest.TestCase):
+    """Which of a key's copies the views take its tables from: the one
+    holding the most tables, then the later flush, then the later seq."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
+                  mock.patch.object(sys, "stderr", io.StringIO()),
+                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
+                                  clear=True)):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def put(self, src, tables=("runs", "seconds"), at=None):
+        d = simdb.cache_root() / "cache" / src
+        d.mkdir(parents=True)
+        for t in tables:
+            simdb.duck(f"COPY (SELECT 'kt' AS k, {simdb.q(src)} AS src, 'c' AS cell, 'a' AS arm, 1 AS seed, 0 AS sec) "
+                       f"TO {simdb.q(d / f'{t}.parquet')} (FORMAT parquet);", out=None)
+        if at:
+            (d / "manifest.json").write_text(json.dumps({"keys": ["kt"], "at": at}))
+
+    def canon(self):
+        v, _ = simdb.views(argparse.Namespace(src=None, cell=None, arm=None, seed=None), derived=False)
+        got = simdb.duck(v + "\nSELECT (SELECT src FROM canon) AS canon, (SELECT src FROM runs) AS runs;")[0]
+        self.assertEqual(got["canon"], got["runs"])
+        return got["canon"]
+
+    def test_seq_ranks_by_number(self):
+        run = "farm/sx0001-00/i-1"
+        for seq in (2, 9, 10):
+            self.put(f"{run}/{seq}")
+        self.assertEqual(self.canon(), f"{run}/10")
+
+    def test_the_later_flush_ranks_first(self):
+        self.put("farm/sx0001-00/i-1/10", at="2026-11-10T05:00:00Z")
+        self.put("farm/sx0001-00/i-2/3", at="2026-11-10T06:00:00Z")
+        self.put("farm/sx0001-00/i-3/9", at="2026-11-10T04:00:00Z")
+        self.assertEqual(self.canon(), "farm/sx0001-00/i-2/3")
+
+    def test_the_most_tables_rank_first(self):
+        self.put("farm/sx0001-00/i-1/10", at="2026-11-10T05:00:00Z")
+        self.put("farm/sx0001-00/i-1/9", ("runs", "seconds", "viewers"), at="2026-11-10T04:00:00Z")
+        self.assertEqual(self.canon(), "farm/sx0001-00/i-1/9")
 
 
 # Queries' sources: a ppspp run's (its viewers name their node `node`), a
