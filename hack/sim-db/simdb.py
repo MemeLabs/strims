@@ -877,7 +877,10 @@ def derive(srcs):
 
 
 def write_table(path, cols, data):
-    """Writes rows `data` (lists in `cols`' order) to Parquet at `path`."""
+    """Writes rows `data` (lists in `cols`' order) to Parquet at `path`,
+    its columns `cols` alone: the CSV it's read from sits in the derived
+    dir's `v=` directory, which DuckDB would take for a hive partition and
+    add as a column."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile("w", suffix=".csv", dir=path.parent, delete=False) as f:
         f.write(",".join(cols) + "\n")
@@ -888,11 +891,24 @@ def write_table(path, cols, data):
     part = path.with_suffix(f".tmp{os.getpid()}")
     try:
         duck(f"COPY (SELECT * FROM read_csv({q(tmp)}, header=true, auto_detect=false, columns={struct(cols)}, "
-             f"nullstr='')) TO {q(part)} (FORMAT parquet, COMPRESSION zstd);", out=None)
+             f"nullstr='', hive_partitioning=false)) TO {q(part)} (FORMAT parquet, COMPRESSION zstd);", out=None)
         part.replace(path)
     finally:
         tmp.unlink(missing_ok=True)
         part.unlink(missing_ok=True)
+
+
+def derived_files(table, srcs):
+    """SQL reading derived `table`'s files of the sources `srcs`, as `x`,
+    else None. The `v=` directory isn't a hive partition, and a `v` column
+    a file holds (DuckDB's, from a file written there with hive
+    partitioning on) is left out."""
+    d = derived_dir(table)
+    f = [str(d / name) for name in (s.replace("/", "~") + ".parquet" for s in srcs) if (d / name).exists()]
+    if not f:
+        return None
+    return (f"(SELECT COLUMNS(lambda c: c <> 'v') FROM read_parquet({plist(f)}, union_by_name=true, "
+            "hive_partitioning=false)) x")
 
 
 # --- selection and views ------------------------------------------------------
@@ -1083,12 +1099,8 @@ def views(a, derived=True, fetch=True):
             have.add(t)
     if derived:
         for t in [*DERIVED, "verdicts"]:
-            d = derived_dir(t)
-            f = [str(d / (s.replace("/", "~") + ".parquet")) for s in srcs
-                 if (d / (s.replace("/", "~") + ".parquet")).exists()]
-            if f:
-                sql.append(f"CREATE VIEW {t} AS SELECT x.* FROM read_parquet({plist(f)}, union_by_name=true) x "
-                           "SEMI JOIN runs USING (k, src);")
+            if f := derived_files(t, srcs):
+                sql.append(f"CREATE VIEW {t} AS SELECT x.* FROM {f} SEMI JOIN runs USING (k, src);")
                 have.add(t)
     sql += macros(have)
     return "\n".join(sql), have

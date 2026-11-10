@@ -8,8 +8,8 @@ the A/B reusing rows of the confirmation's); the arms simdb and suite.py
 name a suite farm run's jobs by, alike, and the index suite.py's `farm`
 writes (ArmLabels); which copy of a key the views take (Canon); its
 queries and joins over a scratch cache of both sims' tables (Queries);
-and its pulls of a farm run's samples from a scratch S3, the aws CLI
-stubbed (SamplesPull):
+its pulls of a farm run's samples from a scratch S3, the aws CLI stubbed
+(SamplesPull); and the derived tables' columns (Derived):
 
   python3 hack/sim-db/simdb_test.py
 
@@ -1069,6 +1069,60 @@ class PerViewerVerdict(unittest.TestCase):
         self.assertEqual(s["lag"], [[5, 5, 5, 5], [-1, -1, 7, 7]])
         self.assertEqual((s["arrive_ms"], s["depart_ms"]), ([-3000, 1500], [None, None]))
         self.assertNotIn("arrive_ms", simdb.series_of({"secs": 4}, secs, vs))
+
+
+class Derived(unittest.TestCase):
+    """The derived tables hold their declared columns alone."""
+
+    SRC = "suite/wt/d"
+    # k: the viewers' stays (audience's): every one there from the start,
+    # or each arriving later
+    STAYS = {"kt0": [(None, None)] * 6, "ktr": [(k + 0.5, None) for k in range(6)]}
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        series = {(self.SRC, k): ({}, audience(40, stays)) for k, stays in self.STAYS.items()}
+        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
+                  mock.patch.object(simdb, "load_series", lambda pairs: {p: series[p] for p in pairs}),
+                  mock.patch.object(sys, "stderr", io.StringIO()),
+                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
+                                  clear=True)):
+            p.start()
+            self.addCleanup(p.stop)
+        d = simdb.cache_root() / "cache" / self.SRC
+        d.mkdir(parents=True)
+        vals = ", ".join(f"({simdb.q(k)}, {simdb.q(self.SRC)}, 'c', 'a', 1)" for k in self.STAYS)
+        simdb.duck(f"COPY (SELECT * FROM (VALUES {vals}) t(k, src, cell, arm, seed)) "
+                   f"TO {simdb.q(d / 'runs.parquet')} (FORMAT parquet);", out=None)
+
+    def columns(self, path):
+        return [r["column_name"] for r in simdb.duck(
+            f"DESCRIBE SELECT * FROM read_parquet({simdb.q(path)}, hive_partitioning=false);")]
+
+    def view(self, query):
+        v, have = simdb.views(argparse.Namespace(src=None, cell=None, arm=None, seed=None))
+        return simdb.duck(v + "\n" + query + ";"), have
+
+    def test_a_table_holds_its_columns_alone(self):
+        path = simdb.cache_root() / "derived" / "t" / "v=abc" / "x.parquet"
+        simdb.write_table(path, simdb.DERIVED["episodes"], [["k", "s", "collapse", 1, 9, 8]])
+        self.assertEqual(self.columns(path), list(simdb.DERIVED["episodes"]))
+
+    def test_a_stray_v_column_is_left_out(self):
+        # A file written beside its CSV in the v= directory, with DuckDB's
+        # hive detection on, holds a `v` column; the views read it and a
+        # file without alike.
+        simdb.derive([self.SRC])
+        d = simdb.derived_dir("episodes")
+        stray = d / "suite~wt~e.parquet"
+        simdb.duck(f"COPY (SELECT * FROM read_parquet({simdb.q(d / 'suite~wt~d.parquet')})) "
+                   f"TO {simdb.q(stray)} (FORMAT parquet);", out=None)
+        self.assertIn("v", self.columns(stray))
+        f = simdb.derived_files("episodes", [self.SRC, "suite/wt/e"])
+        got = simdb.duck(f"DESCRIBE SELECT x.* FROM {f};")
+        self.assertEqual([r["column_name"] for r in got], list(simdb.DERIVED["episodes"]))
 
 
 if __name__ == "__main__":
