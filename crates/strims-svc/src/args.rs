@@ -10,16 +10,18 @@ use strims_base::time::Duration;
 use strims_node::CaptureConfig;
 use strims_node::app::PsiMode;
 use strims_node::codec::FfmpegConfig;
-use strims_svc::{Config, Db, TlsConfig};
+use strims_svc::{Config, Db, TlsConfig, cli};
 use strims_video::codec::ffmpeg::FfmpegSettings;
 use strims_video::codec::{MAX_RENDITIONS, RenditionPlan};
 
 pub(crate) const USAGE: &str = "\
 usage: strims-svc (--db <path> | --db-memory) [options]
+       strims-svc (call | methods | describe | profiles) ... (see --help after one)
 
 Runs a profile's node, serves the UI's frontend RPC over WebSocket, and
 serves the node's HLS streams to players over HTTP, or HTTPS with a
-certificate.
+certificate. Its commands call that frontend API from the command line,
+as the UI does, and manage a store's profiles.
 
 options:
   --db <path>               the redb file holding the profiles' stores
@@ -89,6 +91,8 @@ The log level comes from RUST_LOG (default info).";
 pub(crate) enum Command {
     Run(Box<Config>),
     Help,
+    /// A subcommand ([`strims_svc::cli`]).
+    Cli(cli::Command),
 }
 
 /// The renditions `--renditions` lists: `<side>p<fps>@<bitrate>`, the
@@ -136,6 +140,10 @@ fn ladder(list: &str) -> Result<Vec<RenditionPlan>, String> {
 /// Parses the arguments after the program name. Flags take their value as
 /// the next argument or after `=`.
 pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> {
+    let mut args = args.into_iter().peekable();
+    if let Some(command) = args.next_if(|a| cli::is_subcommand(a)) {
+        return cli::parse(&command, args).map(Command::Cli);
+    }
     let mut config = Config::default();
     let mut db = None;
     let mut capture_dir = None;
@@ -143,7 +151,6 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
     let mut tls_cert = None;
     let mut tls_key = None;
     let mut api_tls = false;
-    let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let (flag, inline) = match arg.split_once('=') {
             Some((f, v)) => (f.to_owned(), Some(v.to_owned())),
@@ -296,7 +303,19 @@ mod tests {
         match parse(args.iter().map(|a| (*a).to_owned()))? {
             Command::Run(c) => Ok(*c),
             Command::Help => panic!("help"),
+            Command::Cli(c) => panic!("a subcommand: {c:?}"),
         }
+    }
+
+    #[test]
+    fn a_first_argument_naming_a_subcommand_starts_it() {
+        let parsed = parse(["methods".to_owned(), "network".to_owned()]).unwrap();
+        assert!(matches!(
+            parsed,
+            Command::Cli(cli::Command::Methods { filter: Some(f) }) if f == "network"
+        ));
+        // anywhere else, it's an unknown argument
+        assert!(run(&["--db-memory", "methods"]).is_err());
     }
 
     #[test]

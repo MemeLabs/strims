@@ -96,6 +96,13 @@
 //! A TLS proxy in front of plain HTTP, its URL the HLS base URL, serves as
 //! well.
 //!
+//! # Command line
+//!
+//! [`cli`] calls the frontend API the way the UI does, over a running
+//! service's API or one it runs on a store for the call, and manages a
+//! store's profiles: `strims-svc call`, `methods`, `describe` and
+//! `profiles` ([`cli::USAGE`]).
+//!
 //! # Threads
 //!
 //! [`Svc`] runs inside a tokio `LocalSet`, on one thread. The running
@@ -104,6 +111,7 @@
 //! while a session computes.
 
 mod api;
+pub mod cli;
 mod http;
 mod http2;
 mod tls;

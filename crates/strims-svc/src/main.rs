@@ -4,15 +4,16 @@
 //! `strims-svc`: runs a profile's node, serves the UI's frontend RPC over
 //! WebSocket and, if asked, HLS over HTTP, with TLS if given a
 //! certificate, until interrupted. See
-//! [`args::USAGE`]. Its allocator counts the heap for the Debug service's
-//! snapshots ([`memory`]).
+//! [`args::USAGE`]. Its subcommands call that API and manage a store's
+//! profiles from the command line ([`cli::USAGE`]). Its allocator counts
+//! the heap for the Debug service's snapshots ([`memory`]).
 
 mod args;
 mod memory;
 
 use std::process::ExitCode;
 
-use strims_svc::Svc;
+use strims_svc::{Svc, cli};
 use tokio::task::LocalSet;
 use tracing_subscriber::EnvFilter;
 
@@ -22,6 +23,20 @@ fn main() -> ExitCode {
         Ok(args::Command::Help) => {
             println!("{}", args::USAGE);
             return ExitCode::SUCCESS;
+        }
+        Ok(args::Command::Cli(command)) => {
+            // stdout carries the command's output
+            tracing_subscriber::fmt()
+                .with_writer(std::io::stderr)
+                .with_env_filter(
+                    EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
+                )
+                .init();
+            return cli::run(command);
+        }
+        Err(e) if is_cli(std::env::args().nth(1)) => {
+            eprintln!("strims-svc: {e}\n\n{}", cli::USAGE);
+            return ExitCode::from(2);
         }
         Err(e) => {
             eprintln!("strims-svc: {e}\n\n{}", args::USAGE);
@@ -76,4 +91,9 @@ fn main() -> ExitCode {
         svc.stop().await;
         ExitCode::SUCCESS
     }))
+}
+
+/// Whether the first argument names a subcommand.
+fn is_cli(first: Option<String>) -> bool {
+    first.is_some_and(|a| cli::is_subcommand(&a))
 }

@@ -12,7 +12,7 @@ strims-dao.workspace = true
 strims-kv.workspace = true
 strims-kv-redb.workspace = true
 strims-node.workspace = true
-strims-proto = { workspace = true, features = ["services"] }
+strims-proto = { workspace = true, features = ["services", "descriptors"] }
 strims-rpc.workspace = true
 strims-session.workspace = true
 strims-video.workspace = true
@@ -24,9 +24,16 @@ h2.workspace = true
 http.workspace = true
 bytes.workspace = true
 rand_core.workspace = true
+prost.workspace = true
+# the command line reads and writes messages by name, as JSON
+prost-reflect = { workspace = true, features = ["serde"] }
+prost-types.workspace = true
+serde_json.workspace = true
 rustls.workspace = true
 rustls-webpki.workspace = true
 tokio-rustls.workspace = true
+# the roots a wss:// API's certificate chains to
+webpki-roots.workspace = true
 futures-util = { workspace = true, features = ["sink", "std"] }
 # `signal`: the binary stops on ctrl-c.
 tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util", "sync", "signal"] }

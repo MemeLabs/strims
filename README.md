@@ -152,6 +152,44 @@ to connect a remote peer and watch the stream via p2p.
 
 1. Find the stream thumbnail in the network directory
 
+## command line
+
+`strims-svc`'s commands do what the web ui does, from a shell: `call` calls
+any method of the frontend API the ui calls (`methods` lists them, `describe`
+shows their messages), and `profiles` lists, adds, removes, exports and
+imports a store's profiles. Requests and responses are JSON (`bytes` in
+base64, 64-bit integers as strings); `decode` and `encode` turn a message
+carried in a `bytes` field to JSON and back. `strims-svc call --help` has the
+details.
+
+A call runs on a store no service holds (`--db`), starting the profile's node
+for the call, or over a running service's API (`--api`, by default
+`ws://127.0.0.1:8083/api`):
+
+```sh
+$ alias svc='cargo run -q -p strims-svc --'
+$ printf %s '<password>' > ./pw
+$ svc profiles add --db ./strims.redb --profile alice --profile-password-file ./pw
+$ LOGIN='--db ./strims.redb --profile alice --profile-password-file ./pw'
+$ svc call $LOGIN NetworkFrontend.CreateServer '{"name": "streams"}' > network.json
+$ # the network's key is its root certificate's
+$ svc decode strims.type.CertificateBody "$(jq -r .network.certificate.parent.body network.json)"
+$ svc call $LOGIN NetworkFrontend.CreateInvitation '{"network_id": "<id>"}'
+$ svc call $LOGIN VideoChannelFrontend.Create \
+    '{"network_key": "<key>", "directory_listing_snippet": {"title": "live"}}'
+$ svc call $LOGIN VideoIngress.SetConfig \
+    '{"config": {"enabled": true, "server_addr": "127.0.0.1:1935"}}'
+$ svc call $LOGIN VideoIngress.GetChannelURL '{"id": "<channel id>"}'
+$ svc call --api ws://127.0.0.1:8083/manage --profile alice \
+    --profile-password-file ./pw --limit 1 DirectoryFrontend.WatchListings
+```
+
+`profiles export` writes a profile and its store, still sealed, to a file
+that `profiles import` adds to another store: a backup or a move, since the
+import is the same device. A second device pairs instead
+(`ReplicationFrontend.CreatePairingToken`, then `AuthFrontend.SignIn` with
+the token).
+
 ## checks
 
 `crates/CONVENTIONS.md` lists the checks to run from the repo root before

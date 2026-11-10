@@ -146,8 +146,6 @@ on it is in `CONVENTIONS.md`.
   - invite shortlinks: a server for `InviteLink.GetInvitation` at
     `/api/invite` (the UI's `/invite/<code>` page already asks it), sign-up
     in the same step for a newcomer, and a way to mint codes;
-  - profile commands: list, add, remove, import and export profiles
-    from the command line;
   - a container image, for infra's leader, seeder and invites
     deployments.
 - Desktop: the Electron app (`src/desktop`) spawns its node from
