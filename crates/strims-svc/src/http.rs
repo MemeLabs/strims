@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! HLS over HTTP: the running profile's HLS streams, answered from the
-//! node factory's [`HlsRoutes`] for external players.
+//! node factory's [`HlsRoutes`] for external players, and under
+//! [`bootstrap::PREFIX`] the [bootstrap API](crate::bootstrap).
 //!
 //! The server speaks HTTP/1.1, and over TLS when it has a certificate,
 //! HTTP/2 to the clients whose handshake picks it (see [`http2`]).
@@ -11,6 +12,12 @@
 //! included) over [`HlsSettings::max_path_bytes`] 414. Every response
 //! carries a content type, a cache control, a content length and
 //! `Access-Control-Allow-Origin: *`; a HEAD's has no body.
+//!
+//! A streamed answer ([`Answer::stream`]) has no content length: its body
+//! goes out as it comes, until it ends or the client goes. Each of its
+//! chunks has [`RESPONSE_TIMEOUT`] to be sent, and nothing bounds the
+//! whole. Over HTTP/1.1 it is close-delimited, the connection ending with
+//! the body.
 //!
 //! A low-latency playlist's blocking reloads and hinted parts
 //! ([`hls`](strims_video::hls#blocking)) wait for their stream within the
@@ -45,6 +52,10 @@ use std::net::SocketAddr;
 use std::rc::Rc;
 use std::time::Duration as StdDuration;
 
+use bytes::Bytes;
+use futures_util::StreamExt;
+use futures_util::future::LocalBoxFuture;
+use futures_util::stream::LocalBoxStream;
 use strims_rpc::Timer;
 use strims_video::HlsSettings;
 use strims_video::hls::{HlsAnswer, HlsResponse, HlsRoutes};
@@ -54,6 +65,7 @@ use tokio::task::{AbortHandle, spawn_local};
 use tokio::time::{Instant, timeout, timeout_at};
 
 use crate::SvcTimer;
+use crate::bootstrap;
 use crate::http2;
 use crate::tls::{self, Tls};
 
@@ -113,6 +125,16 @@ pub(crate) struct Http {
     /// HTTP/1.1 requests waiting on their stream. Bound: half of
     /// `limits.max_connections`.
     waiting: Cell<usize>,
+    /// What answers under [`bootstrap::PREFIX`]; without it, those paths
+    /// answer 503.
+    bootstrap: Option<Rc<dyn ApiRoutes>>,
+}
+
+/// Routes the server answers beside HLS, under [`bootstrap::PREFIX`].
+pub(crate) trait ApiRoutes {
+    /// The answer to a `GET` of `path`, its query included, or a `HEAD`
+    /// when `body` is false.
+    fn request<'a>(&'a self, path: &'a str, body: bool) -> LocalBoxFuture<'a, Answer>;
 }
 
 /// A request head's method and path, or the answer to a head that isn't
@@ -132,37 +154,79 @@ impl Drop for Waiting<'_> {
     }
 }
 
+/// A body sent as it comes.
+pub(crate) type BodyStream = LocalBoxStream<'static, Bytes>;
+
 /// A response, and whether its body is sent.
-#[derive(Debug)]
 pub(crate) struct Answer {
     pub(crate) response: HlsResponse,
     /// False for a HEAD.
     pub(crate) body: bool,
+    /// The body, sent as it comes in place of the response's, which is
+    /// then empty: the head carries no content length.
+    pub(crate) stream: Option<BodyStream>,
+}
+
+impl std::fmt::Debug for Answer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Answer")
+            .field("response", &self.response)
+            .field("body", &self.body)
+            .field("stream", &self.stream.is_some())
+            .finish()
+    }
 }
 
 impl Answer {
+    /// `response`, its body sent unless `body` is false.
+    pub(crate) fn whole(response: HlsResponse, body: bool) -> Answer {
+        Answer {
+            response,
+            body,
+            stream: None,
+        }
+    }
+
     /// An error the server answers itself, with a body naming it.
-    fn error(status: u16) -> Answer {
+    pub(crate) fn error(status: u16) -> Answer {
         let text: &[u8] = match status {
             400 => b"bad request\n",
+            404 => b"not found\n",
             405 => b"method not allowed\n",
             414 => b"path too long\n",
             431 => b"request head too large\n",
+            503 => b"service unavailable\n",
             _ => b"error\n",
         };
-        Answer {
-            response: HlsResponse {
+        Answer::whole(
+            HlsResponse {
                 status,
                 content_type: ERROR_TYPE,
                 cache_control: NO_STORE,
                 body: Rc::from(text),
             },
-            body: true,
-        }
+            true,
+        )
+    }
+
+    /// Whether the head carries a content length: not for a streamed
+    /// body.
+    pub(crate) fn has_length(&self) -> bool {
+        self.stream.is_none()
     }
 
     /// The status line and headers.
     fn head(&self) -> String {
+        self.head_with(self.has_length())
+    }
+
+    /// The status line and headers of a streamed body, which have no
+    /// content length.
+    fn head_streamed(&self) -> String {
+        self.head_with(false)
+    }
+
+    fn head_with(&self, length: bool) -> String {
         let r = &self.response;
         let mut head = String::with_capacity(192);
         // Writing to a String can't fail.
@@ -171,14 +235,15 @@ impl Answer {
             "HTTP/1.1 {} {}\r\n\
              Content-Type: {}\r\n\
              Cache-Control: {}\r\n\
-             Content-Length: {}\r\n\
              Access-Control-Allow-Origin: *\r\n",
             r.status,
             reason(r.status),
             r.content_type,
             r.cache_control,
-            r.body.len(),
         );
+        if length {
+            let _ = write!(head, "Content-Length: {}\r\n", r.body.len());
+        }
         if r.status == 405 {
             head.push_str("Allow: GET, HEAD\r\n");
         }
@@ -216,6 +281,15 @@ impl Http {
             connections: RefCell::new(BTreeMap::new()),
             next_id: Cell::new(0),
             waiting: Cell::new(0),
+            bootstrap: None,
+        }
+    }
+
+    /// The server, answering the bootstrap API from `bootstrap`.
+    pub(crate) fn with_bootstrap(self, bootstrap: Rc<dyn ApiRoutes>) -> Http {
+        Http {
+            bootstrap: Some(bootstrap),
+            ..self
         }
     }
 
@@ -266,15 +340,18 @@ impl Http {
         if path.len() > self.limits.max_path_bytes {
             return Answer::error(414);
         }
+        if bootstrap::routes(path) {
+            return match &self.bootstrap {
+                Some(b) => b.request(path, body).await,
+                None => Answer::error(503),
+            };
+        }
         let response = match self.routes.request(self.timer.now(), path) {
             HlsAnswer::Ready(response) => response,
             HlsAnswer::Blocked(block) => {
                 let _waiting = if http1 {
                     if self.waiting.get() >= self.limits.max_connections / 2 {
-                        return Answer {
-                            response: HlsResponse::unavailable(),
-                            body,
-                        };
+                        return Answer::whole(HlsResponse::unavailable(), body);
                     }
                     self.waiting.set(self.waiting.get() + 1);
                     Some(Waiting(&self.waiting))
@@ -287,7 +364,7 @@ impl Http {
                     .unwrap_or_else(|_| HlsResponse::unavailable())
             }
         };
-        Answer { response, body }
+        Answer::whole(response, body)
     }
 
     /// Reads a request head by `deadline`; `None` when the connection
@@ -336,7 +413,7 @@ impl Http {
         let Some(head) = self.read_request(&mut stream, addr, deadline).await else {
             return;
         };
-        let answer = match head {
+        let mut answer = match head {
             Head::Error(answer) => answer,
             Head::Request { method, path } => {
                 tokio::select! {
@@ -352,6 +429,12 @@ impl Http {
                 }
             }
         };
+        if answer.body
+            && let Some(body) = answer.stream.take()
+        {
+            self.stream(stream, &answer, body, addr).await;
+            return;
+        }
         match timeout(self.limits.response_timeout, respond(&mut stream, &answer)).await {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
@@ -364,6 +447,47 @@ impl Http {
             }
         }
         let _ = timeout(LINGER, drain(&mut stream)).await;
+    }
+
+    /// Sends `answer`'s head, then `body`, the stream taken from it, as it
+    /// comes, close-delimited, and ends the connection: when the body
+    /// ends, when a chunk can't be sent within the response timeout, or
+    /// when the client goes.
+    async fn stream<S: AsyncRead + AsyncWrite + Unpin>(
+        &self,
+        stream: S,
+        answer: &Answer,
+        mut body: BodyStream,
+        addr: SocketAddr,
+    ) {
+        let (mut rx, mut tx) = tokio::io::split(stream);
+        let head = answer.head_streamed();
+        let send = timeout(self.limits.response_timeout, tx.write_all(head.as_bytes()));
+        if !matches!(send.await, Ok(Ok(()))) {
+            tracing::debug!(%addr, "sending a streamed response's head failed");
+            return;
+        }
+        loop {
+            let chunk = tokio::select! {
+                biased;
+                chunk = body.next() => chunk,
+                () = drain(&mut rx) => {
+                    tracing::debug!(%addr, "a streamed response's client left");
+                    return;
+                }
+            };
+            let Some(chunk) = chunk else { break };
+            let send = timeout(self.limits.response_timeout, async {
+                tx.write_all(&chunk).await?;
+                tx.flush().await
+            });
+            if !matches!(send.await, Ok(Ok(()))) {
+                tracing::debug!(%addr, "sending a streamed response failed or timed out");
+                return;
+            }
+        }
+        let _ = timeout(self.limits.response_timeout, tx.shutdown()).await;
+        let _ = timeout(LINGER, drain(&mut rx)).await;
     }
 }
 
@@ -435,6 +559,72 @@ async fn respond<S: AsyncWrite + Unpin>(stream: &mut S, answer: &Answer) -> std:
         stream.write_all(&answer.response.body).await?;
     }
     stream.shutdown().await
+}
+
+/// A route that streams what a test sends it.
+#[cfg(test)]
+pub(crate) mod testing {
+    use std::cell::{Cell, RefCell};
+    use std::rc::Rc;
+
+    use bytes::Bytes;
+    use futures_util::FutureExt;
+    use futures_util::future::LocalBoxFuture;
+    use strims_video::hls::HlsResponse;
+    use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
+
+    use super::{Answer, ApiRoutes};
+
+    /// Answers its first request with a streamed body of what `send`
+    /// sends, ending when `send` drops; `dropped` is set once the server
+    /// drops the body.
+    pub(crate) struct Streaming {
+        rx: RefCell<Option<tokio::sync::mpsc::UnboundedReceiver<Bytes>>>,
+        pub(crate) dropped: Rc<Cell<bool>>,
+    }
+
+    struct Dropped(Rc<Cell<bool>>);
+
+    impl Drop for Dropped {
+        fn drop(&mut self) {
+            self.0.set(true);
+        }
+    }
+
+    impl Streaming {
+        pub(crate) fn new() -> (Rc<Streaming>, UnboundedSender<Bytes>) {
+            let (tx, rx) = unbounded_channel();
+            let s = Streaming {
+                rx: RefCell::new(Some(rx)),
+                dropped: Rc::new(Cell::new(false)),
+            };
+            (Rc::new(s), tx)
+        }
+    }
+
+    impl ApiRoutes for Streaming {
+        fn request<'a>(&'a self, _: &'a str, body: bool) -> LocalBoxFuture<'a, Answer> {
+            let rx = self.rx.borrow_mut().take();
+            let dropped = Dropped(self.dropped.clone());
+            let body_stream = futures_util::stream::unfold((rx, dropped), |(mut rx, d)| async {
+                let chunk = rx.as_mut()?.recv().await?;
+                Some((chunk, (rx, d)))
+            });
+            let head = HlsResponse {
+                status: 200,
+                content_type: "application/octet-stream",
+                cache_control: "no-store",
+                body: Rc::from(&[][..]),
+            };
+            async move {
+                Answer {
+                    stream: Some(Box::pin(body_stream)),
+                    ..Answer::whole(head, body)
+                }
+            }
+            .boxed_local()
+        }
+    }
 }
 
 /// Reads and drops the client's input until it ends.
@@ -902,6 +1092,90 @@ mod tests {
                 !String::from_utf8_lossy(&out).contains("HTTP/1.1"),
                 "a plaintext request is answered: {out:?}"
             );
+        });
+    }
+
+    #[test]
+    fn api_paths_answer_503_without_the_api() {
+        let f = fixture();
+        let h = http(&f.routes, limits());
+        for path in ["/api/v1/directory/events", "/api/v1/invitation/x"] {
+            assert_eq!(
+                answer(&h, &get(path)).unwrap().response.status,
+                503,
+                "{path}"
+            );
+        }
+        assert_eq!(answer(&h, &get("/api/v2/x")).unwrap().response.status, 404);
+    }
+
+    /// The bytes of `s` up to the end of a response head, and the head.
+    async fn read_head(s: &mut TcpStream) -> String {
+        let mut head = Vec::new();
+        let mut byte = [0u8; 1];
+        while !head.ends_with(b"\r\n\r\n") {
+            assert_eq!(s.read(&mut byte).await.unwrap(), 1, "the head ended early");
+            head.push(byte[0]);
+        }
+        String::from_utf8(head).unwrap()
+    }
+
+    #[test]
+    fn a_streamed_answer_goes_out_as_it_comes_and_ends_the_connection_with_its_body() {
+        run(async {
+            let f = fixture();
+            let (api, tx) = crate::http::testing::Streaming::new();
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let h = Rc::new(http(&f.routes, limits()).with_bootstrap(api.clone()));
+            spawn_local(accept(listener, h));
+            let mut s = TcpStream::connect(addr).await.unwrap();
+            s.write_all(&get("/api/v1/directory/events")).await.unwrap();
+            let head = read_head(&mut s).await;
+            assert!(head.starts_with("HTTP/1.1 200 OK\r\n"), "{head}");
+            assert!(!head.contains("Content-Length"), "{head}");
+            assert!(
+                head.contains("Access-Control-Allow-Origin: *\r\n"),
+                "{head}"
+            );
+            assert!(head.ends_with("Connection: close\r\n\r\n"), "{head}");
+            for chunk in [&b"one"[..], b"two"] {
+                tx.send(Bytes::from_static(chunk)).unwrap();
+                let mut got = vec![0u8; chunk.len()];
+                s.read_exact(&mut got).await.unwrap();
+                assert_eq!(got, chunk);
+            }
+            drop(tx);
+            let mut rest = Vec::new();
+            timeout(StdDuration::from_secs(5), s.read_to_end(&mut rest))
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(rest.is_empty());
+            assert!(api.dropped.get());
+        });
+    }
+
+    #[test]
+    fn a_streamed_answer_stops_when_its_client_leaves() {
+        run(async {
+            let f = fixture();
+            let (api, _tx) = crate::http::testing::Streaming::new();
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let h = Rc::new(http(&f.routes, limits()).with_bootstrap(api.clone()));
+            spawn_local(accept(listener, h.clone()));
+            let mut s = TcpStream::connect(addr).await.unwrap();
+            s.write_all(&get("/api/v1/directory/events")).await.unwrap();
+            read_head(&mut s).await;
+            assert!(!api.dropped.get());
+            drop(s);
+            let left = timeout(StdDuration::from_secs(5), async {
+                while !api.dropped.get() || !h.connections_empty() {
+                    tokio::time::sleep(StdDuration::from_millis(5)).await;
+                }
+            });
+            assert!(left.await.is_ok(), "the body outlived its client");
         });
     }
 

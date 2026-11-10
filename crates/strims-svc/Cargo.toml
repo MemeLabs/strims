@@ -9,8 +9,10 @@ license.workspace = true
 [dependencies]
 strims-base.workspace = true
 strims-dao.workspace = true
+strims-directory.workspace = true
 strims-kv.workspace = true
 strims-kv-redb.workspace = true
+strims-network.workspace = true
 strims-node.workspace = true
 strims-proto = { workspace = true, features = ["services", "descriptors"] }
 strims-rpc.workspace = true
@@ -51,7 +53,6 @@ strims-ppspp.workspace = true
 strims-video = { workspace = true, features = ["test-support"] }
 # the ffmpeg test runs ffmpeg and ffprobe
 tokio = { workspace = true, features = ["process"] }
-prost.workspace = true
 # the TLS tests' certificates
 rcgen.workspace = true
 

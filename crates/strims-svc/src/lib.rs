@@ -103,6 +103,23 @@
 //! store's profiles: `strims-svc call`, `methods`, `describe`, `decode`,
 //! `encode` and `profiles` ([`cli::USAGE`]).
 //!
+//! # Headless profile
+//!
+//! With [`Config::profile`], the service signs the profile in and starts
+//! its node as it starts, without a UI: a UI that signs in to the profile
+//! later joins the same session. The profile must exist in the store; a
+//! failed sign-in fails the start.
+//!
+//! # Bootstrap API
+//!
+//! With [`Config::bootstrap`], the HLS listener also answers the
+//! [bootstrap API](bootstrap) for the headless profile: a stream of its
+//! networks' media listings, their thumbnails, and invitations to the
+//! networks, so a browser opens a stream of a network it isn't a member of
+//! yet in one step. Each network it names must be one whose CA the profile
+//! holds, or the service doesn't start. Without the config, the API's
+//! paths answer 503.
+//!
 //! # Threads
 //!
 //! [`Svc`] runs inside a tokio `LocalSet`, on one thread. The running
@@ -111,6 +128,7 @@
 //! while a session computes.
 
 mod api;
+mod bootstrap;
 pub mod cli;
 mod http;
 mod http2;
@@ -123,10 +141,12 @@ use std::time::Duration as StdDuration;
 
 use rand_core::SeedableRng;
 use strims_base::rng::DetRng;
+use strims_dao::Table;
+use strims_dao::schema::network::{Networks, network_key};
 use strims_kv_redb::RedbKv;
-use strims_node::app::{AppConfig, NodeFactory, NodeTimer, PsiMode};
+use strims_node::app::{AppConfig, AppRuntime, NodeFactory, NodeTimer, PsiMode, StartError};
 use strims_node::{NodeInfo, SystemClock, TokioNet};
-use strims_session::Manager;
+use strims_session::{Manager, Session};
 use tokio::net::TcpListener;
 use tokio::task::{AbortHandle, spawn_local};
 
@@ -136,6 +156,7 @@ use crate::tls::{Certificate, Tls};
 type Factory = NodeFactory<TokioNet, SystemClock>;
 type SvcTimer = NodeTimer<SystemClock>;
 type SvcManager = Manager<RedbKv, Factory, SvcTimer>;
+type SvcRuntime = AppRuntime<RedbKv, TokioNet, SystemClock>;
 
 /// Where the profiles' stores live.
 #[derive(Clone, Debug)]
@@ -169,6 +190,42 @@ pub struct Config {
     /// The certificate HLS is served with over TLS, and the API with
     /// [`TlsConfig::api`]. `None` serves both without TLS.
     pub tls: Option<TlsConfig>,
+    /// The profile whose node runs from the start
+    /// ([headless](crate#headless-profile)); `None` starts a node only
+    /// when a UI signs in.
+    pub profile: Option<ProfileLogin>,
+    /// The [bootstrap API](crate#bootstrap-api), on the HLS listener for
+    /// the headless profile: it needs [`hls_listen`](Config::hls_listen)
+    /// and [`profile`](Config::profile).
+    pub bootstrap: Option<BootstrapConfig>,
+}
+
+/// A profile's name and password, which the service signs in with.
+#[derive(Clone)]
+pub struct ProfileLogin {
+    pub name: String,
+    pub password: String,
+}
+
+impl std::fmt::Debug for ProfileLogin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProfileLogin")
+            .field("name", &self.name)
+            .finish_non_exhaustive()
+    }
+}
+
+/// What the [bootstrap API](crate#bootstrap-api) serves.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BootstrapConfig {
+    /// The keys of the networks it serves, each one whose CA the headless
+    /// profile holds.
+    pub networks: Vec<Vec<u8>>,
+    /// The `ws://` or `wss://` URL the node's WebSocket listener is
+    /// reached at, without the profile key; a browser dials only `wss://`.
+    /// Its invitations' bootstrap client dials it and the profile's key in
+    /// hex.
+    pub ws_url: String,
 }
 
 /// How often a [`TlsConfig`] checks its files by default.
@@ -217,6 +274,8 @@ impl Default for Config {
             max_connections: 64,
             hls_listen: None,
             tls: None,
+            profile: None,
+            bootstrap: None,
         }
     }
 }
@@ -236,6 +295,16 @@ pub enum SvcError {
     Ffmpeg(strims_node::codec::ProbeError),
     #[error("loading the TLS certificate: {0}")]
     Tls(#[from] TlsError),
+    #[error("signing in the profile {0}: {1}")]
+    SignIn(String, strims_dao::Error),
+    #[error("starting the profile's node: {0}")]
+    Profile(StartError),
+    #[error("reading the profile's networks: {0}")]
+    Networks(strims_dao::Error),
+    #[error("the bootstrap API needs an HLS listener and a headless profile")]
+    BootstrapConfig,
+    #[error("the bootstrap API's network {0} isn't one whose CA the profile holds")]
+    NotOwner(String),
 }
 
 /// A running service. Dropping it stops serving the UI and HLS.
@@ -247,6 +316,8 @@ pub struct Svc {
     hls: Option<Hls>,
     /// Checks the certificate's files for a renewal.
     watch: Option<AbortHandle>,
+    /// The headless profile's session and node.
+    headless: Option<(Rc<Session<RedbKv>>, Rc<SvcRuntime>)>,
 }
 
 /// The HLS server.
@@ -262,8 +333,22 @@ impl Svc {
     /// A config naming an ffmpeg for the codec stage starts only if
     /// [`probe_ffmpeg`](strims_node::codec::probe_ffmpeg) takes it, and
     /// one with a certificate only if it loads. Runs inside a tokio
-    /// `LocalSet`.
+    /// `LocalSet`. A start that fails has released the store when it
+    /// returns, so another may open it.
     pub async fn start(config: Config) -> Result<Svc, SvcError> {
+        let started = Svc::try_start(config).await;
+        if started.is_err() {
+            // A headless node that started has its tasks aborted; they
+            // drop their hold on the store when next run.
+            tokio::task::yield_now().await;
+        }
+        started
+    }
+
+    async fn try_start(config: Config) -> Result<Svc, SvcError> {
+        if config.bootstrap.is_some() && (config.hls_listen.is_none() || config.profile.is_none()) {
+            return Err(SvcError::BootstrapConfig);
+        }
         let (tls, cert) = match &config.tls {
             Some(c) => {
                 let (tls, cert) = Tls::load(c)?;
@@ -338,6 +423,23 @@ impl Svc {
             std::env::consts::OS,
             DetRng::from_seed(seed),
         ));
+        let headless = match &config.profile {
+            Some(login) => Some(headless(&manager, login).await?),
+            None => None,
+        };
+        let bootstrap = match (&config.bootstrap, &headless) {
+            (Some(b), Some((session, runtime))) => {
+                check_owned(session, &b.networks).await?;
+                let key = session.profile.key.as_ref().map_or(&[][..], |k| &k.public);
+                Some(Rc::new(bootstrap::Bootstrap::new(
+                    runtime.clone(),
+                    key,
+                    b,
+                    hls_limits.max_connections,
+                )))
+            }
+            _ => None,
+        };
         let listener = TcpListener::bind(&config.api_listen).await?;
         let api_addr = listener.local_addr()?;
         let api_tls = tls
@@ -351,12 +453,16 @@ impl Svc {
         ));
         let accept = spawn_local(api::accept(listener, api.clone())).abort_handle();
         let hls = hls_listener.map(|(listener, addr)| {
-            let http = Rc::new(http::Http::new(
+            let mut http = http::Http::new(
                 manager.factory().hls_routes().clone(),
                 manager.timer().clone(),
                 hls_limits,
                 tls.clone(),
-            ));
+            );
+            if let Some(b) = bootstrap {
+                http = http.with_bootstrap(b);
+            }
+            let http = Rc::new(http);
             let accept = spawn_local(http::accept(listener, http.clone())).abort_handle();
             Hls {
                 http,
@@ -375,6 +481,7 @@ impl Svc {
             accept,
             hls,
             watch,
+            headless,
         })
     }
 
@@ -399,6 +506,12 @@ impl Svc {
         self.manager.factory().running()
     }
 
+    /// The headless profile's public key, if one runs.
+    pub fn profile_key(&self) -> Option<&[u8]> {
+        let (session, _) = self.headless.as_ref()?;
+        session.profile.key.as_ref().map(|k| k.public.as_slice())
+    }
+
     /// Stops serving the UI and HLS, and stops the running node.
     pub async fn stop(self) {
         drop(self);
@@ -418,6 +531,41 @@ impl Drop for Svc {
             watch.abort();
         }
     }
+}
+
+/// Signs in `login`'s profile and starts its session.
+async fn headless(
+    manager: &SvcManager,
+    login: &ProfileLogin,
+) -> Result<(Rc<Session<RedbKv>>, Rc<SvcRuntime>), SvcError> {
+    let pk = strims_dao::auth::sign_in(manager.kv(), &login.name, &login.password)
+        .await
+        .map_err(|e| SvcError::SignIn(login.name.clone(), e))?;
+    let running = manager
+        .get_or_create(&pk)
+        .await
+        .map_err(SvcError::Profile)?;
+    tracing::info!(name = login.name, "running the profile headless");
+    Ok(running)
+}
+
+/// Checks that `session`'s profile holds the CA of each network in `keys`.
+async fn check_owned(session: &Session<RedbKv>, keys: &[Vec<u8>]) -> Result<(), SvcError> {
+    let mut tx = session.store.read().await.map_err(SvcError::Networks)?;
+    let networks = Networks::get_all(&mut tx)
+        .await
+        .map_err(SvcError::Networks)?;
+    for key in keys {
+        let owned = networks
+            .iter()
+            .any(|n| n.server_config.is_some() && network_key(n) == *key);
+        if !owned {
+            return Err(SvcError::NotOwner(
+                data_encoding::BASE64URL_NOPAD.encode(key),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// A base URL of HLS playlists, and its host.

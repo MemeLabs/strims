@@ -18,7 +18,8 @@
 //!   [`SEND_BUFFER`] of it queued per request, so a connection holds at
 //!   most `MAX_STREAMS * SEND_BUFFER` of answers unsent.
 //! - A response has the HTTP/1.1 one's time to be sent; then its stream is
-//!   reset.
+//!   reset. A streamed one has that time for each chunk, and ends with its
+//!   body or the client's reset.
 //! - A request that waits for its stream stops when the client resets its
 //!   stream.
 //! - A connection with no request open for the idle timeout is sent a
@@ -37,7 +38,7 @@ use http::{Request, Response, StatusCode};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::time::{Instant, sleep_until, timeout, timeout_at};
 
-use crate::http::{Answer, Http};
+use crate::http::{Answer, BodyStream, Http};
 
 /// The most requests a connection has open at once.
 pub(crate) const MAX_STREAMS: u32 = 16;
@@ -118,9 +119,12 @@ async fn answer(
         }
     };
     tracing::trace!(%addr, %path, status = answer.response.status, "HLS request");
+    let mut answer = answer;
+    let head = head(&answer);
+    let stream = answer.stream.take();
     let body = &answer.response.body;
-    let end = !answer.body || body.is_empty();
-    let mut send = match respond.send_response(head(&answer), end) {
+    let end = !answer.body || (stream.is_none() && body.is_empty());
+    let mut send = match respond.send_response(head, end) {
         Ok(send) => send,
         Err(e) => {
             tracing::debug!(%addr, error = %e, "sending an HLS HTTP/2 response failed");
@@ -130,7 +134,16 @@ async fn answer(
     if end {
         return;
     }
-    match timeout(http.limits.response_timeout, send_body(&mut send, body)).await {
+    if let Some(stream) = stream {
+        send_stream(http, &mut send, stream, addr).await;
+        return;
+    }
+    match timeout(
+        http.limits.response_timeout,
+        send_body(&mut send, body, true),
+    )
+    .await
+    {
         Ok(Ok(())) => {}
         Ok(Err(e)) => tracing::debug!(%addr, error = %e, "sending an HLS HTTP/2 body failed"),
         Err(_) => {
@@ -156,15 +169,18 @@ fn head(answer: &Answer) -> Response<()> {
             headers.insert(name, value);
         }
     }
-    headers.insert(header::CONTENT_LENGTH, HeaderValue::from(r.body.len()));
+    if answer.has_length() {
+        headers.insert(header::CONTENT_LENGTH, HeaderValue::from(r.body.len()));
+    }
     if r.status == 405 {
         headers.insert(header::ALLOW, HeaderValue::from_static("GET, HEAD"));
     }
     head
 }
 
-/// Sends `body` as the stream's capacity allows, then ends the stream.
-async fn send_body(send: &mut SendStream<Bytes>, body: &[u8]) -> Result<(), h2::Error> {
+/// Sends `body` as the stream's capacity allows, then ends the stream if
+/// `end`.
+async fn send_body(send: &mut SendStream<Bytes>, body: &[u8], end: bool) -> Result<(), h2::Error> {
     let mut rest = body;
     while !rest.is_empty() {
         send.reserve_capacity(rest.len());
@@ -176,10 +192,49 @@ async fn send_body(send: &mut SendStream<Bytes>, body: &[u8]) -> Result<(), h2::
         if chunk.is_empty() {
             continue;
         }
-        send.send_data(Bytes::copy_from_slice(chunk), tail.is_empty())?;
+        send.send_data(Bytes::copy_from_slice(chunk), end && tail.is_empty())?;
         rest = tail;
     }
     Ok(())
+}
+
+/// Sends `body` as it comes, each chunk within the response timeout, then
+/// ends the stream; a chunk that can't be sent in time resets it, and the
+/// client's reset ends it.
+async fn send_stream(
+    http: &Http,
+    send: &mut SendStream<Bytes>,
+    mut body: BodyStream,
+    addr: SocketAddr,
+) {
+    loop {
+        let chunk = tokio::select! {
+            biased;
+            chunk = body.next() => chunk,
+            _ = poll_fn(|cx| send.poll_reset(cx)) => {
+                tracing::debug!(%addr, "a streamed HTTP/2 response was reset");
+                return;
+            }
+        };
+        let Some(chunk) = chunk else {
+            if let Err(e) = send.send_data(Bytes::new(), true) {
+                tracing::debug!(%addr, error = %e, "ending a streamed HTTP/2 response failed");
+            }
+            return;
+        };
+        match timeout(http.limits.response_timeout, send_body(send, &chunk, false)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                tracing::debug!(%addr, error = %e, "sending a streamed HTTP/2 response failed");
+                return;
+            }
+            Err(_) => {
+                tracing::debug!(%addr, "sending a streamed HTTP/2 response timed out");
+                send.send_reset(Reason::CANCEL);
+                return;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -209,7 +264,8 @@ mod tests {
 
     use super::*;
     use crate::TlsConfig;
-    use crate::http::{Limits, accept};
+    use crate::http::testing::Streaming;
+    use crate::http::{ApiRoutes, Limits, accept};
     use crate::tls::Tls;
     use crate::tls::testing::{client, connect, dir, self_signed, write};
 
@@ -253,6 +309,17 @@ mod tests {
         name: &str,
         alpn: &[&[u8]],
     ) -> (Rc<Http>, SocketAddr, TlsConnector) {
+        serving_api(f, limits, name, alpn, None).await
+    }
+
+    /// [`serving`], answering under the API prefix from `api`.
+    async fn serving_api(
+        f: &Fixture,
+        limits: Limits,
+        name: &str,
+        alpn: &[&[u8]],
+        api: Option<Rc<dyn ApiRoutes>>,
+    ) -> (Rc<Http>, SocketAddr, TlsConnector) {
         let dir = dir(name);
         let (cert, key, root) = self_signed(&["localhost"]);
         let (cert, key) = write(&dir, &cert, &key);
@@ -260,14 +327,130 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let h = Rc::new(Http::new(
+        let mut h = Http::new(
             f.routes.clone(),
             NodeTimer(SystemClock),
             limits,
             Some(Rc::new(tls)),
-        ));
+        );
+        if let Some(api) = api {
+            h = h.with_bootstrap(api);
+        }
+        let h = Rc::new(h);
         spawn_local(accept(listener, h.clone()));
         (h, addr, client(&root, alpn))
+    }
+
+    /// Waits until `flag` is set, for at most 5 s.
+    async fn until(flag: &std::cell::Cell<bool>, what: &str) {
+        let set = tokio::time::timeout(StdDuration::from_secs(5), async {
+            while !flag.get() {
+                tokio::time::sleep(StdDuration::from_millis(5)).await;
+            }
+        });
+        assert!(set.await.is_ok(), "{what}");
+    }
+
+    #[test]
+    fn a_streamed_http2_answer_has_no_length_and_ends_with_its_body() {
+        run(async {
+            let f = fixture();
+            let (api, tx) = Streaming::new();
+            let routes: Rc<dyn ApiRoutes> = api.clone();
+            let (_h, addr, c) = serving_api(&f, limits(), "stream", &[b"h2"], Some(routes)).await;
+            let (client, _conn) = h2_client(addr, &c).await;
+            let req = Request::get("https://localhost/api/v1/directory/events")
+                .body(())
+                .unwrap();
+            let mut ready = client.clone().ready().await.unwrap();
+            let (response, _) = ready.send_request(req, true).unwrap();
+            tx.send(Bytes::from_static(b"one")).unwrap();
+            let (head, mut body) = response.await.unwrap().into_parts();
+            assert_eq!(head.status, 200);
+            assert!(head.headers.get("content-length").is_none());
+            assert_eq!(
+                header(&head.headers, "content-type"),
+                "application/octet-stream"
+            );
+            assert_eq!(header(&head.headers, "access-control-allow-origin"), "*");
+            let mut got = Vec::new();
+            while got.len() < 3 {
+                let chunk = body.data().await.unwrap().unwrap();
+                body.flow_control().release_capacity(chunk.len()).unwrap();
+                got.extend_from_slice(&chunk);
+            }
+            assert_eq!(got, b"one");
+            // A body larger than the stream's window goes as it opens.
+            let big: Vec<u8> = (0..MEDIA_LEN).map(|i| (i % 253) as u8).collect();
+            tx.send(Bytes::from(big.clone())).unwrap();
+            drop(tx);
+            let mut rest = Vec::new();
+            while let Some(chunk) = body.data().await {
+                let chunk = chunk.unwrap();
+                body.flow_control().release_capacity(chunk.len()).unwrap();
+                rest.extend_from_slice(&chunk);
+            }
+            assert!(rest == big, "the streamed body's bytes");
+            until(&api.dropped, "the body outlived its end").await;
+            // The connection serves on.
+            assert_eq!(fetch(&client, "GET", f.stream.path()).await.0, 200);
+        });
+    }
+
+    #[test]
+    fn a_reset_ends_a_streamed_http2_answer() {
+        run(async {
+            let f = fixture();
+            let (api, _tx) = Streaming::new();
+            let routes: Rc<dyn ApiRoutes> = api.clone();
+            let (_h, addr, c) =
+                serving_api(&f, limits(), "stream-reset", &[b"h2"], Some(routes)).await;
+            let (client, _conn) = h2_client(addr, &c).await;
+            let req = Request::get("https://localhost/api/v1/directory/events")
+                .body(())
+                .unwrap();
+            let mut ready = client.clone().ready().await.unwrap();
+            let (response, mut send) = ready.send_request(req, true).unwrap();
+            let (head, _body) = response.await.unwrap().into_parts();
+            assert_eq!(head.status, 200);
+            assert!(!api.dropped.get());
+            send.send_reset(Reason::CANCEL);
+            until(&api.dropped, "a reset stream's body lives on").await;
+        });
+    }
+
+    #[test]
+    fn a_streamed_chunk_the_client_doesnt_take_resets_its_stream() {
+        run(async {
+            let f = fixture();
+            let limits = Limits {
+                response_timeout: StdDuration::from_millis(300),
+                ..limits()
+            };
+            let (api, tx) = Streaming::new();
+            let routes: Rc<dyn ApiRoutes> = api.clone();
+            let (_h, addr, c) =
+                serving_api(&f, limits, "stream-stall", &[b"h2"], Some(routes)).await;
+            let (client, _conn) = h2_client(addr, &c).await;
+            let req = Request::get("https://localhost/api/v1/directory/events")
+                .body(())
+                .unwrap();
+            let mut ready = client.clone().ready().await.unwrap();
+            let (response, _) = ready.send_request(req, true).unwrap();
+            tx.send(Bytes::from(vec![0u8; MEDIA_LEN])).unwrap();
+            let mut body = response.await.unwrap().into_body();
+            // Read, but with none of the window released.
+            let reset = loop {
+                match body.data().await {
+                    Some(Ok(_)) => {}
+                    Some(Err(e)) => break e,
+                    None => panic!("the whole chunk came without a window"),
+                }
+            };
+            assert_eq!(reset.reason(), Some(Reason::CANCEL), "{reset}");
+            until(&api.dropped, "a stalled stream's body lives on").await;
+            drop(tx);
+        });
     }
 
     /// An HTTP/2 connection to `addr`, and the task driving it.

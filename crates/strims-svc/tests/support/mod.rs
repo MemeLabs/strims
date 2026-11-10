@@ -25,6 +25,7 @@ use tokio_tungstenite::tungstenite::http::header::{COOKIE, SET_COOKIE};
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{self, Message};
 
+pub mod rtmp;
 pub mod tls;
 pub mod video;
 

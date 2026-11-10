@@ -362,6 +362,18 @@ impl<K: Kv, T: Timer, V: VideoHost, S: Spawn> ProfileRuntime<K, T, V, S> {
     pub fn video(&self) -> &VideoControl<K, NodeHost, V, T> {
         &self.video
     }
+
+    /// The profile's network control, which its frontends serve. A driver
+    /// that serves invitations of its own mints them through it.
+    pub fn network(&self) -> &NetworkControl<K, NodeHost, T> {
+        &self.network
+    }
+
+    /// The profile's directory control, which its frontends serve. A
+    /// driver that serves listings of its own reads them through it.
+    pub fn directory(&self) -> &DirectoryControl<K, NodeHost, T> {
+        &self.directory
+    }
 }
 
 impl<K: Kv, T: Timer, V: VideoHost, S: Spawn> Drop for ProfileRuntime<K, T, V, S> {

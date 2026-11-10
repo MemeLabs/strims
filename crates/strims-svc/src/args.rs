@@ -6,11 +6,12 @@
 use std::net::IpAddr;
 use std::path::PathBuf;
 
+use data_encoding::BASE64URL_NOPAD;
 use strims_base::time::Duration;
 use strims_node::CaptureConfig;
 use strims_node::app::PsiMode;
 use strims_node::codec::FfmpegConfig;
-use strims_svc::{Config, Db, TlsConfig, cli};
+use strims_svc::{BootstrapConfig, Config, Db, ProfileLogin, TlsConfig, cli};
 use strims_video::codec::ffmpeg::FfmpegSettings;
 use strims_video::codec::{MAX_RENDITIONS, RenditionPlan};
 
@@ -77,6 +78,22 @@ options:
                             decisions into <dir> (`ppspp-capture` reads them)
   --ppspp-capture-max <MiB> the most a capture keeps, in its last 8 files
                             (default 1024)
+  --profile <name>          sign this profile in and run its node from the
+                            start, without a UI (with
+                            --profile-password-file)
+  --profile-password-file <path>
+                            the file holding the profile's password; a
+                            trailing newline isn't part of it
+  --bootstrap-network <key> serve the bootstrap API under /api/v1/ on the
+                            HLS listener for this network, its key in
+                            unpadded URL-safe base64, one whose CA the
+                            --profile holds; repeatable. Needs --hls-listen
+                            and --bootstrap-ws-url
+  --bootstrap-ws-url <url>  the ws:// or wss:// URL the --ws-listen
+                            listener is reached at, which the bootstrap
+                            API's invitations dial with the profile's key
+                            appended; browsers dial only wss://, through a
+                            TLS proxy
   --help                    print this
 
 Players accept a certificate that chains to a root their device trusts
@@ -152,6 +169,10 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
     let mut tls_cert = None;
     let mut tls_key = None;
     let mut api_tls = false;
+    let mut profile = None;
+    let mut password_file = None;
+    let mut bootstrap_networks = Vec::new();
+    let mut bootstrap_ws_url = None;
     while let Some(arg) = args.next() {
         let (flag, inline) = match arg.split_once('=') {
             Some((f, v)) => (f.to_owned(), Some(v.to_owned())),
@@ -233,6 +254,28 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
             "--renditions" => app.video.ingress.transcode.ladder = ladder(&value()?)?,
             "--ppspp-capture" => capture_dir = Some(PathBuf::from(value()?)),
             "--ppspp-capture-max" => capture_max = Some(positive::<u64>(&flag, &value()?)?),
+            "--profile" => profile = Some(value()?),
+            "--profile-password-file" => password_file = Some(PathBuf::from(value()?)),
+            "--bootstrap-network" => {
+                let v = value()?;
+                match BASE64URL_NOPAD.decode(v.as_bytes()) {
+                    Ok(key) if key.len() == NETWORK_KEY_LEN => bootstrap_networks.push(key),
+                    _ => {
+                        return Err(format!(
+                            "--bootstrap-network takes a network key in unpadded URL-safe base64: {v}"
+                        ));
+                    }
+                }
+            }
+            "--bootstrap-ws-url" => {
+                let url = value()?;
+                if !is_ws_url(&url) {
+                    return Err(format!(
+                        "--bootstrap-ws-url must start with ws(s)://: {url}"
+                    ));
+                }
+                bootstrap_ws_url = Some(url);
+            }
             _ => return Err(format!("unknown argument {flag}")),
         }
     }
@@ -251,6 +294,32 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
     if config.hls_listen.is_none() && !config.app.video.hls.base_url.is_empty() {
         return Err("--hls-public-url needs --hls-listen".to_owned());
     }
+    config.profile = match (profile, password_file) {
+        (Some(name), Some(path)) => {
+            let password = std::fs::read_to_string(&path)
+                .map_err(|e| format!("--profile-password-file {}: {e}", path.display()))?;
+            Some(ProfileLogin {
+                name,
+                password: without_newline(password),
+            })
+        }
+        (None, None) => None,
+        _ => return Err("--profile and --profile-password-file go together".to_owned()),
+    };
+    config.bootstrap = match (bootstrap_networks.is_empty(), bootstrap_ws_url) {
+        (true, None) => None,
+        (true, Some(_)) => return Err("--bootstrap-ws-url needs --bootstrap-network".to_owned()),
+        (false, None) => return Err("--bootstrap-network needs --bootstrap-ws-url".to_owned()),
+        (false, Some(ws_url)) => {
+            if config.hls_listen.is_none() || config.profile.is_none() {
+                return Err("--bootstrap-network needs --hls-listen and --profile".to_owned());
+            }
+            Some(BootstrapConfig {
+                networks: bootstrap_networks,
+                ws_url,
+            })
+        }
+    };
     config.tls = match (tls_cert, tls_key) {
         (Some(cert), Some(key)) => {
             if config.hls_listen.is_none() && !api_tls {
@@ -270,6 +339,30 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
 
 /// What a ppspp capture keeps without `--ppspp-capture-max`, in MiB.
 const DEFAULT_CAPTURE_MIB: u64 = 1024;
+
+/// The bytes of a network key.
+const NETWORK_KEY_LEN: usize = 32;
+
+/// `s` without one trailing newline, `\n` or `\r\n`.
+fn without_newline(mut s: String) -> String {
+    if s.ends_with('\n') {
+        s.pop();
+        if s.ends_with('\r') {
+            s.pop();
+        }
+    }
+    s
+}
+
+/// Whether `url` is `ws://` or `wss://`, in any case, and more.
+fn is_ws_url(url: &str) -> bool {
+    ["ws://", "wss://"].iter().any(|scheme| {
+        url.len() > scheme.len()
+            && url
+                .get(..scheme.len())
+                .is_some_and(|p| p.eq_ignore_ascii_case(scheme))
+    })
+}
 
 fn number<T: std::str::FromStr>(flag: &str, v: &str) -> Result<T, String> {
     v.parse().map_err(|_| format!("{flag}: invalid value {v}"))
@@ -482,6 +575,74 @@ mod tests {
         let eight = ["240p30@1M"; MAX_RENDITIONS].join(",");
         let e = run(&["--db-memory", "--renditions", &eight]).err().unwrap();
         assert!(e.contains("at most 7"), "{e}");
+    }
+
+    #[test]
+    fn a_headless_profile_and_its_bootstrap_api_take_their_flags() {
+        let dir = std::env::temp_dir().join(format!("strims-svc-args-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let password = dir.join("password");
+        std::fs::write(&password, "s3cret\r\n").unwrap();
+        let pw = format!("--profile-password-file={}", password.display());
+        let net = BASE64URL_NOPAD.encode(&[7; 32]);
+        let other = BASE64URL_NOPAD.encode(&[8; 32]);
+        let c = run(&[
+            "--db-memory",
+            "--hls-listen=127.0.0.1:8084",
+            "--profile",
+            "owner",
+            &pw,
+            "--bootstrap-network",
+            &net,
+            &format!("--bootstrap-network={other}"),
+            "--bootstrap-ws-url=wss://node.example/",
+        ])
+        .unwrap();
+        let login = c.profile.unwrap();
+        assert_eq!(
+            (login.name.as_str(), login.password.as_str()),
+            ("owner", "s3cret")
+        );
+        assert!(!format!("{login:?}").contains("s3cret"));
+        assert_eq!(
+            c.bootstrap,
+            Some(BootstrapConfig {
+                networks: vec![vec![7; 32], vec![8; 32]],
+                ws_url: "wss://node.example/".into(),
+            })
+        );
+
+        let bad = |args: &[&str], want: &str| {
+            let mut all = vec!["--db-memory"];
+            all.extend_from_slice(args);
+            let e = run(&all).err().unwrap();
+            assert!(e.contains(want), "{args:?}: {e}");
+        };
+        let ws = "--bootstrap-ws-url=wss://n";
+        let with_net = format!("--bootstrap-network={net}");
+        bad(&["--profile=owner"], "go together");
+        bad(&[&pw], "go together");
+        bad(
+            &["--profile=owner", "--profile-password-file=/nonexistent/pw"],
+            "/nonexistent/pw",
+        );
+        bad(
+            &["--hls-listen=:0", "--profile=owner", &pw, &with_net],
+            "--bootstrap-ws-url",
+        );
+        bad(&[ws], "needs --bootstrap-network");
+        bad(
+            &["--profile=owner", &pw, &with_net, ws],
+            "--hls-listen and --profile",
+        );
+        bad(
+            &["--hls-listen=:0", &with_net, ws],
+            "--hls-listen and --profile",
+        );
+        bad(&["--bootstrap-ws-url=https://n"], "ws(s)://");
+        bad(&["--bootstrap-network=AAAA"], "base64");
+        bad(&[&format!("--bootstrap-network={net}=")], "base64");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
