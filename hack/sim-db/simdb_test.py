@@ -9,7 +9,7 @@ name a suite farm run's jobs by, alike, and the index suite.py's `farm`
 writes (ArmLabels); which copy of a key the views take (Canon); its
 queries and joins over a scratch cache of both sims' tables (Queries);
 its pulls of a farm run's samples from a scratch S3, the aws CLI stubbed
-(SamplesPull); and the derived tables' columns (Derived):
+(SamplesPull); and the derived tables' columns and versions (Derived):
 
   python3 hack/sim-db/simdb_test.py
 
@@ -1072,7 +1072,8 @@ class PerViewerVerdict(unittest.TestCase):
 
 
 class Derived(unittest.TestCase):
-    """The derived tables hold their declared columns alone."""
+    """The derived tables hold their declared columns alone, under a
+    version that moves with them."""
 
     SRC = "suite/wt/d"
     # k: the viewers' stays (audience's): every one there from the start,
@@ -1109,6 +1110,35 @@ class Derived(unittest.TestCase):
         path = simdb.cache_root() / "derived" / "t" / "v=abc" / "x.parquet"
         simdb.write_table(path, simdb.DERIVED["episodes"], [["k", "s", "collapse", 1, 9, 8]])
         self.assertEqual(self.columns(path), list(simdb.DERIVED["episodes"]))
+
+    def test_verdicts_carry_the_startup(self):
+        got, _ = self.view("SELECT k, startup_s, collapsed FROM verdicts ORDER BY k")
+        a = simdb.analyze()
+        self.assertEqual({r["k"]: r["startup_s"] for r in got}, {"kt0": a.STARTUP_SECS, "ktr": 0})
+        name = self.SRC.replace("/", "~") + ".parquet"
+        for t in [*simdb.DERIVED, "verdicts"]:
+            cols = self.columns(simdb.derived_dir(t) / name)
+            self.assertNotIn("v", cols, t)
+            self.assertEqual(cols[:len(simdb.DERIVED.get(t, simdb.VERDICT_COLS))],
+                             list(simdb.DERIVED.get(t, simdb.VERDICT_COLS)), t)
+
+    def test_a_table_made_before_is_stale(self):
+        # Verdicts made without startup_s, under VERDICT_VERSION alone: the
+        # views make their own rather than read them, and the version moves
+        # with the columns.
+        a = simdb.analyze()
+        name = self.SRC.replace("/", "~") + ".parquet"
+        old = {c: t for c, t in simdb.VERDICT_COLS.items() if c != "startup_s"}
+        made = [[k, self.SRC] + [None] * (len(old) - 2) for k in self.STAYS]
+        for t, cols, rows in [*((t, c, []) for t, c in simdb.DERIVED.items()), ("verdicts", old, made)]:
+            simdb.write_table(simdb.cache_root() / "derived" / t / f"v={a.VERDICT_VERSION}" / name, cols, rows)
+        got, _ = self.view("SELECT k, startup_s FROM verdicts ORDER BY k")
+        self.assertEqual([(r["k"], r["startup_s"]) for r in got], [("kt0", a.STARTUP_SECS), ("ktr", 0)])
+        now = simdb.derived_version()
+        self.addCleanup(simdb.derived_version.cache_clear)
+        simdb.derived_version.cache_clear()
+        with mock.patch.object(simdb, "VERDICT_COLS", old):
+            self.assertNotEqual(simdb.derived_version(), now)
 
     def test_a_stray_v_column_is_left_out(self):
         # A file written beside its CSV in the v= directory, with DuckDB's

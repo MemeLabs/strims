@@ -86,23 +86,25 @@ S3 ledger (pull). Nothing in the cache is kept for long: a run is
 reproduced when it's wanted again, and `gc` deletes what's older than
 `--days` (7).
 
-The queries read the cache's tables and, made from them per
-analyze.py's VERDICT_VERSION and kept under derived/, the verdicts'
-tables: `verdict_seconds` (each second's phase, health and what judged
-it), `verdicts` (a run's verdict and analyze.run_metrics), `episodes`
-(healthy, unhealthy and collapse spells) and `derived_events` (start,
-seed_down, seed_up, present_join, present_leave, onset, recovered,
-collapse: DERIVED_KINDS, none of them a kind the sims' events have; the
-viewers present rising or falling are present_join and present_leave,
-the sims' join and leave a node's). A
-selection picks runs: `--src` (cache paths, globs, default every one),
-`--cell`, `--arm` (globs) and `--seed`, and a run's cell and arm are the
-same whatever else it selects. A suite farm run's runs are named by the
-suite cell their matrix ran, <cell>@<run>, which `--cell` matches whole or
-by the cell alone, and by the arm suite.py names them by (arm_label): a
-`--sets` run's (its index has a knob) by its set, the value its env gives
-the knob, else by its matrix's arm, a `--refs` name. A farm run's cells
-hold every row it scored: also
+The queries read the cache's tables and, made from them and kept under
+derived/<table>/v=<derived_version>/ (a hash of analyze.py's
+VERDICT_VERSION and of the derived tables' columns and code, so a change
+to either makes them again), the verdicts' tables: `verdict_seconds`
+(each second's phase, health and what judged it), `verdicts` (a run's
+verdict, the seconds a collapse must last past, `startup_s`
+(analyze.startup), and analyze.run_metrics), `episodes` (healthy,
+unhealthy and collapse spells) and `derived_events` (start, seed_down,
+seed_up, present_join, present_leave, onset, recovered, collapse:
+DERIVED_KINDS, none of them a kind the sims' events have; the viewers
+present rising or falling are present_join and present_leave, the sims'
+join and leave a node's). A selection picks runs: `--src` (cache paths,
+globs, default every one), `--cell`, `--arm` (globs) and `--seed`, and a
+run's cell and arm are the same whatever else it selects. A suite farm
+run's runs are named by the suite cell their matrix ran, <cell>@<run>,
+which `--cell` matches whole or by the cell alone, and by the arm
+suite.py names them by (arm_label): a `--sets` run's (its index has a
+knob) by its set, the value its env gives the knob, else by its matrix's
+arm, a `--refs` name. A farm run's cells hold every row it scored: also
 those the farm reused from other runs or matrices, by its matrices'
 indexes (target/sim-farm/<matrix>/index.jsonl), whose sources' tables
 join the selection (pulled when the cache lacks them). A key's tables come
@@ -185,6 +187,7 @@ import functools
 import gzip
 import hashlib
 import importlib.util
+import inspect
 import json
 import math
 import os
@@ -827,18 +830,32 @@ DERIVED = {
 }
 # derived_events' kinds (analyze.events'), none of them the sims'.
 DERIVED_KINDS = ("start", "seed_down", "seed_up", "present_join", "present_leave", "onset", "recovered", "collapse")
+# A run's verdict, then analyze.run_metrics' columns. startup_s is the
+# seconds a collapse must last past (analyze.startup).
 VERDICT_COLS = {"k": "VARCHAR", "src": "VARCHAR", "onset": "BIGINT", "trees": "BIGINT", "delivery": "BIGINT",
                 "latency": "BIGINT", "recovered": "BIGINT", "absorbing": "BOOLEAN", "feasible": "VARCHAR",
-                "unhealthy": "DOUBLE", "lag_p50": "DOUBLE", "lag_max": "DOUBLE", "collapsed": "BOOLEAN"}
+                "unhealthy": "DOUBLE", "lag_p50": "DOUBLE", "lag_max": "DOUBLE", "collapsed": "BOOLEAN",
+                "startup_s": "BIGINT"}
+
+
+@functools.cache
+def derived_version():
+    """A hash of everything that defines the derived tables: analyze.py's
+    VERDICT_VERSION, their columns and the code that writes them
+    (DERIVE_CODE), so a derived table made under another is stale."""
+    parts = [analyze().VERDICT_VERSION, repr([DERIVED, DERIVED_KINDS, VERDICT_COLS])]
+    parts += [inspect.getsource(f) for f in DERIVE_CODE]
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
 
 
 def derived_dir(table):
-    return cache_root() / "derived" / table / f"v={analyze().VERDICT_VERSION}"
+    """Derived `table`'s files: a source's each, under derived_version."""
+    return cache_root() / "derived" / table / f"v={derived_version()}"
 
 
 def derive(srcs):
     """Makes the derived tables of every source in `srcs` that lacks them
-    under the current VERDICT_VERSION."""
+    under the current derived_version."""
     a = analyze()
     for src in srcs:
         name = src.replace("/", "~") + ".parquet"
@@ -867,7 +884,7 @@ def derive(srcs):
                 out["derived_events"] += [[k, src, t, kind, value] for t, kind, value in a.events(s, v)]
                 verdicts.append([k, src, v["onset"], v["trees"], v["delivery"], v["latency"], v["recovered"],
                                  v["absorbing"], str(v["feasible"]), v["unhealthy"], v["lag_p50"], v["lag_max"],
-                                 a.collapsed(v)] + [m[n] for n in metric_names])
+                                 a.collapsed(v), a.run_startup(v)] + [m[n] for n in metric_names])
             cols = dict(VERDICT_COLS)
             for n in metric_names or []:
                 cols[n] = "BOOLEAN" if n.endswith("_censored") else "DOUBLE"
@@ -896,6 +913,11 @@ def write_table(path, cols, data):
     finally:
         tmp.unlink(missing_ok=True)
         part.unlink(missing_ok=True)
+
+
+# The code that writes the derived tables, whose source derived_version
+# hashes.
+DERIVE_CODE = (derive, write_table)
 
 
 def derived_files(table, srcs):
