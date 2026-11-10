@@ -32,7 +32,7 @@ use crate::peer::{
 use crate::queue_delay;
 use crate::scheduler::PeerPriority;
 use crate::scheduler_peer::push::seed::SeedAllocationStats;
-use crate::scheduler_peer::push::{PushStats, UploadInfo};
+use crate::scheduler_peer::push::{ParentChange, ParentLog, PushStats, UploadInfo};
 use crate::scheduler_peer::{
     ChannelSchedulerStats, FORECAST_CAP, LagForecast, PeerSwarmScheduler, SchedulerError,
     StreamOpenOutcome, SwarmCounters, SwarmSchedulerStats, WriteDataError,
@@ -581,6 +581,11 @@ pub struct Runner {
     tap_level: TapLevel,
     /// The schedulers keep a forecast log ([`Runner::set_forecasts`]).
     forecasts: bool,
+    /// The schedulers keep a parent log ([`Runner::set_parent_log`]).
+    parents: bool,
+    /// The parent logs of the schedulers that went, until the driver takes
+    /// them. Bound: [`crate::PARENT_LOG_CAP`].
+    parent_log: ParentLog,
     /// The forecast logs of removed swarms, until the driver takes them.
     /// Bound: one per swarm removed with a log the driver hasn't taken.
     removed_logs: BTreeMap<SwarmKey, ForecastLog>,
@@ -826,6 +831,8 @@ impl Runner {
             tap: Tap::default(),
             tap_level: TapLevel::Off,
             forecasts: false,
+            parents: false,
+            parent_log: ParentLog::default(),
             removed_logs: BTreeMap::new(),
             held: BTreeSet::new(),
             answer_rate: AnswerRate::new(),
@@ -1353,6 +1360,7 @@ impl Runner {
             tap,
             tap_level,
             forecasts,
+            parents,
             ..
         } = self;
         let p = peers.get_mut(peer).ok_or(RunnerError::UnknownPeer)?;
@@ -1376,6 +1384,7 @@ impl Runner {
             .get_or_insert_with(|| PeerSwarmScheduler::new(&rs.swarm, swarm, &mut fork(rng), now));
         sched.tap_mut().set(*tap_level == TapLevel::All);
         sched.set_forecasts(*forecasts);
+        sched.set_parent_log(*parents);
         tap.push(TapEvent {
             swarm: Some(swarm),
             peer: Some(peer),
@@ -1427,6 +1436,7 @@ impl Runner {
             events,
             tap,
             closed,
+            parent_log,
             ..
         } = self;
         let Some(rs) = swarms.get_mut(key) else {
@@ -1457,6 +1467,7 @@ impl Runner {
         {
             tap.absorb(sched.tap_mut());
             rs.forecast_log.absorb(&mut sched);
+            parent_log.absorb(sched.take_parent_log());
             // nothing fetches the backlog without channels
             if rs.swarm.store().backlog().is_some() {
                 rs.swarm.close_backlog();
@@ -2131,6 +2142,40 @@ impl Runner {
                 s.set_forecasts(on);
             }
         }
+    }
+
+    /// Turns every swarm's parent log on or off (it starts off): each
+    /// change of a hybrid stream's open parent ([`ParentChange`]), kept
+    /// until [`Self::take_parent_changes`]. A change carries no time: the
+    /// driver stamps it with the time of the call it came in, so it takes
+    /// them after each call (or batch of calls at one time) that may change
+    /// a parent, and before it removes a peer it names. It changes no
+    /// decision.
+    pub fn set_parent_log(&mut self, on: bool) {
+        self.parents = on;
+        if !on {
+            self.parent_log = ParentLog::default();
+        }
+        for rs in self.swarms.values_mut() {
+            if let Some(s) = rs.scheduler.as_mut() {
+                s.set_parent_log(on);
+            }
+        }
+    }
+
+    /// Every swarm's parent changes since the last call, in order within a
+    /// swarm, and how many the caps ([`crate::PARENT_LOG_CAP`]) left out.
+    /// The log outlives the swarms' schedulers, which go with their last
+    /// channels, and the swarms.
+    pub fn take_parent_changes(&mut self) -> (Vec<ParentChange>, u64) {
+        let mut out = (Vec::new(), 0);
+        self.parent_log.take_into(&mut out);
+        for rs in self.swarms.values_mut() {
+            if let Some(s) = rs.scheduler.as_mut() {
+                s.take_parent_log().take_into(&mut out);
+            }
+        }
+        out
     }
 
     /// With the forecast log on, the swarm's chunks stored since the last

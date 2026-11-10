@@ -118,6 +118,10 @@
 //!   uplink halved, would otherwise lose its child for many times the
 //!   moment), each doubling with the prunes in a row, which start over
 //!   once its pushes arrived over [`SERVED_SPAN`].
+//! - **Parent log.** At the driver's word ([`crate::Runner::set_parent_log`])
+//!   each change of a stream's open parent is kept for the driver
+//!   ([`ParentChange`]): an open, a switch, our prune or cancel, the
+//!   parent's shed, and a parent lost with its channel or to a new stream.
 //! - **Reports.** Per parent and stream we tally its hits, its late pushes
 //!   and its misses, as the prune rules count them. Per stream we also
 //!   sum the one-way delays ([`codec::Delays`]: arrival less the time the
@@ -194,6 +198,8 @@
 //! - The expected and released chunk maps, and a channel's cancelled
 //!   chunks, are bounded by the window and pruned at GC. A release walks
 //!   only the expected map, once per event.
+//! - The parent log holds at most [`PARENT_LOG_CAP`] changes between the
+//!   driver's takes, and counts the rest as lost.
 //! - Parent checks, the pace's included, cost O(streams × channels) per
 //!   [`PARENT_CHECK_INTERVAL`] (the pace's fallback keeps
 //!   [`PACE_FALLBACK_K`] candidates per stream); shedding sorts the subscribers at most once
@@ -239,7 +245,7 @@ use crate::codec::{
 };
 use crate::options::PushMode;
 use crate::route::ROUTE_MARGIN;
-use crate::runner::PeerKey;
+use crate::runner::{PeerKey, SwarmKey};
 use crate::scheduler::PeerTaskQueue;
 use crate::tap::{
     Admission, AdmitRule, LagEstimate, ParentAction, ParentChoice, Prune, Shed, TapKind, Upload,
@@ -1131,6 +1137,102 @@ pub struct PushStats {
     pub have_lazy_in: usize,
 }
 
+/// Changes a swarm's parent log holds between the driver's takes
+/// ([`crate::Runner::take_parent_changes`]); later ones are counted as
+/// lost.
+pub const PARENT_LOG_CAP: usize = 1 << 12;
+
+/// A change of a stream's open parent, as the parent log records it
+/// ([`crate::Runner::set_parent_log`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParentChange {
+    pub swarm: SwarmKey,
+    pub stream: Stream,
+    /// The stream's open parent from now on; `None` for none.
+    pub parent: Option<PeerKey>,
+    pub why: ParentWhy,
+}
+
+/// Why a stream's open parent changed ([`ParentChange`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParentWhy {
+    /// A STREAM_OPEN gave a stream without a parent one.
+    Open,
+    /// A STREAM_OPEN replaced the open parent (graft before prune).
+    Switch,
+    /// The channel to the parent closed, or a new stream started (a
+    /// reset): no one ended the subscription.
+    Lost,
+    /// We cancelled the parent: for its misses, for an OPEN past our
+    /// window, or at the driver's word (`Runner::cancel_stream`).
+    Prune,
+    /// The parent closed the subscription (STREAM_CLOSE).
+    Shed,
+}
+
+impl ParentWhy {
+    /// Its name for a table: `open`, `switch`, `lost`, `prune` or `shed`.
+    pub fn name(self) -> &'static str {
+        match self {
+            ParentWhy::Open => "open",
+            ParentWhy::Switch => "switch",
+            ParentWhy::Lost => "lost",
+            ParentWhy::Prune => "prune",
+            ParentWhy::Shed => "shed",
+        }
+    }
+}
+
+/// A parent log: the changes since the driver last took them. Bound:
+/// [`PARENT_LOG_CAP`], past which they're counted in `lost`.
+#[derive(Debug, Default)]
+pub(crate) struct ParentLog {
+    changes: Vec<ParentChange>,
+    lost: u64,
+}
+
+impl ParentLog {
+    fn push(&mut self, c: ParentChange) {
+        if self.changes.len() < PARENT_LOG_CAP {
+            self.changes.push(c);
+        } else {
+            self.lost = self.lost.saturating_add(1);
+        }
+    }
+
+    /// Moves `o`'s changes in behind its own.
+    pub(crate) fn absorb(&mut self, o: ParentLog) {
+        self.lost = self.lost.saturating_add(o.lost);
+        for c in o.changes {
+            self.push(c);
+        }
+    }
+
+    /// Moves its changes, and how many the cap left out, onto `out`'s.
+    pub(crate) fn take_into(&mut self, out: &mut (Vec<ParentChange>, u64)) {
+        out.0.append(&mut self.changes);
+        out.1 = out.1.saturating_add(std::mem::take(&mut self.lost));
+    }
+}
+
+/// Records `stream`'s new open parent in `log`, if it's on.
+fn note_parent(
+    log: &mut Option<ParentLog>,
+    swarm: SwarmKey,
+    stream: Stream,
+    parent: Option<PeerKey>,
+    why: ParentWhy,
+) {
+    if let Some(l) = log.as_mut() {
+        l.push(ParentChange {
+            swarm,
+            stream,
+            parent,
+            why,
+        });
+    }
+}
+
 /// The fresh announcement lag of `c`'s peer for stream `i` if it is a
 /// candidate for the stream: it has a handshake, doesn't choke us, isn't
 /// backed off for the stream, announced it within [`CANDIDATE_FRESHNESS`],
@@ -1592,6 +1694,7 @@ impl PeerSwarmScheduler {
             stream,
             why: sub.prune_why(rule, &parent, now),
         });
+        note_parent(&mut s.parent_log, s.key, stream, None, ParentWhy::Prune);
         let last_hit = sub.last_hit;
         p.open = p.open.saturating_sub(1);
         p.stats.pruned = p.stats.pruned.saturating_add(1);
@@ -2009,6 +2112,7 @@ impl PeerSwarmScheduler {
         if was_open.is_some() {
             sub.open = None;
             p.open = p.open.saturating_sub(1);
+            note_parent(&mut self.s.parent_log, key, stream, None, ParentWhy::Prune);
         }
         p.stats.declined = p.stats.declined.saturating_add(1);
         p.next_check = now;
@@ -2066,13 +2170,29 @@ impl PeerSwarmScheduler {
                         stream,
                         from: o.peer,
                     });
+                    note_parent(
+                        &mut self.s.parent_log,
+                        key,
+                        stream,
+                        Some(peer),
+                        ParentWhy::Switch,
+                    );
                     if let Some(c) = self.channels.get_mut(&o.peer) {
                         c.push_cancel(stream);
                         q.enqueue_now(o.peer, key);
                     }
                 }
                 Some(_) => {}
-                None => p.open += 1,
+                None => {
+                    p.open += 1;
+                    note_parent(
+                        &mut self.s.parent_log,
+                        key,
+                        stream,
+                        Some(peer),
+                        ParentWhy::Open,
+                    );
+                }
             }
             // `handle_stream_open` made the peer the stream's source.
         } else if let Some(o) = sub.open.as_mut()
@@ -2126,6 +2246,7 @@ impl PeerSwarmScheduler {
             self.s
                 .tap
                 .emit(key, Some(peer), || TapKind::ShedBy { stream });
+            note_parent(&mut self.s.parent_log, key, stream, None, ParentWhy::Shed);
         }
         p.next_check = now;
         if let Some(c) = self.channels.get_mut(&peer) {
@@ -2158,6 +2279,13 @@ impl PeerSwarmScheduler {
         }
         p.next_check = Time::EPOCH;
         for stream in lost {
+            note_parent(
+                &mut self.s.parent_log,
+                self.s.key,
+                stream,
+                None,
+                ParentWhy::Lost,
+            );
             self.drop_parent(stream, None, q);
         }
     }
@@ -2212,6 +2340,13 @@ impl PeerSwarmScheduler {
         if was_open.is_some() {
             sub.open = None;
             p.open = p.open.saturating_sub(1);
+            note_parent(
+                &mut self.s.parent_log,
+                self.s.key,
+                stream,
+                None,
+                ParentWhy::Prune,
+            );
         }
         if let Some(c) = self.channels.get_mut(&peer) {
             c.push_cancel(stream);
@@ -2762,6 +2897,17 @@ impl PeerSwarmScheduler {
     pub(crate) fn reset_push(&mut self, now: Time) {
         let streams = usize::from(self.s.stream_count);
         if let Some(p) = self.s.push.as_mut() {
+            for (i, sub) in p.subs.iter().enumerate() {
+                if sub.open.is_some() {
+                    note_parent(
+                        &mut self.s.parent_log,
+                        self.s.key,
+                        i as Stream,
+                        None,
+                        ParentWhy::Lost,
+                    );
+                }
+            }
             let stats = p.stats;
             let pin = p.pin.take();
             *p = PushState::new(streams, now, p.next_report);

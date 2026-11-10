@@ -477,6 +477,9 @@ pub(crate) struct SwarmState {
     /// took them, and when: what the log's samples forecast. Bound: as
     /// `forecasts`.
     pub(crate) held_log: Option<Vec<(Bin, Time)>>,
+    /// With the parent log on ([`crate::Runner::set_parent_log`]), each
+    /// change of a stream's open parent since the driver last took them.
+    pub(crate) parent_log: Option<push::ParentLog>,
     /// Our subscribers changed since the runner last asked.
     subscribers_changed: bool,
 
@@ -1645,6 +1648,7 @@ impl PeerSwarmScheduler {
                 forecasts: None,
                 forecasts_lost: 0,
                 held_log: None,
+                parent_log: None,
                 subscribers_changed: false,
                 backlog: None,
                 unannounced: Map::new(),
@@ -3011,6 +3015,22 @@ impl PeerSwarmScheduler {
             self.s.forecasts = on.then(Vec::new);
             self.s.held_log = on.then(Vec::new);
         }
+    }
+
+    /// Turns the parent log on or off ([`crate::Runner::set_parent_log`]).
+    pub(crate) fn set_parent_log(&mut self, on: bool) {
+        if on != self.s.parent_log.is_some() {
+            self.s.parent_log = on.then(push::ParentLog::default);
+        }
+    }
+
+    /// The parent log, taken: its changes go to the caller.
+    pub(crate) fn take_parent_log(&mut self) -> push::ParentLog {
+        self.s
+            .parent_log
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
     }
 
     /// The chunks stored since the last call, and when (the forecast log's

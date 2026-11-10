@@ -119,10 +119,10 @@ pub use runner::{
     PEER_QOS_UPDATE_INTERVAL, PeerKey, Rewind, Runner, RunnerError, SwarmKey, SwarmMut,
     TICK_INTERVAL,
 };
-pub use scheduler_peer::push::PushStats;
 pub use scheduler_peer::push::seed::{
     AllocCounters, ReportCounters, SeedAllocationStats, SeedNeighbour,
 };
+pub use scheduler_peer::push::{PARENT_LOG_CAP, ParentChange, ParentWhy, PushStats};
 pub use scheduler_peer::{
     ChannelSchedulerStats, FORECAST_CAP, LagForecast, LagSnapshot, SwarmCounters,
     SwarmSchedulerStats,

@@ -2372,6 +2372,62 @@ fn hybrid_deadlines_release_to_pull_and_silence_prunes() {
     );
 }
 
+#[test]
+fn the_parent_log_keeps_each_change_of_a_parent() {
+    use push::ParentWhy::{Lost, Open, Prune, Shed, Switch};
+    let mut f = fixture(hybrid(1));
+    let mut q = MockQueue::default();
+    let a = ready_channel(&mut f, &mut q);
+    let b = add_ready(&mut f, &mut q, 1);
+    f.sched.s.first_chunk_set = true;
+    f.sched.set_parent_log(true);
+    let open = |f: &mut Fixture, q: &mut MockQueue, peer| {
+        assert!(f.sched.do_stream_sub(peer, 0, Bin(0)));
+        assert_eq!(
+            f.sched.handle_stream_open(peer, 0, Bin(0), now(), q),
+            Ok(StreamOpenOutcome::Accepted)
+        );
+    };
+    open(&mut f, &mut q, a);
+    // A graft of `b` opens before `a` is cancelled.
+    open(&mut f, &mut q, b);
+    f.sched
+        .handle_stream_close(b, 0, Bin(0), now(), &mut q)
+        .unwrap();
+    open(&mut f, &mut q, a);
+    let swarm = &f.swarm;
+    assert!(f.sched.cancel_stream_sub(a, 0, swarm, now(), &mut q));
+    open(&mut f, &mut q, b);
+    f.sched.close_channel(b, &f.swarm, &mut q);
+    // Changes only: a repeat OPEN from the parent is none.
+    open(&mut f, &mut q, a);
+    open(&mut f, &mut q, a);
+    let mut got = (Vec::new(), 0);
+    f.sched.take_parent_log().take_into(&mut got);
+    let got: Vec<_> = got.0.iter().map(|c| (c.stream, c.parent, c.why)).collect();
+    assert_eq!(
+        got,
+        [
+            (0, Some(a), Open),
+            (0, Some(b), Switch),
+            (0, None, Shed),
+            (0, Some(a), Open),
+            (0, None, Prune),
+            (0, Some(b), Open),
+            (0, None, Lost),
+            (0, Some(a), Open),
+        ]
+    );
+    // A new stream loses the parent too.
+    f.sched.reset_push(now());
+    let mut got = (Vec::new(), 0);
+    f.sched.take_parent_log().take_into(&mut got);
+    assert_eq!(
+        got.0.iter().map(|c| (c.parent, c.why)).collect::<Vec<_>>(),
+        [(None, Lost)]
+    );
+}
+
 /// The decisions the tap recorded since the last call, in order.
 fn tapped(f: &mut Fixture) -> Vec<crate::TapEvent> {
     let mut v = Vec::new();
