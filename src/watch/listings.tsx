@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { ReactNode, createContext, useContext, useEffect, useState } from "react";
+import { useMatch } from "react-router-dom";
 
 import { FrontendWatchListingsResponse } from "../apis/strims/network/v1/directory/directory";
 import { readDelimited } from "../lib/delimited";
@@ -43,15 +44,17 @@ const sleep = (ms: number, signal: AbortSignal) =>
   });
 
 /**
- * Follows the native node's directory projection while mounted, reading
+ * Follows the native node's directory projection while `active`, reading
  * it again with backoff whenever it ends. Each stream starts the listings
  * over: its first message replaces what the last one left, and a stream
- * that fails before its first clears them.
+ * that fails before its first clears them. While inactive the last
+ * listings stay as they were.
  */
-const useBootstrapListingsStream = (): BootstrapListings => {
+const useBootstrapListingsStream = (active: boolean): BootstrapListings => {
   const [listings, setListings] = useState(initialListings);
 
   useEffect(() => {
+    if (!active) return;
     const aborter = new AbortController();
     const { signal } = aborter;
     void (async () => {
@@ -95,18 +98,26 @@ const useBootstrapListingsStream = (): BootstrapListings => {
       }
     })();
     return () => aborter.abort();
-  }, []);
+  }, [active]);
 
   return listings;
 };
 
 const BootstrapListingsContext = createContext<BootstrapListings>(initialListings);
 
-/** Holds one stream of the native node's listings for every page under it. */
-export const BootstrapListingsProvider: React.FC<{ children: ReactNode }> = ({ children }) => (
-  <BootstrapListingsContext.Provider value={useBootstrapListingsStream()}>
-    {children}
-  </BootstrapListingsContext.Provider>
-);
+/**
+ * Gives every page under it the native node's listings, streamed while the
+ * tiles show. Each open stream holds one of the node's connections, so the
+ * player, which needs the listings only for its title, makes do with the
+ * last ones.
+ */
+export const BootstrapListingsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const tiles = !!useMatch({ path: "/", end: true });
+  return (
+    <BootstrapListingsContext.Provider value={useBootstrapListingsStream(tiles)}>
+      {children}
+    </BootstrapListingsContext.Provider>
+  );
+};
 
 export const useBootstrapListings = (): BootstrapListings => useContext(BootstrapListingsContext);
