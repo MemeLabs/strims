@@ -4,7 +4,7 @@
 """The console server's tests, over a small catalog of their own (a
 DuckLake written as simlab.catalog writes one), simlab's schema, views
 and farm, and stand-ins for index and fetch in their forkserver child,
-the suite's matrices and farm.py:
+the suite's matrices, farm.py and the Anthropic client (test_ask's):
 
   python3 hack/console/server_test.py
 """
@@ -33,7 +33,10 @@ if __name__ == "__main__":
     bootstrap.engine(__file__)
 
 import server  # noqa: E402
-from simlab import catalog, engine, farm, suite  # noqa: E402
+from simlab import ask, catalog, engine, farm, suite  # noqa: E402
+
+sys.path.insert(0, str(HACK / "simlab" / "tests"))
+import test_ask as fakes  # noqa: E402
 
 TESTDATA = HACK / "simlab" / "tests" / "testdata"
 # The API's golden query: a column of each DuckDB type, and the columns
@@ -589,6 +592,116 @@ class Commands(unittest.TestCase):
             self.assertRegex(failed.body["error"], error)
             # Refused before any matrix was written: not kept.
             self.assertEqual(call("GET", f"/console/regenerate/{failed.body['id']}").status, 404)
+
+
+class SlowStream(fakes.FakeStream):
+    """A turn whose text comes a word every `delay` s, for a client to
+    leave mid-turn."""
+    delay = 0.05
+
+    def __iter__(self):
+        for ev in super().__iter__():
+            time.sleep(self.delay)
+            yield ev
+
+
+class Ask(unittest.TestCase):
+    def setUp(self):
+        self.ledger = Path(tempfile.mkdtemp(dir=DIR, prefix="spend-")) / "spend.jsonl"
+
+    def asker(self, script):
+        self.client = fakes.FakeClient(script)
+        CONSOLE.asker = ask.Asker(POOL, CONSOLE.schema, client=self.client, ledger=self.ledger,
+                                  views_root=lambda: CONSOLE.views_root, regenerations=REGS, suite=SUITE,
+                                  fetch=CONSOLE.ask_fetch)
+        return CONSOLE.asker
+
+    def test_a_question_streams_ndjson_and_a_follow_up_continues_it(self):
+        count = fakes.call("t1", "run_sql", sql="SELECT count(*) AS n FROM nums", purpose="count")
+        self.asker([fakes.msg([fakes.thinking("count"), count], "tool_use"),
+                    fakes.msg([fakes.text("100,000 numbers.")]), fakes.msg([fakes.text("Still 100,000.")])])
+        res = post("/console/ask", {"question": "how many numbers?", "task_budget": 30_000})
+        self.assertEqual(res.status, 200)
+        self.assertTrue(res.headers["Content-Type"].startswith("application/x-ndjson"))
+        got = lines(res.text)
+        types = [e["type"] for e in got]
+        self.assertEqual((types[0], types[-1]), ("start", "done"))
+        for t in ("thinking", "tool_start", "tool", "sql", "result", "tool_result", "usage", "text"):
+            self.assertIn(t, types)
+        self.assertEqual(got[0]["task_budget"], 30_000)
+        self.assertEqual([e["result"]["rows"] for e in got if e["type"] == "result"], [[[100_000]]])
+        self.assertEqual("".join(e["text"] for e in got if e["type"] == "text"), "100,000 numbers.")
+        self.assertEqual((got[-1]["stop_reason"], got[-1]["turns"]), ("end_turn", 2))
+        cid = got[0]["conversation_id"]
+        self.assertEqual([r["output_config"]["task_budget"]["total"] for r in self.client.requests], [30_000, 30_000])
+        follow = lines(post("/console/ask", {"question": "and now?", "conversation_id": cid}).text)
+        self.assertEqual((follow[0]["conversation_id"], follow[0]["question"]), (cid, 2))
+        self.assertEqual(self.client.requests[2]["messages"][:4], self.client.requests[1]["messages"]
+                         + [self.client.requests[2]["messages"][3]])
+        c = call("GET", f"/console/ask/{cid}").body
+        self.assertEqual([q["question"] for q in c["questions"]], ["how many numbers?", "and now?"])
+        self.assertEqual(c["questions"][0]["events"][-1]["type"], "done")
+        self.assertNotIn("text", {e["type"] for e in c["questions"][0]["events"]})
+        self.assertEqual(call("GET", "/console/ask/nope").status, 404)
+        s = call("GET", "/console/spend").body
+        self.assertEqual(s["days"][0]["questions"], 2)
+        self.assertEqual(s["days"][0]["requests"], 3)
+        self.assertAlmostEqual(s["total_usd"], 3 * (100 * 4 + 50 * 20) / 1e6)
+        self.assertEqual(call("GET", f"/console/spend?day={s['days'][0]['day']}").body["questions"][0]["text"],
+                         "and now?")
+
+    def test_bad_questions_are_refused_before_any_request(self):
+        self.asker([])
+        for body, status in [({}, 400), ({"question": "  "}, 400), ({"question": 3}, 400),
+                             ({"question": "x", "task_budget": 19_999}, 400),
+                             ({"question": "x", "task_budget": 25_000.5}, 400),
+                             ({"question": "x", "task_budget": "30000"}, 400),
+                             ({"question": "x", "conversation_id": "nope"}, 404),
+                             ({"question": "x", "conversation_id": 7}, 400),
+                             ({"question": "x" * (server.MAX_QUESTION + 1)}, 413)]:
+            self.assertEqual(post("/console/ask", body).status, status, body)
+        self.assertEqual(post("/console/ask", b'{"question": "x"}', type="text/plain").status, 415)
+        self.assertEqual(self.client.requests, [])
+
+    def test_a_slow_turn_pings_and_a_client_that_goes_cancels_it(self):
+        a = self.asker([])
+        slow = fakes.msg([fakes.text("word " * 400)])
+        self.client.beta.messages.stream = lambda **kw: SlowStream(self.client, slow)
+        saved = server.PING_S
+        server.PING_S = 0.01
+        try:
+            c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=30)
+            c.request("POST", "/console/ask", body=json.dumps({"question": "slow"}),
+                      headers={"Content-Type": "application/json"})
+            r = c.getresponse()
+            first = json.loads(r.fp.readline())
+            seen = [json.loads(r.fp.readline())["type"] for _ in range(3)]
+            r.close()
+            c.close()
+        finally:
+            server.PING_S = saved
+        self.assertEqual(first["type"], "start")
+        self.assertIn("ping", seen)
+        q = until(lambda: (s := a.conversation(first["conversation_id"])["questions"][0])["stop_reason"] and s)
+        self.assertEqual(q["stop_reason"], "cancelled")
+        self.assertEqual(q["events"][-1]["type"], "done")
+
+    def test_a_proposal_quotes_and_only_the_approve_route_runs_it(self):
+        SUITE.calls.clear()
+        before = len(farm_calls())
+        self.asker([fakes.msg([fakes.call("p1", "propose_farm_run", exp_id="e1", cells=["calm", "storm"],
+                                          arms=["new", "base"], seeds=[2001, 2002, 2003], why="more seeds")],
+                              "tool_use"),
+                    fakes.msg([fakes.text("Quoted: approve it in the console.")])])
+        got = lines(post("/console/ask", {"question": "rerun e1"}).text)
+        proposal = [e for e in got if e["type"] == "proposal"][0]
+        id = proposal["regeneration"]["id"]
+        self.assertEqual((proposal["regeneration"]["state"], proposal["why"]), ("quoted", "more seeds"))
+        result = json.loads([e for e in got if e["type"] == "tool_result"][0]["preview"])
+        self.assertEqual((result["quote_id"], result["cost_usd"], result["jobs"]), (id, 0.05, 16))
+        time.sleep(0.3)
+        self.assertEqual([c[:2] for c in farm_calls()[before:]], [["estimate", "--json"]])
+        self.assertEqual(call("GET", f"/console/regenerate/{id}").body["state"], "quoted")
 
 
 class Children(unittest.TestCase):

@@ -45,6 +45,14 @@ queries after one that succeeded see the new catalog.
                              it's done; with `Accept: application/x-ndjson`, streams its
                              progress as fetch does, then {done, ...the run}
   GET  /console/index        the index running and the last one, and catalog_info
+  POST /console/ask          {question, conversation_id?, task_budget?}: Claude answers the question
+                             by writing and running queries over the catalog (simlab.ask), in a
+                             new conversation or as a follow-up in one; streams NDJSON events
+                             (start, thinking, text, tool_start, tool, sql, result, chart,
+                             progress, proposal, tool_result, fallback, usage, refusal, error,
+                             ping every 15 s, done last). The client going cancels it.
+  GET  /console/ask/ID       a conversation's questions and their events
+  GET  /console/spend        what the questions cost, per day and per question (?day=YYYY-MM-DD)
 
 A saved view is hack/console/views/NAME.sql (one statement, with `$exp`,
 `$cell`, `$arm`, `$seed`, `$delay` and the like for the UI's pickers),
@@ -77,6 +85,7 @@ import json
 import math
 import mimetypes
 import multiprocessing
+import queue
 import re
 import shutil
 import signal
@@ -102,7 +111,7 @@ if __name__ == "__main__":
     bootstrap.engine(__file__)
 
 import simlab  # noqa: E402
-from simlab import catalog, engine, farm, regenerate, suite, views  # noqa: E402
+from simlab import ask, catalog, engine, farm, regenerate, suite, views  # noqa: E402
 from simlab.regenerate import NAME, bad_name  # noqa: E402
 
 INDEX_EVERY_S = 120
@@ -121,6 +130,9 @@ BUILD = ["npm", "run", "console:build"]
 SOURCES = [ROOT / "src" / "devtools", ROOT / "package-lock.json", ROOT / "webpack.config.js"]
 TYPES = {".js": "text/javascript", ".map": "application/json", ".wasm": "application/wasm"}
 NDJSON = "application/x-ndjson"
+# An ask stream's keepalive, and its question's longest text.
+PING_S = 15
+MAX_QUESTION = 20_000
 # The functions index and fetch run in their child, as module:function.
 TASKS = {"index": "simlab.catalog:index", "fetch": "simlab.catalog:fetch"}
 FORKSERVER = multiprocessing.get_context("forkserver")
@@ -379,12 +391,15 @@ class Console:
     `views_root` is the saved views' directory, `regenerations` the
     farm's quotes and runs (farm.Regenerations), `tasks` the functions
     index and fetch run in their child, and `catalog` and `suite` the
-    simlab modules it calls (tests give stand-ins). `index_every` is the
-    index's period in seconds, 0 for none; `hosts` and `origins` add to
-    the names and origins requests may give."""
+    simlab modules it calls (tests give stand-ins). `asker` answers the
+    questions (an ask.Asker over the same pool, schema, views, farm and
+    fetch by default; `ask_client` and `ledger` its Anthropic client and
+    spend ledger). `index_every` is the index's period in seconds, 0 for
+    none; `hosts` and `origins` add to the names and origins requests may
+    give."""
 
     def __init__(self, pool, *, views_root=views.VIEWS, regenerations=None, dist=DIST, index_every=0, hosts=(),
-                 origins=(), tasks=TASKS, catalog=catalog, suite=suite):
+                 origins=(), tasks=TASKS, catalog=catalog, suite=suite, asker=None, ask_client=None, ledger=None):
         self.pool = pool
         self.views_root = Path(views_root)
         self.regenerations = regenerations or farm.Regenerations()
@@ -400,6 +415,9 @@ class Console:
         self._schema = None
         self._epoch = 0
         self._stop = threading.Event()
+        self.asker = asker or ask.Asker(pool, self.schema, client=ask_client, ledger=ledger,
+                                        views_root=lambda: self.views_root, regenerations=self.regenerations,
+                                        suite=suite, fetch=self.ask_fetch)
         if index_every:
             threading.Thread(target=self._tick, args=(index_every,), name="console index", daemon=True).start()
 
@@ -529,6 +547,16 @@ class Console:
             return self.send(h, 200, task.wait().state())
         if route == "GET /console/index":
             return self.send(h, 200, self.index_state())
+        if route == "POST /console/ask":
+            return self.ask(h, self.body(h))
+        if m := re.fullmatch(r"GET /console/ask/([\w-]+)", route, re.A):
+            c = self.asker.conversation(m[1])
+            if c is None:
+                raise HttpError(404, "no such conversation")
+            return self.send(h, 200, c)
+        if route == "GET /console/spend":
+            day = urllib.parse.parse_qs(url.query).get("day", [None])[0]
+            return self.send(h, 200, ask.spend(self.asker.ledger.path, day))
         raise HttpError(404, f"no {route}")
 
     def body(self, h):
@@ -568,9 +596,9 @@ class Console:
         if h.command != "HEAD":
             h.wfile.write(data)
 
-    def stream(self, h, events):
+    def stream(self, h, events, on_gone=None):
         """`events` as NDJSON lines, until the client goes (a task they
-        follow runs on unwatched)."""
+        follow runs on unwatched; `on_gone()` runs then)."""
         h.send_response(200)
         h.send_header("Content-Type", f"{NDJSON}; charset=utf-8")
         h.send_header("Cache-Control", "no-store")
@@ -583,6 +611,8 @@ class Console:
             for event in events:
                 write(event)
         except OSError:
+            if on_gone:
+                on_gone()
             return
         except Exception as e:
             traceback.print_exc()
@@ -698,6 +728,69 @@ class Console:
     def approve(self, id):
         farm.approve(id, self.regenerations)
         return self.regenerations.get(id)
+
+    def ask(self, h, body):
+        if not isinstance(body, dict) or not isinstance(body.get("question"), str) or not body["question"].strip():
+            raise HttpError(400, "{question, conversation_id?, task_budget?}")
+        question = body["question"].strip()
+        if len(question) > MAX_QUESTION:
+            raise HttpError(413, f"a question is at most {MAX_QUESTION:,} characters")
+        cid = body.get("conversation_id")
+        if cid is not None and not isinstance(cid, str):
+            raise HttpError(400, "conversation_id: a string")
+        if cid is not None and self.asker.conversation(cid) is None:
+            raise HttpError(404, "no such conversation")
+        if cid is not None and self.asker.busy(cid):
+            raise HttpError(409, "the conversation is answering a question")
+        budget = body.get("task_budget", ask.TASK_BUDGET)
+        if not safe_int(budget) or not ask.MIN_TASK_BUDGET <= budget <= ask.MAX_TASK_BUDGET:
+            raise HttpError(400, f"task_budget: an integer from {ask.MIN_TASK_BUDGET:,} to {ask.MAX_TASK_BUDGET:,}")
+        events, cancel = queue.Queue(), threading.Event()
+
+        def work():
+            try:
+                self.asker.ask(question, cid, int(budget), emit=events.put, cancel=cancel)
+            except ask.Busy:
+                events.put({"type": "error", "message": "the conversation is answering a question"})
+                events.put({"type": "done", "stop_reason": "error"})
+            except Exception as e:
+                traceback.print_exc()
+                events.put({"type": "error", "message": f"{type(e).__name__}: {e}"})
+                events.put({"type": "done", "stop_reason": "error"})
+            finally:
+                events.put(None)
+
+        def lines():
+            while True:
+                try:
+                    event = events.get(timeout=PING_S)
+                except queue.Empty:
+                    yield {"type": "ping"}
+                    continue
+                if event is None:
+                    return
+                yield event
+
+        threading.Thread(target=work, name="console ask", daemon=True).start()
+        self.stream(h, lines(), on_gone=cancel.set)
+
+    def ask_fetch(self, exp, cells=None, arms=None, tables=(), progress=None):
+        """fetch_data's fetch: catalog.fetch in its child, as POST
+        /console/fetch runs it (one at a time, the readers refreshed after
+        one that succeeded), its lines passed to `progress`."""
+        self._fetching.acquire()
+        try:
+            task = Task("fetch", self.tasks["fetch"], {"exp": exp, "cells": cells, "arms": arms,
+                                                       "tables": list(tables)}, on_done=self._fetched)
+        except BaseException:
+            self._fetching.release()
+            raise
+        for event in task.follow():
+            if progress and event.get("line"):
+                progress(event["line"])
+        if task.code != 0:
+            raise RuntimeError(f"the fetch failed: {task.error}")
+        return task.result
 
     def index_state(self):
         try:

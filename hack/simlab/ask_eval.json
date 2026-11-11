@@ -1,0 +1,124 @@
+{
+  "about": "The console's Ask eval (hack/simlab/ask_eval.py): questions from the week's analyses, each with the SQL that answers it over the catalog and the checks its answer must pass. A check is {text} (the answer names it), {number, tol} (the answer gives a number within tol of it, relative), {any: [texts]} (the answer says one of them) or {none: [texts]} (it says none of them); check mode finds every text and number among the reference SQL's values.",
+  "questions": [
+    {
+      "id": "structural",
+      "question": "Which cells are structural in experiment sa0755?",
+      "reference_sql": ["SELECT cell, arms, runs FROM structural('sa0755') ORDER BY cell"],
+      "answer": "seed-restart and seed-starved: every run of both arms (aimd, main) collapses there, 64 runs each.",
+      "checks": [{"text": "seed-restart"}, {"text": "seed-starved"}]
+    },
+    {
+      "id": "structural_share",
+      "question": "How many of sa0755's main arm's collapsed runs fall in structural cells?",
+      "reference_sql": [
+        "SELECT count(*) FILTER (WHERE v.collapsed) AS collapsed, count(*) FILTER (WHERE v.collapsed AND e.cell IN (SELECT cell FROM structural('sa0755'))) AS structural FROM experiment_jobs e JOIN verdicts v USING (k, src) WHERE e.exp_id = 'sa0755' AND e.arm_label = 'main'"
+      ],
+      "answer": "64 of its 75 collapsed runs, all in seed-starved and seed-restart; 11 collapse elsewhere.",
+      "checks": [{"number": 64, "tol": 0}, {"number": 75, "tol": 0}]
+    },
+    {
+      "id": "end_abrupt_seeds",
+      "question": "In sa0755, which seeds collapsed in star-15-10-end-abrupt in each arm, and is the difference between the arms significant?",
+      "reference_sql": [
+        "SELECT e.arm_label, count(*) FILTER (WHERE v.collapsed) AS collapsed, count(*) AS runs, list(e.seed ORDER BY e.seed) FILTER (WHERE v.collapsed) AS seeds FROM experiment_jobs e JOIN verdicts v USING (k, src) WHERE e.exp_id = 'sa0755' AND e.cell = 'star-15-10-end-abrupt' GROUP BY ALL ORDER BY ALL",
+        "SELECT ka, kb, n, round(p, 2) AS p FROM collapse_test('sa0755', 'main', 'sa0755', 'aimd') WHERE cell = 'star-15-10-end-abrupt'"
+      ],
+      "answer": "aimd 10 of 32 (2003, 2011, 2015, 2016, 2019, 2020, 2022, 2026, 2028, 2032), main 5 of 32 (2006, 2008, 2016, 2019, 2032); Fisher p = 0.24, not significant.",
+      "checks": [
+        {"number": 10, "tol": 0}, {"number": 5, "tol": 0},
+        {"number": 2003, "tol": 0}, {"number": 2011, "tol": 0}, {"number": 2028, "tol": 0},
+        {"number": 2006, "tol": 0}, {"number": 2008, "tol": 0},
+        {"number": 0.24, "tol": 0.05},
+        {"any": ["not significant", "isn't significant", "is not significant", "not a significant", "no significant", "not statistically significant", "p > 0.05", "p ≥ 0.05", "above 0.05", "noise"]}
+      ]
+    },
+    {
+      "id": "absolute_p99",
+      "question": "What is the absolute lag p99 (the geomean over cells, structural cells left out) of sa0755's main arm, of s7ae7e (trains-seed) and of s01a51's ytf arm?",
+      "reference_sql": [
+        "WITH runs AS (SELECT e.exp_id, e.arm_label, e.cell, w.lag_p99_ms, v.collapsed FROM experiment_jobs e JOIN rows w USING (k, src) JOIN verdicts v USING (k, src) WHERE (e.exp_id, e.arm_label) IN (('sa0755', 'main'), ('s7ae7e', 'trains-seed'), ('s01a51', 'ytf'))), st AS (SELECT exp_id, cell FROM experiment_jobs e JOIN verdicts v USING (k, src) WHERE e.exp_id IN ('sa0755', 's7ae7e', 's01a51') GROUP BY ALL HAVING bool_and(v.collapsed)), per_cell AS (SELECT r.exp_id, r.arm_label, r.cell, exp(avg(ln(r.lag_p99_ms)) FILTER (WHERE r.lag_p99_ms > 0)) AS geo FROM runs r ANTI JOIN st USING (exp_id, cell) GROUP BY ALL) SELECT exp_id, arm_label, round(exp(avg(ln(geo))), 1) AS lag_p99_ms FROM per_cell GROUP BY ALL ORDER BY ALL"
+      ],
+      "answer": "sa0755:main 439 ms, s7ae7e:trains-seed 360 ms, s01a51:ytf 381 ms (43 cells each, seed-starved and seed-restart left out).",
+      "checks": [{"number": 439.5, "tol": 0.01}, {"number": 360.0, "tol": 0.01}, {"number": 380.6, "tol": 0.01}]
+    },
+    {
+      "id": "arms_collapse",
+      "question": "Does sa0755's aimd arm collapse more than main? Is the difference significant in any cell?",
+      "reference_sql": [
+        "SELECT collapsed, base_collapsed, round(p99, 3) AS p99 FROM arm_score('sa0755', 'main', 'sa0755', 'aimd')",
+        "SELECT cell, ka, kb, round(p, 2) AS p FROM collapse_test('sa0755', 'main', 'sa0755', 'aimd') WHERE ka <> kb ORDER BY p, cell"
+      ],
+      "answer": "aimd collapses 82 runs to main's 75 (18 to 11 outside the structural cells), but no cell's difference is significant: the largest are star-15-10-end-abrupt (10 vs 5) and star-31-5 (3 vs 0), both at Fisher p = 0.24.",
+      "checks": [
+        {"number": 82, "tol": 0}, {"number": 75, "tol": 0}, {"text": "star-15-10-end-abrupt"},
+        {"any": ["not significant", "no cell", "none of", "isn't significant", "is not significant", "no significant", "not statistically significant", "p < 0.05 in no", "none reach", "none is"]}
+      ]
+    },
+    {
+      "id": "aimd_p99_ratio",
+      "question": "What is aimd's geomean lag p99 ratio against main in sa0755, and its wire bytes per useful byte ratio?",
+      "reference_sql": ["SELECT round(p99, 4) AS p99, round(wire, 4) AS wire FROM arm_score('sa0755', 'main', 'sa0755', 'aimd')"],
+      "answer": "x1.016 lag p99, x1.000 wire per useful byte.",
+      "checks": [{"number": 1.016, "tol": 0.003}, {"number": 1.0, "tol": 0.003}]
+    },
+    {
+      "id": "startup_tail",
+      "question": "Is the lag tail of star-31-5 in sa0755's main arm a startup tail or steady-state spikes?",
+      "reference_sql": [
+        "SELECT round(lag_p99_startup_ms) AS startup, round(lag_p99_steady_ms) AS steady, spike_s_1250, collapsed FROM dynamics('sa0755') WHERE arm_label = 'main' AND cell = 'star-31-5'"
+      ],
+      "answer": "A startup tail: its lag p99 is 5773 ms over startup against 1106 ms in steady state, with about half a second per run past 1250 ms after startup.",
+      "checks": [{"number": 5773, "tol": 0.02}, {"number": 1106, "tol": 0.02}, {"any": ["startup tail", "a startup", "mostly startup", "from startup", "startup, not", "the startup"]}]
+    },
+    {
+      "id": "steady_spikes",
+      "question": "And star-15-10-end-abrupt in sa0755's main arm: is its lag tail startup or steady state?",
+      "reference_sql": [
+        "SELECT round(lag_p99_startup_ms) AS startup, round(lag_p99_steady_ms) AS steady, round(spike_s_1250, 2) AS spike_s_1250, collapsed FROM dynamics('sa0755') WHERE arm_label = 'main' AND cell = 'star-15-10-end-abrupt'"
+      ],
+      "answer": "Steady state: lag p99 434 ms over startup but 2625 ms in steady state, 2.4 s per run past 1250 ms, 5 of 32 runs collapsed.",
+      "checks": [{"number": 434, "tol": 0.02}, {"number": 2625, "tol": 0.02}, {"any": ["steady"]}]
+    },
+    {
+      "id": "spikes_most",
+      "question": "Outside the structural cells, which cell of sa0755's main arm spends the most seconds per run lagging past the 1250 ms playout delay after startup?",
+      "reference_sql": [
+        "SELECT cell, spike_s_1250, spike_s_4250 FROM dynamics('sa0755') WHERE arm_label = 'main' AND cell NOT IN (SELECT cell FROM structural('sa0755')) ORDER BY spike_s_1250 DESC LIMIT 3"
+      ],
+      "answer": "wan-slow-viewer: 45 s per run past 1250 ms (and past 4250 ms), far ahead of wan-residential-seed-step at 8.7 s.",
+      "checks": [{"text": "wan-slow-viewer"}, {"number": 45, "tol": 0.01}]
+    },
+    {
+      "id": "overhead_haves",
+      "question": "In s4c249's star-31-5 cell, how many kbit/s do the viewers spend on HAVEs and on requests, in the decl arm (no HAVEs) and in main?",
+      "reference_sql": [
+        "WITH runs AS (SELECT arm_label AS arm, k, src FROM experiment_jobs WHERE exp_id = 's4c249' AND cell = 'star-31-5'), per_job AS (SELECT r.arm, (max(b.t_ms) - min(b.t_ms)) / 1000.0 AS secs, sum(b.viewer_have_bytes) AS have, sum(b.viewer_request_bytes) AS request FROM runs r JOIN bins b USING (k, src) GROUP BY r.arm, r.k) SELECT arm, round(sum(have) * 8 / 1000 / sum(secs), 1) AS have_kbps, round(sum(request) * 8 / 1000 / sum(secs), 1) AS request_kbps FROM per_job GROUP BY ALL ORDER BY ALL"
+      ],
+      "answer": "decl: no HAVEs (0 kbit/s), 389 kbit/s of requests; main: 673 kbit/s of HAVEs and 16 kbit/s of requests.",
+      "checks": [{"number": 673.3, "tol": 0.02}, {"number": 388.6, "tol": 0.02}, {"number": 16.2, "tol": 0.05}]
+    },
+    {
+      "id": "experiment_shape",
+      "question": "What did s8ed1e compare: which arms, how many cells and how many seeds per cell?",
+      "reference_sql": [
+        "SELECT arm_label, count(DISTINCT cell) AS cells, count(DISTINCT seed) AS seeds, min(seed) AS first_seed, max(seed) AS last_seed FROM experiment_jobs WHERE exp_id = 's8ed1e' GROUP BY ALL ORDER BY ALL"
+      ],
+      "answer": "p4tf against vouch on the robust tier: 45 cells, 32 seeds each (2001-2032).",
+      "checks": [{"text": "p4tf"}, {"text": "vouch"}, {"number": 45, "tol": 0}, {"number": 32, "tol": 0}]
+    },
+    {
+      "id": "trains_seed_collapses",
+      "question": "Outside the structural cells, where does s7ae7e's trains-seed arm collapse? List the cells and how many runs collapsed in each.",
+      "reference_sql": [
+        "SELECT e.cell, count(*) FILTER (WHERE v.collapsed) AS collapsed, count(*) AS runs FROM experiment_jobs e JOIN verdicts v USING (k, src) WHERE e.exp_id = 's7ae7e' AND e.cell NOT IN (SELECT cell FROM structural('s7ae7e')) GROUP BY ALL HAVING collapsed > 0 ORDER BY collapsed DESC, cell"
+      ],
+      "answer": "18 runs in 7 cells: star-15-10-end-abrupt 11 of 32, halve-31-10 2, and one each in thin-15-10, wan-residential-seed-step, wan-residential-seed-varying, wan-slow-viewer and wan-super-peer-varying.",
+      "checks": [
+        {"text": "star-15-10-end-abrupt"}, {"number": 11, "tol": 0}, {"text": "halve-31-10"}, {"text": "thin-15-10"},
+        {"text": "wan-residential-seed-step"}, {"text": "wan-residential-seed-varying"}, {"text": "wan-slow-viewer"},
+        {"text": "wan-super-peer-varying"}
+      ]
+    }
+  ]
+}
