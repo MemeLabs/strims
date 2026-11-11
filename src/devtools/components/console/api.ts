@@ -66,6 +66,8 @@ export interface Regeneration {
   commands: string[][];
   matrices: string[];
   quote: string;
+  /** farm.py estimate's: jobs, wall_s, cost, s3_cost and the rest. */
+  estimate?: Record<string, Json> | null;
   warnings: string[];
   error?: string;
   log_tail?: string[];
@@ -194,6 +196,126 @@ export const getIndex = (): Promise<{
   last: IndexRun | null;
   catalog_info: Record<string, Json>[];
 }> => call("/console/index");
+
+/** A statement's first rows, as an ask's `result` event gives them. */
+export interface AskResult extends QueryResult {
+  row_count?: number;
+}
+
+export interface AskIteration {
+  type: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+  billed: boolean;
+  usd: number;
+}
+
+/** A line of POST /console/ask's stream (simlab.ask's events). */
+export type AskEvent =
+  | {
+      type: "start";
+      conversation_id: string;
+      question: number;
+      model: string;
+      effort: string;
+      fallbacks: string;
+      task_budget: number;
+    }
+  | { type: "thinking" | "text"; turn: number; block: number; text: string }
+  | { type: "tool_start"; turn: number; block: number; id: string; name: string }
+  | { type: "tool"; id: string; name: string; input: Record<string, Json> }
+  | { type: "sql"; id: string; sql: string; params: Record<string, Param>; purpose: string }
+  | { type: "result"; id: string; result: AskResult }
+  | { type: "chart"; id: string; title: string; spec: Record<string, unknown>; sql: string; result: AskResult }
+  | { type: "progress"; id: string; line: string }
+  | { type: "proposal"; id: string; why: string; regeneration: Regeneration }
+  | {
+      type: "tool_result";
+      id: string;
+      name: string;
+      is_error: boolean;
+      preview: string;
+      chars: number;
+      elapsed_ms: number;
+    }
+  | { type: "fallback"; turn: number; from: string; to: string; category: string | null }
+  | {
+      type: "usage";
+      turn: number;
+      model: string;
+      iterations: AskIteration[];
+      usd: number;
+      question_usd: number;
+      conversation_usd: number;
+      budget: { total: number; used: number };
+      tokens: { input: number; output: number; cache_read: number; cache_write: number };
+    }
+  | { type: "refusal"; category: string | null; explanation: string | null }
+  | { type: "error"; message: string }
+  | { type: "ping" }
+  | {
+      type: "done";
+      stop_reason: string;
+      usd?: number;
+      conversation_usd?: number;
+      turns?: number;
+      budget_used?: number;
+      elapsed_ms?: number;
+    };
+
+/**
+ * Asks a question of the catalog: Claude answers it by running queries, each step of which comes
+ * to `onEvent` as it happens. Aborting `signal` cancels the question.
+ *
+ * @param body - the question, the conversation it follows up (none for a new one) and its task
+ *   budget in tokens
+ * @param onEvent - takes each event of the stream
+ * @param signal - cancels the question
+ */
+export const askStream = async (
+  body: { question: string; conversation_id?: string; task_budget?: number },
+  onEvent: (e: AskEvent) => void,
+  signal?: AbortSignal
+): Promise<void> => {
+  const res = await fetch("/console/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const b = (await res.json()) as { error?: string };
+    throw new ApiError(b.error ?? `ask answered ${res.status}`, res.status);
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let rest = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const lines = (rest + value).split("\n");
+    rest = lines.pop() ?? "";
+    for (const l of lines.filter(Boolean)) onEvent(JSON.parse(l) as AskEvent);
+  }
+};
+
+export interface Spend {
+  days: { day: string; usd: number; questions: number; requests: number }[];
+  questions: {
+    day: string;
+    conversation: string;
+    question: number;
+    text: string;
+    usd: number;
+    requests: number;
+  }[];
+  total_usd: number;
+  ledger: string;
+}
+
+export const getSpend = (): Promise<Spend> => call<Spend>("/console/spend");
 
 /** A result's rows as objects, keyed by column name (what Vega-Lite's data takes). */
 export const rowObjects = (r: QueryResult): Record<string, Json>[] =>

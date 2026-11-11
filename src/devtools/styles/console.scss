@@ -420,6 +420,121 @@
     color: var(--ink-2);
     margin-top: 8px;
   }
+
+  &__ask {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__question {
+    border-top: 1px solid var(--hairline);
+    padding-top: 10px;
+  }
+
+  &__asked {
+    font-weight: 600;
+    white-space: pre-wrap;
+    margin-bottom: 6px;
+  }
+
+  &__step {
+    margin: 6px 0;
+  }
+
+  &__thinking {
+    color: var(--ink-2);
+    border-left: 2px solid var(--hairline);
+    padding-left: 8px;
+
+    summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 11px;
+    }
+  }
+
+  &__tool {
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 6px 10px;
+    background: var(--plane);
+
+    &.failed {
+      border-color: var(--critical);
+    }
+
+    details summary {
+      cursor: pointer;
+    }
+  }
+
+  &__tool-head {
+    margin-bottom: 4px;
+  }
+
+  &__sql pre {
+    margin: 4px 0 0;
+    padding: 6px 8px;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    font: 12px/1.45 ui-monospace, "SFMono-Regular", Menlo, monospace;
+    white-space: pre-wrap;
+    max-height: 320px;
+    overflow: auto;
+  }
+
+  &__markdown {
+    max-width: 100ch;
+
+    p,
+    ul,
+    ol {
+      margin: 4px 0;
+    }
+
+    h4 {
+      margin: 8px 0 4px;
+      font-size: 13px;
+    }
+
+    code {
+      font: 12px ui-monospace, "SFMono-Regular", Menlo, monospace;
+      background: var(--plane);
+      padding: 0 3px;
+      border-radius: 3px;
+    }
+
+    pre {
+      background: var(--plane);
+      padding: 6px 8px;
+      overflow: auto;
+      font-size: 12px;
+    }
+
+    .console__table {
+      margin: 6px 0;
+    }
+  }
+
+  &__askbar {
+    position: sticky;
+    bottom: 0;
+    padding: 8px 0;
+    background: var(--surface);
+    border-top: 1px solid var(--hairline);
+
+    textarea {
+      width: 100%;
+      box-sizing: border-box;
+      font: inherit;
+      padding: 6px;
+      border: 1px solid var(--axis);
+      border-radius: 4px;
+      resize: vertical;
+    }
+  }
 }
 
 @media (max-width: 720px) {

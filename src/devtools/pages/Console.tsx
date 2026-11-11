@@ -8,6 +8,7 @@ import { NavLink, Navigate, Route, Routes, useNavigate, useParams } from "react-
 
 import { getIndex, getSchema, startIndex } from "../components/console/api";
 import type { Json, SavedView, Schema } from "../components/console/api";
+import Ask from "../components/console/Ask";
 import Experiments from "../components/console/Experiments";
 import { useOptions, useSelection } from "../components/console/selection";
 import type { Selection } from "../components/console/selection";
@@ -203,7 +204,10 @@ const NamedView: React.FC<NamedViewProps> = ({ views, sel, setSel }) => {
   return <ViewPanel key={view.name} view={view} sel={sel} onSelect={onSelect} />;
 };
 
-/** The sim-results console: saved views over the results catalog, and a SQL workbench. */
+/**
+ * The sim-results console: saved views over the results catalog, a SQL workbench, and questions
+ * in plain language that Claude answers in SQL.
+ */
 const Console: React.FC = () => {
   const [schema, setSchema] = useState<Schema | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -230,6 +234,7 @@ const Console: React.FC = () => {
       <div className="console__frame">
         <nav className="console__menu">
           <h1>Sim results</h1>
+          <NavLink to={`/console/ask?${search}`}>Ask</NavLink>
           <NavLink to={`/console/workbench?${search}`}>SQL workbench</NavLink>
           {ordered.map((v) => (
             <NavLink key={v.name} to={`/console/${v.name}?${search}`}>
@@ -248,6 +253,7 @@ const Console: React.FC = () => {
           />
           <Routes>
             <Route index element={<Navigate to="experiments" replace />} />
+            <Route path="ask" element={<Ask />} />
             <Route
               path="workbench"
               element={<Workbench schema={schema} sel={sel} onSaved={load} />}
