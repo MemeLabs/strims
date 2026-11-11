@@ -1,0 +1,230 @@
+[
+  {
+    "name": "run_timeline",
+    "params": {
+      "exp": "sa0755",
+      "cell": "star-31-5",
+      "arm": "aimd",
+      "seed": "3007",
+      "delay": "1250",
+      "min_stall_ms": "50"
+    },
+    "sel": {
+      "panel": "Stalls at the playout delay picked, as long as picked or longer",
+      "at": {
+        "t_s": [
+          38,
+          46
+        ],
+        "viewer": 7
+      }
+    },
+    "url": "http://127.0.0.1:8086/devtools.html#/console/run_timeline?exp=sa0755&cell=star-31-5&arm=aimd&seed=3007&sel=%7B%22panel%22%3A%22Stalls+at+the+playout+delay+picked%2C+as+long+as+picked+or+longer%22%2C%22at%22%3A%7B%22t_s%22%3A%5B38%2C46%5D%2C%22viewer%22%3A7%7D%7D"
+  },
+  {
+    "name": "run_timeline",
+    "params": {
+      "exp": "sa0755",
+      "cell": "star-31-5",
+      "arm": "aimd",
+      "seed": "3007",
+      "delay": "1250",
+      "min_stall_ms": "50"
+    },
+    "sel": {
+      "at": {
+        "t_s": 40
+      }
+    },
+    "url": "http://127.0.0.1:8086/devtools.html#/console/run_timeline?exp=sa0755&cell=star-31-5&arm=aimd&seed=3007&sel=%7B%22at%22%3A%7B%22t_s%22%3A40%7D%7D"
+  },
+  {
+    "name": "run_timeline",
+    "params": {
+      "exp": "sa0755",
+      "cell": "star-31-5",
+      "arm": "aimd",
+      "seed": "3007",
+      "delay": "4250",
+      "min_stall_ms": "200"
+    },
+    "sel": {
+      "panel": "Lag across viewers (playout delays dashed)",
+      "at": {
+        "t_s": [
+          38.5,
+          46.25
+        ]
+      }
+    },
+    "url": "http://127.0.0.1:8086/devtools.html#/console/run_timeline?exp=sa0755&cell=star-31-5&arm=aimd&seed=3007&delay=4250&min_stall_ms=200&sel=%7B%22panel%22%3A%22Lag+across+viewers+%28playout+delays+dashed%29%22%2C%22at%22%3A%7B%22t_s%22%3A%5B38.5%2C46.25%5D%7D%7D"
+  },
+  {
+    "name": "collapse_grid",
+    "params": {
+      "exp": "sa0755"
+    },
+    "sel": {
+      "at": {
+        "cell": "star-31-5",
+        "seed": 3007
+      }
+    },
+    "url": "http://127.0.0.1:8086/devtools.html#/console/collapse_grid?exp=sa0755&sel=%7B%22at%22%3A%7B%22cell%22%3A%22star-31-5%22%2C%22seed%22%3A3007%7D%7D"
+  },
+  {
+    "name": "collapse_diff",
+    "params": {
+      "exp": "sa0755",
+      "arm": "aimd",
+      "arm2": "main"
+    },
+    "sel": {
+      "at": {
+        "cell": "halve-15-10",
+        "state": "only first"
+      }
+    },
+    "url": "http://127.0.0.1:8086/devtools.html#/console/collapse_diff?exp=sa0755&arm=aimd&arm2=main&sel=%7B%22at%22%3A%7B%22cell%22%3A%22halve-15-10%22%2C%22state%22%3A%22only+first%22%7D%7D"
+  },
+  {
+    "name": "experiments",
+    "params": {
+      "search": "aimd vs main ~*"
+    },
+    "sel": null,
+    "url": "http://127.0.0.1:8086/devtools.html#/console/experiments?search=aimd+vs+main+%7E*"
+  },
+  {
+    "name": "overhead",
+    "params": {
+      "exp": "sa0755"
+    },
+    "sel": null,
+    "url": "http://127.0.0.1:8086/devtools.html#/console/overhead?exp=sa0755"
+  },
+  {
+    "name": "playback",
+    "params": {
+      "exp": "sa0755",
+      "delay": "4250"
+    },
+    "sel": {
+      "panel": "Share of viewing time stalled, by phase",
+      "at": {
+        "arm": "aimd",
+        "phase": "steady"
+      }
+    },
+    "url": "http://127.0.0.1:8086/devtools.html#/console/playback?exp=sa0755&delay=4250&sel=%7B%22panel%22%3A%22Share+of+viewing+time+stalled%2C+by+phase%22%2C%22at%22%3A%7B%22arm%22%3A%22aimd%22%2C%22phase%22%3A%22steady%22%7D%7D"
+  },
+  {
+    "name": "seed_bands",
+    "params": {
+      "exp": "sa0755",
+      "cell": "star-31-5",
+      "arm": "aimd",
+      "align": "seed_down"
+    },
+    "sel": {
+      "at": {
+        "t": [
+          -5,
+          20
+        ]
+      }
+    },
+    "url": "http://127.0.0.1:8086/devtools.html#/console/seed_bands?exp=sa0755&cell=star-31-5&arm=aimd&align=seed_down&sel=%7B%22at%22%3A%7B%22t%22%3A%5B-5%2C20%5D%7D%7D"
+  },
+  {
+    "name": "tree",
+    "params": {
+      "exp": "sa0755",
+      "cell": "star-31-5",
+      "arm": "aimd",
+      "seed": "3007",
+      "t": "45"
+    },
+    "sel": {
+      "panel": "Depth of each node in each stream at the time picked",
+      "at": {
+        "node": 3,
+        "stream": 1
+      }
+    },
+    "url": "http://127.0.0.1:8086/devtools.html#/console/tree?exp=sa0755&cell=star-31-5&arm=aimd&seed=3007&t=45&sel=%7B%22panel%22%3A%22Depth+of+each+node+in+each+stream+at+the+time+picked%22%2C%22at%22%3A%7B%22node%22%3A3%2C%22stream%22%3A1%7D%7D"
+  },
+  {
+    "name": "run_overlay",
+    "params": {
+      "exp": "sa0755",
+      "cell": "star-31-5",
+      "seed": "3007",
+      "arm": "aimd",
+      "arm2": "main",
+      "delay": "1250",
+      "min_stall_ms": "50"
+    },
+    "sel": {
+      "panel": "Verdict: unhealthy seconds and collapses",
+      "at": {
+        "arm": "aimd",
+        "t_s": [
+          30,
+          60
+        ]
+      }
+    },
+    "url": "http://127.0.0.1:8086/devtools.html#/console/run_overlay?exp=sa0755&cell=star-31-5&arm=aimd&arm2=main&seed=3007&sel=%7B%22panel%22%3A%22Verdict%3A+unhealthy+seconds+and+collapses%22%2C%22at%22%3A%7B%22arm%22%3A%22aimd%22%2C%22t_s%22%3A%5B30%2C60%5D%7D%7D"
+  },
+  {
+    "name": "workbench",
+    "params": {
+      "sql": "SELECT seed, t_s, lag_ms FROM lag_by_second WHERE exp_id = $exp AND cell = $cell\n-- the run's lag, 'p99'",
+      "exp": "sa0755",
+      "cell": "star-31-5",
+      "mark": "line",
+      "x": "t_s",
+      "y": "lag_ms",
+      "color": "seed",
+      "logy": "1"
+    },
+    "sel": {
+      "at": {
+        "seed": 3007,
+        "t_s": 40
+      }
+    },
+    "url": "http://127.0.0.1:8086/devtools.html#/console/workbench?sql=SELECT+seed%2C+t_s%2C+lag_ms+FROM+lag_by_second+WHERE+exp_id+%3D+%24exp+AND+cell+%3D+%24cell%0A--+the+run%27s+lag%2C+%27p99%27&exp=sa0755&cell=star-31-5&mark=line&x=t_s&y=lag_ms&color=seed&logy=1&sel=%7B%22at%22%3A%7B%22seed%22%3A3007%2C%22t_s%22%3A40%7D%7D"
+  },
+  {
+    "name": "workbench",
+    "params": {
+      "view": "run_timeline",
+      "exp": "sa0755",
+      "cell": "star-31-5",
+      "arm": "aimd",
+      "seed": "3007",
+      "delay": "1250",
+      "min_stall_ms": "50"
+    },
+    "sel": {
+      "panel": "Stalls at the playout delay picked, as long as picked or longer",
+      "at": {
+        "t_s": [
+          38,
+          46
+        ]
+      }
+    },
+    "url": "http://127.0.0.1:8086/devtools.html#/console/workbench?view=run_timeline&exp=sa0755&cell=star-31-5&arm=aimd&seed=3007&sel=%7B%22panel%22%3A%22Stalls+at+the+playout+delay+picked%2C+as+long+as+picked+or+longer%22%2C%22at%22%3A%7B%22t_s%22%3A%5B38%2C46%5D%7D%7D"
+  },
+  {
+    "name": "workbench",
+    "params": {
+      "sql": "SELECT 1 AS one"
+    },
+    "sel": null,
+    "url": "http://127.0.0.1:8086/devtools.html#/console/workbench?sql=SELECT+1+AS+one"
+  }
+]

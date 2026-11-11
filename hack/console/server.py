@@ -54,6 +54,16 @@ the new catalog.
                              ping every 15 s, done last). The client going cancels it.
   GET  /console/ask/ID       a conversation's questions and their events
   GET  /console/spend        what the questions cost, per day and per question (?day=YYYY-MM-DD)
+  PUT  /console/tabs/ID      {url, focused, visible}: a console tab's address and state, which it
+                             reports on each change and every 30 s; kept in memory, the last
+                             report of each tab, a tab unseen for 2 minutes forgotten
+  GET  /console/tabs         the tabs' reports, [{id, url, focused, visible, last_seen}] (seconds
+                             since its last report), the latest focused first: what
+                             hack/console/ui.py reads (simlab.views.tabs)
+
+While it runs, target/console/server.json in the main checkout says where
+({pid, port, urls}: its loopback URL, then those for the network), for
+hack/console/ui.py (simlab.views.server_state); it goes at exit.
 
 A saved view is hack/console/views/NAME.sql (one statement, with `$exp`,
 `$cell`, `$arm`, `$seed`, `$delay` and the like for the UI's pickers),
@@ -86,6 +96,7 @@ import json
 import math
 import mimetypes
 import multiprocessing
+import os
 import queue
 import re
 import shutil
@@ -135,6 +146,12 @@ PING_S = 15
 MAX_QUESTION = 20_000
 # The functions index and fetch run in their child, as module:function.
 TASKS = {"index": "simlab.catalog:index", "fetch": "simlab.catalog:fetch"}
+# The tabs' reports: how long one unseen is kept, how many are, a tab's
+# id and its address's longest text.
+TAB_TTL_S = 120
+MAX_TABS = 256
+TAB_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+MAX_URL = 1 << 20
 FORKSERVER = multiprocessing.get_context("forkserver")
 
 
@@ -381,6 +398,79 @@ def fetched_lines(r):
     return out
 
 
+# --- the tabs' reports ----------------------------------------------------------------------------
+
+
+class Tabs:
+    """Each console tab's last report (PUT /console/tabs/ID), in memory: a
+    tab unseen for `ttl` seconds is forgotten, and past MAX_TABS the
+    longest unseen go. `clock` is monotonic seconds (tests give their
+    own)."""
+
+    def __init__(self, clock=time.monotonic, ttl=TAB_TTL_S):
+        self.clock = clock
+        self.ttl = ttl
+        self._tabs = {}
+        self._lock = threading.Lock()
+
+    def report(self, id, body):
+        """Keeps tab `id`'s report {url, focused, visible}; returns it as
+        listed."""
+        if not TAB_ID.fullmatch(id):
+            raise HttpError(400, f"a tab's id is ^{TAB_ID.pattern}$")
+        if not isinstance(body, dict) or not isinstance(body.get("url"), str) or not all(
+                isinstance(body.get(k), bool) for k in ("focused", "visible")):
+            raise HttpError(400, "{url: string, focused: boolean, visible: boolean}")
+        if len(body["url"]) > MAX_URL:
+            raise HttpError(413, f"a tab's url is at most {MAX_URL:,} characters")
+        now = self.clock()
+        with self._lock:
+            old = self._tabs.pop(id, None)
+            self._tabs[id] = {"url": body["url"], "focused": body["focused"], "visible": body["visible"], "seen": now,
+                              "focused_at": now if body["focused"] else old and old["focused_at"]}
+            self._forget(now)
+            return self._listed(id, self._tabs[id], now)
+
+    def list(self):
+        """The tabs' reports, the latest focused first (a tab never
+        focused after them, the latest seen first): [{id, url, focused,
+        visible, last_seen}], last_seen the seconds since its report."""
+        now = self.clock()
+        with self._lock:
+            self._forget(now)
+            order = sorted(self._tabs.items(), key=lambda kv: (kv[1]["focused_at"] is not None,
+                                                               kv[1]["focused_at"] or 0, kv[1]["seen"]), reverse=True)
+            return [self._listed(id, t, now) for id, t in order]
+
+    def _forget(self, now):
+        for id in [id for id, t in self._tabs.items() if now - t["seen"] > self.ttl]:
+            del self._tabs[id]
+        while len(self._tabs) > MAX_TABS:
+            del self._tabs[min(self._tabs, key=lambda id: self._tabs[id]["seen"])]
+
+    @staticmethod
+    def _listed(id, t, now):
+        return {"id": id, "url": t["url"], "focused": t["focused"], "visible": t["visible"],
+                "last_seen": round(now - t["seen"], 1)}
+
+
+def write_state(path, port, urls):
+    """Writes the server's state file at `path` ({pid, port, urls})."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}")
+    tmp.write_text(json.dumps({"pid": os.getpid(), "port": port, "urls": urls}, indent=1) + "\n")
+    os.replace(tmp, path)
+
+
+def remove_state(path):
+    """Removes the state file at `path` if it is this process's."""
+    try:
+        if json.loads(path.read_text()).get("pid") == os.getpid():
+            path.unlink()
+    except (OSError, ValueError, AttributeError):
+        pass
+
+
 # --- the console ----------------------------------------------------------------------------------
 
 
@@ -396,11 +486,12 @@ class Console:
     fetch by default; `ask_client` and `ledger` its Anthropic client and
     spend ledger). `index_every` is the index's period in seconds, 0 for
     none; `hosts` and `origins` add to the names and origins requests may
-    give."""
+    give. `tabs` holds the tabs' reports."""
 
     def __init__(self, pool, *, views_root=views.VIEWS, regenerations=None, dist=DIST, index_every=0, hosts=(),
                  origins=(), tasks=TASKS, catalog=catalog, suite=suite, asker=None, ask_client=None, ledger=None):
         self.pool = pool
+        self.tabs = Tabs()
         self.views_root = Path(views_root)
         self.regenerations = regenerations or farm.Regenerations()
         self.dist = Path(dist)
@@ -557,6 +648,10 @@ class Console:
         if route == "GET /console/spend":
             day = urllib.parse.parse_qs(url.query).get("day", [None])[0]
             return self.send(h, 200, ask.spend(self.asker.ledger.path, day))
+        if m := re.fullmatch(r"PUT /console/tabs/([^/]+)", route):
+            return self.send(h, 200, self.tabs.report(urllib.parse.unquote(m[1]), self.body(h)))
+        if route == "GET /console/tabs":
+            return self.send(h, 200, self.tabs.list())
         raise HttpError(404, f"no {route}")
 
     def body(self, h):
@@ -979,19 +1074,24 @@ def main(argv=None):
     server = console.listen(a.port, a.host)
     port = server.server_address[1]
     if a.host is None:
-        print(f"console: http://127.0.0.1:{port}/ (catalog {lake})", file=sys.stderr)
+        urls = [f"http://127.0.0.1:{port}/"]
+        print(f"console: {urls[0]} (catalog {lake})", file=sys.stderr)
         lan = [f"http://{addr}:{port}/" for addr in lan_addresses()]
         if lan:
             print(f"console: on the network: {', '.join(lan)}", file=sys.stderr)
+        urls += lan
     else:
-        here = address_name(server.server_address[0])
-        print(f"console: http://{here}:{port}/ (catalog {lake})", file=sys.stderr)
+        urls = [f"http://{address_name(server.server_address[0])}:{port}/"]
+        print(f"console: {urls[0]} (catalog {lake})", file=sys.stderr)
+    state = views.state_path()
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
+        write_state(state, port, urls)
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        remove_state(state)
         server.server_close()
         console.close()
         if console.indexer.current or console._fetching.locked():

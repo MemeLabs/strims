@@ -373,6 +373,8 @@ def views_text(saved, intro, sql=True):
 
 # --- the topics -----------------------------------------------------------------------------------
 
+# The console's own CLI, which the index points at.
+UI_DESCRIBE = "python3 hack/console/ui.py describe"
 TOPIC_DOCS = {
     "glossary": "the sims' terms: sims, cells, arms, experiments, the oracle, the verdict and collapses, phases, "
                 "lag and playout delays, structural cells, comparing arms, collapse counts, startup tails and "
@@ -406,6 +408,9 @@ def index_text(schema, saved):
               wrapped("Saved views", sorted(v.name for v in saved))]
     if kinds := list(kinds_by(schema)):
         lines.append(wrapped("Event kinds", kinds))
+    lines += ["", textwrap.fill(f"The console's graphs and addresses (a view's panels, the selection in a console URL "
+                                f"or the user's open tab, links to a view): {UI_DESCRIBE}", width=100,
+                                subsequent_indent="  ", break_on_hyphens=False)]
     return "\n".join(lines) + "\n"
 
 

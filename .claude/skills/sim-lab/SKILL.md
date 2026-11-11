@@ -12,6 +12,9 @@ tool as `python3 SCRIPT` from any checkout or worktree: the scripts re-exec
 under hack/'s uv venv, and every worktree reads the main checkout's
 target/sim-db.
 
+When the user mentions their selection, chart or console tab, or you're pointing them at a
+result: sim-console (`ui.py`).
+
 ## Start here
 
     python3 hack/sim-db/simdb.py describe            # the topics, and every table, macro, saved view and event kind
@@ -32,7 +35,6 @@ target/sim-db.
 | After new local runs | `simdb.py index` |
 | Local runs | `suite.py run [--base REF] [--tier T] [--seeds N]` |
 | New farm runs | `suite.py farm ... --no-run` writes the matrices (target/sim-suite/farm/RUN-NN.toml); the main checkout's `python3 hack/sim-farm/farm.py estimate MATRICES...` quotes them; nothing runs without the user's explicit approval |
-| The console UI and its Ask panel | `python3 hack/console/server.py`, then http://127.0.0.1:8086/ |
 
 `simdb.py` is `hack/sim-db/simdb.py`. Each command's `--help` says more:
 `simdb.py --help` holds the cache's tables and selections, and

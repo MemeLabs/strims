@@ -160,6 +160,9 @@ class Topics(unittest.TestCase):
         self.assertIn("Macros: fisher_p, structural", t)
         self.assertIn("Saved views: by_cell, experiments", t)
         self.assertNotIn("raw", t.split("Tables and views:")[1])
+        self.assertTrue(t.endswith("\n\nThe console's graphs and addresses (a view's panels, the selection in a console "
+                                   "URL or the user's\n  open tab, links to a view): python3 hack/console/ui.py "
+                                   "describe\n"), t[-300:])
 
     def test_the_glossary(self):
         t = text("glossary")

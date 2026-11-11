@@ -15,6 +15,7 @@ import json
 import os
 import signal
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -877,6 +878,93 @@ class HostAndOrigin(unittest.TestCase):
         finally:
             httpd.shutdown()
             httpd.server_close()
+
+
+class TabReports(unittest.TestCase):
+    def setUp(self):
+        self.now = [1000.0]
+        saved = CONSOLE.tabs
+        CONSOLE.tabs = server.Tabs(clock=lambda: self.now[0])
+        self.addCleanup(setattr, CONSOLE, "tabs", saved)
+
+    def put(self, id, url, focused=False, visible=True, at=None, **kw):
+        if at is not None:
+            self.now[0] = at
+        return call("PUT", f"/console/tabs/{id}", {"url": url, "focused": focused, "visible": visible}, **kw)
+
+    def listed(self, at=None):
+        if at is not None:
+            self.now[0] = at
+        r = call("GET", "/console/tabs")
+        self.assertEqual(r.status, 200, r.body)
+        return r.body
+
+    def test_reports_are_kept_and_the_latest_focused_first(self):
+        page = "http://127.0.0.1:8086/devtools.html#/console/"
+        r = self.put("a", page + "tree", focused=True, at=1000)
+        self.assertEqual((r.status, r.body), (200, {"id": "a", "url": page + "tree", "focused": True, "visible": True,
+                                                    "last_seen": 0}))
+        self.put("b", page + "scorecard", at=1010)
+        self.put("c", page + "run_timeline", focused=True, at=1020)
+        self.assertEqual([t["id"] for t in self.listed()], ["c", "a", "b"])
+        # A tab focused again goes first; once it loses focus it stays the last focused.
+        self.put("a", page + "tree?exp=e1", focused=True, at=1030)
+        self.put("a", page + "tree?exp=e1&t=45", focused=False, visible=False, at=1040)
+        got = self.listed(at=1045)
+        self.assertEqual(got, [
+            {"id": "a", "url": page + "tree?exp=e1&t=45", "focused": False, "visible": False, "last_seen": 5},
+            {"id": "c", "url": page + "run_timeline", "focused": True, "visible": True, "last_seen": 25},
+            {"id": "b", "url": page + "scorecard", "focused": False, "visible": True, "last_seen": 35}])
+        # Tabs never focused follow, the latest seen first.
+        self.put("d", page + "playback", at=1050)
+        self.assertEqual([t["id"] for t in self.listed()], ["a", "c", "d", "b"])
+
+    def test_a_tab_unseen_for_two_minutes_is_forgotten(self):
+        self.put("a", "http://h/devtools.html#/console/tree", focused=True, at=1000)
+        self.put("b", "http://h/devtools.html#/console/tree", at=1100)
+        self.assertEqual([t["id"] for t in self.listed(at=1120)], ["a", "b"])
+        self.assertEqual([t["id"] for t in self.listed(at=1121)], ["b"])
+        self.assertEqual(self.listed(at=1221), [])
+
+    def test_reports_take_the_apis_checks(self):
+        good = {"url": "http://h/devtools.html#/console/tree", "focused": True, "visible": True}
+        for headers, status in [({"Host": "evil.example"}, 403), ({"Origin": "http://evil.example"}, 403),
+                                ({"Origin": f"http://localhost:{PORT}"}, 200)]:
+            self.assertEqual(call("PUT", "/console/tabs/x", good, headers=headers).status, status, headers)
+            self.assertEqual(call("GET", "/console/tabs", headers=headers).status, status, headers)
+        self.assertEqual(call("PUT", "/console/tabs/x", json.dumps(good).encode(), type="text/plain").status, 415)
+        for id, body in [("a.b", good), ("a" * 65, good), ("x", {**good, "url": None}), ("x", {**good, "focused": 1}),
+                         ("x", {"url": "u", "focused": True}), ("x", [good])]:
+            with self.subTest(id=id, body=body):
+                self.assertEqual(call("PUT", f"/console/tabs/{id}", body).status, 400)
+        self.assertEqual([t["url"] for t in self.listed()], [good["url"]])
+        self.assertEqual(call("POST", "/console/tabs", good).status, 404)
+
+
+class State(unittest.TestCase):
+    def test_server_json_is_written_at_start_and_removed_at_exit(self):
+        repo = DIR / "checkout"
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        state = repo / "target" / "console" / "server.json"
+        env = {**os.environ, "SIM_DB_ROOT": str(DIR), "GIT_DIR": str(repo / ".git")}
+        p = subprocess.Popen([sys.executable, str(HERE / "server.py"), "--port", "0", "--host", "127.0.0.1",
+                              "--no-index"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        try:
+            self.assertTrue(until(state.exists, timeout=60), p.stderr.read() if p.poll() is not None else "")
+            got = json.loads(state.read_text())
+            port = got["port"]
+            self.assertEqual(got, {"pid": p.pid, "port": port, "urls": [f"http://127.0.0.1:{port}/"]})
+            self.assertEqual(status_at("127.0.0.1", port), 200)
+        finally:
+            p.send_signal(signal.SIGTERM)
+            p.wait(timeout=60)
+            p.stderr.close()
+        self.assertEqual(p.returncode, 0)
+        self.assertFalse(state.exists())
+        # Another server's file stays.
+        state.write_text(json.dumps({"pid": 1, "port": 1, "urls": ["http://127.0.0.1:1/"]}))
+        server.remove_state(state)
+        self.assertTrue(state.exists())
 
 
 def status_at(addr, port, headers=None):

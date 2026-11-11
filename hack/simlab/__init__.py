@@ -24,7 +24,8 @@ server (hack/console).
   query     simdb.py's selections and queries, as results
   suite     suite.py's tiers, cells, metrics, local runs and farm matrices
   scoring   the catalog's scoring macros, as scorecards and arm scores
-  views     the console's saved views
+  views     the console's saved views, their graphs, and its addresses:
+            links to a view with a selection, and the open tabs'
   farm      farm.py's quotes and approved runs
   ask       questions in plain language, answered in SQL
 
