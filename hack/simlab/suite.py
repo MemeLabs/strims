@@ -452,6 +452,36 @@ TIERS["sign"] = sign_tier()
 TIERS["sign-confirm"] = sign_confirm_tier()
 TIERS["sign-sens"] = sign_sens_tier()
 
+# The measure tier's cells, by mechanism: robust's (steady, overload, the
+# seed's uplink halved, thin relays, joins and departures, jitter), then
+# peers' (mobile viewers).
+MEASURE_ROBUST = ["star-15-10", "star-31-5", "halve-15-10", "halve-31-10", "thin-15-10", "star-15-10-event",
+                  "star-15-10-end-abrupt", "jitter-15-10"]
+MEASURE_PEERS = ["wan-mobile"]
+# The logs a measurement keeps, by sim: the forecast log and its truth (the
+# chunks each node stored), and the scheduler's park and event logs. The
+# tables go to each job's output dir, as every job's do.
+MEASURE_LOGS = {PPSPP: {"SIM_FORECAST": "1", "SIM_SPEC": "1"},
+                SIM: {"STRIMS_SIM_FORECAST": "1", "STRIMS_SIM_SPEC": "1"}}
+MEASURE_SEEDS = 8
+# The logs hold a row per neighbour per chunk: a run's memory grows with
+# its viewers and its stream's length.
+MEASURE_MEM_GIB = 3
+
+
+def measure_tier():
+    """The cells a forecast or request change is measured on, with every
+    log on (MEASURE_LOGS) at MEASURE_SEEDS seeds each. The logs change no
+    run, and the cells keep their tiers' names."""
+    robust = {c["name"]: c for c in TIERS["robust"]}
+    peers = {c["name"]: c for c in TIERS["peers"]}
+    return [{**c, "env": {**c["env"], **MEASURE_LOGS[c["sim"]]}, "mem_gib": max(c["mem_gib"], MEASURE_MEM_GIB),
+             "seeds": MEASURE_SEEDS, "why": f"{c['why']}, every log on"}
+            for c in [robust[n] for n in MEASURE_ROBUST] + [peers[n] for n in MEASURE_PEERS]]
+
+
+TIERS["measure"] = measure_tier()
+
 
 def cells(tier, only=None, env=()):
     """Tier `tier`'s cells, but for those `only` names when given, each
