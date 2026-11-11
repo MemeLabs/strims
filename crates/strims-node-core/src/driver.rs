@@ -371,6 +371,20 @@ pub struct NodeTask<I: NodeIo> {
     answers_soon: Arc<AtomicBool>,
     query_delay: Duration,
     shutdown: Option<oneshot::Sender<()>>,
+    /// When the node's last pass ran: the time of the snapshot its drop
+    /// hands over ([`NodeConfig::last_metrics`]).
+    passed: Time,
+}
+
+/// A node task that goes (it stopped, or a simulated crash dropped it
+/// with its runtime) hands its last snapshot to the sink
+/// ([`NodeConfig::last_metrics`]): nothing can ask it for one after.
+impl<I: NodeIo> Drop for NodeTask<I> {
+    fn drop(&mut self) {
+        if let Some(sink) = self.state.last_metrics.take() {
+            (sink.0)(self.state.metrics(self.passed));
+        }
+    }
 }
 
 impl<I: NodeIo> fmt::Debug for NodeTask<I> {
@@ -427,6 +441,7 @@ pub fn start<I: NodeIo>(
         info,
         setup.interfaces,
     );
+    let passed = io.now();
     let task = NodeTask {
         state,
         io,
@@ -439,6 +454,7 @@ pub fn start<I: NodeIo>(
         answers_soon,
         query_delay: config.query_delay,
         shutdown: None,
+        passed,
     };
     Ok((node, NodeEvents::new(events), task))
 }
@@ -539,6 +555,7 @@ impl<I: NodeIo> NodeTask<I> {
             self.start_dials();
             self.state.metrics.loop_iterations += 1;
             last = now;
+            self.passed = now;
         }
         self.stop();
     }

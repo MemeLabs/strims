@@ -66,8 +66,9 @@ pub(crate) async fn controller(w: Rc<World>) -> turmoil::Result {
 /// Folds every running node's runner, link and network stats. A `full`
 /// sample also stores the metrics, samples the heap, checks the
 /// invariants, and logs two lines per host (with more counters on the
-/// `last` one). A host that departed isn't sampled: its counters stay as
-/// they were when it left.
+/// `last` one). A host that departed isn't sampled: its node's last
+/// snapshot, as the node went, holds its counters and logs from its last
+/// sample on (`World::observe_stopped`).
 async fn sample(w: &World, full: bool, last: bool) {
     for h in 0..w.spec.hosts.len() {
         let Some(node) = w.node(h).filter(|_| !w.departed(h)) else {

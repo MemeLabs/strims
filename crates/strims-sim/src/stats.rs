@@ -17,9 +17,10 @@
 //!   when the runner recreates one (a peer relinks, a swarm loses its last
 //!   channel, the host restarts). Each source is tracked on its own and
 //!   folded into the host's totals when any of its counters goes down or
-//!   the host crashes. What a source counted after its last sample is
-//!   lost when it ends, so totals are lower bounds, short by at most one
-//!   sample interval per source.
+//!   the host crashes, whose node's last snapshot, as the crash drops it,
+//!   is a sample too. What a source counted after its last sample is
+//!   lost when it ends otherwise, so totals are lower bounds, short by at
+//!   most one sample interval per source.
 //!
 //! Nothing here reads the wall clock or iterates a hash map: everything
 //! is a function of the samples, which are a function of the seed.

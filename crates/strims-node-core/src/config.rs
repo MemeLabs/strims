@@ -150,6 +150,12 @@ pub struct NodeConfig {
     /// forgets the peer it names; `None` (the default, and every real
     /// node's) keeps none. It changes no decision.
     pub parent_log: Option<ParentSink>,
+    /// Hands a last `Node::metrics` snapshot, taken at the node's last pass,
+    /// to the sink when the node task goes: a node that stops, or one
+    /// dropped with its runtime (a simulated crash), whose counters and
+    /// logs since the last snapshot no later one can take; `None` (the
+    /// default, and every real node's) takes none. It changes no decision.
+    pub last_metrics: Option<MetricsSink>,
 }
 
 /// Where a node's parent changes go ([`NodeConfig::parent_log`]), for a
@@ -160,6 +166,17 @@ pub struct ParentSink(pub Arc<dyn Fn(crate::event::ParentInfo) + Send + Sync>);
 impl fmt::Debug for ParentSink {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("ParentSink")
+    }
+}
+
+/// Where a node's last snapshot goes ([`NodeConfig::last_metrics`]), for
+/// a simulation's records.
+#[derive(Clone)]
+pub struct MetricsSink(pub Arc<dyn Fn(crate::NodeMetrics) + Send + Sync>);
+
+impl fmt::Debug for MetricsSink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("MetricsSink")
     }
 }
 
@@ -315,6 +332,7 @@ impl NodeConfig {
             forecast_log: false,
             request_log: false,
             parent_log: None,
+            last_metrics: None,
             node_platform: String::new(),
             node_version: "dev".to_owned(),
             ppspp_capture: None,

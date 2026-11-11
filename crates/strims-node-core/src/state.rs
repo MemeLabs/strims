@@ -55,7 +55,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::CaptureSample;
 use crate::config::{
-    NetworkOptions, NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture, VpnPortConfig,
+    MetricsSink, NetworkOptions, NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture, VpnPortConfig,
 };
 use crate::driver::{IdleOk, Interfaces, LinkProbe, TaskGuard};
 use crate::error::{NodeError, ReadError};
@@ -390,6 +390,9 @@ pub(crate) struct State {
     removed_swarms: Vec<SwarmKey>,
     /// See [`NodeConfig::parent_log`].
     parent_sink: Option<ParentSink>,
+    /// See [`NodeConfig::last_metrics`]: the node task's drop hands it
+    /// the last snapshot.
+    pub(crate) last_metrics: Option<MetricsSink>,
     /// Reused by `drain_transmit`.
     scratch_links: Vec<LinkKey>,
     /// ppspp frame errors seen inside vnic's dispatch, handled after it.
@@ -536,6 +539,7 @@ impl State {
             request_log: config.request_log,
             removed_swarms: Vec::new(),
             parent_sink: config.parent_log.clone(),
+            last_metrics: config.last_metrics.clone(),
             scratch_links: Vec::new(),
             frame_errors: Vec::new(),
             rtc,

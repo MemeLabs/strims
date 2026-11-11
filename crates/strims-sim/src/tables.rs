@@ -41,6 +41,14 @@
 //! network's outside WAN mode, a node's in bins it has no reading at both
 //! edges of, a quantile of no waits) are empty: `NULL` to `hack/sim-db`.
 //!
+//! The nodes' logs (`forecast`, `arrivals`, `haves`, `asks`) come with each
+//! sample too, and what a node logged since its last one, with its
+//! counters (the row's), as it goes (`NodeConfig::last_metrics`): at its
+//! crash or abrupt departure, and for one that departed gracefully, which
+//! no sample asks after it left, once the run ends. A node that crashes
+//! leaves its requests still open unrecorded. A departed host's bins end
+//! at its last sample.
+//!
 //! [`Scenario::wire_bins`]: crate::Scenario::wire_bins
 //! [`Scenario::stats_every`]: crate::Scenario::stats_every
 //! [`HostSpec::arrive_at`]: crate::HostSpec::arrive_at

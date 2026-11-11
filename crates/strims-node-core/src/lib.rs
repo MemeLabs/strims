@@ -119,8 +119,8 @@ mod state;
 pub mod vpn_port;
 
 pub use config::{
-    BufferConfig, CaptureOpen, DEFAULT_NOTSENT_LOWAT, HostileEgress, NetworkOptions, NodeConfig,
-    ParentSink, PeerRpcConfig, PpsppCapture, StatsBins, TcpSocketConfig, VpnPortConfig,
+    BufferConfig, CaptureOpen, DEFAULT_NOTSENT_LOWAT, HostileEgress, MetricsSink, NetworkOptions,
+    NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture, StatsBins, TcpSocketConfig, VpnPortConfig,
     WebRtcConfig,
 };
 pub use driver::{

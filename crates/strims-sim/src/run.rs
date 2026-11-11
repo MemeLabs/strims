@@ -151,9 +151,11 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
         }
     }
     let secs = sim.elapsed().as_secs_f64();
-    let ms = u64::try_from(sim.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let end = sim.elapsed();
+    let ms = u64::try_from(end.as_millis()).unwrap_or(u64::MAX);
     // Dropping the simulation drops every runtime, and with them the nodes.
     drop(sim);
+    w.observe_stopped(end, true);
     let wan = w.wan.lock().take().map(|s| s.report(spec));
     for h in wan.iter().flat_map(|r| &r.hosts) {
         w.log_at(
@@ -204,7 +206,8 @@ fn others(w: &World, h: HostIx) -> Vec<HostIx> {
 /// the sockets the crash drops then close in tokio's task order, which
 /// depends on process-wide task ids and isn't reproducible. Their FINs are
 /// dropped, as a power loss would; peers notice by timeouts, or by an RST
-/// once the address answers again.
+/// once the address answers again. The node's counters and logs since its
+/// last sample are kept ([`World::observe_stopped`]).
 fn cut_off(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, h: HostIx) {
     for x in others(w, h) {
         sim.partition(w.name(h), w.name(x));
@@ -216,6 +219,7 @@ fn cut_off(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, h: HostIx)
         s.crashed(h, sim_time(sim.elapsed()));
     }
     sim.crash(w.name(h));
+    w.observe_stopped(sim.elapsed(), false);
 }
 
 /// Applies a fault. In WAN mode the scheduler holds every link between

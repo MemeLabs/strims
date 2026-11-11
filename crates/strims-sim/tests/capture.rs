@@ -502,6 +502,39 @@ fn a_runs_events_are_its_scenarios_and_losses() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A node's logs and counters since its last stats sample are kept when
+/// it leaves, gracefully or by a crash: with half the viewers gone
+/// mid-stream, every read and every honest answer and HAVE still has its
+/// hold in `arrivals` ([`every_read_and_answer_has_its_hold`]), the
+/// leavers' last ones too, and the expired requests are the runners'
+/// timed out ones, the leavers' among them.
+#[test]
+fn a_departures_logs_keep_every_hold() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "a_departures_logs_keep_every_hold-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    for how in ["graceful", "abrupt"] {
+        let mut spec = departing_wan(how);
+        spec.wire_bins = Some(Duration::from_millis(1000));
+        spec.forecast_log = true;
+        spec.request_logs = true;
+        let r = run(spec, 1).unwrap();
+        let d = dir.join(how);
+        r.write_tables(&d, Duration::from_millis(1000), true)
+            .unwrap();
+        every_read_and_answer_has_its_hold(&r, &d);
+        let expired = table_rows(&d, "asks")
+            .iter()
+            .filter(|a| a["picked"] == "true" && a["outcome"] == "expired")
+            .count() as u64;
+        let (a, b, c) = r.timeouts(0);
+        assert_eq!(expired, a + b + c, "{how}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The seed's `budget_capacity` is the reading its budget was measured
 /// from: at every meter sample once measured, the budget is what 70 % of
 /// it pays for at a subscriber's cost, the cost within a factor of two of
@@ -562,29 +595,82 @@ fn budget_reading_is_the_budgets(r: &strims_sim::Report, d: &Path) {
     assert!(column("bins").iter().any(|&c| c > 0));
 }
 
-/// The request log's tables (`Scenario::request_logs`) against the run: HAVEs, requests and reads against
-/// the holds `arrivals` records (a read's frame in its chunk), expiries against the runners' timeouts.
+/// A table's rows, each by column name.
+fn table_rows(d: &Path, t: &str) -> Vec<BTreeMap<String, String>> {
+    let csv = strims_sim::tables::read_table(d, t).unwrap();
+    let mut lines = csv.lines();
+    let head: Vec<&str> = lines.next().unwrap().split(',').collect();
+    lines
+        .map(|l| {
+            head.iter()
+                .zip(l.split(','))
+                .map(|(&c, v)| (c.to_owned(), v.to_owned()))
+                .collect()
+        })
+        .collect()
+}
+
+/// A row's integer, `None` for an empty field.
+fn int(r: &BTreeMap<String, String>, c: &str) -> Option<i64> {
+    r[c].parse().ok()
+}
+
+/// The request log's tables (`Scenario::request_logs`) against the run:
+/// the holds behind HAVEs, answers and reads
+/// ([`every_read_and_answer_has_its_hold`]), the requests' knowledge, and
+/// expiries against the runners' timeouts.
 fn request_logs_say_what_they_are(r: &strims_sim::Report, d: &Path) {
+    every_read_and_answer_has_its_hold(r, d);
+    // Every request rested on its peer's HAVE, before it went; and the
+    // expiries are the runners' timed out requests.
+    let asks = table_rows(d, "asks");
+    let asked: Vec<_> = asks.iter().filter(|a| a["picked"] == "true").collect();
+    assert!(!asked.is_empty());
+    for a in &asked {
+        assert_eq!(
+            (a["round"].as_str(), a["declares"].as_str()),
+            ("flight", "true"),
+            "{a:?}"
+        );
+        assert!(
+            int(a, "have_ms").unwrap() <= int(a, "t_ms").unwrap(),
+            "{a:?}"
+        );
+        assert!(int(a, "timeout_ms").unwrap() > 0, "{a:?}");
+        assert!(a["predicted_ms"].is_empty(), "{a:?}");
+    }
+    let expired = asked.iter().filter(|a| a["outcome"] == "expired").count() as u64;
+    assert_eq!(expired, {
+        let (a, b, c) = r.timeouts(0);
+        a + b + c
+    });
+    for r in asks.iter().filter(|a| a["picked"] == "false") {
+        assert!(
+            r["outcome"].is_empty() && r["timeout_ms"].is_empty(),
+            "{r:?}"
+        );
+        assert!(
+            int(r, "predicted_ms") <= int(r, "predicted_p90_ms"),
+            "{r:?}"
+        );
+    }
+    let meta = std::fs::read_to_string(d.join("series_meta.json")).unwrap();
+    for lost in ["held_lost", "haves_lost", "asks_lost"] {
+        assert!(meta.contains(&format!("\"{lost}\":0")), "{meta}");
+    }
+}
+
+/// Every honest peer's HAVE and answer came once it held the chunk, and
+/// every read's chunk (its frame's) its viewer's node held by then, as
+/// `arrivals` records the holds: the held log of every node, a crashed or
+/// departed one's to its end.
+fn every_read_and_answer_has_its_hold(r: &strims_sim::Report, d: &Path) {
     let swarm = &r.scenario.swarms[0];
     let per = (swarm.options.chunk_size / 1024) as i64;
-    let rows = |t: &str| -> Vec<BTreeMap<String, String>> {
-        let csv = strims_sim::tables::read_table(d, t).unwrap();
-        let mut lines = csv.lines();
-        let head: Vec<&str> = lines.next().unwrap().split(',').collect();
-        lines
-            .map(|l| {
-                head.iter()
-                    .zip(l.split(','))
-                    .map(|(&c, v)| (c.to_owned(), v.to_owned()))
-                    .collect()
-            })
-            .collect()
-    };
-    let int = |r: &BTreeMap<String, String>, c: &str| -> Option<i64> { r[c].parse().ok() };
     // Each node's first hold of each chunk, in each incarnation.
     let mut held: BTreeMap<(i64, i64, i64), i64> = BTreeMap::new();
     let mut first: BTreeMap<(i64, i64), i64> = BTreeMap::new();
-    for a in rows("arrivals") {
+    for a in table_rows(d, "arrivals") {
         let (n, s, i, t) = (
             int(&a, "node"),
             int(&a, "seq"),
@@ -603,7 +689,7 @@ fn request_logs_say_what_they_are(r: &strims_sim::Report, d: &Path) {
     };
     // Every honest peer's HAVE came once it held the chunk, in the
     // incarnation the row names.
-    let haves = rows("haves");
+    let haves = table_rows(d, "haves");
     assert!(!haves.is_empty());
     for h in haves.iter().filter(|h| h["peer_honest"] == "true") {
         let at = hold(h);
@@ -612,53 +698,29 @@ fn request_logs_say_what_they_are(r: &strims_sim::Report, d: &Path) {
             "{h:?} held {at:?}"
         );
     }
-    // Every request rested on its peer's HAVE, before it went; the
-    // honest peers' answers came once they held the chunk; and the
-    // expiries are the runners' timed out requests.
-    let asks = rows("asks");
-    let asked: Vec<_> = asks.iter().filter(|a| a["picked"] == "true").collect();
-    assert!(!asked.is_empty());
-    for a in &asked {
-        assert_eq!(
-            (a["round"].as_str(), a["declares"].as_str()),
-            ("flight", "true"),
-            "{a:?}"
-        );
+    // Every honest peer's answer came once it held the chunk.
+    let asks = table_rows(d, "asks");
+    let answered: Vec<_> = asks
+        .iter()
+        .filter(|a| a["picked"] == "true" && a["outcome"] == "answered")
+        .filter(|a| a["peer_honest"] == "true")
+        .collect();
+    assert!(!answered.is_empty());
+    for a in answered {
+        let at = hold(a);
         assert!(
-            int(a, "have_ms").unwrap() <= int(a, "t_ms").unwrap(),
-            "{a:?}"
-        );
-        assert!(int(a, "timeout_ms").unwrap() > 0, "{a:?}");
-        assert!(a["predicted_ms"].is_empty(), "{a:?}");
-        if a["outcome"] == "answered" && a["peer_honest"] == "true" {
-            let at = hold(a);
-            assert!(
-                at.is_some_and(|at| at <= int(a, "t_outcome_ms").unwrap()),
-                "{a:?} held {at:?}"
-            );
-        }
-    }
-    let expired = asked.iter().filter(|a| a["outcome"] == "expired").count() as u64;
-    assert_eq!(expired, {
-        let (a, b, c) = r.timeouts(0);
-        a + b + c
-    });
-    for r in asks.iter().filter(|a| a["picked"] == "false") {
-        assert!(
-            r["outcome"].is_empty() && r["timeout_ms"].is_empty(),
-            "{r:?}"
-        );
-        assert!(
-            int(r, "predicted_ms") <= int(r, "predicted_p90_ms"),
-            "{r:?}"
+            at.is_some_and(|at| at <= int(a, "t_outcome_ms").unwrap()),
+            "{a:?} held {at:?}"
         );
     }
     // Every read's chunk its viewer's node held by then.
-    let node: BTreeMap<i64, i64> = rows("viewers")
+    let node: BTreeMap<i64, i64> = table_rows(d, "viewers")
         .iter()
         .map(|v| (int(v, "viewer").unwrap(), int(v, "host").unwrap()))
         .collect();
-    for r in rows("reads") {
+    let reads = table_rows(d, "reads");
+    assert!(!reads.is_empty());
+    for r in reads {
         let (v, s, t) = (
             int(&r, "viewer").unwrap(),
             int(&r, "seq").unwrap(),
@@ -666,10 +728,6 @@ fn request_logs_say_what_they_are(r: &strims_sim::Report, d: &Path) {
         );
         let at = first.get(&(node[&v], s / per));
         assert!(at.is_some_and(|&at| at <= t), "{r:?} held {at:?}");
-    }
-    let meta = std::fs::read_to_string(d.join("series_meta.json")).unwrap();
-    for lost in ["held_lost", "haves_lost", "asks_lost"] {
-        assert!(meta.contains(&format!("\"{lost}\":0")), "{meta}");
     }
 }
 

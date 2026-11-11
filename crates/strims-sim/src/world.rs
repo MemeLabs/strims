@@ -20,7 +20,7 @@ use std::time::Duration;
 use strims_base::rng::{DetRng, det_rng};
 use strims_base::time::Time;
 use strims_crypto::key_from_seed;
-use strims_node::config::ParentSink;
+use strims_node::config::{MetricsSink, ParentSink};
 use strims_node::event::ParentInfo;
 use strims_node::{
     ExchangeOutcome, HostId, NetworkId, Node, NodeConfig, NodeMetrics, PpsppCapture, SwarmKey,
@@ -275,6 +275,11 @@ pub(crate) struct World {
     /// holds a sample's at most.
     parent_tx: mpsc::Sender<(HostIx, u32, ParentInfo)>,
     parent_rx: mpsc::Receiver<(HostIx, u32, ParentInfo)>,
+    /// With the tables, the nodes' last snapshots' channel
+    /// ([`NodeConfig::last_metrics`]): a node task sends its own as it
+    /// goes, which [`World::observe_stopped`] takes.
+    stopped_tx: mpsc::Sender<(HostIx, NodeMetrics)>,
+    stopped_rx: mpsc::Receiver<(HostIx, NodeMetrics)>,
     pub st: RefCell<WorldState>,
 }
 
@@ -335,6 +340,7 @@ impl World {
         };
         let send_buffers = spec.wan.and(spec.send_buffer).map(SendBuffers::new);
         let (parent_tx, parent_rx) = mpsc::channel();
+        let (stopped_tx, stopped_rx) = mpsc::channel();
         World {
             seed,
             spec,
@@ -349,6 +355,8 @@ impl World {
             clock_offsets,
             parent_tx,
             parent_rx,
+            stopped_tx,
+            stopped_rx,
             st: RefCell::new(st),
         }
     }
@@ -487,6 +495,10 @@ impl World {
             let tx = self.parent_tx.clone();
             c.parent_log = Some(ParentSink(Arc::new(move |p| {
                 let _ = tx.send((h, incarnation, p));
+            })));
+            let tx = self.stopped_tx.clone();
+            c.last_metrics = Some(MetricsSink(Arc::new(move |m| {
+                let _ = tx.send((h, m));
             })));
         }
         if let Some(dir) = &self.spec.capture {
@@ -1229,6 +1241,42 @@ impl World {
             hs.haves_lost += m.haves_lost;
             hs.requests_lost += m.requests_lost;
         });
+    }
+
+    /// Keeps the last snapshots of the nodes whose task went since the
+    /// last call ([`NodeConfig::last_metrics`]) as a stats sample at `at`:
+    /// the logs ([`World::observe_bins`]; not the bins: a departed host's
+    /// end at its last sample), the counters ([`HostStats`]) and the
+    /// metrics its incarnation's totals take. A crash's, taken as it drops
+    /// the node, before the host's incarnation retires; and once the run
+    /// `ended` at `at` (the simulation dropped every node), those of the
+    /// hosts that departed, which no sample asked since they left. The
+    /// others' ran to the final sample, and what came past it is left out.
+    pub fn observe_stopped(&self, at: Duration, ended: bool) {
+        let stopped: Vec<(HostIx, NodeMetrics)> = self.stopped_rx.try_iter().collect();
+        for (h, mut m) in stopped {
+            if ended && !self.departed(h) {
+                continue;
+            }
+            m.bins.clear();
+            self.observe_bins(h, &m);
+            let live: Vec<bool> = self
+                .spec
+                .swarms
+                .iter()
+                .map(|s| at >= s.start && at <= s.stop)
+                .collect();
+            self.record(|st| {
+                let Some(hs) = st.hosts.get_mut(h) else {
+                    return;
+                };
+                let swarms = std::mem::take(&mut hs.swarms);
+                hs.stats
+                    .observe(&m, &swarms, &live, at, self.clock_at(h, at));
+                hs.swarms = swarms;
+            });
+            self.store_metrics(h, m);
+        }
     }
 
     pub fn store_metrics(&self, h: HostIx, m: NodeMetrics) {
