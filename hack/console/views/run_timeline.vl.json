@@ -1,9 +1,41 @@
 {
+  "hover": {
+    "x": "t_s"
+  },
   "vconcat": [
     {
       "title": "Lag across viewers (playout delays dashed)",
       "width": "container",
       "height": 170,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t_s",
+            "title": "s"
+          },
+          {
+            "field": "p50",
+            "format": ",.0f"
+          },
+          {
+            "field": "p99",
+            "format": ",.0f"
+          },
+          {
+            "field": "max",
+            "format": ",.0f"
+          }
+        ],
+        "transform": [
+          {
+            "pivot": "series",
+            "value": "value",
+            "groupby": [
+              "t_s"
+            ]
+          }
+        ]
+      },
       "transform": [
         {
           "filter": "datum.track === 'lag'"
@@ -44,20 +76,7 @@
                   "max"
                 ]
               }
-            },
-            "tooltip": [
-              {
-                "field": "t_s",
-                "title": "s"
-              },
-              {
-                "field": "series"
-              },
-              {
-                "field": "value",
-                "format": ".0f"
-              }
-            ]
+            }
           }
         },
         {
@@ -128,6 +147,7 @@
       "title": "Each viewer's lag each second (log colour): a block at the left is startup, a stripe a spike",
       "width": "container",
       "height": 200,
+      "hover": {},
       "transform": [
         {
           "filter": "datum.track === 'heat'"
@@ -187,6 +207,7 @@
       "title": "Stalls at the playout delay picked, as long as picked or longer",
       "width": "container",
       "height": 140,
+      "hover": {},
       "transform": [
         {
           "filter": "datum.track === 'stall'"
@@ -240,6 +261,7 @@
       "title": "Verdict: phases, unhealthy seconds, and the episodes",
       "width": "container",
       "height": 64,
+      "hover": {},
       "transform": [
         {
           "filter": "datum.track === 'phase' || datum.track === 'episode'"
@@ -318,6 +340,33 @@
       "title": "The seed's meter and its uplink",
       "width": "container",
       "height": 120,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t_s",
+            "title": "s"
+          },
+          {
+            "field": "capacity",
+            "title": "meter reading",
+            "format": ".2f"
+          },
+          {
+            "field": "avail",
+            "title": "uplink it had",
+            "format": ".2f"
+          }
+        ],
+        "transform": [
+          {
+            "pivot": "series",
+            "value": "value",
+            "groupby": [
+              "t_s"
+            ]
+          }
+        ]
+      },
       "transform": [
         {
           "filter": "datum.track === 'seed'"
@@ -325,8 +374,7 @@
       ],
       "mark": {
         "type": "line",
-        "interpolate": "step-after",
-        "tooltip": true
+        "interpolate": "step-after"
       },
       "encoding": {
         "x": {
@@ -366,6 +414,18 @@
       "title": "The seed's copies",
       "width": "container",
       "height": 70,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t_s",
+            "title": "s"
+          },
+          {
+            "field": "value",
+            "title": "copies"
+          }
+        ]
+      },
       "transform": [
         {
           "filter": "datum.track === 'copies'"
@@ -399,6 +459,7 @@
       "title": "Events (the verdict's in red)",
       "width": "container",
       "height": 160,
+      "hover": {},
       "transform": [
         {
           "filter": "datum.track === 'event'"
@@ -470,14 +531,86 @@
       "title": "Overhead the seed and the viewers wrote, by kind of message",
       "width": "container",
       "height": 150,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t_s",
+            "title": "s"
+          },
+          {
+            "field": "state",
+            "format": ".1f",
+            "filter": {
+              "valid": true
+            }
+          },
+          {
+            "field": "integrity",
+            "format": ".1f",
+            "filter": {
+              "valid": true
+            }
+          },
+          {
+            "field": "header",
+            "format": ".1f",
+            "filter": {
+              "valid": true
+            }
+          },
+          {
+            "field": "ping",
+            "format": ".1f",
+            "filter": {
+              "valid": true
+            }
+          },
+          {
+            "field": "request",
+            "format": ".1f",
+            "filter": {
+              "valid": true
+            }
+          },
+          {
+            "field": "announce",
+            "format": ".1f",
+            "filter": {
+              "valid": true
+            }
+          },
+          {
+            "field": "ack",
+            "format": ".1f",
+            "filter": {
+              "valid": true
+            }
+          },
+          {
+            "field": "have",
+            "format": ".1f",
+            "filter": {
+              "valid": true
+            }
+          }
+        ],
+        "transform": [
+          {
+            "pivot": "series",
+            "value": "value",
+            "groupby": [
+              "t_s"
+            ]
+          }
+        ]
+      },
       "transform": [
         {
           "filter": "datum.track === 'bytes'"
         }
       ],
       "mark": {
-        "type": "area",
-        "tooltip": true
+        "type": "area"
       },
       "encoding": {
         "x": {
@@ -510,27 +643,26 @@
               "have"
             ]
           }
-        },
-        "tooltip": [
-          {
-            "field": "series"
-          },
-          {
-            "field": "t_s",
-            "title": "s"
-          },
-          {
-            "field": "value",
-            "title": "kbit/s",
-            "format": ".1f"
-          }
-        ]
+        }
       }
     },
     {
       "title": "Chunk data the seed and the viewers wrote",
       "width": "container",
       "height": 80,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t_s",
+            "title": "s"
+          },
+          {
+            "field": "value",
+            "title": "data",
+            "format": ",.0f"
+          }
+        ]
+      },
       "transform": [
         {
           "filter": "datum.track === 'data'"
@@ -561,6 +693,19 @@
       "title": "Packets their uplinks sent",
       "width": "container",
       "height": 80,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t_s",
+            "title": "s"
+          },
+          {
+            "field": "value",
+            "title": "packets",
+            "format": ",.0f"
+          }
+        ]
+      },
       "transform": [
         {
           "filter": "datum.track === 'packets'"

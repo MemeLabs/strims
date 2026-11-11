@@ -1,6 +1,6 @@
 {
   "title": "Seed bands",
-  "description": "A cell and arm across its seeds: each second's honest q0.9 lag as bands over the seeds (p10-p90 light, p25-p75 dark, median line, max dotted) and the share of seeds unhealthy then. Align on the stream's start or on each run's first event of a kind (a departure, an uplink step, the verdict's onset or collapse); runs without one are left out.",
+  "description": "A cell and arm across its seeds: each second's honest q0.9 lag as bands over the seeds (p10–p90 light, p25–p75 dark, p50 line, max dotted) and the share of seeds unhealthy then; hovering shows each quantile at the second under the pointer. Align on the stream's start or on each run's first event of a kind (a departure, an uplink step, the verdict's onset or collapse); runs without one are left out.",
   "params": [
     {
       "name": "exp",

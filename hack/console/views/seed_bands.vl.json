@@ -1,14 +1,61 @@
 {
+  "hover": {
+    "x": "t"
+  },
   "vconcat": [
     {
       "title": "Honest q0.9 lag across seeds",
       "width": "container",
       "height": 260,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t",
+            "title": "s"
+          },
+          {
+            "field": "seeds",
+            "title": "runs"
+          },
+          {
+            "field": "p10",
+            "format": ",.0f"
+          },
+          {
+            "field": "p25",
+            "format": ",.0f"
+          },
+          {
+            "field": "p50",
+            "format": ",.0f"
+          },
+          {
+            "field": "p75",
+            "format": ",.0f"
+          },
+          {
+            "field": "p90",
+            "format": ",.0f"
+          },
+          {
+            "field": "max",
+            "format": ",.0f"
+          },
+          {
+            "field": "worst_seed",
+            "title": "worst seed"
+          },
+          {
+            "field": "unhealthy_share",
+            "title": "unhealthy",
+            "format": ".0%"
+          }
+        ]
+      },
       "layer": [
         {
           "mark": {
-            "type": "area",
-            "color": "#cde2fb"
+            "type": "area"
           },
           "encoding": {
             "x": {
@@ -27,13 +74,45 @@
             },
             "y2": {
               "field": "p90"
+            },
+            "color": {
+              "datum": "p10–p90",
+              "type": "nominal",
+              "title": null,
+              "scale": {
+                "domain": [
+                  "p10–p90",
+                  "p25–p75",
+                  "p50",
+                  "max"
+                ],
+                "range": [
+                  "#cde2fb",
+                  "#86b6ef",
+                  "#184f95",
+                  "#d03b3b"
+                ]
+              },
+              "legend": {
+                "encode": {
+                  "symbols": {
+                    "update": {
+                      "shape": {
+                        "signal": "datum.value === 'p50' || datum.value === 'max' ? 'stroke' : 'square'"
+                      },
+                      "strokeDash": {
+                        "signal": "datum.value === 'max' ? [2, 2] : null"
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },
         {
           "mark": {
-            "type": "area",
-            "color": "#86b6ef"
+            "type": "area"
           },
           "encoding": {
             "x": {
@@ -47,13 +126,16 @@
             },
             "y2": {
               "field": "p75"
+            },
+            "color": {
+              "datum": "p25–p75",
+              "type": "nominal"
             }
           }
         },
         {
           "mark": {
-            "type": "line",
-            "color": "#184f95"
+            "type": "line"
           },
           "encoding": {
             "x": {
@@ -64,13 +146,16 @@
             "y": {
               "field": "p50",
               "type": "quantitative"
+            },
+            "color": {
+              "datum": "p50",
+              "type": "nominal"
             }
           }
         },
         {
           "mark": {
             "type": "line",
-            "color": "#d03b3b",
             "strokeDash": [
               2,
               2
@@ -86,45 +171,11 @@
             "y": {
               "field": "max",
               "type": "quantitative"
-            }
-          }
-        },
-        {
-          "mark": {
-            "type": "rule",
-            "opacity": 0
-          },
-          "encoding": {
-            "x": {
-              "field": "t",
-              "type": "quantitative",
-              "title": null
             },
-            "tooltip": [
-              {
-                "field": "t",
-                "title": "s"
-              },
-              {
-                "field": "seeds"
-              },
-              {
-                "field": "p10"
-              },
-              {
-                "field": "p50"
-              },
-              {
-                "field": "p90"
-              },
-              {
-                "field": "max"
-              },
-              {
-                "field": "worst_seed",
-                "title": "worst seed"
-              }
-            ]
+            "color": {
+              "datum": "max",
+              "type": "nominal"
+            }
           }
         },
         {
@@ -195,6 +246,23 @@
       "title": "Share of seeds unhealthy",
       "width": "container",
       "height": 90,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t",
+            "title": "s"
+          },
+          {
+            "field": "unhealthy_share",
+            "title": "unhealthy",
+            "format": ".0%"
+          },
+          {
+            "field": "seeds",
+            "title": "runs"
+          }
+        ]
+      },
       "mark": {
         "type": "area",
         "color": "#fab219",

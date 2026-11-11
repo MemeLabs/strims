@@ -1,9 +1,89 @@
 {
+  "hover": {
+    "x": "t_s"
+  },
   "vconcat": [
     {
       "title": "Lag across viewers (p99 solid, max dashed; playout delays grey)",
       "width": "container",
       "height": 220,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t_s",
+            "title": "s"
+          },
+          {
+            "field": "arms"
+          },
+          {
+            "field": "p50"
+          },
+          {
+            "field": "p99"
+          },
+          {
+            "field": "max"
+          }
+        ],
+        "transform": [
+          {
+            "filter": "datum.track === 'lag'"
+          },
+          {
+            "window": [
+              {
+                "op": "first_value",
+                "field": "arm",
+                "as": "arm_a"
+              },
+              {
+                "op": "last_value",
+                "field": "arm",
+                "as": "arm_b"
+              }
+            ],
+            "sort": [
+              {
+                "field": "arm"
+              }
+            ],
+            "frame": [
+              null,
+              null
+            ]
+          },
+          {
+            "calculate": "datum.series + (datum.arm === datum.arm_a ? '_a' : '_b')",
+            "as": "key"
+          },
+          {
+            "pivot": "key",
+            "value": "value",
+            "groupby": [
+              "t_s",
+              "arm_a",
+              "arm_b"
+            ]
+          },
+          {
+            "calculate": "datum.arm_a === datum.arm_b ? datum.arm_a : datum.arm_a + ' · ' + datum.arm_b",
+            "as": "arms"
+          },
+          {
+            "calculate": "(isValid(datum.p50_a) ? format(datum.p50_a, ',.0f') : '–') + (datum.arm_a === datum.arm_b ? '' : ' · ' + (isValid(datum.p50_b) ? format(datum.p50_b, ',.0f') : '–'))",
+            "as": "p50"
+          },
+          {
+            "calculate": "(isValid(datum.p99_a) ? format(datum.p99_a, ',.0f') : '–') + (datum.arm_a === datum.arm_b ? '' : ' · ' + (isValid(datum.p99_b) ? format(datum.p99_b, ',.0f') : '–'))",
+            "as": "p99"
+          },
+          {
+            "calculate": "(isValid(datum.max_a) ? format(datum.max_a, ',.0f') : '–') + (datum.arm_a === datum.arm_b ? '' : ' · ' + (isValid(datum.max_b) ? format(datum.max_b, ',.0f') : '–'))",
+            "as": "max"
+          }
+        ]
+      },
       "layer": [
         {
           "transform": [
@@ -58,23 +138,7 @@
                   ]
                 ]
               }
-            },
-            "tooltip": [
-              {
-                "field": "arm"
-              },
-              {
-                "field": "series"
-              },
-              {
-                "field": "t_s",
-                "title": "s"
-              },
-              {
-                "field": "value",
-                "format": ".0f"
-              }
-            ]
+            }
           }
         },
         {
@@ -145,6 +209,7 @@
       "title": "Stalls per second at the playout delay",
       "width": "container",
       "height": 110,
+      "hover": {},
       "transform": [
         {
           "filter": "datum.track === 'stalls'"
@@ -173,13 +238,27 @@
         "color": {
           "field": "arm",
           "type": "nominal"
-        }
+        },
+        "tooltip": [
+          {
+            "field": "t_s",
+            "title": "s"
+          },
+          {
+            "field": "arm"
+          },
+          {
+            "field": "value",
+            "title": "stalls"
+          }
+        ]
       }
     },
     {
       "title": "Verdict: unhealthy seconds and collapses",
       "width": "container",
       "height": 70,
+      "hover": {},
       "transform": [
         {
           "filter": "datum.track === 'verdict'"
@@ -231,7 +310,24 @@
             "unhealthy",
             "collapse"
           ]
-        }
+        },
+        "tooltip": [
+          {
+            "field": "arm"
+          },
+          {
+            "field": "series",
+            "title": "verdict"
+          },
+          {
+            "field": "t_s",
+            "title": "from (s)"
+          },
+          {
+            "field": "t2_s",
+            "title": "to (s)"
+          }
+        ]
       }
     }
   ],

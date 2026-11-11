@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """The console's saved views (hack/console/views): each NAME.sql (one
 SELECT over the catalog, its `$name` parameters the view's), NAME.vl.json
-(a Vega-Lite spec of its rows, or none) and NAME.json ({title,
+(a Vega-Lite spec of its rows, or none; its `hover` keys, which the UI
+expands, give time panels a shared hover cursor and tooltips:
+src/devtools/components/console/hover.ts) and NAME.json ({title,
 description, params: [{name, kind, default?, label?, options?}],
 todo?}).
 

@@ -7,6 +7,7 @@ import embed from "vega-embed";
 import type { Result, VisualizationSpec } from "vega-embed";
 
 import type { Json } from "./api";
+import { hovered } from "./hover";
 import { config } from "./theme";
 
 type Spec = Record<string, unknown>;
@@ -58,7 +59,7 @@ const VegaChart: React.FC<VegaChartProps> = ({ spec, rows, onSelect }) => {
     let live = true;
     const full = {
       $schema: "https://vega.github.io/schema/vega-lite/v6.json",
-      ...sized(spec, Math.max(200, width - 180)),
+      ...sized(hovered(spec), Math.max(200, width - 180)),
       data: { values: rows },
       config: { ...config, ...(isSpec(spec.config) ? spec.config : {}) },
     };

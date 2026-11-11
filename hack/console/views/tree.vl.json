@@ -1,9 +1,36 @@
 {
+  "hover": {
+    "x": "t"
+  },
   "vconcat": [
     {
       "title": "Depth from the seed",
       "width": "container",
       "height": 140,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t",
+            "title": "s"
+          },
+          {
+            "field": "mean depth",
+            "format": ".2f"
+          },
+          {
+            "field": "most depth"
+          }
+        ],
+        "transform": [
+          {
+            "pivot": "series",
+            "value": "value",
+            "groupby": [
+              "t"
+            ]
+          }
+        ]
+      },
       "transform": [
         {
           "filter": "datum.part === 'depth' && datum.series !== 'share without a parent'"
@@ -11,8 +38,7 @@
       ],
       "mark": {
         "type": "line",
-        "interpolate": "step-after",
-        "tooltip": true
+        "interpolate": "step-after"
       },
       "encoding": {
         "x": {
@@ -36,6 +62,19 @@
       "title": "Node-streams without a parent",
       "width": "container",
       "height": 70,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t",
+            "title": "s"
+          },
+          {
+            "field": "value",
+            "title": "without a parent",
+            "format": ".0%"
+          }
+        ]
+      },
       "transform": [
         {
           "filter": "datum.part === 'depth' && datum.series === 'share without a parent'"
@@ -66,6 +105,7 @@
       "title": "Parent changes per second, by reason",
       "width": "container",
       "height": 110,
+      "hover": {},
       "transform": [
         {
           "filter": "datum.part === 'change'"
@@ -103,7 +143,21 @@
               "shed"
             ]
           }
-        }
+        },
+        "tooltip": [
+          {
+            "field": "t",
+            "title": "s"
+          },
+          {
+            "field": "series",
+            "title": "reason"
+          },
+          {
+            "field": "value",
+            "title": "changes"
+          }
+        ]
       }
     },
     {
