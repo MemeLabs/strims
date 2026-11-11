@@ -390,6 +390,15 @@ class Commands(Fixture):
         self.assertEqual(code, 2)
         self.assertIn("'nope' is no NAME=VALUE", err)
 
+    def test_a_failing_query_says_why(self):
+        # Both ways a query runs, as a script and with --param, print DuckDB's message and exit 1.
+        self.index()
+        for extra in ([], ["--param", "exp=sf0001"]):
+            code, out, err = self.cli("lake", "SELECT nope FROM experiments", *extra)
+            self.assertEqual((code, out), (1, ""), extra)
+            self.assertTrue(err.startswith("lake: Binder Error: "), err)
+            self.assertNotIn("Traceback", err)
+
     def test_the_saved_views_listed_run_and_refused(self):
         self.index()
         saved = views.saved()

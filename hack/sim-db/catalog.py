@@ -61,7 +61,7 @@ HACK = Path(__file__).resolve().parents[1]
 if str(HACK) not in sys.path:
     sys.path.insert(0, str(HACK))
 
-from simlab import catalog, describe, engine, views  # noqa: E402
+from simlab import catalog, describe, engine, store_host, views  # noqa: E402
 
 # A --param's name: a statement's `$name`.
 PARAM = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -127,7 +127,10 @@ def cmd_lake(a):
             pool.close()
         printed_result(r, a.json)
         return
-    out = catalog.lake(a.query + ("" if a.query.rstrip().endswith(";") else ";"), out="json" if a.json else "text")
+    try:
+        out = catalog.lake(a.query + ("" if a.query.rstrip().endswith(";") else ";"), out="json" if a.json else "text")
+    except store_host.DuckError as e:
+        sys.exit(f"lake: {e}")
     print(json.dumps(out) if a.json else out, end="" if not a.json else "\n")
 
 
