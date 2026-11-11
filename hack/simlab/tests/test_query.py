@@ -430,5 +430,55 @@ class Asks(unittest.TestCase):
         self.assertEqual(query.asks_view("v", "x", "y", {"held_ms"}, set()), "CREATE OR REPLACE VIEW v AS SELECT * FROM x;")
 
 
+
+class Haves(unittest.TestCase):
+    """Main's HAVE log and request log: node 1 hears of chunk 6 from peer 2
+    (its second incarnation held it at 150, its first at 50), from peer 3,
+    which never held it, and from peer 4, which held it before the channel
+    opened; it asks 2 for it, weighing 3 by its route."""
+
+    ARRIVALS = ("(SELECT * FROM (VALUES ('k', 's', 50, 2, 6, 0), ('k', 's', 150, 2, 6, 1), "
+                "('k', 's', 170, 2, 6, 1), ('k', 's', 90, 4, 6, 0)) v(k, src, t_ms, node, seq, incarnation))")
+    HAVES = ("(SELECT * FROM (VALUES ('k', 's', 160, 1, 2, 6, 10, 1), ('k', 's', 180, 1, 3, 6, 10, 0), "
+             "('k', 's', 100, 1, 4, 6, 95, 0)) v(k, src, t_ms, node, peer, seq, channel_open_ms, peer_incarnation))")
+
+    def test_the_tables_are_kept_with_the_samples(self):
+        self.assertIn("haves", store_host.TABLES)
+        self.assertIn("haves", store_host.SAMPLE_TABLES)
+        self.assertIn("knowledge delay", catalog.NORMALIZED["haves"])
+        self.assertIn("'flight'", catalog.NORMALIZED["asks"])
+        self.assertEqual(query.LOGGED["haves"], "haves_log")
+
+    def test_its_view_has_the_announcing_peers_hold_and_the_knowledge_delay(self):
+        cols = {"k", "src", "t_ms", "node", "peer", "seq", "channel_open_ms", "peer_incarnation"}
+        view = query.haves_view("v", self.HAVES, self.ARRIVALS, cols, {"incarnation"})
+        got = query.records(f"{view} SELECT peer, held_ms, delay_ms, live FROM v ORDER BY peer;")
+        self.assertEqual(got, [{"peer": 2, "held_ms": 150, "delay_ms": 10, "live": True},
+                               {"peer": 3, "held_ms": None, "delay_ms": None, "live": False},
+                               {"peer": 4, "held_ms": 90, "delay_ms": 10, "live": False}])
+        none = query.haves_view("v", self.HAVES, self.ARRIVALS, cols, set())
+        self.assertEqual(query.records(f"{none} SELECT count(held_ms) AS n FROM v;"), [{"n": 0}])
+
+    def test_mains_asks_take_the_view_of_the_lines(self):
+        asks = ("(SELECT * FROM (VALUES ('k', 's', 100, 1, 0, 'flight', true, 2, 6, 20, 500, NULL, NULL, NULL, 95, "
+                "10, 0, 1), ('k', 's', 100, 1, 0, 'flight', false, 3, 6, 30, NULL, 130, 170, NULL, NULL, 10, 0, 0)) "
+                "v(k, src, t_ms, node, ask, round, picked, peer, seq, rtt_ms, timeout_ms, predicted_ms, "
+                "predicted_p90_ms, predicted_p99_ms, have_ms, channel_open_ms, since_ms, peer_incarnation))")
+        cols = {"k", "src", "t_ms", "node", "ask", "round", "picked", "peer", "seq", "rtt_ms", "timeout_ms",
+                "predicted_ms", "predicted_p90_ms", "predicted_p99_ms", "have_ms", "channel_open_ms", "since_ms",
+                "peer_incarnation"}
+        view = query.asks_view("v", asks, self.ARRIVALS, cols, {"incarnation"})
+        got = query.records(f"{view} SELECT peer, held_ms, live, err_ms, pred_err_ms, held_by_p50 FROM v "
+                            "ORDER BY peer;")
+        self.assertEqual(got, [{"peer": 2, "held_ms": 150, "live": True, "err_ms": 40, "pred_err_ms": None,
+                                "held_by_p50": None},
+                               {"peer": 3, "held_ms": None, "live": False, "err_ms": None, "pred_err_ms": None,
+                                "held_by_p50": None}])
+
+    def test_the_catalogs_view_is_the_same(self):
+        sql = catalog.view_sql("haves", {"t_ms": "BIGINT"}, "haves", {}, {"incarnation": "BIGINT"})
+        self.assertIn("delay_ms", sql)
+        self.assertIn("h.incarnation = a.peer_incarnation", sql)
+
 if __name__ == "__main__":
     unittest.main()

@@ -1553,6 +1553,9 @@ def view_sql(t, cols, name, viewers, arrivals=None):
     if t == "asks":
         return query.asks_view(f"main.{ident(name)}", f"(SELECT x.* {canon(t)})",
                                f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
+    if t == "haves":
+        return query.haves_view(f"main.{ident(name)}", f"(SELECT x.* {canon(t)})",
+                                f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
     return f"{head} x.* {canon(t)};"
 
 
@@ -1795,13 +1798,23 @@ NORMALIZED = {
             "truth from arrivals, as spec_requests' columns are: held_ms, the peer's first hold of the chunk in "
             "its incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation; "
             "NULL if none), and from it live (held by since_ms and channel_open_ms, in whole ms), err_ms, "
-            "pred_err_ms, held_by_p50, held_by_p90 and held_by_p99.",
+            "pred_err_ms, held_by_p50, held_by_p90 and held_by_p99. Main's (the HAVE world's request log) "
+            "has one round, 'flight'; its predicted_ms and predicted_p90_ms are a rival's route expectation "
+            "(first sight plus its announcement lag's mean, plus its horizon), NULL on the asked row, which a "
+            "HAVE decided; timeout_ms, have_ms (the row's peer's HAVE of the chunk) and released_ms (push's "
+            "release of it to pull) are its own; grace_ms, frontier_seq, hole_seq and state_age_ms are NULL "
+            "there.",
+    "haves": "Main's HAVE log: a row per chunk a HAVE first announced on a channel. The sims write the HAVE "
+             "(haves_log); the view adds held_ms, the announcing peer's first hold of the chunk in its "
+             "incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation; NULL "
+             "if none), delay_ms (t_ms - held_ms: the knowledge delay) and live (held by channel_open_ms: not "
+             "a backlog the channel's first HAVEs announce).",
 }
 STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewers": "k, viewer",
                  "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",
                  "reads": "k, viewer, t_ms", "forecast": "k, node, peer, seq",
                  "stalls": "k, viewer, delay_ms, t_ms", "parents": "k, node, stream, t_ms",
-                 "asks": "k, node, ask, peer"}
+                 "asks": "k, node, ask, peer", "haves": "k, node, peer, seq"}
 STANDARD_JOINS = {"seconds": "jobs USING (k, src); verdict_seconds USING (k, src, sec)",
                   "viewer_seconds": "viewers USING (k, src, viewer)", "reads": "viewers USING (k, src, viewer)",
                   "events": "viewers USING (k, src, node)", "node_bins": "viewers USING (k, src, node)",
@@ -1809,7 +1822,10 @@ STANDARD_JOINS = {"seconds": "jobs USING (k, src); verdict_seconds USING (k, src
                   "parents": "viewers USING (k, src, node)", "viewers": "reads, viewer_seconds, stalls USING (k, src, viewer)",
                   "asks": "viewers USING (k, src, node); spec_requests USING (k, src, t_ms, node, peer, seq) for "
                           "round 'spec' AND picked; arrivals ON (k, src) and arrivals.node = asks.peer, seq, "
-                          "arrivals.incarnation = asks.peer_incarnation (the peer's holds, the view's truth)"}
+                          "arrivals.incarnation = asks.peer_incarnation (the peer's holds, the view's truth)",
+                  "haves": "viewers USING (k, src, node); arrivals ON (k, src) and arrivals.node = haves.peer, seq, "
+                           "arrivals.incarnation = haves.peer_incarnation (the peer's holds, the view's truth); "
+                           "asks ON (k, src, node, peer, seq) for a request's knowledge"}
 VERDICT_DOCS = {
     "onset": "the first second a trigger held (trees, delivery or latency), NULL if none",
     "trees": "the first second of TREES_SECS with the smoothed hit share under TREES_SHARE",

@@ -39,11 +39,14 @@ the views keeping the files' own.
 The decision log's view, asks, is the table as the sims write it
 (asks_log: what each request was decided on) with its truth, the peers'
 holds joined from arrivals, as spec_requests' columns hold theirs
-(asks_view, which makes the catalog's asks view too).
+(asks_view, which makes the catalog's asks view too). The HAVE log's
+view, haves, is main's table as written (haves_log) with the announcing
+peer's hold from arrivals and the knowledge delay from it (haves_view).
 
 and the selection's parts, which other modules use too:
 
   asks_view(name, asks, arrivals, asks_cols, arrivals_cols) -> sql
+  haves_view(name, haves, arrivals, haves_cols, arrivals_cols) -> sql
   columns(paths) -> {column}
   sources(patterns) -> [src]          (simlab.store's)
   reused(srcs, stored) -> (sql | None, [src])
@@ -400,13 +403,16 @@ def views(sel, derived=True, fetch=True, say=None):
                                                          "union_by_name=true);")}
                 if "host" in got:
                     cols = "x.* REPLACE (coalesce(x.node, x.host) AS node)" if "node" in got else "x.*, x.host AS node"
-            view = "asks_log" if t == "asks" else t
+            view = LOGGED.get(t, t)
             sql.append(f"CREATE VIEW {view} AS SELECT {cols} FROM read_parquet({plist(f)}, union_by_name=true) x "
                        "SEMI JOIN runs USING (k, src);")
             have.add(t)
     if "asks" in have:
         sql.append(asks_view("asks", "asks_log", "arrivals", columns(files(srcs, "asks")),
                              columns(files(srcs, "arrivals"))))
+    if "haves" in have:
+        sql.append(haves_view("haves", "haves_log", "arrivals", columns(files(srcs, "haves")),
+                              columns(files(srcs, "arrivals"))))
     if derived:
         for t in JUDGED:
             if f := derived_files(t, srcs):
@@ -437,6 +443,45 @@ ASK_TRUTH = {
 }
 
 
+# The tables whose views add their truth, and the views of the tables as
+# the sims write them.
+LOGGED = {"asks": "asks_log", "haves": "haves_log"}
+
+# A HAVE's truth, from h.held_ms: the announcing peer's first hold of the
+# chunk in its incarnation then; the knowledge delay, from that hold to
+# the HAVE's arrival; live, held after the channel opened (an arrival the
+# HAVE tracked, not a backlog the channel's first HAVEs announce).
+HAVE_TRUTH = {
+    "held_ms": "h.held_ms",
+    "delay_ms": "a.t_ms - h.held_ms",
+    "live": "coalesce(h.held_ms >= a.channel_open_ms, false)",
+}
+
+
+def held_relation(arrivals, arrivals_cols):
+    """Each (k, src, node, seq, incarnation)'s first hold, `held_ms`, of the
+    `arrivals` relation (columns `arrivals_cols`); none without
+    `incarnation`."""
+    if "incarnation" in arrivals_cols:
+        return f"SELECT k, src, node, seq, incarnation, min(t_ms) AS held_ms FROM {arrivals} GROUP BY ALL"
+    return ("SELECT NULL::VARCHAR AS k, NULL::VARCHAR AS src, NULL::BIGINT AS node, NULL::BIGINT AS seq, "
+            "NULL::BIGINT AS incarnation, NULL::BIGINT AS held_ms WHERE false")
+
+
+def haves_view(name, haves, arrivals, haves_cols, arrivals_cols):
+    """The statement making view `name`: main's HAVE log `haves` (a
+    relation of the table as the sims write it, its columns `haves_cols`)
+    with HAVE_TRUTH from the announcing peer's first hold of the chunk in
+    its incarnation at the HAVE, the `arrivals` relation's earliest row
+    (columns `arrivals_cols`) of node = peer, seq and incarnation =
+    peer_incarnation: held_ms, delay_ms (the HAVE's arrival less it) and
+    live. NULL, live false, without such a hold."""
+    truth = ", ".join(f"{e} AS {c}" for c, e in HAVE_TRUTH.items())
+    return (f"CREATE OR REPLACE VIEW {name} AS SELECT a.*, {truth} FROM {haves} a LEFT JOIN "
+            f"({held_relation(arrivals, arrivals_cols)}) h ON h.k = a.k AND h.src = a.src AND h.node = a.peer "
+            "AND h.seq = a.seq AND h.incarnation = a.peer_incarnation;")
+
+
 def asks_view(name, asks, arrivals, asks_cols, arrivals_cols):
     """The statement making view `name`: the decision log `asks` (a
     relation of the table as the sims write it, its columns `asks_cols`)
@@ -452,10 +497,7 @@ def asks_view(name, asks, arrivals, asks_cols, arrivals_cols):
     older asks, without peer_incarnation) keeps it."""
     if "peer_incarnation" not in asks_cols:
         return f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM {asks};"
-    held = (f"SELECT k, src, node, seq, incarnation, min(t_ms) AS held_ms FROM {arrivals} GROUP BY ALL"
-            if "incarnation" in arrivals_cols else
-            "SELECT NULL::VARCHAR AS k, NULL::VARCHAR AS src, NULL::BIGINT AS node, NULL::BIGINT AS seq, "
-            "NULL::BIGINT AS incarnation, NULL::BIGINT AS held_ms WHERE false")
+    held = held_relation(arrivals, arrivals_cols)
     own = [c for c in ASK_TRUTH if c in asks_cols]
     star = "a.*" + (f" EXCLUDE ({', '.join(own)})" if own else "")
     truth = ", ".join((f"coalesce(a.{c}, {e})" if c in own else e) + f" AS {c}" for c, e in ASK_TRUTH.items())
@@ -487,7 +529,7 @@ def need(have, *tables):
                       + (" (nor does S3: run with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1)"
                          if "forecast" in missing else "")
                       + (" (run with SIM_SPEC=1 / STRIMS_SIM_SPEC=1)"
-                         if {"spec_requests", "parks"} & set(missing) else ""))
+                         if {"spec_requests", "parks", "asks", "haves"} & set(missing) else ""))
 
 
 # Columns a table's era may lack, NULL in the queries over it where it

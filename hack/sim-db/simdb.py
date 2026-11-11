@@ -33,7 +33,7 @@ statement's `$name`s, and `view` runs one of the console's saved views
 by name. `sql` and the queries after it read a selection of the cache's
 runs instead (`--src`, `--cell`, `--arm`, `--seed`), for the deep dives
 into a few runs: they pull the bulky sample tables (reads, forecast,
-arrivals, asks) from S3 where the cache lacks them (`sql --reads`), and
+arrivals, asks, haves) from S3 where the cache lacks them (`sql --reads`), and
 the catalog holds only those the cache has (`fetch --tables` brings an
 experiment's in). The selections and queries are hack/simlab/query.py's
 and the cache's pulls hack/simlab/store.py's, in the duckdb module: every
@@ -154,7 +154,24 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   live (held by since_ms and channel_open_ms, in whole
                   ms), err_ms, pred_err_ms, held_by_p50, held_by_p90,
                   held_by_p99. The asked rows of round spec are
-                  spec_requests' rows
+                  spec_requests' rows. Main's (the HAVE world's request
+                  log): round flight only, predicted_ms and
+                  predicted_p90_ms a rival's route expectation (NULL on
+                  the asked row, which a HAVE decided), outcome answered,
+                  expired, elsewhere or closed, and its own timeout_ms
+                  (the asked row's), have_ms (the row's peer's HAVE of the
+                  chunk) and released_ms (push released it to pull);
+                  grace_ms, frontier_seq, hole_seq, state_age_ms NULL
+  haves           main's, with SIM_SPEC=1 / STRIMS_SIM_SPEC=1 (large),
+                  every chunk a HAVE first announced to a node on a
+                  channel: t_ms (the HAVE arrived), node, honest, peer,
+                  peer_honest, stream, seq, channel_open_ms,
+                  peer_incarnation. The view adds held_ms (the peer's
+                  first hold in that incarnation, from arrivals, as asks'),
+                  delay_ms (t_ms - held_ms: the knowledge delay) and live
+                  (held by channel_open_ms); the table as written is sql's
+                  haves_log, the lake's raw.haves. forecast's HAVE samples
+                  are a capped subset of these HAVEs
   forecast        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 (large), in
                   either of two schemas, told apart by their columns: the
                   arrival models' predictions (a row per neighbour per
@@ -188,7 +205,7 @@ writes (`ADD COLUMN IF NOT EXISTS`); folding a job again replaces it.
 invocation's store into the cache, `<main checkout>/target/sim-db/cache/`
 (suite/<worktree>/<invocation>/), which every worktree shares; the farm
 puts its instances' flushes in S3, and `pull` copies a run's into the
-cache (farm/<run>/...). Its reads, forecast, arrivals and asks logs (the
+cache (farm/<run>/...). Its reads, forecast, arrivals, asks and haves logs (the
 bulky tables, sim-samples/) come with `--reads`: the whole run's, or
 with `--cell`, `--arm` and `--seed` only the flushes holding those jobs
 (the manifests' keys; a job held twice, a verify copy, from the fewest
@@ -364,10 +381,11 @@ cell (a key the farm reused counts in each of its cells). USING (k) joins
 the same rows but keeps both `src` columns, to name as runs.src. Beside
 (k, src) the views join on their own columns: reads and viewer_seconds to
 viewers USING (k, src, viewer), as stalls does; events, parents, node_bins,
-forecast, arrivals, spec_requests, parks and asks to viewers USING (k, src,
+forecast, arrivals, spec_requests, parks, asks and haves to viewers USING (k, src,
 node) (`node` in both sims; strims-sim's viewers also name it `host`),
-and asks to arrivals on the peer's holds (arrivals.node = asks.peer, seq,
-arrivals.incarnation = asks.peer_incarnation: the view's truth); seconds
+and asks and haves to arrivals on the peer's holds (arrivals.node =
+asks.peer, seq, arrivals.incarnation = asks.peer_incarnation, as haves':
+the views' truth); seconds
 to verdict_seconds USING (k, src, sec) (macros.sql's `sec`).
 runs' frames and bytes are its row's: beside viewer_seconds' frames, name
 them runs.frames and runs.bytes.
@@ -484,7 +502,7 @@ def main():
                                "--reads (lake: the whole catalog)", description=SQL_DOC, formatter_class=raw)
     qs["sql"].add_argument("query")
     qs["sql"].add_argument("--reads", action="store_true",
-                           help="pull the selection's reads, forecast, arrivals and asks logs first, where the "
+                           help="pull the selection's reads, forecast, arrivals, asks and haves logs first, where the "
                                 "cache lacks them")
     qs["pooled"] = sub.add_parser("pooled")
     qs["pooled"].add_argument("--by", choices=("none", "phase", "bin", "viewer"), default="none")
@@ -535,7 +553,7 @@ def main():
     p = sub.add_parser("pull")
     p.add_argument("--run", required=True)
     p.add_argument("--reads", action="store_true",
-                   help="the reads, forecast, arrivals and asks logs too (sim-samples/)")
+                   help="the reads, forecast, arrivals, asks and haves logs too (sim-samples/)")
     p.add_argument("--cell", action="append", help="only these cells' reads, globs")
     p.add_argument("--arm", action="append", help="only these arms' reads, globs")
     p.add_argument("--seed", action="append", type=int, help="only these seeds' reads")

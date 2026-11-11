@@ -138,9 +138,9 @@ class Execute(Scratch):
 class FoldExport(Scratch):
     def jobs(self):
         """golden_cli's jobs, written as the sims write them, with the
-        speculative requests', parks', arrivals' and asks' tables
+        speculative requests', parks', arrivals', asks' and haves' tables
         golden_cli's don't write: the ppspp sim's, then strims-sim's (whose
-        viewers add host and name, and whose reads and asks are
+        viewers add host and name, and whose reads, asks and haves are
         zstd-compressed, `<table>.csv.zst`, as the sims write their large
         tables), then a job folded again."""
         jobs = [golden_cli.job_dir(self.dir / "jobs" / f"{i:02d}", j) for i, j in enumerate(golden_cli.JOBS)]
@@ -158,8 +158,11 @@ class FoldExport(Scratch):
                                                ("round", "VARCHAR"), ("picked", "BOOLEAN"), ("peer", "BIGINT"),
                                                ("seq", "BIGINT")],
                                    [(900 + n, 1, 0, "flight", True, 2, 6)])
+            golden_cli.write_table(d, "haves", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
+                                                ("seq", "BIGINT"), ("peer_incarnation", "BIGINT")],
+                                   [(890 + n, 1, 2, 6, 0)])
             if j["sim"].startswith("strims-sim"):
-                for t in ("reads", "asks"):
+                for t in ("reads", "asks", "haves"):
                     csv = d / f"{t}.csv"
                     (d / f"{t}.csv.zst").write_bytes(zstd.compress(csv.read_bytes()))
                     csv.unlink()
@@ -199,6 +202,8 @@ class FoldExport(Scratch):
         self.assertIn(9.5, runs["wall_s"])
         # Each job's asks row, the compressed ones' too.
         cols, rows = parquet(self.dir / "module" / "asks.parquet")
+        self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(runs["k"]))
+        cols, rows = parquet(self.dir / "module" / "haves.parquet")
         self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(runs["k"]))
 
     def test_an_empty_store_exports_nothing(self):
