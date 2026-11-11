@@ -118,7 +118,7 @@ lacks):
                     seconds a viewer wasn't there; events' `detail` also as
                     a MAP where it is key=value; -1 for none or no reading
                     NULL
-  verdicts, verdict_seconds, episodes, derived_events
+  verdicts, verdict_seconds, episodes, derived_events, viewer_phases
                     analyze.py's verdicts, of the current verdict_version
                     (catalog_info); <table>_all holds every version kept
   metric_defs, job_metrics, job_runs, t975
@@ -153,7 +153,9 @@ are `experiment_jobs e JOIN reads USING (k, src) WHERE e.exp_id = ...`.
 arms and seeds. Beside them the tables join on their own columns: reads,
 viewer_seconds and stalls to viewers USING (k, src, viewer); events,
 node_bins, parents and forecast to viewers USING (k, src, node); seconds
-to verdict_seconds USING (k, src, sec).
+to verdict_seconds USING (k, src, sec); a viewer's second (viewer_seconds,
+a read's t_ms // 1000) to viewer_phases ON (k, src, viewer) with start <=
+sec < stop, its phase.
 
   SELECT e.cell, e.arm_label, count(*) AS runs, sum(v.collapsed::INT) AS collapsed
   FROM experiment_jobs e JOIN verdicts v USING (k, src)
@@ -217,8 +219,11 @@ SIMS = {"ppspp": "ppspp", "strims-ppspp:sim": "ppspp", "strims-sim": "strims-sim
 # The sims' tables that are a job's ids and times, not readings: kept as
 # they are where -1 elsewhere is no reading.
 ID_COLS = {"k", "src", "sec", "bin", "t_ms", "t_us", "node", "viewer", "seq", "stream"}
+# The verdicts' tables (verdict.derive's): a source's verdicts and its
+# derived tables.
+VERDICT_TABLES = ("verdicts", *verdict.DERIVED)
 # Written tables whose small files the index merges.
-WRITTEN = ("rows", "verdicts", "verdict_seconds", "episodes", "derived_events", "farm_index", "fields")
+WRITTEN = ("rows", *VERDICT_TABLES, "farm_index", "fields")
 NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 
 q, ident = store_host.q, store_host.ident
@@ -1045,7 +1050,7 @@ def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of,
     meta, parsed = metadata_sql(ins, ins_changed, kind_of, cols, tmp)
     sql += meta
     sql += sources_sql(cache, failed, version, tmp)
-    for t in ("verdicts", "verdict_seconds", "episodes", "derived_events"):
+    for t in VERDICT_TABLES:
         if t in cols:
             sql.append(f"DELETE FROM raw.{t} WHERE src NOT IN (SELECT src FROM raw.sources);")
     sql.append("DELETE FROM raw.inputs;")
@@ -1526,12 +1531,10 @@ def view_sql(t, cols, name, viewers, arrivals=None):
 # sim_<table> then).
 OWN = {"experiments", "experiment_cells", "experiment_jobs", "exp_runs", "jobs", "commits", "costs", "s3",
        "availability", "rows", "scalars", "catalog_info", "metric_catalog", "event_kinds", "table_catalog",
-       "verdicts", "verdict_seconds", "episodes", "derived_events", "verdicts_all", "verdict_seconds_all",
-       "episodes_all", "derived_events_all"}
+       *VERDICT_TABLES, *(f"{t}_all" for t in VERDICT_TABLES)}
 # The raw tables that aren't sims' tables.
 META = {"sources", "files", "fields", "inputs", "info", "runs", "rows", "scalars", "farm_index", "suite_runs",
-        "suite_cells", "matrices", "costs", "s3_ledger", "bin_hashes", "verdicts", "verdict_seconds",
-        "episodes", "derived_events", "tier_cells"}
+        "suite_cells", "matrices", "costs", "s3_ledger", "bin_hashes", *VERDICT_TABLES, "tier_cells"}
 
 
 def sim_tables(cols):
@@ -1559,7 +1562,7 @@ def main_sql(cols, version, tmp, ins, parsed):
     for t in ("rows", "scalars"):
         if t in cols:
             out.append(f"CREATE OR REPLACE VIEW main.{t} AS SELECT x.* {canon(t)};")
-    for t in ("verdicts", "verdict_seconds", "episodes", "derived_events"):
+    for t in VERDICT_TABLES:
         if t in cols:
             out.append(f"CREATE OR REPLACE VIEW main.{t}_all AS SELECT x.* {canon(t)};")
             out.append(f"CREATE OR REPLACE VIEW main.{t} AS SELECT * FROM main.{t}_all "
@@ -1756,6 +1759,16 @@ TABLE_DOCS = {
     "derived_events": (
         "view", "a job's derived event", "k, sec, kind", "jobs USING (k, src)",
         f"analyze.events, the vocabulary's derived kinds (event_kinds' sim 'derived'): {derived_text()}."),
+    "viewer_phases": (
+        "view", "a viewer's span of one phase", "k, viewer, start",
+        "jobs USING (k, src); viewer_seconds, reads (t_ms // 1000) and stalls ON (k, src, viewer) with start <= "
+        "sec < stop",
+        "Each viewer's phases (analyze.viewer_phases), the one source of a viewer-second's phase: [start, stop) "
+        "seconds in phase, from its join's second (0 for a viewer there from the start) to its departure's, "
+        "within the verdict's seconds. A viewer is in startup until its own startup ends (analyze.presence: the "
+        "run's startup for one there from the start, its first frame's second plus JOIN_GRACE_SECS for one that "
+        "arrived later), then in its second's verdict_seconds phase. Every viewer's, the hostile too "
+        "(viewers.hostile)."),
     "catalog_info": (
         "view", "a setting", "key", "",
         "The catalog's versions (catalog_version, verdict_version: the current verdicts', analyze's "
@@ -1911,14 +1924,14 @@ def catalogs_sql(cols, tmp):
                 plain.setdefault(f, (better, kind, tie, name))
     recs = []
     names = {"rows": "rows", **sim_tables(cols)}
-    for t, view in [*names.items(), *((v, v) for v in ("verdicts", "verdict_seconds", "episodes", "derived_events"))]:
+    for t, view in [*names.items(), *((v, v) for v in VERDICT_TABLES)]:
         for c in cols.get(t, {}):
             if c in ("k", "src"):
                 continue
             by = col_docs.get((t, c), {})
             desc = (rdocs.get(c) if t == "rows" else
                     (VERDICT_DOCS.get(c) or mdocs.get(c) or mdocs.get(c.replace("_censored", "")))
-                    if t in ("verdicts", "verdict_seconds", "episodes", "derived_events") else
+                    if t in VERDICT_TABLES else
                     ("; ".join(f"{s}: {d}" for s, d in sorted(by.items())) if len(set(by.values())) > 1
                      else next(iter(by.values()), None))) or rdocs.get(c)
             better, kind, tie, metric = plain.get(c, (None, None, None, None))
@@ -2045,7 +2058,7 @@ def scoring_consts(suite=None):
     z, g = t975_expansion()
     return {"guard_ratio": s.GUARD_RATIO, "lag_ceiling": a.DELIVERY_TARGET_MS,
             "delay_target_ms": a.DELIVERY_TARGET_MS, "delay_max_ms": a.DELIVERY_MAX_MS,
-            "join_grace_secs": a.JOIN_GRACE_SECS, "t975_df": T975_DF, "t975_z": double(z),
+            "t975_df": T975_DF, "t975_z": double(z),
             **{f"t975_g{i}": double(c) for i, c in enumerate(g, 1)}}
 
 

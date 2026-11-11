@@ -59,7 +59,9 @@ coming and going, onset, recovery, collapses), `episodes` its healthy,
 unhealthy and collapse spells, and `run_metrics` sums them up per run
 (collapses, flaps, dwell times, onset after a drop, recovery after a
 rise, excess lag, the lag's oscillation). VERDICT_VERSION hashes all of
-it, so the tables made under another are stale.
+it, so the tables made under another are stale. `viewer_phases` gives
+each viewer's seconds their phase by the same rule, from `presence` and
+`phases`: its own startup, then the second's.
 
 The verdicts are stdlib alone: hack/capture/analyze.py re-exports their
 names, and its capture tools run under the plain python3. The derived
@@ -79,8 +81,9 @@ store_host.duck (the DuckDB CLI, or the executor installed):
                  them), their directories' `v=`
   derive_source(src)
                  the derived tables (verdicts, verdict_seconds, episodes,
-                 derived_events) of cache source `src` where it lacks
-                 them, in this process, under a lock of the source's own
+                 derived_events, viewer_phases) of cache source `src`
+                 where it lacks them, in this process, under a lock of
+                 the source's own
   derive(sources, workers=None, progress=None) -> Derived
                  derive_source of each source, in a pool of `workers`
                  processes (half the cores by default, at most 8; 0 for
@@ -398,6 +401,28 @@ def phases(s, v):
     return out
 
 
+def viewer_phases(s, v):
+    """Each viewer's phases, every viewer's (the hostile too): (viewer,
+    phase, start, stop), its seconds start <= k < stop in one phase, in
+    order. A viewer's seconds run from its join's second (`presence`'s
+    join; 0 for one there from the start) to its departure's, which it was
+    there part of (`presence`'s until), within the verdict's seconds: in
+    `startup` until its own startup ends (`presence`'s since), then in the
+    second's phase (`phases`). `viewer` is the series' `viewer` id, else
+    its place in the series."""
+    ph = phases(s, v)
+    ids = s.get("viewer") or range(len(s["frames"]))
+    out = []
+    for i, (join, since, until) in zip(ids, presence(s)):
+        for k in range(join or 0, min(len(ph), until + 1)):
+            p = "startup" if k < since else ph[k]
+            if out and out[-1][0] == i and out[-1][1] == p and out[-1][3] == k:
+                out[-1][3] = k + 1
+            else:
+                out.append([i, p, k, k + 1])
+    return [tuple(x) for x in out]
+
+
 def events(s, v):
     """A run's events, (second from the stream's start, kind, value): its
     `start`; the seed's uplink steps (`seed_down`, `seed_up`, the new
@@ -572,9 +597,10 @@ def plist(paths):
 def series_of(meta, seconds, viewer_seconds, stays=None):
     """A run's series as its row's `series` has it, from its tables: the
     meta's fields, each `seconds` column (a list by second), and per viewer
-    `lag` and `frames`; with `stays` (the viewers table's rows: viewer,
-    arrive_ms, depart_ms), per viewer `arrive_ms` and `depart_ms`, the
-    stays presence reads (None for a departure that didn't come)."""
+    in the order of their ids `viewer` (its id), `lag` and `frames`; with
+    `stays` (the viewers table's rows: viewer, arrive_ms, depart_ms), per
+    viewer `arrive_ms` and `depart_ms`, the stays presence reads (None for
+    a departure that didn't come)."""
     if not seconds:
         return None
     # A row's series leaves `hostile` out without any.
@@ -596,6 +622,7 @@ def series_of(meta, seconds, viewer_seconds, stays=None):
             if 0 <= k < n:
                 out[k] = x
         return out
+    s["viewer"] = [r["viewer"] for r in by]
     s["lag"] = [by_sec(r, "lag") for r in by]
     s["frames"] = [by_sec(r, "frames") for r in by]
     if stays:
@@ -667,6 +694,8 @@ DERIVED = {
     "episodes": {"k": "VARCHAR", "src": "VARCHAR", "kind": "VARCHAR", "start": "BIGINT", "stop": "BIGINT",
                  "len": "BIGINT"},
     "derived_events": {"k": "VARCHAR", "src": "VARCHAR", "sec": "DOUBLE", "kind": "VARCHAR", "value": "DOUBLE"},
+    "viewer_phases": {"k": "VARCHAR", "src": "VARCHAR", "viewer": "BIGINT", "phase": "VARCHAR", "start": "BIGINT",
+                      "stop": "BIGINT"},
 }
 # derived_events' kinds (events'): the vocabulary's derived ones, in its
 # order, none of them the sims'.
@@ -722,6 +751,7 @@ def derive_source(src):
                                                v["hit_share"][sec], v["delivery_share"][sec], v["lag_q"][sec]])
             out["episodes"] += [[k, src, kind, x, y, y - x] for kind, x, y in episodes(v)]
             out["derived_events"] += [[k, src, t, kind, value] for t, kind, value in events(s, v)]
+            out["viewer_phases"] += [[k, src, *span] for span in viewer_phases(s, v)]
             verdicts.append([k, src, v["onset"], v["trees"], v["delivery"], v["latency"], v["recovered"],
                              v["absorbing"], str(v["feasible"]), v["unhealthy"], v["lag_p50"], v["lag_max"],
                              collapsed(v), run_startup(v)] + [m[n] for n in metric_names])
@@ -759,7 +789,7 @@ def write_table(path, cols, data):
 
 # The code that writes the derived tables, whose source derived_version
 # hashes.
-DERIVE_CODE = (derive_source, write_table)
+DERIVE_CODE = (derive_source, write_table, viewer_phases)
 
 
 # --- a pool of derives ----------------------------------------------------------------

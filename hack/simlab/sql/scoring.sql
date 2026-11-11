@@ -326,11 +326,8 @@ CREATE OR REPLACE MACRO viewer_lag_of(jobs) AS TABLE
 --                            seconds of each phase (startup, steady,
 --                            after_down, after_up), pooled over the runs:
 --                            viewer_lag_of's carried lag. A second's phase
---                            is its verdict's (verdict_seconds), but
---                            startup until the viewer's own startup ends
---                            (analyze.presence: its first frame's second
---                            plus @{join_grace_secs} for one that arrived
---                            later);
+--                            is the viewer's (viewer_phases: its own
+--                            startup, then its verdict's);
 --   spike_s_<D>              per run, the seconds past startup, the run's
 --                            and its own, in which an honest viewer lags
 --                            past D ms: a player D behind would stall then;
@@ -341,20 +338,16 @@ CREATE OR REPLACE MACRO viewer_lag_of(jobs) AS TABLE
 --   unhealthy_p50_s          run, and the median of each run's longest;
 -- for D in @{delay_target_ms} and @{delay_max_ms} (analyze.py's
 -- DELIVERY_TARGET_MS and DELIVERY_MAX_MS).
+-- needs: viewer_phases
 CREATE OR REPLACE MACRO dynamics(exp_name) AS TABLE
     WITH ej AS (
         SELECT DISTINCT cell, arm_label, k, src, matrix FROM experiment_jobs WHERE exp_id = exp_name),
     lags AS (
         FROM viewer_lag_of((SELECT list({'k': k}) FROM experiment_jobs WHERE exp_id = exp_name))),
-    since AS (
-        SELECT k, src, viewer,
-               CASE WHEN arrive_ms IS NULL THEN 0
-                    ELSE coalesce(min(sec) FILTER (WHERE frames > 0 AND sec >= arrive_ms // 1000), arrive_ms // 1000)
-                         + @{join_grace_secs} END AS since
-        FROM lags GROUP BY k, src, viewer, arrive_ms),
     phased AS (
-        SELECT c.*, CASE WHEN c.sec < s.since THEN 'startup' ELSE p.phase END AS phase
-        FROM lags c JOIN since s USING (k, src, viewer) JOIN verdict_seconds p USING (k, src, sec)),
+        SELECT c.*, p.phase
+        FROM lags c JOIN viewer_phases p ON p.k = c.k AND p.src = c.src AND p.viewer = c.viewer
+                                         AND c.sec >= p.start AND c.sec < p.stop),
     lagq AS (
         SELECT e.cell, e.arm_label,
                quantile_cont(p.lag_ms, 0.99) FILTER (WHERE p.phase = 'startup') AS lag_p99_startup_ms,

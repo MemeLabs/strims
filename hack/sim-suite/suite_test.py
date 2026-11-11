@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS viewers (k VARCHAR, src VARCHAR, viewer BIGINT, node 
     hostile BOOLEAN);
 CREATE TABLE IF NOT EXISTS viewer_seconds (k VARCHAR, src VARCHAR, viewer BIGINT, sec BIGINT, lag_ms DOUBLE,
     frames BIGINT);
-CREATE TABLE IF NOT EXISTS verdict_seconds (k VARCHAR, src VARCHAR, sec BIGINT, phase VARCHAR);
+CREATE TABLE IF NOT EXISTS viewer_phases (k VARCHAR, src VARCHAR, viewer BIGINT, phase VARCHAR, start BIGINT,
+    stop BIGINT);
 CREATE TABLE IF NOT EXISTS episodes (k VARCHAR, src VARCHAR, kind VARCHAR, len BIGINT);
 CREATE TABLE IF NOT EXISTS events (k VARCHAR, src VARCHAR, t_ms DOUBLE, kind VARCHAR, node BIGINT);
 CREATE TABLE IF NOT EXISTS event_kinds (kind VARCHAR, sim VARCHAR, class VARCHAR, scope VARCHAR, replaced_by VARCHAR);
@@ -285,6 +286,18 @@ class Dynamics(unittest.TestCase):
             for k in ("k3", "k4"):
                 vs.append((k, 0, sec, 100, 1))
         phase = lambda k, sec: ("startup" if sec < 15 else "after_down" if k == "k2" and sec >= 20 else "steady")
+        # Each viewer's phases (verdict.viewer_phases): the run's, but
+        # viewer 1's own startup from its join at 5 s to its first read's
+        # second plus JOIN_GRACE_SECS.
+        spans = []
+        for k, v, join, since in [("k1", 0, 0, 0), ("k1", 1, 5, 17), ("k1", 2, 0, 0), ("k2", 0, 0, 0),
+                                  ("k3", 0, 0, 0), ("k4", 0, 0, 0)]:
+            for sec in range(join, 30):
+                p = "startup" if sec < since else phase(k, sec)
+                if spans and spans[-1][:3] == [k, v, p] and spans[-1][4] == sec:
+                    spans[-1][4] = sec + 1
+                else:
+                    spans.append([k, v, p, sec, sec + 1])
         lit = lambda x: "NULL" if x is None else repr(x)
         sql = [
             "CREATE SCHEMA raw;",
@@ -309,9 +322,9 @@ class Dynamics(unittest.TestCase):
             "CREATE TABLE viewer_seconds AS SELECT * FROM (VALUES "
             + ", ".join(f"('{k}', 's', {v}, {sec}, {lit(lag)}, {f})" for k, v, sec, lag, f in vs)
             + ") v(k, src, viewer, sec, lag_ms, frames);",
-            "CREATE TABLE verdict_seconds AS SELECT * FROM (VALUES "
-            + ", ".join(f"('{k}', 's', {sec}, '{phase(k, sec)}')" for k in ("k1", "k2", "k3", "k4") for sec in range(30))
-            + ") v(k, src, sec, phase);",
+            "CREATE TABLE viewer_phases AS SELECT * FROM (VALUES "
+            + ", ".join(f"('{k}', 's', {v}, '{p}', {a}, {b})" for k, v, p, a, b in spans)
+            + ") v(k, src, viewer, phase, start, stop);",
             "CREATE TABLE episodes AS SELECT * FROM (VALUES ('k1', 's', 'unhealthy', 3), ('k1', 's', 'unhealthy', 5), "
             "('k1', 's', 'healthy', 22), ('k2', 's', 'unhealthy', 12), ('k3', 's', 'unhealthy', 20), "
             "('k4', 's', 'unhealthy', 25)) v(k, src, kind, len);",
@@ -431,13 +444,17 @@ class LagSince(unittest.TestCase):
         self.assertEqual([(r["kind"], r["lo"], r["hi"]) for r in got], [("join", 0, 34), ("uplink", -10, 19)])
 
     def test_a_catalog_without_what_it_needs(self):
-        # A catalog indexed before event_kinds had a scope: lag_since says
-        # what it lacks, the other macros still score.
+        # A catalog indexed before event_kinds had a scope and the verdicts
+        # viewer_phases: lag_since and dynamics say what they lack, the
+        # other macros still score.
         db = Path(self.tmp.name) / "old.duckdb"
         database(db, "CREATE TABLE event_kinds (kind VARCHAR, sim VARCHAR, class VARCHAR);")
+        suite.simdb().duck("DROP TABLE viewer_phases;", db=db, out=None)
         with self.assertRaisesRegex(suite.simdb().DuckError, "lag_since reads event_kinds.scope, "
                                                              "event_kinds.replaced_by, which this catalog lacks"):
             scored("SELECT * FROM lag_since('since');")
+        with self.assertRaisesRegex(suite.simdb().DuckError, "dynamics reads viewer_phases, which this catalog"):
+            scored("SELECT * FROM dynamics('since');")
         self.assertEqual(scored("SELECT * FROM structural('since');"), [])
 
 

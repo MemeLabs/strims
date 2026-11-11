@@ -47,7 +47,10 @@ them, so a change here changes that prompt too.
 - **Phases.** Each second's phase (`verdict_seconds.phase`): `startup`,
   `after_down` and `after_up` (the 60 s after a step down or up in the
   seed's uplink), else `steady`. A viewer that arrived after the start is
-  in its own startup until its first frame plus 10 s.
+  in its own startup until its first frame plus 10 s. Read a
+  viewer-second's phase from `viewer_phases` (each viewer's [start, stop)
+  spans: its own startup, then the second's phase), not from
+  `verdict_seconds.phase`, which is the run's.
 - **Lag and playout delays.** A viewer's lag is from the seed's publish
   to the viewer holding the data. The latency budget leaves delivery
   1250 ms (the target: 2 s glass to glass) and 4250 ms (the most: 5 s).

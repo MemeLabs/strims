@@ -225,8 +225,10 @@ to either makes them again), the verdicts' tables: `verdict_seconds`
 (each second's phase, health and what judged it), `verdicts` (a run's
 verdict, the seconds a collapse must last past, `startup_s`
 (analyze.startup), and analyze.run_metrics), `episodes` (healthy,
-unhealthy and collapse spells) and `derived_events` (none of them a kind
-the sims' events have; the viewers present rising or falling are
+unhealthy and collapse spells), `viewer_phases` (each viewer's phases,
+its own startup then its seconds' verdict phases, as [start, stop) spans:
+a viewer-second's phase) and `derived_events` (none of them a kind the
+sims' events have; the viewers present rising or falling are
 present_join and present_leave, the sims' join and leave a node's), the
 vocabulary's derived kinds, DERIVED_KINDS:
 {derived}
@@ -253,9 +255,10 @@ manifest's `at`), then a farm flush's later seq, by number
            joins below
   pooled   read lags pooled over the selected runs, by cell and arm: the
            quantiles of every read, beside the mean of the runs' own p99s;
-           `--by` splits them by phase, by `--bin` of read time, or by
-           viewer, each group's columns its own (its runs those with a read
-           in it, their p99s of those reads)
+           `--by` splits them by phase (its viewer's, viewer_phases'),
+           by `--bin` of read time, or by viewer, each group's columns its
+           own (its runs those with a read in it, their p99s of those
+           reads)
   aligned  bands across runs around an event (`--nth` occurrence, the
            first by default): per `--bin` from `--before` to `--after`
            seconds, the median and p10/p90 over runs of `--field`: a read

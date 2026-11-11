@@ -2,8 +2,9 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- Where an arm's lag tail comes from: each viewer-second's lag
--- (viewer_seconds) by what the run was doing then: the verdict's phase
--- (startup, after_down and after_up: within 60 s of a seed uplink step,
+-- (viewer_seconds) by what the run and the viewer were doing then: the
+-- viewer's phase (viewer_phases: startup, the run's or its own after it
+-- joined; after_down and after_up: within 60 s of a seed uplink step;
 -- steady). $cell '' takes every cell of the experiment. Long form:
 --
 --   phase    per arm and phase: viewer-seconds, their share, lag quantiles,
@@ -16,9 +17,10 @@ WITH runs AS (
     SELECT arm_label AS arm, k, src FROM experiment_jobs
     WHERE exp_id = $exp AND ($cell = '' OR cell = $cell)
 ), secs AS (
-    SELECT r.arm, v.lag_ms, coalesce(vs.phase, 'steady') AS phase
+    SELECT r.arm, v.lag_ms, coalesce(p.phase, 'steady') AS phase
     FROM runs r JOIN viewer_seconds v USING (k, src)
-    LEFT JOIN verdict_seconds vs USING (k, src, sec)
+    LEFT JOIN viewer_phases p ON p.k = v.k AND p.src = v.src AND p.viewer = v.viewer AND v.sec >= p.start
+                                 AND v.sec < p.stop
     WHERE v.lag_ms >= 0
 ), arms AS (
     SELECT arm, quantile_cont(lag_ms, 0.99) AS p99, count(*) AS n FROM secs GROUP BY arm

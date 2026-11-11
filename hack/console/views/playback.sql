@@ -2,14 +2,15 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- What a player at a playout delay of $delay ms would have shown, by cell,
--- arm and the verdict's phase, from the sims' `stalls` tables (a frame's
+-- arm and the viewer's phase, from the sims' `stalls` tables (a frame's
 -- stall in strims-sim, a 4 KiB chunk's in the ppspp sim: many are tiny).
 -- Long form, one `part` a chart:
 --
 --   rate     stalls per viewer-minute and the share of viewing time
 --            stalled, per cell, arm and phase; viewing time is the seconds
---            viewers were there and reading (viewer_seconds), each in the
---            phase the verdict gave that second
+--            viewers were there and reading (viewer_seconds), each in its
+--            viewer's phase then (viewer_phases: its own startup, then the
+--            verdict's phase)
 --   startup  the runs' startup time at the delay (rows' startup_ms_D):
 --            median and p90 over seeds, per cell and arm
 --   cdf      how long stalls last, per arm: the share p of the
@@ -23,17 +24,19 @@ WITH runs AS (
     -- The runs whose sim played them (their rows carry its summary).
     SELECT k, src FROM runs JOIN rows USING (k, src) WHERE stalls_per_min_1250 IS NOT NULL
 ), watched AS (
-    SELECT r.cell, r.arm, vs.phase, count(*) AS viewer_s
+    SELECT r.cell, r.arm, p.phase, count(*) AS viewer_s
     FROM runs r JOIN with_stalls USING (k, src)
     JOIN viewer_seconds v USING (k, src)
-    JOIN verdict_seconds vs USING (k, src, sec)
+    JOIN viewer_phases p ON p.k = v.k AND p.src = v.src AND p.viewer = v.viewer AND v.sec >= p.start
+                            AND v.sec < p.stop
     WHERE v.lag_ms >= 0
     GROUP BY ALL
 ), stalled AS (
-    -- A stall counts in the phase of the second it began in.
-    SELECT r.cell, r.arm, coalesce(vs.phase, 'steady') AS phase, s.stall_ms
+    -- A stall counts in its viewer's phase of the second it began in.
+    SELECT r.cell, r.arm, coalesce(p.phase, 'steady') AS phase, s.stall_ms
     FROM runs r JOIN stalls s USING (k, src)
-    LEFT JOIN verdict_seconds vs ON vs.k = s.k AND vs.src = s.src AND vs.sec = s.t_ms // 1000
+    LEFT JOIN viewer_phases p ON p.k = s.k AND p.src = s.src AND p.viewer = s.viewer
+                                 AND s.t_ms // 1000 >= p.start AND s.t_ms // 1000 < p.stop
     WHERE s.delay_ms = $delay
 ), rates AS (
     SELECT w.cell, w.arm, w.phase, w.viewer_s,

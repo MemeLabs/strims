@@ -76,9 +76,9 @@ from .verdict import DERIVED, derived_dir, files, judge, load_series, plist, wan
 PULL_MB = 1000
 # macros.sql: the views' macros.
 MACROS = Path(__file__).with_name("sql") / "macros.sql"
-# The phase `pooled` and `spec` give a read past the verdict's seconds
-# (the vocabulary's phase of that name): the verdict's phases are the
-# others.
+# The phase `pooled` gives a read past its viewer's phases and `spec` a
+# request past the verdict's seconds (the vocabulary's phase of that
+# name): the verdict's phases are the others.
 TAIL = "tail"
 
 
@@ -623,14 +623,15 @@ def sql_text(results):
 
 def pooled(sel, by="none", say=None):
     """Read lags pooled over the selection's runs, by cell and arm, and by
-    `by` (none, phase, bin or viewer)."""
+    `by` (none, phase: its viewer's, viewer_phases, bin or viewer)."""
     v = with_samples(sel, views(sel, say=say), ("reads",), say=say)
     with v:
         need(v.have, "reads")
         group = {"none": "NULL", "bin": f"(t_ms // {sel.bin}) * {sel.bin}", "viewer": "viewer",
-                 "phase": f"coalesce(vs.phase, {q(TAIL)})"}[by]
-        join = ("LEFT JOIN verdict_seconds vs ON vs.k = x.k AND vs.src = x.src AND vs.sec = x.t_ms // 1000"
-                if by == "phase" else "")
+                 "phase": f"coalesce(vp.phase, {q(TAIL)})"}[by]
+        # A read's phase is its viewer's in the second it read in.
+        join = ("LEFT JOIN viewer_phases vp ON vp.k = x.k AND vp.src = x.src AND vp.viewer = x.viewer "
+                "AND x.t_ms // 1000 >= vp.start AND x.t_ms // 1000 < vp.stop" if by == "phase" else "")
         where = time_filter(sel, "x.t_ms")
         # Every column is the group's: its runs are those with a read in it,
         # and each run's p99 is of its reads there.

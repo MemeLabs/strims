@@ -489,9 +489,14 @@ FORECASTS = [(1200, 1, 0, 2, True, True, 0, False, 50, 1100, 1000, 60),
 READ_RUNS = {"kp1": [(0, 1000, 100), (1, 3000, 300)], "kp2": [(0, 2000, 200)], "kd": [(0, 0, 50)],
              "ks1": [(0, 1500, 150), (1, 2500, 250)]}
 READS = {k: [(v, t, lag) for v, start, lag in rs for t in range(start, 5000, 100)] for k, rs in READ_RUNS.items()}
-# (k, sec): phase; a second without one is the tail's
+# (k, sec): the run's phase (verdict_seconds)
 PHASES = {**{("kp1", s): "startup" for s in range(3)}, **{("kp1", s): "steady" for s in (3, 4)},
           **{("kp2", s): "startup" for s in range(5)}}
+# (k, viewer, sec): a viewer's phase (viewer_phases), the run's but kp1's
+# viewer 1's, in its own startup from its first read at 3 s; a second
+# without one is the tail's
+VIEWER_PHASES = {**{(k, v, s): ph for (k, s), ph in PHASES.items() for v, _, _ in READ_RUNS[k]},
+                 ("kp1", 1, 3): "startup", ("kp1", 1, 4): "startup"}
 # k: the viewers present each second (analyze.events' present_join and
 # present_leave): kp1's second viewer counts from 2 s
 PRESENT = {"kp1": [1, 1, 2, 2, 2], "kp2": [1] * 5, "kd": [1] * 5, "ks1": [2] * 5}
@@ -544,6 +549,7 @@ class Queries(unittest.TestCase):
                   for n, v, start in ((1, 0, 1000), (2, 1, 3000), (0, -1, 0)) for t in range(0, 5000, 100)])
         self.derived(P, "verdict_seconds", [[k, P, s, ph, True, False, False, False, False, 1.0, 1.0, 0.0]
                                             for (k, s), ph in PHASES.items()])
+        self.derived(P, "viewer_phases", [[k, P, v, ph, s, s + 1] for (k, v, s), ph in VIEWER_PHASES.items()])
 
     def put(self, src, table, cols, rows):
         d = simdb.cache_root() / "cache" / src
@@ -588,7 +594,7 @@ class Queries(unittest.TestCase):
             for k, cell, arm, _ in rows:
                 cells.setdefault((cell, arm), set()).add(k)
         group = {"none": lambda k, v, t: None, "bin": lambda k, v, t: t // 1000 * 1000,
-                 "viewer": lambda k, v, t: v, "phase": lambda k, v, t: PHASES.get((k, t // 1000), "tail")}
+                 "viewer": lambda k, v, t: v, "phase": lambda k, v, t: VIEWER_PHASES.get((k, v, t // 1000), "tail")}
         for by, g in group.items():
             want = {}
             for (cell, arm), keys in cells.items():
@@ -1098,6 +1104,26 @@ class PerViewerVerdict(unittest.TestCase):
         _, collapsed = self.verdict(s)
         self.assertTrue(collapsed)
 
+    def test_viewer_phases_are_presence_over_the_runs_phases(self):
+        # The seed's uplink steps down at 30 s; viewer 8 arrives at 20.5 s
+        # and reads from 21 s, viewer 9 (hostile) leaves at 40.5 s.
+        s = audience(60, [(None, None), (20.5, None), (None, 40.5)])
+        s["seed_up"] = [[0, 10 ** 9], [30, 5 * 10 ** 8]]
+        s["hostile"], s["viewer"] = [2], [7, 8, 9]
+        v = self.a.verdict(s)
+        own = 21 + self.a.JOIN_GRACE_SECS
+        self.assertEqual(verdict.viewer_phases(s, v), [
+            (7, "startup", 0, 15), (7, "steady", 15, 30), (7, "after_down", 30, 60),
+            (8, "startup", 20, own), (8, "after_down", own, 60),
+            (9, "startup", 0, 15), (9, "steady", 15, 30), (9, "after_down", 30, 41)])
+        # A second's phase is the run's but for an arrival's own startup.
+        ph = self.a.phases(s, v)
+        for i, p, a, b in verdict.viewer_phases(s, v):
+            self.assertTrue(all(p == ("startup" if i == 8 and k < own else ph[k]) for k in range(a, b)))
+        # Without the series' ids, a viewer is its place.
+        del s["viewer"]
+        self.assertEqual([x[0] for x in verdict.viewer_phases(s, v)], [0, 0, 0, 1, 1, 2, 2, 2])
+
     def test_present_join_and_leave_count_every_viewer(self):
         # The events read the viewers present as the series counts them,
         # arrivals in their grace and all.
@@ -1119,6 +1145,7 @@ class PerViewerVerdict(unittest.TestCase):
         self.assertEqual(s["lag"], [[5, 5, 5, 5], [-1, -1, 7, 7]])
         self.assertEqual((s["arrive_ms"], s["depart_ms"]), ([-3000, 1500], [None, None]))
         self.assertNotIn("arrive_ms", simdb.series_of({"secs": 4}, secs, vs))
+        self.assertEqual(s["viewer"], [0, 1])
 
 
 class Derived(unittest.TestCase):
@@ -1160,6 +1187,20 @@ class Derived(unittest.TestCase):
         path = simdb.cache_root() / "derived" / "t" / "v=abc" / "x.parquet"
         simdb.write_table(path, simdb.DERIVED["episodes"], [["k", "s", "collapse", 1, 9, 8]])
         self.assertEqual(self.columns(path), list(simdb.DERIVED["episodes"]))
+
+    def test_viewer_phases_hold_each_viewers_own_startup(self):
+        got, have = self.view("SELECT k, viewer, phase, start, stop FROM viewer_phases ORDER BY ALL")
+        self.assertIn("viewer_phases", have)
+        a = simdb.analyze()
+        by = {}
+        for r in got:
+            by.setdefault((r["k"], r["viewer"]), []).append((r["phase"], r["start"], r["stop"]))
+        # There from the start: the run's startup, then steady; arriving at
+        # i + 0.5 s and reading from i + 1 s: its own startup, the run none.
+        for i in range(6):
+            self.assertEqual(by[("kt0", i)], [("startup", 0, a.STARTUP_SECS), ("steady", a.STARTUP_SECS, 40)])
+            own = i + 1 + a.JOIN_GRACE_SECS
+            self.assertEqual(by[("ktr", i)], [("startup", i, own), ("steady", own, 40)])
 
     def test_verdicts_carry_the_startup(self):
         got, _ = self.view("SELECT k, startup_s, collapsed FROM verdicts ORDER BY k")
