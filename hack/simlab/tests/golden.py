@@ -66,7 +66,7 @@ UV = [bootstrap.uv() or "uv", "run", "--project", str(HACK), "--locked", "--quie
 def script(args, label):
     """Whether a command exits 0; its output's last line, either way."""
     t0 = time.time()
-    p = subprocess.run(args, cwd=REPO, capture_output=True, text=True)
+    p = subprocess.run(args, cwd=REPO, stdin=subprocess.DEVNULL, capture_output=True, text=True)
     tail = (p.stdout + p.stderr).strip().splitlines()[-1:] or [""]
     print(f"{label}: {'ok' if p.returncode == 0 else 'FAILED'} ({time.time() - t0:.0f} s): {tail[0]}")
     if p.returncode:

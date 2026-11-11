@@ -70,8 +70,10 @@ class Bootstrap(unittest.TestCase):
         self.assertEqual(p.stderr, "")
 
     def test_uv_run_of_the_script_works_too(self):
+        # The script reads its stdin: given none, it would wait for the
+        # test's own, and while that is open, wait out the timeout.
         p = subprocess.run([bootstrap.uv(), "run", "--no-project", "--quiet", str(self.script), "x"],
-                           capture_output=True, text=True, cwd="/", env=self.env, timeout=300)
+                           capture_output=True, text=True, cwd="/", env=self.env, input="", timeout=300)
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(json.loads(p.stdout)["argv"], ["x"])
 
