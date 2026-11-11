@@ -80,7 +80,8 @@ def reference(rev):
                                    capture_output=True, text=True).stdout)
     ref = load(path, "suite_ref")
     ref._simdb = suite().simdb()
-    ref.T975 = {r["df"]: r["t"] for r in suite().score_query("SELECT df, t FROM t975 ORDER BY df;")}
+    ref.T975 = {r["df"]: r["t"] for r in suite().score_query(
+        "SELECT df, t975_at(df) AS t FROM range(1, 1001) r(df) ORDER BY df;")}
     return ref
 
 

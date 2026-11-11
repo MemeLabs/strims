@@ -3,9 +3,10 @@
 --
 -- suite.py's scoring as the catalog's macros: what its scorecards, arm
 -- scores and races compute, here once (suite.py prints what they return).
--- catalog.py loads them (scoring_sql) after metric_defs and job_metrics,
--- which it makes from suite.py's METRICS, filling in each @{...}: a
--- constant of suite.py's or analyze.py's, or a row field (r.<field>), the
+-- catalog.py loads them (scoring_sql) after what it makes itself:
+-- metric_defs, job_runs, job_metrics and job_metrics_of from suite.py's
+-- METRICS, and t975, Student's t. It fills in each @{...}: a constant of
+-- suite.py's, analyze.py's or its own, or a row field (r.<field>), the
 -- field where the rows have it, else NULL.
 --
 -- A side is one arm's runs, a list of {'cell', 'seed', 'k', 'src'}
@@ -28,16 +29,13 @@
 --   SELECT cell, metric, effect, lo, hi, mark FROM effects('s8ed1e', 'p4tf', 's8ed1e', 'vouch')
 --   WHERE mark <> ' ' ORDER BY cell_ord, ord;
 
--- Student's t at 97.5 % by degrees of freedom, as suite.py has looked it
--- up: a df the table lacks takes the least t of the larger ones (2.04 for
--- 17-29), and 2.0 past them.
-CREATE OR REPLACE TABLE t975 (df BIGINT, t DOUBLE);
-INSERT INTO t975 VALUES (1, 12.71), (2, 4.30), (3, 3.18), (4, 2.78), (5, 2.57), (6, 2.45), (7, 2.36), (8, 2.31),
-    (9, 2.26), (10, 2.23), (11, 2.20), (12, 2.18), (13, 2.16), (14, 2.14), (15, 2.13), (16, 2.12), (20, 2.09),
-    (30, 2.04);
--- t975's t at df_ degrees of freedom, looked up as the table says.
+-- Student's t at 97.5 % at df_ degrees of freedom: t975's (catalog.py's
+-- t975, df 1 to @{t975_df}), and past them the Cornish-Fisher expansion in
+-- 1/df (Abramowitz and Stegun 26.7.5) to 1/df^4, within 1e-10 there.
 CREATE OR REPLACE MACRO t975_at(df_) AS
-    coalesce((SELECT t FROM t975 WHERE df = df_), (SELECT min(t) FROM t975 WHERE df >= df_), 2.0::DOUBLE);
+    coalesce((SELECT t FROM t975 WHERE df = df_),
+             @{t975_z} + @{t975_g1} / df_ + @{t975_g2} / pow(df_, 2) + @{t975_g3} / pow(df_, 3)
+             + @{t975_g4} / pow(df_, 4));
 
 -- The hypergeometric probability of x of hits_ in the first n_ of n_ + n2_.
 CREATE OR REPLACE MACRO hypergeom_p(x_, n_, n2_, hits_) AS

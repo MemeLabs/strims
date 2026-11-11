@@ -6,10 +6,10 @@
 
   Golden      testdata/golden/ (golden.py fixtures): cells of the latest
               farm experiments and a made-up one, their runs' tables and
-              what the Python scoring before the macros printed over them;
+              what golden.py's reference suite.py printed over them;
               suite.py prints the same, from its sides and from arm_side's.
-  Arithmetic  fisher_p against the exact hypergeometric sum, t975_at's
-              lookup, effect_mark.
+  Arithmetic  fisher_p against the exact hypergeometric sum, t975_at
+              against Student's t, effect_mark.
   Dynamics    structural and dynamics over a made-up experiment.
 
   python3 hack/sim-suite/suite_test.py [-v]
@@ -169,15 +169,19 @@ class Arithmetic(unittest.TestCase):
             self.assertEqual(f"{r['p']:.2f}", f"{want:.2f}")
 
     def test_t975(self):
+        """Student's t at 97.5 %: the closed forms at 1 and 2 degrees of
+        freedom, the tables' to six places, and the expansion past the
+        table meeting it."""
         got = {r["df"]: r["t"] for r in scored(
-            "SELECT df, t975_at(df) AS t FROM range(1, 40) r(df);")}
-        self.assertEqual(got[1], 12.71)
-        self.assertEqual(got[16], 2.12)
-        self.assertEqual(got[17], 2.04)
-        self.assertEqual(got[20], 2.09)
-        self.assertEqual(got[29], 2.04)
-        self.assertEqual(got[30], 2.04)
-        self.assertEqual(got[31], 2.0)
+            "SELECT df, t975_at(df) AS t FROM range(1, 2001) r(df);")}
+        self.assertAlmostEqual(got[1], math.tan(math.pi * 0.475), places=11)
+        self.assertAlmostEqual(got[2], 0.95 / math.sqrt(2 * 0.975 * 0.025), places=11)
+        for df, t in {3: 3.182446, 7: 2.364624, 16: 2.119905, 17: 2.109816, 20: 2.085963, 29: 2.045230,
+                      30: 2.042272, 31: 2.039513, 60: 2.000298, 120: 1.979930, 1000: 1.962339}.items():
+            self.assertAlmostEqual(got[df], t, places=6, msg=df)
+        self.assertAlmostEqual(got[101], 1.9837310030, places=9)
+        self.assertLess(abs(got[100] - 2 * got[101] + got[102]), 1e-5)
+        self.assertTrue(all(got[df] > got[df + 1] > 1.959963984 for df in range(1, 2000)))
 
     def test_mark(self):
         cases = [("lower", "ratio", 0.05, 0.9, 0.85, 0.95, "+"), ("lower", "ratio", 0.05, 0.97, 0.95, 0.99, " "),

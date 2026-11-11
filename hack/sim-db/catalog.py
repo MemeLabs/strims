@@ -128,15 +128,18 @@ import argparse
 import collections
 import contextlib
 import datetime
+import functools
 import hashlib
 import importlib.util
 import inspect
 import json
+import math
 import multiprocessing
 import os
 import queue
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import time
@@ -1805,18 +1808,81 @@ FROM seen s LEFT JOIN doc d USING (kind, sim) ORDER BY s.sim, s.kind;""")
 SCORING = Path(__file__).with_name("scoring.sql")
 # A metric's SQL reads a job's row (r), verdict (v) and job (j).
 FIELD = re.compile(r"\b([rvj])\.([a-z_][a-z0-9_]*)\b")
-CONST = re.compile(r"@\{([a-z_]+)\}")
+CONST = re.compile(r"@\{([a-z_][a-z0-9_]*)\}")
 ROW_FIELD = re.compile(r"@\{r\.([a-z0-9_]+)\}")
 MACRO = re.compile(r"^CREATE OR REPLACE (MACRO|TABLE|VIEW) ([a-z_0-9]+)\s*(\([^)]*\))?", re.M)
 TEMP = re.compile(r"^CREATE OR REPLACE (MACRO|TABLE|VIEW) ", re.M)
 
 
 def scoring_consts(suite=None):
-    """scoring.sql's @{name} constants: suite.py's and analyze.py's."""
+    """scoring.sql's @{name} constants: suite.py's and analyze.py's, and
+    t975_at's expansion (t975_expansion)."""
     s, a = suite or suite_module(), simdb().analyze()
+    z, g = t975_expansion()
     return {"guard_ratio": s.GUARD_RATIO, "lag_ceiling": a.DELIVERY_TARGET_MS,
             "delay_target_ms": a.DELIVERY_TARGET_MS, "delay_max_ms": a.DELIVERY_MAX_MS,
-            "join_grace_secs": a.JOIN_GRACE_SECS}
+            "join_grace_secs": a.JOIN_GRACE_SECS, "t975_df": T975_DF, "t975_z": double(z),
+            **{f"t975_g{i}": double(c) for i, c in enumerate(g, 1)}}
+
+
+def double(x):
+    """`x` as a DuckDB DOUBLE literal, the float itself (a decimal literal
+    is a DECIMAL, cast to DOUBLE through its unscaled integer)."""
+    return f"'{x!r}'::DOUBLE"
+
+
+# Student's t at 97.5 % is tabled (t975) to this many degrees of freedom,
+# and past them taken from its expansion (t975_expansion).
+T975_DF = 100
+
+
+def incomplete_beta(a, b, x):
+    """The regularized incomplete beta I_x(a, b): its continued fraction
+    (Lentz's method), from whichever end converges."""
+    if x <= 0 or x >= 1:
+        return 0.0 if x <= 0 else 1.0
+    if x > (a + 1) / (a + b + 2):
+        return 1 - incomplete_beta(b, a, 1 - x)
+    front = math.exp(math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b) + a * math.log(x) + b * math.log1p(-x))
+    tiny = 1e-300
+    c, d = 1.0, 1 - (a + b) * x / (a + 1)
+    d = 1 / (d if abs(d) > tiny else tiny)
+    h = d
+    for m in range(1, 1000):
+        for num in (m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m)),
+                    -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1))):
+            d = 1 + num * d
+            d = 1 / (d if abs(d) > tiny else tiny)
+            c = 1 + num / c
+            c = c if abs(c) > tiny else tiny
+            h *= d * c
+        if abs(d * c - 1) < 1e-16:
+            break
+    return front * h / a
+
+
+@functools.cache
+def t975():
+    """Student's t at 97.5 % for each df to T975_DF: the t whose two-sided
+    tail, I_{df/(df+t^2)}(df/2, 1/2), is 0.05, by bisection to 1e-13."""
+    out = {}
+    for df in range(1, T975_DF + 1):
+        lo, hi = 0.0, 100.0
+        while hi - lo > 1e-13:
+            mid = (lo + hi) / 2
+            lo, hi = (mid, hi) if incomplete_beta(df / 2, 0.5, df / (df + mid * mid)) > 0.05 else (lo, mid)
+        out[df] = (lo + hi) / 2
+    return out
+
+
+def t975_expansion():
+    """The normal quantile z at 97.5 % and the coefficients of t's
+    expansion in 1/df (Abramowitz and Stegun 26.7.5): t = z + g1/df +
+    g2/df^2 + g3/df^3 + g4/df^4."""
+    z = statistics.NormalDist().inv_cdf(0.975)
+    return z, [(z ** 3 + z) / 4, (5 * z ** 5 + 16 * z ** 3 + 3 * z) / 96,
+               (3 * z ** 7 + 19 * z ** 5 + 17 * z ** 3 - 15 * z) / 384,
+               (79 * z ** 9 + 776 * z ** 7 + 1482 * z ** 5 - 1920 * z ** 3 - 945 * z) / 92160]
 
 
 def getter_sql(sql, cols):
@@ -1848,7 +1914,10 @@ def scoring_sql(cols, temp=False, suite=None):
                     f"{q(guard) if guard else 'NULL'}, {order if order else 'NULL'})")
     out = ["CREATE OR REPLACE TABLE metric_defs (ord BIGINT, name VARCHAR, getter VARCHAR, better VARCHAR, "
            "kind VARCHAR, tie DOUBLE, host BOOLEAN, shown BOOLEAN, guard VARCHAR, guard_ord BIGINT);",
-           f"INSERT INTO metric_defs VALUES {', '.join(defs)};"]
+           f"INSERT INTO metric_defs VALUES {', '.join(defs)};",
+           "-- Student's t at 97.5 % by degrees of freedom (catalog.py's t975).",
+           "CREATE OR REPLACE TABLE t975 (df BIGINT, t DOUBLE);",
+           f"INSERT INTO t975 VALUES {', '.join(f'({df}, {double(t)})' for df, t in t975().items())};"]
     getters = ",\n       ".join(f"TRY_CAST(({getter_sql(sql, cols)}) AS DOUBLE) AS {ident(name)}"
                                for name, sql, *_ in s.METRICS)
     out.append(f"""-- Every source's copy of a job (the catalog's raw.runs): its run's own
@@ -1889,8 +1958,8 @@ def scoring_version(suite=None):
     """A hash of what scoring_sql makes: scoring.sql, METRICS and the
     rest of suite.py's it reads, the constants and scoring_sql itself."""
     s = suite or suite_module()
-    parts = [SCORING.read_text(), repr([s.METRICS, s.GUARDRAILS, s.HOST_METRICS, s.SHOWN, scoring_consts(s)]),
-             inspect.getsource(scoring_sql), inspect.getsource(getter_sql)]
+    parts = [SCORING.read_text(), repr([s.METRICS, s.GUARDRAILS, s.HOST_METRICS, s.SHOWN, scoring_consts(s),
+                                        t975()]), inspect.getsource(scoring_sql), inspect.getsource(getter_sql)]
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
 
 
@@ -1902,7 +1971,12 @@ def scoring_cols(columns):
 def scoring_docs():
     """table_catalog's records of scoring.sql's tables and macros, and of
     metric_defs and job_metrics: each one's comment."""
-    recs = [{"name": "metric_defs", "kind": "table", "grain": "a suite.py metric", "keys": "name",
+    recs = [{"name": "t975", "kind": "table", "grain": "a degree of freedom", "keys": "df",
+             "joins": None,
+             "description": "Student's t at 97.5 % (t) for df 1 to T975_DF: the t whose two-sided tail, the "
+                            "regularized incomplete beta I_{df/(df+t^2)}(df/2, 1/2), is 0.05. t975_at gives "
+                            "any df's."},
+            {"name": "metric_defs", "kind": "table", "grain": "a suite.py metric", "keys": "name",
              "joins": "job_metrics ON job_metrics.metric = metric_defs.name",
              "description": "suite.py's METRICS, as the scoring macros read them: ord (its place), getter (its "
                             "value, SQL over a job's row r, verdict v and job j), better ('lower', 'higher' or "
