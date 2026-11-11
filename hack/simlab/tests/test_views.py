@@ -12,24 +12,28 @@ console's addresses:
               parse; the page's selection keys and defaults
               (selection.ts) and the workbench's marks as views.py's;
               what a link leaves out, its encoding, its numbers, its
-              host; what it refuses
+              host; what it refuses; the servers' state files and their
+              tabs
   Filters     every saved spec's filter transforms translate to SQL, and
               keep the rows JavaScript keeps; the forms that don't say why
   Graphs      every saved view's panels, time fields, encoded columns and
-              legends, the vocabulary's colours among them; vocabulary
-              references expanded as domains.ts expands them
+              legends, the vocabulary's colours among them, and
+              testdata/panels.json their walk as the page's sel.ts takes
+              it (--write-panels writes it); vocabulary references
+              expanded as domains.ts expands them
   Selections  over golden_cli's fixture catalog (its bins given the
               columns run_timeline reads): a moment and ranges on
               run_timeline, a range and a viewer on its stall track, a
               collapse_grid cell, a workbench chart; check's problems: a
               bad experiment, cell or seed, a selection matching no row
 
-  python3 hack/simlab/tests/test_views.py
+  python3 hack/simlab/tests/test_views.py [--write-panels]
 """
 
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -52,6 +56,8 @@ from simlab.views import Param, View  # noqa: E402
 
 TESTDATA = HERE / "testdata"
 LINKS = json.loads((TESTDATA / "links.json").read_text())
+PANELS = TESTDATA / "panels.json"
+WRITE_PANELS = "python3 hack/simlab/tests/test_views.py --write-panels"
 CONSOLE_TS = HACK.parent / "src" / "devtools" / "components" / "console"
 STALLS = "Stalls at the playout delay picked, as long as picked or longer"
 LAG = "Lag across viewers (playout delays dashed)"
@@ -438,17 +444,68 @@ class Addresses(unittest.TestCase):
         with mock.patch.dict(os.environ, {"SIM_CONSOLE_URL": "http://box.local:9000/"}):
             self.assertEqual(views.base(), "http://box.local:9000")
             self.assertTrue(views.link("overhead", {}).startswith("http://box.local:9000/devtools.html#/console/"))
-        with mock.patch.dict(os.environ, {}, clear=False), mock.patch.object(views, "server_state", lambda: None):
+        with mock.patch.dict(os.environ, {}, clear=False), mock.patch.object(views, "server_states", lambda: []):
             os.environ.pop("SIM_CONSOLE_URL", None)
             self.assertEqual(views.base(), views.BASE)
         state = {"pid": os.getpid(), "port": 8087, "urls": ["http://127.0.0.1:8087/", "http://192.168.1.5:8087/"]}
-        with mock.patch.dict(os.environ, {}), mock.patch.object(views, "server_state", lambda: state), \
+        other = {"pid": os.getpid(), "port": 9000, "urls": ["http://127.0.0.1:9000/"]}
+        with mock.patch.dict(os.environ, {}), mock.patch.object(views, "server_states", lambda: [state, other]), \
                 mock.patch.object(views, "tabs", lambda server_url=None: []):
             os.environ.pop("SIM_CONSOLE_URL", None)
             self.assertEqual(views.base(), "http://192.168.1.5:8087")
             with mock.patch.object(views, "tabs", lambda server_url=None: [
-                    {"id": "a", "url": "http://blinky.local:8087/devtools.html#/console/tree", "focused": True}]):
-                self.assertEqual(views.base(), "http://blinky.local:8087")
+                    {"id": "a", "url": "http://blinky.local:9000/devtools.html#/console/tree", "focused": True}]):
+                self.assertEqual(views.base(), "http://blinky.local:9000")
+        with mock.patch.dict(os.environ, {}), mock.patch.object(views, "server_states", lambda: [other]), \
+                mock.patch.object(views, "tabs", lambda server_url=None: []):
+            os.environ.pop("SIM_CONSOLE_URL", None)
+            self.assertEqual(views.base(), "http://127.0.0.1:9000")
+
+    def test_the_servers_state_files(self):
+        tmp = tempfile.TemporaryDirectory(prefix="simlab-views-servers-")
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        gone = subprocess.Popen(["true"])
+        gone.wait()
+        for port, pid in [(9000, os.getpid()), (8087, os.getppid()), (8086, gone.pid)]:
+            (root / f"{port}.json").write_text(json.dumps({"pid": pid, "port": port,
+                                                           "urls": [f"http://127.0.0.1:{port}/"]}))
+        (root / "8088.json").write_text("{")
+        (root / "8089.json").write_text(json.dumps({"pid": os.getpid(), "port": 8089, "urls": []}))
+        with mock.patch.object(views, "state_dir", lambda: root):
+            self.assertEqual(views.state_path(8087), root / "8087.json")
+            # Live servers alone, in port order.
+            self.assertEqual([s["port"] for s in views.server_states()], [8087, 9000])
+            self.assertEqual(views.servers(), ["http://127.0.0.1:8087", "http://127.0.0.1:9000"])
+            # Every server's tabs, the latest focused first, then the latest seen; one not answering is left out.
+            listed = {"http://127.0.0.1:8087": [
+                {"id": "a", "url": "u1", "last_seen": 3, "focused_ago": 30},
+                {"id": "b", "url": "u2", "last_seen": 1, "focused_ago": None}],
+                "http://127.0.0.1:9000": [{"id": "c", "url": "u3", "last_seen": 9, "focused_ago": 9},
+                                          {"id": "d", "url": "u4", "last_seen": 0, "focused_ago": None}]}
+            with mock.patch.object(views, "_tabs_at", lambda at: listed[at]):
+                self.assertEqual([t["id"] for t in views.tabs()], ["c", "a", "d", "b"])
+                self.assertEqual([t["id"] for t in views.tabs("http://127.0.0.1:8087")], ["a", "b"])
+
+            def some(at):
+                if at.endswith(":9000"):
+                    raise views.NoServer("no answer")
+                return listed[at]
+
+            with mock.patch.object(views, "_tabs_at", some):
+                self.assertEqual([t["id"] for t in views.tabs()], ["a", "b"])
+
+            def none(at):
+                raise views.NoServer(f"no answer at {at}")
+
+            with mock.patch.object(views, "_tabs_at", none), \
+                    self.assertRaisesRegex(views.NoServer, "no answer at http://127.0.0.1:8087"):
+                views.tabs()
+        with mock.patch.object(views, "state_dir", lambda: root / "none"), mock.patch.dict(os.environ, {}):
+            os.environ.pop("SIM_CONSOLE_URL", None)
+            self.assertEqual(views.server_states(), [])
+            with self.assertRaisesRegex(views.NoServer, "no console server is running"):
+                views.tabs()
 
     def test_panels_by_id_or_index_path(self):
         rt = views.get("run_timeline")
@@ -580,7 +637,19 @@ class Filters(unittest.TestCase):
             self.assertEqual(got, [i for i, (t, s) in enumerate(rows) if keep(t, s)], text)
 
 
+def panels_fixture():
+    """testdata/panels.json: every saved view's panels as panels() walks
+    them, {view: [{id, path, time, x2, encoded}]}, which the page's walk
+    (src/devtools/components/console/sel.ts) gives too (sel.test.ts)."""
+    return {v.name: [{"id": p.id, "path": p.path, "time": p.time, "x2": p.x2, "encoded": p.encoded}
+                     for p in views.panels(v.spec)] for v in views.saved()}
+
+
 class Graphs(unittest.TestCase):
+    def test_the_pages_panels_are_views_pys(self):
+        self.assertEqual(json.loads(PANELS.read_text()), panels_fixture(),
+                         f"testdata/panels.json isn't views.panels' walk of the saved views: {WRITE_PANELS}")
+
     def test_every_saved_views_panels(self):
         for v in views.saved():
             with self.subTest(view=v.name):
@@ -615,7 +684,8 @@ class Graphs(unittest.TestCase):
         startup = views.graph(views.get("playback"))["panels"][2]
         self.assertEqual(startup["encoded"], ["cell", "arm"])
         grid = views.graph(views.get("collapse_grid"))["panels"]
-        self.assertEqual([(p["id"], p["time"], p["encoded"]) for p in grid], [("0", None, ["seed", "cell", "state"])])
+        self.assertEqual([(p["id"], p["time"], p["encoded"]) for p in grid],
+                         [("0", None, ["seed", "cell", "state", "arm"])])
         tree = views.graph(views.get("tree"))["panels"]
         self.assertEqual([p["time"] for p in tree], ["t", "t", "t", None])
 
@@ -769,4 +839,7 @@ class Selections(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--write-panels"]:
+        PANELS.write_text(json.dumps(panels_fixture(), indent=2, ensure_ascii=False) + "\n")
+        sys.exit(0)
     unittest.main()

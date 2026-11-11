@@ -28,8 +28,8 @@ prints a view's: DuckDB's table, or with `--json` objects; what the
 address is and any panel filter that doesn't translate to SQL (and so
 isn't applied) go to stderr.
 
-`tabs` lists the console tabs open in a browser, as the server last heard
-from them, the latest focused first.
+`tabs` lists the console tabs open in a browser, as the servers running
+(each its own) last heard from them, the latest focused first.
 
 `link` writes an address. Each `--param` is text, as `simdb.py view
 --param` takes it; `--sel` the selection, JSON:
@@ -37,15 +37,15 @@ from them, the latest focused first.
 panel's time field alone (simlab/views.py's docs); `--check` confirms it
 over the catalog (the experiment, its cell, arms and seed, and a row the
 selection matches). Its host is `--base`, else SIM_CONSOLE_URL, else the
-host of the latest focused tab, else the running server's. For the
-workbench, `--chart` sets the auto-chart: a mark (line, point, bar, area,
-rect, tick), x=, y=, color= and logy.
+host of the latest focused tab, else the first running server's (in port
+order). For the workbench, `--chart` sets the auto-chart: a mark (line,
+point, bar, area, rect, tick), x=, y=, color= and logy.
 
 `describe VIEW`, `describe URL` and `link` without `--check` need neither
 the server nor the catalog. `rows` and `--check` read the catalog
 (simdb.py's, through the reader `simdb.py view` uses); `--tab` and `tabs`
-ask the console server (python3 hack/console/server.py, after npm run
-console:build).
+ask the console servers running (python3 hack/console/server.py, after
+npm run console:build).
 """
 
 import argparse

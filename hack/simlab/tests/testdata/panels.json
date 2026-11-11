@@ -1,0 +1,402 @@
+{
+  "collapse_diff": [
+    {
+      "id": "0",
+      "path": "0",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "summary",
+        "seed",
+        "cell",
+        "state"
+      ]
+    }
+  ],
+  "collapse_grid": [
+    {
+      "id": "0",
+      "path": "0",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "seed",
+        "cell",
+        "state",
+        "arm"
+      ]
+    }
+  ],
+  "experiments": [],
+  "overhead": [
+    {
+      "id": "Overhead bytes per useful byte, by kind",
+      "path": "0",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "per_useful",
+        "cell",
+        "arm",
+        "kind",
+        "who"
+      ]
+    },
+    {
+      "id": "Wire bytes per useful byte (uplinks with their acknowledgements)",
+      "path": "1",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "per_useful",
+        "cell",
+        "arm",
+        "who"
+      ]
+    },
+    {
+      "id": "Packets per second",
+      "path": "2",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "packets_per_s",
+        "cell",
+        "arm",
+        "who"
+      ]
+    }
+  ],
+  "p99_sources": [
+    {
+      "id": "Share of each arm's tail (viewer-seconds over its p99) by phase",
+      "path": "0",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "tail_share",
+        "arm",
+        "phase"
+      ]
+    },
+    {
+      "id": "Lag by phase (dot p50, bar p90 to p99, tick max)",
+      "path": "1",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "p90_ms",
+        "p99_ms",
+        "phase",
+        "arm",
+        "p50_ms",
+        "max_ms"
+      ]
+    },
+    {
+      "id": "Viewer-seconds by lag, per phase",
+      "path": "2",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "lag_bin_ms",
+        "viewer_s",
+        "arm",
+        "phase"
+      ]
+    }
+  ],
+  "playback": [
+    {
+      "id": "Stalls per viewer-minute, by phase",
+      "path": "0",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "value",
+        "cell",
+        "arm",
+        "phase"
+      ]
+    },
+    {
+      "id": "Share of viewing time stalled, by phase",
+      "path": "1",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "value",
+        "cell",
+        "arm",
+        "phase"
+      ]
+    },
+    {
+      "id": "Startup time at the delay (dot p50, bar to p90)",
+      "path": "2",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "cell",
+        "arm"
+      ]
+    },
+    {
+      "id": "How long stalls last (share of stalls no longer than)",
+      "path": "3",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "value",
+        "p",
+        "arm"
+      ]
+    }
+  ],
+  "run_overlay": [
+    {
+      "id": "Lag across viewers (p99 solid, max dashed; playout delays grey)",
+      "path": "0",
+      "time": "t_s",
+      "x2": null,
+      "encoded": [
+        "t_s",
+        "value",
+        "arm",
+        "series"
+      ]
+    },
+    {
+      "id": "Stalls per second at the playout delay",
+      "path": "1",
+      "time": "t_s",
+      "x2": null,
+      "encoded": [
+        "t_s",
+        "value",
+        "arm"
+      ]
+    },
+    {
+      "id": "Verdict: unhealthy seconds and collapses",
+      "path": "2",
+      "time": "t_s",
+      "x2": "t2_s",
+      "encoded": [
+        "t_s",
+        "t2_s",
+        "arm",
+        "series"
+      ]
+    }
+  ],
+  "run_timeline": [
+    {
+      "id": "Lag across viewers (playout delays dashed)",
+      "path": "0",
+      "time": "t_s",
+      "x2": null,
+      "encoded": [
+        "t_s",
+        "value",
+        "series"
+      ]
+    },
+    {
+      "id": "Each viewer's lag each second (log colour): a block at the left is startup, a stripe a spike",
+      "path": "1",
+      "time": "t_s",
+      "x2": "t2_s",
+      "encoded": [
+        "t_s",
+        "t2_s",
+        "viewer",
+        "value"
+      ]
+    },
+    {
+      "id": "Stalls at the playout delay picked, as long as picked or longer",
+      "path": "2",
+      "time": "t_s",
+      "x2": "t2_s",
+      "encoded": [
+        "t_s",
+        "t2_s",
+        "viewer"
+      ]
+    },
+    {
+      "id": "Verdict: phases, unhealthy seconds, and the episodes",
+      "path": "3",
+      "time": "t_s",
+      "x2": "t2_s",
+      "encoded": [
+        "t_s",
+        "t2_s",
+        "series"
+      ]
+    },
+    {
+      "id": "The seed's meter and its uplink",
+      "path": "4",
+      "time": "t_s",
+      "x2": null,
+      "encoded": [
+        "t_s",
+        "value",
+        "series"
+      ]
+    },
+    {
+      "id": "The seed's copies",
+      "path": "5",
+      "time": "t_s",
+      "x2": null,
+      "encoded": [
+        "t_s",
+        "value"
+      ]
+    },
+    {
+      "id": "Events (the verdict's in red)",
+      "path": "6",
+      "time": "t_s",
+      "x2": null,
+      "encoded": [
+        "t_s",
+        "series"
+      ]
+    },
+    {
+      "id": "Overhead the seed and the viewers wrote, by kind of message",
+      "path": "7",
+      "time": "t_s",
+      "x2": null,
+      "encoded": [
+        "t_s",
+        "value",
+        "series"
+      ]
+    },
+    {
+      "id": "Chunk data the seed and the viewers wrote",
+      "path": "8",
+      "time": "t_s",
+      "x2": null,
+      "encoded": [
+        "t_s",
+        "value"
+      ]
+    },
+    {
+      "id": "Packets their uplinks sent",
+      "path": "9",
+      "time": "t_s",
+      "x2": null,
+      "encoded": [
+        "t_s",
+        "value"
+      ]
+    }
+  ],
+  "scorecard": [
+    {
+      "id": "Lag p99: ratio with its 95 % interval; base -> arm geomean (ms) and collapses beside",
+      "path": "0",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "lo",
+        "hi",
+        "cell",
+        "moved",
+        "ratio"
+      ]
+    },
+    {
+      "id": "Wire bytes per useful byte: ratio with its 95 % interval; base -> arm geomean beside",
+      "path": "1",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "lo",
+        "hi",
+        "cell",
+        "moved",
+        "ratio"
+      ]
+    }
+  ],
+  "seed_bands": [
+    {
+      "id": "Honest q0.9 lag across seeds",
+      "path": "0",
+      "time": "t",
+      "x2": null,
+      "encoded": [
+        "t",
+        "p10",
+        "p90",
+        "p25",
+        "p75",
+        "p50",
+        "max"
+      ]
+    },
+    {
+      "id": "Share of seeds unhealthy",
+      "path": "1",
+      "time": "t",
+      "x2": null,
+      "encoded": [
+        "t",
+        "unhealthy_share"
+      ]
+    }
+  ],
+  "tree": [
+    {
+      "id": "Depth from the seed",
+      "path": "0",
+      "time": "t",
+      "x2": null,
+      "encoded": [
+        "t",
+        "value",
+        "series"
+      ]
+    },
+    {
+      "id": "Node-streams without a parent",
+      "path": "1",
+      "time": "t",
+      "x2": null,
+      "encoded": [
+        "t",
+        "value"
+      ]
+    },
+    {
+      "id": "Parent changes per second, by reason",
+      "path": "2",
+      "time": "t",
+      "x2": null,
+      "encoded": [
+        "t",
+        "value",
+        "series"
+      ]
+    },
+    {
+      "id": "Depth of each node in each stream at the time picked",
+      "path": "3",
+      "time": null,
+      "x2": null,
+      "encoded": [
+        "stream",
+        "node",
+        "value"
+      ]
+    }
+  ]
+}

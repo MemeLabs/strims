@@ -57,13 +57,15 @@ the new catalog.
   PUT  /console/tabs/ID      {url, focused, visible}: a console tab's address and state, which it
                              reports on each change and every 30 s; kept in memory, the last
                              report of each tab, a tab unseen for 2 minutes forgotten
-  GET  /console/tabs         the tabs' reports, [{id, url, focused, visible, last_seen}] (seconds
-                             since its last report), the latest focused first: what
+  GET  /console/tabs         the tabs' reports, [{id, url, focused, visible, last_seen,
+                             focused_ago}] (seconds since its last report, and since it last
+                             said it was focused, or null), the latest focused first: what
                              hack/console/ui.py reads (simlab.views.tabs)
 
-While it runs, target/console/server.json in the main checkout says where
-({pid, port, urls}: its loopback URL, then those for the network), for
-hack/console/ui.py (simlab.views.server_state); it goes at exit.
+While it runs, target/console/servers/PORT.json in the main checkout says
+where ({pid, port, urls}: its loopback URL, then those for the network),
+for hack/console/ui.py (simlab.views.server_states); it goes at exit.
+Each server has its own, so servers on other ports run side by side.
 
 A saved view is hack/console/views/NAME.sql (one statement, with `$exp`,
 `$cell`, `$arm`, `$seed`, `$delay` and the like for the UI's pickers),
@@ -434,7 +436,8 @@ class Tabs:
     def list(self):
         """The tabs' reports, the latest focused first (a tab never
         focused after them, the latest seen first): [{id, url, focused,
-        visible, last_seen}], last_seen the seconds since its report."""
+        visible, last_seen, focused_ago}], last_seen the seconds since its
+        report, focused_ago since its last focused one (None: never)."""
         now = self.clock()
         with self._lock:
             self._forget(now)
@@ -450,8 +453,10 @@ class Tabs:
 
     @staticmethod
     def _listed(id, t, now):
+        focused = t["focused_at"]
         return {"id": id, "url": t["url"], "focused": t["focused"], "visible": t["visible"],
-                "last_seen": round(now - t["seen"], 1)}
+                "last_seen": round(now - t["seen"], 1),
+                "focused_ago": None if focused is None else round(now - focused, 1)}
 
 
 def write_state(path, port, urls):
@@ -1083,7 +1088,7 @@ def main(argv=None):
     else:
         urls = [f"http://{address_name(server.server_address[0])}:{port}/"]
         print(f"console: {urls[0]} (catalog {lake})", file=sys.stderr)
-    state = views.state_path()
+    state = views.state_path(port)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
         write_state(state, port, urls)

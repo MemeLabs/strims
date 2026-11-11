@@ -101,21 +101,25 @@ BASE/devtools.html#/console/NAME?QUERY and the workbench at
                                    time field, filters and colour legend,
                                    its vocabulary references expanded
                                    (expand_vocab, as domains.ts does)
-  server_state() -> dict | None    the running console server's state file
-                                   (state_path: {pid, port, urls})
+  server_states() -> [dict]        the running console servers' state
+                                   files (state_dir: PORT.json each,
+                                   {pid, port, urls}), in port order, a
+                                   file whose process is gone none
   tabs(server_url=None) -> [dict]  the open console tabs' last reports
                                    ({id, url, focused, visible,
-                                   last_seen}), the latest focused first,
-                                   from the running server (else
-                                   SIM_CONSOLE_URL's): NoServer when none
+                                   last_seen, focused_ago}), the latest
+                                   focused first, from every running
+                                   server (else SIM_CONSOLE_URL's), or
+                                   `server_url`'s: NoServer when none
                                    answers
   tab(id=None, server_url=None) -> dict
                                    one of them, the first by default
   base() -> str                    the host links are on: SIM_CONSOLE_URL,
                                    else the origin of the latest focused
-                                   tab's address, else the running
-                                   server's first LAN URL (server_state),
-                                   else its loopback URL, else BASE
+                                   tab's address on any running server,
+                                   else the first running server's first
+                                   LAN URL (server_states), else its
+                                   loopback URL, else BASE
 """
 
 import dataclasses
@@ -1383,14 +1387,21 @@ class NoServer(RuntimeError):
     """No console server answers: the message says how to start one."""
 
 
-def state_path():
-    """The running console server's state, target/console/server.json in
-    the main checkout ({pid, port, urls}: its loopback URL, then those it
-    gave for the network), which hack/console/server.py writes at its
-    start and removes at its exit."""
+def state_dir():
+    """Where the running console servers say where they are:
+    target/console/servers in the main checkout, PORT.json a server's
+    state ({pid, port, urls}: its loopback URL, then those it gave for the
+    network), which hack/console/server.py writes at its start and removes
+    at its exit. Each server has its own, so servers on other ports run
+    side by side."""
     from . import store_host
 
-    return store_host.main_checkout() / "target" / "console" / "server.json"
+    return store_host.main_checkout() / "target" / "console" / "servers"
+
+
+def state_path(port):
+    """The state file of the console server on `port`."""
+    return state_dir() / f"{int(port)}.json"
 
 
 def _alive(pid):
@@ -1405,15 +1416,21 @@ def _alive(pid):
     return True
 
 
-def server_state():
-    """state_path()'s state while its process runs, else None."""
-    try:
-        state = json.loads(state_path().read_text())
-    except (OSError, ValueError):
-        return None
-    if not isinstance(state, dict) or not isinstance(state.get("urls"), list) or not state["urls"]:
-        return None
-    return state if _alive(state.get("pid")) else None
+def server_states():
+    """The running console servers' states, in port order: state_dir()'s
+    files whose process runs (one whose process is gone is none)."""
+    out = []
+    for f in sorted(state_dir().glob("*.json")):
+        try:
+            state = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(state, dict) or not isinstance(state.get("port"), int) or isinstance(
+                state["port"], bool) or not isinstance(state.get("urls"), list) or not state["urls"]:
+            continue
+        if _alive(state.get("pid")):
+            out.append(state)
+    return sorted(out, key=lambda s: s["port"])
 
 
 def origin(url):
@@ -1422,22 +1439,19 @@ def origin(url):
     return f"{u.scheme}://{u.netloc.rpartition('@')[2]}"
 
 
-def server():
-    """The console server tabs report to: the running one's loopback URL
-    (server_state), else SIM_CONSOLE_URL. NoServer for neither."""
-    state = server_state()
-    if state:
-        return origin(state["urls"][0])
+def servers():
+    """The console servers tabs report to: each running one's loopback URL
+    (server_states), else SIM_CONSOLE_URL's. NoServer for neither."""
+    states = server_states()
+    if states:
+        return [origin(s["urls"][0]) for s in states]
     if os.environ.get("SIM_CONSOLE_URL"):
-        return origin(os.environ["SIM_CONSOLE_URL"])
+        return [origin(os.environ["SIM_CONSOLE_URL"])]
     raise NoServer(f"no console server is running: start one with {SERVER} (after {BUILD})")
 
 
-def tabs(server_url=None):
-    """The open console tabs' last reports (GET /console/tabs at
-    `server_url`, server()'s by default): [{id, url, focused, visible,
-    last_seen}], last_seen in seconds, the latest focused first."""
-    at = (server_url or server()).rstrip("/")
+def _tabs_at(at):
+    at = at.rstrip("/")
     try:
         with urllib.request.urlopen(f"{at}/console/tabs", timeout=TAB_TIMEOUT_S) as r:
             return json.loads(r.read().decode("utf-8"))
@@ -1447,6 +1461,33 @@ def tabs(server_url=None):
     except (OSError, ValueError) as e:
         raise NoServer(f"no console server answers at {at} ({getattr(e, 'reason', e)}): start one with {SERVER} "
                        f"(after {BUILD})") from None
+
+
+def tabs(server_url=None):
+    """The open console tabs' last reports (GET /console/tabs) at
+    `server_url`, else at every server servers() names: [{id, url,
+    focused, visible, last_seen, focused_ago}], last_seen the seconds
+    since its report and focused_ago since it last said it was focused
+    (None: never), the latest focused first (then the latest seen). A
+    server that doesn't answer is left out; NoServer when none does."""
+    if server_url:
+        return _tabs_at(server_url)
+    got, answered, failed = [], False, None
+    for at in servers():
+        try:
+            got += _tabs_at(at)
+            answered = True
+        except NoServer as e:
+            failed = failed or e
+    if not answered:
+        raise failed
+
+    def latest(t):
+        ago = t.get("focused_ago")
+        focused = isinstance(ago, (int, float)) and not isinstance(ago, bool)
+        return (focused, -ago if focused else 0, -t.get("last_seen", 0))
+
+    return sorted(got, key=latest, reverse=True)
 
 
 def tab(id=None, server_url=None):
@@ -1466,21 +1507,21 @@ def tab(id=None, server_url=None):
 
 def base():
     """The host a link is on: SIM_CONSOLE_URL; else the origin of the
-    latest focused tab's address, the host the user's browser reaches;
-    else the running server's first LAN URL, else its loopback URL; else
-    BASE."""
+    latest focused tab's address across the running servers, the host the
+    user's browser reaches; else the first running server's first LAN
+    URL, else its loopback URL; else BASE."""
     if os.environ.get("SIM_CONSOLE_URL"):
         return os.environ["SIM_CONSOLE_URL"].rstrip("/")
-    state = server_state()
-    if not state:
+    states = server_states()
+    if not states:
         return BASE
     try:
-        for t in tabs(origin(state["urls"][0])):
+        for t in tabs():
             if isinstance(t.get("url"), str) and urllib.parse.urlsplit(t["url"]).netloc:
                 return origin(t["url"])
     except NoServer:
         pass
-    urls = [u for u in state["urls"] if isinstance(u, str)]
+    urls = [u for u in states[0]["urls"] if isinstance(u, str)]
     lan = [u for u in urls if not _loopback(urllib.parse.urlsplit(u).hostname)]
     return origin((lan or urls)[0]) if urls else BASE
 

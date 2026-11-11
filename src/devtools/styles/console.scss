@@ -234,6 +234,59 @@
     }
   }
 
+  // A chart drawn again (a new selection) draws out of sight over the last, which stays until then.
+  // (Over vega-embed's own position for its element.)
+  &__chart-host {
+    position: relative;
+
+    > .console__chart-next {
+      position: absolute;
+      top: 0;
+      left: 0;
+      visibility: hidden;
+    }
+  }
+
+  // The address's selection on the chart, in words.
+  &__chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 4px 0 8px;
+    padding: 4px 6px 4px 10px;
+    border: 1px solid var(--axis);
+    border-radius: 6px;
+    background: var(--surface);
+    width: fit-content;
+    max-width: 100%;
+
+    &--bad {
+      border-color: var(--critical);
+
+      .console__chip-text {
+        color: var(--critical);
+      }
+    }
+  }
+
+  &__chip-label {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  &__chip-text {
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+
+  &__chip-clear {
+    line-height: 1;
+    padding: 2px 6px;
+  }
+
   &__table-box {
     overflow: auto;
     max-height: 70vh;

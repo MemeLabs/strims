@@ -317,6 +317,85 @@ export interface Spend {
 
 export const getSpend = (): Promise<Spend> => call<Spend>("/console/spend");
 
+/** How often a tab reports its address while nothing changes: the server forgets one unseen for 2 minutes. */
+const TAB_EVERY_MS = 30_000;
+/** Where a tab keeps its id, which a reload keeps. */
+const TAB_KEY = "console-tab";
+/** A tab's id, as the server takes one. */
+const TAB_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+let tab: string | null = null;
+
+/**
+ * This tab's id: random, kept in sessionStorage so that a reload keeps it (this page's alone where
+ * the storage is out of reach).
+ *
+ * @returns the id
+ */
+export const tabId = (): string => {
+  if (tab !== null) return tab;
+  try {
+    const kept = sessionStorage.getItem(TAB_KEY);
+    if (kept && TAB_ID.test(kept)) {
+      tab = kept;
+      return tab;
+    }
+  } catch {
+    // No storage: the id is this page's.
+  }
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  tab = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  try {
+    sessionStorage.setItem(TAB_KEY, tab);
+  } catch {
+    // As above.
+  }
+  return tab;
+};
+
+/**
+ * Reports this tab's address, and whether it is focused and visible, to the console server (PUT
+ * /console/tabs/ID), which keeps each tab's last report for hack/console/ui.py: what the user means
+ * by "my selection". A failed report is dropped.
+ *
+ * @returns once it's sent or failed
+ */
+export const reportTab = (): Promise<void> =>
+  fetch(`/console/tabs/${tabId()}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url: window.location.href,
+      focused: document.hasFocus(),
+      visible: document.visibilityState === "visible",
+    }),
+    keepalive: true,
+  }).then(
+    () => undefined,
+    () => undefined
+  );
+
+/**
+ * Reports this tab on each focus, blur and visibility change, and every 30 s; the page reports its
+ * address's changes itself (reportTab).
+ *
+ * @returns what stops the reports
+ */
+export const startTabReports = (): (() => void) => {
+  const report = () => void reportTab();
+  window.addEventListener("focus", report);
+  window.addEventListener("blur", report);
+  document.addEventListener("visibilitychange", report);
+  const timer = setInterval(report, TAB_EVERY_MS);
+  return () => {
+    window.removeEventListener("focus", report);
+    window.removeEventListener("blur", report);
+    document.removeEventListener("visibilitychange", report);
+    clearInterval(timer);
+  };
+};
+
 /** A result's rows as objects, keyed by column name (what Vega-Lite's data takes). */
 export const rowObjects = (r: QueryResult): Record<string, Json>[] =>
   r.rows.map((row) => Object.fromEntries(r.columns.map((c, i) => [c.name, row[i]])));

@@ -22,6 +22,16 @@
  * their nearest-x voronoi (laid over a time series' plot, and under a track's marks), and
  * CURSOR_MARKS, which any of a track's marks sets. Each panel draws the cursor from every row's x,
  * so whichever time one panel hovers, each has a rule there.
+ *
+ * A console selection (sel.ts) adds to each time panel, where asked:
+ *
+ * - a brush: an interval selection on x of its own (brushName of the panel's index path), set by
+ *   a drag, on the invisible rules' layer, so that a drag anywhere over the plot makes one;
+ * - a band: each brush's initial value, a range of the time field;
+ * - a moment: a rule at a time, drawn as the cursor's is.
+ *
+ * Their marks take no pointer events (VegaChart makes them non-interactive), so the cursor, the
+ * tooltips and clicks reach the marks under them.
  */
 
 type Spec = Record<string, unknown>;
@@ -37,6 +47,34 @@ const CONCATS = ["vconcat", "hconcat", "concat"];
 /** A unit spec's own keys, which go to its first layer when it becomes a layer spec. */
 const UNIT_KEYS = new Set(["mark", "encoding", "params", "projection", "transform", "data"]);
 const RULE = { type: "rule", color: "#52514e", strokeWidth: 1 };
+/** A moment's rule: the cursor's, held. */
+const MOMENT = { type: "rule", color: "#0b0b0b", strokeWidth: 1.5 };
+/** A brush's band. */
+const BAND = {
+  fill: "#52514e",
+  fillOpacity: 0.14,
+  stroke: "#52514e",
+  strokeOpacity: 0.5,
+  strokeWidth: 1,
+};
+
+/** What a console selection adds to the time panels (the module's docs). */
+export interface Marks {
+  /** A brush on each time panel. */
+  brush?: boolean;
+  /** A range of the time field, each brush's initial value: a band in every time panel. */
+  band?: [number, number];
+  /** A time: a rule at it in every time panel. */
+  moment?: number;
+}
+
+/**
+ * The brush of a time panel, its index path's.
+ *
+ * @param path - the panel's index path (sel.ts panels)
+ * @returns its brush's name, which is its selection's signal
+ */
+export const brushName = (path: string): string => `brush_${path.replace(/\./g, "_")}`;
 
 const array = (v: unknown): unknown[] => (Array.isArray(v) ? v : v === undefined ? [] : [v]);
 
@@ -58,13 +96,15 @@ const stripped = (spec: unknown): unknown => {
 };
 
 /**
- * `spec` with its `hover` keys expanded into Vega-Lite layers and selections (the module's docs);
- * a spec without a time field on its outermost `hover` loses its `hover` keys alone.
+ * `spec` with its `hover` keys expanded into Vega-Lite layers and selections, and the brushes, band
+ * and moment `marks` asks for (the module's docs); a spec without a time field on its outermost
+ * `hover` loses its `hover` keys alone.
  *
  * @param spec - a saved view's Vega-Lite spec
+ * @param marks - what a selection adds to the time panels
  * @returns the spec in Vega-Lite alone
  */
-export const hovered = (spec: Spec): Spec => {
+export const hovered = (spec: Spec, marks: Marks = {}): Spec => {
   const top = spec.hover;
   if (!isSpec(top) || typeof top.x !== "string") return stripped(spec) as Spec;
   const x = top.x;
@@ -76,11 +116,12 @@ export const hovered = (spec: Spec): Spec => {
     { aggregate: [{ op: "count", as: "_rows" }], groupby: [x] },
   ];
   const series: string[] = [];
-  const marks: string[] = [];
+  const tracks: string[] = [];
   const cursors: Spec[] = [];
+  const brushes: Spec[] = [];
   let n = 0;
 
-  const panel = (p: Spec): Spec => {
+  const panel = (p: Spec, path: string): Spec => {
     const h = p.hover as Spec;
     const i = n++;
     const outer: Spec = {};
@@ -119,6 +160,14 @@ export const hovered = (spec: Spec): Spec => {
     // track's marks.
     const name = `hover_${i}`;
     series.push(name);
+    if (marks.brush || marks.band) brushes.push({ name: brushName(path), views: [name] });
+    if (marks.moment !== undefined)
+      layers.push({
+        name: `moment_${i}`,
+        data: { values: [{ [x]: marks.moment }] },
+        mark: MOMENT,
+        encoding: { x: xEnc },
+      });
     if (h.tooltip !== undefined) {
       const tooltip = Array.isArray(h.tooltip) ? h.tooltip : undefined;
       layers.push(cursor, {
@@ -135,7 +184,7 @@ export const hovered = (spec: Spec): Spec => {
         const first = layers[m] as Spec;
         const unit = typeof first.name === "string" ? first.name : `marks_${i}`;
         layers[m] = { ...first, name: unit };
-        marks.push(unit);
+        tracks.push(unit);
       }
       layers = [
         {
@@ -151,15 +200,20 @@ export const hovered = (spec: Spec): Spec => {
     return { ...outer, layer: layers };
   };
 
-  const walk = (s: Spec): Spec => {
-    if (isSpec(s.hover) && (s.mark !== undefined || Array.isArray(s.layer))) return panel(s);
+  // The index paths are sel.ts's: 0 for a spec that is one panel, else its concats' indexes.
+  const walk = (s: Spec, path: string): Spec => {
+    if (isSpec(s.hover) && (s.mark !== undefined || Array.isArray(s.layer)))
+      return panel(s, path || "0");
     const out: Spec = { ...s };
     for (const k of CONCATS)
-      if (Array.isArray(s[k])) out[k] = (s[k] as unknown[]).map((c) => (isSpec(c) ? walk(c) : c));
+      if (Array.isArray(s[k]))
+        out[k] = (s[k] as unknown[]).map((c, i) =>
+          isSpec(c) ? walk(c, path ? `${path}.${i}` : String(i)) : c
+        );
     return out;
   };
 
-  const out = walk(spec);
+  const out = walk(spec, "");
   delete out.hover;
   if (series.length === 0) return stripped(out) as Spec;
   const on = { on: "pointerover", clear: "pointerout", toggle: false };
@@ -170,11 +224,11 @@ export const hovered = (spec: Spec): Spec => {
       views: series,
     },
   ];
-  if (marks.length > 0)
+  if (tracks.length > 0)
     params.push({
       name: CURSOR_MARKS,
       select: { type: "point", fields: [x], ...on },
-      views: marks,
+      views: tracks,
     });
   const hit = params.map((q) => ({ param: q.name, empty: false }));
   const shown = hit.length > 1 ? { or: hit } : hit[0];
@@ -194,6 +248,21 @@ export const hovered = (spec: Spec): Spec => {
     ];
     c.encoding = { x: xEnc, opacity: { condition: { test: shown, value: 1 }, value: 0 } };
   }
+  // A drag brushes x alone, with no clear, move or zoom of its own: VegaChart reads it once the
+  // drag ends, and a click or Escape clears the selection.
+  for (const b of brushes)
+    params.push({
+      ...b,
+      select: {
+        type: "interval",
+        encodings: ["x"],
+        clear: false,
+        translate: false,
+        zoom: false,
+        mark: BAND,
+      },
+      ...(marks.band ? { value: { x: marks.band } } : {}),
+    });
   out.params = [...array(out.params), ...params];
   return stripped(out) as Spec;
 };

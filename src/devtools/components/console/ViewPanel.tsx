@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { rowObjects, runSql } from "./api";
-import type { Json, Param, QueryResult, SavedView } from "./api";
+import type { Param, QueryResult, SavedView } from "./api";
+import { expandVocab } from "./domains";
 import ResultTable from "./ResultTable";
-import { viewParams } from "./selection";
+import { WORKBENCH_KEYS, panels, paramNames, readSel, selJson, selText, textOf } from "./sel";
+import type { Panel, Read, Sel } from "./sel";
+import { carried, ordered, useSel, viewParams } from "./selection";
 import type { Selection } from "./selection";
 import SqlEditor from "./SqlEditor";
 import VegaChart from "./VegaChart";
@@ -57,11 +60,115 @@ export const useQuery = (
   return run;
 };
 
+/**
+ * A graph's panels and the address's selection on it.
+ *
+ * @param spec - the graph's spec (none: no graph)
+ * @param name - the graph's name, for the errors
+ * @returns its panels, the selection read and checked, and its setter
+ */
+export const useGraphSel = (
+  spec: Record<string, unknown> | null | undefined,
+  name: string
+): { panels: Panel[]; read: Read; set: (sel: Sel | null) => void } => {
+  const [text, setText] = useSel();
+  const ps = useMemo(() => {
+    try {
+      return spec ? panels(expandVocab(spec)) : [];
+    } catch {
+      return [];
+    }
+  }, [spec]);
+  const read = useMemo(() => readSel(ps, text, name), [ps, text, name]);
+  return { panels: ps, read, set: (sel) => setText(sel ? selJson(sel) : null) };
+};
+
+export interface SelectionChipProps {
+  panels: Panel[];
+  read: Read;
+  /** The selection's arm, else the address's (the run timeline's arm). */
+  arm: string;
+  onClear: () => void;
+}
+
+/**
+ * The address's selection in words (as hack/simlab/views.py's selection_text words it), with a
+ * button that clears it and, where its values name a cell and a seed, one that opens that run's
+ * timeline: its arm the selection's, else the address's.
+ */
+export const SelectionChip: React.FC<SelectionChipProps> = ({ panels: ps, read, arm, onClear }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  if (!read.sel && !read.error) return null;
+  const at = read.sel?.at ?? {};
+  const run =
+    at.cell !== undefined &&
+    at.seed !== undefined &&
+    !Array.isArray(at.cell) &&
+    !Array.isArray(at.seed)
+      ? {
+          cell: String(at.cell),
+          seed: String(at.seed),
+          arm: typeof at.arm === "string" ? at.arm : arm,
+        }
+      : null;
+  const openRun = () => {
+    if (!run) return;
+    const q = carried(location.search);
+    q.set("cell", run.cell);
+    q.set("seed", run.seed);
+    if (run.arm) q.set("arm", run.arm);
+    navigate(`/console/run_timeline?${ordered(q).toString()}`);
+  };
+  return (
+    <div className={`console__chip${read.error ? " console__chip--bad" : ""}`} role="status">
+      <span className="console__chip-label">{read.error ? "selection not drawn" : "selected"}</span>
+      <span className="console__chip-text">{read.sel ? selText(ps, read.sel) : read.error}</span>
+      {run && (
+        <button
+          onClick={openRun}
+          title={`${run.cell} seed ${run.seed}${run.arm ? ` ${run.arm}` : ""}`}
+        >
+          Open run timeline
+        </button>
+      )}
+      <button className="console__chip-clear" onClick={onClear} title="Clear the selection (Esc)">
+        ×
+      </button>
+    </div>
+  );
+};
+
+/**
+ * The workbench's address of a statement: the selection's keys `carry` holds, then its view or
+ * statement, its `$name`s' values, the auto-chart's choices and a selection.
+ *
+ * @param carry - the address the workbench opens from
+ * @param statement - a saved view's name, or a statement
+ * @param values - its `$name`s' values
+ * @param extra - the auto-chart's choices, and the selection's text
+ * @returns the workbench's route and query
+ */
+export const workbenchHref = (
+  carry: string,
+  statement: { view: string; sql: string } | { sql: string },
+  values: Record<string, unknown>,
+  extra: Record<string, string> = {}
+): string => {
+  const q = carried(carry);
+  if ("view" in statement) q.set("view", statement.view);
+  else q.set("sql", statement.sql);
+  for (const n of paramNames(statement.sql)) {
+    const v = textOf(values[n] as never);
+    if (v !== null && !WORKBENCH_KEYS.includes(n)) q.set(n, v);
+  }
+  for (const [k, v] of Object.entries(extra)) if (v) q.set(k, v);
+  return `/console/workbench?${ordered(q).toString()}`;
+};
+
 export interface ViewPanelProps {
   view: SavedView;
   sel: Selection;
-  /** A click on a mark, with its datum. */
-  onSelect?: (datum: Record<string, Json>) => void;
   /** Shown above the chart. */
   children?: React.ReactNode;
   /** The rows' table, in place of the plain one. */
@@ -70,27 +177,24 @@ export interface ViewPanelProps {
   nonce?: number;
 }
 
-/** A saved view over the selection: its chart, its rows, and its SQL ("open in workbench"). */
-const ViewPanel: React.FC<ViewPanelProps> = ({
-  view,
-  sel,
-  onSelect,
-  children,
-  renderTable,
-  nonce,
-}) => {
+/**
+ * A saved view over the selection: its chart, with the address's selection on it (a click, a
+ * brush or shift-click sets it), its rows, and its SQL ("open in workbench").
+ */
+const ViewPanel: React.FC<ViewPanelProps> = ({ view, sel, children, renderTable, nonce }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [params, missing] = viewParams(view, sel);
   const run = useQuery(view.sql, params, missing.length > 0, nonce);
   const [show, setShow] = useState<"chart" | "table" | "sql">(view.spec ? "chart" : "table");
   const rows = useMemo(() => (run.result ? rowObjects(run.result) : []), [run.result]);
+  const graph = useGraphSel(view.spec, view.name);
 
   const openInWorkbench = () =>
     navigate(
-      `/console/workbench?${new URLSearchParams(window.location.hash.split("?")[1] ?? "")}`,
-      {
-        state: { sql: view.sql, params, spec: view.spec, title: view.title },
-      }
+      workbenchHref(location.search, { view: view.name, sql: view.sql }, params, {
+        sel: graph.read.sel ? selJson(graph.read.sel) : "",
+      })
     );
 
   return (
@@ -120,6 +224,14 @@ const ViewPanel: React.FC<ViewPanelProps> = ({
       {missing.length > 0 && <div className="console__hint">Pick {missing.join(", ")}.</div>}
       {run.error && <div className="console__error">{run.error}</div>}
       {run.running && <div className="console__hint">Running…</div>}
+      {view.spec && (
+        <SelectionChip
+          panels={graph.panels}
+          read={graph.read}
+          arm={sel.arm}
+          onClear={() => graph.set(null)}
+        />
+      )}
       {show === "sql" && (
         <SqlEditor value={view.sql} onChange={() => undefined} readOnly rows={24} />
       )}
@@ -131,7 +243,7 @@ const ViewPanel: React.FC<ViewPanelProps> = ({
           {rows.length === 0 ? (
             <div className="console__hint">No rows for this selection.</div>
           ) : (
-            <VegaChart spec={view.spec} rows={rows} onSelect={onSelect} />
+            <VegaChart spec={view.spec} rows={rows} sel={graph.read.sel} onSel={graph.set} />
           )}
           <div className="console__meta">
             {run.result.rows.length} rows{run.result.truncated ? " (truncated)" : ""} ·{" "}

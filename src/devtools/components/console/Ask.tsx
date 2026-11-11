@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { approveRegeneration, askStream, getRegeneration, getSpend, rowObjects } from "./api";
 import type { AskEvent, AskResult, Json, Param, Regeneration, Spend } from "./api";
 import Markdown from "./Markdown";
 import ResultTable from "./ResultTable";
+import { chartOf } from "./sel";
 import VegaChart from "./VegaChart";
+import { workbenchHref } from "./ViewPanel";
 
 /** The task budget a question gets unless the box says otherwise, and the least the API takes. */
 const BUDGET = 200_000;
@@ -202,8 +204,18 @@ const QuoteCard: React.FC<{ why: string; given: Regeneration }> = ({ why, given 
 
 const ToolView: React.FC<{ step: ToolStep }> = ({ step }) => {
   const navigate = useNavigate();
-  const open = (sql: Sql, spec?: Record<string, unknown>, title?: string) =>
-    navigate("/console/workbench", { state: { sql: sql.sql, params: sql.params, spec, title } });
+  const location = useLocation();
+  // The workbench's address of a statement and its values, and of its chart where the auto-chart
+  // draws it (one mark of an x and a y field).
+  const open = (sql: Sql, spec?: Record<string, unknown>) =>
+    navigate(
+      workbenchHref(
+        location.search,
+        { sql: sql.sql },
+        sql.params,
+        chartOf(spec) ?? {}
+      )
+    );
   const said = step.input?.purpose ?? step.input?.title;
   const purpose = typeof said === "string" ? said : "";
   const others = Object.entries(step.input ?? {}).filter(
@@ -248,7 +260,7 @@ const ToolView: React.FC<{ step: ToolStep }> = ({ step }) => {
             )}
             <button
               onClick={() =>
-                open(s, step.chart && s.sql === step.chart.sql ? step.chart.spec : undefined, step.chart?.title)
+                open(s, step.chart && s.sql === step.chart.sql ? step.chart.spec : undefined)
               }
             >
               Open in workbench

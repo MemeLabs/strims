@@ -903,7 +903,7 @@ class TabReports(unittest.TestCase):
         page = "http://127.0.0.1:8086/devtools.html#/console/"
         r = self.put("a", page + "tree", focused=True, at=1000)
         self.assertEqual((r.status, r.body), (200, {"id": "a", "url": page + "tree", "focused": True, "visible": True,
-                                                    "last_seen": 0}))
+                                                    "last_seen": 0, "focused_ago": 0}))
         self.put("b", page + "scorecard", at=1010)
         self.put("c", page + "run_timeline", focused=True, at=1020)
         self.assertEqual([t["id"] for t in self.listed()], ["c", "a", "b"])
@@ -912,9 +912,12 @@ class TabReports(unittest.TestCase):
         self.put("a", page + "tree?exp=e1&t=45", focused=False, visible=False, at=1040)
         got = self.listed(at=1045)
         self.assertEqual(got, [
-            {"id": "a", "url": page + "tree?exp=e1&t=45", "focused": False, "visible": False, "last_seen": 5},
-            {"id": "c", "url": page + "run_timeline", "focused": True, "visible": True, "last_seen": 25},
-            {"id": "b", "url": page + "scorecard", "focused": False, "visible": True, "last_seen": 35}])
+            {"id": "a", "url": page + "tree?exp=e1&t=45", "focused": False, "visible": False, "last_seen": 5,
+             "focused_ago": 15},
+            {"id": "c", "url": page + "run_timeline", "focused": True, "visible": True, "last_seen": 25,
+             "focused_ago": 25},
+            {"id": "b", "url": page + "scorecard", "focused": False, "visible": True, "last_seen": 35,
+             "focused_ago": None}])
         # Tabs never focused follow, the latest seen first.
         self.put("d", page + "playback", at=1050)
         self.assertEqual([t["id"] for t in self.listed()], ["a", "c", "d", "b"])
@@ -942,29 +945,48 @@ class TabReports(unittest.TestCase):
 
 
 class State(unittest.TestCase):
-    def test_server_json_is_written_at_start_and_removed_at_exit(self):
+    def test_each_server_writes_its_own_state_file_and_removes_it_at_exit(self):
         repo = DIR / "checkout"
         subprocess.run(["git", "init", "-q", str(repo)], check=True)
-        state = repo / "target" / "console" / "server.json"
+        states = repo / "target" / "console" / "servers"
         env = {**os.environ, "SIM_DB_ROOT": str(DIR), "GIT_DIR": str(repo / ".git")}
-        p = subprocess.Popen([sys.executable, str(HERE / "server.py"), "--port", "0", "--host", "127.0.0.1",
-                              "--no-index"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
-        try:
-            self.assertTrue(until(state.exists, timeout=60), p.stderr.read() if p.poll() is not None else "")
-            got = json.loads(state.read_text())
-            port = got["port"]
-            self.assertEqual(got, {"pid": p.pid, "port": port, "urls": [f"http://127.0.0.1:{port}/"]})
-            self.assertEqual(status_at("127.0.0.1", port), 200)
-        finally:
+
+        def start():
+            before = set(states.glob("*.json"))
+            p = subprocess.Popen([sys.executable, str(HERE / "server.py"), "--port", "0", "--host", "127.0.0.1",
+                                  "--no-index"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+            found = until(lambda: [f for f in states.glob("*.json") if f not in before], timeout=60)
+            self.assertTrue(found, p.stderr.read() if p.poll() is not None else "")
+            return p, found[0]
+
+        def stop(p):
             p.send_signal(signal.SIGTERM)
             p.wait(timeout=60)
             p.stderr.close()
-        self.assertEqual(p.returncode, 0)
-        self.assertFalse(state.exists())
-        # Another server's file stays.
-        state.write_text(json.dumps({"pid": 1, "port": 1, "urls": ["http://127.0.0.1:1/"]}))
-        server.remove_state(state)
-        self.assertTrue(state.exists())
+            self.assertEqual(p.returncode, 0)
+
+        first, first_state = start()
+        try:
+            got = json.loads(first_state.read_text())
+            port = got["port"]
+            self.assertEqual(first_state.name, f"{port}.json")
+            self.assertEqual(got, {"pid": first.pid, "port": port, "urls": [f"http://127.0.0.1:{port}/"]})
+            self.assertEqual(status_at("127.0.0.1", port), 200)
+            # A second server, on another port, leaves the first's file, and removes its own alone.
+            second, second_state = start()
+            self.assertNotEqual(second_state, first_state)
+            self.assertEqual(json.loads(second_state.read_text())["pid"], second.pid)
+            stop(second)
+            self.assertFalse(second_state.exists())
+            self.assertEqual(json.loads(first_state.read_text())["pid"], first.pid)
+        finally:
+            if first.poll() is None:
+                stop(first)
+        self.assertFalse(first_state.exists())
+        # Another process's file stays.
+        first_state.write_text(json.dumps({"pid": 1, "port": 1, "urls": ["http://127.0.0.1:1/"]}))
+        server.remove_state(first_state)
+        self.assertTrue(first_state.exists())
 
 
 def status_at(addr, port, headers=None):

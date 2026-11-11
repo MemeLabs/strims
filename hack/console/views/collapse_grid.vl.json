@@ -71,6 +71,9 @@
           ]
         }
       },
+      "detail": {
+        "field": "arm"
+      },
       "opacity": {
         "field": "alpha",
         "type": "quantitative",

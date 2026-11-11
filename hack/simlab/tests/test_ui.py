@@ -14,7 +14,8 @@ on a free port, its state file in the fixture's checkout):
             server, with no state file and with a stale one
   Server    tabs; describe --tab and rows --tab of the latest focused tab
             and of a tab by its id; a link's host the server's, then the
-            latest focused tab's
+            latest focused tab's; a second server's own state file, its
+            tabs among the first's, and the first's file left at its exit
 
   python3 hack/simlab/tests/test_ui.py
 """
@@ -183,36 +184,49 @@ class NoServer(unittest.TestCase):
         dead = subprocess.Popen(["true"])
         dead.wait()
         root = Path(TMP.name) / "stale"
-        (root / "target" / "console").mkdir(parents=True)
+        (root / "target" / "console" / "servers").mkdir(parents=True)
         subprocess.run(["git", "init", "-q", str(root)], check=True)
-        (root / "target" / "console" / "server.json").write_text(json.dumps(
+        (root / "target" / "console" / "servers" / "1.json").write_text(json.dumps(
             {"pid": dead.pid, "port": 1, "urls": ["http://127.0.0.1:1/"]}))
         no_server(self, root)
         code, out, _ = ui("link", "overhead", root=root)
         self.assertEqual((code, out), (0, f"{views.BASE}{views.PAGE}overhead\n"))
 
 
+def start_server():
+    """A server.py over the fixture, on a free port: (its process, its
+    state file)."""
+    states = ROOT / "target" / "console" / "servers"
+    before = set(states.glob("*.json"))
+    proc = subprocess.Popen([sys.executable, str(SERVER), "--port", "0", "--host", "127.0.0.1", "--no-index"],
+                            env=environment(ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    end = time.time() + 60
+    while time.time() < end and proc.poll() is None:
+        new = [f for f in states.glob("*.json") if f not in before]
+        if new:
+            return proc, new[0]
+        time.sleep(0.05)
+    proc.kill()
+    raise RuntimeError("server.py wrote no state file")
+
+
+def stop_server(proc):
+    proc.send_signal(signal.SIGTERM)
+    proc.wait(timeout=60)
+
+
 class Server(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.state = ROOT / "target" / "console" / "server.json"
-        cls.proc = subprocess.Popen([sys.executable, str(SERVER), "--port", "0", "--host", "127.0.0.1", "--no-index"],
-                                    env=environment(ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        end = time.time() + 60
-        while not cls.state.exists() and time.time() < end and cls.proc.poll() is None:
-            time.sleep(0.05)
-        if not cls.state.exists():
-            cls.proc.kill()
-            raise RuntimeError("server.py wrote no state file")
+        cls.proc, cls.state = start_server()
         cls.port = json.loads(cls.state.read_text())["port"]
 
     @classmethod
     def tearDownClass(cls):
-        cls.proc.send_signal(signal.SIGTERM)
-        cls.proc.wait(timeout=60)
+        stop_server(cls.proc)
 
-    def report(self, id, url, focused):
-        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
+    def report(self, id, url, focused, port=None):
+        c = http.client.HTTPConnection("127.0.0.1", port or self.port, timeout=30)
         try:
             c.request("PUT", f"/console/tabs/{id}", json.dumps({"url": url, "focused": focused, "visible": True}),
                       {"Content-Type": "application/json"})
@@ -221,6 +235,28 @@ class Server(unittest.TestCase):
             self.assertEqual(r.status, 200)
         finally:
             c.close()
+
+    def test_every_running_servers_tabs(self):
+        second, state = start_server()
+        try:
+            port = json.loads(state.read_text())["port"]
+            self.assertEqual(state.name, f"{port}.json")
+            # With no tab, a link is on the first server's address, in port order.
+            first = min(port, self.port)
+            self.assertEqual(ui("link", "overhead")[1], f"http://127.0.0.1:{first}{views.PAGE}overhead\n")
+            url = views.link("overhead", {"exp": "sf0001"}, base=f"http://blinky.local:{port}")
+            self.report("s2", url, True, port=port)
+            code, out, err = ui("tabs")
+            self.assertEqual((code, err), (0, ""))
+            rows = [[c.strip() for c in line.split("|")[1:-1]] for line in out.splitlines() if line.startswith("| ")]
+            self.assertEqual([r[:3] + r[4:] for r in rows[1:]], [["s2", "yes", "yes", "overhead", url]])
+            self.assertEqual(ui("link", "overhead", "--param", "exp=sf0001")[1], url + "\n")
+        finally:
+            stop_server(second)
+        self.assertFalse(state.exists())
+        self.assertTrue(self.state.exists())
+        self.assertEqual(ui("tabs"), (0, "no console tab has reported its address: open the console in a browser\n",
+                                      ""))
 
     def test_the_tabs_and_their_addresses(self):
         here = f"http://127.0.0.1:{self.port}"

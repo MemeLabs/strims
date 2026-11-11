@@ -4,13 +4,19 @@
 import "../styles/console.scss";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { NavLink, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 
-import { getIndex, getSchema, startIndex } from "../components/console/api";
+import {
+  getIndex,
+  getSchema,
+  reportTab,
+  startIndex,
+  startTabReports,
+} from "../components/console/api";
 import type { Json, SavedView, Schema } from "../components/console/api";
 import Ask from "../components/console/Ask";
 import Experiments from "../components/console/Experiments";
-import { useOptions, useSelection } from "../components/console/selection";
+import { carried, useOptions, useSelection } from "../components/console/selection";
 import type { Selection } from "../components/console/selection";
 import ViewPanel from "../components/console/ViewPanel";
 import { ALIGNS } from "../components/console/vocab";
@@ -243,21 +249,10 @@ interface NamedViewProps {
 
 const NamedView: React.FC<NamedViewProps> = ({ views, sel, setSel }) => {
   const { name } = useParams();
-  const navigate = useNavigate();
   const view = views.find((v) => v.name === name);
   if (!view) return <div className="console__hint">No saved view {name}.</div>;
   if (view.name === "experiments") return <Experiments view={view} sel={sel} setSel={setSel} />;
-  // A run picked in a grid opens its timeline.
-  const onSelect = (d: Record<string, Json>) => {
-    if (d.cell === undefined || d.seed === undefined) return;
-    const arm = typeof d.arm === "string" ? d.arm : sel.arm;
-    const next = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
-    next.set("cell", String(d.cell));
-    next.set("seed", String(d.seed));
-    if (arm) next.set("arm", arm);
-    navigate(`/console/run_timeline?${next.toString()}`);
-  };
-  return <ViewPanel key={view.name} view={view} sel={sel} onSelect={onSelect} />;
+  return <ViewPanel key={view.name} view={view} sel={sel} />;
 };
 
 /**
@@ -268,7 +263,11 @@ const Console: React.FC = () => {
   const [schema, setSchema] = useState<Schema | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sel, setSel] = useSelection();
+  const location = useLocation();
   const name = (useParams()["*"] ?? "").split("/")[0];
+  // The tab tells the console server its address, for hack/console/ui.py.
+  useEffect(startTabReports, []);
+  useEffect(() => void reportTab(), [location.pathname, location.search]);
   const load = useCallback(() => {
     getSchema().then(setSchema, (e: unknown) =>
       setError(e instanceof Error ? e.message : String(e))
@@ -282,7 +281,8 @@ const Console: React.FC = () => {
     ...views.filter((v) => !ORDER.includes(v.name)),
   ];
   const current = views.find((v) => v.name === name);
-  const search = window.location.hash.split("?")[1] ?? "";
+  // Another page takes the selection's keys, not this one's selection on its graph.
+  const search = carried(location.search).toString();
 
   return (
     <div className="console">
