@@ -35,8 +35,9 @@ target/simlab/golden/ (DIR): sim data is ephemeral, so they stay local.
 `real capture` before a change and `real check` after it compare them,
 over the experiments the capture chose (exps.json). The invocations read
 the real cache and catalog (never indexing it) with an aws CLI that
-refuses, so nothing reaches S3; a farm experiment's are those that need
-no reads (the farm keeps them in S3).
+refuses, so nothing reaches S3; a farm experiment's select its cells in
+its farm runs' flushes (experiments.farm_runs: a run may hold several
+experiments' jobs) and need no reads (the farm keeps them in S3).
 """
 
 import argparse
