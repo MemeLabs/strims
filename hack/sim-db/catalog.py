@@ -28,12 +28,15 @@ last run, is idempotent, runs under lake/index.lock, and does nothing but
 look when nothing changed. A cache source's sim tables are hard links of
 the cache's own Parquet files, registered with the lake
 (ducklake_add_data_files), so they cost no disk while the cache holds
-them; a file whose column types differ from the lake table's is
-rewritten, cast. A source gone from the cache (simdb.py gc) leaves the
-catalog at the next index, and its files with it. The rows, the verdicts
-and the metadata tables are written by the lake, and its small files are
-merged at the end of each index (ducklake_merge_adjacent_files). The
-verdicts are simdb.py's derived tables (simdb.derive, analyze.py's
+them; a file whose column types differ from the lake table's (a column
+new to the lake takes the type most of its files give it) is rewritten,
+cast. A source gone from the cache (simdb.py gc) leaves the catalog at
+the next index, and its files with it. The rows, the verdicts and the
+metadata tables are written by the lake, and its small files are merged
+at the end of each index (ducklake_merge_adjacent_files); snapshots older
+than 15 minutes, and the files only they read, go then too. After each
+write the tables' statistics are marked as holding NULLs (null_stats).
+The verdicts are simdb.py's derived tables (simdb.derive, analyze.py's
 verdict and run_metrics), made for every source that lacks them, several
 sources at a time (`--workers`).
 
@@ -65,12 +68,13 @@ metric, `event_kinds` each event):
   rows              each job's row, a column a field
   scalars           the rows' numbers, long form (name, value)
   seconds, viewer_seconds, viewers, events, bins, node_bins, reads,
-  forecast, and any table a sim writes
+  stalls, parents, forecast, and any table a sim writes
                     the sims' tables, normalized: viewers `node` in both
                     sims, `churned` BOOLEAN, `arrive_ms` NULL for a viewer
                     there from the start; viewer_seconds without the
                     seconds a viewer wasn't there; events' `detail` also as
-                    a MAP where it is key=value; -1 for no reading NULL
+                    a MAP where it is key=value; -1 for none or no reading
+                    NULL
   verdicts, verdict_seconds, episodes, derived_events
                     analyze.py's verdicts, of the current verdict_version
                     (catalog_info); <table>_all holds every version kept
@@ -81,9 +85,9 @@ experiments, cells, arms and seeds. A job's tables come from one cache
 source, jobs.src (simdb.py's source_ranks: the one holding the most of
 them, then the later flush, then the later seq), so a result table has
 one copy of a job. Beside `k` the tables join on their own columns:
-reads and viewer_seconds to viewers USING (k, viewer); events, node_bins
-and forecast to viewers USING (k, node); seconds to verdict_seconds USING
-(k, sec).
+reads, viewer_seconds and stalls to viewers USING (k, viewer); events,
+node_bins, parents and forecast to viewers USING (k, node); seconds to
+verdict_seconds USING (k, sec).
 
   SELECT e.cell, e.arm_label, count(*) AS runs, sum(v.collapsed::INT) AS collapsed
   FROM experiment_jobs e JOIN verdicts v USING (k)
@@ -97,13 +101,11 @@ import argparse
 import collections
 import contextlib
 import datetime
-import hashlib
 import importlib.util
 import json
-import math
 import multiprocessing
-import queue
 import os
+import queue
 import re
 import shutil
 import subprocess
@@ -445,38 +447,109 @@ def paren(text, start):
 
 def column_docs(text):
     """A doc table's columns cell, by column: the parenthesized text after
-    each backticked name, where one follows it."""
+    each backticked name, where one follows it, or the cell's rest after
+    one followed by a colon."""
     out = {}
     for m in BACKTICK.finditer(text):
         p = paren(text, m.end() + 1) if text[m.end():m.end() + 1] == " " else None
+        if p is None and text[m.end():m.end() + 2] == ": ":
+            p = text[m.end() + 2:].strip()
         if p and m.group(1) not in out:
             out[m.group(1)] = p
     return out
 
 
 def event_docs(text):
-    """The events row's text by kind: from each backticked name to the next
-    one's place at the same depth of parentheses, where it names a kind."""
+    """The events row's text by name: the item of its list that names it
+    (between separators, `, `, `; ` or ` and `, at its depth of
+    parentheses), after the text the list's parenthesis follows when it's
+    in one ("every fault of the scenario: `crash`")."""
+    depth, opens, at_depth = 0, [], []
+    for ch in text:
+        at_depth.append(depth)
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+    seps = re.compile(r", |; | and ")
+    ends = lambda lo: text[max(0, lo - 2):lo] in (", ", "; ") or text[max(0, lo - 5):lo] == " and "
+
+    def item(pos):
+        """The item around `pos`, and where its parenthesis opens (or -1)."""
+        d = at_depth[pos]
+        lo = pos
+        while lo > 0 and not (at_depth[lo - 1] == d and ends(lo)) and not (text[lo - 1] == "(" and d > 0
+                                                                          and at_depth[lo - 1] == d - 1):
+            lo -= 1
+        hi = pos
+        while hi < len(text) and not (at_depth[hi] == d and seps.match(text, hi)) \
+                and not (text[hi] == ")" and at_depth[hi] == d):
+            hi += 1
+        opened = next((i for i in range(lo - 1, -1, -1) if text[i] == "(" and at_depth[i] == d - 1), -1) if d else -1
+        return lo, hi, opened
+
     out = {}
-    marks = [(m.start(), m.group(1)) for m in BACKTICK.finditer(text)]
-    for i, (at, name) in enumerate(marks):
+    for m in BACKTICK.finditer(text):
+        name = m.group(1)
         if name in out:
             continue
-        end = marks[i + 1][0] if i + 1 < len(marks) else len(text)
-        p = paren(text, text.find("(", at + len(name) + 2)) if text[at + len(name) + 2:at + len(name) + 4].strip().startswith("(") else None
-        snippet = p if p else text[at + len(name) + 2:end].strip(" ,;:")
-        out[name] = snippet
+        lo, hi, opened = item(m.start())
+        s = text[lo:hi].strip(" ,;")
+        if opened > 0:
+            clo, _, _ = item(opened - 1)
+            context = text[clo:opened].strip(" ,;")
+            s = f"{context}: {s}" if context else s
+        # the row's last column names the list that follows it
+        out[name] = re.sub(r"^`detail`: ", "", s)
     return out
 
 
 ROW_METHODS = re.compile(r'\.(?:int|num|text|bool|nums|opt_num|opt_int|uint|f64|str|list|ints|field|set)\(\s*"([a-z0-9_]+)"')
 
 
-def row_docs():
-    """The rows' fields' comments, {field: text}: the comment lines nearest
-    above the line that writes the field into a sim's row (strims-sim's
-    measures, the ppspp sim's job_row)."""
+def doc_sentences():
+    """The sentences of the sims' rustdoc (their tables and rows' modules:
+    DOC_FILES) and of suite.py's module docs, each with the backticked
+    names it holds, a name's upper-case part (`stalls_per_min_D`) standing
+    for any digits."""
+    paras = []
+    for path in DOC_FILES:
+        with contextlib.suppress(OSError):
+            cur = []
+            for line in path.read_text().splitlines():
+                s = line.strip()
+                # A doc table's rows are column_docs'.
+                if s.startswith(("///", "//!")) and not s[3:].strip().startswith("|"):
+                    cur.append(s[3:].strip())
+                elif cur:
+                    paras.append(" ".join(cur))
+                    cur = []
+    with contextlib.suppress(OSError):
+        doc = suite_module().__doc__ or ""
+        paras += [" ".join(p.split()) for p in doc.split("\n\n")]
+    out = []
+    for p in paras:
+        for s in re.split(r"(?<=[.;:])\s+(?=[A-Z(`])", clean(p)):
+            names = [n for n in re.findall(r"`([a-z][A-Za-z0-9_{}]*)`", s)]
+            pats = [re.compile("^" + re.sub(r"(_[A-Z]+|\{[a-z]+\})", r"_?[0-9a-z_]*", re.escape(n).replace(r"\{", "{")
+                                                                   .replace(r"\}", "}")) + "$") for n in names]
+            if pats:
+                out.append((s, pats))
+    return out
+
+
+def row_docs(names):
+    """The rows' fields' docs, {field: text}: the first sentence of the
+    sims' and suite.py's docs naming the field (doc_sentences), else the
+    comment lines nearest above the line that writes it into a sim's row
+    (strims-sim's measures, the ppspp sim's job_row)."""
+    sentences = doc_sentences()
     out = {}
+    for n in names:
+        for s, pats in sentences:
+            if any(p.match(n) for p in pats):
+                out[n] = s if len(s) <= 600 else s[:597] + "..."
+                break
     for path in DOC_FILES[1:]:
         with contextlib.suppress(OSError):
             lines = path.read_text().splitlines()
@@ -780,7 +853,6 @@ def index(workers=None, quiet=False, wait=True):
 def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of, need_verdicts, version, tmp,
           failed=()):
     """The index's one transaction, as SQL."""
-    sm = simdb()
     cols = lake_columns()
     pre, sql = [], ["BEGIN;"]
     drop = sorted({*gone, *changed})
@@ -804,17 +876,25 @@ def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of,
     types = schemas([cache[s]["files"][t]["path"] for s, t in add])
     files_rows, fields_rows = [], []
     sims = sims_of(cache, add)
+    # A column new to the lake takes the type most of the new files give
+    # it; the files giving another are cast.
+    votes = collections.defaultdict(collections.Counter)
+    for s, t in add:
+        for n, ty in types.get(cache[s]["files"][t]["path"], {}).items():
+            if n not in cols.get(t, {}):
+                votes[(t, n)][ty] += 1
     for s, t in add:
         f = cache[s]["files"][t]
         have_cols = types.get(f["path"], {})
         if not have_cols:
             continue
         table = cols.setdefault(t, {})
+        new_cols = {n: votes[(t, n)].most_common(1)[0][0] for n in have_cols if n not in table}
         if not table:
-            first = {"k": "VARCHAR", "src": "VARCHAR", **have_cols}
+            first = {"k": "VARCHAR", "src": "VARCHAR", **new_cols}
             sql.append(f"CREATE TABLE raw.{ident(t)} ({', '.join(f'{ident(n)} {ty}' for n, ty in first.items())});")
             table.update(first)
-        for n, ty in have_cols.items():
+        for n, ty in new_cols.items():
             if n not in table:
                 sql.append(f"ALTER TABLE raw.{ident(t)} ADD COLUMN {ident(n)} {ty};")
                 table[n] = ty
@@ -1246,8 +1326,11 @@ CREATE OR REPLACE VIEW main.catalog_info AS SELECT key, value FROM raw.info;
 
 
 def canon(t):
-    """A raw table's rows of the jobs' own sources (jobs.src)."""
-    return f"FROM raw.{ident(t)} x SEMI JOIN main.jobs USING (k, src)"
+    """A raw table's rows of the jobs' own sources (jobs.src). An inner
+    join, a job a row of jobs: a filter on k reaches jobs through it, and
+    the source it gives prunes the table's files (a dynamic filter on src),
+    as a semi join's doesn't."""
+    return f"FROM raw.{ident(t)} x JOIN main.jobs j_ ON j_.k = x.k AND j_.src = x.src"
 
 
 NUMERIC = ("BIGINT", "INTEGER", "DOUBLE", "FLOAT", "HUGEINT", "SMALLINT", "TINYINT", "UBIGINT", "UINTEGER", "DECIMAL")
@@ -1301,6 +1384,9 @@ def view_sql(t, cols, name, viewers):
         return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "forecast":
         sel = ["x.k"] + [nullify(c) if c in ("horizon_ms", "held_ms", "mean_ms") else plain(c) for c in rest]
+        return f"{head} {', '.join(sel)} {canon(t)};"
+    if t == "parents":
+        sel = ["x.k"] + [nullify(c) if c == "parent" else plain(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
     return f"{head} x.* EXCLUDE (src) {canon(t)};"
 
@@ -1515,15 +1601,21 @@ NORMALIZED = {
               "stopped counting on the parent; detail_map: detail as a MAP where it is key=value pairs.",
     "seconds": "-1 (no reading) NULL.", "bins": "-1 (no reading) NULL.",
     "node_bins": "viewer NULL for the seed and hostile hosts.",
+    "stalls": "The unit played is the sim's: a frame in strims-sim, a chunk in the ppspp sim, whose stalls are "
+              "one chunk's lateness and so often far shorter than a frame's. A unit read twice counts at its "
+              "first read. macros.sql's playback(delay_ms) plays reads the same way at any delay.",
+    "parents": "parent NULL for none. Only hybrid push gives a stream push parents: empty in other modes.",
     "forecast": "horizon_ms, held_ms and mean_ms NULL where -1 (no estimate, never held).",
 }
 STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewers": "k, viewer",
                  "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",
-                 "reads": "k, viewer, t_ms", "forecast": "k, node, peer, seq"}
+                 "reads": "k, viewer, t_ms", "forecast": "k, node, peer, seq",
+                 "stalls": "k, viewer, delay_ms, t_ms", "parents": "k, node, stream, t_ms"}
 STANDARD_JOINS = {"seconds": "jobs USING (k); verdict_seconds USING (k, sec)",
                   "viewer_seconds": "viewers USING (k, viewer)", "reads": "viewers USING (k, viewer)",
                   "events": "viewers USING (k, node)", "node_bins": "viewers USING (k, node)",
-                  "forecast": "viewers USING (k, node)", "viewers": "reads, viewer_seconds USING (k, viewer)"}
+                  "forecast": "viewers USING (k, node)", "stalls": "viewers USING (k, viewer)",
+                  "parents": "viewers USING (k, node)", "viewers": "reads, viewer_seconds, stalls USING (k, viewer)"}
 VERDICT_DOCS = {
     "onset": "the first second a trigger held (trees, delivery or latency), NULL if none",
     "trees": "the first second of TREES_SECS with the smoothed hit share under TREES_SHARE",
@@ -1576,7 +1668,8 @@ def catalogs_sql(cols, tmp):
         for t, (_, text) in ts.items():
             for c, d in column_docs(text).items():
                 col_docs[(t, c)][sim] = d
-    rdocs, mdocs = row_docs(), run_metric_docs()
+    names = {c for c in (n for t in cols.values() for n in t) if c not in ("k", "src")} | {m[0] for m in suite_metrics()}
+    rdocs, mdocs = row_docs(names), run_metric_docs()
     metrics = suite_metrics()
     plain = {}
     for name, fields, better, kind, tie, text, _ in metrics:
@@ -1594,14 +1687,15 @@ def catalogs_sql(cols, tmp):
                     (VERDICT_DOCS.get(c) or mdocs.get(c) or mdocs.get(c.replace("_censored", "")))
                     if t in ("verdicts", "verdict_seconds", "episodes", "derived_events") else
                     ("; ".join(f"{s}: {d}" for s, d in sorted(by.items())) if len(set(by.values())) > 1
-                     else next(iter(by.values()), None)))
+                     else next(iter(by.values()), None))) or rdocs.get(c)
             better, kind, tie, metric = plain.get(c, (None, None, None, None))
             recs.append({"name": c, "tbl": view, "type": cols[t][c], "unit": unit_of(c), "description": desc,
                          "better": better, "kind": kind, "tie": tie, "guard": GUARDS.get(metric or c),
                          "fields": None, "source": None, "metric": metric})
     for name, fields, better, kind, tie, text, comment in metrics:
         recs.append({"name": name, "tbl": "suite", "type": "DOUBLE", "unit": unit_of(name),
-                     "description": comment, "better": better, "kind": kind, "tie": tie, "guard": GUARDS.get(name),
+                     "description": comment or rdocs.get(name) or next((rdocs[f] for f in fields if f in rdocs), None),
+                     "better": better, "kind": kind, "tie": tie, "guard": GUARDS.get(name),
                      "fields": fields, "source": text, "metric": name})
     recs.append({"name": "collapsed", "tbl": "suite", "type": "BOOLEAN", "unit": None,
                  "description": "collapsed runs of a cell, A against B, judged by their counts' Fisher exact p "
