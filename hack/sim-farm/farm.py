@@ -10,7 +10,7 @@
                                [--hours H] [--verify N] [--job-timeout MIN]
                                [--rotate-mb MB] [--keep]
                                [--local [--slots N] [--imds-url URL]]
-  hack/sim-farm/farm.py estimate MATRIX... [run's options]
+  hack/sim-farm/farm.py estimate MATRIX... [--json] [run's options]
   hack/sim-farm/farm.py status [MATRIX] [--regions R,...]
   hack/sim-farm/farm.py down   [MATRIX] [--regions R,...]
   hack/sim-farm/farm.py report MATRIX [--where KEY=VALUE ...] [--group KEY,...]
@@ -293,12 +293,16 @@ median of what the last 5 runs took over their model's, which covers
 what it leaves out (the syncs' latency, waves of jobs, the end).
 `estimate` prints that for a run's matrices and options without building
 or launching anything: run it with --regions and without to see what
-more regions buy. Once it's done a run logs what it took (launch to
-finish), what it cost, per 1,000 jobs and as instances booting, running
-jobs (their walls) and idle, and each region's mean boot, and adds that,
-its estimate, and each instance AWS interrupted (its id, type, zone,
-launch, notice and how it ended, which the run asks once more as it
-ends) as a line of target/sim-farm/costs.jsonl.
+more regions buy. With --json it prints the estimate as one JSON object
+(Run.estimate's: jobs, have_rows, timed, work_slot_h, boot_s, instances,
+slots, slots_by_region, model_wall_s, model_cost, past_runs, wall_s,
+cost, s3_cost), and its text and log on stderr. Once it's done a run
+logs what it took (launch to finish), what it cost, per 1,000 jobs and
+as instances booting, running jobs (their walls) and idle, and each
+region's mean boot, and adds that, its estimate, and each instance AWS
+interrupted (its id, type, zone, launch, notice and how it ended, which
+the run asks once more as it ends) as a line of
+target/sim-farm/costs.jsonl.
 
 A run's S3 use goes to target/sim-farm/s3.jsonl (S3_LEDGER) as it goes,
 priced by the bucket region's list prices (S3_TIER1 and the rest):
@@ -3996,9 +4000,9 @@ class Run:
             self.estimated = self.estimate()
             log("estimate: " + self.say_estimate(self.estimated))
 
-    def estimate_only(self) -> int:
-        """`estimate`: the run's estimate, with nothing changed in AWS (no
-        key pair, security group or launch)."""
+    def estimate_only(self) -> dict:
+        """`estimate`: the run's estimate, printed and returned, with nothing
+        changed in AWS (no key pair, security group or launch)."""
         if self.testbed is not None:
             sys.exit("estimate takes test matrices")
 
@@ -4017,8 +4021,9 @@ class Run:
         ]
         if unbuilt:
             print(f"not built yet, so their jobs count as having no rows: {', '.join(unbuilt)}")
-        print(self.say_estimate(self.estimate()))
-        return 0
+        est = self.estimate()
+        print(self.say_estimate(est))
+        return est
 
     def where(self, zone: str) -> str:
         """A zone as the log shows it: its letter, or all of it when the
@@ -4842,6 +4847,9 @@ def main() -> int:
         if set(defaults) - known:
             sys.exit(f"{CONFIG}: unknown [run] settings {sorted(set(defaults) - known)}")
         r.set_defaults(**defaults)
+        if cmd == "estimate":
+            r.add_argument("--json", action="store_true",
+                           help="print the estimate as JSON, its text and log on stderr")
     s = sub.add_parser("status")
     s.add_argument("matrix", nargs="?")
     s.add_argument("--regions")
@@ -4868,10 +4876,17 @@ def main() -> int:
         ms = [Matrix(m) for m in args.matrices]
         run_name(ms)  # its checks, before the builds
         if args.cmd == "estimate":
-            args.regions = regions_of(args.regions, cfg)
-            for m in ms:
-                m.resolve()
-            return Run(ms, args).estimate_only()
+            # --json: the estimate alone on stdout, and what estimate prints
+            # otherwise on stderr, the log's lines too.
+            out = sys.stdout
+            with contextlib.redirect_stdout(sys.stderr) if args.json else contextlib.nullcontext():
+                args.regions = regions_of(args.regions, cfg)
+                for m in ms:
+                    m.resolve()
+                est = Run(ms, args).estimate_only()
+            if args.json:
+                print(json.dumps(est), file=out)
+            return 0
         if not args.local:
             args.regions = regions_of(args.regions, cfg)
         for m in ms:
