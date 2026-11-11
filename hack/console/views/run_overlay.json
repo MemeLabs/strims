@@ -1,0 +1,36 @@
+{
+  "title": "Run overlay",
+  "description": "Two arms on the same cell and seed, on one time axis: the seed fixes the audience, arrivals and faults, so where the lines part is where the arms differ. Lag p99 solid and max dashed per arm, stalls per second at the playout delay (from the sims' stalls tables), and the verdict's unhealthy seconds and collapses per arm.",
+  "params": [
+    {
+      "name": "exp",
+      "kind": "exp"
+    },
+    {
+      "name": "cell",
+      "kind": "cell"
+    },
+    {
+      "name": "seed",
+      "kind": "seed"
+    },
+    {
+      "name": "arm",
+      "kind": "arm"
+    },
+    {
+      "name": "arm2",
+      "kind": "arm2"
+    },
+    {
+      "name": "delay",
+      "kind": "number",
+      "default": 1250
+    },
+    {
+      "name": "min_stall_ms",
+      "kind": "number",
+      "default": 50
+    }
+  ]
+}

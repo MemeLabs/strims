@@ -1,0 +1,10 @@
+{
+  "title": "Collapse grid",
+  "description": "Each run of the experiment by cell and seed, per arm: healthy, a ramp (collapsed, but the honest q0.9 lag stayed under 4250 ms) or a collapse. Structural cells, which every arm collapses on every seed, are greyed: they say nothing about the arms. Click a run for its timeline.",
+  "params": [
+    {
+      "name": "exp",
+      "kind": "exp"
+    }
+  ]
+}

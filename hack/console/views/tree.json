@@ -1,0 +1,28 @@
+{
+  "title": "Tree",
+  "description": "One run's push trees from the sims' parents table (hybrid push mode only): the mean and most depth from the seed over time with the share of node-streams without a parent, the parent changes per second by reason, and each node's depth in each stream at the time picked (empty: no parent reaching the seed).",
+  "params": [
+    {
+      "name": "exp",
+      "kind": "exp"
+    },
+    {
+      "name": "cell",
+      "kind": "cell"
+    },
+    {
+      "name": "arm",
+      "kind": "arm"
+    },
+    {
+      "name": "seed",
+      "kind": "seed"
+    },
+    {
+      "name": "t",
+      "kind": "number",
+      "default": 30,
+      "label": "at (s)"
+    }
+  ]
+}

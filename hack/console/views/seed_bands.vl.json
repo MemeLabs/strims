@@ -1,0 +1,243 @@
+{
+  "vconcat": [
+    {
+      "title": "Honest q0.9 lag across seeds",
+      "width": "container",
+      "height": 260,
+      "layer": [
+        {
+          "mark": {
+            "type": "area",
+            "color": "#cde2fb"
+          },
+          "encoding": {
+            "x": {
+              "field": "t",
+              "type": "quantitative",
+              "title": null
+            },
+            "y": {
+              "field": "p10",
+              "type": "quantitative",
+              "title": "lag (ms)",
+              "scale": {
+                "type": "symlog",
+                "constant": 100
+              }
+            },
+            "y2": {
+              "field": "p90"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "area",
+            "color": "#86b6ef"
+          },
+          "encoding": {
+            "x": {
+              "field": "t",
+              "type": "quantitative",
+              "title": null
+            },
+            "y": {
+              "field": "p25",
+              "type": "quantitative"
+            },
+            "y2": {
+              "field": "p75"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "line",
+            "color": "#184f95"
+          },
+          "encoding": {
+            "x": {
+              "field": "t",
+              "type": "quantitative",
+              "title": null
+            },
+            "y": {
+              "field": "p50",
+              "type": "quantitative"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "line",
+            "color": "#d03b3b",
+            "strokeDash": [
+              2,
+              2
+            ],
+            "strokeWidth": 1.5
+          },
+          "encoding": {
+            "x": {
+              "field": "t",
+              "type": "quantitative",
+              "title": null
+            },
+            "y": {
+              "field": "max",
+              "type": "quantitative"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "rule",
+            "opacity": 0
+          },
+          "encoding": {
+            "x": {
+              "field": "t",
+              "type": "quantitative",
+              "title": null
+            },
+            "tooltip": [
+              {
+                "field": "t",
+                "title": "s"
+              },
+              {
+                "field": "seeds"
+              },
+              {
+                "field": "p10"
+              },
+              {
+                "field": "p50"
+              },
+              {
+                "field": "p90"
+              },
+              {
+                "field": "max"
+              },
+              {
+                "field": "worst_seed",
+                "title": "worst seed"
+              }
+            ]
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "d": 1250,
+                "label": "1250 ms"
+              },
+              {
+                "d": 4250,
+                "label": "4250 ms"
+              }
+            ]
+          },
+          "mark": {
+            "type": "rule",
+            "strokeDash": [
+              4,
+              3
+            ],
+            "color": "#898781"
+          },
+          "encoding": {
+            "y": {
+              "field": "d",
+              "type": "quantitative"
+            }
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "d": 1250,
+                "label": "1250 ms"
+              },
+              {
+                "d": 4250,
+                "label": "4250 ms"
+              }
+            ]
+          },
+          "mark": {
+            "type": "text",
+            "align": "left",
+            "dx": 4,
+            "dy": -6,
+            "color": "#898781",
+            "fontSize": 10
+          },
+          "encoding": {
+            "y": {
+              "field": "d",
+              "type": "quantitative"
+            },
+            "x": {
+              "value": 0
+            },
+            "text": {
+              "field": "label"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "Share of seeds unhealthy",
+      "width": "container",
+      "height": 90,
+      "mark": {
+        "type": "area",
+        "color": "#fab219",
+        "interpolate": "step-after"
+      },
+      "encoding": {
+        "x": {
+          "field": "t",
+          "type": "quantitative",
+          "title": "seconds from the start, or from each run's event"
+        },
+        "y": {
+          "field": "unhealthy_share",
+          "type": "quantitative",
+          "title": null,
+          "axis": {
+            "format": "%"
+          },
+          "scale": {
+            "domain": [
+              0,
+              1
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "resolve": {
+    "scale": {
+      "x": "shared"
+    }
+  },
+  "config": {
+    "legend": {
+      "orient": "top",
+      "direction": "horizontal",
+      "labelLimit": 220,
+      "titleLimit": 220,
+      "columnPadding": 14
+    },
+    "axisY": {
+      "labelLimit": 220
+    }
+  }
+}

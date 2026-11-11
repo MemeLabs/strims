@@ -1,0 +1,268 @@
+{
+  "vconcat": [
+    {
+      "title": "Stalls per viewer-minute, by phase",
+      "transform": [
+        {
+          "filter": "datum.part === 'rate' && datum.metric === 'stalls per viewer-minute'"
+        }
+      ],
+      "width": 260,
+      "height": {
+        "step": 9
+      },
+      "mark": {
+        "type": "bar",
+        "tooltip": true,
+        "cornerRadiusEnd": 2
+      },
+      "encoding": {
+        "y": {
+          "field": "cell",
+          "type": "nominal",
+          "title": null
+        },
+        "yOffset": {
+          "field": "arm"
+        },
+        "x": {
+          "field": "value",
+          "type": "quantitative",
+          "title": "stalls per viewer-minute"
+        },
+        "color": {
+          "field": "arm",
+          "type": "nominal",
+          "title": "arm"
+        },
+        "column": {
+          "field": "phase",
+          "type": "nominal",
+          "title": null,
+          "sort": [
+            "startup",
+            "steady",
+            "after_down",
+            "after_up"
+          ]
+        },
+        "tooltip": [
+          {
+            "field": "cell"
+          },
+          {
+            "field": "arm"
+          },
+          {
+            "field": "phase"
+          },
+          {
+            "field": "value",
+            "format": ".4f"
+          },
+          {
+            "field": "stalls"
+          },
+          {
+            "field": "viewer_s",
+            "title": "viewer-seconds"
+          }
+        ]
+      }
+    },
+    {
+      "title": "Share of viewing time stalled, by phase",
+      "transform": [
+        {
+          "filter": "datum.part === 'rate' && datum.metric === 'stalled share'"
+        }
+      ],
+      "width": 260,
+      "height": {
+        "step": 9
+      },
+      "mark": {
+        "type": "bar",
+        "tooltip": true,
+        "cornerRadiusEnd": 2
+      },
+      "encoding": {
+        "y": {
+          "field": "cell",
+          "type": "nominal",
+          "title": null
+        },
+        "yOffset": {
+          "field": "arm"
+        },
+        "x": {
+          "field": "value",
+          "type": "quantitative",
+          "title": "stalled share"
+        },
+        "color": {
+          "field": "arm",
+          "type": "nominal",
+          "title": "arm"
+        },
+        "column": {
+          "field": "phase",
+          "type": "nominal",
+          "title": null,
+          "sort": [
+            "startup",
+            "steady",
+            "after_down",
+            "after_up"
+          ]
+        },
+        "tooltip": [
+          {
+            "field": "cell"
+          },
+          {
+            "field": "arm"
+          },
+          {
+            "field": "phase"
+          },
+          {
+            "field": "value",
+            "format": ".4f"
+          },
+          {
+            "field": "stalls"
+          },
+          {
+            "field": "viewer_s",
+            "title": "viewer-seconds"
+          }
+        ]
+      }
+    },
+    {
+      "title": "Startup time at the delay (dot p50, bar to p90)",
+      "width": 520,
+      "height": {
+        "step": 9
+      },
+      "transform": [
+        {
+          "filter": "datum.part === 'startup'"
+        },
+        {
+          "pivot": "metric",
+          "value": "value",
+          "groupby": [
+            "cell",
+            "arm"
+          ]
+        }
+      ],
+      "layer": [
+        {
+          "mark": {
+            "type": "rule",
+            "strokeWidth": 2
+          },
+          "encoding": {
+            "y": {
+              "field": "cell",
+              "type": "nominal",
+              "title": null
+            },
+            "yOffset": {
+              "field": "arm"
+            },
+            "x": {
+              "field": "startup p50 (ms)",
+              "type": "quantitative",
+              "title": "ms"
+            },
+            "x2": {
+              "field": "startup p90 (ms)"
+            },
+            "color": {
+              "field": "arm",
+              "type": "nominal"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "point",
+            "filled": true,
+            "size": 40,
+            "tooltip": true
+          },
+          "encoding": {
+            "y": {
+              "field": "cell",
+              "type": "nominal"
+            },
+            "yOffset": {
+              "field": "arm"
+            },
+            "x": {
+              "field": "startup p50 (ms)",
+              "type": "quantitative"
+            },
+            "color": {
+              "field": "arm",
+              "type": "nominal"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "How long stalls last (share of stalls no longer than)",
+      "width": 520,
+      "height": 220,
+      "transform": [
+        {
+          "filter": "datum.part === 'cdf'"
+        }
+      ],
+      "mark": {
+        "type": "line",
+        "interpolate": "step-after",
+        "tooltip": true
+      },
+      "encoding": {
+        "x": {
+          "field": "value",
+          "type": "quantitative",
+          "title": "stall (ms)",
+          "scale": {
+            "type": "log"
+          }
+        },
+        "y": {
+          "field": "p",
+          "type": "quantitative",
+          "title": "share of stalls",
+          "axis": {
+            "format": "%"
+          }
+        },
+        "color": {
+          "field": "arm",
+          "type": "nominal"
+        }
+      }
+    }
+  ],
+  "config": {
+    "legend": {
+      "orient": "top",
+      "direction": "horizontal",
+      "labelLimit": 220,
+      "titleLimit": 220,
+      "columnPadding": 14
+    },
+    "axisY": {
+      "labelLimit": 220
+    }
+  }
+}

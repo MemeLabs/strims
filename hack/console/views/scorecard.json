@@ -1,0 +1,19 @@
+{
+  "title": "Scorecard",
+  "description": "An arm against another (the base) cell by cell, as suite.py scores them: per-seed pairs, the geomean ratio of lag p99 and of wire bytes per useful byte with a 95 % t-interval on a log axis (red higher, blue lower, grey a tie), both arms' absolute geomeans beside, and the collapse counts with a two-sided Fisher p. Structural cells (every arm collapses on every seed) are greyed.",
+  "params": [
+    {
+      "name": "exp",
+      "kind": "exp"
+    },
+    {
+      "name": "arm",
+      "kind": "arm"
+    },
+    {
+      "name": "arm2",
+      "kind": "arm2"
+    }
+  ],
+  "todo": "switch to the catalog's scoring macros (effects, collapse_test, arm_score, structural) once step 3 lands them on main; this SQL ports suite.py's formulas against the plain tables."
+}

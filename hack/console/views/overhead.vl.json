@@ -1,0 +1,180 @@
+{
+  "vconcat": [
+    {
+      "title": "Overhead bytes per useful byte, by kind",
+      "width": 300,
+      "height": {
+        "step": 9
+      },
+      "transform": [
+        {
+          "filter": "datum.part === 'bytes' && datum.kind !== 'data'"
+        }
+      ],
+      "mark": {
+        "type": "bar",
+        "tooltip": true
+      },
+      "encoding": {
+        "y": {
+          "field": "cell",
+          "type": "nominal",
+          "title": null
+        },
+        "yOffset": {
+          "field": "arm"
+        },
+        "x": {
+          "field": "per_useful",
+          "type": "quantitative",
+          "title": "bytes per useful byte"
+        },
+        "color": {
+          "field": "kind",
+          "type": "nominal",
+          "scale": {
+            "domain": [
+              "state",
+              "integrity",
+              "header",
+              "ping",
+              "request",
+              "announce",
+              "ack",
+              "have"
+            ]
+          }
+        },
+        "column": {
+          "field": "who",
+          "type": "nominal",
+          "title": null
+        },
+        "tooltip": [
+          {
+            "field": "cell"
+          },
+          {
+            "field": "arm"
+          },
+          {
+            "field": "who"
+          },
+          {
+            "field": "kind"
+          },
+          {
+            "field": "per_useful",
+            "format": ".4f"
+          },
+          {
+            "field": "kbps",
+            "title": "kbit/s",
+            "format": ".1f"
+          }
+        ]
+      }
+    },
+    {
+      "title": "Wire bytes per useful byte (uplinks with their acknowledgements)",
+      "width": 300,
+      "height": {
+        "step": 9
+      },
+      "transform": [
+        {
+          "filter": "datum.part === 'wire'"
+        }
+      ],
+      "mark": {
+        "type": "bar",
+        "tooltip": true
+      },
+      "encoding": {
+        "y": {
+          "field": "cell",
+          "type": "nominal",
+          "title": null
+        },
+        "yOffset": {
+          "field": "arm"
+        },
+        "x": {
+          "field": "per_useful",
+          "type": "quantitative",
+          "title": "bytes per useful byte"
+        },
+        "color": {
+          "field": "arm",
+          "type": "nominal",
+          "title": "arm"
+        },
+        "column": {
+          "field": "who",
+          "type": "nominal",
+          "title": null
+        }
+      }
+    },
+    {
+      "title": "Packets per second",
+      "width": 300,
+      "height": {
+        "step": 9
+      },
+      "transform": [
+        {
+          "filter": "datum.part === 'packets'"
+        }
+      ],
+      "mark": {
+        "type": "bar",
+        "tooltip": true
+      },
+      "encoding": {
+        "y": {
+          "field": "cell",
+          "type": "nominal",
+          "title": null
+        },
+        "yOffset": {
+          "field": "arm"
+        },
+        "x": {
+          "field": "packets_per_s",
+          "type": "quantitative",
+          "title": "packets/s"
+        },
+        "color": {
+          "field": "arm",
+          "type": "nominal"
+        },
+        "column": {
+          "field": "who",
+          "type": "nominal",
+          "title": null
+        }
+      }
+    }
+  ],
+  "resolve": {
+    "scale": {
+      "color": "independent"
+    },
+    "legend": {
+      "color": "independent"
+    }
+  },
+  "config": {
+    "legend": {
+      "orient": "top",
+      "direction": "horizontal",
+      "labelLimit": 220,
+      "titleLimit": 220,
+      "columnPadding": 14
+    },
+    "axisY": {
+      "labelLimit": 220
+    }
+  }
+}

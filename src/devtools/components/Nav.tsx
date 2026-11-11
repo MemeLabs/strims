@@ -11,6 +11,7 @@ const Nav: React.FC = () => (
     <Link to="/emotes">Emotes</Link>
     <Link to="/layout">Layout</Link>
     <Link to="/storybook">Storybook</Link>
+    <Link to="/console">Console</Link>
   </div>
 );
 

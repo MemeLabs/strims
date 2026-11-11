@@ -187,7 +187,7 @@ export class Console {
   readonly regenerations: Regenerations;
   private fetching: Promise<unknown> = Promise.resolve();
   private timer: NodeJS.Timeout | null = null;
-  private schema: Promise<unknown> | null = null;
+  private schema: Promise<Record<string, unknown>> | null = null;
 
   constructor(o: ConsoleOptions) {
     this.lake = o.lake;
@@ -226,7 +226,10 @@ export class Console {
     try {
       let m: RegExpExecArray | null;
       if (route === "POST /console/sql") return send(res, 200, await this.sql(await readBody(req)));
-      if (route === "GET /console/schema") return send(res, 200, await this.getSchema());
+      if (route === "GET /console/schema") {
+        // The views are read each time: they're files anyone may edit.
+        return send(res, 200, { ...(await this.getSchema()), views: readViews(this.views) });
+      }
       if (route === "GET /console/views") return send(res, 200, readViews(this.views));
       if ((m = /^PUT \/console\/views\/([^/]+)$/.exec(route))) {
         return send(res, 200, this.saveView(decodeURIComponent(m[1]), await readBody(req)));
@@ -282,7 +285,7 @@ export class Console {
     return r.rows.map((row) => Object.fromEntries(r.columns.map((c, i) => [c.name, row[i]])));
   };
 
-  private getSchema(): Promise<unknown> {
+  private getSchema(): Promise<Record<string, unknown>> {
     if (!this.schema) {
       this.schema = (async () => {
         const columns = await this.rows(
@@ -302,7 +305,6 @@ export class Console {
               "FROM experiments ORDER BY started_at DESC NULLS LAST, exp_id"
           ),
           catalog_info: await this.rows("SELECT * FROM catalog_info"),
-          views: readViews(this.views),
         };
       })();
       this.schema.catch(() => (this.schema = null));

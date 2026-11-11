@@ -1,0 +1,391 @@
+{
+  "transform": [
+    {
+      "calculate": "datum.structural ? 0.35 : 1",
+      "as": "alpha"
+    },
+    {
+      "calculate": "format(datum.base_geomean, '.4~r') + ' \u2192 ' + format(datum.arm_geomean, '.4~r') + '  \u00b7  ' + datum.base_collapsed + ' \u2192 ' + datum.arm_collapsed + ' of ' + datum.arm_runs + '  \u00b7  p ' + format(datum.fisher_p, '.2f')",
+      "as": "beside"
+    }
+  ],
+  "vconcat": [
+    {
+      "title": "Lag p99: ratio with its 95 % interval; base -> arm geomean (ms) and collapses beside",
+      "width": 420,
+      "height": {
+        "step": 15
+      },
+      "transform": [
+        {
+          "filter": "datum.metric === 'lag p99 (ms)'"
+        }
+      ],
+      "layer": [
+        {
+          "mark": {
+            "type": "rule",
+            "color": "#898781"
+          },
+          "encoding": {
+            "x": {
+              "datum": 1
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "rule",
+            "strokeWidth": 2
+          },
+          "encoding": {
+            "y": {
+              "field": "cell",
+              "type": "nominal",
+              "title": null,
+              "axis": {
+                "labelLimit": 220
+              }
+            },
+            "x": {
+              "field": "lo",
+              "type": "quantitative",
+              "title": "ratio (log)",
+              "scale": {
+                "type": "log",
+                "nice": false,
+                "padding": 12
+              }
+            },
+            "x2": {
+              "field": "hi"
+            },
+            "color": {
+              "field": "moved",
+              "type": "nominal",
+              "title": "moved",
+              "scale": {
+                "domain": [
+                  "lower",
+                  "tie",
+                  "higher"
+                ],
+                "range": [
+                  "#2a78d6",
+                  "#c3c2b7",
+                  "#d03b3b"
+                ]
+              }
+            },
+            "opacity": {
+              "field": "alpha",
+              "type": "quantitative",
+              "scale": null,
+              "legend": null
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "point",
+            "filled": true,
+            "size": 45,
+            "tooltip": true
+          },
+          "encoding": {
+            "y": {
+              "field": "cell",
+              "type": "nominal"
+            },
+            "x": {
+              "field": "ratio",
+              "type": "quantitative"
+            },
+            "color": {
+              "field": "moved",
+              "type": "nominal"
+            },
+            "opacity": {
+              "field": "alpha",
+              "type": "quantitative",
+              "scale": null,
+              "legend": null
+            },
+            "tooltip": [
+              {
+                "field": "cell"
+              },
+              {
+                "field": "metric"
+              },
+              {
+                "field": "n",
+                "title": "pairs"
+              },
+              {
+                "field": "ratio",
+                "format": ".3f"
+              },
+              {
+                "field": "lo",
+                "format": ".3f"
+              },
+              {
+                "field": "hi",
+                "format": ".3f"
+              },
+              {
+                "field": "base_geomean",
+                "title": "base geomean",
+                "format": ".1f"
+              },
+              {
+                "field": "arm_geomean",
+                "title": "arm geomean",
+                "format": ".1f"
+              },
+              {
+                "field": "base_collapsed"
+              },
+              {
+                "field": "arm_collapsed"
+              },
+              {
+                "field": "fisher_p",
+                "format": ".3f"
+              },
+              {
+                "field": "structural"
+              }
+            ]
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "align": "left",
+            "dx": 8,
+            "fontSize": 10,
+            "color": "#52514e",
+            "clip": false
+          },
+          "encoding": {
+            "y": {
+              "field": "cell",
+              "type": "nominal"
+            },
+            "x": {
+              "value": 420
+            },
+            "text": {
+              "field": "beside"
+            },
+            "opacity": {
+              "field": "alpha",
+              "type": "quantitative",
+              "scale": null,
+              "legend": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "Wire bytes per useful byte: ratio with its 95 % interval; base -> arm geomean beside",
+      "width": 420,
+      "height": {
+        "step": 15
+      },
+      "transform": [
+        {
+          "filter": "datum.metric === 'wire/useful'"
+        }
+      ],
+      "layer": [
+        {
+          "mark": {
+            "type": "rule",
+            "color": "#898781"
+          },
+          "encoding": {
+            "x": {
+              "datum": 1
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "rule",
+            "strokeWidth": 2
+          },
+          "encoding": {
+            "y": {
+              "field": "cell",
+              "type": "nominal",
+              "title": null,
+              "axis": {
+                "labelLimit": 220
+              }
+            },
+            "x": {
+              "field": "lo",
+              "type": "quantitative",
+              "title": "ratio (log)",
+              "scale": {
+                "type": "log",
+                "nice": false,
+                "padding": 12
+              }
+            },
+            "x2": {
+              "field": "hi"
+            },
+            "color": {
+              "field": "moved",
+              "type": "nominal",
+              "title": "moved",
+              "scale": {
+                "domain": [
+                  "lower",
+                  "tie",
+                  "higher"
+                ],
+                "range": [
+                  "#2a78d6",
+                  "#c3c2b7",
+                  "#d03b3b"
+                ]
+              }
+            },
+            "opacity": {
+              "field": "alpha",
+              "type": "quantitative",
+              "scale": null,
+              "legend": null
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "point",
+            "filled": true,
+            "size": 45,
+            "tooltip": true
+          },
+          "encoding": {
+            "y": {
+              "field": "cell",
+              "type": "nominal"
+            },
+            "x": {
+              "field": "ratio",
+              "type": "quantitative"
+            },
+            "color": {
+              "field": "moved",
+              "type": "nominal"
+            },
+            "opacity": {
+              "field": "alpha",
+              "type": "quantitative",
+              "scale": null,
+              "legend": null
+            },
+            "tooltip": [
+              {
+                "field": "cell"
+              },
+              {
+                "field": "metric"
+              },
+              {
+                "field": "n",
+                "title": "pairs"
+              },
+              {
+                "field": "ratio",
+                "format": ".3f"
+              },
+              {
+                "field": "lo",
+                "format": ".3f"
+              },
+              {
+                "field": "hi",
+                "format": ".3f"
+              },
+              {
+                "field": "base_geomean",
+                "title": "base geomean",
+                "format": ".1f"
+              },
+              {
+                "field": "arm_geomean",
+                "title": "arm geomean",
+                "format": ".1f"
+              },
+              {
+                "field": "base_collapsed"
+              },
+              {
+                "field": "arm_collapsed"
+              },
+              {
+                "field": "fisher_p",
+                "format": ".3f"
+              },
+              {
+                "field": "structural"
+              }
+            ]
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "align": "left",
+            "dx": 8,
+            "fontSize": 10,
+            "color": "#52514e",
+            "clip": false
+          },
+          "encoding": {
+            "y": {
+              "field": "cell",
+              "type": "nominal"
+            },
+            "x": {
+              "value": 420
+            },
+            "text": {
+              "field": "beside"
+            },
+            "opacity": {
+              "field": "alpha",
+              "type": "quantitative",
+              "scale": null,
+              "legend": null
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "resolve": {
+    "scale": {
+      "y": "independent"
+    }
+  },
+  "config": {
+    "legend": {
+      "orient": "top",
+      "direction": "horizontal",
+      "labelLimit": 220,
+      "titleLimit": 220,
+      "columnPadding": 14
+    },
+    "axisY": {
+      "labelLimit": 220
+    }
+  }
+}

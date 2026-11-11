@@ -1,0 +1,12 @@
+{
+  "title": "Experiments",
+  "description": "Every experiment, newest first: its question, arms (with their commits' subjects), tiers, seeds, cost and how much of its jobs' data is here (rows and reads local, reads still on S3 for a fetch, or expired). Fetch copies what S3 holds; Regenerate quotes a farm rerun, which runs only once approved.",
+  "params": [
+    {
+      "name": "search",
+      "kind": "search",
+      "default": "",
+      "label": "search"
+    }
+  ]
+}

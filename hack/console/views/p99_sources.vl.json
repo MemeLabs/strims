@@ -1,0 +1,304 @@
+{
+  "vconcat": [
+    {
+      "title": "Share of each arm's tail (viewer-seconds over its p99) by phase",
+      "width": "container",
+      "height": {
+        "step": 22
+      },
+      "transform": [
+        {
+          "filter": "datum.part === 'phase'"
+        }
+      ],
+      "mark": {
+        "type": "bar",
+        "tooltip": true
+      },
+      "encoding": {
+        "y": {
+          "field": "arm",
+          "type": "nominal",
+          "title": null
+        },
+        "x": {
+          "field": "tail_share",
+          "type": "quantitative",
+          "title": null,
+          "axis": {
+            "format": "%"
+          },
+          "stack": "normalize"
+        },
+        "color": {
+          "field": "phase",
+          "type": "nominal",
+          "scale": {
+            "domain": [
+              "startup",
+              "steady",
+              "after_down",
+              "after_up",
+              "departure"
+            ]
+          }
+        },
+        "tooltip": [
+          {
+            "field": "arm"
+          },
+          {
+            "field": "phase"
+          },
+          {
+            "field": "tail_share",
+            "format": ".1%"
+          },
+          {
+            "field": "arm_p99_ms",
+            "title": "arm p99 ms",
+            "format": ".0f"
+          },
+          {
+            "field": "share",
+            "title": "share of viewer-seconds",
+            "format": ".1%"
+          }
+        ]
+      }
+    },
+    {
+      "title": "Lag by phase (dot p50, bar p90 to p99, tick max)",
+      "width": "container",
+      "height": {
+        "step": 11
+      },
+      "transform": [
+        {
+          "filter": "datum.part === 'phase'"
+        }
+      ],
+      "layer": [
+        {
+          "mark": {
+            "type": "rule",
+            "strokeWidth": 3
+          },
+          "encoding": {
+            "y": {
+              "field": "phase",
+              "type": "nominal",
+              "title": null,
+              "sort": [
+                "startup",
+                "steady",
+                "after_down",
+                "after_up",
+                "departure"
+              ]
+            },
+            "yOffset": {
+              "field": "arm"
+            },
+            "x": {
+              "field": "p90_ms",
+              "type": "quantitative",
+              "title": "lag (ms)",
+              "scale": {
+                "type": "log"
+              }
+            },
+            "x2": {
+              "field": "p99_ms"
+            },
+            "color": {
+              "field": "arm",
+              "type": "nominal",
+              "title": "arm"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "point",
+            "filled": true,
+            "size": 40,
+            "tooltip": true
+          },
+          "encoding": {
+            "y": {
+              "field": "phase",
+              "type": "nominal",
+              "sort": [
+                "startup",
+                "steady",
+                "after_down",
+                "after_up",
+                "departure"
+              ]
+            },
+            "yOffset": {
+              "field": "arm"
+            },
+            "x": {
+              "field": "p50_ms",
+              "type": "quantitative"
+            },
+            "color": {
+              "field": "arm",
+              "type": "nominal"
+            },
+            "tooltip": [
+              {
+                "field": "arm"
+              },
+              {
+                "field": "phase"
+              },
+              {
+                "field": "viewer_s"
+              },
+              {
+                "field": "p50_ms"
+              },
+              {
+                "field": "p90_ms"
+              },
+              {
+                "field": "p99_ms"
+              },
+              {
+                "field": "max_ms"
+              },
+              {
+                "field": "over_1250",
+                "format": ".2%"
+              },
+              {
+                "field": "over_4250",
+                "format": ".2%"
+              }
+            ]
+          }
+        },
+        {
+          "mark": {
+            "type": "tick",
+            "thickness": 2
+          },
+          "encoding": {
+            "y": {
+              "field": "phase",
+              "type": "nominal",
+              "sort": [
+                "startup",
+                "steady",
+                "after_down",
+                "after_up",
+                "departure"
+              ]
+            },
+            "yOffset": {
+              "field": "arm"
+            },
+            "x": {
+              "field": "max_ms",
+              "type": "quantitative"
+            },
+            "color": {
+              "field": "arm",
+              "type": "nominal"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "Viewer-seconds by lag, per phase",
+      "width": 300,
+      "height": 160,
+      "transform": [
+        {
+          "filter": "datum.part === 'hist'"
+        }
+      ],
+      "mark": {
+        "type": "line",
+        "interpolate": "monotone",
+        "tooltip": true
+      },
+      "encoding": {
+        "x": {
+          "field": "lag_bin_ms",
+          "type": "quantitative",
+          "title": "lag (ms)",
+          "scale": {
+            "type": "log"
+          }
+        },
+        "y": {
+          "field": "viewer_s",
+          "type": "quantitative",
+          "title": "viewer-seconds",
+          "scale": {
+            "type": "symlog"
+          }
+        },
+        "color": {
+          "field": "arm",
+          "type": "nominal"
+        },
+        "facet": {
+          "field": "phase",
+          "type": "nominal",
+          "title": null,
+          "sort": [
+            "startup",
+            "steady",
+            "after_down",
+            "after_up",
+            "departure"
+          ],
+          "columns": 3
+        },
+        "tooltip": [
+          {
+            "field": "arm"
+          },
+          {
+            "field": "phase"
+          },
+          {
+            "field": "lag_bin_ms",
+            "title": "lag ms (bin)",
+            "format": ".0f"
+          },
+          {
+            "field": "viewer_s",
+            "title": "viewer-seconds"
+          }
+        ]
+      }
+    }
+  ],
+  "config": {
+    "legend": {
+      "orient": "top",
+      "direction": "horizontal",
+      "labelLimit": 220,
+      "titleLimit": 220,
+      "columnPadding": 14
+    },
+    "axisY": {
+      "labelLimit": 220
+    }
+  },
+  "resolve": {
+    "scale": {
+      "color": "independent"
+    },
+    "legend": {
+      "color": "independent"
+    }
+  }
+}

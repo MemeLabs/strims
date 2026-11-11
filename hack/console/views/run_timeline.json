@@ -1,0 +1,32 @@
+{
+  "title": "Run timeline",
+  "description": "One run (cell, arm, seed) as tracks on one time axis: the viewers' lag with the playout delays, each viewer's lag each second (a startup tail is a block at the left, an intermittent spike a stripe), stalls at the chosen delay, the verdict's phases and episodes, the seed's meter, uplink and copies, events, and what was written by kind. Stalls come from the sims' stalls table, or for runs from before it, from the run's reads (fetch them from the Experiments view).",
+  "params": [
+    {
+      "name": "exp",
+      "kind": "exp"
+    },
+    {
+      "name": "cell",
+      "kind": "cell"
+    },
+    {
+      "name": "arm",
+      "kind": "arm"
+    },
+    {
+      "name": "seed",
+      "kind": "seed"
+    },
+    {
+      "name": "delay",
+      "kind": "number",
+      "default": 1250
+    },
+    {
+      "name": "min_stall_ms",
+      "kind": "number",
+      "default": 50
+    }
+  ]
+}

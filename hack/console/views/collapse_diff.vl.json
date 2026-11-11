@@ -1,0 +1,100 @@
+{
+  "transform": [
+    {
+      "calculate": "datum.structural ? 0.3 : 1",
+      "as": "alpha"
+    }
+  ],
+  "facet": {
+    "row": {
+      "field": "summary",
+      "type": "nominal",
+      "title": null,
+      "header": {
+        "labelAngle": 0,
+        "labelAlign": "left",
+        "labelAnchor": "start",
+        "labelOrient": "top",
+        "labelFontSize": 12,
+        "labelFontWeight": 600
+      }
+    }
+  },
+  "spec": {
+    "width": {
+      "step": 13
+    },
+    "height": {
+      "step": 13
+    },
+    "mark": {
+      "type": "rect",
+      "stroke": "#fcfcfb",
+      "strokeWidth": 1.5,
+      "cornerRadius": 2,
+      "tooltip": true,
+      "cursor": "pointer"
+    },
+    "encoding": {
+      "x": {
+        "field": "seed",
+        "type": "ordinal",
+        "title": "seed",
+        "axis": {
+          "labelAngle": -90,
+          "labelFontSize": 9
+        }
+      },
+      "y": {
+        "field": "cell",
+        "type": "nominal",
+        "title": null,
+        "axis": {
+          "labelLimit": 260
+        }
+      },
+      "color": {
+        "field": "state",
+        "type": "nominal",
+        "title": "collapsed",
+        "scale": {
+          "domain": [
+            "both",
+            "only first",
+            "only second",
+            "neither"
+          ],
+          "range": [
+            "#d03b3b",
+            "#2a78d6",
+            "#eb6834",
+            "#e9e8e3"
+          ]
+        }
+      },
+      "opacity": {
+        "field": "alpha",
+        "type": "quantitative",
+        "scale": null,
+        "legend": null
+      },
+      "tooltip": [
+        {
+          "field": "cell"
+        },
+        {
+          "field": "seed"
+        },
+        {
+          "field": "state"
+        },
+        {
+          "field": "structural"
+        },
+        {
+          "field": "summary"
+        }
+      ]
+    }
+  }
+}

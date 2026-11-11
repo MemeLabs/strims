@@ -143,7 +143,8 @@ module.exports = (env, argv) => {
 
   const providePlugin = () =>
     new webpack.ProvidePlugin({
-      process: "process/browser",
+      // With the extension: an ES module's requests are fully specified (vega's are).
+      process: "process/browser.js",
       Buffer: ["buffer", "Buffer"],
     });
 

@@ -1,0 +1,18 @@
+{
+  "title": "Collapse diff",
+  "description": "Two arms seed by seed: the collapses that stay on the same seeds (both) and those that move (only the first arm, or only the second). A ramp counts as a collapse, as the verdict counts it. Structural cells are greyed. Click a run for the first arm's timeline.",
+  "params": [
+    {
+      "name": "exp",
+      "kind": "exp"
+    },
+    {
+      "name": "arm",
+      "kind": "arm"
+    },
+    {
+      "name": "arm2",
+      "kind": "arm2"
+    }
+  ]
+}

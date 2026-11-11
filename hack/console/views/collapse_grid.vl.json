@@ -1,0 +1,119 @@
+{
+  "transform": [
+    {
+      "calculate": "datum.arm + ': ' + datum.arm_collapsed + ' collapsed, ' + datum.arm_collapsed_not_structural + ' outside structural cells'",
+      "as": "arm_title"
+    },
+    {
+      "calculate": "datum.structural ? 0.3 : 1",
+      "as": "alpha"
+    }
+  ],
+  "facet": {
+    "column": {
+      "field": "arm_title",
+      "type": "nominal",
+      "title": null,
+      "header": {
+        "labelFontSize": 12,
+        "labelFontWeight": 600
+      }
+    }
+  },
+  "spec": {
+    "width": {
+      "step": 13
+    },
+    "height": {
+      "step": 13
+    },
+    "mark": {
+      "type": "rect",
+      "stroke": "#fcfcfb",
+      "strokeWidth": 1.5,
+      "cornerRadius": 2,
+      "tooltip": true,
+      "cursor": "pointer"
+    },
+    "encoding": {
+      "x": {
+        "field": "seed",
+        "type": "ordinal",
+        "title": "seed",
+        "axis": {
+          "labelAngle": -90,
+          "labelFontSize": 9
+        }
+      },
+      "y": {
+        "field": "cell",
+        "type": "nominal",
+        "title": null,
+        "sort": "ascending",
+        "axis": {
+          "labelLimit": 260
+        }
+      },
+      "color": {
+        "field": "state",
+        "type": "nominal",
+        "title": "run",
+        "scale": {
+          "domain": [
+            "healthy",
+            "ramp",
+            "collapse"
+          ],
+          "range": [
+            "#e9e8e3",
+            "#fab219",
+            "#d03b3b"
+          ]
+        }
+      },
+      "opacity": {
+        "field": "alpha",
+        "type": "quantitative",
+        "scale": null,
+        "legend": null
+      },
+      "tooltip": [
+        {
+          "field": "arm"
+        },
+        {
+          "field": "cell"
+        },
+        {
+          "field": "seed"
+        },
+        {
+          "field": "state"
+        },
+        {
+          "field": "structural"
+        },
+        {
+          "field": "onset",
+          "title": "onset (s)"
+        },
+        {
+          "field": "unhealthy",
+          "title": "unhealthy share"
+        },
+        {
+          "field": "lag_max",
+          "title": "lag max (ms)"
+        },
+        {
+          "field": "k"
+        }
+      ]
+    }
+  },
+  "resolve": {
+    "scale": {
+      "x": "independent"
+    }
+  }
+}

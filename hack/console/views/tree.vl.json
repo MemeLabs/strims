@@ -1,0 +1,186 @@
+{
+  "vconcat": [
+    {
+      "title": "Depth from the seed",
+      "width": "container",
+      "height": 140,
+      "transform": [
+        {
+          "filter": "datum.part === 'depth' && datum.series !== 'share without a parent'"
+        }
+      ],
+      "mark": {
+        "type": "line",
+        "interpolate": "step-after",
+        "tooltip": true
+      },
+      "encoding": {
+        "x": {
+          "field": "t",
+          "type": "quantitative",
+          "title": null
+        },
+        "y": {
+          "field": "value",
+          "type": "quantitative",
+          "title": "hops"
+        },
+        "color": {
+          "field": "series",
+          "type": "nominal",
+          "title": null
+        }
+      }
+    },
+    {
+      "title": "Node-streams without a parent",
+      "width": "container",
+      "height": 70,
+      "transform": [
+        {
+          "filter": "datum.part === 'depth' && datum.series === 'share without a parent'"
+        }
+      ],
+      "mark": {
+        "type": "area",
+        "color": "#fab219",
+        "interpolate": "step-after"
+      },
+      "encoding": {
+        "x": {
+          "field": "t",
+          "type": "quantitative",
+          "title": null
+        },
+        "y": {
+          "field": "value",
+          "type": "quantitative",
+          "title": null,
+          "axis": {
+            "format": "%"
+          }
+        }
+      }
+    },
+    {
+      "title": "Parent changes per second, by reason",
+      "width": "container",
+      "height": 110,
+      "transform": [
+        {
+          "filter": "datum.part === 'change'"
+        }
+      ],
+      "mark": {
+        "type": "bar",
+        "tooltip": true
+      },
+      "encoding": {
+        "x": {
+          "field": "t",
+          "type": "quantitative",
+          "title": "seconds from the stream's start",
+          "bin": {
+            "step": 1
+          }
+        },
+        "y": {
+          "field": "value",
+          "type": "quantitative",
+          "title": "changes",
+          "stack": true
+        },
+        "color": {
+          "field": "series",
+          "type": "nominal",
+          "title": "reason",
+          "scale": {
+            "domain": [
+              "open",
+              "switch",
+              "lost",
+              "prune",
+              "shed"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Depth of each node in each stream at the time picked",
+      "width": {
+        "step": 16
+      },
+      "height": {
+        "step": 12
+      },
+      "transform": [
+        {
+          "filter": "datum.part === 'snapshot'"
+        }
+      ],
+      "mark": {
+        "type": "rect",
+        "tooltip": true,
+        "stroke": "#fcfcfb",
+        "strokeWidth": 1
+      },
+      "encoding": {
+        "x": {
+          "field": "stream",
+          "type": "ordinal",
+          "title": "stream"
+        },
+        "y": {
+          "field": "node",
+          "type": "ordinal",
+          "title": "node"
+        },
+        "color": {
+          "field": "value",
+          "type": "ordinal",
+          "title": "depth",
+          "scale": {
+            "scheme": "blues"
+          }
+        },
+        "tooltip": [
+          {
+            "field": "node"
+          },
+          {
+            "field": "stream"
+          },
+          {
+            "field": "value",
+            "title": "depth"
+          },
+          {
+            "field": "parent"
+          }
+        ]
+      }
+    }
+  ],
+  "resolve": {
+    "scale": {
+      "color": "independent",
+      "x": "independent"
+    },
+    "legend": {
+      "color": "independent"
+    }
+  },
+  "config": {
+    "legend": {
+      "orient": "top",
+      "direction": "horizontal",
+      "labelLimit": 220,
+      "titleLimit": 220,
+      "columnPadding": 14
+    },
+    "axisY": {
+      "labelLimit": 220
+    }
+  }
+}

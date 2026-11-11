@@ -14,6 +14,7 @@ const Emotes = lazy(() => import("../pages/Emotes"));
 const Layout = lazy(() => import("../pages/Layout"));
 const Login = lazy(() => import("../pages/Login"));
 const Storybook = lazy(() => import("../pages/Storybook"));
+const Console = lazy(() => import("../pages/Console"));
 
 const Router: React.FC = () => {
   const { backgroundLocation } = useBackgroundRoute();
@@ -26,6 +27,7 @@ const Router: React.FC = () => {
       <Route path="/layout/*" element={<Layout />} />
       <Route path="/login/*" element={<Login />} />
       <Route path="/storybook/*" element={<Storybook />} />
+      <Route path="/console/*" element={<Console />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

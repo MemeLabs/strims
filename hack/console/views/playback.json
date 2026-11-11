@@ -1,0 +1,15 @@
+{
+  "title": "Playback",
+  "description": "What a player at the playout delay would have shown, per cell and arm, split by the verdict's phase: stalls per viewer-minute and the share of viewing time stalled (from the sims' stalls tables: the ppspp sim stalls per 4 KiB chunk, so many are tiny), the runs' startup time at the delay, and the distribution of stall lengths per arm. Runs from before the sims wrote stalls show nothing here.",
+  "params": [
+    {
+      "name": "exp",
+      "kind": "exp"
+    },
+    {
+      "name": "delay",
+      "kind": "number",
+      "default": 1250
+    }
+  ]
+}

@@ -1,0 +1,251 @@
+{
+  "vconcat": [
+    {
+      "title": "Lag across viewers (p99 solid, max dashed; playout delays grey)",
+      "width": "container",
+      "height": 220,
+      "layer": [
+        {
+          "transform": [
+            {
+              "filter": "datum.track === 'lag' && datum.series !== 'p50'"
+            }
+          ],
+          "mark": {
+            "type": "line",
+            "interpolate": "step-after"
+          },
+          "encoding": {
+            "x": {
+              "field": "t_s",
+              "type": "quantitative",
+              "title": null,
+              "scale": {
+                "zero": false
+              }
+            },
+            "y": {
+              "field": "value",
+              "type": "quantitative",
+              "title": "lag (ms)",
+              "scale": {
+                "type": "symlog",
+                "constant": 100
+              }
+            },
+            "color": {
+              "field": "arm",
+              "type": "nominal",
+              "title": "arm"
+            },
+            "strokeDash": {
+              "field": "series",
+              "type": "nominal",
+              "title": null,
+              "scale": {
+                "domain": [
+                  "p99",
+                  "max"
+                ],
+                "range": [
+                  [
+                    1,
+                    0
+                  ],
+                  [
+                    4,
+                    3
+                  ]
+                ]
+              }
+            },
+            "tooltip": [
+              {
+                "field": "arm"
+              },
+              {
+                "field": "series"
+              },
+              {
+                "field": "t_s",
+                "title": "s"
+              },
+              {
+                "field": "value",
+                "format": ".0f"
+              }
+            ]
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "d": 1250,
+                "label": "1250 ms"
+              },
+              {
+                "d": 4250,
+                "label": "4250 ms"
+              }
+            ]
+          },
+          "mark": {
+            "type": "rule",
+            "strokeDash": [
+              4,
+              3
+            ],
+            "color": "#898781"
+          },
+          "encoding": {
+            "y": {
+              "field": "d",
+              "type": "quantitative"
+            }
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "d": 1250,
+                "label": "1250 ms"
+              },
+              {
+                "d": 4250,
+                "label": "4250 ms"
+              }
+            ]
+          },
+          "mark": {
+            "type": "text",
+            "align": "left",
+            "dx": 4,
+            "dy": -6,
+            "color": "#898781",
+            "fontSize": 10
+          },
+          "encoding": {
+            "y": {
+              "field": "d",
+              "type": "quantitative"
+            },
+            "x": {
+              "value": 0
+            },
+            "text": {
+              "field": "label"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "Stalls per second at the playout delay",
+      "width": "container",
+      "height": 110,
+      "transform": [
+        {
+          "filter": "datum.track === 'stalls'"
+        }
+      ],
+      "mark": {
+        "type": "bar",
+        "tooltip": true,
+        "opacity": 0.8
+      },
+      "encoding": {
+        "x": {
+          "field": "t_s",
+          "type": "quantitative",
+          "title": null,
+          "scale": {
+            "zero": false
+          }
+        },
+        "y": {
+          "field": "value",
+          "type": "quantitative",
+          "title": "stalls",
+          "stack": null
+        },
+        "color": {
+          "field": "arm",
+          "type": "nominal"
+        }
+      }
+    },
+    {
+      "title": "Verdict: unhealthy seconds and collapses",
+      "width": "container",
+      "height": 70,
+      "transform": [
+        {
+          "filter": "datum.track === 'verdict'"
+        }
+      ],
+      "mark": {
+        "type": "rect",
+        "tooltip": true
+      },
+      "encoding": {
+        "x": {
+          "field": "t_s",
+          "type": "quantitative",
+          "title": "seconds from the stream's start",
+          "scale": {
+            "zero": false
+          }
+        },
+        "x2": {
+          "field": "t2_s"
+        },
+        "y": {
+          "field": "arm",
+          "type": "nominal",
+          "title": null
+        },
+        "color": {
+          "field": "series",
+          "type": "nominal",
+          "title": "verdict",
+          "scale": {
+            "domain": [
+              "unhealthy",
+              "collapse"
+            ],
+            "range": [
+              "#fab219",
+              "#d03b3b"
+            ]
+          }
+        },
+        "opacity": {
+          "value": 0.85
+        }
+      }
+    }
+  ],
+  "resolve": {
+    "scale": {
+      "x": "shared",
+      "color": "independent"
+    },
+    "legend": {
+      "color": "independent"
+    }
+  },
+  "config": {
+    "legend": {
+      "orient": "top",
+      "direction": "horizontal",
+      "labelLimit": 220,
+      "titleLimit": 220,
+      "columnPadding": 14
+    },
+    "axisY": {
+      "labelLimit": 220
+    }
+  }
+}
