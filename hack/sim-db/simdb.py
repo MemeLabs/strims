@@ -15,6 +15,13 @@
   hack/sim-db/simdb.py events [selection] [--json]
   hack/sim-db/simdb.py osc [selection] [--json]
   hack/sim-db/simdb.py rows [selection] [--fields A,B,...]
+  hack/sim-db/simdb.py index [--workers N] [--quiet]
+  hack/sim-db/simdb.py fetch --exp E [--cells C,...] [--arms A,...] [--tables reads,forecast]
+  hack/sim-db/simdb.py lake QUERY [--json]
+
+`index`, `fetch` and `lake` are the catalog's (hack/sim-db/catalog.py):
+every result the cache, the farm's and the suite's indexes know, in one
+DuckLake, whose tables answer a question in one SQL statement.
 
 A run of either sim given an output dir (`SIM_OUT`, `STRIMS_SIM_OUT`)
 writes its tables there as CSV files, each beside a `<table>.schema.json`
@@ -855,13 +862,14 @@ def derived_dir(table):
 
 def derive(srcs):
     """Makes the derived tables of every source in `srcs` that lacks them
-    under the current derived_version."""
+    under the current derived_version, each under a lock of its own
+    (derived/locks/), so processes deriving other sources don't wait."""
     a = analyze()
     for src in srcs:
         name = src.replace("/", "~") + ".parquet"
         if all((derived_dir(t) / name).exists() for t in [*DERIVED, "verdicts"]):
             continue
-        with locked(cache_root() / "derive.lock"):
+        with locked(cache_root() / "derived" / "locks" / f"{name}.lock"):
             if all((derived_dir(t) / name).exists() for t in [*DERIVED, "verdicts"]):
                 continue
             keys = [r["k"] for r in duck(f"SELECT k FROM read_parquet({plist(files([src], 'runs'))});")]
@@ -1804,7 +1812,7 @@ def cmd_gc(a):
     for d in (root / "cache").glob("**/*.tmp*"):
         if d.is_dir() and d.stat().st_mtime < time.time() - 3600:
             shutil.rmtree(d)
-    current = f"v={analyze().VERDICT_VERSION}"
+    current = f"v={derived_version()}"
     for d in (root / "derived").glob("*/v=*"):
         if d.name != current:
             shutil.rmtree(d)
@@ -1813,6 +1821,16 @@ def cmd_gc(a):
         if f.stem not in live:
             f.unlink()
     print(f"removed {gone} sources older than {a.days} days")
+
+
+def catalog():
+    """hack/sim-db/catalog.py, the sims' results catalog, over this module
+    (the script's)."""
+    spec = importlib.util.spec_from_file_location("catalog", Path(__file__).with_name("catalog.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    m._simdb = sys.modules["__main__"]
+    return m
 
 
 def main():
@@ -1836,6 +1854,7 @@ def main():
     p.add_argument("--dry-run", action="store_true", help="list the reads' files a pull would fetch, asking S3 nothing")
     g = sub.add_parser("gc")
     g.add_argument("--days", type=float, default=7)
+    lake = catalog().add_commands(sub)
     qs = {}
     qs["sql"] = sub.add_parser("sql", help="a query over the views", description=SQL_DOC, formatter_class=raw)
     qs["sql"].add_argument("query")
@@ -1890,6 +1909,8 @@ def main():
         cmd_pull(a)
     elif a.cmd == "gc":
         cmd_gc(a)
+    elif a.cmd in lake:
+        lake[a.cmd](a)
     else:
         {"sql": cmd_sql, "pooled": cmd_pooled, "aligned": cmd_aligned, "events": cmd_events, "osc": cmd_osc,
          "rows": cmd_rows, "forecast": cmd_forecast}[a.cmd](a)

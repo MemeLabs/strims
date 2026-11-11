@@ -9,7 +9,8 @@ name a suite farm run's jobs by, alike, and the index suite.py's `farm`
 writes (ArmLabels); which copy of a key the views take (Canon); its
 queries and joins over a scratch cache of both sims' tables (Queries);
 its pulls of a farm run's samples from a scratch S3, the aws CLI stubbed
-(SamplesPull); and the derived tables' columns and versions (Derived):
+(SamplesPull); the derived tables' columns and versions (Derived); and
+catalog.py's index of a scratch cache and farm state (Catalog):
 
   python3 hack/sim-db/simdb_test.py
 
@@ -25,6 +26,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -37,6 +39,10 @@ suite = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(suite)
 # suite.py's simdb is this one, so the tests' patches reach it.
 suite._simdb = simdb
+spec = importlib.util.spec_from_file_location("catalog", Path(__file__).with_name("catalog.py"))
+catalog = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(catalog)
+catalog._simdb = simdb
 
 A, B = "farm/sa0001-00+3more-aaaa", "farm/sb0001-00+3more-bbbb"
 GONE = "farm/sc0001-00/i-1/0"
@@ -321,7 +327,7 @@ class ArmLabels(unittest.TestCase):
                  suite.cell("large", suite.PPSPP, "sim_job", {"SIM_PEERS": "200"}, 3, "a large swarm")]
         args = argparse.Namespace(refs=None, sets="seed;1", ref="HEAD", no_off=False, knob="SIM_EXP,STRIMS_SIM_EXP",
                                   first_seed=2001, seeds=3, env=[], no_run=True, farm_args="", against=None,
-                                  all=False, rank="lag")
+                                  question="does seed help?", all=False, rank="lag")
         sha = "a" * 40
         with mock.patch.object(suite, "git", lambda *a, **kw: sha), \
                 mock.patch.object(suite, "peak_gib", lambda r: {"star-3-5": 0.5}), \
@@ -339,6 +345,7 @@ class ArmLabels(unittest.TestCase):
         self.assertEqual((idx["arms"], idx["seeds"], idx["knob"], idx["values"]),
                          ({"x": sha}, [2001, 2002, 2003], {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_EXP"},
                           ["off", "seed", "1"]))
+        self.assertEqual((idx["base"], idx["question"]), ("off", "does seed help?"))
         self.assertEqual(simdb.suite_cells([f"{path.stem}-01"]), {f"{path.stem}-01": (f"large@{path.stem}", "SIM_EXP")})
 
     def test_a_label_holding_two_jobs_is_refused(self):
@@ -1153,6 +1160,228 @@ class Derived(unittest.TestCase):
         f = simdb.derived_files("episodes", [self.SRC, "suite/wt/e"])
         got = simdb.duck(f"DESCRIBE SELECT x.* FROM {f};")
         self.assertEqual([r["column_name"] for r in got], list(simdb.DERIVED["episodes"]))
+
+
+
+# The catalog's fixture: a suite --sets farm run (sa0001: sets off and a)
+# whose jobs a farm flush holds (F1, strims-sim), a second flush holding a
+# copy of one of them with fewer tables (F2), a job it reused from another
+# run that the cache never held (k9), and a local suite invocation's
+# ppspp job (L).
+F1, F2, L = "farm/sa0001-00+1more-aaaa/i-1/0", "farm/sa0001-00+1more-aaaa/i-2/0", "suite/wt/inv"
+SHA = "0" * 40
+
+
+class Catalog(unittest.TestCase):
+    """catalog.py's index over a scratch cache and farm state: what it
+    holds, how it normalizes the sims' tables, and that it does only what
+    changed."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        series = {}
+        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
+                  mock.patch.object(simdb, "load_series",
+                                    lambda pairs: {p: ({}, series[p]) for p in pairs if p in series}),
+                  mock.patch.object(catalog, "_simdb", simdb),
+                  mock.patch.object(sys, "stderr", io.StringIO()),
+                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
+                                  clear=True)):
+            p.start()
+            self.addCleanup(p.stop)
+        self.root = root
+        now = time.time()
+        recent = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 86400))
+        old = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 9 * 86400))
+        env = lambda exp, seed: {"STRIMS_SIM_EXP": exp, "STRIMS_SIM_SEED": str(seed), "STRIMS_SIM_TCP": "1"}
+        row = lambda **kw: {"lag_p99_ms": 300, "meter_seeds": [1.5, 2], "arrivals": "trickle", "passed": True, **kw}
+        self.put(F1, "runs", ["sim", "test", "cell", "arm", "seed", "env", "at", "row_json"], [
+            ("k1", "strims-sim:scenarios", "t", "sa0001-00", "x", 1, json.dumps(env("off", 1)), recent,
+             json.dumps(row())),
+            ("k2", "strims-sim:scenarios", "t", "sa0001-00", "x", 1, json.dumps(env("a", 1)), recent,
+             json.dumps(row(lag_p99_ms=200, extra_ms=5)))])
+        self.put(F1, "viewers", ["viewer", "host", "name", "up", "hostile", "churned", "arrive_ms", "depart_ms"], [
+            ("k1", 0, 7, "v0", -1, False, False, -5, None), ("k1", 1, 8, "v1", 100, False, True, 2000, 4000)])
+        self.put(F1, "viewer_seconds", ["viewer", "sec", "lag_ms", "frames"],
+                 [("k1", 0, s, 100 if s else -1, 1 if s else 0) for s in range(5)])
+        self.put(F1, "events", ["t_us", "kind", "node", "peer", "value", "detail"], [
+            ("k1", 1000, "parent_lost", 7, 8, -1, "abrupt"), ("k1", 2000, "join", -1, -1, 0, "from=3 to=4")])
+        self.put(F1, "seconds", ["sec", "present", "written"], [("k1", 0, 2, -1), ("k1", 1, 2, 10)])
+        self.put(F1, "bins", ["bin", "t_ms", "seed_meter"], [("k1", 0, 0, -1), ("k1", 1, 100, 5)])
+        (simdb.cache_root() / "cache" / F1 / "manifest.json").write_text(json.dumps(
+            {"keys": ["k1", "k2"], "at": recent, "tables": {"runs": {"bytes": 1}, "reads": {"bytes": 99}}}))
+        self.put(F2, "runs", ["sim", "test", "cell", "arm", "seed", "env", "at", "row_json"], [
+            ("k1", "strims-sim:scenarios", "t", "sa0001-00", "x", 1, json.dumps(env("off", 1)), recent,
+             json.dumps(row()))])
+        (simdb.cache_root() / "cache" / F2 / "manifest.json").write_text(json.dumps({"keys": ["k1"], "at": old}))
+        self.put(L, "runs", ["sim", "test", "cell", "arm", "seed", "env", "at", "row_json"], [
+            ("k3", "ppspp", "churn", "churn", "ppspp-123", 2, "{}", recent, json.dumps({"lag_p99_ms": 400}))])
+        # an old ppspp viewers file: churned an integer
+        self.put(L, "viewers", ["viewer", "node", "up", "churned", "arrive_ms", "depart_ms"], [
+            ("k3", 0, 1, 50, 0, -1000, None), ("k3", 1, 2, 50, 1, 2500, 4000)])
+        self.put(L, "viewer_seconds", ["viewer", "sec", "lag_ms", "frames"],
+                 [("k3", v, s, -1 if v and not 2 <= s < 4 else 100, 0 if v and not 2 <= s < 4 else 3)
+                  for v in (0, 1) for s in range(6)])
+        for src, k in ((F1, "k1"), (F1, "k2"), (L, "k3")):
+            series[(src, k)] = audience(40, [(None, None)] * 3)
+        runs = root / "target" / "sim-suite" / "farm-runs"
+        runs.mkdir(parents=True)
+        (runs / "sa0001.json").write_text(json.dumps({
+            "cells": [{"name": "star", "sim": "strims-sim", "test": "t", "why": "w", "env": {"STRIMS_SIM_TCP": "1"}}],
+            "knob": {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_EXP"}, "values": ["off", "a"],
+            "arms": {"x": SHA}, "seeds": [1], "base": "off", "question": "does a help?"}))
+        farm = root / "target" / "sim-farm"
+        (farm / "sa0001-00").mkdir(parents=True)
+        (farm / "sa0001-00+1more-aaaa").mkdir(parents=True)
+        (farm / "sa0001-00+1more-aaaa" / "matrices").write_text("sa0001-00\n")
+        line = lambda i, k, exp, src, **kw: {"id": i, "key": k, "arm": "x", "commit": SHA, "binary": "b" * 64,
+                                             "test": "t", "env": env(exp, 1), "src": src, "at": recent,
+                                             "wall_s": 1.5, "max_rss_mb": 10, "row": {"trace": f"tr-{k}"},
+                                             "reads": True, **kw}
+        (farm / "sa0001-00" / "index.jsonl").write_text("".join(json.dumps(r) + "\n" for r in [
+            line("i1", "k1", "off", F1), line("i2", "k2", "a", F1),
+            line("i9", "k9", "a", "farm/sb0001-00+0more-bbbb/i-1/0", **{"from": "sb0001-00", "at": old})]))
+        # farm.py's prices, which the catalog reads from it
+        (root / "hack" / "sim-farm").mkdir(parents=True)
+        (root / "hack" / "sim-farm" / "farm.py").write_text(
+            "S3_TIER1 = 0.0055 / 1000\nS3_TIER2 = 0.0044 / 10000\nS3_STORAGE_GB_MONTH = 0.026\nS3_KEPT_DAYS = 7\n"
+            "S3_INTER_REGION_GB = 0.02\nS3_INTERNET_GB = 0.09\nGB = 1 << 30\n")
+        (farm / "costs.jsonl").write_text(json.dumps({"run": "sa0001-00+1more-aaaa", "kind": "test", "cost": 1.5,
+                                                      "jobs": 2}) + "\n")
+        (farm / "s3.jsonl").write_text(json.dumps({"run": "sa0001-00+1more-aaaa", "at": recent, "source": "pull",
+                                                   "region": "r", "tier1": {}, "tier2": {"pull_get": 10},
+                                                   "up": {}, "down": {"internet": 1 << 30}, "stored": 0}) + "\n")
+
+    def put(self, src, table, cols, rows):
+        d = simdb.cache_root() / "cache" / src
+        d.mkdir(parents=True, exist_ok=True)
+        lit = lambda x: "NULL" if x is None else simdb.q(x) if isinstance(x, str) else repr(x)
+        vals = ", ".join("(" + ", ".join(lit(x) for x in (r[0], src, *r[1:])) + ")" for r in rows)
+        names = ", ".join(simdb.ident(c) for c in ["k", "src", *cols])
+        simdb.duck(f"COPY (SELECT * FROM (VALUES {vals}) t({names})) "
+                   f"TO {simdb.q(d / f'{table}.parquet')} (FORMAT parquet);", out=None)
+
+    def index(self):
+        return catalog.index(workers=1, quiet=True)
+
+    def q(self, sql):
+        return catalog.lake(sql + ";")
+
+    def test_jobs_one_a_key_from_its_canonical_source(self):
+        self.index()
+        jobs = {r["k"]: r for r in self.q("SELECT k, sim, seed, src, cached, commit, exp, transport, env['STRIMS_SIM_EXP'] "
+                                          "AS e, trace FROM jobs")}
+        self.assertEqual(set(jobs), {"k1", "k2", "k3", "k9"})
+        # the copy holding the most tables
+        self.assertEqual(jobs["k1"]["src"], F1)
+        self.assertEqual((jobs["k1"]["sim"], jobs["k3"]["sim"]), ("strims-sim", "ppspp"))
+        self.assertEqual((jobs["k2"]["exp"], jobs["k2"]["e"], jobs["k2"]["transport"]), ("a", "a", "tcp"))
+        self.assertEqual((jobs["k9"]["cached"], jobs["k9"]["sim"], jobs["k9"]["seed"], jobs["k9"]["trace"]),
+                         (False, "strims-sim", 1, "tr-k9"))
+
+    def test_experiments_name_their_arms_and_reused_jobs(self):
+        self.index()
+        got = {(r["cell"], r["arm_label"], r["k"]): (r["ref"], r["knob_value"], r["reused"]) for r in self.q(
+            "SELECT * FROM experiment_jobs WHERE exp_id = 'sa0001'")}
+        self.assertEqual(got, {("star", "off", "k1"): ("x", "off", False), ("star", "a", "k2"): ("x", "a", False),
+                               ("star", "a", "k9"): ("x", "a", True)})
+        e = {r["exp_id"]: r for r in self.q("SELECT exp_id, kind, question, base, sets, cost_usd, s3_usd, jobs FROM experiments")}
+        self.assertEqual((e["sa0001"]["question"], e["sa0001"]["base"], e["sa0001"]["sets"]), ("does a help?", "off", ["off", "a"]))
+        # the run's only matrix: its whole cost, and the pull's GiB out
+        self.assertAlmostEqual(e["sa0001"]["cost_usd"], 1.5)
+        self.assertGreater(e["sa0001"]["s3_usd"], 0.08)
+        self.assertEqual((e[L]["kind"], e[L]["jobs"]), ("local", 1))
+
+    def test_the_views_normalize_the_sims_tables(self):
+        self.index()
+        v = {(r["k"], r["viewer"]): r for r in self.q("SELECT * FROM viewers")}
+        self.assertEqual((v[("k1", 0)]["node"], v[("k1", 0)]["arrive_ms"], v[("k1", 0)]["up"]), (7, None, None))
+        self.assertEqual((v[("k1", 1)]["arrive_ms"], v[("k1", 1)]["churned"]), (2000, True))
+        # the ppspp file's integer churned, as a BOOLEAN; its -1000 start NULL
+        self.assertEqual((v[("k3", 0)]["node"], v[("k3", 0)]["churned"], v[("k3", 0)]["arrive_ms"]), (1, False, None))
+        self.assertEqual(v[("k3", 1)]["churned"], True)
+        # viewer 1 of k3 was there from 2.5 s to 4 s: seconds 2 and 3, which its stay overlaps
+        secs = [(r["viewer"], r["sec"], r["lag_ms"]) for r in self.q(
+            "SELECT viewer, sec, lag_ms FROM viewer_seconds WHERE k = 'k3' ORDER BY ALL")]
+        self.assertEqual([s for v_, s, _ in secs if v_ == 1], [2, 3])
+        self.assertEqual(len([s for v_, s, _ in secs if v_ == 0]), 6)
+        self.assertEqual(self.q("SELECT lag_ms FROM viewer_seconds WHERE k = 'k1' AND sec = 0")[0]["lag_ms"], None)
+        ev = {r["kind"]: r for r in self.q("SELECT * FROM events WHERE k = 'k1'")}
+        self.assertEqual((ev["join"]["node"], ev["join"]["peer"], ev["join"]["t_ms"]), (None, None, 2.0))
+        self.assertEqual(ev["join"]["detail_map"], {"from": "3", "to": "4"})
+        self.assertEqual((ev["parent_lost"]["value"], ev["parent_lost"]["detail_map"]), (None, None))
+        self.assertEqual([r["written"] for r in self.q("SELECT written FROM seconds ORDER BY sec")], [None, 10])
+        self.assertEqual([r["seed_meter"] for r in self.q("SELECT seed_meter FROM bins ORDER BY bin")], [None, 5])
+
+    def test_rows_are_wide_and_typed(self):
+        self.index()
+        types = {r["column_name"]: r["data_type"] for r in self.q(
+            "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'rows' "
+            "AND table_schema = 'main'")}
+        self.assertEqual((types["lag_p99_ms"], types["meter_seeds"], types["arrivals"], types["passed"]),
+                         ("DOUBLE", "DOUBLE[]", "VARCHAR", "BOOLEAN"))
+        got = {r["k"]: r for r in self.q("SELECT k, lag_p99_ms, extra_ms, meter_seeds FROM rows")}
+        self.assertEqual((got["k2"]["lag_p99_ms"], got["k2"]["extra_ms"], got["k1"]["extra_ms"]), (200, 5, None))
+        self.assertEqual(got["k1"]["meter_seeds"], [1.5, 2.0])
+
+    def test_verdicts_are_derives(self):
+        self.index()
+        got = {r["k"]: r for r in self.q("SELECT * FROM verdicts")}
+        self.assertEqual(set(got), {"k1", "k2", "k3"})
+        version = self.q("SELECT value FROM catalog_info WHERE key = 'verdict_version'")[0]["value"]
+        self.assertEqual(version, simdb.derived_version())
+        want = simdb.judge(audience(40, [(None, None)] * 3))
+        self.assertEqual((got["k1"]["collapsed"], got["k1"]["unhealthy"]),
+                         (simdb.analyze().collapsed(want[0]), want[0]["unhealthy"]))
+        self.assertEqual(got["k1"]["flaps_per_min"], want[1]["flaps_per_min"])
+
+    def test_availability(self):
+        self.index()
+        got = {(r["k"], r["tbl"]): (r["state"], r["src"]) for r in self.q("SELECT * FROM availability")}
+        self.assertEqual(got[("k1", "viewers")], ("local", F1))
+        # F1 lists reads it doesn't hold, uploaded a day ago
+        self.assertEqual(got[("k1", "reads")], ("s3", F1))
+        # k9's flush, never pulled, ran nine days ago
+        self.assertEqual(got[("k9", "sim-data")][0], "expired")
+
+    def test_it_does_only_what_changed(self):
+        self.assertTrue(self.index()["changed"])
+        self.assertFalse(self.index()["changed"])
+        linked = [Path(r["path"]) for r in self.q("SELECT path FROM raw.files WHERE how = 'linked'")]
+        self.assertTrue(linked and all(p.stat().st_nlink == 2 for p in linked))
+        self.assertEqual(self.q("SELECT how FROM raw.files WHERE src = 'suite/wt/inv' AND tbl = 'viewers'")[0]["how"],
+                         "converted")
+        # a new source: only its files are added
+        self.put("suite/wt/inv2", "runs", ["sim", "test", "cell", "arm", "seed", "env", "row_json"],
+                 [("k4", "ppspp", "churn", "churn", "a", 1, "{}", "{}")])
+        got = self.index()
+        self.assertEqual((got["new"], got["gone"]), (1, 0))
+        self.assertIn("k4", {r["k"] for r in self.q("SELECT k FROM jobs")})
+        # the cache drops F1 (simdb.py gc): its jobs' tables leave, F2's copy of k1 stands in
+        shutil.rmtree(simdb.cache_root() / "cache" / F1)
+        got = self.index()
+        self.assertEqual(got["gone"], 6)
+        self.assertEqual(self.q("SELECT src FROM jobs WHERE k = 'k1'")[0]["src"], F2)
+        self.assertEqual(self.q("SELECT count(*) AS n FROM viewers WHERE k LIKE 'k1'")[0]["n"], 0)
+        self.assertEqual(self.q("SELECT count(*) AS n FROM raw.verdicts WHERE src = " + simdb.q(F1))[0]["n"], 0)
+        catalog.compact(keep_minutes=0)
+        self.assertFalse(any(p.exists() for p in linked if F1.replace("/", "~") in p.name))
+
+    def test_the_catalogs_describe_it(self):
+        self.index()
+        m = {(r["tbl"], r["name"]): r for r in self.q("SELECT * FROM metric_catalog")}
+        self.assertEqual((m[("suite", "lag_p99_ms")]["better"], m[("suite", "lag_p99_ms")]["kind"],
+                          m[("suite", "lag_p99_ms")]["tie"]), ("lower", "ratio", 0.05))
+        self.assertEqual(m[("suite", "lag_p99_ms")]["fields"], ["lag_p99_ms", "lag_p99_ms_honest"])
+        self.assertEqual((m[("rows", "lag_p99_ms")]["better"], m[("rows", "lag_p99_ms")]["sims"]),
+                         ("lower", ["ppspp", "strims-sim"]))
+        self.assertTrue(m[("viewer_seconds", "lag_ms")]["description"])
+        t = {r["name"] for r in self.q("SELECT name FROM table_catalog")}
+        self.assertTrue({"jobs", "experiments", "viewers", "verdicts", "availability"} <= t)
+        kinds = {(r["sim"], r["kind"]) for r in self.q("SELECT sim, kind FROM event_kinds")}
+        self.assertTrue({("strims-sim", "join"), ("strims-sim", "parent_lost"), ("derived", "start")} <= kinds)
 
 
 if __name__ == "__main__":

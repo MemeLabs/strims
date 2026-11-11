@@ -15,7 +15,7 @@ working tree's sims against the base's, cell by cell, paired by seed.
                                [--env KEY=VALUE ...]
   hack/sim-suite/suite.py farm (--sets "A,B;C" | --refs a=REF,b=REF) [--knob SIM_EXP,STRIMS_SIM_EXP]
                                [--ref REF] [--tier ...] [--seeds N]
-                               [--first-seed N] [--against SET]
+                               [--first-seed N] [--against SET] [--question TEXT]
                                [--farm-args ARGS] [--no-run] [--env KEY=VALUE ...]
   hack/sim-suite/suite.py score RUN:ARM RUN:ARM [--tier ...] [--only CELL,...]
                                 [--knob SIM_EXP,STRIMS_SIM_EXP] [--all]
@@ -158,8 +158,10 @@ in farm-runs/pending/ until then (`--no-run`): the first `farm` or `score`
 after the farm starts it moves it into place, and one whose run hasn't
 started within a week is dropped. The index holds its cells as their
 matrices ran them (name, sim, test, why, env and the slot's mem_gib), the
-matrices' arms (name: commit) and the seeds, and for a `--sets` run its
-knob and sets. A job's arm is named as hack/sim-db names it (simdb's
+matrices' arms (name: commit), the seeds, the arm the others are scored
+against (`base`), what the run asks (`--question`, for the sims'
+catalog: hack/sim-db/catalog.py) and for a `--sets` run its knob and
+sets. A job's arm is named as hack/sim-db names it (simdb's
 arm_label): in a run whose index has a knob, its set, the value its env
 gives the knob; else its matrix's arm, a `--refs` name. So a `--sets`
 run's arms are its sets alone, and a ref name never stands for one. A
@@ -1571,11 +1573,15 @@ def farm(a, cells):
         paths.append(path)
     settle_indexes()
     keep = ("name", "sim", "test", "why", "env")
+    base = a.against.strip() if a.against else values[0]
+    if base not in values:
+        sys.exit(f"--against {base!r} is none of the sets")
     # A `--sets` run's arms are its knob's values, which hack/sim-db labels
     # its runs by (arm_label).
     index = json.dumps({
         "cells": [{**{k: c[k] for k in keep}, "mem_gib": mem} for c, mem in zip(cells, mems)],
-        "arms": arms, "seeds": [int(s) for s in seeds],
+        "arms": arms, "seeds": [int(s) for s in seeds], "base": base,
+        **({"question": a.question} if a.question else {}),
         **({} if a.refs else {"knob": knob, "values": values}),
     }) + "\n"
     place_index(name, index, not a.no_run or farm_started(name, len(cells)))
@@ -1587,9 +1593,6 @@ def farm(a, cells):
         if not farm_started(name, len(cells)):
             place_index(name, index, False)
     rows = farm_rows(name, cells, None if a.refs else knob)
-    base = a.against.strip() if a.against else values[0]
-    if base not in values:
-        sys.exit(f"--against {base!r} is none of the sets")
     others = [v for v in values if v != base]
     # A --refs arm is its own commit; a --sets arm runs the one commit.
     label = (lambda v: f"{arms[v][:8]} {v}") if a.refs else (lambda v: f"{sha[:8]} {v}")
@@ -1735,6 +1738,7 @@ def main():
     fc.add_argument("--seeds", type=int, default=32, help="seeds per cell, every cell alike")
     fc.add_argument("--first-seed", type=int, default=2001)
     fc.add_argument("--against", help="the set or arm the others are scored against (off, or the first ref)")
+    fc.add_argument("--question", help="what the run asks, kept in its index (the sims' catalog's experiments)")
     fc.add_argument("--only", help="cells, comma-separated")
     fc.add_argument("--all", action="store_true", help="every metric, ties too")
     fc.add_argument("--farm-args", default="", help="more arguments for farm.py run")
