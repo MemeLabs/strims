@@ -21,11 +21,16 @@ is simlab.lake_root() (simdb.py's cache root: `SIM_DB_ROOT`, else the main
 checkout's target/sim-db), read through a pool of simlab.engine's guarded
 readers (simlab.catalog.pool); an index runs every 2 minutes
 (`--no-index` for none), and the queries after one that succeeded see
-the new catalog.
+the new catalog. So do those after an index by another process (suite.py
+run, simdb.py index, a CLI fetch): a query, the schema and GET
+/console/index read the catalog's latest DuckLake snapshot first
+(simlab.catalog.snapshot) and refresh the readers once it isn't the one
+they were opened at.
 
   POST /console/sql          {sql, params?, max_rows?, timeout_s?}: one SELECT (or EXPLAIN of
                              one), run as given, `$name`s bound from params; returns {columns:
-                             [{name, type}], rows, truncated, elapsed_ms}
+                             [{name, type}], rows, truncated, elapsed_ms, snapshot} (the id of
+                             the catalog's snapshot the server had when it ran it, or null)
   GET  /console/schema       the catalog's tables and columns, table_catalog, metric_catalog,
                              event_kinds, experiments, catalog_info and the saved views
   GET  /console/views        the saved views
@@ -45,7 +50,9 @@ the new catalog.
   POST /console/index        starts an index (or joins the one running) and returns it when
                              it's done; with `Accept: application/x-ndjson`, streams its
                              progress as fetch does, then {done, ...the run}
-  GET  /console/index        the index running and the last one, and catalog_info
+  GET  /console/index        the index running and the last one, catalog_info, and the catalog's
+                             latest snapshot, {id, at} (or null): a page whose rows' snapshot
+                             is older has new results to load
   POST /console/ask          {question, conversation_id?, task_budget?}: Claude answers the question
                              by writing and running queries over the catalog (simlab.ask), in a
                              new conversation or as a follow-up in one; streams NDJSON events
@@ -510,6 +517,10 @@ class Console:
         self._assembling = threading.Lock()
         self._schema = None
         self._epoch = 0
+        # The catalog's snapshot the readers were opened at (catalog.snapshot's), and the
+        # lock that takes one refresh for each it moves to.
+        self._snapshot = None
+        self._freshening = threading.RLock()
         self._stop = threading.Event()
         self.asker = asker or ask.Asker(pool, self.schema, client=ask_client, ledger=ledger,
                                         views_root=lambda: self.views_root, regenerations=self.regenerations,
@@ -524,12 +535,33 @@ class Console:
             except Exception:
                 traceback.print_exc()
 
-    def refresh(self):
-        """New readers and schema for the queries after this."""
-        self.pool.refresh()
-        with self._state:
-            self._schema = None
-            self._epoch += 1
+    def refresh(self, snapshot=None):
+        """New readers and schema for the queries after this, at the
+        catalog's latest snapshot (`snapshot`, else read now), which it
+        records: read before the readers go, so that the new ones open at
+        it or later. A snapshot that can't be read keeps the last one."""
+        with self._freshening:
+            snapshot = snapshot or self.catalog.snapshot(self.pool.lake)
+            self.pool.refresh()
+            with self._state:
+                self._schema = None
+                self._epoch += 1
+                if snapshot is not None:
+                    self._snapshot = snapshot
+
+    def fresh(self):
+        """The catalog's snapshot the queries after this see ({id, at}, or
+        None before one could be read): when the latest isn't the one the
+        readers were opened at, an index by another process moved it
+        (suite.py run, simdb.py index, a CLI fetch), and the readers and
+        schema are refreshed first, once. The server's own indexes and
+        fetches refresh them as they end."""
+        latest = self.catalog.snapshot(self.pool.lake)
+        with self._freshening:
+            if latest is not None and (self._snapshot is None or latest["id"] != self._snapshot["id"]):
+                self.refresh(latest)
+            with self._state:
+                return self._snapshot
 
     def close(self):
         self._stop.set()
@@ -734,7 +766,9 @@ class Console:
             raise HttpError(400, "max_rows and timeout_s: numbers")
         max_rows = min(MAX_ROWS, max(0, math.floor(max_rows)))
         timeout = min(MAX_TIMEOUT_S, max(0.1, timeout))
-        return self.pool.query(body["sql"], params, max_rows=max_rows, timeout_s=timeout, temporal_text=True).json()
+        snapshot = self.fresh()
+        out = self.pool.query(body["sql"], params, max_rows=max_rows, timeout_s=timeout, temporal_text=True).json()
+        return {**out, "snapshot": snapshot and snapshot["id"]}
 
     def rows(self, sql, params=None):
         """`sql`'s rows as dicts of the API's JSON values."""
@@ -743,7 +777,8 @@ class Console:
         return [dict(zip(names, r)) for r in j["rows"]]
 
     def schema(self):
-        """catalog.schema's, kept until a refresh."""
+        """catalog.schema's, kept until a refresh (fresh's among them)."""
+        self.fresh()
         with self._assembling:
             with self._state:
                 schema, epoch = self._schema, self._epoch
@@ -893,12 +928,14 @@ class Console:
         return task.result
 
     def index_state(self):
+        snapshot = self.fresh()
         try:
             info = self.rows("SELECT * FROM catalog_info")
         except engine.QueryError:
             info = []
         current, last = self.indexer.current, self.indexer.last
-        return {"running": current and current.state(), "last": last and last.state(), "catalog_info": info}
+        return {"running": current and current.state(), "last": last and last.state(), "catalog_info": info,
+                "snapshot": snapshot}
 
     # --- the build ---
 

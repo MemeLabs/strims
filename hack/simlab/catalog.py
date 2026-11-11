@@ -26,6 +26,9 @@ DuckLake, so that any question is one SQL statement over it.
   state() -> dict
                  {info: catalog_info, current: whether an index would
                  find nothing to do}, or None without a catalog
+  snapshot(lake=None) -> dict
+                 {id, at}: the catalog's latest DuckLake snapshot, which
+                 every index that changes it moves, or None (below)
   availability(exp=None) -> engine.Result
                  what the catalog holds of each job, table by table (of
                  experiment `exp`'s jobs)
@@ -55,6 +58,9 @@ read-only,
   USE lake;
 
 and each query sees one snapshot, whatever the indexer is writing.
+`snapshot` reads the latest from the SQLite metadata alone, without
+DuckDB: a reader whose snapshot isn't it was opened before an index,
+whichever process ran that one (the console refreshes its readers then).
 
 `index` brings the catalog up to date with the cache (the suite's and
 the farm's flushes), the suite's and the farm's indexes, the farm's costs
@@ -196,6 +202,7 @@ import math
 import os
 import re
 import shutil
+import sqlite3
 import statistics
 import subprocess
 import sys
@@ -226,6 +233,8 @@ VERDICT_TABLES = ("verdicts", *verdict.DERIVED)
 # Written tables whose small files the index merges.
 WRITTEN = ("rows", *VERDICT_TABLES, "farm_index", "fields")
 NAME = re.compile(r"^[a-z][a-z0-9_]*$")
+# How long snapshot() waits out a busy catalog metadata before it gives up.
+SNAPSHOT_BUSY_S = 2
 
 q, ident = store_host.q, store_host.ident
 
@@ -776,6 +785,42 @@ def state():
         _, sv = lake_scoring(lake_columns())
         current = not sv or info.get("scoring_version") == sv
     return {"info": info, "current": current}
+
+
+def snapshot(lake=None):
+    """The latest snapshot of the catalog at `lake` (lake_root() by
+    default), {"id": its snapshot_id, "at": its time as iso writes it}:
+    every index that changes the catalog (its sources, metadata, verdicts
+    or scoring objects) moves it, whichever process runs the index, and
+    one with nothing to do doesn't. It is one row of the SQLite metadata,
+    read read-only with stdlib sqlite3 (no DuckDB instance, so cheap
+    enough for every request), the connection closed before it returns so
+    that it never holds up the next index's commit. None without a
+    catalog, and while the metadata stays busy past SNAPSHOT_BUSY_S (a
+    writer's commit: its journal is rollback's) or can't be read: callers
+    keep the last one they read."""
+    path = engine.catalog_file(lake_root() if lake is None else lake)
+    if not path.is_file():
+        return None
+    try:
+        conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=SNAPSHOT_BUSY_S)
+    except sqlite3.Error:
+        return None
+    try:
+        rows = conn.execute("SELECT snapshot_id, snapshot_time FROM ducklake_snapshot "
+                            "ORDER BY snapshot_id DESC LIMIT 1").fetchall()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    if not rows:
+        return None
+    n, at = rows[0]
+    try:
+        at = iso(datetime.datetime.fromisoformat(at).timestamp())
+    except (TypeError, ValueError):
+        pass
+    return {"id": n, "at": at}
 
 
 def availability(exp=None):

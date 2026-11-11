@@ -6,7 +6,12 @@ simlab.verdict's derive pool:
 
   Index        an index's Progress and Indexed, and one with nothing to
                do; state and availability
-  Child        an index in a forkserver's child, as the console runs one,
+  Snapshot     the catalog's latest snapshot: none without a catalog,
+               DuckLake's after an index, moved by one that changes the
+               catalog and not by one with nothing to do, read throughout
+               an index without holding it up, none while the metadata
+               stays busy
+  Child       an index in a forkserver's child, as the console runs one,
                its derives in a pool of the child's
   Derive       the forkserver pool's derived tables are those made in this
                process, with a DuckDB connection open here; a source that
@@ -44,9 +49,12 @@ import multiprocessing
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -128,6 +136,72 @@ class Index(Fixture):
     def test_no_catalog_has_no_state(self):
         with mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(self.root / "nowhere")}):
             self.assertIsNone(catalog.state())
+
+
+class Snapshot(Fixture):
+    def add_source(self, src):
+        """A cache source of one job, folded and exported as a suite run's
+        flush is."""
+        job = (src, f"k-{src.rsplit('/', 1)[1]}", *golden_cli.JOBS[0][2:])
+        d = self.root / "jobs-tables" / src.replace("/", "~")
+        meta = golden_cli.job_dir(d, job)
+        db = self.root / "jobs-tables" / f"{src.replace('/', '~')}.duckdb"
+        store_host.fold(db, [meta], src)
+        store_host.export(db, store_host.cache_root() / "cache" / src)
+
+    def lakes_latest(self):
+        """DuckLake's own latest snapshot id."""
+        return catalog.lake("SELECT max(snapshot_id) AS id FROM ducklake_snapshots('lake');")[0]["id"]
+
+    def test_none_without_a_catalog(self):
+        with mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(self.root / "nowhere")}):
+            self.assertIsNone(catalog.snapshot())
+        self.assertIsNone(catalog.snapshot(self.root / "nowhere"))
+
+    def test_an_index_that_changes_the_catalog_moves_it_and_one_with_nothing_to_do_doesnt(self):
+        self.index()
+        first = catalog.snapshot()
+        self.assertEqual(first["id"], self.lakes_latest())
+        self.assertRegex(first["at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\+00:00$")
+        self.assertEqual(catalog.snapshot(catalog.lake_root()), first)
+        self.assertFalse(self.index()[0].changed)
+        self.assertEqual(catalog.snapshot(), first)
+        # Reads all through the next index: none holds up its commit.
+        self.add_source("suite/wt/snapshot")
+        reads, done = [], threading.Event()
+
+        def read():
+            while not done.is_set():
+                reads.append(catalog.snapshot())
+                time.sleep(0.001)
+        reader = threading.Thread(target=read)
+        reader.start()
+        try:
+            got = self.index()[0]
+        finally:
+            done.set()
+            reader.join()
+        self.assertTrue(got.changed)
+        self.assertIn("suite/wt/snapshot", got.sources)
+        after = catalog.snapshot()
+        self.assertGreater(after["id"], first["id"])
+        self.assertEqual(after["id"], self.lakes_latest())
+        self.assertTrue(reads)
+        self.assertEqual({r["id"] for r in reads if r} - set(range(first["id"], after["id"] + 1)), set())
+
+    def test_a_catalog_busy_past_the_timeout_gives_none(self):
+        if catalog.snapshot() is None:
+            self.index()
+        latest = catalog.snapshot()
+        held = sqlite3.connect(catalog.catalog_path())
+        try:
+            held.execute("BEGIN EXCLUSIVE")
+            with mock.patch.object(catalog, "SNAPSHOT_BUSY_S", 0.05):
+                self.assertIsNone(catalog.snapshot())
+        finally:
+            held.rollback()
+            held.close()
+        self.assertEqual(catalog.snapshot(), latest)
 
 
 def child_index(root):

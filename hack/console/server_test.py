@@ -21,6 +21,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -772,6 +773,56 @@ class Children(unittest.TestCase):
                                    "error": "its process was killed by signal 9"})
         set_mode("fetch", "")
         self.assertEqual(lines(post("/console/fetch", {"exp_id": "e1"}).text)[-1]["code"], 0)
+
+
+def index_elsewhere(table):
+    """An index by another process (as suite.py run's or simdb.py index's
+    is): a child of its own adds `table` to the test's catalog."""
+    subprocess.run([sys.executable, "-c", f"import server_test; server_test.add_table({table!r})"], cwd=HERE,
+                   check=True, timeout=120)
+
+
+class Snapshots(unittest.TestCase):
+    def setUp(self):
+        set_mode("index", "")
+
+    def test_the_index_state_and_a_querys_result_carry_the_catalogs_snapshot(self):
+        latest = catalog.snapshot(LAKE)
+        self.assertIsInstance(latest["id"], int)
+        self.assertRegex(latest["at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\+00:00$")
+        self.assertEqual(sql("SELECT 1 AS x").body["snapshot"], latest["id"])
+        self.assertEqual(call("GET", "/console/index").body["snapshot"], latest)
+
+    def test_an_index_by_another_process_reaches_the_next_query_with_one_refresh(self):
+        seen = sql("SELECT 1").body["snapshot"]
+        before = POOL.generation
+        self.assertEqual(sql("SELECT a FROM elsewhere_1").status, 400)
+        index_elsewhere("elsewhere_1")
+        latest = catalog.snapshot(LAKE)
+        self.assertNotEqual(latest["id"], seen)
+        r = sql("SELECT a FROM elsewhere_1")
+        self.assertEqual((r.status, r.body["rows"], r.body["snapshot"]), (200, [[1]], latest["id"]))
+        self.assertIn("elsewhere_1", [t["name"] for t in call("GET", "/console/schema").body["tables"]])
+        self.assertEqual(call("GET", "/console/index").body["snapshot"], latest)
+        sql("SELECT 1")
+        self.assertEqual(POOL.generation, before + 1)
+
+    def test_with_no_change_nothing_refreshes(self):
+        seen = sql("SELECT 1").body["snapshot"]
+        before = POOL.generation
+        for _ in range(3):
+            self.assertEqual(sql("SELECT 1").body["snapshot"], seen)
+            self.assertEqual(call("GET", "/console/index").body["snapshot"]["id"], seen)
+            self.assertEqual(call("GET", "/console/schema").status, 200)
+        self.assertEqual(POOL.generation, before)
+
+    def test_a_snapshot_that_cant_be_read_keeps_the_last(self):
+        seen = sql("SELECT 1").body["snapshot"]
+        before = POOL.generation
+        with mock.patch.object(catalog, "snapshot", lambda lake=None: None):
+            self.assertEqual(sql("SELECT 1").body["snapshot"], seen)
+            self.assertEqual(call("GET", "/console/index").body["snapshot"]["id"], seen)
+        self.assertEqual(POOL.generation, before)
 
 
 class Static(unittest.TestCase):

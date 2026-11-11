@@ -18,7 +18,39 @@ export interface QueryResult {
   rows: Json[][];
   truncated: boolean;
   elapsed_ms: number;
+  /**
+   * The id of the catalog's snapshot the server had when it ran the query (POST /console/sql's;
+   * null before it could read one).
+   */
+  snapshot?: number | null;
 }
+
+/** A snapshot of the catalog: every index that changes it makes one. */
+export interface Snapshot {
+  id: number;
+  /** When it was made (ISO 8601). */
+  at: string;
+}
+
+/**
+ * Whether the catalog holds results newer than rows of snapshot `shown`: both known, and the latest
+ * snapshot `latest` later. Rows of a later snapshot than `latest` (an index after the page last read
+ * it, such as the page's own fetch) have nothing newer to show. A catalog made again numbers its
+ * snapshots from the start: rows of the old one offer nothing until they load again.
+ *
+ * @param latest - the catalog's latest snapshot, as the page last read it
+ * @param shown - the snapshot the rows came from
+ * @returns whether to offer to load them again
+ */
+export const newResults = (
+  latest: Snapshot | null | undefined,
+  shown: number | null | undefined
+): latest is Snapshot =>
+  latest !== null &&
+  latest !== undefined &&
+  typeof shown === "number" &&
+  typeof latest.id === "number" &&
+  latest.id > shown;
 
 export interface ViewParam {
   name: string;
@@ -191,11 +223,16 @@ export const getRegeneration = (id: string): Promise<Regeneration> =>
 
 export const startIndex = (): Promise<IndexRun> => post<IndexRun>("/console/index", {});
 
-export const getIndex = (): Promise<{
+/** GET /console/index's answer. */
+export interface IndexState {
   running: IndexRun | null;
   last: IndexRun | null;
   catalog_info: Record<string, Json>[];
-}> => call("/console/index");
+  /** The catalog's latest snapshot (null before the server could read one). */
+  snapshot: Snapshot | null;
+}
+
+export const getIndex = (): Promise<IndexState> => call<IndexState>("/console/index");
 
 /** A statement's first rows, as an ask's `result` event gives them. */
 export interface AskResult extends QueryResult {
@@ -229,7 +266,14 @@ export type AskEvent =
   | { type: "tool"; id: string; name: string; input: Record<string, Json> }
   | { type: "sql"; id: string; sql: string; params: Record<string, Param>; purpose: string }
   | { type: "result"; id: string; result: AskResult }
-  | { type: "chart"; id: string; title: string; spec: Record<string, unknown>; sql: string; result: AskResult }
+  | {
+      type: "chart";
+      id: string;
+      title: string;
+      spec: Record<string, unknown>;
+      sql: string;
+      result: AskResult;
+    }
   | { type: "progress"; id: string; line: string }
   | { type: "proposal"; id: string; why: string; regeneration: Regeneration }
   | {

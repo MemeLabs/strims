@@ -207,6 +207,19 @@
     padding: 12px 0;
   }
 
+  // The experiments list's word that the catalog has results its rows don't.
+  &__fresh {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 8px;
+    padding: 6px 8px 6px 12px;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  }
+
   &__error {
     color: var(--critical);
     white-space: pre-wrap;

@@ -3,8 +3,8 @@
 
 import React, { useEffect, useState } from "react";
 
-import { approveRegeneration, fetchData, getRegeneration, regenerate } from "./api";
-import type { QueryResult, Regeneration, SavedView } from "./api";
+import { approveRegeneration, fetchData, getRegeneration, newResults, regenerate } from "./api";
+import type { QueryResult, Regeneration, SavedView, Snapshot } from "./api";
 import ResultTable from "./ResultTable";
 import type { Selection } from "./selection";
 import ViewPanel from "./ViewPanel";
@@ -177,17 +177,37 @@ const RegenerateBox: React.FC<{ exp: string; sel: Selection }> = ({ exp, sel }) 
   );
 };
 
+/**
+ * A time's hours and minutes, in this browser's zone.
+ *
+ * @param at - an ISO 8601 time
+ * @returns its HH:MM, or `at` as it is where it isn't a time
+ */
+const clock = (at: string): string => {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return at;
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
 export interface ExperimentsProps {
   view: SavedView;
   sel: Selection;
   setSel: (s: Partial<Selection>) => void;
+  /** The catalog's latest snapshot, as the page last read it (GET /console/index). */
+  latest: Snapshot | null;
 }
 
-/** The experiments, with fetch and regenerate actions. */
-const Experiments: React.FC<ExperimentsProps> = ({ view, sel, setSel }) => {
+/**
+ * The experiments, with fetch and regenerate actions. When the catalog's latest snapshot is newer
+ * than the one its rows came from (an index since, by any process), a bar above the table says
+ * so; the table loads again only when its Reload is clicked, or for its own reasons (a search, a
+ * fetch), whose rows clear the bar.
+ */
+const Experiments: React.FC<ExperimentsProps> = ({ view, sel, setSel, latest }) => {
   const [action, setAction] = useState<{ exp: string; kind: "fetch" | "regenerate" } | null>(null);
   const [search, setSearch] = useState(sel.search);
   const [nonce, setNonce] = useState(0);
+  const reload = () => setNonce((n) => n + 1);
   useEffect(() => {
     const t = setTimeout(() => setSel({ search }), 300);
     return () => clearTimeout(t);
@@ -196,24 +216,36 @@ const Experiments: React.FC<ExperimentsProps> = ({ view, sel, setSel }) => {
     const idCol = r.columns.findIndex((c) => c.name === "exp_id");
     const kindCol = r.columns.findIndex((c) => c.name === "kind");
     return (
-      <ResultTable
-        result={r}
-        limit={300}
-        actions={(row) => {
-          const exp = String(row[idCol]);
-          return (
-            <>
-              <button onClick={() => setSel({ exp, cell: "", arm: "", arm2: "", seed: "" })}>
-                {sel.exp === exp ? "Selected" : "Select"}
-              </button>
-              <button onClick={() => setAction({ exp, kind: "fetch" })}>Fetch</button>
-              {row[kindCol] === "farm" && (
-                <button onClick={() => setAction({ exp, kind: "regenerate" })}>Regenerate…</button>
-              )}
-            </>
-          );
-        }}
-      />
+      <>
+        {newResults(latest, r.snapshot) && (
+          <div className="console__fresh" role="status">
+            <span>New results are in the catalog (indexed {clock(latest.at)}).</span>
+            <button className="primary" onClick={reload}>
+              Reload
+            </button>
+          </div>
+        )}
+        <ResultTable
+          result={r}
+          limit={300}
+          actions={(row) => {
+            const exp = String(row[idCol]);
+            return (
+              <>
+                <button onClick={() => setSel({ exp, cell: "", arm: "", arm2: "", seed: "" })}>
+                  {sel.exp === exp ? "Selected" : "Select"}
+                </button>
+                <button onClick={() => setAction({ exp, kind: "fetch" })}>Fetch</button>
+                {row[kindCol] === "farm" && (
+                  <button onClick={() => setAction({ exp, kind: "regenerate" })}>
+                    Regenerate…
+                  </button>
+                )}
+              </>
+            );
+          }}
+        />
+      </>
     );
   };
   return (
@@ -226,9 +258,7 @@ const Experiments: React.FC<ExperimentsProps> = ({ view, sel, setSel }) => {
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
-      {action?.kind === "fetch" && (
-        <FetchBox exp={action.exp} sel={sel} onDone={() => setNonce((n) => n + 1)} />
-      )}
+      {action?.kind === "fetch" && <FetchBox exp={action.exp} sel={sel} onDone={reload} />}
       {action?.kind === "regenerate" && <RegenerateBox exp={action.exp} sel={sel} />}
     </ViewPanel>
   );

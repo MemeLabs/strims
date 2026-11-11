@@ -13,7 +13,7 @@ import {
   startIndex,
   startTabReports,
 } from "../components/console/api";
-import type { Json, SavedView, Schema } from "../components/console/api";
+import type { IndexState, Json, SavedView, Schema, Snapshot } from "../components/console/api";
 import Ask from "../components/console/Ask";
 import Experiments from "../components/console/Experiments";
 import { carried, useOptions, useSelection } from "../components/console/selection";
@@ -198,32 +198,33 @@ const Pickers: React.FC<PickersProps> = ({ schema, sel, setSel, uses }) => {
   );
 };
 
-const IndexStatus: React.FC<{ onIndexed: () => void }> = ({ onIndexed }) => {
-  const [text, setText] = useState("");
+/** How often the page reads the index's state: its "indexed" line and the catalog's snapshot. */
+const INDEX_EVERY_MS = 30_000;
+
+interface IndexStatusProps {
+  /** GET /console/index's last answer; null before the first. */
+  state: IndexState | null;
+  /** Whether the last read of it failed. */
+  unreachable: boolean;
+  /** Runs once an index the button started has ended. */
+  onIndexed: () => void;
+}
+
+const IndexStatus: React.FC<IndexStatusProps> = ({ state, unreachable, onIndexed }) => {
   const [busy, setBusy] = useState(false);
-  const read = useCallback(() => {
-    getIndex().then(
-      (s) => {
-        const at = s.catalog_info.find((r) => r.key === "indexed_at")?.value;
-        setText(s.running ? "indexing…" : `indexed ${String(at ?? "?")}`);
-      },
-      () =>
-        setText(
-          "console server unreachable (npm run console:build once, then python3 hack/console/server.py)"
-        )
-    );
-  }, []);
-  useEffect(() => {
-    read();
-    const t = setInterval(read, 30_000);
-    return () => clearInterval(t);
-  }, [read]);
+  const at = state?.catalog_info.find((r) => r.key === "indexed_at")?.value;
+  const text = unreachable
+    ? "console server unreachable (npm run console:build once, then python3 hack/console/server.py)"
+    : state === null
+    ? ""
+    : state.running
+    ? "indexing…"
+    : `indexed ${String(at ?? "?")}`;
   const go = () => {
     setBusy(true);
     startIndex().then(
       () => {
         setBusy(false);
-        read();
         onIndexed();
       },
       () => setBusy(false)
@@ -245,13 +246,17 @@ interface NamedViewProps {
   views: SavedView[];
   sel: Selection;
   setSel: (s: Partial<Selection>) => void;
+  /** The catalog's latest snapshot, as the page last read it. */
+  latest: Snapshot | null;
 }
 
-const NamedView: React.FC<NamedViewProps> = ({ views, sel, setSel }) => {
+const NamedView: React.FC<NamedViewProps> = ({ views, sel, setSel, latest }) => {
   const { name } = useParams();
   const view = views.find((v) => v.name === name);
   if (!view) return <div className="console__hint">No saved view {name}.</div>;
-  if (view.name === "experiments") return <Experiments view={view} sel={sel} setSel={setSel} />;
+  if (view.name === "experiments") {
+    return <Experiments view={view} sel={sel} setSel={setSel} latest={latest} />;
+  }
   return <ViewPanel key={view.name} view={view} sel={sel} />;
 };
 
@@ -274,6 +279,28 @@ const Console: React.FC = () => {
     );
   }, []);
   useEffect(load, [load]);
+  // The index's state, read every 30 s: the menu's "indexed" line, and the snapshot the
+  // experiments list compares its rows' with.
+  const [index, setIndex] = useState<IndexState | null>(null);
+  const [unreachable, setUnreachable] = useState(false);
+  const readIndex = useCallback(() => {
+    getIndex().then(
+      (s) => {
+        setIndex(s);
+        setUnreachable(false);
+      },
+      () => setUnreachable(true)
+    );
+  }, []);
+  useEffect(() => {
+    readIndex();
+    const t = setInterval(readIndex, INDEX_EVERY_MS);
+    return () => clearInterval(t);
+  }, [readIndex]);
+  const indexed = useCallback(() => {
+    readIndex();
+    load();
+  }, [readIndex, load]);
 
   const views = schema?.views ?? [];
   const ordered = [
@@ -297,7 +324,7 @@ const Console: React.FC = () => {
               {v.title}
             </NavLink>
           ))}
-          <IndexStatus onIndexed={load} />
+          <IndexStatus state={index} unreachable={unreachable} onIndexed={indexed} />
         </nav>
         <main className="console__main">
           {error && <div className="console__error">{error}</div>}
@@ -314,7 +341,17 @@ const Console: React.FC = () => {
               path="workbench"
               element={<Workbench schema={schema} sel={sel} onSaved={load} />}
             />
-            <Route path=":name" element={<NamedView views={views} sel={sel} setSel={setSel} />} />
+            <Route
+              path=":name"
+              element={
+                <NamedView
+                  views={views}
+                  sel={sel}
+                  setSel={setSel}
+                  latest={index?.snapshot ?? null}
+                />
+              }
+            />
           </Routes>
         </main>
       </div>
