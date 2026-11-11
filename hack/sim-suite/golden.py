@@ -16,8 +16,9 @@ the farm's indexes, and over the experiment's arms as the catalog's
 experiment_jobs has them (arm_side). Each prints the arm score, ranked by
 lag and for overhead (with no budget, and with one of 1.05), and the
 scorecard, every metric and the default's. The reference's t table is the
-macros' (t975), so the two differ by nothing but their code. The
-experiments are the latest N of each kind (--refs and --sets runs) with
+macros' (t975), and the macros score the METRICS it has (ref_metrics:
+those added since it, which it can't print, are left out), so the two
+differ by nothing but their code. The experiments are the latest N of each kind (--refs and --sets runs) with
 two arms or more; an experiment's base is its index's, else the arm the
 farm reused from an earlier run (an A/B's baseline), else its first.
 
@@ -44,11 +45,12 @@ import subprocess
 import sys
 import types
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "hack") not in sys.path:
     sys.path.insert(0, str(ROOT / "hack"))
-from simlab import scoring  # noqa: E402
+from simlab import scoring, suite as lab  # noqa: E402
 
 # The last suite.py that scored in Python.
 REFERENCE = "4eee6065"
@@ -86,6 +88,15 @@ def reference(rev):
     ref.T975 = {r["df"]: r["t"] for r in scoring.query(
         "SELECT df, t975_at(df) AS t FROM range(1, 1001) r(df) ORDER BY df;")}
     return ref
+
+
+@contextlib.contextmanager
+def ref_metrics(ref):
+    """simlab.suite's METRICS, which the macros score, without those the
+    reference lacks: added since it, they are no part of the comparison."""
+    names = {m[0] for m in ref.METRICS}
+    with mock.patch.object(lab, "METRICS", [m for m in lab.METRICS if m[0] in names]):
+        yield
 
 
 def printed(fn):
@@ -218,6 +229,11 @@ def check_local(ref, n):
 
 def check(a):
     ref = reference(a.ref)
+    with ref_metrics(ref):
+        compared(a, ref)
+
+
+def compared(a, ref):
     ok = True
     if a.local:
         ok &= check_local(ref, a.local)
@@ -327,7 +343,13 @@ def pick_cells(text_arm, text_card, cells):
 
 
 def fixtures(a):
-    s, ref = suite(), reference(a.ref)
+    ref = reference(a.ref)
+    with ref_metrics(ref):
+        write_fixtures(a, ref)
+
+
+def write_fixtures(a, ref):
+    s = suite()
     FIXTURES.mkdir(parents=True, exist_ok=True)
     cases, runs = [], set()
     for e in experiments(a.n, a.exps):

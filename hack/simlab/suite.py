@@ -536,6 +536,13 @@ METRICS = [
     ("osc_amp_ms", "v.osc_amp_ms", LOWER, "ratio", 0.10),
     ("delivery", "coalesce(r.delivery_honest, r.delivery)", HIGHER, "diff", 0.002),
     ("timeouts", "r.timeouts", LOWER, "ratio", 0.10),
+    # timeouts' kinds: requests that timed out unanswered, and speculative
+    # ones that expired or that their holder answered NOT_YET (the rows'
+    # spec_expired and spec_not_yet are the park counters). Rows from
+    # before speculative requests lack them.
+    ("request_timeouts", "r.request_timeouts", LOWER, "ratio", 0.10),
+    ("timeouts_spec_expired", "r.timeouts_spec_expired", LOWER, "ratio", 0.10),
+    ("timeouts_spec_not_yet", "r.timeouts_spec_not_yet", LOWER, "ratio", 0.10),
     ("wasted/read", share("r.wasted", "r.chunks_read"), LOWER, "diff", 0.01),
     ("seed_answer_share", "r.seed_pull_share", None, "diff", 0.02),
     ("viewer_util_p50", "r.viewer_util_p50", None, "diff", 0.02),
@@ -585,6 +592,7 @@ METRICS = [
     ("ovh_seed", "r.ovh_seed", LOWER, "diff", 0.005),
     ("ovh_leaf_p90", "r.ovh_leaf_p90", LOWER, "diff", 0.005),
     ("have/useful", per_useful("up_have"), None, "ratio", 0.05),
+    ("state/useful", per_useful("up_state"), None, "ratio", 0.05),
     ("ack/useful", per_useful("up_ack"), None, "ratio", 0.05),
     ("request/useful", per_useful("up_request"), None, "ratio", 0.05),
     ("integrity/useful", per_useful("up_integrity", "up_signed"), None, "ratio", 0.05),
