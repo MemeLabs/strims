@@ -65,7 +65,12 @@ value), and an INTERVAL's months come back folded into its days (30 a
 month, as the module returns a timedelta; no catalog column is an
 INTERVAL). A query run with `text` returns DuckDB's own strings for its
 values (each column cast to VARCHAR in SQL, names kept), and `table()`
-lays them out as the CLI's -table mode does.
+lays them out as the CLI's -table mode does. One run with `temporal_text`
+casts only its top-level dates, times and timestamps (their text is what
+values() and json() give): DuckDB formats them faster than Python, and
+exactly where the module's values can't hold them (nanoseconds, the
+infinities, years past 9999). A JSON column's type is VARCHAR, as the
+Node server named it.
 """
 
 import contextlib
@@ -410,8 +415,7 @@ class Result:
 
     def values(self):
         """The rows as lists of the CLI's JSON values (the module docs)."""
-        conv = [converter(t, plain=True) for t in self.types]
-        return [[f(v) for f, v in zip(conv, row)] for row in self.rows]
+        return converted(self.rows, [converter(t, plain=True) for t in self.types])
 
     def records(self):
         """The rows as dicts of the CLI's JSON values, as simdb.duck gave
@@ -422,9 +426,8 @@ class Result:
     def json(self):
         """The console API's answer: {columns, rows, truncated,
         elapsed_ms}, its values JSON's (the module docs)."""
-        conv = [converter(t, plain=False) for t in self.types]
         return {"columns": [dataclasses.asdict(c) for c in self.columns],
-                "rows": [[f(v) for f, v in zip(conv, row)] for row in self.rows],
+                "rows": converted(self.rows, [converter(t, plain=False) for t in self.types]),
                 "truncated": self.truncated, "elapsed_ms": self.elapsed_ms}
 
     def table(self):
@@ -434,10 +437,27 @@ class Result:
                                          for row in self.rows])
 
 
+def converted(rows, conv):
+    """`rows` as new lists, each column's converter applied (none called
+    for a column whose converter is `same`)."""
+    todo = [(i, f) for i, f in enumerate(conv) if f is not same]
+    if not todo:
+        return [list(r) for r in rows]
+    out = []
+    for r in rows:
+        r = list(r)
+        for i, f in todo:
+            r[i] = f(r[i])
+        out.append(r)
+    return out
+
+
 def type_name(t):
     """A DuckDBPyType's name as the console's Node server gave it:
-    DuckDB's, with STRUCT and UNION fields quoted."""
+    DuckDB's, with STRUCT and UNION fields quoted, JSON as VARCHAR."""
     kind = t.id
+    if kind == "varchar":
+        return "VARCHAR"
     if kind in ("struct", "union"):
         fields = ", ".join(f"{ident(n)} {type_name(c)}" for n, c in t.children)
         return f"{kind.upper()}({fields})" if t.children else kind.upper()
@@ -455,6 +475,9 @@ def type_name(t):
 BIG_INTS = {"bigint", "ubigint", "hugeint", "uhugeint", "varint", "bignum"}
 INTS = BIG_INTS | {"tinyint", "smallint", "integer", "utinyint", "usmallint", "uinteger"}
 TIMESTAMPS = {"timestamp", "timestamp_s", "timestamp_ms", "timestamp_ns", "timestamp with time zone"}
+# The types `temporal_text` casts to VARCHAR, as DESCRIBE names them.
+TEMPORAL = {"DATE", "TIME", "TIME_NS", "TIME WITH TIME ZONE", "TIMESTAMP", "TIMESTAMP_S", "TIMESTAMP_MS",
+            "TIMESTAMP_NS", "TIMESTAMP WITH TIME ZONE"}
 
 
 def fraction(us):
@@ -534,11 +557,16 @@ def float_json(v):
     return v
 
 
+def same(v):
+    return v
+
+
 def converter(t, plain):
     """A function from a value of type `t` (a DuckDBPyType) as the module
-    gives it to its CLI JSON value (`plain`) or its API JSON value."""
+    gives it to its CLI JSON value (`plain`) or its API JSON value: `same`
+    for one it leaves as it is."""
     kind = t.id if t is not None else None
-    ident_ = lambda v: v
+    ident_ = same
     if kind in INTS:
         if plain or kind not in BIG_INTS:
             return ident_
@@ -598,6 +626,22 @@ def described(conn, statement):
     return [r[0] for r in rows]
 
 
+def temporal_as_text(conn, statement, params):
+    """SQL for `statement` (a SELECT) with its top-level dates, times and
+    timestamps cast to VARCHAR, named as they are, and their types as
+    DESCRIBE names them ({index: type}); (None, {}) when it has none or
+    DESCRIBE can't take it."""
+    try:
+        described = conn.execute(f"DESCRIBE {statement.query}", params).fetchall()
+    except duckdb.Error:
+        return None, {}
+    cast = {i: r[1] for i, r in enumerate(described) if r[1] in TEMPORAL}
+    if not cast:
+        return None, {}
+    cols = ", ".join(f"#{i + 1}{'::VARCHAR' if i in cast else ''} AS {ident(r[0])}" for i, r in enumerate(described))
+    return f"SELECT {cols} FROM (\n{TAIL.sub('', statement.query)}\n)", cast
+
+
 def as_text(conn, statement):
     """SQL for `statement` (a SELECT) with each column cast to VARCHAR,
     named as it is, or None when DESCRIBE can't take it."""
@@ -614,20 +658,24 @@ def as_text(conn, statement):
 TAIL = re.compile(r";(?:\s+|--[^\n]*(?:\n|$)|/\*.*?\*/)*$", re.S)
 
 
-def run(conn, sql, params=None, max_rows=None, timeout_s=None, guard=False, text=False):
+def run(conn, sql, params=None, max_rows=None, timeout_s=None, guard=False, text=False, temporal_text=False):
     """Runs `sql`, one statement, on `conn`: through `gate` when `guard`,
     its parameters bound from `params`, its rows streamed to `max_rows`
     (all of them when None), interrupted at `timeout_s`; with `text` its
-    values DuckDB's strings. QueryError says what failed, and how
+    values DuckDB's strings, with `temporal_text` those of its top-level
+    dates, times and timestamps. QueryError says what failed, and how
     (status)."""
     t0 = time.perf_counter()
     deadline = Deadline(conn, timeout_s) if timeout_s else None
     try:
         statement = gate(conn, sql) if guard else one(conn, sql)
         values = bind(statement, params or {})
-        query = statement
+        query, cast = statement, {}
         if text and statement.type == duckdb.StatementType.SELECT:
             query = as_text(conn, statement) or statement
+        elif temporal_text and statement.type == duckdb.StatementType.SELECT:
+            wrapped, cast = temporal_as_text(conn, statement, values)
+            query = wrapped or statement
         cur = conn.execute(query, values)
         desc = cur.description or []
         rows = cur.fetchmany(max_rows + 1) if max_rows is not None else cur.fetchall()
@@ -644,7 +692,7 @@ def run(conn, sql, params=None, max_rows=None, timeout_s=None, guard=False, text
     if truncated:
         rows = rows[:max_rows]
     types = [d[1] for d in desc]
-    columns = [Column(d[0], type_name(d[1])) for d in desc]
+    columns = [Column(d[0], cast[i] if i in cast else type_name(d[1])) for i, d in enumerate(desc)]
     if text:
         rows = [[None if v is None else v if isinstance(v, str) else varchar(v) for v in r] for r in rows]
     else:
@@ -817,12 +865,13 @@ class Pool:
         finally:
             self._release(gen, conn)
 
-    def query(self, sql, params=None, max_rows=10_000, timeout_s=30.0, text=False):
+    def query(self, sql, params=None, max_rows=10_000, timeout_s=30.0, text=False, temporal_text=False):
         """Runs `sql` through the gate on a free reader (run): its first
         `max_rows` rows, interrupted at `timeout_s`."""
         t0 = time.perf_counter()
         with self.connection() as conn:
-            r = run(conn, sql, params, max_rows=max_rows, timeout_s=timeout_s, guard=True, text=text)
+            r = run(conn, sql, params, max_rows=max_rows, timeout_s=timeout_s, guard=True, text=text,
+                    temporal_text=temporal_text)
         r.elapsed_ms = round((time.perf_counter() - t0) * 1000)
         return r
 

@@ -192,6 +192,39 @@ class Values(Lake):
         j = r.json()
         self.assertEqual([[c["name"], c["type"]] for c in j["columns"]], NODE["columns"])
         self.assertEqual(json.dumps(j["rows"], separators=(",", ":")), NODE["rows"])
+        t = engine.run(c, TYPES_SQL, temporal_text=True).json()
+        self.assertEqual((t["columns"], t["rows"]), (j["columns"], j["rows"]))
+
+    def test_temporal_text_is_duckdbs_where_the_module_cant_hold_the_value(self):
+        c = engine.connect()
+        c.execute("SET TimeZone = 'America/Los_Angeles'")
+        sql = ("SELECT TIMESTAMP_NS '2026-01-01 01:02:03.000000005' AS ns, TIMESTAMP 'infinity' AS inf, "
+               "DATE '-infinity' AS ninf, TIMESTAMPTZ '20000-01-01 00:00:00+00' AS far, $t::TIMESTAMPTZ AS t, "
+               "[TIMESTAMP '2026-01-01 00:00:00.5'] AS nested, 1 AS ns ORDER BY 1")
+        r = engine.run(c, sql, {"t": "2026-07-01 12:00:00+00"}, temporal_text=True)
+        self.assertEqual([(col.name, col.type) for col in r.columns], [
+            ("ns", "TIMESTAMP_NS"), ("inf", "TIMESTAMP"), ("ninf", "DATE"), ("far", "TIMESTAMP WITH TIME ZONE"),
+            ("t", "TIMESTAMP WITH TIME ZONE"), ("nested", "TIMESTAMP[]"), ("ns", "INTEGER")])
+        want = ["2026-01-01 01:02:03.000000005", "infinity", "-infinity", "19999-12-31 16:00:00-08",
+                "2026-07-01 05:00:00-07", ["2026-01-01 00:00:00.5"], 1]
+        self.assertEqual(r.json()["rows"], [want])
+        self.assertEqual(r.values(), [want])
+        # Without it, the module's values: nanoseconds and the infinities lost.
+        self.assertEqual(engine.run(c, sql, {"t": "2026-07-01 12:00:00+00"}).json()["rows"][0][:3],
+                         ["2026-01-01 01:02:03", "9999-12-31 23:59:59.999999", "0001-01-01"])
+        # What DESCRIBE can't take, or has no times, runs as it is.
+        for q in ["DESCRIBE SELECT 1 AS a", "SHOW TABLES", "SUMMARIZE SELECT DATE '2026-01-01' AS d", "SELECT 1 AS a"]:
+            a, b = engine.run(c, q, temporal_text=True).json(), engine.run(c, q).json()
+            self.assertEqual((a["columns"], a["rows"]), (b["columns"], b["rows"]), q)
+        rows = engine.run(c, "SELECT DATE '2026-01-01' + range::INTEGER AS d FROM range(5) ORDER BY d DESC",
+                          temporal_text=True).values()
+        self.assertEqual(rows, [[f"2026-01-0{i}"] for i in range(5, 0, -1)])
+        c.close()
+
+    def test_a_json_column_is_varchar(self):
+        r = engine.run(engine.connect(), "SELECT '{\"a\": 1}'::JSON AS j, ['[]'::JSON] AS l")
+        self.assertEqual([col.type for col in r.columns], ["VARCHAR", "VARCHAR[]"])
+        self.assertEqual(r.json()["rows"], [['{"a": 1}', ["[]"]]])
 
     def test_values_and_tables_are_the_clis(self):
         c = engine.connect()
