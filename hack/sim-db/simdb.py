@@ -27,6 +27,11 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   writes none for a second its viewer wasn't there in)
   reads           every read: viewer, t_ms (true time from the stream's
                   start), seq, lag_ms
+  stalls          each viewer's stalls, playing its reads at delays of
+                  1250 and 4250 ms (analyze.py's DELIVERY_TARGET_MS and
+                  DELIVERY_MAX_MS): viewer, delay_ms, t_ms (when the stall
+                  began), stall_ms; macros.sql's playback(delay_ms) plays
+                  `reads` the same way, at any delay
   bins            finer bins (SIM_BIN_MS / STRIMS_SIM_BIN_MS wide, 100 ms
                   by default), one wide row a bin: t_ms, then counters
                   summed over it and gauges at its end: the series'
@@ -50,6 +55,10 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   and depart_ms), which the verdicts' series carry
   events          the sims' timed events: t_us, kind, node, peer, value,
                   detail
+  parents         every change of a node's push parent of a stream: t_ms,
+                  node, stream, parent (the node from then on, -1 for
+                  none), reason (open, switch, prune, shed, lost), nodes
+                  numbered as in events
   forecast        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 (large: a
                   row per neighbour per chunk announced), every sample of
                   a neighbour's announcement lag, with the estimate it
@@ -114,8 +123,9 @@ manifest's `at`), then a farm flush's later seq, by number
 (source_ranks).
 
   sql      a query over the views (runs, scalars, seconds, viewer_seconds,
-           reads, bins, viewers, events, node_bins, forecast, the derived
-           ones, and macros.sql's), their keys and joins below
+           reads, stalls, bins, viewers, events, parents, node_bins,
+           forecast, the derived ones, and macros.sql's), their keys and
+           joins below
   pooled   read lags pooled over the selected runs, by cell and arm: the
            quantiles of every read, beside the mean of the runs' own p99s;
            `--by` splits them by phase, by `--bin` of read time, or by
@@ -210,9 +220,9 @@ a key's tables come from one source, so any two views join on them:
 cell (a key the farm reused counts in each of its cells). USING (k) joins
 the same rows but keeps both `src` columns, to name as runs.src. Beside
 (k, src) the views join on their own columns: reads and viewer_seconds to
-viewers USING (k, src, viewer); events, node_bins and forecast to viewers
-USING (k, src, node) (`node` in both sims; strims-sim's viewers also name it
-`host`); seconds to verdict_seconds USING (k, src, sec) (macros.sql's
+viewers USING (k, src, viewer), as stalls does; events, parents, node_bins
+and forecast to viewers USING (k, src, node) (`node` in both sims;
+strims-sim's viewers also name it `host`); seconds to verdict_seconds USING (k, src, sec) (macros.sql's
 `sec`). runs' frames and bytes are its row's: beside viewer_seconds' frames,
 name them runs.frames and runs.bytes.
 
@@ -226,7 +236,8 @@ DUCKDB_GZ_SHA256 = "cce2687a38681db644c248198b99ecd86170ff47e324c5f33e50c0042f14
 DUCKDB_SHA256 = "61238cfbe9dfeaad4bcfcd8a48f6f7123dae2e9603aaadb1f77a4217aeb8980c"
 
 # The sims' tables, and the store's own.
-TABLES = ("seconds", "viewer_seconds", "reads", "bins", "viewers", "events", "node_bins", "forecast")
+TABLES = ("seconds", "viewer_seconds", "reads", "stalls", "bins", "viewers", "events", "parents", "node_bins",
+          "forecast")
 # The bulky tables: the farm uploads them under sim-samples/, and a pull
 # fetches them only when asked (`--reads`, or a query that reads them).
 SAMPLE_TABLES = ("reads", "forecast")

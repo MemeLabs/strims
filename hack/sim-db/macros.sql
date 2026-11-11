@@ -20,6 +20,32 @@ CREATE OR REPLACE MACRO run_read_bins(bin_ms) AS TABLE
            quantile_cont(lag_ms, 0.5) AS lag_p50, quantile_cont(lag_ms, 0.99) AS lag_p99, max(lag_ms) AS lag_max
     FROM reads GROUP BY ALL;
 
+-- Each viewer's stalls at a playout delay of `delay_ms`, as the sims'
+-- `stalls` tables have them (strims-wan's `playout`): a unit read twice
+-- counts at its first read, the units due at one time (t_ms - lag_ms) play
+-- together, as late as the latest of them, and in due order each plays at
+-- due + offset, the offset the most of `delay_ms` and the lags so far.
+-- Every rise of the offset past the first unit's is a stall: it starts at
+-- the unit's play time at the old offset (t_ms, the reads' clock) and lasts
+-- the rise (stall_ms).
+-- needs: reads
+CREATE OR REPLACE MACRO playback(delay_ms) AS TABLE
+    WITH firsts AS (
+        SELECT k, src, viewer, t_ms - lag_ms AS due, lag_ms FROM reads
+        QUALIFY row_number() OVER (PARTITION BY k, src, viewer, seq ORDER BY t_ms, lag_ms) = 1
+    ), dues AS (
+        SELECT k, src, viewer, due, max(lag_ms) AS lag_ms FROM firsts GROUP BY ALL
+    ), played AS (
+        SELECT k, src, viewer, due,
+               greatest(delay_ms, max(lag_ms) OVER (PARTITION BY k, src, viewer ORDER BY due
+                                                    ROWS UNBOUNDED PRECEDING)) AS offset_ms
+        FROM dues
+    ), steps AS (
+        SELECT *, lag(offset_ms) OVER (PARTITION BY k, src, viewer ORDER BY due) AS before_ms FROM played
+    )
+    SELECT k, src, viewer, delay_ms::BIGINT AS delay_ms, due + before_ms AS t_ms, offset_ms - before_ms AS stall_ms
+    FROM steps WHERE offset_ms > before_ms;
+
 -- The fine bins regrouped into `bin_ms` (a multiple of the runs' own):
 -- counters summed; a gauge's sum means nothing, read gauges from `bins`.
 -- needs: bins
