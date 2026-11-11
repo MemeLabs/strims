@@ -223,6 +223,14 @@
         },
         "opacity": {
           "value": 0.85
+        },
+        "yOffset": {
+          "field": "series",
+          "type": "nominal",
+          "sort": [
+            "unhealthy",
+            "collapse"
+          ]
         }
       }
     }

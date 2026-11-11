@@ -14,7 +14,7 @@ WITH arms AS (
     GROUP BY ALL
 ), arm_lists AS (
     SELECT a.exp_id,
-           list(a.arm_label || coalesce(' ' || left(a.commit, 8), '') || coalesce(' ' || c.subject, '')
+           list(a.arm_label || coalesce(' ' || left(a.commit, 8), '') || coalesce(' ' || left(c.subject, 72), '')
                 ORDER BY a.arm_label) AS arms
     FROM arms a LEFT JOIN commits c ON c.sha = a.commit
     GROUP BY ALL

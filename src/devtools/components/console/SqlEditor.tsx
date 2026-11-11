@@ -1,11 +1,12 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// The grammar adds itself to the global Prism the import above sets.
-import "prismjs/components/prism-sql";
-
 import Prism from "prismjs";
 import React, { useRef } from "react";
+
+// The grammar adds itself to the global Prism that prismjs sets as it loads: it's required after
+// the imports, which are sorted with side-effect imports first.
+require("prismjs/components/prism-sql");
 
 export interface SqlEditorProps {
   value: string;

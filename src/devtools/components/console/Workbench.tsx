@@ -15,7 +15,7 @@ const START = `-- An experiment's collapses by cell and arm. Ctrl+Enter runs.
 SELECT e.cell, e.arm_label, count(*) AS runs, sum(v.collapsed::INT) AS collapsed
 FROM experiment_jobs e JOIN verdicts v USING (k, src)
 WHERE e.exp_id = $exp
-GROUP BY ALL ORDER BY collapsed DESC, ALL
+GROUP BY ALL ORDER BY collapsed DESC, cell, arm_label
 `;
 
 /** The `$name`s a statement takes, in order, outside its strings and comments. */

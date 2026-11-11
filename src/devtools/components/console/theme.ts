@@ -65,7 +65,17 @@ export const config = {
     titleFontSize: 11,
   },
   axisY: { minExtent: 48 },
-  legend: { labelColor: INK_2, titleColor: INK_2, labelFontSize: 11, titleFontSize: 11 },
+  // Legends above the plot: a page's chart takes the width it has.
+  legend: {
+    orient: "top",
+    direction: "horizontal",
+    labelColor: INK_2,
+    titleColor: INK_2,
+    labelFontSize: 11,
+    titleFontSize: 11,
+    labelLimit: 220,
+    columnPadding: 14,
+  },
   header: { labelColor: INK_2, titleColor: INK_2, labelFontSize: 11 },
   range: { category: SERIES, ramp: SEQUENTIAL, heatmap: SEQUENTIAL },
   line: { strokeWidth: 2 },

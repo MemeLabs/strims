@@ -14,6 +14,8 @@ export const cellText = (v: Json): string => {
     return Number.isInteger(v) ? String(v) : v.toPrecision(6).replace(/\.?0+$/, "");
   }
   if (typeof v === "string") return v;
+  // A list of strings, a line each.
+  if (Array.isArray(v) && v.every((x) => typeof x === "string")) return v.join("\n");
   return JSON.stringify(v);
 };
 
@@ -21,7 +23,7 @@ export interface ResultTableProps {
   result: QueryResult;
   /** The most rows it shows. */
   limit?: number;
-  /** Extra cells after each row's, given the row. */
+  /** A cell before each row's, given the row. */
   actions?: (row: Json[]) => React.ReactNode;
 }
 
@@ -34,18 +36,19 @@ const ResultTable: React.FC<ResultTableProps> = ({ result, limit = 1000, actions
       <table className="console__table">
         <thead>
           <tr>
+            {actions && <th />}
             {result.columns.map((c) => (
               <th key={c.name} title={c.type}>
                 {c.name}
                 <span className="console__type">{c.type}</span>
               </th>
             ))}
-            {actions && <th />}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
             <tr key={i}>
+              {actions && <td className="console__actions">{actions(row)}</td>}
               {row.map((v, j) => {
                 const text = cellText(v);
                 return (
@@ -54,11 +57,10 @@ const ResultTable: React.FC<ResultTableProps> = ({ result, limit = 1000, actions
                     className={numeric[j] ? "console__num" : undefined}
                     title={text.length > 80 ? text : undefined}
                   >
-                    {text.length > 160 ? text.slice(0, 160) + "…" : text}
+                    {text}
                   </td>
                 );
               })}
-              {actions && <td className="console__actions">{actions(row)}</td>}
             </tr>
           ))}
         </tbody>
