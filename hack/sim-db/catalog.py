@@ -8,8 +8,8 @@ DuckLake, so that any question is one SQL statement over it.
   hack/sim-db/simdb.py fetch --exp E [--cells C,...] [--arms A,...] [--tables reads,forecast]
   hack/sim-db/simdb.py lake QUERY [--json]
 
-The catalog is a DuckLake (the `ducklake` extension, EXTENSIONS pins its
-build for the pinned DuckDB CLI) whose metadata is SQLite,
+The catalog is a DuckLake (the `ducklake` extension, EXTENSIONS, from
+simlab.engine, pins its build for the pinned DuckDB CLI) whose metadata is SQLite,
 <cache root>/lake/catalog.sqlite (the cache root is simdb.py's,
 `SIM_DB_ROOT` or the main checkout's target/sim-db), and whose data are
 Parquet files under lake/data/. One writer (`index`) and any number of
@@ -146,12 +146,12 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "hack"))
+
+from simlab.engine import EXTENSIONS  # noqa: E402
 
 # A change to the catalog's layout: the next index makes it again, whole.
 CATALOG_VERSION = 1
-# The extensions' builds for simdb.DUCKDB_VERSION, as DuckDB's repository
-# installs them (~/.duckdb/extensions/).
-EXTENSIONS = {"ducklake": "ac7595b0", "sqlite_scanner": "5274128"}
 # How long S3 keeps a flush (farm.py's S3_KEPT_DAYS).
 S3_DAYS = 7
 # The env's knobs promoted to jobs' columns: the sims' setting of each
@@ -226,7 +226,7 @@ def extensions():
     bad = {n: got.get(n) for n, v in EXTENSIONS.items() if got.get(n) != v}
     if bad:
         sys.exit(f"DuckDB extensions {bad}, not the pinned {EXTENSIONS}: reinstall them "
-                 "(FORCE INSTALL), or pin the new builds in catalog.EXTENSIONS")
+                 "(FORCE INSTALL), or pin the new builds in simlab.engine.EXTENSIONS")
 
 
 # --- scanning -----------------------------------------------------------------

@@ -1,0 +1,17 @@
+# Copyright 2026 Strims contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# hack/simlab and the scripts over it (hack/sim-db, hack/sim-suite,
+# hack/capture, hack/console): the venv they run in, hack/.venv, which
+# `uv run --project hack --locked` makes and each script's bootstrap
+# (simlab/bootstrap.py) runs it under.
+
+[project]
+name = "simlab"
+version = "0"
+requires-python = ">=3.14,<3.15"
+dependencies = ["duckdb==1.5.6", "pytz==2026.6"]
+
+[tool.uv]
+package = false
+python-preference = "only-system"

@@ -1,0 +1,134 @@
+{
+ "about": "hack/console/db.ts toJson over node_types.sql (DuckDB 1.5.6, @duckdb/node-api 1.5.6-r.2, TimeZone America/Los_Angeles): the console server's columns and rows",
+ "columns": [
+  [
+   "a",
+   "BIGINT"
+  ],
+  [
+   "b",
+   "BIGINT"
+  ],
+  [
+   "c",
+   "DECIMAL(10,2)"
+  ],
+  [
+   "c2",
+   "DECIMAL(38,1)"
+  ],
+  [
+   "d",
+   "HUGEINT"
+  ],
+  [
+   "e",
+   "MAP(VARCHAR, INTEGER)"
+  ],
+  [
+   "e2",
+   "MAP(INTEGER, VARCHAR)"
+  ],
+  [
+   "f",
+   "INTEGER[]"
+  ],
+  [
+   "g",
+   "TIMESTAMP WITH TIME ZONE"
+  ],
+  [
+   "g2",
+   "TIMESTAMP"
+  ],
+  [
+   "h",
+   "STRUCT(\"p\" INTEGER, \"q\" DECIMAL(2,1)[])"
+  ],
+  [
+   "i",
+   "DOUBLE"
+  ],
+  [
+   "j",
+   "DOUBLE"
+  ],
+  [
+   "j2",
+   "DOUBLE"
+  ],
+  [
+   "j3",
+   "FLOAT"
+  ],
+  [
+   "l",
+   "DATE"
+  ],
+  [
+   "l2",
+   "TIME"
+  ],
+  [
+   "m",
+   "INTERVAL"
+  ],
+  [
+   "n",
+   "BLOB"
+  ],
+  [
+   "o",
+   "UUID"
+  ],
+  [
+   "p",
+   "BOOLEAN"
+  ],
+  [
+   "r",
+   "UTINYINT"
+  ],
+  [
+   "s",
+   "UBIGINT"
+  ],
+  [
+   "t",
+   "INTEGER[2]"
+  ],
+  [
+   "u",
+   "ENUM('x', 'y')"
+  ],
+  [
+   "v",
+   "VARCHAR"
+  ],
+  [
+   "w",
+   "INTEGER[]"
+  ],
+  [
+   "x",
+   "STRUCT(\"k\" INTEGER)"
+  ],
+  [
+   "y",
+   "MAP(VARCHAR, INTEGER[])"
+  ],
+  [
+   "z",
+   "HUGEINT"
+  ],
+  [
+   "bb",
+   "BIT"
+  ],
+  [
+   "cc",
+   "MAP(VARCHAR, INTEGER)[]"
+  ]
+ ],
+ "rows": "[[2,\"9007199254740993\",1.25,\"123456789012345678.5\",45,{\"x\":1},{\"1\":\"a\"},[1,2],\"2026-11-10 02:00:00-08\",\"2026-11-10 10:00:00.5\",{\"p\":1,\"q\":[1.5]},1.5,\"NaN\",\"Infinity\",0.10000000149011612,\"2026-01-01\",\"01:02:03\",{\"months\":0,\"days\":1,\"micros\":\"0\"},\"ab\\\\x00\",\"00000000-0000-0000-0000-000000000001\",true,255,\"18446744073709551615\",[1,2],\"x\",null,[null,1],{\"k\":null},{\"a\":[1]},\"170141183460469231731687303715884105727\",\"101\",[{\"z\":2}]]]"
+}
