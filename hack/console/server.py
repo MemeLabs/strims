@@ -5,20 +5,22 @@
 (hack/simlab), its schema and saved views, the commands that bring data
 into it, and the console's page.
 
-  python3 hack/console/server.py [--port 8086] [--connections 2] [--memory 8GB]
-                                 [--threads 8] [--no-index] [--build]
+  python3 hack/console/server.py [--port 8086] [--host ADDR] [--connections 2]
+                                 [--memory 8GB] [--threads 8] [--no-index] [--build]
                                  [--allow-host NAME]... [--allow-origin ORIGIN]...
 
-It listens on 127.0.0.1. `/` redirects to the console's page, the
-devtools app's Console (src/devtools/pages/Console.tsx) as `npm run
-console:build` builds it into target/console/dist: until there is a
-build the page answers 503, `--build` builds it first, and one older than
-its sources gets a warning. The dev server proxies /console to it too
-(webpack.config.js). The catalog is simlab.lake_root() (simdb.py's cache
-root: `SIM_DB_ROOT`, else the main checkout's target/sim-db), read
-through a pool of simlab.engine's guarded readers; an index runs every 2
-minutes (`--no-index` for none), and the queries after one that succeeded
-see the new catalog.
+It listens on every interface, IPv6's and IPv4's where the machine has
+both (`--host 127.0.0.1` for this machine alone), and says its loopback
+URL and one for each of the machine's other IPv4 addresses. `/` redirects
+to the console's page, the devtools app's Console
+(src/devtools/pages/Console.tsx) as `npm run console:build` builds it into
+target/console/dist: until there is a build the page answers 503,
+`--build` builds it first, and one older than its sources gets a warning.
+The dev server proxies /console to it too (webpack.config.js). The catalog
+is simlab.lake_root() (simdb.py's cache root: `SIM_DB_ROOT`, else the main
+checkout's target/sim-db), read through a pool of simlab.engine's guarded
+readers; an index runs every 2 minutes (`--no-index` for none), and the
+queries after one that succeeded see the new catalog.
 
   POST /console/sql          {sql, params?, max_rows?, timeout_s?}: one SELECT (or EXPLAIN of
                              one), run as given, `$name`s bound from params; returns {columns:
@@ -55,19 +57,22 @@ holding none of this one's DuckDB instances, threads or locks), which
 sends their progress and result over a pipe: a crash or a memory blow-up
 there fails that run, not the server.
 
-Every request's Host names localhost, 127.0.0.1 or [::1] (any port), or a
-name --allow-host gives, and its Origin, when it has one, is http or https
-on one of those or one --allow-origin gives; anything else is 403, so a
-page that resolves its own name to this machine (DNS rebinding) can't call
-the API. Every POST and PUT takes `Content-Type: application/json`, which
-a page of another origin can't send without a preflight the console never
-answers.
+Every request's Host (any port) names this machine: localhost or a
+loopback address, the address the request connected to (a LAN IP, an IPv6
+one in brackets), one of the machine's IPv4 addresses, its hostname, its
+FQDN or <hostname>.local, or a name --allow-host gives. Its Origin, when
+it has one, is http or https on one of those, or one --allow-origin gives.
+Anything else is 403: another domain name, so a page whose name resolves
+to this machine (DNS rebinding) can't call the API. Every POST and PUT
+takes `Content-Type: application/json`, which a page of another origin
+can't send without a preflight the console never answers.
 """
 
 import argparse
 import contextlib
 import dataclasses
 import importlib
+import ipaddress
 import json
 import math
 import mimetypes
@@ -75,6 +80,8 @@ import multiprocessing
 import re
 import shutil
 import signal
+import socket
+import struct
 import subprocess
 import sys
 import threading
@@ -102,8 +109,11 @@ INDEX_EVERY_S = 120
 MAX_BODY = 4 << 20
 MAX_ROWS = 200_000
 MAX_TIMEOUT_S = 600
-# The names a request's Host and Origin may give, with any port.
+# The names a request's Host and Origin may give, with any port, besides
+# the machine's own (machine_names) and its addresses.
 LOCAL = ("localhost", "127.0.0.1", "[::1]")
+# Linux's ioctl for an interface's IPv4 address.
+SIOCGIFADDR = 0x8915
 DIST = ROOT / "target" / "console" / "dist"
 PAGE = "/devtools.html#/console"
 BUILD = ["npm", "run", "console:build"]
@@ -381,7 +391,7 @@ class Console:
         self.dist = Path(dist)
         self.catalog, self.suite = catalog, suite
         self.tasks = dict(tasks)
-        self.hosts = {*LOCAL, *(h.lower() for h in hosts)}
+        self.hosts = {*LOCAL, *machine_names(), *lan_addresses(), *(h.lower() for h in hosts)}
         self.origins = {o.lower().rstrip("/") for o in origins}
         self.indexer = Indexer(self.tasks["index"], self.refresh)
         self._fetching = threading.Lock()
@@ -411,10 +421,17 @@ class Console:
         self._stop.set()
         self.pool.close()
 
-    def listen(self, port, host="127.0.0.1"):
-        """A server on `port` (0 for any), not yet serving."""
-        server = ThreadingHTTPServer((host, port), Handler)
-        server.daemon_threads = True
+    def listen(self, port, host=None):
+        """A server on `port` (0 for any) at `host`, by default every
+        interface's address (IPv6's and IPv4's where the machine has both);
+        not yet serving."""
+        if host is None:
+            dual = socket.has_dualstack_ipv6()
+            server = Server(("::" if dual else "0.0.0.0", port), Handler, family=socket.AF_INET6 if dual else
+                            socket.AF_INET, dual=dual)
+        else:
+            family = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)[0][0]
+            server = Server((host, port), Handler, family=family)
         server.console = self
         return server
 
@@ -447,8 +464,11 @@ class Console:
                     h.close_connection = True
 
     def check_origin(self, h):
-        host = host_name(h.headers.get("Host") or "")
-        if host not in self.hosts:
+        try:
+            here = address_name(h.connection.getsockname()[0])
+        except (AttributeError, OSError, ValueError):
+            here = None
+        if not self.ours(host_name(h.headers.get("Host") or ""), here):
             raise HttpError(403, f"Host {h.headers.get('Host')!r} isn't this machine's name (--allow-host NAME "
                                  "admits another)")
         origin = h.headers.get("Origin")
@@ -458,9 +478,22 @@ class Console:
         if o in self.origins:
             return
         u = urllib.parse.urlsplit(o)
-        if u.scheme in ("http", "https") and not u.path and host_name(u.netloc) in self.hosts:
+        if u.scheme in ("http", "https") and not u.path and self.ours(host_name(u.netloc), here):
             return
         raise HttpError(403, f"Origin {origin!r} isn't this machine's (--allow-origin ORIGIN admits another)")
+
+    def ours(self, name, here):
+        """Whether `name` (host_name's) names this machine: one of `hosts`,
+        `here` (the address the request connected to) or a loopback
+        address."""
+        if name is None:
+            return False
+        if name in self.hosts or name == here:
+            return True
+        try:
+            return ipaddress.ip_address(name.removeprefix("[").removesuffix("]")).is_loopback
+        except ValueError:
+            return False
 
     def api(self, h, route, url):
         if route == "POST /console/sql":
@@ -728,6 +761,63 @@ def host_name(value):
     return name or None
 
 
+def address_name(addr):
+    """An IP address as a Host header names it: an IPv4 one (an IPv4-mapped
+    IPv6 one too) as itself, an IPv6 one in brackets, its zone left out."""
+    ip = ipaddress.ip_address(addr.split("%", 1)[0])
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return str(ip) if ip.version == 4 else f"[{ip}]"
+
+
+def machine_names():
+    """This machine's names, lower case: its hostname, its FQDN and
+    <hostname>.local (mDNS's)."""
+    host = socket.gethostname().lower()
+    return {host, socket.getfqdn().lower(), f"{host.split('.')[0]}.local"}
+
+
+def lan_addresses():
+    """This machine's IPv4 addresses but loopback's: the one its default
+    route leaves from first, then each interface's (Linux's SIOCGIFADDR)."""
+    out = []
+    with contextlib.suppress(OSError), socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        # Connecting a UDP socket sends nothing: it picks the route.
+        s.connect(("192.0.2.1", 9))
+        out.append(s.getsockname()[0])
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None
+    if fcntl is not None:
+        with contextlib.suppress(OSError):
+            for _, name in socket.if_nameindex():
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                    try:
+                        got = fcntl.ioctl(s.fileno(), SIOCGIFADDR, struct.pack("256s", name.encode()[:15]))
+                    except OSError:
+                        continue
+                out.append(socket.inet_ntoa(got[20:24]))
+    return [a for a in dict.fromkeys(out) if not ipaddress.ip_address(a).is_loopback]
+
+
+class Server(ThreadingHTTPServer):
+    """The console's listener: `family`'s, and with `dual` (IPv6's) taking
+    IPv4's connections too."""
+    daemon_threads = True
+    request_queue_size = 64
+
+    def __init__(self, address, handler, family=socket.AF_INET, dual=False):
+        self.address_family = family
+        self.dual = dual
+        super().__init__(address, handler)
+
+    def server_bind(self):
+        if self.dual:
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        super().server_bind()
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "sim-console"
@@ -771,15 +861,16 @@ def stale(dist=DIST, sources=SOURCES):
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--port", type=int, default=8086)
+    p.add_argument("--host", metavar="ADDR", help="the address to listen on (default: every interface's)")
     p.add_argument("--connections", type=int, default=2, help="queries that run at once")
     p.add_argument("--memory", default="8GB", help="the readers' memory limit")
     p.add_argument("--threads", type=int, default=8, help="the readers' threads")
     p.add_argument("--no-index", action="store_true", help="no index every 2 minutes")
     p.add_argument("--build", action="store_true", help=f"{' '.join(BUILD)} first")
     p.add_argument("--allow-host", action="append", default=[], metavar="NAME",
-                   help="a Host name requests may give besides localhost's")
+                   help="a Host name requests may give besides this machine's")
     p.add_argument("--allow-origin", action="append", default=[], metavar="ORIGIN",
-                   help="an Origin requests may give besides localhost's (scheme://name[:port])")
+                   help="an Origin requests may give besides this machine's (scheme://name[:port])")
     a = p.parse_args(argv)
     if a.build and subprocess.run(BUILD, cwd=ROOT).returncode:
         sys.exit(f"console: {' '.join(BUILD)} failed")
@@ -794,8 +885,16 @@ def main(argv=None):
                        guard=engine.Guard(memory_limit=a.memory, threads=a.threads))
     console = Console(pool, index_every=0 if a.no_index else INDEX_EVERY_S, hosts=a.allow_host,
                       origins=a.allow_origin)
-    server = console.listen(a.port)
-    print(f"console: http://127.0.0.1:{server.server_address[1]}/ (catalog {lake})", file=sys.stderr)
+    server = console.listen(a.port, a.host)
+    port = server.server_address[1]
+    if a.host is None:
+        print(f"console: http://127.0.0.1:{port}/ (catalog {lake})", file=sys.stderr)
+        lan = [f"http://{addr}:{port}/" for addr in lan_addresses()]
+        if lan:
+            print(f"console: on the network: {', '.join(lan)}", file=sys.stderr)
+    else:
+        here = address_name(server.server_address[0])
+        print(f"console: http://{here}:{port}/ (catalog {lake})", file=sys.stderr)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
         server.serve_forever()

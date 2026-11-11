@@ -719,6 +719,64 @@ class HostAndOrigin(unittest.TestCase):
                 got = False
             self.assertEqual(got, ok, headers)
 
+    def test_a_lan_address_and_the_machines_names_pass_other_names_dont(self):
+        lan = server.lan_addresses()
+        if not lan:
+            self.skipTest("no IPv4 address but loopback's")
+        ip, name = lan[0], socket.gethostname()
+        for addr, headers, status in [(ip, {}, 200), (ip, {"Host": "some.other.name"}, 403),
+                                      (ip, {"Origin": f"http://{ip}:8086"}, 200),
+                                      ("127.0.0.1", {"Origin": f"http://{ip}:8086"}, 200),
+                                      ("127.0.0.1", {"Host": f"{name}.local:{PORT}"}, 200),
+                                      ("127.0.0.1", {"Host": name.upper()}, 200),
+                                      ("127.0.0.1", {"Host": f"{name}.evil.example"}, 403),
+                                      ("127.0.0.1", {"Origin": "http://some.other.name:8086"}, 403)]:
+            self.assertEqual(status_at(addr, PORT, headers), status, (addr, headers))
+
+    def test_the_ipv6_address_connected_to_passes_in_brackets(self):
+        if not socket.has_dualstack_ipv6():
+            self.skipTest("no dual-stack IPv6")
+        try:
+            with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as s:
+                s.connect(("2001:db8::1", 9))
+                v6 = s.getsockname()[0]
+        except OSError:
+            self.skipTest("no IPv6 route")
+        # Not a name the console knew: the request's own address admits it.
+        self.assertNotIn(f"[{v6}]", CONSOLE.hosts)
+        self.assertEqual(status_at(v6, PORT), 200)
+        self.assertEqual(status_at(v6, PORT, {"Origin": f"http://[{v6}]:3000"}), 200)
+        self.assertEqual(status_at(v6, PORT, {"Host": f"[2001:db8::2]:{PORT}"}), 403)
+        self.assertEqual(status_at("::1", PORT), 200)
+
+    def test_a_server_on_loopback_refuses_the_network(self):
+        lan = server.lan_addresses()
+        if not lan:
+            self.skipTest("no IPv4 address but loopback's")
+        other = server.Console(POOL, regenerations=REGS, dist=DIR / "dist", suite=SUITE)
+        httpd = other.listen(0, "127.0.0.1")
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        try:
+            port = httpd.server_address[1]
+            with self.assertRaises(ConnectionRefusedError):
+                socket.create_connection((lan[0], port), timeout=10).close()
+            self.assertEqual(status_at("127.0.0.1", port), 200)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+
+def status_at(addr, port, headers=None):
+    """GET /console/views's status at `addr`, with `headers`."""
+    c = http.client.HTTPConnection(addr, port, timeout=30)
+    try:
+        c.request("GET", "/console/views", headers=headers or {})
+        r = c.getresponse()
+        r.read()
+        return r.status
+    finally:
+        c.close()
+
 
 if __name__ == "__main__":
     unittest.main()
