@@ -20,7 +20,8 @@
 //! derived from the one it is built with, so a seed replays exactly.
 //!
 //! [`live`] is what a live stream's seed writes: a live encoder's access
-//! units, and an ingest that signs them early.
+//! units, and an ingest that signs them early. [`playout`] is how a
+//! viewer's player plays what it reads.
 //!
 //! | module | role |
 //! |---|---|
@@ -28,6 +29,7 @@
 //! | [`live`] | a live encoder's access units and early signing |
 //! | [`access`] | access link profiles, sites and weighted mixes |
 //! | [`network`] | uplink and downlink FIFOs, paths, jitter, loss |
+//! | [`playout`] | a live player's stalls at a fixed delay |
 //! | [`sample`] | seeded draws |
 //! | [`wire`] | packet framing and serialization times |
 
@@ -35,6 +37,7 @@ pub mod access;
 pub mod city;
 pub mod live;
 pub mod network;
+pub mod playout;
 pub mod sample;
 pub mod wire;
 

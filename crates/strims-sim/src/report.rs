@@ -506,6 +506,26 @@ pub struct Report {
     /// With [`Scenario::departures`], every viewer's push parent that
     /// departed, in departure order.
     pub parent_losses: Vec<ParentLoss>,
+    /// With [`Scenario::wire_bins`] (the tables), every change of a node's
+    /// push parent of a stream of the first swarm, in time order: the
+    /// nodes' parent logs (`NodeConfig::parent_log`), each change at the
+    /// end of the node's pass that made it.
+    pub parent_changes: Vec<ParentRecord>,
+}
+
+/// A change of `node`'s push parent of `stream` ([`Report::parent_changes`]):
+/// when, in run time, the parent from then on (`None` for none), and why.
+/// A node's own stop without closing its links (a crash, an abrupt
+/// departure) loses the parents it had ([`ParentWhy::Lost`]).
+///
+/// [`ParentWhy::Lost`]: strims_ppspp::ParentWhy::Lost
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParentRecord {
+    pub at: Duration,
+    pub node: HostIx,
+    pub stream: u16,
+    pub parent: Option<HostIx>,
+    pub why: strims_ppspp::ParentWhy,
 }
 
 /// A host that departed ([`crate::Fault::Depart`]) while it was a push

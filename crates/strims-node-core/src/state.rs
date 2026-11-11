@@ -54,13 +54,15 @@ use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::CaptureSample;
-use crate::config::{NetworkOptions, NodeConfig, PeerRpcConfig, PpsppCapture, VpnPortConfig};
+use crate::config::{
+    NetworkOptions, NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture, VpnPortConfig,
+};
 use crate::driver::{IdleOk, Interfaces, LinkProbe, TaskGuard};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
     ChannelInfo, DriverMetrics, ForecastInfo, HeldInfo, LinkInfo, NetworkInfo, NodeBin, NodeEvent,
-    NodeMetrics, PeerInfo, RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmBin,
-    SwarmInfo, WriterInfo,
+    NodeMetrics, ParentInfo, PeerInfo, RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo,
+    SwarmBin, SwarmInfo, WriterInfo,
 };
 
 /// Bin edges [`NodeConfig::stats_bins`] keeps between snapshots; past it the
@@ -383,6 +385,8 @@ pub(crate) struct State {
     /// With the forecast log, the swarms removed since the last snapshot,
     /// whose logs the runner keeps for it. Bound: the app's calls.
     removed_swarms: Vec<SwarmKey>,
+    /// See [`NodeConfig::parent_log`].
+    parent_sink: Option<ParentSink>,
     /// Reused by `drain_transmit`.
     scratch_links: Vec<LinkKey>,
     /// ppspp frame errors seen inside vnic's dispatch, handled after it.
@@ -478,6 +482,7 @@ impl State {
         let mut runner = Runner::new(fork(&mut rng));
         runner.set_upload_capacity(upload_hint(config.upload_capacity, config.rate_limit));
         runner.set_forecasts(config.forecast_log);
+        runner.set_parent_log(config.parent_log.is_some());
         let capture = config
             .ppspp_capture
             .as_ref()
@@ -525,6 +530,7 @@ impl State {
             bins: config.stats_bins.map(|b| (b, b.origin, VecDeque::new())),
             forecast_log: config.forecast_log,
             removed_swarms: Vec::new(),
+            parent_sink: config.parent_log.clone(),
             scratch_links: Vec::new(),
             frame_errors: Vec::new(),
             rtc,
@@ -583,6 +589,7 @@ impl State {
         if self.runner.poll_timeout().is_some_and(|t| t <= now) {
             self.refresh_paths(now);
             self.runner.handle_timeout(now);
+            self.drain_parents(now);
         }
         if let Some(c) = &mut self.capture
             && now - self.capture_flushed >= CAPTURE_FLUSH_INTERVAL
@@ -1050,6 +1057,7 @@ impl State {
             }
             progress |= self.drain_rtc(now);
             if !progress {
+                self.drain_parents(now);
                 return any;
             }
             any = true;
@@ -1061,6 +1069,8 @@ impl State {
             strims_vnic::Event::PeerAdded { peer, host_id } => self.peer_added(peer, host_id, now),
             strims_vnic::Event::PeerRemoved { peer, host_id } => {
                 self.vpn.handle_peer_removed(peer);
+                // The changes so far may name the peer.
+                self.drain_parents(now);
                 if let Some(ps) = self.peers.remove(peer) {
                     self.runner.remove_peer(ps.pp);
                     self.ppspp_peers.remove(ps.pp);
@@ -1582,6 +1592,32 @@ impl State {
             next += width;
         }
         *at = next;
+    }
+
+    /// Hands the runner's parent changes since the last call to the sink
+    /// (`NodeConfig::parent_log`), each at `now` and its parent named by
+    /// host.
+    fn drain_parents(&mut self, now: Time) {
+        let Some(sink) = &self.parent_sink else {
+            return;
+        };
+        let (changes, lost) = self.runner.take_parent_changes();
+        if lost > 0 {
+            tracing::warn!(lost, "parent changes past the log's cap");
+        }
+        for c in changes {
+            let parent = c.parent.and_then(|pp| {
+                let link = self.ppspp_peers.get(pp)?;
+                Some(self.peers.get(*link)?.host_id)
+            });
+            (sink.0)(ParentInfo {
+                at: now,
+                swarm: c.swarm,
+                stream: c.stream,
+                parent,
+                why: c.why,
+            });
+        }
     }
 
     /// The runner's forecast log since the last call, peers named by host,

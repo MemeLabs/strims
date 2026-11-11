@@ -2,17 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! A run's tables (`STRIMS_SIM_OUT=<dir>`, [`Report::write_tables`]): its
-//! first swarm second by second, every read, finer bins, its timed events
-//! and its forecast logs, as CSV files each with a `<table>.schema.json` of
-//! its columns' names and types, for `hack/sim-db` to load without guessing
-//! them. Times are true time, in ms (µs for `events`) from the swarm's
-//! stream start.
+//! first swarm second by second, every read and its viewers' stalls, its
+//! push trees' changes, finer bins, its timed events and its forecast
+//! logs, as CSV files each with a `<table>.schema.json` of its columns'
+//! names and types, for `hack/sim-db` to load without guessing them. Times
+//! are true time, in ms (µs for `events`) from the swarm's stream start.
 //!
 //! | table | one row per | columns |
 //! |---|---|---|
 //! | `seconds` | second of [`Report::series`] | `sec`, then the series' per-second fields (`present`, `hits`, `misses`, `pruned`, `parents`, `capacity`, `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, and `written` for a media swarm) |
 //! | `viewer_seconds` | viewer and second it was there ([`Report::presence`]) | `viewer`, `sec`, `lag_ms` (the series' `lag`: the p99 of the frames read in the second, -1 without any), `frames` |
 //! | `reads` | frame a viewer read (duplicates too) | `viewer`, `t_ms` (when it was read: its write time plus its lag), `seq`, `lag_ms` |
+//! | `stalls` | stall of a viewer's playout at each delay of [`DELAYS_MS`] (`hack/capture/analyze.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`) | `viewer`, `delay_ms`, `t_ms` (when it began, on the `reads`' clock), `stall_ms`: [`playout::play`] over the viewer's `reads`, as `hack/sim-db`'s `playback(delay_ms)` plays them |
+//! | `parents` | change of a node's push parent of a stream ([`Report::parent_changes`]) | `t_ms`, `node` (its host, as in `events`), `stream`, `parent` (the host from then on, -1 for none), `reason`: `open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their channel closed, the stream started anew, or the node stopped without closing its links: a crash, an abrupt departure) |
 //! | `bins` | bin of [`Scenario::wire_bins`] | [`bin_cols`]: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`), then [`ACK_COLS`], the acknowledgements alone their uplinks carried, packets and wire bytes, summed over those viewers and the seed's: TCP's pure ACKs (`*_up_ack_packets`, `*_up_ack_bytes`) and the data channels' SACKs (`*_up_sack_packets`, `*_up_sack_bytes`), none of them in `*_up_bytes`, `*_up_packets` or `*_small_packets` |
 //! | `node_bins` | node and bin, with `STRIMS_SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node` (its host), `viewer` (its number in `viewers`, -1 for the seed and hostile hosts), what it did in the bin |
 //! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink in bytes per second, -1 without a limit), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset), `arrive_ms` (when it booted, [`HostSpec::arrive_at`]: the run's start, negative, for one that came with it) and `depart_ms` (when it left for good, [`Fault::Depart`]; empty if it stayed) |
@@ -44,8 +46,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use strims_base::stats::WaitHistogram;
+use strims_wan::playout::{self, DELAYS_MS};
 
-use crate::report::{NODE_BIN_COUNTERS, NodeBinRecord, Report};
+use crate::report::{NODE_BIN_COUNTERS, NodeBinRecord, Report, ViewerReport};
 use crate::spec::{Departure, Fault, HostClass, HostIx};
 pub use crate::wan::UP_COUNTERS;
 
@@ -133,6 +136,14 @@ impl Table {
             dir.join(format!("{}.schema.json", self.name)),
             format!("{{\"columns\":[{}]}}\n", cols.join(",")),
         )
+    }
+}
+
+/// `at` in ms from `start`, negative before it.
+pub(crate) fn ms_since(at: Duration, start: Duration) -> i64 {
+    match at.checked_sub(start) {
+        Some(d) => d.as_millis() as i64,
+        None => -(start.saturating_sub(at).as_millis() as i64),
     }
 }
 
@@ -403,12 +414,7 @@ impl Report {
             }
             t.write(dir)?;
         }
-        let ms_from = |at: Duration| -> i64 {
-            match at.checked_sub(start) {
-                Some(d) => d.as_millis() as i64,
-                None => -(start.saturating_sub(at).as_millis() as i64),
-            }
-        };
+        let ms_from = |at: Duration| ms_since(at, start);
         let mut t = Table::new(
             "reads",
             &[
@@ -418,11 +424,46 @@ impl Report {
                 ("lag_ms", Col::Int),
             ],
         );
+        let mut stalls = Table::new(
+            "stalls",
+            &[
+                ("viewer", Col::Int),
+                ("delay_ms", Col::Int),
+                ("t_ms", Col::Int),
+                ("stall_ms", Col::Int),
+            ],
+        );
         for (i, v) in viewers.iter().enumerate() {
-            for &(seq, lag) in &v.stats.lags {
-                let at = self.written_at(swarm, seq) + Duration::from_millis(u64::from(lag));
-                t.ints(&[i as i64, ms_from(at), seq as i64, i64::from(lag)]);
+            let reads = self.read_rows(v);
+            for &(at, seq, lag) in &reads {
+                t.ints(&[i as i64, at, seq as i64, lag]);
             }
+            for d in DELAYS_MS {
+                for (at, ms) in playout::play(&reads, d).stalls {
+                    stalls.ints(&[i as i64, d, at, ms]);
+                }
+            }
+        }
+        t.write(dir)?;
+        stalls.write(dir)?;
+        let mut t = Table::new(
+            "parents",
+            &[
+                ("t_ms", Col::Int),
+                ("node", Col::Int),
+                ("stream", Col::Int),
+                ("parent", Col::Int),
+                ("reason", Col::Text),
+            ],
+        );
+        for p in &self.parent_changes {
+            t.fields(&[
+                ms_from(p.at).to_string(),
+                p.node.to_string(),
+                p.stream.to_string(),
+                p.parent.map_or(-1, |h| h as i64).to_string(),
+                p.why.name().to_owned(),
+            ]);
         }
         t.write(dir)?;
         let hostile = |h: HostIx| {
@@ -512,6 +553,24 @@ impl Report {
         );
         meta.push('\n');
         std::fs::write(dir.join("series_meta.json"), meta)
+    }
+
+    /// Viewer `v`'s reads as the `reads` table has them: `(t_ms, seq,
+    /// lag_ms)`, `t_ms` from its swarm's stream start.
+    pub(crate) fn read_rows(&self, v: &ViewerReport) -> Vec<(i64, u64, i64)> {
+        let start = self
+            .scenario
+            .swarms
+            .get(v.swarm)
+            .map_or(Duration::ZERO, |s| s.start);
+        v.stats
+            .lags
+            .iter()
+            .map(|&(seq, lag)| {
+                let at = self.written_at(v.swarm, seq) + Duration::from_millis(u64::from(lag));
+                (ms_since(at, start), seq, i64::from(lag))
+            })
+            .collect()
     }
 
     /// Every host's node bins, by edge.
@@ -651,7 +710,7 @@ impl Report {
 
     /// The `events` table (see the [module docs](self)), times from
     /// `start`.
-    fn events_table(&self, viewers: &[&crate::report::ViewerReport], start: Duration) -> Table {
+    fn events_table(&self, viewers: &[&ViewerReport], start: Duration) -> Table {
         let mut t = Table::new(
             "events",
             &[

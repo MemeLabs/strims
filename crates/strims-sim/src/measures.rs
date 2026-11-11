@@ -73,7 +73,9 @@ use crate::skew::SkewClass;
 use crate::spec::{HostClass, HostIx};
 use crate::stats::{MeterSample, WindowSamples};
 use crate::stream::CAUGHT_UP_MS;
+use crate::tables::ms_since;
 use strims_ppspp::ChannelMetrics;
+use strims_wan::playout::{self, DELAYS_MS, Totals};
 
 /// Tree depth counts from this long after a stream starts, or a viewer
 /// arrives.
@@ -431,6 +433,66 @@ impl Report {
         out.first.sort_unstable();
         out.caught_up.sort_unstable();
         out
+    }
+
+    /// The row's playback columns, as the ppspp sim's rows have them: per
+    /// delay `D` of [`DELAYS_MS`], `swarm`'s viewers' playouts of what they
+    /// read ([`playout::play`], the tables' `stalls`), each viewer from its
+    /// playback's start to its last frame's play, or its departure if that
+    /// came first ([`Totals`]): the stalls per minute played
+    /// (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`),
+    /// and the mean ms from each one's join (its reader's start, or the
+    /// stream's if later, as [`Report::joins`] times it) to its playback's
+    /// start (`startup_ms_D`); with hostile hosts, the honest viewers'
+    /// too, with `_honest`.
+    fn playback_cols(&self, swarm: usize, j: &mut JsonRow) {
+        let Some(spec) = self.scenario.swarms.get(swarm) else {
+            return;
+        };
+        let start = spec.start;
+        let viewers: Vec<&ViewerReport> =
+            self.viewers.iter().filter(|v| v.swarm == swarm).collect();
+        let hostile = (0..self.hosts.len()).any(|h| matches!(self.class(h), HostClass::Hostile(_)));
+        let mut totals = [[Totals::default(); DELAYS_MS.len()]; 2];
+        for v in viewers {
+            let reads = self.read_rows(v);
+            let join = v
+                .stats
+                .joins
+                .first()
+                .map_or(Duration::ZERO, |jn| Duration::from_millis(jn.start_ms));
+            let join = ms_since(join.max(start), start);
+            let left = self
+                .scenario
+                .departure(v.host)
+                .map(|(at, _)| ms_since(at, start));
+            let plays = DELAYS_MS.map(|d| playout::play(&reads, d));
+            // Every viewer's, then the honest viewers'.
+            let honest = self.class(v.host) == HostClass::Honest;
+            for t in totals.iter_mut().take(1 + usize::from(honest)) {
+                for (t, p) in t.iter_mut().zip(&plays) {
+                    t.add(p, join, left);
+                }
+            }
+        }
+        for (who, t) in totals.iter().enumerate() {
+            let suffix = match who {
+                0 => "",
+                _ if hostile => "_honest",
+                _ => continue,
+            };
+            for (t, d) in t.iter().zip(DELAYS_MS) {
+                if let Some(x) = t.stalls_per_min() {
+                    j.num(&format!("stalls_per_min_{d}{suffix}"), x);
+                }
+                if let Some(x) = t.stalled_share() {
+                    j.num(&format!("stalled_share_{d}{suffix}"), x);
+                }
+                if let Some(x) = t.startup_ms() {
+                    j.int(&format!("startup_ms_{d}{suffix}"), x.max(0) as u64);
+                }
+            }
+        }
     }
 
     /// The row's columns of a run with arrivals or departures, named as the
@@ -1153,8 +1215,11 @@ impl Report {
     /// `clock_max_ms`, the largest; `clock_<class>`, the hosts per
     /// [`SkewClass::name`]), as the ppspp sim's rows name them, then per
     /// scenario swarm 0 its delivery, lag (overall,
-    /// startup bucket, steady state, per bucket) and the meter's measures
-    /// (see the module docs). With arrivals or departures, in the ppspp
+    /// startup bucket, steady state, per bucket), its viewers' playback at
+    /// each delay `D` of [`DELAYS_MS`] (`stalls_per_min_D`,
+    /// `stalled_share_D`, `startup_ms_D`: [`Totals`] of their playouts,
+    /// and with hostile hosts the honest viewers' with `_honest`) and the
+    /// meter's measures (see the module docs). With arrivals or departures, in the ppspp
     /// sim's rows' names: their profiles (`arrivals`, `depart`), the
     /// startup and steady state each viewer's own
     /// ([`Report::viewer_spans`]), the viewers that arrived and departed
@@ -1231,6 +1296,7 @@ impl Report {
             .int("steady_p99_ms", u64::from(steady.p99))
             .ints("bucket_p50_ms", buckets.iter().map(|p| u64::from(p.p50)))
             .ints("bucket_p99_ms", buckets.iter().map(|p| u64::from(p.p99)));
+        self.playback_cols(swarm, &mut j);
         let roles = self.roles();
         for (name, hosts) in [
             ("seeds", &roles.seeds),
@@ -2746,6 +2812,7 @@ mod tests {
             wan: None,
             wire_bins: Vec::new(),
             parent_losses: Vec::new(),
+            parent_changes: Vec::new(),
         }
     }
 
