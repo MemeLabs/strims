@@ -116,6 +116,7 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs::File;
 use std::io::{self, BufWriter};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -7066,9 +7067,9 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
         let d = dir.join(ms.to_string());
         sim.write_tables(&d).unwrap();
         let s = sim.series_data().unwrap();
-        let seconds = std::fs::read_to_string(d.join("seconds.csv")).unwrap();
+        let seconds = read_table(&d, "seconds").unwrap();
         assert_eq!(seconds.lines().count(), s.len() + 1);
-        let bins = std::fs::read_to_string(d.join("bins.csv")).unwrap();
+        let bins = read_table(&d, "bins").unwrap();
         assert!(bins.lines().count() > s.len(), "{ms} ms");
         // A column of the bins, summed: the counters the bins take at
         // their edges add up to the run's at its end.
@@ -7098,13 +7099,11 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
             ],
             "{ms} ms"
         );
-        let lines = |t: &str| {
-            std::fs::read_to_string(d.join(format!("{t}.csv"))).map_or(0, |c| c.lines().count())
-        };
+        let lines = |t: &str| read_table(&d, t).map_or(0, |c| c.lines().count());
         assert!(lines("events") > 4, "{ms} ms: a join per viewer");
         assert!(lines("forecast") > 1, "{ms} ms");
         assert_eq!(lines("node_bins") > 0, nodes, "{ms} ms");
-        let reads = std::fs::read_to_string(d.join("reads.csv")).unwrap();
+        let reads = read_table(&d, "reads").unwrap();
         let read: usize = sim.honest().iter().map(|v| v.lags.len()).sum();
         assert_eq!(reads.lines().count(), read + 1);
         for t in ["seconds", "viewer_seconds", "reads", "bins", "viewers"] {
@@ -7114,7 +7113,7 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
         // The seed's budget reading: what its budget was measured from,
         // once measured, in the series and the bins.
         let column = |t: &str| -> Vec<i64> {
-            let csv = std::fs::read_to_string(d.join(format!("{t}.csv"))).unwrap();
+            let csv = read_table(&d, t).unwrap();
             let mut rows = csv.lines();
             let head: Vec<&str> = rows.next().unwrap().split(',').collect();
             let i = head.iter().position(|&c| c == "budget_capacity").unwrap();
@@ -7162,7 +7161,7 @@ fn sim_held_truth_meets_the_reads(sim: &Sim, d: &Path) {
     for (&c, &at) in &seed {
         assert_eq!(at, sim.publish_times[c as usize], "the seed's chunk {c}");
     }
-    let csv = std::fs::read_to_string(d.join("forecast.csv")).unwrap();
+    let csv = read_table(d, "forecast").unwrap();
     let mut rows = csv.lines();
     let head: Vec<&str> = rows.next().unwrap().split(',').collect();
     let col = |n: &str| head.iter().position(|&c| c == n).unwrap();
@@ -10542,17 +10541,66 @@ impl SeriesData {
 /// How much of a [`Table`]'s CSV it holds before writing it to its file.
 const SPILL: usize = 1 << 20;
 
+/// The tables that grow with a run's nodes and its length, written
+/// zstd-compressed, `<name>.csv.zst` (`hack/sim-db` reads either), as
+/// strims-sim's are: the others are a run's summaries, `<name>.csv`.
+const ZSTD: [&str; 4] = ["reads", "node_bins", "events", "forecast"];
+
+/// Where a [`Table`]'s rows go: its file, or a zstd stream onto it.
+enum Sink {
+    Plain(File),
+    Zstd(zstd::stream::write::Encoder<'static, File>),
+}
+
+impl Sink {
+    fn write_all(&mut self, b: &[u8]) -> io::Result<()> {
+        match self {
+            Sink::Plain(f) => io::Write::write_all(f, b),
+            Sink::Zstd(z) => io::Write::write_all(z, b),
+        }
+    }
+
+    /// Ends the stream: a zstd frame's last block and its checksum.
+    fn finish(self) -> io::Result<()> {
+        match self {
+            Sink::Plain(_) => Ok(()),
+            Sink::Zstd(z) => z.finish().map(drop),
+        }
+    }
+}
+
+/// `<name>.csv` in `dir`, or `<name>.csv.zst` for a table of [`ZSTD`].
+fn sink(dir: &Path, name: &str) -> io::Result<Sink> {
+    if ZSTD.contains(&name) {
+        let file = File::create(dir.join(format!("{name}.csv.zst")))?;
+        Ok(Sink::Zstd(zstd::stream::write::Encoder::new(file, 0)?))
+    } else {
+        Ok(Sink::Plain(File::create(dir.join(format!("{name}.csv")))?))
+    }
+}
+
+/// A table's CSV as a run wrote it: `<name>.csv`, or `<name>.csv.zst`
+/// decompressed.
+fn read_table(dir: &Path, name: &str) -> io::Result<String> {
+    let z = dir.join(format!("{name}.csv.zst"));
+    if z.exists() {
+        let csv = zstd::stream::decode_all(File::open(z)?)?;
+        return String::from_utf8(csv).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e));
+    }
+    std::fs::read_to_string(dir.join(format!("{name}.csv")))
+}
+
 /// One of [`Sim::write_tables`]' tables: its columns, and its rows as CSV,
-/// which go to `<name>.csv` as the table fills, a MiB at a time
-/// ([`SPILL`]): a long or overloaded run's logs come to gigabytes of CSV,
-/// more than their records take. [`Table::finish`] writes the rest and
+/// which go to its file as the table fills, a MiB at a time ([`SPILL`]): a
+/// long or overloaded run's logs come to gigabytes of CSV, more than their
+/// records take. [`Table::finish`] writes the rest and
 /// `<name>.schema.json`.
 struct Table {
     name: &'static str,
     /// Each column's name and type, as `hack/sim-db` names it.
     cols: Vec<(String, &'static str)>,
     dir: PathBuf,
-    file: std::fs::File,
+    file: Sink,
     /// The rows not written yet.
     csv: String,
     /// The first write that failed: [`Table::finish`] returns it, and
@@ -10561,17 +10609,17 @@ struct Table {
 }
 
 impl Table {
-    /// A table of integer columns, `<name>.csv` in `dir`.
+    /// A table of integer columns, its file in `dir`.
     fn new(dir: &Path, name: &'static str, cols: &[impl AsRef<str>]) -> io::Result<Table> {
         let cols: Vec<(&str, &'static str)> = cols.iter().map(|c| (c.as_ref(), "BIGINT")).collect();
         Table::typed(dir, name, &cols)
     }
 
     /// A table of columns with their types (`BIGINT`, `BOOLEAN`,
-    /// `VARCHAR`): creates `<name>.csv` in `dir`, its header the first
-    /// line.
+    /// `VARCHAR`): creates its file in `dir` ([`ZSTD`]), its header the
+    /// first line.
     fn typed(dir: &Path, name: &'static str, cols: &[(&str, &'static str)]) -> io::Result<Table> {
-        let file = std::fs::File::create(dir.join(format!("{name}.csv")))?;
+        let file = sink(dir, name)?;
         let names: Vec<&str> = cols.iter().map(|(n, _)| *n).collect();
         let mut csv = names.join(",");
         csv.push('\n');
@@ -10616,7 +10664,7 @@ impl Table {
     /// Writes the rows held to the file, unless a write failed before.
     fn flush(&mut self) {
         if self.failed.is_none()
-            && let Err(e) = io::Write::write_all(&mut self.file, self.csv.as_bytes())
+            && let Err(e) = self.file.write_all(self.csv.as_bytes())
         {
             self.failed = Some(e);
         }
@@ -10630,6 +10678,7 @@ impl Table {
         if let Some(e) = self.failed.take() {
             return Err(e);
         }
+        self.file.finish()?;
         let cols: Vec<String> = self
             .cols
             .iter()

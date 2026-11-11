@@ -26,6 +26,7 @@ rand_core.workspace = true
 sha2.workspace = true
 tokio.workspace = true
 turmoil.workspace = true
+zstd.workspace = true
 tracking-allocator = "0.4"
 
 [dev-dependencies]

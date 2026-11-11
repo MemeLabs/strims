@@ -26,7 +26,8 @@ the exports it is, imports its names.
   cache_root()   the cache's root: `SIM_DB_ROOT`, else the main
                  checkout's target/sim-db (its tmp/ is the CLI's spill)
 
-TABLES are the sims' tables a job's dir may hold (`<table>.csv` beside
+TABLES are the sims' tables a job's dir may hold (`<table>.csv`, or the
+large ones zstd-compressed as `<table>.csv.zst`, beside
 `<table>.schema.json`), SAMPLE_TABLES the bulky ones the farm uploads
 apart, and RUN_COLS and SCALAR_COLS the store's own `runs` and `scalars`
 (simdb.py's docs).
@@ -351,6 +352,15 @@ class FoldError(RuntimeError):
     pass
 
 
+def table_csv(d, t):
+    """Job dir `d`'s CSV of table `t`: `<t>.csv`, or the zstd stream
+    `<t>.csv.zst` the sims write their large tables to (DuckDB's read_csv
+    reads either); None without one or its schema."""
+    if not (d / f"{t}.schema.json").exists():
+        return None
+    return next((p for p in (d / f"{t}.csv", d / f"{t}.csv.zst") if p.exists()), None)
+
+
 def scalars(row, prefix=""):
     """A row's numbers and bools, (name, value), lists element by element
     (`name[i]`)."""
@@ -387,7 +397,7 @@ def fold(db, jobs, src, threads=2, memory="1GB"):
         runs, scal = [], []
         for j in jobs:
             d = Path(j["dir"])
-            have = [t for t in TABLES if (d / f"{t}.csv").exists() and (d / f"{t}.schema.json").exists()]
+            have = [t for t in TABLES if table_csv(d, t)]
             row = dict(j.get("row") or {})
             if not have and row.get("series"):
                 raise FoldError(f"{j['k']}: its binary wrote no tables (built before the sims wrote them?)")
@@ -431,7 +441,7 @@ def fold(db, jobs, src, threads=2, memory="1GB"):
             for t in wrote[j["k"]]:
                 c = schema(d / f"{t}.schema.json")
                 sql.append(f"INSERT INTO {t} BY NAME SELECT {q(j['k'])} AS k, {q(src)} AS src, * FROM "
-                           f"read_csv({q(d / f'{t}.csv')}, header=true, auto_detect=false, columns={struct(c)});")
+                           f"read_csv({q(table_csv(d, t))}, header=true, auto_detect=false, columns={struct(c)});")
         sql.append("COMMIT;")
         duck("\n".join(sql), db, out=None, threads=threads, memory=memory)
         return wrote

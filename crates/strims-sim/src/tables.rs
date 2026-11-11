@@ -74,15 +74,65 @@ impl Col {
 /// How much of a [`Table`]'s CSV it holds before writing it to its file.
 const SPILL: usize = 1 << 20;
 
+/// The tables that grow with a run's nodes and its length, written
+/// zstd-compressed, `<name>.csv.zst` (`hack/sim-db` reads either): an
+/// overloaded run's come to gigabytes of CSV, which a job's dir holds until
+/// it is folded. The others are a run's summaries, `<name>.csv`.
+pub const ZSTD: [&str; 4] = ["reads", "node_bins", "events", "forecast"];
+
+/// Where a [`Table`]'s rows go: its file, or a zstd stream onto it.
+enum Sink {
+    Plain(File),
+    Zstd(zstd::stream::write::Encoder<'static, File>),
+}
+
+impl Sink {
+    fn write_all(&mut self, b: &[u8]) -> io::Result<()> {
+        match self {
+            Sink::Plain(f) => io::Write::write_all(f, b),
+            Sink::Zstd(z) => io::Write::write_all(z, b),
+        }
+    }
+
+    /// Ends the stream: a zstd frame's last block and its checksum.
+    fn finish(self) -> io::Result<()> {
+        match self {
+            Sink::Plain(_) => Ok(()),
+            Sink::Zstd(z) => z.finish().map(drop),
+        }
+    }
+}
+
+/// `<name>.csv` in `dir`, or `<name>.csv.zst` for a table of [`ZSTD`].
+fn sink(dir: &Path, name: &str) -> io::Result<Sink> {
+    if ZSTD.contains(&name) {
+        let file = File::create(dir.join(format!("{name}.csv.zst")))?;
+        Ok(Sink::Zstd(zstd::stream::write::Encoder::new(file, 0)?))
+    } else {
+        Ok(Sink::Plain(File::create(dir.join(format!("{name}.csv")))?))
+    }
+}
+
+/// A table's CSV as a run wrote it: `<name>.csv`, or `<name>.csv.zst`
+/// decompressed.
+pub fn read_table(dir: &Path, name: &str) -> io::Result<String> {
+    let z = dir.join(format!("{name}.csv.zst"));
+    if z.exists() {
+        let csv = zstd::stream::decode_all(File::open(z)?)?;
+        return String::from_utf8(csv).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e));
+    }
+    std::fs::read_to_string(dir.join(format!("{name}.csv")))
+}
+
 /// One table being written: its columns, and its rows as CSV, which go to
-/// `<name>.csv` as the table fills, a MiB at a time ([`SPILL`]): a long or
+/// its file as the table fills, a MiB at a time ([`SPILL`]): a long or
 /// overloaded run's logs come to gigabytes of CSV, more than their records
 /// take. [`Table::finish`] writes the rest and `<name>.schema.json`.
 pub(crate) struct Table {
     name: &'static str,
     cols: Vec<(String, Col)>,
     dir: PathBuf,
-    file: File,
+    file: Sink,
     /// The rows not written yet.
     csv: String,
     /// The first write that failed: [`Table::finish`] returns it, and
@@ -91,10 +141,11 @@ pub(crate) struct Table {
 }
 
 impl Table {
-    /// Creates `<name>.csv` in `dir`, its header the first line.
+    /// Creates the table's file in `dir` ([`ZSTD`]), its header the first
+    /// line.
     pub fn new(dir: &Path, name: &'static str, cols: &[(&str, Col)]) -> io::Result<Table> {
         let cols: Vec<(String, Col)> = cols.iter().map(|&(n, c)| (n.to_owned(), c)).collect();
-        let file = File::create(dir.join(format!("{name}.csv")))?;
+        let file = sink(dir, name)?;
         let mut csv = String::new();
         let header: Vec<&str> = cols.iter().map(|(n, _)| n.as_str()).collect();
         csv.push_str(&header.join(","));
@@ -157,7 +208,7 @@ impl Table {
     /// Writes the rows held to the file, unless a write failed before.
     fn flush(&mut self) {
         if self.failed.is_none()
-            && let Err(e) = io::Write::write_all(&mut self.file, self.csv.as_bytes())
+            && let Err(e) = self.file.write_all(self.csv.as_bytes())
         {
             self.failed = Some(e);
         }
@@ -171,6 +222,7 @@ impl Table {
         if let Some(e) = self.failed.take() {
             return Err(e);
         }
+        self.file.finish()?;
         let cols: Vec<String> = self
             .cols
             .iter()

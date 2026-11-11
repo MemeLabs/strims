@@ -28,6 +28,8 @@ prost.workspace = true
 proptest.workspace = true
 strims-wan.workspace = true
 strims-ppspp-capture.workspace = true
+# the sim's large tables (tests/sim.rs)
+zstd.workspace = true
 
 [lints]
 workspace = true

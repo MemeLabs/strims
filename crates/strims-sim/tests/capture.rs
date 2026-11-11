@@ -206,14 +206,14 @@ fn a_run_with_tables_keeps_its_trace() {
             let d = dir.join(format!("{name}-{ms}"));
             r.write_tables(&d, bin, true).unwrap();
             let lines = |t: &str| {
-                std::fs::read_to_string(d.join(format!("{t}.csv")))
+                strims_sim::tables::read_table(&d, t)
                     .unwrap()
                     .lines()
                     .count()
             };
             // A column of a table, summed.
             let sum = |t: &str, col: &str| -> i64 {
-                let csv = std::fs::read_to_string(d.join(format!("{t}.csv"))).unwrap();
+                let csv = strims_sim::tables::read_table(&d, t).unwrap();
                 let mut rows = csv.lines();
                 let head: Vec<&str> = rows.next().unwrap().split(',').collect();
                 let i = head.iter().position(|&c| c == col).unwrap();
@@ -359,7 +359,7 @@ fn budget_reading_is_the_budgets(r: &strims_sim::Report, d: &Path) {
     }
     assert!(checked > 0, "the budget was measured");
     let column = |t: &str| -> Vec<i64> {
-        let csv = std::fs::read_to_string(d.join(format!("{t}.csv"))).unwrap();
+        let csv = strims_sim::tables::read_table(d, t).unwrap();
         let mut rows = csv.lines();
         let head: Vec<&str> = rows.next().unwrap().split(',').collect();
         let i = head.iter().position(|&c| c == "budget_capacity").unwrap();
@@ -408,7 +408,7 @@ fn held_truth_meets_the_reads(r: &strims_sim::Report, d: &Path) {
         let written = r.written_at(0, c * per + per - 1);
         assert_eq!(at, written, "the seed's chunk {c}");
     }
-    let csv = std::fs::read_to_string(d.join("forecast.csv")).unwrap();
+    let csv = strims_sim::tables::read_table(d, "forecast").unwrap();
     let mut rows = csv.lines();
     let head: Vec<&str> = rows.next().unwrap().split(',').collect();
     let col = |n: &str| head.iter().position(|&c| c == n).unwrap();

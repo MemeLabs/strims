@@ -17,6 +17,7 @@ import os
 import sys
 import tempfile
 import unittest
+from compression import zstd
 from pathlib import Path
 from unittest import mock
 
@@ -139,7 +140,9 @@ class FoldExport(Scratch):
         """golden_cli's jobs, written as the sims write them, with the
         speculative requests', parks', arrivals' and asks' tables
         golden_cli's don't write: the ppspp sim's, then strims-sim's (whose
-        viewers add host and name), then a job folded again."""
+        viewers add host and name, and whose reads and asks are
+        zstd-compressed, `<table>.csv.zst`, as the sims write their large
+        tables), then a job folded again."""
         jobs = [golden_cli.job_dir(self.dir / "jobs" / f"{i:02d}", j) for i, j in enumerate(golden_cli.JOBS)]
         for n, j in enumerate(jobs):
             d = Path(j["dir"])
@@ -155,6 +158,11 @@ class FoldExport(Scratch):
                                                ("round", "VARCHAR"), ("picked", "BOOLEAN"), ("peer", "BIGINT"),
                                                ("seq", "BIGINT")],
                                    [(900 + n, 1, 0, "flight", True, 2, 6)])
+            if j["sim"].startswith("strims-sim"):
+                for t in ("reads", "asks"):
+                    csv = d / f"{t}.csv"
+                    (d / f"{t}.csv.zst").write_bytes(zstd.compress(csv.read_bytes()))
+                    csv.unlink()
         pp = [j for j in jobs if "ppspp" in j["sim"]]
         ss = [j for j in jobs if j["sim"].startswith("strims-sim")]
         self.assertTrue(pp and ss)
@@ -189,6 +197,9 @@ class FoldExport(Scratch):
                         zip(*parquet(self.dir / "module" / "runs.parquet")[1])))
         self.assertEqual(sorted(runs["k"]), sorted({j["k"] for b in batches for j in b}))
         self.assertIn(9.5, runs["wall_s"])
+        # Each job's asks row, the compressed ones' too.
+        cols, rows = parquet(self.dir / "module" / "asks.parquet")
+        self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(runs["k"]))
 
     def test_an_empty_store_exports_nothing(self):
         sm = simdb()

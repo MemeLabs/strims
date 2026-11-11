@@ -157,6 +157,8 @@ pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }
 tokio = { version = "1", features = ["rt", "macros", "time", "net", "io-util", "sync"] }
 turmoil = "0.7"
 tokio-tungstenite = "0.30"
+# the sims' large tables, zstd-compressed CSV as they're written
+zstd = { version = "0.14", default-features = false }
 # HTTP/1 heads: strims-svc's HLS requests, strims-node's HTTPS responses
 httparse = "1.10"
 # HTTP/2: strims-svc's HLS over TLS
