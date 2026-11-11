@@ -16,6 +16,8 @@ server (hack/console).
   store_host
             the store as the farm hosts run it: stdlib and the DuckDB CLI
   verdict   analyze.py's verdicts, and the derived tables made from them
+  vocab     the sims' event vocabulary (crates/strims-wan/vocab.toml),
+            and the Rust and TS files made from it
   catalog   the DuckLake catalog: index, fetch, availability, schema
   describe  the catalog in words, a topic at a time: simdb.py describe's
             text, and the catalog's part of the Ask prompt
@@ -28,9 +30,10 @@ server (hack/console).
 
 Each module's docstring says what it offers. `engine` and the modules
 over it need the duckdb module, which hack/pyproject.toml pins (uv's venv,
-hack/.venv); `bootstrap`, `verdict`'s verdict functions, `farm` and this
-module are stdlib alone, so a script under the plain python3 imports them;
-`store_host` is self-contained too, as farm.py ships it alone.
+hack/.venv); `bootstrap`, `verdict`'s verdict functions, `farm`, `vocab`
+and this module are stdlib alone, so a script under the plain python3
+imports them; `store_host` is self-contained too, as farm.py ships it
+alone.
 A script puts hack/ on sys.path and imports `simlab`; its `__main__`
 block runs `bootstrap.engine` before anything needs the module.
 """

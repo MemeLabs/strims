@@ -1184,6 +1184,16 @@ pub enum ParentWhy {
 }
 
 impl ParentWhy {
+    /// Every reason, in [`ParentWhy::name`]'s order: the order of the sims'
+    /// vocabulary's reasons (`strims_wan::vocab::REASONS`).
+    pub const ALL: [ParentWhy; 5] = [
+        ParentWhy::Open,
+        ParentWhy::Switch,
+        ParentWhy::Lost,
+        ParentWhy::Prune,
+        ParentWhy::Shed,
+    ];
+
     /// Its name for a table: `open`, `switch`, `lost`, `prune` or `shed`.
     pub fn name(self) -> &'static str {
         match self {

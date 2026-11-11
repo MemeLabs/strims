@@ -144,6 +144,7 @@ use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sampl
 use strims_wan::live::{self, Encoder, Op, Plan, Sign, Signer};
 use strims_wan::playout::{self, DELAYS_MS, Totals};
 use strims_wan::sample::pick;
+use strims_wan::vocab::{self, Kind};
 use strims_wan::wire::{small_packets, tcp_wire};
 use strims_wan::{
     Access, Carrier, City, EndStats, GLOBAL_AUDIENCE, Network, RESIDENTIAL, Region, Site,
@@ -1606,7 +1607,7 @@ fn node_bin_row(
 /// and a detail by kind ([`Sim::write_tables`]).
 struct TimedEvent {
     at: Time,
-    kind: &'static str,
+    kind: Kind,
     node: i64,
     peer: i64,
     value: i64,
@@ -2819,12 +2820,12 @@ impl Sim {
             let victim = self.busiest_relay();
             match what {
                 Incident::Dies => {
-                    self.log("incident", victim as i64, -1, 0, "dies");
+                    self.log(Kind::Incident, victim as i64, -1, 0, "dies");
                     self.parents_gone(victim);
                     self.nodes[victim].role = Role::Dead;
                 }
                 Incident::Slows(bw) => {
-                    self.log("incident", victim as i64, -1, bw as i64, "slows");
+                    self.log(Kind::Incident, victim as i64, -1, bw as i64, "slows");
                     self.nodes[victim].up_bw = bw;
                 }
             }
@@ -2840,11 +2841,11 @@ impl Sim {
             self.touch(0);
             match step {
                 SeedStep::Uplink(bw) => {
-                    self.log("uplink", 0, -1, bw as i64, "");
+                    self.log(Kind::Uplink, 0, -1, bw as i64, "");
                     self.nodes[0].up_bw = bw;
                 }
                 SeedStep::Latency(d) => {
-                    self.log("latency", 0, -1, ms(d), "");
+                    self.log(Kind::Latency, 0, -1, ms(d), "");
                     for l in &mut self.links {
                         if l.from == 0 || l.to == 0 {
                             l.latency = d;
@@ -2855,7 +2856,7 @@ impl Sim {
                     }
                 }
                 SeedStep::Reconnect => {
-                    self.log("reconnect", 0, -1, 0, "");
+                    self.log(Kind::Reconnect, 0, -1, 0, "");
                     for l in 0..self.links.len() {
                         let (from, to, peer) =
                             (self.links[l].from, self.links[l].to, self.links[l].peer);
@@ -2950,7 +2951,7 @@ impl Sim {
 
     /// Viewer `i` leaves: its neighbours see its links close.
     fn leave(&mut self, i: usize) {
-        self.log("leave", i as i64, -1, 0, "");
+        self.log(Kind::Leave, i as i64, -1, 0, "");
         self.parents_gone(i);
         let n = &mut self.nodes[i];
         n.role = Role::Dead;
@@ -2987,7 +2988,7 @@ impl Sim {
             self.take_parents(i);
             runner.set_parent_log(true);
         }
-        self.log("join", i as i64, -1, 0, "");
+        self.log(Kind::Join, i as i64, -1, 0, "");
         let swarm = strims_ppspp::Swarm::new(self.swarm_id.clone(), self.options.clone()).unwrap();
         let reader = swarm.reader();
         let key = runner.add_swarm(swarm);
@@ -3044,7 +3045,7 @@ impl Sim {
     /// nodes already there, as a tracker would answer it.
     fn arrive(&mut self, i: usize) {
         let now = self.now;
-        self.log("join", i as i64, -1, 0, "");
+        self.log(Kind::Join, i as i64, -1, 0, "");
         let n = &mut self.nodes[i];
         n.role = n.kind;
         n.arrival = now;
@@ -3117,7 +3118,7 @@ impl Sim {
         }
         let abrupt = self.cfg.depart.is_some_and(|d| d.abrupt);
         let how = if abrupt { "abrupt" } else { "graceful" };
-        self.log("depart", i as i64, -1, 0, how);
+        self.log(Kind::Depart, i as i64, -1, 0, how);
         let links: Vec<(usize, usize)> =
             self.nodes[i].links.iter().map(|(&j, &l)| (j, l)).collect();
         for &(j, l) in &links {
@@ -3138,7 +3139,7 @@ impl Sim {
                 self.parent_lost.0 += 1;
                 self.parent_lost.1 += lost as u64;
             }
-            self.log("parent_lost", j as i64, i as i64, lost as i64, how);
+            self.log(Kind::ParentLost, j as i64, i as i64, lost as i64, how);
         }
         self.parents_gone(i);
         let n = &mut self.nodes[i];
@@ -3238,7 +3239,7 @@ impl Sim {
         }
         self.relinks += to.len() as u64;
         for &k in &to {
-            self.log("relink", j as i64, k as i64, 0, "");
+            self.log(Kind::Relink, j as i64, k as i64, 0, "");
         }
         self.link_to(j, to);
     }
@@ -3535,7 +3536,7 @@ impl Sim {
         let at_start = (1..self.nodes.len()).filter(|&i| self.nodes[i].role != Role::Absent);
         let joins = at_start.map(|i| TimedEvent {
             at: t0(),
-            kind: "join",
+            kind: Kind::Join,
             node: i as i64,
             peer: -1,
             value: 0,
@@ -3555,7 +3556,7 @@ impl Sim {
     }
 
     /// With the tables, records an event at the current time.
-    fn log(&mut self, kind: &'static str, node: i64, peer: i64, value: i64, detail: &'static str) {
+    fn log(&mut self, kind: Kind, node: i64, peer: i64, value: i64, detail: &'static str) {
         if let Some(t) = self.timeline.as_mut() {
             t.push(TimedEvent {
                 at: self.now,
@@ -4131,7 +4132,7 @@ impl Sim {
             for e in events {
                 t.fields(&[
                     us(e.at).to_string(),
-                    e.kind.to_owned(),
+                    e.kind.name().to_owned(),
                     e.node.to_string(),
                     e.peer.to_string(),
                     e.value.to_string(),
@@ -4213,7 +4214,12 @@ impl Sim {
         // comes in the HAVEs of a channel's start, not as it arrives (not
         // `live`).
         let mut joined: BTreeMap<usize, Vec<Time>> = BTreeMap::new();
-        for e in self.timeline.iter().flatten().filter(|e| e.kind == "join") {
+        for e in self
+            .timeline
+            .iter()
+            .flatten()
+            .filter(|e| e.kind == Kind::Join)
+        {
             joined.entry(e.node as usize).or_default().push(e.at);
         }
         // Every node's chunks by index, with when each incarnation first
@@ -5123,7 +5129,9 @@ impl Sim {
                         node.caught_up = Some(now);
                     }
                     if let Some(t) = self.timeline.as_mut() {
-                        for (kind, new) in [("first_read", first_read), ("caught_up", caught_up)] {
+                        for (kind, new) in
+                            [(Kind::FirstRead, first_read), (Kind::CaughtUp, caught_up)]
+                        {
                             if new {
                                 t.push(TimedEvent {
                                     at: now,
@@ -7032,6 +7040,13 @@ fn sim_chunk_codecs_change_no_trace() {
     }
 }
 
+/// The `parents` table's reasons are the vocabulary's: [`ParentWhy`]'s
+/// names, in its order, are [`vocab::REASONS`].
+#[test]
+fn sim_parent_reasons_are_the_vocabularys() {
+    assert_eq!(ParentWhy::ALL.map(ParentWhy::name), vocab::REASONS);
+}
+
 /// The tables ([`Sim::write_tables`]) leave the run as it was, at any bin
 /// width, and their seconds are the series': read through getters, their
 /// counters change nothing. Behind an admission seed and an adaptive one,
@@ -8197,10 +8212,13 @@ fn sim_departures_leave_the_rest_watching() {
         let events = sim.timeline.as_ref().unwrap();
         let departs: BTreeMap<i64, Time> = events
             .iter()
-            .filter(|e| e.kind == "depart")
+            .filter(|e| e.kind == Kind::Depart)
             .map(|e| (e.node, e.at))
             .collect();
-        let lost: Vec<&TimedEvent> = events.iter().filter(|e| e.kind == "parent_lost").collect();
+        let lost: Vec<&TimedEvent> = events
+            .iter()
+            .filter(|e| e.kind == Kind::ParentLost)
+            .collect();
         assert!(!lost.is_empty(), "abrupt {abrupt}: no parent left");
         for e in &lost {
             // At the parent's departure, by a child still there.
@@ -8271,10 +8289,10 @@ fn sim_departures_relink_as_a_tracker_answers() {
         let events = sim.timeline.as_ref().unwrap();
         let departs: BTreeMap<i64, Time> = events
             .iter()
-            .filter(|e| e.kind == "depart")
+            .filter(|e| e.kind == Kind::Depart)
             .map(|e| (e.node, e.at))
             .collect();
-        let relinks: Vec<&TimedEvent> = events.iter().filter(|e| e.kind == "relink").collect();
+        let relinks: Vec<&TimedEvent> = events.iter().filter(|e| e.kind == Kind::Relink).collect();
         assert_eq!(relinks.len() as u64, sim.relinks, "abrupt {abrupt}");
         assert!(!relinks.is_empty(), "abrupt {abrupt}");
         let there = |i: i64, at: Time| {

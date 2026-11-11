@@ -3,5 +3,6 @@
 vendor
 src/apis/google
 src/apis/strims
+src/devtools/components/console/vocab.ts
 vendor_modules
 tsconfig.json

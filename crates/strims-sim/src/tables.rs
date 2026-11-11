@@ -48,6 +48,7 @@ use std::time::Duration;
 
 use strims_base::stats::WaitHistogram;
 use strims_wan::playout::{self, DELAYS_MS};
+use strims_wan::vocab::Kind;
 
 use crate::report::{NODE_BIN_COUNTERS, NodeBinRecord, Report, ViewerReport};
 use crate::spec::{Departure, Fault, HostClass, HostIx};
@@ -845,10 +846,10 @@ impl Report {
                 None => -(start.saturating_sub(at).as_micros() as i64),
             }
         };
-        let mut rows: Vec<(i64, String, i64, i64, i64, String)> = Vec::new();
+        let mut rows: Vec<(i64, Kind, i64, i64, i64, String)> = Vec::new();
         let mut push =
-            |at: Duration, kind: &str, node: i64, peer: i64, value: i64, detail: &str| {
-                rows.push((us(at), kind.to_owned(), node, peer, value, text(detail)));
+            |at: Duration, kind: Kind, node: i64, peer: i64, value: i64, detail: &str| {
+                rows.push((us(at), kind, node, peer, value, text(detail)));
             };
         let first = |g: &[HostIx]| g.first().map_or(-1, |&h| h as i64);
         let groups = |a: &[HostIx], b: &[HostIx]| (a.len() * b.len()) as i64;
@@ -856,35 +857,47 @@ impl Report {
             let at = f.at;
             match &f.fault {
                 Fault::Partition(a, b) => {
-                    push(at, "partition", first(a), first(b), groups(a, b), "")
+                    push(at, Kind::Partition, first(a), first(b), groups(a, b), "")
                 }
-                Fault::Repair(a, b) => push(at, "repair", first(a), first(b), groups(a, b), ""),
-                Fault::Hold(a, b) => push(at, "hold", first(a), first(b), groups(a, b), ""),
-                Fault::Release(a, b) => push(at, "release", first(a), first(b), groups(a, b), ""),
-                Fault::Crash(h) => push(at, "crash", *h as i64, -1, 0, ""),
-                Fault::Restart(h) => push(at, "restart", *h as i64, -1, 0, ""),
-                Fault::Latency(a, b, d) => {
-                    push(at, "latency", first(a), first(b), d.as_millis() as i64, "")
+                Fault::Repair(a, b) => push(at, Kind::Repair, first(a), first(b), groups(a, b), ""),
+                Fault::Hold(a, b) => push(at, Kind::Hold, first(a), first(b), groups(a, b), ""),
+                Fault::Release(a, b) => {
+                    push(at, Kind::Release, first(a), first(b), groups(a, b), "")
                 }
-                Fault::PauseReading(h) => push(at, "pause_reading", *h as i64, -1, 0, ""),
-                Fault::ResumeReading(h) => push(at, "resume_reading", *h as i64, -1, 0, ""),
-                Fault::ResetWriter(s) => push(at, "reset_writer", *s as i64, -1, 0, ""),
-                Fault::Uplink(h, bps) => push(at, "uplink", *h as i64, -1, *bps as i64, ""),
-                Fault::Connect { from, to, network } => {
-                    push(at, "connect", *from as i64, *to as i64, *network as i64, "")
-                }
+                Fault::Crash(h) => push(at, Kind::Crash, *h as i64, -1, 0, ""),
+                Fault::Restart(h) => push(at, Kind::Restart, *h as i64, -1, 0, ""),
+                Fault::Latency(a, b, d) => push(
+                    at,
+                    Kind::Latency,
+                    first(a),
+                    first(b),
+                    d.as_millis() as i64,
+                    "",
+                ),
+                Fault::PauseReading(h) => push(at, Kind::PauseReading, *h as i64, -1, 0, ""),
+                Fault::ResumeReading(h) => push(at, Kind::ResumeReading, *h as i64, -1, 0, ""),
+                Fault::ResetWriter(s) => push(at, Kind::ResetWriter, *s as i64, -1, 0, ""),
+                Fault::Uplink(h, bps) => push(at, Kind::Uplink, *h as i64, -1, *bps as i64, ""),
+                Fault::Connect { from, to, network } => push(
+                    at,
+                    Kind::Connect,
+                    *from as i64,
+                    *to as i64,
+                    *network as i64,
+                    "",
+                ),
                 Fault::Depart(h, how) => {
                     let (value, detail) = match how {
                         Departure::Graceful => (0, "graceful"),
                         Departure::Abrupt => (1, "abrupt"),
                     };
-                    push(at, "depart", *h as i64, -1, value, detail)
+                    push(at, Kind::Depart, *h as i64, -1, value, detail)
                 }
             }
         }
         for (h, spec) in self.scenario.hosts.iter().enumerate() {
             if let Some(at) = spec.arrive_at {
-                push(at, "arrive", h as i64, -1, 0, "");
+                push(at, Kind::Arrive, h as i64, -1, 0, "");
             }
         }
         for l in &self.parent_losses {
@@ -894,7 +907,7 @@ impl Report {
             };
             push(
                 Duration::from_millis(at),
-                "parent_lost",
+                Kind::ParentLost,
                 l.viewer as i64,
                 l.parent as i64,
                 value,
@@ -903,29 +916,29 @@ impl Report {
         }
         for (h, spec) in self.scenario.hosts.iter().enumerate() {
             for &(at, bps) in &spec.up_steps {
-                push(at, "up_step", h as i64, -1, bps as i64, "");
+                push(at, Kind::UpStep, h as i64, -1, bps as i64, "");
             }
             for c in &spec.competing {
                 push(
                     c.start,
-                    "competing_start",
+                    Kind::CompetingStart,
                     h as i64,
                     -1,
                     c.rtt.as_millis() as i64,
                     "",
                 );
-                push(c.stop, "competing_stop", h as i64, -1, 0, "");
+                push(c.stop, Kind::CompetingStop, h as i64, -1, 0, "");
             }
         }
         for v in viewers {
             for j in &v.stats.joins {
                 let at = Duration::from_millis(j.start_ms);
-                push(at, "join", v.host as i64, -1, 0, "");
+                push(at, Kind::Join, v.host as i64, -1, 0, "");
                 if let Some(ms) = j.first_frame_ms {
                     let d = ms.saturating_sub(j.start_ms) as i64;
                     push(
                         Duration::from_millis(ms),
-                        "first_frame",
+                        Kind::FirstFrame,
                         v.host as i64,
                         -1,
                         d,
@@ -936,7 +949,7 @@ impl Report {
                     let d = ms.saturating_sub(j.start_ms) as i64;
                     push(
                         Duration::from_millis(ms),
-                        "caught_up",
+                        Kind::CaughtUp,
                         v.host as i64,
                         -1,
                         d,
@@ -950,19 +963,19 @@ impl Report {
         {
             for &(at, s, sample) in &h.runner.seed_changes {
                 if s == 0 {
-                    push(at, "copies", seed as i64, -1, sample.copies as i64, "");
+                    push(at, Kind::Copies, seed as i64, -1, sample.copies as i64, "");
                 }
             }
         }
         rows.sort_by(|a, b| {
             a.0.cmp(&b.0)
-                .then_with(|| a.1.cmp(&b.1))
+                .then_with(|| a.1.name().cmp(b.1.name()))
                 .then(a.2.cmp(&b.2))
         });
         for (at, kind, node, peer, value, detail) in rows {
             t.fields(&[
                 at.to_string(),
-                kind,
+                kind.name().to_owned(),
                 node.to_string(),
                 peer.to_string(),
                 value.to_string(),
