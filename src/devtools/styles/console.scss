@@ -13,9 +13,12 @@
   --critical: #d03b3b;
   --warning-ink: #8a5a00;
 
+  // The app's html and body don't scroll: the console fills the window, and its menu and content
+  // panel scroll each on their own.
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   background: var(--plane);
   color: var(--ink);
   font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -82,6 +85,7 @@
     display: flex;
     flex-direction: column;
     padding: 12px 8px;
+    overflow-y: auto;
     border-right: 1px solid var(--hairline);
     background: var(--surface);
 
@@ -121,6 +125,7 @@
   &__main {
     flex: 1;
     min-width: 0;
+    overflow: auto;
     padding: 12px 16px 32px;
   }
 
@@ -424,6 +429,11 @@
       flex-direction: column;
     }
 
+    // The menu sits above the content, and they scroll together.
+    &__frame {
+      overflow-y: auto;
+    }
+
     &__menu,
     &__schema {
       flex: none;
@@ -432,6 +442,8 @@
     }
 
     &__main {
+      flex: none;
+      overflow: visible;
       padding: 8px 16px;
     }
   }
