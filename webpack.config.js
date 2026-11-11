@@ -406,6 +406,72 @@ module.exports = (env, argv) => {
           ],
         },
       ];
+    // The sim-results console's page alone, which hack/console/server.py
+    // serves: the devtools app with the wasm crates' glue stubbed
+    // (src/devtools/wasm-stub.ts), so it builds without Rust, into
+    // target/console/dist.
+    case "console":
+      return [
+        {
+          target: "web",
+          entry: {
+            devtools: path.join(__dirname, "src", "devtools", "index.tsx"),
+          },
+          devtool: "source-map",
+          output: {
+            filename: "[name].[contenthash].js",
+            chunkFilename: "[id].[chunkhash].js",
+            path: path.resolve(__dirname, "target", "console", "dist"),
+            publicPath: "/",
+            clean: true,
+          },
+          cache: {
+            type: "filesystem",
+            cacheDirectory: path.resolve(__dirname, "target", "console", "webpack-cache"),
+          },
+          // The machine's inotify watchers run out on the whole tree.
+          watchOptions: {
+            ignored: [
+              "**/node_modules/**",
+              "**/target/**",
+              "**/crates/**",
+              "**/dist/**",
+              "**/.git/**",
+            ],
+          },
+          module: {
+            // No React Refresh: nothing serves hot updates.
+            rules: [scriptRule(false), ...sharedRules.filter((r) => r !== scriptModuleRule)],
+          },
+          resolve,
+          plugins: [
+            new webpack.NormalModuleReplacementPlugin(
+              /crates\/[^/]+\/Cargo\.toml$/,
+              path.resolve(__dirname, "src", "devtools", "wasm-stub.ts")
+            ),
+            new HtmlWebpackPlugin({
+              filename: "devtools.html",
+              chunks: ["devtools"],
+              title: "devtools",
+              ...htmlWebpackPluginOptions,
+            }),
+            new CopyWebpackPlugin({
+              patterns: [
+                {
+                  from: path.resolve(__dirname, "assets", "locales"),
+                  to: "locales",
+                  transform: (content) => JSON.stringify(JSON5.parse(content)),
+                },
+              ],
+            }),
+            new webpack.DefinePlugin({
+              MANIFEST: "[]",
+            }),
+            providePlugin(),
+            definePlugin(),
+          ],
+        },
+      ];
     case "web":
     default:
       return [
@@ -462,9 +528,11 @@ module.exports = (env, argv) => {
                 },
               },
               {
-                // The sim-results console's API (node hack/console/server.ts).
+                // The sim-results console's API (hack/console/server.py), which
+                // answers only requests whose Host names this machine.
                 context: "/console",
                 target: "http://localhost:8086",
+                changeOrigin: true,
                 // As /api/v1's: a fetch's streamed output ends with the browser's response.
                 onProxyReq: (proxyReq, req, res) => {
                   res.on("close", () => {

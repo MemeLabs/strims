@@ -11,6 +11,8 @@
     "dev:web": "run-p web:webpack",
     "test:js": "mocha",
     "dev:build": "webpack --mode development",
+    "console:build": "webpack --mode development --env TARGET=console",
+    "console:watch": "webpack --mode development --env TARGET=console --watch",
     "build": "tsc && webpack --mode production",
     "typecheck": "tsc",
     "lint": "oxlint src"
