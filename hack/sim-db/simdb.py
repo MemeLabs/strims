@@ -1540,6 +1540,8 @@ def cmd_rows(a):
         row = got.get((r["src"], r["k"]))
         if row is None:
             continue
+        # A key counts in each of its cells: each prints its own copy.
+        row = dict(row)
         v_ = row.pop("_verdict") or {}
         out = {"cell": r["cell"], "arm": r["arm"], "seed": r["seed"], "k": r["k"], "src": r["src"]}
         out.update({f: row.get(f) for f in want} if want else row)

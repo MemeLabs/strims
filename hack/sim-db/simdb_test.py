@@ -198,6 +198,24 @@ class Selection(unittest.TestCase):
         self.assertEqual(self.cells([f"{B}*"])["star-7-5@sb0001"], {("kz", "main")})
         self.assertNotIn("halve-7-10@sa0001", self.cells([f"{B}*"]))
 
+    def test_rows_prints_a_key_in_each_of_its_cells(self):
+        # kr and kq: B's rows, which A's run reused; rows() gives a key's
+        # row once, whatever cells it counts in.
+        verdict = {"healthy": [True] * 30, "onset": None, "recovered": None, "absorbing": False,
+                   "unhealthy": 0.0, "lag_p50": 200.0}
+        rows = lambda pairs: {p: {"lag_p99_ms": 300, "_verdict": verdict, "_metrics": {}} for p in pairs}
+        out = io.StringIO()
+        with mock.patch.object(simdb, "rows", rows), mock.patch.object(sys, "stdout", out):
+            simdb.cmd_rows(argparse.Namespace(src=None, cell=["halve-7-10@*"], arm=None, seed=None, fields=None))
+        got = [json.loads(line) for line in out.getvalue().splitlines()]
+        self.assertEqual(sorted((r["cell"], r["k"]) for r in got if r["k"] in ("kr", "kq")),
+                         [("halve-7-10@sa0001", "kq"), ("halve-7-10@sa0001", "kr"), ("halve-7-10@sb0001", "kq"),
+                          ("halve-7-10@sb0001", "kr")])
+        for r in got:
+            self.assertEqual((r["lag_p99_ms"], r["_metrics"], r["_collapsed"]), (300, {}, False), r)
+            self.assertEqual(r["_verdict"], {x: verdict[x] for x in ("onset", "recovered", "absorbing", "unhealthy",
+                                                                     "lag_p50")}, r)
+
 
 # Suite farm runs, as suite.py's `farm` leaves them: a --sets run (the
 # knob its index names, set apart from SIM_EXP for strims-sim), a --refs
