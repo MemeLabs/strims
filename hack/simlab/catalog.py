@@ -2238,8 +2238,8 @@ def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, pr
 
 # --- the console's schema ------------------------------------------------------------
 
-# What GET /console/schema answers, a query each (as the console's Node
-# server made it), and how many rows each may hold.
+# What GET /console/schema answers, a query each, and how many rows each
+# may hold.
 SCHEMA = {
     "tables": "SELECT table_schema AS schema, table_name AS name, "
               "list({name: column_name, type: data_type} ORDER BY ordinal_position) AS columns "

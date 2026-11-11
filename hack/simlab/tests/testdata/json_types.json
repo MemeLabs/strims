@@ -1,5 +1,5 @@
 {
- "about": "hack/console/db.ts toJson over node_types.sql (DuckDB 1.5.6, @duckdb/node-api 1.5.6-r.2, TimeZone America/Los_Angeles): the console server's columns and rows",
+ "about": "the console API's JSON (engine.Result.json) over json_types.sql, a column of each DuckDB type (DuckDB 1.5.6, TimeZone America/Los_Angeles): its columns and rows",
  "columns": [
   [
    "a",

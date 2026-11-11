@@ -36,10 +36,10 @@ import server  # noqa: E402
 from simlab import catalog, engine, farm, suite  # noqa: E402
 
 TESTDATA = HACK / "simlab" / "tests" / "testdata"
-# The Node server's golden query: a column of each DuckDB type, and its
-# columns and rows as the Node server answered them.
-TYPES_SQL = (TESTDATA / "node_types.sql").read_text()
-NODE = json.loads((TESTDATA / "node_types.json").read_text())
+# The API's golden query: a column of each DuckDB type, and the columns
+# and rows it answers.
+TYPES_SQL = (TESTDATA / "json_types.sql").read_text()
+API = json.loads((TESTDATA / "json_types.json").read_text())
 # The stand-ins in the child find the test's directory here.
 DIR_ENV = "CONSOLE_TEST_DIR"
 
@@ -200,7 +200,7 @@ def farm_calls():
 
 def setUpModule():
     global TMP, DIR, LAKE, POOL, CONSOLE, HTTPD, PORT, SUITE, REGS
-    # node_types.json's TIMESTAMPTZ offsets are Los Angeles's.
+    # json_types.json's TIMESTAMPTZ offsets are Los Angeles's.
     os.environ["TZ"] = "America/Los_Angeles"
     time.tzset()
     TMP = tempfile.TemporaryDirectory(prefix="console-test-")
@@ -391,13 +391,13 @@ class Sql(unittest.TestCase):
     def test_a_post_that_isnt_json_is_refused(self):
         self.assertEqual(post("/console/sql", {"sql": "SELECT 1"}, "text/plain").status, 415)
 
-    def test_json_is_the_node_servers(self):
+    def test_json_is_the_golden(self):
         r = sql(TYPES_SQL)
         self.assertEqual(r.status, 200, r.body)
-        self.assertEqual([[c["name"], c["type"]] for c in r.body["columns"]], NODE["columns"])
-        self.assertEqual(json.dumps(r.body["rows"], separators=(",", ":")), NODE["rows"])
+        self.assertEqual([[c["name"], c["type"]] for c in r.body["columns"]], API["columns"])
+        self.assertEqual(json.dumps(r.body["rows"], separators=(",", ":")), API["rows"])
 
-    def test_bodies_and_numbers_the_node_server_refused(self):
+    def test_bodies_and_numbers_it_refuses(self):
         for body, status in [(b"{", 400), (b"[1]", 400), (b'{"sql": 1}', 400), (b'{"sql": "SELECT 1", "x": NaN}', 400),
                              (b'{"sql": "SELECT 1", "params": [1]}', 400),
                              (b'{"sql": "SELECT 1", "params": {"a": [true]}}', 400),

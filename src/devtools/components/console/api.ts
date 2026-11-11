@@ -1,7 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** The sim-results console's API (hack/console/server.ts), which the dev server proxies at /console. */
+/** The sim-results console's API (hack/console/server.py), which the dev server proxies at /console. */
 
 export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 

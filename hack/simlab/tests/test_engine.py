@@ -4,8 +4,8 @@
 """simlab.engine over a catalog of its own (a DuckLake written as
 catalog.py writes one): the pins; the guards (every statement refused,
 reads outside the lake, the settings locked); the values against the
-console's Node server (testdata/node_types.json, its JSON for every
-DuckDB type) and the CLI (simdb.duck's JSON and -table text); parameters;
+console's API (testdata/json_types.json, its JSON for every DuckDB type)
+and the CLI (simdb.duck's JSON and -table text); parameters;
 the timeout's interrupt and its race with the next query; the pool and
 its refresh; scripts as the CLI runs them:
 
@@ -36,9 +36,9 @@ import duckdb  # noqa: E402
 from simlab import engine  # noqa: E402
 
 TESTDATA = Path(__file__).with_name("testdata")
-# The Node server's golden query: a column of each DuckDB type.
-TYPES_SQL = (TESTDATA / "node_types.sql").read_text()
-NODE = json.loads((TESTDATA / "node_types.json").read_text())
+# The console API's golden query: a column of each DuckDB type.
+TYPES_SQL = (TESTDATA / "json_types.sql").read_text()
+API = json.loads((TESTDATA / "json_types.json").read_text())
 
 
 def load(path, name):
@@ -100,8 +100,6 @@ class Pins(unittest.TestCase):
         deps = tomllib.loads((HACK / "pyproject.toml").read_text())["project"]["dependencies"]
         self.assertIn(f"duckdb=={duckdb.__version__}", deps)
         self.assertIs(catalog.EXTENSIONS, engine.EXTENSIONS)
-        # The Node server reads them from the text.
-        self.assertRegex((HACK / "simlab" / "engine.py").read_text(), r'(?m)^EXTENSIONS = \{"ducklake": ')
 
     def test_the_extensions_are_the_pinned_builds(self):
         engine.ensure_extensions()
@@ -185,13 +183,13 @@ class Guards(Lake):
 
 
 class Values(Lake):
-    def test_json_is_the_node_servers(self):
+    def test_json_is_the_apis(self):
         c = engine.connect()
         c.execute("SET TimeZone = 'America/Los_Angeles'")
         r = engine.run(c, TYPES_SQL)
         j = r.json()
-        self.assertEqual([[c["name"], c["type"]] for c in j["columns"]], NODE["columns"])
-        self.assertEqual(json.dumps(j["rows"], separators=(",", ":")), NODE["rows"])
+        self.assertEqual([[c["name"], c["type"]] for c in j["columns"]], API["columns"])
+        self.assertEqual(json.dumps(j["rows"], separators=(",", ":")), API["rows"])
         t = engine.run(c, TYPES_SQL, temporal_text=True).json()
         self.assertEqual((t["columns"], t["rows"]), (j["columns"], j["rows"]))
 
@@ -257,7 +255,7 @@ class Values(Lake):
 
 
 class Parameters(Lake):
-    def test_they_bind_by_name_as_the_node_server_bound_them(self):
+    def test_they_bind_by_name_whole_numbers_as_bigint(self):
         r = self.query("SELECT $exp || '!' AS s, $seed + 1 AS n, typeof($seed) AS t, $xs AS xs, typeof($f) AS f, "
                        "typeof($whole) AS w, typeof($big) AS b, $yes AS y, $none IS NULL AS z, typeof($ns) AS ns",
                        {"exp": "e1", "seed": 2001, "xs": ["a", "b"], "f": 2.5, "whole": 2.0, "big": 2 ** 60,

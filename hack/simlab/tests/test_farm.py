@@ -230,7 +230,7 @@ class StandIn(unittest.TestCase):
         self.regs.save({**r, "state": "running", "pid": os.getpid(), "code": 0})
         self.assertEqual(self.regs.get(q.id)["state"], "running")
 
-    def test_ids_are_the_node_servers(self):
+    def test_ids_are_twelve_url_safe_characters(self):
         ids = {farm.quote(self.paths, self.regs).id for _ in range(3)}
         self.assertEqual(len(ids), 3)
         for id in ids:

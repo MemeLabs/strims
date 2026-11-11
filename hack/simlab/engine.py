@@ -36,8 +36,8 @@ serializes SELECTs only), before anything binds it: one SELECT (DESCRIBE,
 SHOW, SUMMARIZE and FROM-first among them) or an EXPLAIN whose rest is
 one, else 403. DuckDB may write the allowed directories, and binding an
 EXPORT DATABASE already makes its directory, so a COPY, an ATTACH or a
-CREATE never gets that far. A parameter binds as the console's Node
-server bound it: an integer a double holds exactly as BIGINT, another
+CREATE never gets that far. A parameter binds as the console's API
+binds it: an integer a double holds exactly as BIGINT, another
 number as DOUBLE, a list as a list of its numbers and strings; only the
 names the statement has bind (the module refuses extra ones). The timeout
 is a timer whose interrupt holds the query's lock: closing the query
@@ -49,27 +49,24 @@ waits for a free one; `refresh` retires them for new ones (the catalog
 changed under them) once the queries on them finish.
 
 Results. A Result holds a statement's columns (their names and types as
-the console's Node server named them: STRUCT fields quoted), its rows as
-the module gives them, `truncated` and `elapsed_ms`.
-`values()` gives them as the CLI's JSON gave them (simdb.duck): integers
-and decimals as numbers (a decimal with a scale as a float), times,
-dates, intervals, blobs and UUIDs as DuckDB's strings, MAP keys as
-strings. `json()` gives them as the console's API does: BIGINT, HUGEINT
-and DECIMAL as JSON numbers where a double holds them exactly, else as
-strings, NaN and the infinities as "NaN", "Infinity" and "-Infinity",
-INTERVALs as {months, days, micros}, MAPs as objects. Two deviations from
-the Node server: a TIMESTAMPTZ takes the session time zone's offset at its
-own instant (Node's took the server's offset at its start for every
-value), and an INTERVAL's months come back folded into its days (30 a
-month, as the module returns a timedelta; no catalog column is an
-INTERVAL). A query run with `text` returns DuckDB's own strings for its
-values (each column cast to VARCHAR in SQL, names kept), and `table()`
-lays them out as the CLI's -table mode does. One run with `temporal_text`
-casts only its top-level dates, times and timestamps (their text is what
-values() and json() give): DuckDB formats them faster than Python, and
-exactly where the module's values can't hold them (nanoseconds, the
-infinities, years past 9999). A JSON column's type is VARCHAR, as the
-Node server named it.
+the console's API names them: STRUCT fields quoted, JSON as VARCHAR), its
+rows as the module gives them, `truncated` and `elapsed_ms`. `values()`
+gives them as the CLI's JSON gave them (simdb.duck): integers and decimals
+as numbers (a decimal with a scale as a float), times, dates, intervals,
+blobs and UUIDs as DuckDB's strings, MAP keys as strings. `json()` gives
+them as the console's API does: BIGINT, HUGEINT and DECIMAL as JSON
+numbers where a double holds them exactly, else as strings, NaN and the
+infinities as "NaN", "Infinity" and "-Infinity", INTERVALs as {months,
+days, micros}, MAPs as objects; a TIMESTAMPTZ takes the session time
+zone's offset at its own instant, and an INTERVAL's months come back
+folded into its days (30 a month, as the module returns a timedelta; no
+catalog column is an INTERVAL). A query run with `text` returns DuckDB's
+own strings for its values (each column cast to VARCHAR in SQL, names
+kept), and `table()` lays them out as the CLI's -table mode does. One run
+with `temporal_text` casts only its top-level dates, times and timestamps
+(their text is what values() and json() give): DuckDB formats them faster
+than Python, and exactly where the module's values can't hold them
+(nanoseconds, the infinities, years past 9999).
 """
 
 import contextlib
@@ -333,7 +330,7 @@ def js_string(x):
 
 
 def number(v):
-    """A JSON number as the Node server bound it: a whole one a double
+    """A JSON number as the console's API binds it: a whole one a double
     holds exactly as BIGINT, any other as DOUBLE."""
     if isinstance(v, int) and abs(v) <= SAFE or isinstance(v, float) and v.is_integer() and abs(v) <= SAFE:
         return duckdb.LongValue(int(v))
@@ -453,8 +450,8 @@ def converted(rows, conv):
 
 
 def type_name(t):
-    """A DuckDBPyType's name as the console's Node server gave it:
-    DuckDB's, with STRUCT and UNION fields quoted, JSON as VARCHAR."""
+    """A DuckDBPyType's name as the console's API gives it: DuckDB's, with
+    STRUCT and UNION fields quoted, JSON as VARCHAR."""
     kind = t.id
     if kind == "varchar":
         return "VARCHAR"

@@ -144,7 +144,10 @@ const IndexStatus: React.FC<{ onIndexed: () => void }> = ({ onIndexed }) => {
         const at = s.catalog_info.find((r) => r.key === "indexed_at")?.value;
         setText(s.running ? "indexing…" : `indexed ${String(at ?? "?")}`);
       },
-      () => setText("console server unreachable (node hack/console/server.ts)")
+      () =>
+        setText(
+          "console server unreachable (npm run console:build once, then python3 hack/console/server.py)"
+        )
     );
   }, []);
   useEffect(() => {

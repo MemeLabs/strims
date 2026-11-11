@@ -28,7 +28,7 @@ approves its quote.
                  didn't start (failed).
   Regenerations(root=REGENERATE, farm_py=None, python="python3")
                  the regenerations, each <root>/<id>.json in the console's
-                 Node server's shape (and the estimate beside its text),
+                 API's shape (and the estimate beside its text),
                  once approved with its run's pid, log, approved_at, state
                  `running` and then `finished` with its exit code (null
                  for a signal).
@@ -56,8 +56,8 @@ from . import ROOT, simdb
 from .bootstrap import ENV as UV_ENV
 
 REGENERATE = ROOT / "target" / "console" / "regenerate"
-# An id as quote makes one (secrets.token_urlsafe(9), as the Node server's
-# randomBytes(9) base64url), or any the routes pass: a file name.
+# An id as quote makes one (secrets.token_urlsafe(9)), or any the routes
+# pass: a file name.
 ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 LOG_TAIL = 60
 # farm.py estimate reads each region's prices and quotas: a quote that
@@ -88,7 +88,8 @@ class Approval:
 
 
 def now():
-    """The time as the Node server's records had it (toISOString)."""
+    """The time as a regeneration's record holds it: UTC, to the
+    millisecond, as JavaScript's toISOString gives it."""
     return datetime.datetime.now(datetime.UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 

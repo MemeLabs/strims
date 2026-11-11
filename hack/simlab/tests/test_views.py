@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """simlab.views: hack/console/views' views read and checked, every
 `$name` of their SQL a param; a view saved and read back, its files as
-the Node server wrote them; bad names and views refused with nothing
+the UI's Workbench reads them; bad names and views refused with nothing
 written; views read from disk at each call; a view run over a catalog of
 its own, its params' defaults and numbers as the UI gives them:
 
@@ -68,7 +68,7 @@ class Files(unittest.TestCase):
         self.assertEqual([x.json() for x in views.saved(self.root)], [{
             "name": "my-view", "title": "Mine", "description": "", "params": [{"name": "exp", "kind": "exp"}],
             "sql": "SELECT $exp AS e\n", "spec": {"mark": "bar"}}])
-        # Node's files: the statement with a newline, JSON at indent 2.
+        # The files: the statement with a newline, JSON at indent 2.
         self.assertEqual(self.files(), ["my-view.json", "my-view.sql", "my-view.vl.json"])
         self.assertEqual((self.root / "my-view.json").read_text(),
                          '{\n  "title": "Mine",\n  "description": "",\n  "params": [\n    {\n      "name": "exp",\n'

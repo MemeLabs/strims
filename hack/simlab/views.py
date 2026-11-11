@@ -22,7 +22,7 @@ todo?}).
                                    string its number, as the UI's pickers
                                    give them (selection.ts viewParams)
 
-A view's name is NAME (server.ts's VIEW_NAME); files of other names are
+A view's name is NAME; files of other names are
 none. A param's name is one the UI finds in a statement (`$name`), its
 kind one of KINDS (the UI's pickers, the Workbench's text and a choice
 of its options), its default a value the console's API binds: null, a
@@ -80,7 +80,7 @@ class View:
 
 
 def is_value(v):
-    """Whether the console's API binds `v` (server.ts's isParam)."""
+    """Whether the console's API binds `v`."""
     if v is None or isinstance(v, (str, bool)):
         return True
     if isinstance(v, (int, float)):

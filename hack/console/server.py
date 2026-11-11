@@ -134,8 +134,8 @@ def plain(x):
 
 
 def js_number(v, default):
-    """Number(v ?? default), as the Node server read a body's numbers: NaN
-    for what JavaScript makes none of."""
+    """A body's number as JavaScript's Number(v ?? default) makes it: NaN
+    for what it makes none of."""
     if v is None:
         v = default
     if isinstance(v, bool):
