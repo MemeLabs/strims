@@ -1780,16 +1780,21 @@ NORMALIZED = {
               "first read. macros.sql's playback(delay_ms) plays reads the same way at any delay.",
     "parents": "parent NULL for none. Only hybrid push gives a stream push parents: empty in other modes.",
     "forecast": "horizon_ms, held_ms and mean_ms NULL where -1 (no estimate, never held).",
+    "asks": "Every rival kept, in both rounds: a row per request and channel it weighed, the asked row (picked) "
+            "first; grace_ms, outcome, reason and t_outcome_ms are the asked row's, NULL on a rival's.",
 }
 STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewers": "k, viewer",
                  "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",
                  "reads": "k, viewer, t_ms", "forecast": "k, node, peer, seq",
-                 "stalls": "k, viewer, delay_ms, t_ms", "parents": "k, node, stream, t_ms"}
+                 "stalls": "k, viewer, delay_ms, t_ms", "parents": "k, node, stream, t_ms",
+                 "asks": "k, node, ask, peer"}
 STANDARD_JOINS = {"seconds": "jobs USING (k, src); verdict_seconds USING (k, src, sec)",
                   "viewer_seconds": "viewers USING (k, src, viewer)", "reads": "viewers USING (k, src, viewer)",
                   "events": "viewers USING (k, src, node)", "node_bins": "viewers USING (k, src, node)",
                   "forecast": "viewers USING (k, src, node)", "stalls": "viewers USING (k, src, viewer)",
-                  "parents": "viewers USING (k, src, node)", "viewers": "reads, viewer_seconds, stalls USING (k, src, viewer)"}
+                  "parents": "viewers USING (k, src, node)", "viewers": "reads, viewer_seconds, stalls USING (k, src, viewer)",
+                  "asks": "viewers USING (k, src, node); spec_requests USING (k, src, t_ms, node, peer, seq) for "
+                          "round 'spec' AND picked"}
 VERDICT_DOCS = {
     "onset": "the first second a trigger held (trees, delivery or latency), NULL if none",
     "trees": "the first second of TREES_SECS with the smoothed hit share under TREES_SHARE",

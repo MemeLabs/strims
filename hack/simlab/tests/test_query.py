@@ -19,6 +19,9 @@ simdb.py prints of it is golden_cli's):
                the sample tables the run's flushes hold (simdb_test's
                SamplesPull's scratch S3, one flush with arrivals and no
                forecast)
+  Asks         asks (the HAVE removal's decision log, every rival kept)
+               is a sample table too: a pull fetches it with the reads,
+               and the catalog says whose rows hold an outcome
 
   python3 hack/simlab/tests/test_query.py
 """
@@ -45,7 +48,7 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import query, store_host  # noqa: E402
+from simlab import catalog, query, store_host  # noqa: E402
 
 SUITE = query.Selection(src=["suite/**"])
 
@@ -348,6 +351,38 @@ class Arrivals(unittest.TestCase):
                          ["i-2/0/arrivals.parquet"])
         with query.views(query.Selection(src=[f"farm/{self.RUN}/*/*"], cell=[self.C0]), derived=False) as v:
             self.assertEqual(v.records("SELECT k, seq FROM arrivals;"), [{"k": "k3", "seq": 5}])
+
+
+class Asks(unittest.TestCase):
+    """SamplesPull's run, with i-2's flush holding asks in its samples."""
+
+    setUp_pull, aws, gets, cli = PULL.setUp, PULL.aws, PULL.gets, PULL.cli
+    RUN, C0 = golden_cli.simdb_test().RUN, golden_cli.simdb_test().C0
+
+    def setUp(self):
+        self.setUp_pull()
+        st = golden_cli.simdb_test()
+        data = self.s3 / "sim-data" / self.RUN / "i-2" / "0"
+        asks = self.s3 / "sim-samples" / self.RUN / "i-2" / "0" / "asks.parquet"
+        st.simdb.duck(f"COPY (SELECT 'k3' AS k, {st.simdb.q(st.src_of('i-2'))} AS src, 1 AS node, 0 AS ask, "
+                      f"'flight' AS round, false AS picked, 2 AS peer, 6 AS seq) "
+                      f"TO {st.simdb.q(asks)} (FORMAT parquet);", out=None)
+        m = json.loads((data / "manifest.json").read_text())
+        m["tables"]["asks"] = {"rows": 1, "bytes": asks.stat().st_size, "sha256": st.simdb.sha256(asks)}
+        (data / "manifest.json").write_text(json.dumps(m))
+
+    def test_a_pull_fetches_it_with_the_samples(self):
+        self.assertIn("asks", store_host.SAMPLE_TABLES)
+        self.assertIn("Every rival kept", catalog.NORMALIZED["asks"])
+        self.cli("pull", "--run", self.RUN)
+        cache = store_host.cache_root() / "cache" / "farm" / self.RUN
+        self.assertEqual(list(cache.glob("**/asks.parquet")), [])
+        _, err = self.cli("pull", "--run", self.RUN, "--reads", "--cell", self.C0)
+        self.assertIn("asks", err)
+        self.assertIn(f"sim-samples/{self.RUN}/i-2/0/asks.parquet", self.gets())
+        with query.views(query.Selection(src=[f"farm/{self.RUN}/*/*"], cell=[self.C0]), derived=False) as v:
+            self.assertEqual(v.records("SELECT k, round, picked, peer, seq FROM asks;"),
+                             [{"k": "k3", "round": "flight", "picked": False, "peer": 2, "seq": 6}])
 
 
 if __name__ == "__main__":

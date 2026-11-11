@@ -112,6 +112,23 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   behind_window, ahead, no_grace, range, dropped or
                   outside; a release's queue_full; an expiry's dataless),
                   t_outcome_ms, held_ms (the holder's own first hold)
+  asks            with SIM_SPEC=1 / STRIMS_SIM_SPEC=1 (large), every
+                  request either request round made, once it ended, a row
+                  per channel it weighed, every rival's: t_ms, node (the
+                  requester), viewer, honest, ask (its rows share it),
+                  round (spec, the speculative round; flight, the flight
+                  window's, for a chunk the asked peer declared), peer,
+                  peer_honest, picked (the asked peer's row, first; else a
+                  rival's), declares, stream, seq, grace_ms (the asked
+                  row's), rtt_ms, predicted_ms, predicted_p90_ms and
+                  predicted_p99_ms (the model's holds at the decision),
+                  frontier_seq, hole_seq, state_age_ms (the peer's latest
+                  STATE's age then), outcome (the asked row's: spec's as
+                  spec_requests', flight's answered, not_yet, expired,
+                  elsewhere, closed), reason, t_outcome_ms, held_ms,
+                  channel_open_ms, live, err_ms, pred_err_ms, held_by_p50,
+                  held_by_p90, held_by_p99 (as spec_requests'); the asked
+                  rows of round spec are spec_requests' rows
   forecast        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 (large), in
                   either of two schemas, told apart by their columns: the
                   arrival models' predictions (a row per neighbour per
@@ -145,17 +162,17 @@ writes (`ADD COLUMN IF NOT EXISTS`); folding a job again replaces it.
 invocation's store into the cache, `<main checkout>/target/sim-db/cache/`
 (suite/<worktree>/<invocation>/), which every worktree shares; the farm
 puts its instances' flushes in S3, and `pull` copies a run's into the
-cache (farm/<run>/...). Its reads, forecast and arrivals logs (the bulky
-tables, sim-samples/) come with `--reads`: the whole run's, or with `--cell`,
-`--arm` and `--seed` only the flushes holding those jobs (the manifests'
-keys; a job held twice, a verify copy, from the fewest flushes), and the
-queries that read them (pooled, aligned on a read lag, forecast, and sql
-with `--reads`) pull their selection's that way when the cache lacks
-them, noting the size, at most `--pull-mb`. `--dry-run` lists what a pull
-would fetch, asking S3 nothing. What a pull costs S3 goes to the farm's
-S3 ledger (pull). Nothing in the cache is kept for long: a run is
-reproduced when it's wanted again, and `gc` deletes what's older than
-`--days` (7).
+cache (farm/<run>/...). Its reads, forecast, arrivals and asks logs (the
+bulky tables, sim-samples/) come with `--reads`: the whole run's, or
+with `--cell`, `--arm` and `--seed` only the flushes holding those jobs
+(the manifests' keys; a job held twice, a verify copy, from the fewest
+flushes), and the queries that read them (pooled, aligned on a read lag,
+forecast, and sql with `--reads`) pull their selection's that way when
+the cache lacks them, noting the size, at most `--pull-mb`. `--dry-run`
+lists what a pull would fetch, asking S3 nothing. What a pull costs S3
+goes to the farm's S3 ledger (pull). Nothing in the cache is kept for
+long: a run is reproduced when it's wanted again, and `gc` deletes
+what's older than `--days` (7).
 
 The queries read the cache's tables and, made from them and kept under
 derived/<table>/v=<derived_version>/ (a hash of analyze.py's
@@ -321,11 +338,11 @@ cell (a key the farm reused counts in each of its cells). USING (k) joins
 the same rows but keeps both `src` columns, to name as runs.src. Beside
 (k, src) the views join on their own columns: reads and viewer_seconds to
 viewers USING (k, src, viewer), as stalls does; events, parents, node_bins,
-forecast, arrivals, spec_requests and parks to viewers USING (k, src, node)
-(`node` in both sims; strims-sim's viewers also name it `host`); seconds to
-verdict_seconds USING (k, src, sec) (macros.sql's `sec`). runs' frames and
-bytes are its row's: beside viewer_seconds' frames, name them runs.frames
-and runs.bytes.
+forecast, arrivals, spec_requests, parks and asks to viewers USING (k, src,
+node) (`node` in both sims; strims-sim's viewers also name it `host`);
+seconds to verdict_seconds USING (k, src, sec) (macros.sql's `sec`).
+runs' frames and bytes are its row's: beside viewer_seconds' frames, name
+them runs.frames and runs.bytes.
 
   simdb.py sql "SELECT r.cell, r.arm, w.up, quantile_cont(lag_ms, 0.99) AS p99
     FROM reads JOIN viewers w USING (k, src, viewer) JOIN runs r USING (k, src)
@@ -443,7 +460,8 @@ def main():
     e.add_argument("dest")
     p = sub.add_parser("pull")
     p.add_argument("--run", required=True)
-    p.add_argument("--reads", action="store_true", help="the reads, forecast and arrivals logs too (sim-samples/)")
+    p.add_argument("--reads", action="store_true",
+                   help="the reads, forecast, arrivals and asks logs too (sim-samples/)")
     p.add_argument("--cell", action="append", help="only these cells' reads, globs")
     p.add_argument("--arm", action="append", help="only these arms' reads, globs")
     p.add_argument("--seed", action="append", type=int, help="only these seeds' reads")
@@ -455,8 +473,8 @@ def main():
     qs["sql"] = sub.add_parser("sql", help="a query over the views", description=SQL_DOC, formatter_class=raw)
     qs["sql"].add_argument("query")
     qs["sql"].add_argument("--reads", action="store_true",
-                           help="pull the selection's reads, forecast and arrivals logs first, where the cache lacks "
-                                "them")
+                           help="pull the selection's reads, forecast, arrivals and asks logs first, where the "
+                                "cache lacks them")
     qs["pooled"] = sub.add_parser("pooled")
     qs["pooled"].add_argument("--by", choices=("none", "phase", "bin", "viewer"), default="none")
     qs["aligned"] = sub.add_parser("aligned")
