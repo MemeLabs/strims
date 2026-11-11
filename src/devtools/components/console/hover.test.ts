@@ -5,6 +5,7 @@ import assert from "assert";
 import { readFileSync, readdirSync } from "fs";
 import path from "path";
 
+import { expandVocab } from "./domains";
 import { CURSOR, CURSOR_MARKS, hovered } from "./hover";
 import { config } from "./theme";
 
@@ -143,7 +144,7 @@ describe("hovered", () => {
     );
   });
 
-  it("expands every saved view into a spec Vega-Lite compiles without a warning", async () => {
+  it("expands every saved view, its vocabulary then its hover keys, into a spec Vega-Lite compiles without a warning", async () => {
     const { compile } = await import("vega-lite");
     const files = readdirSync(VIEWS).filter((f) => f.endsWith(".vl.json"));
     assert.ok(files.length > 0);
@@ -159,8 +160,9 @@ describe("hovered", () => {
         warn: (...a: unknown[]) => (warnings.push(a.join(" ")), logger),
         error: (...a: unknown[]) => (warnings.push(a.join(" ")), logger),
       };
-      const out = hovered(spec);
+      const out = hovered(expandVocab(spec));
       assert.ok(!JSON.stringify(out).includes('"hover":{'), `${f}: a hover key is left`);
+      assert.ok(!JSON.stringify(out).includes('"vocab":'), `${f}: a vocab reference is left`);
       compile({ ...out, data: { values: [] }, config } as never, { logger });
       assert.deepStrictEqual(warnings, [], f);
     }

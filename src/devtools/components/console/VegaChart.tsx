@@ -7,6 +7,7 @@ import embed from "vega-embed";
 import type { Result, VisualizationSpec } from "vega-embed";
 
 import type { Json } from "./api";
+import { expandVocab } from "./domains";
 import { hovered } from "./hover";
 import { config } from "./theme";
 
@@ -41,7 +42,10 @@ export interface VegaChartProps {
   onSelect?: (datum: Record<string, Json>) => void;
 }
 
-/** A Vega-Lite chart of a query's rows: the rows are its data, whatever data the spec names. */
+/**
+ * A Vega-Lite chart of a query's rows: the rows are its data, whatever data the spec names, and its
+ * vocabulary references (domains.ts), then its hover keys (hover.ts), are expanded.
+ */
 const VegaChart: React.FC<VegaChartProps> = ({ spec, rows, onSelect }) => {
   const select = useRef(onSelect);
   select.current = onSelect;
@@ -57,9 +61,16 @@ const VegaChart: React.FC<VegaChartProps> = ({ spec, rows, onSelect }) => {
     if (!target.current || width === 0) return;
     let result: Result | null = null;
     let live = true;
+    let expanded: Spec;
+    try {
+      expanded = expandVocab(spec);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return;
+    }
     const full = {
       $schema: "https://vega.github.io/schema/vega-lite/v6.json",
-      ...sized(hovered(spec), Math.max(200, width - 180)),
+      ...sized(hovered(expanded), Math.max(200, width - 180)),
       data: { values: rows },
       config: { ...config, ...(isSpec(spec.config) ? spec.config : {}) },
     };

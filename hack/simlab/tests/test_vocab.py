@@ -4,7 +4,8 @@
 """simlab.vocab, stdlib alone: the generated files (vocab.rs, vocab.ts)
 are the generator's output byte for byte; the document checks (ids
 unique, references to what exists, derived kinds disjoint from the sims'
-kinds, colours unique); and the queries over it:
+kinds, a colour to each phase, episode and reason, one to a name of its
+section); and the queries over it:
 
   python3 hack/simlab/tests/test_vocab.py
 """
@@ -29,18 +30,20 @@ class = "{cls}"
 PHASE = """
 [phases.{name}]
 description = "a phase"
+colour = "#{i:06x}"
 """
 
 
 def document(kinds=(("a", "scenario", ["ppspp"]),), phases=("steady",), extra=""):
-    """A small document: `kinds` (id, class, sims or None), `phases`, one
-    episode and one reason, then `extra`."""
+    """A small document: `kinds` (id, class, sims or None), `phases` (each
+    its own colour), one episode and one reason, then `extra`."""
     out = []
     for kid, cls, sims in kinds:
         s = "" if sims is None else "sims = [" + ", ".join(f'"{x}"' for x in sims) + "]\n"
         out.append(KIND.format(kid=kid, cls=cls, sims=s))
-    out += [PHASE.format(name=p) for p in phases]
-    out.append('\n[episodes.healthy]\ndescription = "a spell"\n\n[reasons.open]\ndescription = "a reason"\n')
+    out += [PHASE.format(name=p, i=i) for i, p in enumerate(phases)]
+    out.append('\n[episodes.healthy]\ndescription = "a spell"\ncolour = "#000000"\n'
+               '\n[reasons.open]\ndescription = "a reason"\ncolour = "#000000"\n')
     return "".join(out) + extra
 
 
@@ -139,12 +142,17 @@ class Document(unittest.TestCase):
         self.assertEqual(problems(document() + '\n[colours.x]\ndescription = "x"\n'),
                          ["[colours]: not a section (kinds, phases, episodes, reasons)"])
         two = document(phases=("steady", "tail"))
-        two = two.replace('[phases.steady]\ndescription = "a phase"\n',
-                          '[phases.steady]\ndescription = "a phase"\ncolour = "#123456"\n')
         self.assertEqual(problems(two), [])
-        two = two.replace('[phases.tail]\ndescription = "a phase"\n',
-                          '[phases.tail]\ndescription = "a phase"\ncolour = "#123456"\n')
-        self.assertEqual(problems(two), ["[phases.tail]: colour '#123456' is steady's too"])
+        # A colour is one to a name of its section, whichever section; another section's may be the same.
+        self.assertEqual(problems(two.replace('colour = "#000001"', 'colour = "#000000"')),
+                         ["[phases.tail]: colour '#000000' is steady's too"])
+        two_reasons = two + '\n[reasons.shed]\ndescription = "a reason"\ncolour = "#000000"\n'
+        self.assertEqual(problems(two_reasons), ["[reasons.shed]: colour '#000000' is open's too"])
+        self.assertEqual(problems(two.replace('colour = "#000001"', 'colour = "#ABCDEF"')),
+                         ["[phases.tail]: colour '#ABCDEF' is not a lower case #rrggbb"])
+        self.assertEqual(problems(document().replace('description = "a spell"\ncolour = "#000000"\n',
+                                                     'description = "a spell"\n')),
+                         ["[episodes.healthy]: no colour"])
         self.assertEqual(problems(document().replace('description = "a reason"', "")),
                          ["[reasons.open]: no description"])
 

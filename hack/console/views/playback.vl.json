@@ -39,12 +39,9 @@
           "field": "phase",
           "type": "nominal",
           "title": null,
-          "sort": [
-            "startup",
-            "steady",
-            "after_down",
-            "after_up"
-          ]
+          "sort": {
+            "vocab": "phases"
+          }
         },
         "tooltip": [
           {
@@ -109,12 +106,9 @@
           "field": "phase",
           "type": "nominal",
           "title": null,
-          "sort": [
-            "startup",
-            "steady",
-            "after_down",
-            "after_up"
-          ]
+          "sort": {
+            "vocab": "phases"
+          }
         },
         "tooltip": [
           {

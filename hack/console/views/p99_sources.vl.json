@@ -34,12 +34,12 @@
           "field": "phase",
           "type": "nominal",
           "scale": {
-            "domain": [
+            "vocab": "phases",
+            "only": [
               "startup",
-              "steady",
               "after_down",
               "after_up",
-              "departure"
+              "steady"
             ]
           }
         },
@@ -89,13 +89,9 @@
               "field": "phase",
               "type": "nominal",
               "title": null,
-              "sort": [
-                "startup",
-                "steady",
-                "after_down",
-                "after_up",
-                "departure"
-              ]
+              "sort": {
+                "vocab": "phases"
+              }
             },
             "yOffset": {
               "field": "arm"
@@ -129,13 +125,9 @@
             "y": {
               "field": "phase",
               "type": "nominal",
-              "sort": [
-                "startup",
-                "steady",
-                "after_down",
-                "after_up",
-                "departure"
-              ]
+              "sort": {
+                "vocab": "phases"
+              }
             },
             "yOffset": {
               "field": "arm"
@@ -190,13 +182,9 @@
             "y": {
               "field": "phase",
               "type": "nominal",
-              "sort": [
-                "startup",
-                "steady",
-                "after_down",
-                "after_up",
-                "departure"
-              ]
+              "sort": {
+                "vocab": "phases"
+              }
             },
             "yOffset": {
               "field": "arm"
@@ -252,13 +240,9 @@
           "field": "phase",
           "type": "nominal",
           "title": null,
-          "sort": [
-            "startup",
-            "steady",
-            "after_down",
-            "after_up",
-            "departure"
-          ],
+          "sort": {
+            "vocab": "phases"
+          },
           "columns": 3
         },
         "tooltip": [

@@ -25,7 +25,7 @@ from simlab import bootstrap  # noqa: E402
 if __name__ == "__main__":
     bootstrap.engine(__file__)
 
-from simlab import engine, views  # noqa: E402
+from simlab import engine, views, vocab  # noqa: E402
 from simlab.views import Param, View  # noqa: E402
 
 
@@ -34,6 +34,73 @@ def sql_params(sql):
     the UI's Workbench finds them (paramNames)."""
     bare = re.sub(r"--[^\n]*|/\*[\s\S]*?\*/|'(?:[^']|'')*'", " ", sql)
     return set(re.findall(r"\$([A-Za-z_]\w*)", bare))
+
+
+def _results(e):
+    """The text constants expression `e` (a node of DuckDB's parse tree)
+    can be: itself, a CASE's results, COALESCE's arguments, a cast's
+    operand; nothing for any other expression."""
+    if not isinstance(e, dict):
+        return set()
+    if e.get("class") == "CONSTANT":
+        v = e["value"]
+        return {v["value"]} if not v["is_null"] and v["type"]["id"] == "VARCHAR" else set()
+    if e.get("class") == "CASE":
+        return set().union(*(_results(c["then_expr"]) for c in e["case_checks"]), _results(e["else_expr"]))
+    if e.get("type") == "OPERATOR_COALESCE" or (e.get("class") == "FUNCTION"
+                                                 and e.get("function_name") in ("coalesce", "ifnull")):
+        return set().union(*(_results(c) for c in e["children"]))
+    if e.get("class") == "CAST":
+        return _results(e["child"])
+    return set()
+
+
+def _columns(node):
+    """Query node `node`'s output columns as [(name or None, [expression])]:
+    a SELECT's list, a set operation's left side's names over both sides'
+    expressions by position."""
+    if node.get("type") == "SELECT_NODE":
+        out = []
+        for e in node["select_list"]:
+            name = e.get("alias") or (e["column_names"][-1] if e.get("class") == "COLUMN_REF" else None)
+            out.append((name, [e]))
+        return out
+    if node.get("type") == "SET_OPERATION_NODE":
+        left, right = _columns(node["left"]), _columns(node["right"])
+        return [(name, es + (right[i][1] if i < len(right) else [])) for i, (name, es) in enumerate(left)]
+    return []
+
+
+def returned(sql, names):
+    """{name: {text}}: the text constants a column called one of `names`
+    can hold, in any of statement `sql`'s queries (its CTEs', subqueries'
+    and set operations'), from DuckDB's parse tree; a column's values from
+    a table aren't known, and count as none."""
+    con = engine.duckdb.connect()
+    try:
+        tree = json.loads(con.execute("SELECT json_serialize_sql(?)", [sql]).fetchone()[0])
+    finally:
+        con.close()
+    if tree.get("error"):
+        raise ValueError(tree.get("error_message"))
+    out = {n: set() for n in names}
+
+    def walk(v, named=True):
+        # A set operation's sides take its names, not their own.
+        if isinstance(v, dict):
+            for name, es in _columns(v) if named else ():
+                if name in out:
+                    for e in es:
+                        out[name] |= _results(e)
+            side = v.get("type") == "SET_OPERATION_NODE"
+            for k, x in v.items():
+                walk(x, not (side and k in ("left", "right")))
+        elif isinstance(v, list):
+            for x in v:
+                walk(x)
+
+    walk(tree)
+    return out
 
 
 class Saved(unittest.TestCase):
@@ -49,6 +116,35 @@ class Saved(unittest.TestCase):
                 j = v.json()
                 self.assertEqual(set(j) - {"todo"}, {"name", "title", "description", "params", "sql", "spec"})
                 self.assertEqual(j["params"], json.loads((views.VIEWS / f"{v.name}.json").read_text())["params"])
+
+    @unittest.skipIf(engine.duckdb is None, "needs the duckdb module (uv)")
+    def test_the_phases_and_reasons_a_view_makes_are_the_documents(self):
+        doc = {"phase": set(vocab.phases()), "reason": set(vocab.reasons())}
+        made = set()
+        for v in views.saved():
+            with self.subTest(view=v.name):
+                for col, got in returned(v.sql, doc).items():
+                    self.assertLessEqual(got, doc[col], f"{v.name}'s {col}s")
+                    made |= got
+        self.assertIn("steady", made, "a view's unknown phase falls back to steady")
+
+    @unittest.skipIf(engine.duckdb is None, "needs the duckdb module (uv)")
+    def test_the_values_a_column_can_hold(self):
+        sql = """
+            WITH s AS (
+                SELECT CASE WHEN x THEN 'departure' ELSE coalesce(p.phase, 'steady') END AS phase,
+                       p.kind = 'depart' AS gone FROM t p
+            )
+            SELECT 'a' AS part, phase, 'x' AS reason FROM s
+            UNION ALL SELECT 'b', CAST('tail' AS VARCHAR), NULL FROM s WHERE phase IN (SELECT 'startup' AS phase)
+            UNION ALL SELECT 'c', ifnull(phase, 'after_up'), upper('y') FROM s
+        """
+        self.assertEqual(returned(sql, ("phase", "reason", "part")), {
+            "phase": {"departure", "steady", "tail", "startup", "after_up"}, "reason": {"x"},
+            "part": {"a", "b", "c"}})
+        # A union's columns are its first query's, however the later ones name theirs.
+        sql = "SELECT 'p' AS series FROM t UNION ALL SELECT phase FROM t UNION ALL SELECT 'unhealthy' FROM t"
+        self.assertEqual(returned(sql, ("phase", "series")), {"phase": set(), "series": {"p", "unhealthy"}})
 
 
 class Files(unittest.TestCase):

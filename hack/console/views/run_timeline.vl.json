@@ -291,7 +291,7 @@
             "phase",
             "unhealthy s",
             "unhealthy spell",
-            "collapse"
+            "collapse spell"
           ]
         },
         "color": {
@@ -299,21 +299,17 @@
           "type": "nominal",
           "title": "verdict",
           "scale": {
-            "domain": [
+            "vocab": [
+              "phases",
+              "episodes"
+            ],
+            "only": [
               "startup",
-              "steady",
               "after_down",
               "after_up",
+              "steady",
               "unhealthy",
               "collapse"
-            ],
-            "range": [
-              "#cde2fb",
-              "#e9e8e3",
-              "#f2c7b3",
-              "#c7e8d8",
-              "#fab219",
-              "#d03b3b"
             ]
           }
         },
@@ -735,7 +731,7 @@
   ],
   "transform": [
     {
-      "calculate": "datum.track === 'episode' ? (datum.series === 'collapse' ? 'collapse' : 'unhealthy spell') : datum.series === 'unhealthy' ? 'unhealthy s' : 'phase'",
+      "calculate": "datum.track === 'episode' ? datum.series + ' spell' : datum.series === 'unhealthy' ? 'unhealthy s' : 'phase'",
       "as": "lane"
     },
     {

@@ -11,7 +11,7 @@
 //! document, and makes this file and the console's lists from it.
 
 /// The vocabulary, as `crates/strims-wan/vocab.toml` holds it.
-pub const DOCUMENT: &str = r#"# The sims' event vocabulary: every kind of event an `events` table holds
+pub const DOCUMENT: &str = r##"# The sims' event vocabulary: every kind of event an `events` table holds
 # (both sims', and the verdict's `derived_events`), the verdict's phases
 # and episodes, and the `parents` table's reasons. Rust embeds it and names
 # its kinds (src/vocab.rs), simlab reads it (hack/simlab/vocab.py), and the
@@ -48,7 +48,8 @@ pub const DOCUMENT: &str = r#"# The sims' event vocabulary: every kind of event 
 #
 # [phases.<name>], [episodes.<name>], [reasons.<name>]
 #   description  what it is
-#   colour       a phase's, one to a phase
+#   colour       its colour in the console's charts, #rrggbb, one to a name
+#                of its section
 
 # --- scenario ---------------------------------------------------------------
 
@@ -409,54 +410,73 @@ value = "its length"
 unit = "s"
 
 # --- phases -----------------------------------------------------------------
-# What each second of a run is (`verdict.phases`).
+# What each second of a run is (`verdict.phases`). Colours: the console's
+# categorical hues (theme.ts' SERIES) at steps over 3:1 on light and dark
+# surfaces, none yellow, which would read as the episodes' unhealthy beside
+# them; steady, every other second, is the de-emphasis grey.
 
 [phases.startup]
 description = "The run's startup: its first `STARTUP_SECS` seconds, none when every viewer arrived later."
+colour = "#2a78d6"
 
 [phases.after_down]
 description = "Within `STEP_SECS` of the seed's latest uplink step, a step down."
+colour = "#eb6834"
 
 [phases.after_up]
 description = "Within `STEP_SECS` of the seed's latest uplink step, a step up."
+colour = "#199e70"
 
 [phases.steady]
 description = "Every other second of the verdict's."
+colour = "#c3c2b7"
 
 [phases.tail]
 description = "A second past the verdict's: the run's tail, after the stream's seconds (`query.pooled` by phase)."
+colour = "#9085e9"
 
 # --- episodes ---------------------------------------------------------------
-# A run's spells (`verdict.episodes`).
+# A run's spells (`verdict.episodes`). Colours: the status scale (theme.ts'
+# STATUS), good, warning and critical.
 
 [episodes.healthy]
 description = "A run of healthy seconds: no trigger (trees, delivery or latency) held."
+colour = "#0ca30c"
 
 [episodes.unhealthy]
 description = "A run of unhealthy seconds: a trigger held in each."
+colour = "#fab219"
 
 [episodes.collapse]
 description = "An unhealthy run of `COLLAPSED_SECS` seconds or more that lasts past the run's startup (`verdict.collapsed`'s rule), listed again as a collapse."
+colour = "#d03b3b"
 
 # --- reasons ----------------------------------------------------------------
 # Why a node's push parent of a stream changed: the `parents` table's
-# `reason` (`strims_ppspp::ParentWhy`).
+# `reason` (`strims_ppspp::ParentWhy`). Colours: the console's first five
+# categorical hues in order, at the steps that keep every pair apart (a
+# second's stack holds any of them).
 
 [reasons.open]
 description = "A STREAM_OPEN gave a stream without a parent one."
+colour = "#2a78d6"
 
 [reasons.switch]
 description = "A STREAM_OPEN replaced the open parent (graft before prune)."
+colour = "#d95926"
 
 [reasons.lost]
 description = "No one ended the subscription: the channel to the parent closed, or a new stream started (a reset). The sims' `parents` count the node's own stop too: strims-sim's crash or abrupt departure, the ppspp sim's node that left, departed or died."
+colour = "#199e70"
 
 [reasons.prune]
 description = "The node cancelled the parent: for its misses, for an OPEN past its window, or at the driver's word (`Runner::cancel_stream`)."
+colour = "#eda100"
 
 [reasons.shed]
 description = "The parent closed the subscription (STREAM_CLOSE)."
-"#;
+colour = "#e87ba4"
+"##;
 
 /// A sim that writes `events` tables.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

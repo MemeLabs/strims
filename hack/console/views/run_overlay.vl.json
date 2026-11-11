@@ -290,13 +290,10 @@
           "type": "nominal",
           "title": "verdict",
           "scale": {
-            "domain": [
+            "vocab": "episodes",
+            "only": [
               "unhealthy",
               "collapse"
-            ],
-            "range": [
-              "#fab219",
-              "#d03b3b"
             ]
           }
         },
@@ -306,10 +303,13 @@
         "yOffset": {
           "field": "series",
           "type": "nominal",
-          "sort": [
-            "unhealthy",
-            "collapse"
-          ]
+          "sort": {
+            "vocab": "episodes",
+            "only": [
+              "unhealthy",
+              "collapse"
+            ]
+          }
         },
         "tooltip": [
           {

@@ -1,6 +1,6 @@
 {
   "title": "Where p99 comes from",
-  "description": "Each arm's viewer-seconds by what the run was doing then: the verdict's phase (startup, after a seed uplink step down or up, steady) or within 10 s of a departure. The bars show which phase holds the viewer-seconds above the arm's own p99 lag (a tail from startup in an adversarial cell is no player's rebuffering), the lag quantiles per phase, and the lag distribution. Pick no cell for the whole experiment.",
+  "description": "Each arm's viewer-seconds by what the run was doing then: the verdict's phase (startup, after a seed uplink step down or up, steady). The bars show which phase holds the viewer-seconds above the arm's own p99 lag (a tail from startup in an adversarial cell is no player's rebuffering), the lag quantiles per phase, and the lag distribution. Pick no cell for the whole experiment.",
   "params": [
     {
       "name": "exp",

@@ -67,9 +67,10 @@ FIELDS = ("node", "peer", "value", "unit", "detail")
 # `level`, `until`, `scope` and `horizon_s` make a kind a phase's anchor.
 KIND_KEYS = ("class", "sims", "with", "description", *FIELDS, "details", "notes", "replaced_by", "phase", "level",
              "until", "scope", "horizon_s")
-SECTION_KEYS = {"phases": ("description", "colour"), "episodes": ("description",), "reasons": ("description",)}
+SECTION_KEYS = {s: ("description", "colour") for s in ("phases", "episodes", "reasons")}
 SCOPES = ("run", "viewer")
 ID = re.compile(r"[a-z][a-z0-9_]*\Z")
+COLOUR = re.compile(r"#[0-9a-f]{6}\Z")
 
 
 class VocabError(ValueError):
@@ -106,7 +107,8 @@ def problems(doc):
     sections and keys it doesn't define, ids that aren't lower snake case,
     a kind without a class or description, sims it doesn't know, a derived
     kind a sim writes, a reference (`replaced_by`, `until`, `phase`) to
-    nothing current, and colours two phases share."""
+    nothing current, and a phase, episode or reason without a colour of
+    its own in its section (lower case #rrggbb)."""
     out = []
     for s in doc:
         if s not in SECTIONS:
@@ -185,13 +187,20 @@ def problems(doc):
             h = k["horizon_s"]
             if isinstance(h, bool) or not isinstance(h, (int, float)) or h < 0:
                 out.append(f"{where}: horizon_s is not a number of seconds")
-    colours = {}
-    for name, v in doc["phases"].items():
-        if isinstance(v, dict) and "colour" in v:
-            c = v["colour"]
-            if c in colours:
-                out.append(f"[phases.{name}]: colour {c!r} is {colours[c]}'s too")
-            colours[c] = name
+    for s in SECTION_KEYS:
+        colours = {}
+        for name, v in doc[s].items():
+            if not isinstance(v, dict):
+                continue
+            c = v.get("colour")
+            if c is None:
+                out.append(f"[{s}.{name}]: no colour")
+            elif not isinstance(c, str) or not COLOUR.match(c):
+                out.append(f"[{s}.{name}]: colour {c!r} is not a lower case #rrggbb")
+            elif c in colours:
+                out.append(f"[{s}.{name}]: colour {c!r} is {colours[c]}'s too")
+            else:
+                colours[c] = name
     return out
 
 

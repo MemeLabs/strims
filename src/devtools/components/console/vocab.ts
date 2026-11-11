@@ -8,22 +8,27 @@ export const PHASES = [
   {
     name: "startup",
     description: "The run's startup: its first `STARTUP_SECS` seconds, none when every viewer arrived later.",
+    colour: "#2a78d6",
   },
   {
     name: "after_down",
     description: "Within `STEP_SECS` of the seed's latest uplink step, a step down.",
+    colour: "#eb6834",
   },
   {
     name: "after_up",
     description: "Within `STEP_SECS` of the seed's latest uplink step, a step up.",
+    colour: "#199e70",
   },
   {
     name: "steady",
     description: "Every other second of the verdict's.",
+    colour: "#c3c2b7",
   },
   {
     name: "tail",
     description: "A second past the verdict's: the run's tail, after the stream's seconds (`query.pooled` by phase).",
+    colour: "#9085e9",
   },
 ] as const;
 
@@ -32,14 +37,17 @@ export const EPISODES = [
   {
     name: "healthy",
     description: "A run of healthy seconds: no trigger (trees, delivery or latency) held.",
+    colour: "#0ca30c",
   },
   {
     name: "unhealthy",
     description: "A run of unhealthy seconds: a trigger held in each.",
+    colour: "#fab219",
   },
   {
     name: "collapse",
     description: "An unhealthy run of `COLLAPSED_SECS` seconds or more that lasts past the run's startup (`verdict.collapsed`'s rule), listed again as a collapse.",
+    colour: "#d03b3b",
   },
 ] as const;
 
@@ -48,22 +56,27 @@ export const REASONS = [
   {
     name: "open",
     description: "A STREAM_OPEN gave a stream without a parent one.",
+    colour: "#2a78d6",
   },
   {
     name: "switch",
     description: "A STREAM_OPEN replaced the open parent (graft before prune).",
+    colour: "#d95926",
   },
   {
     name: "lost",
     description: "No one ended the subscription: the channel to the parent closed, or a new stream started (a reset). The sims' `parents` count the node's own stop too: strims-sim's crash or abrupt departure, the ppspp sim's node that left, departed or died.",
+    colour: "#199e70",
   },
   {
     name: "prune",
     description: "The node cancelled the parent: for its misses, for an OPEN past its window, or at the driver's word (`Runner::cancel_stream`).",
+    colour: "#eda100",
   },
   {
     name: "shed",
     description: "The parent closed the subscription (STREAM_CLOSE).",
+    colour: "#e87ba4",
   },
 ] as const;
 

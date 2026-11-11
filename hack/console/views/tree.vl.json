@@ -135,13 +135,7 @@
           "type": "nominal",
           "title": "reason",
           "scale": {
-            "domain": [
-              "open",
-              "switch",
-              "lost",
-              "prune",
-              "shed"
-            ]
+            "vocab": "reasons"
           }
         },
         "tooltip": [

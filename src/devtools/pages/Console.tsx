@@ -13,6 +13,7 @@ import Experiments from "../components/console/Experiments";
 import { useOptions, useSelection } from "../components/console/selection";
 import type { Selection } from "../components/console/selection";
 import ViewPanel from "../components/console/ViewPanel";
+import { ALIGNS } from "../components/console/vocab";
 import Workbench from "../components/console/Workbench";
 import Nav from "../components/Nav";
 
@@ -41,17 +42,6 @@ const PICKERS: { key: keyof Selection; label: string }[] = [
   { key: "min_stall_ms", label: "stalls from (ms)" },
   { key: "align", label: "align on" },
   { key: "t", label: "at (s)" },
-];
-
-const ALIGNS = [
-  "start",
-  "onset",
-  "seed_down",
-  "seed_up",
-  "collapse",
-  "depart",
-  "up_step",
-  "arrive",
 ];
 
 /** A decimal number, as a number picker takes it. */
@@ -139,7 +129,7 @@ const Pickers: React.FC<PickersProps> = ({ schema, sel, setSel, uses }) => {
       ))}
     </select>
   );
-  const plain = (xs: string[]) => xs.map((x) => ({ value: x, label: x }));
+  const plain = (xs: readonly string[]) => xs.map((x) => ({ value: x, label: x }));
   const control = (key: keyof Selection): React.ReactNode => {
     switch (key) {
       case "exp":
