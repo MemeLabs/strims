@@ -74,6 +74,9 @@ SAMPLE_TABLES), sim-samples/<run>/<instance>/<seq>/:
                  and how many jobs no flush gives; `views` is SQL making
                  the selection's `runs_all` and `runs` (simlab.query's
                  Views.sql)
+  listed_samples(srcs, tables=SAMPLE_TABLES) -> [table]
+                 those of `tables` some of the flushes `srcs` hold (their
+                 manifests list), which a pull's lines name
   pull_samples(views, tables, limit_mb=None, say=None) -> bool
                  the plan fetched, noting its size, refused (Refused) past
                  `limit_mb`; whether it fetched any
@@ -373,7 +376,26 @@ def unlanded(srcs):
     return out
 
 
-def sample_plan(views, tables, gone=()):
+def candidates(views):
+    """{k: {src}}: the sources holding each job the views `views` select."""
+    cands = collections.defaultdict(set)
+    for r in execute(views + "\nSELECT DISTINCT k, src FROM runs_all SEMI JOIN runs USING (k);"):
+        cands[r["k"]].add(r["src"])
+    return cands
+
+
+def listed_samples(srcs, tables=store_host.SAMPLE_TABLES):
+    """Those of the sample `tables` that some of the farm flushes `srcs`
+    hold, as their manifests list them, in `tables`' order: what a pull of
+    them can fetch, which its lines name."""
+    listed = set()
+    for s in srcs:
+        if s.startswith("farm/"):
+            listed |= set(manifest_of(s).get("tables") or {})
+    return [t for t in tables if t in listed]
+
+
+def sample_plan(views, tables, gone=(), cands=None):
     """What the jobs the views `views` select lack of the sample `tables`
     that S3 holds: {src: (tables, bytes, jobs)}, a farm flush each, and how
     many jobs no flush in S3 gives them. A key's tables come from the
@@ -384,11 +406,10 @@ def sample_plan(views, tables, gone=()):
     (the one giving the most of those left, the fewer bytes on a tie), so
     a verify copy's flush comes only for a job its original's doesn't
     give. A flush gives none once `gone` from S3, nor when its matrices'
-    indexes say its samples never landed (unlanded)."""
+    indexes say its samples never landed (unlanded). `cands` are the
+    views' candidates, when the caller has them."""
     root = store_host.cache_root() / "cache"
-    cands = collections.defaultdict(set)
-    for r in execute(views + "\nSELECT DISTINCT k, src FROM runs_all SEMI JOIN runs USING (k);"):
-        cands[r["k"]].add(r["src"])
+    cands = candidates(views) if cands is None else cands
     farm = {s for ss in cands.values() for s in ss if s.startswith("farm/")}
     if not farm:
         return {}, 0
@@ -459,12 +480,15 @@ def pull_samples(views, tables, limit_mb=None, say=None):
     refusing it past `limit_mb`; where S3 no longer holds a flush, another
     copy of its jobs stands in. Each run's GETs and bytes go to its line
     of the farm's S3 ledger, however the pull ends. Returns whether it
-    fetched any."""
+    fetched any. Its lines name the tables the jobs' flushes hold
+    (listed_samples)."""
     say = say or stderr
-    plan, lost = sample_plan(views, tables)
+    cands = candidates(views)
+    named = listed_samples({s for ss in cands.values() for s in ss}, tables) or list(tables)
+    plan, lost = sample_plan(views, tables, cands=cands)
     if plan:
         total = sum(b for _, b, _ in plan.values())
-        what = (f"the {' and '.join(tables)} of {sum(n for *_, n in plan.values())} jobs the selection lacks: "
+        what = (f"the {' and '.join(named)} of {sum(n for *_, n in plan.values())} jobs the selection lacks: "
                 f"{len(plan)} flushes, {total / 1e6:.1f} MB")
         if limit_mb is not None and total > limit_mb * 1e6:
             raise Refused(f"{what}, past --pull-mb {limit_mb:g}: narrow the selection, or raise --pull-mb")
@@ -474,13 +498,13 @@ def pull_samples(views, tables, limit_mb=None, say=None):
     try:
         while plan:
             gone |= fetch_samples(plan, gets, got)
-            plan, lost = sample_plan(views, tables, gone)
+            plan, lost = sample_plan(views, tables, gone, cands)
     finally:
         region = farm_bucket()[1] if gets else None
         for run in gets:
             farm_ledger(run, {"region": region or "", "tier1": {}, "tier2": {"pull_get": gets[run]},
                               "up": {}, "down": {"internet": got[run]}, "stored": 0})
     if lost:
-        say(f"S3 holds none of the {' or '.join(tables)} of {lost} of the selection's jobs (expired, or never "
+        say(f"S3 holds none of the {' or '.join(named)} of {lost} of the selection's jobs (expired, or never "
             "landed): left out")
     return fetched

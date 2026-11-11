@@ -32,9 +32,9 @@ each closed one, one at a time, to zstd Parquet with a manifest
 (the store's export) and uploads its files by the --policy file's
 presigned POST policies (s3sign.py) while jobs run on: the tables to
 sim-data/<run>/<instance>/<seq>/<table>.parquet, then manifest.json, then
-the bulky tables (reads, forecast) to sim-samples/.../<table>.parquet. A
-flush that lands leaves D/flushes/<seq>.json for the controller, and its
-generation is deleted.
+the bulky tables (the store's SAMPLE_TABLES) to
+sim-samples/.../<table>.parquet. A flush that lands leaves
+D/flushes/<seq>.json for the controller, and its generation is deleted.
 A job of `"store": false` (the canary) keeps its whole row and no tables.
 The policy file is {"data": policy, "samples": policy}, or {"dir": D2}
 to copy flushes into D2/<run>/<instance>/<seq>/ instead (--local: the

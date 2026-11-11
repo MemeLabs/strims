@@ -14,11 +14,18 @@ simdb.py prints of it is golden_cli's):
                forecast's predictions and HAVE samples apart, read by their
                columns, the decision logs (spec), their fields aligned on a
                sim's event about a node (--peer)
+  Arrivals     arrivals is a sample table: a worker uploads it with the
+               samples, a pull fetches it with them, and a pull's lines name
+               the sample tables the run's flushes hold (simdb_test's
+               SamplesPull's scratch S3, one flush with arrivals and no
+               forecast)
 
   python3 hack/simlab/tests/test_query.py
 """
 
 import argparse
+import importlib.util
+import json
 import os
 import sys
 import tempfile
@@ -286,6 +293,61 @@ class Logs(Fixture):
         self.assertEqual(n, {-4000: 2.0})
         with self.assertRaisesRegex(query.Refused, "the selection has no prune event about node 9; its kinds: "):
             query.aligned(self.LOGS, "prune", "spec_n", peer=9)
+
+
+PULL = golden_cli.simdb_test().SamplesPull
+
+
+class Arrivals(unittest.TestCase):
+    """SamplesPull's run (its scratch S3, the aws CLI stood in), with i-2's
+    flush holding arrivals in its samples and no forecast."""
+
+    setUp_pull, aws, gets, cli = PULL.setUp, PULL.aws, PULL.gets, PULL.cli
+    RUN, C0 = golden_cli.simdb_test().RUN, golden_cli.simdb_test().C0
+
+    def setUp(self):
+        self.setUp_pull()
+        st = golden_cli.simdb_test()
+        data = self.s3 / "sim-data" / self.RUN / "i-2" / "0"
+        samples = self.s3 / "sim-samples" / self.RUN / "i-2" / "0"
+        (samples / "forecast.parquet").unlink()
+        arrivals = samples / "arrivals.parquet"
+        st.simdb.duck(f"COPY (SELECT 'k3' AS k, {st.simdb.q(st.src_of('i-2'))} AS src, 1 AS node, 5 AS seq) "
+                      f"TO {st.simdb.q(arrivals)} (FORMAT parquet);", out=None)
+        m = json.loads((data / "manifest.json").read_text())
+        del m["tables"]["forecast"]
+        m["tables"]["arrivals"] = {"rows": 1, "bytes": arrivals.stat().st_size, "sha256": st.simdb.sha256(arrivals)}
+        (data / "manifest.json").write_text(json.dumps(m))
+
+    def test_a_worker_uploads_it_with_the_samples(self):
+        spec = importlib.util.spec_from_file_location("worker_for_arrivals", HACK / "sim-farm" / "worker.py")
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+        self.assertIn("arrivals", worker.store().SAMPLE_TABLES)
+        sink = worker.Sink({"data": {"prefix": "sim-data/r/i/"}, "samples": {"prefix": "sim-samples/r/i/"}}, "r", "i")
+        posted = []
+        sink.post = lambda seq, pol, key, path, abort_at: posted.append(key)
+        names = ["runs.parquet", "manifest.json", "reads.parquet", "arrivals.parquet"]
+        self.assertTrue(sink.put(0, [(n, Path(n)) for n in names], None))
+        self.assertEqual(posted, ["sim-data/r/i/0/runs.parquet", "sim-data/r/i/0/manifest.json",
+                                  "sim-samples/r/i/0/reads.parquet", "sim-samples/r/i/0/arrivals.parquet"])
+
+    def test_a_pull_fetches_it_with_the_samples_and_names_what_the_flushes_hold(self):
+        self.cli("pull", "--run", self.RUN)
+        cache = store_host.cache_root() / "cache" / "farm" / self.RUN
+        self.assertEqual(list(cache.glob("**/arrivals.parquet")), [])
+        out, _ = self.cli("pull", "--run", self.RUN, "--reads", "--dry-run")
+        self.assertIn("would GET 4 files", out)
+        self.assertIn("jobs' reads and arrivals; S3 holds none for 1 jobs", out)
+        self.assertIn(f"s3://bkt/sim-samples/{self.RUN}/i-2/0/arrivals.parquet", out)
+        self.calls.clear()
+        _, err = self.cli("pull", "--run", self.RUN, "--reads", "--cell", self.C0)
+        self.assertIn("pulling the reads and arrivals of 4 jobs the selection lacks: 2 flushes", err)
+        self.assertIn(f"sim-samples/{self.RUN}/i-2/0/arrivals.parquet", self.gets())
+        self.assertEqual([p.relative_to(cache).as_posix() for p in cache.glob("**/arrivals.parquet")],
+                         ["i-2/0/arrivals.parquet"])
+        with query.views(query.Selection(src=[f"farm/{self.RUN}/*/*"], cell=[self.C0]), derived=False) as v:
+            self.assertEqual(v.records("SELECT k, seq FROM arrivals;"), [{"k": "k3", "seq": 5}])
 
 
 if __name__ == "__main__":

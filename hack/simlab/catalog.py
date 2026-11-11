@@ -1719,7 +1719,8 @@ TABLE_DOCS = {
         "Where each job's tables are: state 'local' (the catalog holds tbl of the job's source), 's3' (a farm flush "
         "of it lists tbl and S3 still keeps it: fetch copies it in) or 'expired' (S3 kept it 7 days); src the "
         "source, bytes its file's size (the flush's, shared by its jobs). A job no cache source ever held has "
-        "'sim-data' (its flush's tables) and, where its samples landed, 'sim-samples' (reads, forecast)."),
+        f"'sim-data' (its flush's tables) and, where its samples landed, 'sim-samples' "
+        f"({', '.join(store_host.SAMPLE_TABLES)})."),
     "rows": (
         "view", "a job", "k", "jobs USING (k, src)",
         "Each job's row (the sims' one-line JSON result), a column a field: numbers DOUBLE, lists of them "

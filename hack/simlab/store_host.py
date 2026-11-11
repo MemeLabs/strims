@@ -63,7 +63,7 @@ TABLES = ("seconds", "viewer_seconds", "reads", "stalls", "bins", "viewers", "ev
           "forecast", "spec_requests", "parks", "arrivals")
 # The bulky tables: the farm uploads them under sim-samples/, and a pull
 # fetches them only when asked (`--reads`, or a query that reads them).
-SAMPLE_TABLES = ("reads", "forecast")
+SAMPLE_TABLES = ("reads", "forecast", "arrivals")
 RUN_COLS = {
     "k": "VARCHAR", "src": "VARCHAR", "sim": "VARCHAR", "test": "VARCHAR", "cell": "VARCHAR", "arm": "VARCHAR",
     "seed": "BIGINT", "env": "VARCHAR", "trace": "VARCHAR", "frames": "BIGINT", "bytes": "BIGINT",

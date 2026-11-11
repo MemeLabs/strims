@@ -1057,7 +1057,8 @@ class Pulled:
     (its directory `dest` in the cache and its `sources` there), the
     selection's samples pulled (`fetched`), or the samples' `files` a pull
     would GET ((url, bytes, jobs)) for `jobs` jobs; `lost` jobs S3 holds
-    none for."""
+    none for; `tables` the sample tables the run's flushes hold, which its
+    lines name (store.listed_samples)."""
     run: str
     dry_run: bool = False
     dest: Path = None
@@ -1092,6 +1093,7 @@ def pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False, sa
         v = views(sel, derived=False, fetch=not dry_run, say=say)
         if not dry_run:
             out.fetched = store.pull_samples(v.sql, SAMPLE_TABLES, say=say)
+            out.tables = tuple(store.listed_samples(sources([f"farm/{run}"])))
             return out
         plan, out.lost = store.sample_plan(v.sql, SAMPLE_TABLES)
     else:
@@ -1106,6 +1108,7 @@ def pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False, sa
                 out.lost += jobs
             elif lack:
                 plan[s] = (lack, sum(listed[t].get("bytes", 0) for t in lack), jobs)
+    out.tables = tuple(store.listed_samples(srcs))
     bucket, _, _ = store.farm_bucket()
     out.files = [(f"s3://{bucket}/sim-samples/{s.split('/', 1)[1]}/{t}.parquet", manifest_of(s)["tables"][t]["bytes"],
                   n) for s, (tables, _, n) in plan.items() for t in tables]

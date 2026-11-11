@@ -75,7 +75,7 @@ def add_commands(sub):
     f.add_argument("--exp", required=True, help="an experiment's exp_id (a suite farm run's name)")
     f.add_argument("--cells", help="only these cells, comma-separated")
     f.add_argument("--arms", help="only these arms (arm_label), comma-separated")
-    f.add_argument("--tables", help="sample tables too, comma-separated: reads, forecast")
+    f.add_argument("--tables", help="sample tables too, comma-separated: reads, forecast, arrivals")
     f.add_argument("--workers", type=int)
     f.add_argument("--pull-mb", type=float, default=None, help="the most of the sample tables it pulls, MB")
     lk = sub.add_parser("lake", help="a query over the catalog, read-only", description=__doc__, formatter_class=raw)

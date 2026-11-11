@@ -145,8 +145,8 @@ writes (`ADD COLUMN IF NOT EXISTS`); folding a job again replaces it.
 invocation's store into the cache, `<main checkout>/target/sim-db/cache/`
 (suite/<worktree>/<invocation>/), which every worktree shares; the farm
 puts its instances' flushes in S3, and `pull` copies a run's into the
-cache (farm/<run>/...). Its reads and forecast logs (the bulky tables,
-sim-samples/) come with `--reads`: the whole run's, or with `--cell`,
+cache (farm/<run>/...). Its reads, forecast and arrivals logs (the bulky
+tables, sim-samples/) come with `--reads`: the whole run's, or with `--cell`,
 `--arm` and `--seed` only the flushes holding those jobs (the manifests'
 keys; a job held twice, a verify copy, from the fewest flushes), and the
 queries that read them (pooled, aligned on a read lag, forecast, and sql
@@ -443,7 +443,7 @@ def main():
     e.add_argument("dest")
     p = sub.add_parser("pull")
     p.add_argument("--run", required=True)
-    p.add_argument("--reads", action="store_true", help="the reads and forecast logs too (sim-samples/)")
+    p.add_argument("--reads", action="store_true", help="the reads, forecast and arrivals logs too (sim-samples/)")
     p.add_argument("--cell", action="append", help="only these cells' reads, globs")
     p.add_argument("--arm", action="append", help="only these arms' reads, globs")
     p.add_argument("--seed", action="append", type=int, help="only these seeds' reads")
@@ -455,7 +455,8 @@ def main():
     qs["sql"] = sub.add_parser("sql", help="a query over the views", description=SQL_DOC, formatter_class=raw)
     qs["sql"].add_argument("query")
     qs["sql"].add_argument("--reads", action="store_true",
-                           help="pull the selection's reads and forecast logs first, where the cache lacks them")
+                           help="pull the selection's reads, forecast and arrivals logs first, where the cache lacks "
+                                "them")
     qs["pooled"] = sub.add_parser("pooled")
     qs["pooled"].add_argument("--by", choices=("none", "phase", "bin", "viewer"), default="none")
     qs["aligned"] = sub.add_parser("aligned")
