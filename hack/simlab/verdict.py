@@ -90,7 +90,8 @@ Over time, for hack/sim-db's tables and sim-suite's paired metrics:
 uplink's steps, viewers coming and going, onset, recovery, collapses),
 `episodes` its healthy, unhealthy and collapse spells, and `run_metrics`
 sums them up per run (collapses, flaps, dwell times, onset after a drop,
-recovery after a rise, excess lag, the lag's oscillation).
+recovery after a rise, excess lag, the lag's oscillation, and the honest
+viewers' lag p99 in startup and in steady state, `phase_lags`).
 VERDICT_VERSION hashes all of it, the vocabulary's anchors among it, so
 the tables made under another are stale. `viewer_phases` gives each
 viewer's seconds their phase, and `phase_windows` lists the windows
@@ -657,6 +658,23 @@ def viewer_phases(s, v):
     return [tuple(x) for x in out]
 
 
+def phase_lags(s):
+    """The honest viewers' lag by phase, {phase: [ms]}: their lag (`lags`,
+    carried a second further behind in a second without a read) in each
+    of their seconds of the verdict's that has one, in the viewer's own
+    phase (`viewer_phases`'s: the run's windows and its own joins')."""
+    n = seconds(s)
+    hostile = set(s.get("hostile", []))
+    out = collections.defaultdict(list)
+    for i, (lag, secs) in enumerate(zip(lags(s), timeline(s).viewers)):
+        if i in hostile:
+            continue
+        for k in sorted(secs):
+            if k < min(n, len(lag)) and lag[k] is not None:
+                out[phase_name(secs[k][0])].append(lag[k])
+    return dict(out)
+
+
 def phase_windows(s):
     """Series `s`'s windows (`timeline`), to explain a phase: (viewer,
     kind, node, phase, anchor_s, end_s, stop_s, horizon_s), the run's
@@ -743,7 +761,13 @@ def run_metrics(s, v):
                               the startup; `osc_period_s` and `osc_acf`
                               the autocorrelation's highest peak past
                               OSC_ACF at a period of OSC_MIN_PERIOD or
-                              more, when one is"""
+                              more, when one is
+      lag_p99_startup_ms      the p99 of the honest viewers' lag over
+                              their seconds of startup, the run's and
+                              their own joins' (`phase_lags`)
+      lag_p99_steady_ms       the p99 of the honest viewers' lag over
+                              their seconds of steady state
+                              (`phase_lags`)"""
     h = v["healthy"]
     n = len(h)
     eps = episodes(v)
@@ -793,6 +817,9 @@ def run_metrics(s, v):
                 best = (p, r[p])
         if best:
             out["osc_period_s"], out["osc_acf"] = best
+    by = phase_lags(s)
+    out["lag_p99_startup_ms"] = quantile(by.get("startup", []), 0.99)
+    out["lag_p99_steady_ms"] = quantile(by.get("steady", []), 0.99)
     return out
 
 
@@ -803,7 +830,8 @@ def verdict_version():
     parts = [inspect.getsource(f) for f in (lags, seconds, stay, viewer_nodes, gone, rule_events, windows, rank,
                                             holds, incarnations, timeline, presence, startup, measures, slope,
                                             runs_of, quantile, med, verdict, feasible, run_startup, collapsed,
-                                            steps, phase_name, phases, events, episodes, acf, run_metrics)]
+                                            steps, phase_name, phases, phase_lags, events, episodes, acf,
+                                            run_metrics)]
     parts.append(repr([TREES_SHARE, TREES_SMOOTH, TREES_SECS, DELIVERY_SHARE, DELIVERY_SECS, LAG_QUANTILE,
                        LAG_HIGH_MS, LAG_HIGH_SECS, LAG_SLOPE, LAG_SLOPE_SECS, LAG_SLOPE_FLOOR_MS, RECOVER_SECS,
                        ABSORB_SECS, STARTUP_SECS, COLLAPSED_SECS, STEP_SECS, OSC_ACF, OSC_MIN_PERIOD,

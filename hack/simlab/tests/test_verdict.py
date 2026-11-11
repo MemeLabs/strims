@@ -34,7 +34,7 @@ NAMES = (
     "LAG_SLOPE", "LAG_SLOPE_SECS", "LAG_SLOPE_FLOOR_MS", "RECOVER_SECS", "ABSORB_SECS", "STARTUP_SECS",
     "COLLAPSED_SECS", "STEP_SECS", "OSC_ACF", "OSC_MIN_PERIOD", "OVERHEAD", "med", "quantile", "lags", "presence",
     "startup", "measures", "slope", "runs_of", "verdict", "run_startup", "collapsed", "steps", "timeline", "phases",
-    "events", "episodes", "acf", "run_metrics", "verdict_version", "feasible", "VERDICT_VERSION",
+    "events", "episodes", "acf", "run_metrics", "verdict_version", "feasible", "VERDICT_VERSION", "phase_lags",
 )
 
 # A run of two viewers there from the start whose seed's uplink steps
@@ -297,6 +297,36 @@ class Phases(unittest.TestCase):
         self.assertEqual(self.phases(run(seed_up=up, events=events))[7:10], ["startup", "startup", "after_down"])
         self.assertEqual(verdict.steps(run(seed_up=up, events=events)), [(9.0, "seed_down", 0.5)])
         self.assertEqual(self.phases(run(seed_up=up))[7:10], ["startup", "after_down", "after_down"])
+
+    def test_the_lag_p99s_are_the_honest_viewers_over_their_own_phases(self):
+        # Viewers 0 and 1 are there from the start and lag 10 k and 10 k + 5
+        # ms in second k; viewer 2 joins at 30.3 s, reads first at 31 s
+        # (3000 ms), nothing in 32 and 33 (carried: 4000 and 5000) and at
+        # 300 ms from 34 s; viewer 3, hostile, lags 9000 ms throughout; a
+        # latency step at 55 s opens after_disruption.
+        s = run(60, viewers=4, events=[ev(30.3, "join", 3), ev(55, "latency", 0, 150)], hostile=[3])
+        s["lag"] = [[10 * k for k in range(60)], [10 * k + 5 for k in range(60)],
+                    [-1] * 31 + [3000, -1, -1] + [300] * 26, [9000] * 60]
+        s["frames"][2] = [-1] * 30 + [0, 10, 0, 0] + [10] * 26
+        by = verdict.phase_lags(s)
+        # Startup: viewers 0 and 1's seconds 0-24 (0-240 and 5-245) and
+        # viewer 2's own 30-49 but 30, without a lag yet (3000, 4000, 5000
+        # and 300 x 16): 69 lags, whose p99 (index round(68 x 0.99) = 67)
+        # is the second largest, 4000.
+        self.assertEqual(sorted(by["startup"]), sorted([10 * k for k in range(25)] + [10 * k + 5 for k in range(25)]
+                                                       + [3000, 4000, 5000] + [300] * 16))
+        # Steady: 0 and 1's 25-54 (250-540, 255-545) and 2's 50-54 (300 x
+        # 5): 65 lags, p99 index 63, 540. The latency's seconds are
+        # after_disruption's.
+        self.assertEqual(sorted(by["steady"]), sorted([10 * k for k in range(25, 55)]
+                                                      + [10 * k + 5 for k in range(25, 55)] + [300] * 5))
+        self.assertEqual(sorted(by["after_disruption"]), sorted([10 * k for k in range(55, 60)]
+                                                                + [10 * k + 5 for k in range(55, 60)] + [300] * 5))
+        m = verdict.run_metrics(s, verdict.verdict(s))
+        self.assertEqual((m["lag_p99_startup_ms"], m["lag_p99_steady_ms"]), (4000, 540))
+        # A run of its startup alone has no steady lag.
+        m = verdict.run_metrics(run(20), verdict.verdict(run(20)))
+        self.assertEqual((m["lag_p99_startup_ms"], m["lag_p99_steady_ms"]), (200, None))
 
     def test_the_vocabulary_is_the_one_the_module_loaded(self):
         # The rule and VERDICT_VERSION read the snapshot taken at import,

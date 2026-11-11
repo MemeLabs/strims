@@ -644,11 +644,13 @@ def row_docs(names):
 
 
 def run_metric_docs():
-    """verdict.run_metrics' docstring, by metric."""
-    doc = verdict.run_metrics.__doc__ or ""
+    """verdict.run_metrics' docstring, by metric: its lines indented under
+    the first (inspect.cleandoc's, whether or not the compiler dedented
+    the docstring), a metric's name, then its text."""
+    doc = inspect.cleandoc(verdict.run_metrics.__doc__ or "")
     out, cur = {}, None
     for line in doc.splitlines():
-        m = re.match(r"^\s{4,8}([a-z_]+)\s{2,}(.*)$", line)
+        m = re.match(r"^\s{1,8}([a-z][a-z0-9_]*)\s{2,}(.*)$", line)
         if m:
             cur = m.group(1)
             out[cur] = m.group(2).strip()

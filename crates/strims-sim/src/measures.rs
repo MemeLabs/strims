@@ -5,8 +5,7 @@
 //! run's one-line JSON row (`STRIMS_SIM_ROWS=1`, and a sim farm job's).
 //!
 //! - **buckets** ([`Report::buckets`]): a swarm's stream in [`BUCKET`]s of
-//!   stream time from its start. The first is the startup; the steady
-//!   state is everything after it ([`Report::steady_lag`]).
+//!   stream time from its start.
 //! - **roles** ([`Report::roles`]): the swarms' seeds; forwarders, the other
 //!   hosts that answered a STREAM_REQUEST (accepted or declined); and the
 //!   rest.
@@ -76,9 +75,8 @@
 //!   [`Scenario::clock_skew`](crate::Scenario::clock_skew), the hosts'
 //!   clock offsets per [`SkewClass`], and the largest.
 //! - **arrivals and departures** ([`crate::arrivals`]): with either, the
-//!   measures follow each viewer's own stay ([`Report::presence`]): its
-//!   startup and steady state ([`Report::viewer_spans`]), the frames it is
-//!   owed ([`Report::owed`]), the rates per minute it was there for
+//!   measures follow each viewer's own stay ([`Report::presence`]): the
+//!   frames it is owed ([`Report::owed`]), the rates per minute it was there for
 //!   ([`Report::viewer_minutes`]), its link counts and depths from its own
 //!   arrival; every join's time to its first frame and to catching up
 //!   ([`Report::joins`]); and how the viewers that stayed came through the
@@ -103,19 +101,6 @@ use strims_wan::playout::{self, DELAYS_MS, Totals};
 /// Tree depth counts from this long after a stream starts, or a viewer
 /// arrives.
 const DEPTH_WARM: Duration = Duration::from_secs(10);
-/// A viewer that joins a running stream ([`crate::HostSpec::arrive_at`])
-/// is in its startup for this long, its steady state after
-/// ([`Report::viewer_spans`]): long enough to find its peers, join at the
-/// live edge and catch up, as its join's `caught_up_*` measures.
-pub const JOIN_WARM: Duration = Duration::from_secs(10);
-
-/// A part of a viewer's stay ([`Report::viewer_spans`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Phase {
-    Startup,
-    Steady,
-}
-
 /// A swarm's joins ([`Report::joins`]): how many, and the ms each took to
 /// its first frame and to catch up, ascending, of those that did.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -328,66 +313,6 @@ impl Report {
             .into_iter()
             .map(|(a, b)| self.lag_between(swarm, a, b))
             .collect()
-    }
-
-    /// The lag after the first bucket.
-    pub fn steady_lag(&self, swarm: usize) -> Percentiles {
-        let Some(s) = self.scenario.swarms.get(swarm) else {
-            return Percentiles::default();
-        };
-        self.lag_between(swarm, s.start + BUCKET, s.stop)
-    }
-
-    /// Viewer `v`'s startup and steady state in run time, while it was
-    /// there ([`Report::presence`]) and the stream ran: a viewer there at
-    /// the stream's start waits out the swarm's own startup, its first
-    /// [`BUCKET`], and one that arrives later its own first [`JOIN_WARM`];
-    /// its steady state runs from there to its departure.
-    pub fn viewer_spans(&self, v: &ViewerReport) -> [(Duration, Duration); 2] {
-        let Some(spec) = self.scenario.swarms.get(v.swarm) else {
-            return [(Duration::ZERO, Duration::ZERO); 2];
-        };
-        let (arrive, leave) = self.presence(v.host);
-        let from = arrive.max(spec.start);
-        let to = leave.min(spec.stop).max(from);
-        let warm = match arrive <= spec.start {
-            true => spec.start + BUCKET,
-            false => arrive + JOIN_WARM,
-        };
-        let warm = warm.clamp(from, to);
-        [(from, warm), (warm, to)]
-    }
-
-    /// The lag of the frames `swarm`'s viewers (those among `hosts`, if
-    /// given) read that were written in their own `phase`
-    /// ([`Report::viewer_spans`]).
-    pub fn lag_in_spans(
-        &self,
-        swarm: usize,
-        hosts: Option<&[HostIx]>,
-        phase: Phase,
-    ) -> Percentiles {
-        let mut lags = Vec::new();
-        for v in self
-            .viewers
-            .iter()
-            .filter(|v| v.swarm == swarm && hosts.is_none_or(|h| h.contains(&v.host)))
-        {
-            let [startup, steady] = self.viewer_spans(v);
-            let (from, to) = match phase {
-                Phase::Startup => startup,
-                Phase::Steady => steady,
-            };
-            let range = self.frames_between(swarm, from, to);
-            lags.extend(
-                v.stats
-                    .lags
-                    .iter()
-                    .filter(|(seq, _)| range.contains(seq))
-                    .map(|&(_, l)| l),
-            );
-        }
-        Percentiles::of(lags)
     }
 
     /// How long host `h` was there while the first swarm streamed
@@ -1237,16 +1162,14 @@ impl Report {
     /// offsets (`clock_offsets_ms`, each host's in host order;
     /// `clock_max_ms`, the largest; `clock_<class>`, the hosts per
     /// [`SkewClass::name`]), as the ppspp sim's rows name them, then per
-    /// scenario swarm 0 its delivery, lag (overall,
-    /// startup bucket, steady state, per bucket), its viewers' playback at
-    /// each delay `D` of [`DELAYS_MS`] (`stalls_per_min_D`,
-    /// `stalled_share_D`, `startup_ms_D`: [`Totals`] of their playouts,
-    /// and with hostile hosts the honest viewers' with `_honest`) and the
-    /// meter's measures (see the module docs). With arrivals or departures, in the ppspp
-    /// sim's rows' names: their profiles (`arrivals`, `depart`), the
-    /// startup and steady state each viewer's own
-    /// ([`Report::viewer_spans`]), the viewers that arrived and departed
-    /// (`arrived`, `departed`, each with `_honest`), the joins
+    /// scenario swarm 0 its delivery, lag (overall and per bucket), its
+    /// viewers' playback at each delay `D` of [`DELAYS_MS`]
+    /// (`stalls_per_min_D`, `stalled_share_D`, `startup_ms_D`: [`Totals`]
+    /// of their playouts, and with hostile hosts the honest viewers' with
+    /// `_honest`) and the meter's measures (see the module docs). With
+    /// arrivals or departures, in the ppspp sim's rows' names: their
+    /// profiles (`arrivals`, `depart`), the viewers that arrived and
+    /// departed (`arrived`, `departed`, each with `_honest`), the joins
     /// ([`Report::joins`]: `join_p50_ms`, `join_p90_ms`, `join_unread`,
     /// `caught_up_p50_ms`, `caught_up_p90_ms`, `caught_up_never`), the
     /// push parents lost to departures (`parent_lost`,
@@ -1300,23 +1223,9 @@ impl Report {
         }
         let lag = self.lag(swarm);
         let buckets = self.lag_buckets(swarm);
-        let (startup, steady) = match self.scenario.profiled() {
-            true => (
-                self.lag_in_spans(swarm, None, Phase::Startup),
-                self.lag_in_spans(swarm, None, Phase::Steady),
-            ),
-            false => (
-                buckets.first().copied().unwrap_or_default(),
-                self.steady_lag(swarm),
-            ),
-        };
         j.num("delivery", self.delivery(swarm))
             .int("lag_p50_ms", u64::from(lag.p50))
             .int("lag_p99_ms", u64::from(lag.p99))
-            .int("startup_p50_ms", u64::from(startup.p50))
-            .int("startup_p99_ms", u64::from(startup.p99))
-            .int("steady_p50_ms", u64::from(steady.p50))
-            .int("steady_p99_ms", u64::from(steady.p99))
             .ints("bucket_p50_ms", buckets.iter().map(|p| u64::from(p.p50)))
             .ints("bucket_p99_ms", buckets.iter().map(|p| u64::from(p.p99)));
         self.playback_cols(swarm, &mut j);
@@ -1552,13 +1461,8 @@ impl Report {
                 .map_or(Duration::ZERO, |s| s.stop);
             for (name, hosts) in [("honest", &honest), ("hostile", &hostile)] {
                 let lag = self.lag_of_between(swarm, hosts, s, e);
-                let startup = match self.scenario.profiled() {
-                    true => self.lag_in_spans(swarm, Some(hosts), Phase::Startup),
-                    false => self.lag_of_between(swarm, hosts, s, (s + BUCKET).min(e)),
-                };
                 j.int(&format!("lag_p99_ms_{name}"), u64::from(lag.p99))
                     .int(&format!("lag_p50_ms_{name}"), u64::from(lag.p50))
-                    .int(&format!("startup_p99_ms_{name}"), u64::from(startup.p99))
                     .num(&format!("delivery_{name}"), self.delivery_of(swarm, hosts));
             }
             j.int("timeouts_hostile", hostile_timeouts);

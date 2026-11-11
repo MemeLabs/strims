@@ -21,5 +21,4 @@ columns = [
   "delivery:mean,min",
   "lag_p50_ms:median",
   "lag_p99_ms:median,max",
-  "steady_p99_ms:median,max",
 ]

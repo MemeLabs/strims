@@ -582,7 +582,10 @@ METRICS = [
     ("depart_recover_ms", "r.depart_recover_ms", LOWER, "diff", 2000),
     ("depart_stranded", "r.depart_stranded", LOWER, "diff", 0.5),
     ("parent_lost_noticed_p90_ms", "r.parent_lost_noticed_p90_ms", LOWER, "ratio", 0.10),
-    ("startup_p99_ms", "coalesce(r.startup_p99_ms_honest, r.startup_p99_ms)", LOWER, "ratio", 0.10),
+    # The honest viewers' lag p99 over their seconds of startup, and of
+    # steady state (the verdict's phases: verdict.phase_lags).
+    ("lag_p99_startup_ms", "v.lag_p99_startup_ms", LOWER, "ratio", 0.10),
+    ("lag_p99_steady_ms", "v.lag_p99_steady_ms", LOWER, "ratio", 0.05),
     ("signed_lag_p99_ms", "r.signed_lag_p99_ms", LOWER, "ratio", 0.05),
     ("wire/media", "r.wire_per_media", LOWER, "ratio", 0.02),
     # Where the uplinks' bytes go (the sims' `up_*` ledger), per byte read.

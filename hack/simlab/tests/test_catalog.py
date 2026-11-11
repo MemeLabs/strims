@@ -290,6 +290,20 @@ class Kinds(Fixture):
             self.assertIn(p, catalog.VERDICT_DOCS["phase"])
         self.assertNotIn(query.TAIL, seconds + catalog.VERDICT_DOCS["phase"])
 
+    def test_the_run_metrics_docs_are_their_docstrings(self):
+        # metric_catalog's docs of run_metrics' columns, whether the
+        # compiler dedented the docstring (Python 3.13 on) or kept it
+        # indented.
+        got = catalog.run_metric_docs()
+        self.assertEqual(got["collapses"], "collapse spells (`episodes`)")
+        self.assertTrue(got["lag_p99_startup_ms"].startswith("the p99 of the honest viewers' lag over their seconds "
+                                                             "of startup"), got)
+        self.assertTrue(got["lag_p99_steady_ms"].endswith("of steady state (`phase_lags`)"), got)
+        first, *rest = verdict.run_metrics.__doc__.splitlines()
+        indented = "\n".join([first, *("    " + line if line else line for line in rest)])
+        with mock.patch.object(verdict.run_metrics, "__doc__", indented):
+            self.assertEqual(catalog.run_metric_docs(), got)
+
 
 class Fetch(Fixture):
     def test_a_fetch_pulls_the_flushes_the_cache_lacks_and_prices_its_ledger_lines(self):

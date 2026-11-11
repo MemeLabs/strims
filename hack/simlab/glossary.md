@@ -91,13 +91,15 @@ them, so a change here changes that prompt too.
   arm and cell's lag p99 in startup, steady and after events (every
   `after_*` phase pooled) and `spike_s_<D>`, the seconds per run past
   startup in which an honest viewer lags past D; `dynamics_phases(exp)`
-  gives each phase's lag quantiles and share apart. Take startup and
-  steady numbers from these, never from a rule of your own. Weigh steady
-  state and joins into a running swarm over startup. `lag_since(exp)`
-  gives the honest viewers' lag quantiles against the seconds since each
-  phase window's anchor (an uplink step, a departure, a viewer's own
-  join, the stream's start) and each span's end, from 10 s before to 120
-  s after: how long a disturbance lasts.
+  gives each phase's lag quantiles and share apart; each run's
+  `verdicts.lag_p99_startup_ms` and `lag_p99_steady_ms` are its own,
+  which the scorecard's metrics of those names pair by seed. Take
+  startup and steady numbers from these, never from a rule of your own.
+  Weigh steady state and joins into a running swarm over startup.
+  `lag_since(exp)` gives the honest viewers' lag quantiles against the
+  seconds since each phase window's anchor (an uplink step, a departure,
+  a viewer's own join, the stream's start) and each span's end, from 10 s
+  before to 120 s after: how long a disturbance lasts.
 - **Overhead.** What the swarm writes besides the stream: `bins`'
   `seed_<kind>_bytes` and `viewer_<kind>_bytes` by message kind (data,
   have, request, integrity, state, ack, announce, ping, header), per

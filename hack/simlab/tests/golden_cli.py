@@ -244,7 +244,7 @@ def job_dir(d, job):
            "reads_hash": f"rh-{len(k)}-{n_reads}", "lag_p50_ms": q(0.5), "lag_p99_ms": q(0.99),
            "lag_p99_ms_honest": q(0.99), "join_p90_ms": 900 + 10 * seed, "caught_up_p90_ms": 1400 + 20 * seed,
            "useful_bytes": n_reads * 4096, "wire_bytes": n_reads * 4400 + 1000 * seed,
-           "startup_p50_ms": 300 + seed, "meter_seeds": [1.5, 2.0],
+           "meter_seeds": [1.5, 2.0],
            "arrivals": "trickle" if stays is TRICKLE else "t0", "series": {"secs": SECS},
            **({"off_drop": [2.5, 3.0], "off_rise": [4.0]} if shape == "step" else {})}
     return {"k": k, "dir": str(d), "sim": sim, "test": test, "cell": cell, "arm": arm, "seed": seed, "env": env,

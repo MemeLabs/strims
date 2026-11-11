@@ -16,9 +16,9 @@ the farm's indexes, and over the experiment's arms as the catalog's
 experiment_jobs has them (arm_side). Each prints the arm score, ranked by
 lag and for overhead (with no budget, and with one of 1.05), and the
 scorecard, every metric and the default's. The reference's t table is the
-macros' (t975), and the macros score the METRICS it has (ref_metrics:
-those added since it, which it can't print, are left out), so the two
-differ by nothing but their code. The experiments are the latest N of each kind (--refs and --sets runs) with
+macros' (t975), and both score the METRICS both have (ref_metrics: those
+added since it, which it can't print, and those dropped since, which the
+macros can't, are left out), so the two differ by nothing but their code. The experiments are the latest N of each kind (--refs and --sets runs) with
 two arms or more; an experiment's base is its index's, else the arm the
 farm reused from an earlier run (an A/B's baseline), else its first.
 
@@ -92,10 +92,13 @@ def reference(rev):
 
 @contextlib.contextmanager
 def ref_metrics(ref):
-    """simlab.suite's METRICS, which the macros score, without those the
-    reference lacks: added since it, they are no part of the comparison."""
-    names = {m[0] for m in ref.METRICS}
-    with mock.patch.object(lab, "METRICS", [m for m in lab.METRICS if m[0] in names]):
+    """The METRICS both sides have: simlab.suite's, which the macros score,
+    without those the reference lacks, and the reference's without those
+    simlab.suite lacks. A metric added or dropped since the reference is
+    no part of the comparison."""
+    ours, theirs = {m[0] for m in lab.METRICS}, {m[0] for m in ref.METRICS}
+    with mock.patch.object(lab, "METRICS", [m for m in lab.METRICS if m[0] in theirs]), \
+            mock.patch.object(ref, "METRICS", [m for m in ref.METRICS if m[0] in ours]):
         yield
 
 

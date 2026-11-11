@@ -134,8 +134,9 @@ with or without the STRIMS_SIM_CAL_, STRIMS_SIM_ or SIM_ prefix.
             each drop until it reads at most the new uplink and after each
             rise until it reads 80 % of it, the share of the uplink the seed's
             chunks used, the median viewer's first frame (seconds into the
-            stream) and the row's startup p50 lag, and the row's off_drop
-            and off_rise medians when it has them; --runs prints each run
+            stream) and the honest viewers' lag p50 over their startup
+            (the verdict's phases), and the row's off_drop and off_rise
+            medians when it has them; --runs prints each run
   delays    how the node's queueing delay readings follow its true uplink
             queue, per cell: for the meter's pings (qd), vnic's path excess
             (qdv) and its queued bytes over the delivery rate (qdb), the
@@ -167,8 +168,8 @@ from simlab.verdict import (  # noqa: E402
     ABSORB_SECS, COLLAPSED_SECS, DELIVERY_MAX_MS, DELIVERY_SECS, DELIVERY_SHARE, DELIVERY_TARGET_MS, E2E_MAX_MS,
     E2E_TARGET_MS, LAG_HIGH_MS, LAG_HIGH_SECS, LAG_QUANTILE, LAG_SLOPE, LAG_SLOPE_FLOOR_MS, LAG_SLOPE_SECS, OSC_ACF,
     OSC_MIN_PERIOD, OVERHEAD, PIPELINE_MS, RECOVER_SECS, STARTUP_SECS, STEP_SECS, TREES_SECS, TREES_SHARE,
-    TREES_SMOOTH, VERDICT_VERSION, acf, collapsed, episodes, events, feasible, lags, measures, med, phases, presence,
-    quantile, run_metrics, run_startup, runs_of, slope, startup, steps, timeline, verdict, verdict_version,
+    TREES_SMOOTH, VERDICT_VERSION, acf, collapsed, episodes, events, feasible, lags, measures, med, phase_lags, phases,
+    presence, quantile, run_metrics, run_startup, runs_of, slope, startup, steps, timeline, verdict, verdict_version,
 )
 
 # The rows `reduce` keeps.
@@ -924,7 +925,8 @@ def track_run(s, row):
     return {
         "ratio": (quantile(ratios, 0.1), quantile(ratios, 0.5), quantile(ratios, 0.9)),
         "fall": falls, "climb": climbs, "used": used,
-        "first": med([x for x in firsts if x is not None]), "startup": row.get("startup_p50_ms"),
+        "first": med([x for x in firsts if x is not None]),
+        "startup": quantile(phase_lags(s).get("startup", []), 0.5),
         "off_drop": off("off_drop"), "off_rise": off("off_rise"),
     }
 
@@ -945,7 +947,7 @@ def track(a):
             r = t["ratio"]
             print(
                 f"{label} {cell} | {f(r[0])} {f(r[1])} {f(r[2])} | {lst(t['fall'])} | {lst(t['climb'])} |"
-                f" {f(t['used'])} | {f(t['first'], 'd')} {f(t['startup'], 'd')} | {f(t['off_drop'])} {f(t['off_rise'])}"
+                f" {f(t['used'])} | {f(t['first'], 'd')} {f(t['startup'], '.0f')} | {f(t['off_drop'])} {f(t['off_rise'])}"
             )
         return
     cells = collections.defaultdict(list)
