@@ -16,6 +16,9 @@
   hack/sim-db/simdb.py spec [selection] [--by phase|none] [--json]
   hack/sim-db/simdb.py osc [selection] [--json]
   hack/sim-db/simdb.py rows [selection] [--fields A,B,...]
+  hack/sim-db/simdb.py forecast-report [--exp E] [--cell C] [--arm A] [--seed N] [--name NAME=GLOB]
+                                       [--phases rest|all|P,...] [--collapsed yes|no] [--section S ...]
+                                       [--sample N] [--decode-sample N] [--iters N] [--json]
   hack/sim-db/simdb.py duckdb
   hack/sim-db/simdb.py fold DB JOB_DIR... [--src SRC]
   hack/sim-db/simdb.py export DB DEST
@@ -340,6 +343,29 @@ manifest's `at`), then a farm flush's later seq, by number
            its grace (released ones' wait over grace, and their wait).
            `--json` gives {"spec": rows, "parks": rows}
 
+`forecast-report` is the catalog's (hack/simlab/forecast.py and
+regimes.py, whose docs say more): the arrival forecast study over the
+decision logs (asks, arrivals, haves) of the jobs its own selection picks
+(`--exp`, `--cell` and `--arm` globs over experiment_jobs' exp_id, cell
+and arm_label, `--seed`; `--name NAME=GLOB` names the arm of the labels a
+glob matches, so one arm's two sims report as one), the requester's
+phases `--phases` keeps (rest, every one but startup, by default) and the
+runs `--collapsed` keeps by their verdict (every one by default), by
+`--section`: runs (each arm and cell's runs, collapsed or not, and how
+much and how badly they ask), decompose (failures and prediction errors
+by the chunk's structure: the peer's path, its supply, its position
+against the peer's STATE, whether a rival declared it), explained (how
+well the model, structure and both predict a request's failure), scores
+(pinball loss, WIS, coverage, the PIT histogram, sharpness), aligned (on
+events), baselines (persistence and cadence, and the model's skill
+against them), staleness (the STATE's age, the time since the peer's
+parent changed), selection (the picked peer against its rivals), bound
+(main's knowledge delay and its requests' outcomes beside the HAVE
+removal's), every one of those by default; and regimes (a hidden
+semi-Markov model of each peer's availability per stream, fit on
+`--sample` streams a run and described on `--decode-sample`, `--iters`
+EM iterations; minutes).
+
 Every query takes `--json`: its rows, integer and decimal values (HUGEINT,
 which sum() of integers gives, too) as numbers. The DuckDB CLI is pinned
 (DUCKDB_VERSION, its sha256s) and fetched once into ~/.cache/strims/duckdb/
@@ -377,6 +403,8 @@ from simlab.verdict import (  # noqa: E402, F401
 # pulls from S3 (hack/simlab/store.py), which the commands print.
 from simlab import query, store  # noqa: E402
 from simlab.query import PULL_MB  # noqa: E402, F401
+# The arrival forecast study's sections (hack/simlab/forecast.py).
+from simlab.forecast import SECTIONS as FORECAST_SECTIONS  # noqa: E402
 # The event vocabulary (hack/simlab/vocab.py, stdlib), whose names the
 # docs list.
 from simlab import vocab  # noqa: E402
@@ -504,6 +532,33 @@ def cmd_rows(a):
         print(json.dumps(line))
 
 
+def cmd_forecast_report(a):
+    from simlab import forecast, regimes
+
+    phases = a.phases if a.phases in ("all", forecast.REST) else a.phases.split(",")
+    names = {}
+    for x in a.name or ():
+        name, glob = x.split("=", 1)
+        names[glob] = name
+    collapsed = {None: None, "yes": True, "no": False}[a.collapsed]
+    sel = forecast.Selection(exp=a.exp, cell=a.cell, arm=a.arm, seed=a.seed, names=names or None, phases=phases,
+                             collapsed=collapsed)
+    sections = a.section or list(forecast.SECTIONS)
+    say = lambda m: print(m, file=sys.stderr)  # noqa: E731
+    sql = [s for s in sections if s != "regimes"]
+    got = forecast.report(sel, sql) if sql else {}
+    out = {s: r.records() for s, r in got.items()}
+    text = forecast.report_text(got) if got and not a.json else ""
+    if "regimes" in sections:
+        tables, _ = regimes.regimes(sel, sample=a.sample, decode_sample=a.decode_sample, iters=a.iters, say=say)
+        out["regimes"] = tables
+        text += regimes.regimes_text(tables) if not a.json else ""
+    if a.json:
+        print(json.dumps(out))
+    else:
+        print(text, end="")
+
+
 def cmd_pull(a):
     print(query.pull_text(query.pull_run(a.run, a.reads, a.cell, a.arm, a.seed, a.dry_run)))
 
@@ -568,6 +623,23 @@ def main():
         x.add_argument("--pull-mb", type=float, default=PULL_MB,
                        help="the most of the reads it pulls from S3 for the selection, MB")
         x.add_argument("--json", action="store_true")
+    fr = sub.add_parser("forecast-report", help="the arrival forecast study over the decision logs (simlab's "
+                        "forecast and regimes)")
+    fr.add_argument("--exp", action="append", help="experiments, globs (experiment_jobs' exp_id)")
+    fr.add_argument("--cell", action="append", help="cells, globs")
+    fr.add_argument("--arm", action="append", help="arm labels, globs")
+    fr.add_argument("--seed", action="append", type=int)
+    fr.add_argument("--name", action="append", metavar="NAME=GLOB", help="the arm name of the labels GLOB matches")
+    fr.add_argument("--phases", default="rest", help="the requester's phases kept: rest (all but startup), all, or "
+                    "phases, comma-separated")
+    fr.add_argument("--collapsed", choices=("yes", "no"), help="only the runs whose verdict collapsed, or only "
+                    "those that didn't")
+    fr.add_argument("--section", action="append", choices=[*FORECAST_SECTIONS, "regimes"],
+                    help="the sections (every one but regimes by default)")
+    fr.add_argument("--sample", type=int, default=1, help="regimes: streams a run the fit reads")
+    fr.add_argument("--decode-sample", type=int, default=2, help="regimes: streams a run it describes")
+    fr.add_argument("--iters", type=int, default=12, help="regimes: EM iterations")
+    fr.add_argument("--json", action="store_true")
     sub.add_parser("duckdb", help="fetch the pinned DuckDB CLI")
     f = sub.add_parser("fold", help="fold job dirs into a store (each a dir holding the tables and a job.json)")
     f.add_argument("db")
@@ -603,6 +675,8 @@ def main():
         cmd_gc(a)
     elif a.cmd in lake:
         lake[a.cmd](a)
+    elif a.cmd == "forecast-report":
+        cmd_forecast_report(a)
     else:
         {"sql": cmd_sql, "pooled": cmd_pooled, "aligned": cmd_aligned, "events": cmd_events, "osc": cmd_osc,
          "rows": cmd_rows, "forecast": cmd_forecast, "spec": cmd_spec}[a.cmd](a)

@@ -28,6 +28,11 @@ server (hack/console).
             links to a view with a selection, and the open tabs'
   farm      farm.py's quotes and approved runs
   ask       questions in plain language, answered in SQL
+  forecast  the arrival forecast study over the decision logs: failures
+            and prediction errors by structure, proper scores, baselines,
+            staleness, selection, main's upper bound
+  regimes   the study's hidden semi-Markov model of each peer's
+            availability
 
 Each module's docstring says what it offers. `engine` and the modules
 over it need the duckdb module, which hack/pyproject.toml pins (uv's venv,
