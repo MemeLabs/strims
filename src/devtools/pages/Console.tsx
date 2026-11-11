@@ -3,7 +3,7 @@
 
 import "../styles/console.scss";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 
 import { getIndex, getSchema, startIndex } from "../components/console/api";
@@ -53,6 +53,69 @@ const ALIGNS = [
   "up_step",
   "arrive",
 ];
+
+/** A decimal number, as a number picker takes it. */
+const NUMBER = /^-?(\d+\.?\d*|\.\d+)$/;
+
+/** How long typing pauses before a number picker's text reaches the selection. */
+const SETTLE_MS = 500;
+
+interface NumberInputProps {
+  /** The selection's value. */
+  value: string;
+  /** Sets the selection's value, with text that parses. */
+  onCommit: (v: string) => void;
+}
+
+/**
+ * A number picker. What's typed in it is its own, and reaches the selection once it parses, on
+ * Enter, on blur or once typing pauses: an empty or partial number runs nothing, the view keeps
+ * its last result, and a field left that way shows as invalid.
+ */
+const NumberInput: React.FC<NumberInputProps> = ({ value, onCommit }) => {
+  const [text, setText] = useState(value);
+  const [invalid, setInvalid] = useState(false);
+  const sent = useRef(value);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    // The URL or another picker moved it; what this field sent is already its text.
+    if (value === sent.current) return;
+    sent.current = value;
+    setText(value);
+    setInvalid(false);
+  }, [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const commit = (t: string) => {
+    clearTimeout(timer.current);
+    const v = t.trim();
+    const ok = NUMBER.test(v);
+    setInvalid(!ok);
+    if (ok && v !== sent.current) {
+      sent.current = v;
+      onCommit(v);
+    }
+  };
+  return (
+    <input
+      value={text}
+      size={6}
+      inputMode="decimal"
+      aria-invalid={invalid || undefined}
+      title={invalid ? "a number" : undefined}
+      onChange={(e) => {
+        const t = e.target.value;
+        setText(t);
+        setInvalid(false);
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => commit(t), SETTLE_MS);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit(text);
+      }}
+      onBlur={() => commit(text)}
+    />
+  );
+};
 
 interface PickersProps {
   schema: Schema | null;
@@ -118,6 +181,9 @@ const Pickers: React.FC<PickersProps> = ({ schema, sel, setSel, uses }) => {
         return select("delay", plain(["1250", "4250"]));
       case "align":
         return select("align", plain(ALIGNS));
+      case "min_stall_ms":
+      case "t":
+        return <NumberInput value={sel[key]} onCommit={(v) => setSel({ [key]: v })} />;
       default:
         return (
           <input value={sel[key]} size={6} onChange={(e) => setSel({ [key]: e.target.value })} />

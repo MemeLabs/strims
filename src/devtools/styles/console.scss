@@ -68,6 +68,10 @@
     border-radius: 4px;
     background: var(--surface);
     max-width: 100%;
+
+    &[aria-invalid="true"] {
+      border-color: var(--critical);
+    }
   }
 
   input.wide {
