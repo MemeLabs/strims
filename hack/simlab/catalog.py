@@ -192,7 +192,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import engine, store, store_host, verdict
+from . import engine, query, store, store_host, verdict
 from .engine import EXTENSIONS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1497,10 +1497,11 @@ def canon(t):
 NUMERIC = ("BIGINT", "INTEGER", "DOUBLE", "FLOAT", "HUGEINT", "SMALLINT", "TINYINT", "UBIGINT", "UINTEGER", "DECIMAL")
 
 
-def view_sql(t, cols, name, viewers):
+def view_sql(t, cols, name, viewers, arrivals=None):
     """The view `name` of sim table `t` (its columns `cols`), normalized as
     the module docs say; `viewers` the viewers table's columns, for the
-    viewers' stays."""
+    viewers' stays, and `arrivals` the arrivals table's, for the asks'
+    truth (simlab.query's asks_view)."""
     num = lambda c: cols[c].split("(")[0] in NUMERIC
     rest = [c for c in cols if c not in ("k", "src")]
     nullify = lambda c: f"nullif(x.{ident(c)}, -1) AS {ident(c)}" if num(c) else f"x.{ident(c)}"
@@ -1549,6 +1550,9 @@ def view_sql(t, cols, name, viewers):
     if t == "parents":
         sel = ["x.k", "x.src"] + [nullify(c) if c == "parent" else plain(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
+    if t == "asks":
+        return query.asks_view(f"main.{ident(name)}", f"(SELECT x.* {canon(t)})",
+                               f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
     return f"{head} x.* {canon(t)};"
 
 
@@ -1585,7 +1589,7 @@ def main_sql(cols, version, tmp, ins, parsed):
     out.append(EXP_RUNS_SQL)
     out += commits_sql(tmp, ins, parsed)
     for t, name in sim_tables(cols).items():
-        out.append(view_sql(t, cols[t], name, cols.get("viewers", {})))
+        out.append(view_sql(t, cols[t], name, cols.get("viewers", {}), cols.get("arrivals", {})))
     for t in ("rows", "scalars"):
         if t in cols:
             out.append(f"CREATE OR REPLACE VIEW main.{t} AS SELECT x.* {canon(t)};")
@@ -1786,7 +1790,12 @@ NORMALIZED = {
     "parents": "parent NULL for none. Only hybrid push gives a stream push parents: empty in other modes.",
     "forecast": "horizon_ms, held_ms and mean_ms NULL where -1 (no estimate, never held).",
     "asks": "Every rival kept, in both rounds: a row per request and channel it weighed, the asked row (picked) "
-            "first; grace_ms, outcome, reason and t_outcome_ms are the asked row's, NULL on a rival's.",
+            "first; grace_ms, outcome, reason and t_outcome_ms are the asked row's, NULL on a rival's. The sims "
+            "write what a request was decided on (peer_honest the peer's at the request); the view adds its "
+            "truth from arrivals, as spec_requests' columns are: held_ms, the peer's first hold of the chunk in "
+            "its incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation; "
+            "NULL if none), and from it live (held by since_ms and channel_open_ms, in whole ms), err_ms, "
+            "pred_err_ms, held_by_p50, held_by_p90 and held_by_p99.",
 }
 STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewers": "k, viewer",
                  "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",
@@ -1799,7 +1808,8 @@ STANDARD_JOINS = {"seconds": "jobs USING (k, src); verdict_seconds USING (k, src
                   "forecast": "viewers USING (k, src, node)", "stalls": "viewers USING (k, src, viewer)",
                   "parents": "viewers USING (k, src, node)", "viewers": "reads, viewer_seconds, stalls USING (k, src, viewer)",
                   "asks": "viewers USING (k, src, node); spec_requests USING (k, src, t_ms, node, peer, seq) for "
-                          "round 'spec' AND picked"}
+                          "round 'spec' AND picked; arrivals ON (k, src) and arrivals.node = asks.peer, seq, "
+                          "arrivals.incarnation = asks.peer_incarnation (the peer's holds, the view's truth)"}
 VERDICT_DOCS = {
     "onset": "the first second a trigger held (trees, delivery or latency), NULL if none",
     "trees": "the first second of TREES_SECS with the smoothed hit share under TREES_SHARE",

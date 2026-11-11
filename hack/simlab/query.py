@@ -36,8 +36,15 @@ they always were), then the predictions' (`kind` "prediction"). A table's
 columns its era lacks read NULL in the queries over it (OPTIONAL_COLS),
 the views keeping the files' own.
 
+The decision log's view, asks, is the table as the sims write it
+(asks_log: what each request was decided on) with its truth, the peers'
+holds joined from arrivals, as spec_requests' columns hold theirs
+(asks_view, which makes the catalog's asks view too).
+
 and the selection's parts, which other modules use too:
 
+  asks_view(name, asks, arrivals, asks_cols, arrivals_cols) -> sql
+  columns(paths) -> {column}
   sources(patterns) -> [src]          (simlab.store's)
   reused(srcs, stored) -> (sql | None, [src])
   source_ranks(srcs) -> {src: rank}
@@ -393,9 +400,13 @@ def views(sel, derived=True, fetch=True, say=None):
                                                          "union_by_name=true);")}
                 if "host" in got:
                     cols = "x.* REPLACE (coalesce(x.node, x.host) AS node)" if "node" in got else "x.*, x.host AS node"
-            sql.append(f"CREATE VIEW {t} AS SELECT {cols} FROM read_parquet({plist(f)}, union_by_name=true) x "
+            view = "asks_log" if t == "asks" else t
+            sql.append(f"CREATE VIEW {view} AS SELECT {cols} FROM read_parquet({plist(f)}, union_by_name=true) x "
                        "SEMI JOIN runs USING (k, src);")
             have.add(t)
+    if "asks" in have:
+        sql.append(asks_view("asks", "asks_log", "arrivals", columns(files(srcs, "asks")),
+                             columns(files(srcs, "arrivals"))))
     if derived:
         for t in JUDGED:
             if f := derived_files(t, srcs):
@@ -403,6 +414,54 @@ def views(sel, derived=True, fetch=True, say=None):
                 have.add(t)
     sql += macros(have)
     return Views("\n".join(sql), have)
+
+
+def columns(paths):
+    """The columns of Parquet files `paths`, read by name (none for none)."""
+    if not paths:
+        return set()
+    return {r["column_name"] for r in records(f"DESCRIBE SELECT * FROM read_parquet({plist(paths)}, "
+                                              "union_by_name=true);")}
+
+
+# An ask's truth, as spec_requests' (simdb.py's docs), from h.held_ms: the
+# peer's first hold of the chunk in its incarnation then.
+ASK_TRUTH = {
+    "held_ms": "h.held_ms",
+    "live": "coalesce(h.held_ms >= a.since_ms AND h.held_ms >= a.channel_open_ms, false)",
+    "err_ms": "h.held_ms - (a.t_ms + a.rtt_ms // 2)",
+    "pred_err_ms": "h.held_ms - a.predicted_ms",
+    "held_by_p50": "h.held_ms <= a.predicted_ms",
+    "held_by_p90": "h.held_ms <= a.predicted_p90_ms",
+    "held_by_p99": "h.held_ms <= a.predicted_p99_ms",
+}
+
+
+def asks_view(name, asks, arrivals, asks_cols, arrivals_cols):
+    """The statement making view `name`: the decision log `asks` (a
+    relation of the table as the sims write it, its columns `asks_cols`)
+    with its truth, which the sims leave out, writing each ask as its log
+    is taken, before the peers' later holds: ASK_TRUTH from the peer's
+    first hold of the chunk in its incarnation at the request, the
+    `arrivals` relation's earliest row (columns `arrivals_cols`) of node =
+    peer, seq and incarnation = peer_incarnation. All NULL, `live` false,
+    without such a hold, as where arrivals lacks `incarnation`. `live` is
+    computed in whole ms, so a hold in the ms the requester's incarnation
+    began or its channel opened counts, where spec_requests' (the sims')
+    compares the times finer. A log that carries its truth (the branch's
+    older asks, without peer_incarnation) keeps it."""
+    if "peer_incarnation" not in asks_cols:
+        return f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM {asks};"
+    held = (f"SELECT k, src, node, seq, incarnation, min(t_ms) AS held_ms FROM {arrivals} GROUP BY ALL"
+            if "incarnation" in arrivals_cols else
+            "SELECT NULL::VARCHAR AS k, NULL::VARCHAR AS src, NULL::BIGINT AS node, NULL::BIGINT AS seq, "
+            "NULL::BIGINT AS incarnation, NULL::BIGINT AS held_ms WHERE false")
+    own = [c for c in ASK_TRUTH if c in asks_cols]
+    star = "a.*" + (f" EXCLUDE ({', '.join(own)})" if own else "")
+    truth = ", ".join((f"coalesce(a.{c}, {e})" if c in own else e) + f" AS {c}" for c, e in ASK_TRUTH.items())
+    return (f"CREATE OR REPLACE VIEW {name} AS SELECT {star}, {truth} FROM {asks} a LEFT JOIN ({held}) h "
+            "ON h.k = a.k AND h.src = a.src AND h.node = a.peer AND h.seq = a.seq "
+            "AND h.incarnation = a.peer_incarnation;")
 
 
 def macros(have):

@@ -354,21 +354,35 @@ class Arrivals(unittest.TestCase):
 
 
 class Asks(unittest.TestCase):
-    """SamplesPull's run, with i-2's flush holding asks in its samples."""
+    """SamplesPull's run, with i-2's flush holding asks and arrivals in its
+    samples: node 1's two requests of chunk 6, the first weighing peers 2
+    (in its second incarnation, whose first hold of the chunk came at 150
+    after its first's at 50), 3 (that never held it) and 4 (that held it
+    before the channel opened), the second asking 2 again in the ms its
+    hold, the requester's incarnation and the channel all began."""
 
     setUp_pull, aws, gets, cli = PULL.setUp, PULL.aws, PULL.gets, PULL.cli
     RUN, C0 = golden_cli.simdb_test().RUN, golden_cli.simdb_test().C0
+    ASKS = ("t_ms, node, ask, round, picked, peer, seq, rtt_ms, predicted_ms, predicted_p90_ms, predicted_p99_ms, "
+            "channel_open_ms, since_ms, peer_incarnation",
+            [(100, 1, 0, "'spec'", "true", 2, 6, 20, 120, 160, 200, 10, 0, 1),
+             (100, 1, 0, "'spec'", "false", 3, 6, 30, 90, 90, 90, 10, 0, 0),
+             (100, 1, 0, "'spec'", "false", 4, 6, 40, "NULL", "NULL", "NULL", 95, 0, 0),
+             (200, 1, 1, "'flight'", "true", 2, 6, 20, 150, 150, 150, 150, 150, 1)])
+    ARRIVALS = ("t_ms, node, seq, incarnation", [(50, 2, 6, 0), (150, 2, 6, 1), (170, 2, 6, 1), (90, 4, 6, 0)])
 
     def setUp(self):
         self.setUp_pull()
         st = golden_cli.simdb_test()
         data = self.s3 / "sim-data" / self.RUN / "i-2" / "0"
-        asks = self.s3 / "sim-samples" / self.RUN / "i-2" / "0" / "asks.parquet"
-        st.simdb.duck(f"COPY (SELECT 'k3' AS k, {st.simdb.q(st.src_of('i-2'))} AS src, 1 AS node, 0 AS ask, "
-                      f"'flight' AS round, false AS picked, 2 AS peer, 6 AS seq) "
-                      f"TO {st.simdb.q(asks)} (FORMAT parquet);", out=None)
+        samples = self.s3 / "sim-samples" / self.RUN / "i-2" / "0"
         m = json.loads((data / "manifest.json").read_text())
-        m["tables"]["asks"] = {"rows": 1, "bytes": asks.stat().st_size, "sha256": st.simdb.sha256(asks)}
+        for t, (cols, rows) in {"asks": self.ASKS, "arrivals": self.ARRIVALS}.items():
+            f = samples / f"{t}.parquet"
+            values = ", ".join("(" + ", ".join(map(str, r)) + ")" for r in rows)
+            st.simdb.duck(f"COPY (SELECT 'k3' AS k, {st.simdb.q(st.src_of('i-2'))} AS src, * FROM (VALUES {values}) "
+                          f"v({cols})) TO {st.simdb.q(f)} (FORMAT parquet);", out=None)
+            m["tables"][t] = {"rows": len(rows), "bytes": f.stat().st_size, "sha256": st.simdb.sha256(f)}
         (data / "manifest.json").write_text(json.dumps(m))
 
     def test_a_pull_fetches_it_with_the_samples(self):
@@ -381,8 +395,39 @@ class Asks(unittest.TestCase):
         self.assertIn("asks", err)
         self.assertIn(f"sim-samples/{self.RUN}/i-2/0/asks.parquet", self.gets())
         with query.views(query.Selection(src=[f"farm/{self.RUN}/*/*"], cell=[self.C0]), derived=False) as v:
-            self.assertEqual(v.records("SELECT k, round, picked, peer, seq FROM asks;"),
-                             [{"k": "k3", "round": "flight", "picked": False, "peer": 2, "seq": 6}])
+            self.assertEqual(v.records("SELECT k, ask, round, picked, peer, seq FROM asks ORDER BY ask, peer;")[0],
+                             {"k": "k3", "ask": 0, "round": "spec", "picked": True, "peer": 2, "seq": 6})
+
+    def test_its_view_has_the_truth_of_the_peers_holds_in_their_incarnations(self):
+        self.cli("pull", "--run", self.RUN, "--reads", "--cell", self.C0)
+        truth = list(query.ASK_TRUTH)
+        with query.views(query.Selection(src=[f"farm/{self.RUN}/*/*"], cell=[self.C0]), derived=False) as v:
+            got = v.records(f"SELECT ask, peer, {', '.join(truth)} FROM asks ORDER BY ask, peer;")
+            log = {r["column_name"] for r in v.records("DESCRIBE asks_log;")}
+            cols = [r["column_name"] for r in v.records("DESCRIBE asks;")]
+        self.assertFalse(log & set(truth))
+        self.assertEqual(cols, [c for c in cols if c in log] + truth)
+        want = [(0, 2, 150, True, 40, 30, False, True, True),
+                (0, 3, None, False, None, None, None, None, None),
+                (0, 4, 90, False, -30, None, None, None, None),
+                (1, 2, 150, True, -60, 0, True, True, True)]
+        self.assertEqual(got, [dict(zip(["ask", "peer", *truth], w)) for w in want])
+
+    def test_a_log_that_carries_its_truth_keeps_it(self):
+        new = "(SELECT 'k' AS k, 's' AS src, 2 AS peer, 6 AS seq, 1 AS peer_incarnation, 100 AS t_ms, 20 AS rtt_ms, " \
+              "120 AS predicted_ms, 160 AS predicted_p90_ms, 200 AS predicted_p99_ms, 0 AS since_ms, " \
+              "10 AS channel_open_ms, NULL::BIGINT AS held_ms, NULL::BOOLEAN AS live)"
+        old = "(SELECT 'k' AS k, 's' AS src, 3 AS peer, 6 AS seq, NULL::BIGINT AS peer_incarnation, 100 AS t_ms, " \
+              "20 AS rtt_ms, 120 AS predicted_ms, 160 AS predicted_p90_ms, 200 AS predicted_p99_ms, " \
+              "NULL::BIGINT AS since_ms, 10 AS channel_open_ms, 90 AS held_ms, true AS live)"
+        arrivals = "(SELECT 'k' AS k, 's' AS src, 150 AS t_ms, 2 AS node, 6 AS seq, 1 AS incarnation)"
+        both = {"k", "src", "peer", "seq", "peer_incarnation", "t_ms", "rtt_ms", "predicted_ms", "predicted_p90_ms",
+                "predicted_p99_ms", "since_ms", "channel_open_ms", "held_ms", "live"}
+        view = query.asks_view("v", f"({new} UNION ALL {old})", arrivals, both, {"incarnation"})
+        got = query.records(f"{view} SELECT peer, held_ms, live, err_ms FROM v ORDER BY peer;")
+        self.assertEqual(got, [{"peer": 2, "held_ms": 150, "live": True, "err_ms": 40},
+                               {"peer": 3, "held_ms": 90, "live": True, "err_ms": None}])
+        self.assertEqual(query.asks_view("v", "x", "y", {"held_ms"}, set()), "CREATE OR REPLACE VIEW v AS SELECT * FROM x;")
 
 
 if __name__ == "__main__":

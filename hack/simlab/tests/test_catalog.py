@@ -327,7 +327,14 @@ class Tables(Fixture):
         golden_cli.write_table(d, "parks", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
                                             ("outcome", "VARCHAR")], [(800, 1, 5, "sent")])
         golden_cli.write_table(d, "arrivals", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
-                                               ("how", "VARCHAR"), ("peer", "BIGINT")], [(1150, 1, 6, "answer", 2)])
+                                               ("how", "VARCHAR"), ("peer", "BIGINT"), ("incarnation", "BIGINT")],
+                               [(1150, 1, 6, "answer", 2, 0)])
+        # Node 2's request of chunk 6: of node 1, which held it at 1150,
+        # and a rival, node 3, which never did.
+        golden_cli.write_table(d, "asks", [(c, "BIGINT") for c in (
+            "t_ms", "node", "ask", "peer", "seq", "rtt_ms", "predicted_ms", "predicted_p90_ms", "predicted_p99_ms",
+            "channel_open_ms", "since_ms", "peer_incarnation")],
+            [(1000, 2, 0, 1, 6, 20, 1100, 1200, 1300, 500, 0, 0), (1000, 2, 0, 3, 6, 20, 1100, 1200, 1300, 500, 0, 0)])
         db = self.root / "jobs-tables" / f"{src.replace('/', '~')}.duckdb"
         store_host.fold(db, [meta], src)
         store_host.export(db, store_host.cache_root() / "cache" / src)
@@ -354,7 +361,14 @@ class Tables(Fixture):
         self.assertEqual(f[(lazy, 5)], {"k": lazy, "seq": 5, "tail_ms": None, "extrapolated": None,
                                         "first_sight": False, "lazy": True, "held_ms": None})
         names = {r["name"] for r in catalog.lake("SELECT name FROM table_catalog;")}
-        self.assertTrue({"spec_requests", "parks", "arrivals"} <= names)
+        self.assertTrue({"spec_requests", "parks", "arrivals", "asks"} <= names)
+        # The asks view's truth: the peer's hold, from arrivals.
+        asks = catalog.lake("SELECT peer, held_ms, live, err_ms, pred_err_ms, held_by_p50, held_by_p90 FROM asks "
+                            f"WHERE k = {catalog.q(tail)} ORDER BY peer;")
+        self.assertEqual(asks, [{"peer": 1, "held_ms": 1150, "live": True, "err_ms": 140, "pred_err_ms": 50,
+                                 "held_by_p50": False, "held_by_p90": True},
+                                {"peer": 3, "held_ms": None, "live": False, "err_ms": None, "pred_err_ms": None,
+                                 "held_by_p50": None, "held_by_p90": None}])
 
 
 

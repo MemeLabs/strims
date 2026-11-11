@@ -99,7 +99,10 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   and its timeline there: t_ms, node, viewer, seq, how
                   (own, push, answer, other), peer (the source), parent,
                   expected_ms, released_ms, asked_ms, asks, last_ask_peer,
-                  last_ask_ms, rtt_ms
+                  last_ask_ms, rtt_ms, incarnation (the node's at the
+                  hold: strims-sim's restarts by then, the first 0; the
+                  ppspp sim's joins by then, the seed's 0; older logs
+                  lack it)
   spec_requests   with SIM_SPEC=1 / STRIMS_SIM_SPEC=1, every speculative
                   request once it ended: t_ms, node (the requester),
                   viewer, honest, peer (the holder), peer_honest, stream,
@@ -127,21 +130,31 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   t_outcome_ms, held_ms (the holder's own first hold)
   asks            with SIM_SPEC=1 / STRIMS_SIM_SPEC=1 (large), every
                   request either request round made, once it ended, a row
-                  per channel it weighed, every rival's: t_ms, node (the
-                  requester), viewer, honest, ask (its rows share it),
+                  per channel it weighed, every rival's. The sims write
+                  what each was decided on, as its log is taken: t_ms,
+                  node (the requester), honest, ask (its rows share it),
                   round (spec, the speculative round; flight, the flight
                   window's, for a chunk the asked peer declared), peer,
-                  peer_honest, picked (the asked peer's row, first; else a
-                  rival's), declares, stream, seq, grace_ms (the asked
-                  row's), rtt_ms, predicted_ms, predicted_p90_ms and
-                  predicted_p99_ms (the model's holds at the decision),
-                  frontier_seq, hole_seq, state_age_ms (the peer's latest
-                  STATE's age then), outcome (the asked row's: spec's as
-                  spec_requests', flight's answered, not_yet, expired,
-                  elsewhere, closed), reason, t_outcome_ms, held_ms,
-                  channel_open_ms, live, err_ms, pred_err_ms, held_by_p50,
-                  held_by_p90, held_by_p99 (as spec_requests'); the asked
-                  rows of round spec are spec_requests' rows
+                  peer_honest (the peer's at the request), picked (the
+                  asked peer's row, first; else a rival's), declares,
+                  stream, seq, grace_ms (the asked row's), rtt_ms,
+                  predicted_ms, predicted_p90_ms and predicted_p99_ms (the
+                  model's holds at the decision), frontier_seq, hole_seq,
+                  state_age_ms (the peer's latest STATE's age then),
+                  outcome (the asked row's: spec's as spec_requests',
+                  flight's answered, not_yet, expired, elsewhere, closed),
+                  reason, t_outcome_ms, channel_open_ms, since_ms (when the
+                  requester's incarnation began), peer_incarnation (the
+                  peer's then, as arrivals' incarnation counts). The view
+                  adds the truth from arrivals, as spec_requests' is (the
+                  table as written is sql's asks_log, the lake's
+                  raw.asks): held_ms (the peer's first hold in that
+                  incarnation: arrivals' earliest row of node = peer, seq
+                  and incarnation = peer_incarnation; empty where none),
+                  live (held by since_ms and channel_open_ms, in whole
+                  ms), err_ms, pred_err_ms, held_by_p50, held_by_p90,
+                  held_by_p99. The asked rows of round spec are
+                  spec_requests' rows
   forecast        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 (large), in
                   either of two schemas, told apart by their columns: the
                   arrival models' predictions (a row per neighbour per
@@ -352,8 +365,10 @@ the same rows but keeps both `src` columns, to name as runs.src. Beside
 (k, src) the views join on their own columns: reads and viewer_seconds to
 viewers USING (k, src, viewer), as stalls does; events, parents, node_bins,
 forecast, arrivals, spec_requests, parks and asks to viewers USING (k, src,
-node) (`node` in both sims; strims-sim's viewers also name it `host`);
-seconds to verdict_seconds USING (k, src, sec) (macros.sql's `sec`).
+node) (`node` in both sims; strims-sim's viewers also name it `host`),
+and asks to arrivals on the peer's holds (arrivals.node = asks.peer, seq,
+arrivals.incarnation = asks.peer_incarnation: the view's truth); seconds
+to verdict_seconds USING (k, src, sec) (macros.sql's `sec`).
 runs' frames and bytes are its row's: beside viewer_seconds' frames, name
 them runs.frames and runs.bytes.
 
