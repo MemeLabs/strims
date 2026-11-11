@@ -135,12 +135,13 @@ use strims_ppspp::codec::{
 use strims_ppspp::store::{self, BufferReader, ChunkBytes, ChunkCodec};
 use strims_ppspp::{
     ChannelMetrics, ChannelSchedulerStats, ChannelTotals, DATA_QUEUE_CAP, DeliveryMode, Event,
-    LagForecast, MAX_BIN, ParentAction, PeerKey, PushMode, PushStats, ReportCounters, Runner,
-    SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey, SwarmOptions, TapKind, TapLevel,
-    Writer, WriterOptions,
+    LagForecast, MAX_BIN, ParentAction, ParentWhy, PeerKey, PushMode, PushStats, ReportCounters,
+    Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey, SwarmOptions, TapKind,
+    TapLevel, Writer, WriterOptions,
 };
 use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
 use strims_wan::live::{self, Encoder, Op, Plan, Sign, Signer};
+use strims_wan::playout::{self, DELAYS_MS, Totals};
 use strims_wan::sample::pick;
 use strims_wan::wire::{small_packets, tcp_wire};
 use strims_wan::{
@@ -947,7 +948,7 @@ struct Node {
     underruns: u64,
     resets: u64,
     lags: Vec<(Time, Duration)>,
-    /// With the tables ([`Sim::keep_tables`]), the chunk of each of `lags`.
+    /// The chunk of each of `lags`.
     read_seqs: Vec<u32>,
     /// A digest of the reads `lags` records: each one's chunk and read
     /// time ([`Sim::reads_hash`]).
@@ -1270,6 +1271,13 @@ struct Sim {
     /// and the samples the logs' caps left out.
     forecasts: Option<Vec<Forecast>>,
     forecasts_lost: u64,
+    /// With the tables, every node's parent changes of its swarm's streams
+    /// ([`Runner::set_parent_log`], [`Sim::take_parents`]), the changes
+    /// the logs' caps left out, and each node's open parent per stream as
+    /// they have it.
+    parents: Option<Vec<ParentRow>>,
+    parents_lost: u64,
+    open_parents: BTreeMap<(usize, Stream), usize>,
     /// The churn's leaves and returns ([`churn_plan`]), and how many are
     /// done.
     churn: Vec<(Time, usize, bool)>,
@@ -1593,6 +1601,17 @@ struct TimedEvent {
     peer: i64,
     value: i64,
     detail: &'static str,
+}
+
+/// A change of a node's open parent of a stream for the `parents` table
+/// ([`Sim::take_parents`]): true time, the node, the stream, the parent
+/// from then on (`None` for none) and why.
+struct ParentRow {
+    at: Time,
+    node: usize,
+    stream: Stream,
+    parent: Option<usize>,
+    why: ParentWhy,
 }
 
 /// A forecast log sample ([`Runner::set_forecasts`]) as the harness keeps
@@ -2466,6 +2485,9 @@ impl Sim {
             timeline: None,
             forecasts: None,
             forecasts_lost: 0,
+            parents: None,
+            parents_lost: 0,
+            open_parents: BTreeMap::new(),
             churn,
             churn_done: 0,
             arrivals,
@@ -2696,6 +2718,7 @@ impl Sim {
         }
         for i in 0..self.nodes.len() {
             self.take_forecasts(i);
+            self.take_parents(i);
         }
         for n in &mut self.nodes {
             if let Some(c) = n.cap.as_mut() {
@@ -2772,6 +2795,7 @@ impl Sim {
             match what {
                 Incident::Dies => {
                     self.log("incident", victim as i64, -1, 0, "dies");
+                    self.parents_gone(victim);
                     self.nodes[victim].role = Role::Dead;
                 }
                 Incident::Slows(bw) => {
@@ -2887,6 +2911,7 @@ impl Sim {
         for i in self.due_nodes() {
             self.transmit(i);
             self.touch(i);
+            self.take_parents(i);
         }
 
         if self.cfg.capture.is_some() {
@@ -2901,6 +2926,7 @@ impl Sim {
     /// Viewer `i` leaves: its neighbours see its links close.
     fn leave(&mut self, i: usize) {
         self.log("leave", i as i64, -1, 0, "");
+        self.parents_gone(i);
         let n = &mut self.nodes[i];
         n.role = Role::Dead;
         n.churned = true;
@@ -2908,6 +2934,7 @@ impl Sim {
         let links: Vec<usize> = n.links.values().copied().collect();
         for l in links {
             let (to, rpeer) = (self.links[l].to, self.links[l].rpeer);
+            self.take_parents(to);
             self.nodes[to].runner.remove_peer(rpeer);
             self.touch(to);
         }
@@ -2930,6 +2957,10 @@ impl Sim {
         if self.forecasts.is_some() {
             self.take_forecasts(i);
             runner.set_forecasts(true);
+        }
+        if self.parents.is_some() {
+            self.take_parents(i);
+            runner.set_parent_log(true);
         }
         self.log("join", i as i64, -1, 0, "");
         let swarm = strims_ppspp::Swarm::new(self.swarm_id.clone(), self.options.clone()).unwrap();
@@ -3084,6 +3115,7 @@ impl Sim {
             }
             self.log("parent_lost", j as i64, i as i64, lost as i64, how);
         }
+        self.parents_gone(i);
         let n = &mut self.nodes[i];
         n.role = Role::Gone;
         n.left = Some(self.now);
@@ -3109,6 +3141,7 @@ impl Sim {
     /// closes: its runner forgets the peer.
     fn unlink(&mut self, j: usize, i: usize, l: usize) {
         let rpeer = self.links[l].peer;
+        self.take_parents(j);
         let n = &mut self.nodes[j];
         n.runner.remove_peer(rpeer);
         n.links.remove(&i);
@@ -3447,6 +3480,7 @@ impl Sim {
                     || matches!(self.nodes[self.links[link].from].role, Role::Adversary(_)),
                 "honest frame failed: {e}"
             );
+            self.take_parents(to);
             let node = &mut self.nodes[to];
             node.errors += 1;
             node.runner.remove_peer(rpeer);
@@ -3459,9 +3493,9 @@ impl Sim {
     /// edge of bins `width` wide (`SIM_BIN_MS`), each node's too with
     /// `nodes` (`SIM_BIN_NODES=1`), the run's timed events, and with
     /// `forecasts` (`SIM_FORECAST=1`; a row per neighbour per chunk
-    /// announced, tens of MB a run) every node's forecast log. Set before
-    /// the run; outside the config, so the run's tag stays the same, and it
-    /// changes no trace.
+    /// announced, tens of MB a run) every node's forecast log, and every
+    /// node's parent changes. Set before the run; outside the config, so
+    /// the run's tag stays the same, and it changes no trace.
     fn keep_tables(&mut self, width: Duration, nodes: bool, forecasts: bool) {
         self.series.get_or_insert_with(Vec::new);
         self.bins = Some(Bins {
@@ -3483,6 +3517,10 @@ impl Sim {
             detail: "",
         });
         self.timeline = Some(joins.collect());
+        self.parents = Some(Vec::new());
+        for n in &mut self.nodes {
+            n.runner.set_parent_log(true);
+        }
         if forecasts {
             self.forecasts = Some(Vec::new());
             for n in &mut self.nodes {
@@ -3528,6 +3566,61 @@ impl Sim {
             peer: peers.get(&f.peer).copied().unwrap_or(usize::MAX),
             f,
         }));
+    }
+
+    /// With the tables, moves node `i`'s parent changes of its swarm into
+    /// the harness's, at the current time: the driver takes them after
+    /// each call, and before it removes a peer they may name. A node that
+    /// is off has none: its runner, kept as it stopped, still hears its
+    /// neighbours' links close ([`Sim::leave`]).
+    fn take_parents(&mut self, i: usize) {
+        let Some(all) = self.parents.as_mut() else {
+            return;
+        };
+        let n = &mut self.nodes[i];
+        let (changes, lost) = n.runner.take_parent_changes();
+        if n.role.off() {
+            return;
+        }
+        self.parents_lost += lost;
+        for c in changes.into_iter().filter(|c| c.swarm == n.swarm) {
+            let parent = c.parent.and_then(|k| n.runner.peer_id(k)).map(id_node);
+            match parent {
+                Some(p) => self.open_parents.insert((i, c.stream), p),
+                None => self.open_parents.remove(&(i, c.stream)),
+            };
+            all.push(ParentRow {
+                at: self.now,
+                node: i,
+                stream: c.stream,
+                parent,
+                why: c.why,
+            });
+        }
+    }
+
+    /// With the tables, node `i` stops without a word to its runner (it
+    /// leaves, departs or dies): it loses the parents it has.
+    fn parents_gone(&mut self, i: usize) {
+        self.take_parents(i);
+        let Some(all) = self.parents.as_mut() else {
+            return;
+        };
+        let streams: Vec<Stream> = self
+            .open_parents
+            .range((i, 0)..=(i, Stream::MAX))
+            .map(|(&(_, s), _)| s)
+            .collect();
+        for stream in streams {
+            self.open_parents.remove(&(i, stream));
+            all.push(ParentRow {
+                at: self.now,
+                node: i,
+                stream,
+                parent: None,
+                why: ParentWhy::Lost,
+            });
+        }
     }
 
     /// Node `i`'s [`NodeCounts`] now, with its push stats `p`.
@@ -3846,6 +3939,8 @@ impl Sim {
     /// | `seconds` | second of [`Sim::series`] | `sec`, then the series' per-second fields (`present`, `hits`, `misses`, `pruned`, `parents`, `capacity`, `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, and `written` in a media run) |
     /// | `viewer_seconds` | viewer and second | `viewer`, `sec`, `lag_ms` (the series' `lag`, -1 without a read), `frames` |
     /// | `reads` | chunk a viewer read | `viewer`, `t_ms` (when it read it), `seq` (the chunk), `lag_ms` (from its publishing) |
+    /// | `stalls` | stall of a viewer's playout at each delay of [`DELAYS_MS`] (`hack/capture/analyze.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`) | `viewer`, `delay_ms`, `t_ms` (when it began, on the `reads`' clock), `stall_ms`: [`playout::play`] over the viewer's `reads`, as `hack/sim-db`'s `playback(delay_ms)` plays them |
+    /// | `parents` | change of a node's open parent of a stream of its swarm ([`Sim::take_parents`]) | `t_ms`, `node` (as in `events`), `stream`, `parent` (the node from then on, -1 for none), `reason`: `open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their link closed, the stream started anew, or the node left, departed or died) |
     /// | `bins` | bin of [`Sim::keep_tables`]' width | [`bin_cols`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), the seed's meter, uplink and copies at its end and what it sent in it, then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`) |
     /// | `node_bins` | node and bin, with `SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node`, `viewer` (its number here, -1 for none), what it did in the bin |
     /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink in bytes per second), `hostile`, `churned` (it left at least once), `clock_ms` (its clock's offset), `arrive_ms` (when it arrived, -1000 for the start; [`Arrivals`]), `depart_ms` (when it left for good, empty if it stayed; [`Depart`]) |
@@ -3855,9 +3950,9 @@ impl Sim {
     /// `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
     /// `secs`, the seed's `seed_up` steps and the viewers' `viewer_up` as
     /// the series has them, the number of `seconds` and `viewers`, the
-    /// bins' `bin_ms`, and the forecast samples the logs' caps left out
-    /// (`forecasts_lost`). An empty field is a reading the run doesn't
-    /// have ([`NONE`]).
+    /// bins' `bin_ms`, and the forecast samples and parent changes the
+    /// logs' caps left out (`forecasts_lost`, `parents_lost`). An empty
+    /// field is a reading the run doesn't have ([`NONE`]).
     ///
     /// The bins read the counters the series reads, at each edge rather
     /// than each second's first event ([`Sim::sample_bins`]), so a bin's
@@ -3887,15 +3982,38 @@ impl Sim {
             t.write(dir)?;
         }
         let mut t = Table::new("reads", &["viewer", "t_ms", "seq", "lag_ms"]);
+        let mut stalls = Table::new("stalls", &["viewer", "delay_ms", "t_ms", "stall_ms"]);
         for (i, v) in honest.iter().enumerate() {
-            for (&(at, lag), &seq) in v.lags.iter().zip(&v.read_seqs) {
-                t.ints(&[
-                    i as i64,
-                    (at - start).as_millis(),
-                    i64::from(seq),
-                    lag.as_millis(),
-                ]);
+            let reads = read_rows(v);
+            for &(at, seq, lag) in &reads {
+                t.ints(&[i as i64, at, seq as i64, lag]);
             }
+            for d in DELAYS_MS {
+                for (at, ms) in playout::play(&reads, d).stalls {
+                    stalls.ints(&[i as i64, d, at, ms]);
+                }
+            }
+        }
+        t.write(dir)?;
+        stalls.write(dir)?;
+        let mut t = Table::typed(
+            "parents",
+            &[
+                ("t_ms", "BIGINT"),
+                ("node", "BIGINT"),
+                ("stream", "BIGINT"),
+                ("parent", "BIGINT"),
+                ("reason", "VARCHAR"),
+            ],
+        );
+        for p in self.parents.iter().flatten() {
+            t.fields(&[
+                (p.at - start).as_millis().to_string(),
+                p.node.to_string(),
+                p.stream.to_string(),
+                p.parent.map_or(-1, |n| n as i64).to_string(),
+                p.why.name().to_owned(),
+            ]);
         }
         t.write(dir)?;
         let mut t = Table::new("bins", &bin_cols());
@@ -4001,9 +4119,10 @@ impl Sim {
         let width = self.bins.as_ref().map_or(0, |b| b.width.as_millis());
         let _ = write!(
             meta,
-            ",\"viewers\":{},\"bin_ms\":{width},\"forecasts_lost\":{}}}",
+            ",\"viewers\":{},\"bin_ms\":{width},\"forecasts_lost\":{},\"parents_lost\":{}}}",
             honest.len(),
-            self.forecasts_lost
+            self.forecasts_lost,
+            self.parents_lost
         );
         meta.push('\n');
         std::fs::write(dir.join("series_meta.json"), meta)
@@ -4915,9 +5034,7 @@ impl Sim {
                             node.lags.push((now, now - pt));
                             fnv(&mut node.reads_hash, &c.to_be_bytes());
                             fnv(&mut node.reads_hash, &now.unix_nanos().to_be_bytes());
-                            if self.bins.is_some() {
-                                node.read_seqs.push(c as u32);
-                            }
+                            node.read_seqs.push(c as u32);
                             if let Some(&st) =
                                 self.media.as_ref().and_then(|m| m.signed.get(c as usize))
                             {
@@ -7399,6 +7516,17 @@ fn ms(d: Duration) -> i64 {
     d.as_millis()
 }
 
+/// Viewer `n`'s reads as the tables' `reads` has them: `(t_ms, seq,
+/// lag_ms)`, `t_ms` from the stream's start ([`stream_start`]).
+fn read_rows(n: &Node) -> Vec<(i64, u64, i64)> {
+    let start = stream_start();
+    n.lags
+        .iter()
+        .zip(&n.read_seqs)
+        .map(|(&(at, lag), &seq)| ((at - start).as_millis(), u64::from(seq), lag.as_millis()))
+        .collect()
+}
+
 /// One row of the comparison table.
 fn row(sc: Scenario, streams: usize, mode: PushMode, r: &Report) -> String {
     let p = &r.push;
@@ -9695,6 +9823,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         )
         .num("announce_share", r.announce.2)
         .int("asks", r.asks);
+    playback_cols(&mut row, sim);
     // Requests timed out ([`Sim::timeouts`]): the honest viewers' over
     // every incarnation, the seed's, and with greedy viewers or adversaries
     // theirs; and the path measure against greedy viewers: honest nodes'
@@ -9934,6 +10063,38 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         media_cols(&mut row, sim, m, r);
     }
     row.finish()
+}
+
+/// The playback columns, as strims-sim's rows have them: per delay `D` of
+/// [`DELAYS_MS`], the honest viewers' playouts of what they read
+/// ([`playout::play`], the tables' `stalls`), each viewer from its
+/// playback's start to its last chunk's play, or its leaving for good if
+/// that came first ([`Totals`]): the stalls per minute played
+/// (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and
+/// the mean ms from each one's join (its arrival, or the stream's start if
+/// later) to its playback's start (`startup_ms_D`).
+fn playback_cols(row: &mut JsonRow, sim: &Sim) {
+    let start = stream_start();
+    let mut totals = [Totals::default(); DELAYS_MS.len()];
+    for n in sim.honest() {
+        let reads = read_rows(n);
+        let join = (n.arrival.max(start) - start).as_millis();
+        let left = n.left.map(|t| (t - start).as_millis());
+        for (t, d) in totals.iter_mut().zip(DELAYS_MS) {
+            t.add(&playout::play(&reads, d), join, left);
+        }
+    }
+    for (t, d) in totals.iter().zip(DELAYS_MS) {
+        if let Some(x) = t.stalls_per_min() {
+            row.num(&format!("stalls_per_min_{d}"), x);
+        }
+        if let Some(x) = t.stalled_share() {
+            row.num(&format!("stalled_share_{d}"), x);
+        }
+        if let Some(x) = t.startup_ms() {
+            row.int(&format!("startup_ms_{d}"), x.max(0) as u64);
+        }
+    }
 }
 
 /// The columns of a run with arrivals or departures ([`Sim::audience`],

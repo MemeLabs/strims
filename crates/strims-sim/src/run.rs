@@ -271,7 +271,7 @@ fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) {
         }
         Fault::Crash(h) => {
             cut_off(sim, w, wan, *h);
-            w.crashed(*h);
+            w.crashed(*h, ms);
             format!("crash {}", w.name(*h))
         }
         Fault::Restart(h) if w.skips_restart(*h) => {
@@ -383,6 +383,7 @@ fn report(
     let wire_bins = std::mem::take(&mut st.wire_bins);
     let parent_losses = std::mem::take(&mut st.parent_losses);
     drop(st);
+    let parent_changes = w.parent_changes();
     if w.spec.probes.is_some() {
         vpn.unicast_by_phase = control::unicast_phases(w);
         vpn.lookups_by_phase = control::lookup_phases(w);
@@ -409,6 +410,7 @@ fn report(
         wan,
         wire_bins,
         parent_losses,
+        parent_changes,
     };
     r.scenario.faults.sort_by_key(|f| f.at);
     r

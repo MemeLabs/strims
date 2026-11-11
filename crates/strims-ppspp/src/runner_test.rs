@@ -408,6 +408,38 @@ fn the_forecast_log_outlives_its_scheduler_and_swarm() {
 }
 
 #[test]
+fn the_parent_log_outlives_its_scheduler_and_swarm() {
+    let mut p = Pair::with(hybrid(), hybrid());
+    p.leech.runner.set_parent_log(true);
+    push_to_leech(&mut p, 2);
+    let (peer, swarm) = (p.leech.peer, p.leech.swarm);
+    let open = crate::ParentChange {
+        swarm,
+        stream: 0,
+        parent: Some(peer),
+        why: crate::ParentWhy::Open,
+    };
+    let lost = crate::ParentChange {
+        parent: None,
+        why: crate::ParentWhy::Lost,
+        ..open
+    };
+    assert_eq!(p.leech.runner.take_parent_changes(), (vec![open], 0));
+    assert_eq!(p.leech.runner.take_parent_changes(), Default::default());
+
+    // The scheduler goes with the last channel, and the swarm with it.
+    p.leech.runner.stop_swarm(peer, swarm);
+    assert!(p.leech.runner.swarm_stats(swarm).is_none());
+    assert!(p.leech.runner.remove_swarm(swarm).is_some());
+    assert_eq!(p.leech.runner.take_parent_changes(), (vec![lost], 0));
+
+    // Off, it keeps nothing.
+    let mut p = Pair::with(hybrid(), hybrid());
+    push_to_leech(&mut p, 2);
+    assert_eq!(p.leech.runner.take_parent_changes(), Default::default());
+}
+
+#[test]
 fn unknown_channels_are_skipped() {
     let mut p = Pair::new(options());
     let mut frame = vec![0u8; 64];

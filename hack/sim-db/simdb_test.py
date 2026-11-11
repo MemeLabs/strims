@@ -9,7 +9,8 @@ name a suite farm run's jobs by, alike, and the index suite.py's `farm`
 writes (ArmLabels); which copy of a key the views take (Canon); its
 queries and joins over a scratch cache of both sims' tables (Queries);
 its pulls of a farm run's samples from a scratch S3, the aws CLI stubbed
-(SamplesPull); the derived tables' columns and versions (Derived); and
+(SamplesPull); the derived tables' columns and versions (Derived);
+macros.sql's playback() against the sims' own stalls (Playback); and
 catalog.py's index of a scratch cache and farm state (Catalog):
 
   python3 hack/sim-db/simdb_test.py
@@ -1160,6 +1161,87 @@ class Derived(unittest.TestCase):
         f = simdb.derived_files("episodes", [self.SRC, "suite/wt/e"])
         got = simdb.duck(f"DESCRIBE SELECT x.* FROM {f};")
         self.assertEqual([r["column_name"] for r in got], list(simdb.DERIVED["episodes"]))
+
+
+class Playback(unittest.TestCase):
+    """macros.sql's playback(delay_ms) plays `reads` as the sims' `stalls`
+    tables have them (strims-wan's playout): over runs made up as its unit
+    tests' are, and over runs of both sims trimmed to a few viewers
+    (testdata/playback/<sim>/, each a run's reads and the stalls it
+    wrote)."""
+
+    SRC = "suite/wt/pb"
+    # k: viewer: its reads (t_ms, seq, lag_ms). kq's viewer 0 has a unit
+    # 400 ms late at 1250; viewer 1 a unit read again much later, which
+    # counts at its first read, and two due together, the later 250 ms
+    # late; viewer 2 a late first unit, which starts playback late. kr's
+    # second unit is late at both delays.
+    READS = {"kq": {0: [(1200, 0, 1200), (1300, 1, 1200), (1850, 2, 1650), (1500, 3, 1200)],
+                    1: [(100, 0, 100), (200, 1, 100), (9000, 1, 8900), (1600, 2, 1400), (1700, 3, 1500)],
+                    2: [(2000, 0, 2000), (2100, 1, 2000)]},
+             "kr": {0: [(1200, 0, 1200), (6000, 1, 5900)]}}
+    FIXTURES = Path(__file__).with_name("testdata") / "playback"
+    COLS = {"reads": {"viewer": "BIGINT", "t_ms": "BIGINT", "seq": "BIGINT", "lag_ms": "BIGINT"},
+            "stalls": {"viewer": "BIGINT", "delay_ms": "BIGINT", "t_ms": "BIGINT", "stall_ms": "BIGINT"}}
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
+                  mock.patch.object(simdb, "derive", lambda srcs: None),
+                  mock.patch.object(sys, "stderr", io.StringIO()),
+                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
+                                  clear=True)):
+            p.start()
+            self.addCleanup(p.stop)
+        a = simdb.analyze()
+        self.delays = [a.DELIVERY_TARGET_MS, a.DELIVERY_MAX_MS]
+
+    def runs(self, src, keys):
+        """The scratch cache's dir of `src`, holding runs `keys`."""
+        d = simdb.cache_root() / "cache" / src
+        d.mkdir(parents=True, exist_ok=True)
+        vals = ", ".join(f"({simdb.q(k)}, {simdb.q(src)}, 'c', 'a', 1)" for k in keys)
+        simdb.duck(f"COPY (SELECT * FROM (VALUES {vals}) t(k, src, cell, arm, seed)) "
+                   f"TO {simdb.q(d / 'runs.parquet')} (FORMAT parquet);", out=None)
+        return d
+
+    def rows(self, query):
+        v, _ = simdb.views(argparse.Namespace(src=None, cell=None, arm=None, seed=None))
+        return sorted((r["k"], r["viewer"], r["delay_ms"], r["t_ms"], r["stall_ms"])
+                      for r in simdb.duck(v + "\n" + query + ";"))
+
+    def played(self):
+        return self.rows(" UNION ALL ".join(f"SELECT * FROM playback({d})" for d in self.delays))
+
+    def test_a_stall_is_each_rise_of_the_offset_past_the_first_unit(self):
+        d = self.runs(self.SRC, self.READS)
+        vals = ", ".join(f"({simdb.q(k)}, {simdb.q(self.SRC)}, {v}, {t}, {seq}, {lag})"
+                         for k, vs in self.READS.items() for v, rs in vs.items() for t, seq, lag in rs)
+        simdb.duck(f"COPY (SELECT * FROM (VALUES {vals}) t(k, src, viewer, t_ms, seq, lag_ms)) "
+                   f"TO {simdb.q(d / 'reads.parquet')} (FORMAT parquet);", out=None)
+        self.assertEqual(self.delays, [1250, 4250])
+        self.assertEqual(self.played(), [("kq", 0, 1250, 1450, 400), ("kq", 1, 1250, 1450, 250),
+                                         ("kr", 0, 1250, 1350, 4650), ("kr", 0, 4250, 4350, 1650)])
+
+    def test_playback_gives_the_sims_own_stalls(self):
+        sims = sorted(p.name for p in self.FIXTURES.iterdir())
+        self.assertEqual(sims, ["ppspp", "strims-sim"])
+        for sim in sims:
+            src = f"suite/wt/{sim}"
+            d = self.runs(src, [sim])
+            for t, cols in self.COLS.items():
+                c = "{" + ", ".join(f"{simdb.q(n)}: {simdb.q(typ)}" for n, typ in cols.items()) + "}"
+                f = self.FIXTURES / sim / f"{t}.csv.gz"
+                simdb.duck(f"COPY (SELECT {simdb.q(sim)} AS k, {simdb.q(src)} AS src, * FROM read_csv({simdb.q(f)}, "
+                           f"header=true, auto_detect=false, columns={c})) "
+                           f"TO {simdb.q(d / f'{t}.parquet')} (FORMAT parquet);", out=None)
+        stalls = self.rows("SELECT * FROM stalls")
+        for sim in sims:
+            for delay in self.delays:
+                self.assertTrue(any(s[0] == sim and s[2] == delay for s in stalls), (sim, delay))
+        self.assertEqual(self.played(), stalls)
 
 
 

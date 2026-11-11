@@ -6,9 +6,10 @@
 use strims_base::time::Time;
 use strims_binmap::Bin;
 use strims_kademlia::ID;
+use strims_ppspp::codec::Stream;
 use strims_ppspp::{
-    ChannelMetrics, ChannelStats, ChannelTotals, LagForecast, MetricsSnapshot, PeerStats,
-    PushStats, SwarmCounters, SwarmId, SwarmKey, SwarmSchedulerStats,
+    ChannelMetrics, ChannelStats, ChannelTotals, LagForecast, MetricsSnapshot, ParentWhy,
+    PeerStats, PushStats, SwarmCounters, SwarmId, SwarmKey, SwarmSchedulerStats,
 };
 use strims_vnic::{HostMetrics, LinkKind, LinkMetrics, LinkPath};
 use strims_vpn::{Delivery, ExchangeOutcome, NetworkId};
@@ -248,6 +249,19 @@ pub struct ForecastInfo {
     pub swarm: SwarmKey,
     pub peer: Option<ID>,
     pub forecast: LagForecast,
+}
+
+/// A change of a hybrid stream's open parent
+/// ([`crate::NodeConfig::parent_log`], ppspp's `ParentChange`): when, by
+/// the node's clock, and the stream's parent from then on, by host
+/// (`None` for none).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParentInfo {
+    pub at: Time,
+    pub swarm: SwarmKey,
+    pub stream: Stream,
+    pub parent: Option<ID>,
+    pub why: ParentWhy,
 }
 
 /// The ppspp runner's state.

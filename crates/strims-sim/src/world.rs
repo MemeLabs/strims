@@ -14,12 +14,14 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use strims_base::rng::{DetRng, det_rng};
 use strims_base::time::Time;
 use strims_crypto::key_from_seed;
+use strims_node::config::ParentSink;
+use strims_node::event::ParentInfo;
 use strims_node::{
     ExchangeOutcome, HostId, NetworkId, Node, NodeConfig, NodeMetrics, PpsppCapture, SwarmKey,
     WebRtcConfig,
@@ -29,7 +31,9 @@ use strims_wan::live::Au;
 
 use crate::memory::{GroupCounters, MemoryGroup};
 use crate::net::SendBuffers;
-use crate::report::{ForecastRecord, HostReport, MediaLog, NodeBinRecord, ParentLoss, VpnReport};
+use crate::report::{
+    ForecastRecord, HostReport, MediaLog, NodeBinRecord, ParentLoss, ParentRecord, VpnReport,
+};
 use crate::skew::OffsetCapture;
 use crate::spec::{HostIx, Scenario, Transport};
 use crate::stats::{HostStats, TransferSample};
@@ -89,6 +93,12 @@ pub(crate) struct HostState {
     pub neighbours: Vec<(Duration, Vec<HostIx>)>,
     /// The node's key for each scenario swarm it takes part in.
     pub swarms: Vec<Option<SwarmKey>>,
+    /// Each incarnation's key of the first scenario swarm, as it
+    /// registered.
+    pub first_swarm: Vec<(u32, Option<SwarmKey>)>,
+    /// When each incarnation that stopped without closing its links (a
+    /// crash, an abrupt departure) stopped.
+    pub stopped: Vec<(u32, Duration)>,
     /// Links (indexes into `Scenario::links`) being dialed.
     pub dialing: BTreeSet<usize>,
     /// The last dial outcome per link, to log changes only.
@@ -215,6 +225,10 @@ pub(crate) struct WorldState {
     pub wire_bins: Vec<Vec<[u64; crate::wan::UP_COUNTERS.len()]>>,
     /// See [`crate::Report::parent_losses`].
     pub parent_losses: Vec<ParentLoss>,
+    /// With the tables, every node's parent changes as their sinks gave
+    /// them ([`World::parent_changes`]): the host, its incarnation, the
+    /// change.
+    pub parents: Vec<(HostIx, u32, ParentInfo)>,
 }
 
 /// One run.
@@ -240,6 +254,12 @@ pub(crate) struct World {
     /// How far each host's clock reads ahead of true time
     /// ([`Scenario::clock_skew`]); empty without skew.
     pub clock_offsets: Vec<strims_base::time::Duration>,
+    /// With the tables, the nodes' parent sinks' channel
+    /// ([`NodeConfig::parent_log`]): they send from inside the nodes'
+    /// passes, and the records take what came at each stats sample, so it
+    /// holds a sample's at most.
+    parent_tx: mpsc::Sender<(HostIx, u32, ParentInfo)>,
+    parent_rx: mpsc::Receiver<(HostIx, u32, ParentInfo)>,
     pub st: RefCell<WorldState>,
 }
 
@@ -296,8 +316,10 @@ impl World {
             rng,
             wire_bins: Vec::new(),
             parent_losses: Vec::new(),
+            parents: Vec::new(),
         };
         let send_buffers = spec.wan.and(spec.send_buffer).map(SendBuffers::new);
+        let (parent_tx, parent_rx) = mpsc::channel();
         World {
             seed,
             spec,
@@ -310,6 +332,8 @@ impl World {
             wan: SharedWan::default(),
             media_traces,
             clock_offsets,
+            parent_tx,
+            parent_rx,
             st: RefCell::new(st),
         }
     }
@@ -444,6 +468,10 @@ impl World {
                 width: width.max(Duration::from_millis(1)).into(),
             });
             c.forecast_log = self.spec.forecast_log;
+            let tx = self.parent_tx.clone();
+            c.parent_log = Some(ParentSink(Arc::new(move |p| {
+                let _ = tx.send((h, incarnation, p));
+            })));
         }
         if let Some(dir) = &self.spec.capture {
             let path = dir.join(format!("{}-{incarnation}.ppcap", spec.name));
@@ -493,6 +521,8 @@ impl World {
             hs.host_id = Some(id);
             hs.nets = nets;
             hs.net_peers.clear();
+            hs.first_swarm
+                .push((hs.incarnation, swarms.first().copied().flatten()));
             hs.swarms = swarms;
             Some(hs.incarnation)
         });
@@ -577,9 +607,11 @@ impl World {
 
     // --- faults -------------------------------------------------------------
 
-    pub fn crashed(&self, h: HostIx) {
+    /// `h` crashed at `ms`.
+    pub fn crashed(&self, h: HostIx, ms: u64) {
         self.record(|st| {
             if let Some(s) = st.hosts.get_mut(h) {
+                s.stopped.push((s.incarnation, Duration::from_millis(ms)));
                 s.retire();
                 s.totals.restarts += 1;
                 s.down = true;
@@ -660,6 +692,7 @@ impl World {
                 Some(s) if s.departed.is_none() => {
                     s.departed = Some(ms);
                     if stopped {
+                        s.stopped.push((s.incarnation, Duration::from_millis(ms)));
                         s.retire();
                     }
                 }
@@ -1164,6 +1197,7 @@ impl World {
     /// is logged once per host.
     pub fn observe_stats(&self, h: HostIx, m: &NodeMetrics) {
         self.observe_bins(h, m);
+        self.take_parents();
         if self.spec.departures.is_some() {
             self.observe_parents(h, m);
         }
@@ -1254,6 +1288,74 @@ impl World {
             self.log("invariant", &f);
             self.record(|st| st.violations.push((now, f)));
         }
+    }
+
+    /// Moves what the nodes' parent sinks sent into the records.
+    fn take_parents(&self) {
+        self.record(|st| st.parents.extend(self.parent_rx.try_iter()));
+    }
+
+    /// Every node's parent changes of the first scenario swarm
+    /// ([`crate::Report::parent_changes`]), in run time: those its parent
+    /// log gave, and at each stop of an incarnation that didn't close its
+    /// links, the loss of the parents it had then.
+    pub fn parent_changes(&self) -> Vec<ParentRecord> {
+        self.take_parents();
+        let st = self.st.borrow();
+        let mut by_host: BTreeMap<HostIx, Vec<(u32, ParentInfo)>> = BTreeMap::new();
+        for &(h, inc, p) in &st.parents {
+            by_host.entry(h).or_default().push((inc, p));
+        }
+        let mut out = Vec::new();
+        for (h, hs) in st.hosts.iter().enumerate() {
+            let epoch = self.clock_epoch(h);
+            let mut open: BTreeMap<u16, HostIx> = BTreeMap::new();
+            let (mut inc, mut last) = (0, Duration::ZERO);
+            // An incarnation's parents are lost where it stopped (in the
+            // fault's ms, not before its own last change).
+            let stop = |inc: u32, last: Duration, open: &mut BTreeMap<u16, HostIx>| {
+                let open = std::mem::take(open);
+                let at = hs.stopped.iter().find(|&&(i, _)| i == inc);
+                let Some(at) = at.map(|&(_, at)| at.max(last)) else {
+                    return Vec::new();
+                };
+                open.into_keys()
+                    .map(|stream| ParentRecord {
+                        at,
+                        node: h,
+                        stream,
+                        parent: None,
+                        why: strims_ppspp::ParentWhy::Lost,
+                    })
+                    .collect()
+            };
+            for &(i, p) in by_host.get(&h).into_iter().flatten() {
+                let key = hs.first_swarm.iter().find(|&&(j, _)| j == i);
+                if key.and_then(|&(_, k)| k) != Some(p.swarm) {
+                    continue;
+                }
+                if i != inc {
+                    out.extend(stop(inc, last, &mut open));
+                    inc = i;
+                }
+                let parent = p.parent.and_then(|id| st.ids.get(&id).copied());
+                match parent {
+                    Some(x) => open.insert(p.stream, x),
+                    None => open.remove(&p.stream),
+                };
+                last = (p.at - epoch).to_std().unwrap_or_default();
+                out.push(ParentRecord {
+                    at: last,
+                    node: h,
+                    stream: p.stream,
+                    parent,
+                    why: p.why,
+                });
+            }
+            out.extend(stop(inc, last, &mut open));
+        }
+        out.sort_by_key(|r| r.at);
+        out
     }
 
     /// Keeps the push parents of `h`'s first scenario swarm from a stats

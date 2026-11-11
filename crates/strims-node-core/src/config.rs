@@ -138,6 +138,23 @@ pub struct NodeConfig {
     /// the next `Node::metrics` (`NodeMetrics::forecasts`); off by default
     /// and on every real node. It changes no decision.
     pub forecast_log: bool,
+    /// Hands every change of a hybrid stream's open parent (the ppspp
+    /// runner's parent log, `Runner::set_parent_log`) to the sink as it
+    /// happens: at the end of the node's pass that made it, before the pass
+    /// forgets the peer it names; `None` (the default, and every real
+    /// node's) keeps none. It changes no decision.
+    pub parent_log: Option<ParentSink>,
+}
+
+/// Where a node's parent changes go ([`NodeConfig::parent_log`]), for a
+/// simulation's tables.
+#[derive(Clone)]
+pub struct ParentSink(pub Arc<dyn Fn(crate::event::ParentInfo) + Send + Sync>);
+
+impl fmt::Debug for ParentSink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ParentSink")
+    }
 }
 
 /// The bins of [`NodeConfig::stats_bins`]: edges every `width` from
@@ -290,6 +307,7 @@ impl NodeConfig {
             query_delay: Duration::from_millis(200),
             stats_bins: None,
             forecast_log: false,
+            parent_log: None,
             node_platform: String::new(),
             node_version: "dev".to_owned(),
             ppspp_capture: None,
