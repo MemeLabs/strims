@@ -80,7 +80,10 @@ them, so a change here changes that prompt too.
   steady state that would rebuffer a player. `dynamics(exp)` gives each
   arm and cell's lag p99 by phase and `spike_s_<D>`, the seconds per run
   past startup in which an honest viewer lags past D. Weigh steady state
-  and joins into a running swarm over startup.
+  and joins into a running swarm over startup. `lag_since(exp)` gives the
+  honest viewers' lag quantiles against the seconds since each scenario
+  event (an uplink step, a departure, a viewer's own join), from 10 s
+  before it to 120 s after: how long a disturbance lasts.
 - **Overhead.** What the swarm writes besides the stream: `bins`'
   `seed_<kind>_bytes` and `viewer_<kind>_bytes` by message kind (data,
   have, request, integrity, state, ack, announce, ping, header), per

@@ -250,8 +250,11 @@ class Kinds(Fixture):
         # The fields as the document gives them: a sim's note, value with
         # its unit, a derived kind's sim.
         join = got[("join", "ppspp")]
-        self.assertEqual((join["class"], join["node"], join["notes"], join["value_meaning"]),
-                         ("scenario", "the viewer", vocab.notes("join", "ppspp"), None))
+        self.assertEqual((join["class"], join["scope"], join["node"], join["notes"], join["value_meaning"]),
+                         ("scenario", "viewer", "the viewer", vocab.notes("join", "ppspp"), None))
+        # A scenario kind's scope is run unless it names its own; another
+        # class's none.
+        self.assertEqual([got[(k, "strims-sim")]["scope"] for k in ("latency", "caught_up")], ["run", None])
         self.assertEqual(got[("competing_start", "strims-sim")]["value_meaning"], "the competing flow's round trip, ms")
         self.assertEqual((got[("collapse", "derived")]["class"], got[("collapse", "derived")]["value_meaning"]),
                          ("derived", "its length, s"))

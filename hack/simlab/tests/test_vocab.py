@@ -262,6 +262,14 @@ class Queries(unittest.TestCase):
         self.assertEqual(list(vocab.entries("reasons")), vocab.reasons())
         self.assertTrue(vocab.entries("phases")["steady"]["description"])
 
+    def test_scope_is_run_for_a_scenario_kind_that_names_none(self):
+        text = given(document(kinds=(("a", "scenario", ["ppspp"]), ("b", "scenario", ["ppspp"]),
+                                     ("c", "observation", ["ppspp"]))), "b", 'scope = "viewer"')
+        doc = vocab.parse(text)
+        self.assertEqual(vocab.problems(doc), [])
+        self.assertEqual([vocab.scope(k, doc) for k in ("a", "b", "c")], ["run", "viewer", None])
+        self.assertEqual((vocab.scope("join"), vocab.scope("latency")), ("viewer", "run"))
+
 
 if __name__ == "__main__":
     unittest.main()

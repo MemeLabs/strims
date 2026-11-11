@@ -37,6 +37,8 @@ in its order:
                                `kid`: itself, or its replacement
   notes(kid, sim)              that sim's note on the kind, or None
   holders(kid)                 the sims whose runs may hold the kind
+  scope(kid)                   whose seconds a scenario kind bears on: run
+                               (its default) or viewer
   value_text(k)                what a kind's table says `value` holds, its
                                unit after it
   knobs()                      the current kinds a knob (`env_gate`) gates,
@@ -305,6 +307,15 @@ def _holders(k):
         return []
     sims = k.get("sims") or []
     return [s for s in SIMS if s in sims] if sims else list(SIMS)
+
+
+def scope(kid, doc=None):
+    """Whose seconds kind `kid` bears on: its `scope`, run (every viewer's)
+    or viewer (its node's viewer's alone, as a join's); run for a scenario
+    kind that names none; None for a kind of another class that names
+    none."""
+    k = kind(kid, doc)
+    return k.get("scope") or ("run" if k["class"] == "scenario" else None)
 
 
 def value_text(k):

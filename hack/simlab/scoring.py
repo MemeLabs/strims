@@ -66,12 +66,14 @@ SCORE_DB = None
 def query(sql):
     """The rows of `sql` over the catalog (or SCORE_DB) in a session holding
     the scoring objects as simlab.suite defines them (catalog.scoring_sql,
-    TEMP: its METRICS, whatever the catalog's indexer had)."""
+    TEMP: its METRICS, whatever the catalog's indexer had); a macro that
+    reads a table the catalog's indexer didn't make fails saying so, and
+    the others still score."""
     run = (lambda s: catalog.lake(s)) if SCORE_DB is None else (lambda s: store_host.duck(s, db=SCORE_DB))
-    cols = {r["t"]: r["c"] for r in run(
+    cols = {r["t"]: set(r["c"]) for r in run(
         "SELECT table_name AS t, list(column_name) AS c FROM duckdb_columns() WHERE database_name = "
-        "current_database() AND schema_name = 'main' AND table_name IN ('rows', 'verdicts', 'jobs') GROUP BY ALL;")}
-    return run(catalog.scoring_sql(catalog.scoring_cols(cols), temp=True) + "\n" + sql)
+        "current_database() AND schema_name = 'main' GROUP BY ALL;")}
+    return run(catalog.scoring_sql(catalog.scoring_cols(cols, have=cols), temp=True) + "\n" + sql)
 
 
 def sides_sql(**sides):

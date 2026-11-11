@@ -184,6 +184,7 @@ class = "scenario"
 sims = ["strims-sim", "ppspp"]
 description = "A viewer incarnation starts reading the stream."
 node = "the viewer"
+scope = "viewer"
 
 [kinds.join.notes]
 strims-sim = "Each viewer incarnation's (`Join`'s start), a restart's too."

@@ -14,6 +14,7 @@ fixtures:
   Arithmetic  fisher_p against the exact hypergeometric sum, t975_at
               against Student's t, effect_mark.
   Dynamics    structural and dynamics over a made-up experiment.
+  LagSince    lag_since over a made-up run's events.
 
   python3 hack/sim-suite/suite_test.py [-v]
 """
@@ -53,15 +54,18 @@ CREATE TABLE IF NOT EXISTS raw.runs (k VARCHAR, src VARCHAR, cell VARCHAR, arm V
     frames BIGINT, bytes BIGINT, wall_s DOUBLE, rss_mb DOUBLE, "at" VARCHAR);
 CREATE TABLE IF NOT EXISTS rows (k VARCHAR, src VARCHAR);
 CREATE TABLE IF NOT EXISTS verdicts (k VARCHAR, src VARCHAR, collapsed BOOLEAN);
-CREATE TABLE IF NOT EXISTS jobs (k VARCHAR, src VARCHAR, trace VARCHAR, reads_hash VARCHAR);
+CREATE TABLE IF NOT EXISTS jobs (k VARCHAR, src VARCHAR, sim VARCHAR, trace VARCHAR, reads_hash VARCHAR);
 CREATE TABLE IF NOT EXISTS experiment_jobs (exp_id VARCHAR, cell VARCHAR, arm_label VARCHAR, seed BIGINT, k VARCHAR,
     src VARCHAR, flush VARCHAR, matrix VARCHAR);
 CREATE TABLE IF NOT EXISTS experiment_cells (exp_id VARCHAR, cell VARCHAR, why VARCHAR, matrix VARCHAR);
-CREATE TABLE IF NOT EXISTS viewers (k VARCHAR, src VARCHAR, viewer BIGINT, arrive_ms BIGINT, hostile BOOLEAN);
+CREATE TABLE IF NOT EXISTS viewers (k VARCHAR, src VARCHAR, viewer BIGINT, node BIGINT, arrive_ms BIGINT,
+    hostile BOOLEAN);
 CREATE TABLE IF NOT EXISTS viewer_seconds (k VARCHAR, src VARCHAR, viewer BIGINT, sec BIGINT, lag_ms DOUBLE,
     frames BIGINT);
 CREATE TABLE IF NOT EXISTS verdict_seconds (k VARCHAR, src VARCHAR, sec BIGINT, phase VARCHAR);
 CREATE TABLE IF NOT EXISTS episodes (k VARCHAR, src VARCHAR, kind VARCHAR, len BIGINT);
+CREATE TABLE IF NOT EXISTS events (k VARCHAR, src VARCHAR, t_ms DOUBLE, kind VARCHAR, node BIGINT);
+CREATE TABLE IF NOT EXISTS event_kinds (kind VARCHAR, sim VARCHAR, class VARCHAR, scope VARCHAR, replaced_by VARCHAR);
 """
 
 
@@ -344,6 +348,97 @@ class Dynamics(unittest.TestCase):
         self.assertEqual((c["unhealthy_max_s"], c["unhealthy_p50_s"]), (12, 8.5))
         d = got["d"]
         self.assertEqual((d["runs"], d["collapsed"], d["spike_s_1250"], d["unhealthy_max_s"]), (2, 2, 0.0, 25))
+
+
+class LagSince(unittest.TestCase):
+    """A made-up experiment `since`, cell c, arm x, one strims-sim run k1:
+    viewers 0 (node 1, lag 100 + its second, nothing read at 21 s), 1
+    (node 2, arriving at 5 s, reading 200 from 7 s) and 2 (hostile,
+    9000); a latency step at 0 s (setup), two uplink events at 20 s, an
+    old_up (retired, replaced by uplink) at 22 s, viewer 1's join at
+    5.3 s and a first_frame (an observation) at 7 s."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.db = Path(cls.tmp.name) / "since.duckdb"
+        vs = []
+        for sec in range(40):
+            vs.append((0, sec, None if sec == 21 else 100 + sec))
+            if sec >= 5:
+                vs.append((1, sec, None if sec < 7 else 200))
+            vs.append((2, sec, 9000))
+        lit = lambda x: "NULL" if x is None else repr(x)
+        events = [(0.0, "latency", -1), (20000.0, "uplink", 0), (20000.0, "uplink", 7), (22000.0, "old_up", 0),
+                  (0.0, "join", 1), (5300.0, "join", 2), (7000.0, "first_frame", 2)]
+        kinds = [("latency", "scenario", "run", None), ("uplink", "scenario", "run", None),
+                 ("old_up", "scenario", "run", "uplink"), ("join", "scenario", "viewer", None),
+                 ("first_frame", "observation", None, None)]
+        sql = [
+            "CREATE TABLE jobs AS SELECT 'k1' AS k, 's' AS src, 'strims-sim' AS sim, NULL::VARCHAR AS trace, "
+            "NULL::VARCHAR AS reads_hash;",
+            "CREATE TABLE experiment_jobs AS SELECT 'since' AS exp_id, 'c' AS cell, 'x' AS arm_label, 1 AS seed, "
+            "'k1' AS k, 's' AS src, 's' AS flush, 'since-00' AS matrix;",
+            "CREATE TABLE viewers AS SELECT * FROM (VALUES ('k1', 's', 0, 1, NULL, false), ('k1', 's', 1, 2, 5000, false), "
+            "('k1', 's', 2, 3, NULL, true)) v(k, src, viewer, node, arrive_ms, hostile);",
+            "CREATE TABLE viewer_seconds AS SELECT * FROM (VALUES "
+            + ", ".join(f"('k1', 's', {v}, {sec}, {lit(lag)}, 1)" for v, sec, lag in vs)
+            + ") v(k, src, viewer, sec, lag_ms, frames);",
+            "CREATE TABLE events AS SELECT * FROM (VALUES "
+            + ", ".join(f"('k1', 's', {t}, '{kind}', {node})" for t, kind, node in events)
+            + ") v(k, src, t_ms, kind, node);",
+            "CREATE TABLE event_kinds AS SELECT kind, 'strims-sim' AS sim, class, scope::VARCHAR AS scope, "
+            "replaced_by::VARCHAR AS replaced_by FROM (VALUES "
+            + ", ".join(f"('{kid}', '{cls}', {lit(scope)}, {lit(by)})" for kid, cls, scope, by in kinds)
+            + ") v(kind, class, scope, replaced_by);",
+        ]
+        database(cls.db, "\n".join(sql))
+
+    @classmethod
+    def tearDownClass(cls):
+        scoring.SCORE_DB = None
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        scoring.SCORE_DB = self.db
+
+    def test_lag_since(self):
+        got = scored("SELECT * FROM lag_since('since', before := 2, after := 3);")
+        self.assertEqual(list(got[0]), ["cell", "arm_label", "kind", "rel_s", "windows", "viewer_s", "lag_p50_ms",
+                                        "lag_p90_ms", "lag_p99_ms"])
+        by = {(r["kind"], r["rel_s"]): r for r in got}
+        # The setup's latency and the observation anchor nothing; old_up
+        # is uplink's; the two uplink events at 20 s are one window.
+        self.assertEqual(sorted(by), [("join", 0), ("join", 1), ("join", 2)] + [("uplink", r) for r in range(-2, 3)])
+        # Viewer 1's join takes its own seconds alone: 5 and 6 s hold no
+        # lag yet, 7 s its first.
+        self.assertEqual([(by[("join", r)]["windows"], by[("join", r)]["viewer_s"]) for r in range(3)],
+                         [(1, 0), (1, 0), (1, 1)])
+        self.assertIsNone(by[("join", 0)]["lag_p50_ms"])
+        self.assertEqual(by[("join", 2)]["lag_p99_ms"], 200)
+        # uplink at 20 s and 22 s: each of their seconds 20-22 counts in
+        # both windows, so 20 viewer-seconds where the honest viewers have
+        # 14 from 18 s to 24 s. At rel_s 1: 21 s (viewer 0's carried 1120
+        # and 200) and 23 s (123 and 200).
+        self.assertEqual([by[("uplink", r)]["windows"] for r in range(-2, 3)], [2] * 5)
+        self.assertEqual(sum(by[("uplink", r)]["viewer_s"] for r in range(-2, 3)), 20)
+        one = by[("uplink", 1)]
+        self.assertEqual(one["lag_p50_ms"], 200)
+        self.assertAlmostEqual(one["lag_p99_ms"], 200 + 0.97 * 920, places=6)
+        self.assertEqual(by[("uplink", -2)]["lag_p50_ms"], (120 + 200) / 2)
+        # By default 10 s before to 120 s after, the run's 40 s bounding it.
+        got = scored("SELECT kind, min(rel_s) AS lo, max(rel_s) AS hi FROM lag_since('since') GROUP BY ALL ORDER BY ALL;")
+        self.assertEqual([(r["kind"], r["lo"], r["hi"]) for r in got], [("join", 0, 34), ("uplink", -10, 19)])
+
+    def test_a_catalog_without_what_it_needs(self):
+        # A catalog indexed before event_kinds had a scope: lag_since says
+        # what it lacks, the other macros still score.
+        db = Path(self.tmp.name) / "old.duckdb"
+        database(db, "CREATE TABLE event_kinds (kind VARCHAR, sim VARCHAR, class VARCHAR);")
+        with self.assertRaisesRegex(suite.simdb().DuckError, "lag_since reads event_kinds.scope, "
+                                                             "event_kinds.replaced_by, which this catalog lacks"):
+            scored("SELECT * FROM lag_since('since');")
+        self.assertEqual(scored("SELECT * FROM structural('since');"), [])
 
 
 if __name__ == "__main__":

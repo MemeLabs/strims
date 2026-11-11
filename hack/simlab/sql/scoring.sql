@@ -7,7 +7,10 @@
 -- metric_defs, job_runs, job_metrics and job_metrics_of from suite.py's
 -- METRICS, and t975, Student's t. It fills in each @{...}: a constant of
 -- suite.py's, analyze.py's or its own, or a row field (r.<field>), the
--- field where the rows have it, else NULL.
+-- field where the rows have it, else NULL. A macro's `-- needs:` line names
+-- the tables (or table.column) it reads that a catalog indexed by older
+-- code may lack: a session's own objects over such a catalog make it one
+-- that fails saying so (catalog.needed).
 --
 -- A side is one arm's runs, a list of {'cell', 'seed', 'k', 'src'}
 -- structs: the job k is that arm's run of the cell at the seed, and src
@@ -295,20 +298,39 @@ CREATE OR REPLACE MACRO structural(exp_name) AS TABLE
     GROUP BY e.cell HAVING bool_and(v.collapsed)
     ORDER BY min(e.matrix), e.cell;
 
+-- The honest viewers' lag each second of the runs `jobs`, a list of
+-- structs with a job's `k` (its tables its own source's, jobs.src; other
+-- fields left alone, so a side serves): k, src, viewer, sec, lag_ms,
+-- frames and arrive_ms (NULL for a viewer there from the start). lag_ms is
+-- viewer_seconds', carried from the viewer's last second with a read
+-- +1000 ms a second without one, as analyze.py's lags() does: NULL before
+-- its first read.
+CREATE OR REPLACE MACRO viewer_lag_of(jobs) AS TABLE
+    WITH j AS (
+        SELECT DISTINCT b.k, b.src FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k),
+    vs AS (
+        SELECT s.k, s.src, s.viewer, s.sec, s.lag_ms, s.frames, w.arrive_ms
+        FROM viewer_seconds s SEMI JOIN j USING (k, src)
+        JOIN viewers w USING (k, src, viewer) WHERE NOT w.hostile)
+    SELECT k, src, viewer, sec,
+           coalesce(lag_ms, last_value(lag_ms IGNORE NULLS) OVER w
+                    + 1000 * (sec - last_value(CASE WHEN lag_ms IS NOT NULL THEN sec END IGNORE NULLS) OVER w))
+               AS lag_ms,
+           frames, arrive_ms
+    FROM vs WINDOW w AS (PARTITION BY k, src, viewer ORDER BY sec ROWS UNBOUNDED PRECEDING);
+
 -- Each arm and cell of experiment exp_name, in the terms that tell a
 -- startup tail from a steady spike:
 --   runs, collapsed          its runs and the collapsed ones;
 --   lag_p99_<phase>_ms       the p99 of the honest viewers' lag over their
 --                            seconds of each phase (startup, steady,
 --                            after_down, after_up), pooled over the runs:
---                            viewer_seconds' lag_ms, carried from a
---                            viewer's last second with a read +1000 ms a
---                            second without one, as analyze.py does. A
---                            second's phase is its verdict's
---                            (verdict_seconds), but startup until the
---                            viewer's own startup ends (analyze.presence:
---                            its first frame's second plus
---                            @{join_grace_secs} for one that arrived later);
+--                            viewer_lag_of's carried lag. A second's phase
+--                            is its verdict's (verdict_seconds), but
+--                            startup until the viewer's own startup ends
+--                            (analyze.presence: its first frame's second
+--                            plus @{join_grace_secs} for one that arrived
+--                            later);
 --   spike_s_<D>              per run, the seconds past startup, the run's
 --                            and its own, in which an honest viewer lags
 --                            past D ms: a player D behind would stall then;
@@ -322,34 +344,27 @@ CREATE OR REPLACE MACRO structural(exp_name) AS TABLE
 CREATE OR REPLACE MACRO dynamics(exp_name) AS TABLE
     WITH ej AS (
         SELECT DISTINCT cell, arm_label, k, src, matrix FROM experiment_jobs WHERE exp_id = exp_name),
-    vs AS (
-        SELECT s.k, s.src, s.viewer, s.sec, s.lag_ms, s.frames, w.arrive_ms
-        FROM viewer_seconds s SEMI JOIN ej USING (k, src)
-        JOIN viewers w USING (k, src, viewer) WHERE NOT w.hostile),
-    carried AS (
-        SELECT *, coalesce(lag_ms, last_value(lag_ms IGNORE NULLS) OVER w
-                           + 1000 * (sec - last_value(CASE WHEN lag_ms IS NOT NULL THEN sec END IGNORE NULLS) OVER w))
-                  AS lag
-        FROM vs WINDOW w AS (PARTITION BY k, src, viewer ORDER BY sec ROWS UNBOUNDED PRECEDING)),
+    lags AS (
+        FROM viewer_lag_of((SELECT list({'k': k}) FROM experiment_jobs WHERE exp_id = exp_name))),
     since AS (
         SELECT k, src, viewer,
                CASE WHEN arrive_ms IS NULL THEN 0
                     ELSE coalesce(min(sec) FILTER (WHERE frames > 0 AND sec >= arrive_ms // 1000), arrive_ms // 1000)
                          + @{join_grace_secs} END AS since
-        FROM vs GROUP BY k, src, viewer, arrive_ms),
+        FROM lags GROUP BY k, src, viewer, arrive_ms),
     phased AS (
         SELECT c.*, CASE WHEN c.sec < s.since THEN 'startup' ELSE p.phase END AS phase
-        FROM carried c JOIN since s USING (k, src, viewer) JOIN verdict_seconds p USING (k, src, sec)),
+        FROM lags c JOIN since s USING (k, src, viewer) JOIN verdict_seconds p USING (k, src, sec)),
     lagq AS (
         SELECT e.cell, e.arm_label,
-               quantile_cont(p.lag, 0.99) FILTER (WHERE p.phase = 'startup') AS lag_p99_startup_ms,
-               quantile_cont(p.lag, 0.99) FILTER (WHERE p.phase = 'steady') AS lag_p99_steady_ms,
-               quantile_cont(p.lag, 0.99) FILTER (WHERE p.phase = 'after_down') AS lag_p99_after_down_ms,
-               quantile_cont(p.lag, 0.99) FILTER (WHERE p.phase = 'after_up') AS lag_p99_after_up_ms
+               quantile_cont(p.lag_ms, 0.99) FILTER (WHERE p.phase = 'startup') AS lag_p99_startup_ms,
+               quantile_cont(p.lag_ms, 0.99) FILTER (WHERE p.phase = 'steady') AS lag_p99_steady_ms,
+               quantile_cont(p.lag_ms, 0.99) FILTER (WHERE p.phase = 'after_down') AS lag_p99_after_down_ms,
+               quantile_cont(p.lag_ms, 0.99) FILTER (WHERE p.phase = 'after_up') AS lag_p99_after_up_ms
         FROM phased p JOIN ej e USING (k, src) GROUP BY ALL),
     spikes AS (
-        SELECT k, src, count(DISTINCT sec) FILTER (WHERE lag > @{delay_target_ms}) AS s1,
-               count(DISTINCT sec) FILTER (WHERE lag > @{delay_max_ms}) AS s2
+        SELECT k, src, count(DISTINCT sec) FILTER (WHERE lag_ms > @{delay_target_ms}) AS s1,
+               count(DISTINCT sec) FILTER (WHERE lag_ms > @{delay_max_ms}) AS s2
         FROM phased WHERE phase <> 'startup' GROUP BY ALL),
     spells AS (
         SELECT k, src, max(len) AS longest FROM episodes WHERE kind = 'unhealthy' GROUP BY ALL),
@@ -372,3 +387,53 @@ CREATE OR REPLACE MACRO dynamics(exp_name) AS TABLE
            matrix, runs, collapsed)
     FROM runs r LEFT JOIN lagq l USING (cell, arm_label)
     ORDER BY r.matrix, r.cell, r.arm_label;
+
+-- The honest viewers' lag (viewer_lag_of) against the seconds since each
+-- scenario event of experiment exp_name's runs, from `before` seconds
+-- before it to `after` after, by cell, arm and kind: cell, arm_label,
+-- kind, rel_s, windows, viewer_s and lag_p50_ms, lag_p90_ms, lag_p99_ms.
+-- kind is the event's current id (event_kinds' replaced_by, by the job's
+-- sim, for a retired one), of class scenario; an event at t <= 0 sets the
+-- run up and anchors nothing. A viewer's second sec is rel_s =
+-- floor(sec + 0.5 - t) after an event at t s, as the verdict places a
+-- second in a phase, for rel_s from -before to after - 1. A run-scoped
+-- kind's event (event_kinds.scope) takes every honest viewer's seconds of
+-- its run, a viewer-scoped kind's (a join) only its node's viewer's.
+-- Every event is a window of its own (a run's events of one kind at one
+-- time, of one viewer for a viewer-scoped kind, are one), so a second
+-- within two windows of a kind counts in each. windows is how many
+-- windows hold a viewer-second at rel_s, and viewer_s how many
+-- viewer-seconds with a lag they hold there (the quantiles').
+-- needs: events event_kinds.scope event_kinds.replaced_by jobs.sim viewers.node
+CREATE OR REPLACE MACRO lag_since(exp_name, before := 10, after := 120) AS TABLE
+    WITH ej AS (
+        SELECT DISTINCT cell, arm_label, k, src, matrix FROM experiment_jobs WHERE exp_id = exp_name),
+    kinds AS (
+        SELECT o.kind AS id, o.sim, n.kind, n.scope = 'viewer' AS own
+        FROM event_kinds o JOIN event_kinds n ON n.kind = coalesce(o.replaced_by, o.kind) AND n.sim = o.sim
+        WHERE n.class = 'scenario'),
+    anchors AS (
+        SELECT row_number() OVER () AS w, * FROM (
+            SELECT DISTINCT e.k, e.src, c.kind, c.own, e.t_ms / 1000 AS t, CASE WHEN c.own THEN v.viewer END AS viewer
+            FROM events e SEMI JOIN ej USING (k, src) JOIN jobs j USING (k, src)
+            JOIN kinds c ON c.id = e.kind AND c.sim = j.sim
+            LEFT JOIN viewers v ON v.k = e.k AND v.src = e.src AND v.node = e.node
+            WHERE e.t_ms > 0 AND (NOT c.own OR v.viewer IS NOT NULL))),
+    secs AS (
+        SELECT w, k, src, kind, own, viewer, t,
+               unnest(range(ceil(t - before - 0.5)::BIGINT, ceil(t + after - 0.5)::BIGINT)) AS sec
+        FROM anchors),
+    lags AS (
+        FROM viewer_lag_of((SELECT list({'k': k}) FROM experiment_jobs WHERE exp_id = exp_name))),
+    hits AS (
+        SELECT s.w, s.k, s.src, s.kind, floor(s.sec + 0.5 - s.t)::BIGINT AS rel_s, l.lag_ms
+        FROM secs s JOIN lags l USING (k, src, sec) WHERE NOT s.own
+        UNION ALL
+        SELECT s.w, s.k, s.src, s.kind, floor(s.sec + 0.5 - s.t)::BIGINT AS rel_s, l.lag_ms
+        FROM secs s JOIN lags l USING (k, src, viewer, sec) WHERE s.own)
+    SELECT e.cell, e.arm_label, h.kind, h.rel_s, count(DISTINCT h.w) AS windows, count(h.lag_ms) AS viewer_s,
+           quantile_cont(h.lag_ms, 0.5) AS lag_p50_ms, quantile_cont(h.lag_ms, 0.9) AS lag_p90_ms,
+           quantile_cont(h.lag_ms, 0.99) AS lag_p99_ms
+    FROM hits h JOIN ej e USING (k, src)
+    GROUP BY e.cell, e.arm_label, h.kind, h.rel_s
+    ORDER BY min(e.matrix), e.cell, e.arm_label, h.kind, h.rel_s;

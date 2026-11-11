@@ -135,7 +135,10 @@ lacks):
                     structural(exp) gives the cells every arm collapsed on
                     at every seed, dynamics(exp) each arm and cell's lag by
                     phase, spikes past the playout delays, stalls and
-                    spells. table_catalog describes each (kind 'macro' or
+                    spells, lag_since(exp) the lag against the seconds
+                    since each scenario event, both from
+                    viewer_lag_of(jobs), the honest viewers' lag each
+                    second. table_catalog describes each (kind 'macro' or
                     'table macro', keys its parameters)
 
 Every table carries a job's key `k`, and the result tables and
@@ -1570,8 +1573,9 @@ def main_sql(cols, version, tmp, ins, parsed):
         info["scoring_version"] = sv
     out.append("DELETE FROM raw.info;")
     out.append("INSERT INTO raw.info VALUES " + ", ".join(f"({q(k)}, {q(v)})" for k, v in info.items()) + ";")
-    out += scoring
+    # The catalogs first: the scoring macros read event_kinds.
     out += catalogs_sql(cols, tmp)
+    out += scoring
     return out
 
 
@@ -1767,11 +1771,12 @@ TABLE_DOCS = {
         "Every kind of the vocabulary (crates/strims-wan/vocab.toml), a row for each sim whose runs may hold it "
         "(sim 'derived' for derived_events'; both sims for a kind only other builds write, under its knob), and "
         "each kind a sim's events hold that the vocabulary doesn't give that sim (documented false, the rest "
-        f"NULL): class ({either(vocab.CLASSES)}), description, what node, peer, value (value_meaning, its unit "
-        "after it) and detail hold, details (detail's values), notes (that sim's, where its kind differs), env_gate "
-        "(the knob a sim writes it under), replaced_by (a retired kind's current id for that sim: a retired kind's "
-        "events of that sim read as that kind's), documented, n (how many events: 0 for a kind no run has "
-        "written), and when first and last seen."),
+        f"NULL): class ({either(vocab.CLASSES)}), scope (whose seconds a scenario kind bears on: run, every "
+        "viewer's, or viewer, its node's viewer's alone, as a join's), description, what node, peer, value "
+        "(value_meaning, its unit after it) and detail hold, details (detail's values), notes (that sim's, where "
+        "its kind differs), env_gate (the knob a sim writes it under), replaced_by (a retired kind's current id "
+        "for that sim: a retired kind's events of that sim read as that kind's), documented, n (how many events: "
+        "0 for a kind no run has written), and when first and last seen."),
     "table_catalog": (
         "table", "a table", "name", "metric_catalog ON metric_catalog.tbl = table_catalog.name",
         "This list: each table's grain, keys, joins and description."),
@@ -1845,9 +1850,10 @@ VERDICT_DOCS = {
     "verdict_version": "the verdicts' version (simdb.derived_version)",
 }
 # event_kinds' columns from the vocabulary, as kind_docs gives them.
-KIND_COLS = {"kind": "VARCHAR", "sim": "VARCHAR", "class": "VARCHAR", "description": "VARCHAR",
-             "value_meaning": "VARCHAR", "node": "VARCHAR", "peer": "VARCHAR", "detail": "VARCHAR",
-             "details": "VARCHAR[]", "notes": "VARCHAR", "env_gate": "VARCHAR", "replaced_by": "VARCHAR"}
+KIND_COLS = {"kind": "VARCHAR", "sim": "VARCHAR", "class": "VARCHAR", "scope": "VARCHAR",
+             "description": "VARCHAR", "value_meaning": "VARCHAR", "node": "VARCHAR", "peer": "VARCHAR",
+             "detail": "VARCHAR", "details": "VARCHAR[]", "notes": "VARCHAR", "env_gate": "VARCHAR",
+             "replaced_by": "VARCHAR"}
 # The sim event_kinds names derived_events' kinds by.
 DERIVED_SIM = "derived"
 
@@ -1860,7 +1866,8 @@ def kind_docs():
     for kid in [*vocab.kinds(), *vocab.retired()]:
         k = vocab.kind(kid)
         for sim in [DERIVED_SIM] if k["class"] == "derived" else vocab.holders(kid):
-            out.append({"kind": kid, "sim": sim, "class": k["class"], "description": k["description"],
+            out.append({"kind": kid, "sim": sim, "class": k["class"], "scope": vocab.scope(kid),
+                        "description": k["description"],
                         "value_meaning": vocab.value_text(k), "node": k.get("node"), "peer": k.get("peer"),
                         "detail": k.get("detail"), "details": k.get("details"), "notes": vocab.notes(kid, sim),
                         "env_gate": k.get("env_gate"),
@@ -1989,6 +1996,46 @@ CONST = re.compile(r"@\{([a-z_][a-z0-9_]*)\}")
 ROW_FIELD = re.compile(r"@\{r\.([a-z0-9_]+)\}")
 MACRO = re.compile(r"^CREATE OR REPLACE (MACRO|TABLE|VIEW) ([a-z_0-9]+)\s*(\([^)]*\))?", re.M)
 TEMP = re.compile(r"^CREATE OR REPLACE (MACRO|TABLE|VIEW) ", re.M)
+# A scoring.sql statement's comment line (`-- needs: ...`) naming the
+# tables (table, or table.column) it reads that a catalog indexed by older
+# code may lack.
+NEEDS = re.compile(r"needs: (.+)")
+
+
+def comment_above(text, at):
+    """The text of the `--` lines right above offset `at` of `text`."""
+    before = text[:at].rstrip("\n").splitlines()
+    out = []
+    while before and before[-1].startswith("--"):
+        out.insert(0, before.pop()[2:].strip())
+    return out
+
+
+def needed(text, have):
+    """scoring.sql's `text` with each macro whose `-- needs:` names a table
+    or column that `have` ({table: its columns}) lacks made one that fails
+    saying so when called, so the others still score over a catalog its
+    index made with older code; `text` as it is for `have` None (every
+    one there)."""
+    if have is None:
+        return text
+
+    def lacks(need):
+        table, _, col = need.partition(".")
+        return table not in have or bool(col) and col not in have[table]
+
+    out, at = [], 0
+    for m in MACRO.finditer(text):
+        needs = [n for line in comment_above(text, m.start()) if (x := NEEDS.match(line)) for n in x.group(1).split()]
+        missing = [n for n in needs if lacks(n)]
+        if not missing or m.group(1) != "MACRO":
+            continue
+        end = text.find(";", m.end())
+        why = q(f"{m.group(2)} reads {', '.join(missing)}, which this catalog lacks: index it with this checkout")
+        body = f"TABLE SELECT error({why}) AS error" if " AS TABLE" in text[m.end():m.end() + 20] else f"error({why})"
+        out.append(f"{text[at:m.start()]}CREATE OR REPLACE MACRO {m.group(2)}{m.group(3) or '()'} AS {body}")
+        at = end
+    return "".join(out) + text[at:]
 
 
 def scoring_consts(suite=None):
@@ -2078,7 +2125,9 @@ def scoring_sql(cols, temp=False, suite=None):
     job_metrics, from suite.py's METRICS (`suite` the module, by default
     this checkout's), then scoring.sql's tables and macros, its constants
     and row fields filled in. `cols` holds the columns of rows (r),
-    verdicts (v) and job_runs (j), so a field they lack reads NULL. With
+    verdicts (v) and job_runs (j), so a field they lack reads NULL, and
+    the database's tables' (have: None for one holding every one a macro
+    needs), so a macro needing one it lacks fails saying so (needed). With
     `temp` every object is TEMP, a session's own: one whose suite.py
     differs from the catalog's indexer's scores by its own METRICS."""
     s = suite or suite_module()
@@ -2126,7 +2175,7 @@ SELECT k, src, metric, value FROM (UNPIVOT (
     text = CONST.sub(lambda m: str(consts[m.group(1)]), SCORING.read_text())
     text = ROW_FIELD.sub(lambda m: f"r.{m.group(1)}" if cols.get("r") is None or m.group(1) in cols["r"]
                          else "NULL::DOUBLE", text)
-    out.append(text)
+    out.append(needed(text, cols.get("have")))
     sql = "\n".join(out)
     return TEMP.sub(lambda m: f"CREATE OR REPLACE TEMP {m.group(1)} ", sql) if temp else sql
 
@@ -2140,9 +2189,10 @@ def scoring_version(suite=None):
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
 
 
-def scoring_cols(columns):
-    """scoring_sql's `cols` from `columns`, {table: its columns}."""
-    return {"r": set(columns.get("rows", ())), "v": set(columns.get("verdicts", ())), "j": None}
+def scoring_cols(columns, have=None):
+    """scoring_sql's `cols` from `columns`, {table: its columns}, and
+    `have`, the database's tables (needed's: None for every one)."""
+    return {"r": set(columns.get("rows", ())), "v": set(columns.get("verdicts", ())), "j": None, "have": have}
 
 
 def scoring_docs():
@@ -2183,10 +2233,7 @@ def scoring_docs():
         header.append(line[2:].strip())
     for m in MACRO.finditer(text):
         kind, name, params = m.groups()
-        before = text[:m.start()].rstrip("\n").splitlines()
-        comment = []
-        while before and before[-1].startswith("--"):
-            comment.insert(0, before.pop()[2:].strip())
+        comment = [c for c in comment_above(text, m.start()) if not NEEDS.match(c)]
         body = text[m.end():text.find(";", m.end())]
         kind = ("table macro" if " AS TABLE" in body[:200] else "macro") if kind == "MACRO" else kind.lower()
         desc = " ".join(c for c in comment if c) or None

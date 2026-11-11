@@ -233,6 +233,7 @@ export const KINDS = [
     description: "A viewer incarnation starts reading the stream.",
     node: "the viewer",
     notes: { "strims-sim": "Each viewer incarnation's (`Join`'s start), a restart's too.", "ppspp": "Each viewer's, at the start or its arrival, and on taking a place again (`Churn`)." },
+    scope: "viewer",
   },
   {
     id: "leave",
