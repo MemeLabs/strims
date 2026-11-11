@@ -15,16 +15,26 @@ engine.Result (its values the CLI's JSON values by `records()`), and its
   views(sel, derived=True, fetch=True, say=None) -> Views
   sql(sel, query, reads=False, text=False) -> [engine.Result]
   pooled(sel, by="none") -> engine.Result
-  aligned(sel, event, field="lag_p99", per="run", node=None, detail=None,
-          pool=False, before=10, after=60, nth=1) -> engine.Result
+  aligned(sel, event, field="lag_p99", per="run", node=None, peer=None,
+          detail=None, pool=False, before=10, after=60, nth=1) -> engine.Result
   events(sel) -> engine.Result
   osc(sel) -> engine.Result
-  forecast(sel) -> engine.Result
+  forecast(sel) -> Forecast(have, prediction)
+  spec(sel, by="phase") -> Spec(requests, parks)
   selected_rows(sel, fields=None) -> [dict]
   pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False)
           -> Pulled
   pooled_text(rows, by), aligned_text(rows, ...), events_text(rows),
-  osc_text(rows), forecast_text(rows), pull_text(pulled)
+  osc_text(rows), forecast_text(rows), spec_text(requests, parks),
+  pull_text(pulled)
+
+The forecast log comes in two schemas, told apart by their columns: the
+HAVE samples' (first_sight, lazy) and the arrival models' predictions'
+(extrapolated, and where logged tail_ms). A Forecast holds a Result for
+each the selection has, and its records() are the HAVE samples' rows (as
+they always were), then the predictions' (`kind` "prediction"). A table's
+columns its era lacks read NULL in the queries over it (OPTIONAL_COLS),
+the views keeping the files' own.
 
 and the selection's parts, which other modules use too:
 
@@ -416,7 +426,39 @@ def need(have, *tables):
         raise Refused(f"the selection has no {', '.join(missing)}"
                       + (" (nor does S3: run with the reads)" if "reads" in missing else "")
                       + (" (nor does S3: run with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1)"
-                         if "forecast" in missing else ""))
+                         if "forecast" in missing else "")
+                      + (" (run with SIM_SPEC=1 / STRIMS_SIM_SPEC=1)"
+                         if {"spec_requests", "parks"} & set(missing) else ""))
+
+
+# Columns a table's era may lack, NULL in the queries over it where it
+# does: the forecast log's HAVE samples (`first_sight`, `lazy`) or its
+# arrival models' predictions (`extrapolated`, and the 99th percentile's
+# lag, `tail_ms`), the horizon and the channel's opening of older logs,
+# and the speculative requests' predicted holds by the 90th and 99th
+# percentiles.
+OPTIONAL_COLS = {
+    "forecast": {"first_sight": "BOOLEAN", "lazy": "BOOLEAN", "extrapolated": "BOOLEAN", "tail_ms": "BIGINT",
+                 "horizon_ms": "BIGINT", "channel_open_ms": "BIGINT"},
+    "spec_requests": {"predicted_p90_ms": "BIGINT", "predicted_p99_ms": "BIGINT"},
+}
+
+
+def columns_of(v, t):
+    """View `t`'s columns."""
+    return {r["column_name"] for r in v.records(f"DESCRIBE {t};")}
+
+
+def filled(v, t):
+    """SQL of view `t` with OPTIONAL_COLS' columns it lacks as NULLs, and
+    for the forecast log each row's `kind`: 'prediction' where it has
+    `extrapolated` (an arrival model's), else 'have' (a HAVE sample)."""
+    got = columns_of(v, t)
+    cols = "".join(f", NULL::{ty} AS {c}" for c, ty in OPTIONAL_COLS.get(t, {}).items() if c not in got)
+    if t == "forecast":
+        pred = "x.extrapolated IS NOT NULL" if "extrapolated" in got else "false"
+        cols += f", CASE WHEN {pred} THEN 'prediction' ELSE 'have' END AS kind"
+    return f"(SELECT x.*{cols} FROM {t} x)"
 
 
 def with_samples(sel, v, tables, derived=True, say=None):
@@ -521,10 +563,17 @@ VIEWER_SECOND_FIELDS = {"lag_ms": "max(lag_ms) FILTER (WHERE lag_ms >= 0)::DOUBL
 ID_COLS = {"k", "src", "bin", "t_ms", "sec", "node", "viewer"}
 # The forecast log's fields: (table, aggregate) over a bin's samples (a
 # forecast's node is a viewer), as `forecast` judges them against the
-# truth: each HAVE's first sample of its stream that didn't set the chunk's
-# first sight, from an honest peer the sim saw hold the chunk as it arrived
-# (`live`); the error is held - (seen + mean).
-FORECAST_LIVE = "peer_honest AND live AND run = 0 AND NOT first_sight AND mean_ms >= 0 AND held_ms >= 0"
+# truth: each sample (a HAVE's first of its stream that didn't set the
+# chunk's first sight, or a prediction) from an honest peer the sim saw
+# hold the chunk as it arrived (`live`); the error is held - (seen + mean),
+# the true hold less the estimate's median (a prediction's median hold).
+FORECAST_LIVE = ("peer_honest AND live AND run = 0 AND coalesce(NOT first_sight, true) AND mean_ms >= 0 "
+                 "AND held_ms >= 0")
+# The decision logs' fields: (table, aggregate) over a bin's rows of
+# honest nodes (`honest`), per run or per node (the requester's or the
+# holder's). The early/late error counts where the sim knows the truth as
+# it arrived (`live`, an honest holder).
+SPEC_JUDGED = "peer_honest AND live"
 LOG_FIELDS = {
     "forecast_n": ("forecast", f"count(*) FILTER (WHERE {FORECAST_LIVE})::DOUBLE"),
     "forecast_err_p50": ("forecast", f"quantile_cont(held_ms - (seen_ms + mean_ms), 0.5) FILTER (WHERE {FORECAST_LIVE})"),
@@ -533,6 +582,15 @@ LOG_FIELDS = {
                              f"quantile_cont(abs(held_ms - (seen_ms + mean_ms)), 0.5) FILTER (WHERE {FORECAST_LIVE})"),
     "forecast_abs_err_p90": ("forecast",
                              f"quantile_cont(abs(held_ms - (seen_ms + mean_ms)), 0.9) FILTER (WHERE {FORECAST_LIVE})"),
+    "spec_n": ("spec_requests", "count(*) FILTER (WHERE honest)::DOUBLE"),
+    **{f"spec_{o}": ("spec_requests", f"avg((outcome = '{o}')::INT) FILTER (WHERE honest)")
+       for o in ("answered", "not_yet", "expired", "cancelled")},
+    "spec_err_p50": ("spec_requests", f"quantile_cont(err_ms, 0.5) FILTER (WHERE honest AND {SPEC_JUDGED})"),
+    "spec_err_p90": ("spec_requests", f"quantile_cont(err_ms, 0.9) FILTER (WHERE honest AND {SPEC_JUDGED})"),
+    "spec_early": ("spec_requests", f"avg((err_ms > 0)::INT) FILTER (WHERE honest AND {SPEC_JUDGED})"),
+    "spec_late": ("spec_requests", f"avg((err_ms <= 0)::INT) FILTER (WHERE honest AND {SPEC_JUDGED})"),
+    "park_n": ("parks", "count(*) FILTER (WHERE honest)::DOUBLE"),
+    "park_expired": ("parks", "avg((outcome = 'expired')::INT) FILTER (WHERE honest AND outcome <> 'refused')"),
 }
 
 
@@ -552,7 +610,7 @@ def field_source(sel, v, field, per):
     if f in LOG_FIELDS:
         t, agg = LOG_FIELDS[f]
         need(have, t)
-        return t, "t_ms", agg
+        return filled(v, t), "t_ms", agg
 
     def columns(t):
         return {r["column_name"] for r in v.records(f"DESCRIBE {t};")} - ID_COLS if t in have else set()
@@ -596,13 +654,14 @@ def field_source(sel, v, field, per):
                      f"a verdict column ({', '.join(VERDICT_FIELDS)}), or a seconds or bins column"))
 
 
-def aligned(sel, event, field="lag_p99", per="run", node=None, detail=None, pool=False, before=10, after=60, nth=1,
-            say=None):
+def aligned(sel, event, field="lag_p99", per="run", node=None, peer=None, detail=None, pool=False, before=10,
+            after=60, nth=1, say=None):
     """Bands across the selection's runs (`per` "run") or their nodes
     (`per` "node") around their `nth` `event` (0: every one, a window
-    each): per bin of `sel.bin` ms from `before` to `after` seconds, the
-    median and p10/p90 of `field` over the windows, or with `pool` the
-    field over every window's rows of a cell and arm (its value thrice)."""
+    each) of `node` and about `peer` where given (a sim's events'): per
+    bin of `sel.bin` ms from `before` to `after` seconds, the median and
+    p10/p90 of `field` over the windows, or with `pool` the field over
+    every window's rows of a cell and arm (its value thrice)."""
     say = say or stderr
     v = views(sel, say=say)
     if field in READ_FIELDS:
@@ -618,13 +677,15 @@ def aligned(sel, event, field="lag_p99", per="run", node=None, detail=None, pool
         series, tcol, agg = field_source(sel, v, field, per)
         lo, hi = int(-before * 1000), int(after * 1000)
         on = "" if node is None else f" AND node = {int(node)}"
+        on += "" if peer is None else f" AND peer = {int(peer)}"
         keys = "k, src, node" if per_node else "k, src"
         kind = f"kind = {q(event)}"
         sims = (f"(SELECT count(*) FROM events WHERE {kind}{on}) AS sims, "
                 f"(SELECT count(*) FROM events WHERE {kind}{on} AND node >= 0) AS nodes"
                 if "events" in have else "0 AS sims, 0 AS nodes")
         # A derived event has no node.
-        derived = f"(SELECT count(*) FROM derived_events WHERE {kind}{'' if node is None else ' AND false'})"
+        derived = (f"(SELECT count(*) FROM derived_events WHERE {kind}"
+                   f"{'' if node is None and peer is None else ' AND false'})")
         got = v.records(f"SELECT {derived} AS derived, {sims}, "
                         "(SELECT list(DISTINCT kind ORDER BY kind) FROM ev) AS kinds;")[0]
         if got["derived"] and got["sims"]:
@@ -632,6 +693,7 @@ def aligned(sel, event, field="lag_p99", per="run", node=None, detail=None, pool
                           "(DERIVED_KINDS)")
         if not got["derived"] and not got["sims"]:
             raise Refused(f"the selection has no {event} event" + (f" of node {node}" if node is not None else "")
+                          + (f" about node {peer}" if peer is not None else "")
                           + f"; its kinds: {', '.join(got['kinds'] or [])}")
         if per_node:
             if not got["nodes"]:
@@ -757,21 +819,37 @@ def osc_text(rows):
     return "\n".join(lines)
 
 
+@dataclasses.dataclass
+class Forecast:
+    """`forecast`'s Results: the HAVE samples' and the predictions', None
+    for a kind the selection lacks."""
+    have: object = None
+    prediction: object = None
+
+    def records(self):
+        """The HAVE samples' rows, then the predictions'."""
+        return [*(self.have.records() if self.have else []), *(self.prediction.records() if self.prediction else [])]
+
+
 def forecast(sel, say=None):
-    """The forecast logs pooled by sim, cell, arm and the pace asked of
-    the HAVEs (simdb.py's docs)."""
+    """The forecast logs pooled by sim, cell and arm: the HAVE samples by
+    the pace asked of the HAVEs, the predictions apart (simdb.py's docs)."""
     v = with_samples(sel, views(sel, derived=False, say=say), ("forecast",), derived=False, say=say)
     with v:
         need(v.have, "forecast")
-        w = " AND ".join(["run = 0", "NOT first_sight", "mean_ms >= 0", *time_filter(sel)])
-        return v.run(f"""
+        f = filled(v, "forecast")
+        kinds = {r["kind"] for r in v.records(f"SELECT DISTINCT kind FROM {f} x;")}
+        out = Forecast()
+        if "have" in kinds:
+            w = " AND ".join(["kind = 'have'", "run = 0", "NOT first_sight", "mean_ms >= 0", *time_filter(sel)])
+            out.have = v.run(f"""
 WITH f AS (SELECT r.sim, r.cell, r.arm, CASE WHEN lazy THEN 'lazy' ELSE 'prompt' END AS pace,
                   sample_ms - mean_ms AS err, sample_ms <= horizon_ms AS covered, held_ms,
                   peer_honest,
                   peer_honest AND held_ms >= 0 AND held_ms < channel_open_ms AS backlog,
                   CASE WHEN peer_honest AND live THEN held_ms - (seen_ms + mean_ms) END AS truth_err,
                   CASE WHEN peer_honest AND live THEN seen_ms + sample_ms - held_ms END AS late
-           FROM forecast x JOIN runs r USING (k, src) WHERE {w})
+           FROM {f} x JOIN runs r USING (k, src) WHERE {w})
 SELECT sim, cell, arm, pace, count(*) AS n,
        quantile_cont(err, [0.1, 0.5, 0.9, 0.99]) AS err_q, avg(covered::INT) AS coverage,
        count(truth_err) AS held, quantile_cont(truth_err, [0.1, 0.5, 0.9, 0.99]) AS truth_q,
@@ -779,6 +857,27 @@ SELECT sim, cell, arm, pace, count(*) AS n,
        avg((held_ms IS NULL OR held_ms < 0)::INT) FILTER (WHERE peer_honest) AS censored,
        avg(backlog::INT) FILTER (WHERE peer_honest) AS backlog
 FROM f GROUP BY ALL ORDER BY ALL;""")
+        if "prediction" in kinds:
+            w = " AND ".join(["kind = 'prediction'", "run = 0", *time_filter(sel)])
+            q4s = "[0.1, 0.5, 0.9, 0.99]"
+            out.prediction = v.run(f"""
+WITH f AS (SELECT r.sim, r.cell, r.arm, held_ms, peer_honest,
+                  peer_honest AND held_ms >= 0 AND held_ms < channel_open_ms AS backlog,
+                  peer_honest AND live AND mean_ms >= 0 AND held_ms >= 0 AS predicted,
+                  held_ms - (seen_ms + mean_ms) AS err50, held_ms - (seen_ms + horizon_ms) AS err90,
+                  held_ms <= seen_ms + mean_ms AS in50, held_ms <= seen_ms + horizon_ms AS in90,
+                  held_ms <= seen_ms + tail_ms AS in99
+           FROM {f} x JOIN runs r USING (k, src) WHERE {w})
+SELECT sim, cell, arm, 'prediction' AS kind, count(*) AS n, count(*) FILTER (WHERE predicted) AS held,
+       quantile_cont(err50, {q4s}) FILTER (WHERE predicted) AS truth_q,
+       quantile_cont(err90, {q4s}) FILTER (WHERE predicted) AS truth90_q,
+       avg(in50::INT) FILTER (WHERE predicted) AS under_p50,
+       avg(in90::INT) FILTER (WHERE predicted) AS under_p90,
+       avg(in99::INT) FILTER (WHERE predicted) AS under_p99,
+       avg((held_ms IS NULL OR held_ms < 0)::INT) FILTER (WHERE peer_honest) AS censored,
+       avg(backlog::INT) FILTER (WHERE peer_honest) AS backlog
+FROM f GROUP BY ALL ORDER BY ALL;""")
+        return out
 
 
 def q4(x):
@@ -786,14 +885,141 @@ def q4(x):
 
 
 def forecast_text(rows):
-    lines = [f"{'sim':10} {'cell':20} {'arm':24} {'pace':6} {'n':>8} {'err ms p10 p50 p90 p99':>23} "
-             f"{'cover':>5} {'held':>7} {'truth err p10 p50 p90 p99':>26} {'HAVE late p10 p50 p90 p99':>26} "
-             f"{'cens':>5} {'backlog':>7}"]
-    for r in rows:
+    """Forecast.records()' text: the predictions' table, then the HAVE
+    samples', each titled when the selection has both."""
+    preds = [r for r in rows if r.get("kind") == "prediction"]
+    haves = [r for r in rows if r.get("kind") != "prediction"]
+    lines = []
+    if preds:
+        lines.append("predictions (arrival models): the true hold less the predicted one, by the median and the "
+                     "90th percentile; and the share of true holds by the predicted p50, p90 and p99 holds")
+        lines.append(f"{'sim':10} {'cell':20} {'arm':24} {'n':>8} {'held':>7} {'err@p50 p10 p50 p90 p99':>26} "
+                     f"{'err@p90 p10 p50 p90 p99':>26} {'<=p50':>5} {'<=p90':>5} {'<=p99':>5} {'cens':>5} "
+                     f"{'backlog':>7}")
+        for r in preds:
+            lines.append(
+                f"{r['sim'] or '-':10} {r['cell'] or '-':20} {short(r['arm']) or '-':24} {r['n']:8d} "
+                f"{r['held']:7d} {q4(r['truth_q']):>26} {q4(r['truth90_q']):>26} {fmt(r['under_p50'], 2):>5} "
+                f"{fmt(r['under_p90'], 2):>5} {fmt(r['under_p99'], 2):>5} {fmt(r['censored'], 3):>5} "
+                f"{fmt(r['backlog'], 3):>7}")
+    if haves or not preds:
+        if preds:
+            lines += ["", "HAVE samples (announcement-lag estimates)"]
+        lines.append(f"{'sim':10} {'cell':20} {'arm':24} {'pace':6} {'n':>8} {'err ms p10 p50 p90 p99':>23} "
+                     f"{'cover':>5} {'held':>7} {'truth err p10 p50 p90 p99':>26} {'HAVE late p10 p50 p90 p99':>26} "
+                     f"{'cens':>5} {'backlog':>7}")
+    for r in haves:
         lines.append(
             f"{r['sim'] or '-':10} {r['cell'] or '-':20} {short(r['arm']) or '-':24} {r['pace']:6} {r['n']:8d} "
             f"{q4(r['err_q']):>23} {fmt(r['coverage'], 2):>5} {r['held']:7d} {q4(r['truth_q']):>26} "
             f"{q4(r['late_q']):>26} {fmt(r['censored'], 3):>5} {fmt(r['backlog'], 3):>7}")
+    return "\n".join(lines)
+
+
+SPEC_OUTCOMES = ("answered", "not_yet", "expired", "cancelled", "closed")
+PARK_OUTCOMES = ("released", "expired", "cancelled", "closed", "refused")
+REFUSALS = ("full", "behind_window", "ahead", "no_grace", "range", "dropped", "outside")
+
+
+@dataclasses.dataclass
+class Spec:
+    """`spec`'s Results: the speculative requests' and the parks', None for
+    a log the selection lacks."""
+    requests: object = None
+    parks: object = None
+
+    def records(self):
+        """{"spec": the requests' rows, "parks": the parks'}."""
+        return {"spec": self.requests.records() if self.requests else [],
+                "parks": self.parks.records() if self.parks else []}
+
+
+def spec(sel, by="phase", say=None):
+    """The decision logs pooled over honest nodes' rows, by sim, cell, arm
+    and `by` the verdict's phase (or none): the speculative requests by
+    predictor, the parked and refused requests (simdb.py's docs)."""
+    with views(sel, derived=by == "phase", say=say) as v:
+        if "spec_requests" not in v.have and "parks" not in v.have:
+            need(v.have, "spec_requests", "parks")
+        phase = "coalesce(vs.phase, 'tail')" if by == "phase" else "'all'"
+        join = ("LEFT JOIN verdict_seconds vs ON vs.k = x.k AND vs.src = x.src AND vs.sec = x.t_ms // 1000"
+                if by == "phase" else "")
+        w = " AND ".join(["x.honest", *time_filter(sel, "x.t_ms")])
+        shares = lambda vals: ", ".join(f"avg((outcome = {q(o)})::INT) AS {o}" for o in vals)  # noqa: E731
+        out = Spec()
+        if "spec_requests" in v.have:
+            out.requests = v.run(f"""
+WITH x AS (SELECT r.sim, r.cell, r.arm, {phase} AS phase, x.*, x.t_outcome_ms - x.t_ms AS after_ms,
+                  x.peer_honest AND x.live AS judged
+           FROM {filled(v, "spec_requests")} x JOIN runs r USING (k, src) {join} WHERE {w})
+SELECT sim, cell, arm, predictor, phase, count(*) AS n, count(DISTINCT k) AS runs, {shares(SPEC_OUTCOMES)},
+       quantile_cont(after_ms, [0.5, 0.9, 0.99]) FILTER (WHERE outcome = 'answered') AS answer_q,
+       quantile_cont(grace_ms, [0.1, 0.5, 0.9]) AS grace_q,
+       count(err_ms) FILTER (WHERE judged) AS held,
+       quantile_cont(err_ms, [0.1, 0.5, 0.9, 0.99]) FILTER (WHERE judged) AS err_q,
+       avg((err_ms > 0)::INT) FILTER (WHERE judged) AS early,
+       quantile_cont(held_ms - predicted_ms, [0.1, 0.5, 0.9, 0.99])
+           FILTER (WHERE judged AND predicted_ms IS NOT NULL) AS pred_err_q,
+       avg((held_ms <= predicted_ms)::INT) FILTER (WHERE judged AND predicted_ms IS NOT NULL) AS under_p50,
+       avg((held_ms <= predicted_p90_ms)::INT) FILTER (WHERE judged AND predicted_p90_ms IS NOT NULL) AS under_p90,
+       avg((held_ms <= predicted_p99_ms)::INT) FILTER (WHERE judged AND predicted_p99_ms IS NOT NULL) AS under_p99,
+       avg((held_ms IS NULL)::INT) FILTER (WHERE peer_honest) AS never_held
+FROM x GROUP BY sim, cell, arm, predictor, phase ORDER BY ALL;""")
+        if "parks" in v.have:
+            refused = ", ".join(f"avg((outcome = 'refused' AND reason = {q(r)})::INT) AS refused_{r}"
+                                for r in REFUSALS)
+            out.parks = v.run(f"""
+WITH x AS (SELECT r.sim, r.cell, r.arm, {phase} AS phase, x.*, x.t_outcome_ms - x.t_ms AS wait_ms
+           FROM parks x JOIN runs r USING (k, src) {join} WHERE {w})
+SELECT sim, cell, arm, phase, count(*) AS n, count(DISTINCT k) AS runs, {shares(PARK_OUTCOMES)}, {refused},
+       avg((outcome = 'refused' AND had)::INT) AS refused_had,
+       avg((outcome = 'released' AND reason = 'queue_full')::INT) AS queue_full,
+       count(*) FILTER (WHERE outcome IN ('released', 'expired', 'cancelled', 'closed')) AS parked,
+       avg((outcome = 'released')::INT) FILTER (WHERE outcome <> 'refused') AS parked_released,
+       avg((outcome = 'expired')::INT) FILTER (WHERE outcome <> 'refused') AS parked_expired,
+       quantile_cont(grace_ms, [0.1, 0.5, 0.9]) FILTER (WHERE outcome <> 'refused') AS grace_q,
+       quantile_cont(wait_ms::DOUBLE / grace_ms, [0.1, 0.5, 0.9])
+           FILTER (WHERE outcome = 'released' AND grace_ms > 0) AS released_frac_q,
+       quantile_cont(wait_ms, [0.5, 0.9, 0.99]) FILTER (WHERE outcome = 'released') AS released_wait_q
+FROM x GROUP BY sim, cell, arm, phase ORDER BY ALL;""")
+        return out
+
+
+def spec_text(requests, parks):
+    """Spec.records()' text: its "spec" rows, then its "parks"."""
+    def q3(x, nd=0):
+        return "-" if not x else " ".join(fmt(y, nd) for y in x)
+
+    def pct(x):
+        return "-" if x is None else f"{100 * x:.1f}"
+
+    lines = ["speculative requests (honest requesters), outcome shares %"]
+    lines.append(f"{'sim':10} {'cell':22} {'arm':24} {'pred':8} {'phase':8} {'n':>7} "
+                 + " ".join(f"{o[:6]:>6}" for o in SPEC_OUTCOMES)
+                 + f" {'answer ms p50 p90 p99':>21} {'grace p10 p50 p90':>17} {'held':>6} "
+                 f"{'err ms p10 p50 p90 p99':>22} {'early':>5} {'pred err p10 p50 p90 p99':>24} "
+                 f"{'<=p50':>5} {'<=p90':>5} {'<=p99':>5} {'never':>5}")
+    for r in requests:
+        lines.append(f"{r['sim'] or '-':10} {r['cell'] or '-':22} {short(r['arm']) or '-':24} {r['predictor']:8} "
+                     f"{r['phase']:8} {r['n']:7d} "
+                     + " ".join(f"{pct(r[o]):>6}" for o in SPEC_OUTCOMES)
+                     + f" {q3(r['answer_q']):>21} {q3(r['grace_q']):>17} {r['held']:6d} {q3(r['err_q']):>22} "
+                     f"{pct(r['early']):>5} {q3(r['pred_err_q']):>24} {pct(r['under_p50']):>5} "
+                     f"{pct(r['under_p90']):>5} {pct(r['under_p99']):>5} {pct(r['never_held']):>5}")
+    lines.append("\nparked and refused requests (honest holders), shares %")
+    lines.append(f"{'sim':10} {'cell':22} {'arm':24} {'phase':8} {'n':>7} "
+                 + " ".join(f"{o[:6]:>6}" for o in PARK_OUTCOMES)
+                 + " " + " ".join(f"{r[:6]:>6}" for r in REFUSALS)
+                 + f" {'had':>5} {'qfull':>5} {'parked':>6} {'rel/p':>5} {'exp/p':>5} {'grace p10 p50 p90':>17} "
+                 f"{'wait/grace p10 p50 p90':>22} {'wait ms p50 p90 p99':>19}")
+    for r in parks:
+        lines.append(f"{r['sim'] or '-':10} {r['cell'] or '-':22} {short(r['arm']) or '-':24} {r['phase']:8} "
+                     f"{r['n']:7d} "
+                     + " ".join(f"{pct(r[o]):>6}" for o in PARK_OUTCOMES)
+                     + " " + " ".join(f"{pct(r['refused_' + x]):>6}" for x in REFUSALS)
+                     + f" {pct(r['refused_had']):>5} {pct(r['queue_full']):>5} {r['parked']:6d} "
+                     f"{pct(r['parked_released']):>5} {pct(r['parked_expired']):>5} "
+                     f"{q3(r['grace_q']):>17} {q3(r['released_frac_q'], 2):>22} {q3(r['released_wait_q']):>19}")
     return "\n".join(lines)
 
 

@@ -10,9 +10,10 @@
   hack/sim-db/simdb.py gc [--days N]
   hack/sim-db/simdb.py sql QUERY [selection] [--reads] [--json]
   hack/sim-db/simdb.py pooled [selection] [--by none|phase|bin|viewer] [--bin MS] [--json]
-  hack/sim-db/simdb.py aligned EVENT [selection] [--field F] [--bin MS] [--per run|node] [--node N]
+  hack/sim-db/simdb.py aligned EVENT [selection] [--field F] [--bin MS] [--per run|node] [--node N] [--peer N]
                                      [--detail GLOB] [--pool] [--before S] [--after S] [--nth N] [--json]
   hack/sim-db/simdb.py events [selection] [--json]
+  hack/sim-db/simdb.py spec [selection] [--by phase|none] [--json]
   hack/sim-db/simdb.py osc [selection] [--json]
   hack/sim-db/simdb.py rows [selection] [--fields A,B,...]
   hack/sim-db/simdb.py index [--workers N] [--quiet]
@@ -21,7 +22,11 @@
 
 `index`, `fetch` and `lake` are the catalog's (hack/sim-db/catalog.py):
 every result the cache, the farm's and the suite's indexes know, in one
-DuckLake, whose tables answer a question in one SQL statement.
+DuckLake, whose tables answer a question in one SQL statement. The
+selections and queries are hack/simlab/query.py's and the cache's pulls
+hack/simlab/store.py's, in the duckdb module: every command but `duckdb`,
+`fold` and `export` (the store's, in the CLI, under any python3) runs
+under hack/'s uv venv, which the script execs itself into.
 
 A run of either sim given an output dir (`SIM_OUT`, `STRIMS_SIM_OUT`)
 writes its tables there as CSV files, each beside a `<table>.schema.json`
@@ -47,7 +52,12 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   answers refused (a full queue) and dropped (at write
                   time), parent switches, sheds taken and sent,
                   message bytes by kind, payloads and HAVE-only ones,
-                  retransmits, drops and push and answer waits (strims-sim
+                  request parking's counters (spec_sent, spec_answered,
+                  spec_not_yet, spec_expired, spec_cancelled,
+                  requests_not_yet, parked, park_released, park_expired,
+                  park_cancelled, park_refused, not_yet_sent,
+                  not_yet_received), retransmits, drops and push and
+                  answer waits (strims-sim
                   also the window model's window cuts and timeouts, and
                   the acknowledgements alone it sends, packets and bytes
                   the uplinks' leave out: TCP's pure ACKs
@@ -61,19 +71,64 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   good (arrive_ms, negative for one there from the start,
                   and depart_ms), which the verdicts' series carry
   events          the sims' timed events: t_us, kind, node, peer, value,
-                  detail
+                  detail; with SIM_SPEC=1 / STRIMS_SIM_SPEC=1 also every
+                  node's scheduler decisions (parent_choice, parent_open,
+                  parent_switch, prune, shed_by, parent_link_lost,
+                  window_collapse, timeout_loss, and read_skip, a first-gap
+                  skip with the chunks passed over in value: tens of
+                  thousands of rows a minute of a hundred viewers)
   parents         every change of a node's push parent of a stream: t_ms,
                   node, stream, parent (the node from then on, -1 for
                   none), reason (open, switch, prune, shed, lost), nodes
                   numbered as in events
-  forecast        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 (large: a
-                  row per neighbour per chunk announced), every sample of
-                  a neighbour's announcement lag, with the estimate it
-                  updated: t_ms, node, viewer, peer, stream,
-                  seq, sample_ms, mean_ms, horizon_ms, samples, fresh,
-                  lazy, first_sight, run, seen_ms, held_ms (when the peer
-                  first held the chunk: -1 where never), live (held after
-                  both nodes took their places)
+  arrivals        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 or SIM_SPEC=1
+                  / STRIMS_SIM_SPEC=1, every chunk each node first held
+                  and its timeline there: t_ms, node, viewer, seq, how
+                  (own, push, answer, other), peer (the source), parent,
+                  expected_ms, released_ms, asked_ms, asks, last_ask_peer,
+                  last_ask_ms, rtt_ms
+  spec_requests   with SIM_SPEC=1 / STRIMS_SIM_SPEC=1, every speculative
+                  request once it ended: t_ms, node (the requester),
+                  viewer, honest, peer (the holder), peer_honest, stream,
+                  seq, grace_ms, rtt_ms, predictor (`model`), predicted_ms,
+                  predicted_p90_ms and predicted_p99_ms (the model's hold
+                  by its median, 90th and 99th percentiles), frontier_seq,
+                  hole_seq (the holder's declared newest hole), outcome
+                  (answered, not_yet, expired, cancelled, closed), reason
+                  (an expiry's grace, invalid or window), t_outcome_ms,
+                  held_ms (the holder's true first hold: empty where
+                  never), channel_open_ms, live, err_ms (the request's
+                  earliness: held_ms - (t_ms + rtt_ms / 2), positive when
+                  it reached the holder before the chunk did), pred_err_ms
+                  (held_ms - predicted_ms) and held_by_p50, held_by_p90 and
+                  held_by_p99 (held by each predicted hold; empty without a
+                  hold or a prediction)
+  parks           with SIM_SPEC=1 / STRIMS_SIM_SPEC=1, every request a
+                  holder parked or refused, once it ended: t_ms, node (the
+                  holder), viewer, honest, peer (the requester),
+                  peer_honest, stream, seq, grace_ms, had (the holder had
+                  held the chunk), outcome (released, expired, cancelled,
+                  closed, refused), reason (a refusal's full,
+                  behind_window, ahead, no_grace, range, dropped or
+                  outside; a release's queue_full; an expiry's dataless),
+                  t_outcome_ms, held_ms (the holder's own first hold)
+  forecast        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 (large), in
+                  either of two schemas, told apart by their columns: the
+                  arrival models' predictions (a row per neighbour per
+                  chunk weighed: each channel's first prediction of a
+                  chunk, `extrapolated` and where logged `tail_ms`), or
+                  the HAVE samples (a row per neighbour per chunk
+                  announced: each sample of a neighbour's announcement
+                  lag, with the estimate it updated, `lazy` and
+                  `first_sight`): t_ms, node, viewer, peer, peer_honest,
+                  stream, seq, sample_ms (a prediction's chunk's age),
+                  mean_ms and horizon_ms (a prediction's hold's lag by its
+                  median and 90th percentile), tail_ms (by its 99th),
+                  samples, fresh, extrapolated (the signing time was), lazy,
+                  first_sight, run, seen_ms (the signing), held_ms (when
+                  the peer first held the chunk: empty where never, -1 in
+                  older logs), channel_open_ms, live (held after both
+                  nodes took their places)
 
 A run's `bin_ms` is its bins' width: `--bin` over a bins column is a
 multiple of every selected run's. The CLI's cache root is `SIM_DB_ROOT`
@@ -146,9 +201,11 @@ manifest's `at`), then a farm flush's later seq, by number
            (summed over the bin). The events are the derived ones and the
            sims' own (`events`: faults, uplink steps, competing uploads,
            arrivals, joins, first reads or frames, churn leaves, seed steps
-           and copies, departures and the losses and re-links after them;
-           `--node` picks one node's), a kind the selection lacks refused
-           with the kinds it has. `aligned depart` anchors a run on its
+           and copies, departures and the losses and re-links after them,
+           and with the decision logs the schedulers' parent, window and
+           read events; `--node` and `--peer` pick one node's, or the
+           other's), a kind the selection lacks refused with the kinds it
+           has. `aligned depart` anchors a run on its
            first departure, which opens the departures' window
            (`SIM_DEPART`, `STRIMS_SIM_DEPART`), `--nth 0` on each one, and
            `--per node` each viewer that left on its own. With `--per node` each
@@ -165,30 +222,59 @@ manifest's `at`), then a farm flush's later seq, by number
            forecast_err_p50, forecast_err_p90, forecast_abs_err_p50,
            forecast_abs_err_p90) are a bin's samples, per run or per node
            (the forecasting node's), as `forecast` judges them against
-           the truth. `--nth 0` aligns on every occurrence, a window
-           each (n counts windows); `--pool` takes the field over every
-           window's rows of a cell and arm together, a bin, rather than
-           a band over windows; `--detail` (a glob) and `--since` /
-           `--until` pick the events by their detail and time
+           the truth; the decision logs' fields (spec_n, spec_answered,
+           spec_not_yet, spec_expired, spec_cancelled, spec_err_p50,
+           spec_err_p90, spec_early, spec_late, park_n, park_expired) are
+           a bin's rows of honest nodes, per run or per node (the
+           requester's or the holder's). `--nth 0` aligns on every
+           occurrence, a window each (n counts windows); `--pool` takes
+           the field over every window's rows of a cell and arm
+           together, a bin, rather than a band over windows; `--detail`
+           (a glob) and `--since` / `--until` pick the events by their
+           detail and time
   events   the run metrics pooled: collapses, onset after a step down and
            recovery after a step up (with how many runs they censored),
            excess lag, flaps
   osc      oscillation: spells and their dwell times, flaps, the lag's
            autocorrelation period and amplitude
   rows     the selected runs' rows (JSON lines), with their verdicts
-  forecast the forecast logs pooled, by sim, cell, arm and the pace asked
-           of the HAVEs: the error of each neighbour's announcement-lag
-           estimate against the HAVE (sample - mean) and its horizon's
-           coverage, and where the sim knows when an honest neighbour
-           truly held the chunk as it arrived (`live`), the error against
-           that
-           (held - (seen + mean)), the HAVE's lateness over it (seen +
-           sample - held: the HAVE's hold and its one-way delay), the
-           share never held (censored), and the share the peer held before
-           our channel with it opened (backlog: its first HAVEs announce
-           them, so they don't count as forecasts of arrival).
-           Only each HAVE's first sample of a stream counts, and not those
-           that set the chunk's first sight (they are zero)
+  forecast the forecast logs pooled, by sim, cell and arm: the arrival
+           models' predictions, where the sim knows when an honest
+           neighbour truly held the chunk as it arrived (`live`), by the
+           truth error at the median and the 90th percentile (held -
+           (seen + mean), held - (seen + horizon): positive, the model
+           predicted the hold too early) and the calibration of the
+           predicted quantiles (the share of true holds by the predicted
+           p50, p90 and p99 holds: 0.5, 0.9 and 0.99 when calibrated; p99
+           where the log has `tail_ms`); and the HAVE samples, by the pace
+           asked of the HAVEs: the error of each neighbour's
+           announcement-lag estimate against the HAVE (sample - mean) and
+           its horizon's coverage, and where the sim knows the truth the
+           error against that (held - (seen + mean)) and the HAVE's
+           lateness over it (seen + sample - held: the HAVE's hold and its
+           one-way delay). Both give the share never held (censored), and
+           the share the peer held before our channel with it opened
+           (backlog: its first HAVEs announce them, so they don't count as
+           forecasts of arrival). Only each HAVE's first sample of a
+           stream counts, and not those that set the chunk's first sight
+           (they are zero). `--json` gives the HAVE samples' rows, then
+           the predictions' (`kind` prediction)
+  spec     the decision logs pooled (honest nodes' rows), by sim, cell,
+           arm and `--by` phase (the verdict's, or none): speculative
+           requests by predictor, their outcome shares, the answered
+           ones' time to answer, their graces, and where the holder truly
+           held the chunk as it arrived (`live`) the early/late error
+           (err_ms; positive, the request reached the holder first) and
+           its share early, the prediction's error (held - predicted_ms,
+           the model's median hold: positive, it predicted the hold too
+           early) and the share of true holds by the predicted p50, p90
+           and p99 holds (p90 and p99 where the log has them); parked and
+           refused requests, their outcome shares, the refusals by reason
+           and those of chunks the holder had held (the startup's
+           announced-then-dropped chunks among them), the parked ones'
+           release and expiry shares, and how long a park waited against
+           its grace (released ones' wait over grace, and their wait).
+           `--json` gives {"spec": rows, "parks": rows}
 
 Every query takes `--json`: its rows, integer and decimal values (HUGEINT,
 which sum() of integers gives, too) as numbers. The DuckDB CLI is pinned
@@ -234,11 +320,12 @@ a key's tables come from one source, so any two views join on them:
 cell (a key the farm reused counts in each of its cells). USING (k) joins
 the same rows but keeps both `src` columns, to name as runs.src. Beside
 (k, src) the views join on their own columns: reads and viewer_seconds to
-viewers USING (k, src, viewer), as stalls does; events, parents, node_bins
-and forecast to viewers USING (k, src, node) (`node` in both sims;
-strims-sim's viewers also name it `host`); seconds to verdict_seconds USING (k, src, sec) (macros.sql's
-`sec`). runs' frames and bytes are its row's: beside viewer_seconds' frames,
-name them runs.frames and runs.bytes.
+viewers USING (k, src, viewer), as stalls does; events, parents, node_bins,
+forecast, arrivals, spec_requests and parks to viewers USING (k, src, node)
+(`node` in both sims; strims-sim's viewers also name it `host`); seconds to
+verdict_seconds USING (k, src, sec) (macros.sql's `sec`). runs' frames and
+bytes are its row's: beside viewer_seconds' frames, name them runs.frames
+and runs.bytes.
 
   simdb.py sql "SELECT r.cell, r.arm, w.up, quantile_cont(lag_ms, 0.99) AS p99
     FROM reads JOIN viewers w USING (k, src, viewer) JOIN runs r USING (k, src)
@@ -296,8 +383,8 @@ def cmd_pooled(a):
 
 
 def cmd_aligned(a):
-    rows = query.aligned(selection(a), a.event, a.field, a.per, a.node, a.detail, a.pool, a.before, a.after,
-                         a.nth).records()
+    rows = query.aligned(selection(a), a.event, a.field, a.per, a.node, getattr(a, "peer", None), a.detail, a.pool,
+                         a.before, a.after, a.nth).records()
     emit(a, rows, lambda: query.aligned_text(rows, a.event, a.field, a.per, a.nth, a.pool))
 
 
@@ -314,6 +401,11 @@ def cmd_osc(a):
 def cmd_forecast(a):
     rows = query.forecast(selection(a)).records()
     emit(a, rows, lambda: query.forecast_text(rows))
+
+
+def cmd_spec(a):
+    rows = query.spec(selection(a), a.by).records()
+    emit(a, rows, lambda: query.spec_text(rows["spec"], rows["parks"]))
 
 
 def cmd_rows(a):
@@ -369,8 +461,10 @@ def main():
     qs["aligned"] = sub.add_parser("aligned")
     qs["aligned"].add_argument("event", help=f"a derived event ({', '.join(DERIVED_KINDS)}) or a sim's (its "
                                "events table's kinds: join, leave, first_read, first_frame, ...; join and leave "
-                               "a node's)")
+                               "a node's; with the decision logs parent_choice, parent_open, parent_switch, "
+                               "prune, shed_by, parent_link_lost, window_collapse, timeout_loss, read_skip)")
     qs["aligned"].add_argument("--node", type=int, help="only events of this node (the sims' events)")
+    qs["aligned"].add_argument("--peer", type=int, help="only events about this other node (the sims' events)")
     qs["aligned"].add_argument("--detail", help="only events whose detail matches this glob (the sims' events)")
     qs["aligned"].add_argument("--pool", action="store_true",
                                help="the field over every window's rows pooled a bin, not a band over windows")
@@ -385,6 +479,8 @@ def main():
     qs["events"] = sub.add_parser("events")
     qs["osc"] = sub.add_parser("osc")
     qs["forecast"] = sub.add_parser("forecast")
+    qs["spec"] = sub.add_parser("spec")
+    qs["spec"].add_argument("--by", choices=("phase", "none"), default="phase")
     qs["rows"] = sub.add_parser("rows")
     qs["rows"].add_argument("--fields", help="the row's fields to print, comma-separated (all by default)")
     for x in qs.values():
@@ -417,7 +513,7 @@ def main():
         lake[a.cmd](a)
     else:
         {"sql": cmd_sql, "pooled": cmd_pooled, "aligned": cmd_aligned, "events": cmd_events, "osc": cmd_osc,
-         "rows": cmd_rows, "forecast": cmd_forecast}[a.cmd](a)
+         "rows": cmd_rows, "forecast": cmd_forecast, "spec": cmd_spec}[a.cmd](a)
 
 
 # The commands the plain python3 runs, with the DuckDB CLI: the store's

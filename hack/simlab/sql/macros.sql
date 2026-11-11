@@ -61,18 +61,20 @@ CREATE OR REPLACE VIEW sec AS
 -- Every event, the verdicts' (derived from the series, node -1:
 -- simdb.py's DERIVED_KINDS, the viewers present rising and falling
 -- present_join and present_leave) and, where the runs wrote them, the
--- sims' own (`events`: times in µs, with the node; join and leave a
--- node's). No kind is both.
+-- sims' own (`events`: times in µs, with the node and the other node;
+-- join and leave a node's). No kind is both.
 -- needs: derived_events
 CREATE OR REPLACE VIEW ev AS
-    SELECT k, src, sec * 1000 AS t_ms, kind, value, -1::BIGINT AS node, NULL::VARCHAR AS detail
+    SELECT k, src, sec * 1000 AS t_ms, kind, value, -1::BIGINT AS node, -1::BIGINT AS peer,
+           NULL::VARCHAR AS detail
     FROM derived_events;
 -- needs: derived_events events
 CREATE OR REPLACE VIEW ev AS
-    SELECT k, src, sec * 1000 AS t_ms, kind, value, -1::BIGINT AS node, NULL::VARCHAR AS detail
+    SELECT k, src, sec * 1000 AS t_ms, kind, value, -1::BIGINT AS node, -1::BIGINT AS peer,
+           NULL::VARCHAR AS detail
     FROM derived_events
     UNION ALL
-    SELECT k, src, t_us / 1000.0 AS t_ms, kind, value::DOUBLE, node, detail FROM events;
+    SELECT k, src, t_us / 1000.0 AS t_ms, kind, value::DOUBLE, node, peer, detail FROM events;
 
 -- The runs of some cells and arms (empty lists for all): a farm run's
 -- cell by its name or by the suite cell alone (<cell>@<run>).

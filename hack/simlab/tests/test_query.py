@@ -10,6 +10,10 @@ simdb.py prints of it is golden_cli's):
                the CLI's
   Commands     the commands' Results, their columns, a refusal, the rows
                by key and the selection's rows, a pull's dry run
+  Logs         a job of the HAVE removal's logs beside the fixture's: the
+               forecast's predictions and HAVE samples apart, read by their
+               columns, the decision logs (spec), their fields aligned on a
+               sim's event about a node (--peer)
 
   python3 hack/simlab/tests/test_query.py
 """
@@ -163,6 +167,125 @@ class Commands(Fixture):
         self.assertTrue(query.pull_text(p).startswith(f"{run}: would GET 1 files, 0.0 MB, for 2 jobs' "))
         with self.assertRaises(query.Refused):
             query.pull_run(run, dry_run=True)
+
+
+def quantiles(xs, ps):
+    """quantile_cont's."""
+    xs = sorted(xs)
+    out = []
+    for p in ps:
+        at = p * (len(xs) - 1)
+        lo = int(at)
+        out.append(xs[lo] + (xs[min(lo + 1, len(xs) - 1)] - xs[lo]) * (at - lo))
+    return out
+
+
+class Logs(Fixture):
+    """A job whose sim wrote the HAVE removal's logs: the forecast's
+    predictions (extrapolated, tail_ms), speculative requests (without the
+    predicted p90 and p99) and parks, and scheduler events about other
+    nodes; and the fixture's HAVE-sample forecast (suite/wt/inv1)."""
+
+    SRC = "suite/wt/logs"
+    BOTH = query.Selection(src=[SRC, "suite/wt/inv1"])
+    LOGS = query.Selection(src=[SRC])
+    # t_ms, node, viewer, peer, peer_honest, live, run, stream, seq, sample_ms, mean_ms, horizon_ms, tail_ms,
+    # samples, fresh, extrapolated, seen_ms, held_ms, channel_open_ms
+    PREDICTIONS = [(1000, 1, 0, 2, True, True, 0, 0, 5, 30, 50, 80, 150, 4, True, False, 1000, 1100, 0),
+                   (1010, 1, 0, 2, True, True, 0, 0, 6, 30, 50, 80, 150, 4, True, False, 1000, 1060, 0),
+                   (1020, 1, 0, 2, True, True, 0, 0, 7, 30, 50, 80, 150, 4, True, False, 1000, None, 0),
+                   (1030, 1, 0, 3, False, True, 0, 0, 8, 30, 50, 80, 150, 4, True, False, 1000, 1000, 0)]
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(cls.root / "target" / "sim-db")}):
+            job = (cls.SRC, "k-logs", *golden_cli.JOBS[0][2:4], "logs-5", "ppspp-logs", *golden_cli.JOBS[0][6:])
+            d = cls.root / "jobs-logs" / "0"
+            meta = golden_cli.job_dir(d, job)
+            b = "BIGINT"
+            golden_cli.write_table(d, "forecast", [
+                ("t_ms", b), ("node", b), ("viewer", b), ("peer", b), ("peer_honest", "BOOLEAN"), ("live", "BOOLEAN"),
+                ("run", b), ("stream", b), ("seq", b), ("sample_ms", b), ("mean_ms", b), ("horizon_ms", b),
+                ("tail_ms", b), ("samples", b), ("fresh", "BOOLEAN"), ("extrapolated", "BOOLEAN"), ("seen_ms", b),
+                ("held_ms", b), ("channel_open_ms", b)], cls.PREDICTIONS)
+            golden_cli.write_table(d, "spec_requests", [
+                ("t_ms", b), ("node", b), ("viewer", b), ("honest", "BOOLEAN"), ("peer", b),
+                ("peer_honest", "BOOLEAN"), ("stream", b), ("seq", b), ("grace_ms", b), ("rtt_ms", b),
+                ("predictor", "VARCHAR"), ("predicted_ms", b), ("outcome", "VARCHAR"), ("reason", "VARCHAR"),
+                ("t_outcome_ms", b), ("held_ms", b), ("live", "BOOLEAN"), ("err_ms", b)],
+                [(1000, 1, 0, True, 2, True, 0, 5, 100, 20, "model", 1050, "answered", None, 1040, 1060, True, 20),
+                 (2000, 1, 0, True, 2, True, 0, 6, 100, 20, "model", 2050, "not_yet", None, 2010, 2030, True, 5),
+                 (2500, 4, 3, False, 2, True, 0, 7, 100, 20, "model", 2550, "expired", "grace", 2600, None, True,
+                  None)])
+            golden_cli.write_table(d, "parks", [
+                ("t_ms", b), ("node", b), ("viewer", b), ("honest", "BOOLEAN"), ("peer", b),
+                ("peer_honest", "BOOLEAN"), ("stream", b), ("seq", b), ("grace_ms", b), ("had", "BOOLEAN"),
+                ("outcome", "VARCHAR"), ("reason", "VARCHAR"), ("t_outcome_ms", b), ("held_ms", b)],
+                [(1000, 2, 1, True, 1, True, 0, 5, 100, False, "released", None, 1050, 1040),
+                 (1500, 2, 1, True, 1, True, 0, 6, 100, True, "refused", "full", 1500, 1400),
+                 (2000, 2, 1, True, 1, True, 0, 7, 100, False, "expired", "dataless", 2100, None)])
+            golden_cli.write_table(d, "events", [
+                ("t_us", b), ("kind", "VARCHAR"), ("node", b), ("peer", b), ("value", b), ("detail", "VARCHAR")],
+                [(0, "join", 1, 0, 0, ""), (5_000_000, "prune", 2, 1, 0, ""), (6_000_000, "prune", 3, 4, 0, "")])
+            db = cls.root / "jobs-logs" / "logs.duckdb"
+            store_host.fold(db, [meta], cls.SRC)
+            store_host.export(db, store_host.cache_root() / "cache" / cls.SRC)
+
+    def test_the_forecasts_two_schemas_apart(self):
+        got = query.forecast(self.LOGS)
+        self.assertIsNone(got.have)
+        (r,) = got.prediction.records()
+        self.assertEqual((r["kind"], r["n"], r["held"]), ("prediction", 4, 2))
+        ps = [0.1, 0.5, 0.9, 0.99]
+        for k, want in (("truth_q", quantiles([50, 10], ps)), ("truth90_q", quantiles([20, -20], ps))):
+            self.assertEqual(len(r[k]), 4)
+            for a, b in zip(r[k], want):
+                self.assertAlmostEqual(a, b, places=9)
+        self.assertEqual((r["under_p50"], r["under_p90"], r["under_p99"]), (0.0, 0.5, 1.0))
+        self.assertAlmostEqual(r["censored"], 1 / 3)
+        self.assertEqual(r["backlog"], 0.0)
+        # Beside the HAVE samples, theirs are as they are alone.
+        both = query.forecast(self.BOTH)
+        alone = query.forecast(query.Selection(src=["suite/wt/inv1"]))
+        self.assertIsNone(alone.prediction)
+        self.assertEqual(both.have.records(), alone.have.records())
+        self.assertEqual(both.records(), [*alone.have.records(), r])
+        text = query.forecast_text(both.records()).splitlines()
+        self.assertTrue(text[0].startswith("predictions (arrival models)"))
+        self.assertIn("HAVE samples (announcement-lag estimates)", text)
+        self.assertEqual(text[text.index("HAVE samples (announcement-lag estimates)") + 1:],
+                         query.forecast_text(alone.records()).splitlines())
+
+    def test_the_decision_logs(self):
+        got = query.spec(self.LOGS, "none")
+        (r,) = got.requests.records()
+        self.assertEqual((r["predictor"], r["phase"], r["n"], r["runs"], r["answered"], r["not_yet"], r["expired"]),
+                         ("model", "all", 2, 1, 0.5, 0.5, 0.0))
+        self.assertEqual((r["answer_q"], r["held"], r["early"], r["under_p50"], r["under_p90"], r["never_held"]),
+                         ([40.0, 40.0, 40.0], 2, 1.0, 0.5, None, 0.0))
+        self.assertEqual(r["pred_err_q"], quantiles([10, -20], [0.1, 0.5, 0.9, 0.99]))
+        (p,) = got.parks.records()
+        self.assertEqual((p["n"], p["parked"], p["refused_full"], p["refused_had"], p["parked_released"],
+                          p["released_frac_q"], p["released_wait_q"]),
+                         (3, 2, 1 / 3, 1 / 3, 0.5, [0.5, 0.5, 0.5], [50.0, 50.0, 50.0]))
+        text = query.spec_text(got.records()["spec"], got.records()["parks"])
+        self.assertIn("parked and refused requests (honest holders), shares %", text)
+        phases = {r["phase"] for r in query.spec(self.LOGS).requests.records()}
+        self.assertTrue(phases)
+        self.assertNotIn("all", phases)
+        with self.assertRaisesRegex(query.Refused, r"the selection has no spec_requests, parks .*SIM_SPEC=1"):
+            query.spec(query.Selection(src=["suite/wt/inv1"]))
+
+    def test_the_logs_fields_around_an_event_about_a_node(self):
+        got = {r["rel_ms"]: r["p50"] for r in query.aligned(self.LOGS, "prune", "spec_n", peer=1).records()}
+        self.assertEqual(got, {-4000: 1.0, -3000: 1.0})
+        got = {r["rel_ms"]: r["p50"] for r in query.aligned(self.LOGS, "prune", "park_n", peer=4).records()}
+        self.assertEqual(got, {-5000: 2.0, -4000: 1.0})
+        n = {r["rel_ms"]: r["p50"] for r in query.aligned(self.LOGS, "prune", "forecast_n", peer=1).records()}
+        self.assertEqual(n, {-4000: 2.0})
+        with self.assertRaisesRegex(query.Refused, "the selection has no prune event about node 9; its kinds: "):
+            query.aligned(self.LOGS, "prune", "spec_n", peer=9)
 
 
 if __name__ == "__main__":
