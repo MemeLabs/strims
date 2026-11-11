@@ -79,18 +79,22 @@ metric, `event_kinds` each event):
                     analyze.py's verdicts, of the current verdict_version
                     (catalog_info); <table>_all holds every version kept
 
-Every table carries `k` and joins the others on it: USING (k) gives a
-job's rows of any table, and `JOIN experiment_jobs USING (k)` its
-experiments, cells, arms and seeds. A job's tables come from one cache
+Every table carries a job's key `k`, and the result tables and
+experiment_jobs its source `src` too: a job's tables come from one cache
 source, jobs.src (simdb.py's source_ranks: the one holding the most of
-them, then the later flush, then the later seq), so a result table has
-one copy of a job. Beside `k` the tables join on their own columns:
-reads, viewer_seconds and stalls to viewers USING (k, viewer); events,
-node_bins, parents and forecast to viewers USING (k, node); seconds to
-verdict_seconds USING (k, sec).
+them, then the later flush, then the later seq), so a result table holds
+one copy of a job, and any two join USING (k, src), as simdb.py's views
+do. USING (k) joins the same rows, but USING (k, src) lets the source
+prune the files a big table (reads, bins) reads: an experiment's reads
+are `experiment_jobs e JOIN reads USING (k, src) WHERE e.exp_id = ...`.
+`JOIN experiment_jobs USING (k, src)` gives a job's experiments, cells,
+arms and seeds. Beside them the tables join on their own columns: reads,
+viewer_seconds and stalls to viewers USING (k, src, viewer); events,
+node_bins, parents and forecast to viewers USING (k, src, node); seconds
+to verdict_seconds USING (k, src, sec).
 
   SELECT e.cell, e.arm_label, count(*) AS runs, sum(v.collapsed::INT) AS collapsed
-  FROM experiment_jobs e JOIN verdicts v USING (k)
+  FROM experiment_jobs e JOIN verdicts v USING (k, src)
   WHERE e.exp_id = 'sa0755' GROUP BY ALL ORDER BY ALL
 
 The physical tables are in schema `raw`, a source's rows each under its
@@ -1215,7 +1219,7 @@ SELECT src AS exp_id, cell, any_value({rsim}) AS sim, any_value(test) AS test,
 FROM raw.runs WHERE src LIKE 'suite/%' GROUP BY src, cell;
 
 CREATE OR REPLACE TABLE main.experiment_jobs AS
-SELECT * EXCLUDE (line) FROM (
+SELECT u.* EXCLUDE (line), j.src FROM (
     SELECT c.exp_id, c.cell,
            CASE WHEN r.knob[c.sim] IS NULL THEN f.arm ELSE coalesce(f.env[r.knob[c.sim]], f.arm) END AS arm_label,
            f.arm AS ref, f.env[r.knob[c.sim]] AS knob_value, f.k,
@@ -1226,8 +1230,9 @@ SELECT * EXCLUDE (line) FROM (
     WHERE f.src IS NOT NULL AND f.k IS NOT NULL
     UNION ALL BY NAME
     SELECT src AS exp_id, cell, arm AS arm_label, arm AS ref, k, seed, false AS reused, src AS flush, 0 AS line
-    FROM raw.runs WHERE src LIKE 'suite/%')
-QUALIFY row_number() OVER (PARTITION BY exp_id, cell, arm_label, seed, k ORDER BY reused, line DESC) = 1;
+    FROM raw.runs WHERE src LIKE 'suite/%') u
+LEFT JOIN main.jobs j USING (k)
+QUALIFY row_number() OVER (PARTITION BY u.exp_id, u.cell, u.arm_label, u.seed, u.k ORDER BY u.reused, u.line DESC) = 1;
 
 CREATE OR REPLACE TABLE main.experiments AS
 WITH ej AS (
@@ -1320,7 +1325,7 @@ QUALIFY row_number() OVER (PARTITION BY k, tbl ORDER BY state = 's3' DESC, bytes
 
 EXP_RUNS_SQL = """
 CREATE OR REPLACE VIEW main.exp_runs AS
-SELECT e.*, j.* EXCLUDE (k, seed) FROM main.experiment_jobs e JOIN main.jobs j USING (k);
+SELECT e.*, j.* EXCLUDE (k, seed, src) FROM main.experiment_jobs e JOIN main.jobs j USING (k);
 CREATE OR REPLACE VIEW main.catalog_info AS SELECT key, value FROM raw.info;
 """
 
@@ -1348,7 +1353,7 @@ def view_sql(t, cols, name, viewers):
     if t == "viewers":
         node = ("coalesce(x.node, x.host)" if "node" in cols and "host" in cols else
                 "x.node" if "node" in cols else "x.host" if "host" in cols else "NULL::BIGINT")
-        sel = ["x.k", "x.viewer", f"{node} AS node"]
+        sel = ["x.k", "x.src", "x.viewer", f"{node} AS node"]
         special = {"up": "nullif(x.up, -1) AS up", "hostile": "coalesce(x.hostile, false) AS hostile",
                    "churned": "x.churned::BOOLEAN AS churned",
                    "arrive_ms": "CASE WHEN x.arrive_ms >= 0 THEN x.arrive_ms END AS arrive_ms"}
@@ -1360,11 +1365,11 @@ def view_sql(t, cols, name, viewers):
             stay.append("(w.arrive_ms IS NULL OR w.arrive_ms < 0 OR (x.sec + 1) * 1000 > w.arrive_ms)")
         if "depart_ms" in viewers:
             stay.append("(w.depart_ms IS NULL OR x.sec * 1000 < w.depart_ms)")
-        sel = ["x.k"] + [("nullif(x.lag_ms, -1) AS lag_ms" if c == "lag_ms" else plain(c)) for c in rest]
+        sel = ["x.k", "x.src"] + [("nullif(x.lag_ms, -1) AS lag_ms" if c == "lag_ms" else plain(c)) for c in rest]
         join = "LEFT JOIN raw.viewers w ON w.k = x.k AND w.src = x.src AND w.viewer = x.viewer" if stay else ""
         return f"{head} {', '.join(sel)} {canon(t)} {join}" + (f" WHERE {' AND '.join(stay)}" if stay else "") + ";"
     if t == "events":
-        sel = ["x.k"]
+        sel = ["x.k", "x.src"]
         for c in rest:
             sel.append({"node": "nullif(x.node, -1) AS node", "peer": "nullif(x.peer, -1) AS peer",
                         "value": "CASE WHEN x.kind = 'parent_lost' AND x.value = -1 THEN NULL ELSE x.value END AS value"
@@ -1377,18 +1382,18 @@ def view_sql(t, cols, name, viewers):
                        "'value': p[strpos(p, '=') + 1:]})) END AS detail_map")
         return f"{head} {', '.join(sel)} {canon(t)};"
     if t in ("seconds", "bins"):
-        sel = ["x.k"] + [plain(c) if c in ID_COLS else nullify(c) for c in rest]
+        sel = ["x.k", "x.src"] + [plain(c) if c in ID_COLS else nullify(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "node_bins":
-        sel = ["x.k"] + [("nullif(x.viewer, -1) AS viewer" if c == "viewer" else plain(c)) for c in rest]
+        sel = ["x.k", "x.src"] + [("nullif(x.viewer, -1) AS viewer" if c == "viewer" else plain(c)) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "forecast":
-        sel = ["x.k"] + [nullify(c) if c in ("horizon_ms", "held_ms", "mean_ms") else plain(c) for c in rest]
+        sel = ["x.k", "x.src"] + [nullify(c) if c in ("horizon_ms", "held_ms", "mean_ms") else plain(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "parents":
-        sel = ["x.k"] + [nullify(c) if c == "parent" else plain(c) for c in rest]
+        sel = ["x.k", "x.src"] + [nullify(c) if c == "parent" else plain(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
-    return f"{head} x.* EXCLUDE (src) {canon(t)};"
+    return f"{head} x.* {canon(t)};"
 
 
 # The catalog's own names, which a sim table's view doesn't take (it is
@@ -1428,10 +1433,10 @@ def main_sql(cols, version, tmp, ins, parsed):
         out.append(view_sql(t, cols[t], name, cols.get("viewers", {})))
     for t in ("rows", "scalars"):
         if t in cols:
-            out.append(f"CREATE OR REPLACE VIEW main.{t} AS SELECT x.* EXCLUDE (src) {canon(t)};")
+            out.append(f"CREATE OR REPLACE VIEW main.{t} AS SELECT x.* {canon(t)};")
     for t in ("verdicts", "verdict_seconds", "episodes", "derived_events"):
         if t in cols:
-            out.append(f"CREATE OR REPLACE VIEW main.{t}_all AS SELECT x.* EXCLUDE (src) {canon(t)};")
+            out.append(f"CREATE OR REPLACE VIEW main.{t}_all AS SELECT x.* {canon(t)};")
             out.append(f"CREATE OR REPLACE VIEW main.{t} AS SELECT * FROM main.{t}_all "
                        f"WHERE verdict_version = (SELECT value FROM raw.info WHERE key = 'verdict_version');")
     info = {"catalog_version": str(CATALOG_VERSION), "verdict_version": version,
@@ -1509,17 +1514,18 @@ TABLE_DOCS = {
         "with other settings): (exp_id, cell) is a cell."),
     "experiment_jobs": (
         "table", "an experiment's job", "exp_id, cell, arm_label, seed -> k",
-        "jobs and every result table USING (k); experiment_cells USING (exp_id, cell)",
+        "jobs and every result table USING (k, src); experiment_cells USING (exp_id, cell)",
         "The jobs an experiment scored, by cell, arm and seed. arm_label is the arm as suite.py and simdb.py name "
         "it (simdb.arm_label): a --sets run's set (the value the job's env gives the run's knob), else the matrix's "
-        "arm (a --refs name); ref is the matrix's arm, knob_value the env's value of the knob. A job the farm reused "
+        "arm (a --refs name); ref is the matrix's arm, knob_value the env's value of the knob; src the job's source "
+        "(jobs.src), which joins the result tables USING (k, src) and prunes their files. A job the farm reused "
         "from another run or matrix (reused, its row from flush) counts in each experiment it was reused for, so "
         "a k can be in several experiments and cells. A farm job whose data left S3 stays listed (availability)."),
     "exp_runs": (
         "view", "an experiment's job", "exp_id, cell, arm_label, seed -> k", "as experiment_jobs",
         "experiment_jobs with its jobs' columns (jobs, but k and seed)."),
     "jobs": (
-        "table", "a job", "k", "every table USING (k); commits ON commits.sha = jobs.commit",
+        "table", "a job", "k", "every table USING (k, src); commits ON commits.sha = jobs.commit",
         "Every job the cache or the farm's indexes know: sim ('ppspp' or 'strims-sim'), test, seed, commit and "
         "binary_sha256 (the farm's), env (its settings, MAP) and knobs promoted from it (transport: 'tcp' or "
         "'webrtc' (rtc_browsers the browsers) or NULL for the sim's own model; known_uplink, arrivals, depart and "
@@ -1542,35 +1548,35 @@ TABLE_DOCS = {
         "The farm's S3 ledger (target/sim-farm/s3.jsonl): each host's, the farm's and each pull's requests and "
         "bytes (source 'host', 'run', 'pull', ...), priced as farm.py prices them (cost_usd)."),
     "availability": (
-        "table", "a job's table", "k, tbl", "jobs USING (k)",
+        "table", "a job's table", "k, tbl", "jobs USING (k, src)",
         "Where each job's tables are: state 'local' (the catalog holds tbl of the job's source), 's3' (a farm flush "
         "of it lists tbl and S3 still keeps it: fetch copies it in) or 'expired' (S3 kept it 7 days); src the "
         "source, bytes its file's size (the flush's, shared by its jobs). A job no cache source ever held has "
         "'sim-data' (its flush's tables) and, where its samples landed, 'sim-samples' (reads, forecast)."),
     "rows": (
-        "view", "a job", "k", "jobs USING (k)",
+        "view", "a job", "k", "jobs USING (k, src)",
         "Each job's row (the sims' one-line JSON result), a column a field: numbers DOUBLE, lists of them "
         "DOUBLE[], strings VARCHAR. Fields a sim or a commit doesn't write are NULL. metric_catalog describes each."),
     "scalars": (
-        "view", "a number of a job's row", "k, name", "jobs USING (k)",
+        "view", "a number of a job's row", "k, name", "jobs USING (k, src)",
         "The rows' numbers in long form, as simdb.py folds them: bools 1.0, list elements name[i], non-finite "
         "numbers and strings left out."),
     "verdicts": (
-        "view", "a job", "k", "jobs USING (k)",
+        "view", "a job", "k", "jobs USING (k, src)",
         "analyze.py's verdict and run metrics of each job (simdb.py's derived `verdicts`), of the current "
         "verdict_version: onset (the first unhealthy trigger's second), trees, delivery, latency (each trigger's "
         "onset), recovered, absorbing, feasible ('True', 'False' or 'step'), unhealthy (the share of unhealthy "
         "seconds), lag_p50, lag_max, collapsed (an unhealthy spell of COLLAPSED_SECS lasting past startup_s), "
         "startup_s, then analyze.run_metrics' columns. verdicts_all holds every version kept."),
     "verdict_seconds": (
-        "view", "a job's second", "k, sec", "jobs USING (k); seconds USING (k, sec)",
+        "view", "a job's second", "k, sec", "jobs USING (k, src); seconds USING (k, src, sec)",
         "Each second's verdict: phase (startup, after_down, after_up, steady), healthy and what judged it "
         "(trees_bad, deliv_bad, lag_high, lag_rise), hit_share, delivery and lag_q (the honest viewers' q0.9 lag)."),
     "episodes": (
-        "view", "a job's spell", "k, kind, start", "jobs USING (k)",
+        "view", "a job's spell", "k, kind, start", "jobs USING (k, src)",
         "A run's healthy, unhealthy and collapse spells: [start, stop) seconds, len."),
     "derived_events": (
-        "view", "a job's derived event", "k, sec, kind", "jobs USING (k)",
+        "view", "a job's derived event", "k, sec, kind", "jobs USING (k, src)",
         "analyze.events: start, seed_down, seed_up, present_join, present_leave, onset, recovered, collapse "
         "(value: a step's new uplink over the old, how many viewers came or went, a collapse's length)."),
     "catalog_info": (
@@ -1611,11 +1617,11 @@ STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewe
                  "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",
                  "reads": "k, viewer, t_ms", "forecast": "k, node, peer, seq",
                  "stalls": "k, viewer, delay_ms, t_ms", "parents": "k, node, stream, t_ms"}
-STANDARD_JOINS = {"seconds": "jobs USING (k); verdict_seconds USING (k, sec)",
-                  "viewer_seconds": "viewers USING (k, viewer)", "reads": "viewers USING (k, viewer)",
-                  "events": "viewers USING (k, node)", "node_bins": "viewers USING (k, node)",
-                  "forecast": "viewers USING (k, node)", "stalls": "viewers USING (k, viewer)",
-                  "parents": "viewers USING (k, node)", "viewers": "reads, viewer_seconds, stalls USING (k, viewer)"}
+STANDARD_JOINS = {"seconds": "jobs USING (k, src); verdict_seconds USING (k, src, sec)",
+                  "viewer_seconds": "viewers USING (k, src, viewer)", "reads": "viewers USING (k, src, viewer)",
+                  "events": "viewers USING (k, src, node)", "node_bins": "viewers USING (k, src, node)",
+                  "forecast": "viewers USING (k, src, node)", "stalls": "viewers USING (k, src, viewer)",
+                  "parents": "viewers USING (k, src, node)", "viewers": "reads, viewer_seconds, stalls USING (k, src, viewer)"}
 VERDICT_DOCS = {
     "onset": "the first second a trigger held (trees, delivery or latency), NULL if none",
     "trees": "the first second of TREES_SECS with the smoothed hit share under TREES_SHARE",
