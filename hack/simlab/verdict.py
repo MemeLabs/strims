@@ -713,8 +713,7 @@ def derived_version():
     """A hash of everything that defines the derived tables:
     VERDICT_VERSION, their columns and the code that writes them
     (DERIVE_CODE), so a derived table made under another is stale."""
-    parts = [VERDICT_VERSION, repr([DERIVED, DERIVED_KINDS, VERDICT_COLS])]
-    parts += [inspect.getsource(f) for f in DERIVE_CODE]
+    parts = [VERDICT_VERSION, repr([DERIVED, DERIVED_KINDS, VERDICT_COLS]), *DERIVE_SOURCES]
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
 
 
@@ -788,8 +787,13 @@ def write_table(path, cols, data):
 
 
 # The code that writes the derived tables, whose source derived_version
-# hashes.
+# hashes: read here, as the module loads, so a process hashes the code it
+# runs. inspect.getsource reads the file, so a later call in a process
+# that outlives an edit (the console server's forkserver children, which
+# fork from the code they started with) would hash the edited file's text
+# against the loaded code and name a version no derive writes.
 DERIVE_CODE = (derive_source, write_table, viewer_phases)
+DERIVE_SOURCES = tuple(inspect.getsource(f) for f in DERIVE_CODE)
 
 
 # --- a pool of derives ----------------------------------------------------------------

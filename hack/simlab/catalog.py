@@ -2198,8 +2198,14 @@ def scoring_version(suite=None):
     rest of suite.py's it reads, the constants and scoring_sql itself."""
     s = suite or suite_module()
     parts = [SCORING.read_text(), repr([s.METRICS, s.GUARDRAILS, s.HOST_METRICS, s.SHOWN, scoring_consts(s),
-                                        t975()]), inspect.getsource(scoring_sql), inspect.getsource(getter_sql)]
+                                        t975()]), *SCORING_SOURCES]
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
+
+
+# scoring_sql's and getter_sql's sources, which scoring_version hashes: read
+# as the module loads, so a process hashes the code it runs, as
+# verdict.DERIVE_SOURCES is.
+SCORING_SOURCES = (inspect.getsource(scoring_sql), inspect.getsource(getter_sql))
 
 
 def scoring_cols(columns, have=None):

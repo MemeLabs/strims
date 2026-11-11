@@ -100,6 +100,22 @@ class Verdict(unittest.TestCase):
         self.assertEqual(got["verdict"]["onset"], 20)
         self.assertIsNotNone(got["verdict"]["recovered"])
 
+    def test_the_versions_hash_the_code_that_loaded(self):
+        # A process that outlives an edit to its source files (the console
+        # server's forkserver children) hashes what it runs: the versions
+        # don't read the files again, so an edited file on disk moves
+        # neither.
+        from unittest import mock
+
+        from simlab import catalog
+
+        derived, scoring = verdict.derived_version(), catalog.scoring_version()
+        self.addCleanup(verdict.derived_version.cache_clear)
+        verdict.derived_version.cache_clear()
+        with mock.patch("inspect.getsource", lambda f: "an edited file's text"):
+            self.assertEqual(verdict.derived_version(), derived)
+            self.assertEqual(catalog.scoring_version(), scoring)
+
 
 if __name__ == "__main__":
     unittest.main()
