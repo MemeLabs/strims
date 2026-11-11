@@ -4,15 +4,14 @@
 -- Two arms' collapses seed by seed: which stay on the same seeds (both)
 -- and which move (only the first arm, $arm, or only the second, $arm2). A
 -- ramp counts as a collapse, as the verdict counts it. Structural cells
--- (every arm of the experiment collapses on every seed) are marked, to
+-- (structural: every arm collapses on every seed it ran) are marked, to
 -- grey them; `summary` counts each state, for the chart's header.
 WITH runs AS (
     SELECT e.arm_label AS arm, e.cell, e.seed, v.collapsed
     FROM experiment_jobs e JOIN verdicts v USING (k, src)
     WHERE e.exp_id = $exp
 ), structural AS (
-    SELECT cell FROM runs GROUP BY cell
-    HAVING bool_and(collapsed) AND count(DISTINCT arm) = (SELECT count(DISTINCT arm) FROM runs)
+    SELECT cell FROM structural($exp)
 ), pairs AS (
     -- The seeds both arms ran in a cell.
     SELECT a.cell, a.seed, a.collapsed AS a, b.collapsed AS b
