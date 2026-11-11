@@ -14,6 +14,8 @@ simlab.verdict's derive pool:
   Schema       catalog.schema over an engine.Pool: the console's parts
   Fetch        the flushes a fetch pulls (store.pull_sources stood in) and
                what the S3 ledger's new lines cost; its refusals
+  Tiers        an experiment's tiers from its cells' names, tests and env,
+               its index recording none
 
   python3 hack/simlab/tests/test_catalog.py
 """
@@ -42,7 +44,7 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import catalog, engine, store, store_host, verdict  # noqa: E402
+from simlab import catalog, engine, store, store_host, suite, verdict  # noqa: E402
 
 
 class Fixture(unittest.TestCase):
@@ -223,6 +225,70 @@ class Fetch(Fixture):
             catalog.fetch("sf0001", tables=["bins"])
         with self.assertRaisesRegex(SystemExit, "experiment nope has no jobs"):
             catalog.fetch("nope")
+
+
+class Tiers(Fixture):
+    """Farm-runs indexes of cells without env, their matrices' jobs giving
+    it: each cell's tier is the one holding the most of the experiment's
+    cells among those with a cell of its name, test and env."""
+
+    def setUp(self):
+        super().setUp()
+        self.runs = self.root / "target" / "sim-suite" / "farm-runs"
+        self.farm = self.root / "target" / "sim-farm"
+
+    def experiment(self, name, cells):
+        """A farm run's index naming `cells` (tier cells, each with its
+        env or another) by name, sim and test alone, and a job of each."""
+        (self.runs / f"{name}.json").write_text(json.dumps({"cells": [
+            {"name": c["name"], "sim": c["sim"], "test": c["test"], "why": "w"} for c in cells]}))
+        for i, c in enumerate(cells):
+            seed = "SIM_SEED" if c["sim"] == suite.PPSPP else "STRIMS_SIM_SEED"
+            d = self.farm / f"{name}-{i:02d}"
+            d.mkdir()
+            (d / "index.jsonl").write_text(json.dumps({
+                "id": f"{name}{i}", "key": f"k-{name}-{i}", "arm": "main", "commit": "1" * 40, "test": c["test"],
+                "env": {**c["env"], seed: "7"}, "src": f"farm/{name}-00+0more-aaaa/i-1/0"}) + "\n")
+
+    def tiers(self):
+        catalog.index(workers=0)
+        return {r["exp_id"]: r["tiers"] for r in catalog.lake("SELECT exp_id, tiers FROM experiments;")}
+
+    def test_a_cells_env_decides_its_tier(self):
+        by = {}
+        for t, cs in suite.TIERS.items():
+            for c in cs:
+                by.setdefault(c["name"], {})[t] = c
+        # A name two tiers give different env, and two cells only one of
+        # them holds.
+        name, both = next((n, ts) for n, ts in sorted(by.items())
+                          if len(ts) >= 2 and len({json.dumps(c["env"], sort_keys=True) for c in ts.values()}) == len(ts))
+        a, b = sorted(both)[:2]
+        only_b = [c for c in suite.TIERS[b] if c["name"] not in by or set(by[c["name"]]) == {b}][:2]
+        self.experiment("sx0001", [both[b], *only_b])
+        self.experiment("sx0002", [both[a]])
+        self.experiment("sx0003", [{**both[a], "env": {**both[a]["env"], "SIM_SUITE_UNKNOWN": "1"}}])
+        got = self.tiers()
+        self.assertEqual((got["sx0001"], got["sx0002"], got["sx0003"]), ([b], [a], []))
+
+    def test_the_tier_holding_the_most_of_its_cells(self):
+        # Cells of one tier, one of which another tier holds as well (its
+        # name and env alike): all of them that tier's.
+        shared = None
+        for t, cs in sorted(suite.TIERS.items()):
+            for c in cs:
+                key = (c["name"], json.dumps(c["env"], sort_keys=True))
+                others = [u for u, us in suite.TIERS.items() if u != t and any(
+                    (x["name"], json.dumps(x["env"], sort_keys=True)) == key for x in us)]
+                if others and len(cs) >= 3:
+                    shared = (t, c)
+                    break
+            if shared:
+                break
+        t, c = shared
+        rest = [x for x in suite.TIERS[t] if x["name"] != c["name"]][:2]
+        self.experiment("sx0004", [c, *rest])
+        self.assertEqual(self.tiers()["sx0004"], [t])
 
 
 if __name__ == "__main__":

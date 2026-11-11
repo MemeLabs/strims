@@ -155,6 +155,15 @@ to verdict_seconds USING (k, src, sec).
 sql/scoring.sql, again whenever either changes (catalog_info's
 scoring_version); suite.py loads its own into each session, TEMP.
 
+An experiment's `tiers` are suite.py's TIERS (as they are now) its cells
+came from: each cell is matched by its name, test and env (a farm cell's
+env its index's, else its matrix's jobs', less their seeds and the run's
+knob) to the cells of the tiers, and its tier is the one of those
+holding the most of the experiment's cells (then the smaller tier, then
+the name). A cell whose env no tier's cell of its name has (TIERS changed
+since, or --env set more) is in none, nor is one with no env (its index
+predates cells' env, and no matrix of its ran).
+
 The physical tables are in schema `raw`, a source's rows each under its
 `src`; the views above read them through `jobs`.
 """
@@ -422,11 +431,11 @@ def tier_cells():
         suite = suite_module()
     except Exception:
         return []
-    return [{"tier": t, "cell": c["name"], "sim": c["sim"], "env": {str(a): str(b) for a, b in c["env"].items()}}
-            for t, cells in suite.TIERS.items() for c in cells]
+    return [{"tier": t, "cell": c["name"], "sim": c["sim"], "env": {str(a): str(b) for a, b in c["env"].items()},
+             "test": c.get("test")} for t, cells in suite.TIERS.items() for c in cells]
 
 
-TIER_COLS = {"tier": "VARCHAR", "cell": "VARCHAR", "sim": "VARCHAR", "env": "MAP(VARCHAR, VARCHAR)"}
+TIER_COLS = {"tier": "VARCHAR", "cell": "VARCHAR", "sim": "VARCHAR", "env": "MAP(VARCHAR, VARCHAR)", "test": "VARCHAR"}
 
 # suite.py, whose module docs describe its metrics and rows.
 SUITE_PY = ROOT / "hack" / "sim-suite" / "suite.py"
@@ -1210,6 +1219,10 @@ def metadata_sql(ins, changed, kind_of, cols, tmp):
         if name not in cols:
             out.append(f"CREATE TABLE raw.{name} ({', '.join(f'{ident(n)} {ty}' for n, ty in spec.items())});")
             cols[name] = dict(spec)
+        for n, ty in spec.items():
+            if n not in cols[name]:
+                out.append(f"ALTER TABLE raw.{name} ADD COLUMN {ident(n)} {ty};")
+                cols[name][n] = ty
 
     table("farm_index", FARM_INDEX_COLS)
     redo = sorted(p for p in changed if kind_of.get(p) == "farm_index")
@@ -1389,14 +1402,16 @@ spend AS (
     SELECT exp_id, list(DISTINCT farm_run ORDER BY farm_run) AS farm_runs, sum(share * cost.cost) AS cost_usd,
            sum(share * s3.s3) AS s3_usd
     FROM share LEFT JOIN cost USING (farm_run) LEFT JOIN s3 USING (farm_run) GROUP BY exp_id),
+cell_tiers AS (
+    SELECT e.exp_id, e.cell, t.tier, t.size, count(*) OVER (PARTITION BY e.exp_id, t.tier) AS held
+    FROM main.experiment_cells e
+    JOIN (SELECT *, count(*) OVER (PARTITION BY tier) AS size FROM raw.tier_cells) t
+      ON t.cell = e.cell AND (e.test IS NULL OR t.test = e.test)
+     AND list_sort(map_entries(t.env)) = list_sort(map_entries(e.env))),
 tiers AS (
-    SELECT exp_id, list(tier ORDER BY tier) AS tiers FROM (
-        SELECT e.exp_id, t.tier, count(DISTINCT t.cell) AS n, any_value(t.size) AS size
-        FROM main.experiment_cells e
-        JOIN (SELECT *, count(*) OVER (PARTITION BY tier) AS size FROM raw.tier_cells) t
-          ON t.cell = e.cell AND list_sort(map_entries(t.env)) = list_sort(map_entries(e.env))
-        GROUP BY ALL)
-    WHERE n = size GROUP BY exp_id),
+    SELECT exp_id, list(DISTINCT tier ORDER BY tier) AS tiers FROM (
+        SELECT exp_id, cell, arg_min(tier, (-held, size, tier)) AS tier FROM cell_tiers GROUP BY ALL)
+    GROUP BY exp_id),
 refs AS (
     SELECT e.exp_id, map_from_entries(list(DISTINCT {{'key': f.arm, 'value': f.commit}})) AS arms
     FROM main.experiment_cells e JOIN raw.farm_index f USING (matrix)
@@ -1651,9 +1666,11 @@ TABLE_DOCS = {
         "A suite farm run (kind 'farm'; exp_id its name, as suite.py farm printed it) or a local suite invocation "
         "(kind 'local'; exp_id its cache source, suite/<worktree>/<invocation>, which holds the jobs it ran itself, "
         "not the ones it kept from earlier invocations). started_at and finished_at: its own jobs' first and last "
-        "ran_at (a farm run's pending index's time before any ran); tiers: suite.py's TIERS, as they are now, whose "
-        "every cell it ran; seeds; knob (the env variable by sim) and sets of a --sets run; arms (name: commit, from "
-        "its index) and arm_labels (experiment_jobs' arms); base: the arm the others are scored against; question "
+        "ran_at (a farm run's pending index's time before any ran); tiers (a farm run's): suite.py's TIERS, as they "
+        "are now, its cells came from, each cell's the tier holding the most of its cells among those with a cell of "
+        "its name, test and env (none for a cell whose env no tier's has); seeds; knob (the env variable by sim) and "
+        "sets of a --sets run; arms (name: commit, from its index) and arm_labels (experiment_jobs' arms); base: the "
+        "arm the others are scored against, where its index names it (a --sets run's first set else); question "
         "(suite.py farm --question); pending: its index still waits for the farm to start it; farm_runs: the farm "
         "runs that ran its matrices; cost_usd and s3_usd: those runs' costs and S3 ledger lines, each shared out "
         "by the jobs its matrices ran of the run's."),
