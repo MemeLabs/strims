@@ -408,6 +408,29 @@ fn the_forecast_log_outlives_its_scheduler_and_swarm() {
 }
 
 #[test]
+fn the_held_log_has_every_chunk_a_seed_writes_with_or_without_a_channel() {
+    let mut p = Pair::with(hybrid(), hybrid());
+    p.seed.runner.set_forecasts(true);
+    push_to_leech(&mut p, 2);
+    let pushed = p.seed.runner.take_held(p.seed.swarm);
+    let chunks = pushed.len();
+    assert!(chunks > 0 && chunks.is_multiple_of(2), "{pushed:?}");
+    // The scheduler goes with the last channel; the runner logs the
+    // seed's writes in its place, each at its write.
+    p.seed.runner.stop_swarm(p.seed.peer, p.seed.swarm);
+    assert!(p.seed.runner.swarm_stats(p.seed.swarm).is_none());
+    p.tick(50);
+    p.write(2);
+    let alone = p.seed.runner.take_held(p.seed.swarm);
+    let next: Vec<Bin> = (0..chunks as u64)
+        .map(|i| Bin(2 * (chunks as u64 + i)))
+        .collect();
+    assert_eq!(alone.iter().map(|&(b, _)| b).collect::<Vec<_>>(), next);
+    assert!(alone.iter().all(|&(_, at)| at == p.now), "{alone:?}");
+    assert!(p.seed.runner.take_held(p.seed.swarm).is_empty());
+}
+
+#[test]
 fn the_parent_log_outlives_its_scheduler_and_swarm() {
     let mut p = Pair::with(hybrid(), hybrid());
     p.leech.runner.set_parent_log(true);

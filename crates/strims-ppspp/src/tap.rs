@@ -204,9 +204,13 @@ pub enum TapKind {
         reporters: u64,
     },
     /// The seed's budget changed: subscriptions its measured upload pays
-    /// for, copies and streams per holder; and the capacity, a
-    /// subscriber's cost and the node's other swarms' push rate it was
-    /// computed from.
+    /// for, copies and streams per holder; a subscriber's cost and the
+    /// node's other swarms' push rate it was computed from; and
+    /// `capacity`, the budget's busy time's unbounded reading
+    /// (`UploadInfo::capacity` over `UploadInfo::for_budget`), which sizes
+    /// the copies before the budget is measured. Not the reading a
+    /// measured budget takes, which is bounded by what the seed wrote
+    /// lately ([`PushStats::seed_budget_capacity`](crate::PushStats::seed_budget_capacity)).
     SeedBudget {
         budget: u64,
         copies: u64,
@@ -216,7 +220,9 @@ pub enum TapKind {
         others: u64,
     },
     /// An adaptive seed sized its first wave: the `copies` that the
-    /// capacity, less the node's other swarms' push rate, pays for at the
+    /// capacity (the budget's busy time's unbounded reading, as
+    /// [`TapKind::SeedBudget`]'s), less the node's other swarms' push rate,
+    /// pays for at the
     /// store rate since the first chunk (`early_rate`), at most one per
     /// neighbour.
     SeedFirstWave {
@@ -297,8 +303,9 @@ pub struct Admission {
     pub extra: bool,
     /// The upload meter's rate; the push rate committed (our children at
     /// a subscriber's cost, plus the node's other swarms'); the other
-    /// swarms' share of it; a subscriber's cost; the capacity estimate;
-    /// and the utilization target in thousandths.
+    /// swarms' share of it; a subscriber's cost; the capacity estimate (the
+    /// relay busy-time reading, [`Upload`]'s); and the utilization target
+    /// in thousandths.
     pub upload_rate: u64,
     pub committed: u64,
     pub others: u64,
@@ -322,7 +329,8 @@ pub enum Shed {
     /// [`SHED_UTILIZATION`](crate::scheduler_peer::push::SHED_UTILIZATION) of the time (`busy`
     /// in thousandths), and the committed push rate (`committed`, our
     /// children's, plus `others`, the node's other swarms') was over the
-    /// interior target of `capacity`: `excess` is this swarm's share of
+    /// interior target of `capacity` (the relay busy-time reading,
+    /// [`Upload`]'s): `excess` is this swarm's share of
     /// the difference, and `count` the subscribers it closed for it.
     Saturated {
         busy: u64,
@@ -438,9 +446,11 @@ pub struct RequestRound {
 }
 
 /// The upload measurement as a swarm takes it: the rate written, the busy
-/// fraction in thousandths, the capacity estimate, the driver's hint, the
-/// node's other swarms' push rate and this swarm's, and the queueing delay
-/// past the runner.
+/// fraction in thousandths, the capacity estimate (the relay busy-time
+/// reading admission and shedding take, `UploadInfo::relay_capacity`, as
+/// [`PushStats::upload_capacity`](crate::PushStats::upload_capacity)), the
+/// driver's hint, the node's other swarms' push rate and this swarm's, and
+/// the queueing delay past the runner.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Upload {
     pub rate: u64,

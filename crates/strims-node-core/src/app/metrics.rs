@@ -492,6 +492,7 @@ fn push(s: PushStats) -> v1::PushStats {
         seed_copies: _,
         seed_first_wave: _,
         seed_first_wave_capacity: _,
+        seed_budget_capacity: _,
         pace_channels: _,
         have_lazy_out: _,
         have_lazy_in: _,

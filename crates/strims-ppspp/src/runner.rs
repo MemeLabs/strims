@@ -143,13 +143,15 @@ struct RunnerSwarm {
     /// The push rate its subscriptions committed at the last tick.
     committed: f64,
     /// The forecast log of the swarm's schedulers that went with its last
-    /// channel, until the driver takes it.
+    /// channel, and the chunks stored while it had none, until the driver
+    /// takes it.
     forecast_log: ForecastLog,
 }
 
 /// A forecast log ([`Runner::set_forecasts`]) the runner keeps for the
-/// driver once the scheduler that recorded it went: its samples, its
-/// stored chunks, and how many of either the caps left out. Bound:
+/// driver once the scheduler that recorded it went, or while the swarm has
+/// none: its samples, its stored chunks, and how many of either the caps
+/// left out. Bound:
 /// [`FORECAST_CAP`] samples and as many chunks, past which they're
 /// counted in `lost`.
 #[derive(Debug, Default)]
@@ -178,6 +180,20 @@ impl ForecastLog {
 
     fn is_empty(&self) -> bool {
         self.forecasts.is_empty() && self.held.is_empty() && self.lost == 0
+    }
+
+    /// Logs the chunks of `b`, stored at `now` while the swarm had no
+    /// scheduler to log them (a seed's writes before its first channel).
+    fn stored(&mut self, b: Bin, now: Time) {
+        let (mut x, r) = b.base();
+        while x <= r {
+            if self.held.len() < FORECAST_CAP {
+                self.held.push((x, now));
+            } else {
+                self.lost += 1;
+            }
+            x += 2;
+        }
     }
 }
 
@@ -607,10 +623,12 @@ pub struct Runner {
 }
 
 /// Hands a swarm's queued events to its scheduler and the driver. Called
-/// after every call that can publish or reset.
+/// after every call that can publish or reset. Without a scheduler, `held`
+/// (the runner's forecast log, while it is on) logs the chunks stored.
 fn drain_swarm(
     swarm: &mut Swarm,
     mut scheduler: Option<&mut PeerSwarmScheduler>,
+    mut held: Option<&mut ForecastLog>,
     key: SwarmKey,
     now: Time,
     q: &mut Queues<'_>,
@@ -623,11 +641,14 @@ fn drain_swarm(
                     s.reset(now, q);
                 }
             }
-            SwarmEvent::Published(b) => {
-                if let Some(s) = scheduler.as_deref_mut() {
-                    s.consume(b, now, swarm, q);
+            SwarmEvent::Published(b) => match scheduler.as_deref_mut() {
+                Some(s) => s.consume(b, now, swarm, q),
+                None => {
+                    if let Some(log) = held.as_deref_mut() {
+                        log.stored(b, now);
+                    }
                 }
-            }
+            },
             SwarmEvent::Readable => {
                 readable.insert(key);
             }
@@ -676,7 +697,7 @@ fn handle_payload(
                         // A newer epoch: the stream restarted. The store,
                         // verifier and scheduler start over.
                         swarm.reset();
-                        drain_swarm(swarm, Some(sched), key, now, q, readable);
+                        drain_swarm(swarm, Some(sched), None, key, now, q, readable);
                     }
                     Ok(false) => {}
                     Err(EpochError::OutOfDate) => continue,
@@ -715,7 +736,7 @@ fn handle_payload(
                             }
                         }
                         let signed = swarm.verifier().signed_at(d.bin);
-                        drain_swarm(swarm, Some(sched), key, now, q, readable);
+                        drain_swarm(swarm, Some(sched), None, key, now, q, readable);
                         sched.handle_data(
                             peer,
                             d.bin,
@@ -1077,6 +1098,7 @@ impl Runner {
             swarms,
             peers,
             events,
+            forecasts,
             ..
         } = self;
         let Some(rs) = swarms.get_mut(key) else {
@@ -1089,6 +1111,7 @@ impl Runner {
         drain_swarm(
             &mut rs.swarm,
             rs.scheduler.as_mut(),
+            forecasts.then_some(&mut rs.forecast_log),
             key,
             now,
             &mut q,
@@ -1225,7 +1248,15 @@ impl Runner {
         if pending {
             sched.open_backlog(from, to, &mut q);
         }
-        drain_swarm(swarm, Some(sched), key, now, &mut q, &mut events.readable);
+        drain_swarm(
+            swarm,
+            Some(sched),
+            None,
+            key,
+            now,
+            &mut q,
+            &mut events.readable,
+        );
         if pending {
             return Ok(Rewind::Pending);
         }
@@ -1242,13 +1273,17 @@ impl Runner {
             swarms,
             peers,
             events,
+            forecasts,
             ..
         } = self;
         let Some(rs) = swarms.get_mut(key) else {
             return;
         };
         let RunnerSwarm {
-            swarm, scheduler, ..
+            swarm,
+            scheduler,
+            forecast_log,
+            ..
         } = rs;
         match scheduler.as_mut() {
             Some(sched) => sched.close_backlog(swarm),
@@ -1261,6 +1296,7 @@ impl Runner {
         drain_swarm(
             swarm,
             scheduler.as_mut(),
+            forecasts.then_some(forecast_log),
             key,
             now,
             &mut q,
@@ -1899,7 +1935,15 @@ impl Runner {
                 transmit: &mut events.transmit,
             };
             sched.run(now, swarm, &mut q);
-            drain_swarm(swarm, Some(sched), key, now, &mut q, &mut events.readable);
+            drain_swarm(
+                swarm,
+                Some(sched),
+                None,
+                key,
+                now,
+                &mut q,
+                &mut events.readable,
+            );
         }
         for (key, p) in peers.iter_mut() {
             if p.wake == Wake::AtTick {
@@ -2180,7 +2224,8 @@ impl Runner {
 
     /// With the forecast log on, the swarm's chunks stored since the last
     /// call, each with the time it was: when this node first held it, the
-    /// truth its neighbours' forecasts aim at. It changes no decision.
+    /// truth its neighbours' forecasts aim at, a seed's own writes included
+    /// (those before its first channel too). It changes no decision.
     /// The log outlives the swarm's schedulers, which go with its last
     /// channel, and the swarm.
     pub fn take_held(&mut self, swarm: SwarmKey) -> Vec<(Bin, Time)> {

@@ -10,16 +10,16 @@
 //!
 //! | table | one row per | columns |
 //! |---|---|---|
-//! | `seconds` | second of [`Report::series`] | `sec`, then the series' per-second fields (`present`, `hits`, `misses`, `pruned`, `parents`, `capacity`, `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, and `written` for a media swarm) |
+//! | `seconds` | second of [`Report::series`] | `sec`, then the series' per-second fields: `present`, `hits`, `misses`, `pruned`, `parents`, `capacity` (the seed's relay busy-time reading, `PushStats::upload_capacity`, at the stats tick that opens the second: one tick before the one the second's counters come from), `busy` (the same tick's, in thousandths), `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, `budget_capacity` (the capacity reading the seed's budget was measured from, `PushStats::seed_budget_capacity`, at `capacity`'s tick: 0 until measured, -1 without a reading), and `written` for a media swarm |
 //! | `viewer_seconds` | viewer and second it was there ([`Report::presence`]) | `viewer`, `sec`, `lag_ms` (the series' `lag`: the p99 of the frames read in the second, -1 without any), `frames` |
 //! | `reads` | frame a viewer read (duplicates too) | `viewer`, `t_ms` (when it was read: its write time plus its lag), `seq`, `lag_ms` |
 //! | `stalls` | stall of a viewer's playout at each delay of [`DELAYS_MS`] (`hack/capture/analyze.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`) | `viewer`, `delay_ms`, `t_ms` (when it began, on the `reads`' clock), `stall_ms`: [`playout::play`] over the viewer's `reads`, as `hack/sim-db`'s `playback(delay_ms)` plays them |
 //! | `parents` | change of a node's push parent of a stream ([`Report::parent_changes`]) | `t_ms`, `node` (its host, as in `events`), `stream`, `parent` (the host from then on, -1 for none), `reason`: `open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their channel closed, the stream started anew, or the node stopped without closing its links: a crash, an abrupt departure) |
-//! | `bins` | bin of [`Scenario::wire_bins`] | [`bin_cols`]: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`), then [`ACK_COLS`], the acknowledgements alone their uplinks carried, packets and wire bytes, summed over those viewers and the seed's: TCP's pure ACKs (`*_up_ack_packets`, `*_up_ack_bytes`) and the data channels' SACKs (`*_up_sack_packets`, `*_up_sack_bytes`), none of them in `*_up_bytes`, `*_up_packets` or `*_small_packets` |
+//! | `bins` | bin of [`Scenario::wire_bins`] | [`bin_cols`]: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, `capacity` (the relay busy-time reading, `PushStats::upload_capacity`) and `busy`, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`), then [`ACK_COLS`], the acknowledgements alone their uplinks carried, packets and wire bytes, summed over those viewers and the seed's: TCP's pure ACKs (`*_up_ack_packets`, `*_up_ack_bytes`) and the data channels' SACKs (`*_up_sack_packets`, `*_up_sack_bytes`), none of them in `*_up_bytes`, `*_up_packets` or `*_small_packets`; and `budget_capacity` (the capacity reading the seed's budget was measured from, at the bin's end: `PushStats::seed_budget_capacity`, 0 until measured) |
 //! | `node_bins` | node and bin, with `STRIMS_SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node` (its host), `viewer` (its number in `viewers`, -1 for the seed and hostile hosts), what it did in the bin |
-//! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink in bytes per second, -1 without a limit), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset), `arrive_ms` (when it booted, [`HostSpec::arrive_at`]: the run's start, negative, for one that came with it) and `depart_ms` (when it left for good, [`Fault::Depart`]; empty if it stayed) |
-//! | `events` | timed event | `t_us`, `kind`, `node` (the host it happened to, -1 for none), `peer` (another host, -1 for none), `value`, `detail`: every fault of the scenario (`partition`, `repair`, `hold`, `release` with `node` and `peer` the groups' first hosts and `value` the groups' sizes' product, `crash`, `restart`, `latency` in ms, `pause_reading`, `resume_reading`, `reset_writer` with `node` the swarm, `uplink` in bytes per second, `connect`), `depart` with `value` 1 for an abrupt departure, 0 for a graceful one, every host's uplink steps (`up_step`), competing uploads (`competing_start`, `competing_stop`), each arriving viewer's `arrive` ([`HostSpec::arrive_at`]), each viewer incarnation's `join`, `first_frame` (`value` its ms from the join) and `caught_up` (the same), each `parent_lost` ([`Report::parent_losses`]: `node` the viewer, `peer` the parent that departed, `value` the ms from its departure until the viewer stopped counting on it, -1 if it never did, at its departure then) and the seed's `copies` changes |
-//! | `forecast` | sample of a node's forecast log ([`strims_ppspp::LagForecast`]), with `STRIMS_SIM_FORECAST=1` | `t_ms`, `node`, `viewer`, `peer` (the hosts), `peer_honest` (not a hostile host), `stream`, `seq` (the chunk), `sample_ms`, `mean_ms`, `horizon_ms` (-1 before the estimate's first sample), `samples`, `fresh`, `lazy`, `first_sight`, `run`, and `seen_ms` (our first sight), `held_ms` (when the peer first stored the chunk, in the incarnation that announced it, `Runner::take_held`; -1 if never) `channel_open_ms` (when our channel with the peer opened) and `live` (it was held after both hosts' incarnations started and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
+//! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink at the start in bytes per second, -1 without a limit; its steps are `events`' `up_step`), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset), `arrive_ms` (when it booted, [`HostSpec::arrive_at`]: the run's start, negative, for one that came with it) and `depart_ms` (when it left for good, [`Fault::Depart`]; empty if it stayed) |
+//! | `events` | timed event | `t_us`, `kind`, `node` (the host it happened to, -1 for none), `peer` (another host, -1 for none), `value`, `detail`: every fault of the scenario (`partition`, `repair`, `hold`, `release` with `node` and `peer` the groups' first hosts and `value` the groups' sizes' product, `crash`, `restart`, `latency` in ms, `pause_reading`, `resume_reading`, `reset_writer` with `node` the swarm, `uplink` in bytes per second, `connect`), `depart` with `value` 1 for an abrupt departure, 0 for a graceful one, every host's uplink steps (`up_step`), competing uploads (`competing_start` (`value` the competing flow's round trip in ms), `competing_stop`), each arriving viewer's `arrive` ([`HostSpec::arrive_at`]), each viewer incarnation's `join`, `first_frame` (`value` its ms from the join) and `caught_up` (the same), each `parent_lost` ([`Report::parent_losses`]: `node` the viewer, `peer` the parent that departed, `value` the ms from its departure until the viewer stopped counting on it, -1 if it never did, at its departure then) and the seed's `copies` (`value` its copies, at each change of its seed sample: its budget, window, copies or first wave, so `value` can repeat) |
+//! | `forecast` | sample of a node's forecast log ([`strims_ppspp::LagForecast`]): a HAVE's announcement lag, with `STRIMS_SIM_FORECAST=1` | `t_ms` (the HAVE's arrival), `node`, `viewer`, `peer` (the hosts), `peer_honest` (not a hostile host), `stream`, `seq` (the chunk), `sample_ms` (the lag: from our first sight of the chunk's unit to the HAVE), `mean_ms` (the mean of the peer's lag estimate before the sample, -1 before its first sample), `horizon_ms` (how late a sample still fits that estimate: the later of its decaying peak and its mean plus two deviations, -1 before its first sample), `samples` (the estimate's so far), `fresh` (its latest sample was recent enough for a candidate), `lazy` (we asked the peer for lazy HAVEs), `first_sight` (this HAVE set the unit's first sight: the sample is 0), `run` (the sample's place in the HAVE's run of its stream's bins: a whole unit's HAVE gives one per chunk, the same lag each), `seen_ms` (our first sight of the unit, `t_ms - sample_ms`), `held_ms` (when the peer first stored the chunk, in the incarnation it had at the sample: its runner's held log, `Runner::take_held`, a seed's own writes included; empty if that incarnation never did), `channel_open_ms` (when our channel with the peer opened) and `live` (it was held after both hosts' incarnations started and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
 //!
 //! `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
 //! `secs`, the seed's `seed_up` steps and the viewers' `viewer_up` as the
@@ -251,6 +251,7 @@ pub fn bin_cols() -> Vec<String> {
     for who in ["viewer", "seed"] {
         cols.extend(ACK_COLS.iter().map(|c| format!("{who}_{c}")));
     }
+    cols.push("budget_capacity".into());
     cols
 }
 
@@ -657,6 +658,7 @@ impl Report {
             row.push(self.wire_delta(seed, ku, uc("rtos")));
             row.extend(ACK_COLS.iter().map(|c| wire_sum(honest, ku, uc(c))));
             row.extend(ACK_COLS.iter().map(|c| self.wire_delta(seed, ku, uc(c))));
+            row.push(gauge(nc("budget_capacity")));
             t.opt_ints(&row);
         }
         Ok(t)
@@ -907,6 +909,13 @@ impl Report {
                 .and_then(|s| s.iter().rev().find(|&&t| t <= at).copied())
                 .unwrap_or(Duration::ZERO)
         };
+        // ... and when the one after it did, if any.
+        let next = |h: HostIx, at: Duration| -> Duration {
+            starts
+                .get(h)
+                .and_then(|s| s.iter().find(|&&t| t > at).copied())
+                .unwrap_or(Duration::MAX)
+        };
         // Every host's chunks by index, with when each incarnation first
         // held it, in order.
         let held: Vec<BTreeMap<u64, Vec<Duration>>> = self
@@ -931,11 +940,11 @@ impl Report {
                 // The peer's first hold in the incarnation that announced
                 // it, and whether it came after we took our place too.
                 let truth = r.peer.and_then(|p| {
-                    let since = place(p, r.at);
+                    let (since, until) = (place(p, r.at), next(p, r.at));
                     held.get(p)?
                         .get(&f.bin.base_offset())?
                         .iter()
-                        .find(|&&t| t >= since)
+                        .find(|&&t| t >= since && t < until)
                         .copied()
                 });
                 let opened = r.opened;
@@ -964,7 +973,7 @@ impl Report {
                     f.first_sight.to_string(),
                     f.run.to_string(),
                     ms(seen).to_string(),
-                    truth.map_or(-1, ms).to_string(),
+                    truth.map_or(String::new(), |t| ms(t).to_string()),
                     ms(opened).to_string(),
                     live.to_string(),
                 ]);

@@ -1570,6 +1570,7 @@ impl State {
                     upload_capacity: push.upload_capacity,
                     upload_busy_permille: u64::from(push.upload_busy_permille),
                     seed_copies: push.seed_copies as u64,
+                    seed_budget_capacity: push.seed_budget_capacity,
                     counters: self.runner.swarm_counters(key).unwrap_or_default(),
                 })
             })

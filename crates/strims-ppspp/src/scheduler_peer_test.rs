@@ -2276,6 +2276,48 @@ fn the_budget_leaves_out_the_time_data_waited_only_for_links_that_hold_it_back()
 }
 
 #[test]
+fn push_stats_carry_the_reading_the_seeds_budget_was_measured_from() {
+    let stats = |budget_busy| {
+        let mut f = adaptive_seed(4, 2);
+        let mut q = MockQueue::default();
+        let p = ready_channel(&mut f, &mut q);
+        for s in 0..4 {
+            f.sched
+                .handle_stream_request(p, s, Bin(0), Bin(0), now(), &mut q)
+                .unwrap();
+        }
+        let t = now() + Duration::from_secs(1);
+        publish(&mut f, now(), t);
+        f.sched.set_upload(push::UploadInfo {
+            rate: 900_000,
+            busy: 1.0,
+            budget_busy,
+            written_peak: 1_800_000.0,
+            ..Default::default()
+        });
+        f.sched.run_push(t, &mut q);
+        // Not measured yet: no reading.
+        assert_eq!(f.sched.push_stats().seed_budget_capacity, 0);
+        publish(&mut f, t, t + push::seed::ALLOC_MEASURE);
+        let t = t + push::seed::ALLOC_MEASURE;
+        f.sched.run_push(t, &mut q);
+        let st = f.sched.push_stats();
+        (
+            st.seed_budget,
+            st.seed_budget_capacity,
+            st.upload_capacity,
+            f.sched.seed_allocation(t).unwrap().budget,
+        )
+    };
+    // The budget pays for 70 % of its reading: six streams' worth of
+    // 900 kB/s busy all the time, twelve of twice that once half the busy
+    // time waited only for links that hold data back. The relay reading
+    // takes the whole busy time either way.
+    assert_eq!(stats(None), (6, 900_000, 900_000, 6));
+    assert_eq!(stats(Some(0.5)), (12, 1_800_000, 900_000, 12));
+}
+
+#[test]
 fn seed_weights_follow_the_streams_pushed() {
     let mut f = fixture(SwarmOptions {
         seed: crate::SeedPolicy {

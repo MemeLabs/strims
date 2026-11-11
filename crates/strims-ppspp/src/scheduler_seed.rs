@@ -804,6 +804,12 @@ pub(crate) struct Allocator {
     /// Once measured, the budget in stream slots.
     measured: bool,
     budget: usize,
+    /// The capacity reading (bytes per second) the latest check measured
+    /// `budget` from: [`seed_capacity`](super::UploadInfo::seed_capacity)
+    /// over the budget's busy time
+    /// ([`for_budget`](super::UploadInfo::for_budget)). Zero until
+    /// measured.
+    capacity: u64,
     /// The copies in effect, and the streams a holder may take: all of
     /// them once the budget is measured, any number before.
     copies: usize,
@@ -855,6 +861,7 @@ impl Allocator {
             measuring_since: Time::NIL,
             measured: false,
             budget: 0,
+            capacity: 0,
             copies: window.copies,
             streams: usize::MAX,
             window,
@@ -875,6 +882,7 @@ impl Allocator {
     /// Fills `out`'s seed fields.
     pub(super) fn push_stats(&self, out: &mut super::PushStats) {
         out.seed_budget = self.budget;
+        out.seed_budget_capacity = self.capacity;
         out.seed_window = self.window.copies;
         out.seed_copies = self.copies;
         out.seed_first_wave = self.first_wave;
@@ -1705,6 +1713,7 @@ impl PeerSwarmScheduler {
                 a.budget = target;
             }
             a.measured = true;
+            a.capacity = cap as u64;
         }
         let before = (a.budget, a.copies, a.streams);
         let paid = if a.measured {

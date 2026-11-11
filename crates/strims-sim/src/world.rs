@@ -1145,6 +1145,7 @@ impl World {
                         o.payloads,
                         o.have_only_payloads,
                         b.bytes_written.saturating_sub(o.data_bytes),
+                        sw.seed_budget_capacity,
                     ],
                     waits: [c.push_wait, c.answer_wait],
                 });

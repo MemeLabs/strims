@@ -351,6 +351,11 @@ impl PathOverhead {
 /// milliseconds), with the subscriptions it served per scenario swarm
 /// (`PushStats::children`) and the STREAM_REQUESTs it answered (`accepted`
 /// plus `rejected`, over its hybrid swarms, since the incarnation started).
+/// `capacity` is the relay busy-time reading admission and shedding take
+/// (`UploadInfo::relay_capacity`), a seed's too; an adaptive seed's budget
+/// takes its own, per scenario swarm (`budget_capacity`,
+/// `PushStats::seed_budget_capacity`: the reading its latest allocation
+/// check measured the budget from, zero until measured).
 ///
 /// Beside the meter's queueing delay, two from vnic's path measure over
 /// the node's links with a recent round trip, each aggregated as the meter
@@ -373,6 +378,7 @@ pub struct MeterSample {
     pub path_queued_ms: Option<u32>,
     pub path_latest_ms: Option<u32>,
     pub capacity: u64,
+    pub budget_capacity: BTreeMap<usize, u64>,
     pub children: BTreeMap<usize, usize>,
     pub requests_in: u32,
     pub rejected: u32,
@@ -623,6 +629,7 @@ impl HostStats {
                 ms.lazy_out = ms.lazy_out.saturating_add(n(push.have_lazy_out));
                 ms.lazy_in = ms.lazy_in.saturating_add(n(push.have_lazy_in));
                 if push.seed_window > 0 {
+                    ms.budget_capacity.insert(s, push.seed_budget_capacity);
                     let seed = SeedSample {
                         budget: push.seed_budget,
                         window: push.seed_window,

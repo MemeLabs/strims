@@ -10,6 +10,19 @@
 //! - **roles** ([`Report::roles`]): the swarms' seeds; forwarders, the other
 //!   hosts that answered a STREAM_REQUEST (accepted or declined); and the
 //!   rest.
+//! - **meter readings**: the upload meter's capacity, the relay busy-time
+//!   reading admission and shedding take (`PushStats::upload_capacity`,
+//!   [`MeterSample::capacity`]), a seed's too, ÷ the host's uplink at each
+//!   sample while a swarm streams ([`Report::meter_readings`]): its
+//!   p10/p50/p90 over each role's samples (`meter_seeds`,
+//!   `meter_forwarders`, `meter_others`), its median per bucket
+//!   (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked
+//!   changes (`off_drop`, `off_rise`, below). An adaptive seed's budget
+//!   takes its own reading ([`MeterSample::budget_capacity`]): its
+//!   p10/p50/p90 ÷ the uplink over the seeds' samples once measured
+//!   (`meter_budget_seeds`, [`Report::budget_readings`]). The first
+//!   wave's `seed_first_wave_capacity` is the budget's busy time's
+//!   unbounded reading, neither of them.
 //! - **standing queue** ([`Report::standing_queue`]): the share of a set of
 //!   hosts' uplink queue samples, while a swarm streams, that wait longer
 //!   than [`STANDING_QUEUE`] (WAN mode).
@@ -34,7 +47,17 @@
 //!   exactly when the uplink stayed busy throughout that window (WAN
 //!   mode). vnic's queued bytes, which read the queue as it is rather than
 //!   its floor, are also scored against the wait at the moment
-//!   ([`QueueTruth`]).
+//!   ([`QueueTruth`]). The row's `<reading>_err_<role>_ms`,
+//!   `<reading>_fp_<role>` and `<reading>_fn_<role>` score the meter's
+//!   delay (`qd`), vnic's path excess (`qdv`) and queued time (`qdb`)
+//!   against the standing queue, and the queued time (`qdbi`) and the
+//!   latest round trips' excess (`qdl`) against the wait at the moment. A
+//!   reading is positive from [`QUEUE_DELAY_THRESHOLD_MS`]; the truth is
+//!   positive from [`SATURATED_STANDING_MS`] for the standing queue (an
+//!   uplink that never emptied: a standing queue of 5 to 80 ms is a
+//!   positive the reading must read 80 ms for) and from the same 80 ms for
+//!   the wait at the moment. `fp` is the share of the truth's negatives
+//!   read positive, `fn` the share of its positives read negative.
 //! - **network construction**, over the honest viewers (every swarm's
 //!   viewers whose [`HostClass`] is honest) from [`NET_WARM`] on: their
 //!   link counts at each stats sample ([`Report::link_counts`]); the links
@@ -1307,6 +1330,14 @@ impl Report {
             j.nums(&format!("meter_{name}"), d.into_iter())
                 .int(&format!("n_{name}"), hosts.len() as u64);
         }
+        let mut budget: Vec<f64> = roles
+            .seeds
+            .iter()
+            .flat_map(|&h| self.budget_readings(h))
+            .collect();
+        if !budget.is_empty() {
+            j.nums("meter_budget_seeds", deciles(&mut budget).into_iter());
+        }
         j.nums(
             "meter_bucket_seeds",
             self.meter_buckets(swarm, &roles.seeds).into_iter(),
@@ -2373,16 +2404,18 @@ impl Report {
     /// | `seed_up` | `[s, bytes per second]`: the seed's uplink from the start and at each step, `s` from the stream's start |
     /// | `viewer_up` | the viewers' uplinks, summed |
     /// | `lag`, `frames` | per viewer, the p99 lag in ms of the frames it read in each second (-1 without any) and how many it read; with arrivals or departures, `frames` is -1 in a second it wasn't there in ([`Report::presence`]) |
-    /// | `present` | viewers with a transfer sample in the second |
+    /// | `present` | the honest viewers' transfer samples in the second: the honest viewers there while the stats tick once a second, more with a finer [`Scenario::stats_every`] (each viewer once per tick) |
     /// | `hits`, `misses`, `pruned` | over the viewers, pushes before their deadline, deadlines released to pull, and parents pruned |
     /// | `parents` | the viewers' median count of streams with an open parent |
-    /// | `capacity`, `busy`, `avail` | the seed's meter at its last reading in the second (capacity, busy in thousandths) and the upload it had then |
-    /// | `copies` | the adaptive seed's copies |
+    /// | `capacity`, `busy`, `avail` | the seed's meter at its last reading in the second, the stats tick that opens it (one tick before the one the second's counters come from): `capacity` the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, the seed's too), `busy` in thousandths; and the uplink it had at the second's middle |
+    /// | `copies` | the adaptive seed's copies at the second's middle (as of the tick that opens it) |
     /// | `sent`, `pushed` | chunks the seed sent, and of them pushes |
     /// | `seed_ovh`, `viewer_ovh` | bytes the seed and the honest viewers (summed) wrote to their links that weren't chunk data ([`crate::TransferSample::overhead`]; the row's `up_transport` and `up_acks` have the transports') |
+    /// | `budget_capacity` | the capacity reading an adaptive seed's latest allocation check measured its budget from, at `capacity`'s reading (`PushStats::seed_budget_capacity`: bounded by what the seed wrote lately, and once its window was cut by `SEED_GROWTH`; 0 until measured, -1 without a reading or for another seed) |
     /// | `written`, `chunks` | a media swarm's chunks published: those holding media, then with those of padding alone |
     ///
     /// [`Scenario::transfer_samples`]: crate::Scenario::transfer_samples
+    /// [`Scenario::stats_every`]: crate::Scenario::stats_every
     pub fn series(&self, swarm: usize) -> Option<String> {
         self.series_data(swarm).map(|s| s.json())
     }
@@ -2513,13 +2546,19 @@ impl Report {
             last = Some(x);
         }
         let (mut capacity, mut busy) = (vec![-1; n], vec![-1; n]);
+        let mut budget_capacity = vec![-1; n];
         if let Some(h) = self.hosts.get(seed) {
             for m in &h.runner.meter {
                 if let Some(k) = second(m.t)
-                    && let (Some(c), Some(b)) = (capacity.get_mut(k), busy.get_mut(k))
+                    && let (Some(c), Some(b), Some(g)) = (
+                        capacity.get_mut(k),
+                        busy.get_mut(k),
+                        budget_capacity.get_mut(k),
+                    )
                 {
                     *c = m.capacity as i64;
                     *b = i64::from(m.busy_permille);
+                    *g = m.budget_capacity.get(&swarm).map_or(-1, |&x| x as i64);
                 }
             }
         }
@@ -2575,6 +2614,7 @@ impl Report {
             ("pushed", pushed),
             ("seed_ovh", seed_ovh),
             ("viewer_ovh", viewer_ovh),
+            ("budget_capacity", budget_capacity),
         ];
         // A media swarm's chunks sent each second, those holding media, by
         // their first byte (`written`, what `frames` counts): its other

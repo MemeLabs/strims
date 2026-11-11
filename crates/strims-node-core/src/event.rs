@@ -224,8 +224,10 @@ pub struct NodeBin {
 /// (`misses`), parents pruned, replaced (`switched`) and lost to their
 /// closing the subscription (`shed`), subscribers closed for a saturated
 /// uplink (`sheds_sent`), streams with an open parent, the upload meter's
-/// capacity and busy thousandths and a seed's copies, and the scheduler's
-/// counters.
+/// capacity (the relay busy-time reading, `PushStats::upload_capacity`)
+/// and busy thousandths, a seed's copies and the capacity its budget was
+/// measured from (`PushStats::seed_budget_capacity`, zero elsewhere), and
+/// the scheduler's counters.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SwarmBin {
     pub swarm: SwarmKey,
@@ -239,6 +241,7 @@ pub struct SwarmBin {
     pub upload_capacity: u64,
     pub upload_busy_permille: u64,
     pub seed_copies: u64,
+    pub seed_budget_capacity: u64,
     pub counters: SwarmCounters,
 }
 

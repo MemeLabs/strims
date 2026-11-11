@@ -310,7 +310,122 @@ fn a_run_with_tables_keeps_its_trace() {
             assert!(lines("node_bins") > lines("bins"), "{name}: {ms} ms");
             assert!(lines("events") > 3, "{name}: {ms} ms: a join per viewer");
             assert!(lines("forecast") > 1, "{name}: {ms} ms");
+            budget_reading_is_the_budgets(&r, &d);
+            held_truth_meets_the_reads(&r, &d);
         }
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The seed's `budget_capacity` is the reading its budget was measured
+/// from: at every meter sample once measured, the budget is what 70 % of
+/// it pays for at a subscriber's cost, the cost within a factor of two of
+/// the stream's (the budget takes the store's rate over its last second,
+/// which a bursty writer swings); and the series' and the bins' columns
+/// carry it. ppspp's unit tests check the reading exactly.
+fn budget_reading_is_the_budgets(r: &strims_sim::Report, d: &Path) {
+    use strims_ppspp::scheduler_peer::push::PUSH_OVERHEAD;
+    use strims_ppspp::scheduler_peer::push::seed::{ALLOC_UTILIZATION, OVER_BUDGET};
+    let swarm = &r.scenario.swarms[0];
+    let seed = &r.hosts[swarm.seed].runner;
+    let streams = swarm.options.stream_count.max(1);
+    let cost = swarm.rate() / streams as f64 * PUSH_OVERHEAD;
+    let mut checked = 0;
+    for m in &seed.meter {
+        let Some(&cap) = m.budget_capacity.get(&0).filter(|&&c| c > 0) else {
+            continue;
+        };
+        let budget = seed
+            .seed_changes
+            .iter()
+            .rev()
+            .find(|(t, s, _)| *s == 0 && *t <= m.t)
+            .map(|x| x.2.budget)
+            .unwrap();
+        // The store's rate falls off once the stream stops.
+        if budget > streams && m.t < swarm.stop {
+            // The cost the budget implies, before its hysteresis.
+            let (lo, hi) = (
+                cap as f64 * ALLOC_UTILIZATION / (budget + 1) as f64,
+                cap as f64 * ALLOC_UTILIZATION / (budget as f64 * (1.0 - OVER_BUDGET)),
+            );
+            assert!(
+                hi >= cost / 2.0 && lo <= cost * 2.0,
+                "at {:?}: budget {budget} from {cap} B/s at {cost} B/s a subscriber",
+                m.t
+            );
+        }
+        checked += 1;
+    }
+    assert!(checked > 0, "the budget was measured");
+    let column = |t: &str| -> Vec<i64> {
+        let csv = std::fs::read_to_string(d.join(format!("{t}.csv"))).unwrap();
+        let mut rows = csv.lines();
+        let head: Vec<&str> = rows.next().unwrap().split(',').collect();
+        let i = head.iter().position(|&c| c == "budget_capacity").unwrap();
+        rows.filter_map(|l| l.split(',').nth(i).unwrap().parse().ok())
+            .collect()
+    };
+    let readings: BTreeSet<i64> = seed
+        .meter
+        .iter()
+        .filter_map(|m| m.budget_capacity.get(&0).map(|&c| c as i64))
+        .collect();
+    let seconds = column("seconds");
+    assert!(seconds.iter().any(|&c| c > 0));
+    assert!(seconds.iter().all(|c| *c == -1 || readings.contains(c)));
+    assert!(column("bins").iter().any(|&c| c > 0));
+}
+
+/// Every viewer stored each chunk it read before it read a frame of it,
+/// the seed each chunk at its frames' write, and the forecast's `held_ms`
+/// is the sampled peer's own first store, empty (never -1) without one.
+fn held_truth_meets_the_reads(r: &strims_sim::Report, d: &Path) {
+    let swarm = &r.scenario.swarms[0];
+    let per = (swarm.options.chunk_size / 1024) as u64;
+    let first = |h: usize| -> BTreeMap<u64, Duration> {
+        let mut m = BTreeMap::new();
+        for &(seq, at) in &r.hosts[h].held {
+            m.entry(seq).or_insert(at);
+        }
+        m
+    };
+    for v in &r.viewers {
+        let held = first(v.host);
+        for &(seq, lag) in &v.stats.lags {
+            let read = r.written_at(v.swarm, seq) + Duration::from_millis(u64::from(lag) + 1);
+            let at = held.get(&(seq / per));
+            assert!(
+                at.is_some_and(|&t| t <= read),
+                "{}: frame {seq} read at {read:?}, held {at:?}",
+                v.host
+            );
+        }
+    }
+    let seed = first(swarm.seed);
+    assert!(!seed.is_empty());
+    for (&c, &at) in &seed {
+        let written = r.written_at(0, c * per + per - 1);
+        assert_eq!(at, written, "the seed's chunk {c}");
+    }
+    let csv = std::fs::read_to_string(d.join("forecast.csv")).unwrap();
+    let mut rows = csv.lines();
+    let head: Vec<&str> = rows.next().unwrap().split(',').collect();
+    let col = |n: &str| head.iter().position(|&c| c == n).unwrap();
+    let (peer, seq, held) = (col("peer"), col("seq"), col("held_ms"));
+    let start = swarm.start;
+    let mut truths = 0;
+    for l in rows {
+        let f: Vec<&str> = l.split(',').collect();
+        assert_ne!(f[held], "-1");
+        let (Ok(p), Ok(c)) = (f[peer].parse::<usize>(), f[seq].parse::<u64>()) else {
+            continue;
+        };
+        if let Ok(h) = f[held].parse::<i64>() {
+            let at = first(p)[&c];
+            assert_eq!(h, at.as_millis() as i64 - start.as_millis() as i64, "{l}");
+            truths += 1;
+        }
+    }
+    assert!(truths > 0);
 }

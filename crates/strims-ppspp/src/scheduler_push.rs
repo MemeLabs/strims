@@ -503,7 +503,9 @@ impl UploadInfo {
     /// relay that has carried nothing yet starts from [`RELAY_FLOOR`].
     /// The driver's hint stands as it is, and so does the delivered rate
     /// under a standing queue. The seed's budget has its own ramp and
-    /// window validation and takes the unbounded reading.
+    /// window validation and its own bound
+    /// ([`seed_capacity`](Self::seed_capacity)); its first wave takes the
+    /// unbounded reading.
     pub(crate) fn relay_capacity(&self) -> Option<f64> {
         self.bounded_capacity(self.latest_delay, RELAY_GROWTH)
     }
@@ -1074,8 +1076,11 @@ pub struct PushStats {
     /// second, and the busy fraction in thousandths.
     pub upload_rate: u64,
     pub upload_busy_permille: u32,
-    /// The upload capacity admission control estimated from it, in bytes
-    /// per second (0 before anything was sent).
+    /// The upload capacity admission control and shedding estimated from
+    /// it, in bytes per second (0 before anything was sent): the relay
+    /// busy-time reading (`UploadInfo::relay_capacity`), bounded by what
+    /// the node wrote lately, a seed's too. An adaptive seed's budget
+    /// takes its own reading ([`seed_budget_capacity`](Self::seed_budget_capacity)).
     pub upload_capacity: u64,
     /// The node's queueing delay past the runner, from its peers' ping
     /// round trips; `None` with too few peers.
@@ -1124,12 +1129,20 @@ pub struct PushStats {
     /// stream slots (zero until measured), the window and the copies in
     /// effect; and its first wave, the most copies the window opened
     /// before the budget was measured, with the capacity reading (bytes per
-    /// second) that sized them.
+    /// second) that sized them: the budget's busy time's, unbounded
+    /// (`UploadInfo::capacity` over `UploadInfo::for_budget`).
     pub seed_budget: usize,
     pub seed_window: usize,
     pub seed_copies: usize,
     pub seed_first_wave: usize,
     pub seed_first_wave_capacity: u64,
+    /// The capacity reading (bytes per second) the latest check measured
+    /// `seed_budget` from: `UploadInfo::seed_capacity` over the budget's
+    /// busy time (`UploadInfo::for_budget`), bounded by what the seed wrote
+    /// lately and, once its window was cut, by [`SEED_GROWTH`]. Zero until
+    /// measured. Not [`upload_capacity`](Self::upload_capacity), the relay
+    /// reading.
+    pub seed_budget_capacity: u64,
     /// Channels, and those whose peer we ask for lazy HAVEs and those whose
     /// peer asked lazy HAVEs of us.
     pub pace_channels: usize,

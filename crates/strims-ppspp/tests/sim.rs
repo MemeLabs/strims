@@ -1271,6 +1271,10 @@ struct Sim {
     /// and the samples the logs' caps left out.
     forecasts: Option<Vec<Forecast>>,
     forecasts_lost: u64,
+    /// With the forecast log, every chunk each node stored, every
+    /// incarnation ([`Runner::take_held`]): by node, the chunk's index and
+    /// when, in true time.
+    held: Vec<Vec<(u64, Time)>>,
     /// With the tables, every node's parent changes of its swarm's streams
     /// ([`Runner::set_parent_log`], [`Sim::take_parents`]), the changes
     /// the logs' caps left out, and each node's open parent per stream as
@@ -1346,10 +1350,12 @@ struct BinSample {
     /// ([`Node::written_overhead`]), and its uplink's bytes, packets and
     /// small packets ([`Node::wire`]); and the rest of its counters.
     viewers: Vec<Option<([u64; 8], NodeCounts)>>,
-    /// The seed's meter capacity and busy thousandths, copies, chunks sent
-    /// and pushed, uplink, overhead bytes, and its uplink's bytes, packets
-    /// and small packets; and the rest of its counters.
-    seed: ([u64; 10], NodeCounts),
+    /// The seed's meter capacity (the relay busy-time reading,
+    /// `PushStats::upload_capacity`) and busy thousandths, copies, chunks
+    /// sent and pushed, uplink, overhead bytes, its uplink's bytes, packets
+    /// and small packets, and the capacity its budget was measured from
+    /// (`PushStats::seed_budget_capacity`); and the rest of its counters.
+    seed: ([u64; 11], NodeCounts),
 }
 
 /// A node's counters at a bin edge beyond the series': [`NODE_COLS`]' so
@@ -1405,7 +1411,8 @@ const WAIT_COLS: [&str; 6] = [
 
 /// The `bins` table's columns ([`Sim::write_tables`]): the series' and the
 /// network's, then [`NODE_COLS`] and [`WAIT_COLS`] summed over the viewers
-/// (`viewer_`) and the seed's (`seed_`).
+/// (`viewer_`) and the seed's (`seed_`), then the capacity the seed's budget
+/// was measured from (`budget_capacity`).
 fn bin_cols() -> Vec<String> {
     let mut cols: Vec<String> = [
         "bin",
@@ -1440,6 +1447,7 @@ fn bin_cols() -> Vec<String> {
                 .map(|c| format!("{who}_{c}")),
         );
     }
+    cols.push("budget_capacity".into());
     cols
 }
 
@@ -1557,6 +1565,7 @@ fn bin_row(k: usize, width: Duration, a: &BinSample, b: &BinSample) -> Vec<i64> 
     let (c, w) = counts_delta(&a.seed.1, &b.seed.1);
     row.extend(c);
     row.extend(wait_cols(&w));
+    row.push(gauge(10));
     row
 }
 
@@ -1630,9 +1639,11 @@ struct SeriesSample {
     /// with an open parent, and the overhead bytes it wrote so far
     /// ([`Node::written_overhead`]).
     viewers: Vec<Option<[u64; 5]>>,
-    /// The seed's meter capacity and busy thousandths, copies, chunks sent
-    /// and pushed, uplink, and overhead bytes so far.
-    seed: [u64; 7],
+    /// The seed's meter capacity (the relay busy-time reading,
+    /// `PushStats::upload_capacity`) and busy thousandths, copies, chunks
+    /// sent and pushed, uplink, overhead bytes so far, and the capacity its
+    /// budget was measured from (`PushStats::seed_budget_capacity`).
+    seed: [u64; 8],
 }
 
 impl Verdicts {
@@ -1696,8 +1707,10 @@ struct Shape {
     relays: u64,
     viewers: u64,
     /// Per sample of each honest node whose upload meter has a capacity:
-    /// the capacity over the node's true uplink, for the seed, relays and
-    /// the other viewers.
+    /// the capacity (the relay busy-time reading,
+    /// `PushStats::upload_capacity`, the seed's too) over the node's true
+    /// uplink, for the seed, relays and the other viewers: the row's
+    /// `meter_seed_p*`, `meter_relays_p*` and `meter_others_p*`.
     meter: [Vec<f64>; 3],
     /// Per sample of each honest relay: its push subscribers, all streams.
     fanout: Vec<u64>,
@@ -1895,8 +1908,13 @@ struct AllocSample {
     barred: BTreeSet<usize>,
     /// After the warm-up, the holders with a real child.
     with_children: BTreeSet<usize>,
-    /// The seed's upload capacity estimate (`PushStats::upload_capacity`).
+    /// The seed's upload capacity estimate (`PushStats::upload_capacity`):
+    /// the relay busy-time reading admission and shedding take, not its
+    /// budget's ...
     capacity: u64,
+    /// ... which is this (`PushStats::seed_budget_capacity`: zero until
+    /// measured).
+    budget_capacity: u64,
     /// Per honest neighbour holding every stream: its on-time pushes
     /// (`PushStats::hits`), all of them from the seed.
     hits: BTreeMap<usize, u64>,
@@ -1956,8 +1974,13 @@ struct Report {
     /// samples after the warm-up.
     seed_objective: Duration,
     /// The seed's capacity estimate ([`AllocSample::capacity`]), median
-    /// over the samples after the warm-up while it writes.
+    /// over the samples after the warm-up while it writes: the row's
+    /// `seed_capacity`, the relay busy-time reading despite its name ...
     seed_capacity: u64,
+    /// ... and the reading its budget was measured from
+    /// ([`AllocSample::budget_capacity`]), median over the same samples
+    /// once measured: the row's `budget_capacity` (0 if never).
+    budget_capacity: u64,
     /// When the seed's holders ([`AllocSample::holders`]) last changed,
     /// after the stream started.
     settled: Duration,
@@ -2485,6 +2508,7 @@ impl Sim {
             timeline: None,
             forecasts: None,
             forecasts_lost: 0,
+            held: Vec::new(),
             parents: None,
             parents_lost: 0,
             open_parents: BTreeMap::new(),
@@ -3550,8 +3574,14 @@ impl Sim {
         };
         let n = &mut self.nodes[i];
         let (log, lost) = n.runner.take_forecasts(n.swarm);
-        // The harness's own truth is `arrived`.
-        n.runner.take_held(n.swarm);
+        let held = n.runner.take_held(n.swarm);
+        if self.held.len() <= i {
+            self.held.resize_with(i + 1, Vec::new);
+        }
+        self.held[i].extend(
+            held.into_iter()
+                .map(|(b, at)| (b.base_offset(), n.true_time(at))),
+        );
         self.forecasts_lost += lost;
         if log.is_empty() {
             return;
@@ -3706,6 +3736,7 @@ impl Sim {
                     seed.wire.up_bytes,
                     seed.wire.up_packets,
                     seed.wire.small_packets,
+                    p.seed_budget_capacity,
                 ],
                 self.node_counts(0, &p),
             ),
@@ -3723,7 +3754,7 @@ impl Sim {
                 b.rows.push(bin_row(k, b.width, a, &sample));
                 if let Some(rows) = b.node_rows.as_mut() {
                     // The seed's overhead and uplink, in the viewers' order.
-                    let seed = |c: &[u64; 10]| [0, 0, 0, 0, c[6], c[7], c[8], c[9]];
+                    let seed = |c: &[u64; 11]| [0, 0, 0, 0, c[6], c[7], c[8], c[9]];
                     let (x, y) = (seed(&a.seed.0), seed(&sample.seed.0));
                     rows.push(node_bin_row(
                         k,
@@ -3781,6 +3812,7 @@ impl Sim {
                 pushed,
                 seed.up_bw,
                 seed.written_overhead(),
+                p.seed_budget_capacity,
             ],
         });
     }
@@ -3895,6 +3927,7 @@ impl Sim {
             ("pushed", seed_delta(4)),
             ("seed_ovh", seed_delta(6)),
             ("viewer_ovh", pooled(4)),
+            ("budget_capacity", seed(7)),
         ];
         // A media run's chunks sent each second, by their signing: those
         // holding media (`written`, what `frames` counts), as its other
@@ -3936,16 +3969,16 @@ impl Sim {
     ///
     /// | table | one row per | columns |
     /// |---|---|---|
-    /// | `seconds` | second of [`Sim::series`] | `sec`, then the series' per-second fields (`present`, `hits`, `misses`, `pruned`, `parents`, `capacity`, `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, and `written` in a media run) |
+    /// | `seconds` | second of [`Sim::series`] | `sec`, then the series' per-second fields: `present`, `hits`, `misses`, `pruned`, `parents`, `capacity` (the seed's relay busy-time reading, `PushStats::upload_capacity`, at the second's end, the sample its counters come from: strims-sim's is a tick older), `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, `budget_capacity` (the capacity reading the seed's budget was measured from, `PushStats::seed_budget_capacity`, at the second's end: 0 until measured), and `written` in a media run |
     /// | `viewer_seconds` | viewer and second | `viewer`, `sec`, `lag_ms` (the series' `lag`, -1 without a read), `frames` |
     /// | `reads` | chunk a viewer read | `viewer`, `t_ms` (when it read it), `seq` (the chunk), `lag_ms` (from its publishing) |
     /// | `stalls` | stall of a viewer's playout at each delay of [`DELAYS_MS`] (`hack/capture/analyze.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`) | `viewer`, `delay_ms`, `t_ms` (when it began, on the `reads`' clock), `stall_ms`: [`playout::play`] over the viewer's `reads`, as `hack/sim-db`'s `playback(delay_ms)` plays them |
     /// | `parents` | change of a node's open parent of a stream of its swarm ([`Sim::take_parents`]) | `t_ms`, `node` (as in `events`), `stream`, `parent` (the node from then on, -1 for none), `reason`: `open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their link closed, the stream started anew, or the node left, departed or died) |
-    /// | `bins` | bin of [`Sim::keep_tables`]' width | [`bin_cols`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), the seed's meter, uplink and copies at its end and what it sent in it, then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`) |
+    /// | `bins` | bin of [`Sim::keep_tables`]' width | [`bin_cols`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), the seed's meter, `capacity` (the relay busy-time reading, `PushStats::upload_capacity`) and `busy`, uplink and copies at its end and what it sent in it, then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), then `budget_capacity` (the capacity reading the seed's budget was measured from, at the bin's end: `PushStats::seed_budget_capacity`, 0 until measured) |
     /// | `node_bins` | node and bin, with `SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node`, `viewer` (its number here, -1 for none), what it did in the bin |
-    /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink in bytes per second), `hostile`, `churned` (it left at least once), `clock_ms` (its clock's offset), `arrive_ms` (when it arrived, -1000 for the start; [`Arrivals`]), `depart_ms` (when it left for good, empty if it stayed; [`Depart`]) |
+    /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink at the run's end in bytes per second: an `incident`'s, if one slowed it), `hostile`, `churned` (it left at least once), `clock_ms` (its clock's offset), `arrive_ms` (when it arrived, -1000 for the start; [`Arrivals`]), `depart_ms` (when it left for good, empty if it stayed; [`Depart`]) |
     /// | `events` | timed event ([`TimedEvent`]) | `t_us`, `kind`, `node`, `peer` (-1 for none), `value`, `detail`: each viewer's `join` (at the start or its arrival, and on taking a place again), `first_read` and `caught_up` (its first chunk read within [`CAUGHT_UP`] of its publishing; `value` each one's ms from the join), churn's `leave`, a viewer's `depart` (`detail` graceful or abrupt), `parent_lost` (`node` a viewer whose open parent `peer` departed, `value` the streams it was the parent of, `detail` the departure's), `relink` (`node` a viewer that lost a neighbour to a departure linking to `peer`, [`Sim::relink`]), the seed's steps (`uplink` in bytes per second, `latency` in ms, `reconnect`) and an `incident` (`detail` dies or slows, `value` the new uplink) |
-    /// | `forecast` | sample of a node's forecast log ([`Runner::set_forecasts`]), with `SIM_FORECAST=1` | `t_ms`, `node`, `viewer`, `peer` (nodes), `peer_honest` (the seed, or an honest viewer at the end: a greedy one's HAVEs can claim what it never held), `stream`, `seq` (the chunk), `sample_ms`, `mean_ms`, `horizon_ms` (-1 before the estimate's first sample), `samples`, `fresh`, `lazy`, `first_sight`, `run` ([`LagForecast`]), `seen_ms` (our first sight of the chunk) and `held_ms` (when the peer first held it: its first data from an honest node, the seed's publishing; -1 if never, or not in the incarnation that announced it), `channel_open_ms` (when our channel with the peer opened), `live` (it was held after both nodes took their places and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
+    /// | `forecast` | sample of a node's forecast log ([`Runner::set_forecasts`]), with `SIM_FORECAST=1` | `t_ms`, `node`, `viewer`, `peer` (nodes), `peer_honest` (the seed, or an honest viewer at the end: a greedy one's HAVEs can claim what it never held), `stream`, `seq` (the chunk), `sample_ms`, `mean_ms`, `horizon_ms` (-1 before the estimate's first sample), `samples`, `fresh`, `lazy`, `first_sight`, `run` ([`LagForecast`], as strims-sim's), `seen_ms` (our first sight of the chunk) and `held_ms` (when the peer first stored the chunk, in the incarnation it had at the sample: its runner's held log, [`Runner::take_held`], the seed's own writes included; empty if that incarnation never did), `channel_open_ms` (when our channel with the peer opened), `live` (it was held after both nodes took their places and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
     ///
     /// `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
     /// `secs`, the seed's `seed_up` steps and the viewers' `viewer_up` as
@@ -4129,10 +4162,9 @@ impl Sim {
     }
 
     /// The `forecast` table: each forecast log sample, with the true times
-    /// it implies and when the sampled node truly first held the chunk
-    /// (its first data from an honest node, or the seed's publishing),
-    /// `-1` if it never did (censored). `us` maps a true time to the
-    /// tables' µs.
+    /// it implies and when the sampled node first stored the chunk in its
+    /// incarnation then ([`Sim::held`]), empty if it never did (censored).
+    /// `us` maps a true time to the tables' µs.
     fn forecast_table(
         &self,
         forecasts: &[Forecast],
@@ -4164,16 +4196,31 @@ impl Sim {
             ],
         );
         let ms_of = |at: Time| us(at).div_euclid(1000);
-        // When each node took its place, every time: a peer's first data
-        // for a chunk ([`Node::arrived`]) is its first incarnation's, so a
-        // sample of a later incarnation's has no truth to meet; and a chunk
-        // held before the other's place was taken, or before the channel
-        // opened, comes in the HAVEs of a channel's start, not as it
-        // arrives (not `live`).
+        // When each node took its place, every time: a sample's truth is
+        // the peer's first store in the incarnation then; and a chunk held
+        // before the other's place was taken, or before the channel opened,
+        // comes in the HAVEs of a channel's start, not as it arrives (not
+        // `live`).
         let mut joined: BTreeMap<usize, Vec<Time>> = BTreeMap::new();
         for e in self.timeline.iter().flatten().filter(|e| e.kind == "join") {
             joined.entry(e.node as usize).or_default().push(e.at);
         }
+        // Every node's chunks by index, with when each incarnation first
+        // stored it, in order.
+        let held: Vec<BTreeMap<u64, Vec<Time>>> = self
+            .held
+            .iter()
+            .map(|h| {
+                let mut m: BTreeMap<u64, Vec<Time>> = BTreeMap::new();
+                for &(seq, at) in h {
+                    m.entry(seq).or_default().push(at);
+                }
+                for v in m.values_mut() {
+                    v.sort_unstable();
+                }
+                m
+            })
+            .collect();
         for r in forecasts {
             let f = &r.f;
             let node = &self.nodes[r.node];
@@ -4186,11 +4233,21 @@ impl Sim {
                     .and_then(|j| j.iter().rev().find(|&&t| t <= at).copied())
                     .unwrap_or(t0())
             };
-            let held = match r.peer {
-                0 => self.publish_times.get(seq).copied(),
-                p => self.nodes.get(p).and_then(|n| n.arrived.get(seq).copied()),
-            }
-            .filter(|h| !h.is_nil() && *h >= place(r.peer));
+            // ... and when the one after it did, if any.
+            let next = |n: usize| {
+                joined
+                    .get(&n)
+                    .and_then(|j| j.iter().find(|&&t| t > at).copied())
+            };
+            let (since, until) = (place(r.peer), next(r.peer));
+            let held = held
+                .get(r.peer)
+                .and_then(|m| m.get(&(seq as u64)))
+                .and_then(|v| {
+                    v.iter()
+                        .find(|&&h| h >= since && until.is_none_or(|u| h < u))
+                        .copied()
+                });
             let opened = node.true_time(f.channel_open);
             let live = held.is_some_and(|h| h >= place(r.node) && h >= opened);
             let est = f.estimate;
@@ -4215,7 +4272,7 @@ impl Sim {
                 f.first_sight.to_string(),
                 f.run.to_string(),
                 ms_of(seen).to_string(),
-                held.map_or(-1, ms_of).to_string(),
+                held.map_or(String::new(), |h| ms_of(h).to_string()),
                 ms_of(opened).to_string(),
                 live.to_string(),
             ]);
@@ -4318,10 +4375,10 @@ impl Sim {
             holders.extend(held.iter().filter(|&(_, &n)| n > 0).map(|(&id, _)| id));
         }
         let seed = &self.nodes[0];
-        let capacity = seed
+        let (capacity, budget_capacity) = seed
             .runner
             .push_stats(seed.swarm)
-            .map_or(0, |p| p.upload_capacity);
+            .map_or((0, 0), |p| (p.upload_capacity, p.seed_budget_capacity));
         let whole = self.cfg.stream_count;
         let hits = held
             .iter()
@@ -4339,6 +4396,7 @@ impl Sim {
             barred,
             with_children,
             capacity,
+            budget_capacity,
             hits,
         });
     }
@@ -5558,6 +5616,18 @@ impl Sim {
                     .iter()
                     .filter(|a| a.at > warm && a.at <= end)
                     .map(|a| a.capacity)
+                    .collect();
+                v.sort_unstable();
+                v.get(v.len() / 2).copied().unwrap_or(0)
+            },
+            budget_capacity: {
+                let end =
+                    t0() + Duration::SECOND + Duration::from_secs(self.cfg.stream_secs as i64);
+                let mut v: Vec<u64> = self
+                    .alloc
+                    .iter()
+                    .filter(|a| a.at > warm && a.at <= end && a.budget_capacity > 0)
+                    .map(|a| a.budget_capacity)
                     .collect();
                 v.sort_unstable();
                 v.get(v.len() / 2).copied().unwrap_or(0)
@@ -6953,7 +7023,8 @@ fn sim_chunk_codecs_change_no_trace() {
 
 /// The tables ([`Sim::write_tables`]) leave the run as it was, at any bin
 /// width, and their seconds are the series': read through getters, their
-/// counters change nothing.
+/// counters change nothing. Behind an admission seed and an adaptive one,
+/// whose budget's reading the series and the bins carry.
 #[test]
 fn sim_tables_change_no_trace() {
     let mut cfg = Config::new(5, 8);
@@ -6961,6 +7032,13 @@ fn sim_tables_change_no_trace() {
     cfg.degree = 4;
     cfg.push_mode = PushMode::Hybrid;
     cfg.stream_count = 4;
+    sim_tables_change_no_trace_of(cfg.clone());
+    cfg.seed_policy.allocation = SeedAllocation::Adaptive;
+    sim_tables_change_no_trace_of(cfg);
+}
+
+fn sim_tables_change_no_trace_of(cfg: Config) {
+    let adaptive = cfg.seed_policy.allocation == SeedAllocation::Adaptive;
     let mut plain = Sim::new(cfg.clone());
     let r = plain.run();
     let plain = (r.trace, r.frames, r.bytes, plain.reads_hash());
@@ -7022,8 +7100,78 @@ fn sim_tables_change_no_trace() {
         for t in ["seconds", "viewer_seconds", "reads", "bins", "viewers"] {
             assert!(d.join(format!("{t}.schema.json")).exists(), "{t}");
         }
+        sim_held_truth_meets_the_reads(&sim, &d);
+        // The seed's budget reading: what its budget was measured from,
+        // once measured, in the series and the bins.
+        let column = |t: &str| -> Vec<i64> {
+            let csv = std::fs::read_to_string(d.join(format!("{t}.csv"))).unwrap();
+            let mut rows = csv.lines();
+            let head: Vec<&str> = rows.next().unwrap().split(',').collect();
+            let i = head.iter().position(|&c| c == "budget_capacity").unwrap();
+            rows.filter_map(|l| l.split(',').nth(i).unwrap().parse().ok())
+                .collect()
+        };
+        let last = seed.runner.push_stats(seed.swarm).unwrap();
+        assert_eq!(last.seed_budget_capacity > 0, adaptive);
+        assert_eq!(column("seconds").iter().any(|&c| c > 0), adaptive);
+        assert_eq!(column("bins").iter().any(|&c| c > 0), adaptive);
+        // The row's medians take the samples after the warm-up alone.
+        assert!(!adaptive || r.seed_capacity == 0 || r.budget_capacity > 0);
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Every honest viewer stored each chunk it read before it read it, the
+/// seed each chunk as it published it, and the forecast's `held_ms` is the
+/// sampled node's own first store, empty (never -1) without one.
+fn sim_held_truth_meets_the_reads(sim: &Sim, d: &Path) {
+    let first = |n: usize| -> BTreeMap<u64, Time> {
+        let mut m = BTreeMap::new();
+        for &(seq, at) in sim.held.get(n).into_iter().flatten() {
+            let e = m.entry(seq).or_insert(at);
+            *e = (*e).min(at);
+        }
+        m
+    };
+    for (i, n) in sim.nodes.iter().enumerate().skip(1) {
+        if !n.watched() {
+            continue;
+        }
+        let held = first(i);
+        for &(at, seq, _) in &read_rows(n) {
+            let read = stream_start() + Duration::from_millis(at + 1);
+            let h = held.get(&seq);
+            assert!(
+                h.is_some_and(|&h| h <= read),
+                "node {i}: chunk {seq} read {at} ms, held {h:?}"
+            );
+        }
+    }
+    let seed = first(0);
+    assert!(!seed.is_empty());
+    for (&c, &at) in &seed {
+        assert_eq!(at, sim.publish_times[c as usize], "the seed's chunk {c}");
+    }
+    let csv = std::fs::read_to_string(d.join("forecast.csv")).unwrap();
+    let mut rows = csv.lines();
+    let head: Vec<&str> = rows.next().unwrap().split(',').collect();
+    let col = |n: &str| head.iter().position(|&c| c == n).unwrap();
+    let (peer, seq, held) = (col("peer"), col("seq"), col("held_ms"));
+    let start = t0() + Duration::SECOND;
+    let mut truths = 0;
+    for l in rows {
+        let f: Vec<&str> = l.split(',').collect();
+        assert_ne!(f[held], "-1");
+        let (Ok(p), Ok(c)) = (f[peer].parse::<usize>(), f[seq].parse::<u64>()) else {
+            continue;
+        };
+        if let Ok(h) = f[held].parse::<i64>() {
+            let at = first(p)[&c];
+            assert_eq!(h, (at - start).as_micros().div_euclid(1000), "{l}");
+            truths += 1;
+        }
+    }
+    assert!(truths > 0);
 }
 
 /// The harness labels each read with the chunks the reader truly read
@@ -9771,6 +9919,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         .num("seed_slots", r.seed_slots)
         .int("seed_up_bw", seed.up_bw)
         .int("seed_capacity", r.seed_capacity)
+        .int("budget_capacity", r.budget_capacity)
         .int("seed_first_wave", seed_push.seed_first_wave as u64)
         .int(
             "seed_first_wave_capacity",

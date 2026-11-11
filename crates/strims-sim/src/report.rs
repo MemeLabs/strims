@@ -186,7 +186,8 @@ pub struct NodeBinRecord {
 
 /// [`NodeBinRecord::counters`]: pushes before their deadline, deadlines
 /// released to pull, parents pruned and streams with an open parent; the
-/// upload meter's capacity and busy thousandths and a seed's copies; chunks
+/// upload meter's capacity (the relay busy-time reading,
+/// `PushStats::upload_capacity`) and busy thousandths and a seed's copies; chunks
 /// sent and pushed; requests timed out and chunks wasted; answers a full
 /// queue refused and answers dropped at write time
 /// ([`strims_ppspp::SwarmCounters`]); parents replaced, parents lost to
@@ -194,8 +195,10 @@ pub struct NodeBinRecord {
 /// uplink (`PushStats`' `switched`, `shed`, `sheds_sent`); its outbound
 /// messages' bytes by kind, its payloads and those of HAVEs alone
 /// ([`strims_ppspp::ChannelMetrics`]); and the bytes it wrote that weren't
-/// chunk data (the series' overhead).
-pub const NODE_BIN_COUNTERS: [&str; 29] = [
+/// chunk data (the series' overhead); and the capacity an adaptive seed's
+/// latest check measured its budget from (`PushStats::seed_budget_capacity`,
+/// zero elsewhere).
+pub const NODE_BIN_COUNTERS: [&str; 30] = [
     "hits",
     "misses",
     "pruned",
@@ -225,6 +228,7 @@ pub const NODE_BIN_COUNTERS: [&str; 29] = [
     "payloads",
     "have_only_payloads",
     "ovh",
+    "budget_capacity",
 ];
 
 /// A forecast log sample of a node's ([`HostReport::forecasts`]): when it
@@ -966,7 +970,9 @@ impl Report {
     /// fractions of what the host could upload at each sample
     /// ([`upload_cap_at`](Report::upload_cap_at)):
     /// (capacity ÷ cap, the push rate its subscriptions commit ÷ cap) per
-    /// sample. Empty without a cap.
+    /// sample, the capacity the relay busy-time reading
+    /// ([`MeterSample::capacity`](crate::stats::MeterSample::capacity)), a
+    /// seed's too. Empty without a cap.
     pub fn meter_readings(&self, h: HostIx) -> Vec<(f64, f64)> {
         self.meter_series(h)
             .into_iter()
@@ -1000,6 +1006,31 @@ impl Report {
                 Some((m.t, m.capacity as f64 / cap, committed / cap))
             })
             .collect()
+    }
+
+    /// An adaptive seed's budget readings at `h` while a swarm was live:
+    /// the capacity each of its scenario swarms' latest allocation check
+    /// measured its budget from
+    /// ([`MeterSample::budget_capacity`](crate::stats::MeterSample::budget_capacity)),
+    /// once measured, ÷ what the host could upload at the sample. Empty
+    /// without a cap, and at other hosts.
+    pub fn budget_readings(&self, h: HostIx) -> Vec<f64> {
+        let Some(host) = self.hosts.get(h) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for m in host.runner.meter.iter().filter(|m| self.live(m.t)) {
+            let Some(cap) = self.upload_cap_at(h, m.t) else {
+                continue;
+            };
+            out.extend(
+                m.budget_capacity
+                    .values()
+                    .filter(|&&c| c > 0)
+                    .map(|&c| c as f64 / cap as f64),
+            );
+        }
+        out
     }
 
     /// Whether any swarm streams at `t`.
