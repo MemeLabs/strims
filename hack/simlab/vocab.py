@@ -32,7 +32,13 @@ in its order:
   aligns()                     what a curve aligns on: derived, then
                                scenario
   anchors()                    the current kinds that anchor a phase
-                               (`phase`), by id
+                               (`phase`), by id: the derived `start` among
+                               them
+  rule_kinds()                 the kinds of the sims' events the phase rule
+                               reads: the anchors a sim writes and the
+                               kinds that end their spans (`until`)
+  anchor_fields()              each anchor's ANCHOR_KEYS, by id: what
+                               defines the phase rule
   current(kid, sim)            the current id of a kind `sim`'s runs name
                                `kid`: itself, or its replacement
   notes(kid, sim)              that sim's note on the kind, or None
@@ -77,6 +83,11 @@ KIND_KEYS = ("class", "sims", "env_gate", "description", *FIELDS, "details", "no
              "level", "until", "scope", "horizon_s")
 SECTION_KEYS = {s: ("description", "colour") for s in ("phases", "episodes", "reasons")}
 SCOPES = ("run", "viewer")
+# A kind's keys that make it an anchor, and define the phase rule.
+ANCHOR_KEYS = ("phase", "level", "until", "scope", "horizon_s")
+# The phases no kind anchors: steady, every second no window holds, and
+# tail, past the verdict's seconds.
+UNANCHORED = ("steady", "tail")
 ID = re.compile(r"[a-z][a-z0-9_]*\Z")
 COLOUR = re.compile(r"#[0-9a-f]{6}\Z")
 
@@ -117,7 +128,10 @@ def problems(doc):
     kind a sim writes, a reference (`replaced_by`, `until`, `phase`) to
     nothing current, a retired kind whose replacement a sim of its runs
     doesn't hold (`replaced_by` by sim names each of its sims, and only
-    those), and a phase, episode or reason without a colour of its own in
+    those), an anchor without a horizon or with a phase table that is
+    neither {down, up} (a level) nor its `details`', anchor keys on a kind
+    that anchors nothing, a phase but steady and tail that no kind
+    anchors, and a phase, episode or reason without a colour of its own in
     its section (lower case #rrggbb)."""
     out = []
     for s in doc:
@@ -190,11 +204,21 @@ def problems(doc):
         if "phase" in k:
             p = k["phase"]
             names = list(p.values()) if isinstance(p, dict) else [p]
-            if isinstance(p, dict) and (set(p) != {"down", "up"} or k.get("level") is not True):
-                out.append(f"{where}: a phase table is {{down, up}}, with level = true")
+            if isinstance(p, dict) and k.get("level") is True and set(p) != {"down", "up"}:
+                out.append(f"{where}: a level's phase table is {{down, up}}")
+            elif isinstance(p, dict) and k.get("level") is not True and set(p) != set(k.get("details") or ()):
+                out.append(f"{where}: a phase table is {{down, up}}, with level = true, or by its details")
+            elif not isinstance(p, dict) and k.get("level") is True:
+                out.append(f"{where}: a level's phase is a table {{down, up}}")
             for name in names:
                 if name not in doc["phases"]:
                     out.append(f"{where}: phase {name!r} is not a phase")
+            if "horizon_s" not in k:
+                out.append(f"{where}: an anchor takes a horizon_s")
+        else:
+            for key in ANCHOR_KEYS[1:]:
+                if key in k and key != "scope":
+                    out.append(f"{where}: {key} without a phase")
         if "level" in k and not isinstance(k["level"], bool):
             out.append(f"{where}: level is not a boolean")
         if "scope" in k and k["scope"] not in SCOPES:
@@ -203,6 +227,11 @@ def problems(doc):
             h = k["horizon_s"]
             if isinstance(h, bool) or not isinstance(h, (int, float)) or h < 0:
                 out.append(f"{where}: horizon_s is not a number of seconds")
+    anchored = {n for k in ks.values() if isinstance(k, dict) and "replaced_by" not in k and "phase" in k
+                for n in (k["phase"].values() if isinstance(k["phase"], dict) else [k["phase"]])}
+    for name in doc["phases"]:
+        if name not in anchored and name not in UNANCHORED:
+            out.append(f"[phases.{name}]: no kind anchors it")
     for s in SECTION_KEYS:
         colours = {}
         for name, v in doc[s].items():
@@ -270,8 +299,24 @@ def aligns(doc=None):
 
 
 def anchors(doc=None):
-    """The current kinds that anchor a phase, {id: table}."""
+    """The current kinds that anchor a phase, {id: table}, in the
+    document's order (its ties' order)."""
     return {kid: kind(kid, doc) for kid in kinds(doc=doc) if "phase" in kind(kid, doc)}
+
+
+def rule_kinds(doc=None):
+    """The current kinds of the sims' events the phase rule reads, in the
+    document's order: the anchors a sim writes (not the derived `start`)
+    and the kinds that end their spans (`until`)."""
+    a = anchors(doc)
+    want = {kid for kid, k in a.items() if k["class"] != "derived"} | {k["until"] for k in a.values() if "until" in k}
+    return [kid for kid in kinds(doc=doc) if kid in want]
+
+
+def anchor_fields(doc=None):
+    """Each anchor's keys that define the phase rule (ANCHOR_KEYS), {id:
+    {key: value}}, in the document's order."""
+    return {kid: {key: k[key] for key in ANCHOR_KEYS if key in k} for kid, k in anchors(doc).items()}
 
 
 def current(kid, sim, doc=None):

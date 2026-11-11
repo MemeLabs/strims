@@ -32,8 +32,11 @@ reopen each.
   a small table usually do.
 - Prefer the catalog's macros and saved views to re-deriving them: the
   scoring macros (`effects`, `collapse_test`, `arm_score`, `arm_cells`,
-  `structural`, `dynamics`, `fisher_p`) are what suite.py prints, and the
-  saved views are what the console's pages show. Their docs follow.
+  `structural`, `dynamics`, `dynamics_phases`, `fisher_p`) are what
+  suite.py prints, and the saved views are what the console's pages show.
+  Their docs follow. A phase (startup, steady, after an event) is the
+  verdict's (`viewer_phases`, `verdict_seconds`): never define one of your
+  own.
 - Look before you aggregate: when a table or experiment is new to you,
   check its columns and a few rows (`DESCRIBE`, `LIMIT 5`) before a big
   query.

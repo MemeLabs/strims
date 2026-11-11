@@ -3,9 +3,9 @@
 --
 -- Where an arm's lag tail comes from: each viewer-second's lag
 -- (viewer_seconds) by what the run and the viewer were doing then: the
--- viewer's phase (viewer_phases: startup, the run's or its own after it
--- joined; after_down and after_up: within 60 s of a seed uplink step;
--- steady). $cell '' takes every cell of the experiment. Long form:
+-- viewer's phase (viewer_phases: the verdict's, the vocabulary's phases,
+-- its own startup after it joined among them). $cell '' takes every cell
+-- of the experiment. Long form:
 --
 --   phase    per arm and phase: viewer-seconds, their share, lag quantiles,
 --            the share over the playout delays (1250 and 4250 ms), and

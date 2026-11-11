@@ -13,8 +13,9 @@ fixtures:
               (score, arm_scores), whose JSON holds what the text shows.
   Arithmetic  fisher_p against the exact hypergeometric sum, t975_at
               against Student's t, effect_mark.
-  Dynamics    structural and dynamics over a made-up experiment.
-  LagSince    lag_since over a made-up run's events.
+  Dynamics    structural, dynamics and dynamics_phases over a made-up
+              experiment.
+  LagSince    lag_since over a made-up run's phase windows.
 
   python3 hack/sim-suite/suite_test.py [-v]
 """
@@ -64,6 +65,8 @@ CREATE TABLE IF NOT EXISTS viewer_seconds (k VARCHAR, src VARCHAR, viewer BIGINT
     frames BIGINT);
 CREATE TABLE IF NOT EXISTS viewer_phases (k VARCHAR, src VARCHAR, viewer BIGINT, phase VARCHAR, start BIGINT,
     stop BIGINT);
+CREATE TABLE IF NOT EXISTS phase_windows (k VARCHAR, src VARCHAR, viewer BIGINT, kind VARCHAR, node BIGINT,
+    phase VARCHAR, anchor_s DOUBLE, end_s DOUBLE, stop_s DOUBLE, horizon_s DOUBLE);
 CREATE TABLE IF NOT EXISTS episodes (k VARCHAR, src VARCHAR, kind VARCHAR, len BIGINT);
 CREATE TABLE IF NOT EXISTS events (k VARCHAR, src VARCHAR, t_ms DOUBLE, kind VARCHAR, node BIGINT);
 CREATE TABLE IF NOT EXISTS event_kinds (kind VARCHAR, sim VARCHAR, class VARCHAR, scope VARCHAR, replaced_by VARCHAR);
@@ -264,36 +267,43 @@ SELECT (SELECT count(*) FROM metric_defs) AS defs, (SELECT count(*) FROM job_met
 
 
 class Dynamics(unittest.TestCase):
-    """A made-up experiment `dyn`, arm x: cell c's seed 1 (k1) and seed 2
-    (k2, collapsed), cell d's seeds both collapsed."""
+    """A made-up experiment `dyn`, arm x, of 50 s runs: cell c's seed 1
+    (k1) and seed 2 (k2, collapsed; its seed's uplink steps down at 35 s
+    and a viewer departs at 45 s), cell d's seeds both collapsed. The
+    viewers' phases are the verdict's rule's (viewer_phases): the run's
+    startup STARTUP_SECS, a join's join's horizon."""
 
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.db = Path(cls.tmp.name) / "dyn.duckdb"
+        from simlab import verdict
+
+        start, own = verdict.STARTUP_SECS, verdict.ANCHORS["join"]["horizon_s"]
         vs = []
-        for sec in range(30):
+        for sec in range(50):
             # k1, viewer 0 (there from the start): a startup spike, then
             # 2000, nothing read (3000 carried) and 5000 in steady seconds.
-            lag0 = {3: 3000, 20: 2000, 21: None, 22: 5000}.get(sec, 100)
+            lag0 = {3: 3000, 30: 2000, 31: None, 32: 5000}.get(sec, 100)
             vs.append(("k1", 0, sec, lag0, 1))
-            # k1, viewer 1 (arriving at 5 s, reading from 7 s: its startup
-            # until 17 s), a spike of 6000 within it.
-            if sec >= 5:
-                vs.append(("k1", 1, sec, None if sec < 7 else 6000 if sec == 8 else 200, 0 if sec < 7 else 1))
+            # k1, viewer 1 (arriving at 15 s, reading from 17 s: its own
+            # startup from its join's second, 15 s, for join's horizon), a
+            # spike of 6000 within it.
+            if sec >= 15:
+                vs.append(("k1", 1, sec, None if sec < 17 else 6000 if sec == 18 else 200, 0 if sec < 17 else 1))
             vs.append(("k1", 2, sec, 9000, 1))
-            vs.append(("k2", 0, sec, 4500 if sec == 25 else 100, 1))
+            # k2, viewer 0: 4500 after the step down, 3500 after the
+            # departure.
+            vs.append(("k2", 0, sec, {40: 4500, 47: 3500}.get(sec, 100), 1))
             for k in ("k3", "k4"):
                 vs.append((k, 0, sec, 100, 1))
-        phase = lambda k, sec: ("startup" if sec < 15 else "after_down" if k == "k2" and sec >= 20 else "steady")
-        # Each viewer's phases (verdict.viewer_phases): the run's, but
-        # viewer 1's own startup from its join at 5 s to its first read's
-        # second plus JOIN_GRACE_SECS.
+        cls.start, cls.own = start, own
+        phase = lambda k, sec: ("after_departure" if k == "k2" and sec >= 45 else "after_down" if k == "k2"
+                                and sec >= 35 else "startup" if sec < start else "steady")
         spans = []
-        for k, v, join, since in [("k1", 0, 0, 0), ("k1", 1, 5, 17), ("k1", 2, 0, 0), ("k2", 0, 0, 0),
-                                  ("k3", 0, 0, 0), ("k4", 0, 0, 0)]:
-            for sec in range(join, 30):
-                p = "startup" if sec < since else phase(k, sec)
+        for k, v, join in [("k1", 0, 0), ("k1", 1, 15), ("k1", 2, 0), ("k2", 0, 0), ("k3", 0, 0), ("k4", 0, 0)]:
+            for sec in range(join, 50):
+                p = "startup" if join and sec < join + own else phase(k, sec)
                 if spans and spans[-1][:3] == [k, v, p] and spans[-1][4] == sec:
                     spans[-1][4] = sec + 1
                 else:
@@ -316,7 +326,7 @@ class Dynamics(unittest.TestCase):
             "('k2', 's', 4.0, 1.5, 0.03, 0.02, 1100.0, 4200.0), ('k3', 's', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), "
             "('k4', 's', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)) v(k, src, stalls_per_min_1250, stalls_per_min_4250, "
             "stalled_share_1250, stalled_share_4250, startup_ms_1250, startup_ms_4250);",
-            "CREATE TABLE viewers AS SELECT * FROM (VALUES ('k1', 's', 0, NULL, false), ('k1', 's', 1, 5000, false), "
+            "CREATE TABLE viewers AS SELECT * FROM (VALUES ('k1', 's', 0, NULL, false), ('k1', 's', 1, 15000, false), "
             "('k1', 's', 2, NULL, true), ('k2', 's', 0, NULL, false), ('k3', 's', 0, NULL, false), "
             "('k4', 's', 0, NULL, false)) v(k, src, viewer, arrive_ms, hostile);",
             "CREATE TABLE viewer_seconds AS SELECT * FROM (VALUES "
@@ -339,6 +349,11 @@ class Dynamics(unittest.TestCase):
     def setUp(self):
         scoring.SCORE_DB = self.db
 
+    def test_the_rule_the_fixture_takes(self):
+        # Its numbers below hold for these: a run's startup of 25 s
+        # outlasting viewer 1's own of 20 s from 15 s by 10 s.
+        self.assertEqual((self.start, self.own), (25, 20))
+
     def test_structural(self):
         self.assertEqual(scoring.structural("dyn"), [{"cell": "d", "arms": 1, "runs": 2}])
 
@@ -346,15 +361,19 @@ class Dynamics(unittest.TestCase):
         got = {r["cell"]: r for r in scoring.dynamics("dyn")}
         c = got["c"]
         self.assertEqual((c["arm_label"], c["runs"], c["collapsed"]), ("x", 2, 1))
-        # Startup: 40 seconds, the runs' first 15 and viewer 1's own 7-16
-        # (its 5-6 read nothing yet): 100 x29, 200 x9, 3000, 6000.
-        self.assertAlmostEqual(c["lag_p99_startup_ms"], 3000 + 0.61 * 3000, places=6)
-        # Steady: 100 x17, 200 x13, 2000, 3000 (carried), 5000.
-        self.assertAlmostEqual(c["lag_p99_steady_ms"], 3000 + 0.68 * 2000, places=6)
-        self.assertAlmostEqual(c["lag_p99_after_down_ms"], 100 + 0.91 * 4400, places=6)
-        self.assertIsNone(c["lag_p99_after_up_ms"])
-        # k1 spikes past 1250 at 20-22 and past 4250 at 22, k2 at 25.
-        self.assertEqual((c["spike_s_1250"], c["spike_s_4250"]), (2.0, 1.0))
+        self.assertEqual([x for x in c if x.startswith("lag_p99_")],
+                         ["lag_p99_startup_ms", "lag_p99_steady_ms", "lag_p99_after_ms"])
+        # Startup: the runs' first 25 s and viewer 1's own 15-34 s (its
+        # 15-16 read nothing yet): 100 x49, 200 x17, 3000, 6000.
+        self.assertAlmostEqual(c["lag_p99_startup_ms"], 3000 + 0.33 * 3000, places=6)
+        # Steady: 100 x32, 200 x15, 2000, 3000 (carried), 5000.
+        self.assertAlmostEqual(c["lag_p99_steady_ms"], 3000 + 0.51 * 2000, places=6)
+        # After: k2's after_down (35-44 s) and after_departure (45-49 s)
+        # pooled: 100 x13, 3500, 4500.
+        self.assertAlmostEqual(c["lag_p99_after_ms"], 3500 + 0.86 * 1000, places=6)
+        # k1 spikes past 1250 at 30-32 and past 4250 at 32, k2 at 40 and
+        # past 1250 at 47.
+        self.assertEqual((c["spike_s_1250"], c["spike_s_4250"]), (2.5, 1.0))
         self.assertEqual((c["stalls_per_min_1250"], c["stalls_per_min_4250"]), (3.0, 1.0))
         self.assertAlmostEqual(c["stalled_share_1250"], 0.02)
         self.assertEqual((c["startup_ms_1250"], c["startup_ms_4250"]), (1000.0, 4100.0))
@@ -362,14 +381,35 @@ class Dynamics(unittest.TestCase):
         d = got["d"]
         self.assertEqual((d["runs"], d["collapsed"], d["spike_s_1250"], d["unhealthy_max_s"]), (2, 2, 0.0, 25))
 
+    def test_dynamics_phases(self):
+        got = scored("SELECT * FROM dynamics_phases('dyn');")
+        self.assertEqual(list(got[0]), ["cell", "arm_label", "phase", "viewer_s", "share", "lag_p50_ms",
+                                        "lag_p90_ms", "lag_p99_ms", "lag_max_ms"])
+        # By cell, then in the vocabulary's order of the phases.
+        self.assertEqual([(r["cell"], r["phase"]) for r in got], [
+            ("c", "startup"), ("c", "after_down"), ("c", "steady"), ("c", "after_departure"),
+            ("d", "startup"), ("d", "steady")])
+        c = {r["phase"]: r for r in got if r["cell"] == "c"}
+        self.assertEqual({p: r["viewer_s"] for p, r in c.items()},
+                         {"startup": 68, "steady": 50, "after_down": 10, "after_departure": 5})
+        self.assertAlmostEqual(sum(r["share"] for r in c.values()), 1.0)
+        self.assertAlmostEqual(c["after_down"]["share"], 10 / 133)
+        # dynamics' p99s are its own.
+        dyn = {r["cell"]: r for r in scoring.dynamics("dyn")}["c"]
+        self.assertAlmostEqual(c["startup"]["lag_p99_ms"], dyn["lag_p99_startup_ms"])
+        self.assertAlmostEqual(c["steady"]["lag_p99_ms"], dyn["lag_p99_steady_ms"])
+        self.assertEqual((c["after_down"]["lag_p50_ms"], c["after_down"]["lag_max_ms"]), (100, 4500))
+        self.assertAlmostEqual(c["after_departure"]["lag_p90_ms"], 100 + 0.6 * 3400)
+        self.assertEqual(c["startup"]["lag_max_ms"], 6000)
+
 
 class LagSince(unittest.TestCase):
     """A made-up experiment `since`, cell c, arm x, one strims-sim run k1:
     viewers 0 (node 1, lag 100 + its second, nothing read at 21 s), 1
     (node 2, arriving at 5 s, reading 200 from 7 s) and 2 (hostile,
-    9000); a latency step at 0 s (setup), two uplink events at 20 s, an
-    old_up (retired, replaced by uplink) at 22 s, viewer 1's join at
-    5.3 s and a first_frame (an observation) at 7 s."""
+    9000); its phase_windows the stream's start's, two uplink steps down
+    at 20 s (of two nodes) and one at 22 s, viewer 1's join at 5.3 s and a
+    crash at 30 s that ends at 33 s."""
 
     @classmethod
     def setUpClass(cls):
@@ -382,11 +422,13 @@ class LagSince(unittest.TestCase):
                 vs.append((1, sec, None if sec < 7 else 200))
             vs.append((2, sec, 9000))
         lit = lambda x: "NULL" if x is None else repr(x)
-        events = [(0.0, "latency", -1), (20000.0, "uplink", 0), (20000.0, "uplink", 7), (22000.0, "old_up", 0),
-                  (0.0, "join", 1), (5300.0, "join", 2), (7000.0, "first_frame", 2)]
-        kinds = [("latency", "scenario", "run", None), ("uplink", "scenario", "run", None),
-                 ("old_up", "scenario", "run", "uplink"), ("join", "scenario", "viewer", None),
-                 ("first_frame", "observation", None, None)]
+        # (viewer, kind, node, phase, anchor_s, end_s, stop_s, horizon_s)
+        windows = [(None, "start", None, "startup", 0.0, None, 25.0, 25.0),
+                   (None, "uplink_rate", 0, "after_down", 20.0, None, 80.0, 60.0),
+                   (None, "uplink_rate", 7, "after_down", 20.0, None, 80.0, 60.0),
+                   (None, "uplink_rate", 0, "after_down", 22.0, None, 82.0, 60.0),
+                   (1, "join", 2, "startup", 5.3, None, 25.3, 20.0),
+                   (None, "crash", 3, "after_departure", 30.0, 33.0, 53.0, 20.0)]
         sql = [
             "CREATE TABLE jobs AS SELECT 'k1' AS k, 's' AS src, 'strims-sim' AS sim, NULL::VARCHAR AS trace, "
             "NULL::VARCHAR AS reads_hash;",
@@ -397,13 +439,10 @@ class LagSince(unittest.TestCase):
             "CREATE TABLE viewer_seconds AS SELECT * FROM (VALUES "
             + ", ".join(f"('k1', 's', {v}, {sec}, {lit(lag)}, 1)" for v, sec, lag in vs)
             + ") v(k, src, viewer, sec, lag_ms, frames);",
-            "CREATE TABLE events AS SELECT * FROM (VALUES "
-            + ", ".join(f"('k1', 's', {t}, '{kind}', {node})" for t, kind, node in events)
-            + ") v(k, src, t_ms, kind, node);",
-            "CREATE TABLE event_kinds AS SELECT kind, 'strims-sim' AS sim, class, scope::VARCHAR AS scope, "
-            "replaced_by::VARCHAR AS replaced_by FROM (VALUES "
-            + ", ".join(f"('{kid}', '{cls}', {lit(scope)}, {lit(by)})" for kid, cls, scope, by in kinds)
-            + ") v(kind, class, scope, replaced_by);",
+            "CREATE TABLE phase_windows AS SELECT * FROM (VALUES "
+            + ", ".join(f"('k1', 's', {lit(v)}::BIGINT, '{kind}', {lit(node)}::BIGINT, '{p}', {a}, {lit(e)}::DOUBLE, "
+                        f"{b}, {h})" for v, kind, node, p, a, e, b, h in windows)
+            + ") v(k, src, viewer, kind, node, phase, anchor_s, end_s, stop_s, horizon_s);",
         ]
         database(cls.db, "\n".join(sql))
 
@@ -417,44 +456,58 @@ class LagSince(unittest.TestCase):
 
     def test_lag_since(self):
         got = scored("SELECT * FROM lag_since('since', before := 2, after := 3);")
-        self.assertEqual(list(got[0]), ["cell", "arm_label", "kind", "rel_s", "windows", "viewer_s", "lag_p50_ms",
-                                        "lag_p90_ms", "lag_p99_ms"])
-        by = {(r["kind"], r["rel_s"]): r for r in got}
-        # The setup's latency and the observation anchor nothing; old_up
-        # is uplink's; the two uplink events at 20 s are one window.
-        self.assertEqual(sorted(by), [("join", 0), ("join", 1), ("join", 2)] + [("uplink", r) for r in range(-2, 3)])
+        self.assertEqual(list(got[0]), ["cell", "arm_label", "kind", "phase", "since", "rel_s", "windows",
+                                        "viewer_s", "lag_p50_ms", "lag_p90_ms", "lag_p99_ms"])
+        by = {(r["kind"], r["since"], r["rel_s"]): r for r in got}
+        # The windows' anchors and the crash's end; the two steps at 20 s
+        # are one window; the start's seconds before it aren't there.
+        self.assertEqual(sorted(by), [("crash", "anchor", r) for r in range(-2, 3)]
+                         + [("crash", "end", r) for r in range(-2, 3)]
+                         + [("join", "anchor", r) for r in range(3)] + [("start", "anchor", r) for r in range(3)]
+                         + [("uplink_rate", "anchor", r) for r in range(-2, 3)])
+        self.assertEqual({r["phase"] for r in got if r["kind"] == "uplink_rate"}, {"after_down"})
         # Viewer 1's join takes its own seconds alone: 5 and 6 s hold no
         # lag yet, 7 s its first.
-        self.assertEqual([(by[("join", r)]["windows"], by[("join", r)]["viewer_s"]) for r in range(3)],
-                         [(1, 0), (1, 0), (1, 1)])
-        self.assertIsNone(by[("join", 0)]["lag_p50_ms"])
-        self.assertEqual(by[("join", 2)]["lag_p99_ms"], 200)
-        # uplink at 20 s and 22 s: each of their seconds 20-22 counts in
+        self.assertEqual([(by[("join", "anchor", r)]["windows"], by[("join", "anchor", r)]["viewer_s"])
+                          for r in range(3)], [(1, 0), (1, 0), (1, 1)])
+        self.assertIsNone(by[("join", "anchor", 0)]["lag_p50_ms"])
+        self.assertEqual(by[("join", "anchor", 2)]["lag_p99_ms"], 200)
+        # The steps at 20 s and 22 s: each of their seconds 20-22 counts in
         # both windows, so 20 viewer-seconds where the honest viewers have
         # 14 from 18 s to 24 s. At rel_s 1: 21 s (viewer 0's carried 1120
         # and 200) and 23 s (123 and 200).
-        self.assertEqual([by[("uplink", r)]["windows"] for r in range(-2, 3)], [2] * 5)
-        self.assertEqual(sum(by[("uplink", r)]["viewer_s"] for r in range(-2, 3)), 20)
-        one = by[("uplink", 1)]
+        self.assertEqual([by[("uplink_rate", "anchor", r)]["windows"] for r in range(-2, 3)], [2] * 5)
+        self.assertEqual(sum(by[("uplink_rate", "anchor", r)]["viewer_s"] for r in range(-2, 3)), 20)
+        one = by[("uplink_rate", "anchor", 1)]
         self.assertEqual(one["lag_p50_ms"], 200)
         self.assertAlmostEqual(one["lag_p99_ms"], 200 + 0.97 * 920, places=6)
-        self.assertEqual(by[("uplink", -2)]["lag_p50_ms"], (120 + 200) / 2)
+        self.assertEqual(by[("uplink_rate", "anchor", -2)]["lag_p50_ms"], (120 + 200) / 2)
+        # The start's: viewer 0's lag from 0 s (viewer 1 not there yet).
+        self.assertEqual([by[("start", "anchor", r)]["lag_p50_ms"] for r in range(3)], [100, 101, 102])
+        # The crash from its anchor (28-32 s) and from its end (31-35 s).
+        self.assertEqual(by[("crash", "anchor", -2)]["lag_p50_ms"], (128 + 200) / 2)
+        self.assertEqual(by[("crash", "end", 0)]["lag_p50_ms"], (133 + 200) / 2)
         # By default 10 s before to 120 s after, the run's 40 s bounding it.
-        got = scored("SELECT kind, min(rel_s) AS lo, max(rel_s) AS hi FROM lag_since('since') GROUP BY ALL ORDER BY ALL;")
-        self.assertEqual([(r["kind"], r["lo"], r["hi"]) for r in got], [("join", 0, 34), ("uplink", -10, 19)])
+        got = scored("SELECT kind, since, min(rel_s) AS lo, max(rel_s) AS hi FROM lag_since('since') "
+                     "GROUP BY ALL ORDER BY ALL;")
+        self.assertEqual([(r["kind"], r["since"], r["lo"], r["hi"]) for r in got],
+                         [("crash", "anchor", -10, 9), ("crash", "end", -10, 6), ("join", "anchor", 0, 34),
+                          ("start", "anchor", 0, 39), ("uplink_rate", "anchor", -10, 19)])
 
     def test_a_catalog_without_what_it_needs(self):
-        # A catalog indexed before event_kinds had a scope and the verdicts
-        # viewer_phases: lag_since and dynamics say what they lack, the
-        # other macros still score.
+        # A catalog indexed before the verdicts had viewer_phases and
+        # phase_windows: lag_since, dynamics and dynamics_phases say what
+        # they lack, the other macros still score.
         db = Path(self.tmp.name) / "old.duckdb"
-        database(db, "CREATE TABLE event_kinds (kind VARCHAR, sim VARCHAR, class VARCHAR);")
-        suite.simdb().duck("DROP TABLE viewer_phases;", db=db, out=None)
-        with self.assertRaisesRegex(suite.simdb().DuckError, "lag_since reads event_kinds.scope, "
-                                                             "event_kinds.replaced_by, which this catalog lacks"):
+        database(db, "")
+        suite.simdb().duck("DROP TABLE viewer_phases; DROP TABLE phase_windows;", db=db, out=None)
+        with self.assertRaisesRegex(suite.simdb().DuckError, "lag_since reads phase_windows, which this catalog "
+                                                             "lacks"):
             scored("SELECT * FROM lag_since('since');")
         with self.assertRaisesRegex(suite.simdb().DuckError, "dynamics reads viewer_phases, which this catalog"):
             scored("SELECT * FROM dynamics('since');")
+        with self.assertRaisesRegex(suite.simdb().DuckError, "dynamics_phases reads viewer_phases"):
+            scored("SELECT * FROM dynamics_phases('since');")
         self.assertEqual(scored("SELECT * FROM structural('since');"), [])
 
 

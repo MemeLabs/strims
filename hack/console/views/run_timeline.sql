@@ -14,8 +14,8 @@
 --            longer (the ppspp sim stalls per 4 KiB chunk: many are tiny):
 --            the sims' `stalls` table, or for a run without one, its
 --            reads played as macros.sql's playback() plays them
---   phase    the verdict's phase each second (startup, after_down,
---            after_up, steady), and `unhealthy` seconds
+--   phase    the verdict's phase each second (the vocabulary's: startup,
+--            after_down, ..., steady), and `unhealthy` seconds
 --   episode  the verdict's unhealthy spells and collapses
 --   seed     the seed's meter reading (capacity) and the uplink it had
 --            (avail), Mbit/s, from bins

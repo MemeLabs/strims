@@ -10,6 +10,8 @@ writes (ArmLabels); which copy of a key the views take (Canon); its
 queries and joins over a scratch cache of both sims' tables (Queries);
 its pulls of a farm run's samples from a scratch S3, the aws CLI stubbed
 (SamplesPull); the derived tables' columns and versions (Derived);
+the events load_series gives the phase rule, retired ids read as
+current ones and a source without events implying them (RuleEvents);
 macros.sql's playback() against the sims' own stalls (Playback); and
 catalog.py's index of a scratch cache and farm state (Catalog):
 
@@ -1028,7 +1030,8 @@ def audience(secs, stays, sim="ppspp", tree_secs=3, stay_info=True):
 
 class PerViewerVerdict(unittest.TestCase):
     """analyze.py's verdict counts each viewer only while it is there and
-    past its own startup (analyze.presence)."""
+    past its own startup (analyze.presence: its join's window, the phase
+    rule's)."""
 
     a = simdb.analyze()
 
@@ -1050,17 +1053,20 @@ class PerViewerVerdict(unittest.TestCase):
 
     def test_trickle_reads_healthy_throughout(self):
         # 20 viewers arrive a second apart from 0.5 s: none counts before
-        # its first frame plus the grace, so trees forming around arrivals
-        # read as nothing, where counting them from their arrival reads the
-        # first seconds' trees as failing.
+        # its join plus join's horizon (its own startup), so trees forming
+        # around arrivals read as nothing, where counting them from their
+        # arrival reads the first seconds' trees as failing. The run's
+        # startup is the stream's start's, every viewer arriving later or
+        # not.
         stays = [(k + 0.5, None) for k in range(20)]
+        own = verdict.ANCHORS["join"]["horizon_s"]
         for sim in ("ppspp", "strims-sim"):
             v, collapsed = self.verdict(audience(60, stays, sim))
             self.assertTrue(all(v["healthy"]), sim)
             self.assertFalse(collapsed, sim)
-            self.assertEqual(v["startup"], 0, sim)
-            first = [since for _, since, _ in self.a.presence(audience(60, stays, sim))]
-            self.assertEqual(first[:2], [1 + self.a.JOIN_GRACE_SECS, 2 + self.a.JOIN_GRACE_SECS], sim)
+            self.assertEqual(v["startup"], self.a.STARTUP_SECS, sim)
+            first = [st.index("counts") for st in self.a.presence(audience(60, stays, sim))]
+            self.assertEqual(first[:2], [own, own + 1], sim)
         v, _ = self.verdict(audience(60, stays, "ppspp", stay_info=False))
         self.assertFalse(all(v["healthy"]))
         # strims-sim's -1 frames carry the arrivals without the table, those
@@ -1104,25 +1110,41 @@ class PerViewerVerdict(unittest.TestCase):
         _, collapsed = self.verdict(s)
         self.assertTrue(collapsed)
 
-    def test_viewer_phases_are_presence_over_the_runs_phases(self):
+    def test_viewer_phases_are_the_runs_windows_and_its_own_joins(self):
         # The seed's uplink steps down at 30 s; viewer 8 arrives at 20.5 s
-        # and reads from 21 s, viewer 9 (hostile) leaves at 40.5 s.
+        # and reads from 21 s, viewer 9 (hostile) leaves at 40.5 s. The
+        # series has no events: they come from seed_up and the stays.
         s = audience(60, [(None, None), (20.5, None), (None, 40.5)])
         s["seed_up"] = [[0, 10 ** 9], [30, 5 * 10 ** 8]]
         s["hostile"], s["viewer"] = [2], [7, 8, 9]
         v = self.a.verdict(s)
-        own = 21 + self.a.JOIN_GRACE_SECS
+        start = self.a.STARTUP_SECS
+        # The run: its startup, steady, the step down's window, then the
+        # departure's (at 40.5 s, holding second 40 from its midpoint).
+        self.assertEqual(self.a.phases(s, v), ["startup"] * start + ["steady"] * (30 - start)
+                         + ["after_down"] * 10 + ["after_departure"] * 20)
+        # Viewer 8's own startup from its join's second, until the step
+        # down, later, takes its phase; viewer 9's seconds end at its
+        # departure's, which it was there part of.
         self.assertEqual(verdict.viewer_phases(s, v), [
-            (7, "startup", 0, 15), (7, "steady", 15, 30), (7, "after_down", 30, 60),
-            (8, "startup", 20, own), (8, "after_down", own, 60),
-            (9, "startup", 0, 15), (9, "steady", 15, 30), (9, "after_down", 30, 41)])
-        # A second's phase is the run's but for an arrival's own startup.
+            (7, "startup", 0, start), (7, "steady", start, 30), (7, "after_down", 30, 40),
+            (7, "after_departure", 40, 60),
+            (8, "startup", 20, 30), (8, "after_down", 30, 40), (8, "after_departure", 40, 60),
+            (9, "startup", 0, start), (9, "steady", start, 30), (9, "after_down", 30, 40),
+            (9, "after_departure", 40, 41)])
+        # A second's phase is the run's but in an arrival's own startup,
+        # which doesn't count in the verdict for join's horizon from its
+        # join, the step down's phase or not.
         ph = self.a.phases(s, v)
+        st = self.a.presence(s)
         for i, p, a, b in verdict.viewer_phases(s, v):
-            self.assertTrue(all(p == ("startup" if i == 8 and k < own else ph[k]) for k in range(a, b)))
+            self.assertTrue(all(p == ("startup" if i == 8 and k < 30 else ph[k]) for k in range(a, b)))
+        own = verdict.ANCHORS["join"]["horizon_s"]
+        self.assertEqual([k for k, x in enumerate(st[1]) if x == "own"], list(range(20, 20 + own)))
+        self.assertEqual((st[2][39], st[2][40], st[2][41]), ("counts", "leaving", None))
         # Without the series' ids, a viewer is its place.
         del s["viewer"]
-        self.assertEqual([x[0] for x in verdict.viewer_phases(s, v)], [0, 0, 0, 1, 1, 2, 2, 2])
+        self.assertEqual([x[0] for x in verdict.viewer_phases(s, v)], [0] * 4 + [1] * 3 + [2] * 4)
 
     def test_present_join_and_leave_count_every_viewer(self):
         # The events read the viewers present as the series counts them,
@@ -1196,16 +1218,18 @@ class Derived(unittest.TestCase):
         for r in got:
             by.setdefault((r["k"], r["viewer"]), []).append((r["phase"], r["start"], r["stop"]))
         # There from the start: the run's startup, then steady; arriving at
-        # i + 0.5 s and reading from i + 1 s: its own startup, the run none.
+        # i + 0.5 s: its own startup, join's horizon from its join's second,
+        # then the run's while that lasts.
+        own = verdict.ANCHORS["join"]["horizon_s"]
         for i in range(6):
             self.assertEqual(by[("kt0", i)], [("startup", 0, a.STARTUP_SECS), ("steady", a.STARTUP_SECS, 40)])
-            own = i + 1 + a.JOIN_GRACE_SECS
-            self.assertEqual(by[("ktr", i)], [("startup", i, own), ("steady", own, 40)])
+            end = max(i + own, a.STARTUP_SECS)
+            self.assertEqual(by[("ktr", i)], [("startup", i, end), ("steady", end, 40)])
 
     def test_verdicts_carry_the_startup(self):
         got, _ = self.view("SELECT k, startup_s, collapsed FROM verdicts ORDER BY k")
         a = simdb.analyze()
-        self.assertEqual({r["k"]: r["startup_s"] for r in got}, {"kt0": a.STARTUP_SECS, "ktr": 0})
+        self.assertEqual({r["k"]: r["startup_s"] for r in got}, {"kt0": a.STARTUP_SECS, "ktr": a.STARTUP_SECS})
         name = self.SRC.replace("/", "~") + ".parquet"
         for t in [*simdb.DERIVED, "verdicts"]:
             cols = self.columns(simdb.derived_dir(t) / name)
@@ -1224,7 +1248,7 @@ class Derived(unittest.TestCase):
         for t, cols, rows in [*((t, c, []) for t, c in simdb.DERIVED.items()), ("verdicts", old, made)]:
             simdb.write_table(simdb.cache_root() / "derived" / t / f"v={a.VERDICT_VERSION}" / name, cols, rows)
         got, _ = self.view("SELECT k, startup_s FROM verdicts ORDER BY k")
-        self.assertEqual([(r["k"], r["startup_s"]) for r in got], [("kt0", a.STARTUP_SECS), ("ktr", 0)])
+        self.assertEqual([(r["k"], r["startup_s"]) for r in got], [("kt0", a.STARTUP_SECS), ("ktr", a.STARTUP_SECS)])
         now = simdb.derived_version()
         self.addCleanup(simdb.derived_version.cache_clear)
         simdb.derived_version.cache_clear()
@@ -1244,6 +1268,88 @@ class Derived(unittest.TestCase):
         f = simdb.derived_files("episodes", [self.SRC, "suite/wt/e"])
         got = simdb.duck(f"DESCRIBE SELECT x.* FROM {f};")
         self.assertEqual([r["column_name"] for r in got], list(simdb.DERIVED["episodes"]))
+
+
+class RuleEvents(unittest.TestCase):
+    """load_series gives the verdict the events its phase rule reads, by
+    their current ids: a source of last week's, holding retired ids
+    (strims-sim's up_step and uplink, the ppspp sim's uplink) and no
+    starting levels, judges as one holding today's."""
+
+    # (sim, its runs' events: (t_s, kind, node, value), and its viewers
+    # table's node column)
+    SOURCES = {
+        "suite/wt/old": ("strims-sim", [(-5, "join", 1, 0), (-5, "join", 2, 0), (0.3, "first_frame", 1, 300),
+                                        (30, "up_step", 0, 5 * 10 ** 8), (40, "uplink", 1, 10 ** 5),
+                                        (45, "depart", 2, 1)], "host"),
+        "suite/wt/new": ("strims-sim", [(-5, "join", 1, 0), (-5, "join", 2, 0), (-5, "uplink_rate", 0, 10 ** 9),
+                                        (0.3, "first_read", 1, 300), (30, "uplink_rate", 0, 5 * 10 ** 8),
+                                        (40, "rate_limit", 1, 10 ** 5), (45, "depart", 2, 1)], "node"),
+        "suite/wt/pp-old": ("ppspp", [(-1, "join", 1, 0), (-1, "join", 2, 0), (30, "uplink", 0, 5 * 10 ** 8),
+                                      (45, "depart", 2, 1)], "node"),
+        "suite/wt/pp-new": ("ppspp", [(-1, "join", 1, 0), (-1, "join", 2, 0), (-1, "uplink_rate", 0, 10 ** 9),
+                                      (30, "uplink_rate", 0, 5 * 10 ** 8), (45, "depart", 2, 1)], "node"),
+    }
+    SECS = 60
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for p in (*checkout(root), mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
+            p.start()
+            self.addCleanup(p.stop)
+        q = simdb.q
+        meta = {"rate": 10 * 4096, "chunk": 4096, "frame": 4096, "secs": self.SECS, "viewer_up": 10 ** 9,
+                "seed_up": [[0, 10 ** 9], [30, 5 * 10 ** 8]]}
+        for src, (sim, events, node) in self.SOURCES.items():
+            d = simdb.cache_root() / "cache" / src
+            d.mkdir(parents=True)
+            copy = lambda name, cols, rows: simdb.duck(
+                f"COPY (SELECT * FROM (VALUES {', '.join(rows)}) t({cols})) TO {q(d / f'{name}.parquet')} "
+                "(FORMAT parquet);", out=None)
+            copy("runs", "k, src, sim, meta", [f"('k', {q(src)}, {q(sim)}, {q(json.dumps({'sim': sim, **meta}))})"])
+            copy("seconds", "k, src, sec, present, hits", [f"('k', {q(src)}, {k}, 2, 20)" for k in range(self.SECS)])
+            copy("viewer_seconds", "k, src, viewer, sec, lag_ms, frames",
+                 [f"('k', {q(src)}, {v}, {k}, 200, 10)" for v in (0, 1) for k in range(self.SECS)])
+            copy("viewers", f"k, src, viewer, {node}, arrive_ms, depart_ms",
+                 [f"('k', {q(src)}, 0, 1, -5000, NULL)", f"('k', {q(src)}, 1, 2, -5000, 45000)"])
+            copy("events", "k, src, t_us, kind, node, peer, value, detail",
+                 [f"('k', {q(src)}, {int(t * 10 ** 6)}, {q(kind)}, {n}, -1, {x}, '')" for t, kind, n, x in events])
+
+    def judged(self, src):
+        (meta, s), = verdict.load_series([(src, "k")]).values()
+        v = verdict.verdict(s)
+        return s, {"phases": verdict.phases(s, v), "viewer_phases": verdict.viewer_phases(s, v),
+                   "windows": verdict.phase_windows(s), "steps": verdict.steps(s)}
+
+    def test_retired_ids_judge_as_current_ones(self):
+        old, got = self.judged("suite/wt/old")
+        new, want = self.judged("suite/wt/new")
+        self.assertEqual(got, want)
+        # The rule's kinds alone, by their current ids; the viewers' nodes
+        # strims-sim's hosts.
+        self.assertEqual([e[1] for e in old["events"]], ["join", "join", "uplink_rate", "rate_limit", "depart"])
+        self.assertEqual(old["node"], [1, 2])
+        self.assertEqual([(kind, p, a) for _, kind, _, p, a, *_ in want["windows"]],
+                         [("start", "startup", 0), ("uplink_rate", "after_down", 30), ("rate_limit", "after_down", 40),
+                          ("depart", "after_departure", 45)])
+        # The ppspp sim's uplink is its uplink_rate (strims-sim's its
+        # rate_limit).
+        _, pp_old = self.judged("suite/wt/pp-old")
+        _, pp_new = self.judged("suite/wt/pp-new")
+        self.assertEqual(pp_old, pp_new)
+        self.assertEqual([kind for _, kind, *_ in pp_new["windows"]], ["start", "uplink_rate", "depart"])
+
+    def test_a_source_without_events_implies_them(self):
+        # Its seed's uplink from seed_up and its viewers' stays: no cap.
+        (simdb.cache_root() / "cache" / "suite/wt/new" / "events.parquet").unlink()
+        s, got = self.judged("suite/wt/new")
+        self.assertNotIn("events", s)
+        self.assertEqual([(kind, node, p, a) for _, kind, node, p, a, *_ in got["windows"]],
+                         [("start", None, "startup", 0), ("uplink_rate", 0, "after_down", 30),
+                          ("depart", 2, "after_departure", 45)])
+        self.assertEqual(got["phases"][29:], ["steady"] + ["after_down"] * 15 + ["after_departure"] * 15)
 
 
 class Playback(unittest.TestCase):

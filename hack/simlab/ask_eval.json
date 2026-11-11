@@ -14,8 +14,8 @@
       "reference_sql": [
         "SELECT count(*) FILTER (WHERE v.collapsed) AS collapsed, count(*) FILTER (WHERE v.collapsed AND e.cell IN (SELECT cell FROM structural('sa0755'))) AS structural FROM experiment_jobs e JOIN verdicts v USING (k, src) WHERE e.exp_id = 'sa0755' AND e.arm_label = 'main'"
       ],
-      "answer": "64 of its 75 collapsed runs, all in seed-starved and seed-restart; 11 collapse elsewhere.",
-      "checks": [{"number": 64, "tol": 0}, {"number": 75, "tol": 0}]
+      "answer": "64 of its 71 collapsed runs, all in seed-starved and seed-restart; 7 collapse elsewhere.",
+      "checks": [{"number": 64, "tol": 0}, {"number": 71, "tol": 0}]
     },
     {
       "id": "end_abrupt_seeds",
@@ -49,9 +49,9 @@
         "SELECT collapsed, base_collapsed, round(p99, 3) AS p99 FROM arm_score('sa0755', 'main', 'sa0755', 'aimd')",
         "SELECT cell, ka, kb, round(p, 2) AS p FROM collapse_test('sa0755', 'main', 'sa0755', 'aimd') WHERE ka <> kb ORDER BY p, cell"
       ],
-      "answer": "aimd collapses 82 runs to main's 75 (18 to 11 outside the structural cells), but no cell's difference is significant: the largest are star-15-10-end-abrupt (10 vs 5) and star-31-5 (3 vs 0), both at Fisher p = 0.24.",
+      "answer": "aimd collapses 78 runs to main's 71 (14 to 7 outside the structural cells), but no cell's difference is significant: the largest is star-15-10-end-abrupt (10 vs 5, Fisher p = 0.24).",
       "checks": [
-        {"number": 82, "tol": 0}, {"number": 75, "tol": 0}, {"text": "star-15-10-end-abrupt"},
+        {"number": 78, "tol": 0}, {"number": 71, "tol": 0}, {"text": "star-15-10-end-abrupt"},
         {"any": ["not significant", "no cell", "none of", "isn't significant", "is not significant", "no significant", "not statistically significant", "p < 0.05 in no", "none reach", "none is"]}
       ]
     },
@@ -68,17 +68,20 @@
       "reference_sql": [
         "SELECT round(lag_p99_startup_ms) AS startup, round(lag_p99_steady_ms) AS steady, spike_s_1250, collapsed FROM dynamics('sa0755') WHERE arm_label = 'main' AND cell = 'star-31-5'"
       ],
-      "answer": "A startup tail: its lag p99 is 5773 ms over startup against 1106 ms in steady state, with about half a second per run past 1250 ms after startup.",
-      "checks": [{"number": 5773, "tol": 0.02}, {"number": 1106, "tol": 0.02}, {"any": ["startup tail", "a startup", "mostly startup", "from startup", "startup, not", "the startup"]}]
+      "answer": "A startup tail: its lag p99 is 5567 ms over startup against 563 ms in steady state, with no second per run past 1250 ms after startup.",
+      "checks": [{"number": 5567, "tol": 0.02}, {"number": 563, "tol": 0.02}, {"any": ["startup tail", "a startup", "mostly startup", "from startup", "startup, not", "the startup"]}]
     },
     {
       "id": "steady_spikes",
-      "question": "And star-15-10-end-abrupt in sa0755's main arm: is its lag tail startup or steady state?",
+      "question": "And star-15-10-end-abrupt in sa0755's main arm: is its lag tail startup, steady state or after its viewers' departures?",
       "reference_sql": [
-        "SELECT round(lag_p99_startup_ms) AS startup, round(lag_p99_steady_ms) AS steady, round(spike_s_1250, 2) AS spike_s_1250, collapsed FROM dynamics('sa0755') WHERE arm_label = 'main' AND cell = 'star-15-10-end-abrupt'"
+        "SELECT phase, viewer_s, round(share, 3) AS share, round(lag_p99_ms) AS lag_p99_ms FROM dynamics_phases('sa0755') WHERE arm_label = 'main' AND cell = 'star-15-10-end-abrupt' ORDER BY lag_p99_ms DESC"
       ],
-      "answer": "Steady state: lag p99 434 ms over startup but 2625 ms in steady state, 2.4 s per run past 1250 ms, 5 of 32 runs collapsed.",
-      "checks": [{"number": 434, "tol": 0.02}, {"number": 2625, "tol": 0.02}, {"any": ["steady"]}]
+      "answer": "After the departures: lag p99 3442 ms in after_departure (the 45 s after each abrupt departure, 46 % of its viewer-seconds) against 453 ms over startup and 372 ms in steady state.",
+      "checks": [
+        {"number": 3442, "tol": 0.02}, {"number": 453, "tol": 0.02}, {"number": 372, "tol": 0.02},
+        {"any": ["after_departure", "after the departure", "after its departure", "after departure", "departures"]}
+      ]
     },
     {
       "id": "spikes_most",
@@ -86,8 +89,8 @@
       "reference_sql": [
         "SELECT cell, spike_s_1250, spike_s_4250 FROM dynamics('sa0755') WHERE arm_label = 'main' AND cell NOT IN (SELECT cell FROM structural('sa0755')) ORDER BY spike_s_1250 DESC LIMIT 3"
       ],
-      "answer": "wan-slow-viewer: 45 s per run past 1250 ms (and past 4250 ms), far ahead of wan-residential-seed-step at 8.7 s.",
-      "checks": [{"text": "wan-slow-viewer"}, {"number": 45, "tol": 0.01}]
+      "answer": "wan-slow-viewer: 35 s per run past 1250 ms (and past 4250 ms), far ahead of wan-residential-seed-step at 8.0 s.",
+      "checks": [{"text": "wan-slow-viewer"}, {"number": 35, "tol": 0.01}]
     },
     {
       "id": "overhead_haves",
@@ -113,11 +116,10 @@
       "reference_sql": [
         "SELECT e.cell, count(*) FILTER (WHERE v.collapsed) AS collapsed, count(*) AS runs FROM experiment_jobs e JOIN verdicts v USING (k, src) WHERE e.exp_id = 's7ae7e' AND e.cell NOT IN (SELECT cell FROM structural('s7ae7e')) GROUP BY ALL HAVING collapsed > 0 ORDER BY collapsed DESC, cell"
       ],
-      "answer": "18 runs in 7 cells: star-15-10-end-abrupt 11 of 32, halve-31-10 2, and one each in thin-15-10, wan-residential-seed-step, wan-residential-seed-varying, wan-slow-viewer and wan-super-peer-varying.",
+      "answer": "16 runs in 5 cells: star-15-10-end-abrupt 11 of 32, halve-31-10 2, and one each in wan-residential-seed-step, wan-slow-viewer and wan-super-peer-varying.",
       "checks": [
-        {"text": "star-15-10-end-abrupt"}, {"number": 11, "tol": 0}, {"text": "halve-31-10"}, {"text": "thin-15-10"},
-        {"text": "wan-residential-seed-step"}, {"text": "wan-residential-seed-varying"}, {"text": "wan-slow-viewer"},
-        {"text": "wan-super-peer-varying"}
+        {"text": "star-15-10-end-abrupt"}, {"number": 11, "tol": 0}, {"text": "halve-31-10"},
+        {"text": "wan-residential-seed-step"}, {"text": "wan-slow-viewer"}, {"text": "wan-super-peer-varying"}
       ]
     }
   ]

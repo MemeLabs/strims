@@ -8,15 +8,17 @@ from a testbed run's nodes too), over the stream's seconds (not the
 run's tail):
 
 - Each viewer counts while it is there and past its own startup
-  (`presence`): one there from the start from the stream's start, one
-  that arrived later from its first frame plus JOIN_GRACE_SECS (its join
-  plus that if it never reads), and either to its departure. Outside its
-  span it is in no measure: neither the viewers present that trees count
-  against, nor the lag, nor delivery. A series knows a viewer's stay by
-  its `arrive_ms` and `depart_ms` (the viewers table's, from the stream's
-  start: hack/sim-db's series carry them), else by strims-sim's -1 frames
-  in the seconds it wasn't there; the ppspp sim's series alone (a viewer
-  absent reads nothing) can't tell, and reads as one there throughout.
+  (`presence`): in each of its incarnations, from its join (the stream's
+  start for one there from the start) to its departure, but for the
+  seconds of its own startup (`timeline`: its join's window, `join`'s
+  horizon, whichever window holds their phase). Outside them it is in no measure: neither the viewers present
+  that trees count against, nor the lag, nor delivery. A series knows a
+  viewer's incarnations by its events (`events`: its joins, and the
+  departures, leaves and crashes that end them), else by its `arrive_ms`
+  and `depart_ms` (the viewers table's, from the stream's start), else
+  by strims-sim's -1 frames in the seconds it wasn't there; the ppspp
+  sim's series alone (a viewer absent reads nothing) can't tell, and
+  reads as one there throughout.
 - A viewer's lag in a second is the p99 of the frames it read then; in a
   second it reads none, its lag from the last second grows by a second (it
   falls behind live). The swarm's lag is the LAG_QUANTILE of its viewers'.
@@ -48,29 +50,60 @@ run's tail):
   uplink as "step".
 - A run collapsed (sim-suite's scorecard, `collapsed`) when COLLAPSED_SECS
   seconds in a row are unhealthy and they last past its startup: the
-  first STARTUP_SECS when viewers were there from the start (their own
-  first seconds), none when every viewer arrived later (each arrival's
-  are out of the measures already).
+  seconds its startup holds from the stream's start (`startup`: the first
+  STARTUP_SECS, fewer when a scenario event comes sooner).
+
+The phases come from the run's scenario events, by one rule (`timeline`),
+the vocabulary's (crates/strims-wan/vocab.toml: which kinds anchor which
+phase, and for how long, `horizon_s`):
+
+- An anchor opens a window. The stream's start opens the run's startup,
+  [0, STARTUP_SECS); a kind with `until` a span, [t, end + horizon),
+  where end is the next `until` event of its node (and peer, for a kind
+  with one), the run's end without one; a level (`level`: uplink_rate,
+  rate_limit) [t, t + horizon), after_down or after_up by its value
+  against the node's previous level (none before it: no limit, so a
+  step down); any other kind [t, t + horizon), its `phase` (or its
+  detail's). Events at t <= 0 set the run up (starting levels, viewers
+  there from the start, the testbed twins' latencies) and open nothing.
+- Second k is in a window [a, b) when a <= k + 0.5 < b. Of the windows
+  holding it, the one whose latest event at or before k + 0.5 is latest
+  wins: its anchor, or a span's end once that has come. A tie goes to
+  the kind listed first in the document. A second no window holds is
+  steady.
+- The run's phase (`phases`) is its windows' but joins'; a viewer's
+  (`viewer_phases`) is the run's windows' and its own joins' (a join's
+  scope is its viewer's), each second placed at its midpoint, or at the
+  viewer's join for the second it joined in after its midpoint. Each
+  join opens its viewer's own startup, every churn incarnation's.
+- Only the scenario's events anchor (the vocabulary's scenario kinds and
+  the start), never the run's response (first reads, catching up). A
+  series without events implies them: each viewer's join and departure
+  from its stay, and the seed's uplink from `seed_up` (its starting level
+  where the events lack one, and its steps where they hold none), so
+  analyze.py's testbed series and a row's series read as their runs'
+  events do; `seed_up` reads each second's end in the ppspp sim, a step
+  at t s at second ceil(t) - 1, the events at t.
 
 Over time, for hack/sim-db's tables and sim-suite's paired metrics:
-`phases` names each second (startup, after an uplink step down or up, or
-steady), `events` lists a run's (its start, the uplink's steps, viewers
-coming and going, onset, recovery, collapses), `episodes` its healthy,
-unhealthy and collapse spells, and `run_metrics` sums them up per run
-(collapses, flaps, dwell times, onset after a drop, recovery after a
-rise, excess lag, the lag's oscillation). VERDICT_VERSION hashes all of
-it, so the tables made under another are stale. `viewer_phases` gives
-each viewer's seconds their phase by the same rule, from `presence` and
-`phases`: its own startup, then the second's.
+`phases` names each second, `events` lists a run's (its start, the
+uplink's steps, viewers coming and going, onset, recovery, collapses),
+`episodes` its healthy, unhealthy and collapse spells, and `run_metrics`
+sums them up per run (collapses, flaps, dwell times, onset after a drop,
+recovery after a rise, excess lag, the lag's oscillation).
+VERDICT_VERSION hashes all of it, the vocabulary's anchors among it, so
+the tables made under another are stale. `viewer_phases` gives each
+viewer's seconds their phase, and `phase_windows` lists the windows
+unresolved, to explain a phase.
 
 The verdicts are stdlib alone: hack/capture/analyze.py re-exports their
 names, and its capture tools run under the plain python3. The derived
 tables are made from them, the cache's tables read through
 store_host.duck (the DuckDB CLI, or the executor installed):
 
-  series_of(meta, seconds, viewer_seconds, stays=None) -> dict | None
+  series_of(meta, seconds, viewer_seconds, stays=None, events=None) -> dict | None
                  a run's series as its row's `series` has it, from its
-                 tables
+                 tables, with its events the phase rule reads
   load_series(pairs) -> {(src, k): (meta, series)}
                  the series of the runs `pairs` of (src, k), from the
                  cache
@@ -81,7 +114,8 @@ store_host.duck (the DuckDB CLI, or the executor installed):
                  them), their directories' `v=`
   derive_source(src)
                  the derived tables (verdicts, verdict_seconds, episodes,
-                 derived_events, viewer_phases) of cache source `src`
+                 derived_events, viewer_phases, phase_windows) of cache
+                 source `src`
                  where it lacks them, in this process, under a lock of
                  the source's own
   derive(sources, workers=None, progress=None) -> Derived
@@ -103,6 +137,7 @@ store_host.duck (the DuckDB CLI, or the executor installed):
 
 import concurrent.futures as cf
 import collections
+import copy
 import dataclasses
 import functools
 import hashlib
@@ -150,19 +185,30 @@ LAG_SLOPE_SECS = 20
 LAG_SLOPE_FLOOR_MS = DELIVERY_TARGET_MS
 RECOVER_SECS = 20
 ABSORB_SECS = 60
-# A run collapsed when this many seconds in a row are unhealthy and they
-# last past its startup (the real stack's trees take about 10 s to form).
-STARTUP_SECS = 15
+# The vocabulary, loaded once as the module loads: the phase rule and
+# VERDICT_VERSION read this copy, so a process that outlives an edit to
+# the document (the console server's forkserver children) judges by the
+# document it hashed.
+VOCAB = copy.deepcopy(vocab.load())
+# The kinds that anchor a phase, and how (`timeline`), by id.
+ANCHORS = vocab.anchor_fields(VOCAB)
+# A kind's place in the document: of two windows whose latest events came
+# at once, the one of the kind listed first holds the second.
+RANK = {kid: i for i, kid in enumerate(VOCAB["kinds"])}
+# The kinds of the events the rule reads (`rule_events`), and the phase
+# whose kinds end a viewer's incarnation at its node (a departure, a
+# leave, a crash, a relay's death).
+RULE_KINDS = tuple(vocab.rule_kinds(VOCAB))
+GONE = "after_departure"
+# The run's startup, from the stream's start (`start`'s horizon): a run
+# collapsed when COLLAPSED_SECS seconds in a row are unhealthy and they
+# last past it.
+STARTUP_SECS = ANCHORS["start"]["horizon_s"]
 COLLAPSED_SECS = 8
-# A viewer that arrived after the start counts in the verdicts from its
-# first frame plus this: an arrival's own startup, as the sims' rows leave
-# its first 10 s out of its steady lag (the ppspp sim's SIM_WARM,
-# strims-sim's JOIN_WARM).
-JOIN_GRACE_SECS = 10
-# How long after an uplink step its seconds belong to it (`phases`), and
-# the window its onset and recovery are measured in (`run_metrics`) when
-# no later step ends it first.
-STEP_SECS = 60
+# How long after an uplink step its seconds belong to it (uplink_rate's
+# horizon), and the window its onset and recovery are measured in
+# (`run_metrics`) when no later step ends it first.
+STEP_SECS = ANCHORS["uplink_rate"]["horizon_s"]
 # An oscillation: the lag series' autocorrelation peaks past this at some
 # period of at least OSC_MIN_PERIOD seconds (`run_metrics`).
 OSC_ACF = 0.3
@@ -200,44 +246,235 @@ def lags(s):
     return out
 
 
-def presence(s):
-    """Each viewer's stay, as the verdicts count it (see the module docs):
-    (join, since, until), the first second `present` may count it in
-    (None for one there from the start), and the seconds k it counts in,
-    since <= k < until. One there from the start counts from 0, one that
-    arrived later from its first frame's second plus JOIN_GRACE_SECS (its
-    arrival's, if it never reads); either until its departure's second,
-    which it left part-way through."""
+def seconds(s):
+    """The verdict's seconds of series `s`: the stream's that `present`
+    covers."""
+    return min(s["secs"], len(s["present"]))
+
+
+def stay(s, i):
+    """Viewer `i`'s stay as series `s` gives it without events: (arrival,
+    departure) in ms from the stream's start, None for one there from the
+    start or one that stayed; from `arrive_ms` and `depart_ms`, else from
+    strims-sim's -1 frames in the seconds it wasn't there."""
     arrive, depart = s.get("arrive_ms") or [], s.get("depart_ms") or []
-    out = []
-    for i, frames in enumerate(s["frames"]):
-        a = arrive[i] if i < len(arrive) else None
-        d = depart[i] if i < len(depart) else None
-        # strims-sim's frames are -1 in the seconds a viewer wasn't there.
-        there = [k for k, f in enumerate(frames) if f >= 0]
-        if a is None and there and frames[0] < 0:
-            a = there[0] * 1000
-        if d is None and there and frames[-1] < 0:
-            d = there[-1] * 1000
-        until = len(frames) if d is None else max(0, int(d // 1000))
-        if a is None or a < 0:
-            out.append((None, 0, until))
+    frames = s["frames"][i]
+    a = arrive[i] if i < len(arrive) else None
+    d = depart[i] if i < len(depart) else None
+    there = [k for k, f in enumerate(frames) if f >= 0]
+    if a is None and there and frames[0] < 0:
+        a = there[0] * 1000
+    if d is None and there and frames[-1] < 0:
+        d = there[-1] * 1000
+    return (a if a is not None and a > 0 else None), d
+
+
+def viewer_nodes(s):
+    """Each viewer's node: the series' `node` (the viewers table's), else
+    a name of its own (its place), which no event names."""
+    nodes = s.get("node") or []
+    return [nodes[i] if i < len(nodes) and nodes[i] is not None else ("viewer", i)
+            for i in range(len(s.get("frames") or ()))]
+
+
+def gone(e):
+    """Whether event `e` (rule_events') ends its node's incarnation: a kind
+    whose phase, for its detail, is GONE's."""
+    a = ANCHORS.get(e[1])
+    p = a and a["phase"]
+    return (p.get(e[5]) if isinstance(p, dict) and not a.get("level") else p) == GONE
+
+
+def rule_events(s):
+    """The events the phase rule reads, (t, kind, node, peer, value,
+    detail) in time order, t in s from the stream's start: the series' own
+    (`events`, current ids of RULE_KINDS, load_series'), and those it
+    implies where it lacks them (the module docs): a viewer without a join
+    or a departure of its node gets its stay's (`stay`: a join at its
+    arrival, a depart at its departure), and the seed (`seed`, the
+    series_meta's; 0 for older ones) its uplink's levels from `seed_up`,
+    their start (at 0) where no uplink_rate of its node comes at t <= 0,
+    and their steps where none comes after either."""
+    evs = [tuple(e) for e in s.get("events") or []]
+    nodes = viewer_nodes(s)
+    held = {e[2] for e in evs if e[1] == "join" or gone(e)}
+    for i, node in enumerate(nodes):
+        if node in held:
             continue
-        # strims-sim samples an arrival first in the second it boots in,
-        # the ppspp sim in the next: `present` may count it from either.
-        join = int(a // 1000)
-        first = next((k for k in range(join, len(frames)) if frames[k] > 0), join)
-        out.append((join, first + JOIN_GRACE_SECS, until))
+        a, d = stay(s, i)
+        if a is not None:
+            evs.append((a / 1000, "join", node, None, None, None))
+        if d is not None:
+            evs.append((d / 1000, "depart", node, None, None, None))
+    seed = s.get("seed", 0)
+    ups = [e for e in evs if e[1] == "uplink_rate" and e[2] == seed]
+    levels = s.get("seed_up") or []
+    if levels and not any(e[0] <= 0 for e in ups):
+        evs.append((0, "uplink_rate", seed, None, levels[0][1], None))
+        if not ups:
+            evs += [(t, "uplink_rate", seed, None, u, None) for t, u in levels[1:]]
+    key = lambda e: (e[0], RANK.get(e[1], len(RANK)), str(e[2]), str(e[3]))
+    return sorted(evs, key=key)
+
+
+# A phase's window (`windows`): its anchor's kind, node and peer, its phase,
+# when it opened (anchor) and its span ended (end: None for a step, a
+# level or a span without its end), when it stops holding seconds (stop)
+# and its horizon; `viewer` is the place of the viewer a viewer-scoped
+# window is its (a join's), None for the run's; `i` its place in the list,
+# which breaks the last ties.
+Window = collections.namedtuple("Window", "kind node peer phase anchor end stop horizon viewer i")
+
+
+def windows(s, evs=None):
+    """Series `s`'s windows (the module docs' rule), from its rule_events
+    `evs`: the start's, then each anchor's at t > 0 in time order. A join
+    whose node is no viewer's opens none; nor does a level that doesn't
+    change, or a kind whose phase is by detail with a detail it lacks."""
+    evs = rule_events(s) if evs is None else evs
+    n = seconds(s)
+    nodes = {node: i for i, node in enumerate(viewer_nodes(s))}
+    start = ANCHORS["start"]
+    out = [Window("start", None, None, start["phase"], 0, None, start["horizon_s"], start["horizon_s"], None, 0)]
+    levels = {}
+    for at, (t, kind, node, peer, value, detail) in enumerate(evs):
+        a = ANCHORS.get(kind)
+        if a is None:
+            continue
+        p = a["phase"]
+        if a.get("level"):
+            before = levels.get((kind, node))
+            levels[(kind, node)] = value
+            if t <= 0 or value is None or value == before:
+                continue
+            # A node without a level before had no limit.
+            p = p["down" if not before or value < before else "up"]
+        elif t <= 0:
+            continue
+        elif isinstance(p, dict):
+            p = p.get(detail)
+            if p is None:
+                continue
+        viewer = None
+        if a.get("scope") == "viewer":
+            viewer = nodes.get(node)
+            if viewer is None:
+                continue
+        end = None
+        if "until" in a:
+            peers = "peer" in VOCAB["kinds"][kind]
+            end = next((e[0] for e in evs[at + 1:]
+                        if e[1] == a["until"] and e[2] == node and (not peers or e[3] == peer) and e[0] >= t), None)
+        h = a["horizon_s"]
+        stop = ((end if end is not None else n) if "until" in a else t) + h
+        out.append(Window(kind, node, peer, p, t, end, stop, h, viewer, len(out)))
     return out
 
 
+def rank(w, x):
+    """Window `w`'s claim on instant `x`: its latest event at or before
+    `x` (a span's end once it came, else its anchor), then its kind's
+    place in the document and its own, the earlier first."""
+    latest = w.end if w.end is not None and w.end <= x else w.anchor
+    return latest, -RANK[w.kind], -w.i
+
+
+def holds(ws, x):
+    """The window of `ws` that holds instant `x` (the highest rank of
+    those whose [anchor, stop) holds it), or None."""
+    return max((w for w in ws if w.anchor <= x < w.stop), key=lambda w: rank(w, x), default=None)
+
+
+def incarnations(s, evs):
+    """Each viewer's incarnations, [(join, end)] in s from the stream's
+    start: from its joins (join None for one there from the start: its
+    join at t <= 0, or its first event an end, or none) to the departure,
+    leave or crash of its node that ends each (`gone`), end None for one
+    that stayed."""
+    by = collections.defaultdict(list)
+    for e in evs:
+        if e[1] == "join" or gone(e):
+            by[e[2]].append(e)
+    out = []
+    for node in viewer_nodes(s):
+        own = by.get(node, [])
+        there = not own or not (own[0][1] == "join" and own[0][0] > 0)
+        cur, inc = None, []
+        for t, kind, *_ in own:
+            if kind == "join":
+                if t <= 0:
+                    there, cur = True, None
+                    continue
+                if there:
+                    inc.append((cur, t))
+                there, cur = True, t
+            elif there:
+                inc.append((cur, t))
+                there = False
+        if there:
+            inc.append((cur, None))
+        out.append(inc)
+    return out
+
+
+# A viewer's second's state (`timeline`): it counts in the verdict's
+# measures, it is in its own startup (one of its joins' windows holds it,
+# whichever window holds its phase: there, counted in `present`, but out
+# of the measures, so trees forming around an arrival read as nothing) or
+# it left part-way through it.
+COUNTS, OWN, LEAVING = "counts", "own", "leaving"
+Timeline = collections.namedtuple("Timeline", "windows run viewers")
+
+
+def timeline(s):
+    """Series `s`'s phases by the rule (the module docs), over the
+    verdict's seconds: Timeline(windows, run, viewers): `windows`
+    (`windows`'), `run` the window holding each second of the run's (None:
+    steady), and `viewers`, per viewer, {second: (window or None, state)}
+    for each second it was there any part of (from its join's second to
+    its departure's, each incarnation's; a later incarnation takes a
+    second two share): its state COUNTS, OWN (in one of its own joins'
+    windows) or LEAVING (its departure's second)."""
+    evs = rule_events(s)
+    ws = windows(s, evs)
+    n = seconds(s)
+    run_ws = [w for w in ws if w.viewer is None]
+    run = [holds(run_ws, k + 0.5) for k in range(n)]
+    viewers = []
+    for i, inc in enumerate(incarnations(s, evs)):
+        own = [w for w in ws if w.viewer == i]
+        secs = {}
+        for join, end in inc:
+            first = 0 if join is None else max(0, math.floor(join))
+            last = n - 1 if end is None else min(n - 1, math.floor(end))
+            for k in range(first, last + 1):
+                x = k + 0.5 if join is None else max(k + 0.5, join)
+                w = holds(run_ws, x) if x != k + 0.5 else run[k]
+                mine = holds(own, x)
+                if mine is not None and (w is None or rank(mine, x) > rank(w, x)):
+                    w = mine
+                state = (LEAVING if end is not None and k == math.floor(end) else OWN if mine is not None
+                         else COUNTS)
+                secs[k] = (w, state)
+        viewers.append(secs)
+    return Timeline(ws, run, viewers)
+
+
+def presence(s):
+    """Each viewer's seconds as the verdicts count it, a list a viewer of
+    each of the verdict's seconds' state: None where it wasn't there,
+    OWN in its own startup, COUNTS where it counts, LEAVING its
+    departure's second (`timeline`)."""
+    n = seconds(s)
+    return [[secs[k][1] if k in secs else None for k in range(n)] for secs in timeline(s).viewers]
+
+
 def startup(s):
-    """The run's startup, the seconds a collapse must last past: STARTUP_SECS
-    when an honest viewer was there from the start, else none (each
-    arrival's own startup is out of the measures, `presence`)."""
-    hostile = set(s.get("hostile", []))
-    stays = [p for i, p in enumerate(presence(s)) if i not in hostile]
-    return STARTUP_SECS if not stays or any(join is None for join, _, _ in stays) else 0
+    """The run's startup, the seconds a collapse must last past: those the
+    start's window holds from the stream's start (STARTUP_SECS, fewer when
+    another window takes the run's seconds sooner)."""
+    run = timeline(s).run
+    return next((k for k, w in enumerate(run) if w is None or w.kind != "start"), len(run))
 
 
 def measures(s):
@@ -250,16 +487,15 @@ def measures(s):
     measure the seconds a viewer doesn't count in (`presence`): its hits
     are the series' sum over the viewers present, so an arrival's before it
     counts stay in it (the share then held to 1)."""
-    n = min(s["secs"], len(s["present"]))
+    n = seconds(s)
     per_s = s["rate"] / s["chunk"]
     chunks, written = s.get("chunks"), s.get("written")
     need = lambda k: chunks[k] if chunks else written[k] if written else per_s
     hostile = set(s.get("hostile", []))
     stays = presence(s)
-    # The honest arrivals present (`present` counts them) that don't count
-    # yet.
-    early = [sum(1 for i, (join, since, until) in enumerate(stays)
-                 if i not in hostile and join is not None and join <= k < min(since, until)) for k in range(n)]
+    # The honest viewers present (`present` counts them) in their own
+    # startup.
+    early = [sum(1 for i, st in enumerate(stays) if i not in hostile and st[k] == OWN) for k in range(n)]
     share = []
     for k in range(n):
         present = s["present"][k] - early[k]
@@ -282,13 +518,13 @@ def measures(s):
     deliv = []
     for k in range(n):
         d = [
-            x for (frames, (_, since, until)), first in zip(viewers, firsts)
-            if first is not None and k >= first + DELIVERY_SECS - 1 and since <= k < until
+            x for (frames, st), first in zip(viewers, firsts)
+            if first is not None and k >= first + DELIVERY_SECS - 1 and st[k] == COUNTS
             for x in [window(frames, k)] if x is not None
         ]
         deliv.append(med(d))
-    vl = [[x if since <= k < until else None for k, x in enumerate(v)]
-          for i, (v, (_, since, until)) in enumerate(zip(lags(s), stays)) if i not in hostile]
+    vl = [[x if k < n and st[k] == COUNTS else None for k, x in enumerate(v)]
+          for i, (v, st) in enumerate(zip(lags(s), stays)) if i not in hostile]
     lag = [quantile([v[k] for v in vl if v[k] is not None], LAG_QUANTILE) for k in range(n)]
     return n, smooth, deliv, lag
 
@@ -335,7 +571,7 @@ def verdict(s):
         k0 = runs_of([h and k > onset for k, h in enumerate(healthy)], RECOVER_SECS)
         recovered = k0
     # The trigger goes away when the seed's uplink last steps back up.
-    ups = [t for (t, u), (_, before) in zip(s["seed_up"][1:], s["seed_up"]) if u > before]
+    ups = [t for t, kind, _ in steps(s) if kind == "seed_up"]
     absorbing = False
     if onset is not None:
         if recovered is None:
@@ -357,7 +593,8 @@ def verdict(s):
 
 
 def run_startup(v):
-    """A verdict's startup (`startup`): STARTUP_SECS for one made without."""
+    """A verdict's startup (`startup`): STARTUP_SECS for one made without
+    it."""
     return v.get("startup", STARTUP_SECS)
 
 
@@ -374,53 +611,63 @@ def collapsed(v):
 
 
 def steps(s):
-    """The seed's uplink steps: (second, "seed_down" or "seed_up", the new
-    uplink over the old)."""
+    """The seed's uplink steps: (t in s, "seed_down" or "seed_up", the new
+    uplink over the old), its uplink_rate levels' changes (rule_events':
+    its events', else seed_up's) from a level it had."""
     out = []
-    for (t, u), (_, before) in zip(s["seed_up"][1:], s["seed_up"]):
-        if u != before and before:
+    seed = s.get("seed", 0)
+    before = None
+    for t, kind, node, _, u, _ in rule_events(s):
+        if kind != "uplink_rate" or node != seed or u is None:
+            continue
+        if t > 0 and before and u != before:
             out.append((t, "seed_down" if u < before else "seed_up", u / before))
+        before = u
     return out
+
+
+def phase_name(w):
+    """The phase of a second window `w` holds (`timeline`): steady for none."""
+    return "steady" if w is None else w.phase
 
 
 def phases(s, v):
-    """Each second's phase: `startup` (the run's, `startup`: none when every
-    viewer arrived later), `after_down` or `after_up` (within STEP_SECS of
-    the latest uplink step), else `steady`."""
-    out = []
-    st = steps(s)
-    first = run_startup(v)
-    for k in range(len(v["healthy"])):
-        last = [(t, kind) for t, kind, _ in st if t <= k + 0.5 and k < t + STEP_SECS]
-        if k < first:
-            out.append("startup")
-        elif last:
-            out.append("after_down" if last[-1][1] == "seed_down" else "after_up")
-        else:
-            out.append("steady")
-    return out
+    """Each second's phase, the run's (`timeline`): its windows' but its
+    viewers' own joins', steady where none holds it."""
+    return [phase_name(w) for w in timeline(s).run][:len(v["healthy"])]
 
 
 def viewer_phases(s, v):
     """Each viewer's phases, every viewer's (the hostile too): (viewer,
     phase, start, stop), its seconds start <= k < stop in one phase, in
-    order. A viewer's seconds run from its join's second (`presence`'s
-    join; 0 for one there from the start) to its departure's, which it was
-    there part of (`presence`'s until), within the verdict's seconds: in
-    `startup` until its own startup ends (`presence`'s since), then in the
-    second's phase (`phases`). `viewer` is the series' `viewer` id, else
-    its place in the series."""
-    ph = phases(s, v)
+    order (`timeline`): the seconds it was there any part of, each
+    incarnation's from its join's second to its departure's, in the
+    window that holds them of the run's and its own joins'. `viewer` is
+    the series' `viewer` id, else its place in the series."""
     ids = s.get("viewer") or range(len(s["frames"]))
     out = []
-    for i, (join, since, until) in zip(ids, presence(s)):
-        for k in range(join or 0, min(len(ph), until + 1)):
-            p = "startup" if k < since else ph[k]
+    n = len(v["healthy"])
+    for i, secs in zip(ids, timeline(s).viewers):
+        for k in sorted(x for x in secs if x < n):
+            p = phase_name(secs[k][0])
             if out and out[-1][0] == i and out[-1][1] == p and out[-1][3] == k:
                 out[-1][3] = k + 1
             else:
                 out.append([i, p, k, k + 1])
     return [tuple(x) for x in out]
+
+
+def phase_windows(s):
+    """Series `s`'s windows (`timeline`), to explain a phase: (viewer,
+    kind, node, phase, anchor_s, end_s, stop_s, horizon_s), the run's
+    start's first, then each anchor's in time order. viewer is the series'
+    `viewer` id of a join's viewer, None for the run's; node None for one
+    the series doesn't name (an implied viewer's, the start's); end_s a
+    span's end, None for a step, a level or a span without one."""
+    ids = s.get("viewer") or range(len(s["frames"]))
+    ids = list(ids)
+    return [(None if w.viewer is None else ids[w.viewer], w.kind, w.node if isinstance(w.node, int) else None,
+             w.phase, w.anchor, w.end, w.stop, w.horizon) for w in timeline(s).windows]
 
 
 def events(s, v):
@@ -550,17 +797,18 @@ def run_metrics(s, v):
 
 
 def verdict_version():
-    """A hash of everything that defines the verdicts and the run metrics:
-    a derived table made under another is stale."""
-    import inspect
-
-    parts = [inspect.getsource(f) for f in (lags, presence, startup, measures, slope, runs_of, quantile, med,
-                                            verdict, feasible, run_startup, collapsed, steps, phases, events,
-                                            episodes, acf, run_metrics)]
+    """A hash of everything that defines the verdicts, the phases and the
+    run metrics, the vocabulary's anchors (ANCHORS, in RANK's order, and
+    GONE) among it: a derived table made under another is stale."""
+    parts = [inspect.getsource(f) for f in (lags, seconds, stay, viewer_nodes, gone, rule_events, windows, rank,
+                                            holds, incarnations, timeline, presence, startup, measures, slope,
+                                            runs_of, quantile, med, verdict, feasible, run_startup, collapsed,
+                                            steps, phase_name, phases, events, episodes, acf, run_metrics)]
     parts.append(repr([TREES_SHARE, TREES_SMOOTH, TREES_SECS, DELIVERY_SHARE, DELIVERY_SECS, LAG_QUANTILE,
                        LAG_HIGH_MS, LAG_HIGH_SECS, LAG_SLOPE, LAG_SLOPE_SECS, LAG_SLOPE_FLOOR_MS, RECOVER_SECS,
-                       ABSORB_SECS, STARTUP_SECS, COLLAPSED_SECS, JOIN_GRACE_SECS, STEP_SECS, OSC_ACF,
-                       OSC_MIN_PERIOD, DELIVERY_TARGET_MS, OVERHEAD]))
+                       ABSORB_SECS, STARTUP_SECS, COLLAPSED_SECS, STEP_SECS, OSC_ACF, OSC_MIN_PERIOD,
+                       DELIVERY_TARGET_MS, OVERHEAD, GONE, [(kid, ANCHORS[kid], RANK[kid]) for kid in ANCHORS],
+                       {kid: "peer" in VOCAB["kinds"][kid] for kid in ANCHORS}]))
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
 
 
@@ -582,6 +830,14 @@ VERDICT_VERSION = verdict_version()
 
 # series_meta.json's keys that aren't the series'.
 META_ONLY = {"sim", "seconds", "viewers", "bin_ms"}
+# The sims by the names a run's `sim` holds (a farm job's, its binary's).
+SIM_NAMES = {"ppspp": "ppspp", "strims-ppspp:sim": "ppspp", "strims-sim": "strims-sim",
+             "strims-sim:scenarios": "strims-sim"}
+# The ids a sim's runs name the rule's kinds by, (sim, id, current id):
+# each current one's own, and each retired one's replacement for that
+# sim, as load_series reads them.
+RULE_IDS = tuple((sim, kid, vocab.current(kid, sim, VOCAB)) for sim in vocab.SIMS for kid in VOCAB["kinds"]
+                 if vocab.current(kid, sim, VOCAB) in RULE_KINDS)
 
 
 def files(srcs, table):
@@ -594,13 +850,16 @@ def plist(paths):
     return "[" + ", ".join(store_host.q(p) for p in paths) + "]"
 
 
-def series_of(meta, seconds, viewer_seconds, stays=None):
+def series_of(meta, seconds, viewer_seconds, stays=None, events=None):
     """A run's series as its row's `series` has it, from its tables: the
     meta's fields, each `seconds` column (a list by second), and per viewer
     in the order of their ids `viewer` (its id), `lag` and `frames`; with
-    `stays` (the viewers table's rows: viewer, arrive_ms, depart_ms), per
-    viewer `arrive_ms` and `depart_ms`, the stays presence reads (None for
-    a departure that didn't come)."""
+    `stays` (the viewers table's rows: viewer, and node, arrive_ms and
+    depart_ms where its table has them), per viewer `node`, `arrive_ms`
+    and `depart_ms` (None for a departure that didn't come); with `events`
+    (rows of t in s, kind, node, peer, value, detail: the rule's kinds,
+    current ids), `events`, [t, kind, node, peer, value, detail] by time,
+    the phase rule's (`rule_events`)."""
     if not seconds:
         return None
     # A row's series leaves `hostile` out without any.
@@ -628,8 +887,14 @@ def series_of(meta, seconds, viewer_seconds, stays=None):
     if stays:
         at = {r["viewer"]: r for r in stays}
         if all(r["viewer"] in at for r in by):
-            s["arrive_ms"] = [at[r["viewer"]]["arrive_ms"] for r in by]
-            s["depart_ms"] = [at[r["viewer"]]["depart_ms"] for r in by]
+            rows = [at[r["viewer"]] for r in by]
+            for f in ("node", "arrive_ms", "depart_ms"):
+                if all(f in x for x in rows) and (f != "node" or all(x[f] is not None for x in rows)):
+                    s[f] = [x[f] for x in rows]
+    if events is not None:
+        key = lambda e: (e["t"], RANK[e["kind"]], e["node"] is None, e["node"] or 0, e["peer"] is None, e["peer"] or 0)
+        s["events"] = [[e["t"], e["kind"], e["node"], e["peer"], e["value"], e["detail"]]
+                       for e in sorted(events, key=key)]
     return s
 
 
@@ -662,18 +927,39 @@ def load_series(pairs):
                       f"FROM read_parquet({plist(files(srcs, 'viewer_seconds'))}, union_by_name=true) "
                       f"SEMI JOIN {want} USING (src, k) GROUP BY ALL;"):
             vs[(r["src"], r["k"])].append(r)
-    # The viewers' stays, where the tables have them (both sims' since
-    # their arrivals and departures).
+    # The viewers' nodes (strims-sim's hosts) and stays, where the tables
+    # have them (both sims' since their arrivals and departures).
     stays = collections.defaultdict(list)
     viewers = files(srcs, "viewers")
     if viewers:
         table = f"read_parquet({plist(viewers)}, union_by_name=true)"
         cols = {r["column_name"] for r in duck(f"DESCRIBE SELECT * FROM {table};")}
-        if {"arrive_ms", "depart_ms"} <= cols:
-            for r in duck(f"SELECT src, k, viewer, arrive_ms, depart_ms FROM {table} "
-                          f"SEMI JOIN {want} USING (src, k);"):
+        node = [c for c in ("node", "host") if c in cols]
+        sel = ([f"coalesce({', '.join(node)}) AS node"] if node else []) + [
+            c for c in ("arrive_ms", "depart_ms") if {"arrive_ms", "depart_ms"} <= cols]
+        if sel:
+            for r in duck(f"SELECT src, k, viewer, {', '.join(sel)} FROM {table} SEMI JOIN {want} USING (src, k);"):
                 stays[(r["src"], r["k"])].append(r)
-    return {p: (m, series_of(m, secs.get(p, []), vs.get(p, []), stays.get(p))) for p, m in meta.items()}
+    # The events the phase rule reads, by their current ids (RULE_IDS, by
+    # the run's sim), filtered here.
+    events = {}
+    if files(srcs, "events"):
+        q = store_host.q
+        table = f"read_parquet({plist(files(srcs, 'events'))}, union_by_name=true)"
+        cols = {r["column_name"] for r in duck(f"DESCRIBE SELECT * FROM {table};")}
+        detail = "e.detail" if "detail" in cols else "NULL::VARCHAR"
+        sims = " ".join(f"WHEN {q(a)} THEN {q(b)}" for a, b in SIM_NAMES.items())
+        ids = ", ".join(f"({q(s)}, {q(a)}, {q(b)})" for s, a, b in RULE_IDS)
+        events = {p: [] for p in meta}
+        for r in duck(f"SELECT e.src, e.k, e.t_us / 1e6 AS t, m.kind, nullif(e.node, -1) AS node, "
+                      f"nullif(e.peer, -1) AS peer, e.value, {detail} AS detail "
+                      f"FROM {table} e SEMI JOIN {want} USING (src, k) "
+                      f"JOIN (SELECT src, k, CASE sim {sims} END AS sim FROM read_parquet({plist(runs)}, "
+                      f"union_by_name=true)) r USING (src, k) "
+                      f"JOIN (VALUES {ids}) m(sim, id, kind) ON m.sim = r.sim AND m.id = e.kind;"):
+            events.setdefault((r["src"], r["k"]), []).append(r)
+    return {p: (m, series_of(m, secs.get(p, []), vs.get(p, []), stays.get(p), events.get(p)))
+            for p, m in meta.items()}
 
 
 def judge(s):
@@ -696,6 +982,9 @@ DERIVED = {
     "derived_events": {"k": "VARCHAR", "src": "VARCHAR", "sec": "DOUBLE", "kind": "VARCHAR", "value": "DOUBLE"},
     "viewer_phases": {"k": "VARCHAR", "src": "VARCHAR", "viewer": "BIGINT", "phase": "VARCHAR", "start": "BIGINT",
                       "stop": "BIGINT"},
+    "phase_windows": {"k": "VARCHAR", "src": "VARCHAR", "viewer": "BIGINT", "kind": "VARCHAR", "node": "BIGINT",
+                      "phase": "VARCHAR", "anchor_s": "DOUBLE", "end_s": "DOUBLE", "stop_s": "DOUBLE",
+                      "horizon_s": "DOUBLE"},
 }
 # derived_events' kinds (events'): the vocabulary's derived ones, in its
 # order, none of them the sims'.
@@ -711,9 +1000,10 @@ VERDICT_COLS = {"k": "VARCHAR", "src": "VARCHAR", "onset": "BIGINT", "trees": "B
 @functools.cache
 def derived_version():
     """A hash of everything that defines the derived tables:
-    VERDICT_VERSION, their columns and the code that writes them
-    (DERIVE_CODE), so a derived table made under another is stale."""
-    parts = [VERDICT_VERSION, repr([DERIVED, DERIVED_KINDS, VERDICT_COLS]), *DERIVE_SOURCES]
+    VERDICT_VERSION, their columns, the events the verdict reads of a run
+    (RULE_IDS, by SIM_NAMES) and the code that writes them (DERIVE_CODE),
+    so a derived table made under another is stale."""
+    parts = [VERDICT_VERSION, repr([DERIVED, DERIVED_KINDS, VERDICT_COLS, RULE_IDS, SIM_NAMES]), *DERIVE_SOURCES]
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
 
 
@@ -751,6 +1041,7 @@ def derive_source(src):
             out["episodes"] += [[k, src, kind, x, y, y - x] for kind, x, y in episodes(v)]
             out["derived_events"] += [[k, src, t, kind, value] for t, kind, value in events(s, v)]
             out["viewer_phases"] += [[k, src, *span] for span in viewer_phases(s, v)]
+            out["phase_windows"] += [[k, src, *w] for w in phase_windows(s)]
             verdicts.append([k, src, v["onset"], v["trees"], v["delivery"], v["latency"], v["recovered"],
                              v["absorbing"], str(v["feasible"]), v["unhealthy"], v["lag_p50"], v["lag_max"],
                              collapsed(v), run_startup(v)] + [m[n] for n in metric_names])
@@ -792,7 +1083,7 @@ def write_table(path, cols, data):
 # that outlives an edit (the console server's forkserver children, which
 # fork from the code they started with) would hash the edited file's text
 # against the loaded code and name a version no derive writes.
-DERIVE_CODE = (derive_source, write_table, viewer_phases)
+DERIVE_CODE = (derive_source, write_table, viewer_phases, phase_windows, series_of, load_series)
 DERIVE_SOURCES = tuple(inspect.getsource(f) for f in DERIVE_CODE)
 
 

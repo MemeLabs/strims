@@ -165,11 +165,10 @@ sys.path.insert(0, str(REPO / "hack"))
 
 from simlab.verdict import (  # noqa: E402
     ABSORB_SECS, COLLAPSED_SECS, DELIVERY_MAX_MS, DELIVERY_SECS, DELIVERY_SHARE, DELIVERY_TARGET_MS, E2E_MAX_MS,
-    E2E_TARGET_MS, JOIN_GRACE_SECS, LAG_HIGH_MS, LAG_HIGH_SECS, LAG_QUANTILE, LAG_SLOPE, LAG_SLOPE_FLOOR_MS,
-    LAG_SLOPE_SECS, OSC_ACF, OSC_MIN_PERIOD, OVERHEAD, PIPELINE_MS, RECOVER_SECS, STARTUP_SECS, STEP_SECS,
-    TREES_SECS, TREES_SHARE, TREES_SMOOTH, VERDICT_VERSION, acf, collapsed, episodes, events, feasible, lags, measures,
-    med, phases, presence, quantile, run_metrics, run_startup, runs_of, slope, startup, steps, verdict,
-    verdict_version,
+    E2E_TARGET_MS, LAG_HIGH_MS, LAG_HIGH_SECS, LAG_QUANTILE, LAG_SLOPE, LAG_SLOPE_FLOOR_MS, LAG_SLOPE_SECS, OSC_ACF,
+    OSC_MIN_PERIOD, OVERHEAD, PIPELINE_MS, RECOVER_SECS, STARTUP_SECS, STEP_SECS, TREES_SECS, TREES_SHARE,
+    TREES_SMOOTH, VERDICT_VERSION, acf, collapsed, episodes, events, feasible, lags, measures, med, phases, presence,
+    quantile, run_metrics, run_startup, runs_of, slope, startup, steps, timeline, verdict, verdict_version,
 )
 
 # The rows `reduce` keeps.

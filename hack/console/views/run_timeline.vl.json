@@ -308,6 +308,8 @@
               "after_down",
               "after_up",
               "steady",
+              "after_departure",
+              "after_disruption",
               "unhealthy",
               "collapse"
             ]

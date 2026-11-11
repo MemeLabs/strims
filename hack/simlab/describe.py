@@ -269,15 +269,53 @@ def events_lines(schema, counts=False):
     return out
 
 
+# The phase rule (verdict.timeline's), as the phases topic gives it.
+PHASE_RULE = (
+    "A second's phase comes from its run's scenario events: each event of a kind that anchors a phase opens a "
+    "window, the stream's start the run's startup. A window is [t, t + horizon), or for a span [t, end + "
+    "horizon) to its until event of the same node (the run's end without one); a level's phase (uplink_rate's, "
+    "rate_limit's) is after_down or after_up by its value against its node's previous level. Events at t <= 0 "
+    "set the run up and open none. Second k is in a window when its anchor <= k + 0.5 < its stop; of the windows "
+    "holding it, the one whose latest event (a span's end once it came, else its anchor) is latest wins, a tie "
+    "to the kind the vocabulary lists first; none holds a steady second. The run's phase (verdict_seconds) takes "
+    "every window but joins'; a viewer's (viewer_phases) the run's and its own joins', and a viewer counts in the "
+    "verdict's measures but for join's horizon after each of its joins. phase_windows lists each run's windows; lag_since(exp) gives the "
+    "lag against the seconds since each window's anchor and span's end, the curves the horizons are read from.")
+
+
+def anchor_text(kid, a, phase):
+    """Anchor `kid` (its vocabulary table `a`) of `phase`: its id, then how
+    it opens the phase's window and for how long."""
+    how = []
+    p = a["phase"]
+    if isinstance(p, dict):
+        when = [d for d, x in p.items() if x == phase]
+        how.append(f"a step {when[0]}" if a.get("level") else ", ".join(when))
+    if a.get("scope") == "viewer":
+        how.append("its viewer's own")
+    h = f"{a['horizon_s']:g} s"
+    how.append(f"to its {a['until']}, then {h}" if "until" in a else h)
+    return f"{kid} ({'; '.join(how)})"
+
+
 def phases_text():
     """The vocabulary's phases, episodes and reasons (SECTIONS), each with
-    its description."""
+    its description, a phase with its anchors (the kinds that open its
+    windows, and how), after the phase rule (PHASE_RULE)."""
     out = ["# Phases, episodes and reasons", "",
            "The vocabulary's (crates/strims-wan/vocab.toml) names of what the verdict and the sims' tables hold "
            "beside the event kinds."]
+    anchors = vocab.anchors()
     for section, doc in SECTIONS.items():
         out += ["", f"## {section.capitalize()}", doc, ""]
-        out += [f"- {name}: {v['description']}" for name, v in vocab.entries(section).items()]
+        if section == "phases":
+            out += [PHASE_RULE, ""]
+        for name, v in vocab.entries(section).items():
+            out.append(f"- {name}: {v['description']}")
+            of = [anchor_text(kid, a, name) for kid, a in anchors.items()
+                  if name in (a["phase"].values() if isinstance(a["phase"], dict) else [a["phase"]])]
+            if section == "phases" and of:
+                out.append(f"  - anchors: {', '.join(of)}")
     return "\n".join(out) + "\n"
 
 

@@ -4,8 +4,10 @@
 """simlab.vocab, stdlib alone: the generated files (vocab.rs, vocab.ts)
 are the generator's output byte for byte; the document checks (ids
 unique, references to what exists, a retired kind's replacement one its
-sims' runs hold, derived kinds disjoint from the sims' kinds, a colour to
-each phase, episode and reason, one to a name of its section); each
+sims' runs hold, derived kinds disjoint from the sims' kinds, an anchor's
+phase, horizon and keys, every phase but steady and tail anchored, a
+colour to each phase, episode and reason, one to a name of its section);
+each
 kind's `sims` the sims whose event writers name it; and the queries over
 it:
 
@@ -121,11 +123,12 @@ class Document(unittest.TestCase):
         cases = {
             'replaced_by = "nope"': ["[kinds.b]: replaced_by 'nope' is not a current kind"],
             'replaced_by = { ppspp = "a", other = "a" }': ["[kinds.b]: replaced_by names a sim it doesn't know"],
-            'until = "nope"': ["[kinds.b]: until 'nope' is not a current kind"],
-            'phase = "nope"': ["[kinds.b]: phase 'nope' is not a phase"],
-            'phase = { down = "steady", up = "steady" }': ["[kinds.b]: a phase table is {down, up}, with level = true"],
+            'until = "nope"\nphase = "steady"\nhorizon_s = 1': ["[kinds.b]: until 'nope' is not a current kind"],
+            'phase = "nope"\nhorizon_s = 1': ["[kinds.b]: phase 'nope' is not a phase"],
+            'phase = { down = "steady", up = "steady" }\nhorizon_s = 1': [
+                "[kinds.b]: a phase table is {down, up}, with level = true, or by its details"],
             'scope = "world"': ["[kinds.b]: scope 'world' is none of run, viewer"],
-            "horizon_s = -1": ["[kinds.b]: horizon_s is not a number of seconds"],
+            'phase = "steady"\nhorizon_s = -1': ["[kinds.b]: horizon_s is not a number of seconds"],
             'notes = { other = "x" }': ["[kinds.b]: notes is not a table of text by sim"],
             'details = ["x", "x"]': ["[kinds.b]: details is not a list of distinct values"],
             'nonsense = "x"': ["[kinds.b]: unknown key 'nonsense'"],
@@ -138,7 +141,34 @@ class Document(unittest.TestCase):
         chain = given(given(chain, "b", 'replaced_by = "c"'), "c", 'replaced_by = "b"')
         self.assertEqual(problems(chain), ["[kinds.b]: replaced_by 'c' is not a current kind",
                                            "[kinds.c]: replaced_by 'b' is not a current kind"])
-        self.assertEqual(problems(given(good, "b", 'phase = { down = "steady", up = "steady" }\nlevel = true')), [])
+        self.assertEqual(problems(given(good, "b", 'phase = { down = "steady", up = "steady" }\nlevel = true\n'
+                                                   'horizon_s = 1')), [])
+
+    def test_an_anchor_takes_a_horizon_and_its_keys(self):
+        good = document(kinds=(("a", "scenario", ["ppspp"]), ("b", "scenario", ["ppspp"])), phases=("steady", "x"))
+        good = given(good, "a", 'phase = "x"\nhorizon_s = 10')
+        self.assertEqual(problems(good), [])
+        cases = {
+            'phase = "steady"': ["[kinds.b]: an anchor takes a horizon_s"],
+            'until = "a"': ["[kinds.b]: until without a phase"],
+            "level = true": ["[kinds.b]: level without a phase"],
+            "horizon_s = 5": ["[kinds.b]: horizon_s without a phase"],
+            'phase = "x"\nlevel = true\nhorizon_s = 5': ["[kinds.b]: a level's phase is a table {down, up}"],
+            'phase = { up = "x", side = "x" }\nlevel = true\nhorizon_s = 5': [
+                "[kinds.b]: a level's phase table is {down, up}"],
+            # By detail: its keys the kind's details.
+            'details = ["p", "q"]\nphase = { p = "x", q = "steady" }\nhorizon_s = 5': [],
+            'details = ["p", "q"]\nphase = { p = "x" }\nhorizon_s = 5': [
+                "[kinds.b]: a phase table is {down, up}, with level = true, or by its details"],
+            # A scope alone is no anchor's (lag_since reads it).
+            'scope = "viewer"': [],
+        }
+        for line, want in cases.items():
+            self.assertEqual(problems(given(good, "b", line)), want, line)
+        # Every phase but steady and tail is some current kind's.
+        three = document(kinds=(("a", "scenario", ["ppspp"]),), phases=("steady", "tail", "x"))
+        self.assertEqual(problems(three), ["[phases.x]: no kind anchors it"])
+        self.assertEqual(problems(given(three, "a", 'phase = "x"\nhorizon_s = 1')), [])
 
     def test_a_replacement_by_sim_names_its_sims_and_what_their_runs_hold(self):
         both = document(kinds=(("a", "scenario", ["strims-sim", "ppspp"]), ("b", "scenario", ["ppspp"]),
@@ -233,10 +263,29 @@ class Queries(unittest.TestCase):
         self.assertEqual(vocab.derived(), ["start", "seed_down", "seed_up", "present_join", "present_leave", "onset",
                                            "recovered", "collapse"])
         self.assertEqual(vocab.aligns(), vocab.derived() + vocab.scenario())
-        self.assertEqual(vocab.phases(), ["startup", "after_down", "after_up", "steady", "tail"])
+        self.assertEqual(vocab.phases(), ["startup", "after_down", "after_up", "steady", "after_departure",
+                                          "after_disruption", "tail"])
         self.assertEqual(vocab.episodes(), ["healthy", "unhealthy", "collapse"])
         self.assertEqual(vocab.reasons(), ["open", "switch", "lost", "prune", "shed"])
-        self.assertEqual(vocab.anchors(), {})
+        # The anchors in the document's order (its ties'): join first of
+        # the scenario's, so a viewer's join holds the second a crash's or
+        # a leave's span ends in; the start's last, a derived kind's.
+        self.assertEqual(list(vocab.anchors()), [
+            "join", "partition", "hold", "crash", "latency", "pause_reading", "reset_writer", "rate_limit",
+            "connect", "depart", "uplink_rate", "competing_start", "leave", "reconnect", "incident", "start"])
+        self.assertTrue(all(vocab.kind(k)["class"] == "scenario" for k in list(vocab.anchors())[:-1]))
+        # The kinds the rule reads of the sims' events: the anchors but
+        # the start, and the kinds that end their spans.
+        self.assertEqual(vocab.rule_kinds(), [
+            "join", "partition", "repair", "hold", "release", "crash", "restart", "latency", "pause_reading",
+            "resume_reading", "reset_writer", "rate_limit", "connect", "depart", "uplink_rate", "competing_start",
+            "competing_stop", "leave", "reconnect", "incident"])
+        self.assertEqual(vocab.anchor_fields()["rate_limit"], {
+            "phase": {"down": "after_down", "up": "after_up"}, "level": True, "horizon_s": 60})
+        self.assertEqual(vocab.anchor_fields()["leave"], {"phase": "after_departure", "until": "join",
+                                                          "horizon_s": 20})
+        # No observation anchors: the run's response never sets a phase.
+        self.assertFalse({k for k in vocab.anchors() if vocab.kind(k)["class"] not in ("scenario", "derived")})
 
     def test_current_follows_replaced_by(self):
         text = document(kinds=(("a", "scenario", ["strims-sim", "ppspp"]), ("b", "scenario", ["ppspp"]),

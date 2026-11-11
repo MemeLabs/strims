@@ -42,12 +42,24 @@ pub const DOCUMENT: &str = r##"# The sims' event vocabulary: every kind of event
 #   replaced_by  a retired kind's current id, or a table of them by sim
 #                naming each of its sims; the id is one that sim's runs
 #                hold
-# and a kind that anchors a phase:
-#   phase        the phase it opens: a name, or {down, up} by its value's
-#                direction, with level = true
-#   until        the kind that ends its span
+# and a kind that anchors a phase (`verdict.timeline`, whose docs give the
+# rule):
+#   phase        the phase its window holds: a name; {down, up} by its
+#                value's direction against the node's previous level, with
+#                level = true; or a table by `detail`, its keys `details`
+#   until        the kind that ends its span: the next one of the node and
+#                peer
 #   scope        run or viewer: whose phase it sets
-#   horizon_s    how long the phase lasts after it, or after its span
+#   horizon_s    how long the window lasts after it, or after its span's
+#                end; why, in a comment beside it, from `lag_since`'s
+#                curves (the honest viewers' lag p99 against the seconds
+#                since it, over sa0755, s740d7, sce6ba, s51ec1 and local
+#                suite runs of the robust, peers and churn tiers, every arm
+#                pooled): the second the lag is back within a quarter (and
+#                150 ms) of the level it had before, or settles at after
+# A kind's place in the document breaks ties between windows: of two
+# whose latest events came at once, the one listed first holds the
+# second.
 #
 # [phases.<name>], [episodes.<name>], [reasons.<name>]
 #   description  what it is
@@ -56,6 +68,26 @@ pub const DOCUMENT: &str = r##"# The sims' event vocabulary: every kind of event
 
 # --- scenario ---------------------------------------------------------------
 
+[kinds.join]
+class = "scenario"
+sims = ["strims-sim", "ppspp"]
+description = "A viewer incarnation starts reading the stream."
+node = "the viewer"
+# First of the scenario's kinds: a viewer's join outranks the span it ends
+# (`leave`'s, `crash`'s at its restart).
+phase = "startup"
+scope = "viewer"
+# A joiner's lag settles 1-15 s after it joins into a swarm whose trees
+# formed (14-18 s at the slowest: the ppspp sim's cable-event and
+# large-4mbit), 20-35 s when it arrives in the swarm's own first 20 s and
+# their trees form together (star-15-5, mesh6-15-5, thin-15-10-trickle):
+# three in four of 87 cells by 20 s.
+horizon_s = 20
+
+[kinds.join.notes]
+strims-sim = "Each viewer incarnation's (`Join`'s start), a restart's too."
+ppspp = "Each viewer's, at the start or its arrival, and on taking a place again (`Churn`)."
+
 [kinds.partition]
 class = "scenario"
 sims = ["strims-sim"]
@@ -63,6 +95,11 @@ description = "Everything between two groups of hosts is dropped (`Fault::Partit
 node = "the first group's first host"
 peer = "the second group's first host"
 value = "the groups' sizes' product"
+phase = "after_disruption"
+until = "repair"
+# No run holds one yet: TCP streams that lost a segment stall until their
+# read timeout, and recover after the repair.
+horizon_s = 30
 
 [kinds.repair]
 class = "scenario"
@@ -79,6 +116,11 @@ description = "Everything between two groups of hosts is held, and delivered on 
 node = "the first group's first host"
 peer = "the second group's first host"
 value = "the groups' sizes' product"
+phase = "after_disruption"
+until = "release"
+# No run holds one yet: what the hold held arrives at once on release, and
+# the viewers catch up from it.
+horizon_s = 30
 
 [kinds.release]
 class = "scenario"
@@ -93,6 +135,12 @@ class = "scenario"
 sims = ["strims-sim"]
 description = "The host's software is killed, after partitioning it from every other host (`Fault::Crash`). The FINs of the sockets the crash drops are lost, as in a power loss; peers notice by timeouts, or by an RST once the host answers again."
 node = "the host"
+phase = "after_departure"
+until = "restart"
+# The seed's (seed-restart, 3 s down): the viewers' lag is back 8 s after
+# its restart; a viewer's (viewer-churn): the others' lag never moves, and
+# its own incarnation ends.
+horizon_s = 20
 
 [kinds.restart]
 class = "scenario"
@@ -108,6 +156,10 @@ node = "the host, or the first group's first host"
 peer = "the second group's first host; -1 for every link of the node"
 value = "the one-way latency"
 unit = "ms"
+phase = "after_disruption"
+# latency-step's 150 ms more: the lag takes it at once, and a bump to
+# 0.8 s on top in one of two experiments is gone 8 s after it.
+horizon_s = 15
 
 [kinds.latency.notes]
 strims-sim = "Between two groups of hosts (`Fault::Latency`), `node` and `peer` the groups' first hosts. In WAN mode it replaces the paths' base latency, and jitter, loss and bandwidth still apply."
@@ -118,6 +170,10 @@ class = "scenario"
 sims = ["strims-sim"]
 description = "The host's swarm readers stop reading (`Fault::PauseReading`)."
 node = "the host"
+phase = "after_disruption"
+until = "resume_reading"
+# No run holds one yet: the host's readers catch up on resuming.
+horizon_s = 30
 
 [kinds.resume_reading]
 class = "scenario"
@@ -130,6 +186,10 @@ class = "scenario"
 sims = ["strims-sim"]
 description = "A swarm's seed starts a new epoch (`Fault::ResetWriter`, `SwarmWriter::reset`)."
 node = "the swarm's number, not a host"
+phase = "after_disruption"
+# seed-restart's new epoch at 29 s: a blip of a second, where the lag
+# hasn't already risen with the seed's restart.
+horizon_s = 15
 
 [kinds.rate_limit]
 class = "scenario"
@@ -138,6 +198,13 @@ description = "A host's upload cap from then on, on its software, a level: the s
 node = "the host"
 value = "the cap"
 unit = "bytes/s"
+# A host without a starting cap had none: its first cap is a step down.
+phase = { down = "after_down", up = "after_up" }
+level = true
+# As uplink_rate's: seed-starved's cap to 16 KiB/s starves the viewers for
+# its 80 s, its lift drains their lag within 3 s (or never, in the arm
+# that stays collapsed).
+horizon_s = 60
 
 [kinds.connect]
 class = "scenario"
@@ -146,6 +213,9 @@ description = "A host links to another through peer exchange (`Fault::Connect`, 
 node = "the host that links"
 peer = "the host it links to"
 value = "the network's number"
+phase = "after_disruption"
+# No run holds one yet: the new link's peers settle on it.
+horizon_s = 30
 
 [kinds.depart]
 class = "scenario"
@@ -155,6 +225,12 @@ node = "the viewer"
 value = "1 for an abrupt departure, 0 for a graceful one"
 detail = "how it left"
 details = ["graceful", "abrupt"]
+phase = "after_departure"
+# Abruptly, its children notice at their read timeout and repair: the
+# ppspp sim's (cable-end-abrupt) lag climbs to the 25 s READ_TIMEOUT and is
+# back by 34-45 s, strims-sim's (star-15-10-end-abrupt) by 16-25 s;
+# gracefully, by 10-15 s.
+horizon_s = 45
 
 [kinds.depart.notes]
 strims-sim = "`Fault::Depart`. An abrupt departure is a crash that leaves the host cut off and stopped, and counts no restart."
@@ -167,6 +243,13 @@ description = "The rate of a host's uplink from then on, a level: its starting r
 node = "the host"
 value = "the rate"
 unit = "bytes/s"
+phase = { down = "after_down", up = "after_up" }
+level = true
+# A step down: the main arm's lag is back 10-15 s after it, the arms that
+# struggle not by the run's end (halve-31-10, 30 s on) or rise again 35-40
+# s after it (wan-residential-seed-step in s740d7); a step up drains it in
+# 3-10 s.
+horizon_s = 60
 
 [kinds.uplink_rate.notes]
 strims-sim = "The upload available on the host's site uplink, in WAN mode (`HostSpec::up_steps`), as when other traffic takes part of it for a while: the starting rate for the first swarm's seed and for each host that steps, if it has a site. A software cap is `rate_limit`'s, competing uploads `competing_start`'s."
@@ -179,6 +262,11 @@ description = "Bulk uploads by other software on the host start, sharing its upl
 node = "the host"
 value = "the competing flow's round trip"
 unit = "ms"
+# Its uplink falls for the span: the varying cells' lag p99 rises a fifth
+# to a half within 5-15 s, and is back 13-19 s after the stop.
+phase = "after_down"
+until = "competing_stop"
+horizon_s = 20
 
 [kinds.competing_stop]
 class = "scenario"
@@ -192,28 +280,25 @@ sims = ["strims-sim"]
 description = "A host that comes after the run's start boots (`HostSpec::arrive_at`): its node starts, joins its swarms and dials its links."
 node = "the host"
 
-[kinds.join]
-class = "scenario"
-sims = ["strims-sim", "ppspp"]
-description = "A viewer incarnation starts reading the stream."
-node = "the viewer"
-scope = "viewer"
-
-[kinds.join.notes]
-strims-sim = "Each viewer incarnation's (`Join`'s start), a restart's too."
-ppspp = "Each viewer's, at the start or its arrival, and on taking a place again (`Churn`)."
-
 [kinds.leave]
 class = "scenario"
 sims = ["ppspp"]
 description = "A viewer leaves mid-stream (`Churn`): its neighbours see its links close, as a closed tab's, and a new viewer with nothing takes its place on the same links a while later (its `join`)."
 node = "the viewer"
+phase = "after_departure"
+until = "join"
+# The churn cell's: no leave moves the others' lag off the cell's level,
+# and its successor's settles at it 3-5 s after its join.
+horizon_s = 20
 
 [kinds.reconnect]
 class = "scenario"
 sims = ["ppspp"]
 description = "The seed's channels close and open again on both ends, as after a dropped and redialed link (`SeedStep::Reconnect`)."
 node = "the seed"
+phase = "after_disruption"
+# No run holds one yet: the seed's children open their streams again.
+horizon_s = 30
 
 [kinds.incident]
 class = "scenario"
@@ -224,6 +309,10 @@ value = "its new uplink, 0 when it dies"
 unit = "bytes/s"
 detail = "what happened"
 details = ["dies", "slows"]
+phase = { dies = "after_departure", slows = "after_down" }
+# No run holds one yet: a relay that dies is an abrupt departure's (its
+# children notice at READ_TIMEOUT), one that slows a step down's.
+horizon_s = 60
 
 # --- observation ------------------------------------------------------------
 
@@ -389,6 +478,13 @@ detail = "`from=<chunk> to=<chunk> wait_ms=<ms>`"
 [kinds.start]
 class = "derived"
 description = "The stream's start."
+# The run's startup, from the stream's start: its viewers' lag settles by
+# 5-12 s where trees form easily (the ppspp sim's residential, wan-global,
+# wan-mobile), by 20-28 s where every viewer joins at once into a seed
+# they must share (star-31-5, lock-in, the ppspp sim's large-4mbit and
+# sparse-lossy); thin-15-10 at 31-35 s.
+phase = "startup"
+horizon_s = 25
 
 [kinds.seed_down]
 class = "derived"
@@ -472,26 +568,40 @@ strims-sim = "`Report::parent_losses`: a host that departed while it was a push 
 ppspp = "Timed at the departure, one for each neighbour whose open parent it was on some stream; `value` the streams it was the parent of; `detail` the departure's, graceful or abrupt."
 
 # --- phases -----------------------------------------------------------------
-# What each second of a run is (`verdict.phases`). Colours: the console's
+# What each second of a run, and of each viewer, is (`verdict.timeline`):
+# a window of the kinds that anchor it (their `phase`), steady outside
+# every window, tail past the verdict's seconds. Few, and named by what
+# happened, so a chart can tell each from the rest. Colours: the console's
 # categorical hues (theme.ts' SERIES) at steps over 3:1 on light and dark
-# surfaces, none yellow, which would read as the episodes' unhealthy beside
-# them; steady, every other second, is the de-emphasis grey.
+# surfaces, none yellow or red, which would read as the episodes'
+# unhealthy and collapse beside them; steady is the de-emphasis grey. The
+# order is the charts' (a stack's, a legend's): steady's grey sits between
+# after_up's aqua and the magenta and green, which beside it are hard to
+# tell apart (deuteranopes the magenta, everyone the green).
 
 [phases.startup]
-description = "The run's startup: its first `STARTUP_SECS` seconds, none when every viewer arrived later."
+description = "Trees forming: the run's first seconds (`start`'s horizon, `STARTUP_SECS`), and a viewer's after each of its joins (`join`'s), each incarnation's. A viewer doesn't count in the verdict's measures for `join`'s horizon after each of its joins, whichever phase holds those seconds."
 colour = "#2a78d6"
 
 [phases.after_down]
-description = "Within `STEP_SECS` of the seed's latest uplink step, a step down."
+description = "After a host's upload fell: its uplink's rate or its cap stepped down (`uplink_rate`, `rate_limit`, against its previous level), other software's uploads shared it (`competing_start`, to its stop), or the busiest relay's slowed (`incident`)."
 colour = "#eb6834"
 
 [phases.after_up]
-description = "Within `STEP_SECS` of the seed's latest uplink step, a step up."
+description = "After a host's uplink's rate or its cap stepped up (`uplink_rate`, `rate_limit`)."
 colour = "#199e70"
 
 [phases.steady]
-description = "Every other second of the verdict's."
+description = "Every other second of the verdict's: no window holds it."
 colour = "#c3c2b7"
+
+[phases.after_departure]
+description = "After a peer went: a viewer departed (`depart`) or left a while (`leave`, to its successor's join), a host crashed (`crash`, to its restart), or the busiest relay died (`incident`)."
+colour = "#d55181"
+
+[phases.after_disruption]
+description = "After the swarm's links or stream were disturbed: a latency step (`latency`), a partition (`partition`, to its repair), a hold (`hold`, to its release), a host's readers paused (`pause_reading`, to their resume), the seed's new epoch (`reset_writer`), a new link (`connect`), the seed's channels reopened (`reconnect`)."
+colour = "#008300"
 
 [phases.tail]
 description = "A second past the verdict's: the run's tail, after the stream's seconds (`query.pooled` by phase)."
@@ -592,6 +702,14 @@ impl Class {
 /// ([`Kind::name`]) names it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Kind {
+    /// A viewer incarnation starts reading the stream.
+    ///
+    /// - `node`: the viewer
+    /// - strims-sim: Each viewer incarnation's (`Join`'s start), a restart's
+    ///   too.
+    /// - ppspp: Each viewer's, at the start or its arrival, and on taking a
+    ///   place again (`Churn`).
+    Join,
     /// Everything between two groups of hosts is dropped (`Fault::Partition`):
     /// TCP streams that lose a segment stall until their read timeout.
     ///
@@ -718,14 +836,6 @@ pub enum Kind {
     ///
     /// - `node`: the host
     Arrive,
-    /// A viewer incarnation starts reading the stream.
-    ///
-    /// - `node`: the viewer
-    /// - strims-sim: Each viewer incarnation's (`Join`'s start), a restart's
-    ///   too.
-    /// - ppspp: Each viewer's, at the start or its arrival, and on taking a
-    ///   place again (`Churn`).
-    Join,
     /// A viewer leaves mid-stream (`Churn`): its neighbours see its links
     /// close, as a closed tab's, and a new viewer with nothing takes its place
     /// on the same links a while later (its `join`).
@@ -803,6 +913,7 @@ pub enum Kind {
 impl Kind {
     /// Every kind, in the document's order.
     pub const ALL: [Kind; 27] = [
+        Kind::Join,
         Kind::Partition,
         Kind::Repair,
         Kind::Hold,
@@ -820,7 +931,6 @@ impl Kind {
         Kind::CompetingStart,
         Kind::CompetingStop,
         Kind::Arrive,
-        Kind::Join,
         Kind::Leave,
         Kind::Reconnect,
         Kind::Incident,
@@ -835,6 +945,7 @@ impl Kind {
     /// Its id: the `kind` column's text.
     pub fn name(self) -> &'static str {
         match self {
+            Kind::Join => "join",
             Kind::Partition => "partition",
             Kind::Repair => "repair",
             Kind::Hold => "hold",
@@ -852,7 +963,6 @@ impl Kind {
             Kind::CompetingStart => "competing_start",
             Kind::CompetingStop => "competing_stop",
             Kind::Arrive => "arrive",
-            Kind::Join => "join",
             Kind::Leave => "leave",
             Kind::Reconnect => "reconnect",
             Kind::Incident => "incident",
@@ -868,6 +978,7 @@ impl Kind {
     /// The kind of id `name`, if a sim here writes one.
     pub fn from_name(name: &str) -> Option<Kind> {
         match name {
+            "join" => Some(Kind::Join),
             "partition" => Some(Kind::Partition),
             "repair" => Some(Kind::Repair),
             "hold" => Some(Kind::Hold),
@@ -885,7 +996,6 @@ impl Kind {
             "competing_start" => Some(Kind::CompetingStart),
             "competing_stop" => Some(Kind::CompetingStop),
             "arrive" => Some(Kind::Arrive),
-            "join" => Some(Kind::Join),
             "leave" => Some(Kind::Leave),
             "reconnect" => Some(Kind::Reconnect),
             "incident" => Some(Kind::Incident),
@@ -902,7 +1012,8 @@ impl Kind {
     /// What it records.
     pub fn class(self) -> Class {
         match self {
-            Kind::Partition
+            Kind::Join
+            | Kind::Partition
             | Kind::Repair
             | Kind::Hold
             | Kind::Release
@@ -919,7 +1030,6 @@ impl Kind {
             | Kind::CompetingStart
             | Kind::CompetingStop
             | Kind::Arrive
-            | Kind::Join
             | Kind::Leave
             | Kind::Reconnect
             | Kind::Incident => Class::Scenario,
@@ -937,7 +1047,8 @@ impl Kind {
         match sim {
             Sim::StrimsSim => matches!(
                 self,
-                Kind::Partition
+                Kind::Join
+                    | Kind::Partition
                     | Kind::Repair
                     | Kind::Hold
                     | Kind::Release
@@ -954,7 +1065,6 @@ impl Kind {
                     | Kind::CompetingStart
                     | Kind::CompetingStop
                     | Kind::Arrive
-                    | Kind::Join
                     | Kind::FirstRead
                     | Kind::CaughtUp
                     | Kind::ParentDeparted
@@ -963,10 +1073,10 @@ impl Kind {
             ),
             Sim::Ppspp => matches!(
                 self,
-                Kind::Latency
+                Kind::Join
+                    | Kind::Latency
                     | Kind::Depart
                     | Kind::UplinkRate
-                    | Kind::Join
                     | Kind::Leave
                     | Kind::Reconnect
                     | Kind::Incident

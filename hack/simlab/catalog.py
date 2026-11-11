@@ -118,7 +118,8 @@ lacks):
                     seconds a viewer wasn't there; events' `detail` also as
                     a MAP where it is key=value; -1 for none or no reading
                     NULL
-  verdicts, verdict_seconds, episodes, derived_events, viewer_phases
+  verdicts, verdict_seconds, episodes, derived_events, viewer_phases,
+  phase_windows
                     analyze.py's verdicts, of the current verdict_version
                     (catalog_info); <table>_all holds every version kept
   metric_defs, job_metrics, job_runs, t975
@@ -135,8 +136,9 @@ lacks):
                     structural(exp) gives the cells every arm collapsed on
                     at every seed, dynamics(exp) each arm and cell's lag by
                     phase, spikes past the playout delays, stalls and
-                    spells, lag_since(exp) the lag against the seconds
-                    since each scenario event, both from
+                    spells, dynamics_phases(exp) its lag in each phase,
+                    lag_since(exp) the lag against the seconds since each
+                    phase window's anchor (phase_windows), all from
                     viewer_lag_of(jobs), the honest viewers' lag each
                     second. table_catalog describes each (kind 'macro' or
                     'table macro', keys its parameters)
@@ -214,8 +216,7 @@ S3_DAYS = 7
 PROMOTED = {"known_uplink": "KNOWN_UPLINK", "arrivals": "ARRIVALS", "depart": "DEPART", "exp": "EXP"}
 # A job's own keys in its env, left out of env_hash: its seed and output.
 JOB_KEYS = ("SIM_SEED", "STRIMS_SIM_SEED", "SIM_OUT", "STRIMS_SIM_OUT")
-SIMS = {"ppspp": "ppspp", "strims-ppspp:sim": "ppspp", "strims-sim": "strims-sim",
-        "strims-sim:scenarios": "strims-sim"}
+SIMS = verdict.SIM_NAMES
 # The sims' tables that are a job's ids and times, not readings: kept as
 # they are where -1 elsewhere is no reading.
 ID_COLS = {"k", "src", "sec", "bin", "t_ms", "t_us", "node", "viewer", "seq", "stream"}
@@ -1764,11 +1765,25 @@ TABLE_DOCS = {
         "jobs USING (k, src); viewer_seconds, reads (t_ms // 1000) and stalls ON (k, src, viewer) with start <= "
         "sec < stop",
         "Each viewer's phases (analyze.viewer_phases), the one source of a viewer-second's phase: [start, stop) "
-        "seconds in phase, from its join's second (0 for a viewer there from the start) to its departure's, "
-        "within the verdict's seconds. A viewer is in startup until its own startup ends (analyze.presence: the "
-        "run's startup for one there from the start, its first frame's second plus JOIN_GRACE_SECS for one that "
-        "arrived later), then in its second's verdict_seconds phase. Every viewer's, the hostile too "
-        "(viewers.hostile)."),
+        "seconds in phase, the seconds it was there any part of, within the verdict's seconds: each incarnation's "
+        "from its join's second (0 for a viewer there from the start) to its departure's, leave's or crash's. A "
+        "second's phase is the window that holds it of the run's and the viewer's own joins' (phase_windows; the "
+        "verdict's rule, analyze.timeline): startup while its own join's window holds it (each incarnation's), "
+        "else the run's verdict_seconds phase. Every viewer's, the hostile too (viewers.hostile)."),
+    "phase_windows": (
+        "view", "a job's phase window", "k, anchor_s, kind", "jobs USING (k, src); viewer_phases ON (k, src) with "
+        "phase and anchor_s <= viewer_phases.start + 0.5 < stop_s",
+        "The windows the verdict's phases come from (analyze.timeline), unresolved, to explain a phase: one for "
+        "the stream's start (kind start, the run's startup), then one for each event of a kind that anchors a "
+        "phase (event_kinds' scenario kinds; the vocabulary's phase, until and horizon_s), at t > 0: kind, node "
+        "(NULL for the start's), viewer (a join's viewer, whose own startup it is; NULL for a window of the run's), "
+        "phase (a level's, uplink_rate's or rate_limit's, after_down or after_up by its value against the node's "
+        "previous level), anchor_s (its event's time), end_s (a span's end: its until event's time, NULL without "
+        "one or for a step), stop_s (when it stops holding seconds: anchor_s, or end_s or the run's end for a "
+        "span, plus horizon_s) and horizon_s. A second k is in a window when anchor_s <= k + 0.5 < stop_s; of "
+        "those holding it, the one whose latest event (end_s once it came, else anchor_s) is latest wins, a tie "
+        "to the kind the vocabulary lists first. A series without events implies its windows: the viewers' "
+        "joins and departures from their stays, the seed's uplink levels from seed_up."),
     "catalog_info": (
         "view", "a setting", "key", "",
         "The catalog's versions (catalog_version, verdict_version: the current verdicts', analyze's "
@@ -1853,7 +1868,14 @@ VERDICT_DOCS = {
     "feasible": "whether the seed's uplink could carry the stream ('True', 'False', 'step')",
     "unhealthy": "the share of unhealthy seconds", "lag_p50": "the median of the lag q0.9 series",
     "lag_max": "the largest lag q0.9", "collapsed": "an unhealthy spell of COLLAPSED_SECS lasting past startup_s",
-    "startup_s": "the seconds a collapse must last past: STARTUP_SECS, or 0 when every honest viewer arrived later",
+    "startup_s": "the seconds a collapse must last past: those the run's startup holds from the stream's start "
+                 "(STARTUP_SECS, fewer when another phase window takes over sooner)",
+    "viewer": "the viewer (viewers.viewer); in phase_windows a join's, whose own startup it is, NULL for the run's",
+    "node": "the node of the window's event (events.node, strims-sim's host); NULL for the start's",
+    "anchor_s": "when the window's event came, s from the stream's start",
+    "end_s": "when a span's until event came, s from the stream's start; NULL for a step, a level or no end",
+    "stop_s": "when the window stops holding seconds: its anchor (a span's end, or the run's end) plus horizon_s",
+    "horizon_s": "how long the window lasts past its anchor, or past its span's end (the vocabulary's horizon_s)",
     "phase": f"{either(verdict_phases())}: the vocabulary's phases, as the table's description gives them",
     "healthy": "no trigger held this second", "trees_bad": "the smoothed hit share under TREES_SHARE",
     "deliv_bad": "the delivery share under DELIVERY_SHARE", "lag_high": "the lag q0.9 past LAG_HIGH_MS",
@@ -2052,13 +2074,16 @@ def needed(text, have):
 
 
 def scoring_consts(suite=None):
-    """scoring.sql's @{name} constants: suite.py's and analyze.py's, and
-    t975_at's expansion (t975_expansion)."""
+    """scoring.sql's @{name} constants: suite.py's and analyze.py's (the
+    vocabulary's phases among them, the verdict's), and t975_at's
+    expansion (t975_expansion)."""
     s, a = suite or suite_module(), verdict
     z, g = t975_expansion()
     return {"guard_ratio": s.GUARD_RATIO, "lag_ceiling": a.DELIVERY_TARGET_MS,
             "delay_target_ms": a.DELIVERY_TARGET_MS, "delay_max_ms": a.DELIVERY_MAX_MS,
             "t975_df": T975_DF, "t975_z": double(z),
+            # The vocabulary's phases, in its order (dynamics_phases').
+            "phases": "[" + ", ".join(q(p) for p in a.VOCAB["phases"]) + "]",
             **{f"t975_g{i}": double(c) for i, c in enumerate(g, 1)}}
 
 

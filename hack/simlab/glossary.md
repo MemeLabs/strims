@@ -39,18 +39,25 @@ them, so a change here changes that prompt too.
   trees fail (`trees_bad`), too little is delivered (`deliv_bad`), or the
   honest viewers' q0.9 lag is high or rising (`lag_high`, `lag_rise`). A
   run **collapsed** when 8 seconds in a row are unhealthy past its
-  startup (`verdicts.startup_s`, 15 s by default): unhealthy seconds
-  during startup never count toward a collapse, which is the **startup
-  exclusion**. A **ramp** is a collapse whose honest q0.9 lag never
+  startup (`verdicts.startup_s`: 25 s, less when a scenario event comes
+  sooner): unhealthy seconds during startup never count toward a
+  collapse, which is the **startup exclusion**. A **ramp** is a collapse whose honest q0.9 lag never
   passed 4250 ms (viewers some seconds behind who catch up); it still
   counts as a collapse.
-- **Phases.** Each second's phase (`verdict_seconds.phase`): `startup`,
-  `after_down` and `after_up` (the 60 s after a step down or up in the
-  seed's uplink), else `steady`. A viewer that arrived after the start is
-  in its own startup until its first frame plus 10 s. Read a
-  viewer-second's phase from `viewer_phases` (each viewer's [start, stop)
-  spans: its own startup, then the second's phase), not from
-  `verdict_seconds.phase`, which is the run's.
+- **Phases.** What each second is, from the run's scenario events by one
+  rule (`describe phases` gives it, the phases and their anchors):
+  `startup` (the run's first 25 s, and a viewer's first 20 s after each
+  of its joins), `after_down` and `after_up` (an uplink's rate or cap
+  stepping down or up, competing uploads), `after_departure` (a viewer
+  departing or leaving, a crash), `after_disruption` (a latency step, a
+  partition, the seed's new epoch), else `steady`. Each event opens a
+  window for its kind's horizon (a span to its end, then the horizon);
+  the latest event's window holds a second. Read a viewer-second's phase
+  from `viewer_phases` (each viewer's [start, stop) spans: its own
+  startups among them), not from `verdict_seconds.phase`, which is the
+  run's; `phase_windows` explains either. A viewer doesn't count in the
+  verdict for 20 s after each of its joins, whatever phase those seconds
+  are.
 - **Lag and playout delays.** A viewer's lag is from the seed's publish
   to the viewer holding the data. The latency budget leaves delivery
   1250 ms (the target: 2 s glass to glass) and 4250 ms (the most: 5 s).
@@ -81,12 +88,16 @@ them, so a change here changes that prompt too.
   lag p99 can be the startup of an adversarial cell (every viewer joins
   while the trees form, which no real audience does at once) or spikes in
   steady state that would rebuffer a player. `dynamics(exp)` gives each
-  arm and cell's lag p99 by phase and `spike_s_<D>`, the seconds per run
-  past startup in which an honest viewer lags past D. Weigh steady state
-  and joins into a running swarm over startup. `lag_since(exp)` gives the
-  honest viewers' lag quantiles against the seconds since each scenario
-  event (an uplink step, a departure, a viewer's own join), from 10 s
-  before it to 120 s after: how long a disturbance lasts.
+  arm and cell's lag p99 in startup, steady and after events (every
+  `after_*` phase pooled) and `spike_s_<D>`, the seconds per run past
+  startup in which an honest viewer lags past D; `dynamics_phases(exp)`
+  gives each phase's lag quantiles and share apart. Take startup and
+  steady numbers from these, never from a rule of your own. Weigh steady
+  state and joins into a running swarm over startup. `lag_since(exp)`
+  gives the honest viewers' lag quantiles against the seconds since each
+  phase window's anchor (an uplink step, a departure, a viewer's own
+  join, the stream's start) and each span's end, from 10 s before to 120
+  s after: how long a disturbance lasts.
 - **Overhead.** What the swarm writes besides the stream: `bins`'
   `seed_<kind>_bytes` and `viewer_<kind>_bytes` by message kind (data,
   have, request, integrity, state, ack, announce, ping, header), per

@@ -39,7 +39,9 @@
               "startup",
               "after_down",
               "after_up",
-              "steady"
+              "steady",
+              "after_departure",
+              "after_disruption"
             ]
           }
         },

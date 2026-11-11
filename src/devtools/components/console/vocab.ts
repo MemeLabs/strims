@@ -7,23 +7,33 @@
 export const PHASES = [
   {
     name: "startup",
-    description: "The run's startup: its first `STARTUP_SECS` seconds, none when every viewer arrived later.",
+    description: "Trees forming: the run's first seconds (`start`'s horizon, `STARTUP_SECS`), and a viewer's after each of its joins (`join`'s), each incarnation's. A viewer doesn't count in the verdict's measures for `join`'s horizon after each of its joins, whichever phase holds those seconds.",
     colour: "#2a78d6",
   },
   {
     name: "after_down",
-    description: "Within `STEP_SECS` of the seed's latest uplink step, a step down.",
+    description: "After a host's upload fell: its uplink's rate or its cap stepped down (`uplink_rate`, `rate_limit`, against its previous level), other software's uploads shared it (`competing_start`, to its stop), or the busiest relay's slowed (`incident`).",
     colour: "#eb6834",
   },
   {
     name: "after_up",
-    description: "Within `STEP_SECS` of the seed's latest uplink step, a step up.",
+    description: "After a host's uplink's rate or its cap stepped up (`uplink_rate`, `rate_limit`).",
     colour: "#199e70",
   },
   {
     name: "steady",
-    description: "Every other second of the verdict's.",
+    description: "Every other second of the verdict's: no window holds it.",
     colour: "#c3c2b7",
+  },
+  {
+    name: "after_departure",
+    description: "After a peer went: a viewer departed (`depart`) or left a while (`leave`, to its successor's join), a host crashed (`crash`, to its restart), or the busiest relay died (`incident`).",
+    colour: "#d55181",
+  },
+  {
+    name: "after_disruption",
+    description: "After the swarm's links or stream were disturbed: a latency step (`latency`), a partition (`partition`, to its repair), a hold (`hold`, to its release), a host's readers paused (`pause_reading`, to their resume), the seed's new epoch (`reset_writer`), a new link (`connect`), the seed's channels reopened (`reconnect`).",
+    colour: "#008300",
   },
   {
     name: "tail",
@@ -83,6 +93,17 @@ export const REASONS = [
 /** Every kind of event the `events` tables and `derived_events` hold, retired ones too. */
 export const KINDS = [
   {
+    id: "join",
+    class: "scenario",
+    sims: ["strims-sim", "ppspp"],
+    description: "A viewer incarnation starts reading the stream.",
+    node: "the viewer",
+    notes: { "strims-sim": "Each viewer incarnation's (`Join`'s start), a restart's too.", "ppspp": "Each viewer's, at the start or its arrival, and on taking a place again (`Churn`)." },
+    phase: "startup",
+    scope: "viewer",
+    horizon_s: 20,
+  },
+  {
     id: "partition",
     class: "scenario",
     sims: ["strims-sim"],
@@ -90,6 +111,9 @@ export const KINDS = [
     node: "the first group's first host",
     peer: "the second group's first host",
     value: "the groups' sizes' product",
+    phase: "after_disruption",
+    until: "repair",
+    horizon_s: 30,
   },
   {
     id: "repair",
@@ -108,6 +132,9 @@ export const KINDS = [
     node: "the first group's first host",
     peer: "the second group's first host",
     value: "the groups' sizes' product",
+    phase: "after_disruption",
+    until: "release",
+    horizon_s: 30,
   },
   {
     id: "release",
@@ -124,6 +151,9 @@ export const KINDS = [
     sims: ["strims-sim"],
     description: "The host's software is killed, after partitioning it from every other host (`Fault::Crash`). The FINs of the sockets the crash drops are lost, as in a power loss; peers notice by timeouts, or by an RST once the host answers again.",
     node: "the host",
+    phase: "after_departure",
+    until: "restart",
+    horizon_s: 20,
   },
   {
     id: "restart",
@@ -142,6 +172,8 @@ export const KINDS = [
     value: "the one-way latency",
     unit: "ms",
     notes: { "strims-sim": "Between two groups of hosts (`Fault::Latency`), `node` and `peer` the groups' first hosts. In WAN mode it replaces the paths' base latency, and jitter, loss and bandwidth still apply.", "ppspp": "A seed step (`SeedStep::Latency`): every link to and from the seed, `node` the seed and `peer` -1." },
+    phase: "after_disruption",
+    horizon_s: 15,
   },
   {
     id: "pause_reading",
@@ -149,6 +181,9 @@ export const KINDS = [
     sims: ["strims-sim"],
     description: "The host's swarm readers stop reading (`Fault::PauseReading`).",
     node: "the host",
+    phase: "after_disruption",
+    until: "resume_reading",
+    horizon_s: 30,
   },
   {
     id: "resume_reading",
@@ -163,6 +198,8 @@ export const KINDS = [
     sims: ["strims-sim"],
     description: "A swarm's seed starts a new epoch (`Fault::ResetWriter`, `SwarmWriter::reset`).",
     node: "the swarm's number, not a host",
+    phase: "after_disruption",
+    horizon_s: 15,
   },
   {
     id: "rate_limit",
@@ -172,6 +209,9 @@ export const KINDS = [
     node: "the host",
     value: "the cap",
     unit: "bytes/s",
+    phase: { "down": "after_down", "up": "after_up" },
+    level: true,
+    horizon_s: 60,
   },
   {
     id: "connect",
@@ -181,6 +221,8 @@ export const KINDS = [
     node: "the host that links",
     peer: "the host it links to",
     value: "the network's number",
+    phase: "after_disruption",
+    horizon_s: 30,
   },
   {
     id: "depart",
@@ -192,6 +234,8 @@ export const KINDS = [
     detail: "how it left",
     details: ["graceful", "abrupt"],
     notes: { "strims-sim": "`Fault::Depart`. An abrupt departure is a crash that leaves the host cut off and stopped, and counts no restart.", "ppspp": "`Depart`. Older runs hold `value` 0 for an abrupt one too: `detail` says how. Gracefully, its neighbours see its links close and drop them, and each viewer among them asks for another at once (`relink`); abruptly, it goes silent, and its neighbours' links to it close at their read timeouts." },
+    phase: "after_departure",
+    horizon_s: 45,
   },
   {
     id: "uplink_rate",
@@ -202,6 +246,9 @@ export const KINDS = [
     value: "the rate",
     unit: "bytes/s",
     notes: { "strims-sim": "The upload available on the host's site uplink, in WAN mode (`HostSpec::up_steps`), as when other traffic takes part of it for a while: the starting rate for the first swarm's seed and for each host that steps, if it has a site. A software cap is `rate_limit`'s, competing uploads `competing_start`'s.", "ppspp": "The seed's uplink: its starting rate, then each seed step (`SeedStep::Uplink`); `node` the seed. An incident's slowed relay is `incident`'s." },
+    phase: { "down": "after_down", "up": "after_up" },
+    level: true,
+    horizon_s: 60,
   },
   {
     id: "competing_start",
@@ -211,6 +258,9 @@ export const KINDS = [
     node: "the host",
     value: "the competing flow's round trip",
     unit: "ms",
+    phase: "after_down",
+    until: "competing_stop",
+    horizon_s: 20,
   },
   {
     id: "competing_stop",
@@ -227,20 +277,14 @@ export const KINDS = [
     node: "the host",
   },
   {
-    id: "join",
-    class: "scenario",
-    sims: ["strims-sim", "ppspp"],
-    description: "A viewer incarnation starts reading the stream.",
-    node: "the viewer",
-    notes: { "strims-sim": "Each viewer incarnation's (`Join`'s start), a restart's too.", "ppspp": "Each viewer's, at the start or its arrival, and on taking a place again (`Churn`)." },
-    scope: "viewer",
-  },
-  {
     id: "leave",
     class: "scenario",
     sims: ["ppspp"],
     description: "A viewer leaves mid-stream (`Churn`): its neighbours see its links close, as a closed tab's, and a new viewer with nothing takes its place on the same links a while later (its `join`).",
     node: "the viewer",
+    phase: "after_departure",
+    until: "join",
+    horizon_s: 20,
   },
   {
     id: "reconnect",
@@ -248,6 +292,8 @@ export const KINDS = [
     sims: ["ppspp"],
     description: "The seed's channels close and open again on both ends, as after a dropped and redialed link (`SeedStep::Reconnect`).",
     node: "the seed",
+    phase: "after_disruption",
+    horizon_s: 30,
   },
   {
     id: "incident",
@@ -259,6 +305,8 @@ export const KINDS = [
     unit: "bytes/s",
     detail: "what happened",
     details: ["dies", "slows"],
+    phase: { "dies": "after_departure", "slows": "after_down" },
+    horizon_s: 60,
   },
   {
     id: "first_read",
@@ -421,6 +469,8 @@ export const KINDS = [
     id: "start",
     class: "derived",
     description: "The stream's start.",
+    phase: "startup",
+    horizon_s: 25,
   },
   {
     id: "seed_down",
@@ -516,6 +566,7 @@ export const ALIGNS = [
   "onset",
   "recovered",
   "collapse",
+  "join",
   "partition",
   "repair",
   "hold",
@@ -533,7 +584,6 @@ export const ALIGNS = [
   "competing_start",
   "competing_stop",
   "arrive",
-  "join",
   "leave",
   "reconnect",
   "incident",
