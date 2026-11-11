@@ -461,6 +461,17 @@ module.exports = (env, argv) => {
                 },
               },
               {
+                // The sim-results console's API (node hack/console/server.ts).
+                context: "/console",
+                target: "http://localhost:8086",
+                // As /api/v1's: a fetch's streamed output ends with the browser's response.
+                onProxyReq: (proxyReq, req, res) => {
+                  res.on("close", () => {
+                    if (!res.writableFinished) proxyReq.destroy();
+                  });
+                },
+              },
+              {
                 // A local native node's WS listener, which a node in the page
                 // dials as wss://<LAN IP>:8080/<hex key>.
                 context: (pathname) => /^\/[0-9a-f]{64}$/.test(pathname),
