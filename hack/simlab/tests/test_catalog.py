@@ -16,6 +16,10 @@ simlab.verdict's derive pool:
                what the S3 ledger's new lines cost; its refusals
   Tiers        an experiment's tiers from its cells' names, tests and env,
                its index recording none
+  Tables       a sim's tables the catalog has no code for (spec_requests,
+               parks, arrivals), folded by the store, as they are; forecast
+               in either schema (tail_ms and extrapolated, or first_sight
+               and lazy), the other's columns NULL
 
   python3 hack/simlab/tests/test_catalog.py
 """
@@ -289,6 +293,60 @@ class Tiers(Fixture):
         rest = [x for x in suite.TIERS[t] if x["name"] != c["name"]][:2]
         self.experiment("sx0004", [c, *rest])
         self.assertEqual(self.tiers()["sx0004"], [t])
+
+
+class Tables(Fixture):
+    # The two forecast schemas: the HAVE-era one (first_sight, lazy) and
+    # its successor (tail_ms, extrapolated); held_ms empty when never held.
+    COMMON = [("t_ms", "BIGINT"), ("node", "BIGINT"), ("viewer", "BIGINT"), ("peer", "BIGINT"), ("stream", "BIGINT"),
+              ("seq", "BIGINT"), ("sample_ms", "BIGINT"), ("mean_ms", "BIGINT"), ("horizon_ms", "BIGINT")]
+    FORECASTS = {
+        "suite/wt/tail": (COMMON + [("tail_ms", "BIGINT"), ("extrapolated", "BOOLEAN"), ("held_ms", "BIGINT")],
+                          [(1000, 1, 0, 2, 0, 5, 60, 50, 80, 120, True, None), (1100, 1, 0, 2, 0, 6, 40, 50, 80, 120,
+                                                                              False, 1150)]),
+        "suite/wt/lazy": (COMMON + [("first_sight", "BOOLEAN"), ("lazy", "BOOLEAN"), ("held_ms", "BIGINT")],
+                          [(1000, 1, 0, 2, 0, 5, 60, 50, 80, False, True, -1)]),
+    }
+
+    def fold(self, src, forecast):
+        job = (src, f"k-{src.rsplit('/', 1)[1]}", *golden_cli.JOBS[0][2:])
+        d = self.root / "jobs-tables" / src.replace("/", "~")
+        meta = golden_cli.job_dir(d, job)
+        golden_cli.write_table(d, "forecast", *forecast)
+        golden_cli.write_table(d, "spec_requests", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
+                                                    ("held_ms", "BIGINT"), ("held_by_p90", "BOOLEAN")],
+                               [(900, 1, 5, None, None), (950, 1, 6, 1150, True)])
+        golden_cli.write_table(d, "parks", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
+                                            ("outcome", "VARCHAR")], [(800, 1, 5, "sent")])
+        golden_cli.write_table(d, "arrivals", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
+                                               ("how", "VARCHAR"), ("peer", "BIGINT")], [(1150, 1, 6, "answer", 2)])
+        db = self.root / "jobs-tables" / f"{src.replace('/', '~')}.duckdb"
+        store_host.fold(db, [meta], src)
+        store_host.export(db, store_host.cache_root() / "cache" / src)
+        return meta["k"]
+
+    def test_tables_without_code_and_both_forecasts(self):
+        keys = {src: self.fold(src, f) for src, f in self.FORECASTS.items()}
+        got = self.index()[0]
+        self.assertEqual(got.failed, {})
+        for t in ("spec_requests", "parks", "arrivals"):
+            rows = catalog.lake(f"SELECT k FROM {t} WHERE k IN ({', '.join(catalog.q(k) for k in keys.values())});")
+            self.assertEqual(len(rows), len(keys) * (2 if t == "spec_requests" else 1), t)
+        held = catalog.lake("SELECT seq, held_ms, held_by_p90 FROM spec_requests WHERE k = "
+                            f"{catalog.q(keys['suite/wt/tail'])} ORDER BY seq;")
+        self.assertEqual(held, [{"seq": 5, "held_ms": None, "held_by_p90": None},
+                                {"seq": 6, "held_ms": 1150, "held_by_p90": True}])
+        f = {(r["k"], r["seq"]): r for r in catalog.lake(
+            "SELECT k, seq, tail_ms, extrapolated, first_sight, lazy, held_ms FROM forecast WHERE k IN "
+            f"({', '.join(catalog.q(k) for k in keys.values())});")}
+        tail, lazy = keys["suite/wt/tail"], keys["suite/wt/lazy"]
+        self.assertEqual(f[(tail, 5)], {"k": tail, "seq": 5, "tail_ms": 120, "extrapolated": True,
+                                        "first_sight": None, "lazy": None, "held_ms": None})
+        self.assertEqual(f[(tail, 6)]["held_ms"], 1150)
+        self.assertEqual(f[(lazy, 5)], {"k": lazy, "seq": 5, "tail_ms": None, "extrapolated": None,
+                                        "first_sight": False, "lazy": True, "held_ms": None})
+        names = {r["name"] for r in catalog.lake("SELECT name FROM table_catalog;")}
+        self.assertTrue({"spec_requests", "parks", "arrivals"} <= names)
 
 
 if __name__ == "__main__":

@@ -136,10 +136,21 @@ class Execute(Scratch):
 
 class FoldExport(Scratch):
     def jobs(self):
-        """golden_cli's jobs, written as the sims write them: the ppspp
-        sim's, then strims-sim's (whose viewers add host and name), then a
-        job folded again."""
+        """golden_cli's jobs, written as the sims write them, with the
+        speculative requests', parks' and arrivals' tables golden_cli's
+        don't write: the ppspp sim's, then strims-sim's (whose viewers add
+        host and name), then a job folded again."""
         jobs = [golden_cli.job_dir(self.dir / "jobs" / f"{i:02d}", j) for i, j in enumerate(golden_cli.JOBS)]
+        for n, j in enumerate(jobs):
+            d = Path(j["dir"])
+            golden_cli.write_table(d, "spec_requests", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
+                                                        ("held_ms", "BIGINT"), ("held_by_p90", "BOOLEAN")],
+                                   [(900 + n, 1, 5, None, None), (950, 2, 6, 1150 + n, True)])
+            golden_cli.write_table(d, "parks", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
+                                                ("outcome", "VARCHAR")], [(800 + n, 1, 5, "sent")])
+            golden_cli.write_table(d, "arrivals", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
+                                                   ("how", "VARCHAR"), ("peer", "BIGINT")],
+                                   [(1150 + n, 1, 6, "answer", 2)])
         pp = [j for j in jobs if "ppspp" in j["sim"]]
         ss = [j for j in jobs if j["sim"].startswith("strims-sim")]
         self.assertTrue(pp and ss)
