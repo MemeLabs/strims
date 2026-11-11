@@ -229,7 +229,7 @@ class ArmLabels(unittest.TestCase):
         for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
                   mock.patch.object(suite, "farm_root", lambda: root),
                   mock.patch.object(simdb, "pull_sources", lambda s, reads=False: []),
-                  mock.patch.object(simdb, "rows", lambda pairs, series=False: {(s, k): {"key": k} for s, k in pairs}),
+                  mock.patch.object(suite, "index_catalog", lambda: None),
                   mock.patch.object(sys, "stderr", io.StringIO()),
                   mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
                                   clear=True)):
@@ -269,7 +269,7 @@ class ArmLabels(unittest.TestCase):
     def farm_rows(self, run):
         """{arm: {(cell, seed): key}}"""
         rows = suite.farm_rows(run, LABEL_CELLS, LABEL_INDEXES[run].get("knob"))
-        return {arm: {at: r["key"] for at, r in rs.items()} for arm, rs in rows.items()}
+        return {arm: {at: k for at, (k, _) in rs.items()} for arm, rs in rows.items()}
 
     def score(self, arg, knob=None):
         """`score`'s rows of RUN:ARM `arg`, {(cell, seed): key}."""
@@ -277,7 +277,7 @@ class ArmLabels(unittest.TestCase):
         args = argparse.Namespace(a=arg, b=arg, knob=knob, only=None, rank="lag", all=False)
         with mock.patch.object(suite, "scorecard", lambda cells, a_rows, b_rows, *_: got.update(a_rows)):
             suite.score(args, LABEL_CELLS)
-        return {at: r["key"] for at, r in got.items()}
+        return {at: k for at, (k, _) in got.items()}
 
     def want(self, run, pick):
         """{(cell, seed): key} of `run`'s jobs `pick(arm, value)` takes."""
@@ -334,6 +334,7 @@ class ArmLabels(unittest.TestCase):
                 mock.patch.object(suite, "peak_gib", lambda r: {"star-3-5": 0.5}), \
                 mock.patch.object(suite, "WORK", self.root / "work"), \
                 mock.patch.object(suite, "print_arm_score", lambda *a: None), \
+                mock.patch.object(suite, "arm_score", lambda *a: None), \
                 mock.patch.object(suite, "scorecard", lambda *a, **kw: None):
             suite.farm(args, cells)
         [path] = (self.root / "target" / "sim-suite" / "farm-runs" / "pending").glob("*.json")

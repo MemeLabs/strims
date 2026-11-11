@@ -78,6 +78,22 @@ metric, `event_kinds` each event):
   verdicts, verdict_seconds, episodes, derived_events
                     analyze.py's verdicts, of the current verdict_version
                     (catalog_info); <table>_all holds every version kept
+  metric_defs, job_metrics, job_runs, t975
+                    suite.py's METRICS (each one's SQL over a job's row,
+                    verdict and run), every job's value of each, each
+                    source's copy of a job with its own host's numbers, and
+                    the t table the intervals use
+  scoring.sql's macros
+                    suite.py's scoring (scoring_sql), one implementation:
+                    effects, collapse_test, traces, arm_cells and
+                    arm_score score one experiment's arm against
+                    another's, cell by cell, as `suite.py score` prints
+                    them (the *_of macros take any two lists of runs);
+                    structural(exp) gives the cells every arm collapsed on
+                    at every seed, dynamics(exp) each arm and cell's lag by
+                    phase, spikes past the playout delays, stalls and
+                    spells. table_catalog describes each (kind 'macro' or
+                    'table macro', keys its parameters)
 
 Every table carries a job's key `k`, and the result tables and
 experiment_jobs its source `src` too: a job's tables come from one cache
@@ -97,6 +113,13 @@ to verdict_seconds USING (k, src, sec).
   FROM experiment_jobs e JOIN verdicts v USING (k, src)
   WHERE e.exp_id = 'sa0755' GROUP BY ALL ORDER BY ALL
 
+  SELECT cell, metric, a_median, b_median, effect, lo, hi, mark
+  FROM effects('s8ed1e', 'p4tf', 's8ed1e', 'vouch') WHERE mark <> ' ' ORDER BY cell_ord, ord
+
+`index` makes the scoring objects from its checkout's suite.py and
+scoring.sql, again whenever either changes (catalog_info's
+scoring_version); suite.py loads its own into each session, TEMP.
+
 The physical tables are in schema `raw`, a source's rows each under its
 `src`; the views above read them through `jobs`.
 """
@@ -105,7 +128,9 @@ import argparse
 import collections
 import contextlib
 import datetime
+import hashlib
 import importlib.util
+import inspect
 import json
 import multiprocessing
 import os
@@ -594,39 +619,36 @@ def run_metric_docs():
 
 
 def suite_metrics():
-    """suite.py's METRICS: (name, fields read, better, kind, tie, source)."""
+    """suite.py's METRICS: (name, fields read, better, kind, tie, its SQL,
+    the comment above it)."""
     suite = suite_module()
     src = (ROOT / "hack" / "sim-suite" / "suite.py").read_text().splitlines()
     out = []
-    for name, _, better, kind, tie in suite.METRICS:
+    for name, sql, better, kind, tie in suite.METRICS:
         line = next((i for i, s in enumerate(src) if re.match(rf'^\s*\("{re.escape(name)}",', s)), None)
-        text, comment = "", []
-        if line is not None:
-            j = line
-            text = src[j].strip()
-            while not text.rstrip().endswith("),") and j + 1 < len(src):
-                j += 1
-                text += " " + src[j].strip()
-            k = line - 1
-            while k >= 0 and src[k].strip().startswith("#"):
-                comment.insert(0, src[k].strip().lstrip("# "))
-                k -= 1
-        fields = sorted(set(re.findall(r'r(?:\.get\(|\[)"([a-z0-9_]+)"', text))
-                        | {f for g in re.findall(r'per_useful\(([^)]*)\)', text) for f in re.findall(r'"([a-z0-9_]+)"', g)}
-                        | set(re.findall(r'metric\("([a-z0-9_]+)"\)', text)))
-        out.append((name, fields, better, kind, tie, text, " ".join(comment) or None))
+        comment = []
+        k = (line or 0) - 1
+        while line is not None and k >= 0 and src[k].strip().startswith("#"):
+            comment.insert(0, src[k].strip().lstrip("# "))
+            k -= 1
+        fields = sorted({f for _, f in FIELD.findall(sql)})
+        out.append((name, fields, better, kind, tie, sql, " ".join(comment) or None))
     return out
 
 
-GUARDS = {
-    "lag_p99_ms": "breaks arm_score: ratio CI low past GUARD_RATIO in a cell the base never collapsed",
-    "lag_p99_ms_weak": "breaks arm_score: ratio CI low past GUARD_RATIO in a cell the base never collapsed",
-    "join_p90_ms": "breaks arm_score: ratio CI low past GUARD_RATIO in a cell the base never collapsed",
-    "caught_up_p90_ms": "breaks arm_score: ratio CI low past GUARD_RATIO in a cell the base never collapsed",
-    "delivery": "breaks arm_score: marked worse in a cell",
-    "defector_gain": "breaks arm_score: ratio CI high under 1 in a cell",
-    "collapsed": "breaks arm_score: more collapsed runs with Fisher p < 0.05 in a cell",
-}
+# How suite.py's arm_score breaks an arm on a metric (its GUARDRAILS).
+GUARD_TEXT = {"lo": "breaks arm_score: ratio CI low past GUARD_RATIO in a cell the base never collapsed",
+              "worse": "breaks arm_score: marked worse in a cell",
+              "hi": "breaks arm_score: ratio CI high under 1 in a cell",
+              "collapsed": "breaks arm_score: more collapsed runs with Fisher p < 0.05 in a cell"}
+# A metric's SQL that reads one field, or the first of several it has.
+PLAIN = re.compile(r"^(?:coalesce\()?[rvj]\.\w+(?:, [rvj]\.\w+)*\)?$")
+
+
+def guards():
+    """GUARD_TEXT by metric, from suite.py's GUARDRAILS."""
+    return {**{m: GUARD_TEXT[g] for m, g in suite_module().GUARDRAILS.items()}, "collapsed": GUARD_TEXT["collapsed"]}
+
 
 UNITS = ((r"_ms(_|$)", "ms"), (r"_us$", "us"), (r"(_s|_secs)(_|$)", "s"), (r"_per_min$|/min$", "per minute"),
          (r"bytes|_bps$|_wire$|^up_|^down_", "bytes"), (r"share|_rate$|^delivery", "fraction"),
@@ -826,8 +848,19 @@ def index(workers=None, quiet=False, wait=True):
         need_verdicts = sorted(s for s in cache if done_srcs.get(s, {}).get("verdicts") != version)
         runs_redo = sorted({s for s, t in [*changed, *new] if t == "runs"})
         if not (gone or changed or new or ins_changed or need_verdicts) and info.get("verdict_version") == version:
-            say(f"the catalog is up to date ({time.monotonic() - t0:.1f} s)")
-            return {"changed": False}
+            cols = lake_columns()
+            scoring, sv = lake_scoring(cols)
+            if not sv or info.get("scoring_version") == sv:
+                say(f"the catalog is up to date ({time.monotonic() - t0:.1f} s)")
+                return {"changed": False}
+            # Only the scoring objects changed: they, their docs and their
+            # version, alone.
+            with scratch() as tmp:
+                lake("\n".join(["BEGIN;", *scoring, "DELETE FROM raw.info WHERE key = 'scoring_version';",
+                                 f"INSERT INTO raw.info VALUES ('scoring_version', {q(sv)});",
+                                 *catalogs_sql(cols, tmp), "COMMIT;"]), write=True, out=None)
+            say(f"index: the scoring macros made again ({time.monotonic() - t0:.1f} s)")
+            return {"changed": True, "scoring": True}
         say(f"index: {len(new)} new files, {len(changed)} changed, {len(gone)} gone; "
             f"{len(ins_changed)} metadata files changed; verdicts for {len(need_verdicts)} sources")
         failed = derive_all(need_verdicts, workers or max(1, min(8, (os.cpu_count() or 2) // 2)), say)
@@ -1443,10 +1476,26 @@ def main_sql(cols, version, tmp, ins, parsed):
             "analyze_verdict_version": sm.analyze().VERDICT_VERSION, "duckdb_version": sm.DUCKDB_VERSION,
             "ducklake_version": EXTENSIONS["ducklake"], "sqlite_version": EXTENSIONS["sqlite_scanner"],
             "indexed_at": iso(time.time())}
+    scoring, sv = lake_scoring(cols)
+    if sv:
+        info["scoring_version"] = sv
     out.append("DELETE FROM raw.info;")
     out.append("INSERT INTO raw.info VALUES " + ", ".join(f"({q(k)}, {q(v)})" for k, v in info.items()) + ";")
+    out += scoring
     out += catalogs_sql(cols, tmp)
     return out
+
+
+def lake_scoring(cols):
+    """The catalog's scoring objects (scoring_sql, from this checkout's
+    suite.py) over the raw tables' columns `cols`, and their
+    scoring_version; none, with a warning, when suite.py doesn't load."""
+    try:
+        sv = scoring_version()
+        return [scoring_sql(scoring_cols({t: cols.get(t, {}) for t in ("rows", "verdicts")}))], sv
+    except Exception as e:
+        print(f"index: no scoring macros: suite.py's METRICS don't load ({e})", file=sys.stderr)
+        return [], None
 
 
 def commits_sql(tmp, ins, parsed):
@@ -1664,6 +1713,7 @@ def catalogs_sql(cols, tmp):
             desc += f" Normalized: {NORMALIZED[t]}"
         tables.append({"name": view, "kind": "view", "grain": grain, "keys": STANDARD_KEYS.get(t, "k"),
                        "joins": STANDARD_JOINS.get(t, "jobs USING (k)"), "description": desc})
+    tables += scoring_docs()
     tcols = {"name": "VARCHAR", "kind": "VARCHAR", "grain": "VARCHAR", "keys": "VARCHAR", "joins": "VARCHAR",
              "description": "VARCHAR"}
     out.append(f"CREATE OR REPLACE TABLE main.table_catalog AS SELECT * FROM "
@@ -1677,9 +1727,9 @@ def catalogs_sql(cols, tmp):
     names = {c for c in (n for t in cols.values() for n in t) if c not in ("k", "src")} | {m[0] for m in suite_metrics()}
     rdocs, mdocs = row_docs(names), run_metric_docs()
     metrics = suite_metrics()
-    plain = {}
+    plain, guard = {}, guards()
     for name, fields, better, kind, tie, text, _ in metrics:
-        if not any(w in text for w in ("per_useful", "share(", " / ", "depth_mean", "unhealthy,")):
+        if PLAIN.match(text):
             for f in fields:
                 plain.setdefault(f, (better, kind, tie, name))
     recs = []
@@ -1696,17 +1746,17 @@ def catalogs_sql(cols, tmp):
                      else next(iter(by.values()), None))) or rdocs.get(c)
             better, kind, tie, metric = plain.get(c, (None, None, None, None))
             recs.append({"name": c, "tbl": view, "type": cols[t][c], "unit": unit_of(c), "description": desc,
-                         "better": better, "kind": kind, "tie": tie, "guard": GUARDS.get(metric or c),
+                         "better": better, "kind": kind, "tie": tie, "guard": guard.get(metric or c),
                          "fields": None, "source": None, "metric": metric})
     for name, fields, better, kind, tie, text, comment in metrics:
         recs.append({"name": name, "tbl": "suite", "type": "DOUBLE", "unit": unit_of(name),
                      "description": comment or rdocs.get(name) or next((rdocs[f] for f in fields if f in rdocs), None),
-                     "better": better, "kind": kind, "tie": tie, "guard": GUARDS.get(name),
+                     "better": better, "kind": kind, "tie": tie, "guard": guard.get(name),
                      "fields": fields, "source": text, "metric": name})
     recs.append({"name": "collapsed", "tbl": "suite", "type": "BOOLEAN", "unit": None,
                  "description": "collapsed runs of a cell, A against B, judged by their counts' Fisher exact p "
                                 "(suite.py collapses and fisher)", "better": "lower", "kind": "count",
-                 "tie": None, "guard": GUARDS["collapsed"], "fields": ["collapsed"], "source": None,
+                 "tie": None, "guard": guard["collapsed"], "fields": ["collapsed"], "source": None,
                  "metric": "collapsed"})
     mcols = {"name": "VARCHAR", "tbl": "VARCHAR", "type": "VARCHAR", "unit": "VARCHAR", "description": "VARCHAR",
              "better": "VARCHAR", "kind": "VARCHAR", "tie": "DOUBLE", "guard": "VARCHAR", "fields": "VARCHAR[]",
@@ -1748,6 +1798,153 @@ doc AS (SELECT * FROM {read_jsonl(jsonl(tmp / 'event_kinds.jsonl', ev), ecols)})
 SELECT s.kind, s.sim, d.description, d.value_meaning, s.n, s.first_seen, s.last_seen
 FROM seen s LEFT JOIN doc d USING (kind, sim) ORDER BY s.sim, s.kind;""")
     return out
+
+
+# --- scoring ----------------------------------------------------------------------
+
+SCORING = Path(__file__).with_name("scoring.sql")
+# A metric's SQL reads a job's row (r), verdict (v) and job (j).
+FIELD = re.compile(r"\b([rvj])\.([a-z_][a-z0-9_]*)\b")
+CONST = re.compile(r"@\{([a-z_]+)\}")
+ROW_FIELD = re.compile(r"@\{r\.([a-z0-9_]+)\}")
+MACRO = re.compile(r"^CREATE OR REPLACE (MACRO|TABLE|VIEW) ([a-z_0-9]+)\s*(\([^)]*\))?", re.M)
+TEMP = re.compile(r"^CREATE OR REPLACE (MACRO|TABLE|VIEW) ", re.M)
+
+
+def scoring_consts(suite=None):
+    """scoring.sql's @{name} constants: suite.py's and analyze.py's."""
+    s, a = suite or suite_module(), simdb().analyze()
+    return {"guard_ratio": s.GUARD_RATIO, "lag_ceiling": a.DELIVERY_TARGET_MS,
+            "delay_target_ms": a.DELIVERY_TARGET_MS, "delay_max_ms": a.DELIVERY_MAX_MS,
+            "join_grace_secs": a.JOIN_GRACE_SECS}
+
+
+def getter_sql(sql, cols):
+    """A metric's SQL with each field of r, v or j that `cols` (by table
+    letter: a set of column names, or None for any) lacks read as NULL."""
+    def sub(m):
+        have = cols.get(m.group(1))
+        if have is None or m.group(2) in have:
+            return m.group(0)
+        return "(NULL::DOUBLE[])" if sql[m.end():m.end() + 1] == "[" else "NULL::DOUBLE"
+    return FIELD.sub(sub, sql)
+
+
+def scoring_sql(cols, temp=False, suite=None):
+    """The scoring objects (scoring.sql's header) as SQL: metric_defs and
+    job_metrics, from suite.py's METRICS (`suite` the module, by default
+    this checkout's), then scoring.sql's tables and macros, its constants
+    and row fields filled in. `cols` holds the columns of rows (r),
+    verdicts (v) and job_runs (j), so a field they lack reads NULL. With
+    `temp` every object is TEMP, a session's own: one whose suite.py
+    differs from the catalog's indexer's scores by its own METRICS."""
+    s = suite or suite_module()
+    defs = []
+    for i, (name, sql, better, kind, tie) in enumerate(s.METRICS, 1):
+        guard = s.GUARDRAILS.get(name)
+        order = list(s.GUARDRAILS).index(name) + 1 if guard else None
+        defs.append(f"({i}, {q(name)}, {q(sql)}, {q(better) if better else 'NULL'}, {q(kind)}, {float(tie)!r}, "
+                    f"{str(name in s.HOST_METRICS).lower()}, {str(name in s.SHOWN).lower()}, "
+                    f"{q(guard) if guard else 'NULL'}, {order if order else 'NULL'})")
+    out = ["CREATE OR REPLACE TABLE metric_defs (ord BIGINT, name VARCHAR, getter VARCHAR, better VARCHAR, "
+           "kind VARCHAR, tie DOUBLE, host BOOLEAN, shown BOOLEAN, guard VARCHAR, guard_ord BIGINT);",
+           f"INSERT INTO metric_defs VALUES {', '.join(defs)};"]
+    getters = ",\n       ".join(f"TRY_CAST(({getter_sql(sql, cols)}) AS DOUBLE) AS {ident(name)}"
+                               for name, sql, *_ in s.METRICS)
+    out.append(f"""-- Every source's copy of a job (the catalog's raw.runs): its run's own
+-- numbers, which another copy's needn't share (wall_s, rss_mb: its host's).
+CREATE OR REPLACE VIEW job_runs AS
+SELECT k, src, cell, arm, seed, trace, wall_s, rss_mb FROM raw.runs
+QUALIFY row_number() OVER (PARTITION BY k, src ORDER BY cell) = 1;
+-- The metric values (metric_defs') of the runs in `runs`, a list of
+-- {{'k', 'src'}}, one a metric a run has a value of: k, src (the run's
+-- source, the job's own, jobs.src, where NULL), metric, value. A run reads
+-- the job's row and verdict (r, v) and its own copy's numbers (j).
+CREATE OR REPLACE MACRO job_metrics_of(runs) AS TABLE
+SELECT k, src, metric, value FROM (UNPIVOT (
+    SELECT u.k, coalesce(u.src, r.src) AS src,
+       {getters}
+    FROM (SELECT DISTINCT unnest(runs, recursive := true)) u JOIN rows r ON r.k = u.k
+    LEFT JOIN verdicts v ON v.k = r.k AND v.src = r.src
+    LEFT JOIN job_runs j ON j.k = u.k AND j.src = coalesce(u.src, r.src)
+) ON COLUMNS(* EXCLUDE (k, src)) INTO NAME metric VALUE value);
+-- Every job's metric values, its own source's (jobs.src), as
+-- job_metrics_of gives them.
+CREATE OR REPLACE VIEW job_metrics AS
+SELECT k, src, metric, value FROM (UNPIVOT (
+    SELECT r.k, r.src,
+       {getters}
+    FROM rows r LEFT JOIN verdicts v USING (k, src) LEFT JOIN job_runs j USING (k, src)
+) ON COLUMNS(* EXCLUDE (k, src)) INTO NAME metric VALUE value);""")
+    consts = scoring_consts(s)
+    text = CONST.sub(lambda m: str(consts[m.group(1)]), SCORING.read_text())
+    text = ROW_FIELD.sub(lambda m: f"r.{m.group(1)}" if cols.get("r") is None or m.group(1) in cols["r"]
+                         else "NULL::DOUBLE", text)
+    out.append(text)
+    sql = "\n".join(out)
+    return TEMP.sub(lambda m: f"CREATE OR REPLACE TEMP {m.group(1)} ", sql) if temp else sql
+
+
+def scoring_version(suite=None):
+    """A hash of what scoring_sql makes: scoring.sql, METRICS and the
+    rest of suite.py's it reads, the constants and scoring_sql itself."""
+    s = suite or suite_module()
+    parts = [SCORING.read_text(), repr([s.METRICS, s.GUARDRAILS, s.HOST_METRICS, s.SHOWN, scoring_consts(s)]),
+             inspect.getsource(scoring_sql), inspect.getsource(getter_sql)]
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
+
+
+def scoring_cols(columns):
+    """scoring_sql's `cols` from `columns`, {table: its columns}."""
+    return {"r": set(columns.get("rows", ())), "v": set(columns.get("verdicts", ())), "j": None}
+
+
+def scoring_docs():
+    """table_catalog's records of scoring.sql's tables and macros, and of
+    metric_defs and job_metrics: each one's comment."""
+    recs = [{"name": "metric_defs", "kind": "table", "grain": "a suite.py metric", "keys": "name",
+             "joins": "job_metrics ON job_metrics.metric = metric_defs.name",
+             "description": "suite.py's METRICS, as the scoring macros read them: ord (its place), getter (its "
+                            "value, SQL over a job's row r, verdict v and job j), better ('lower', 'higher' or "
+                            "NULL), kind ('ratio' or 'diff'), tie (the band a tie is within), host (the host's "
+                            "number, marked h and kept out of totals), shown (a scorecard shows it, ties too), "
+                            "guard ('worse', 'lo' or 'hi': how arm_score breaks an arm on it) and guard_ord."},
+            {"name": "job_metrics", "kind": "view", "grain": "a job's metric", "keys": "k, metric",
+             "joins": "jobs USING (k, src); metric_defs ON metric_defs.name = job_metrics.metric",
+             "description": "Each job's value of each metric_defs metric it has one of (value DOUBLE), its own "
+                            "source's (jobs.src): the values suite.py's scorecards pair."},
+            {"name": "job_metrics_of", "kind": "table macro", "grain": "a run's metric", "keys": "(runs)",
+             "joins": "metric_defs ON metric_defs.name = job_metrics_of.metric",
+             "description": "The metric values of the runs in `runs`, a list of {'k', 'src'}: k, src (the run's "
+                            "source, jobs.src where NULL), metric, value. A run reads its job's row and verdict and "
+                            "its own copy's host numbers (job_runs)."},
+            {"name": "job_runs", "kind": "view", "grain": "a source's copy of a job", "keys": "k, src",
+             "joins": "jobs USING (k)",
+             "description": "Every cache source's copy of a job (raw.runs): cell and arm as it stored them, seed, "
+                            "trace, and its own run's wall_s and rss_mb, which another copy of the "
+                            "job (a rerun, a verify copy) needn't share."}]
+    consts = scoring_consts()
+    text = CONST.sub(lambda m: str(consts[m.group(1)]), SCORING.read_text())
+    header = []
+    for line in text.splitlines()[3:]:
+        if not line.startswith("--"):
+            break
+        header.append(line[2:].strip())
+    for m in MACRO.finditer(text):
+        kind, name, params = m.groups()
+        before = text[:m.start()].rstrip("\n").splitlines()
+        comment = []
+        while before and before[-1].startswith("--"):
+            comment.insert(0, before.pop()[2:].strip())
+        body = text[m.end():text.find(";", m.end())]
+        kind = ("table macro" if " AS TABLE" in body[:200] else "macro") if kind == "MACRO" else kind.lower()
+        desc = " ".join(c for c in comment if c) or None
+        recs.append({"name": name, "kind": kind, "grain": None, "keys": params and re.sub(r"\s+", " ", params),
+                     "joins": None,
+                     "description": desc})
+    recs.append({"name": "scoring.sql", "kind": "macros", "grain": None, "keys": None, "joins": None,
+                 "description": " ".join(h for h in header if h)})
+    return recs
 
 
 # --- maintenance ------------------------------------------------------------------

@@ -98,6 +98,15 @@ cell's budget) are listed first. Four seeds show direction, not effect sizes:
 take what moves to the farm. Cheap cells run more seeds, and so do cells
 that tip between healthy and collapsed by seed.
 
+The sims' results catalog (hack/sim-db/catalog.py) computes every score
+here: the runs' tables go to the cache, the catalog indexes them (each
+run's row and analyze.py's verdict), and its scoring macros
+(hack/sim-db/scoring.sql, over METRICS) pair two arms' runs and give the
+effects, collapse tests, traces and guardrails this script prints. A
+session loads the macros as this script defines them, so a branch's
+METRICS score its runs. golden.py checks the macros against the Python
+scoring suite.py had at golden.py's REFERENCE.
+
 `race` finds the best combination of the working tree's flags (a knob
 naming them comma-separated, by default SIM_EXP and STRIMS_SIM_EXP): round
 0 runs a two-level fractional factorial over them (each flag's main effect
@@ -190,11 +199,11 @@ import random
 import re
 import shlex
 import shutil
-import statistics
 import subprocess
 import sys
 import threading
 import time
+import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -592,150 +601,143 @@ TIERS["sign"] = sign_tier()
 TIERS["sign-confirm"] = sign_confirm_tier()
 TIERS["sign-sens"] = sign_sens_tier()
 
-# Metrics: (name, how to read it from a row, better: "lower", "higher" or
-# None, kind: "ratio" (geometric) or "diff" (absolute), tie band).
+# Metrics: (name, its value as SQL, better: "lower", "higher" or None,
+# kind: "ratio" (geometric) or "diff" (absolute), tie band). The SQL reads
+# a job's row (r: the catalog's `rows`, a column a field), its verdict and
+# run metrics (v: `verdicts`, analyze.py's) and its host's numbers (j:
+# `jobs`); a field the catalog's rows lack reads NULL, and NULL is no
+# value (hack/sim-db/catalog.py's job_metrics, scoring.sql's macros).
 LOWER, HIGHER = "lower", "higher"
 
 
-def depth_mean(r):
-    """The mean hops to the seed over chains that reach it (ppspp sim)."""
-    hops = [(k, r.get(f"depth_{k}")) for k in range(1, 7)]
-    w = sum(v for _, v in hops if v)
-    return sum(k * v for k, v in hops if v) / w if w else None
-
-
-def derived(r):
-    """A row's verdict and run metrics (analyze.py's), from its tables'
-    series: simdb's rows, local or the farm's, carry them (`_verdict`,
-    `_metrics`)."""
-    return r.get("_verdict"), r.get("_metrics")
-
-
-def unhealthy(r):
-    v = derived(r)[0]
-    return v["unhealthy"] if v else None
-
-
-def metric(name):
-    """A run metric (analyze.run_metrics) of a row."""
-    return lambda r: (derived(r)[1] or {}).get(name)
-
-
 def share(num, den):
-    return lambda r: (r.get(num, 0) or 0) / den(r) if den(r) else None
+    """`num` over `den`, none where `den` is 0."""
+    return f"CASE WHEN {den} <> 0 THEN coalesce({num}, 0) / ({den}) END"
 
 
 def per_useful(*fields):
     """The row's `fields` summed, per byte of the stream the honest viewers
-    read (`useful_bytes`)."""
-    def get(r):
-        if not r.get("useful_bytes") or any(f not in r for f in fields):
-            return None
-        return sum(r[f] for f in fields) / r["useful_bytes"]
-    return get
+    read (`useful_bytes`); none without all of them."""
+    return f"CASE WHEN r.useful_bytes <> 0 THEN ({' + '.join(f'r.{f}' for f in fields)}) / r.useful_bytes END"
 
 
-HOST_METRICS = ("rss_mb", "wall_s")
+# The mean hops to the seed over chains that reach it (ppspp sim).
+DEPTH_MEAN = share(" + ".join(f"{k} * coalesce(r.depth_{k}, 0)" for k in range(1, 7)),
+                   " + ".join(f"coalesce(r.depth_{k}, 0)" for k in range(1, 7)))
 
 METRICS = [
     # A row with hostile viewers scores its honest ones'.
-    ("lag_p50_ms", lambda r: r.get("lag_p50_ms_honest", r.get("lag_p50_ms")), LOWER, "ratio", 0.05),
-    ("lag_p99_ms", lambda r: r.get("lag_p99_ms_honest", r.get("lag_p99_ms")), LOWER, "ratio", 0.05),
-    ("unhealthy", unhealthy, LOWER, "diff", 0.03),
+    ("lag_p50_ms", "coalesce(r.lag_p50_ms_honest, r.lag_p50_ms)", LOWER, "ratio", 0.05),
+    ("lag_p99_ms", "coalesce(r.lag_p99_ms_honest, r.lag_p99_ms)", LOWER, "ratio", 0.05),
+    ("unhealthy", "v.unhealthy", LOWER, "diff", 0.03),
     # The run's health over time (analyze.run_metrics).
-    ("collapses", metric("collapses"), LOWER, "diff", 0.5),
-    ("flaps_per_min", metric("flaps_per_min"), LOWER, "diff", 0.2),
-    ("unhealthy_dwell_p90_s", metric("unhealthy_dwell_p90_s"), LOWER, "diff", 2),
-    ("onset_after_drop_s", metric("onset_after_drop_s"), HIGHER, "diff", 2),
-    ("recover_after_rise_s", metric("recover_after_rise_s"), LOWER, "diff", 2),
-    ("excess_lag_area", metric("excess_lag_area_ms_s"), LOWER, "ratio", 0.10),
-    ("osc_amp_ms", metric("osc_amp_ms"), LOWER, "ratio", 0.10),
-    ("delivery", lambda r: r.get("delivery_honest", r.get("delivery")), HIGHER, "diff", 0.002),
-    ("timeouts", lambda r: r.get("timeouts"), LOWER, "ratio", 0.10),
-    ("wasted/read", lambda r: (r.get("wasted") or 0) / r["chunks_read"] if r.get("chunks_read") else None,
-     LOWER, "diff", 0.01),
-    ("seed_answer_share", lambda r: r.get("seed_pull_share"), None, "diff", 0.02),
-    ("viewer_util_p50", lambda r: r.get("viewer_util_p50"), None, "diff", 0.02),
-    ("viewer_util_p90", lambda r: r.get("viewer_util_p90"), None, "diff", 0.02),
-    ("relay_share", lambda r: r.get("relay_share"), None, "diff", 0.03),
-    ("depth_mean", depth_mean, None, "ratio", 0.05),
-    ("depth_cycle", lambda r: r.get("depth_cycle"), LOWER, "diff", 0.01),
-    ("depth_pull_rooted", lambda r: r.get("depth_pull_rooted"), LOWER, "diff", 0.01),
-    ("fanout_p50", lambda r: r.get("fanout_p50"), None, "ratio", 0.10),
-    ("fanout_p90", lambda r: r.get("fanout_p90"), None, "ratio", 0.10),
-    ("parent_changes_per_min", lambda r: r.get("parent_changes_per_min"), LOWER, "ratio", 0.10),
-    ("relay_declines", share("relay_rejected", lambda r: (r.get("relay_rejected") or 0) + (r.get("relay_accepted") or 0)),
+    ("collapses", "v.collapses", LOWER, "diff", 0.5),
+    ("flaps_per_min", "v.flaps_per_min", LOWER, "diff", 0.2),
+    ("unhealthy_dwell_p90_s", "v.unhealthy_dwell_p90_s", LOWER, "diff", 2),
+    ("onset_after_drop_s", "v.onset_after_drop_s", HIGHER, "diff", 2),
+    ("recover_after_rise_s", "v.recover_after_rise_s", LOWER, "diff", 2),
+    ("excess_lag_area", "v.excess_lag_area_ms_s", LOWER, "ratio", 0.10),
+    ("osc_amp_ms", "v.osc_amp_ms", LOWER, "ratio", 0.10),
+    ("delivery", "coalesce(r.delivery_honest, r.delivery)", HIGHER, "diff", 0.002),
+    ("timeouts", "r.timeouts", LOWER, "ratio", 0.10),
+    ("wasted/read", share("r.wasted", "r.chunks_read"), LOWER, "diff", 0.01),
+    ("seed_answer_share", "r.seed_pull_share", None, "diff", 0.02),
+    ("viewer_util_p50", "r.viewer_util_p50", None, "diff", 0.02),
+    ("viewer_util_p90", "r.viewer_util_p90", None, "diff", 0.02),
+    ("relay_share", "r.relay_share", None, "diff", 0.03),
+    ("depth_mean", DEPTH_MEAN, None, "ratio", 0.05),
+    ("depth_cycle", "r.depth_cycle", LOWER, "diff", 0.01),
+    ("depth_pull_rooted", "r.depth_pull_rooted", LOWER, "diff", 0.01),
+    ("fanout_p50", "r.fanout_p50", None, "ratio", 0.10),
+    ("fanout_p90", "r.fanout_p90", None, "ratio", 0.10),
+    ("parent_changes_per_min", "r.parent_changes_per_min", LOWER, "ratio", 0.10),
+    ("relay_declines", share("r.relay_rejected", "coalesce(r.relay_rejected, 0) + coalesce(r.relay_accepted, 0)"),
      None, "diff", 0.03),
-    ("declines_idle", lambda r: r.get("declines_idle"), LOWER, "diff", 0.05),
-    ("declined_wrongly", share("declined_wrongly", lambda r: r.get("declined") or 0), LOWER, "diff", 0.05),
-    ("meter_relays_p50", lambda r: r.get("meter_relays_p50") or (r.get("meter_forwarders") or [None] * 3)[1],
+    ("declines_idle", "r.declines_idle", LOWER, "diff", 0.05),
+    ("declined_wrongly", share("r.declined_wrongly", "coalesce(r.declined, 0)"), LOWER, "diff", 0.05),
+    # A median the row has as a field, else its forwarders' (others') list's
+    # middle (p10, p50, p90).
+    ("meter_relays_p50", "CASE WHEN r.meter_relays_p50 <> 0 THEN r.meter_relays_p50 ELSE r.meter_forwarders[2] END",
      None, "ratio", 0.10),
-    ("meter_others_p50", lambda r: r.get("meter_others_p50") or (r.get("meter_others") or [None] * 3)[1],
+    ("meter_others_p50", "CASE WHEN r.meter_others_p50 <> 0 THEN r.meter_others_p50 ELSE r.meter_others[2] END",
      None, "ratio", 0.10),
-    ("holder_short", lambda r: r.get("holder_short"), LOWER, "diff", 0.03),
+    ("holder_short", "r.holder_short", LOWER, "diff", 0.03),
     # Each viewer from its own join (with arrivals or departures): to its
     # first read or frame, to its first under the delivery target, the
     # viewers that never did.
-    ("join_p50_ms", lambda r: r.get("join_p50_ms"), LOWER, "ratio", 0.10),
-    ("join_p90_ms", lambda r: r.get("join_p90_ms"), LOWER, "ratio", 0.10),
-    ("caught_up_p50_ms", lambda r: r.get("caught_up_p50_ms"), LOWER, "ratio", 0.10),
-    ("caught_up_p90_ms", lambda r: r.get("caught_up_p90_ms"), LOWER, "ratio", 0.10),
-    ("caught_up_never", lambda r: r.get("caught_up_never"), LOWER, "diff", 0.5),
+    ("join_p50_ms", "r.join_p50_ms", LOWER, "ratio", 0.10),
+    ("join_p90_ms", "r.join_p90_ms", LOWER, "ratio", 0.10),
+    ("caught_up_p50_ms", "r.caught_up_p50_ms", LOWER, "ratio", 0.10),
+    ("caught_up_p90_ms", "r.caught_up_p90_ms", LOWER, "ratio", 0.10),
+    ("caught_up_never", "r.caught_up_never", LOWER, "diff", 0.5),
     # The viewers that stayed through departures: their worst lag, their lag
     # p90's excess over the delivery target summed, the time back under it,
     # those left with no neighbour; and how soon a child noticed its parent
     # gone (strims-sim).
-    ("depart_lag_peak_ms", lambda r: r.get("depart_lag_peak_ms"), LOWER, "ratio", 0.10),
-    ("depart_excess_area", lambda r: r.get("depart_excess_lag_area_ms_s"), LOWER, "ratio", 0.10),
-    ("depart_recover_ms", lambda r: r.get("depart_recover_ms"), LOWER, "diff", 2000),
-    ("depart_stranded", lambda r: r.get("depart_stranded"), LOWER, "diff", 0.5),
-    ("parent_lost_noticed_p90_ms", lambda r: r.get("parent_lost_noticed_p90_ms"), LOWER, "ratio", 0.10),
-    ("startup_p99_ms", lambda r: r.get("startup_p99_ms_honest", r.get("startup_p99_ms")), LOWER, "ratio", 0.10),
-    ("signed_lag_p99_ms", lambda r: r.get("signed_lag_p99_ms"), LOWER, "ratio", 0.05),
-    ("wire/media", lambda r: r.get("wire_per_media"), LOWER, "ratio", 0.02),
+    ("depart_lag_peak_ms", "r.depart_lag_peak_ms", LOWER, "ratio", 0.10),
+    ("depart_excess_area", "r.depart_excess_lag_area_ms_s", LOWER, "ratio", 0.10),
+    ("depart_recover_ms", "r.depart_recover_ms", LOWER, "diff", 2000),
+    ("depart_stranded", "r.depart_stranded", LOWER, "diff", 0.5),
+    ("parent_lost_noticed_p90_ms", "r.parent_lost_noticed_p90_ms", LOWER, "ratio", 0.10),
+    ("startup_p99_ms", "coalesce(r.startup_p99_ms_honest, r.startup_p99_ms)", LOWER, "ratio", 0.10),
+    ("signed_lag_p99_ms", "r.signed_lag_p99_ms", LOWER, "ratio", 0.05),
+    ("wire/media", "r.wire_per_media", LOWER, "ratio", 0.02),
     # Where the uplinks' bytes go (the sims' `up_*` ledger), per byte read.
-    ("wire/useful", lambda r: r.get("wire_per_useful"), LOWER, "ratio", 0.02),
+    ("wire/useful", "r.wire_per_useful", LOWER, "ratio", 0.02),
     ("packets/useful", per_useful("packets_up"), LOWER, "ratio", 0.02),
     ("dup/useful", per_useful("dup_bytes"), LOWER, "diff", 0.002),
-    ("ovh_seed", lambda r: r.get("ovh_seed"), LOWER, "diff", 0.005),
-    ("ovh_leaf_p90", lambda r: r.get("ovh_leaf_p90"), LOWER, "diff", 0.005),
+    ("ovh_seed", "r.ovh_seed", LOWER, "diff", 0.005),
+    ("ovh_leaf_p90", "r.ovh_leaf_p90", LOWER, "diff", 0.005),
     ("have/useful", per_useful("up_have"), None, "ratio", 0.05),
     ("ack/useful", per_useful("up_ack"), None, "ratio", 0.05),
     ("request/useful", per_useful("up_request"), None, "ratio", 0.05),
     ("integrity/useful", per_useful("up_integrity", "up_signed"), None, "ratio", 0.05),
     ("transport/useful", per_useful("up_transport"), None, "ratio", 0.05),
     ("acks/useful", per_useful("up_acks"), None, "ratio", 0.05),
-    ("links_p50", lambda r: r.get("links_p50"), None, "diff", 0.5),
-    ("links_p90", lambda r: r.get("links_p90"), None, "diff", 0.5),
-    ("links_dropped/min", lambda r: r.get("links_dropped_per_host_min"), LOWER, "diff", 0.1),
-    ("eclipsed_share", lambda r: r.get("eclipsed_share"), LOWER, "diff", 0.005),
-    ("honest_lag_p99_ms", lambda r: r.get("lag_p99_ms_honest"), LOWER, "ratio", 0.05),
-    ("hostile_lag_p99_ms", lambda r: r.get("lag_p99_ms_hostile"), None, "ratio", 0.05),
-    ("hostile_delivery", lambda r: r.get("delivery_hostile"), None, "diff", 0.002),
-    ("cut_from_seed_share", lambda r: r.get("cut_from_seed_share"), LOWER, "diff", 0.005),
+    ("links_p50", "r.links_p50", None, "diff", 0.5),
+    ("links_p90", "r.links_p90", None, "diff", 0.5),
+    ("links_dropped/min", "r.links_dropped_per_host_min", LOWER, "diff", 0.1),
+    ("eclipsed_share", "r.eclipsed_share", LOWER, "diff", 0.005),
+    ("honest_lag_p99_ms", "r.lag_p99_ms_honest", LOWER, "ratio", 0.05),
+    ("hostile_lag_p99_ms", "r.lag_p99_ms_hostile", None, "ratio", 0.05),
+    ("hostile_delivery", "r.delivery_hostile", None, "diff", 0.002),
+    ("cut_from_seed_share", "r.cut_from_seed_share", LOWER, "diff", 0.005),
     # Where strong uplinks sit (`Report::capacity_position`).
-    ("cap_depth_rho", lambda r: r.get("cap_depth_rho"), LOWER, "diff", 0.05),
-    ("cap_depth_rho_startup", lambda r: r.get("cap_depth_rho_startup"), LOWER, "diff", 0.05),
-    ("cap_fanout_rho", lambda r: r.get("cap_fanout_rho"), HIGHER, "diff", 0.05),
-    ("cap_hops_rho", lambda r: r.get("cap_hops_rho"), LOWER, "diff", 0.05),
-    ("seed_nbr_up_p50", lambda r: r.get("seed_nbr_up_p50"), HIGHER, "ratio", 0.10),
-    ("depth1_up_p50", lambda r: r.get("depth1_up_p50"), HIGHER, "ratio", 0.10),
-    ("top_seed_link_s", lambda r: r.get("top_seed_link_s"), LOWER, "ratio", 0.10),
-    ("lag_p99_ms_weak", lambda r: r.get("lag_p99_ms_weak"), LOWER, "ratio", 0.05),
-    ("seed_offers_per_min", lambda r: r.get("seed_offers_per_min"), None, "ratio", 0.10),
-    ("links_formed/min", lambda r: r.get("links_formed_per_host_min"), None, "ratio", 0.10),
-    ("pool_trials/min", lambda r: r.get("pool_trials_per_host_min"), None, "diff", 0.1),
-    ("pool_trial_wins", lambda r: r.get("pool_trial_wins"), None, "diff", 0.05),
-    ("rejoin_p90_ms", lambda r: r.get("rejoin_p90_ms"), LOWER, "ratio", 0.10),
+    ("cap_depth_rho", "r.cap_depth_rho", LOWER, "diff", 0.05),
+    ("cap_depth_rho_startup", "r.cap_depth_rho_startup", LOWER, "diff", 0.05),
+    ("cap_fanout_rho", "r.cap_fanout_rho", HIGHER, "diff", 0.05),
+    ("cap_hops_rho", "r.cap_hops_rho", LOWER, "diff", 0.05),
+    ("seed_nbr_up_p50", "r.seed_nbr_up_p50", HIGHER, "ratio", 0.10),
+    ("depth1_up_p50", "r.depth1_up_p50", HIGHER, "ratio", 0.10),
+    ("top_seed_link_s", "r.top_seed_link_s", LOWER, "ratio", 0.10),
+    ("lag_p99_ms_weak", "r.lag_p99_ms_weak", LOWER, "ratio", 0.05),
+    ("seed_offers_per_min", "r.seed_offers_per_min", None, "ratio", 0.10),
+    ("links_formed/min", "r.links_formed_per_host_min", None, "ratio", 0.10),
+    ("pool_trials/min", "r.pool_trials_per_host_min", None, "diff", 0.1),
+    ("pool_trial_wins", "r.pool_trial_wins", None, "diff", 0.05),
+    ("rejoin_p90_ms", "r.rejoin_p90_ms", LOWER, "ratio", 0.10),
     # What a defector's lag is to an honest viewer's: under 1, defecting pays.
-    ("defector_gain", lambda r: r["lag_p99_ms_hostile"] / r["lag_p99_ms_honest"]
-     if r.get("lag_p99_ms_hostile") and r.get("lag_p99_ms_honest") else None, HIGHER, "ratio", 0.05),
-    ("exch_rejected", lambda r: r.get("exch_rejected"), None, "diff", 1),
+    ("defector_gain", "CASE WHEN r.lag_p99_ms_hostile <> 0 AND r.lag_p99_ms_honest <> 0 "
+     "THEN r.lag_p99_ms_hostile / r.lag_p99_ms_honest END", HIGHER, "ratio", 0.05),
+    ("exch_rejected", "r.exch_rejected", None, "diff", 1),
     # What the machine running a job sets as much as the change: shown,
     # marked h, and kept out of the scorecard's totals (HOST_METRICS).
-    ("rss_mb", lambda r: r.get("_rss_mb"), LOWER, "diff", 100),
-    ("wall_s", lambda r: r.get("_wall_s"), LOWER, "ratio", 0.20),
+    ("rss_mb", "j.rss_mb", LOWER, "diff", 100),
+    ("wall_s", "j.wall_s", LOWER, "ratio", 0.20),
 ]
+HOST_METRICS = ("rss_mb", "wall_s")
+# The metrics a scorecard shows in every cell, ties too.
+SHOWN = ("lag_p50_ms", "lag_p99_ms", "unhealthy", "delivery")
+# arm_score's guardrails, in the order it checks them: "worse" breaks an
+# arm marked worse in a cell; "lo" one whose ratio interval lies past
+# GUARD_RATIO in a cell the base never collapsed (past --lag-budget when
+# ranked for overhead, and none without one); "hi" one whose ratio
+# interval lies under 1. More collapsed runs with a Fisher p under 0.05
+# break an arm too.
+GUARDRAILS = {"delivery": "worse", "lag_p99_ms": "lo", "lag_p99_ms_weak": "lo", "join_p90_ms": "lo",
+              "caught_up_p90_ms": "lo", "defector_gain": "hi"}
+GUARD_RATIO = 1.10
+
 
 _simdb = None
 
@@ -928,78 +930,81 @@ def load_rows(path):
     return rows
 
 
-# Student's t at 97.5 % by degrees of freedom; 2.0 past the table.
-T975 = {1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45, 7: 2.36, 8: 2.31, 9: 2.26, 10: 2.23,
-        11: 2.20, 12: 2.18, 13: 2.16, 14: 2.14, 15: 2.13, 16: 2.12, 20: 2.09, 30: 2.04}
+# --- scoring ----------------------------------------------------------------
+#
+# A side is an arm's runs, {(cell, seed): (k, src)}: the catalog's job k
+# for each cell and seed, and the source of the run's own copy (its farm
+# index line's flush, its local invocation's), whose host numbers it
+# reads. The catalog's scoring macros (hack/sim-db/scoring.sql) pair two
+# sides and score them; this script prints what they return.
+
+_catalog = None
+# The DuckDB file scores are computed over, None for the catalog: a file
+# holding the tables the scoring reads (rows, verdicts, jobs), as the
+# tests' fixtures do.
+SCORE_DB = None
 
 
-def t_interval(v):
-    """The mean of `v` and its 95 % t-interval (none below two values)."""
-    n = len(v)
-    mean = sum(v) / n
-    if n < 2:
-        return mean, -math.inf, math.inf
-    sd = math.sqrt(sum((x - mean) ** 2 for x in v) / (n - 1))
-    t = T975.get(n - 1) or min((t for d, t in T975.items() if d >= n - 1), default=2.0)
-    half = t * sd / math.sqrt(n)
-    return mean, mean - half, mean + half
+def catalog():
+    """hack/sim-db/catalog.py: the sims' results catalog, which indexes the
+    runs' tables and holds the scoring macros."""
+    global _catalog
+    if _catalog is None:
+        spec = importlib.util.spec_from_file_location("catalog", ROOT / "hack" / "sim-db" / "catalog.py")
+        _catalog = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_catalog)
+        _catalog._simdb = simdb()
+    return _catalog
 
 
-def effect(kind, pairs):
-    """The paired effect of B against A over seeds, with its 95 % interval:
-    the geometric mean ratio, or the mean difference."""
-    if kind == "ratio":
-        v = [math.log(b / a) for a, b in pairs if a and b and a > 0 and b > 0]
-        if not v:
-            return None
-        m, lo, hi = t_interval(v)
-        return math.exp(m), math.exp(lo) if lo > -math.inf else 0.0, math.exp(hi) if hi < math.inf else math.inf
-    v = [b - a for a, b in pairs if a is not None and b is not None]
-    if not v:
-        return None
-    return t_interval(v)
+def index_catalog():
+    """Brings the catalog up to date with the cache (catalog.index), so it
+    holds every run this script scores. An index that fails leaves the
+    catalog as it was: the runs it lacks then fail, and their rows stay
+    kept for the next invocation to score."""
+    if SCORE_DB is None:
+        try:
+            catalog().index(quiet=True)
+        except SystemExit as e:
+            print(f"the catalog's index failed, scoring what it holds: {e}", file=sys.stderr)
 
 
-def collapsed(r):
-    """Whether a row's run collapsed (analyze.collapsed: COLLAPSED_SECS
-    unhealthy seconds in a row lasting past its startup)."""
-    v = derived(r)[0]
-    return None if v is None else analyze().collapsed(v)
+def scoring():
+    """What scoring.sql's objects read of this script: its METRICS and
+    their uses."""
+    return types.SimpleNamespace(METRICS=METRICS, GUARDRAILS=GUARDRAILS, HOST_METRICS=HOST_METRICS, SHOWN=SHOWN,
+                                 GUARD_RATIO=GUARD_RATIO)
 
 
-def fisher(k, n, m, n2):
-    """The two-sided Fisher exact p of k in n against m in n2."""
-    total, hits = n + n2, k + m
-    prob = lambda x: math.comb(n, x) * math.comb(n2, hits - x) / math.comb(total, hits)
-    seen = prob(k)
-    return min(1.0, sum(prob(x) for x in range(max(0, hits - n2), min(n, hits) + 1) if prob(x) <= seen * (1 + 1e-9)))
+def score_query(sql):
+    """The rows of `sql` over the catalog (or SCORE_DB) in a session holding
+    the scoring objects as this script defines them (catalog.scoring_sql,
+    TEMP: this script's METRICS, whatever the catalog's indexer had)."""
+    run = (lambda s: catalog().lake(s)) if SCORE_DB is None else (lambda s: simdb().duck(s, db=SCORE_DB))
+    cols = {r["t"]: r["c"] for r in run(
+        "SELECT table_name AS t, list(column_name) AS c FROM duckdb_columns() WHERE database_name = "
+        "current_database() AND schema_name = 'main' AND table_name IN ('rows', 'verdicts', 'jobs') GROUP BY ALL;")}
+    return run(catalog().scoring_sql(catalog().scoring_cols(cols), temp=True, suite=scoring()) + "\n" + sql)
 
 
-def collapses(c, a_rows, b_rows):
-    """The seeds whose runs collapsed under A and under B, and how many
-    seeds both have."""
-    seeds = sorted({s for (name, s) in a_rows if name == c["name"]} & {s for (name, s) in b_rows if name == c["name"]})
-    count = lambda rows: sum(1 for s in seeds if collapsed(rows[(c["name"], s)]))
-    return count(a_rows), count(b_rows), len(seeds)
+def q(s):
+    return simdb().q(s)
 
 
-def mark(better, kind, tie, e):
-    """+ better, - worse, ~ moved with no better direction, blank for a
-    tie."""
-    if e is None:
-        return " "
-    x, lo, hi = e
-    if kind == "ratio":
-        moved = (lo > 1 or hi < 1) and abs(math.log(x)) > math.log(1 + tie)
-        up = x > 1
-    else:
-        moved = (lo > 0 or hi < 0) and abs(x) > tie
-        up = x > 0
-    if not moved:
-        return " "
-    if better is None:
-        return "~"
-    return "+" if (up == (better == HIGHER)) else "-"
+def sides_sql(**sides):
+    """SQL making a TEMP table of each side, `name`: one row, `s` the side as
+    scoring.sql takes one (in its order)."""
+    out = []
+    for name, side in sides.items():
+        items = ", ".join(f"{{'cell': {q(c)}, 'seed': {int(s)}, 'k': {q(k)}, 'src': {q(src)}}}"
+                          for (c, s), (k, src) in side.items())
+        out.append(f"CREATE OR REPLACE TEMP TABLE {name} AS SELECT "
+                   f"[{items}]::STRUCT(cell VARCHAR, seed BIGINT, k VARCHAR, src VARCHAR)[] AS s;")
+    return "\n".join(out) + "\n"
+
+
+def cell_list(cells):
+    return "[" + ", ".join(q(c["name"]) for c in cells) + "]::VARCHAR[]"
 
 
 def fmt(x):
@@ -1010,67 +1015,60 @@ def fmt(x):
     return f"{x:.0f}"
 
 
-def same_run(a, b):
-    """Whether rows `a` and `b` ran the same: their traces, and their
-    reads' digests where both carry one."""
-    reads = a.get("reads_hash") and b.get("reads_hash")
-    return a["trace"] == b["trace"] and (not reads or a["reads_hash"] == b["reads_hash"])
+def effect_text(e):
+    """An effect (effects_of's) as the scorecard prints it."""
+    if e["effect"] is None:
+        return "-"
+    if e["kind"] == "ratio":
+        return f"x{e['effect']:.2f} [{e['lo']:.2f},{e['hi']:.2f}]"
+    return f"{e['effect']:+.3f} [{e['lo']:+.3f},{e['hi']:+.3f}]"
 
 
 def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False, traces=True):
+    """Prints the scorecard of side B against side A over `cells`: per cell,
+    the collapse test and each metric's paired effect (effects_of,
+    collapse_test_of), then the totals of their marks and how many runs B
+    ran as A did (traces_of)."""
+    cl = cell_list(cells)
+    got = score_query(sides_sql(side_a=a_rows, side_b=b_rows) + f"""
+SELECT (SELECT list(e ORDER BY cell_ord, ord) FROM effects_of({cl}, (SELECT s FROM side_a), (SELECT s FROM side_b)) e)
+           AS effects,
+       (SELECT list(c) FROM collapse_test_of({cl}, (SELECT s FROM side_a), (SELECT s FROM side_b)) c) AS collapses,
+       (SELECT list(t ORDER BY a_first) FROM traces_of((SELECT s FROM side_a), (SELECT s FROM side_b)) t) AS traces;""")[0]
+    effects = collections.defaultdict(list)
+    for e in got["effects"] or []:
+        effects[e["cell"]].append(e)
+    tests = {c["cell"]: c for c in got["collapses"] or []}
     print(f"A = {a_label}   B = {b_label}")
     print("legend: + better  - worse  ~ moved  (ratio B/A or difference B-A, 95 % t-interval over seeds)")
     totals = collections.Counter()
     for c in cells:
         lines = []
-        for name, get, better, kind, tie in METRICS:
-            pairs = []
-            for s in sorted({s for (name_, s) in a_rows if name_ == c["name"]}):
-                ra, rb = a_rows.get((c["name"], s)), b_rows.get((c["name"], s))
-                if ra is None or rb is None:
-                    continue
-                va, vb = get(ra), get(rb)
-                if va is None or vb is None:
-                    continue
-                pairs.append((va, vb))
-            if not pairs:
-                continue
-            e = effect(kind, pairs)
-            m = mark(better, kind, tie, e)
-            if name in HOST_METRICS:
-                m = " " if m == " " else "h"
-            else:
+        for e in effects.get(c["name"], []):
+            m = e["mark"]
+            if not e["host"]:
                 totals[m] += 1
-            key = name in ("lag_p50_ms", "lag_p99_ms", "unhealthy", "delivery")
-            if m == " " and not key and not show_all:
+            if m == " " and not e["shown"] and not show_all:
                 continue
-            med = lambda xs: sorted(xs)[len(xs) // 2]
-            if e is None:
-                eff = "-"
-            elif kind == "ratio":
-                eff = f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
-            else:
-                eff = f"{e[0]:+.3f} [{e[1]:+.3f},{e[2]:+.3f}]"
-            lines.append(f"   {m} {name:20} {fmt(med([p[0] for p in pairs])):>9} {fmt(med([p[1] for p in pairs])):>9}  {eff}")
+            lines.append(f"   {m} {e['metric']:20} {fmt(e['a_median']):>9} {fmt(e['b_median']):>9}  {effect_text(e)}")
         # Whether a run collapses is near all-or-nothing, and a change
         # redraws which seeds do: the counts, not the pairs, carry it.
-        ka, kb, n = collapses(c, a_rows, b_rows)
-        if ka or kb:
-            p = fisher(ka, n, kb, n)
-            m = " " if p >= 0.05 else ("+" if kb < ka else "-")
-            totals[m] += 1
-            lines.insert(0, f"   {m} {'collapsed':20} {ka:>7}/{n} {kb:>7}/{n}  Fisher p={p:.2f}")
+        t = tests.get(c["name"]) or {"ka": 0, "kb": 0, "n": 0, "mark": None}
+        ka, kb, n = t["ka"], t["kb"], t["n"]
+        if t["mark"] is not None:
+            totals[t["mark"]] += 1
+            lines.insert(0, f"   {t['mark']} {'collapsed':20} {ka:>7}/{n} {kb:>7}/{n}  Fisher p={t['p']:.2f}")
         print(f"\n{c['name']}, {n} seeds ({c['why']})")
         print("\n".join(lines) if lines else "   (no rows)")
     print(f"\nmoved: {totals['+']} better, {totals['-']} worse, {totals['~']} changed; {totals[' ']} ties")
-    pairs = [(k[0], same_run(ra, b_rows[k])) for k, ra in a_rows.items()
-             if k in b_rows and ra.get("trace") and b_rows[k].get("trace")]
-    if traces and pairs:
-        same = sum(1 for _, eq in pairs if eq)
-        differ = collections.Counter(name for name, eq in pairs if not eq)
-        cells_ = ", ".join(f"{name} ({k})" for name, k in differ.most_common(8))
+    runs = got["traces"] or []
+    total = sum(t["runs"] for t in runs)
+    if traces and total:
+        same = sum(t["same"] for t in runs)
+        differ = sorted((t for t in runs if t["same"] < t["runs"]), key=lambda t: t["same"] - t["runs"])
+        cells_ = ", ".join(f"{t['cell']} ({t['runs'] - t['same']})" for t in differ[:8])
         more = f" and {len(differ) - 8} more" if len(differ) > 8 else ""
-        print(f"traces: {same} of {len(pairs)} runs as A's" + (f"; differ in {cells_}{more}" if 0 < same < len(pairs) else ""))
+        print(f"traces: {same} of {total} runs as A's" + (f"; differ in {cells_}{more}" if 0 < same < total else ""))
 
 
 # --- race -------------------------------------------------------------------
@@ -1093,77 +1091,49 @@ def design(flags):
     return arms
 
 
-GUARD_RATIO = 1.10
+def break_text(b):
+    """A guardrail an arm broke (arm_cells_of's), as the arm score names it."""
+    if b["kind"] == "collapsed":
+        return f"{b['cell']} collapsed {b['ka']}->{b['kb']}/{b['n']}"
+    if b["kind"] == "lag_ceiling":
+        return f"{b['cell']} lag p99 {b['a']:.0f}->{b['b']:.0f} ms past {b['x']:.0f}"
+    if b["kind"] == "worse":
+        return f"{b['cell']} {b['metric']}"
+    return f"{b['cell']} {b['metric']} x{b['x']:.2f}"
 
 
 def arm_score(cells, base_rows, arm_rows, rank=None):
-    """An arm against the base on the same seeds: its collapsed runs and the
-    base's, the geometric means over cells of its lag p99 ratio and its
-    wire bytes per useful byte, and the guardrails it broke. Ranked for
-    overhead (`rank`: --lag-ceiling, --lag-budget), a cell whose median lag
-    p99 the base kept under the ceiling breaks one when the arm's isn't, and
-    its lag ratios are guarded only by the budget, when one is given."""
+    """An arm against the base on the same seeds (arm_score_of and
+    arm_cells_of): its collapsed runs and the base's, the geometric means
+    over cells of its lag p99 ratio and its wire bytes per useful byte, and
+    the guardrails it broke (GUARDRAILS). Ranked for overhead (`rank`:
+    --lag-ceiling, --lag-budget), a cell whose median lag p99 the base kept
+    under the ceiling breaks one when the arm's isn't, and its lag ratios
+    are guarded only by the budget, when one is given."""
     overhead = rank is not None and rank.rank == "overhead"
-    guard = rank.lag_budget if overhead else GUARD_RATIO
-    ka_all = kb_all = 0
-    logs, wires = [], []
-    broken = []
-    cells_out = []
-    get = {name: (fn, better, kind, tie) for name, fn, better, kind, tie in METRICS}
-    for c in cells:
-        ka, kb, n = collapses(c, base_rows, arm_rows)
-        if n == 0:
-            continue
-        ka_all += ka
-        kb_all += kb
-        if kb > ka and fisher(ka, n, kb, n) < 0.05:
-            broken.append(f"{c['name']} collapsed {ka}->{kb}/{n}")
-        def pairs(name):
-            fn = get[name][0]
-            out = []
-            for (cell, seed), ra in base_rows.items():
-                rb = arm_rows.get((cell, seed))
-                if cell != c["name"] or rb is None:
-                    continue
-                va, vb = fn(ra), fn(rb)
-                if va is not None and vb is not None:
-                    out.append((va, vb))
-            return out
-        e = effect("ratio", pairs("lag_p99_ms"))
-        if e is not None:
-            logs.append(math.log(e[0]))
-        cells_out.append((c["name"], ka, kb, n, e))
-        w = effect("ratio", pairs("wire/useful"))
-        if w is not None:
-            wires.append(math.log(w[0]))
-        if overhead and (lags := pairs("lag_p99_ms")):
-            ma = statistics.median(x for x, _ in lags)
-            mb = statistics.median(y for _, y in lags)
-            if ma < rank.lag_ceiling <= mb:
-                broken.append(f"{c['name']} lag p99 {ma:.0f}->{mb:.0f} ms past {rank.lag_ceiling:.0f}")
-        fn, better, kind, tie = get["delivery"]
-        if mark(better, kind, tie, effect(kind, pairs("delivery"))) == "-":
-            broken.append(f"{c['name']} delivery")
-        if ka == 0 and guard is not None:
-            for name in ("lag_p99_ms", "lag_p99_ms_weak", "join_p90_ms", "caught_up_p90_ms"):
-                e = effect("ratio", pairs(name))
-                if e is not None and e[1] > guard:
-                    broken.append(f"{c['name']} {name} x{e[0]:.2f}")
-        # Defecting must not come to pay more.
-        e = effect("ratio", pairs("defector_gain"))
-        if e is not None and e[2] < 1:
-            broken.append(f"{c['name']} defector_gain x{e[0]:.2f}")
-    p99 = math.exp(sum(logs) / len(logs)) if logs else None
-    wire = math.exp(sum(wires) / len(wires)) if wires else None
-    return {"collapsed": kb_all, "base_collapsed": ka_all, "p99": p99, "wire": wire, "broken": broken,
-            "cells": cells_out, "overhead": overhead}
+    # No budget is an infinite one.
+    budget = rank.lag_budget if overhead and rank.lag_budget is not None else math.inf
+    ceiling = rank.lag_ceiling if overhead else analyze().DELIVERY_TARGET_MS
+    opts = (f"overhead := {str(overhead).lower()}, lag_ceiling := {float(ceiling)!r}, "
+            f"lag_budget := '{float(budget)!r}'::DOUBLE")
+    cl, sides = cell_list(cells), "(SELECT s FROM side_a), (SELECT s FROM side_b)"
+    got = score_query(sides_sql(side_a=base_rows, side_b=arm_rows) + f"""
+SELECT (SELECT list(c ORDER BY cell_ord) FROM arm_cells_of({cl}, {sides}, {opts}) c) AS cells,
+       (SELECT s FROM arm_score_of({cl}, {sides}, {opts}) s) AS score;""")[0]
+    sc = got["score"]
+    key = sc["rank_key"]
+    return {"collapsed": sc["collapsed"], "base_collapsed": sc["base_collapsed"], "p99": sc["p99"],
+            "wire": sc["wire"], "broken": [break_text(b) for b in sc["breaks"]],
+            "cells": [(c["cell"], c["ka"], c["kb"], c["n"], None if c["lag"] is None else
+                       (c["lag"], c["lag_lo"], c["lag_hi"]), c["p"]) for c in got["cells"] or []],
+            "overhead": overhead, "rank_key": (key["broken"], key["collapsed"], key["by"])}
 
 
 def rank_key(sc):
     """Broken arms last, then fewer collapsed runs, then the lower lag p99
-    ratio, or wire per useful byte when ranked for overhead."""
-    by = sc["wire"] if sc["overhead"] else sc["p99"]
-    return (bool(sc["broken"]), sc["collapsed"], by if by is not None else math.inf)
+    ratio, or wire per useful byte when ranked for overhead (arm_score_of's
+    rank_key)."""
+    return sc["rank_key"]
 
 
 def ratio_text(x):
@@ -1197,7 +1167,7 @@ def race(a, cells, count, sha, base, sims, union):
             p99, wire = ratio_text(sc["p99"]), ratio_text(sc["wire"])
             print(f"   {','.join(arm):58} {sc['collapsed']:5} ({sc['base_collapsed']:3})   {p99:>9}  {wire:>10}   "
                   f"{'; '.join(sc['broken'][:3]) + (' ...' if len(sc['broken']) > 3 else '') or 'ok'}")
-            for name, ka, kb, n, e in sc["cells"] if per_cell else ():
+            for name, ka, kb, n, e, _ in sc["cells"] if per_cell else ():
                 p99 = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
                 print(f"      {name:22} collapsed {ka:>3} -> {kb:>3} of {n:<3}  lag p99 {p99}")
         for f in failures:
@@ -1284,10 +1254,12 @@ def run_cells(cells, runs, slots, mem_gib):
     at its seeds for the cells of its sim, with `env` added to every job's
     environment, skipping runs kept (per label, in
     target/sim-suite/rows/<label>.jsonl, a line a run naming the cache
-    source of its tables); returns each label's rows by (cell, seed) and
-    the failures. Each job writes its tables into an output dir, folded
-    into the invocation's store (Invocation) as jobs end; its line is
-    written once they are."""
+    source of its tables); returns each label's side, its runs' jobs by
+    (cell, seed), and the failures. Each job writes its tables into an
+    output dir, folded into the invocation's store (Invocation) as jobs
+    end; its line is written once they are. The invocation's tables go to
+    the cache, and the catalog indexes them before a side is made of
+    them: a run whose rows the catalog lacks fails."""
     store = lambda label: WORK / "rows" / f"{label}.jsonl"
     inv = Invocation()
     have = {label: kept_rows(store(label)) for label in runs}
@@ -1370,15 +1342,24 @@ def run_cells(cells, runs, slots, mem_gib):
             if c["sim"] == sim
             for s in seeds(c)
             if job_id(label, c, s) in have[label]}
-    got = simdb().rows([(rec["src"], rec["id"]) for rec in want.values()])
+    index_catalog()
+    got = held([rec["id"] for rec in want.values()])
     rows = {label: {} for label in runs}
     for (label, cell_name, s), rec in want.items():
-        row = got.get((rec["src"], rec["id"]))
-        if row is None:
+        if rec["id"] not in got:
             failures.append(f"{label} {cell_name} seed {s}: no tables in {rec['src']}")
             continue
-        rows[label][(cell_name, s)] = row
+        rows[label][(cell_name, s)] = (rec["id"], rec["src"])
     return rows, failures
+
+
+def held(ks):
+    """The jobs among `ks` whose rows the catalog (or SCORE_DB) holds."""
+    if not ks:
+        return set()
+    sql = f"SELECT k FROM rows WHERE k IN (SELECT unnest([{', '.join(q(k) for k in ks)}]));"
+    rows = catalog().lake(sql) if SCORE_DB is None else simdb().duck(sql, db=SCORE_DB)
+    return {r["k"] for r in rows}
 
 
 # --- farm -------------------------------------------------------------------
@@ -1407,11 +1388,11 @@ def peak_gib(sha):
 
 
 def farm_jobs(name, cells):
-    """Farm run `name`'s jobs (its matrices are `cells`, in order) with
-    their rows: (cell, seed, index line, row) each. A matrix's index names
-    each job's tables (`src`), which are pulled into the cache from S3
-    (hack/sim-db) and read as local runs' are; a job whose data has expired
-    is left out, to run again."""
+    """Farm run `name`'s jobs (its matrices are `cells`, in order): (cell,
+    seed, index line) each. A matrix's index names each job's tables
+    (`src`), which are pulled into the cache from S3 (hack/sim-db) and
+    indexed by the catalog, as local runs' are; a job whose data has
+    expired is left out, to run again."""
     want = []
     for i, c in enumerate(cells):
         seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
@@ -1426,34 +1407,28 @@ def farm_jobs(name, cells):
     if gone:
         print(f"{name}: {len(gone)} flushes' tables are gone from S3 (a week's): rerun their jobs",
               file=sys.stderr)
-    got = simdb().rows([(rec["src"], rec["key"]) for _, _, rec in want if rec["src"] not in gone])
-    out = []
-    for c, seed_key, rec in want:
-        row = got.get((rec["src"], rec["key"]))
-        if row is not None:
-            out.append((c, int(rec["env"][seed_key]), rec,
-                        {**row, "_rss_mb": rec.get("max_rss_mb"), "_wall_s": rec.get("wall_s")}))
-    return out
+    index_catalog()
+    return [(c, int(rec["env"][seed_key]), rec) for c, seed_key, rec in want if rec["src"] not in gone]
 
 
 def by_arm(jobs, knob):
-    """`jobs`' rows (farm_jobs') by arm, each by (cell, seed), the arm as
-    hack/sim-db names it (simdb.arm_label): with `knob` (a `--sets` run's,
-    by sim) a set, the value its job's env gives the knob, else its
-    matrix's arm, a `--refs` name; and the arms that would hold two jobs at
-    one cell and seed, which that naming doesn't keep apart."""
-    rows, keys, clash = collections.defaultdict(dict), {}, set()
-    for c, seed, rec, row in jobs:
+    """`jobs` (farm_jobs') as sides by arm, each its jobs by (cell, seed),
+    the arm as hack/sim-db names it (simdb.arm_label): with `knob` (a
+    `--sets` run's, by sim) a set, the value its job's env gives the knob,
+    else its matrix's arm, a `--refs` name; and the arms that would hold
+    two jobs at one cell and seed, which that naming doesn't keep apart."""
+    rows, clash = collections.defaultdict(dict), set()
+    for c, seed, rec in jobs:
         arm = simdb().arm_label(knob, c["sim"], rec["arm"], rec["env"])
-        if keys.setdefault((arm, c["name"], seed), rec["key"]) != rec["key"]:
+        if rows[arm].setdefault((c["name"], seed), (rec["key"], rec["src"]))[0] != rec["key"]:
             clash.add(arm)
-        rows[arm][(c["name"], seed)] = row
+        rows[arm][(c["name"], seed)] = (rec["key"], rec["src"])
     return rows, clash
 
 
 def farm_rows(name, cells, knob):
-    """Farm run `name`'s rows (its matrices are `cells`, in order) by arm,
-    each by (cell, seed): by_arm's, `knob` a `--sets` run's (its index's)
+    """Farm run `name`'s sides (its matrices are `cells`, in order) by
+    arm, each its jobs by (cell, seed): by_arm's, `knob` a `--sets` run's (its index's)
     and None for a `--refs` run's. An arm holding two jobs at one cell and
     seed is refused."""
     rows, clash = by_arm(farm_jobs(name, cells), knob)
@@ -1607,9 +1582,9 @@ def farm(a, cells):
 def print_arm_score(title, sc):
     print(f"\n{title}: collapsed {sc['collapsed']} ({sc['base_collapsed']}), p99 {ratio_text(sc['p99'])}, "
           f"wire/useful {ratio_text(sc['wire'])}, guardrails {'; '.join(sc['broken']) or 'ok'}")
-    for cname, ka, kb, n, e in sc["cells"]:
-        p = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
-        print(f"   {cname:22} collapsed {ka:>3} -> {kb:>3} of {n:<3} Fisher p={fisher(ka, n, kb, n):.2f}  lag p99 {p}")
+    for cname, ka, kb, n, e, p in sc["cells"]:
+        lag = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
+        print(f"   {cname:22} collapsed {ka:>3} -> {kb:>3} of {n:<3} Fisher p={p:.2f}  lag p99 {lag}")
 
 
 def list_cells(a):
@@ -1639,8 +1614,8 @@ def short(k):
 
 
 def arm_rows(run, cells, arm, index, knob):
-    """Arm `arm`'s rows of farm run `run` (its matrices are `cells`), by
-    (cell, seed): by its `index`, a `--sets` run's arm is a set (its
+    """Arm `arm`'s side of farm run `run` (its matrices are `cells`), its
+    jobs by (cell, seed): by its `index`, a `--sets` run's arm is a set (its
     index's knob's value) and a `--refs` run's a name. A run without an
     index is read both ways, the sets by `knob`, each way only where it
     keeps the jobs of a cell and seed apart; an arm both ways name, with
@@ -1664,8 +1639,7 @@ def arm_rows(run, cells, arm, index, knob):
             named.append(rows[arm])
     if not named:
         sys.exit(f"run {run} has no rows of arm {arm!r} (it has {', '.join(sorted(have)) or 'none'})")
-    jobs_of = lambda rows: {at: id(row) for at, row in rows.items()}
-    if len(named) > 1 and jobs_of(named[0]) != jobs_of(named[1]):
+    if len(named) > 1 and named[0] != named[1]:
         sys.exit(f"run {run} has no index, and {arm!r} names both a set (--knob's value) and a --refs name, "
                  "with other rows")
     return named[0]
