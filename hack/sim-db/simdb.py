@@ -1066,7 +1066,7 @@ SELECT sim, cell, arm, pace, count(*) AS n,
        quantile_cont(err, [0.1, 0.5, 0.9, 0.99]) AS err_q, avg(covered::INT) AS coverage,
        count(truth_err) AS held, quantile_cont(truth_err, [0.1, 0.5, 0.9, 0.99]) AS truth_q,
        quantile_cont(late, [0.1, 0.5, 0.9, 0.99]) AS late_q,
-       avg((held_ms < 0)::INT) FILTER (WHERE peer_honest) AS censored,
+       avg((held_ms IS NULL OR held_ms < 0)::INT) FILTER (WHERE peer_honest) AS censored,
        avg(backlog::INT) FILTER (WHERE peer_honest) AS backlog
 FROM f GROUP BY ALL ORDER BY ALL;"""
     out = duck(v + sql)
