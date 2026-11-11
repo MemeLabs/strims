@@ -395,6 +395,10 @@ INVOCATIONS = [
                                          "FROM experiments ORDER BY ALL"]),
     ("lake-jobs-json", SIMDB, ["lake", "SELECT k, j.sim, j.seed, e.cell, src FROM jobs j JOIN experiment_jobs e "
                                        "USING (k, src) ORDER BY ALL", "--json"]),
+    # event_kinds holds every kind of the vocabulary, more than the dump
+    # shows whole: the kinds the runs wrote.
+    ("lake-event-kinds", SIMDB, ["lake", "SELECT kind, sim, class, value_meaning, documented, n FROM event_kinds "
+                                         "WHERE n > 0 ORDER BY sim, kind"]),
     ("collapse", ANALYZE, ["collapse", *FARM_MATRICES]),
     ("series", ANALYZE, ["series", FARM_MATRICES[0], "--every", "5"]),
     ("series-where", ANALYZE, ["series", *FARM_MATRICES, "--where", "EXP=a", "--every", "10"]),

@@ -6,14 +6,14 @@ prints, and the catalog's part of the console's Ask prompt
 
   describe(topic=None, pool=None, views_root=views.VIEWS) -> str
                  a topic's text: with none, the index of the topics and
-                 of every table, view, macro and saved view; else one of
-                 TOPICS, or a name, which gives each thing it names (a
-                 table or view of the catalog, a macro, a saved view:
-                 `events` is a view of the catalog and the event kinds'
-                 topic, `experiments` a table and a saved view).
-                 ValueError for anything else, naming the topics. `pool`
-                 is an engine.Pool of the catalog's readers; glossary and
-                 views read files alone
+                 of every table, view, macro, saved view and event kind;
+                 else one of TOPICS, or a name, which gives each thing it
+                 names (a table or view of the catalog, a macro, a saved
+                 view, an event kind: `events` is a view of the catalog
+                 and the event kinds' topic, `experiments` a table and a
+                 saved view). ValueError for anything else, naming the
+                 topics. `pool` is an engine.Pool of the catalog's
+                 readers; glossary, phases and views read files alone
   glossary() -> str
                  glossary.md: the sims' terms and DuckDB's dialect
   glossary_section(title) -> str
@@ -23,15 +23,22 @@ prints, and the catalog's part of the console's Ask prompt
                  the catalog (catalog.schema's parts): main's tables and
                  views with their columns and the catalog's notes, raw's
                  names, the macros, the scored metrics and the event kinds
+  phases_text() -> str
+                 the vocabulary's phases, episodes and reasons, each with
+                 its description
   views_text(saved, intro, sql=True) -> str
                  the saved views (views.saved's) under a heading and
                  `intro`: each one's title, description, params and, with
                  `sql`, its SQL
 
-Every text is sorted by name and free of counts and times, so the same
-catalog and views give the same bytes: the Ask prompt is cached on them.
-Nothing here names the Ask panel's tools, which are ask_prompt.md's and
-ask.py's to describe.
+The event kinds are event_kinds' rows, which the catalog makes from the
+vocabulary (crates/strims-wan/vocab.toml, simlab.vocab) and the kinds the
+runs hold; the phases, episodes and reasons are the vocabulary's own.
+Every text is sorted (by name, the event kinds by their class first) and
+free of counts and times, but the `events` topic's and an event kind's
+counts, so the same catalog and views give the same bytes: the Ask
+prompt is cached on them. Nothing here names the Ask panel's tools,
+which are ask_prompt.md's and ask.py's to describe.
 """
 
 import difflib
@@ -40,16 +47,22 @@ import re
 import textwrap
 from pathlib import Path
 
-from . import catalog, views
+from . import catalog, views, vocab
 
 GLOSSARY = Path(__file__).resolve().parent / "glossary.md"
 # A markdown file's leading comment (its licence and what it is for).
 COMMENT = re.compile(r"\A<!--.*?-->\s*", re.S)
-TOPICS = ("glossary", "tables", "macros", "metrics", "events", "views")
+TOPICS = ("glossary", "tables", "macros", "metrics", "events", "phases", "views")
 MACRO_KINDS = ("macro", "table macro", "macros")
-# A column's catalog note, at most this long; a grain in `tables`' lines.
+# A column's catalog note, at most this long; a grain in `tables`' lines;
+# an event kind's description, note or column.
 NOTE_CHARS = 240
 GRAIN_CHARS = 160
+KIND_CHARS = 600
+# What the vocabulary's other sections name, as the catalog holds them.
+SECTIONS = {"phases": "What each second of a run is: verdict_seconds' phase, and pooled's and spec's by phase.",
+            "episodes": "A run's spells: episodes' kind.",
+            "reasons": "Why a node's push parent of a stream changed: parents' reason."}
 VIEWS_INTRO = ("The console's pages, each one SELECT whose `$name`s its params bind. `simdb.py view NAME --param "
                "name=value` runs one, and `simdb.py describe NAME` gives its SQL.")
 
@@ -184,14 +197,87 @@ def metrics_lines(schema):
     return out
 
 
-def events_lines(schema):
-    out = ["## Event kinds", "", "event_kinds: the `events` and `derived_events` kinds by sim.", ""]
-    for e in sorted(schema.get("event_kinds") or [], key=lambda e: (str(e.get("sim")), str(e.get("kind")))):
-        line = f"- {e.get('kind')} ({e.get('sim')}): {clipped(e.get('description') or '', NOTE_CHARS)}"
-        if e.get("value_meaning"):
-            line += f"; value: {clipped(e['value_meaning'], 120)}"
-        out.append(line)
+def kinds_by(schema):
+    """event_kinds' rows by kind, each kind's by sim."""
+    out = {}
+    for e in sorted(schema.get("event_kinds") or [], key=lambda e: (str(e.get("kind")), str(e.get("sim")))):
+        out.setdefault(str(e.get("kind")), []).append(e)
     return out
+
+
+def seen_text(rows):
+    """How many events of a kind the catalog holds, by sim, and the days
+    the first and last ran."""
+    out = []
+    for r in rows:
+        n = r.get("n") or 0
+        days = (f" ({str(r['first_seen'])[:10]} to {str(r['last_seen'])[:10]})"
+                if n and r.get("first_seen") and r.get("last_seen") else "")
+        out.append(f"{r.get('sim')} {n:,}{days}")
+    return ", ".join(out)
+
+
+def kind_lines(kind, rows, counts=False, grouped=False):
+    """A kind's lines, from its event_kinds rows (one a sim): its class
+    (but `grouped`, under its class's heading), knob and sims, its
+    description, what its columns hold, each sim's note and a retired
+    kind's replacement; with `counts`, how many the catalog holds."""
+    r = rows[0]
+    sims = [str(x.get("sim")) for x in rows]
+    if r.get("documented") is False:
+        out = [f"- {kind} ({', '.join(sims)}): not in the vocabulary"]
+    else:
+        tags = [t for t in (None if grouped else r.get("class"), r.get("with") and f"with {r['with']}") if t]
+        if sims != [catalog.DERIVED_SIM]:
+            tags.append(", ".join(sims))
+        out = [f"- {kind}" + (f" ({'; '.join(tags)})" if tags else "")
+               + f": {clipped(r.get('description') or '', KIND_CHARS)}"]
+        cols = []
+        for c, key in (("node", "node"), ("peer", "peer"), ("value", "value_meaning"), ("detail", "detail")):
+            if r.get(key):
+                text = r[key] + (f" ({catalog.either(r['details'])})" if c == "detail" and r.get("details") else "")
+                cols.append(f"{c}: {clipped(text, KIND_CHARS)}")
+        if cols:
+            out.append("  - " + "; ".join(cols))
+        out += [f"  - {x['sim']}: {clipped(x['notes'], KIND_CHARS)}" for x in rows if x.get("notes")]
+        out += [f"  - {x['sim']}'s replaced by {x['replaced_by']}" for x in rows if x.get("replaced_by")]
+    if counts:
+        out.append(f"  - events: {seen_text(rows)}")
+    return out
+
+
+def events_lines(schema, counts=False):
+    """event_kinds' kinds by class (vocab.CLASSES' order, then those the
+    vocabulary lacks), each kind_lines'."""
+    by = kinds_by(schema)
+    out = ["## Event kinds", "",
+           "event_kinds: the kinds of `events` (the sims') and `derived_events` (the verdict's, sim 'derived'), "
+           "the vocabulary's (crates/strims-wan/vocab.toml), by class: each kind's knob (with, where a sim writes "
+           "it only under one) and the sims whose runs may hold it, what it records, what its node, peer, value "
+           "and detail hold, and a sim's note where that sim's kind differs."]
+    groups = [(c, vocab.CLASS_DOCS[c]) for c in vocab.CLASSES] + [(None, "Kinds the runs hold that the vocabulary "
+                                                                         "lacks.")]
+    for cls, doc in groups:
+        names = [k for k, rows in by.items() if rows[0].get("class") == cls
+                 or (cls is None and rows[0].get("class") not in vocab.CLASSES)]
+        if not names:
+            continue
+        out += ["", f"### {cls or 'undocumented'}", doc, ""]
+        for k in names:
+            out += kind_lines(k, by[k], counts, grouped=True)
+    return out
+
+
+def phases_text():
+    """The vocabulary's phases, episodes and reasons (SECTIONS), each with
+    its description."""
+    out = ["# Phases, episodes and reasons", "",
+           "The vocabulary's (crates/strims-wan/vocab.toml) names of what the verdict and the sims' tables hold "
+           "beside the event kinds."]
+    for section, doc in SECTIONS.items():
+        out += ["", f"## {section.capitalize()}", doc, ""]
+        out += [f"- {name}: {v['description']}" for name, v in vocab.entries(section).items()]
+    return "\n".join(out) + "\n"
 
 
 def catalog_text(schema):
@@ -258,7 +344,10 @@ TOPIC_DOCS = {
               "fisher_p, ...), with their parameters",
     "MACRO": "a macro's line of `macros`",
     "metrics": "the scored metrics: each one's better direction, kind, tie band, guard, unit and SQL",
-    "events": "the event kinds of `events` and `derived_events`, by sim",
+    "events": "the event kinds of `events` and `derived_events`, the vocabulary's (crates/strims-wan/vocab.toml), "
+              "by class: each one's sims, columns and notes, and how many the catalog holds",
+    "KIND": "an event kind's line of `events`",
+    "phases": "the verdict's phases, the episodes and the parents table's reasons, the vocabulary's",
     "views": "the saved views (the console's pages): their titles, descriptions and params",
     "VIEW": "a saved view: its title, description, params and SQL",
 }
@@ -276,6 +365,8 @@ def index_text(schema, saved):
               for k, v in TOPIC_DOCS.items()]
     lines += ["", wrapped("Tables and views", names), wrapped("Macros", [m["name"] for m in macros(schema)]),
               wrapped("Saved views", sorted(v.name for v in saved))]
+    if kinds := list(kinds_by(schema)):
+        lines.append(wrapped("Event kinds", kinds))
     return "\n".join(lines) + "\n"
 
 
@@ -284,6 +375,8 @@ def describe(topic=None, pool=None, views_root=views.VIEWS):
     saved = views.saved(views_root)
     if topic == "glossary":
         return glossary()
+    if topic == "phases":
+        return phases_text()
     if topic == "views":
         return views_text(saved, VIEWS_INTRO, sql=False)
     schema = catalog.schema(pool)
@@ -297,16 +390,19 @@ def describe(topic=None, pool=None, views_root=views.VIEWS):
                                            .get(topic, []))))
     fixed = {"tables": lambda: tables_text(schema), "macros": lambda: "\n".join(macros_lines(schema)) + "\n",
              "metrics": lambda: "\n".join(metrics_lines(schema)) + "\n",
-             "events": lambda: "\n".join(events_lines(schema)) + "\n"}
+             "events": lambda: "\n".join(events_lines(schema, counts=True)) + "\n"}
     if topic in fixed:
         parts.append(fixed[topic]())
     parts += [macro_line(m) + "\n" for m in macros(schema) if m["name"] == topic]
     parts += ["\n".join(view_lines(v)) for v in saved if v.name == topic]
+    kinds = kinds_by(schema)
+    if topic in kinds:
+        parts.append("\n".join(kind_lines(topic, kinds[topic], counts=True)) + "\n")
     if parts:
         return "\n".join(parts)
     names = ([t["name"] for t in main_tables(schema)] + [m["name"] for m in macros(schema)]
-             + [v.name for v in saved])
+             + [v.name for v in saved] + list(kinds))
     near = difflib.get_close_matches(str(topic), names + list(TOPICS), n=3)
     raise ValueError(f"no topic {topic!r}" + (f" (did you mean {', '.join(near)}?)" if near else "") +
-                     f": the topics are {', '.join(TOPICS)}, or the name of a table, view, macro or saved view "
-                     "(describe with no topic lists them)")
+                     f": the topics are {', '.join(TOPICS)}, or the name of a table, view, macro, saved view or "
+                     "event kind (describe with no topic lists them)")

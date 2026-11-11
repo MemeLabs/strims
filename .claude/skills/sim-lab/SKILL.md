@@ -14,9 +14,10 @@ target/sim-db.
 
 ## Start here
 
-    python3 hack/sim-db/simdb.py describe            # the topics, and every table, macro and saved view
+    python3 hack/sim-db/simdb.py describe            # the topics, and every table, macro, saved view and event kind
     python3 hack/sim-db/simdb.py describe glossary   # the terms: cells, arms, the verdict, collapses, phases, ...
-    python3 hack/sim-db/simdb.py describe NAME       # a table's columns and notes, a macro, a view's params and SQL
+    python3 hack/sim-db/simdb.py describe events     # the event kinds (crates/strims-wan/vocab.toml) and their counts
+    python3 hack/sim-db/simdb.py describe NAME       # a table's columns and notes, a macro, a view's params and SQL, a kind
 
 ## Which command
 

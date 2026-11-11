@@ -76,6 +76,10 @@ from .verdict import DERIVED, derived_dir, files, judge, load_series, plist, wan
 PULL_MB = 1000
 # macros.sql: the views' macros.
 MACROS = Path(__file__).with_name("sql") / "macros.sql"
+# The phase `pooled` and `spec` give a read past the verdict's seconds
+# (the vocabulary's phase of that name): the verdict's phases are the
+# others.
+TAIL = "tail"
 
 
 @dataclasses.dataclass
@@ -624,7 +628,7 @@ def pooled(sel, by="none", say=None):
     with v:
         need(v.have, "reads")
         group = {"none": "NULL", "bin": f"(t_ms // {sel.bin}) * {sel.bin}", "viewer": "viewer",
-                 "phase": "coalesce(vs.phase, 'tail')"}[by]
+                 "phase": f"coalesce(vs.phase, {q(TAIL)})"}[by]
         join = ("LEFT JOIN verdict_seconds vs ON vs.k = x.k AND vs.src = x.src AND vs.sec = x.t_ms // 1000"
                 if by == "phase" else "")
         where = time_filter(sel, "x.t_ms")
@@ -1042,7 +1046,7 @@ def spec(sel, by="phase", say=None):
     with views(sel, derived=by == "phase", say=say) as v:
         if "spec_requests" not in v.have and "parks" not in v.have:
             need(v.have, "spec_requests", "parks")
-        phase = "coalesce(vs.phase, 'tail')" if by == "phase" else "'all'"
+        phase = f"coalesce(vs.phase, {q(TAIL)})" if by == "phase" else "'all'"
         join = ("LEFT JOIN verdict_seconds vs ON vs.k = x.k AND vs.src = x.src AND vs.sec = x.t_ms // 1000"
                 if by == "phase" else "")
         w = " AND ".join(["x.honest", *time_filter(sel, "x.t_ms")])

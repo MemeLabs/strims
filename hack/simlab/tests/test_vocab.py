@@ -199,6 +199,18 @@ class Queries(unittest.TestCase):
         self.assertEqual(vocab.retired(doc), ["b", "c"])
         self.assertEqual(vocab.kinds(doc=doc), ["a"])
 
+    def test_who_holds_a_kind_its_value_and_its_knob(self):
+        self.assertEqual(vocab.holders("latency"), ["strims-sim", "ppspp"])
+        self.assertEqual(vocab.holders("leave"), ["ppspp"])
+        self.assertEqual(vocab.holders("parent_choice"), list(vocab.SIMS))
+        self.assertEqual(vocab.holders("collapse"), [])
+        self.assertEqual(vocab.value_text(vocab.kind("uplink")), "the limit, bytes/s")
+        self.assertEqual(vocab.value_text(vocab.kind("copies")), "its copies")
+        self.assertIsNone(vocab.value_text(vocab.kind("join")))
+        self.assertEqual(vocab.knobs(), {"SIM_SPEC": vocab.unwritten()})
+        self.assertEqual(list(vocab.entries("reasons")), vocab.reasons())
+        self.assertTrue(vocab.entries("phases")["steady"]["description"])
+
 
 if __name__ == "__main__":
     unittest.main()

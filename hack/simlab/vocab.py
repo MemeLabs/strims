@@ -36,8 +36,14 @@ in its order:
   current(kid, sim)            the current id of a kind `sim`'s runs name
                                `kid`: itself, or its replacement
   notes(kid, sim)              that sim's note on the kind, or None
+  holders(kid)                 the sims whose runs may hold the kind
+  value_text(k)                what a kind's table says `value` holds, its
+                               unit after it
+  knobs()                      the current kinds a knob (`with`) gates, by
+                               knob
   phases(), episodes(), reasons()
                                those sections' names
+  entries(section)             a section's tables, by name
 
   outputs() -> {path: text}    the generated files, as the document makes
                                them
@@ -277,6 +283,36 @@ def notes(kid, sim, doc=None):
     return kind(kid, doc).get("notes", {}).get(sim)
 
 
+def holders(kid, doc=None):
+    """The sims whose runs may hold kind `kid`, in SIMS' order: those that
+    write it (a retired kind's, those that wrote it), or, for a kind only
+    other builds write (no sims), every sim, since either sim's runs hold
+    it from such a build with its knob on; none for a derived kind, which
+    no sim writes."""
+    k = kind(kid, doc)
+    if k["class"] == "derived":
+        return []
+    return [s for s in SIMS if s in k["sims"]] if k["sims"] else list(SIMS)
+
+
+def value_text(k):
+    """What kind table `k` says `value` holds, its unit after a comma
+    ("the limit, bytes/s"); None where it says nothing."""
+    if "value" not in k:
+        return None
+    return k["value"] + (f", {k['unit']}" if "unit" in k else "")
+
+
+def knobs(doc=None):
+    """The current kinds a knob gates, {knob (`with`): [id]}, in the
+    document's order."""
+    out = {}
+    for kid in kinds(doc=doc):
+        if "with" in kind(kid, doc):
+            out.setdefault(kind(kid, doc)["with"], []).append(kid)
+    return out
+
+
 def phases(doc=None):
     return list(_doc(doc)["phases"])
 
@@ -287,6 +323,12 @@ def episodes(doc=None):
 
 def reasons(doc=None):
     return list(_doc(doc)["reasons"])
+
+
+def entries(section, doc=None):
+    """Section `section`'s (phases, episodes or reasons) tables, {name:
+    table}, in the document's order."""
+    return dict(_doc(doc)[section])
 
 
 # --- generated files -------------------------------------------------------------
@@ -336,9 +378,7 @@ def _kind_doc(k):
     for f in ("node", "peer", "value", "detail"):
         if f not in k:
             continue
-        text = k[f]
-        if f == "value" and "unit" in k:
-            text += f", {k['unit']}"
+        text = value_text(k) if f == "value" else k[f]
         if f == "detail" and "details" in k:
             text += ": " + ", ".join(f"`{d}`" for d in k["details"])
         items.append(f"`{f}`: {text}")

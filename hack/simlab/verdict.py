@@ -111,7 +111,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from . import store_host
+from . import store_host, vocab
 
 
 # The latency budget: Amazon IVS's low-latency figures, glass to glass
@@ -668,8 +668,9 @@ DERIVED = {
                  "len": "BIGINT"},
     "derived_events": {"k": "VARCHAR", "src": "VARCHAR", "sec": "DOUBLE", "kind": "VARCHAR", "value": "DOUBLE"},
 }
-# derived_events' kinds (events'), none of them the sims'.
-DERIVED_KINDS = ("start", "seed_down", "seed_up", "present_join", "present_leave", "onset", "recovered", "collapse")
+# derived_events' kinds (events'): the vocabulary's derived ones, in its
+# order, none of them the sims'.
+DERIVED_KINDS = tuple(vocab.derived())
 # A run's verdict, then run_metrics' columns. startup_s is the seconds a
 # collapse must last past (startup).
 VERDICT_COLS = {"k": "VARCHAR", "src": "VARCHAR", "onset": "BIGINT", "trees": "BIGINT", "delivery": "BIGINT",

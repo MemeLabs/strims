@@ -88,7 +88,10 @@ CLI prints.
 
 The tables (`table_catalog` holds this, by table, for the console and
 for questions in plain language; `metric_catalog` holds each column and
-metric, `event_kinds` each event):
+metric, `event_kinds` each event kind, the vocabulary's,
+crates/strims-wan/vocab.toml (simlab.vocab), with how many of each the
+runs hold: an index warns on stderr of a kind the runs hold that it
+lacks):
 
   experiments       one an experiment: a suite farm run (exp_id its name,
                     s7ae7e), or a local suite invocation (exp_id its cache
@@ -192,7 +195,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import engine, query, store, store_host, verdict
+from . import engine, query, store, store_host, verdict, vocab
 from .engine import EXTENSIONS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -349,7 +352,7 @@ def inputs():
         add(farm / n, kind)
     for p in (simdb().main_checkout() / "hack" / "sim-farm" / "farm.py", SUITE_PY,
               ROOT / "hack" / "simlab" / "suite.py", ROOT / "hack" / "simlab" / "verdict.py", Path(__file__),
-              *DOC_FILES):
+              Path(vocab.__file__), vocab.DOCUMENT, *DOC_FILES):
         add(p, "code")
     return out
 
@@ -559,51 +562,6 @@ def column_docs(text):
             p = text[m.end() + 2:].strip()
         if p and m.group(1) not in out:
             out[m.group(1)] = p
-    return out
-
-
-def event_docs(text):
-    """The events row's text by name: the item of its list that names it
-    (between separators, `, `, `; ` or ` and `, at its depth of
-    parentheses), after the text the list's parenthesis follows when it's
-    in one ("every fault of the scenario: `crash`")."""
-    depth, opens, at_depth = 0, [], []
-    for ch in text:
-        at_depth.append(depth)
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth = max(0, depth - 1)
-    seps = re.compile(r", |; | and ")
-    ends = lambda lo: text[max(0, lo - 2):lo] in (", ", "; ") or text[max(0, lo - 5):lo] == " and "
-
-    def item(pos):
-        """The item around `pos`, and where its parenthesis opens (or -1)."""
-        d = at_depth[pos]
-        lo = pos
-        while lo > 0 and not (at_depth[lo - 1] == d and ends(lo)) and not (text[lo - 1] == "(" and d > 0
-                                                                          and at_depth[lo - 1] == d - 1):
-            lo -= 1
-        hi = pos
-        while hi < len(text) and not (at_depth[hi] == d and seps.match(text, hi)) \
-                and not (text[hi] == ")" and at_depth[hi] == d):
-            hi += 1
-        opened = next((i for i in range(lo - 1, -1, -1) if text[i] == "(" and at_depth[i] == d - 1), -1) if d else -1
-        return lo, hi, opened
-
-    out = {}
-    for m in BACKTICK.finditer(text):
-        name = m.group(1)
-        if name in out:
-            continue
-        lo, hi, opened = item(m.start())
-        s = text[lo:hi].strip(" ,;")
-        if opened > 0:
-            clo, _, _ = item(opened - 1)
-            context = text[clo:opened].strip(" ,;")
-            s = f"{context}: {s}" if context else s
-        # the row's last column names the list that follows it
-        out[name] = re.sub(r"^`detail`: ", "", s)
     return out
 
 
@@ -976,6 +934,7 @@ def index(workers=None, progress=None, wait=True):
                 lake("\n".join(["BEGIN;", *scoring, "DELETE FROM raw.info WHERE key = 'scoring_version';",
                                  f"INSERT INTO raw.info VALUES ('scoring_version', {q(sv)});",
                                  *catalogs_sql(cols, tmp), "COMMIT;"]), write=True, out=None)
+            warn_undocumented()
             say("done", f"index: the scoring macros made again ({took():.1f} s)")
             return Indexed(changed=True, scoring=True, elapsed_s=took())
         say("scan", f"index: {len(new)} new files, {len(changed)} changed, {len(gone)} gone; "
@@ -998,6 +957,7 @@ def index(workers=None, progress=None, wait=True):
                 shutil.copytree(tmp, failed_dir)
                 (failed_dir / "index.sql").write_text(sql.replace(str(tmp), str(failed_dir)))
                 sys.exit(f"index: {e}\n(the SQL: {failed_dir / 'index.sql'}; the catalog is as it was)")
+        warn_undocumented()
         say("write", f"index: compacting ({took():.0f} s in)")
         compact()
         say("done", f"index: done in {took():.0f} s")
@@ -1670,8 +1630,42 @@ def commits_sql(tmp, ins, parsed):
 
 # --- self-description -----------------------------------------------------------
 
+
+def either(names):
+    """`names` as a list in words: "a, b or c"."""
+    names = list(names)
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} or {names[-1]}"
+
+
+def clause(text):
+    """A description as a clause: its first letter lower case (but an
+    acronym's), its full stop dropped."""
+    text = text.strip().rstrip(".")
+    if len(text) > 1 and text[0].isupper() and not text[1].isupper():
+        text = text[0].lower() + text[1:]
+    return text
+
+
+def verdict_phases():
+    """The phases the verdict gives a second: the vocabulary's, but
+    query.TAIL (a read's past the verdict's seconds)."""
+    return [p for p in vocab.phases() if p != query.TAIL]
+
+
+def verdict_phases_text():
+    """The verdict's phases, each with its description."""
+    return either(f"{p} ({clause(vocab.entries('phases')[p]['description'])})" for p in verdict_phases())
+
+
+def derived_text():
+    """The derived kinds, each with what its value holds."""
+    return ", ".join(kid + (f" (value: {v})" if (v := vocab.value_text(vocab.kind(kid))) else "")
+                     for kid in vocab.derived())
+
+
 # The catalog's tables: (kind, grain, keys, joins, description). The sims'
-# tables add their own, from the sims' docs (doc_tables).
+# tables add their own, from the sims' docs (doc_tables); the vocabulary
+# gives the kinds and phases.
 TABLE_DOCS = {
     "experiments": (
         "table", "an experiment", "exp_id", "experiment_cells, experiment_jobs USING (exp_id)",
@@ -1750,15 +1744,14 @@ TABLE_DOCS = {
         "startup_s, then analyze.run_metrics' columns. verdicts_all holds every version kept."),
     "verdict_seconds": (
         "view", "a job's second", "k, sec", "jobs USING (k, src); seconds USING (k, src, sec)",
-        "Each second's verdict: phase (startup, after_down, after_up, steady), healthy and what judged it "
+        f"Each second's verdict: phase, the vocabulary's: {verdict_phases_text()}; healthy and what judged it "
         "(trees_bad, deliv_bad, lag_high, lag_rise), hit_share, delivery and lag_q (the honest viewers' q0.9 lag)."),
     "episodes": (
         "view", "a job's spell", "k, kind, start", "jobs USING (k, src)",
         "A run's healthy, unhealthy and collapse spells: [start, stop) seconds, len."),
     "derived_events": (
         "view", "a job's derived event", "k, sec, kind", "jobs USING (k, src)",
-        "analyze.events: start, seed_down, seed_up, present_join, present_leave, onset, recovered, collapse "
-        "(value: a step's new uplink over the old, how many viewers came or went, a collapse's length)."),
+        f"analyze.events, the vocabulary's derived kinds (event_kinds' sim 'derived'): {derived_text()}."),
     "catalog_info": (
         "view", "a setting", "key", "",
         "The catalog's versions (catalog_version, verdict_version: the current verdicts', analyze's "
@@ -1771,8 +1764,13 @@ TABLE_DOCS = {
         "reads and its source, the sims that write it, and when it was first and last seen."),
     "event_kinds": (
         "table", "an event kind of a sim", "kind, sim", "events, derived_events ON kind",
-        "The kinds of events seen (sim 'derived' for derived_events'): the docs' description, what `value` means, "
-        "how many, and when first and last seen."),
+        "Every kind of the vocabulary (crates/strims-wan/vocab.toml), a row for each sim whose runs may hold it "
+        "(sim 'derived' for derived_events'; both sims for a kind only other builds write, under its knob), and "
+        "each kind a sim's events hold that the vocabulary doesn't give that sim (documented false, the rest "
+        f"NULL): class ({either(vocab.CLASSES)}), description, what node, peer, value (value_meaning, its unit "
+        "after it) and detail hold, details (detail's values), notes (that sim's, where its kind differs), \"with\" "
+        "(the knob a sim writes it under, quoted: a keyword), replaced_by (a retired kind's current id, that "
+        "sim's), documented, n (how many events: 0 for a kind no run has written), and when first and last seen."),
     "table_catalog": (
         "table", "a table", "name", "metric_catalog ON metric_catalog.tbl = table_catalog.name",
         "This list: each table's grain, keys, joins and description."),
@@ -1837,7 +1835,7 @@ VERDICT_DOCS = {
     "unhealthy": "the share of unhealthy seconds", "lag_p50": "the median of the lag q0.9 series",
     "lag_max": "the largest lag q0.9", "collapsed": "an unhealthy spell of COLLAPSED_SECS lasting past startup_s",
     "startup_s": "the seconds a collapse must last past: STARTUP_SECS, or 0 when every honest viewer arrived later",
-    "phase": "startup, after_down, after_up (within STEP_SECS of a seed step) or steady",
+    "phase": f"{either(verdict_phases())}: the vocabulary's phases, as the table's description gives them",
     "healthy": "no trigger held this second", "trees_bad": "the smoothed hit share under TREES_SHARE",
     "deliv_bad": "the delivery share under DELIVERY_SHARE", "lag_high": "the lag q0.9 past LAG_HIGH_MS",
     "lag_rise": "the lag rising past LAG_SLOPE ms/s over LAG_SLOPE_SECS while past LAG_SLOPE_FLOOR_MS",
@@ -1845,12 +1843,28 @@ VERDICT_DOCS = {
     "lag_q": "the honest present viewers' nearest-rank q0.9 lag, ms",
     "verdict_version": "the verdicts' version (simdb.derived_version)",
 }
-DERIVED_EVENT_DOCS = {
-    "start": "the stream's start", "seed_down": "the seed's uplink stepped down (value: new over old)",
-    "seed_up": "the seed's uplink stepped up (value: new over old)",
-    "present_join": "viewers present rose (value: by how many)", "present_leave": "viewers present fell (value: by how many)",
-    "onset": "the verdict's onset", "recovered": "the verdict's recovery", "collapse": "a collapse spell began (value: its length, s)",
-}
+# event_kinds' columns from the vocabulary, as kind_docs gives them.
+KIND_COLS = {"kind": "VARCHAR", "sim": "VARCHAR", "class": "VARCHAR", "description": "VARCHAR",
+             "value_meaning": "VARCHAR", "node": "VARCHAR", "peer": "VARCHAR", "detail": "VARCHAR",
+             "details": "VARCHAR[]", "notes": "VARCHAR", "with": "VARCHAR", "replaced_by": "VARCHAR"}
+# The sim event_kinds names derived_events' kinds by.
+DERIVED_SIM = "derived"
+
+
+def kind_docs():
+    """event_kinds' records of the vocabulary's kinds, retired ones too: a
+    kind's for each sim whose runs may hold it (vocab.holders), with that
+    sim's note and replacement; a derived kind's for DERIVED_SIM."""
+    out = []
+    for kid in [*vocab.kinds(), *vocab.retired()]:
+        k = vocab.kind(kid)
+        for sim in [DERIVED_SIM] if k["class"] == "derived" else vocab.holders(kid):
+            out.append({"kind": kid, "sim": sim, "class": k["class"], "description": k["description"],
+                        "value_meaning": vocab.value_text(k), "node": k.get("node"), "peer": k.get("peer"),
+                        "detail": k.get("detail"), "details": k.get("details"), "notes": vocab.notes(kid, sim),
+                        "with": k.get("with"),
+                        "replaced_by": vocab.current(kid, sim) if "replaced_by" in k else None})
+    return out
 
 
 def catalogs_sql(cols, tmp):
@@ -1927,32 +1941,42 @@ SELECT d.name, d.tbl, d.type, d.unit, d.description, d.better, d.kind, d.tie, d.
        d.metric, list_sort(s.sims) AS sims, s.first_seen, s.last_seen
 FROM {read_jsonl(jsonl(tmp / 'metric_catalog.jsonl', recs), mcols)} d LEFT JOIN seen s USING (tbl, name)
 ORDER BY d.tbl, d.name;""")
-    # event_kinds
-    ev = []
-    for sim, ts in docs.items():
-        if "events" in ts:
-            for kind, text in event_docs(ts["events"][1]).items():
-                m = re.search(r"`value` ([^,;)]+)", text)
-                ev.append({"kind": kind, "sim": sim, "description": text, "value_meaning": m.group(1).strip() if m else None})
-    for kind, text in DERIVED_EVENT_DOCS.items():
-        m = re.search(r"\(value: ([^)]+)\)", text)
-        ev.append({"kind": kind, "sim": "derived", "description": text, "value_meaning": m.group(1) if m else None})
-    ecols = {"kind": "VARCHAR", "sim": "VARCHAR", "description": "VARCHAR", "value_meaning": "VARCHAR"}
+    # event_kinds: the vocabulary's kinds, and the kinds the runs hold that
+    # it lacks (undocumented warns of them)
     seen = []
     if "events" in cols:
         seen.append("SELECT j.sim, e.kind, count(*) AS n, min(j.ran_at) AS first_seen, max(j.ran_at) AS last_seen "
                     "FROM raw.events e JOIN main.jobs j USING (k, src) GROUP BY ALL")
     if "derived_events" in cols:
-        seen.append("SELECT 'derived' AS sim, e.kind, count(*) AS n, min(j.ran_at), max(j.ran_at) "
+        seen.append(f"SELECT {q(DERIVED_SIM)} AS sim, e.kind, count(*) AS n, min(j.ran_at), max(j.ran_at) "
                     "FROM main.derived_events e JOIN main.jobs j USING (k) GROUP BY ALL")
-    seen_sql = " UNION ALL ".join(seen) or ("SELECT NULL::VARCHAR AS sim, NULL::VARCHAR AS kind, 0 AS n, "
+    seen_sql = " UNION ALL ".join(seen) or ("SELECT NULL::VARCHAR AS sim, NULL::VARCHAR AS kind, 0::BIGINT AS n, "
                                             "NULL::TIMESTAMPTZ AS first_seen, NULL::TIMESTAMPTZ AS last_seen WHERE false")
+    doc_cols = ", ".join(f"d.{ident(c)}" for c in KIND_COLS if c not in ("kind", "sim"))
     out.append(f"""CREATE OR REPLACE TABLE main.event_kinds AS
 WITH seen AS ({seen_sql}),
-doc AS (SELECT * FROM {read_jsonl(jsonl(tmp / 'event_kinds.jsonl', ev), ecols)})
-SELECT s.kind, s.sim, d.description, d.value_meaning, s.n, s.first_seen, s.last_seen
-FROM seen s LEFT JOIN doc d USING (kind, sim) ORDER BY s.sim, s.kind;""")
+doc AS (SELECT * FROM {read_jsonl(jsonl(tmp / 'event_kinds.jsonl', kind_docs()), KIND_COLS)})
+SELECT coalesce(d.kind, s.kind) AS kind, coalesce(d.sim, s.sim) AS sim, {doc_cols},
+       d.kind IS NOT NULL AS documented, coalesce(s.n, 0) AS n, s.first_seen, s.last_seen
+FROM doc d FULL JOIN seen s ON s.kind = d.kind AND s.sim = d.sim ORDER BY sim, kind;""")
     return out
+
+
+def undocumented():
+    """The kinds event_kinds holds that the vocabulary doesn't give the
+    sims whose events hold them, {kind: [sim]}."""
+    out = {}
+    for r in lake("SELECT kind, sim FROM event_kinds WHERE NOT documented ORDER BY kind, sim;"):
+        out.setdefault(r["kind"], []).append(r["sim"])
+    return out
+
+
+def warn_undocumented():
+    """Warns on stderr of each kind of undocumented's: a kind the sims
+    write that the vocabulary should name."""
+    for kind, sims in undocumented().items():
+        print(f"index: event kind {kind} ({', '.join(sims)}) isn't in the vocabulary, "
+              f"{vocab.DOCUMENT.relative_to(ROOT)}", file=sys.stderr)
 
 
 # --- scoring ----------------------------------------------------------------------

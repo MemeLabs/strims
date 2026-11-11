@@ -84,16 +84,17 @@ rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
                   good (arrive_ms, negative for one there from the start,
                   and depart_ms), which the verdicts' series carry
   events          the sims' timed events: t_us, kind, node, peer, value,
-                  detail; with SIM_SPEC=1 / STRIMS_SIM_SPEC=1 also every
-                  node's scheduler decisions (parent_choice, parent_open,
-                  parent_switch, prune, shed_by, parent_link_lost,
-                  window_collapse, timeout_loss, and read_skip, a first-gap
-                  skip with the chunks passed over in value: tens of
-                  thousands of rows a minute of a hundred viewers)
+                  detail, of the vocabulary's kinds
+                  (crates/strims-wan/vocab.toml: `describe events` says
+                  what each holds), those a knob gates only with it on
+                  (with the decision logs, tens of thousands of rows a
+                  minute of a hundred viewers):
+                  {kinds}
   parents         every change of a node's push parent of a stream: t_ms,
                   node, stream, parent (the node from then on, -1 for
-                  none), reason (open, switch, prune, shed, lost), nodes
-                  numbered as in events
+                  none), reason, nodes numbered as in events; the
+                  vocabulary's reasons (`describe phases`):
+                  {reasons}
   arrivals        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 or SIM_SPEC=1
                   / STRIMS_SIM_SPEC=1, every chunk each node first held
                   and its timeline there: t_ms, node, viewer, seq, how
@@ -224,22 +225,24 @@ to either makes them again), the verdicts' tables: `verdict_seconds`
 (each second's phase, health and what judged it), `verdicts` (a run's
 verdict, the seconds a collapse must last past, `startup_s`
 (analyze.startup), and analyze.run_metrics), `episodes` (healthy,
-unhealthy and collapse spells) and `derived_events` (start, seed_down,
-seed_up, present_join, present_leave, onset, recovered, collapse:
-DERIVED_KINDS, none of them a kind the sims' events have; the viewers
-present rising or falling are present_join and present_leave, the sims'
-join and leave a node's). A selection picks runs: `--src` (cache paths,
-globs, default every one), `--cell`, `--arm` (globs) and `--seed`, and a
-run's cell and arm are the same whatever else it selects. A suite farm
-run's runs are named by the suite cell their matrix ran, <cell>@<run>,
-which `--cell` matches whole or by the cell alone, and by the arm
-suite.py names them by (arm_label): a `--sets` run's (its index has a
-knob) by its set, the value its env gives the knob, else by its matrix's
-arm, a `--refs` name. A farm run's cells hold every row it scored: also
-those the farm reused from other runs or matrices, by its matrices'
-indexes (target/sim-farm/<matrix>/index.jsonl), whose sources' tables
-join the selection (pulled when the cache lacks them). A key's tables come
-from one of its sources whatever cells it counts in (its copies are one
+unhealthy and collapse spells) and `derived_events` (none of them a kind
+the sims' events have; the viewers present rising or falling are
+present_join and present_leave, the sims' join and leave a node's), the
+vocabulary's derived kinds, DERIVED_KINDS:
+{derived}
+
+A selection picks runs: `--src` (cache paths, globs, default every one),
+`--cell`, `--arm` (globs) and `--seed`, and a run's cell and arm are the
+same whatever else it selects. A suite farm run's runs are named by the
+suite cell their matrix ran, <cell>@<run>, which `--cell` matches whole
+or by the cell alone, and by the arm suite.py names them by (arm_label):
+a `--sets` run's (its index has a knob) by its set, the value its env
+gives the knob, else by its matrix's arm, a `--refs` name. A farm run's
+cells hold every row it scored: also those the farm reused from other
+runs or matrices, by its matrices' indexes
+(target/sim-farm/<matrix>/index.jsonl), whose sources' tables join the
+selection (pulled when the cache lacks them). A key's tables come from
+one of its sources whatever cells it counts in (its copies are one
 job's): the one holding the most of them, then the later flush (its
 manifest's `at`), then a farm flush's later seq, by number
 (source_ranks).
@@ -259,21 +262,19 @@ manifest's `at`), then a farm flush's later seq, by number
            lag (lag_p50, lag_p99, lag_max, reads), a verdict column (healthy,
            lag_q, hit_share, delivery), a `seconds` column, or a `bins` one
            (summed over the bin). The events are the derived ones and the
-           sims' own (`events`: faults, uplink steps, competing uploads,
-           arrivals, joins, first reads or frames, churn leaves, seed steps
-           and copies, departures and the losses and re-links after them,
-           and with the decision logs the schedulers' parent, window and
-           read events; `--node` and `--peer` pick one node's, or the
-           other's), a kind the selection lacks refused with the kinds it
-           has. `aligned depart` anchors a run on its
+           sims' own (`events`: the vocabulary's scenario and observation
+           kinds, and with the decision logs its decision kinds, as
+           `describe events` lists them; `--node` and `--peer` pick one
+           node's, or the other's), a kind the selection lacks refused
+           with the kinds it has. `aligned depart` anchors a run on its
            first departure, which opens the departures' window
            (`SIM_DEPART`, `STRIMS_SIM_DEPART`), `--nth 0` on each one, and
            `--per node` each viewer that left on its own. With `--per node` each
            node's own series is aligned on its own `--nth` occurrence of
-           a sim's per-node event (a viewer's join, first read or frame,
-           churn leave), the bands over every run's nodes (n counts
-           them); the per-node fields are a node's reads' lags, its
-           `node_bins` columns (summed over the bin) and its
+           a sim's per-node event (one whose `node` is a viewer, as
+           `describe events` says), the bands over every run's nodes
+           (n counts them); the per-node fields are a node's reads' lags,
+           its `node_bins` columns (summed over the bin) and its
            `viewer_seconds` lag_ms (the bin's worst second) and frames
            (summed). The verdict, `seconds` and `bins` columns are
            run-wide, as are the derived events: `--per node` refuses
@@ -345,7 +346,9 @@ by `duckdb`, or by whatever needs it first.
 import argparse
 import importlib.util
 import json
+import re
 import sys
+import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -371,6 +374,28 @@ from simlab.verdict import (  # noqa: E402, F401
 # pulls from S3 (hack/simlab/store.py), which the commands print.
 from simlab import query, store  # noqa: E402
 from simlab.query import PULL_MB  # noqa: E402, F401
+# The event vocabulary (hack/simlab/vocab.py, stdlib), whose names the
+# docs list.
+from simlab import vocab  # noqa: E402
+
+# The sims' event kinds, those a knob gates after the others, by knob.
+EVENT_KINDS = "; ".join(
+    [", ".join(k for k in vocab.kinds() if vocab.kind(k)["class"] != "derived" and "with" not in vocab.kind(k))]
+    + [f"with {knob}=1 / STRIMS_{knob}=1 {', '.join(ks)}" for knob, ks in vocab.knobs().items()])
+
+
+def listed(doc, fields):
+    """`doc` with each line that is a `{name}` alone `fields`' text of the
+    name, wrapped at 72 columns at that line's indent."""
+    def fill(m):
+        return textwrap.fill(fields[m.group(2)], 72, initial_indent=m.group(1), subsequent_indent=m.group(1),
+                             break_on_hyphens=False, break_long_words=False)
+
+    return re.sub(r"^( *)\{([a-z_]+)\}$", fill, doc, flags=re.M)
+
+
+__doc__ = listed(__doc__, {"kinds": EVENT_KINDS, "reasons": ", ".join(vocab.reasons()),
+                           "derived": ", ".join(DERIVED_KINDS)})
 
 # The views' keys and joins: `sql --help`, and the end of `--help`.
 SQL_DOC = """\
@@ -507,10 +532,8 @@ def main():
     qs["pooled"] = sub.add_parser("pooled")
     qs["pooled"].add_argument("--by", choices=("none", "phase", "bin", "viewer"), default="none")
     qs["aligned"] = sub.add_parser("aligned")
-    qs["aligned"].add_argument("event", help=f"a derived event ({', '.join(DERIVED_KINDS)}) or a sim's (its "
-                               "events table's kinds: join, leave, first_read, first_frame, ...; join and leave "
-                               "a node's; with the decision logs parent_choice, parent_open, parent_switch, "
-                               "prune, shed_by, parent_link_lost, window_collapse, timeout_loss, read_skip)")
+    qs["aligned"].add_argument("event", help=f"a derived event ({', '.join(DERIVED_KINDS)}) or a sim's (the "
+                               f"vocabulary's: {EVENT_KINDS}; `describe events` says what each holds)")
     qs["aligned"].add_argument("--node", type=int, help="only events of this node (the sims' events)")
     qs["aligned"].add_argument("--peer", type=int, help="only events about this other node (the sims' events)")
     qs["aligned"].add_argument("--detail", help="only events whose detail matches this glob (the sims' events)")

@@ -12,12 +12,15 @@ DuckLake, so that any question is one SQL statement over it.
 
 `describe` says what the catalog holds, a topic at a time
 (simlab.describe): with no topic, the topics and every table, view,
-macro and saved view; `glossary` the sims' terms (cells, arms, the
-verdict, collapses, phases, playout delays, structural cells, how arms
-compare); `tables` a line a table; a table's name its columns, types,
-units and notes; `macros`, `metrics` and `events` the macros (suite.py's
-scoring among them), the scored metrics and the event kinds; `views`
-the saved views; a view's name its params and SQL.
+macro, saved view and event kind; `glossary` the sims' terms (cells,
+arms, the verdict, collapses, phases, playout delays, structural cells,
+how arms compare); `tables` a line a table; a table's name its columns,
+types, units and notes; `macros`, `metrics` and `events` the macros
+(suite.py's scoring among them), the scored metrics and the event kinds
+(the vocabulary's, crates/strims-wan/vocab.toml, with how many the
+catalog holds); an event kind's name its line of `events`; `phases` the
+vocabulary's phases, episodes and reasons; `views` the saved views; a
+view's name its params and SQL.
 
 `lake` runs a query over the whole catalog, read-only, its macros
 loaded: a script of any number of statements, or with `--param` one
@@ -175,8 +178,8 @@ def add_commands(sub):
     raw = argparse.RawDescriptionHelpFormatter
     d = sub.add_parser("describe", help="what the catalog holds, by topic: start here (catalog.py)",
                        description=__doc__, formatter_class=raw)
-    d.add_argument("topic", nargs="?", help="glossary, tables, macros, metrics, events, views, or a table's, "
-                                            "macro's or saved view's name (none: the topics and names)")
+    d.add_argument("topic", nargs="?", help=f"{', '.join(describe.TOPICS)}, or a table's, macro's, saved view's or "
+                                            "event kind's name (none: the topics and names)")
     lk = sub.add_parser("lake", help="a query over the whole catalog, read-only, its macros loaded (catalog.py)",
                         description=__doc__, formatter_class=raw)
     lk.add_argument("query")

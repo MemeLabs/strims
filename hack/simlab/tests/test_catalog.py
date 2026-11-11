@@ -12,6 +12,10 @@ simlab.verdict's derive pool:
                process, with a DuckDB connection open here; a source that
                fails comes back failed, the others judged
   Schema       catalog.schema over an engine.Pool: the console's parts
+  Kinds        event_kinds from the vocabulary: its every kind, a row for
+               each sim whose runs may hold it, with n 0 where no run wrote
+               it; a kind the runs hold that it lacks, or lacks for that
+               sim, flagged and warned of; the table docs' kinds and phases
   Fetch        the flushes a fetch pulls (store.pull_sources stood in) and
                what the S3 ledger's new lines cost; its refusals
   Tiers        an experiment's tiers from its cells' names, tests and env,
@@ -24,13 +28,17 @@ simlab.verdict's derive pool:
                catalog, as a caller runs them: params bound typed or as
                text, one missing named; the saved views listed, run with
                their defaults or params, an unknown one refused; describe's
-               every topic and name, none naming the Ask panel's tools
+               every topic and name (event kinds too), none naming the
+               Ask panel's tools
 
   python3 hack/simlab/tests/test_catalog.py
 """
 
 import concurrent.futures as cf
+import contextlib
+import copy
 import dataclasses
+import io
 import json
 import multiprocessing
 import os
@@ -55,7 +63,7 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import ask, catalog, describe, engine, store, store_host, suite, verdict, views  # noqa: E402
+from simlab import ask, catalog, describe, engine, query, store, store_host, suite, verdict, views, vocab  # noqa: E402
 
 
 class Fixture(unittest.TestCase):
@@ -200,6 +208,74 @@ class Schema(Fixture):
                                                       "question", "cells", "jobs"})
         self.assertNotIn("first_seen", got["metric_catalog"][0])
         self.assertIn("verdict_version", {r["key"] for r in got["catalog_info"]})
+
+
+def without(doc, kid, sims=None):
+    """Vocabulary `doc` without kind `kid`, or with `sims` its sims."""
+    out = copy.deepcopy(doc)
+    if sims is None:
+        del out["kinds"][kid]
+    else:
+        out["kinds"][kid]["sims"] = sims
+    return out
+
+
+class Kinds(Fixture):
+    def test_the_kinds_are_the_vocabularys_and_the_runs(self):
+        # A vocabulary that lacks up_step (strims-sim's step jobs write it)
+        # and gives latency (every job's) to strims-sim alone.
+        doc = without(without(vocab.load(), "up_step"), "latency", ["strims-sim"])
+        err = io.StringIO()
+        with mock.patch.object(vocab, "load", lambda path=None: doc), contextlib.redirect_stderr(err):
+            self.index()
+            docs = catalog.kind_docs()
+        self.assertEqual(err.getvalue().splitlines(), [
+            "index: event kind latency (ppspp) isn't in the vocabulary, crates/strims-wan/vocab.toml",
+            "index: event kind up_step (strims-sim) isn't in the vocabulary, crates/strims-wan/vocab.toml"])
+        rows = catalog.lake("SELECT * EXCLUDE (first_seen, last_seen) FROM event_kinds ORDER BY sim, kind;")
+        self.assertEqual(list(rows[0]), [*catalog.KIND_COLS, "documented", "n"])
+        got = {(r["kind"], r["sim"]): r for r in rows}
+        # Every kind of the document's, for each sim that may hold it.
+        documented = {k: r for k, r in got.items() if r["documented"]}
+        self.assertEqual(sorted(documented), sorted((d["kind"], d["sim"]) for d in docs))
+        for d in docs:
+            self.assertEqual({c: got[(d["kind"], d["sim"])][c] for c in d}, d)
+        self.assertEqual(sorted(k for k, r in got.items() if not r["documented"]),
+                         [("latency", "ppspp"), ("up_step", "strims-sim")])
+        lost = got[("up_step", "strims-sim")]
+        self.assertGreater(lost["n"], 0)
+        self.assertEqual({c: lost[c] for c in catalog.KIND_COLS if c not in ("kind", "sim")},
+                         dict.fromkeys(set(catalog.KIND_COLS) - {"kind", "sim"}))
+        self.assertGreater(got[("latency", "strims-sim")]["n"], 0)
+        # The fields as the document gives them: a sim's note, value with
+        # its unit, a derived kind's sim.
+        join = got[("join", "ppspp")]
+        self.assertEqual((join["class"], join["node"], join["notes"], join["value_meaning"]),
+                         ("scenario", "the viewer", vocab.notes("join", "ppspp"), None))
+        self.assertEqual(got[("competing_start", "strims-sim")]["value_meaning"], "the competing flow's round trip, ms")
+        self.assertEqual((got[("collapse", "derived")]["class"], got[("collapse", "derived")]["value_meaning"]),
+                         ("derived", "its length, s"))
+        self.assertGreater(got[("start", "derived")]["n"], 0)
+        # A kind no run has written: n 0, for both sims when only other
+        # builds write it, its knob named.
+        for sim in vocab.SIMS:
+            spec = got[("parent_choice", sim)]
+            self.assertEqual((spec["n"], spec["with"], spec["details"], spec["documented"]),
+                             (0, "SIM_SPEC", ["open", "switch"], True))
+        self.assertEqual((got[("arrive", "strims-sim")]["n"], ("arrive", "ppspp") in got), (0, False))
+
+    def test_the_docs_name_the_vocabularys_kinds_and_phases(self):
+        self.assertEqual(verdict.DERIVED_KINDS, tuple(vocab.derived()))
+        self.assertIn(query.TAIL, vocab.phases())
+        self.assertEqual(catalog.verdict_phases(), [p for p in vocab.phases() if p != query.TAIL])
+        derived, seconds = catalog.TABLE_DOCS["derived_events"][4], catalog.TABLE_DOCS["verdict_seconds"][4]
+        for kid in vocab.derived():
+            self.assertIn(kid, derived)
+        self.assertIn("seed_down (value: the new uplink over the old)", derived)
+        for p in catalog.verdict_phases():
+            self.assertIn(f"{p} (", seconds)
+            self.assertIn(p, catalog.VERDICT_DOCS["phase"])
+        self.assertNotIn(query.TAIL, seconds + catalog.VERDICT_DOCS["phase"])
 
 
 class Fetch(Fixture):
@@ -454,8 +530,10 @@ class Commands(Fixture):
         self.assertEqual(out, describe.describe(None, pool))
         schema = catalog.schema(pool)
         names = sorted({t["name"] for t in schema["tables"] if t["schema"] == "main"}
-                       | {m["name"] for m in describe.macros(schema)} | {v.name for v in views.saved()})
-        self.assertTrue({"experiments", "verdicts", "structural", "effects", "scorecard"} <= set(names))
+                       | {m["name"] for m in describe.macros(schema)} | {v.name for v in views.saved()}
+                       | {e["kind"] for e in schema["event_kinds"]})
+        self.assertTrue({"experiments", "verdicts", "structural", "effects", "scorecard", "join", "start"}
+                        <= set(names))
         for topic in [*describe.TOPICS, *names]:
             got = describe.describe(topic, pool)
             self.assertTrue(got.strip(), topic)

@@ -3,8 +3,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """simlab.describe over a catalog of its own: every topic's text (the
 index, the glossary, the tables, a table, the macros and one, the metrics,
-the events, the saved views and one), a name naming a table and a view
-giving both, an unknown topic refused with the topics named, and no text
+the event kinds by class with their counts and one kind, the phases,
+episodes and reasons, the saved views and one), the Ask prompt's kinds
+without counts, a name naming a table and a view giving both, an unknown
+topic refused with the topics named, and no text
 naming the Ask panel's tools, over the console's own views too; the Ask
 prompt taking the glossary's sections where ask_prompt.md names them:
 
@@ -25,7 +27,7 @@ from simlab import bootstrap  # noqa: E402
 if __name__ == "__main__":
     bootstrap.engine(__file__)
 
-from simlab import ask, catalog, describe, engine, views  # noqa: E402
+from simlab import ask, catalog, describe, engine, views, vocab  # noqa: E402
 from simlab.views import Param, View  # noqa: E402
 
 # The Ask panel's tools named by no catalog object or plain word.
@@ -61,13 +63,56 @@ INSERT INTO metric_catalog VALUES
   ('lag_p99_ms', 'runs', 'DOUBLE', 'ms', 'the honest viewers'' p99 lag', NULL, NULL, NULL, NULL, NULL, 'x', 'y'),
   ('t_us', 'events', 'BIGINT', 'us', NULL, NULL, NULL, NULL, NULL, NULL, 'x', 'y'),
   ('lag_p99_ms', 'suite', NULL, 'ms', 'lag p99', 'lower', 'ratio', 0.05, 'lo', 'r.lag_p99_ms', 'x', 'y');
-CREATE TABLE event_kinds (kind VARCHAR, sim VARCHAR, description VARCHAR, value_meaning VARCHAR);
-INSERT INTO event_kinds VALUES ('join', 'ppspp', 'a viewer joins', NULL),
-  ('collapse', 'derived', 'a collapse began', 'its length, s');
+CREATE TABLE event_kinds (kind VARCHAR, sim VARCHAR, class VARCHAR, description VARCHAR, value_meaning VARCHAR,
+                          node VARCHAR, peer VARCHAR, detail VARCHAR, details VARCHAR[], notes VARCHAR,
+                          "with" VARCHAR, replaced_by VARCHAR, documented BOOLEAN, n BIGINT,
+                          first_seen TIMESTAMPTZ, last_seen TIMESTAMPTZ);
+INSERT INTO event_kinds VALUES
+  ('join', 'ppspp', 'scenario', 'A viewer joins.', NULL, 'the viewer', NULL, NULL, NULL, 'Each viewer''s.', NULL,
+   NULL, true, 12, '2026-11-08 12:00:00+00', '2026-11-10 12:00:00+00'),
+  ('join', 'strims-sim', 'scenario', 'A viewer joins.', NULL, 'the viewer', NULL, NULL, NULL, NULL, NULL, NULL, true,
+   0, NULL, NULL),
+  ('prune', 'ppspp', 'decision', 'The node pruned the parent.', 'the stream', 'the node', 'the parent', 'the rule',
+   ['silent', 'lossy'], NULL, 'SIM_SPEC', NULL, true, 0, NULL, NULL),
+  ('collapse', 'derived', 'derived', 'A collapse began.', 'its length, s', NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+   true, 3, '2026-11-09 12:00:00+00', '2026-11-09 12:00:00+00'),
+  ('old_kind', 'ppspp', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, false, 5,
+   '2026-11-09 12:00:00+00', '2026-11-10 12:00:00+00');
 CREATE TABLE catalog_info (key VARCHAR, value VARCHAR);
 INSERT INTO catalog_info VALUES ('indexed_at', '2026-11-10T10:00:00+00:00');""")
     finally:
         w.close()
+
+
+# The fixture's event kinds, as the events topic gives them.
+KINDS_WITH_COUNTS = """### scenario
+Exogenous: what the scenario does to the run.
+
+- join (ppspp, strims-sim): A viewer joins.
+  - node: the viewer
+  - ppspp: Each viewer's.
+  - events: ppspp 12 (2026-11-08 to 2026-11-10), strims-sim 0
+
+### decision
+A node's scheduler decisions, from its event log.
+
+- prune (with SIM_SPEC; ppspp): The node pruned the parent.
+  - node: the node; peer: the parent; value: the stream; detail: the rule (silent or lossy)
+  - events: ppspp 0
+
+### derived
+The verdict's own, made from the series (`derived_events`).
+
+- collapse: A collapse began.
+  - value: its length, s
+  - events: derived 3 (2026-11-09 to 2026-11-09)
+
+### undocumented
+Kinds the runs hold that the vocabulary lacks.
+
+- old_kind (ppspp): not in the vocabulary
+  - events: ppspp 5 (2026-11-09 to 2026-11-10)
+"""
 
 
 def setUpModule():
@@ -134,8 +179,36 @@ class Topics(unittest.TestCase):
         self.assertTrue(e.startswith("### events (view)\ngrain: an event; keys: k, t_us; joins: viewers USING "
                                      "(k, src, node)\n"), e)
         self.assertIn("columns: k VARCHAR, t_us BIGINT [us], kind VARCHAR\n\n## Event kinds\n", e)
-        self.assertIn("- collapse (derived): a collapse began; value: its length, s\n- join (ppspp): a viewer joins\n",
-                      e)
+        self.assertTrue(e.endswith(KINDS_WITH_COUNTS), e)
+
+    def test_the_event_kinds_by_class_their_counts_only_in_the_topic(self):
+        self.assertEqual(text("events").split("\n\n## Event kinds\n\n")[1].split("\n\n", 1)[1], KINDS_WITH_COUNTS)
+        prompt = describe.catalog_text(catalog.schema(POOL))
+        self.assertTrue(prompt.endswith(re.sub(r"(?m)^  - events: .*\n", "", KINDS_WITH_COUNTS)), prompt)
+        self.assertNotIn("events: ppspp 12", prompt)
+
+    def test_an_event_kind(self):
+        self.assertEqual(text("join"), "- join (scenario; ppspp, strims-sim): A viewer joins.\n  - node: the viewer\n"
+                                       "  - ppspp: Each viewer's.\n"
+                                       "  - events: ppspp 12 (2026-11-08 to 2026-11-10), strims-sim 0\n")
+        self.assertTrue(text("prune").startswith("- prune (decision; with SIM_SPEC; ppspp): The node pruned"))
+        self.assertEqual(text("old_kind"), "- old_kind (ppspp): not in the vocabulary\n"
+                                           "  - events: ppspp 5 (2026-11-09 to 2026-11-10)\n")
+        self.assertIn("Event kinds: collapse, join, old_kind, prune\n", text())
+        with self.assertRaisesRegex(ValueError, r"^no topic 'jion' \(did you mean join\?\)"):
+            text("jion")
+
+    def test_the_phases_episodes_and_reasons(self):
+        t = describe.describe("phases")
+        self.assertEqual(text("phases"), t)
+        self.assertTrue(t.startswith("# Phases, episodes and reasons\n\n"), t)
+        for section in describe.SECTIONS:
+            names = list(vocab.entries(section))
+            self.assertEqual(names, getattr(vocab, section)())
+            block = t.split(f"## {section.capitalize()}\n", 1)[1].split("\n\n## ")[0].rstrip("\n") + "\n"
+            self.assertEqual(re.findall(r"(?m)^- ([a-z_]+): ", block), names)
+            for name, v in vocab.entries(section).items():
+                self.assertIn(f"- {name}: {v['description']}\n", block)
 
     def test_the_views_and_a_view(self):
         v = text("views")
