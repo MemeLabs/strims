@@ -11,6 +11,7 @@ fixtures:
               simlab.scoring prints the same, from suite.py's sides and
               from arm_side's, and scoring an experiment's arms by name
               (score, arm_scores), whose JSON holds what the text shows.
+              Zeros compare without their sign, as in golden.compare.
   Arithmetic  fisher_p against the exact hypergeometric sum, t975_at
               against Student's t, effect_mark.
   Dynamics    structural, dynamics and dynamics_phases over a made-up
@@ -85,6 +86,14 @@ def scored(sql):
     return scoring.query(sql)
 
 
+def lines(text):
+    """`text`'s lines, each printed -0.000 as +0.000 (golden.unsigned_zeros),
+    as golden.compare reads both sides: the fixtures are the reference's
+    text, which prints the sign of an effect its Python sums land a last bit
+    below zero, and simlab.scoring.signed prints every zero +0.000."""
+    return golden.unsigned_zeros(text).splitlines()
+
+
 class Golden(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -111,7 +120,7 @@ class Golden(unittest.TestCase):
                            case["arm"])
         for name, want in case["want"].items():
             with self.subTest(case=case["exp"], text=name):
-                self.assertEqual(got[name].splitlines(), want.splitlines())
+                self.assertEqual(lines(got[name]), lines(want))
 
     def test_sides(self):
         """suite.py's sides, as it reads them from the farm's indexes."""
@@ -139,12 +148,12 @@ class Golden(unittest.TestCase):
             for show_all in (False, True):
                 card = scoring.score(exp, base, exp, arm, cells=names, show_all=show_all)
                 with self.subTest(case=exp, text=f"scorecard all={show_all}"):
-                    self.assertEqual(card.text().splitlines(), case["want"][f"scorecard all={show_all}"].splitlines())
+                    self.assertEqual(lines(card.text()), lines(case["want"][f"scorecard all={show_all}"]))
             for kind, budgets in golden.RANKS.items():
                 for budget in budgets:
                     [sc] = scoring.arm_scores(exp, base, [arm], cells=names, rank=kind, lag_budget=budget)
                     with self.subTest(case=exp, text=f"arm {kind} {budget}"):
-                        self.assertEqual(sc.text().splitlines(), case["want"][f"arm {kind} {budget}"].splitlines())
+                        self.assertEqual(lines(sc.text()), lines(case["want"][f"arm {kind} {budget}"]))
             j = json.loads(json.dumps(card.json()))
             moved = re.search(r"moved: (\d+) better, (\d+) worse, (\d+) changed; (\d+) ties", card.text()).groups()
             self.assertEqual([j["moved"][k] for k in ("better", "worse", "changed", "ties")], [int(x) for x in moved])
