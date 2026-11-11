@@ -136,9 +136,9 @@ use strims_ppspp::codec::{
 use strims_ppspp::store::{self, BufferReader, ChunkBytes, ChunkCodec};
 use strims_ppspp::{
     ChannelMetrics, ChannelSchedulerStats, ChannelTotals, DATA_QUEUE_CAP, DeliveryMode, Event,
-    LagForecast, MAX_BIN, ParentAction, ParentWhy, PeerKey, PushMode, PushStats, ReportCounters,
-    Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey, SwarmOptions, TapKind,
-    TapLevel, Writer, WriterOptions,
+    HaveRecord, Held, LagForecast, MAX_BIN, ParentAction, ParentWhy, PeerKey, PushMode, PushStats,
+    ReportCounters, RequestRecord, Runner, SeedAllocation, SeedPolicy, SeedQos, SwarmId, SwarmKey,
+    SwarmOptions, TapKind, TapLevel, Writer, WriterOptions,
 };
 use strims_ppspp_capture::{Capture, Clock, Dir, Options as CaptureOptions, Sample};
 use strims_wan::live::{self, Encoder, Op, Plan, Sign, Signer};
@@ -1277,6 +1277,18 @@ struct Sim {
     /// incarnation ([`Runner::take_held`]): by node, the chunk's index and
     /// when, in true time.
     held: Vec<Vec<(u64, Time)>>,
+    /// With `SIM_SPEC=1`, every node's request log ([`Runner::set_request_log`],
+    /// [`RequestLogs`]).
+    requests: Option<RequestLogs>,
+    /// With the forecast or the request log, every chunk each node stored
+    /// with its timeline ([`Arrival`], the `arrivals` table).
+    stored: Vec<Arrival>,
+    /// With the tables, when each node joined, every incarnation, in
+    /// order (the timeline's `join`s), each with whether it was an honest
+    /// viewer's (its role [`Role::Peer`], as [`Node::watched`] reads it:
+    /// not greedy, a grabber included, nor an adversary): its incarnation at
+    /// a time is its joins by then ([`Sim::joins`]).
+    joined: BTreeMap<usize, Vec<(Time, bool)>>,
     /// With the tables, every node's parent changes of its swarm's streams
     /// ([`Runner::set_parent_log`], [`Sim::take_parents`]), the changes
     /// the logs' caps left out, and each node's open parent per stream as
@@ -1623,6 +1635,50 @@ struct ParentRow {
     stream: Stream,
     parent: Option<usize>,
     why: ParentWhy,
+}
+
+/// The nodes' request logs as the harness keeps them (`SIM_SPEC=1`,
+/// [`Runner::set_request_log`]): every chunk HAVEs announced to each
+/// node, every request it made, and how many of those and of its stored
+/// chunks the logs' caps left out.
+#[derive(Default)]
+struct RequestLogs {
+    haves: Vec<HaveRow>,
+    asks: Vec<AskRow>,
+    held_lost: u64,
+    haves_lost: u64,
+    asks_lost: u64,
+}
+
+/// A chunk a node stored, from its held log ([`Runner::take_held`]), as
+/// the harness keeps it: the node, its record (its clock), and the nodes
+/// its record names (`usize::MAX` for a peer key that named no link, or
+/// none).
+struct Arrival {
+    node: usize,
+    held: Held,
+    peer: usize,
+    parent: usize,
+    asked: usize,
+}
+
+/// A chunk a HAVE announced to a node ([`Runner::take_haves`]): the node,
+/// the announcing node (`usize::MAX` if its key named no link), and the
+/// record (its clock).
+struct HaveRow {
+    node: usize,
+    peer: usize,
+    have: HaveRecord,
+}
+
+/// A request a node made ([`Runner::take_requests`]): the node, the asked
+/// node and the rivals' (`usize::MAX` for a key that named no link), and
+/// the record (its clock).
+struct AskRow {
+    node: usize,
+    peer: usize,
+    rivals: Vec<usize>,
+    record: RequestRecord,
 }
 
 /// A forecast log sample ([`Runner::set_forecasts`]) as the harness keeps
@@ -2510,6 +2566,9 @@ impl Sim {
             timeline: None,
             forecasts: None,
             forecasts_lost: 0,
+            requests: None,
+            stored: Vec::new(),
+            joined: BTreeMap::new(),
             held: Vec::new(),
             parents: None,
             parents_lost: 0,
@@ -2980,15 +3039,17 @@ impl Sim {
         if self.loops.is_some() {
             runner.set_tap(TapLevel::All);
         }
-        if self.forecasts.is_some() {
+        if self.forecasts.is_some() || self.requests.is_some() {
             self.take_forecasts(i);
-            runner.set_forecasts(true);
+            runner.set_forecasts(self.forecasts.is_some());
+            runner.set_request_log(self.requests.is_some());
         }
         if self.parents.is_some() {
             self.take_parents(i);
             runner.set_parent_log(true);
         }
         self.log(Kind::Join, i as i64, -1, 0, "");
+        self.joins(i, true);
         let swarm = strims_ppspp::Swarm::new(self.swarm_id.clone(), self.options.clone()).unwrap();
         let reader = swarm.reader();
         let key = runner.add_swarm(swarm);
@@ -3046,6 +3107,7 @@ impl Sim {
     fn arrive(&mut self, i: usize) {
         let now = self.now;
         self.log(Kind::Join, i as i64, -1, 0, "");
+        self.joins(i, self.nodes[i].kind == Role::Peer);
         let n = &mut self.nodes[i];
         n.role = n.kind;
         n.arrival = now;
@@ -3533,8 +3595,14 @@ impl Sim {
         });
         // The viewers there from the start; arrivals log theirs as they
         // come ([`Sim::arrive`]).
-        let at_start = (1..self.nodes.len()).filter(|&i| self.nodes[i].role != Role::Absent);
-        let joins = at_start.map(|i| TimedEvent {
+        let at_start: Vec<usize> = (1..self.nodes.len())
+            .filter(|&i| self.nodes[i].role != Role::Absent)
+            .collect();
+        for &i in &at_start {
+            let honest = self.nodes[i].role == Role::Peer;
+            self.joined.entry(i).or_default().push((t0(), honest));
+        }
+        let joins = at_start.into_iter().map(|i| TimedEvent {
             at: t0(),
             kind: Kind::Join,
             node: i as i64,
@@ -3555,6 +3623,42 @@ impl Sim {
         }
     }
 
+    /// Keeps every node's request log for the tables (`SIM_SPEC=1`: the
+    /// `arrivals`, `haves` and `asks` tables, [`RequestLogs`]), after
+    /// [`Sim::keep_tables`]. It changes no trace.
+    fn keep_requests(&mut self) {
+        self.requests = Some(RequestLogs::default());
+        for n in &mut self.nodes {
+            n.runner.set_request_log(true);
+        }
+    }
+
+    /// With the tables, node `i` joins now in a new incarnation, an honest
+    /// viewer's or not ([`Sim::joined`]).
+    fn joins(&mut self, i: usize, honest: bool) {
+        if self.timeline.is_some() {
+            self.joined.entry(i).or_default().push((self.now, honest));
+        }
+    }
+
+    /// Node `i`'s incarnation at true time `at` ([`Sim::joined`]).
+    fn incarnation(&self, i: usize, at: Time) -> usize {
+        self.joined
+            .get(&i)
+            .map_or(0, |j| j.iter().filter(|&&(t, _)| t <= at).count())
+    }
+
+    /// When node `i`'s incarnation at true time `at` joined, and whether it
+    /// was an honest viewer's ([`Sim::joined`]); none before its first.
+    fn joined_at(&self, i: usize, at: Time) -> Option<(Time, bool)> {
+        self.joined
+            .get(&i)?
+            .iter()
+            .rev()
+            .find(|&&(t, _)| t <= at)
+            .copied()
+    }
+
     /// With the tables, records an event at the current time.
     fn log(&mut self, kind: Kind, node: i64, peer: i64, value: i64, detail: &'static str) {
         if let Some(t) = self.timeline.as_mut() {
@@ -3571,33 +3675,61 @@ impl Sim {
 
     /// With the tables, moves node `i`'s forecast log into the harness's.
     fn take_forecasts(&mut self, i: usize) {
-        let Some(all) = self.forecasts.as_mut() else {
+        if self.forecasts.is_none() && self.requests.is_none() {
             return;
-        };
+        }
         let n = &mut self.nodes[i];
         let (log, lost) = n.runner.take_forecasts(n.swarm);
         let held = n.runner.take_held(n.swarm);
+        let held_lost = n.runner.take_held_lost(n.swarm);
+        let (haves, haves_lost) = n.runner.take_haves(n.swarm);
+        let (asks, asks_lost) = n.runner.take_requests(n.swarm);
         if self.held.len() <= i {
             self.held.resize_with(i + 1, Vec::new);
         }
         self.held[i].extend(
-            held.into_iter()
-                .map(|(b, at)| (b.base_offset(), n.true_time(at))),
+            held.iter()
+                .map(|h| (h.bin.base_offset(), n.true_time(h.at))),
         );
         self.forecasts_lost += lost;
-        if log.is_empty() {
-            return;
-        }
+        let n = &self.nodes[i];
         let peers: BTreeMap<PeerKey, usize> = n
             .links
             .iter()
             .map(|(&to, &l)| (self.links[l].peer, to))
             .collect();
-        all.extend(log.into_iter().map(|f| Forecast {
+        let peer = |k: &PeerKey| peers.get(k).copied().unwrap_or(usize::MAX);
+        let of = |k: Option<PeerKey>| k.map_or(usize::MAX, |k| peer(&k));
+        if let Some(r) = self.requests.as_mut() {
+            r.held_lost += held_lost;
+            r.haves_lost += haves_lost;
+            r.asks_lost += asks_lost;
+            r.haves.extend(haves.into_iter().map(|have| HaveRow {
+                node: i,
+                peer: peer(&have.peer),
+                have,
+            }));
+            r.asks.extend(asks.into_iter().map(|record| AskRow {
+                node: i,
+                peer: peer(&record.asked.peer),
+                rivals: record.rivals.iter().map(|w| peer(&w.peer)).collect(),
+                record,
+            }));
+        }
+        self.stored.extend(held.into_iter().map(|h| Arrival {
             node: i,
-            peer: peers.get(&f.peer).copied().unwrap_or(usize::MAX),
-            f,
+            peer: of(h.peer),
+            parent: of(h.parent),
+            asked: of(h.last_ask.map(|(k, _)| k)),
+            held: h,
         }));
+        if let Some(all) = self.forecasts.as_mut() {
+            all.extend(log.into_iter().map(|f| Forecast {
+                node: i,
+                peer: peer(&f.peer),
+                f,
+            }));
+        }
     }
 
     /// With the tables, moves node `i`'s parent changes of its swarm into
@@ -3981,12 +4113,17 @@ impl Sim {
     /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink at the run's end in bytes per second: an `incident`'s, if one slowed it), `hostile`, `churned` (it left at least once), `clock_ms` (its clock's offset), `arrive_ms` (when it arrived, -1000 for the start; [`Arrivals`]), `depart_ms` (when it left for good, empty if it stayed; [`Depart`]) |
     /// | `events` | timed event ([`TimedEvent`]) | `t_us`, `kind`, `node`, `peer` (-1 for none), `value`, `detail`: each viewer's `join` (at the start or its arrival, and on taking a place again), `first_read` and `caught_up` (its first chunk read within [`CAUGHT_UP`] of its publishing; `value` each one's ms from the join), churn's `leave`, a viewer's `depart` (`detail` graceful or abrupt), `parent_lost` (`node` a viewer whose open parent `peer` departed, `value` the streams it was the parent of, `detail` the departure's), `relink` (`node` a viewer that lost a neighbour to a departure linking to `peer`, [`Sim::relink`]), the seed's steps (`uplink` in bytes per second, `latency` in ms, `reconnect`) and an `incident` (`detail` dies or slows, `value` the new uplink) |
     /// | `forecast` | sample of a node's forecast log ([`Runner::set_forecasts`]), with `SIM_FORECAST=1` | `t_ms`, `node`, `viewer`, `peer` (nodes), `peer_honest` (the seed, or an honest viewer at the end: a greedy one's HAVEs can claim what it never held), `stream`, `seq` (the chunk), `sample_ms`, `mean_ms`, `horizon_ms` (-1 before the estimate's first sample), `samples`, `fresh`, `lazy`, `first_sight`, `run` ([`LagForecast`], as strims-sim's), `seen_ms` (our first sight of the chunk) and `held_ms` (when the peer first stored the chunk, in the incarnation it had at the sample: its runner's held log, [`Runner::take_held`], the seed's own writes included; empty if that incarnation never did), `channel_open_ms` (when our channel with the peer opened), `live` (it was held after both nodes took their places and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
+    /// | `arrivals` | chunk a node stored, with `SIM_FORECAST=1` or `SIM_SPEC=1` (its held log, [`Runner::take_held`], [`Held`]) | strims-sim's `arrivals` columns: `t_ms`, `node`, `viewer`, `seq`, `how`, `peer` and `parent` (nodes, -1 for none), `expected_ms`, `released_ms`, `asked_ms`, `asks`, `last_ask_peer`, `last_ask_ms`, `rtt_ms`, `incarnation` (the node's then: its joins by the hold, [`Sim::joined`], the seed's 0); its earliest row of a node, chunk and incarnation is the `forecast` table's `held_ms` |
+    /// | `haves` | chunk a HAVE first announced to a node on a channel, with `SIM_SPEC=1` (its request log, [`Runner::take_haves`], [`HaveRecord`]) | strims-sim's `haves` columns: `t_ms` (the HAVE arrived), `node`, `honest` (the node is the seed or its incarnation then an honest viewer's, [`Sim::joined`]), `peer` (-1 for a key that named no link), `peer_honest` (the same, in its incarnation then), `stream`, `seq`, `channel_open_ms`, `peer_incarnation` (as `arrivals`' `incarnation`; empty without a peer). The `forecast` table samples a capped subset of these HAVEs; the knowledge delay is `t_ms` less the peer's hold in that incarnation, from `arrivals` (`hack/sim-db`'s view) |
+    /// | `asks` | channel a request of a node's weighed, from its request log ([`Runner::take_requests`], [`RequestRecord`]): every request the request round made, once it ended, the asked peer's row and then one per rival, with `SIM_SPEC=1` | strims-sim's `asks` columns: `t_ms`, `node`, `honest` and `peer_honest` (as `haves`'), `ask`, `round` (`flight`), `peer`, `picked`, `declares` (a HAVE from the row's peer had announced the chunk), `stream`, `seq`, `timeout_ms` (the asked row's), `rtt_ms`, `predicted_ms` and `predicted_p90_ms` (a rival's route expectation; empty on the asked row), `predicted_p99_ms` (empty), `have_ms` (the row's peer's HAVE of the chunk), `released_ms` (push released the chunk to pull), `outcome` (`answered`, `expired`, `elsewhere` or `closed`; the asked row's), `reason` (`timeout`), `t_outcome_ms`, `channel_open_ms`, `since_ms` (when the requester's incarnation then joined), `peer_incarnation`. A node whose place a new viewer takes leaves its requests still open unrecorded. The truth is `hack/sim-db`'s view's, from `arrivals` |
     ///
     /// `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
     /// `secs`, the seed's `seed_up` steps and the viewers' `viewer_up` as
     /// the series has them, the number of `seconds` and `viewers`, the
     /// bins' `bin_ms`, and the forecast samples and parent changes the
-    /// logs' caps left out (`forecasts_lost`, `parents_lost`). An empty
+    /// logs' caps left out (`forecasts_lost`, `parents_lost`), with
+    /// `SIM_SPEC=1` the held, HAVE and request logs' too (`held_lost`,
+    /// `haves_lost`, `asks_lost`: requests, each with its rivals). An empty
     /// field is a reading the run doesn't have ([`NONE`]).
     ///
     /// The bins read the counters the series reads, at each edge rather
@@ -4145,6 +4282,14 @@ impl Sim {
             self.forecast_table(dir, forecasts, &viewer, &us)?
                 .finish()?;
         }
+        if self.forecasts.is_some() || self.requests.is_some() {
+            self.arrivals_table(dir, &self.stored, &viewer, &us)?
+                .finish()?;
+        }
+        if let Some(r) = &self.requests {
+            self.haves_table(dir, &r.haves, &us)?.finish()?;
+            self.asks_table(dir, &r.asks, &us)?.finish()?;
+        }
         let mut meta = String::from("{\"sim\":\"ppspp\"");
         if let Some(s) = &series {
             let _ = write!(
@@ -4162,13 +4307,190 @@ impl Sim {
         let width = self.bins.as_ref().map_or(0, |b| b.width.as_millis());
         let _ = write!(
             meta,
-            ",\"viewers\":{},\"bin_ms\":{width},\"forecasts_lost\":{},\"parents_lost\":{}}}",
+            ",\"viewers\":{},\"bin_ms\":{width},\"forecasts_lost\":{},\"parents_lost\":{}",
             honest.len(),
             self.forecasts_lost,
             self.parents_lost
         );
+        if let Some(r) = &self.requests {
+            let _ = write!(
+                meta,
+                ",\"held_lost\":{},\"haves_lost\":{},\"asks_lost\":{}",
+                r.held_lost, r.haves_lost, r.asks_lost
+            );
+        }
+        meta.push('}');
         meta.push('\n');
         std::fs::write(dir.join("series_meta.json"), meta)
+    }
+
+    /// The `arrivals` table ([`Sim::write_tables`]): every chunk each node
+    /// stored, from its held log, with its timeline there. `us` maps a
+    /// true time to the tables' µs.
+    fn arrivals_table(
+        &self,
+        dir: &Path,
+        stored: &[Arrival],
+        viewer: &[i64],
+        us: &dyn Fn(Time) -> i64,
+    ) -> io::Result<Table> {
+        let mut t = Table::typed(
+            dir,
+            "arrivals",
+            &[
+                ("t_ms", "BIGINT"),
+                ("node", "BIGINT"),
+                ("viewer", "BIGINT"),
+                ("seq", "BIGINT"),
+                ("how", "VARCHAR"),
+                ("peer", "BIGINT"),
+                ("parent", "BIGINT"),
+                ("expected_ms", "BIGINT"),
+                ("released_ms", "BIGINT"),
+                ("asked_ms", "BIGINT"),
+                ("asks", "BIGINT"),
+                ("last_ask_peer", "BIGINT"),
+                ("last_ask_ms", "BIGINT"),
+                ("rtt_ms", "BIGINT"),
+                ("incarnation", "BIGINT"),
+            ],
+        )?;
+        for a in stored {
+            let n = &self.nodes[a.node];
+            let ms_of = |at: Time| us(n.true_time(at)).div_euclid(1000);
+            let opt = |x: Option<Time>| x.map_or(String::new(), |x| ms_of(x).to_string());
+            let h = &a.held;
+            t.fields(&[
+                ms_of(h.at).to_string(),
+                a.node.to_string(),
+                viewer.get(a.node).copied().unwrap_or(-1).to_string(),
+                h.bin.base_offset().to_string(),
+                h.how.name().to_owned(),
+                node_of(a.peer),
+                node_of(a.parent),
+                opt(h.expected),
+                opt(h.released),
+                opt(h.asked),
+                h.asks.to_string(),
+                node_of(a.asked),
+                opt(h.last_ask.map(|(_, at)| at)),
+                h.rtt.as_millis().to_string(),
+                self.incarnation(a.node, n.true_time(h.at)).to_string(),
+            ]);
+        }
+        Ok(t)
+    }
+
+    /// Whether node `n` was the seed or, in its incarnation at true time
+    /// `at`, an honest viewer ([`Sim::joined`]).
+    fn honest_at(&self, n: usize, at: Time) -> bool {
+        n == 0 || self.joined_at(n, at).is_some_and(|(_, h)| h)
+    }
+
+    /// The `haves` table ([`Sim::write_tables`]): every chunk a HAVE first
+    /// announced to each node on each channel. `us` maps a true time to
+    /// the tables' µs.
+    fn haves_table(
+        &self,
+        dir: &Path,
+        haves: &[HaveRow],
+        us: &dyn Fn(Time) -> i64,
+    ) -> io::Result<Table> {
+        let mut t = Table::typed(
+            dir,
+            "haves",
+            &[
+                ("t_ms", "BIGINT"),
+                ("node", "BIGINT"),
+                ("honest", "BOOLEAN"),
+                ("peer", "BIGINT"),
+                ("peer_honest", "BOOLEAN"),
+                ("stream", "BIGINT"),
+                ("seq", "BIGINT"),
+                ("channel_open_ms", "BIGINT"),
+                ("peer_incarnation", "BIGINT"),
+            ],
+        )?;
+        for x in haves {
+            let n = &self.nodes[x.node];
+            let at = n.true_time(x.have.at);
+            let ms_of = |at: Time| us(n.true_time(at)).div_euclid(1000);
+            let known = x.peer != usize::MAX;
+            t.fields(&[
+                ms_of(x.have.at).to_string(),
+                x.node.to_string(),
+                self.honest_at(x.node, at).to_string(),
+                node_of(x.peer),
+                (known && self.honest_at(x.peer, at)).to_string(),
+                x.have.stream.to_string(),
+                x.have.bin.base_offset().to_string(),
+                ms_of(x.have.channel_open).to_string(),
+                if known {
+                    self.incarnation(x.peer, at).to_string()
+                } else {
+                    String::new()
+                },
+            ]);
+        }
+        Ok(t)
+    }
+
+    /// The `asks` table ([`Sim::write_tables`]): every request each node's
+    /// request round made, the asked peer's row and then one per rival.
+    /// `us` maps a true time to the tables' µs.
+    fn asks_table(
+        &self,
+        dir: &Path,
+        asks: &[AskRow],
+        us: &dyn Fn(Time) -> i64,
+    ) -> io::Result<Table> {
+        let mut t = Table::typed(dir, "asks", &ASK_COLS)?;
+        for (ask, x) in asks.iter().enumerate() {
+            let n = &self.nodes[x.node];
+            let r = &x.record;
+            let at = n.true_time(r.at);
+            let ms_of = |at: Time| us(n.true_time(at)).div_euclid(1000);
+            let opt = |v: Option<Time>| v.map_or(String::new(), |v| ms_of(v).to_string());
+            let since = self.joined_at(x.node, at).map_or(t0(), |(t, _)| t);
+            let honest = self.honest_at(x.node, at).to_string();
+            let rows = std::iter::once((x.peer, &r.asked, true))
+                .chain(x.rivals.iter().zip(&r.rivals).map(|(&p, w)| (p, w, false)));
+            for (peer, w, picked) in rows {
+                let only = |v: String| if picked { v } else { String::new() };
+                let known = peer != usize::MAX;
+                t.fields(&[
+                    ms_of(r.at).to_string(),
+                    x.node.to_string(),
+                    honest.clone(),
+                    ask.to_string(),
+                    "flight".to_owned(),
+                    node_of(peer),
+                    (known && self.honest_at(peer, at)).to_string(),
+                    picked.to_string(),
+                    w.announced.is_some().to_string(),
+                    r.stream.to_string(),
+                    r.bin.base_offset().to_string(),
+                    only(r.timeout.as_millis().to_string()),
+                    w.rtt.as_millis().to_string(),
+                    opt(w.predicted.map(|p| p.0)),
+                    opt(w.predicted.map(|p| p.1)),
+                    String::new(),
+                    opt(w.announced),
+                    opt(r.released),
+                    only(r.end.name().to_owned()),
+                    only(r.end.reason().to_owned()),
+                    only(ms_of(r.ended).to_string()),
+                    ms_of(w.channel_open).to_string(),
+                    us(since).div_euclid(1000).to_string(),
+                    if known {
+                        self.incarnation(peer, at).to_string()
+                    } else {
+                        String::new()
+                    },
+                ]);
+            }
+        }
+        Ok(t)
     }
 
     /// The `forecast` table: each forecast log sample, with the true times
@@ -7073,6 +7395,7 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
     for (ms, nodes) in [(1000, false), (1, true)] {
         let mut sim = Sim::new(cfg.clone());
         sim.keep_tables(Duration::from_millis(ms), nodes, true);
+        sim.keep_requests();
         let r = sim.run();
         assert_eq!(
             (r.trace, r.frames, r.bytes, sim.reads_hash()),
@@ -7125,6 +7448,7 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
             assert!(d.join(format!("{t}.schema.json")).exists(), "{t}");
         }
         sim_held_truth_meets_the_reads(&sim, &d);
+        sim_request_logs_say_what_they_are(&sim, &d);
         // The seed's budget reading: what its budget was measured from,
         // once measured, in the series and the bins.
         let column = |t: &str| -> Vec<i64> {
@@ -7143,6 +7467,115 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
         assert!(!adaptive || r.seed_capacity == 0 || r.budget_capacity > 0);
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The request log's tables ([`Sim::keep_requests`]) against the run: HAVEs, requests and reads against
+/// the holds `arrivals` records, expiries against the runners' timeouts.
+fn sim_request_logs_say_what_they_are(sim: &Sim, d: &Path) {
+    let rows = |t: &str| -> Vec<BTreeMap<String, String>> {
+        let csv = read_table(d, t).unwrap();
+        let mut lines = csv.lines();
+        let head: Vec<&str> = lines.next().unwrap().split(',').collect();
+        lines
+            .map(|l| {
+                head.iter()
+                    .zip(l.split(','))
+                    .map(|(&c, v)| (c.to_owned(), v.to_owned()))
+                    .collect()
+            })
+            .collect()
+    };
+    let int = |r: &BTreeMap<String, String>, c: &str| -> Option<i64> { r[c].parse().ok() };
+    // Each node's first hold of each chunk, in each incarnation.
+    let mut held: BTreeMap<(i64, i64, i64), i64> = BTreeMap::new();
+    let mut first: BTreeMap<(i64, i64), i64> = BTreeMap::new();
+    for a in rows("arrivals") {
+        let (n, s, i, t) = (
+            int(&a, "node"),
+            int(&a, "seq"),
+            int(&a, "incarnation"),
+            int(&a, "t_ms"),
+        );
+        let (n, s, i, t) = (n.unwrap(), s.unwrap(), i.unwrap(), t.unwrap());
+        let h = held.entry((n, s, i)).or_insert(t);
+        *h = (*h).min(t);
+        let f = first.entry((n, s)).or_insert(t);
+        *f = (*f).min(t);
+    }
+    let hold = |r: &BTreeMap<String, String>| {
+        held.get(&(int(r, "peer")?, int(r, "seq")?, int(r, "peer_incarnation")?))
+            .copied()
+    };
+    // Every honest peer's HAVE came once it held the chunk, in the
+    // incarnation the row names.
+    let haves = rows("haves");
+    assert!(!haves.is_empty());
+    for h in haves.iter().filter(|h| h["peer_honest"] == "true") {
+        let at = hold(h);
+        assert!(
+            at.is_some_and(|at| at <= int(h, "t_ms").unwrap()),
+            "{h:?} held {at:?}"
+        );
+    }
+    // Every request rested on its peer's HAVE, before it went; the
+    // honest peers' answers came once they held the chunk; and the
+    // expiries are the runners' timed out requests.
+    let asks = rows("asks");
+    let asked: Vec<_> = asks.iter().filter(|a| a["picked"] == "true").collect();
+    assert!(!asked.is_empty());
+    for a in &asked {
+        assert_eq!(
+            (a["round"].as_str(), a["declares"].as_str()),
+            ("flight", "true"),
+            "{a:?}"
+        );
+        assert!(
+            int(a, "have_ms").unwrap() <= int(a, "t_ms").unwrap(),
+            "{a:?}"
+        );
+        assert!(int(a, "timeout_ms").unwrap() > 0, "{a:?}");
+        assert!(a["predicted_ms"].is_empty(), "{a:?}");
+        if a["outcome"] == "answered" && a["peer_honest"] == "true" {
+            let at = hold(a);
+            assert!(
+                at.is_some_and(|at| at <= int(a, "t_outcome_ms").unwrap()),
+                "{a:?} held {at:?}"
+            );
+        }
+    }
+    let expired = asked.iter().filter(|a| a["outcome"] == "expired").count() as u64;
+    assert_eq!(expired, {
+        let (a, b, c) = sim.timeouts();
+        a + b + c
+    });
+    for r in asks.iter().filter(|a| a["picked"] == "false") {
+        assert!(
+            r["outcome"].is_empty() && r["timeout_ms"].is_empty(),
+            "{r:?}"
+        );
+        assert!(
+            int(r, "predicted_ms") <= int(r, "predicted_p90_ms"),
+            "{r:?}"
+        );
+    }
+    // Every read's chunk its viewer's node held by then.
+    let node: BTreeMap<i64, i64> = rows("viewers")
+        .iter()
+        .map(|v| (int(v, "viewer").unwrap(), int(v, "node").unwrap()))
+        .collect();
+    for r in rows("reads") {
+        let (v, s, t) = (
+            int(&r, "viewer").unwrap(),
+            int(&r, "seq").unwrap(),
+            int(&r, "t_ms").unwrap(),
+        );
+        let at = first.get(&(node[&v], s));
+        assert!(at.is_some_and(|&at| at <= t), "{r:?} held {at:?}");
+    }
+    let meta = std::fs::read_to_string(d.join("series_meta.json")).unwrap();
+    for lost in ["held_lost", "haves_lost", "asks_lost"] {
+        assert!(meta.contains(&format!("\"{lost}\":0")), "{meta}");
+    }
 }
 
 /// Every honest viewer stored each chunk it read before it read it, the
@@ -9844,6 +10277,9 @@ fn sim_job() {
             knob::<u32>("SIM_BIN_NODES") == Some(1),
             knob::<u32>("SIM_FORECAST") == Some(1),
         );
+        if knob::<u32>("SIM_SPEC") == Some(1) {
+            sim.keep_requests();
+        }
     }
     let r = sim.run();
     println!("ROW {}", job_row(&scenario, &case, &sim, &r));
@@ -10562,7 +10998,51 @@ const SPILL: usize = 1 << 20;
 /// The tables that grow with a run's nodes and its length, written
 /// zstd-compressed, `<name>.csv.zst` (`hack/sim-db` reads either), as
 /// strims-sim's are: the others are a run's summaries, `<name>.csv`.
-const ZSTD: [&str; 4] = ["reads", "node_bins", "events", "forecast"];
+const ZSTD: [&str; 7] = [
+    "reads",
+    "node_bins",
+    "events",
+    "forecast",
+    "arrivals",
+    "haves",
+    "asks",
+];
+
+/// A node by its index, `-1` for none (`usize::MAX`).
+fn node_of(n: usize) -> String {
+    match n {
+        usize::MAX => "-1".to_owned(),
+        n => n.to_string(),
+    }
+}
+
+/// The `asks` table's columns ([`Sim::write_tables`]), strims-sim's.
+const ASK_COLS: [(&str, &str); 24] = [
+    ("t_ms", "BIGINT"),
+    ("node", "BIGINT"),
+    ("honest", "BOOLEAN"),
+    ("ask", "BIGINT"),
+    ("round", "VARCHAR"),
+    ("peer", "BIGINT"),
+    ("peer_honest", "BOOLEAN"),
+    ("picked", "BOOLEAN"),
+    ("declares", "BOOLEAN"),
+    ("stream", "BIGINT"),
+    ("seq", "BIGINT"),
+    ("timeout_ms", "BIGINT"),
+    ("rtt_ms", "BIGINT"),
+    ("predicted_ms", "BIGINT"),
+    ("predicted_p90_ms", "BIGINT"),
+    ("predicted_p99_ms", "BIGINT"),
+    ("have_ms", "BIGINT"),
+    ("released_ms", "BIGINT"),
+    ("outcome", "VARCHAR"),
+    ("reason", "VARCHAR"),
+    ("t_outcome_ms", "BIGINT"),
+    ("channel_open_ms", "BIGINT"),
+    ("since_ms", "BIGINT"),
+    ("peer_incarnation", "BIGINT"),
+];
 
 /// Where a [`Table`]'s rows go: its file, or a zstd stream onto it.
 enum Sink {

@@ -43,7 +43,7 @@ use std::time::Duration;
 use strims_base::stats::WaitHistogram;
 use strims_ppspp::scheduler_peer::push::PUSH_OVERHEAD;
 use strims_ppspp::scheduler_peer::push::seed::ALLOC_UTILIZATION;
-use strims_ppspp::{ChannelTotals, LagForecast};
+use strims_ppspp::{ChannelTotals, HaveRecord, Held, LagForecast, RequestRecord};
 use strims_wan::{Access, EndStats, Region, Site};
 
 use crate::spec::{HostIx, Scenario};
@@ -167,6 +167,63 @@ pub struct HostReport {
     /// first held, every incarnation: the chunk's index and when (true time
     /// from the run's start).
     pub held: Vec<(u64, Duration)>,
+    /// With the forecast or the request log, the same chunks with their
+    /// timelines ([`ArrivalHostRecord`]), and those the caps left out.
+    pub arrivals: Vec<ArrivalHostRecord>,
+    pub held_lost: u64,
+    /// With [`Scenario::request_logs`], every chunk of its first scenario
+    /// swarm a HAVE first announced on a channel ([`HaveHostRecord`]),
+    /// every request it made ([`RequestHostRecord`]), and those the caps
+    /// left out.
+    pub haves: Vec<HaveHostRecord>,
+    pub haves_lost: u64,
+    pub requests: Vec<RequestHostRecord>,
+    pub requests_lost: u64,
+}
+
+/// A chunk a host first held ([`HostReport::arrivals`]): its times as true
+/// time, the hosts it names, and the record, its times by the host's
+/// clock.
+#[derive(Clone, Copy, Debug)]
+pub struct ArrivalHostRecord {
+    /// When the host first held the chunk, and when push expected it, it
+    /// was released to pull, we first and last asked for it (true time
+    /// from the run's start).
+    pub at: Duration,
+    pub expected: Option<Duration>,
+    pub released: Option<Duration>,
+    pub asked: Option<Duration>,
+    pub last_ask: Option<Duration>,
+    /// The source's host, the stream's parent's then, and the host last
+    /// asked.
+    pub peer: Option<HostIx>,
+    pub parent: Option<HostIx>,
+    pub asked_peer: Option<HostIx>,
+    pub held: Held,
+}
+
+/// A chunk a HAVE announced to a host ([`HostReport::haves`]): when the
+/// HAVE arrived and when its channel opened (true time from the run's
+/// start), the announcing host, and the record, its times by the host's
+/// clock.
+#[derive(Clone, Copy, Debug)]
+pub struct HaveHostRecord {
+    pub at: Duration,
+    pub opened: Duration,
+    pub peer: Option<HostIx>,
+    pub have: HaveRecord,
+}
+
+/// A request a host made ([`HostReport::requests`]): the record, its times
+/// by the host's clock, with that clock's epoch (true time from the run's
+/// start is `t - epoch`), and the asked host and the rivals', in the
+/// record's order.
+#[derive(Clone, Debug)]
+pub struct RequestHostRecord {
+    pub epoch: strims_base::time::Time,
+    pub peer: Option<HostIx>,
+    pub rivals: Vec<Option<HostIx>>,
+    pub record: RequestRecord,
 }
 
 /// A node's counters at an edge of the tables' bins

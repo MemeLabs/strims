@@ -138,6 +138,12 @@ pub struct NodeConfig {
     /// the next `Node::metrics` (`NodeMetrics::forecasts`); off by default
     /// and on every real node. It changes no decision.
     pub forecast_log: bool,
+    /// Keeps the ppspp runner's request log (`Runner::set_request_log`:
+    /// the HAVEs' chunks and the request round's requests, with the held
+    /// log) for the next `Node::metrics` (`NodeMetrics::haves`,
+    /// `NodeMetrics::requests`, `NodeMetrics::held`); off by default and on
+    /// every real node. It changes no decision.
+    pub request_log: bool,
     /// Hands every change of a hybrid stream's open parent (the ppspp
     /// runner's parent log, `Runner::set_parent_log`) to the sink as it
     /// happens: at the end of the node's pass that made it, before the pass
@@ -307,6 +313,7 @@ impl NodeConfig {
             query_delay: Duration::from_millis(200),
             stats_bins: None,
             forecast_log: false,
+            request_log: false,
             parent_log: None,
             node_platform: String::new(),
             node_version: "dev".to_owned(),

@@ -205,6 +205,8 @@ use crate::swarm::Swarm;
 use crate::tap::{RequestRound, Tap, TapKind};
 use crate::time_set::TimeSet;
 
+#[path = "scheduler_log.rs"]
+pub mod log;
 #[path = "scheduler_push.rs"]
 pub mod push;
 
@@ -473,10 +475,29 @@ pub(crate) struct SwarmState {
     /// `forecasts_lost` instead.
     pub(crate) forecasts: Option<Vec<LagForecast>>,
     pub(crate) forecasts_lost: u64,
-    /// With the forecast log on, each chunk stored since the driver last
-    /// took them, and when: what the log's samples forecast. Bound: as
-    /// `forecasts`.
-    pub(crate) held_log: Option<Vec<(Bin, Time)>>,
+    /// With the forecast or the request log on, each chunk stored since
+    /// the driver last took them, and when: what the logs' samples
+    /// forecast, with the chunk's timeline here ([`log::Held`]). Bound: as
+    /// `forecasts`, past which they're counted in `held_lost`.
+    pub(crate) held_log: Option<Vec<log::Held>>,
+    pub(crate) held_lost: u64,
+    /// With the held log on, what was noted of each chunk not yet stored
+    /// ([`log::HeldMarks`]). Bound: the window.
+    pub(crate) held_marks: BTreeMap<Bin, log::HeldMarks>,
+    /// With the request log on ([`crate::Runner::set_request_log`]), each
+    /// chunk a HAVE first announced on a channel since the driver last
+    /// took them ([`log::HaveRecord`]). Bound: as `forecasts`, past which
+    /// they're counted in `haves_lost`.
+    pub(crate) have_log: Option<Vec<log::HaveRecord>>,
+    pub(crate) haves_lost: u64,
+    /// With the request log on, the requests out and those ended since the
+    /// driver last took them ([`log::RequestRecord`]).
+    pub(crate) request_log: Option<log::RequestLog>,
+    /// Scratch for the request log: the chunks a channel's request round
+    /// just asked for, with their timeouts, for the swarm to record with
+    /// the rivals it weighed. Bound: one round's requests; empty with the
+    /// log off.
+    requests_sent: Vec<(Bin, Duration)>,
     /// With the parent log on ([`crate::Runner::set_parent_log`]), each
     /// change of a stream's open parent since the driver last took them.
     pub(crate) parent_log: Option<push::ParentLog>,
@@ -788,6 +809,10 @@ pub(crate) struct PeerChannelScheduler {
     /// announce as a backlog, not as it arrives ([`LagForecast`]).
     opened: Time,
     pub(crate) unanswered: u32,
+    /// With the request log on, when a HAVE first announced each chunk
+    /// the peer holds ([`log::RequestChannel::announced`]). Bound: pruned
+    /// behind the store's window at GC.
+    announced: BTreeMap<Bin, Time>,
 
     /// Scratch for `write1`. Bound: one frame of requests plus a request
     /// group per lane (live and backlog), and [`CANDIDATE_CAPACITY`]
@@ -831,6 +856,7 @@ impl PeerChannelScheduler {
             next_restart_time: now + SCHEDULER_RESTART_COOLDOWN,
             handshake_received: false,
             opened: now,
+            announced: BTreeMap::new(),
             next_ping_time: Time::EPOCH,
             ping_nonce: 0,
             eager_haves_until: now + EAGER_HAVES_AFTER_OPEN,
@@ -875,6 +901,7 @@ impl PeerChannelScheduler {
         };
         self.peer_have_bins = Map::new();
         self.known_bins = Map::new();
+        self.announced.clear();
         // The new stream starts at bin 0: requests must not wait for it to
         // pass the old stream's position.
         self.peer_max_have_bin = Bin(0);
@@ -933,6 +960,9 @@ impl PeerChannelScheduler {
                 self.backoff_bins.set(x);
                 self.unanswered = self.unanswered.saturating_add(1);
                 n += 1;
+                if let Some(l) = s.request_log.as_mut() {
+                    l.ended(self.peer, x, log::RequestEnd::Expired, now);
+                }
             }
             // Requests are single chunks; anything left with a request
             // time arrived from elsewhere unanswered.
@@ -941,6 +971,9 @@ impl PeerChannelScheduler {
                 if self.request_times.get(x).is_some_and(|(tb, _)| tb == x) {
                     self.request_times.unset(x);
                     settled += 1;
+                }
+                if let Some(l) = s.request_log.as_mut() {
+                    l.ended(self.peer, x, log::RequestEnd::Elsewhere, now);
                 }
                 x += 2;
             }
@@ -1419,6 +1452,12 @@ impl PeerChannelScheduler {
                 break;
             }
             s.request_bins.set(b);
+            if s.held_log.is_some() {
+                s.held_marks.entry(b).or_default().ask(self.peer, now);
+            }
+            if s.request_log.is_some() {
+                s.requests_sent.push((b, timeout - now));
+            }
             self.request_times.set(b, now);
             self.request_bins.push(b, timeout);
             if self.asked_since.is_nil() {
@@ -1648,6 +1687,12 @@ impl PeerSwarmScheduler {
                 forecasts: None,
                 forecasts_lost: 0,
                 held_log: None,
+                held_lost: 0,
+                held_marks: BTreeMap::new(),
+                have_log: None,
+                haves_lost: 0,
+                request_log: None,
+                requests_sent: Vec::new(),
                 parent_log: None,
                 subscribers_changed: false,
                 backlog: None,
@@ -1752,6 +1797,13 @@ impl PeerSwarmScheduler {
 
         let store = swarm.store();
         self.s.request_bins.fill_before(store.store_from());
+        let from = store.store_from();
+        self.s.held_marks.retain(|&b, _| b >= from);
+        if self.s.request_log.is_some() {
+            for c in self.channels.values_mut() {
+                c.announced.retain(|&b, _| b >= from);
+            }
+        }
         if self
             .s
             .backlog
@@ -1785,6 +1837,9 @@ impl PeerSwarmScheduler {
         }
         let size = self.s.chunk_size as i64;
         for c in self.channels.values_mut() {
+            if let Some(l) = self.s.request_log.as_mut() {
+                l.settled(c.peer, settle, &self.s.have_bins, now);
+            }
             let settled = c.request_times.take_before(settle);
             if settled > 0 {
                 c.controller
@@ -1817,6 +1872,10 @@ impl PeerSwarmScheduler {
         s.peer_max_have_bin = Bin(0);
         s.backlog = None;
         s.unannounced = Map::new();
+        s.held_marks.clear();
+        if let Some(l) = s.request_log.as_mut() {
+            l.close(None, now);
+        }
 
         for c in self.channels.values_mut() {
             c.reset(s, now);
@@ -1854,9 +1913,19 @@ impl PeerSwarmScheduler {
                 wasted = wasted.saturating_sub(1);
                 if let Some(log) = s.held_log.as_mut() {
                     if log.len() < FORECAST_CAP {
-                        log.push((x, now));
+                        let m = s.held_marks.remove(&x).unwrap_or_default();
+                        log.push(log::Held {
+                            bin: x,
+                            at: now,
+                            expected: m.expected,
+                            released: m.released,
+                            asked: m.asked,
+                            asks: m.asks,
+                            last_ask: m.last_ask,
+                            ..log::Held::default()
+                        });
                     } else {
-                        s.forecasts_lost += 1;
+                        s.held_lost += 1;
                     }
                 }
                 if s.in_backlog(x) {
@@ -2288,6 +2357,9 @@ impl PeerSwarmScheduler {
         if !self.channels.contains_key(&peer) {
             return;
         }
+        if valid && new {
+            self.held_from(peer, b);
+        }
         if self.s.push.is_some() {
             if valid {
                 self.push_data(peer, b, new, signed, now, q);
@@ -2339,6 +2411,9 @@ impl PeerSwarmScheduler {
             // Answered: a second copy doesn't ack again, and the timeout
             // doesn't settle it.
             c.request_times.unset(b);
+            if let Some(l) = s.request_log.as_mut() {
+                l.ended(peer, b, log::RequestEnd::Answered, now);
+            }
         }
     }
 
@@ -2359,6 +2434,9 @@ impl PeerSwarmScheduler {
             c.controller.on_answered(now, size, ts, t);
             c.answer_time.sample(now - ts);
             c.request_times.unset(b);
+            if let Some(l) = s.request_log.as_mut() {
+                l.ended(peer, b, log::RequestEnd::Answered, now);
+            }
         }
     }
 
@@ -2385,6 +2463,9 @@ impl PeerSwarmScheduler {
         let br = b.base_right();
         let new_max = c.peer_max_have_bin.max(br);
         let lo = s.history_start(new_max);
+        if s.have_log.is_some() || s.request_log.is_some() {
+            Self::log_have(s, c, peer, b, lo, now);
+        }
         let found;
         {
             let mut it = c.peer_have_bins.iterate_empty_at(b);
@@ -2832,7 +2913,12 @@ impl PeerSwarmScheduler {
             c.ping_nonce = nonce;
         }
         c.write0(swarm, cw)?;
-        c.write1(s, now, cw)?;
+        let wrote = c.write1(s, now, cw);
+        self.log_requests(peer, now);
+        wrote?;
+        let Some((s, c)) = self.channel(peer) else {
+            return Ok(());
+        };
         c.write_report(cw)?;
         let eager = !s.uplink_queued()
             && haves_go_alone(
@@ -3009,12 +3095,176 @@ impl PeerSwarmScheduler {
         }
     }
 
+    /// With the request log on, logs the chunks of `b` the HAVE newly
+    /// announces on `c`'s channel, from `lo` (the tracked history), as
+    /// `handle_have` takes them ([`log::HaveRecord`]).
+    fn log_have(
+        s: &mut SwarmState,
+        c: &mut PeerChannelScheduler,
+        peer: PeerKey,
+        b: Bin,
+        lo: Bin,
+        now: Time,
+    ) {
+        let mut it = c.peer_have_bins.iterate_empty_at(b);
+        let mut next = it.next_base_after(b.base_left().max(lo));
+        while let Some(x) = next {
+            if s.request_log.is_some() {
+                c.announced.entry(x).or_insert(now);
+            }
+            let stream = s.bin_stream(x);
+            if let Some(log) = s.have_log.as_mut() {
+                if log.len() < FORECAST_CAP {
+                    log.push(log::HaveRecord {
+                        at: now,
+                        peer,
+                        stream,
+                        bin: x,
+                        channel_open: c.opened,
+                    });
+                } else {
+                    s.haves_lost += 1;
+                }
+            }
+            next = it.next_base();
+        }
+    }
+
+    /// Records in the request log the requests `peer`'s channel just made
+    /// in its request round (`SwarmState::requests_sent`), each with what
+    /// was known of its chunk and the rivals the round weighed for it: the
+    /// other channels whose route had fresh window room and an
+    /// announcement lag for the stream, as `write1`'s `yields` reads them.
+    fn log_requests(&mut self, peer: PeerKey, now: Time) {
+        let PeerSwarmScheduler { s, channels } = self;
+        if s.requests_sent.is_empty() {
+            return;
+        }
+        let sent = std::mem::take(&mut s.requests_sent);
+        let Some(c) = channels.get(&peer) else {
+            return;
+        };
+        let at = |o: &PeerChannelScheduler, b: Bin| log::RequestChannel {
+            peer: o.peer,
+            announced: o.announced.get(&b).copied(),
+            predicted: None,
+            rtt: o.controller.rtt(),
+            channel_open: o.opened,
+        };
+        let mut records = Vec::with_capacity(sent.len());
+        for &(b, timeout) in &sent {
+            let stream = s.bin_stream(b);
+            let first = match s.bin_time(b) {
+                Time::EPOCH => now,
+                t => t,
+            };
+            let rivals = s
+                .route
+                .iter()
+                .filter(|&(&who, r)| who != peer && r.room.is_some_and(|t| now - t <= ROOM_FRESH))
+                .filter_map(|(who, r)| {
+                    let (mean, horizon) = r.lags.get(usize::from(stream)).copied().flatten()?;
+                    let o = channels.get(who)?;
+                    Some(log::RequestChannel {
+                        predicted: Some((first + mean, first + horizon)),
+                        ..at(o, b)
+                    })
+                })
+                .collect();
+            records.push(log::RequestRecord {
+                at: now,
+                stream,
+                bin: b,
+                timeout,
+                released: s.held_marks.get(&b).and_then(|m| m.released),
+                asked: at(c, b),
+                rivals,
+                end: log::RequestEnd::Closed,
+                ended: now,
+            });
+        }
+        if let Some(l) = s.request_log.as_mut() {
+            for r in records {
+                l.sent(r);
+            }
+        }
+        let mut sent = sent;
+        sent.clear();
+        s.requests_sent = sent;
+    }
+
     /// Turns the forecast log on or off ([`crate::Runner::set_forecasts`]).
     pub(crate) fn set_forecasts(&mut self, on: bool) {
         if on != self.s.forecasts.is_some() {
             self.s.forecasts = on.then(Vec::new);
-            self.s.held_log = on.then(Vec::new);
         }
+        self.set_held_log();
+    }
+
+    /// Turns the request log on or off ([`crate::Runner::set_request_log`]).
+    pub(crate) fn set_request_log(&mut self, on: bool) {
+        if on != self.s.request_log.is_some() {
+            self.s.have_log = on.then(Vec::new);
+            self.s.request_log = on.then(log::RequestLog::default);
+            for c in self.channels.values_mut() {
+                c.announced.clear();
+            }
+        }
+        self.set_held_log();
+    }
+
+    /// The held log is on with the forecast or the request log.
+    fn set_held_log(&mut self) {
+        let on = self.s.forecasts.is_some() || self.s.request_log.is_some();
+        if on != self.s.held_log.is_some() {
+            self.s.held_log = on.then(Vec::new);
+            self.s.held_marks.clear();
+        }
+    }
+
+    /// Ends the request log's requests open to `peer` as closed, at `now`:
+    /// its channel goes ([`Self::close_channel`]).
+    pub(crate) fn close_requests(&mut self, peer: PeerKey, now: Time) {
+        if let Some(l) = self.s.request_log.as_mut() {
+            l.close(Some(peer), now);
+        }
+    }
+
+    /// The HAVEs' chunks since the last call, and how many the cap left
+    /// out ([`crate::Runner::take_haves`]).
+    pub(crate) fn take_haves(&mut self) -> (Vec<log::HaveRecord>, u64) {
+        let lost = std::mem::take(&mut self.s.haves_lost);
+        (
+            self.s
+                .have_log
+                .as_mut()
+                .map(std::mem::take)
+                .unwrap_or_default(),
+            lost,
+        )
+    }
+
+    /// The requests ended since the last call, and how many the cap left
+    /// out ([`crate::Runner::take_requests`]); with `close`, the open ones
+    /// end closed first (the scheduler goes).
+    pub(crate) fn take_requests(
+        &mut self,
+        close: bool,
+        now: Time,
+    ) -> (Vec<log::RequestRecord>, u64) {
+        let Some(l) = self.s.request_log.as_mut() else {
+            return (Vec::new(), 0);
+        };
+        if close {
+            l.close(None, now);
+        }
+        l.take()
+    }
+
+    /// The stored chunks the held log's bound left out since the last
+    /// call.
+    pub(crate) fn take_held_lost(&mut self) -> u64 {
+        std::mem::take(&mut self.s.held_lost)
     }
 
     /// Turns the parent log on or off ([`crate::Runner::set_parent_log`]).
@@ -3035,7 +3285,7 @@ impl PeerSwarmScheduler {
 
     /// The chunks stored since the last call, and when (the forecast log's
     /// [`crate::Runner::take_held`]).
-    pub(crate) fn take_held(&mut self) -> Vec<(Bin, Time)> {
+    pub(crate) fn take_held(&mut self) -> Vec<log::Held> {
         self.s
             .held_log
             .as_mut()

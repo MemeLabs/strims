@@ -425,8 +425,8 @@ fn the_held_log_has_every_chunk_a_seed_writes_with_or_without_a_channel() {
     let next: Vec<Bin> = (0..chunks as u64)
         .map(|i| Bin(2 * (chunks as u64 + i)))
         .collect();
-    assert_eq!(alone.iter().map(|&(b, _)| b).collect::<Vec<_>>(), next);
-    assert!(alone.iter().all(|&(_, at)| at == p.now), "{alone:?}");
+    assert_eq!(alone.iter().map(|h| h.bin).collect::<Vec<_>>(), next);
+    assert!(alone.iter().all(|h| h.at == p.now), "{alone:?}");
     assert!(p.seed.runner.take_held(p.seed.swarm).is_empty());
 }
 

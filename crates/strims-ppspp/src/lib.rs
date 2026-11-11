@@ -119,6 +119,9 @@ pub use runner::{
     PEER_QOS_UPDATE_INTERVAL, PeerKey, Rewind, Runner, RunnerError, SwarmKey, SwarmMut,
     TICK_INTERVAL,
 };
+pub use scheduler_peer::log::{
+    HaveRecord, Held, HeldHow, RequestChannel, RequestEnd, RequestRecord,
+};
 pub use scheduler_peer::push::seed::{
     AllocCounters, ReportCounters, SeedAllocationStats, SeedNeighbour,
 };

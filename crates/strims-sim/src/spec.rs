@@ -534,6 +534,12 @@ pub struct Scenario {
     /// forecast log for the tables' `forecast` (a row per neighbour per
     /// chunk announced: tens of MB a run). Changes no trace.
     pub forecast_log: bool,
+    /// With [`Scenario::wire_bins`], every node keeps its ppspp runner's
+    /// request log (`Runner::set_request_log`, with the held log) for the
+    /// tables' `arrivals`, `haves` and `asks` (`STRIMS_SIM_SPEC=1`: a row
+    /// per neighbour per chunk announced, and per request and rival).
+    /// Changes no trace.
+    pub request_logs: bool,
     /// TCP writes in pieces of at most this many bytes, as segments: the
     /// window model ([`SendBuffer::window`]) then fills a window segment by
     /// segment, as real TCP does, where a whole write of up to a GSO
@@ -747,6 +753,7 @@ impl Scenario {
             transfer_samples: false,
             wire_bins: None,
             forecast_log: false,
+            request_logs: false,
             tcp_segment: None,
             stored_chunks: false,
             discovery: None,

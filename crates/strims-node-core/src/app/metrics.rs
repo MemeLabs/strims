@@ -119,6 +119,11 @@ fn node(m: NodeMetrics) -> v1::NodeMetrics {
         forecasts: _,
         forecasts_lost: _,
         held: _,
+        held_lost: _,
+        haves: _,
+        haves_lost: _,
+        requests: _,
+        requests_lost: _,
     } = m;
     v1::NodeMetrics {
         host: Some(host(h)),

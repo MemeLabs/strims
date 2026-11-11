@@ -20,12 +20,17 @@
 //! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink at the start in bytes per second, -1 without a limit; its steps are `events`' `up_step`), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset), `arrive_ms` (when it booted, [`HostSpec::arrive_at`]: the run's start, negative, for one that came with it) and `depart_ms` (when it left for good, [`Fault::Depart`]; empty if it stayed) |
 //! | `events` | timed event | `t_us`, `kind`, `node` (the host it happened to, -1 for none), `peer` (another host, -1 for none), `value`, `detail`: every fault of the scenario (`partition`, `repair`, `hold`, `release` with `node` and `peer` the groups' first hosts and `value` the groups' sizes' product, `crash`, `restart`, `latency` in ms, `pause_reading`, `resume_reading`, `reset_writer` with `node` the swarm, `uplink` in bytes per second, `connect`), `depart` with `value` 1 for an abrupt departure, 0 for a graceful one, every host's uplink steps (`up_step`), competing uploads (`competing_start` (`value` the competing flow's round trip in ms), `competing_stop`), each arriving viewer's `arrive` ([`HostSpec::arrive_at`]), each viewer incarnation's `join`, `first_frame` (`value` its ms from the join) and `caught_up` (the same), each `parent_lost` ([`Report::parent_losses`]: `node` the viewer, `peer` the parent that departed, `value` the ms from its departure until the viewer stopped counting on it, -1 if it never did, at its departure then) and the seed's `copies` (`value` its copies, at each change of its seed sample: its budget, window, copies or first wave, so `value` can repeat) |
 //! | `forecast` | sample of a node's forecast log ([`strims_ppspp::LagForecast`]): a HAVE's announcement lag, with `STRIMS_SIM_FORECAST=1` | `t_ms` (the HAVE's arrival), `node`, `viewer`, `peer` (the hosts), `peer_honest` (not a hostile host), `stream`, `seq` (the chunk), `sample_ms` (the lag: from our first sight of the chunk's unit to the HAVE), `mean_ms` (the mean of the peer's lag estimate before the sample, -1 before its first sample), `horizon_ms` (how late a sample still fits that estimate: the later of its decaying peak and its mean plus two deviations, -1 before its first sample), `samples` (the estimate's so far), `fresh` (its latest sample was recent enough for a candidate), `lazy` (we asked the peer for lazy HAVEs), `first_sight` (this HAVE set the unit's first sight: the sample is 0), `run` (the sample's place in the HAVE's run of its stream's bins: a whole unit's HAVE gives one per chunk, the same lag each), `seen_ms` (our first sight of the unit, `t_ms - sample_ms`), `held_ms` (when the peer first stored the chunk, in the incarnation it had at the sample: its runner's held log, `Runner::take_held`, a seed's own writes included; empty if that incarnation never did), `channel_open_ms` (when our channel with the peer opened) and `live` (it was held after both hosts' incarnations started and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
+//! | `arrivals` | chunk a host first held, with `STRIMS_SIM_FORECAST=1` or `STRIMS_SIM_SPEC=1` (its held log, [`strims_ppspp::Held`]) | `t_ms` (when it first held it: the `forecast` table's `held_ms` is this row's, in the incarnation the sample's peer had), `node` (the host), `viewer`, `seq` (the chunk), `how` (`own`: published, or no data message named it, so an unattributed store too; `push`: pushed by the stream's open parent; `answer`: an answer to a request of ours, which wins over `push` when the parent's push answered our request; `other`), `peer` (the source's host, -1 for none), `parent` (the stream's open parent's then, -1 for none), `expected_ms` (when push first expected it: a HAVE marked it the parent's to push), `released_ms` (when push's deadline, or the parent's going, released it to pull), `asked_ms` (our first request for it), `asks` (the requests), `last_ask_peer` and `last_ask_ms` (the last one's host and time), `rtt_ms` (the source channel's smoothed round trip then), `incarnation` (the host's then: its restarts by the hold, the first 0); times empty where none |
+//! | `haves` | chunk a HAVE first announced to a host on a channel, with `STRIMS_SIM_SPEC=1` (its request log, [`strims_ppspp::HaveRecord`]): once per chunk and channel, past the tracked history none | `t_ms` (the HAVE arrived), `node` (the receiver's host), `honest` (not a hostile host), `peer` (the announcing host), `peer_honest`, `stream`, `seq` (the chunk), `channel_open_ms` (when the channel opened: a chunk held before then comes in its first HAVEs, a backlog rather than an arrival), `peer_incarnation` (the peer's then, as `arrivals`' `incarnation` counts them). The `forecast` table samples the same HAVEs in the hybrid, where the chunk's first sight is known, under its own cap; this table has every one. The knowledge delay is `t_ms` less the peer's hold, `arrivals`' earliest `t_ms` of node = peer, seq and incarnation = peer_incarnation |
+//! | `asks` | channel a request of a node's weighed, from its request log ([`strims_ppspp::RequestRecord`]): every request the request round made, once it ended, the asked peer's row and then one per rival, with `STRIMS_SIM_SPEC=1` | the park4 line's `asks` columns where they mean the same: `t_ms` (the request went), `node` (the requester's host), `honest`, `ask` (the request's number in the run, from 0: its rows share it), `round` (`flight`: the request round, its flight window's, the only one here), `peer` (the row's channel's host), `peer_honest`, `picked` (the row is the asked peer's; else a rival's: another channel whose route had fresh window room and an announcement lag for the stream, which the round weighed: one expected to deliver the chunk sooner would have taken it), `declares` (a HAVE from the row's peer had announced the chunk), `stream`, `seq`, `rtt_ms` (the requester's smoothed round trip to the row's peer then), `predicted_ms` and `predicted_p90_ms` (a rival's: when the route expected it to hold the chunk, the chunk's first sight plus its announcement lag's mean, and plus the lag's horizon; empty on the asked row, which a HAVE decided), `predicted_p99_ms` (empty), `outcome` (the asked row only: `answered`, `expired`, `elsewhere`: the chunk came from another peer first and the request settled unanswered, at its timeout or as the read position passed it, or `closed`), `reason` (an expiry's `timeout`), `t_outcome_ms` (the asked row only), `channel_open_ms`, `since_ms` (when the requester's incarnation then began), `peer_incarnation` (the peer's then); and the HAVE world's own: `timeout_ms` (the asked row only: the request's timeout, from its time), `have_ms` (when a HAVE from the row's peer first announced the chunk, the knowledge the request rested on; empty without one) and `released_ms` (when push's deadline released the chunk to pull, empty if push never expected it). The line's `grace_ms` (requests here carry none), `frontier_seq`, `hole_seq` and `state_age_ms` (no STATE summaries) are absent. The truth (`held_ms`, `live`, `err_ms`, `pred_err_ms`, `held_by_p50/p90/p99`) is `hack/sim-db`'s view's, from `arrivals`, as the line's |
 //!
 //! `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
 //! `secs`, the seed's `seed_up` steps and the viewers' `viewer_up` as the
 //! series has them, the number of `seconds`, the bins' `bin_ms`, the
 //! hostile viewers' numbers (`hostile`), and the forecast samples the
-//! nodes' caps left out (`forecasts_lost`).
+//! nodes' caps left out (`forecasts_lost`); with `STRIMS_SIM_SPEC=1`, the
+//! held log's, the HAVE log's and the request log's (`held_lost`,
+//! `haves_lost`, `asks_lost`: requests, each with its rivals).
 //!
 //! The runners' counters reach the bins from the nodes themselves
 //! (`NodeConfig::stats_bins`), read at each edge before the node's first
@@ -50,7 +55,7 @@ use strims_base::stats::WaitHistogram;
 use strims_wan::playout::{self, DELAYS_MS};
 use strims_wan::vocab::Kind;
 
-use crate::report::{NODE_BIN_COUNTERS, NodeBinRecord, Report, ViewerReport};
+use crate::report::{HostReport, NODE_BIN_COUNTERS, NodeBinRecord, Report, ViewerReport};
 use crate::spec::{Departure, Fault, HostClass, HostIx};
 pub use crate::wan::UP_COUNTERS;
 
@@ -79,7 +84,15 @@ const SPILL: usize = 1 << 20;
 /// zstd-compressed, `<name>.csv.zst` (`hack/sim-db` reads either): an
 /// overloaded run's come to gigabytes of CSV, which a job's dir holds until
 /// it is folded. The others are a run's summaries, `<name>.csv`.
-pub const ZSTD: [&str; 4] = ["reads", "node_bins", "events", "forecast"];
+pub const ZSTD: [&str; 7] = [
+    "reads",
+    "node_bins",
+    "events",
+    "forecast",
+    "arrivals",
+    "haves",
+    "asks",
+];
 
 /// Where a [`Table`]'s rows go: its file, or a zstd stream onto it.
 enum Sink {
@@ -629,6 +642,13 @@ impl Report {
         if self.scenario.forecast_log {
             self.forecast_table(dir, &number, start)?.finish()?;
         }
+        if self.scenario.forecast_log || self.scenario.request_logs {
+            self.arrivals_table(dir, &number, start)?.finish()?;
+        }
+        if self.scenario.request_logs {
+            self.haves_table(dir, start)?.finish()?;
+            self.asks_table(dir, start)?.finish()?;
+        }
         let ints = |v: &[i64]| {
             let v: Vec<String> = v.iter().map(i64::to_string).collect();
             v.join(",")
@@ -651,10 +671,21 @@ impl Report {
         let lost: u64 = self.hosts.iter().map(|h| h.forecasts_lost).sum();
         let _ = write!(
             meta,
-            ",\"viewers\":{},\"bin_ms\":{},\"forecasts_lost\":{lost}}}",
+            ",\"viewers\":{},\"bin_ms\":{},\"forecasts_lost\":{lost}",
             viewers.len(),
             width.as_millis()
         );
+        if self.scenario.request_logs {
+            let sum = |f: fn(&HostReport) -> u64| -> u64 { self.hosts.iter().map(f).sum() };
+            let _ = write!(
+                meta,
+                ",\"held_lost\":{},\"haves_lost\":{},\"asks_lost\":{}",
+                sum(|h| h.held_lost),
+                sum(|h| h.haves_lost),
+                sum(|h| h.requests_lost)
+            );
+        }
+        meta.push('}');
         meta.push('\n');
         std::fs::write(dir.join("series_meta.json"), meta)
     }
@@ -1115,4 +1146,235 @@ impl Report {
         }
         Ok(t)
     }
+
+    /// The `arrivals` table (see the [module docs](self)): every chunk
+    /// each host first held, with its timeline there.
+    fn arrivals_table(
+        &self,
+        dir: &Path,
+        number: &BTreeMap<HostIx, usize>,
+        start: Duration,
+    ) -> io::Result<Table> {
+        let ms = |at: Duration| ms_from(start, at);
+        let opt = |x: Option<Duration>| x.map_or(String::new(), |x| ms(x).to_string());
+        let hostn = |x: Option<HostIx>| x.map_or(-1, |h| h as i64).to_string();
+        let mut t = Table::new(
+            dir,
+            "arrivals",
+            &[
+                ("t_ms", Col::Int),
+                ("node", Col::Int),
+                ("viewer", Col::Int),
+                ("seq", Col::Int),
+                ("how", Col::Text),
+                ("peer", Col::Int),
+                ("parent", Col::Int),
+                ("expected_ms", Col::Int),
+                ("released_ms", Col::Int),
+                ("asked_ms", Col::Int),
+                ("asks", Col::Int),
+                ("last_ask_peer", Col::Int),
+                ("last_ask_ms", Col::Int),
+                ("rtt_ms", Col::Int),
+                ("incarnation", Col::Int),
+            ],
+        )?;
+        let starts = incarnations(&self.scenario);
+        for (h, r) in self.hosts.iter().enumerate() {
+            let viewer = number.get(&h).map_or(-1, |&i| i as i64).to_string();
+            for a in &r.arrivals {
+                t.fields(&[
+                    ms(a.at).to_string(),
+                    h.to_string(),
+                    viewer.clone(),
+                    a.held.bin.base_offset().to_string(),
+                    a.held.how.name().to_string(),
+                    hostn(a.peer),
+                    hostn(a.parent),
+                    opt(a.expected),
+                    opt(a.released),
+                    opt(a.asked),
+                    a.held.asks.to_string(),
+                    hostn(a.asked_peer),
+                    opt(a.last_ask),
+                    a.held.rtt.as_millis().to_string(),
+                    incarnation(&starts, h, a.at).to_string(),
+                ]);
+            }
+        }
+        Ok(t)
+    }
+
+    /// Whether host `h` is honest: not a hostile host.
+    fn honest(&self, h: HostIx) -> bool {
+        !matches!(
+            self.scenario.hosts.get(h).map(|x| x.class),
+            Some(HostClass::Hostile(_))
+        )
+    }
+
+    /// The `haves` table (see the [module docs](self)): every chunk a HAVE
+    /// first announced to each host on each channel, times from `start`.
+    fn haves_table(&self, dir: &Path, start: Duration) -> io::Result<Table> {
+        let ms = |at: Duration| ms_from(start, at);
+        let mut t = Table::new(
+            dir,
+            "haves",
+            &[
+                ("t_ms", Col::Int),
+                ("node", Col::Int),
+                ("honest", Col::Bool),
+                ("peer", Col::Int),
+                ("peer_honest", Col::Bool),
+                ("stream", Col::Int),
+                ("seq", Col::Int),
+                ("channel_open_ms", Col::Int),
+                ("peer_incarnation", Col::Int),
+            ],
+        )?;
+        let starts = incarnations(&self.scenario);
+        for (h, r) in self.hosts.iter().enumerate() {
+            let honest = self.honest(h).to_string();
+            for x in &r.haves {
+                t.fields(&[
+                    ms(x.at).to_string(),
+                    h.to_string(),
+                    honest.clone(),
+                    x.peer.map_or(-1, |p| p as i64).to_string(),
+                    x.peer.is_some_and(|p| self.honest(p)).to_string(),
+                    x.have.stream.to_string(),
+                    x.have.bin.base_offset().to_string(),
+                    ms(x.opened).to_string(),
+                    x.peer
+                        .map_or(String::new(), |p| incarnation(&starts, p, x.at).to_string()),
+                ]);
+            }
+        }
+        Ok(t)
+    }
+
+    /// The `asks` table (see the [module docs](self)): every request each
+    /// host's request round made, the asked peer's row and then one per
+    /// rival, times from `start`.
+    fn asks_table(&self, dir: &Path, start: Duration) -> io::Result<Table> {
+        let ms = |at: Duration| ms_from(start, at);
+        let mut t = Table::new(dir, "asks", &ASK_COLS)?;
+        let starts = incarnations(&self.scenario);
+        let mut ask = 0u64;
+        for (h, r) in self.hosts.iter().enumerate() {
+            let honest = self.honest(h).to_string();
+            for x in &r.requests {
+                let tt = |at: strims_base::time::Time| (at - x.epoch).to_std().unwrap_or_default();
+                let rec = &x.record;
+                let at = tt(rec.at);
+                let since = starts
+                    .get(h)
+                    .and_then(|s| s.get(incarnation(&starts, h, at)))
+                    .copied()
+                    .unwrap_or_default();
+                let opt = |v: Option<strims_base::time::Time>| {
+                    v.map_or(String::new(), |v| ms(tt(v)).to_string())
+                };
+                let rows = std::iter::once((x.peer, &rec.asked, true)).chain(
+                    x.rivals
+                        .iter()
+                        .zip(&rec.rivals)
+                        .map(|(&p, w)| (p, w, false)),
+                );
+                for (peer, w, picked) in rows {
+                    let only = |v: String| if picked { v } else { String::new() };
+                    t.fields(&[
+                        ms(at).to_string(),
+                        h.to_string(),
+                        honest.clone(),
+                        ask.to_string(),
+                        "flight".to_owned(),
+                        peer.map_or(-1, |p| p as i64).to_string(),
+                        peer.is_some_and(|p| self.honest(p)).to_string(),
+                        picked.to_string(),
+                        w.announced.is_some().to_string(),
+                        rec.stream.to_string(),
+                        rec.bin.base_offset().to_string(),
+                        only(rec.timeout.as_millis().to_string()),
+                        w.rtt.as_millis().to_string(),
+                        opt(w.predicted.map(|p| p.0)),
+                        opt(w.predicted.map(|p| p.1)),
+                        String::new(),
+                        opt(w.announced),
+                        opt(rec.released),
+                        only(rec.end.name().to_owned()),
+                        only(rec.end.reason().to_owned()),
+                        only(ms(tt(rec.ended)).to_string()),
+                        ms(tt(w.channel_open)).to_string(),
+                        ms(since).to_string(),
+                        peer.map_or(String::new(), |p| incarnation(&starts, p, at).to_string()),
+                    ]);
+                }
+                ask += 1;
+            }
+        }
+        Ok(t)
+    }
 }
+
+/// The ms from `start` to `at`, negative before it.
+fn ms_from(start: Duration, at: Duration) -> i64 {
+    match at.checked_sub(start) {
+        Some(d) => d.as_millis() as i64,
+        None => -(start.saturating_sub(at).as_millis() as i64),
+    }
+}
+
+/// When each host's incarnations started, in order, the run's start the
+/// first's: a chunk an earlier one held isn't what a later one announced.
+fn incarnations(scenario: &crate::Scenario) -> Vec<Vec<Duration>> {
+    let mut starts: Vec<Vec<Duration>> = vec![vec![Duration::ZERO]; scenario.hosts.len()];
+    for f in &scenario.faults {
+        if let Fault::Restart(h) = f.fault
+            && let Some(s) = starts.get_mut(h)
+        {
+            s.push(f.at);
+        }
+    }
+    for s in &mut starts {
+        s.sort_unstable();
+    }
+    starts
+}
+
+/// Host `h`'s incarnation at `at` (`starts` [`incarnations`]): its
+/// restarts by then, the first 0.
+fn incarnation(starts: &[Vec<Duration>], h: HostIx, at: Duration) -> usize {
+    starts.get(h).map_or(0, |s| {
+        s.iter().filter(|&&t| t <= at).count().saturating_sub(1)
+    })
+}
+
+/// The columns of the `asks` table (see the [module docs](self)), as the
+/// ppspp sim writes them too.
+const ASK_COLS: [(&str, Col); 24] = [
+    ("t_ms", Col::Int),
+    ("node", Col::Int),
+    ("honest", Col::Bool),
+    ("ask", Col::Int),
+    ("round", Col::Text),
+    ("peer", Col::Int),
+    ("peer_honest", Col::Bool),
+    ("picked", Col::Bool),
+    ("declares", Col::Bool),
+    ("stream", Col::Int),
+    ("seq", Col::Int),
+    ("timeout_ms", Col::Int),
+    ("rtt_ms", Col::Int),
+    ("predicted_ms", Col::Int),
+    ("predicted_p90_ms", Col::Int),
+    ("predicted_p99_ms", Col::Int),
+    ("have_ms", Col::Int),
+    ("released_ms", Col::Int),
+    ("outcome", Col::Text),
+    ("reason", Col::Text),
+    ("t_outcome_ms", Col::Int),
+    ("channel_open_ms", Col::Int),
+    ("since_ms", Col::Int),
+    ("peer_incarnation", Col::Int),
+];

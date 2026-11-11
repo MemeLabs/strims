@@ -32,7 +32,8 @@ use strims_wan::live::Au;
 use crate::memory::{GroupCounters, MemoryGroup};
 use crate::net::SendBuffers;
 use crate::report::{
-    ForecastRecord, HostReport, MediaLog, NodeBinRecord, ParentLoss, ParentRecord, VpnReport,
+    ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport, MediaLog, NodeBinRecord,
+    ParentLoss, ParentRecord, RequestHostRecord, VpnReport,
 };
 use crate::skew::OffsetCapture;
 use crate::spec::{HostIx, Scenario, Transport};
@@ -126,6 +127,14 @@ pub(crate) struct HostState {
     pub forecasts: Vec<ForecastRecord>,
     pub forecasts_lost: u64,
     pub held: Vec<(u64, Duration)>,
+    /// See [`HostReport::arrivals`], [`HostReport::haves`] and
+    /// [`HostReport::requests`].
+    pub arrivals: Vec<ArrivalHostRecord>,
+    pub held_lost: u64,
+    pub haves: Vec<HaveHostRecord>,
+    pub haves_lost: u64,
+    pub requests: Vec<RequestHostRecord>,
+    pub requests_lost: u64,
     /// When it left for good ([`crate::Fault::Depart`]), in ms.
     pub departed: Option<u64>,
     /// Crashed, and not restarted yet.
@@ -152,6 +161,12 @@ impl HostState {
         r.forecasts = self.forecasts.clone();
         r.forecasts_lost = self.forecasts_lost;
         r.held = self.held.clone();
+        r.arrivals = self.arrivals.clone();
+        r.held_lost = self.held_lost;
+        r.haves = self.haves.clone();
+        r.haves_lost = self.haves_lost;
+        r.requests = self.requests.clone();
+        r.requests_lost = self.requests_lost;
         r
     }
 
@@ -468,6 +483,7 @@ impl World {
                 width: width.max(Duration::from_millis(1)).into(),
             });
             c.forecast_log = self.spec.forecast_log;
+            c.request_log = self.spec.request_logs;
             let tx = self.parent_tx.clone();
             c.parent_log = Some(ParentSink(Arc::new(move |p| {
                 let _ = tx.send((h, incarnation, p));
@@ -1089,7 +1105,15 @@ impl World {
         let (Some(width), Some(swarm)) = (self.spec.wire_bins, self.spec.swarms.first()) else {
             return;
         };
-        if m.bins.is_empty() && m.forecasts.is_empty() && m.held.is_empty() && m.forecasts_lost == 0
+        if m.bins.is_empty()
+            && m.forecasts.is_empty()
+            && m.held.is_empty()
+            && m.forecasts_lost == 0
+            && m.held_lost == 0
+            && m.haves.is_empty()
+            && m.haves_lost == 0
+            && m.requests.is_empty()
+            && m.requests_lost == 0
         {
             return;
         }
@@ -1165,13 +1189,45 @@ impl World {
                     forecast: f.forecast,
                 });
             }
+            let t = |t: Time| (t - epoch).to_std().unwrap_or_default();
+            let host = |id: Option<HostId>| id.and_then(|id| ids.get(&id).copied());
             for c in &m.held {
                 if Some(c.swarm) == key {
-                    let at = (c.at - epoch).to_std().unwrap_or_default();
+                    let at = t(c.at);
                     hs.held.push((c.bin.base_offset(), at));
+                    hs.arrivals.push(ArrivalHostRecord {
+                        at,
+                        expected: c.held.expected.map(t),
+                        released: c.held.released.map(t),
+                        asked: c.held.asked.map(t),
+                        last_ask: c.held.last_ask.map(|(_, x)| t(x)),
+                        peer: host(c.peer),
+                        parent: host(c.parent),
+                        asked_peer: host(c.asked),
+                        held: c.held,
+                    });
                 }
             }
+            for x in m.haves.iter().filter(|x| Some(x.swarm) == key) {
+                hs.haves.push(HaveHostRecord {
+                    at: t(x.have.at),
+                    opened: t(x.have.channel_open),
+                    peer: host(x.peer),
+                    have: x.have,
+                });
+            }
+            for x in m.requests.iter().filter(|x| Some(x.swarm) == key) {
+                hs.requests.push(RequestHostRecord {
+                    epoch,
+                    peer: host(x.peer),
+                    rivals: x.rivals.iter().map(|&w| host(w)).collect(),
+                    record: x.record.clone(),
+                });
+            }
             hs.forecasts_lost += m.forecasts_lost;
+            hs.held_lost += m.held_lost;
+            hs.haves_lost += m.haves_lost;
+            hs.requests_lost += m.requests_lost;
         });
     }
 

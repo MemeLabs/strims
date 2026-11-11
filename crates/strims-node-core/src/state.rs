@@ -60,9 +60,9 @@ use crate::config::{
 use crate::driver::{IdleOk, Interfaces, LinkProbe, TaskGuard};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
-    ChannelInfo, DriverMetrics, ForecastInfo, HeldInfo, LinkInfo, NetworkInfo, NodeBin, NodeEvent,
-    NodeMetrics, ParentInfo, PeerInfo, RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo,
-    SwarmBin, SwarmInfo, WriterInfo,
+    ChannelInfo, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo, LinkInfo, NetworkInfo, NodeBin,
+    NodeEvent, NodeMetrics, ParentInfo, PeerInfo, RequestInfo, RunnerMetrics, RunnerPeerInfo,
+    SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
 };
 
 /// Bin edges [`NodeConfig::stats_bins`] keeps between snapshots; past it the
@@ -382,7 +382,10 @@ pub(crate) struct State {
     /// With [`NodeConfig::forecast_log`], the runner's log since the last
     /// snapshot. Bound: the runner's cap per swarm and snapshot.
     forecast_log: bool,
-    /// With the forecast log, the swarms removed since the last snapshot,
+    /// With [`NodeConfig::request_log`], the runner's request log since
+    /// the last snapshot. Bound: as the forecast log.
+    request_log: bool,
+    /// With either log, the swarms removed since the last snapshot,
     /// whose logs the runner keeps for it. Bound: the app's calls.
     removed_swarms: Vec<SwarmKey>,
     /// See [`NodeConfig::parent_log`].
@@ -482,6 +485,7 @@ impl State {
         let mut runner = Runner::new(fork(&mut rng));
         runner.set_upload_capacity(upload_hint(config.upload_capacity, config.rate_limit));
         runner.set_forecasts(config.forecast_log);
+        runner.set_request_log(config.request_log);
         runner.set_parent_log(config.parent_log.is_some());
         let capture = config
             .ppspp_capture
@@ -529,6 +533,7 @@ impl State {
             metrics: DriverMetrics::default(),
             bins: config.stats_bins.map(|b| (b, b.origin, VecDeque::new())),
             forecast_log: config.forecast_log,
+            request_log: config.request_log,
             removed_swarms: Vec::new(),
             parent_sink: config.parent_log.clone(),
             scratch_links: Vec::new(),
@@ -1523,7 +1528,7 @@ impl State {
     /// Every counter, in a fixed order (see [`NodeMetrics`]). `&mut` and
     /// `now` because the runner's rates advance their windows to `now`.
     pub(crate) fn metrics(&mut self, now: Time) -> NodeMetrics {
-        let (forecasts, forecasts_lost, held) = self.take_forecasts();
+        let logs = self.take_forecasts();
         NodeMetrics {
             host: self.vnic.metrics(),
             vpn: self.vpn.metrics(),
@@ -1535,9 +1540,14 @@ impl State {
                 .bins
                 .as_mut()
                 .map_or(Vec::new(), |(_, _, b)| b.drain(..).collect()),
-            forecasts,
-            forecasts_lost,
-            held,
+            forecasts: logs.forecasts,
+            forecasts_lost: logs.forecasts_lost,
+            held: logs.held,
+            held_lost: logs.held_lost,
+            haves: logs.haves,
+            haves_lost: logs.haves_lost,
+            requests: logs.requests,
+            requests_lost: logs.requests_lost,
         }
     }
 
@@ -1621,36 +1631,57 @@ impl State {
         }
     }
 
-    /// The runner's forecast log since the last call, peers named by host,
-    /// how many samples its caps left out, and the chunks it stored.
-    fn take_forecasts(&mut self) -> (Vec<ForecastInfo>, u64, Vec<HeldInfo>) {
-        if !self.forecast_log {
-            return (Vec::new(), 0, Vec::new());
+    /// The runner's forecast and request logs since the last call, peers
+    /// named by host, with how many records their caps left out.
+    fn take_forecasts(&mut self) -> TakenLogs {
+        let mut out = TakenLogs::default();
+        if !self.forecast_log && !self.request_log {
+            return out;
         }
         let hosts: BTreeMap<PpsppPeer, ID> =
             self.peers.values().map(|ps| (ps.pp, ps.host_id)).collect();
-        let (mut out, mut lost, mut held) = (Vec::new(), 0, Vec::new());
+        let host = |p: Option<PpsppPeer>| p.and_then(|p| hosts.get(&p).copied());
         let removed = std::mem::take(&mut self.removed_swarms);
         for &key in self.swarms.iter().chain(&removed) {
             let (log, n) = self.runner.take_forecasts(key);
-            lost += n;
-            out.extend(log.into_iter().map(|forecast| ForecastInfo {
-                swarm: key,
-                peer: hosts.get(&forecast.peer).copied(),
-                forecast,
-            }));
-            held.extend(
-                self.runner
-                    .take_held(key)
-                    .into_iter()
-                    .map(|(bin, at)| HeldInfo {
+            out.forecasts_lost += n;
+            out.forecasts
+                .extend(log.into_iter().map(|forecast| ForecastInfo {
+                    swarm: key,
+                    peer: host(Some(forecast.peer)),
+                    forecast,
+                }));
+            out.held
+                .extend(self.runner.take_held(key).into_iter().map(|h| HeldInfo {
+                    swarm: key,
+                    bin: h.bin,
+                    at: h.at,
+                    peer: host(h.peer),
+                    parent: host(h.parent),
+                    asked: host(h.last_ask.map(|(p, _)| p)),
+                    held: h,
+                }));
+            out.held_lost += self.runner.take_held_lost(key);
+            if self.request_log {
+                let (haves, n) = self.runner.take_haves(key);
+                out.haves_lost += n;
+                out.haves.extend(haves.into_iter().map(|have| HaveInfo {
+                    swarm: key,
+                    peer: host(Some(have.peer)),
+                    have,
+                }));
+                let (requests, n) = self.runner.take_requests(key);
+                out.requests_lost += n;
+                out.requests
+                    .extend(requests.into_iter().map(|record| RequestInfo {
                         swarm: key,
-                        bin,
-                        at,
-                    }),
-            );
+                        peer: host(Some(record.asked.peer)),
+                        rivals: record.rivals.iter().map(|w| host(Some(w.peer))).collect(),
+                        record,
+                    }));
+            }
         }
-        (out, lost, held)
+        out
     }
 
     fn link_metrics(&mut self, now: Time) -> Vec<LinkInfo> {
@@ -2056,7 +2087,7 @@ impl State {
             .remove_swarm(swarm)
             .ok_or(NodeError::UnknownSwarm)?;
         self.swarms.remove(&swarm);
-        if self.forecast_log {
+        if self.forecast_log || self.request_log {
             self.removed_swarms.push(swarm);
         }
         self.publishers.retain(|_, p| p.swarm != swarm);
@@ -2365,4 +2396,18 @@ mod tests {
         assert_eq!(upload_hint(Some(500), Some(1000)), Some(500));
         assert_eq!(upload_hint(Some(500), None), Some(500));
     }
+}
+
+/// The runner's logs a snapshot takes ([`NodeMetrics`]'s fields of the
+/// same names).
+#[derive(Default)]
+struct TakenLogs {
+    forecasts: Vec<ForecastInfo>,
+    forecasts_lost: u64,
+    held: Vec<HeldInfo>,
+    held_lost: u64,
+    haves: Vec<HaveInfo>,
+    haves_lost: u64,
+    requests: Vec<RequestInfo>,
+    requests_lost: u64,
 }

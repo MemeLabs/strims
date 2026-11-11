@@ -197,6 +197,7 @@ fn a_run_with_tables_keeps_its_trace() {
             spec.transfer_samples = true;
             spec.wire_bins = Some(bin);
             spec.forecast_log = true;
+            spec.request_logs = true;
             let r = run(spec, 1).unwrap();
             assert_eq!(
                 (&plain.trace_hash, plain.reads_hash()),
@@ -312,6 +313,7 @@ fn a_run_with_tables_keeps_its_trace() {
             assert!(lines("forecast") > 1, "{name}: {ms} ms");
             budget_reading_is_the_budgets(&r, &d);
             held_truth_meets_the_reads(&r, &d);
+            request_logs_say_what_they_are(&r, &d);
         }
     }
     let _ = std::fs::remove_dir_all(&dir);
@@ -375,6 +377,117 @@ fn budget_reading_is_the_budgets(r: &strims_sim::Report, d: &Path) {
     assert!(seconds.iter().any(|&c| c > 0));
     assert!(seconds.iter().all(|c| *c == -1 || readings.contains(c)));
     assert!(column("bins").iter().any(|&c| c > 0));
+}
+
+/// The request log's tables (`Scenario::request_logs`) against the run: HAVEs, requests and reads against
+/// the holds `arrivals` records (a read's frame in its chunk), expiries against the runners' timeouts.
+fn request_logs_say_what_they_are(r: &strims_sim::Report, d: &Path) {
+    let swarm = &r.scenario.swarms[0];
+    let per = (swarm.options.chunk_size / 1024) as i64;
+    let rows = |t: &str| -> Vec<BTreeMap<String, String>> {
+        let csv = strims_sim::tables::read_table(d, t).unwrap();
+        let mut lines = csv.lines();
+        let head: Vec<&str> = lines.next().unwrap().split(',').collect();
+        lines
+            .map(|l| {
+                head.iter()
+                    .zip(l.split(','))
+                    .map(|(&c, v)| (c.to_owned(), v.to_owned()))
+                    .collect()
+            })
+            .collect()
+    };
+    let int = |r: &BTreeMap<String, String>, c: &str| -> Option<i64> { r[c].parse().ok() };
+    // Each node's first hold of each chunk, in each incarnation.
+    let mut held: BTreeMap<(i64, i64, i64), i64> = BTreeMap::new();
+    let mut first: BTreeMap<(i64, i64), i64> = BTreeMap::new();
+    for a in rows("arrivals") {
+        let (n, s, i, t) = (
+            int(&a, "node"),
+            int(&a, "seq"),
+            int(&a, "incarnation"),
+            int(&a, "t_ms"),
+        );
+        let (n, s, i, t) = (n.unwrap(), s.unwrap(), i.unwrap(), t.unwrap());
+        let h = held.entry((n, s, i)).or_insert(t);
+        *h = (*h).min(t);
+        let f = first.entry((n, s)).or_insert(t);
+        *f = (*f).min(t);
+    }
+    let hold = |r: &BTreeMap<String, String>| {
+        held.get(&(int(r, "peer")?, int(r, "seq")?, int(r, "peer_incarnation")?))
+            .copied()
+    };
+    // Every honest peer's HAVE came once it held the chunk, in the
+    // incarnation the row names.
+    let haves = rows("haves");
+    assert!(!haves.is_empty());
+    for h in haves.iter().filter(|h| h["peer_honest"] == "true") {
+        let at = hold(h);
+        assert!(
+            at.is_some_and(|at| at <= int(h, "t_ms").unwrap()),
+            "{h:?} held {at:?}"
+        );
+    }
+    // Every request rested on its peer's HAVE, before it went; the
+    // honest peers' answers came once they held the chunk; and the
+    // expiries are the runners' timed out requests.
+    let asks = rows("asks");
+    let asked: Vec<_> = asks.iter().filter(|a| a["picked"] == "true").collect();
+    assert!(!asked.is_empty());
+    for a in &asked {
+        assert_eq!(
+            (a["round"].as_str(), a["declares"].as_str()),
+            ("flight", "true"),
+            "{a:?}"
+        );
+        assert!(
+            int(a, "have_ms").unwrap() <= int(a, "t_ms").unwrap(),
+            "{a:?}"
+        );
+        assert!(int(a, "timeout_ms").unwrap() > 0, "{a:?}");
+        assert!(a["predicted_ms"].is_empty(), "{a:?}");
+        if a["outcome"] == "answered" && a["peer_honest"] == "true" {
+            let at = hold(a);
+            assert!(
+                at.is_some_and(|at| at <= int(a, "t_outcome_ms").unwrap()),
+                "{a:?} held {at:?}"
+            );
+        }
+    }
+    let expired = asked.iter().filter(|a| a["outcome"] == "expired").count() as u64;
+    assert_eq!(expired, {
+        let (a, b, c) = r.timeouts(0);
+        a + b + c
+    });
+    for r in asks.iter().filter(|a| a["picked"] == "false") {
+        assert!(
+            r["outcome"].is_empty() && r["timeout_ms"].is_empty(),
+            "{r:?}"
+        );
+        assert!(
+            int(r, "predicted_ms") <= int(r, "predicted_p90_ms"),
+            "{r:?}"
+        );
+    }
+    // Every read's chunk its viewer's node held by then.
+    let node: BTreeMap<i64, i64> = rows("viewers")
+        .iter()
+        .map(|v| (int(v, "viewer").unwrap(), int(v, "host").unwrap()))
+        .collect();
+    for r in rows("reads") {
+        let (v, s, t) = (
+            int(&r, "viewer").unwrap(),
+            int(&r, "seq").unwrap(),
+            int(&r, "t_ms").unwrap(),
+        );
+        let at = first.get(&(node[&v], s / per));
+        assert!(at.is_some_and(|&at| at <= t), "{r:?} held {at:?}");
+    }
+    let meta = std::fs::read_to_string(d.join("series_meta.json")).unwrap();
+    for lost in ["held_lost", "haves_lost", "asks_lost"] {
+        assert!(meta.contains(&format!("\"{lost}\":0")), "{meta}");
+    }
 }
 
 /// Every viewer stored each chunk it read before it read a frame of it,

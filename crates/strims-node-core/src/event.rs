@@ -8,8 +8,9 @@ use strims_binmap::Bin;
 use strims_kademlia::ID;
 use strims_ppspp::codec::Stream;
 use strims_ppspp::{
-    ChannelMetrics, ChannelStats, ChannelTotals, LagForecast, MetricsSnapshot, ParentWhy,
-    PeerStats, PushStats, SwarmCounters, SwarmId, SwarmKey, SwarmSchedulerStats,
+    ChannelMetrics, ChannelStats, ChannelTotals, HaveRecord, LagForecast, MetricsSnapshot,
+    ParentWhy, PeerStats, PushStats, RequestRecord, SwarmCounters, SwarmId, SwarmKey,
+    SwarmSchedulerStats,
 };
 use strims_vnic::{HostMetrics, LinkKind, LinkMetrics, LinkPath};
 use strims_vpn::{Delivery, ExchangeOutcome, NetworkId};
@@ -188,18 +189,53 @@ pub struct NodeMetrics {
     /// the samples its caps left out; empty otherwise.
     pub forecasts: Vec<ForecastInfo>,
     pub forecasts_lost: u64,
-    /// With [`crate::NodeConfig::forecast_log`], the chunks the runner
-    /// stored since the last snapshot (`Runner::take_held`).
+    /// With [`crate::NodeConfig::forecast_log`] or
+    /// [`crate::NodeConfig::request_log`], the chunks the runner stored
+    /// since the last snapshot (`Runner::take_held`), and those its cap
+    /// left out.
     pub held: Vec<HeldInfo>,
+    pub held_lost: u64,
+    /// With [`crate::NodeConfig::request_log`], the chunks HAVEs announced
+    /// (`Runner::take_haves`) and the requests that ended
+    /// (`Runner::take_requests`) since the last snapshot, and those the
+    /// caps left out; empty otherwise.
+    pub haves: Vec<HaveInfo>,
+    pub haves_lost: u64,
+    pub requests: Vec<RequestInfo>,
+    pub requests_lost: u64,
 }
 
 /// A chunk the node first held ([`NodeMetrics::held`]): its swarm, its
-/// bin, and when, by the node's clock.
+/// bin, and when, by the node's clock, with its timeline here
+/// (`strims_ppspp::Held`) and its source peer, the stream's parent then
+/// and the peer last asked for it, by host.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HeldInfo {
     pub swarm: SwarmKey,
     pub bin: Bin,
     pub at: Time,
+    pub held: strims_ppspp::Held,
+    pub peer: Option<ID>,
+    pub parent: Option<ID>,
+    pub asked: Option<ID>,
+}
+
+/// A chunk a HAVE announced ([`NodeMetrics::haves`]), its peer by host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HaveInfo {
+    pub swarm: SwarmKey,
+    pub peer: Option<ID>,
+    pub have: HaveRecord,
+}
+
+/// A request the request round made ([`NodeMetrics::requests`]), its
+/// asked peer and its rivals by host, in the record's order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RequestInfo {
+    pub swarm: SwarmKey,
+    pub peer: Option<ID>,
+    pub rivals: Vec<Option<ID>>,
+    pub record: RequestRecord,
 }
 
 /// The node's counters at one edge of its stats bins

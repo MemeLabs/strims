@@ -1334,6 +1334,13 @@ impl SwarmState {
             }
             self.request_bins.set(b);
             p.marked.set(b);
+            if self.held_log.is_some() {
+                self.held_marks
+                    .entry(b)
+                    .or_default()
+                    .expected
+                    .get_or_insert(now);
+            }
             let at = (now + sub.lag.deadline() + DEADLINE_GRANULARITY - Duration::NANOSECOND)
                 .truncate(DEADLINE_GRANULARITY);
             p.deadlines.push(b, at);
@@ -1362,6 +1369,7 @@ impl SwarmState {
     fn release_marked(
         &mut self,
         stream: Stream,
+        at: Option<Time>,
         mut cancel: Option<(Bin, &mut PeerChannelScheduler, Time)>,
     ) -> u64 {
         let Some(p) = self.push.as_mut() else {
@@ -1376,6 +1384,13 @@ impl SwarmState {
                 if self.have_bins.empty_at(x) {
                     self.request_bins.reset(x);
                     n += 1;
+                    if let Some(t) = at.filter(|_| self.held_log.is_some()) {
+                        self.held_marks
+                            .entry(x)
+                            .or_default()
+                            .released
+                            .get_or_insert(t);
+                    }
                     if let Some((start, c, now)) = cancel.as_mut()
                         && x >= *start
                     {
@@ -1569,6 +1584,13 @@ impl PeerSwarmScheduler {
             p.marked.reset(x);
             s.request_bins.reset(x);
             p.released.set(x);
+            if s.held_log.is_some() {
+                s.held_marks
+                    .entry(x)
+                    .or_default()
+                    .released
+                    .get_or_insert(now);
+            }
             released += 1;
             p.stats.misses = p.stats.misses.saturating_add(1);
             // Chunks before the parent's start were expected from the one
@@ -1733,6 +1755,43 @@ impl PeerSwarmScheduler {
         self.drop_parent(stream, Some((parent, now)), q);
     }
 
+    /// With the held log on, names `peer` the source of the chunks of `b`
+    /// just stored ([`super::log::Held`]): pushed by the stream's open parent, an
+    /// answer to a request of ours, or other data.
+    pub(super) fn held_from(&mut self, peer: PeerKey, b: Bin) {
+        let PeerSwarmScheduler { s, channels } = self;
+        let stream_bits = s.stream_bits;
+        let push = s.push.as_ref();
+        let Some(log) = s.held_log.as_mut() else {
+            return;
+        };
+        let Some(c) = channels.get(&peer) else {
+            return;
+        };
+        let (l, r) = b.base();
+        for h in log.iter_mut().rev().take(64) {
+            if h.bin < l || h.bin > r || h.peer.is_some() {
+                continue;
+            }
+            let stream = ((h.bin.0 >> 1) & stream_bits) as usize;
+            let parent = push
+                .and_then(|p| p.subs.get(stream))
+                .and_then(|sub| sub.open.filter(|o| h.bin >= o.start))
+                .map(|o| o.peer);
+            let asked = c.request_times.get(h.bin).is_some();
+            h.peer = Some(peer);
+            h.parent = parent;
+            h.rtt = crate::controller::RequestController::rtt(&c.controller);
+            h.how = if asked {
+                super::log::HeldHow::Answer
+            } else if parent == Some(peer) {
+                super::log::HeldHow::Push
+            } else {
+                super::log::HeldHow::Other
+            };
+        }
+    }
+
     /// After the open parent of `stream` went away: its expected chunks go
     /// to pull, and it is no longer the stream's source. If it is still a
     /// neighbour (`parent`, and when it went), we give up its pushes of
@@ -1760,7 +1819,7 @@ impl PeerSwarmScheduler {
         }
         let cancel =
             parent.and_then(|(o, now)| self.channels.get_mut(&o.peer).map(|c| (o.start, c, now)));
-        if s.release_marked(stream, cancel) > 0 {
+        if s.release_marked(stream, parent.map(|(_, t)| t), cancel) > 0 {
             for &peer in self.channels.keys() {
                 q.enqueue_now(peer, s.key);
             }

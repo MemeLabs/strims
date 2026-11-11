@@ -91,7 +91,9 @@
 //!   sets the width of the `bins` table's bins ([`Scenario::wire_bins`]),
 //!   `STRIMS_SIM_BIN_NODES=1` adds each node's bins (`node_bins`), and
 //!   `STRIMS_SIM_FORECAST=1` the nodes' forecast logs (`forecast`, large:
-//!   [`Scenario::forecast_log`]). None of them changes the trace.
+//!   [`Scenario::forecast_log`]), `STRIMS_SIM_SPEC=1` their request logs
+//!   (`arrivals`, `haves`, `asks`, large: [`Scenario::request_logs`]).
+//!   None of them changes the trace.
 //! - `STRIMS_SIM_ROWS=1` prints each run's measures as one line,
 //!   `ROW {json}`, on stdout ([`Report::row`]).
 //! - `STRIMS_SIM_JOB=1` runs the sweep as one sim farm job
@@ -432,6 +434,7 @@ fn sweep_seeds(
     let bin = Duration::from_millis(knob::<u64>("STRIMS_SIM_BIN_MS").unwrap_or(100).max(1));
     let bin_nodes = knob::<u32>("STRIMS_SIM_BIN_NODES") == Some(1);
     let forecast = knob::<u32>("STRIMS_SIM_FORECAST") == Some(1);
+    let request_logs = knob::<u32>("STRIMS_SIM_SPEC") == Some(1);
     let chunk: Option<usize> = knob("STRIMS_SIM_CHUNK");
     let munro: Option<usize> = knob("STRIMS_SIM_MUNRO");
     let stream_secs: Option<u64> = knob("STRIMS_SIM_STREAM_SECS");
@@ -464,6 +467,7 @@ fn sweep_seeds(
         if out.is_some() {
             spec.wire_bins = Some(bin);
             spec.forecast_log = forecast;
+            spec.request_logs = request_logs;
         }
         if segment.is_some() {
             spec.tcp_segment = segment;
