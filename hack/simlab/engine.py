@@ -260,7 +260,9 @@ def writer(lake, threads=None, memory=None, tmp=None):
 
 
 def store(db, threads=2, memory="1GB", tmp=None):
-    """A fold's DuckDB file `db` (simdb.fold's store), made if missing."""
+    """A fold's DuckDB file `db` (simdb.fold's store), made if missing, or
+    an instance in memory (":memory:"), its threads, memory limit and
+    spill directory `tmp` set where given."""
     need_module()
     conn = duckdb.connect(str(db), config=CONFIG)
     try:

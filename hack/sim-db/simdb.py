@@ -214,7 +214,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import tomllib
 import urllib.request
 from pathlib import Path
 
@@ -331,10 +330,17 @@ class DuckError(RuntimeError):
     pass
 
 
+# What runs duck()'s scripts in place of the CLI, to its contract (its
+# arguments, return and DuckError): simlab.store's in the duckdb module,
+# once installed; None, the CLI.
+EXECUTOR = None
+
+
 def duck(script, db=None, out="json", threads=None, memory=None):
     """Runs a SQL script in the DuckDB CLI, over `db` (a file) or in
     memory, and returns its last statement's rows (`out` "json"), its text
-    (`out` "text": DuckDB's tables), or nothing (None).
+    (`out` "text": DuckDB's tables), or nothing (None); in EXECUTOR when
+    one is installed.
 
     The CLI prints the values of some integer types (HUGEINT, which sum()
     of integers gives, UBIGINT, UHUGEINT) and of DECIMAL as JSON strings,
@@ -342,6 +348,8 @@ def duck(script, db=None, out="json", threads=None, memory=None):
     a last statement that is a query (QUERY_WORDS) the script DESCRIBEs
     it, and its columns' types say which strings are numbers. A script
     the DESCRIBE fails runs as it is, its rows as the CLI prints them."""
+    if EXECUTOR is not None:
+        return EXECUTOR(script, db=db, out=out, threads=threads, memory=memory)
     pre = []
     if threads:
         pre.append(f"SET threads={int(threads)};")
@@ -1553,68 +1561,22 @@ def cmd_rows(a):
 # --- cache --------------------------------------------------------------------
 
 
-def farm_bucket():
-    cfg = main_checkout() / "hack" / "sim-farm" / "config.toml"
-    if not cfg.exists():
-        sys.exit(f"no {cfg}: the farm's bucket is its s3_bucket")
-    c = tomllib.loads(cfg.read_text())
-    return c["s3_bucket"], c.get("s3_region"), c.get("aws_profile")
-
-
-def aws(args, region, profile):
-    """Runs the aws CLI's `args` in the farm bucket's region, as its
-    profile."""
-    return subprocess.run(["aws", *args, *(["--region", region] if region else []),
-                           *(["--profile", profile] if profile else [])], capture_output=True, text=True)
-
-
-# The aws CLI's multipart size: it downloads a file past it a ranged GET a
-# part (farm.py's CLI_PART).
-CLI_PART = 8 * 1024 * 1024
+def store():
+    """simlab.store: the module executor, and the pulls from S3. Imported
+    when first wanted, never on a farm host (which ships this file
+    alone)."""
+    hack = str(ROOT / "hack")
+    if hack not in sys.path:
+        sys.path.insert(0, hack)
+    from simlab import store as m
+    return m
 
 
 def pull(run, reads=False):
-    """Copies farm run `run`'s flushes from S3 into the cache
-    (farm/<run>/<instance>/<seq>/), and with `reads` their reads too. What
-    it cost S3 goes to the run's line of the farm's S3 ledger
-    (target/sim-farm/s3.jsonl, farm.py's S3_LEDGER): a LIST a thousand of a
-    prefix's keys, a GET a file it downloaded (a part each past CLI_PART),
-    and the bytes, out to the internet."""
-    bucket, region, profile = farm_bucket()
-    dest = cache_root() / "cache" / "farm" / run
-    lists = gets = got = 0
-    for prefix in ["sim-data"] + (["sim-samples"] if reads else []):
-        p = aws(["s3", "sync", f"s3://{bucket}/{prefix}/{run}/", str(dest), "--no-progress"], region, profile)
-        p.check_returncode()
-        for line in p.stdout.splitlines():
-            if line.startswith("download: ") and " to " in line:
-                size = Path(line.rsplit(" to ", 1)[1]).stat().st_size
-                gets += 1 if size < CLI_PART else math.ceil(size / CLI_PART)
-                got += size
-        keys = sum(1 for f in dest.glob("**/*")
-                   if f.is_file() and (f.stem in SAMPLE_TABLES) == (prefix == "sim-samples"))
-        lists += max(1, math.ceil(keys / 1000))
-    farm_ledger(run, {"region": region or "", "tier1": {"pull_list": lists}, "tier2": {"pull_get": gets},
-                      "up": {}, "down": {"internet": got}, "stored": 0})
-    return dest
-
-
-def farm_ledger(run, use):
-    """A pull's line of the farm's S3 ledger, appended under its lock as
-    farm.py appends (append_jsonl)."""
-    path = main_checkout() / "target" / "sim-farm" / "s3.jsonl"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    rec = {"run": run, "at": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()), "source": "pull", **use}
-    with open(path, "ab+") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        end = f.seek(0, os.SEEK_END)
-        torn = False
-        if end:
-            f.seek(end - 1)
-            torn = f.read(1) != b"\n"
-        f.write((("\n" if torn else "") + json.dumps(rec) + "\n").encode())
-        f.flush()
-        os.fsync(f.fileno())
+    """Copies farm run `run`'s flushes from S3 into the cache, with
+    `reads` their samples too (simlab.store.pull); returns the run's
+    directory there."""
+    return store().pull(run, reads).dest
 
 
 def pull_sources(srcs):
@@ -1701,38 +1663,9 @@ def sample_plan(v, tables, gone=()):
 
 
 def fetch_samples(plan, gets, got):
-    """Fetches `plan`'s tables (sample_plan's) from S3 into the cache, a
-    GET a file (s3api get-object: one request whatever the size), each
-    checked against its flush's manifest and put in place whole; returns
-    the flushes S3 no longer holds. Counts each run's GETs (a missing
-    key's too) in `gets` and their bytes in `got`, however it ends."""
-    bucket, region, profile = farm_bucket()
-    root = cache_root() / "cache"
-    gone = set()
-    for src, (tables, _, _) in plan.items():
-        _, run, flush = src.split("/", 2)
-        want = manifest_of(src)["tables"]
-        for t in tables:
-            dest = root / src / f"{t}.parquet"
-            part = dest.with_name(f".{dest.name}.tmp{os.getpid()}")
-            gets[run] += 1
-            try:
-                try:
-                    p = aws(["s3api", "get-object", "--bucket", bucket, "--key",
-                             f"sim-samples/{run}/{flush}/{t}.parquet", str(part)], region, profile)
-                finally:
-                    got[run] += part.stat().st_size if part.exists() else 0
-                if p.returncode:
-                    if "NoSuchKey" in p.stderr or "(404)" in p.stderr:
-                        gone.add(src)
-                        break
-                    sys.exit(f"{src}: {t}: {p.stderr.strip()}")
-                if part.stat().st_size != want[t]["bytes"] or sha256(part) != want[t]["sha256"]:
-                    sys.exit(f"{src}: S3's {t}.parquet ({part.stat().st_size} bytes) isn't its manifest's")
-                part.replace(dest)
-            finally:
-                part.unlink(missing_ok=True)
-    return gone
+    """Fetches `plan`'s tables from S3 into the cache (simlab.store's
+    fetch_samples); returns the flushes S3 no longer holds."""
+    return store().fetch_samples(plan, gets, got)
 
 
 def pull_samples(v, tables, limit_mb=None):
@@ -1756,10 +1689,10 @@ def pull_samples(v, tables, limit_mb=None):
             gone |= fetch_samples(plan, gets, got)
             plan, lost = sample_plan(v, tables, gone)
     finally:
-        region = farm_bucket()[1] if gets else None
+        region = store().farm_bucket()[1] if gets else None
         for run in gets:
-            farm_ledger(run, {"region": region or "", "tier1": {}, "tier2": {"pull_get": gets[run]}, "up": {},
-                              "down": {"internet": got[run]}, "stored": 0})
+            store().farm_ledger(run, {"region": region or "", "tier1": {}, "tier2": {"pull_get": gets[run]},
+                                      "up": {}, "down": {"internet": got[run]}, "stored": 0})
     if lost:
         print(f"S3 holds none of the {' or '.join(tables)} of {lost} of the selection's jobs (expired, or never "
               "landed): left out", file=sys.stderr)
@@ -1799,7 +1732,7 @@ def cmd_pull(a):
                 lost += jobs
             elif lack:
                 plan[s] = (lack, sum(listed[t].get("bytes", 0) for t in lack), jobs)
-    bucket, _, _ = farm_bucket()
+    bucket, _, _ = store().farm_bucket()
     files = [(f"s3://{bucket}/sim-samples/{s.split('/', 1)[1]}/{t}.parquet", manifest_of(s)["tables"][t]["bytes"], n)
              for s, (tables, _, n) in plan.items() for t in tables]
     gone = f"; S3 holds none for {lost} jobs (expired, or never landed)" if lost else ""

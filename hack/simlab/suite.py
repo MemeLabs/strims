@@ -31,7 +31,9 @@
 Its state is the checkout's target/sim-suite (WORK: binaries, kept rows,
 an invocation's store, matrices) and the main checkout's (farm_root():
 the farm's state and the farm runs' indexes). stdlib alone: the store and
-the catalog are simdb.py's and catalog.py's (simdb(), catalog()).
+the catalog are simdb.py's and catalog.py's (simdb(), catalog()), and an
+invocation's store folds and exports in the duckdb module where it
+imports (simlab.store.installed: under the engine), else in the CLI.
 """
 
 import collections
@@ -52,6 +54,7 @@ import time
 from pathlib import Path
 
 import simlab
+from simlab import store
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / "target" / "sim-suite"
@@ -835,14 +838,17 @@ class Invocation:
     target/sim-suite/store/<inv>.duckdb, held by a lock while the
     invocation lives, and exported to the cache, source
     suite/<worktree>/<inv>, when it ends. A store no process holds is a
-    crashed invocation's, exported when the next one starts."""
+    crashed invocation's, exported when the next one starts. While it
+    lives, the store's scripts run in the duckdb module where it imports
+    (simlab.store.installed)."""
 
     count = itertools.count()
 
     def __init__(self):
         self.dir = WORK / "store"
         self.dir.mkdir(parents=True, exist_ok=True)
-        simdb().recover(self.dir, self.dest)
+        with store.installed():
+            simdb().recover(self.dir, self.dest)
         for d in (WORK / "out").glob("*"):
             if not (self.dir / f"{d.name}.lock").exists():
                 shutil.rmtree(d, ignore_errors=True)
@@ -852,6 +858,8 @@ class Invocation:
         self.db = self.dir / f"{self.inv}.duckdb"
         self.out = WORK / "out" / self.inv
         self.src = f"suite/{ROOT.name}/{self.inv}"
+        self.executor = store.installed()
+        self.executor.__enter__()
 
     @staticmethod
     def dest(inv):
@@ -865,6 +873,7 @@ class Invocation:
         shutil.rmtree(self.out, ignore_errors=True)
         self.lock.__exit__(None, None, None)
         (self.dir / f"{self.inv}.lock").unlink(missing_ok=True)
+        self.executor.__exit__(None, None, None)
 
 
 def kept_rows(path):

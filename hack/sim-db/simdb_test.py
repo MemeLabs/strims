@@ -35,6 +35,12 @@ from unittest import mock
 spec = importlib.util.spec_from_file_location("simdb", Path(__file__).with_name("simdb.py"))
 simdb = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(simdb)
+# simlab's simdb (simlab.simdb()) is this one, so the tests' patches reach
+# simlab.store's pulls too.
+sys.modules["simdb"] = simdb
+sys.path.insert(0, str(Path(__file__).parents[1]))
+from simlab import store  # noqa: E402
+
 spec = importlib.util.spec_from_file_location("suite", Path(__file__).parents[1] / "sim-suite" / "suite.py")
 suite = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(suite)
@@ -787,7 +793,7 @@ class SamplesPull(unittest.TestCase):
         self.s3, self.calls = root / "s3", []
         for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
                   mock.patch.object(simdb, "derive", lambda srcs: None),
-                  mock.patch.object(simdb, "aws", self.aws),
+                  mock.patch.object(store, "aws", self.aws),
                   mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
                                   clear=True)):
             p.start()

@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """simlab.suite: write_matrices called as the console calls it writes what
 `suite.py farm --no-run` writes (golden_suite's golden), and run_cells
-runs a cell's seeds under a binary, folds their tables into the cache,
-indexes them and gives their sides, keeping them for the next call, over
-a scratch cache and main checkout with a stand-in sim that writes
-golden_cli's job dirs:
+runs a cell's seeds under a binary, folds their tables into the cache (in
+the duckdb module), indexes them and gives their sides, keeping them for
+the next call, over a scratch cache and main checkout with a stand-in sim
+that writes golden_cli's job dirs:
 
   python3 hack/simlab/tests/test_suite.py
 """
@@ -27,6 +27,7 @@ import goldens
 HACK = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(HACK))
 
+from simlab import store  # noqa: E402
 from simlab import suite as lab  # noqa: E402
 
 # A sim binary as run_jobs runs one: it writes the job dir made for its
@@ -110,11 +111,22 @@ class LocalRuns(unittest.TestCase):
 
     def run_cells(self):
         runs = {"fake": (self.bin, lambda c: [1, 2, 3], lab.SIM, {})}
-        with mock.patch.object(sys, "stderr", io.StringIO()):
-            return lab.run_cells([self.cell], runs, 2, 4)
+        real, self.ran = store.execute, []
+
+        def execute(*a, **kw):
+            self.ran.append(a)
+            return real(*a, **kw)
+
+        with mock.patch.object(sys, "stderr", io.StringIO()), mock.patch.object(store, "execute", execute):
+            got = lab.run_cells([self.cell], runs, 2, 4)
+        # The CLI is back for what follows.
+        self.assertIsNone(lab.simdb().EXECUTOR)
+        return got
 
     def test_runs_fold_and_keep(self):
         rows, failures = self.run_cells()
+        # The invocation's store folded and exported in the module.
+        self.assertTrue(self.ran)
         self.assertEqual(len(failures), 1)
         self.assertRegex(failures[0], r"^fake halve-5 seed 3: exit 1: .*no job for this seed")
         side = rows["fake"]
