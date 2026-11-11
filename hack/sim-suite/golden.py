@@ -169,8 +169,18 @@ def ref_texts(ref, cells, base_rows, arm_rows, exp, base, arm):
     return out
 
 
+def unsigned_zeros(text):
+    """`text` with each printed -0.000 as +0.000. The reference sums in
+    Python and the macros in DuckDB, so an effect within a last bit of zero
+    can fall either side of it; the reference, suite.py at REFERENCE,
+    prints that sign, and simlab.scoring.signed doesn't."""
+    return re.sub(r"(?<![\d.])-0\.000(?!\d)", "+0.000", text)
+
+
 def compare(name, want, got):
-    """The lines `got` differs from `want` by, printed; whether none."""
+    """The lines `got` differs from `want` by, printed; whether none.
+    Zeros compare without their sign (unsigned_zeros)."""
+    want, got = unsigned_zeros(want), unsigned_zeros(got)
     if want == got:
         return True
     diff = list(difflib.unified_diff(want.splitlines(), got.splitlines(), "reference", name, lineterm="", n=1))

@@ -232,6 +232,14 @@ class Arithmetic(unittest.TestCase):
                      f"v(i, b, kind, tie, x, lo, hi) ORDER BY i;")
         self.assertEqual([r["m"] for r in got], [c[6] for c in cases])
 
+    def test_a_zero_prints_without_a_sign(self):
+        # A difference within a last bit of zero prints +0.000 whichever side
+        # its sum fell, and the golden compares a reference's -0.000 as one.
+        e = {"kind": "diff", "effect": -1e-17, "lo": -0.0004, "hi": -0.0006}
+        self.assertEqual(scoring.effect_text(e), "+0.000 [+0.000,-0.001]")
+        self.assertEqual(golden.unsigned_zeros("   ~ flaps_per_min -0.000 [-0.005,+0.004] 10-0.000"),
+                         "   ~ flaps_per_min +0.000 [-0.005,+0.004] 10-0.000")
+
 
 class Lake(unittest.TestCase):
     def test_persisted(self):

@@ -115,13 +115,21 @@ def fmt(x):
     return f"{x:.0f}"
 
 
+def signed(x):
+    """A difference to three places with its sign, a zero at that precision
+    as +0.000: a sum in another order can land a last-bit hair either side
+    of zero, and a printed -0.000 would read as a move."""
+    text = f"{x:+.3f}"
+    return "+0.000" if text == "-0.000" else text
+
+
 def effect_text(e):
     """An effect (effects_of's) as the scorecard prints it."""
     if e["effect"] is None:
         return "-"
     if e["kind"] == "ratio":
         return f"x{e['effect']:.2f} [{e['lo']:.2f},{e['hi']:.2f}]"
-    return f"{e['effect']:+.3f} [{e['lo']:+.3f},{e['hi']:+.3f}]"
+    return f"{signed(e['effect'])} [{signed(e['lo'])},{signed(e['hi'])}]"
 
 
 @dataclasses.dataclass
