@@ -40,7 +40,7 @@ spec.loader.exec_module(simdb)
 # simlab.store's pulls too.
 sys.modules["simdb"] = simdb
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from simlab import bootstrap, store, verdict  # noqa: E402
+from simlab import bootstrap, query, store, store_host, verdict  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("suite", Path(__file__).parents[1] / "sim-suite" / "suite.py")
 suite = importlib.util.module_from_spec(spec)
@@ -51,6 +51,21 @@ suite.lab._simdb = simdb
 spec = importlib.util.spec_from_file_location("catalog", Path(__file__).with_name("catalog.py"))
 catalog = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(catalog)
+
+
+
+def checkout(root):
+    """Patches making `root` the main checkout: store_host's, which the
+    selections and pulls read, and simdb's, which the catalog reads."""
+    return (mock.patch.object(store_host, "main_checkout", lambda: root),
+            mock.patch.object(simdb, "main_checkout", lambda: root))
+
+
+def views(a, derived=True):
+    """The SQL of the views of simdb.py's options `a`, and their tables."""
+    v = query.views(query.Selection.of(a), derived)
+    return v.sql, v.have
+
 
 A, B = "farm/sa0001-00+3more-aaaa", "farm/sb0001-00+3more-bbbb"
 GONE = "farm/sc0001-00/i-1/0"
@@ -98,8 +113,8 @@ class Selection(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
         self.pulled = []
-        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
-                  mock.patch.object(simdb, "pull_sources", lambda s, reads=False: self.pulled.extend(s) or list(s)),
+        for p in (*checkout(root),
+                  mock.patch.object(query, "pull_sources", lambda s, reads=False: self.pulled.extend(s) or list(s)),
                   mock.patch.object(sys, "stderr", io.StringIO()),
                   mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
@@ -138,7 +153,7 @@ class Selection(unittest.TestCase):
                            f"TO {q(d / 'seconds.parquet')} (FORMAT parquet);", out=None)
 
     def select(self, src=None, cell=None, sql="SELECT src, k, cell, arm FROM runs"):
-        v, _ = simdb.views(argparse.Namespace(src=src, cell=cell, arm=None, seed=None), derived=False)
+        v, _ = views(argparse.Namespace(src=src, cell=cell, arm=None, seed=None), derived=False)
         return simdb.duck(v + "\n" + sql + ";")
 
     def runs(self, src=None, cell=None):
@@ -210,7 +225,7 @@ class Selection(unittest.TestCase):
                    "unhealthy": 0.0, "lag_p50": 200.0}
         rows = lambda pairs: {p: {"lag_p99_ms": 300, "_verdict": verdict, "_metrics": {}} for p in pairs}
         out = io.StringIO()
-        with mock.patch.object(simdb, "rows", rows), mock.patch.object(sys, "stdout", out):
+        with mock.patch.object(query, "rows", rows), mock.patch.object(sys, "stdout", out):
             simdb.cmd_rows(argparse.Namespace(src=None, cell=["halve-7-10@*"], arm=None, seed=None, fields=None))
         got = [json.loads(line) for line in out.getvalue().splitlines()]
         self.assertEqual(sorted((r["cell"], r["k"]) for r in got if r["k"] in ("kr", "kq")),
@@ -250,9 +265,9 @@ class ArmLabels(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = root = Path(tmp.name)
-        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
+        for p in (*checkout(root),
                   mock.patch.object(suite.lab, "farm_root", lambda: root),
-                  mock.patch.object(simdb, "pull_sources", lambda s, reads=False: []),
+                  mock.patch.object(query, "pull_sources", lambda s, reads=False: []),
                   mock.patch.object(suite.lab, "index_catalog", lambda: None),
                   mock.patch.object(sys, "stderr", io.StringIO()),
                   mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
@@ -385,12 +400,12 @@ class ArmLabels(unittest.TestCase):
         self.assertIn("arm x holds two jobs at one cell and seed", str(cm.exception.code))
 
     def test_simdb_names_the_arms_as_suite_does(self):
-        v, _ = simdb.views(argparse.Namespace(src=None, cell=None, arm=None, seed=None), derived=False)
-        views = {r["k"]: (r["cell"], r["arm"]) for r in simdb.duck(v + "\nSELECT k, cell, arm FROM runs;")}
+        v, _ = views(argparse.Namespace(src=None, cell=None, arm=None, seed=None), derived=False)
+        named = {r["k"]: (r["cell"], r["arm"]) for r in simdb.duck(v + "\nSELECT k, cell, arm FROM runs;")}
         for run in LABEL_INDEXES:
             for arm, rows in self.farm_rows(run).items():
                 for (cell, _), k in rows.items():
-                    self.assertEqual(views[k], (f"{cell}@{run}", arm), k)
+                    self.assertEqual(named[k], (f"{cell}@{run}", arm), k)
         self.assertEqual(simdb.arm_label(SETS_KNOB, "strims-sim", "x", {"STRIMS_SIM_KNOWN_UPLINK": "1"}), "1")
         self.assertEqual(simdb.arm_label(None, "strims-sim", "main", {"STRIMS_SIM_EXP": "off"}), "main")
 
@@ -403,7 +418,7 @@ class Canon(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
-        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
+        for p in (*checkout(root),
                   mock.patch.object(sys, "stderr", io.StringIO()),
                   mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
@@ -419,7 +434,7 @@ class Canon(unittest.TestCase):
             (d / "manifest.json").write_text(json.dumps({"keys": ["kt"], "at": at}))
 
     def canon(self):
-        v, _ = simdb.views(argparse.Namespace(src=None, cell=None, arm=None, seed=None), derived=False)
+        v, _ = views(argparse.Namespace(src=None, cell=None, arm=None, seed=None), derived=False)
         got = simdb.duck(v + "\nSELECT (SELECT src FROM canon) AS canon, (SELECT src FROM runs) AS runs;")[0]
         self.assertEqual(got["canon"], got["runs"])
         return got["canon"]
@@ -495,8 +510,8 @@ class Queries(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
-        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
-                  mock.patch.object(simdb, "derive", lambda srcs: None),
+        for p in (*checkout(root),
+                  mock.patch.object(query, "derive", lambda srcs: None),
                   mock.patch.object(sys, "stderr", io.StringIO()),
                   mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
@@ -553,7 +568,7 @@ class Queries(unittest.TestCase):
         return json.loads(out.getvalue())
 
     def sql(self, query, src=None):
-        v, _ = simdb.views(self.args(src=src))
+        v, _ = views(self.args(src=src))
         return simdb.duck(v + "\n" + query + ";")
 
     def aligned(self, event, field, per, nth=1, before=1, after=2, node=None, **kw):
@@ -660,7 +675,7 @@ class Queries(unittest.TestCase):
                            "WHERE k = 'kd' GROUP BY ALL")
             self.assertEqual({r["cell"]: r["n"] for r in got}, {"d1": 50, "d2": 50}, using)
         # every view and macro joins runs on (k, src)
-        v, have = simdb.views(self.args())
+        v, have = views(self.args())
         made = {"sec": {"seconds", "verdict_seconds"}, "ev": {"derived_events"}, "read_bins(1000)": {"reads"},
                 "run_read_bins(1000)": {"reads"}, "bins_by(1000)": {"bins"}}
         for t in [*(have - {"runs"}), *(m for m, needs in made.items() if needs <= have)]:
@@ -793,8 +808,8 @@ class SamplesPull(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
         self.s3, self.calls = root / "s3", []
-        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
-                  mock.patch.object(simdb, "derive", lambda srcs: None),
+        for p in (*checkout(root),
+                  mock.patch.object(query, "derive", lambda srcs: None),
                   mock.patch.object(store, "aws", self.aws),
                   mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
@@ -883,7 +898,7 @@ class SamplesPull(unittest.TestCase):
 
     def served(self, cell):
         """{k: (its reads' source's instance, reads)} in `cell`'s views."""
-        v, _ = simdb.views(self.args(cell))
+        v, _ = views(self.args(cell))
         return {r["k"]: (r["src"].split("/")[2], r["n"]) for r in simdb.duck(
             v + "\nSELECT k, src, count(*) AS n FROM reads GROUP BY ALL;")}
 
@@ -1120,8 +1135,9 @@ class Derived(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
         series = {(self.SRC, k): ({}, audience(40, stays)) for k, stays in self.STAYS.items()}
-        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
+        for p in (*checkout(root),
                   mock.patch.object(verdict, "load_series", lambda pairs: {p: series[p] for p in pairs}),
+                  mock.patch.object(query, "WORKERS", 0),
                   mock.patch.object(sys, "stderr", io.StringIO()),
                   mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
@@ -1137,7 +1153,7 @@ class Derived(unittest.TestCase):
             f"DESCRIBE SELECT * FROM read_parquet({simdb.q(path)}, hive_partitioning=false);")]
 
     def view(self, query):
-        v, have = simdb.views(argparse.Namespace(src=None, cell=None, arm=None, seed=None))
+        v, have = views(argparse.Namespace(src=None, cell=None, arm=None, seed=None))
         return simdb.duck(v + "\n" + query + ";"), have
 
     def test_a_table_holds_its_columns_alone(self):
@@ -1214,8 +1230,8 @@ class Playback(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
-        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
-                  mock.patch.object(simdb, "derive", lambda srcs: None),
+        for p in (*checkout(root),
+                  mock.patch.object(query, "derive", lambda srcs: None),
                   mock.patch.object(sys, "stderr", io.StringIO()),
                   mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
@@ -1233,7 +1249,7 @@ class Playback(unittest.TestCase):
         return d
 
     def rows(self, query):
-        v, _ = simdb.views(argparse.Namespace(src=None, cell=None, arm=None, seed=None))
+        v, _ = views(argparse.Namespace(src=None, cell=None, arm=None, seed=None))
         return sorted((r["k"], r["viewer"], r["delay_ms"], r["t_ms"], r["stall_ms"])
                       for r in simdb.duck(v + "\n" + query + ";"))
 
@@ -1289,7 +1305,7 @@ class Catalog(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
         series = {}
-        for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
+        for p in (*checkout(root),
                   mock.patch.object(verdict, "load_series",
                                     lambda pairs: {p: ({}, series[p]) for p in pairs if p in series}),
                   mock.patch.object(sys, "stderr", io.StringIO()),

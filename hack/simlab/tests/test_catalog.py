@@ -73,7 +73,8 @@ class Fixture(unittest.TestCase):
 
     def setUp(self):
         for p in (mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(self.root / "target" / "sim-db"), "TZ": "UTC"}),
-                  mock.patch.object(simlab.simdb(), "main_checkout", lambda: self.root)):
+                  mock.patch.object(simlab.simdb(), "main_checkout", lambda: self.root),
+                  mock.patch.object(store_host, "main_checkout", lambda: self.root)):
             p.start()
             self.addCleanup(p.stop)
 
@@ -118,7 +119,7 @@ def child_index(root):
     """An index in a forkserver's child over the fixture at `root`: its
     Indexed, as a dict, and its Progress events' kinds."""
     os.environ["SIM_DB_ROOT"] = str(Path(root) / "target" / "sim-db")
-    simlab.simdb().main_checkout = lambda: Path(root)
+    simlab.simdb().main_checkout = store_host.main_checkout = lambda: Path(root)
     events = []
     got = catalog.index(2, events.append)
     return dataclasses.asdict(got), [e.kind for e in events]

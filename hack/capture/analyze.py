@@ -543,19 +543,12 @@ def testbed_series(d, env):
     return s
 
 
-_simdb = None
+def query():
+    """simlab.query: the farm's tables, in hack/sim-db's cache (the duckdb
+    module's: VERDICT_COMMANDS run under the engine)."""
+    from simlab import query
 
-
-def simdb():
-    """hack/sim-db/simdb.py: the farm's tables, in its cache."""
-    global _simdb
-    if _simdb is None:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "simdb", Path(__file__).resolve().parents[1] / "sim-db" / "simdb.py")
-        _simdb = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(_simdb)
-    return _simdb
+    return query
 
 
 def index_of(p):
@@ -569,8 +562,8 @@ def index_rows(index):
     series from its tables, pulled into hack/sim-db's cache; a job whose
     tables are gone (S3 keeps them a week) is left out."""
     recs = [r for r in map(json.loads, filter(str.strip, index.read_text().splitlines())) if r.get("src")]
-    gone = set(simdb().pull_sources({r["src"] for r in recs}))
-    got = simdb().rows([(r["src"], r["key"]) for r in recs if r["src"] not in gone], series=True)
+    gone = set(query().pull_sources({r["src"] for r in recs}))
+    got = query().rows([(r["src"], r["key"]) for r in recs if r["src"] not in gone], series=True)
     for r in recs:
         row = got.get((r["src"], r["key"]))
         if row is not None:
@@ -1338,14 +1331,7 @@ def main():
     p = command("diverge", diverge)
     p.add_argument("runs", nargs=2)
     p.add_argument("--source", default="seed")
-    for name, f in (
-        ("series", series),
-        ("collapse", collapse),
-        ("map", map_),
-        ("pair", pair),
-        ("track", track),
-        ("delays", delays),
-    ):
+    for name, f in zip(VERDICT_COMMANDS, (series, collapse, map_, pair, track, delays)):
         p = sub.add_parser(name)
         p.set_defaults(f=f)
         p.add_argument("runs", nargs="+")
@@ -1371,5 +1357,14 @@ def main():
         pass
 
 
+# The commands over runs, which read a farm matrix's tables from hack/sim-db's
+# cache in the duckdb module (hack/'s uv venv); the capture tools run under
+# any python3.
+VERDICT_COMMANDS = ("series", "collapse", "map", "pair", "track", "delays")
+
 if __name__ == "__main__":
+    if sys.argv[1:2] and sys.argv[1] in VERDICT_COMMANDS:
+        from simlab import bootstrap
+
+        bootstrap.engine(__file__)
     main()

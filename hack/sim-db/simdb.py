@@ -197,13 +197,9 @@ by `duckdb`, or by whatever needs it first.
 """
 
 import argparse
-import collections
-import contextlib
 import importlib.util
 import json
-import shutil
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -225,6 +221,10 @@ from simlab.verdict import (  # noqa: E402, F401
     DERIVE_CODE, DERIVED, DERIVED_KINDS, META_ONLY, VERDICT_COLS, derive_source, derived_dir, derived_version, files,
     judge, load_series, plist, series_of, wanted, write_table,
 )
+# The cache's selections and queries (hack/simlab/query.py), and its
+# pulls from S3 (hack/simlab/store.py), which the commands print.
+from simlab import query, store  # noqa: E402
+from simlab.query import PULL_MB  # noqa: E402, F401
 
 # The views' keys and joins: `sql --help`, and the end of `--help`.
 SQL_DOC = """\
@@ -244,11 +244,6 @@ name them runs.frames and runs.bytes.
     FROM reads JOIN viewers w USING (k, src, viewer) JOIN runs r USING (k, src)
     GROUP BY ALL ORDER BY ALL"
 """
-# The most a query pulls of the sample tables (SAMPLE_TABLES) by default
-# (`--pull-mb`).
-PULL_MB = 1000
-# macros.sql: the views' macros.
-MACROS = ROOT / "hack" / "simlab" / "sql" / "macros.sql"
 
 _analyze = None
 
@@ -263,862 +258,75 @@ def analyze():
     return _analyze
 
 
-# --- rows ---------------------------------------------------------------------
+def __getattr__(name):
+    """simlab.query's and simlab.store's names (rows, views, arm_label,
+    pull_sources, have_src, sample_plan, ...), for the scripts that load
+    this one."""
+    for m in (query, store):
+        if hasattr(m, name):
+            return getattr(m, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def rows(pairs, series=False):
-    """The rows of `pairs` of (src, k) in the cache, {(src, k): row}: each
-    the sim's row (less its series) with `_verdict` and `_metrics`
-    (analyze.py) from its tables' series, `_wall_s` and `_rss_mb`, and
-    with `series` the series as `_series`."""
-    pairs = sorted(set(pairs))
-    runs = files(sorted({s for s, _ in pairs}), "runs")
-    if not pairs or not runs:
-        return {}
-    got = load_series(pairs)
-    out = {}
-    for r in duck(f"SELECT src, k, row_json, wall_s, rss_mb FROM read_parquet({plist(runs)}, union_by_name=true) "
-                  f"SEMI JOIN {wanted(pairs)} USING (src, k);"):
-        row = json.loads(r["row_json"])
-        row["_wall_s"], row["_rss_mb"] = r["wall_s"], r["rss_mb"]
-        _, s = got.get((r["src"], r["k"]), ({}, None))
-        row["_verdict"], row["_metrics"] = judge(s)
-        if series:
-            row["_series"] = s
-        out[(r["src"], r["k"])] = row
-    return out
+# --- the commands -------------------------------------------------------------
 
 
-def have_src(src):
-    """Whether the cache holds source `src`'s export."""
-    return (cache_root() / "cache" / src / "runs.parquet").exists()
-
-
-# --- derived tables -----------------------------------------------------------
-
-
-def derive(srcs):
-    """Makes the derived tables of every source in `srcs` that lacks them
-    (verdict.derive_source), in this process, one after another."""
-    for src in srcs:
-        derive_source(src)
-
-
-def derived_files(table, srcs):
-    """SQL reading derived `table`'s files of the sources `srcs`, as `x`,
-    else None. The `v=` directory isn't a hive partition, and a `v` column
-    a file holds (DuckDB's, from a file written there with hive
-    partitioning on) is left out."""
-    d = derived_dir(table)
-    f = [str(d / name) for name in (s.replace("/", "~") + ".parquet" for s in srcs) if (d / name).exists()]
-    if not f:
-        return None
-    return (f"(SELECT COLUMNS(lambda c: c <> 'v') FROM read_parquet({plist(f)}, union_by_name=true, "
-            "hive_partitioning=false)) x")
-
-
-# --- selection and views ------------------------------------------------------
-
-
-def sources(patterns):
-    """The cache's sources (dirs holding runs.parquet) matching `patterns`."""
-    root = cache_root() / "cache"
-    out = set()
-    for p in patterns or ["**"]:
-        for m in root.glob(p):
-            if (m / "runs.parquet").exists():
-                out.add(str(m.relative_to(root)))
-            for r in m.glob("**/runs.parquet"):
-                out.add(str(r.parent.relative_to(root)))
-    return sorted(out)
-
-
-def suite_index(run):
-    """Suite farm run `run`'s index: the main checkout's
-    target/sim-suite/farm-runs/<run>.json, or while suite.py keeps it apart
-    (written by `farm --no-run`, the run started by hand) pending/<run>.json
-    there; {} if neither."""
-    d = main_checkout() / "target" / "sim-suite" / "farm-runs"
-    for p in (d / f"{run}.json", d / "pending" / f"{run}.json"):
-        try:
-            return json.loads(p.read_text())
-        except (OSError, ValueError):
-            continue
-    return {}
-
-
-def arm_label(knob, sim, arm, env):
-    """A suite farm job's arm, as simdb and suite.py both name it: when its
-    run's index names a knob (`knob`, by sim: a `--sets` run's), the value
-    the job's `env` gives its sim's, its set; else `arm`, its matrix's arm
-    (a `--refs` name). views names its runs' arms this way in SQL."""
-    k = (knob or {}).get(sim)
-    return arm if k is None else (env or {}).get(k, arm)
-
-
-def suite_cells(names):
-    """The suite cells that farm matrices named `names` run: a suite farm
-    run's matrices are <run>-<i>, the i-th cell of its index (suite_index),
-    and a run's arms are named by arm_label, from the knob its index names.
-    By matrix: (<cell>@<run>, knob), a name of the matrix alone, so a cell
-    that two suite runs share (a farm run of several tiers, an A/B and its
-    confirmation) is apart whichever of them a selection holds. Names no
-    index tells are left out."""
-    idx, got = {}, {}
-    for n in names:
-        run, _, i = (n or "").rpartition("-")
-        if not (len(run) == 6 and run[0] == "s" and i.isdigit()):
-            continue
-        if run not in idx:
-            idx[run] = suite_index(run)
-        cells = idx[run].get("cells") or []
-        if int(i) < len(cells):
-            c = cells[int(i)]
-            got[n] = (f"{c['name']}@{run}", (idx[run].get("knob") or {}).get(c.get("sim")))
-    return got
-
-
-def reused(srcs, stored):
-    """The rows the farm runs of sources `srcs` count by reference: the
-    lines of their matrices' indexes (the main checkout's
-    target/sim-farm/<matrix>/index.jsonl) whose row ran for another matrix
-    (`from`: the farm reused a row of an earlier run, or of a matrix of its
-    own that shares the job), as SQL of (k, src, matrix, arm), else None;
-    and the sources holding those rows. A run's matrices are its state's
-    list, and the cells its rows in `srcs` were `stored` under."""
-    farm = main_checkout() / "target" / "sim-farm"
-    names = set(stored)
-    for run in {s.split("/")[1] for s in srcs if s.startswith("farm/")}:
-        with contextlib.suppress(OSError):
-            names |= set((farm / run / "matrices").read_text().split())
-    paths = sorted(str(farm / n / "index.jsonl") for n in names if n and (farm / n / "index.jsonl").is_file())
-    if not paths:
-        return None, []
-    matrix = r"regexp_extract(filename, '([^/]+)/index\.jsonl$', 1)"
-    cols = struct({"key": "VARCHAR", "src": "VARCHAR", "arm": "VARCHAR", "from": "VARCHAR"})
-    sql = (f"(SELECT key AS k, src, {matrix} AS matrix, arm FROM read_json({plist(paths)}, "
-           f"format='newline_delimited', columns={cols}, filename=true, ignore_errors=true) "
-           f"WHERE src IS NOT NULL AND \"from\" <> {matrix})")
-    held = [r["src"] for r in duck(f"SELECT DISTINCT src FROM {sql};")]
-    return (sql if held else None), held
-
-
-def source_ranks(srcs):
-    """{src: rank} over the cache's sources `srcs`, the higher the rank the
-    sooner the views take a key's tables from it: the source holding the
-    most of the sims' tables (a farm run's reads come with `pull --reads`),
-    then the later flush (its manifest's `at`), then a farm flush's later
-    seq (farm/<run>/<instance>/<seq>, by number), then the name."""
-    root = cache_root() / "cache"
-
-    def key(s):
-        last = s.rsplit("/", 1)[-1]
-        seq = int(last) if s.startswith("farm/") and last.isdigit() else -1
-        return sum((root / s / f"{t}.parquet").exists() for t in TABLES), manifest_of(s).get("at") or "", seq, s
-
-    return {s: n for n, s in enumerate(sorted(srcs, key=key))}
-
-
-def views(a, derived=True, fetch=True):
-    """The SQL that makes the views over selection `a`'s sources, and the
-    tables it has. A farm source's runs name the suite cells and arms its
-    matrices ran (suite_cells), and a farm run's cells hold the rows it
-    reused (reused: their sources' tables join the views, pulled into the
-    cache when it lacks them, unless not `fetch`); `matrix` is the matrix
-    (or local cell) a run counts for."""
-    srcs = sources(a.src)
-    if not srcs:
-        sys.exit("no runs in the cache match --src")
-    stored = f"read_parquet({plist(files(srcs, 'runs'))}, union_by_name=true)"
-    moved, held = None, []
-    if any(s.startswith("farm/") for s in srcs):
-        moved, held = reused(srcs, [r["cell"] for r in duck(
-            f"SELECT DISTINCT cell FROM {stored} WHERE src LIKE 'farm/%';")])
-    lack = [s for s in held if not have_src(s)]
-    if lack and not fetch:
-        print(f"the cache lacks {len(lack)} flushes whose rows the selection's runs reused: left out",
-              file=sys.stderr)
-    elif lack:
-        print(f"pulling the farm runs of {len(lack)} flushes whose rows the selection's runs reused",
-              file=sys.stderr)
-        gone = pull_sources(lack)
-        if gone:
-            print(f"{len(gone)} of them are gone from S3 (a week's): their rows are left out", file=sys.stderr)
-    srcs = sorted({*srcs, *(s for s in held if have_src(s))})
-    if derived:
-        derive(srcs)
-    read_runs = f"(SELECT *, cell AS matrix FROM {stored})"
-    if moved:
-        read_runs = (f"(SELECT * FROM {read_runs} UNION ALL BY NAME "
-                     f"SELECT r.* REPLACE (m.matrix AS cell, m.arm AS arm), m.matrix "
-                     f"FROM read_parquet({plist(files(srcs, 'runs'))}, union_by_name=true) r "
-                     f"JOIN {moved} m USING (k, src))")
-    cells = {}
-    if any(s.startswith("farm/") for s in srcs):
-        cells = suite_cells([r["matrix"] for r in duck(f"SELECT DISTINCT matrix FROM {read_runs};")])
-    if cells:
-        pairs = ", ".join(f"({q(n)}, {q(c)}, {q(k) if k else 'NULL'})" for n, (c, k) in cells.items())
-        # The arm as arm_label names it.
-        read_runs = (
-            f"(SELECT r.* REPLACE (coalesce(m.cell, r.cell) AS cell, CASE WHEN m.knob IS NULL THEN r.arm "
-            f"ELSE coalesce(json_extract_string(r.env, '$.' || m.knob), r.arm) END AS arm) "
-            f"FROM {read_runs} r LEFT JOIN (VALUES {pairs}) m(matrix, cell, knob) ON r.matrix = m.matrix)"
-        )
-    where = []
-    if a.cell:
-        where.append("(" + " OR ".join(f"cell GLOB {q(c)} OR split_part(cell, '@', 1) GLOB {q(c)}"
-                                       for c in a.cell) + ")")
-    if a.arm:
-        where.append("(" + " OR ".join(f"arm GLOB {q(x)}" for x in a.arm) + ")")
-    if a.seed:
-        where.append(f"seed IN ({', '.join(str(int(s)) for s in a.seed)})")
-    rank = "(VALUES " + ", ".join(f"({q(s)}, {n})" for s, n in source_ranks(srcs).items()) + ") h(src, rank)"
-    sql = [
-        f"CREATE VIEW runs_all AS SELECT * FROM {read_runs};",
-        # A key's tables come from one source, whatever cells it counts in
-        # (the copies are one job's): the top of source_ranks. So (k) is a
-        # key's whole identity in the views, and USING (k) joins the rows
-        # USING (k, src) does.
-        f"CREATE VIEW canon AS SELECT k, src FROM runs_all LEFT JOIN {rank} USING (src) "
-        "QUALIFY row_number() OVER (PARTITION BY k ORDER BY coalesce(rank, -1) DESC) = 1;",
-        # A key in two cells (a job the farm reused) counts in each, with the
-        # cell's own row (its copy in the key's source, else its top one).
-        f"CREATE VIEW runs AS SELECT * FROM (SELECT r.* REPLACE (c.src AS src) FROM runs_all r JOIN canon c USING (k) "
-        f"LEFT JOIN {rank} ON h.src = r.src QUALIFY row_number() OVER (PARTITION BY r.k, r.cell "
-        "ORDER BY r.src = c.src DESC, coalesce(h.rank, -1) DESC) = 1)"
-        + (" WHERE " + " AND ".join(where) if where else "") + ";",
-    ]
-    have = {"runs"}
-    for t in ("scalars", *TABLES):
-        f = files(srcs, t)
-        if f:
-            cols = "x.*"
-            if t == "viewers":
-                # strims-sim names a viewer's node its host: `node` in both
-                # sims, as events, node_bins and forecast name it.
-                got = {r["column_name"] for r in duck(f"DESCRIBE SELECT * FROM read_parquet({plist(f)}, "
-                                                      "union_by_name=true);")}
-                if "host" in got:
-                    cols = "x.* REPLACE (coalesce(x.node, x.host) AS node)" if "node" in got else "x.*, x.host AS node"
-            sql.append(f"CREATE VIEW {t} AS SELECT {cols} FROM read_parquet({plist(f)}, union_by_name=true) x "
-                       "SEMI JOIN runs USING (k, src);")
-            have.add(t)
-    if derived:
-        for t in [*DERIVED, "verdicts"]:
-            if f := derived_files(t, srcs):
-                sql.append(f"CREATE VIEW {t} AS SELECT x.* FROM {f} SEMI JOIN runs USING (k, src);")
-                have.add(t)
-    sql += macros(have)
-    return "\n".join(sql), have
-
-
-def macros(have):
-    """macros.sql's statements whose `-- needs:` tables the views have."""
-    out, needs, cur = [], set(), []
-    for line in MACROS.read_text().splitlines():
-        if line.startswith("-- needs:"):
-            needs = set(line.split(":", 1)[1].split())
-        cur.append(line)
-        if line.rstrip().endswith(";"):
-            if needs <= have:
-                out.append("\n".join(cur))
-            cur, needs = [], set()
-    return out
-
-
-def need(have, *tables):
-    missing = [t for t in tables if t not in have]
-    if missing:
-        sys.exit(f"the selection has no {', '.join(missing)}"
-                 + (" (nor does S3: run with the reads)" if "reads" in missing else "")
-                 + (" (nor does S3: run with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1)" if "forecast" in missing else ""))
-
-
-def with_samples(a, v, have, tables, derived=True):
-    """The views of selection `a` (`v`, `have`) once the cache holds what S3
-    has of its jobs' sample `tables` (pull_samples, at most `--pull-mb`)."""
-    if pull_samples(v, tables, limit_mb=getattr(a, "pull_mb", PULL_MB)):
-        return views(a, derived)
-    return v, have
-
-
-def emit(a, rows_, text):
+def emit(a, rows, text):
     if a.json:
-        print(json.dumps(rows_))
+        print(json.dumps(rows))
     else:
         print(text())
 
 
-def short(arm):
-    """An arm label for a table's header."""
-    return arm if arm is None or len(arm) <= 24 else arm[:10] + "..." + arm[-11:]
-
-
-# --- queries ------------------------------------------------------------------
-
-
-def time_filter(a, col="t_ms"):
-    w = []
-    if a.since is not None:
-        w.append(f"{col} >= {int(a.since * 1000)}")
-    if a.until is not None:
-        w.append(f"{col} < {int(a.until * 1000)}")
-    return w
+def selection(a):
+    return query.Selection.of(a)
 
 
 def cmd_sql(a):
-    v, have = views(a)
-    if getattr(a, "reads", False):
-        v, _ = with_samples(a, v, have, SAMPLE_TABLES)
-    out = duck(v + "\n" + a.query + ("" if a.query.rstrip().endswith(";") else ";"),
-               out="json" if a.json else "text")
-    print(json.dumps(out) if a.json else out, end="" if not a.json else "\n")
-
-
-def fmt(x, nd=0):
-    if x is None:
-        return "-"
-    if isinstance(x, float):
-        return f"{x:.{nd}f}"
-    return str(x)
+    got = query.sql(selection(a), a.query, reads=getattr(a, "reads", False), text=not a.json)
+    if a.json:
+        print(json.dumps(got[-1].records() if got else []))
+    else:
+        print(query.sql_text(got), end="")
 
 
 def cmd_pooled(a):
-    v, have = with_samples(a, *views(a), ("reads",))
-    need(have, "reads")
-    group = {"none": "NULL", "bin": f"(t_ms // {a.bin}) * {a.bin}", "viewer": "viewer",
-             "phase": "coalesce(vs.phase, 'tail')"}[a.by]
-    join = ("LEFT JOIN verdict_seconds vs ON vs.k = x.k AND vs.src = x.src AND vs.sec = x.t_ms // 1000"
-            if a.by == "phase" else "")
-    where = time_filter(a, "x.t_ms")
-    # Every column is the group's: its runs are those with a read in it,
-    # and each run's p99 is of its reads there.
-    same = " AND ".join(f"pool.{c} IS NOT DISTINCT FROM runp.{c}" for c in ("cell", "arm", "g"))
-    sql = f"""
-WITH x AS (SELECT r.cell, r.arm, {group} AS g, x.* FROM reads x JOIN runs r USING (k, src) {join}
-           {"WHERE " + " AND ".join(where) if where else ""}),
-per AS (SELECT cell, arm, g, k, src, quantile_cont(lag_ms, 0.99) AS p99 FROM x GROUP BY ALL),
-runp AS (SELECT cell, arm, g, avg(p99) AS mean_run_p99, count(*) AS runs FROM per GROUP BY ALL),
-pool AS (SELECT cell, arm, g, count(*) AS reads, quantile_cont(lag_ms, [0.5, 0.9, 0.99]) AS q, max(lag_ms) AS lag_max
-         FROM x GROUP BY ALL)
-SELECT pool.cell, pool.arm, pool.g, runs, reads, q[1] AS lag_p50, q[2] AS lag_p90, q[3] AS lag_p99, lag_max,
-       mean_run_p99
-FROM pool JOIN runp ON {same} ORDER BY pool.cell, pool.arm, pool.g;"""
-    out = duck(v + sql)
-
-    def text():
-        lines = [f"{'cell':22} {'arm':24} {a.by if a.by != 'none' else '':>10} {'runs':>5} {'reads':>9} "
-                 f"{'p50':>7} {'p90':>7} {'p99':>7} {'max':>7}  mean of runs' p99"]
-        for r in out:
-            lines.append(f"{r['cell'] or '-':22} {short(r['arm']) or '-':24} {fmt(r['g']):>10} {r['runs']:5d} "
-                         f"{r['reads']:9d} {fmt(r['lag_p50']):>7} {fmt(r['lag_p90']):>7} {fmt(r['lag_p99']):>7} "
-                         f"{fmt(r['lag_max']):>7}  {fmt(r['mean_run_p99'])}")
-        return "\n".join(lines)
-
-    emit(a, out, text)
-
-
-READ_FIELDS = {"lag_p50": "quantile_cont(lag_ms, 0.5)", "lag_p99": "quantile_cont(lag_ms, 0.99)",
-               "lag_max": "max(lag_ms)", "reads": "count(*)"}
-VERDICT_FIELDS = {"healthy": "avg(healthy::INT)", "lag_q": "avg(lag_q)", "hit_share": "avg(hit_share)",
-                  "delivery": "avg(delivery)"}
-
-
-# viewer_seconds' fields over a bin: lag_ms the worst second's with a frame,
-# frames (and any other) summed.
-VIEWER_SECOND_FIELDS = {"lag_ms": "max(lag_ms) FILTER (WHERE lag_ms >= 0)::DOUBLE", "frames": "sum(frames)::DOUBLE"}
-# The series' own columns, not fields.
-ID_COLS = {"k", "src", "bin", "t_ms", "sec", "node", "viewer"}
-# The forecast log's fields: (table, aggregate) over a bin's samples (a
-# forecast's node is a viewer), as cmd_forecast judges them against the
-# truth: each HAVE's first sample of its stream that didn't set the chunk's
-# first sight, from an honest peer the sim saw hold the chunk as it arrived
-# (`live`); the error is held - (seen + mean).
-FORECAST_LIVE = "peer_honest AND live AND run = 0 AND NOT first_sight AND mean_ms >= 0 AND held_ms >= 0"
-LOG_FIELDS = {
-    "forecast_n": ("forecast", f"count(*) FILTER (WHERE {FORECAST_LIVE})::DOUBLE"),
-    "forecast_err_p50": ("forecast", f"quantile_cont(held_ms - (seen_ms + mean_ms), 0.5) FILTER (WHERE {FORECAST_LIVE})"),
-    "forecast_err_p90": ("forecast", f"quantile_cont(held_ms - (seen_ms + mean_ms), 0.9) FILTER (WHERE {FORECAST_LIVE})"),
-    "forecast_abs_err_p50": ("forecast",
-                             f"quantile_cont(abs(held_ms - (seen_ms + mean_ms)), 0.5) FILTER (WHERE {FORECAST_LIVE})"),
-    "forecast_abs_err_p90": ("forecast",
-                             f"quantile_cont(abs(held_ms - (seen_ms + mean_ms)), 0.9) FILTER (WHERE {FORECAST_LIVE})"),
-}
-
-
-def field_source(a, v, have):
-    """Where `--field` comes from: (series, a table or a query; time column
-    in ms; aggregate). Per node (`--per node`) each of the series' rows has
-    its `node`: a viewer's reads and viewer_seconds by `viewers`."""
-    f, per_node = a.field, a.per == "node"
-
-    def by_node(t):
-        need(have, "viewers")
-        return f"(SELECT x.*, w.node FROM {t} x JOIN viewers w USING (k, src, viewer))"
-
-    if f in READ_FIELDS:
-        need(have, "reads")
-        return (by_node("reads") if per_node else "reads"), "t_ms", READ_FIELDS[f]
-    if f in LOG_FIELDS:
-        t, agg = LOG_FIELDS[f]
-        need(have, t)
-        return t, "t_ms", agg
-
-    def columns(t):
-        return {r["column_name"] for r in duck(v + f"\nDESCRIBE {t};")} - ID_COLS if t in have else set()
-
-    def check_bin(t):
-        unit = 1000 if t in ("seconds", "viewer_seconds") else (
-            duck(v + "\nSELECT max(bin_ms) AS b FROM runs;")[0]["b"] or 1)
-        if a.bin % unit:
-            sys.exit(f"{f} comes in {unit} ms bins: --bin must be a multiple of {unit} "
-                     "(or rerun with a smaller SIM_BIN_MS / STRIMS_SIM_BIN_MS)")
-
-    nodes = [t for t in ("node_bins", "viewer_seconds") if f in columns(t)]
-    if per_node:
-        if nodes:
-            t = nodes[0]
-            check_bin(t)
-            if t == "node_bins":
-                return "node_bins", "t_ms", f"sum({ident(f)})::DOUBLE"
-            return by_node("viewer_seconds"), "sec * 1000", VIEWER_SECOND_FIELDS.get(f, f"sum({ident(f)})::DOUBLE")
-        wide = "a verdict" if f in VERDICT_FIELDS else next(
-            (f"a {t}" for t in ("bins", "seconds") if f in columns(t)), None)
-        if wide:
-            sys.exit(f"{f} is run-wide ({wide} column): --per node aligns a node's own fields, its reads' "
-                     f"({', '.join(READ_FIELDS)}), viewer_seconds' ({', '.join(VIEWER_SECOND_FIELDS)}) and "
-                     "node_bins' columns"
-                     + ("" if "node_bins" in have else
-                        " (the selection has no node_bins: SIM_BIN_NODES=1 / STRIMS_SIM_BIN_NODES=1 write them)"))
-    else:
-        if f in VERDICT_FIELDS:
-            if a.bin % 1000:
-                sys.exit(f"{f} is per second: --bin must be a multiple of 1000")
-            return "verdict_seconds", "sec * 1000", VERDICT_FIELDS[f]
-        for t, tcol in (("bins", "t_ms"), ("seconds", "sec * 1000")):
-            if f in columns(t):
-                check_bin(t)
-                return t, tcol, f"sum({ident(f)})::DOUBLE"
-        if nodes:
-            sys.exit(f"{f} is a node's (a {nodes[0]} column): align it --per node")
-    sys.exit(f"no field {f!r}: a read lag ({', '.join(READ_FIELDS)}), "
-             + ("a viewer_seconds column or a node_bins one" if per_node else
-                f"a verdict column ({', '.join(VERDICT_FIELDS)}), or a seconds or bins column"))
+    rows = query.pooled(selection(a), a.by).records()
+    emit(a, rows, lambda: query.pooled_text(rows, a.by))
 
 
 def cmd_aligned(a):
-    v, have = views(a)
-    if a.field in READ_FIELDS:
-        v, have = with_samples(a, v, have, ("reads",))
-    elif a.field in LOG_FIELDS:
-        v, have = with_samples(a, v, have, (LOG_FIELDS[a.field][0],))
-    need(have, "derived_events")
-    per_node = a.per == "node"
-    if per_node:
-        need(have, "events")
-    series, tcol, agg = field_source(a, v, have)
-    lo, hi = int(-a.before * 1000), int(a.after * 1000)
-    node = "" if a.node is None else f" AND node = {int(a.node)}"
-    keys = "k, src, node" if per_node else "k, src"
-    kind = f"kind = {q(a.event)}"
-    sims = (f"(SELECT count(*) FROM events WHERE {kind}{node}) AS sims, "
-            f"(SELECT count(*) FROM events WHERE {kind}{node} AND node >= 0) AS nodes"
-            if "events" in have else "0 AS sims, 0 AS nodes")
-    # A derived event has no node.
-    derived = f"(SELECT count(*) FROM derived_events WHERE {kind}{'' if a.node is None else ' AND false'})"
-    got = duck(v + f"\nSELECT {derived} AS derived, {sims}, "
-                   "(SELECT list(DISTINCT kind ORDER BY kind) FROM ev) AS kinds;")[0]
-    if got["derived"] and got["sims"]:
-        sys.exit(f"{a.event} is both a derived event and a sim's: analyze.events must name its own apart "
-                 "(DERIVED_KINDS)")
-    if not got["derived"] and not got["sims"]:
-        sys.exit(f"the selection has no {a.event} event" + (f" of node {a.node}" if a.node is not None else "")
-                 + f"; its kinds: {', '.join(got['kinds'] or [])}")
-    if per_node:
-        if not got["nodes"]:
-            sys.exit(f"{a.event} is run-wide (a derived event, or a sim's with no node): align it --per run")
-        node += " AND node >= 0"
-    if a.detail is not None:
-        node += f" AND detail GLOB {q(a.detail)}"
-    node += "".join(f" AND {w}" for w in time_filter(a))
-    # The nth occurrence, or every one (`--nth 0`), each its own window.
-    pick = "" if int(a.nth) == 0 else f" WHERE nth = {int(a.nth)}"
-    sql = f"""
-WITH e AS (SELECT {keys}, t_ms AS e_ms, nth AS eid FROM
-              (SELECT *, row_number() OVER (PARTITION BY {keys} ORDER BY t_ms) AS nth
-               FROM ev WHERE kind = {q(a.event)}{node}){pick}),
-x AS (SELECT x.*, e.eid, floor(({tcol} - e.e_ms) / {a.bin}) * {a.bin} AS rel
-      FROM {series} x JOIN e USING ({keys})
-      WHERE {tcol} - e.e_ms >= {lo} AND {tcol} - e.e_ms < {hi}),"""
-    if a.pool:
-        # Every window's rows of a cell and arm in one pool a bin.
-        sql += f"""
-pool AS (SELECT r.cell, r.arm, x.rel, count(*) AS n, {agg} AS v FROM x JOIN runs r USING (k, src) GROUP BY ALL)
-SELECT cell, arm, rel::BIGINT AS rel_ms, n, v AS p10, v AS p50, v AS p90 FROM pool WHERE v IS NOT NULL
-ORDER BY cell, rel_ms, arm;"""
-        out = duck(v + sql)
-    else:
-        sql += f"""
-per AS (SELECT * FROM (SELECT {keys}, eid, rel, {agg} AS v FROM x GROUP BY ALL) WHERE v IS NOT NULL)
-SELECT r.cell, r.arm, rel::BIGINT AS rel_ms, count(*) AS n, quantile_cont(v, [0.1, 0.5, 0.9]) AS q
-FROM per JOIN runs r USING (k, src) GROUP BY ALL ORDER BY r.cell, rel_ms, r.arm;"""
-        out = duck(v + sql)
-        for r in out:
-            r["p10"], r["p50"], r["p90"] = r.pop("q")
-    if per_node and not out:
-        print(f"no node with a {a.event} event has a {a.field} series around it", file=sys.stderr)
-
-    def text():
-        arms = sorted({r["arm"] for r in out})
-        lines = []
-        nth = "every one" if int(a.nth) == 0 else f"#{a.nth}"
-        around = f"each node's own {a.event} ({nth})" if per_node else f"{a.event} ({nth})"
-        over = "nodes of runs" if per_node else "runs"
-        if int(a.nth) == 0:
-            over = f"windows ({over}' every event)"
-        if a.pool:
-            over = "the windows' pooled rows (the pool's value thrice)"
-        for cell in sorted({r["cell"] for r in out}):
-            lines.append(f"\n{cell}: {a.field} around {around}, median [p10, p90] over {over} (n)")
-            lines.append(f"{'rel_s':>8} " + " ".join(f"{short(x) or '-':>34}" for x in arms))
-            by = {(r["rel_ms"], r["arm"]): r for r in out if r["cell"] == cell}
-            for rel in sorted({k for k, _ in by}):
-                cells = []
-                for x in arms:
-                    r = by.get((rel, x))
-                    cells.append(f"{'-':>34}" if r is None else
-                                 f"{fmt(r['p50'], 2):>10} [{fmt(r['p10'], 2)}, {fmt(r['p90'], 2)}] ({r['n']})".rjust(34))
-                lines.append(f"{rel / 1000:8.2f} " + " ".join(cells))
-        return "\n".join(lines)
-
-    emit(a, out, text)
+    rows = query.aligned(selection(a), a.event, a.field, a.per, a.node, a.detail, a.pool, a.before, a.after,
+                         a.nth).records()
+    emit(a, rows, lambda: query.aligned_text(rows, a.event, a.field, a.per, a.nth, a.pool))
 
 
 def cmd_events(a):
-    v, have = views(a)
-    need(have, "verdicts")
-    sql = """
-SELECT r.cell, r.arm, count(*) AS runs, sum(collapsed::INT)::BIGINT AS collapsed, sum(collapses)::BIGINT AS collapses,
-       median(onset_after_drop_s) AS onset_after_drop_s, sum(onset_after_drop_censored::INT)::BIGINT AS onset_censored,
-       count(onset_after_drop_s) AS drops,
-       median(recover_after_rise_s) AS recover_after_rise_s, sum(recover_after_rise_censored::INT)::BIGINT AS recover_censored,
-       count(recover_after_rise_s) AS rises,
-       median(excess_lag_area_ms_s) AS excess_area_p50, quantile_cont(excess_lag_area_ms_s, 0.9) AS excess_area_p90,
-       median(excess_lag_peak_ms) AS excess_peak_p50, median(flaps_per_min) AS flaps_per_min
-FROM verdicts JOIN runs r USING (k, src) GROUP BY ALL ORDER BY ALL;"""
-    out = duck(v + sql)
-
-    def text():
-        lines = [f"{'cell':22} {'arm':24} {'runs':>4} {'coll':>4} {'onset_s (cens/n)':>17} {'recover_s (cens/n)':>19} "
-                 f"{'excess p50 p90':>15} {'peak':>6} {'flaps':>6}"]
-        for r in out:
-            lines.append(
-                f"{r['cell'] or '-':22} {short(r['arm']) or '-':24} {r['runs']:4d} {r['collapsed'] or 0:4d} "
-                f"{fmt(r['onset_after_drop_s'], 1):>7} ({r['onset_censored'] or 0}/{r['drops']})".ljust(73)
-                + f" {fmt(r['recover_after_rise_s'], 1):>7} ({r['recover_censored'] or 0}/{r['rises']})".ljust(20)
-                + f" {fmt(r['excess_area_p50']):>7} {fmt(r['excess_area_p90']):>7} {fmt(r['excess_peak_p50']):>6}"
-                f" {fmt(r['flaps_per_min'], 2):>6}")
-        return "\n".join(lines)
-
-    emit(a, out, text)
+    rows = query.events(selection(a)).records()
+    emit(a, rows, lambda: query.events_text(rows))
 
 
 def cmd_osc(a):
-    v, have = views(a)
-    need(have, "verdicts", "episodes")
-    sql = """
-WITH sp AS (SELECT r.cell, r.arm, e.kind, e.len FROM episodes e JOIN runs r USING (k, src)),
-d AS (SELECT cell, arm,
-             quantile_cont(len, 0.5) FILTER (WHERE kind = 'healthy') AS healthy_p50,
-             quantile_cont(len, 0.9) FILTER (WHERE kind = 'healthy') AS healthy_p90,
-             quantile_cont(len, 0.5) FILTER (WHERE kind = 'unhealthy') AS unhealthy_p50,
-             quantile_cont(len, 0.9) FILTER (WHERE kind = 'unhealthy') AS unhealthy_p90,
-             count(*) FILTER (WHERE kind = 'unhealthy') AS unhealthy_spells
-      FROM sp GROUP BY ALL),
-m AS (SELECT r.cell, r.arm, count(*) AS runs, median(flaps_per_min) AS flaps_per_min,
-             max(collapses)::BIGINT AS max_collapses, count(osc_period_s) AS periodic,
-             median(osc_period_s) AS period_s, median(osc_acf) AS acf, median(osc_amp_ms) AS amp_ms,
-             quantile_cont(osc_amp_ms, 0.9) AS amp_p90_ms
-      FROM verdicts JOIN runs r USING (k, src) GROUP BY ALL)
-SELECT * FROM m JOIN d USING (cell, arm) ORDER BY ALL;"""
-    out = duck(v + sql)
-
-    def text():
-        lines = [f"{'cell':22} {'arm':24} {'runs':>4} {'flaps/min':>9} {'unhealthy spells':>16} "
-                 f"{'dwell s: healthy p50 p90':>24} {'unhealthy p50 p90':>18} {'periodic':>8} {'period_s':>8} "
-                 f"{'acf':>5} {'amp_ms p50 p90':>15}"]
-        for r in out:
-            lines.append(
-                f"{r['cell'] or '-':22} {short(r['arm']) or '-':24} {r['runs']:4d} {fmt(r['flaps_per_min'], 2):>9} "
-                f"{r['unhealthy_spells']:>16} {fmt(r['healthy_p50']):>15} {fmt(r['healthy_p90']):>8} "
-                f"{fmt(r['unhealthy_p50']):>9} {fmt(r['unhealthy_p90']):>8} {r['periodic']:>8} "
-                f"{fmt(r['period_s'], 1):>8} {fmt(r['acf'], 2):>5} {fmt(r['amp_ms']):>7} {fmt(r['amp_p90_ms']):>7}")
-        return "\n".join(lines)
-
-    emit(a, out, text)
+    rows = query.osc(selection(a)).records()
+    emit(a, rows, lambda: query.osc_text(rows))
 
 
 def cmd_forecast(a):
-    v, have = with_samples(a, *views(a, derived=False), ("forecast",), derived=False)
-    need(have, "forecast")
-    w = " AND ".join(["run = 0", "NOT first_sight", "mean_ms >= 0", *time_filter(a)])
-    sql = f"""
-WITH f AS (SELECT r.sim, r.cell, r.arm, CASE WHEN lazy THEN 'lazy' ELSE 'prompt' END AS pace,
-                  sample_ms - mean_ms AS err, sample_ms <= horizon_ms AS covered, held_ms,
-                  peer_honest,
-                  peer_honest AND held_ms >= 0 AND held_ms < channel_open_ms AS backlog,
-                  CASE WHEN peer_honest AND live THEN held_ms - (seen_ms + mean_ms) END AS truth_err,
-                  CASE WHEN peer_honest AND live THEN seen_ms + sample_ms - held_ms END AS late
-           FROM forecast x JOIN runs r USING (k, src) WHERE {w})
-SELECT sim, cell, arm, pace, count(*) AS n,
-       quantile_cont(err, [0.1, 0.5, 0.9, 0.99]) AS err_q, avg(covered::INT) AS coverage,
-       count(truth_err) AS held, quantile_cont(truth_err, [0.1, 0.5, 0.9, 0.99]) AS truth_q,
-       quantile_cont(late, [0.1, 0.5, 0.9, 0.99]) AS late_q,
-       avg((held_ms IS NULL OR held_ms < 0)::INT) FILTER (WHERE peer_honest) AS censored,
-       avg(backlog::INT) FILTER (WHERE peer_honest) AS backlog
-FROM f GROUP BY ALL ORDER BY ALL;"""
-    out = duck(v + sql)
-
-    def q4(x):
-        return "-" if not x else " ".join(fmt(y) for y in x)
-
-    def text():
-        lines = [f"{'sim':10} {'cell':20} {'arm':24} {'pace':6} {'n':>8} {'err ms p10 p50 p90 p99':>23} "
-                 f"{'cover':>5} {'held':>7} {'truth err p10 p50 p90 p99':>26} {'HAVE late p10 p50 p90 p99':>26} "
-                 f"{'cens':>5} {'backlog':>7}"]
-        for r in out:
-            lines.append(
-                f"{r['sim'] or '-':10} {r['cell'] or '-':20} {short(r['arm']) or '-':24} {r['pace']:6} {r['n']:8d} "
-                f"{q4(r['err_q']):>23} {fmt(r['coverage'], 2):>5} {r['held']:7d} {q4(r['truth_q']):>26} "
-                f"{q4(r['late_q']):>26} {fmt(r['censored'], 3):>5} {fmt(r['backlog'], 3):>7}")
-        return "\n".join(lines)
-
-    emit(a, out, text)
+    rows = query.forecast(selection(a)).records()
+    emit(a, rows, lambda: query.forecast_text(rows))
 
 
 def cmd_rows(a):
-    v, _ = views(a, derived=False)
-    keys = duck(v + "\nSELECT src, k, cell, arm, seed FROM runs ORDER BY cell, arm, seed;")
-    got = rows([(r["src"], r["k"]) for r in keys])
-    want = a.fields.split(",") if a.fields else None
-    for r in keys:
-        row = got.get((r["src"], r["k"]))
-        if row is None:
-            continue
-        # A key counts in each of its cells: each prints its own copy.
-        row = dict(row)
-        v_ = row.pop("_verdict") or {}
-        out = {"cell": r["cell"], "arm": r["arm"], "seed": r["seed"], "k": r["k"], "src": r["src"]}
-        out.update({f: row.get(f) for f in want} if want else row)
-        out["_verdict"] = {x: v_.get(x) for x in ("onset", "recovered", "absorbing", "unhealthy", "lag_p50")}
-        out["_collapsed"] = analyze().collapsed(v_) if v_ else None
-        print(json.dumps(out))
-
-
-# --- cache --------------------------------------------------------------------
-
-
-def store():
-    """simlab.store: the module executor, and the pulls from S3, imported
-    when a pull first wants them."""
-    from simlab import store as m
-    return m
-
-
-def pull(run, reads=False):
-    """Copies farm run `run`'s flushes from S3 into the cache, with
-    `reads` their samples too (simlab.store.pull); returns the run's
-    directory there."""
-    return store().pull(run, reads).dest
-
-
-def pull_sources(srcs):
-    """Pulls the farm runs of the sources `srcs` (farm/<run>/...) that the
-    cache lacks, a run at a time, less their samples (pull_samples);
-    returns those still missing (expired from S3, or never uploaded)."""
-    return store().pull_sources(srcs)[1]
-
-
-def manifest_of(src):
-    """Source `src`'s manifest in the cache (export's: its keys, and its
-    tables' rows, bytes and sha256), or {}."""
-    try:
-        return json.loads((cache_root() / "cache" / src / "manifest.json").read_text())
-    except (OSError, ValueError):
-        return {}
-
-
-def unlanded(srcs):
-    """The farm flushes among `srcs` whose samples never landed in S3, as
-    their runs' matrices' indexes say (a line's `reads` false; a run's
-    matrices its state's list)."""
-    farm = main_checkout() / "target" / "sim-farm"
-    names = set()
-    for run in {s.split("/")[1] for s in srcs if s.startswith("farm/")}:
-        with contextlib.suppress(OSError):
-            names |= set((farm / run / "matrices").read_text().split())
-    out = set()
-    for n in sorted(names):
-        with contextlib.suppress(OSError):
-            for line in (farm / n / "index.jsonl").read_text().splitlines():
-                with contextlib.suppress(ValueError):
-                    r = json.loads(line)
-                    if isinstance(r, dict) and r.get("reads") is False and r.get("src") in srcs:
-                        out.add(r["src"])
-    return out
-
-
-def sample_plan(v, tables, gone=()):
-    """What the jobs the views `v` select lack of the sample `tables` that
-    S3 holds: {src: (tables, bytes, jobs)}, a farm flush each, and how many
-    jobs no flush in S3 gives them. A key's tables come from the source
-    holding the most of them (views' canon), so a job lacks nothing once a
-    source of it at the top holds what its manifest lists of `tables`; else
-    one of those is fetched, and then holds the most. The flushes are the
-    fewest that give every such job, picked greedily (the one giving the
-    most of those left, the fewer bytes on a tie), so a verify copy's
-    flush comes only for a job its original's doesn't give. A flush gives
-    none once `gone` from S3, nor when its matrices' indexes say its
-    samples never landed (unlanded)."""
-    root = cache_root() / "cache"
-    cands = collections.defaultdict(set)
-    for r in duck(v + "\nSELECT DISTINCT k, src FROM runs_all SEMI JOIN runs USING (k);"):
-        cands[r["k"]].add(r["src"])
-    farm = {s for ss in cands.values() for s in ss if s.startswith("farm/")}
-    if not farm:
-        return {}, 0
-    held = {s: sum((root / s / f"{t}.parquet").exists() for t in TABLES) for ss in cands.values() for s in ss}
-    listed = {s: manifest_of(s).get("tables") or {} for s in farm}
-    lack = {s: [t for t in tables if t in listed.get(s, {}) and not (root / s / f"{t}.parquet").exists()]
-            for s in held}
-    bad = unlanded(farm) | set(gone)
-    need, lost = {}, 0
-    for k, ss in cands.items():
-        most = max(held[s] for s in ss)
-        top = [s for s in ss if held[s] == most]
-        if any(not lack[s] for s in top):
-            continue
-        if can := [s for s in top if s not in bad]:
-            need[k] = can
-        else:
-            lost += 1
-    size = {s: sum(listed[s][t].get("bytes", 0) for t in lack[s]) for s in farm}
-    plan = {}
-    while need:
-        score = collections.Counter(s for ss in need.values() for s in ss)
-        s = max(score, key=lambda s: (score[s], -size[s], s))
-        plan[s] = (lack[s], size[s], score[s])
-        need = {k: ss for k, ss in need.items() if s not in ss}
-    return plan, lost
-
-
-def fetch_samples(plan, gets, got):
-    """Fetches `plan`'s tables from S3 into the cache (simlab.store's
-    fetch_samples); returns the flushes S3 no longer holds."""
-    return store().fetch_samples(plan, gets, got)
-
-
-def pull_samples(v, tables, limit_mb=None, say=None):
-    """Pulls what the jobs the views `v` select lack of the sample `tables`
-    (sample_plan), noting its size (on stderr, or to `say`), and refusing
-    it past `limit_mb`; where S3 no longer holds a flush, another copy of
-    its jobs stands in. Each run's GETs and bytes go to its line of the
-    farm's S3 ledger, however the pull ends. Returns whether it fetched
-    any."""
-    say = say or (lambda m: print(m, file=sys.stderr))
-    plan, lost = sample_plan(v, tables)
-    if plan:
-        total = sum(b for _, b, _ in plan.values())
-        what = (f"the {' and '.join(tables)} of {sum(n for *_, n in plan.values())} jobs the selection lacks: "
-                f"{len(plan)} flushes, {total / 1e6:.1f} MB")
-        if limit_mb is not None and total > limit_mb * 1e6:
-            sys.exit(f"{what}, past --pull-mb {limit_mb:g}: narrow the selection, or raise --pull-mb")
-        say(f"pulling {what}")
-    fetched, gone = bool(plan), set()
-    gets, got = collections.Counter(), collections.Counter()
-    try:
-        while plan:
-            gone |= fetch_samples(plan, gets, got)
-            plan, lost = sample_plan(v, tables, gone)
-    finally:
-        region = store().farm_bucket()[1] if gets else None
-        for run in gets:
-            store().farm_ledger(run, {"region": region or "", "tier1": {}, "tier2": {"pull_get": gets[run]},
-                                      "up": {}, "down": {"internet": got[run]}, "stored": 0})
-    if lost:
-        say(f"S3 holds none of the {' or '.join(tables)} of {lost} of the selection's jobs (expired, or never "
-            "landed): left out")
-    return fetched
+    for line in query.selected_rows(selection(a), a.fields.split(",") if a.fields else None):
+        print(json.dumps(line))
 
 
 def cmd_pull(a):
-    picked = a.cell or a.arm or a.seed
-    if (picked or a.dry_run) and not a.reads:
-        sys.exit("--cell, --arm, --seed and --dry-run are of a pull's reads: give --reads")
-    if not a.dry_run and not picked:
-        dest = pull(a.run, a.reads)
-        print(f"{a.run}: {len(sources([f'farm/{a.run}']))} sources in {dest}")
-        return
-    srcs = sources([f"farm/{a.run}"])
-    if not srcs:
-        if a.dry_run:
-            sys.exit(f"the cache lacks farm/{a.run}: pull --run {a.run} copies the tables that name its jobs")
-        pull(a.run)
-    if picked:
-        sel = argparse.Namespace(src=[f"farm/{a.run}"], cell=a.cell, arm=a.arm, seed=a.seed)
-        v, _ = views(sel, derived=False, fetch=not a.dry_run)
-        if not a.dry_run:
-            pull_samples(v, SAMPLE_TABLES)
-            print(f"{a.run}: the selection's {' and '.join(SAMPLE_TABLES)} in {cache_root() / 'cache' / 'farm'}")
-            return
-        plan, lost = sample_plan(v, SAMPLE_TABLES)
-    else:
-        # The whole run's, as `pull --reads` syncs them: each flush's.
-        root, bad = cache_root() / "cache", unlanded(srcs)
-        plan, lost = {}, 0
-        for s in srcs:
-            m = manifest_of(s)
-            listed, jobs = m.get("tables") or {}, len(m.get("keys") or [])
-            lack = [t for t in SAMPLE_TABLES if t in listed and not (root / s / f"{t}.parquet").exists()]
-            if lack and s in bad:
-                lost += jobs
-            elif lack:
-                plan[s] = (lack, sum(listed[t].get("bytes", 0) for t in lack), jobs)
-    bucket, _, _ = store().farm_bucket()
-    files = [(f"s3://{bucket}/sim-samples/{s.split('/', 1)[1]}/{t}.parquet", manifest_of(s)["tables"][t]["bytes"], n)
-             for s, (tables, _, n) in plan.items() for t in tables]
-    gone = f"; S3 holds none for {lost} jobs (expired, or never landed)" if lost else ""
-    if not files:
-        print(f"{a.run}: nothing to pull: the cache holds what S3 has of the jobs' samples{gone}")
-        return
-    print(f"{a.run}: would GET {len(files)} files, {sum(b for _, b, _ in files) / 1e6:.1f} MB, for "
-          f"{sum(n for *_, n in plan.values())} jobs' {' and '.join(SAMPLE_TABLES)}{gone}")
-    for url, b, n in files:
-        print(f"  {url}  {b / 1e6:.1f} MB  {n} jobs")
+    print(query.pull_text(query.pull_run(a.run, a.reads, a.cell, a.arm, a.seed, a.dry_run)))
 
 
 def cmd_gc(a):
-    root = cache_root()
-    cutoff = time.time() - a.days * 86400
-    gone = 0
-    for runs in (root / "cache").glob("**/runs.parquet"):
-        d = runs.parent
-        if d.stat().st_mtime < cutoff:
-            shutil.rmtree(d)
-            gone += 1
-    # An export a killed process left half written.
-    for d in (root / "cache").glob("**/*.tmp*"):
-        if d.is_dir() and d.stat().st_mtime < time.time() - 3600:
-            shutil.rmtree(d)
-    current = f"v={derived_version()}"
-    for d in (root / "derived").glob("*/v=*"):
-        if d.name != current:
-            shutil.rmtree(d)
-    live = {s.replace("/", "~") for s in sources(None)}
-    for f in (root / "derived").glob("*/v=*/*.parquet"):
-        if f.stem not in live:
-            f.unlink()
-    print(f"removed {gone} sources older than {a.days} days")
+    print(f"removed {store.gc(a.days)} sources older than {a.days} days")
 
 
 def catalog():
@@ -1212,14 +420,17 @@ def main():
          "rows": cmd_rows, "forecast": cmd_forecast}[a.cmd](a)
 
 
-# The commands that run in the duckdb module (under hack/'s uv venv).
-ENGINE_COMMANDS = ("index", "fetch", "lake")
+# The commands the plain python3 runs, with the DuckDB CLI: the store's
+# (store_host's). The others run in the duckdb module, under hack/'s uv
+# venv.
+STORE_COMMANDS = ("duckdb", "fold", "export")
 
 if __name__ == "__main__":
-    if sys.argv[1:2] and sys.argv[1] in ENGINE_COMMANDS:
+    if sys.argv[1:2] and not sys.argv[1].startswith("-") and sys.argv[1] not in STORE_COMMANDS:
         from simlab import bootstrap
 
         bootstrap.engine(__file__)
+        store.install()
     # The store's errors are this script's: one it doesn't catch reads
     # `DuckError: ...`, as a class of the script's own would.
     DuckError.__module__ = FoldError.__module__ = "__main__"

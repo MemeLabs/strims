@@ -61,10 +61,10 @@ unhealthy and collapse spells, and `run_metrics` sums them up per run
 rise, excess lag, the lag's oscillation). VERDICT_VERSION hashes all of
 it, so the tables made under another are stale.
 
-The verdicts are stdlib alone: hack/capture/analyze.py, which
-re-exports their names, and hack/sim-db/simdb.py run under the plain
-python3. The derived tables are made from them, the cache's tables read
-through store_host.duck (the DuckDB CLI, or the executor installed):
+The verdicts are stdlib alone: hack/capture/analyze.py re-exports their
+names, and its capture tools run under the plain python3. The derived
+tables are made from them, the cache's tables read through
+store_host.duck (the DuckDB CLI, or the executor installed):
 
   series_of(meta, seconds, viewer_seconds, stays=None) -> dict | None
                  a run's series as its row's `series` has it, from its

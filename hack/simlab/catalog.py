@@ -72,7 +72,7 @@ pool of `workers` processes (verdict.derive).
 
 `fetch` copies what S3 still holds of an experiment's jobs into the cache
 (simlab.store's pulls, and with `tables` the bulky sample tables of the
-jobs picked by `cells` and `arms`: simdb.py's pull_samples), indexes them,
+jobs picked by `cells` and `arms`: store.pull_samples), indexes them,
 and returns what S3 charged for it, from the farm's S3 ledger.
 
 Progress events are Progress(kind, message, done, total): kind "index"
@@ -214,8 +214,8 @@ q, ident = store_host.q, store_host.ident
 
 
 def simdb():
-    """hack/sim-db/simdb.py (simlab.simdb()): the cache's manifests, and a
-    fetch's sample pulls."""
+    """hack/sim-db/simdb.py (simlab.simdb()): the main checkout (its
+    main_checkout, which tests patch)."""
     import simlab
 
     return simlab.simdb()
@@ -316,7 +316,7 @@ def scan_cache():
                 continue
             st = os.stat(Path(d) / n)
             files[t] = {"path": str(Path(d) / n), "bytes": st.st_size, "inode": st.st_ino, "mtime_ns": st.st_mtime_ns}
-        out[src] = {"files": files, "manifest": simdb().manifest_of(src)}
+        out[src] = {"files": files, "manifest": store.manifest_of(src)}
     return out
 
 
@@ -2190,9 +2190,8 @@ def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, pr
     the cache, then indexes (`workers`, `progress` index's): the flushes
     holding their tables (store.pull of each farm run the cache lacks one
     of), and with `tables` (of SAMPLE_TABLES) the fewest flushes giving the
-    jobs those (simdb.py's sample_plan and pull_samples, which refuses past
+    jobs those (store's sample_plan and pull_samples, which refuses past
     `limit_mb`). Returns what it pulled and what S3 charged for it."""
-    sm = simdb()
     say = sayer(progress)
     if not catalog_path().exists():
         index(workers, progress)
@@ -2215,7 +2214,7 @@ def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, pr
         jsonl(tmp / "keys.jsonl", [{"k": k} for k in keys])
         holders = lake(f"SELECT DISTINCT f.src FROM raw.farm_index f SEMI JOIN {read_jsonl(tmp / 'keys.jsonl', {'k': 'VARCHAR'})} w "
                        "USING (k) WHERE f.src LIKE 'farm/%';")
-        lack = [r["src"] for r in holders if not sm.have_src(r["src"])]
+        lack = [r["src"] for r in holders if not store.have_src(r["src"])]
         if lack:
             say("pull", f"{exp}: pulling the farm runs of {len(lack)} flushes the cache lacks", 0, len(lack))
             pulls, out.gone = store.pull_sources(lack)
@@ -2223,14 +2222,14 @@ def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, pr
             if out.gone:
                 say("pull", f"{len(out.gone)} of them are gone from S3: their jobs' tables are left out")
         if tables:
-            srcs = sorted({s for s in [r["src"] for r in holders] if sm.have_src(s)} |
+            srcs = sorted({s for s in [r["src"] for r in holders] if store.have_src(s)} |
                           {r["src"] for r in lake(f"SELECT DISTINCT src FROM raw.runs SEMI JOIN "
                                                   f"{read_jsonl(tmp / 'keys.jsonl', {'k': 'VARCHAR'})} w USING (k);")
-                           if sm.have_src(r["src"])})
+                           if store.have_src(r["src"])})
             v = (f"CREATE VIEW runs_all AS SELECT k, src FROM read_parquet({verdict.plist(verdict.files(srcs, 'runs'))}, "
                  f"union_by_name=true);\nCREATE VIEW runs AS SELECT k FROM "
                  f"{read_jsonl(tmp / 'keys.jsonl', {'k': 'VARCHAR'})};")
-            sm.pull_samples(v, tuple(tables), limit_mb=limit_mb, say=lambda m: say("pull", m))
+            store.pull_samples(v, tuple(tables), limit_mb=limit_mb, say=lambda m: say("pull", m))
     index(workers, progress)
     out.s3_usd, out.ledger_lines = s3_spent(before)
     return out
