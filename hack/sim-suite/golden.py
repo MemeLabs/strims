@@ -11,8 +11,8 @@ farm experiments must be the same, line for line.
 `check` scores, for each experiment, every arm against its base three
 ways and compares what they print: the reference (suite.py at REV,
 REFERENCE by default, scoring its rows in Python), this checkout's
-suite.py (the macros over the sides it reads from the farm's indexes),
-and the macros over the experiment's arms as the catalog's
+scoring (simlab.scoring: the macros) over the sides suite.py reads from
+the farm's indexes, and over the experiment's arms as the catalog's
 experiment_jobs has them (arm_side). Each prints the arm score, ranked by
 lag and for overhead (with no budget, and with one of 1.05), and the
 scorecard, every metric and the default's. The reference's t table is the
@@ -39,7 +39,6 @@ import gzip
 import importlib.util
 import io
 import json
-import math
 import re
 import subprocess
 import sys
@@ -47,6 +46,10 @@ import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / "hack") not in sys.path:
+    sys.path.insert(0, str(ROOT / "hack"))
+from simlab import scoring  # noqa: E402
+
 # The last suite.py that scored in Python.
 REFERENCE = "4eee6065"
 WORK = ROOT / "target" / "golden"
@@ -80,7 +83,7 @@ def reference(rev):
                                    capture_output=True, text=True).stdout)
     ref = load(path, "suite_ref")
     ref._simdb = suite().simdb()
-    ref.T975 = {r["df"]: r["t"] for r in suite().score_query(
+    ref.T975 = {r["df"]: r["t"] for r in scoring.query(
         "SELECT df, t975_at(df) AS t FROM range(1, 1001) r(df) ORDER BY df;")}
     return ref
 
@@ -122,27 +125,32 @@ SELECT *, row_number() OVER (PARTITION BY sets ORDER BY started_at DESC) AS nth 
     return out
 
 
-def catalog_sides(exp, arms):
-    """`exp`'s arms as the catalog's arm_side gives them."""
-    s = suite()
-    out = {}
-    for arm in arms:
-        rows = s.score_query(f"SELECT unnest(arm_side({s.q(exp)}, {s.q(arm)}), recursive := true);")
-        out[arm] = {(r["cell"], r["seed"]): (r["k"], r["src"]) for r in rows}
-    return out
-
-
-def texts(mod, cells, base_rows, arm_rows, exp, base, arm):
-    """What `mod` (a suite.py) prints scoring `arm_rows` against
+def texts(cells, base_rows, arm_rows, exp, base, arm):
+    """What simlab.scoring prints scoring side `arm_rows` against side
     `base_rows` over `cells`: {name: text}."""
     out = {}
     for kind, budgets in RANKS.items():
         for budget in budgets:
-            r = rank(kind, budget)
-            out[f"arm {kind} {budget}"] = printed(lambda: mod.print_arm_score(
-                f"{exp}:{arm} against {exp}:{base}", mod.arm_score(cells, base_rows, arm_rows, r)))
+            out[f"arm {kind} {budget}"] = scoring.arm_score(
+                cells, base_rows, arm_rows, f"{exp}:{arm} against {exp}:{base}", kind, budget).text()
     for show_all in (False, True):
-        out[f"scorecard all={show_all}"] = printed(lambda: mod.scorecard(
+        out[f"scorecard all={show_all}"] = scoring.scorecard(
+            cells, base_rows, arm_rows, f"{exp}:{base}", f"{exp}:{arm}", show_all).text()
+    return out
+
+
+def ref_texts(ref, cells, base_rows, arm_rows, exp, base, arm):
+    """What the reference (a suite.py, `ref`) prints scoring `arm_rows`
+    against `base_rows` over `cells`, its rows: {name: text}, as texts
+    names them."""
+    out = {}
+    for kind, budgets in RANKS.items():
+        for budget in budgets:
+            r = rank(kind, budget)
+            out[f"arm {kind} {budget}"] = printed(lambda: ref.print_arm_score(
+                f"{exp}:{arm} against {exp}:{base}", ref.arm_score(cells, base_rows, arm_rows, r)))
+    for show_all in (False, True):
+        out[f"scorecard all={show_all}"] = printed(lambda: ref.scorecard(
             cells, base_rows, arm_rows, f"{exp}:{base}", f"{exp}:{arm}", show_all))
     return out
 
@@ -197,8 +205,8 @@ def check_local(ref, n):
         rows = ref.simdb().rows([v[::-1] for side in e["sides"].values() for v in side.values()])
         ref_rows = {n_: {at: rows[(src, k)] for at, (k, src) in side.items() if (src, k) in rows}
                     for n_, side in e["sides"].items()}
-        want = texts(ref, e["cells"], ref_rows["base"], ref_rows["tree"], e["exp"], "base", "tree")
-        got = texts(suite(), e["cells"], e["sides"]["base"], e["sides"]["tree"], e["exp"], "base", "tree")
+        want = ref_texts(ref, e["cells"], ref_rows["base"], ref_rows["tree"], e["exp"], "base", "tree")
+        got = texts(e["cells"], e["sides"]["base"], e["sides"]["tree"], e["exp"], "base", "tree")
         same = all(compare(f"local {e['exp']} {k}", want[k], got[k]) for k in want)
         ok &= same
         cells, marked, moved = stats(want["scorecard all=False"])
@@ -216,11 +224,11 @@ def check(a):
     for e in experiments(a.n, a.exps) if a.n or a.exps else ():
         ref_rows = ref.farm_rows(e["exp"], e["cells"], e["knob"])
         new = suite().farm_rows(e["exp"], e["cells"], e["knob"])
-        cat = catalog_sides(e["exp"], [e["base"], *e["arms"]])
+        cat = scoring.sides(e["exp"], [e["base"], *e["arms"]])
         for arm in e["arms"]:
-            want = texts(ref, e["cells"], ref_rows[e["base"]], ref_rows[arm], e["exp"], e["base"], arm)
+            want = ref_texts(ref, e["cells"], ref_rows[e["base"]], ref_rows[arm], e["exp"], e["base"], arm)
             for how, sides in (("suite.py", new), ("arm_side", cat)):
-                got = texts(suite(), e["cells"], sides[e["base"]], sides[arm], e["exp"], e["base"], arm)
+                got = texts(e["cells"], sides[e["base"]], sides[arm], e["exp"], e["base"], arm)
                 same = all(compare(f"{how} {e['exp']}:{arm} {k}", want[k], got[k]) for k in want)
                 ok &= same
                 cells, marked, moved = stats(want["scorecard all=False"])
@@ -326,11 +334,11 @@ def fixtures(a):
         ref_rows = ref.farm_rows(e["exp"], e["cells"], e["knob"])
         new = s.farm_rows(e["exp"], e["cells"], e["knob"])
         arm = e["arms"][0]
-        full = texts(ref, e["cells"], ref_rows[e["base"]], ref_rows[arm], e["exp"], e["base"], arm)
+        full = ref_texts(ref, e["cells"], ref_rows[e["base"]], ref_rows[arm], e["exp"], e["base"], arm)
         cells = pick_cells(full["arm lag None"], full["scorecard all=False"], e["cells"])
         names = {c["name"] for c in cells}
         sub = lambda rows: {at: r for at, r in rows.items() if at[0] in names}
-        want = texts(ref, cells, sub(ref_rows[e["base"]]), sub(ref_rows[arm]), e["exp"], e["base"], arm)
+        want = ref_texts(ref, cells, sub(ref_rows[e["base"]]), sub(ref_rows[arm]), e["exp"], e["base"], arm)
         sides = {n: sub(new[n]) for n in (e["base"], arm)}
         runs |= {v for side in sides.values() for v in side.values()}
         cases.append({"exp": e["exp"], "base": e["base"], "arm": arm, "cells": cells, "want": want,
@@ -362,7 +370,7 @@ def fixtures(a):
         "experiment_cells": f"SELECT exp_id, cell, why, matrix FROM experiment_cells WHERE exp_id IN ({exps})",
     }
     syn_cells, syn_recs, syn_ref, syn_sides = synthetic_case()
-    syn_want = texts(ref, syn_cells, syn_ref["base"], syn_ref["arm"], "synthetic", "base", "arm")
+    syn_want = ref_texts(ref, syn_cells, syn_ref["base"], syn_ref["arm"], "synthetic", "base", "arm")
     cases.append({"exp": "synthetic", "base": "base", "arm": "arm", "cells": syn_cells, "want": syn_want,
                   "sides": {n: [[c, seed, k, src] for (c, seed), (k, src) in side.items()]
                             for n, side in syn_sides.items()}})
@@ -396,7 +404,6 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.path.insert(0, str(ROOT / "hack"))
     from simlab import bootstrap
 
     bootstrap.engine(__file__)

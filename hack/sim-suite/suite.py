@@ -186,12 +186,12 @@ the seed and lets none leave when the cell's audience wouldn't fit in it
 and departures), seeds and settings.
 
 The tiers, cells and metrics, the local runs and the farm's matrices are
-simlab.suite's (hack/simlab/suite.py): this script parses the commands
-and prints what they give.
+simlab.suite's (hack/simlab/suite.py), and the scorecards and arm scores
+simlab.scoring's (hack/simlab/scoring.py): this script parses the
+commands and prints what they give.
 """
 
 import argparse
-import collections
 import hashlib
 import itertools
 import json
@@ -206,119 +206,7 @@ from pathlib import Path
 HACK = Path(__file__).resolve().parents[1]
 if str(HACK) not in sys.path:
     sys.path.insert(0, str(HACK))
-from simlab import bootstrap, suite as lab  # noqa: E402
-
-
-# --- scoring ----------------------------------------------------------------
-#
-# A side is an arm's runs, {(cell, seed): (k, src)}: the catalog's job k
-# for each cell and seed, and the source of the run's own copy (its farm
-# index line's flush, its local invocation's), whose host numbers it
-# reads. The catalog's scoring macros (hack/simlab/sql/scoring.sql) pair two
-# sides and score them; this script prints what they return.
-
-# The DuckDB file scores are computed over, None for the catalog: a file
-# holding the tables the scoring reads (rows, verdicts, jobs), as the
-# tests' fixtures do.
-SCORE_DB = None
-
-
-def scoring():
-    """What scoring.sql's objects read of simlab.suite: its METRICS and
-    their uses."""
-    return types.SimpleNamespace(METRICS=lab.METRICS, GUARDRAILS=lab.GUARDRAILS, HOST_METRICS=lab.HOST_METRICS,
-                                 SHOWN=lab.SHOWN, GUARD_RATIO=lab.GUARD_RATIO)
-
-
-def score_query(sql):
-    """The rows of `sql` over the catalog (or SCORE_DB) in a session holding
-    the scoring objects as this script defines them (catalog.scoring_sql,
-    TEMP: this script's METRICS, whatever the catalog's indexer had)."""
-    run = (lambda s: lab.catalog().lake(s)) if SCORE_DB is None else (lambda s: lab.simdb().duck(s, db=SCORE_DB))
-    cols = {r["t"]: r["c"] for r in run(
-        "SELECT table_name AS t, list(column_name) AS c FROM duckdb_columns() WHERE database_name = "
-        "current_database() AND schema_name = 'main' AND table_name IN ('rows', 'verdicts', 'jobs') GROUP BY ALL;")}
-    return run(lab.catalog().scoring_sql(lab.catalog().scoring_cols(cols), temp=True, suite=scoring()) + "\n" + sql)
-
-
-def sides_sql(**sides):
-    """SQL making a TEMP table of each side, `name`: one row, `s` the side as
-    scoring.sql takes one (in its order)."""
-    out = []
-    for name, side in sides.items():
-        items = ", ".join(f"{{'cell': {lab.q(c)}, 'seed': {int(s)}, 'k': {lab.q(k)}, 'src': {lab.q(src)}}}"
-                          for (c, s), (k, src) in side.items())
-        out.append(f"CREATE OR REPLACE TEMP TABLE {name} AS SELECT "
-                   f"[{items}]::STRUCT(cell VARCHAR, seed BIGINT, k VARCHAR, src VARCHAR)[] AS s;")
-    return "\n".join(out) + "\n"
-
-
-def cell_list(cells):
-    return "[" + ", ".join(lab.q(c["name"]) for c in cells) + "]::VARCHAR[]"
-
-
-def fmt(x):
-    if x is None:
-        return "-"
-    if isinstance(x, float) and abs(x) < 10:
-        return f"{x:.3g}"
-    return f"{x:.0f}"
-
-
-def effect_text(e):
-    """An effect (effects_of's) as the scorecard prints it."""
-    if e["effect"] is None:
-        return "-"
-    if e["kind"] == "ratio":
-        return f"x{e['effect']:.2f} [{e['lo']:.2f},{e['hi']:.2f}]"
-    return f"{e['effect']:+.3f} [{e['lo']:+.3f},{e['hi']:+.3f}]"
-
-
-def scorecard(cells, a_rows, b_rows, a_label, b_label, show_all=False, traces=True):
-    """Prints the scorecard of side B against side A over `cells`: per cell,
-    the collapse test and each metric's paired effect (effects_of,
-    collapse_test_of), then the totals of their marks and how many runs B
-    ran as A did (traces_of)."""
-    cl = cell_list(cells)
-    got = score_query(sides_sql(side_a=a_rows, side_b=b_rows) + f"""
-SELECT (SELECT list(e ORDER BY cell_ord, ord) FROM effects_of({cl}, (SELECT s FROM side_a), (SELECT s FROM side_b)) e)
-           AS effects,
-       (SELECT list(c) FROM collapse_test_of({cl}, (SELECT s FROM side_a), (SELECT s FROM side_b)) c) AS collapses,
-       (SELECT list(t ORDER BY a_first) FROM traces_of((SELECT s FROM side_a), (SELECT s FROM side_b)) t) AS traces;""")[0]
-    effects = collections.defaultdict(list)
-    for e in got["effects"] or []:
-        effects[e["cell"]].append(e)
-    tests = {c["cell"]: c for c in got["collapses"] or []}
-    print(f"A = {a_label}   B = {b_label}")
-    print("legend: + better  - worse  ~ moved  (ratio B/A or difference B-A, 95 % t-interval over seeds)")
-    totals = collections.Counter()
-    for c in cells:
-        lines = []
-        for e in effects.get(c["name"], []):
-            m = e["mark"]
-            if not e["host"]:
-                totals[m] += 1
-            if m == " " and not e["shown"] and not show_all:
-                continue
-            lines.append(f"   {m} {e['metric']:20} {fmt(e['a_median']):>9} {fmt(e['b_median']):>9}  {effect_text(e)}")
-        # Whether a run collapses is near all-or-nothing, and a change
-        # redraws which seeds do: the counts, not the pairs, carry it.
-        t = tests.get(c["name"]) or {"ka": 0, "kb": 0, "n": 0, "mark": None}
-        ka, kb, n = t["ka"], t["kb"], t["n"]
-        if t["mark"] is not None:
-            totals[t["mark"]] += 1
-            lines.insert(0, f"   {t['mark']} {'collapsed':20} {ka:>7}/{n} {kb:>7}/{n}  Fisher p={t['p']:.2f}")
-        print(f"\n{c['name']}, {n} seeds ({c['why']})")
-        print("\n".join(lines) if lines else "   (no rows)")
-    print(f"\nmoved: {totals['+']} better, {totals['-']} worse, {totals['~']} changed; {totals[' ']} ties")
-    runs = got["traces"] or []
-    total = sum(t["runs"] for t in runs)
-    if traces and total:
-        same = sum(t["same"] for t in runs)
-        differ = sorted((t for t in runs if t["same"] < t["runs"]), key=lambda t: t["same"] - t["runs"])
-        cells_ = ", ".join(f"{t['cell']} ({t['runs'] - t['same']})" for t in differ[:8])
-        more = f" and {len(differ) - 8} more" if len(differ) > 8 else ""
-        print(f"traces: {same} of {total} runs as A's" + (f"; differ in {cells_}{more}" if 0 < same < total else ""))
+from simlab import bootstrap, scoring, suite as lab, verdict  # noqa: E402
 
 
 # --- race -------------------------------------------------------------------
@@ -342,53 +230,12 @@ def design(flags):
     return arms
 
 
-def break_text(b):
-    """A guardrail an arm broke (arm_cells_of's), as the arm score names it."""
-    if b["kind"] == "collapsed":
-        return f"{b['cell']} collapsed {b['ka']}->{b['kb']}/{b['n']}"
-    if b["kind"] == "lag_ceiling":
-        return f"{b['cell']} lag p99 {b['a']:.0f}->{b['b']:.0f} ms past {b['x']:.0f}"
-    if b["kind"] == "worse":
-        return f"{b['cell']} {b['metric']}"
-    return f"{b['cell']} {b['metric']} x{b['x']:.2f}"
-
-
-def arm_score(cells, base_rows, arm_rows, rank=None):
-    """An arm against the base on the same seeds (arm_score_of and
-    arm_cells_of): its collapsed runs and the base's, the geometric means
-    over cells of its lag p99 ratio and its wire bytes per useful byte, and
-    the guardrails it broke (GUARDRAILS). Ranked for overhead (`rank`:
-    --lag-ceiling, --lag-budget), a cell whose median lag p99 the base kept
-    under the ceiling breaks one when the arm's isn't, and its lag ratios
-    are guarded only by the budget, when one is given."""
-    overhead = rank is not None and rank.rank == "overhead"
-    # No budget is an infinite one.
-    budget = rank.lag_budget if overhead and rank.lag_budget is not None else math.inf
-    ceiling = rank.lag_ceiling if overhead else lab.analyze().DELIVERY_TARGET_MS
-    opts = (f"overhead := {str(overhead).lower()}, lag_ceiling := {float(ceiling)!r}, "
-            f"lag_budget := '{float(budget)!r}'::DOUBLE")
-    cl, sides = cell_list(cells), "(SELECT s FROM side_a), (SELECT s FROM side_b)"
-    got = score_query(sides_sql(side_a=base_rows, side_b=arm_rows) + f"""
-SELECT (SELECT list(c ORDER BY cell_ord) FROM arm_cells_of({cl}, {sides}, {opts}) c) AS cells,
-       (SELECT s FROM arm_score_of({cl}, {sides}, {opts}) s) AS score;""")[0]
-    sc = got["score"]
-    key = sc["rank_key"]
-    return {"collapsed": sc["collapsed"], "base_collapsed": sc["base_collapsed"], "p99": sc["p99"],
-            "wire": sc["wire"], "broken": [break_text(b) for b in sc["breaks"]],
-            "cells": [(c["cell"], c["ka"], c["kb"], c["n"], None if c["lag"] is None else
-                       (c["lag"], c["lag_lo"], c["lag_hi"]), c["p"]) for c in got["cells"] or []],
-            "overhead": overhead, "rank_key": (key["broken"], key["collapsed"], key["by"])}
-
-
-def rank_key(sc):
-    """Broken arms last, then fewer collapsed runs, then the lower lag p99
-    ratio, or wire per useful byte when ranked for overhead (arm_score_of's
-    rank_key)."""
-    return sc["rank_key"]
-
-
-def ratio_text(x):
-    return "-" if x is None else f"x{x:.3f}"
+def ranked(a):
+    """scoring.arm_score's ranking, as --rank gives it, with --lag-budget's
+    and --lag-ceiling's when ranked for overhead."""
+    if a.rank != "overhead":
+        return {"rank": a.rank}
+    return {"rank": a.rank, "lag_budget": a.lag_budget, "lag_ceiling": a.lag_ceiling}
 
 
 def race(a, cells, count, sha, base, sims, union):
@@ -410,17 +257,17 @@ def race(a, cells, count, sha, base, sims, union):
             runs.update(r)
         rows, failures = lab.run_cells(cells, runs, a.slots, a.mem_gib)
         base_rows = union(rows, [label for label, _ in base.values()])
-        scores = {arm: arm_score(cells, base_rows, union(rows, labels[arm]), a) for arm in arms}
+        scores = {arm: scoring.arm_score(cells, base_rows, union(rows, labels[arm]), **ranked(a)) for arm in arms}
         print(f"\n{title}: {len(arms)} arms")
         print(f"   {'arm':58} collapsed (base)   p99 ratio  wire ratio   guardrails")
-        for arm in sorted(arms, key=lambda x: rank_key(scores[x])):
+        for arm in sorted(arms, key=lambda x: scores[x].rank_key):
             sc = scores[arm]
-            p99, wire = ratio_text(sc["p99"]), ratio_text(sc["wire"])
-            print(f"   {','.join(arm):58} {sc['collapsed']:5} ({sc['base_collapsed']:3})   {p99:>9}  {wire:>10}   "
-                  f"{'; '.join(sc['broken'][:3]) + (' ...' if len(sc['broken']) > 3 else '') or 'ok'}")
-            for name, ka, kb, n, e, _ in sc["cells"] if per_cell else ():
-                p99 = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
-                print(f"      {name:22} collapsed {ka:>3} -> {kb:>3} of {n:<3}  lag p99 {p99}")
+            p99, wire, broken = scoring.ratio_text(sc.p99), scoring.ratio_text(sc.wire), sc.broken
+            print(f"   {','.join(arm):58} {sc.collapsed:5} ({sc.base_collapsed:3})   {p99:>9}  {wire:>10}   "
+                  f"{'; '.join(broken[:3]) + (' ...' if len(broken) > 3 else '') or 'ok'}")
+            for c in sc.cells if per_cell else ():
+                p99 = "-" if c["lag"] is None else f"x{c['lag']:.2f} [{c['lag_lo']:.2f},{c['lag_hi']:.2f}]"
+                print(f"      {c['cell']:22} collapsed {c['ka']:>3} -> {c['kb']:>3} of {c['n']:<3}  lag p99 {p99}")
         for f in failures:
             print("   FAILURE " + f)
         sys.stdout.flush()
@@ -433,23 +280,25 @@ def race(a, cells, count, sha, base, sims, union):
     print("\nmain effects (round 0): log p99 ratio, collapsed runs, arms out")
     for f in flags:
         on = [scores[x] for x in arms if f in x]
-        off = [scores[x] for x in arms if f not in x] + [{"collapsed": scores[arms[0]]["base_collapsed"], "p99": 1.0, "broken": []}]
-        lp = lambda xs: sum(math.log(x["p99"]) for x in xs if x["p99"]) / max(1, sum(1 for x in xs if x["p99"]))
-        col = lambda xs: sum(x["collapsed"] for x in xs) / max(1, len(xs))
-        out = lambda xs: sum(1 for x in xs if x["broken"]) / max(1, len(xs))
+        # The base itself, all off.
+        base_arm = types.SimpleNamespace(collapsed=scores[arms[0]].base_collapsed, p99=1.0, breaks=[])
+        off = [scores[x] for x in arms if f not in x] + [base_arm]
+        lp = lambda xs: sum(math.log(x.p99) for x in xs if x.p99) / max(1, sum(1 for x in xs if x.p99))
+        col = lambda xs: sum(x.collapsed for x in xs) / max(1, len(xs))
+        out = lambda xs: sum(1 for x in xs if x.breaks) / max(1, len(xs))
         print(f"   {f:18} {lp(on) - lp(off):+.3f}   {col(on) - col(off):+6.2f}   {out(on):.0%} vs {out(off):.0%}")
     for mult in (1.0, 2.0):
-        live = sorted(arms, key=lambda x: rank_key(scores[x]))
-        live = [x for x in live if not scores[x]["broken"]] or live[:1]
+        live = sorted(arms, key=lambda x: scores[x].rank_key)
+        live = [x for x in live if not scores[x].breaks] or live[:1]
         arms = live[: max(a.keep, math.ceil(len(live) / 2))]
         scores = play(arms, upto(mult), f"round at {mult:g}x the seeds")
-    best = sorted(arms, key=lambda x: rank_key(scores[x]))[: a.keep]
+    best = sorted(arms, key=lambda x: scores[x].rank_key)[: a.keep]
     fresh = lambda c: list(range(1001, 1001 + max(2, count(c))))
     play(best, fresh, "confirmation at fresh seeds", per_cell=True)
 
 
 def farm(a, cells):
-    arms ={n.strip(): r.strip() for n, r in (x.split("=", 1) for x in a.refs.split(","))} if a.refs else None
+    arms = {n.strip(): r.strip() for n, r in (x.split("=", 1) for x in a.refs.split(","))} if a.refs else None
     m = lab.write_matrices(
         cells, range(a.first_seed, a.first_seed + a.seeds), arms=arms,
         sets=None if a.refs else [x.strip() for x in a.sets.split(";") if x.strip()], ref=a.ref,
@@ -475,18 +324,10 @@ def farm(a, cells):
     label = (lambda v: f"{arms[v][:8]} {v}") if a.refs else (lambda v: f"{sha[:8]} {v}")
     for v in others:
         title = f"{label(v)} against {label(base)}" if a.refs else f"{v} against {base} at {sha[:8]}"
-        print_arm_score(title, arm_score(cells, rows[base], rows[v], a))
+        print(scoring.arm_score(cells, rows[base], rows[v], title, **ranked(a)).text(), end="")
     for v in others:
         print()
-        scorecard(cells, rows[base], rows[v], label(base), label(v), a.all)
-
-
-def print_arm_score(title, sc):
-    print(f"\n{title}: collapsed {sc['collapsed']} ({sc['base_collapsed']}), p99 {ratio_text(sc['p99'])}, "
-          f"wire/useful {ratio_text(sc['wire'])}, guardrails {'; '.join(sc['broken']) or 'ok'}")
-    for cname, ka, kb, n, e, p in sc["cells"]:
-        lag = "-" if e is None else f"x{e[0]:.2f} [{e[1]:.2f},{e[2]:.2f}]"
-        print(f"   {cname:22} collapsed {ka:>3} -> {kb:>3} of {n:<3} Fisher p={p:.2f}  lag p99 {lag}")
+        print(scoring.scorecard(cells, rows[base], rows[v], label(base), label(v), a.all).text(), end="")
 
 
 def list_cells(a):
@@ -531,9 +372,9 @@ def score(a, cells):
     if a.only:
         both = [c for c in both if c["name"] in set(a.only.split(","))]
     if a.rank == "overhead":
-        print_arm_score(f"{a.b} against {a.a}", arm_score(both, a_rows, b_rows, a))
+        print(scoring.arm_score(both, a_rows, b_rows, f"{a.b} against {a.a}", **ranked(a)).text(), end="")
         print()
-    scorecard(both, a_rows, b_rows, a.a, a.b, a.all)
+    print(scoring.scorecard(both, a_rows, b_rows, a.a, a.b, a.all).text(), end="")
 
 
 def main():
@@ -607,7 +448,7 @@ def main():
                        help="rank arms after collapses by lag p99, or by wire bytes per useful byte")
         p.add_argument("--lag-budget", type=float, default=None,
                        help="with --rank overhead: a ratio guarding lag below the ceiling (none by default)")
-        p.add_argument("--lag-ceiling", type=float, default=lab.analyze().DELIVERY_TARGET_MS,
+        p.add_argument("--lag-ceiling", type=float, default=verdict.DELIVERY_TARGET_MS,
                        help="with --rank overhead: the lag p99 (ms) a cell under it must stay under "
                             "(delivery's share of the latency target, analyze.py)")
     a = ap.parse_args()
@@ -640,8 +481,8 @@ def main():
         per = {c["name"]: count(c) for c in cells}
         b = {(c, s - per[c]): r for (c, s), r in every.items() if s > per[c]}
         a_rows = {k: r for k, r in every.items() if k[1] <= per[k[0]]}
-        report = lambda: scorecard(cells, a_rows, b, f"{a.base} {sha[:8]} at seeds 1..N",
-                                   "the same at seeds N+1..2N", True, traces=False)
+        report = lambda: scoring.scorecard(cells, a_rows, b, f"{a.base} {sha[:8]} at seeds 1..N",
+                                           "the same at seeds N+1..2N", True, traces=False)
     else:
         tree = {sim: lab.tree_binary(sim, base[sim]) for sim in sims}
         # The working tree's knobs name its rows apart from the same binary's
@@ -657,21 +498,25 @@ def main():
         b_rows = union(rows, [label for label, _ in tree.values()])
         tree_labels = ", ".join(label for label, _ in tree.values())
         knobs = " ".join(a.tree_env)
-        report = lambda: scorecard(cells, a_rows, b_rows, f"{a.base} {sha[:8]}",
-                                   f"working tree ({tree_labels}){' with ' + knobs if knobs else ''}", a.all)
+        report = lambda: scoring.scorecard(cells, a_rows, b_rows, f"{a.base} {sha[:8]}",
+                                           f"working tree ({tree_labels}){' with ' + knobs if knobs else ''}",
+                                           a.all)
     if failures:
         print("FAILURES")
         for f in failures:
             print("  " + f)
-    report()
+    print(report().text(), end="")
     if failures:
         sys.exit(1)
 
 
 def __getattr__(name):
     """simlab.suite's names (the tiers, metrics, runs and farm matrices this
-    script's commands call), for the scripts that read them here."""
-    return getattr(lab, name)
+    script's commands call), else simlab.scoring's (its scorecards and arm
+    scores), for the scripts that read them here."""
+    if hasattr(lab, name):
+        return getattr(lab, name)
+    return getattr(scoring, name)
 
 
 if __name__ == "__main__":

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Tests of suite.py's scoring, the catalog's scoring macros
-(hack/simlab/sql/scoring.sql), over DuckDB files made from fixtures:
+"""Tests of suite.py's scoring, simlab.scoring and the catalog's
+scoring macros (hack/simlab/sql/scoring.sql), over DuckDB files made from
+fixtures:
 
   Golden      testdata/golden/ (golden.py fixtures): cells of the latest
               farm experiments and a made-up one, their runs' tables and
               what golden.py's reference suite.py printed over them;
-              suite.py prints the same, from its sides and from arm_side's.
+              simlab.scoring prints the same, from suite.py's sides and
+              from arm_side's, and scoring an experiment's arms by name
+              (score, arm_scores), whose JSON holds what the text shows.
   Arithmetic  fisher_p against the exact hypergeometric sum, t975_at
               against Student's t, effect_mark.
   Dynamics    structural and dynamics over a made-up experiment.
@@ -36,6 +39,8 @@ def load(path, name):
 
 
 suite = load(HERE / "suite.py", "suite")
+# simlab.scoring, whose scorecards and arm scores suite.py prints.
+scoring = suite.scoring
 golden = load(HERE / "golden.py", "golden")
 golden._suite = suite
 
@@ -61,15 +66,15 @@ CREATE TABLE IF NOT EXISTS episodes (k VARCHAR, src VARCHAR, kind VARCHAR, len B
 
 
 def database(path, sql):
-    """A DuckDB file at `path` made by `sql` (and TABLES); suite.py scores
-    over it."""
+    """A DuckDB file at `path` made by `sql` (and TABLES); simlab.scoring
+    scores over it."""
     suite.simdb().duck(sql + TABLES, db=path, out=None)
-    suite.SCORE_DB = path
+    scoring.SCORE_DB = path
 
 
 def scored(sql):
     """The rows of `sql` over the scoring objects."""
-    return suite.score_query(sql)
+    return scoring.query(sql)
 
 
 class Golden(unittest.TestCase):
@@ -85,16 +90,16 @@ class Golden(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        suite.SCORE_DB = None
+        scoring.SCORE_DB = None
         cls.tmp.cleanup()
 
     def setUp(self):
         if not self.db.exists():
             database(self.db, self.sql)
-        suite.SCORE_DB = self.db
+        scoring.SCORE_DB = self.db
 
     def check(self, case, sides):
-        got = golden.texts(suite, case["cells"], sides[case["base"]], sides[case["arm"]], case["exp"], case["base"],
+        got = golden.texts(case["cells"], sides[case["base"]], sides[case["arm"]], case["exp"], case["base"],
                            case["arm"])
         for name, want in case["want"].items():
             with self.subTest(case=case["exp"], text=name):
@@ -110,11 +115,35 @@ class Golden(unittest.TestCase):
         """The experiments' arms as the catalog's experiment_jobs has them."""
         for case in self.cases:
             names = {c["name"] for c in case["cells"]}
-            sides = {}
-            for arm in (case["base"], case["arm"]):
-                rows = scored(f"SELECT unnest(arm_side({suite.q(case['exp'])}, {suite.q(arm)}), recursive := true);")
-                sides[arm] = {(r["cell"], r["seed"]): (r["k"], r["src"]) for r in rows if r["cell"] in names}
+            sides = {arm: {at: v for at, v in side.items() if at[0] in names}
+                     for arm, side in scoring.sides(case["exp"], [case["base"], case["arm"]]).items()}
             self.check(case, sides)
+
+    def test_experiments(self):
+        """An experiment's arms scored by name (score, arm_scores), its
+        cells experiment_cells', print the same; their JSON holds the
+        numbers the text shows."""
+        for case in self.cases:
+            names = [c["name"] for c in case["cells"]]
+            exp, base, arm = case["exp"], case["base"], case["arm"]
+            self.assertEqual([{"name": c["name"], "why": c["why"]} for c in case["cells"]],
+                             scoring.cells_of(exp, only=names))
+            for show_all in (False, True):
+                card = scoring.score(exp, base, exp, arm, cells=names, show_all=show_all)
+                with self.subTest(case=exp, text=f"scorecard all={show_all}"):
+                    self.assertEqual(card.text().splitlines(), case["want"][f"scorecard all={show_all}"].splitlines())
+            for kind, budgets in golden.RANKS.items():
+                for budget in budgets:
+                    [sc] = scoring.arm_scores(exp, base, [arm], cells=names, rank=kind, lag_budget=budget)
+                    with self.subTest(case=exp, text=f"arm {kind} {budget}"):
+                        self.assertEqual(sc.text().splitlines(), case["want"][f"arm {kind} {budget}"].splitlines())
+            j = json.loads(json.dumps(card.json()))
+            moved = re.search(r"moved: (\d+) better, (\d+) worse, (\d+) changed; (\d+) ties", card.text()).groups()
+            self.assertEqual([j["moved"][k] for k in ("better", "worse", "changed", "ties")], [int(x) for x in moved])
+            self.assertEqual([c["name"] for c in j["cells"]], names)
+            a = json.loads(json.dumps(sc.json()))
+            self.assertEqual((a["collapsed"], a["base_collapsed"], a["broken"], len(a["cells"])),
+                             (sc.collapsed, sc.base_collapsed, sc.broken, len(sc.cells)))
 
     def test_cases(self):
         """The fixtures hold farm runs of both kinds, a broken guardrail
@@ -143,11 +172,11 @@ class Arithmetic(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        suite.SCORE_DB = None
+        scoring.SCORE_DB = None
         cls.tmp.cleanup()
 
     def setUp(self):
-        suite.SCORE_DB = self.db
+        scoring.SCORE_DB = self.db
 
     def test_fisher(self):
         """fisher_p is the exact two-sided sum, near enough that no p
@@ -206,7 +235,7 @@ class Lake(unittest.TestCase):
             try:
                 suite.simdb().duck("INSTALL ducklake; INSTALL sqlite; LOAD ducklake; LOAD sqlite; "
                                    f"ATTACH {path} AS lake (DATA_PATH {suite.q(tmp + '/data/')}); USE lake;\n"
-                                   + TABLES + cat.scoring_sql(cat.scoring_cols({}), suite=suite.scoring()), out=None)
+                                   + TABLES + cat.scoring_sql(cat.scoring_cols({})), out=None)
             except suite.simdb().DuckError as e:
                 if "ducklake" in str(e).lower() and "extension" in str(e).lower():
                     self.skipTest(f"no ducklake extension: {e}")
@@ -287,17 +316,17 @@ class Dynamics(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        suite.SCORE_DB = None
+        scoring.SCORE_DB = None
         cls.tmp.cleanup()
 
     def setUp(self):
-        suite.SCORE_DB = self.db
+        scoring.SCORE_DB = self.db
 
     def test_structural(self):
-        self.assertEqual(scored("SELECT * FROM structural('dyn');"), [{"cell": "d", "arms": 1, "runs": 2}])
+        self.assertEqual(scoring.structural("dyn"), [{"cell": "d", "arms": 1, "runs": 2}])
 
     def test_dynamics(self):
-        got = {r["cell"]: r for r in scored("SELECT * FROM dynamics('dyn');")}
+        got = {r["cell"]: r for r in scoring.dynamics("dyn")}
         c = got["c"]
         self.assertEqual((c["arm_label"], c["runs"], c["collapsed"]), ("x", 2, 1))
         # Startup: 40 seconds, the runs' first 15 and viewer 1's own 7-16

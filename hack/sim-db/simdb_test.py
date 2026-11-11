@@ -298,7 +298,12 @@ class ArmLabels(unittest.TestCase):
         """`score`'s rows of RUN:ARM `arg`, {(cell, seed): key}."""
         got = {}
         args = argparse.Namespace(a=arg, b=arg, knob=knob, only=None, rank="lag", all=False)
-        with mock.patch.object(suite, "scorecard", lambda cells, a_rows, b_rows, *_: got.update(a_rows)):
+
+        def scorecard(cells, a_rows, b_rows, *_):
+            got.update(a_rows)
+            return mock.Mock(text=lambda: "")
+
+        with mock.patch.object(suite.scoring, "scorecard", scorecard):
             suite.score(args, LABEL_CELLS)
         return {at: k for at, (k, _) in got.items()}
 
@@ -353,12 +358,13 @@ class ArmLabels(unittest.TestCase):
                                   first_seed=2001, seeds=3, env=[], no_run=True, farm_args="", against=None,
                                   question="does seed help?", all=False, rank="lag")
         sha = "a" * 40
+        # The farm holds no rows of the run: its scores print nothing.
+        silent = lambda *a, **kw: mock.Mock(text=lambda: "")  # noqa: E731
         with mock.patch.object(suite.lab, "git", lambda *a, **kw: sha), \
                 mock.patch.object(suite.lab, "peak_gib", lambda r: {"star-3-5": 0.5}), \
                 mock.patch.object(suite.lab, "WORK", self.root / "work"), \
-                mock.patch.object(suite, "print_arm_score", lambda *a: None), \
-                mock.patch.object(suite, "arm_score", lambda *a: None), \
-                mock.patch.object(suite, "scorecard", lambda *a, **kw: None):
+                mock.patch.object(suite.scoring, "arm_score", silent), \
+                mock.patch.object(suite.scoring, "scorecard", silent):
             suite.farm(args, cells)
         [path] = (self.root / "target" / "sim-suite" / "farm-runs" / "pending").glob("*.json")
         idx = simdb.suite_index(path.stem)

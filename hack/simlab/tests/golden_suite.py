@@ -19,7 +19,7 @@ write_matrices suite.py's farm calls, are pointed at a scratch dir for
 its run (WORK, its rows and matrices; farm_root, the main checkout whose
 target/ holds the farm's and the suite's state), and the scoring after
 the matrices is left out (simlab.suite's farm_rows, the rows the farm
-holds, gives none; suite.py's print_arm_score and scorecard print
+holds, gives none; simlab.scoring's arm scores and scorecards print
 nothing), so nothing pulls, indexes or scores. A run's text is its
 output, then each file it wrote (the matrices in target/sim-suite/farm/,
 the index in farm-runs/ or pending/), named relative to the scratch dir.
@@ -75,9 +75,8 @@ def farm(argv):
         for name, value in (("WORK", tmp / "work"), ("farm_root", lambda: tmp / "main"),
                             ("farm_rows", lambda name, cells, knob: collections.defaultdict(dict))):
             seams.enter_context(mock.patch.object(s.lab, name, value))
-        s.print_arm_score = lambda title, sc: None
-        s.scorecard = lambda *a, **kw: None
-        s.arm_score = lambda *a, **kw: None
+        for name in ("arm_score", "scorecard"):
+            seams.enter_context(mock.patch.object(s.scoring, name, lambda *a, **kw: mock.Mock(text=lambda: "")))
         out, err = io.StringIO(), io.StringIO()
         old = sys.argv
         sys.argv = ["suite.py", "farm", "--no-run", *argv]
