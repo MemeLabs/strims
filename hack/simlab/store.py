@@ -1,27 +1,28 @@
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
-"""simdb.py's store, run in the module, and pulls from the farm's S3.
+"""The store (store_host's) run in the module, and pulls from the farm's S3.
 
-simdb.py's fold and export build their SQL scripts and run them through
-simdb.duck, which runs the DuckDB CLI unless an executor is installed
-(simdb.EXECUTOR): the farm hosts, which ship the store alone, run the CLI.
-`install` installs this module's `execute`, so a script running under the
-engine (simlab.bootstrap.engine) folds, exports and queries in the module,
-over the same SQL.
+The store's fold and export (store_host's, which simdb.py's names are)
+build their SQL scripts and run them through store_host.duck, which runs
+the DuckDB CLI unless an executor is installed (store_host.EXECUTOR): the
+farm hosts, which ship store_host alone, run the CLI. `install` installs
+this module's `execute`, so a script running under the engine
+(simlab.bootstrap.engine) folds, exports and queries in the module, over
+the same SQL.
 
   execute(script, db=None, out="json", threads=None, memory=None)
-                 simdb.duck's contract, in the module: `script` run over
+                 store_host.duck's contract, in the module: `script` run over
                  the DuckDB file `db` (made if missing), else in memory,
                  statement by statement as the CLI runs them (stopping at
                  the first that fails: a transaction it opened rolls
-                 back), with simdb.duck's settings (threads, memory_limit,
+                 back), with duck's settings (threads, memory_limit,
                  the cache's tmp/ to spill to); returns the last shown
                  statement's rows as dicts of the CLI's JSON values
                  (engine.Result.records; [] for none), the CLI's -table
                  text of every shown statement (`out` "text"), or None
-                 (`out` None); simdb.DuckError, DuckDB's message, on a
-                 failure
-  install()      simdb.EXECUTOR = execute, on simlab.simdb()'s module
+                 (`out` None); store_host.DuckError, DuckDB's message,
+                 on a failure
+  install()      store_host.EXECUTOR = execute
   installed()    a block whose duck runs in the module where the duckdb
                  module imports (else in the CLI), the executor before it
                  back after: a simlab.suite invocation's store
@@ -51,7 +52,7 @@ SAMPLE_TABLES), sim-samples/<run>/<instance>/<seq>/:
                  the aws CLI's `args` in the bucket's region, as its
                  profile
 
-The cache and the main checkout are simdb's (simlab.simdb()).
+The pulls' cache and main checkout are simdb's (simlab.simdb()).
 """
 
 import contextlib
@@ -66,7 +67,7 @@ import time
 import tomllib
 from pathlib import Path
 
-from . import engine, simdb
+from . import engine, simdb, store_host
 
 
 @dataclasses.dataclass
@@ -85,10 +86,10 @@ class Pull:
 
 
 def execute(script, db=None, out="json", threads=None, memory=None):
-    """Runs `script` as simdb.duck would in the CLI (the module docs)."""
+    """Runs `script` as store_host.duck would in the CLI (the module
+    docs)."""
     engine.need_module()
-    sm = simdb()
-    tmp = sm.cache_root() / "tmp"
+    tmp = store_host.cache_root() / "tmp"
     if tmp.parent.exists():
         tmp.mkdir(exist_ok=True)
     else:
@@ -96,11 +97,11 @@ def execute(script, db=None, out="json", threads=None, memory=None):
     try:
         conn = engine.store(db or ":memory:", threads, memory, tmp)
     except engine.duckdb.Error as e:
-        raise sm.DuckError(str(e)) from None
+        raise store_host.DuckError(str(e)) from None
     try:
         shown = engine.script(conn, script, text=out == "text")
     except (engine.QueryError, engine.duckdb.Error) as e:
-        raise sm.DuckError(str(e)) from None
+        raise store_host.DuckError(str(e)) from None
     finally:
         conn.close()
     if out == "json":
@@ -111,8 +112,8 @@ def execute(script, db=None, out="json", threads=None, memory=None):
 
 
 def install():
-    """Makes simdb.duck run its scripts in the module (`execute`)."""
-    simdb().EXECUTOR = execute
+    """Makes duck run its scripts in the module (`execute`)."""
+    store_host.EXECUTOR = execute
 
 
 @contextlib.contextmanager
@@ -120,14 +121,13 @@ def installed():
     """duck runs its scripts in the module inside the block, where the
     duckdb module imports (a script under the engine), else in the CLI;
     the executor before it is back after."""
-    sm = simdb()
-    before = sm.EXECUTOR
+    before = store_host.EXECUTOR
     if engine.duckdb is not None:
-        sm.EXECUTOR = execute
+        store_host.EXECUTOR = execute
     try:
         yield
     finally:
-        sm.EXECUTOR = before
+        store_host.EXECUTOR = before
 
 
 # --- S3 -------------------------------------------------------------------------------

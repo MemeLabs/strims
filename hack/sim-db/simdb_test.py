@@ -101,8 +101,7 @@ class Selection(unittest.TestCase):
         for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
                   mock.patch.object(simdb, "pull_sources", lambda s, reads=False: self.pulled.extend(s) or list(s)),
                   mock.patch.object(sys, "stderr", io.StringIO()),
-                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
-                                  clear=True)):
+                  mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
             self.addCleanup(p.stop)
         runs = root / "target" / "sim-suite" / "farm-runs"
@@ -256,8 +255,7 @@ class ArmLabels(unittest.TestCase):
                   mock.patch.object(simdb, "pull_sources", lambda s, reads=False: []),
                   mock.patch.object(suite.lab, "index_catalog", lambda: None),
                   mock.patch.object(sys, "stderr", io.StringIO()),
-                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
-                                  clear=True)):
+                  mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
             self.addCleanup(p.stop)
         runs = root / "target" / "sim-suite" / "farm-runs"
@@ -401,8 +399,7 @@ class Canon(unittest.TestCase):
         root = Path(tmp.name)
         for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
                   mock.patch.object(sys, "stderr", io.StringIO()),
-                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
-                                  clear=True)):
+                  mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
             self.addCleanup(p.stop)
 
@@ -495,8 +492,7 @@ class Queries(unittest.TestCase):
         for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
                   mock.patch.object(simdb, "derive", lambda srcs: None),
                   mock.patch.object(sys, "stderr", io.StringIO()),
-                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
-                                  clear=True)):
+                  mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
             self.addCleanup(p.stop)
         for src, rows in RUNS.items():
@@ -794,8 +790,7 @@ class SamplesPull(unittest.TestCase):
         for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
                   mock.patch.object(simdb, "derive", lambda srcs: None),
                   mock.patch.object(store, "aws", self.aws),
-                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
-                                  clear=True)):
+                  mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
             self.addCleanup(p.stop)
         (root / "hack" / "sim-farm").mkdir(parents=True)
@@ -1122,8 +1117,7 @@ class Derived(unittest.TestCase):
         for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
                   mock.patch.object(simdb, "load_series", lambda pairs: {p: series[p] for p in pairs}),
                   mock.patch.object(sys, "stderr", io.StringIO()),
-                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
-                                  clear=True)):
+                  mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
             self.addCleanup(p.stop)
         d = simdb.cache_root() / "cache" / self.SRC
@@ -1217,8 +1211,7 @@ class Playback(unittest.TestCase):
         for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
                   mock.patch.object(simdb, "derive", lambda srcs: None),
                   mock.patch.object(sys, "stderr", io.StringIO()),
-                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
-                                  clear=True)):
+                  mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
             self.addCleanup(p.stop)
         a = simdb.analyze()
@@ -1295,8 +1288,7 @@ class Catalog(unittest.TestCase):
                                     lambda pairs: {p: ({}, series[p]) for p in pairs if p in series}),
                   mock.patch.object(catalog, "_simdb", simdb),
                   mock.patch.object(sys, "stderr", io.StringIO()),
-                  mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
-                                  clear=True)):
+                  mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
             self.addCleanup(p.stop)
         self.root = root

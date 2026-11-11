@@ -27,7 +27,7 @@ import goldens
 HACK = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(HACK))
 
-from simlab import store  # noqa: E402
+from simlab import store, store_host  # noqa: E402
 from simlab import suite as lab  # noqa: E402
 
 # A sim binary as run_jobs runs one: it writes the job dir made for its
@@ -120,7 +120,7 @@ class LocalRuns(unittest.TestCase):
         with mock.patch.object(sys, "stderr", io.StringIO()), mock.patch.object(store, "execute", execute):
             got = lab.run_cells([self.cell], runs, 2, 4)
         # The CLI is back for what follows.
-        self.assertIsNone(lab.simdb().EXECUTOR)
+        self.assertIsNone(store_host.EXECUTOR)
         return got
 
     def test_runs_fold_and_keep(self):

@@ -6,7 +6,7 @@
  *
  * One DuckDB instance holds the catalog attached READ_ONLY and a few connections that use it. Before
  * any query runs, the instance loads the pinned ducklake and sqlite builds (simlab/engine.py's EXTENSIONS,
- * for simdb.py's DUCKDB_VERSION) and then shuts itself in: no external access but the lake's data
+ * for store_host.py's DUCKDB_VERSION) and then shuts itself in: no external access but the lake's data
  * files and its own spill directory (`allowed_directories`), no extension autoloading, a memory limit
  * and a thread count, all locked (`lock_configuration`). A query is one statement, a SELECT or an
  * EXPLAIN of one, which DuckDB's parser alone tells (json_serialize_sql serializes SELECTs only)
@@ -72,17 +72,18 @@ export interface LakeOptions {
   memoryLimit?: string;
   threads?: number;
   maxTempSize?: string;
-  /** hack/sim-db, whose catalog.py and simdb.py pin the extensions and DuckDB. */
+  /** hack/sim-db, beside simlab/, whose engine.py and store_host.py pin the extensions and DuckDB. */
   simDb: string;
 }
 
-/** The DuckDB release and extension builds the catalog pins (simdb.py, hack/simlab/engine.py). */
+/** The DuckDB release and extension builds the catalog pins (simlab/store_host.py, engine.py). */
 export const pins = (simDb: string): { duckdb: string; extensions: Record<string, string> } => {
-  const simdb = readFileSync(path.join(simDb, "simdb.py"), "utf8");
+  const host = readFileSync(path.join(simDb, "..", "simlab", "store_host.py"), "utf8");
   const engine = readFileSync(path.join(simDb, "..", "simlab", "engine.py"), "utf8");
-  const duckdb = /^DUCKDB_VERSION = "([^"]+)"/m.exec(simdb)?.[1];
+  const duckdb = /^DUCKDB_VERSION = "([^"]+)"/m.exec(host)?.[1];
   const ext = /^EXTENSIONS = \{([^}]*)\}/m.exec(engine)?.[1];
-  if (!duckdb || !ext) throw new Error("no DUCKDB_VERSION in simdb.py or EXTENSIONS in simlab/engine.py");
+  if (!duckdb || !ext)
+    throw new Error("no DUCKDB_VERSION in simlab/store_host.py or EXTENSIONS in simlab/engine.py");
   const extensions: Record<string, string> = {};
   for (const m of ext.matchAll(/"([a-z_]+)":\s*"([^"]+)"/g)) extensions[m[1]] = m[2];
   return { duckdb, extensions };

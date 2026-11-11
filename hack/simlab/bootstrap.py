@@ -5,7 +5,7 @@ the duckdb module: the system python3 has no pip, and hack/pyproject.toml
 pins the module (and hack/uv.lock its build).
 
 A script calls it from its `__main__` block, never at import, so a module
-that loads the script by path (farm.py's worker.simdb(), golden.py's
+that loads the script by path (simlab.simdb(), golden.py's
 reference suite.py) never runs it:
 
   if __name__ == "__main__":

@@ -29,7 +29,7 @@ generation is closed when it reaches --rotate-mb, when the controller
 asks for a flush with nothing left here to run (its sync's `flush`), at
 --end-at, and on an interruption notice; another thread then exports
 each closed one, one at a time, to zstd Parquet with a manifest
-(hack/sim-db's export) and uploads its files by the --policy file's
+(the store's export) and uploads its files by the --policy file's
 presigned POST policies (s3sign.py) while jobs run on: the tables to
 sim-data/<run>/<instance>/<seq>/<table>.parquet, then manifest.json, then
 the bulky tables (reads, forecast) to sim-samples/.../<table>.parquet. A
@@ -292,17 +292,18 @@ def notice_time(action: bytes) -> float:
 
 
 @functools.cache
-def simdb():
-    """hack/sim-db/simdb.py: beside this file on a host (farm.py puts it
-    there), in the checkout here."""
+def store():
+    """The store, hack/simlab/store_host.py (stdlib and the DuckDB CLI):
+    beside this file on a host (farm.py puts it there), in the checkout
+    here."""
     here = Path(__file__).resolve().parent
-    for p in (here / "simdb.py", here.parent / "sim-db" / "simdb.py"):
+    for p in (here / "store_host.py", here.parent / "simlab" / "store_host.py"):
         if p.exists():
-            spec = importlib.util.spec_from_file_location("simdb", p)
+            spec = importlib.util.spec_from_file_location("store_host", p)
             m = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(m)
             return m
-    raise RuntimeError(f"no simdb.py beside {here} or in hack/sim-db")
+    raise RuntimeError(f"no store_host.py beside {here} or in hack/simlab")
 
 
 @functools.cache
@@ -327,7 +328,7 @@ class Sink:
 
     def put(self, seq: int, files: list[tuple[str, Path]], abort_at: float | None) -> bool:
         """Puts `files` ((name, path), in order: the tables, manifest.json,
-        then the bulky ones, simdb's SAMPLE_TABLES) as flush `seq`'s;
+        then the bulky ones, the store's SAMPLE_TABLES) as flush `seq`'s;
         returns whether the bulky ones landed too. Raises if a table or the
         manifest didn't."""
         if "dir" in self.p:
@@ -341,7 +342,7 @@ class Sink:
             os.replace(tmp, dest)
             return True
         reads = True
-        samples = {f"{t}.parquet" for t in simdb().SAMPLE_TABLES}
+        samples = {f"{t}.parquet" for t in store().SAMPLE_TABLES}
         for name, path in files:
             pol = self.p["samples" if name in samples else "data"]
             try:
@@ -390,7 +391,7 @@ class Store:
         except (OSError, ValueError):
             self.ops = {"flushes": {}}
         self.flush_dir, self.landed_dir = root / "flush", root / "flushes"
-        # simdb's spill and the DuckDB it runs.
+        # The store's spill and the DuckDB it runs.
         os.environ["SIM_DB_ROOT"] = str(self.dir)
         if args.duckdb:
             os.environ["SIM_DUCKDB"] = str(args.duckdb)
@@ -537,12 +538,12 @@ class Store:
         jobs = {w: self.fold_job(w, r) for w, r in recs.items()}
         failed = {}
         try:
-            simdb().fold(self.db(seq), jobs.values(), self.src(seq), threads=self.threads, memory=STORE_MEMORY)
-        except simdb().FoldError:
+            store().fold(self.db(seq), jobs.values(), self.src(seq), threads=self.threads, memory=STORE_MEMORY)
+        except store().FoldError:
             for w, j in jobs.items():
                 try:
-                    simdb().fold(self.db(seq), [j], self.src(seq), threads=self.threads, memory=STORE_MEMORY)
-                except simdb().FoldError as e:
+                    store().fold(self.db(seq), [j], self.src(seq), threads=self.threads, memory=STORE_MEMORY)
+                except store().FoldError as e:
                     failed[w] = str(e)
         for w, r in recs.items():
             res = dict(r["result"])
@@ -599,12 +600,12 @@ class Store:
         if (dest / "manifest.json").exists():
             manifest = json.loads((dest / "manifest.json").read_text())
         elif db.exists():
-            manifest = simdb().export(db, dest, threads=self.threads)
+            manifest = store().export(db, dest, threads=self.threads)
         else:
             manifest = None
         if manifest is not None:
             tables = manifest["tables"]
-            bulky = simdb().SAMPLE_TABLES
+            bulky = store().SAMPLE_TABLES
             files = [(f"{t}.parquet", dest / f"{t}.parquet") for t in tables if t not in bulky]
             files.append(("manifest.json", dest / "manifest.json"))
             files += [(f"{t}.parquet", dest / f"{t}.parquet") for t in bulky if t in tables]
@@ -1147,7 +1148,7 @@ def main() -> None:
     s.add_argument("--policy", type=Path, help="the upload policies (Sink)")
     s.add_argument("--rotate-mb", type=float, default=512, help="close a generation this big")
     s.add_argument("--end-at", type=float, help="seconds since the epoch: stop and flush then")
-    s.add_argument("--duckdb", type=Path, help="the DuckDB CLI (else simdb's)")
+    s.add_argument("--duckdb", type=Path, help="the DuckDB CLI (else the store's)")
     y = sub.add_parser("sync")
     y.add_argument("--dir", type=Path, default=here)
     args = p.parse_args()

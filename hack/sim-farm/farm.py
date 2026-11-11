@@ -571,10 +571,11 @@ RETAIN_S = 6 * 86400
 # size: 512 MB takes about 13 s and 23 s, and an interruption that finds
 # one uploading and another open still uploads both within its window.
 ROTATE_MB = 512
-# What farm.py puts beside the worker on a host: the store's (sim-db's)
-# and the uploads' modules.
-SIMDB = ROOT / "hack" / "sim-db" / "simdb.py"
-HOST_FILES = [HERE / "worker.py", HERE / "s3sign.py", SIMDB]
+# What farm.py puts beside the worker on a host: the store's
+# (hack/simlab/store_host.py, stdlib and the DuckDB CLI) and the uploads'
+# modules, all a host imports.
+STORE_HOST = ROOT / "hack" / "simlab" / "store_host.py"
+HOST_FILES = [HERE / "worker.py", HERE / "s3sign.py", STORE_HOST]
 # The rows a job's expected wall averages, the latest: code and instance
 # types change what a job takes.
 RECENT_ROWS = 64
@@ -2474,7 +2475,7 @@ class Run:
         self.fields = {
             jid: list(dict.fromkeys(f for m, _ in own for f in m.row_fields())) for jid, own in self.owners.items()
         }
-        self.duckdb = f"duckdb-{worker.simdb().DUCKDB_VERSION}"
+        self.duckdb = f"duckdb-{worker.store().DUCKDB_VERSION}"
         # job id -> its expected wall, from past rows. Test jobs run longest
         # first, and before them those no row says, which may be long, so
         # the last to finish are short (a stable sort: otherwise matrix by
@@ -4059,7 +4060,7 @@ class Run:
         if not dst.exists():
             BIN.mkdir(parents=True, exist_ok=True)
             tmp = dst.with_suffix(".tmp")
-            shutil.copy2(worker.simdb().duckdb_bin(), tmp)
+            shutil.copy2(worker.store().duckdb_bin(), tmp)
             os.replace(tmp, dst)
         if self.duckdb not in self.bins:
             self.bins.append(self.duckdb)
@@ -4068,7 +4069,7 @@ class Run:
         if self.testbed is None:
             self.ship_duckdb()
             # Flushes go straight into the cache, as `pull` would put them.
-            self.sink_dir = worker.simdb().cache_root() / "cache" / "farm"
+            self.sink_dir = worker.store().cache_root() / "cache" / "farm"
         if self.testbed is not None:
             slots = 1
         else:

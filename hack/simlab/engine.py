@@ -3,13 +3,12 @@
 """DuckDB for simlab, in the duckdb module: the pinned release and
 extensions, the catalog's connections, and queries over them.
 
-Pins. DUCKDB_VERSION is simdb.py's (the farm hosts' CLI, read from its
-text, so the one copy stays there); hack/pyproject.toml pins the module to
-the same release. EXTENSIONS are the ducklake and sqlite builds for it, as
-DuckDB's repository installs them (~/.duckdb/extensions/, which the CLI
-and the module share). `ensure_extensions` installs them where missing;
-every connection loads them, then checks the release and the builds
-(PinError).
+Pins. DUCKDB_VERSION is store_host's (the farm hosts' CLI);
+hack/pyproject.toml pins the module to the same release. EXTENSIONS are
+the ducklake and sqlite builds for it, as DuckDB's repository installs
+them (~/.duckdb/extensions/, which the CLI and the module share).
+`ensure_extensions` installs them where missing; every connection loads
+them, then checks the release and the builds (PinError).
 
 Connections. Each is a new in-memory instance with extension autoloading
 and autoinstalling off:
@@ -93,9 +92,8 @@ except ImportError:
     # connection needs the module (bootstrap.engine).
     duckdb = None
 
-from . import SIMDB_PY
+from .store_host import DUCKDB_VERSION
 
-DUCKDB_VERSION = re.search(r'^DUCKDB_VERSION = "([^"]+)"', SIMDB_PY.read_text(), re.M).group(1)
 # The extensions' builds for DUCKDB_VERSION, as DuckDB's repository
 # installs them (~/.duckdb/extensions/).
 EXTENSIONS = {"ducklake": "ac7595b0", "sqlite_scanner": "5274128"}

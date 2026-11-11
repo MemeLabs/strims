@@ -11,8 +11,10 @@ server (hack/console).
             store), the statement gate, parameters, timeouts, a pool of
             readers, and results as Python values, JSON and the CLI's
             tables
-  store     the fold and export SQL of simdb.py run in the module, and
-            pulls from S3
+  store     the store's SQL (store_host's fold and export) run in the
+            module, and pulls from S3
+  store_host
+            the store as the farm hosts run it: stdlib and the DuckDB CLI
   verdict   analyze.py's verdicts, and the derived tables made from them
   catalog   the DuckLake catalog: index, fetch, availability, schema
   query     simdb.py's selections and queries, as results
@@ -25,7 +27,8 @@ server (hack/console).
 Each module's docstring says what it offers. `engine` and the modules
 over it need the duckdb module, which hack/pyproject.toml pins (uv's venv,
 hack/.venv); `bootstrap`, `verdict`'s verdict functions, `farm` and this
-module are stdlib alone, so a script under the plain python3 imports them.
+module are stdlib alone, so a script under the plain python3 imports them;
+`store_host` is self-contained too, as farm.py ships it alone.
 A script puts hack/ on sys.path and imports `simlab`; its `__main__`
 block runs `bootstrap.engine` before anything needs the module.
 """
@@ -40,9 +43,10 @@ SIMDB_PY = HACK / "sim-db" / "simdb.py"
 
 
 def simdb():
-    """hack/sim-db/simdb.py: the farm hosts' stdlib store, whose cache,
-    pins and SQL simlab shares. The running script's own module when that
-    is simdb.py, else loaded once by path (as `simdb` in sys.modules)."""
+    """hack/sim-db/simdb.py: the cache's selections and queries, and the
+    store's names (store_host's), whose cache and SQL simlab shares. The
+    running script's own module when that is simdb.py, else loaded once by
+    path (as `simdb` in sys.modules)."""
     for name in ("simdb", "__main__"):
         m = sys.modules.get(name)
         f = getattr(m, "__file__", None)

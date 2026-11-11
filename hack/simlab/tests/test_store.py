@@ -32,7 +32,7 @@ import duckdb  # noqa: E402
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import store  # noqa: E402
+from simlab import store, store_host  # noqa: E402
 
 SRC = "suite/wt/parity"
 
@@ -54,7 +54,7 @@ def executor(fn):
         calls.append(args)
         return fn(*args, **kw)
 
-    with mock.patch.object(simdb(), "EXECUTOR", counted if fn else None):
+    with mock.patch.object(store_host, "EXECUTOR", counted if fn else None):
         yield calls
 
 
@@ -127,10 +127,10 @@ class Execute(Scratch):
 
     def test_install_runs_duck_in_the_module(self):
         sm = simdb()
-        with mock.patch.object(sm, "EXECUTOR", None):
+        with mock.patch.object(store_host, "EXECUTOR", None):
             store.install()
-            self.assertIs(sm.EXECUTOR, store.execute)
-            with mock.patch.object(sm, "duckdb_bin", lambda fetch=True: self.fail("ran the CLI")):
+            self.assertIs(store_host.EXECUTOR, store.execute)
+            with mock.patch.object(store_host, "duckdb_bin", lambda fetch=True: self.fail("ran the CLI")):
                 self.assertEqual(sm.duck("SELECT 2 AS b;"), [{"b": 2}])
 
 
