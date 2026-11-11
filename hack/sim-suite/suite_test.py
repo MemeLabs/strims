@@ -2,7 +2,7 @@
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
 """Tests of suite.py's scoring, the catalog's scoring macros
-(hack/sim-db/scoring.sql), over DuckDB files made from fixtures:
+(hack/simlab/sql/scoring.sql), over DuckDB files made from fixtures:
 
   Golden      testdata/golden/ (golden.py fixtures): cells of the latest
               farm experiments and a made-up one, their runs' tables and

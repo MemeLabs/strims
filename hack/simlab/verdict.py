@@ -63,26 +63,55 @@ it, so the tables made under another are stale.
 
 The verdicts are stdlib alone: hack/capture/analyze.py, which
 re-exports their names, and hack/sim-db/simdb.py run under the plain
-python3. The derived tables are made from them:
+python3. The derived tables are made from them, the cache's tables read
+through store_host.duck (the DuckDB CLI, or the executor installed):
 
   series_of(meta, seconds, viewer_seconds, stays=None) -> dict | None
-                 simdb.series_of: a run's series from its tables
+                 a run's series as its row's `series` has it, from its
+                 tables
   load_series(pairs) -> {(src, k): (meta, series)}
-                 simdb.load_series, over the cache's sources
-  derive(sources, workers=None, progress=None) -> Derived
+                 the series of the runs `pairs` of (src, k), from the
+                 cache
+  judge(series) -> (verdict, run metrics) | (None, None)
+  derived_version()
+                 a hash of what defines the derived tables (DERIVED,
+                 VERDICT_COLS, VERDICT_VERSION and the code that writes
+                 them), their directories' `v=`
+  derive_source(src)
                  the derived tables (verdicts, verdict_seconds, episodes,
-                 derived_events) of each source lacking them, judged in a
-                 forkserver pool (concurrent.futures over
-                 multiprocessing's "forkserver" context, the pure verdict
-                 code preloaded, never duckdb), each worker with one
-                 DuckDB connection of its own, recycled after 50 sources;
-                 a source that fails comes back in `failed`, its verdicts
-                 left for the next index
+                 derived_events) of cache source `src` where it lacks
+                 them, in this process, under a lock of the source's own
+  derive(sources, workers=None, progress=None) -> Derived
+                 derive_source of each source, in a pool of `workers`
+                 processes (half the cores by default, at most 8; 0 for
+                 this one): concurrent.futures over multiprocessing's
+                 "forkserver" context, whose server (a fresh interpreter,
+                 this module preloaded, never duckdb) forks each worker,
+                 so none inherits the caller's DuckDB instances, threads
+                 or locks. Each worker opens one DuckDB connection, which
+                 every source it judges reads and writes through (its
+                 store_host.EXECUTOR); a pool takes RECYCLE sources a
+                 worker, and the next pool's workers are new, so memory
+                 can't creep. A source that fails comes back in
+                 `failed`, its verdicts left for the next index;
+                 `progress(message, done, total)` hears of each failure
+                 and of every 50th source
 """
 
+import concurrent.futures as cf
+import collections
 import dataclasses
+import functools
 import hashlib
+import inspect
+import json
 import math
+import multiprocessing
+import os
+import tempfile
+from pathlib import Path
+
+from . import store_host
 
 
 # The latency budget: Amazon IVS's low-latency figures, glass to glass
@@ -524,6 +553,223 @@ def feasible(s):
 VERDICT_VERSION = verdict_version()
 
 
+# --- the derived tables --------------------------------------------------------------
+
+# series_meta.json's keys that aren't the series'.
+META_ONLY = {"sim", "seconds", "viewers", "bin_ms"}
+
+
+def files(srcs, table):
+    """`table`'s Parquet files in the cache's sources `srcs`."""
+    root = store_host.cache_root() / "cache"
+    return [str(root / s / f"{table}.parquet") for s in srcs if (root / s / f"{table}.parquet").exists()]
+
+
+def plist(paths):
+    return "[" + ", ".join(store_host.q(p) for p in paths) + "]"
+
+
+def series_of(meta, seconds, viewer_seconds, stays=None):
+    """A run's series as its row's `series` has it, from its tables: the
+    meta's fields, each `seconds` column (a list by second), and per viewer
+    `lag` and `frames`; with `stays` (the viewers table's rows: viewer,
+    arrive_ms, depart_ms), per viewer `arrive_ms` and `depart_ms`, the
+    stays presence reads (None for a departure that didn't come)."""
+    if not seconds:
+        return None
+    # A row's series leaves `hostile` out without any.
+    s = {k: v for k, v in meta.items() if k not in META_ONLY and not (k == "hostile" and not v)}
+    seconds = sorted(seconds, key=lambda r: r["sec"])
+    for c in seconds[0]:
+        if c in ("k", "src", "sec"):
+            continue
+        v = [r.get(c) for r in seconds]
+        if any(x is not None for x in v):
+            s[c] = v
+    by = sorted(viewer_seconds, key=lambda r: r["viewer"])
+    # strims-sim writes no viewer_seconds row for a second its viewer
+    # wasn't there in: the series' -1 frames (and lag) there.
+    n = len(seconds)
+    def by_sec(r, f):
+        out = [-1] * n
+        for k, x in zip(r.get("sec") or range(len(r[f])), r[f]):
+            if 0 <= k < n:
+                out[k] = x
+        return out
+    s["lag"] = [by_sec(r, "lag") for r in by]
+    s["frames"] = [by_sec(r, "frames") for r in by]
+    if stays:
+        at = {r["viewer"]: r for r in stays}
+        if all(r["viewer"] in at for r in by):
+            s["arrive_ms"] = [at[r["viewer"]]["arrive_ms"] for r in by]
+            s["depart_ms"] = [at[r["viewer"]]["depart_ms"] for r in by]
+    return s
+
+
+def wanted(pairs):
+    """A VALUES list of (src, k) for a join."""
+    q = store_host.q
+    return "(VALUES " + ", ".join(f"({q(s)}, {q(k)})" for s, k in pairs) + ") w(src, k)"
+
+
+def load_series(pairs):
+    """{(src, k): (meta, series)} for `pairs` of (src, k), from the cache."""
+    duck = store_host.duck
+    pairs = sorted(set(pairs))
+    srcs = sorted({s for s, _ in pairs})
+    runs = files(srcs, "runs")
+    if not pairs or not runs:
+        return {}
+    want = wanted(pairs)
+    meta = {(r["src"], r["k"]): json.loads(r["meta"] or "{}") for r in duck(
+        f"SELECT src, k, meta FROM read_parquet({plist(runs)}, union_by_name=true) SEMI JOIN {want} USING (src, k);")}
+    secs = collections.defaultdict(list)
+    if files(srcs, "seconds"):
+        for r in duck(f"SELECT * FROM read_parquet({plist(files(srcs, 'seconds'))}, union_by_name=true) "
+                      f"SEMI JOIN {want} USING (src, k);"):
+            secs[(r["src"], r["k"])].append(r)
+    vs = collections.defaultdict(list)
+    if files(srcs, "viewer_seconds"):
+        for r in duck(f"SELECT src, k, viewer, list(sec ORDER BY sec) AS sec, list(lag_ms ORDER BY sec) AS lag, "
+                      f"list(frames ORDER BY sec) AS frames "
+                      f"FROM read_parquet({plist(files(srcs, 'viewer_seconds'))}, union_by_name=true) "
+                      f"SEMI JOIN {want} USING (src, k) GROUP BY ALL;"):
+            vs[(r["src"], r["k"])].append(r)
+    # The viewers' stays, where the tables have them (both sims' since
+    # their arrivals and departures).
+    stays = collections.defaultdict(list)
+    viewers = files(srcs, "viewers")
+    if viewers:
+        table = f"read_parquet({plist(viewers)}, union_by_name=true)"
+        cols = {r["column_name"] for r in duck(f"DESCRIBE SELECT * FROM {table};")}
+        if {"arrive_ms", "depart_ms"} <= cols:
+            for r in duck(f"SELECT src, k, viewer, arrive_ms, depart_ms FROM {table} "
+                          f"SEMI JOIN {want} USING (src, k);"):
+                stays[(r["src"], r["k"])].append(r)
+    return {p: (m, series_of(m, secs.get(p, []), vs.get(p, []), stays.get(p))) for p, m in meta.items()}
+
+
+def judge(s):
+    """A series' verdict and run metrics, or (None, None)."""
+    if not s:
+        return None, None
+    try:
+        v = verdict(s)
+    except Exception:
+        return None, None
+    return v, run_metrics(s, v)
+
+
+DERIVED = {
+    "verdict_seconds": {"k": "VARCHAR", "src": "VARCHAR", "sec": "BIGINT", "phase": "VARCHAR", "healthy": "BOOLEAN",
+                        "trees_bad": "BOOLEAN", "deliv_bad": "BOOLEAN", "lag_high": "BOOLEAN", "lag_rise": "BOOLEAN",
+                        "hit_share": "DOUBLE", "delivery": "DOUBLE", "lag_q": "DOUBLE"},
+    "episodes": {"k": "VARCHAR", "src": "VARCHAR", "kind": "VARCHAR", "start": "BIGINT", "stop": "BIGINT",
+                 "len": "BIGINT"},
+    "derived_events": {"k": "VARCHAR", "src": "VARCHAR", "sec": "DOUBLE", "kind": "VARCHAR", "value": "DOUBLE"},
+}
+# derived_events' kinds (events'), none of them the sims'.
+DERIVED_KINDS = ("start", "seed_down", "seed_up", "present_join", "present_leave", "onset", "recovered", "collapse")
+# A run's verdict, then run_metrics' columns. startup_s is the seconds a
+# collapse must last past (startup).
+VERDICT_COLS = {"k": "VARCHAR", "src": "VARCHAR", "onset": "BIGINT", "trees": "BIGINT", "delivery": "BIGINT",
+                "latency": "BIGINT", "recovered": "BIGINT", "absorbing": "BOOLEAN", "feasible": "VARCHAR",
+                "unhealthy": "DOUBLE", "lag_p50": "DOUBLE", "lag_max": "DOUBLE", "collapsed": "BOOLEAN",
+                "startup_s": "BIGINT"}
+
+
+@functools.cache
+def derived_version():
+    """A hash of everything that defines the derived tables:
+    VERDICT_VERSION, their columns and the code that writes them
+    (DERIVE_CODE), so a derived table made under another is stale."""
+    parts = [VERDICT_VERSION, repr([DERIVED, DERIVED_KINDS, VERDICT_COLS])]
+    parts += [inspect.getsource(f) for f in DERIVE_CODE]
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
+
+
+def derived_dir(table):
+    """Derived `table`'s files: a source's each, under derived_version."""
+    return store_host.cache_root() / "derived" / table / f"v={derived_version()}"
+
+
+def derive_source(src):
+    """Makes the derived tables of cache source `src` where it lacks them
+    under the current derived_version, under a lock of its own
+    (derived/locks/), so processes deriving other sources don't wait."""
+    name = src.replace("/", "~") + ".parquet"
+    if all((derived_dir(t) / name).exists() for t in [*DERIVED, "verdicts"]):
+        return
+    with store_host.locked(store_host.cache_root() / "derived" / "locks" / f"{name}.lock"):
+        if all((derived_dir(t) / name).exists() for t in [*DERIVED, "verdicts"]):
+            return
+        keys = [r["k"] for r in store_host.duck(f"SELECT k FROM read_parquet({plist(files([src], 'runs'))});")]
+        got = load_series([(src, k) for k in keys])
+        out = {t: [] for t in DERIVED}
+        verdicts = []
+        metric_names = None
+        for (_, k), (meta, s) in got.items():
+            v, m = judge(s)
+            if v is None:
+                continue
+            if metric_names is None:
+                metric_names = list(m)
+            ph = phases(s, v)
+            for sec in range(len(v["healthy"])):
+                out["verdict_seconds"].append([k, src, sec, ph[sec], v["healthy"][sec], v["trees_bad"][sec],
+                                               v["deliv_bad"][sec], v["lag_high"][sec], v["lag_rise"][sec],
+                                               v["hit_share"][sec], v["delivery_share"][sec], v["lag_q"][sec]])
+            out["episodes"] += [[k, src, kind, x, y, y - x] for kind, x, y in episodes(v)]
+            out["derived_events"] += [[k, src, t, kind, value] for t, kind, value in events(s, v)]
+            verdicts.append([k, src, v["onset"], v["trees"], v["delivery"], v["latency"], v["recovered"],
+                             v["absorbing"], str(v["feasible"]), v["unhealthy"], v["lag_p50"], v["lag_max"],
+                             collapsed(v), run_startup(v)] + [m[n] for n in metric_names])
+        cols = dict(VERDICT_COLS)
+        for n in metric_names or []:
+            cols[n] = "BOOLEAN" if n.endswith("_censored") else "DOUBLE"
+        write_table(derived_dir("verdicts") / name, cols, verdicts)
+        for t, c in DERIVED.items():
+            write_table(derived_dir(t) / name, c, out[t])
+
+
+def write_table(path, cols, data):
+    """Writes rows `data` (lists in `cols`' order) to Parquet at `path`,
+    its columns `cols` alone: the CSV it's read from sits in the derived
+    dir's `v=` directory, which DuckDB would take for a hive partition and
+    add as a column."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", suffix=".csv", dir=path.parent, delete=False) as f:
+        f.write(",".join(cols) + "\n")
+        for r in data:
+            f.write(",".join("" if x is None else store_host.csv_text(str(x).lower() if isinstance(x, bool) else x)
+                             for x in r) + "\n")
+        tmp = Path(f.name)
+    part = path.with_suffix(f".tmp{os.getpid()}")
+    q = store_host.q
+    try:
+        store_host.duck(f"COPY (SELECT * FROM read_csv({q(tmp)}, header=true, auto_detect=false, "
+                        f"columns={store_host.struct(cols)}, nullstr='', hive_partitioning=false)) TO {q(part)} "
+                        "(FORMAT parquet, COMPRESSION zstd);", out=None)
+        part.replace(path)
+    finally:
+        tmp.unlink(missing_ok=True)
+        part.unlink(missing_ok=True)
+
+
+# The code that writes the derived tables, whose source derived_version
+# hashes.
+DERIVE_CODE = (derive_source, write_table)
+
+
+# --- a pool of derives ----------------------------------------------------------------
+
+# A pool's sources a worker, each pool's workers new.
+RECYCLE = 50
+# A worker's DuckDB connection: its threads and memory limit.
+WORKER_THREADS = 2
+WORKER_MEMORY = "2GB"
+
+
 @dataclasses.dataclass
 class Derived:
     """What a derive made: the sources it judged, and those it couldn't,
@@ -532,13 +778,76 @@ class Derived:
     failed: dict = dataclasses.field(default_factory=dict)
 
 
-def series_of(meta, seconds, viewer_seconds, stays=None):
-    raise NotImplementedError("simlab.verdict.series_of: increment I3")
-
-
-def load_series(pairs):
-    raise NotImplementedError("simlab.verdict.load_series: increment I3")
+def default_workers():
+    return max(1, min(8, (os.cpu_count() or 2) // 2))
 
 
 def derive(sources, workers=None, progress=None):
-    raise NotImplementedError("simlab.verdict.derive: increment I3")
+    """derive_source of each of `sources` (the module docs): `workers` at a
+    time in a forkserver pool, or in this process with 0."""
+    say = progress or (lambda message, done, total: None)
+    srcs = list(dict.fromkeys(sources))
+    out = Derived()
+    total = len(srcs)
+
+    def record(src, err, done):
+        if err is None:
+            out.judged.append(src)
+        else:
+            out.failed[src] = err
+            say(f"verdicts: {src}: {err}", done, total)
+        if done % 50 == 0 or done == total:
+            say(f"verdicts: {done}/{total} sources", done, total)
+
+    if not srcs:
+        return out
+    if workers == 0:
+        for n, src in enumerate(srcs, 1):
+            record(src, judged(src), n)
+        return out
+    ctx = multiprocessing.get_context("forkserver")
+    ctx.set_forkserver_preload([__name__])
+    n = max(1, min(workers or default_workers(), total))
+    done = 0
+    # A pool takes RECYCLE sources a worker, and its workers end with it:
+    # the executor's own max_tasks_per_child leaves a worker that ends
+    # unreplaced once workers have been idle (its idle count only grows),
+    # and the pool hangs when the last one ends.
+    for i in range(0, total, n * RECYCLE):
+        part = srcs[i:i + n * RECYCLE]
+        with cf.ProcessPoolExecutor(min(n, len(part)), mp_context=ctx, initializer=start_worker,
+                                    initargs=(str(store_host.cache_root()),)) as pool:
+            futures = {pool.submit(judged, src): src for src in part}
+            for f in cf.as_completed(futures):
+                try:
+                    err = f.result()
+                except cf.BrokenExecutor as e:
+                    # A worker that died took the sources it held with it.
+                    err = f"its worker died: {e}"
+                done += 1
+                record(futures[f], err, done)
+    return out
+
+
+def judged(src):
+    """derive_source of `src`: None, or why it failed."""
+    try:
+        derive_source(src)
+    except Exception as e:
+        return str(e) or type(e).__name__
+    return None
+
+
+def start_worker(root):
+    """A derive worker's start: the caller's cache root (the forkserver's
+    environment is the one it started with), and its one DuckDB
+    connection, every store_host.duck of the sources it judges run on
+    it."""
+    from . import engine, store
+
+    os.environ["SIM_DB_ROOT"] = root
+    tmp = Path(root) / "tmp"
+    if tmp.parent.exists():
+        tmp.mkdir(exist_ok=True)
+    store_host.EXECUTOR = store.executor(engine.store(":memory:", WORKER_THREADS, WORKER_MEMORY,
+                                                     tmp if tmp.exists() else None))

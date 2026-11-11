@@ -98,10 +98,10 @@ cell's budget) are listed first. Four seeds show direction, not effect sizes:
 take what moves to the farm. Cheap cells run more seeds, and so do cells
 that tip between healthy and collapsed by seed.
 
-The sims' results catalog (hack/sim-db/catalog.py) computes every score
+The sims' results catalog (hack/simlab/catalog.py) computes every score
 here: the runs' tables go to the cache, the catalog indexes them (each
 run's row and analyze.py's verdict), and its scoring macros
-(hack/sim-db/scoring.sql, over METRICS) pair two arms' runs and give the
+(hack/simlab/sql/scoring.sql, over METRICS) pair two arms' runs and give the
 effects, collapse tests, traces and guardrails this script prints. A
 session loads the macros as this script defines them, so a branch's
 METRICS score its runs. golden.py checks the macros against the Python
@@ -169,7 +169,7 @@ started within a week is dropped. The index holds its cells as their
 matrices ran them (name, sim, test, why, env and the slot's mem_gib), the
 matrices' arms (name: commit), the seeds, the arm the others are scored
 against (`base`), what the run asks (`--question`, for the sims'
-catalog: hack/sim-db/catalog.py) and for a `--sets` run its knob and
+catalog: hack/simlab/catalog.py) and for a `--sets` run its knob and
 sets. A job's arm is named as hack/sim-db names it (simdb's
 arm_label): in a run whose index has a knob, its set, the value its env
 gives the knob; else its matrix's arm, a `--refs` name. So a `--sets`
@@ -214,7 +214,7 @@ from simlab import bootstrap, suite as lab  # noqa: E402
 # A side is an arm's runs, {(cell, seed): (k, src)}: the catalog's job k
 # for each cell and seed, and the source of the run's own copy (its farm
 # index line's flush, its local invocation's), whose host numbers it
-# reads. The catalog's scoring macros (hack/sim-db/scoring.sql) pair two
+# reads. The catalog's scoring macros (hack/simlab/sql/scoring.sql) pair two
 # sides and score them; this script prints what they return.
 
 # The DuckDB file scores are computed over, None for the catalog: a file

@@ -22,6 +22,11 @@ the same SQL.
                  text of every shown statement (`out` "text"), or None
                  (`out` None); store_host.DuckError, DuckDB's message,
                  on a failure
+  results(conn, script, out="json")
+                 the same over the connection `conn`
+  executor(conn) duck's contract over `conn`, an instance in memory a
+                 process holds (a derive worker's): its scripts run on it,
+                 one over a DuckDB file in a connection of its own
   install()      store_host.EXECUTOR = execute
   installed()    a block whose duck runs in the module where the duckdb
                  module imports (else in the CLI), the executor before it
@@ -36,6 +41,10 @@ SAMPLE_TABLES), sim-samples/<run>/<instance>/<seq>/:
                  `aws s3 sync` of the run's sim-data (and sim-samples with
                  `reads`) into the cache's farm/<run>/, its LISTs, GETs
                  and bytes a line of the farm's S3 ledger
+  pull_sources(srcs) -> ([Pull], gone)
+                 the pulls of the farm runs of the sources `srcs` the
+                 cache lacks, less their samples, and the sources still
+                 missing after them (expired from S3, or never uploaded)
   fetch_samples(plan, gets, got) -> set
                  the tables of simdb.sample_plan's `plan` ({src: (tables,
                  bytes, jobs)}), a GET a file, each checked against its
@@ -99,16 +108,35 @@ def execute(script, db=None, out="json", threads=None, memory=None):
     except engine.duckdb.Error as e:
         raise store_host.DuckError(str(e)) from None
     try:
+        return results(conn, script, out)
+    finally:
+        conn.close()
+
+
+def results(conn, script, out="json"):
+    """Runs `script` on `conn` statement by statement, and returns what
+    store_host.duck returns for `out`; store_host.DuckError, DuckDB's
+    message, at the first that fails."""
+    try:
         shown = engine.script(conn, script, text=out == "text")
     except (engine.QueryError, engine.duckdb.Error) as e:
         raise store_host.DuckError(str(e)) from None
-    finally:
-        conn.close()
     if out == "json":
         return shown[-1].records() if shown else []
     if out == "text":
         return "".join(r.table() for r in shown)
     return None
+
+
+def executor(conn):
+    """store_host.duck's contract over `conn`: a script with no `db` runs
+    on it (its threads and memory as `conn` has them), one over a DuckDB
+    file in a connection of its own (execute)."""
+    def run(script, db=None, out="json", threads=None, memory=None):
+        if db is not None:
+            return execute(script, db, out, threads, memory)
+        return results(conn, script, out)
+    return run
 
 
 def install():
@@ -181,6 +209,17 @@ def pull(run, reads=False):
            "down": {"internet": got}, "stored": 0}
     farm_ledger(run, use)
     return Pull(run, dest, sorted(pulled), use)
+
+
+def pull_sources(srcs):
+    """Pulls the farm runs of the sources `srcs` (farm/<run>/...) that the
+    cache lacks, a run at a time, less their samples (simdb's
+    pull_samples); returns their Pulls and the sources still missing
+    (expired from S3, or never uploaded)."""
+    sm = simdb()
+    want = sorted({s for s in srcs if s.startswith("farm/") and not sm.have_src(s)})
+    pulls = [pull(run) for run in sorted({s.split("/")[1] for s in want})]
+    return pulls, [s for s in want if not sm.have_src(s)]
 
 
 def farm_ledger(run, use):

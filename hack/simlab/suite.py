@@ -502,7 +502,7 @@ def cells(tier, only=None, env=()):
 # a job's row (r: the catalog's `rows`, a column a field), its verdict and
 # run metrics (v: `verdicts`, analyze.py's) and its host's numbers (j:
 # `jobs`); a field the catalog's rows lack reads NULL, and NULL is no
-# value (hack/sim-db/catalog.py's job_metrics, scoring.sql's macros).
+# value (simlab.catalog's job_metrics, scoring.sql's macros).
 LOWER, HIGHER = "lower", "higher"
 
 

@@ -199,15 +199,10 @@ by `duckdb`, or by whatever needs it first.
 import argparse
 import collections
 import contextlib
-import functools
-import hashlib
 import importlib.util
-import inspect
 import json
-import os
 import shutil
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -223,6 +218,12 @@ from simlab.store_host import (  # noqa: E402, F401
     RUN_COLS, SAMPLE_TABLES, SCALAR_COLS, SQL_SPECIAL, TABLES, TYPES, DuckError, FoldError, Pairs, cache_root,
     csv_text, described, duck, duckdb_bin, export, fold, git, ident, locked, main_checkout, number, plain, q,
     recover, scalars, schema, sha256, statements, struct, tables_in, typed_row,
+)
+# The runs' series, their verdicts and the derived tables made from them
+# (hack/simlab/verdict.py), which the views read.
+from simlab.verdict import (  # noqa: E402, F401
+    DERIVE_CODE, DERIVED, DERIVED_KINDS, META_ONLY, VERDICT_COLS, derive_source, derived_dir, derived_version, files,
+    judge, load_series, plist, series_of, wanted, write_table,
 )
 
 # The views' keys and joins: `sql --help`, and the end of `--help`.
@@ -246,8 +247,8 @@ name them runs.frames and runs.bytes.
 # The most a query pulls of the sample tables (SAMPLE_TABLES) by default
 # (`--pull-mb`).
 PULL_MB = 1000
-# series_meta.json's keys that aren't the series'.
-META_ONLY = {"sim", "seconds", "viewers", "bin_ms"}
+# macros.sql: the views' macros.
+MACROS = ROOT / "hack" / "simlab" / "sql" / "macros.sql"
 
 _analyze = None
 
@@ -263,106 +264,6 @@ def analyze():
 
 
 # --- rows ---------------------------------------------------------------------
-
-
-def files(srcs, table):
-    """`table`'s Parquet files in the cache's sources `srcs`."""
-    root = cache_root() / "cache"
-    return [str(root / s / f"{table}.parquet") for s in srcs if (root / s / f"{table}.parquet").exists()]
-
-
-def plist(paths):
-    return "[" + ", ".join(q(p) for p in paths) + "]"
-
-
-def series_of(meta, seconds, viewer_seconds, stays=None):
-    """A run's series as its row's `series` has it, from its tables: the
-    meta's fields, each `seconds` column (a list by second), and per viewer
-    `lag` and `frames`; with `stays` (the viewers table's rows: viewer,
-    arrive_ms, depart_ms), per viewer `arrive_ms` and `depart_ms`, the
-    stays analyze.presence reads (None for a departure that didn't come)."""
-    if not seconds:
-        return None
-    # A row's series leaves `hostile` out without any.
-    s = {k: v for k, v in meta.items() if k not in META_ONLY and not (k == "hostile" and not v)}
-    seconds = sorted(seconds, key=lambda r: r["sec"])
-    for c in seconds[0]:
-        if c in ("k", "src", "sec"):
-            continue
-        v = [r.get(c) for r in seconds]
-        if any(x is not None for x in v):
-            s[c] = v
-    by = sorted(viewer_seconds, key=lambda r: r["viewer"])
-    # strims-sim writes no viewer_seconds row for a second its viewer
-    # wasn't there in: the series' -1 frames (and lag) there.
-    n = len(seconds)
-    def by_sec(r, f):
-        out = [-1] * n
-        for k, x in zip(r.get("sec") or range(len(r[f])), r[f]):
-            if 0 <= k < n:
-                out[k] = x
-        return out
-    s["lag"] = [by_sec(r, "lag") for r in by]
-    s["frames"] = [by_sec(r, "frames") for r in by]
-    if stays:
-        at = {r["viewer"]: r for r in stays}
-        if all(r["viewer"] in at for r in by):
-            s["arrive_ms"] = [at[r["viewer"]]["arrive_ms"] for r in by]
-            s["depart_ms"] = [at[r["viewer"]]["depart_ms"] for r in by]
-    return s
-
-
-def wanted(pairs):
-    """A VALUES list of (src, k) for a join."""
-    return "(VALUES " + ", ".join(f"({q(s)}, {q(k)})" for s, k in pairs) + ") w(src, k)"
-
-
-def load_series(pairs):
-    """{(src, k): (meta, series)} for `pairs` of (src, k), from the cache."""
-    pairs = sorted(set(pairs))
-    srcs = sorted({s for s, _ in pairs})
-    runs = files(srcs, "runs")
-    if not pairs or not runs:
-        return {}
-    want = wanted(pairs)
-    meta = {(r["src"], r["k"]): json.loads(r["meta"] or "{}") for r in duck(
-        f"SELECT src, k, meta FROM read_parquet({plist(runs)}, union_by_name=true) SEMI JOIN {want} USING (src, k);")}
-    secs = collections.defaultdict(list)
-    if files(srcs, "seconds"):
-        for r in duck(f"SELECT * FROM read_parquet({plist(files(srcs, 'seconds'))}, union_by_name=true) "
-                      f"SEMI JOIN {want} USING (src, k);"):
-            secs[(r["src"], r["k"])].append(r)
-    vs = collections.defaultdict(list)
-    if files(srcs, "viewer_seconds"):
-        for r in duck(f"SELECT src, k, viewer, list(sec ORDER BY sec) AS sec, list(lag_ms ORDER BY sec) AS lag, "
-                      f"list(frames ORDER BY sec) AS frames "
-                      f"FROM read_parquet({plist(files(srcs, 'viewer_seconds'))}, union_by_name=true) "
-                      f"SEMI JOIN {want} USING (src, k) GROUP BY ALL;"):
-            vs[(r["src"], r["k"])].append(r)
-    # The viewers' stays, where the tables have them (both sims' since
-    # their arrivals and departures).
-    stays = collections.defaultdict(list)
-    viewers = files(srcs, "viewers")
-    if viewers:
-        table = f"read_parquet({plist(viewers)}, union_by_name=true)"
-        cols = {r["column_name"] for r in duck(f"DESCRIBE SELECT * FROM {table};")}
-        if {"arrive_ms", "depart_ms"} <= cols:
-            for r in duck(f"SELECT src, k, viewer, arrive_ms, depart_ms FROM {table} "
-                          f"SEMI JOIN {want} USING (src, k);"):
-                stays[(r["src"], r["k"])].append(r)
-    return {p: (m, series_of(m, secs.get(p, []), vs.get(p, []), stays.get(p))) for p, m in meta.items()}
-
-
-def judge(s):
-    """A series' verdict and run metrics (analyze.py), or (None, None)."""
-    if not s:
-        return None, None
-    a = analyze()
-    try:
-        v = a.verdict(s)
-    except Exception:
-        return None, None
-    return v, a.run_metrics(s, v)
 
 
 def rows(pairs, series=False):
@@ -395,105 +296,12 @@ def have_src(src):
 
 # --- derived tables -----------------------------------------------------------
 
-DERIVED = {
-    "verdict_seconds": {"k": "VARCHAR", "src": "VARCHAR", "sec": "BIGINT", "phase": "VARCHAR", "healthy": "BOOLEAN",
-                        "trees_bad": "BOOLEAN", "deliv_bad": "BOOLEAN", "lag_high": "BOOLEAN", "lag_rise": "BOOLEAN",
-                        "hit_share": "DOUBLE", "delivery": "DOUBLE", "lag_q": "DOUBLE"},
-    "episodes": {"k": "VARCHAR", "src": "VARCHAR", "kind": "VARCHAR", "start": "BIGINT", "stop": "BIGINT",
-                 "len": "BIGINT"},
-    "derived_events": {"k": "VARCHAR", "src": "VARCHAR", "sec": "DOUBLE", "kind": "VARCHAR", "value": "DOUBLE"},
-}
-# derived_events' kinds (analyze.events'), none of them the sims'.
-DERIVED_KINDS = ("start", "seed_down", "seed_up", "present_join", "present_leave", "onset", "recovered", "collapse")
-# A run's verdict, then analyze.run_metrics' columns. startup_s is the
-# seconds a collapse must last past (analyze.startup).
-VERDICT_COLS = {"k": "VARCHAR", "src": "VARCHAR", "onset": "BIGINT", "trees": "BIGINT", "delivery": "BIGINT",
-                "latency": "BIGINT", "recovered": "BIGINT", "absorbing": "BOOLEAN", "feasible": "VARCHAR",
-                "unhealthy": "DOUBLE", "lag_p50": "DOUBLE", "lag_max": "DOUBLE", "collapsed": "BOOLEAN",
-                "startup_s": "BIGINT"}
-
-
-@functools.cache
-def derived_version():
-    """A hash of everything that defines the derived tables: analyze.py's
-    VERDICT_VERSION, their columns and the code that writes them
-    (DERIVE_CODE), so a derived table made under another is stale."""
-    parts = [analyze().VERDICT_VERSION, repr([DERIVED, DERIVED_KINDS, VERDICT_COLS])]
-    parts += [inspect.getsource(f) for f in DERIVE_CODE]
-    return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
-
-
-def derived_dir(table):
-    """Derived `table`'s files: a source's each, under derived_version."""
-    return cache_root() / "derived" / table / f"v={derived_version()}"
-
 
 def derive(srcs):
     """Makes the derived tables of every source in `srcs` that lacks them
-    under the current derived_version, each under a lock of its own
-    (derived/locks/), so processes deriving other sources don't wait."""
-    a = analyze()
+    (verdict.derive_source), in this process, one after another."""
     for src in srcs:
-        name = src.replace("/", "~") + ".parquet"
-        if all((derived_dir(t) / name).exists() for t in [*DERIVED, "verdicts"]):
-            continue
-        with locked(cache_root() / "derived" / "locks" / f"{name}.lock"):
-            if all((derived_dir(t) / name).exists() for t in [*DERIVED, "verdicts"]):
-                continue
-            keys = [r["k"] for r in duck(f"SELECT k FROM read_parquet({plist(files([src], 'runs'))});")]
-            got = load_series([(src, k) for k in keys])
-            out = {t: [] for t in DERIVED}
-            verdicts = []
-            metric_names = None
-            for (_, k), (meta, s) in got.items():
-                v, m = judge(s)
-                if v is None:
-                    continue
-                if metric_names is None:
-                    metric_names = list(m)
-                ph = a.phases(s, v)
-                for sec in range(len(v["healthy"])):
-                    out["verdict_seconds"].append([k, src, sec, ph[sec], v["healthy"][sec], v["trees_bad"][sec],
-                                                   v["deliv_bad"][sec], v["lag_high"][sec], v["lag_rise"][sec],
-                                                   v["hit_share"][sec], v["delivery_share"][sec], v["lag_q"][sec]])
-                out["episodes"] += [[k, src, kind, x, y, y - x] for kind, x, y in a.episodes(v)]
-                out["derived_events"] += [[k, src, t, kind, value] for t, kind, value in a.events(s, v)]
-                verdicts.append([k, src, v["onset"], v["trees"], v["delivery"], v["latency"], v["recovered"],
-                                 v["absorbing"], str(v["feasible"]), v["unhealthy"], v["lag_p50"], v["lag_max"],
-                                 a.collapsed(v), a.run_startup(v)] + [m[n] for n in metric_names])
-            cols = dict(VERDICT_COLS)
-            for n in metric_names or []:
-                cols[n] = "BOOLEAN" if n.endswith("_censored") else "DOUBLE"
-            write_table(derived_dir("verdicts") / name, cols, verdicts)
-            for t, c in DERIVED.items():
-                write_table(derived_dir(t) / name, c, out[t])
-
-
-def write_table(path, cols, data):
-    """Writes rows `data` (lists in `cols`' order) to Parquet at `path`,
-    its columns `cols` alone: the CSV it's read from sits in the derived
-    dir's `v=` directory, which DuckDB would take for a hive partition and
-    add as a column."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile("w", suffix=".csv", dir=path.parent, delete=False) as f:
-        f.write(",".join(cols) + "\n")
-        for r in data:
-            f.write(",".join("" if x is None else csv_text(str(x).lower() if isinstance(x, bool) else x)
-                             for x in r) + "\n")
-        tmp = Path(f.name)
-    part = path.with_suffix(f".tmp{os.getpid()}")
-    try:
-        duck(f"COPY (SELECT * FROM read_csv({q(tmp)}, header=true, auto_detect=false, columns={struct(cols)}, "
-             f"nullstr='', hive_partitioning=false)) TO {q(part)} (FORMAT parquet, COMPRESSION zstd);", out=None)
-        part.replace(path)
-    finally:
-        tmp.unlink(missing_ok=True)
-        part.unlink(missing_ok=True)
-
-
-# The code that writes the derived tables, whose source derived_version
-# hashes.
-DERIVE_CODE = (derive, write_table)
+        derive_source(src)
 
 
 def derived_files(table, srcs):
@@ -707,7 +515,7 @@ def views(a, derived=True, fetch=True):
 def macros(have):
     """macros.sql's statements whose `-- needs:` tables the views have."""
     out, needs, cur = [], set(), []
-    for line in (Path(__file__).parent / "macros.sql").read_text().splitlines():
+    for line in MACROS.read_text().splitlines():
         if line.startswith("-- needs:"):
             needs = set(line.split(":", 1)[1].split())
         cur.append(line)
@@ -1128,10 +936,7 @@ def pull_sources(srcs):
     """Pulls the farm runs of the sources `srcs` (farm/<run>/...) that the
     cache lacks, a run at a time, less their samples (pull_samples);
     returns those still missing (expired from S3, or never uploaded)."""
-    want = sorted({s for s in srcs if s.startswith("farm/") and not have_src(s)})
-    for run in sorted({s.split("/")[1] for s in want}):
-        pull(run)
-    return [s for s in want if not have_src(s)]
+    return store().pull_sources(srcs)[1]
 
 
 def manifest_of(src):
@@ -1213,12 +1018,14 @@ def fetch_samples(plan, gets, got):
     return store().fetch_samples(plan, gets, got)
 
 
-def pull_samples(v, tables, limit_mb=None):
+def pull_samples(v, tables, limit_mb=None, say=None):
     """Pulls what the jobs the views `v` select lack of the sample `tables`
-    (sample_plan), noting its size on stderr, and refusing it past
-    `limit_mb`; where S3 no longer holds a flush, another copy of its jobs
-    stands in. Each run's GETs and bytes go to its line of the farm's S3
-    ledger, however the pull ends. Returns whether it fetched any."""
+    (sample_plan), noting its size (on stderr, or to `say`), and refusing
+    it past `limit_mb`; where S3 no longer holds a flush, another copy of
+    its jobs stands in. Each run's GETs and bytes go to its line of the
+    farm's S3 ledger, however the pull ends. Returns whether it fetched
+    any."""
+    say = say or (lambda m: print(m, file=sys.stderr))
     plan, lost = sample_plan(v, tables)
     if plan:
         total = sum(b for _, b, _ in plan.values())
@@ -1226,7 +1033,7 @@ def pull_samples(v, tables, limit_mb=None):
                 f"{len(plan)} flushes, {total / 1e6:.1f} MB")
         if limit_mb is not None and total > limit_mb * 1e6:
             sys.exit(f"{what}, past --pull-mb {limit_mb:g}: narrow the selection, or raise --pull-mb")
-        print(f"pulling {what}", file=sys.stderr)
+        say(f"pulling {what}")
     fetched, gone = bool(plan), set()
     gets, got = collections.Counter(), collections.Counter()
     try:
@@ -1239,8 +1046,8 @@ def pull_samples(v, tables, limit_mb=None):
             store().farm_ledger(run, {"region": region or "", "tier1": {}, "tier2": {"pull_get": gets[run]},
                                       "up": {}, "down": {"internet": got[run]}, "stored": 0})
     if lost:
-        print(f"S3 holds none of the {' or '.join(tables)} of {lost} of the selection's jobs (expired, or never "
-              "landed): left out", file=sys.stderr)
+        say(f"S3 holds none of the {' or '.join(tables)} of {lost} of the selection's jobs (expired, or never "
+            "landed): left out")
     return fetched
 
 
@@ -1315,12 +1122,10 @@ def cmd_gc(a):
 
 
 def catalog():
-    """hack/sim-db/catalog.py, the sims' results catalog, over this module
-    (the script's)."""
+    """hack/sim-db/catalog.py: the catalog's commands (simlab.catalog's)."""
     spec = importlib.util.spec_from_file_location("catalog", Path(__file__).with_name("catalog.py"))
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
-    m._simdb = sys.modules["__main__"]
     return m
 
 
@@ -1407,7 +1212,14 @@ def main():
          "rows": cmd_rows, "forecast": cmd_forecast}[a.cmd](a)
 
 
+# The commands that run in the duckdb module (under hack/'s uv venv).
+ENGINE_COMMANDS = ("index", "fetch", "lake")
+
 if __name__ == "__main__":
+    if sys.argv[1:2] and sys.argv[1] in ENGINE_COMMANDS:
+        from simlab import bootstrap
+
+        bootstrap.engine(__file__)
     # The store's errors are this script's: one it doesn't catch reads
     # `DuckError: ...`, as a class of the script's own would.
     DuckError.__module__ = FoldError.__module__ = "__main__"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
-"""The catalog's scoring macros (hack/sim-db/scoring.sql) against the
+"""The catalog's scoring macros (hack/simlab/sql/scoring.sql) against the
 Python scoring suite.py had before them: what both print for the latest
 farm experiments must be the same, line for line.
 
@@ -396,4 +396,8 @@ def main():
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(ROOT / "hack"))
+    from simlab import bootstrap
+
+    bootstrap.engine(__file__)
     main()

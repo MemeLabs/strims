@@ -15,7 +15,8 @@ catalog.py's index of a scratch cache and farm state (Catalog):
 
   python3 hack/sim-db/simdb_test.py
 
-Needs the pinned DuckDB CLI (simdb.py duckdb fetches it)."""
+Needs the pinned DuckDB CLI (simdb.py duckdb fetches it); runs under
+hack/'s uv venv (the catalog's in the duckdb module)."""
 
 import argparse
 import importlib.util
@@ -39,7 +40,7 @@ spec.loader.exec_module(simdb)
 # simlab.store's pulls too.
 sys.modules["simdb"] = simdb
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from simlab import store  # noqa: E402
+from simlab import bootstrap, store, verdict  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("suite", Path(__file__).parents[1] / "sim-suite" / "suite.py")
 suite = importlib.util.module_from_spec(spec)
@@ -50,7 +51,6 @@ suite.lab._simdb = simdb
 spec = importlib.util.spec_from_file_location("catalog", Path(__file__).with_name("catalog.py"))
 catalog = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(catalog)
-catalog._simdb = simdb
 
 A, B = "farm/sa0001-00+3more-aaaa", "farm/sb0001-00+3more-bbbb"
 GONE = "farm/sc0001-00/i-1/0"
@@ -1115,7 +1115,7 @@ class Derived(unittest.TestCase):
         root = Path(tmp.name)
         series = {(self.SRC, k): ({}, audience(40, stays)) for k, stays in self.STAYS.items()}
         for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
-                  mock.patch.object(simdb, "load_series", lambda pairs: {p: series[p] for p in pairs}),
+                  mock.patch.object(verdict, "load_series", lambda pairs: {p: series[p] for p in pairs}),
                   mock.patch.object(sys, "stderr", io.StringIO()),
                   mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
@@ -1165,7 +1165,7 @@ class Derived(unittest.TestCase):
         now = simdb.derived_version()
         self.addCleanup(simdb.derived_version.cache_clear)
         simdb.derived_version.cache_clear()
-        with mock.patch.object(simdb, "VERDICT_COLS", old):
+        with mock.patch.object(verdict, "VERDICT_COLS", old):
             self.assertNotEqual(simdb.derived_version(), now)
 
     def test_a_stray_v_column_is_left_out(self):
@@ -1284,9 +1284,8 @@ class Catalog(unittest.TestCase):
         root = Path(tmp.name)
         series = {}
         for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
-                  mock.patch.object(simdb, "load_series",
+                  mock.patch.object(verdict, "load_series",
                                     lambda pairs: {p: ({}, series[p]) for p in pairs if p in series}),
-                  mock.patch.object(catalog, "_simdb", simdb),
                   mock.patch.object(sys, "stderr", io.StringIO()),
                   mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
@@ -1364,7 +1363,7 @@ class Catalog(unittest.TestCase):
                    f"TO {simdb.q(d / f'{table}.parquet')} (FORMAT parquet);", out=None)
 
     def index(self):
-        return catalog.index(workers=1, quiet=True)
+        return catalog.index(workers=0, quiet=True)
 
     def q(self, sql):
         return catalog.lake(sql + ";")
@@ -1447,8 +1446,8 @@ class Catalog(unittest.TestCase):
         self.assertEqual(got[("k9", "sim-data")][0], "expired")
 
     def test_it_does_only_what_changed(self):
-        self.assertTrue(self.index()["changed"])
-        self.assertFalse(self.index()["changed"])
+        self.assertTrue(self.index().changed)
+        self.assertFalse(self.index().changed)
         linked = [Path(r["path"]) for r in self.q("SELECT path FROM raw.files WHERE how = 'linked'")]
         self.assertTrue(linked and all(p.stat().st_nlink == 2 for p in linked))
         self.assertEqual(self.q("SELECT how FROM raw.files WHERE src = 'suite/wt/inv' AND tbl = 'viewers'")[0]["how"],
@@ -1457,12 +1456,12 @@ class Catalog(unittest.TestCase):
         self.put("suite/wt/inv2", "runs", ["sim", "test", "cell", "arm", "seed", "env", "row_json"],
                  [("k4", "ppspp", "churn", "churn", "a", 1, "{}", "{}")])
         got = self.index()
-        self.assertEqual((got["new"], got["gone"]), (1, 0))
+        self.assertEqual((got.new, got.gone), (1, 0))
         self.assertIn("k4", {r["k"] for r in self.q("SELECT k FROM jobs")})
         # the cache drops F1 (simdb.py gc): its jobs' tables leave, F2's copy of k1 stands in
         shutil.rmtree(simdb.cache_root() / "cache" / F1)
         got = self.index()
-        self.assertEqual(got["gone"], 6)
+        self.assertEqual(got.gone, 6)
         self.assertEqual(self.q("SELECT src FROM jobs WHERE k = 'k1'")[0]["src"], F2)
         self.assertEqual(self.q("SELECT count(*) AS n FROM viewers WHERE k LIKE 'k1'")[0]["n"], 0)
         self.assertEqual(self.q("SELECT count(*) AS n FROM raw.verdicts WHERE src = " + simdb.q(F1))[0]["n"], 0)
@@ -1485,4 +1484,5 @@ class Catalog(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    bootstrap.engine(__file__)
     unittest.main()
