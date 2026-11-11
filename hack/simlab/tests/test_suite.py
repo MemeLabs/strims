@@ -4,9 +4,9 @@
 """simlab.suite: write_matrices called as the console calls it writes what
 `suite.py farm --no-run` writes (golden_suite's golden), and run_cells
 runs a cell's seeds under a binary, folds their tables into the cache (in
-the duckdb module), indexes them and gives their sides, keeping them for
-the next call, over a scratch cache and main checkout with a stand-in sim
-that writes golden_cli's job dirs:
+the duckdb module) as each ends, indexes them and gives their sides,
+keeping them for the next call, over a scratch cache and main checkout with
+a stand-in sim that writes golden_cli's job dirs:
 
   python3 hack/simlab/tests/test_suite.py
 """
@@ -141,6 +141,26 @@ class LocalRuns(unittest.TestCase):
         # The next call runs only the seed it lacks, and keeps the rest.
         again, failures = self.run_cells()
         self.assertEqual(again, rows)
+        self.assertEqual(len(failures), 1)
+
+    def test_each_job_folds_as_it_ends(self):
+        """One slot, seed 3 (which fails) first: each job folds once it
+        ends, alone, and the output dirs of the jobs before it, folded or
+        failed, are gone by then."""
+        sm = lab.simdb()
+        real, folds = sm.fold, []
+
+        def fold(db, jobs, src, **kw):
+            jobs = list(jobs)
+            out = Path(jobs[0]["dir"]).parent
+            folds.append(([j["seed"] for j in jobs], len(list(out.iterdir()))))
+            return real(db, jobs, src, **kw)
+
+        runs = {"fake": (self.bin, lambda c: [3, 1, 2], lab.SIM, {})}
+        with mock.patch.object(sys, "stderr", io.StringIO()), mock.patch.object(sm, "fold", fold):
+            rows, failures = lab.run_cells([self.cell], runs, 1, 4)
+        self.assertEqual(folds, [([1], 2), ([2], 1)])
+        self.assertEqual(set(rows["fake"]), {("halve-5", 1), ("halve-5", 2)})
         self.assertEqual(len(failures), 1)
 
 

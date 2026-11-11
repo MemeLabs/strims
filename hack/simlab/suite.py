@@ -798,7 +798,8 @@ TIME = ["/usr/bin/time", "-f", f"{TIME_TAG} %M"] if Path("/usr/bin/time").exists
 def run_jobs(jobs, slots, mem_gib, need_gib):
     """Runs (label, bin_dir, cell, seed) jobs, the heaviest first, under
     `slots` processes and `mem_gib` of memory, a job taking its cell's
-    `need_gib`. Yields (job, row, error)."""
+    `need_gib`. Yields, each time jobs end, the (job, row, error) of
+    every job that ended since the last yield."""
     lock = threading.Condition()
     used = [0.0]
 
@@ -844,9 +845,11 @@ def run_jobs(jobs, slots, mem_gib, need_gib):
 
     order = sorted(jobs, key=lambda j: -j[2]["mem_gib"])
     with cf.ThreadPoolExecutor(slots) as ex:
-        futures = [ex.submit(one, j) for j in order]
-        for f in cf.as_completed(futures):
-            yield f.result()
+        waiting = [ex.submit(one, j) for j in order]
+        while waiting:
+            ended, _ = cf.wait(waiting, return_when=cf.FIRST_COMPLETED)
+            yield [f.result() for f in waiting if f in ended]
+            waiting = [f for f in waiting if f not in ended]
 
 
 def load_rows(path):
@@ -865,10 +868,9 @@ def load_rows(path):
 
 # Each sim's output dir knob (hack/sim-db): the run writes its tables there.
 OUT_KNOB = {PPSPP: "SIM_OUT", SIM: "STRIMS_SIM_OUT"}
-# Finished jobs fold into the invocation's store this many at a time, or
-# this long after the first waits.
+# Finished jobs fold into the invocation's store as they end, those that
+# ended while the last fold ran together, at most this many a transaction.
 FOLD_BATCH = 16
-FOLD_SECS = 5
 
 
 class Invocation:
@@ -928,8 +930,10 @@ def run_cells(cells, runs, slots, mem_gib):
     target/sim-suite/rows/<label>.jsonl, a line a run naming the cache
     source of its tables); returns each label's side, its runs' jobs by
     (cell, seed), and the failures. Each job writes its tables into an
-    output dir, folded into the invocation's store (Invocation) as jobs
-    end; its line is written once they are. The invocation's tables go to
+    output dir, folded into the invocation's store (Invocation) as soon as
+    the job ends and then removed (a failed job's at once), so an
+    invocation holds the CSV of the jobs running and folding alone; its
+    line is written once they are folded. The invocation's tables go to
     the cache, and the catalog indexes them before a side is made of
     them: a run whose rows the catalog lacks fails."""
     store = lambda label: WORK / "rows" / f"{label}.jsonl"
@@ -960,10 +964,8 @@ def run_cells(cells, runs, slots, mem_gib):
     failures = []
     t0 = time.monotonic()
     files = {label: open(store(label), "a") for label in runs}
-    pending = []
-    first = [None]
 
-    def fold():
+    def fold(pending):
         batch = [{"k": job_id(label, c, s), "dir": extra[OUT_KNOB[c["sim"]]], "sim": c["sim"], "test": c["test"],
                   "cell": c["name"], "arm": label, "seed": s, "env": c["env"], "row": row,
                   "wall_s": row.get("_wall_s"), "rss_mb": row.get("_rss_mb")}
@@ -988,22 +990,23 @@ def run_cells(cells, runs, slots, mem_gib):
             have[label][rec["id"]] = rec
             files[label].write(json.dumps(rec) + "\n")
             files[label].flush()
-        pending.clear()
-        first[0] = None
 
     try:
-        for done, (job, row, err) in enumerate(run_jobs(jobs, slots, mem_gib, need), 1):
-            label, _, c, s, _ = job
-            if err:
-                failures.append(f"{label} {c['name']} seed {s}: {err}")
-            if row is not None:
-                pending.append((job, row))
-                first[0] = first[0] or time.monotonic()
-            if pending and (len(pending) >= FOLD_BATCH or time.monotonic() - first[0] >= FOLD_SECS):
-                fold()
+        done = 0
+        for ended in run_jobs(jobs, slots, mem_gib, need):
+            pending = []
+            for job, row, err in ended:
+                label, _, c, s, extra = job
+                if err:
+                    failures.append(f"{label} {c['name']} seed {s}: {err}")
+                if row is not None:
+                    pending.append((job, row))
+                else:
+                    shutil.rmtree(extra[OUT_KNOB[c["sim"]]], ignore_errors=True)
+            for i in range(0, len(pending), FOLD_BATCH):
+                fold(pending[i:i + FOLD_BATCH])
+            done += len(ended)
             print(f"\r{done}/{len(jobs)} runs, {time.monotonic() - t0:.0f} s", end="", file=sys.stderr)
-        if pending:
-            fold()
     finally:
         print(file=sys.stderr)
         for f in files.values():
