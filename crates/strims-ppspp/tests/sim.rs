@@ -3999,23 +3999,27 @@ impl Sim {
         if let Some(s) = &series {
             let mut names = vec!["sec"];
             names.extend(s.cols.iter().map(|(n, _)| *n));
-            let mut t = Table::new("seconds", &names);
+            let mut t = Table::new(dir, "seconds", &names)?;
             for k in 0..s.len() {
                 let mut row = vec![k as i64];
                 row.extend(s.cols.iter().map(|(_, v)| v.get(k).copied().unwrap_or(-1)));
                 t.ints(&row);
             }
-            t.write(dir)?;
-            let mut t = Table::new("viewer_seconds", &["viewer", "sec", "lag_ms", "frames"]);
+            t.finish()?;
+            let mut t = Table::new(
+                dir,
+                "viewer_seconds",
+                &["viewer", "sec", "lag_ms", "frames"],
+            )?;
             for (i, (lag, frames)) in s.lag.iter().zip(&s.frames).enumerate() {
                 for (k, (l, f)) in lag.iter().zip(frames).enumerate() {
                     t.ints(&[i as i64, k as i64, *l, *f]);
                 }
             }
-            t.write(dir)?;
+            t.finish()?;
         }
-        let mut t = Table::new("reads", &["viewer", "t_ms", "seq", "lag_ms"]);
-        let mut stalls = Table::new("stalls", &["viewer", "delay_ms", "t_ms", "stall_ms"]);
+        let mut t = Table::new(dir, "reads", &["viewer", "t_ms", "seq", "lag_ms"])?;
+        let mut stalls = Table::new(dir, "stalls", &["viewer", "delay_ms", "t_ms", "stall_ms"])?;
         for (i, v) in honest.iter().enumerate() {
             let reads = read_rows(v);
             for &(at, seq, lag) in &reads {
@@ -4027,9 +4031,10 @@ impl Sim {
                 }
             }
         }
-        t.write(dir)?;
-        stalls.write(dir)?;
+        t.finish()?;
+        stalls.finish()?;
         let mut t = Table::typed(
+            dir,
             "parents",
             &[
                 ("t_ms", "BIGINT"),
@@ -4038,7 +4043,7 @@ impl Sim {
                 ("parent", "BIGINT"),
                 ("reason", "VARCHAR"),
             ],
-        );
+        )?;
         for p in self.parents.iter().flatten() {
             t.fields(&[
                 (p.at - start).as_millis().to_string(),
@@ -4048,12 +4053,12 @@ impl Sim {
                 p.why.name().to_owned(),
             ]);
         }
-        t.write(dir)?;
-        let mut t = Table::new("bins", &bin_cols());
+        t.finish()?;
+        let mut t = Table::new(dir, "bins", &bin_cols())?;
         for row in self.bins.iter().flat_map(|b| &b.rows) {
             t.ints(row);
         }
-        t.write(dir)?;
+        t.finish()?;
         // Each node's number in the tables, if an honest viewer at the end.
         let mut viewer = vec![-1i64; self.nodes.len()];
         for (i, v) in honest.iter().enumerate() {
@@ -4062,13 +4067,13 @@ impl Sim {
             }
         }
         if let Some(rows) = self.bins.as_ref().and_then(|b| b.node_rows.as_ref()) {
-            let mut t = Table::new("node_bins", &node_bin_cols());
+            let mut t = Table::new(dir, "node_bins", &node_bin_cols())?;
             for row in rows {
                 let mut row = row.clone();
                 row[3] = viewer.get(row[2] as usize).copied().unwrap_or(-1);
                 t.ints(&row);
             }
-            t.write(dir)?;
+            t.finish()?;
         }
         let us = |at: Time| -> i64 {
             if at >= start {
@@ -4078,6 +4083,7 @@ impl Sim {
             }
         };
         let mut t = Table::typed(
+            dir,
             "viewers",
             &[
                 ("viewer", "BIGINT"),
@@ -4089,7 +4095,7 @@ impl Sim {
                 ("arrive_ms", "BIGINT"),
                 ("depart_ms", "BIGINT"),
             ],
-        );
+        )?;
         for (i, v) in honest.iter().enumerate() {
             let node = self
                 .nodes
@@ -4107,9 +4113,10 @@ impl Sim {
                 v.left.map_or(String::new(), |t| (us(t) / 1000).to_string()),
             ]);
         }
-        t.write(dir)?;
+        t.finish()?;
         if let Some(events) = &self.timeline {
             let mut t = Table::typed(
+                dir,
                 "events",
                 &[
                     ("t_us", "BIGINT"),
@@ -4119,7 +4126,7 @@ impl Sim {
                     ("value", "BIGINT"),
                     ("detail", "VARCHAR"),
                 ],
-            );
+            )?;
             for e in events {
                 t.fields(&[
                     us(e.at).to_string(),
@@ -4130,10 +4137,11 @@ impl Sim {
                     e.detail.to_owned(),
                 ]);
             }
-            t.write(dir)?;
+            t.finish()?;
         }
         if let Some(forecasts) = &self.forecasts {
-            self.forecast_table(forecasts, &viewer, &us).write(dir)?;
+            self.forecast_table(dir, forecasts, &viewer, &us)?
+                .finish()?;
         }
         let mut meta = String::from("{\"sim\":\"ppspp\"");
         if let Some(s) = &series {
@@ -4167,11 +4175,13 @@ impl Sim {
     /// `us` maps a true time to the tables' µs.
     fn forecast_table(
         &self,
+        dir: &Path,
         forecasts: &[Forecast],
         viewer: &[i64],
         us: &dyn Fn(Time) -> i64,
-    ) -> Table {
+    ) -> io::Result<Table> {
         let mut t = Table::typed(
+            dir,
             "forecast",
             &[
                 ("t_ms", "BIGINT"),
@@ -4194,7 +4204,7 @@ impl Sim {
                 ("channel_open_ms", "BIGINT"),
                 ("live", "BOOLEAN"),
             ],
-        );
+        )?;
         let ms_of = |at: Time| us(at).div_euclid(1000);
         // When each node took its place, every time: a sample's truth is
         // the peer's first store in the incarnation then; and a chunk held
@@ -4277,7 +4287,7 @@ impl Sim {
                 live.to_string(),
             ]);
         }
-        t
+        Ok(t)
     }
 
     fn sample_alloc(&mut self) {
@@ -10529,37 +10539,56 @@ impl SeriesData {
     }
 }
 
-/// One of [`Sim::write_tables`]' tables: integer columns, as CSV.
+/// How much of a [`Table`]'s CSV it holds before writing it to its file.
+const SPILL: usize = 1 << 20;
+
+/// One of [`Sim::write_tables`]' tables: its columns, and its rows as CSV,
+/// which go to `<name>.csv` as the table fills, a MiB at a time
+/// ([`SPILL`]): a long or overloaded run's logs come to gigabytes of CSV,
+/// more than their records take. [`Table::finish`] writes the rest and
+/// `<name>.schema.json`.
 struct Table {
     name: &'static str,
     /// Each column's name and type, as `hack/sim-db` names it.
     cols: Vec<(String, &'static str)>,
+    dir: PathBuf,
+    file: std::fs::File,
+    /// The rows not written yet.
     csv: String,
+    /// The first write that failed: [`Table::finish`] returns it, and
+    /// nothing is written after it.
+    failed: Option<io::Error>,
 }
 
 impl Table {
-    /// A table of integer columns.
-    fn new(name: &'static str, cols: &[impl AsRef<str>]) -> Table {
+    /// A table of integer columns, `<name>.csv` in `dir`.
+    fn new(dir: &Path, name: &'static str, cols: &[impl AsRef<str>]) -> io::Result<Table> {
         let cols: Vec<(&str, &'static str)> = cols.iter().map(|c| (c.as_ref(), "BIGINT")).collect();
-        Table::typed(name, &cols)
+        Table::typed(dir, name, &cols)
     }
 
-    /// A table of columns with their types (`BIGINT`, `BOOLEAN`, `VARCHAR`).
-    fn typed(name: &'static str, cols: &[(&str, &'static str)]) -> Table {
+    /// A table of columns with their types (`BIGINT`, `BOOLEAN`,
+    /// `VARCHAR`): creates `<name>.csv` in `dir`, its header the first
+    /// line.
+    fn typed(dir: &Path, name: &'static str, cols: &[(&str, &'static str)]) -> io::Result<Table> {
+        let file = std::fs::File::create(dir.join(format!("{name}.csv")))?;
         let names: Vec<&str> = cols.iter().map(|(n, _)| *n).collect();
         let mut csv = names.join(",");
         csv.push('\n');
-        Table {
+        Ok(Table {
             name,
             cols: cols.iter().map(|&(n, t)| (n.to_owned(), t)).collect(),
+            dir: dir.to_owned(),
+            file,
             csv,
-        }
+            failed: None,
+        })
     }
 
     /// Appends a row already formatted as CSV fields.
     fn fields(&mut self, row: &[String]) {
         self.csv.push_str(&row.join(","));
-        self.csv.push('\n');
+        self.end_row();
     }
 
     /// Appends a row of integers, [`NONE`] an empty field.
@@ -10573,19 +10602,41 @@ impl Table {
                 write!(self.csv, "{x}").unwrap();
             }
         }
-        self.csv.push('\n');
+        self.end_row();
     }
 
-    /// Writes `<name>.csv` and `<name>.schema.json` into `dir`.
-    fn write(&self, dir: &Path) -> io::Result<()> {
-        std::fs::write(dir.join(format!("{}.csv", self.name)), &self.csv)?;
+    /// Ends a row, and writes the rows held once they come to [`SPILL`].
+    fn end_row(&mut self) {
+        self.csv.push('\n');
+        if self.csv.len() >= SPILL {
+            self.flush();
+        }
+    }
+
+    /// Writes the rows held to the file, unless a write failed before.
+    fn flush(&mut self) {
+        if self.failed.is_none()
+            && let Err(e) = io::Write::write_all(&mut self.file, self.csv.as_bytes())
+        {
+            self.failed = Some(e);
+        }
+        self.csv.clear();
+    }
+
+    /// Writes the rows not written yet, then `<name>.schema.json`; the
+    /// first write that failed, if one did.
+    fn finish(mut self) -> io::Result<()> {
+        self.flush();
+        if let Some(e) = self.failed.take() {
+            return Err(e);
+        }
         let cols: Vec<String> = self
             .cols
             .iter()
             .map(|(n, t)| format!("{{\"name\":\"{n}\",\"type\":\"{t}\"}}"))
             .collect();
         std::fs::write(
-            dir.join(format!("{}.schema.json", self.name)),
+            self.dir.join(format!("{}.schema.json", self.name)),
             format!("{{\"columns\":[{}]}}\n", cols.join(",")),
         )
     }

@@ -41,8 +41,9 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
+use std::fs::File;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use strims_base::stats::WaitHistogram;
@@ -70,27 +71,48 @@ impl Col {
     }
 }
 
-/// One table being written: its columns, then its rows as CSV.
+/// How much of a [`Table`]'s CSV it holds before writing it to its file.
+const SPILL: usize = 1 << 20;
+
+/// One table being written: its columns, and its rows as CSV, which go to
+/// `<name>.csv` as the table fills, a MiB at a time ([`SPILL`]): a long or
+/// overloaded run's logs come to gigabytes of CSV, more than their records
+/// take. [`Table::finish`] writes the rest and `<name>.schema.json`.
 pub(crate) struct Table {
     name: &'static str,
     cols: Vec<(String, Col)>,
+    dir: PathBuf,
+    file: File,
+    /// The rows not written yet.
     csv: String,
+    /// The first write that failed: [`Table::finish`] returns it, and
+    /// nothing is written after it.
+    failed: Option<io::Error>,
 }
 
 impl Table {
-    pub fn new(name: &'static str, cols: &[(&str, Col)]) -> Table {
+    /// Creates `<name>.csv` in `dir`, its header the first line.
+    pub fn new(dir: &Path, name: &'static str, cols: &[(&str, Col)]) -> io::Result<Table> {
         let cols: Vec<(String, Col)> = cols.iter().map(|&(n, c)| (n.to_owned(), c)).collect();
+        let file = File::create(dir.join(format!("{name}.csv")))?;
         let mut csv = String::new();
         let header: Vec<&str> = cols.iter().map(|(n, _)| n.as_str()).collect();
         csv.push_str(&header.join(","));
         csv.push('\n');
-        Table { name, cols, csv }
+        Ok(Table {
+            name,
+            cols,
+            dir: dir.to_owned(),
+            file,
+            csv,
+            failed: None,
+        })
     }
 
     /// A table of integer columns.
-    pub fn ints_named(name: &'static str, cols: &[String]) -> Table {
+    pub fn ints_named(dir: &Path, name: &'static str, cols: &[String]) -> io::Result<Table> {
         let cols: Vec<(&str, Col)> = cols.iter().map(|n| (n.as_str(), Col::Int)).collect();
-        Table::new(name, &cols)
+        Table::new(dir, name, &cols)
     }
 
     /// Appends a row of integers, `None` an empty field (`NULL` to
@@ -104,7 +126,7 @@ impl Table {
                 let _ = write!(self.csv, "{x}");
             }
         }
-        self.csv.push('\n');
+        self.end_row();
     }
 
     /// Appends a row of integers.
@@ -115,25 +137,47 @@ impl Table {
             }
             let _ = write!(self.csv, "{x}");
         }
-        self.csv.push('\n');
+        self.end_row();
     }
 
     /// Appends a row already formatted as CSV fields.
     pub fn fields(&mut self, row: &[String]) {
         self.csv.push_str(&row.join(","));
-        self.csv.push('\n');
+        self.end_row();
     }
 
-    /// Writes `<name>.csv` and `<name>.schema.json` into `dir`.
-    pub fn write(&self, dir: &Path) -> io::Result<()> {
-        std::fs::write(dir.join(format!("{}.csv", self.name)), &self.csv)?;
+    /// Ends a row, and writes the rows held once they come to [`SPILL`].
+    fn end_row(&mut self) {
+        self.csv.push('\n');
+        if self.csv.len() >= SPILL {
+            self.flush();
+        }
+    }
+
+    /// Writes the rows held to the file, unless a write failed before.
+    fn flush(&mut self) {
+        if self.failed.is_none()
+            && let Err(e) = io::Write::write_all(&mut self.file, self.csv.as_bytes())
+        {
+            self.failed = Some(e);
+        }
+        self.csv.clear();
+    }
+
+    /// Writes the rows not written yet, then `<name>.schema.json`; the
+    /// first write that failed, if one did.
+    pub fn finish(mut self) -> io::Result<()> {
+        self.flush();
+        if let Some(e) = self.failed.take() {
+            return Err(e);
+        }
         let cols: Vec<String> = self
             .cols
             .iter()
             .map(|(n, c)| format!("{{\"name\":\"{n}\",\"type\":\"{}\"}}", c.name()))
             .collect();
         std::fs::write(
-            dir.join(format!("{}.schema.json", self.name)),
+            self.dir.join(format!("{}.schema.json", self.name)),
             format!("{{\"columns\":[{}]}}\n", cols.join(",")),
         )
     }
@@ -386,7 +430,7 @@ impl Report {
         if let Some(s) = &series {
             let mut cols = vec![("sec", Col::Int)];
             cols.extend(s.cols.iter().map(|(n, _)| (*n, Col::Int)));
-            let mut t = Table::new("seconds", &cols);
+            let mut t = Table::new(dir, "seconds", &cols)?;
             let mut row = Vec::with_capacity(cols.len());
             for k in 0..s.len() {
                 row.clear();
@@ -394,8 +438,9 @@ impl Report {
                 row.extend(s.cols.iter().map(|(_, v)| v.get(k).copied().unwrap_or(-1)));
                 t.ints(&row);
             }
-            t.write(dir)?;
+            t.finish()?;
             let mut t = Table::new(
+                dir,
                 "viewer_seconds",
                 &[
                     ("viewer", Col::Int),
@@ -403,7 +448,7 @@ impl Report {
                     ("lag_ms", Col::Int),
                     ("frames", Col::Int),
                 ],
-            );
+            )?;
             for (i, (lag, frames)) in s.lag.iter().zip(&s.frames).enumerate() {
                 for (k, (l, f)) in lag.iter().zip(frames).enumerate() {
                     // A second it wasn't there in (see `Report::series`).
@@ -413,10 +458,11 @@ impl Report {
                     t.ints(&[i as i64, k as i64, *l, *f]);
                 }
             }
-            t.write(dir)?;
+            t.finish()?;
         }
         let ms_from = |at: Duration| ms_since(at, start);
         let mut t = Table::new(
+            dir,
             "reads",
             &[
                 ("viewer", Col::Int),
@@ -424,8 +470,9 @@ impl Report {
                 ("seq", Col::Int),
                 ("lag_ms", Col::Int),
             ],
-        );
+        )?;
         let mut stalls = Table::new(
+            dir,
             "stalls",
             &[
                 ("viewer", Col::Int),
@@ -433,7 +480,7 @@ impl Report {
                 ("t_ms", Col::Int),
                 ("stall_ms", Col::Int),
             ],
-        );
+        )?;
         for (i, v) in viewers.iter().enumerate() {
             let reads = self.read_rows(v);
             for &(at, seq, lag) in &reads {
@@ -445,9 +492,10 @@ impl Report {
                 }
             }
         }
-        t.write(dir)?;
-        stalls.write(dir)?;
+        t.finish()?;
+        stalls.finish()?;
         let mut t = Table::new(
+            dir,
             "parents",
             &[
                 ("t_ms", Col::Int),
@@ -456,7 +504,7 @@ impl Report {
                 ("parent", Col::Int),
                 ("reason", Col::Text),
             ],
-        );
+        )?;
         for p in &self.parent_changes {
             t.fields(&[
                 ms_from(p.at).to_string(),
@@ -466,7 +514,7 @@ impl Report {
                 p.why.name().to_owned(),
             ]);
         }
-        t.write(dir)?;
+        t.finish()?;
         let hostile = |h: HostIx| {
             matches!(
                 self.scenario.hosts.get(h).map(|x| x.class),
@@ -479,7 +527,7 @@ impl Report {
             .filter(|&h| !hostile(h))
             .collect();
         let width = bin.max(Duration::from_millis(1));
-        self.bins_table(spec.seed, &honest, width)?.write(dir)?;
+        self.bins_table(dir, spec.seed, &honest, width)?.finish()?;
         let number: BTreeMap<HostIx, usize> = viewers
             .iter()
             .enumerate()
@@ -489,9 +537,11 @@ impl Report {
         if nodes {
             let mut hosts = vec![spec.seed];
             hosts.extend(viewers.iter().map(|v| v.host));
-            self.node_bins_table(&hosts, &number, width).write(dir)?;
+            self.node_bins_table(dir, &hosts, &number, width)?
+                .finish()?;
         }
         let mut t = Table::new(
+            dir,
             "viewers",
             &[
                 ("viewer", Col::Int),
@@ -504,7 +554,7 @@ impl Report {
                 ("arrive_ms", Col::Int),
                 ("depart_ms", Col::Int),
             ],
-        );
+        )?;
         for (i, v) in viewers.iter().enumerate() {
             let h = self.hosts.get(v.host);
             let (arrive, _) = self.presence(v.host);
@@ -521,10 +571,10 @@ impl Report {
                 depart.map_or(String::new(), |(at, _)| ms_from(at).to_string()),
             ]);
         }
-        t.write(dir)?;
-        self.events_table(&viewers, start).write(dir)?;
+        t.finish()?;
+        self.events_table(dir, &viewers, start)?.finish()?;
         if self.scenario.forecast_log {
-            self.forecast_table(&number, start).write(dir)?;
+            self.forecast_table(dir, &number, start)?.finish()?;
         }
         let ints = |v: &[i64]| {
             let v: Vec<String> = v.iter().map(i64::to_string).collect();
@@ -585,10 +635,16 @@ impl Report {
     }
 
     /// The `bins` table ([`bin_cols`]), of `seed` and the `honest` viewers.
-    fn bins_table(&self, seed: HostIx, honest: &[HostIx], width: Duration) -> io::Result<Table> {
+    fn bins_table(
+        &self,
+        dir: &Path,
+        seed: HostIx,
+        honest: &[HostIx],
+        width: Duration,
+    ) -> io::Result<Table> {
         let nb = self.node_bins();
         let edges = nb.edges().max(self.wire_bins.len() as u64);
-        let mut t = Table::ints_named("bins", &bin_cols());
+        let mut t = Table::ints_named(dir, "bins", &bin_cols())?;
         let w = width.as_millis() as i64;
         let start = self
             .scenario
@@ -668,13 +724,14 @@ impl Report {
     /// viewer `number`.
     fn node_bins_table(
         &self,
+        dir: &Path,
         hosts: &[HostIx],
         number: &BTreeMap<HostIx, usize>,
         width: Duration,
-    ) -> Table {
+    ) -> io::Result<Table> {
         let nb = self.node_bins();
         let edges = nb.edges().max(self.wire_bins.len() as u64);
-        let mut t = Table::ints_named("node_bins", &node_bin_cols());
+        let mut t = Table::ints_named(dir, "node_bins", &node_bin_cols())?;
         let w = width.as_millis() as i64;
         let node_cols = node_cols();
         for k in 0..edges.saturating_sub(1) {
@@ -707,13 +764,19 @@ impl Report {
                 t.opt_ints(&row);
             }
         }
-        t
+        Ok(t)
     }
 
     /// The `events` table (see the [module docs](self)), times from
     /// `start`.
-    fn events_table(&self, viewers: &[&ViewerReport], start: Duration) -> Table {
+    fn events_table(
+        &self,
+        dir: &Path,
+        viewers: &[&ViewerReport],
+        start: Duration,
+    ) -> io::Result<Table> {
         let mut t = Table::new(
+            dir,
             "events",
             &[
                 ("t_us", Col::Int),
@@ -723,7 +786,7 @@ impl Report {
                 ("value", Col::Int),
                 ("detail", Col::Text),
             ],
-        );
+        )?;
         let us = |at: Duration| -> i64 {
             match at.checked_sub(start) {
                 Some(d) => d.as_micros() as i64,
@@ -854,13 +917,19 @@ impl Report {
                 detail,
             ]);
         }
-        t
+        Ok(t)
     }
 
     /// The `forecast` table (see the [module docs](self)): every host's
     /// forecast log, `number` the viewers' numbers, times from `start`.
-    fn forecast_table(&self, number: &BTreeMap<HostIx, usize>, start: Duration) -> Table {
+    fn forecast_table(
+        &self,
+        dir: &Path,
+        number: &BTreeMap<HostIx, usize>,
+        start: Duration,
+    ) -> io::Result<Table> {
         let mut t = Table::new(
+            dir,
             "forecast",
             &[
                 ("t_ms", Col::Int),
@@ -883,7 +952,7 @@ impl Report {
                 ("channel_open_ms", Col::Int),
                 ("live", Col::Bool),
             ],
-        );
+        )?;
         let ms = |at: Duration| -> i64 {
             match at.checked_sub(start) {
                 Some(d) => d.as_millis() as i64,
@@ -979,6 +1048,6 @@ impl Report {
                 ]);
             }
         }
-        t
+        Ok(t)
     }
 }
