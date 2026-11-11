@@ -38,8 +38,9 @@ spec.loader.exec_module(simdb)
 spec = importlib.util.spec_from_file_location("suite", Path(__file__).parents[1] / "sim-suite" / "suite.py")
 suite = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(suite)
-# suite.py's simdb is this one, so the tests' patches reach it.
-suite._simdb = simdb
+# suite.py's runs and farm matrices are simlab.suite's (suite.lab), whose
+# simdb is this one, so the tests' patches reach it.
+suite.lab._simdb = simdb
 spec = importlib.util.spec_from_file_location("catalog", Path(__file__).with_name("catalog.py"))
 catalog = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(catalog)
@@ -227,9 +228,9 @@ class ArmLabels(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.root = root = Path(tmp.name)
         for p in (mock.patch.object(simdb, "main_checkout", lambda: root),
-                  mock.patch.object(suite, "farm_root", lambda: root),
+                  mock.patch.object(suite.lab, "farm_root", lambda: root),
                   mock.patch.object(simdb, "pull_sources", lambda s, reads=False: []),
-                  mock.patch.object(suite, "index_catalog", lambda: None),
+                  mock.patch.object(suite.lab, "index_catalog", lambda: None),
                   mock.patch.object(sys, "stderr", io.StringIO()),
                   mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "SIM_DB_ROOT"},
                                   clear=True)):
@@ -330,9 +331,9 @@ class ArmLabels(unittest.TestCase):
                                   first_seed=2001, seeds=3, env=[], no_run=True, farm_args="", against=None,
                                   question="does seed help?", all=False, rank="lag")
         sha = "a" * 40
-        with mock.patch.object(suite, "git", lambda *a, **kw: sha), \
-                mock.patch.object(suite, "peak_gib", lambda r: {"star-3-5": 0.5}), \
-                mock.patch.object(suite, "WORK", self.root / "work"), \
+        with mock.patch.object(suite.lab, "git", lambda *a, **kw: sha), \
+                mock.patch.object(suite.lab, "peak_gib", lambda r: {"star-3-5": 0.5}), \
+                mock.patch.object(suite.lab, "WORK", self.root / "work"), \
                 mock.patch.object(suite, "print_arm_score", lambda *a: None), \
                 mock.patch.object(suite, "arm_score", lambda *a: None), \
                 mock.patch.object(suite, "scorecard", lambda *a, **kw: None):

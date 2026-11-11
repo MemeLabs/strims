@@ -14,14 +14,15 @@ afresh, with --sets (the arms' commit and the knob's values) and with
 options (--seeds, --first-seed, --env, --question, --against, --no-off,
 --knob, --only) on one tier. The commits are two of main's, so the
 matrices' arms and the cells' memory (peak_gib, over no kept rows) stay
-put. It writes nowhere shared: suite.py's seams are pointed at a scratch
-dir for its run (WORK, its rows and matrices; farm_root, the main
-checkout whose target/ holds the farm's and the suite's state), and the
-scoring after the matrices is left out (farm_rows, the rows the farm
-holds, gives none; print_arm_score and scorecard print nothing), so
-nothing pulls, indexes or scores. A run's text is its output, then each
-file it wrote (the matrices in target/sim-suite/farm/, the index in
-farm-runs/ or pending/), named relative to the scratch dir.
+put. It writes nowhere shared: simlab.suite's seams, whose
+write_matrices suite.py's farm calls, are pointed at a scratch dir for
+its run (WORK, its rows and matrices; farm_root, the main checkout whose
+target/ holds the farm's and the suite's state), and the scoring after
+the matrices is left out (simlab.suite's farm_rows, the rows the farm
+holds, gives none; suite.py's print_arm_score and scorecard print
+nothing), so nothing pulls, indexes or scores. A run's text is its
+output, then each file it wrote (the matrices in target/sim-suite/farm/,
+the index in farm-runs/ or pending/), named relative to the scratch dir.
 """
 
 import argparse
@@ -32,6 +33,7 @@ import io
 import sys
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 import goldens
 
@@ -68,11 +70,11 @@ def runs():
 def farm(argv):
     """What `suite.py farm --no-run ARGV` prints and writes."""
     s = suite()
-    with tempfile.TemporaryDirectory(prefix="simlab-matrices-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="simlab-matrices-") as tmp, contextlib.ExitStack() as seams:
         tmp = Path(tmp)
-        s.WORK = tmp / "work"
-        s.farm_root = lambda: tmp / "main"
-        s.farm_rows = lambda name, cells, knob: collections.defaultdict(dict)
+        for name, value in (("WORK", tmp / "work"), ("farm_root", lambda: tmp / "main"),
+                            ("farm_rows", lambda name, cells, knob: collections.defaultdict(dict))):
+            seams.enter_context(mock.patch.object(s.lab, name, value))
         s.print_arm_score = lambda title, sc: None
         s.scorecard = lambda *a, **kw: None
         s.arm_score = lambda *a, **kw: None

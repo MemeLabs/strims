@@ -282,7 +282,8 @@ def inputs():
     for n, kind in (("costs.jsonl", "costs"), ("s3.jsonl", "s3"), ("bin-hashes.json", "bin_hashes")):
         add(farm / n, kind)
     for p in (simdb().main_checkout() / "hack" / "sim-farm" / "farm.py", ROOT / "hack" / "sim-suite" / "suite.py",
-              ROOT / "hack" / "capture" / "analyze.py", Path(__file__), *DOC_FILES):
+              ROOT / "hack" / "simlab" / "suite.py", ROOT / "hack" / "capture" / "analyze.py", Path(__file__),
+              *DOC_FILES):
         add(p, "code")
     return out
 
@@ -623,9 +624,9 @@ def run_metric_docs():
 
 def suite_metrics():
     """suite.py's METRICS: (name, fields read, better, kind, tie, its SQL,
-    the comment above it)."""
+    the comment above it, in simlab.suite, which holds them)."""
     suite = suite_module()
-    src = (ROOT / "hack" / "sim-suite" / "suite.py").read_text().splitlines()
+    src = (ROOT / "hack" / "simlab" / "suite.py").read_text().splitlines()
     out = []
     for name, sql, better, kind, tie in suite.METRICS:
         line = next((i for i, s in enumerate(src) if re.match(rf'^\s*\("{re.escape(name)}",', s)), None)
