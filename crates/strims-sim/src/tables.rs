@@ -17,20 +17,21 @@
 //! | `parents` | change of a node's push parent of a stream ([`Report::parent_changes`]) | `t_ms`, `node` (its host, as in `events`), `stream`, `parent` (the host from then on, -1 for none), `reason`: `open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their channel closed, the stream started anew, or the node stopped without closing its links: a crash, an abrupt departure) |
 //! | `bins` | bin of [`Scenario::wire_bins`] | [`bin_cols`]: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, `capacity` (the relay busy-time reading, `PushStats::upload_capacity`) and `busy`, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`), then [`ACK_COLS`], the acknowledgements alone their uplinks carried, packets and wire bytes, summed over those viewers and the seed's: TCP's pure ACKs (`*_up_ack_packets`, `*_up_ack_bytes`) and the data channels' SACKs (`*_up_sack_packets`, `*_up_sack_bytes`), none of them in `*_up_bytes`, `*_up_packets` or `*_small_packets`; and `budget_capacity` (the capacity reading the seed's budget was measured from, at the bin's end: `PushStats::seed_budget_capacity`, 0 until measured) |
 //! | `node_bins` | node and bin, with `STRIMS_SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node` (its host), `viewer` (its number in `viewers`, -1 for the seed and hostile hosts), what it did in the bin |
-//! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink at the start in bytes per second, -1 without a limit; its steps are `events`' `up_step`), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset), `arrive_ms` (when it booted, [`HostSpec::arrive_at`]: the run's start, negative, for one that came with it) and `depart_ms` (when it left for good, [`Fault::Depart`]; empty if it stayed) |
+//! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink at the start in bytes per second, -1 without a limit; its steps are `events`' `uplink_rate`), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset), `arrive_ms` (when it booted, [`HostSpec::arrive_at`]: the run's start, negative, for one that came with it) and `depart_ms` (when it left for good, [`Fault::Depart`]; empty if it stayed) |
 //! | `events` | timed event | `t_us`, `kind` (its id: the vocabulary, [`strims_wan::vocab`] from `crates/strims-wan/vocab.toml`, gives each kind, the sims that write it and what its other columns hold), `node` (the host it happened to, -1 for none), `peer` (another host, -1 for none), `value`, `detail` |
 //! | `forecast` | sample of a node's forecast log ([`strims_ppspp::LagForecast`]): a HAVE's announcement lag, with `STRIMS_SIM_FORECAST=1` | `t_ms` (the HAVE's arrival), `node`, `viewer`, `peer` (the hosts), `peer_honest` (not a hostile host), `stream`, `seq` (the chunk), `sample_ms` (the lag: from our first sight of the chunk's unit to the HAVE), `mean_ms` (the mean of the peer's lag estimate before the sample, -1 before its first sample), `horizon_ms` (how late a sample still fits that estimate: the later of its decaying peak and its mean plus two deviations, -1 before its first sample), `samples` (the estimate's so far), `fresh` (its latest sample was recent enough for a candidate), `lazy` (we asked the peer for lazy HAVEs), `first_sight` (this HAVE set the unit's first sight: the sample is 0), `run` (the sample's place in the HAVE's run of its stream's bins: a whole unit's HAVE gives one per chunk, the same lag each), `seen_ms` (our first sight of the unit, `t_ms - sample_ms`), `held_ms` (when the peer first stored the chunk, in the incarnation it had at the sample: its runner's held log, `Runner::take_held`, a seed's own writes included; empty if that incarnation never did), `channel_open_ms` (when our channel with the peer opened) and `live` (it was held after both hosts' incarnations started and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
 //! | `arrivals` | chunk a host first held, with `STRIMS_SIM_FORECAST=1` or `STRIMS_SIM_SPEC=1` (its held log, [`strims_ppspp::Held`]) | `t_ms` (when it first held it: the `forecast` table's `held_ms` is this row's, in the incarnation the sample's peer had), `node` (the host), `viewer`, `seq` (the chunk), `how` (`own`: published, or no data message named it, so an unattributed store too; `push`: pushed by the stream's open parent; `answer`: an answer to a request of ours, which wins over `push` when the parent's push answered our request; `other`), `peer` (the source's host, -1 for none), `parent` (the stream's open parent's then, -1 for none), `expected_ms` (when push first expected it: a HAVE marked it the parent's to push), `released_ms` (when push's deadline, or the parent's going, released it to pull), `asked_ms` (our first request for it), `asks` (the requests), `last_ask_peer` and `last_ask_ms` (the last one's host and time), `rtt_ms` (the source channel's smoothed round trip then), `incarnation` (the host's then: its restarts by the hold, the first 0); times empty where none |
 //! | `haves` | chunk a HAVE first announced to a host on a channel, with `STRIMS_SIM_SPEC=1` (its request log, [`strims_ppspp::HaveRecord`]): once per chunk and channel, past the tracked history none | `t_ms` (the HAVE arrived), `node` (the receiver's host), `honest` (not a hostile host), `peer` (the announcing host), `peer_honest`, `stream`, `seq` (the chunk), `channel_open_ms` (when the channel opened: a chunk held before then comes in its first HAVEs, a backlog rather than an arrival), `peer_incarnation` (the peer's then, as `arrivals`' `incarnation` counts them). The `forecast` table samples the same HAVEs in the hybrid, where the chunk's first sight is known, under its own cap; this table has every one. The knowledge delay is `t_ms` less the peer's hold, `arrivals`' earliest `t_ms` of node = peer, seq and incarnation = peer_incarnation |
 //! | `asks` | channel a request of a node's weighed, from its request log ([`strims_ppspp::RequestRecord`]): every request the request round made, once it ended, the asked peer's row and then one per rival, with `STRIMS_SIM_SPEC=1` | the park4 line's `asks` columns where they mean the same: `t_ms` (the request went), `node` (the requester's host), `honest`, `ask` (the request's number in the run, from 0: its rows share it), `round` (`flight`: the request round, its flight window's, the only one here), `peer` (the row's channel's host), `peer_honest`, `picked` (the row is the asked peer's; else a rival's: another channel whose route had fresh window room and an announcement lag for the stream, which the round weighed: one expected to deliver the chunk sooner would have taken it), `declares` (a HAVE from the row's peer had announced the chunk), `stream`, `seq`, `rtt_ms` (the requester's smoothed round trip to the row's peer then), `predicted_ms` and `predicted_p90_ms` (a rival's: when the route expected it to hold the chunk, the chunk's first sight plus its announcement lag's mean, and plus the lag's horizon; empty on the asked row, which a HAVE decided), `predicted_p99_ms` (empty), `outcome` (the asked row only: `answered`, `expired`, `elsewhere`: the chunk came from another peer first and the request settled unanswered, at its timeout or as the read position passed it, or `closed`), `reason` (an expiry's `timeout`), `t_outcome_ms` (the asked row only), `channel_open_ms`, `since_ms` (when the requester's incarnation then began), `peer_incarnation` (the peer's then); and the HAVE world's own: `timeout_ms` (the asked row only: the request's timeout, from its time), `have_ms` (when a HAVE from the row's peer first announced the chunk, the knowledge the request rested on; empty without one) and `released_ms` (when push's deadline released the chunk to pull, empty if push never expected it). The line's `grace_ms` (requests here carry none), `frontier_seq`, `hole_seq` and `state_age_ms` (no STATE summaries) are absent. The truth (`held_ms`, `live`, `err_ms`, `pred_err_ms`, `held_by_p50/p90/p99`) is `hack/sim-db`'s view's, from `arrivals`, as the line's |
 //!
-//! `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
-//! `secs`, the seed's `seed_up` steps and the viewers' `viewer_up` as the
-//! series has them, the number of `seconds`, the bins' `bin_ms`, the
-//! hostile viewers' numbers (`hostile`), and the forecast samples the
-//! nodes' caps left out (`forecasts_lost`); with `STRIMS_SIM_SPEC=1`, the
-//! held log's, the HAVE log's and the request log's (`held_lost`,
-//! `haves_lost`, `asks_lost`: requests, each with its rivals).
+//! `series_meta.json` holds the first swarm's `seed` (its host), the
+//! stream's `rate`, `chunk`, `frame` and `secs`, the seed's `seed_up`
+//! steps and the viewers' `viewer_up` as the series has them, the number
+//! of `seconds`, the bins' `bin_ms`, the hostile viewers' numbers
+//! (`hostile`), and the forecast samples the nodes' caps left out
+//! (`forecasts_lost`); with `STRIMS_SIM_SPEC=1`, the held log's, the HAVE
+//! log's and the request log's (`held_lost`, `haves_lost`, `asks_lost`:
+//! requests, each with its rivals).
 //!
 //! The runners' counters reach the bins from the nodes themselves
 //! (`NodeConfig::stats_bins`), read at each edge before the node's first
@@ -44,7 +45,7 @@
 //! [`Scenario::stats_every`]: crate::Scenario::stats_every
 //! [`HostSpec::arrive_at`]: crate::HostSpec::arrive_at
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs::File;
 use std::io;
@@ -654,6 +655,9 @@ impl Report {
             v.join(",")
         };
         let mut meta = String::from("{\"sim\":\"strims-sim\"");
+        if let Some(sw) = self.scenario.swarms.first() {
+            let _ = write!(meta, ",\"seed\":{}", sw.seed);
+        }
         if let Some(s) = &series {
             let _ = write!(
                 meta,
@@ -908,7 +912,7 @@ impl Report {
                 Fault::PauseReading(h) => push(at, Kind::PauseReading, *h as i64, -1, 0, ""),
                 Fault::ResumeReading(h) => push(at, Kind::ResumeReading, *h as i64, -1, 0, ""),
                 Fault::ResetWriter(s) => push(at, Kind::ResetWriter, *s as i64, -1, 0, ""),
-                Fault::Uplink(h, bps) => push(at, Kind::Uplink, *h as i64, -1, *bps as i64, ""),
+                Fault::Uplink(h, bps) => push(at, Kind::RateLimit, *h as i64, -1, *bps as i64, ""),
                 Fault::Connect { from, to, network } => push(
                     at,
                     Kind::Connect,
@@ -931,23 +935,73 @@ impl Report {
                 push(at, Kind::Arrive, h as i64, -1, 0, "");
             }
         }
+        // A parent's loss at its departure (the `depart` event's time and
+        // how, as the `viewers` table's `depart_ms`), then the viewer's
+        // notice, if it came.
         for l in &self.parent_losses {
-            let (at, value) = match l.noticed_ms {
-                Some(n) => (n, n.saturating_sub(l.departed_ms) as i64),
-                None => (l.departed_ms, -1),
+            let (at, how) = match self.scenario.departure(l.parent) {
+                Some((at, Departure::Graceful)) => (at, "graceful"),
+                Some((at, Departure::Abrupt)) => (at, "abrupt"),
+                None => (Duration::from_millis(l.departed_ms), ""),
             };
             push(
-                Duration::from_millis(at),
-                Kind::ParentLost,
+                at,
+                Kind::ParentDeparted,
                 l.viewer as i64,
                 l.parent as i64,
-                value,
-                "",
+                l.streams as i64,
+                how,
             );
+            if let Some(n) = l.noticed_ms {
+                push(
+                    Duration::from_millis(n),
+                    Kind::ParentNoticed,
+                    l.viewer as i64,
+                    l.parent as i64,
+                    n.saturating_sub(l.departed_ms) as i64,
+                    "",
+                );
+            }
         }
+        // The uplinks' rates and the software caps as levels, from the
+        // run's start: each site's rate for the first swarm's seed and for
+        // every host that steps, then its steps; the starting cap of each
+        // host a fault caps (the faults are its steps).
+        let seed = self.scenario.swarms.first().map(|s| s.seed);
+        let capped: BTreeSet<HostIx> = self
+            .scenario
+            .faults
+            .iter()
+            .filter_map(|f| match f.fault {
+                Fault::Uplink(h, _) => Some(h),
+                _ => None,
+            })
+            .collect();
         for (h, spec) in self.scenario.hosts.iter().enumerate() {
+            if let Some(cap) = spec.uplink.filter(|_| capped.contains(&h)) {
+                push(
+                    Duration::ZERO,
+                    Kind::RateLimit,
+                    h as i64,
+                    -1,
+                    cap as i64,
+                    "",
+                );
+            }
+            if let Some(site) = spec.site
+                && (seed == Some(h) || !spec.up_steps.is_empty())
+            {
+                push(
+                    Duration::ZERO,
+                    Kind::UplinkRate,
+                    h as i64,
+                    -1,
+                    site.profile.up as i64,
+                    "",
+                );
+            }
             for &(at, bps) in &spec.up_steps {
-                push(at, Kind::UpStep, h as i64, -1, bps as i64, "");
+                push(at, Kind::UplinkRate, h as i64, -1, bps as i64, "");
             }
             for c in &spec.competing {
                 push(
@@ -969,7 +1023,7 @@ impl Report {
                     let d = ms.saturating_sub(j.start_ms) as i64;
                     push(
                         Duration::from_millis(ms),
-                        Kind::FirstFrame,
+                        Kind::FirstRead,
                         v.host as i64,
                         -1,
                         d,

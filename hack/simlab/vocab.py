@@ -39,8 +39,8 @@ in its order:
   holders(kid)                 the sims whose runs may hold the kind
   value_text(k)                what a kind's table says `value` holds, its
                                unit after it
-  knobs()                      the current kinds a knob (`with`) gates, by
-                               knob
+  knobs()                      the current kinds a knob (`env_gate`) gates,
+                               by knob
   phases(), episodes(), reasons()
                                those sections' names
   entries(section)             a section's tables, by name
@@ -71,8 +71,8 @@ SECTIONS = ("kinds", "phases", "episodes", "reasons")
 FIELDS = ("node", "peer", "value", "unit", "detail")
 # A kind's keys, in the order the generated files give them. `phase`,
 # `level`, `until`, `scope` and `horizon_s` make a kind a phase's anchor.
-KIND_KEYS = ("class", "sims", "with", "description", *FIELDS, "details", "notes", "replaced_by", "phase", "level",
-             "until", "scope", "horizon_s")
+KIND_KEYS = ("class", "sims", "env_gate", "description", *FIELDS, "details", "notes", "replaced_by", "phase",
+             "level", "until", "scope", "horizon_s")
 SECTION_KEYS = {s: ("description", "colour") for s in ("phases", "episodes", "reasons")}
 SCOPES = ("run", "viewer")
 ID = re.compile(r"[a-z][a-z0-9_]*\Z")
@@ -113,8 +113,10 @@ def problems(doc):
     sections and keys it doesn't define, ids that aren't lower snake case,
     a kind without a class or description, sims it doesn't know, a derived
     kind a sim writes, a reference (`replaced_by`, `until`, `phase`) to
-    nothing current, and a phase, episode or reason without a colour of
-    its own in its section (lower case #rrggbb)."""
+    nothing current, a retired kind whose replacement a sim of its runs
+    doesn't hold (`replaced_by` by sim names each of its sims, and only
+    those), and a phase, episode or reason without a colour of its own in
+    its section (lower case #rrggbb)."""
     out = []
     for s in doc:
         if s not in SECTIONS:
@@ -147,7 +149,7 @@ def problems(doc):
         if cls not in CLASSES:
             out.append(f"{where}: class {cls!r} is none of {', '.join(CLASSES)}")
         if cls == "derived":
-            for key in ("sims", "with", "notes", "replaced_by"):
+            for key in ("sims", "env_gate", "notes", "replaced_by"):
                 if key in k:
                     out.append(f"{where}: a derived kind takes no {key!r}: the verdict makes it")
         elif not isinstance(k.get("sims"), list):
@@ -156,7 +158,7 @@ def problems(doc):
             sims = k["sims"]
             if any(s not in SIMS for s in sims) or len(set(sims)) != len(sims):
                 out.append(f"{where}: sims {sims} are not distinct sims of {', '.join(SIMS)}")
-        for key in (*FIELDS, "with"):
+        for key in (*FIELDS, "env_gate"):
             if key in k and not _text(k[key]):
                 out.append(f"{where}: {key} is not text")
         if "details" in k:
@@ -169,12 +171,18 @@ def problems(doc):
                 out.append(f"{where}: notes is not a table of text by sim")
         if "replaced_by" in k:
             r = k["replaced_by"]
-            targets = r.values() if isinstance(r, dict) else [r]
+            sims = k.get("sims") if isinstance(k.get("sims"), list) else []
+            by = r if isinstance(r, dict) else dict.fromkeys(sims, r)
             if isinstance(r, dict) and any(s not in SIMS for s in r):
                 out.append(f"{where}: replaced_by names a sim it doesn't know")
-            for t in targets:
+            elif isinstance(r, dict) and set(r) != set(sims):
+                out.append(f"{where}: replaced_by's sims {sorted(r)} are not its sims {sorted(sims)}")
+            for t in dict.fromkeys(r.values() if isinstance(r, dict) else [r]):
                 if t not in live:
                     out.append(f"{where}: replaced_by {t!r} is not a current kind")
+            for s, t in by.items():
+                if t in live and isinstance(ks[t], dict) and s in SIMS and s not in _holders(ks[t]):
+                    out.append(f"{where}: replaced_by {t!r} for {s}, whose runs don't hold it")
         if "until" in k and k["until"] not in live:
             out.append(f"{where}: until {k['until']!r} is not a current kind")
         if "phase" in k:
@@ -289,10 +297,14 @@ def holders(kid, doc=None):
     other builds write (no sims), every sim, since either sim's runs hold
     it from such a build with its knob on; none for a derived kind, which
     no sim writes."""
-    k = kind(kid, doc)
-    if k["class"] == "derived":
+    return _holders(kind(kid, doc))
+
+
+def _holders(k):
+    if k.get("class") == "derived":
         return []
-    return [s for s in SIMS if s in k["sims"]] if k["sims"] else list(SIMS)
+    sims = k.get("sims") or []
+    return [s for s in SIMS if s in sims] if sims else list(SIMS)
 
 
 def value_text(k):
@@ -304,12 +316,12 @@ def value_text(k):
 
 
 def knobs(doc=None):
-    """The current kinds a knob gates, {knob (`with`): [id]}, in the
+    """The current kinds a knob gates, {knob (`env_gate`): [id]}, in the
     document's order."""
     out = {}
     for kid in kinds(doc=doc):
-        if "with" in kind(kid, doc):
-            out.setdefault(kind(kid, doc)["with"], []).append(kid)
+        if "env_gate" in kind(kid, doc):
+            out.setdefault(kind(kid, doc)["env_gate"], []).append(kid)
     return out
 
 
@@ -348,7 +360,7 @@ CLASS_DOCS = {
 
 
 def variant(kid):
-    """Kind `kid`'s Rust variant: `parent_lost` is `ParentLost`."""
+    """Kind `kid`'s Rust variant: `parent_departed` is `ParentDeparted`."""
     return "".join(p.capitalize() for p in kid.split("_"))
 
 
@@ -474,7 +486,7 @@ def rust(text, doc):
         o.append(f"            Sim::{SIM_VARIANTS[s][0]} => {body},\n")
     o.append("        }\n    }\n}\n\n")
     o.append("/// The current kinds no sim here writes, which other builds' runs hold\n"
-             "/// (their `with` knob on).\n")
+             "/// (their `env_gate` knob on).\n")
     o.append(f"pub const UNWRITTEN: &[&str] = {_strs(unwritten(doc), 0)};\n\n")
     o.append("/// The retired kinds: ids that older runs hold, each `replaced_by` a\n/// current one.\n")
     o.append(f"pub const RETIRED: &[&str] = {_strs(retired(doc), 0)};\n\n")

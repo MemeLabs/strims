@@ -1768,9 +1768,10 @@ TABLE_DOCS = {
         "(sim 'derived' for derived_events'; both sims for a kind only other builds write, under its knob), and "
         "each kind a sim's events hold that the vocabulary doesn't give that sim (documented false, the rest "
         f"NULL): class ({either(vocab.CLASSES)}), description, what node, peer, value (value_meaning, its unit "
-        "after it) and detail hold, details (detail's values), notes (that sim's, where its kind differs), \"with\" "
-        "(the knob a sim writes it under, quoted: a keyword), replaced_by (a retired kind's current id, that "
-        "sim's), documented, n (how many events: 0 for a kind no run has written), and when first and last seen."),
+        "after it) and detail hold, details (detail's values), notes (that sim's, where its kind differs), env_gate "
+        "(the knob a sim writes it under), replaced_by (a retired kind's current id for that sim: a retired kind's "
+        "events of that sim read as that kind's), documented, n (how many events: 0 for a kind no run has "
+        "written), and when first and last seen."),
     "table_catalog": (
         "table", "a table", "name", "metric_catalog ON metric_catalog.tbl = table_catalog.name",
         "This list: each table's grain, keys, joins and description."),
@@ -1781,8 +1782,8 @@ NORMALIZED = {
                "viewer there from the start; up NULL without a limit; hostile false where a sim didn't say.",
     "viewer_seconds": "only the seconds the viewer was there (its stay overlaps the second), in both sims; lag_ms "
                       "NULL in a second without a read.",
-    "events": "t_ms = t_us / 1000; node and peer NULL for none; a parent_lost's value NULL if the viewer never "
-              "stopped counting on the parent; detail_map: detail as a MAP where it is key=value pairs.",
+    "events": "t_ms = t_us / 1000; node and peer NULL for none; a retired parent_lost's value NULL if the viewer "
+              "never stopped counting on the parent; detail_map: detail as a MAP where it is key=value pairs.",
     "seconds": "-1 (no reading) NULL.", "bins": "-1 (no reading) NULL.",
     "node_bins": "viewer NULL for the seed and hostile hosts.",
     "stalls": "The unit played is the sim's: a frame in strims-sim, a chunk in the ppspp sim, whose stalls are "
@@ -1846,7 +1847,7 @@ VERDICT_DOCS = {
 # event_kinds' columns from the vocabulary, as kind_docs gives them.
 KIND_COLS = {"kind": "VARCHAR", "sim": "VARCHAR", "class": "VARCHAR", "description": "VARCHAR",
              "value_meaning": "VARCHAR", "node": "VARCHAR", "peer": "VARCHAR", "detail": "VARCHAR",
-             "details": "VARCHAR[]", "notes": "VARCHAR", "with": "VARCHAR", "replaced_by": "VARCHAR"}
+             "details": "VARCHAR[]", "notes": "VARCHAR", "env_gate": "VARCHAR", "replaced_by": "VARCHAR"}
 # The sim event_kinds names derived_events' kinds by.
 DERIVED_SIM = "derived"
 
@@ -1862,7 +1863,7 @@ def kind_docs():
             out.append({"kind": kid, "sim": sim, "class": k["class"], "description": k["description"],
                         "value_meaning": vocab.value_text(k), "node": k.get("node"), "peer": k.get("peer"),
                         "detail": k.get("detail"), "details": k.get("details"), "notes": vocab.notes(kid, sim),
-                        "with": k.get("with"),
+                        "env_gate": k.get("env_gate"),
                         "replaced_by": vocab.current(kid, sim) if "replaced_by" in k else None})
     return out
 

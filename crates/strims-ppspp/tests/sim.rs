@@ -2900,7 +2900,7 @@ impl Sim {
             self.touch(0);
             match step {
                 SeedStep::Uplink(bw) => {
-                    self.log(Kind::Uplink, 0, -1, bw as i64, "");
+                    self.log(Kind::UplinkRate, 0, -1, bw as i64, "");
                     self.nodes[0].up_bw = bw;
                 }
                 SeedStep::Latency(d) => {
@@ -3173,14 +3173,14 @@ impl Sim {
     /// for another at once ([`Sim::relink`]); abruptly, it goes silent, and
     /// its neighbours' links to it close at their read timeouts
     /// ([`READ_TIMEOUT`], [`Sim::timed_out`]). Each neighbour whose open
-    /// parent it was on some stream logs a `parent_lost`.
+    /// parent it was on some stream logs a `parent_departed`.
     fn depart(&mut self, i: usize) {
         if self.nodes[i].role.off() {
             return;
         }
         let abrupt = self.cfg.depart.is_some_and(|d| d.abrupt);
         let how = if abrupt { "abrupt" } else { "graceful" };
-        self.log(Kind::Depart, i as i64, -1, 0, how);
+        self.log(Kind::Depart, i as i64, -1, i64::from(abrupt), how);
         let links: Vec<(usize, usize)> =
             self.nodes[i].links.iter().map(|(&j, &l)| (j, l)).collect();
         for &(j, l) in &links {
@@ -3201,7 +3201,7 @@ impl Sim {
                 self.parent_lost.0 += 1;
                 self.parent_lost.1 += lost as u64;
             }
-            self.log(Kind::ParentLost, j as i64, i as i64, lost as i64, how);
+            self.log(Kind::ParentDeparted, j as i64, i as i64, lost as i64, how);
         }
         self.parents_gone(i);
         let n = &mut self.nodes[i];
@@ -3602,6 +3602,16 @@ impl Sim {
             let honest = self.nodes[i].role == Role::Peer;
             self.joined.entry(i).or_default().push((t0(), honest));
         }
+        // The seed's uplink rate from the start, a level its steps move
+        // ([`SeedStep::Uplink`]).
+        let up = TimedEvent {
+            at: t0(),
+            kind: Kind::UplinkRate,
+            node: 0,
+            peer: -1,
+            value: self.nodes[0].up_bw as i64,
+            detail: "",
+        };
         let joins = at_start.into_iter().map(|i| TimedEvent {
             at: t0(),
             kind: Kind::Join,
@@ -3610,7 +3620,7 @@ impl Sim {
             value: 0,
             detail: "",
         });
-        self.timeline = Some(joins.collect());
+        self.timeline = Some(std::iter::once(up).chain(joins).collect());
         self.parents = Some(Vec::new());
         for n in &mut self.nodes {
             n.runner.set_parent_log(true);
@@ -4117,14 +4127,15 @@ impl Sim {
     /// | `haves` | chunk a HAVE first announced to a node on a channel, with `SIM_SPEC=1` (its request log, [`Runner::take_haves`], [`HaveRecord`]) | strims-sim's `haves` columns: `t_ms` (the HAVE arrived), `node`, `honest` (the node is the seed or its incarnation then an honest viewer's, [`Sim::joined`]), `peer` (-1 for a key that named no link), `peer_honest` (the same, in its incarnation then), `stream`, `seq`, `channel_open_ms`, `peer_incarnation` (as `arrivals`' `incarnation`; empty without a peer). The `forecast` table samples a capped subset of these HAVEs; the knowledge delay is `t_ms` less the peer's hold in that incarnation, from `arrivals` (`hack/sim-db`'s view) |
     /// | `asks` | channel a request of a node's weighed, from its request log ([`Runner::take_requests`], [`RequestRecord`]): every request the request round made, once it ended, the asked peer's row and then one per rival, with `SIM_SPEC=1` | strims-sim's `asks` columns: `t_ms`, `node`, `honest` and `peer_honest` (as `haves`'), `ask`, `round` (`flight`), `peer`, `picked`, `declares` (a HAVE from the row's peer had announced the chunk), `stream`, `seq`, `timeout_ms` (the asked row's), `rtt_ms`, `predicted_ms` and `predicted_p90_ms` (a rival's route expectation; empty on the asked row), `predicted_p99_ms` (empty), `have_ms` (the row's peer's HAVE of the chunk), `released_ms` (push released the chunk to pull), `outcome` (`answered`, `expired`, `elsewhere` or `closed`; the asked row's), `reason` (`timeout`), `t_outcome_ms`, `channel_open_ms`, `since_ms` (when the requester's incarnation then joined), `peer_incarnation`. A node whose place a new viewer takes leaves its requests still open unrecorded. The truth is `hack/sim-db`'s view's, from `arrivals` |
     ///
-    /// `series_meta.json` holds the stream's `rate`, `chunk`, `frame` and
-    /// `secs`, the seed's `seed_up` steps and the viewers' `viewer_up` as
-    /// the series has them, the number of `seconds` and `viewers`, the
-    /// bins' `bin_ms`, and the forecast samples and parent changes the
-    /// logs' caps left out (`forecasts_lost`, `parents_lost`), with
-    /// `SIM_SPEC=1` the held, HAVE and request logs' too (`held_lost`,
-    /// `haves_lost`, `asks_lost`: requests, each with its rivals). An empty
-    /// field is a reading the run doesn't have ([`NONE`]).
+    /// `series_meta.json` holds the `seed` (its node, 0), the stream's
+    /// `rate`, `chunk`, `frame` and `secs`, the seed's `seed_up` steps and
+    /// the viewers' `viewer_up` as the series has them, the number of
+    /// `seconds` and `viewers`, the bins' `bin_ms`, and the forecast
+    /// samples and parent changes the logs' caps left out
+    /// (`forecasts_lost`, `parents_lost`), with `SIM_SPEC=1` the held, HAVE
+    /// and request logs' too (`held_lost`, `haves_lost`, `asks_lost`:
+    /// requests, each with its rivals). An empty field is a reading the
+    /// run doesn't have ([`NONE`]).
     ///
     /// The bins read the counters the series reads, at each edge rather
     /// than each second's first event ([`Sim::sample_bins`]), so a bin's
@@ -4290,7 +4301,7 @@ impl Sim {
             self.haves_table(dir, &r.haves, &us)?.finish()?;
             self.asks_table(dir, &r.asks, &us)?.finish()?;
         }
-        let mut meta = String::from("{\"sim\":\"ppspp\"");
+        let mut meta = String::from("{\"sim\":\"ppspp\",\"seed\":0");
         if let Some(s) = &series {
             let _ = write!(
                 meta,
@@ -7631,6 +7642,76 @@ fn sim_held_truth_meets_the_reads(sim: &Sim, d: &Path) {
     assert!(truths > 0);
 }
 
+/// The seed's uplink is a level of the `events` table (`uplink_rate`): its
+/// rate from the start, at the run's start, then each uplink step, the
+/// levels the series' `seed_up` (in `series_meta.json`) holds, which reads
+/// the uplink at each second's end: a step at `t` s shows at second
+/// `ceil(t) - 1`. A latency step is no level of it. `series_meta.json`
+/// names the seed.
+#[test]
+fn sim_uplink_rate_is_the_seed_ups_levels() {
+    let mut cfg = Config::new(5, 8);
+    cfg.stream_secs = 8;
+    cfg.degree = 4;
+    cfg.push_mode = PushMode::Hybrid;
+    cfg.stream_count = 4;
+    let up = cfg.seed_up as i64;
+    cfg.steps = vec![
+        (3, SeedStep::Uplink(cfg.seed_up / 2)),
+        (4, SeedStep::Latency(Duration::from_millis(50))),
+        (6, SeedStep::Uplink(cfg.seed_up)),
+    ];
+    let mut sim = Sim::new(cfg);
+    sim.keep_tables(Duration::from_millis(1000), false, false);
+    sim.run();
+    let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "sim_uplink_rate_is_the_seed_ups_levels-{}",
+        std::process::id()
+    ));
+    sim.write_tables(&d).unwrap();
+    let events = read_table(&d, "events").unwrap();
+    let levels: Vec<(i64, i64)> = events
+        .lines()
+        .skip(1)
+        .map(|l| l.split(',').collect::<Vec<_>>())
+        .filter(|f| f[1] == "uplink_rate")
+        .map(|f| {
+            assert_eq!((f[2], f[3], f[5]), ("0", "-1", ""), "{f:?}");
+            (f[0].parse().unwrap(), f[4].parse().unwrap())
+        })
+        .collect();
+    assert_eq!(
+        levels.iter().map(|l| l.1).collect::<Vec<_>>(),
+        [up, up / 2, up]
+    );
+    assert!(levels[0].0 <= 0, "{levels:?}");
+    assert!(
+        levels[1].0 >= 2_000_000 && levels[2].0 >= 5_000_000,
+        "{levels:?}"
+    );
+    let s = sim.series_data().unwrap();
+    let meta = std::fs::read_to_string(d.join("series_meta.json")).unwrap();
+    assert!(meta.starts_with("{\"sim\":\"ppspp\",\"seed\":0,"), "{meta}");
+    assert!(
+        meta.contains(&format!("\"seed_up\":[{}]", s.seed_up.join(","))),
+        "{meta}"
+    );
+    let seed_up: Vec<(i64, i64)> = s
+        .seed_up
+        .iter()
+        .map(|p| {
+            let (k, v) = p.trim_matches(['[', ']']).split_once(',').unwrap();
+            (k.parse().unwrap(), v.parse().unwrap())
+        })
+        .collect();
+    assert_eq!(seed_up.len(), levels.len(), "{seed_up:?} {levels:?}");
+    assert_eq!(seed_up[0], (0, up));
+    for (&(k, v), &(t, x)) in seed_up.iter().zip(&levels).skip(1) {
+        assert_eq!((k, v), ((t + 999_999) / 1_000_000 - 1, x), "{t} µs");
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 /// The harness labels each read with the chunks the reader truly read
 /// when the store moves the reader on its own: a read offset set again
 /// after reads, past every chunk written, resyncs the viewer's reader to
@@ -8597,7 +8678,8 @@ fn sim_departures_leave_the_rest_watching() {
     // of them leave for good within 2 s from 8 s in, closing their links
     // or going silent. The rest read every chunk to the end and none of
     // them keeps a viewer gone as a parent; every viewer whose open parent
-    // left logs it at that departure, as the row counts.
+    // left logs it at that departure, how it left with it, as the row
+    // counts, and each departure's value says how (1 abruptly).
     let mut traces = Vec::new();
     for abrupt in [false, true] {
         let mut cfg = audience_config(23, 16, 20, Arrivals::Trickle(None));
@@ -8643,21 +8725,25 @@ fn sim_departures_leave_the_rest_watching() {
             }
         }
         let events = sim.timeline.as_ref().unwrap();
+        let how = if abrupt { "abrupt" } else { "graceful" };
         let departs: BTreeMap<i64, Time> = events
             .iter()
             .filter(|e| e.kind == Kind::Depart)
-            .map(|e| (e.node, e.at))
+            .map(|e| {
+                assert_eq!((e.value, e.detail), (i64::from(abrupt), how));
+                (e.node, e.at)
+            })
             .collect();
         let lost: Vec<&TimedEvent> = events
             .iter()
-            .filter(|e| e.kind == Kind::ParentLost)
+            .filter(|e| e.kind == Kind::ParentDeparted)
             .collect();
         assert!(!lost.is_empty(), "abrupt {abrupt}: no parent left");
         for e in &lost {
             // At the parent's departure, by a child still there.
             assert_eq!(
-                departs.get(&e.peer),
-                Some(&e.at),
+                (departs.get(&e.peer), e.detail),
+                (Some(&e.at), how),
                 "abrupt {abrupt}: {}",
                 e.peer
             );
@@ -10977,7 +11063,11 @@ struct SeriesData {
     rate: u64,
     chunk: u64,
     secs: u64,
-    /// `[k, bytes per second]` pairs, as the JSON object writes them.
+    /// `[k, bytes per second]` pairs, as the JSON object writes them: the
+    /// seed's uplink at second 0's end, then at the end of each second `k`
+    /// where it differs from the second before's. A step at `t` s from the
+    /// stream's start (its `uplink_rate` event's time) shows at
+    /// `k = ceil(t) - 1`.
     seed_up: Vec<String>,
     viewer_up: u64,
     lag: Vec<Vec<i64>>,

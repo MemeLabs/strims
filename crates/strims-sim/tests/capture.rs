@@ -4,8 +4,8 @@
 //! A run with ppspp capture on: the trace a run without it gives, and a
 //! dump per host that reads back. And a run's tables
 //! ([`strims_sim::tables`]): the same trace at any bin width, over TCP and
-//! as browsers, seconds that are the series', and bins that add up to the
-//! row's totals.
+//! as browsers, seconds that are the series', bins that add up to the
+//! row's totals, and events that are the scenario's and the report's.
 
 #![allow(
     clippy::unwrap_used,
@@ -24,7 +24,9 @@ use strims_ppspp::PushMode;
 use strims_ppspp_capture::{Dir, Reader, Record, sample_kind};
 use strims_sim::tables::UP_COUNTERS;
 use strims_sim::topology::random_mesh;
-use strims_sim::{Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport, WanHostReport, run};
+use strims_sim::{
+    Fault, Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport, WanHostReport, run,
+};
 use strims_wan::{Access, City, Site};
 
 #[global_allocator]
@@ -316,6 +318,187 @@ fn a_run_with_tables_keeps_its_trace() {
             request_logs_say_what_they_are(&r, &d);
         }
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Six viewers and a seed on cable in Chicago, a full mesh over TCP in
+/// Hybrid, the seed capped at three copies of the stream (so viewers
+/// relay), half the viewers leaving (`how`) within a second from 8 s into
+/// the stream; the seed's site uplink halves 2 s in, and a viewer's cap
+/// halves 4 s in.
+fn departing_wan(how: &str) -> Scenario {
+    let mut s = Scenario::new("events_wan");
+    let site = Site::new(City::Chicago, Access::Cable);
+    let seed = s.host_at("seed", site);
+    let viewers: Vec<_> = (1..7).map(|i| s.host_at(&format!("v{i}"), site)).collect();
+    let all: Vec<_> = std::iter::once(seed).chain(viewers).collect();
+    for (i, &a) in all.iter().enumerate() {
+        for &b in all.iter().skip(i + 1) {
+            s.link(b, a, Transport::Tcp);
+        }
+    }
+    s.wan = Some(strims_wan::Options {
+        jitter: false,
+        loss: false,
+    });
+    s.swarm(
+        SwarmSpec::live(
+            all[0],
+            all[1..].to_vec(),
+            64 * 1024,
+            Duration::from_secs(2),
+            Duration::from_secs(14),
+        )
+        .with_push_mode(PushMode::Hybrid),
+    );
+    s.departures = Some(format!("50:8:1:{how}").parse().unwrap());
+    s.hosts[all[0]].uplink = Some(3 * 64 * 1024);
+    s.hosts[all[0]].up_steps = vec![(Duration::from_secs(4), site.profile.up / 2)];
+    let cap = s.hosts[all[1]].uplink.unwrap();
+    s.at(Duration::from_secs(6), Fault::Uplink(all[1], cap / 2));
+    s.duration = Duration::from_secs(16);
+    s
+}
+
+/// The `events` table's levels, departures and parent losses, against
+/// the report and `series_meta.json`: the seed's `uplink_rate` levels are
+/// its `seed_up` steps (the site's rate at the run's start, then each
+/// step), a capped host's `rate_limit` starts at its cap; a `depart`'s
+/// value is its detail's (1 abrupt); each parent loss
+/// ([`strims_sim::Report::parent_losses`]) is a `parent_departed` at its
+/// parent's `depart` (the streams it parented, how it left) and, once the
+/// viewer noticed, a `parent_noticed` (the ms since); `series_meta.json`
+/// names the seed.
+#[test]
+fn a_runs_events_are_its_scenarios_and_losses() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "a_runs_events_are_its_scenarios_and_losses-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    // Losses noticed, and not: an abrupt departure's child that left too.
+    let mut noticed = [0, 0];
+    for how in ["graceful", "abrupt"] {
+        let mut spec = departing_wan(how);
+        spec.transfer_samples = true;
+        spec.wire_bins = Some(Duration::from_millis(1000));
+        let r = run(spec, 1).unwrap();
+        let d = dir.join(how);
+        r.write_tables(&d, Duration::from_millis(1000), true)
+            .unwrap();
+        let csv = strims_sim::tables::read_table(&d, "events").unwrap();
+        let events: Vec<(i64, String, i64, i64, i64, String)> = csv
+            .lines()
+            .skip(1)
+            .map(|l| {
+                let f: Vec<&str> = l.split(',').collect();
+                let int = |i: usize| f[i].parse::<i64>().unwrap();
+                (int(0), f[1].into(), int(2), int(3), int(4), f[5].into())
+            })
+            .collect();
+        let of = |kind: &str| -> Vec<&(i64, String, i64, i64, i64, String)> {
+            events.iter().filter(|e| e.1 == kind).collect()
+        };
+        let start = r.scenario.swarms[0].start;
+        let us = |at: Duration| at.as_micros() as i64 - start.as_micros() as i64;
+        let seed = r.scenario.swarms[0].seed;
+        let meta: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(d.join("series_meta.json")).unwrap())
+                .unwrap();
+        assert_eq!(meta["seed"], seed, "{how}");
+        let seed_up: Vec<(f64, i64)> = meta["seed_up"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p[0].as_f64().unwrap(), p[1].as_i64().unwrap()))
+            .collect();
+        let up = of("uplink_rate");
+        assert!(
+            up.iter().all(|e| e.2 == seed as i64 && e.3 == -1),
+            "{how}: {up:?}"
+        );
+        assert_eq!(up.len(), seed_up.len(), "{how}: {up:?} {seed_up:?}");
+        assert!(up[0].0 <= 0, "{how}: {up:?}");
+        for (e, &(s, v)) in up.iter().zip(&seed_up) {
+            assert_eq!(e.4, v, "{how}");
+            assert!(
+                (e.0.max(0) as f64 / 1e6 - s).abs() < 0.05,
+                "{how}: {e:?} {s}"
+            );
+        }
+        let capped = r.scenario.swarms[0].viewers[0];
+        let cap = r.scenario.hosts[capped].uplink.unwrap() as i64;
+        let caps: Vec<(i64, i64, i64)> = of("rate_limit").iter().map(|e| (e.0, e.2, e.4)).collect();
+        assert_eq!(
+            caps,
+            [
+                (us(Duration::ZERO), capped as i64, cap),
+                (us(Duration::from_secs(6)), capped as i64, cap / 2)
+            ],
+            "{how}"
+        );
+        let departs = of("depart");
+        assert!(!departs.is_empty(), "{how}");
+        for e in &departs {
+            assert_eq!(
+                (e.4, e.5.as_str()),
+                (i64::from(how == "abrupt"), how),
+                "{e:?}"
+            );
+        }
+        let at = |h: usize| departs.iter().find(|e| e.2 == h as i64).unwrap().0;
+        let mut want: Vec<(i64, i64, i64, i64, String)> = r
+            .parent_losses
+            .iter()
+            .map(|l| {
+                (
+                    at(l.parent),
+                    l.viewer as i64,
+                    l.parent as i64,
+                    l.streams as i64,
+                    how.into(),
+                )
+            })
+            .collect();
+        let mut got: Vec<_> = of("parent_departed")
+            .iter()
+            .map(|e| (e.0, e.2, e.3, e.4, e.5.clone()))
+            .collect();
+        want.sort();
+        got.sort();
+        assert_eq!(got, want, "{how}");
+        let mut want: Vec<(i64, i64, i64, i64)> = r
+            .parent_losses
+            .iter()
+            .filter_map(|l| {
+                let n = l.noticed_ms?;
+                let t = us(Duration::from_millis(n));
+                Some((
+                    t,
+                    l.viewer as i64,
+                    l.parent as i64,
+                    (n - l.departed_ms) as i64,
+                ))
+            })
+            .collect();
+        let mut got: Vec<_> = of("parent_noticed")
+            .iter()
+            .map(|e| (e.0, e.2, e.3, e.4))
+            .collect();
+        want.sort();
+        got.sort();
+        assert_eq!(got, want, "{how}");
+        assert!(
+            of("parent_lost").is_empty()
+                && of("up_step").is_empty()
+                && of("first_frame").is_empty()
+        );
+        assert!(!r.parent_losses.is_empty(), "{how}: no parent departed");
+        for l in &r.parent_losses {
+            noticed[usize::from(l.noticed_ms.is_none())] += 1;
+        }
+    }
+    assert!(noticed[0] > 0 && noticed[1] > 0, "{noticed:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

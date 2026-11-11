@@ -227,7 +227,8 @@ def kind_lines(kind, rows, counts=False, grouped=False):
     if r.get("documented") is False:
         out = [f"- {kind} ({', '.join(sims)}): not in the vocabulary"]
     else:
-        tags = [t for t in (None if grouped else r.get("class"), r.get("with") and f"with {r['with']}") if t]
+        tags = [t for t in (None if grouped else r.get("class"), r.get("env_gate") and f"env_gate {r['env_gate']}")
+                if t]
         if sims != [catalog.DERIVED_SIM]:
             tags.append(", ".join(sims))
         out = [f"- {kind}" + (f" ({'; '.join(tags)})" if tags else "")
@@ -252,9 +253,9 @@ def events_lines(schema, counts=False):
     by = kinds_by(schema)
     out = ["## Event kinds", "",
            "event_kinds: the kinds of `events` (the sims') and `derived_events` (the verdict's, sim 'derived'), "
-           "the vocabulary's (crates/strims-wan/vocab.toml), by class: each kind's knob (with, where a sim writes "
-           "it only under one) and the sims whose runs may hold it, what it records, what its node, peer, value "
-           "and detail hold, and a sim's note where that sim's kind differs."]
+           "the vocabulary's (crates/strims-wan/vocab.toml), by class: each kind's knob (env_gate, where a sim "
+           "writes it only under one) and the sims whose runs may hold it, what it records, what its node, peer, "
+           "value and detail hold, and a sim's note where that sim's kind differs."]
     groups = [(c, vocab.CLASS_DOCS[c]) for c in vocab.CLASSES] + [(None, "Kinds the runs hold that the vocabulary "
                                                                          "lacks.")]
     for cls, doc in groups:

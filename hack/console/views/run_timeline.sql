@@ -20,9 +20,10 @@
 --   seed     the seed's meter reading (capacity) and the uplink it had
 --            (avail), Mbit/s, from bins
 --   copies   the adaptive seed's copies
---   event    the sims' events (arrive, join, first_frame, caught_up,
---            depart, parent_lost, up_step, competing_*, latency, ...) and
---            the verdict's (seed_down, seed_up, onset, collapse, ...)
+--   event    the sims' events (arrive, join, first_read, caught_up,
+--            depart, parent_departed, uplink_rate, competing_*, latency,
+--            ...) and the verdict's (seed_down, seed_up, onset, collapse,
+--            ...)
 --   bytes    what the seed and the viewers wrote each second by kind
 --            of message (bins' *_bytes) but data, kbit/s
 --   data     the chunk data they wrote, kbit/s

@@ -380,7 +380,7 @@ from simlab import vocab  # noqa: E402
 
 # The sims' event kinds, those a knob gates after the others, by knob.
 EVENT_KINDS = "; ".join(
-    [", ".join(k for k in vocab.kinds() if vocab.kind(k)["class"] != "derived" and "with" not in vocab.kind(k))]
+    [", ".join(k for k in vocab.kinds() if vocab.kind(k)["class"] != "derived" and "env_gate" not in vocab.kind(k))]
     + [f"with {knob}=1 / STRIMS_{knob}=1 {', '.join(ks)}" for knob, ks in vocab.knobs().items()])
 
 

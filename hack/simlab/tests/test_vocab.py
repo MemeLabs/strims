@@ -3,9 +3,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """simlab.vocab, stdlib alone: the generated files (vocab.rs, vocab.ts)
 are the generator's output byte for byte; the document checks (ids
-unique, references to what exists, derived kinds disjoint from the sims'
-kinds, a colour to each phase, episode and reason, one to a name of its
-section); and the queries over it:
+unique, references to what exists, a retired kind's replacement one its
+sims' runs hold, derived kinds disjoint from the sims' kinds, a colour to
+each phase, episode and reason, one to a name of its section); each
+kind's `sims` the sims whose event writers name it; and the queries over
+it:
 
   python3 hack/simlab/tests/test_vocab.py
 """
@@ -138,6 +140,23 @@ class Document(unittest.TestCase):
                                            "[kinds.c]: replaced_by 'b' is not a current kind"])
         self.assertEqual(problems(given(good, "b", 'phase = { down = "steady", up = "steady" }\nlevel = true')), [])
 
+    def test_a_replacement_by_sim_names_its_sims_and_what_their_runs_hold(self):
+        both = document(kinds=(("a", "scenario", ["strims-sim", "ppspp"]), ("b", "scenario", ["ppspp"]),
+                               ("c", "scenario", ["strims-sim"])))
+        self.assertEqual(problems(given(both, "a", 'replaced_by = { strims-sim = "c", ppspp = "b" }')), [])
+        cases = {
+            'replaced_by = { ppspp = "b" }': ["[kinds.a]: replaced_by's sims ['ppspp'] are not its sims "
+                                             "['ppspp', 'strims-sim']"],
+            'replaced_by = { strims-sim = "b", ppspp = "b" }': [
+                "[kinds.a]: replaced_by 'b' for strims-sim, whose runs don't hold it"],
+            'replaced_by = "c"': ["[kinds.a]: replaced_by 'c' for ppspp, whose runs don't hold it"],
+        }
+        for line, want in cases.items():
+            self.assertEqual(problems(given(both, "a", line)), want, line)
+        # A kind only other builds write (no sims) is either sim's to hold.
+        other = document(kinds=(("a", "scenario", ["ppspp"]), ("b", "decision", [])))
+        self.assertEqual(problems(given(other, "a", 'replaced_by = "b"')), [])
+
     def test_sections_and_colours(self):
         self.assertEqual(problems(document() + '\n[colours.x]\ndescription = "x"\n'),
                          ["[colours]: not a section (kinds, phases, episodes, reasons)"])
@@ -157,27 +176,58 @@ class Document(unittest.TestCase):
                          ["[reasons.open]: no description"])
 
 
+# Each sim's event writers: the sources that name its kinds (`Kind::X`).
+WRITERS = {"strims-sim": [HACK.parent / "crates" / "strims-sim" / "src" / "tables.rs"],
+           "ppspp": [HACK.parent / "crates" / "strims-ppspp" / "tests" / "sim.rs"]}
+
+
+def written(sim):
+    """The kinds `sim`'s event writers name, by id."""
+    variants = {vocab.variant(kid): kid for kid in vocab.emitted()}
+    names = {m for f in WRITERS[sim] for m in re.findall(r"\bKind::([A-Z][A-Za-z0-9]*)", f.read_text())}
+    return {variants.get(n, n) for n in names}
+
+
 class Queries(unittest.TestCase):
     def test_the_sims_kinds(self):
         doc = vocab.load()
         strims = ["partition", "repair", "hold", "release", "crash", "restart", "latency", "pause_reading",
-                  "resume_reading", "reset_writer", "uplink", "connect", "depart", "arrive", "parent_lost",
-                  "up_step", "competing_start", "competing_stop", "join", "first_frame", "caught_up", "copies"]
-        ppspp = ["join", "first_read", "caught_up", "leave", "depart", "parent_lost", "relink", "uplink", "latency",
-                 "reconnect", "incident"]
+                  "resume_reading", "reset_writer", "rate_limit", "connect", "depart", "arrive", "parent_departed",
+                  "parent_noticed", "uplink_rate", "competing_start", "competing_stop", "join", "first_read",
+                  "caught_up", "copies"]
+        ppspp = ["join", "first_read", "caught_up", "leave", "depart", "parent_departed", "relink", "uplink_rate",
+                 "latency", "reconnect", "incident"]
         self.assertEqual(sorted(vocab.kinds(sim="strims-sim", doc=doc)), sorted(strims))
         self.assertEqual(sorted(vocab.kinds(sim="ppspp", doc=doc)), sorted(ppspp))
         self.assertEqual(set(vocab.emitted(doc)), set(strims) | set(ppspp))
         self.assertEqual(vocab.notes("parent_lost", "ppspp", doc)[:22], "Timed at the departure")
         self.assertIsNone(vocab.notes("arrive", "ppspp", doc))
 
+    def test_each_kinds_sims_are_the_sims_that_write_it(self):
+        for sim in vocab.SIMS:
+            self.assertEqual(written(sim), set(vocab.kinds(sim=sim)), sim)
+
+    def test_the_retired_ids_map_by_sim(self):
+        self.assertEqual(vocab.retired(), ["first_frame", "up_step", "uplink", "parent_lost"])
+        got = {kid: {sim: vocab.current(kid, sim) for sim in vocab.holders(kid)} for kid in vocab.retired()}
+        self.assertEqual(got, {
+            "first_frame": {"strims-sim": "first_read"},
+            "up_step": {"strims-sim": "uplink_rate"},
+            "uplink": {"strims-sim": "rate_limit", "ppspp": "uplink_rate"},
+            "parent_lost": {"strims-sim": "parent_noticed", "ppspp": "parent_departed"},
+        })
+        for kid, by in got.items():
+            for sim, now in by.items():
+                self.assertIn(sim, vocab.kind(now)["sims"], f"{kid}: {sim}'s runs write {now}")
+                # The meaning it had stays with it.
+                self.assertEqual(vocab.kind(kid)["class"], vocab.kind(now)["class"], kid)
+
     def test_the_kinds_no_sim_here_writes(self):
         decisions = ["parent_choice", "parent_open", "parent_switch", "prune", "shed_by", "window_collapse",
                      "timeout_loss", "read_skip"]
         self.assertEqual(vocab.kinds("decision"), decisions)
         self.assertEqual(vocab.unwritten(), ["parent_channel_closed", *decisions])
-        self.assertTrue(all(vocab.kind(k)["with"] == "SIM_SPEC" for k in vocab.unwritten()))
-        self.assertEqual(vocab.retired(), [])
+        self.assertTrue(all(vocab.kind(k)["env_gate"] == "SIM_SPEC" for k in vocab.unwritten()))
 
     def test_names_of_the_other_sections(self):
         self.assertEqual(vocab.derived(), ["start", "seed_down", "seed_up", "present_join", "present_leave", "onset",
@@ -189,7 +239,7 @@ class Queries(unittest.TestCase):
         self.assertEqual(vocab.anchors(), {})
 
     def test_current_follows_replaced_by(self):
-        text = document(kinds=(("a", "scenario", ["ppspp"]), ("b", "scenario", ["ppspp"]),
+        text = document(kinds=(("a", "scenario", ["strims-sim", "ppspp"]), ("b", "scenario", ["ppspp"]),
                                ("c", "scenario", ["strims-sim"])))
         text = given(given(text, "c", 'replaced_by = { strims-sim = "a" }'), "b", 'replaced_by = "a"')
         doc = vocab.parse(text)
@@ -204,6 +254,7 @@ class Queries(unittest.TestCase):
         self.assertEqual(vocab.holders("leave"), ["ppspp"])
         self.assertEqual(vocab.holders("parent_choice"), list(vocab.SIMS))
         self.assertEqual(vocab.holders("collapse"), [])
+        self.assertEqual(vocab.value_text(vocab.kind("rate_limit")), "the cap, bytes/s")
         self.assertEqual(vocab.value_text(vocab.kind("uplink")), "the limit, bytes/s")
         self.assertEqual(vocab.value_text(vocab.kind("copies")), "its copies")
         self.assertIsNone(vocab.value_text(vocab.kind("join")))

@@ -188,15 +188,18 @@ def job_dir(d, job):
         events.append((0 if a is None else a * 1_000_000, "join", node, 0, 0, ""))
         first = next((t for t in range(SECS) if s["frames"][v][t] > 0), None)
         if first is not None:
-            events.append((first * 1_000_000 + 250_000, "first_frame" if ss else "first_read", node, -1, 0, ""))
+            events.append((first * 1_000_000 + 250_000, "first_read", node, -1, 0, ""))
             events.append((first * 1_000_000 + 900_000, "caught_up", node, -1, 0, ""))
         if dep is not None:
             events.append((dep * 1_000_000, "depart", node, -1, 0, "graceful"))
     if shape == "collapse":
-        events += [(18_000_000, "parent_lost", 2, 1, 300, "abrupt from=1"),
-                   (24_000_000, "parent_lost", 3, 1, 900, "abrupt from=1")]
+        events += [(18_000_000, "parent_departed", 2, 1, 1, "abrupt from=1"),
+                   (24_000_000, "parent_departed", 3, 1, 2, "abrupt from=1")]
     if shape == "step":
-        events += [(20_000_000, "up_step", 0, -1, 2_000_000, "down"), (32_000_000, "up_step", 0, -1, 8_000_000, "up")]
+        # The seed's uplink as a level: its rate from the run's start, then each step.
+        events += [(start * 1000, "uplink_rate", 0, -1, 8_000_000, ""),
+                   (20_000_000, "uplink_rate", 0, -1, 2_000_000, ""),
+                   (32_000_000, "uplink_rate", 0, -1, 8_000_000, "")]
     events.append((5_000_000, "latency", 0, -1, 250, "to=3 wait_ms=12"))
     write_table(d, "events", [("t_us", "BIGINT"), ("kind", "VARCHAR"), ("node", "BIGINT"), ("peer", "BIGINT"),
                               ("value", "BIGINT"), ("detail", "VARCHAR")], sorted(events))
@@ -368,9 +371,9 @@ INVOCATIONS = [
     ("aligned-join-node", SIMDB, ["aligned", "join", "--per", "node", "--field", "lag_p99", "--after", "8", *S]),
     ("aligned-first-read-pool", SIMDB, ["aligned", "first_read", "--per", "node", "--nth", "0", "--pool",
                                         "--field", "lag_ms", "--after", "5", "--cell", "star-5"]),
-    ("aligned-parent-lost", SIMDB, ["aligned", "parent_lost", "--detail", "abrupt*", "--field", "seed_meter",
+    ("aligned-parent-departed", SIMDB, ["aligned", "parent_departed", "--detail", "abrupt*", "--field", "seed_meter",
                                     "--bin", "500", "--before", "2", "--after", "6"]),
-    ("aligned-node", SIMDB, ["aligned", "parent_lost", "--node", "3", "--field", "viewer_timeouts",
+    ("aligned-node", SIMDB, ["aligned", "parent_departed", "--node", "3", "--field", "viewer_timeouts",
                              "--bin", "1000", "--before", "1", "--after", "3", "--json"]),
     ("aligned-refused", SIMDB, ["aligned", "onset", "--per", "node", "--field", "lag_p99", *S]),
     ("events", SIMDB, ["events"]),

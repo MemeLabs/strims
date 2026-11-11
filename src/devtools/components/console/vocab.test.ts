@@ -56,13 +56,16 @@ describe("vocab", () => {
     );
   });
 
-  it("lists every kind of the document, and aligns on its derived and scenario kinds", () => {
+  it("lists every kind of the document, and aligns on its current derived and scenario kinds", () => {
     assert.deepStrictEqual(
       KINDS.map((k) => k.id),
       headers("kinds")
     );
-    const of = (c: string) => KINDS.filter((k) => k.class === c).map((k) => k.id as string);
+    const of = (c: string) =>
+      KINDS.filter((k) => k.class === c && !("replaced_by" in k)).map((k) => k.id as string);
     assert.deepStrictEqual([...ALIGNS], [...of("derived"), ...of("scenario")]);
+    const retired = KINDS.filter((k) => "replaced_by" in k).map((k) => k.id as string);
+    assert.ok(retired.includes("up_step") && !ALIGNS.some((a) => retired.includes(a)), retired.join());
   });
 
   it("gives each phase, episode and reason a colour of its own in its section", () => {

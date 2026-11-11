@@ -5,7 +5,7 @@
 -- verdict's lag_q) as quantile bands over the seeds, and the share of
 -- seeds unhealthy then. Seconds count from the stream's start ($align
 -- 'start'), or from each run's first event of kind $align (a sim's event:
--- depart, up_step, arrive, ...; or the verdict's: onset, collapse,
+-- depart, uplink_rate, arrive, ...; or the verdict's: onset, collapse,
 -- seed_down, seed_up, ...); a run without one is left out.
 WITH runs AS (
     SELECT k, src, seed FROM experiment_jobs

@@ -222,16 +222,16 @@ def without(doc, kid, sims=None):
 
 class Kinds(Fixture):
     def test_the_kinds_are_the_vocabularys_and_the_runs(self):
-        # A vocabulary that lacks up_step (strims-sim's step jobs write it)
-        # and gives latency (every job's) to strims-sim alone.
-        doc = without(without(vocab.load(), "up_step"), "latency", ["strims-sim"])
+        # A vocabulary that lacks uplink_rate (strims-sim's step jobs write
+        # it) and gives latency (every job's) to strims-sim alone.
+        doc = without(without(vocab.load(), "uplink_rate"), "latency", ["strims-sim"])
         err = io.StringIO()
         with mock.patch.object(vocab, "load", lambda path=None: doc), contextlib.redirect_stderr(err):
             self.index()
             docs = catalog.kind_docs()
         self.assertEqual(err.getvalue().splitlines(), [
             "index: event kind latency (ppspp) isn't in the vocabulary, crates/strims-wan/vocab.toml",
-            "index: event kind up_step (strims-sim) isn't in the vocabulary, crates/strims-wan/vocab.toml"])
+            "index: event kind uplink_rate (strims-sim) isn't in the vocabulary, crates/strims-wan/vocab.toml"])
         rows = catalog.lake("SELECT * EXCLUDE (first_seen, last_seen) FROM event_kinds ORDER BY sim, kind;")
         self.assertEqual(list(rows[0]), [*catalog.KIND_COLS, "documented", "n"])
         got = {(r["kind"], r["sim"]): r for r in rows}
@@ -241,8 +241,8 @@ class Kinds(Fixture):
         for d in docs:
             self.assertEqual({c: got[(d["kind"], d["sim"])][c] for c in d}, d)
         self.assertEqual(sorted(k for k, r in got.items() if not r["documented"]),
-                         [("latency", "ppspp"), ("up_step", "strims-sim")])
-        lost = got[("up_step", "strims-sim")]
+                         [("latency", "ppspp"), ("uplink_rate", "strims-sim")])
+        lost = got[("uplink_rate", "strims-sim")]
         self.assertGreater(lost["n"], 0)
         self.assertEqual({c: lost[c] for c in catalog.KIND_COLS if c not in ("kind", "sim")},
                          dict.fromkeys(set(catalog.KIND_COLS) - {"kind", "sim"}))
@@ -260,9 +260,19 @@ class Kinds(Fixture):
         # builds write it, its knob named.
         for sim in vocab.SIMS:
             spec = got[("parent_choice", sim)]
-            self.assertEqual((spec["n"], spec["with"], spec["details"], spec["documented"]),
+            self.assertEqual((spec["n"], spec["env_gate"], spec["details"], spec["documented"]),
                              (0, "SIM_SPEC", ["open", "switch"], True))
         self.assertEqual((got[("arrive", "strims-sim")]["n"], ("arrive", "ppspp") in got), (0, False))
+        # A retired kind's row per sim that wrote it, each with that sim's
+        # replacement, none written by today's fixture.
+        for kid, by in (("uplink", {"strims-sim": "rate_limit", "ppspp": "uplink_rate"}),
+                        ("parent_lost", {"strims-sim": "parent_noticed", "ppspp": "parent_departed"}),
+                        ("first_frame", {"strims-sim": "first_read"})):
+            rows = {s: r for (k, s), r in got.items() if k == kid}
+            self.assertEqual({s: r["replaced_by"] for s, r in rows.items()}, by, kid)
+            self.assertTrue(all(r["n"] == 0 and r["documented"] for r in rows.values()), kid)
+        self.assertGreater(got[("parent_departed", "ppspp")]["n"], 0)
+        self.assertIsNone(got[("parent_departed", "ppspp")]["replaced_by"])
 
     def test_the_docs_name_the_vocabularys_kinds_and_phases(self):
         self.assertEqual(verdict.DERIVED_KINDS, tuple(vocab.derived()))

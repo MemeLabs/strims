@@ -65,13 +65,17 @@ INSERT INTO metric_catalog VALUES
   ('lag_p99_ms', 'suite', NULL, 'ms', 'lag p99', 'lower', 'ratio', 0.05, 'lo', 'r.lag_p99_ms', 'x', 'y');
 CREATE TABLE event_kinds (kind VARCHAR, sim VARCHAR, class VARCHAR, description VARCHAR, value_meaning VARCHAR,
                           node VARCHAR, peer VARCHAR, detail VARCHAR, details VARCHAR[], notes VARCHAR,
-                          "with" VARCHAR, replaced_by VARCHAR, documented BOOLEAN, n BIGINT,
+                          env_gate VARCHAR, replaced_by VARCHAR, documented BOOLEAN, n BIGINT,
                           first_seen TIMESTAMPTZ, last_seen TIMESTAMPTZ);
 INSERT INTO event_kinds VALUES
   ('join', 'ppspp', 'scenario', 'A viewer joins.', NULL, 'the viewer', NULL, NULL, NULL, 'Each viewer''s.', NULL,
    NULL, true, 12, '2026-11-08 12:00:00+00', '2026-11-10 12:00:00+00'),
   ('join', 'strims-sim', 'scenario', 'A viewer joins.', NULL, 'the viewer', NULL, NULL, NULL, NULL, NULL, NULL, true,
    0, NULL, NULL),
+  ('parent_lost', 'ppspp', 'observation', 'A parent departed.', NULL, 'the viewer', 'the parent', NULL, NULL, NULL,
+   NULL, 'parent_departed', true, 4, '2026-11-08 12:00:00+00', '2026-11-08 12:00:00+00'),
+  ('parent_lost', 'strims-sim', 'observation', 'A parent departed.', NULL, 'the viewer', 'the parent', NULL, NULL,
+   NULL, NULL, 'parent_noticed', true, 0, NULL, NULL),
   ('prune', 'ppspp', 'decision', 'The node pruned the parent.', 'the stream', 'the node', 'the parent', 'the rule',
    ['silent', 'lossy'], NULL, 'SIM_SPEC', NULL, true, 0, NULL, NULL),
   ('collapse', 'derived', 'derived', 'A collapse began.', 'its length, s', NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -93,10 +97,19 @@ Exogenous: what the scenario does to the run.
   - ppspp: Each viewer's.
   - events: ppspp 12 (2026-11-08 to 2026-11-10), strims-sim 0
 
+### observation
+The run's response.
+
+- parent_lost (ppspp, strims-sim): A parent departed.
+  - node: the viewer; peer: the parent
+  - ppspp's replaced by parent_departed
+  - strims-sim's replaced by parent_noticed
+  - events: ppspp 4 (2026-11-08 to 2026-11-08), strims-sim 0
+
 ### decision
 A node's scheduler decisions, from its event log.
 
-- prune (with SIM_SPEC; ppspp): The node pruned the parent.
+- prune (env_gate SIM_SPEC; ppspp): The node pruned the parent.
   - node: the node; peer: the parent; value: the stream; detail: the rule (silent or lossy)
   - events: ppspp 0
 
@@ -191,10 +204,10 @@ class Topics(unittest.TestCase):
         self.assertEqual(text("join"), "- join (scenario; ppspp, strims-sim): A viewer joins.\n  - node: the viewer\n"
                                        "  - ppspp: Each viewer's.\n"
                                        "  - events: ppspp 12 (2026-11-08 to 2026-11-10), strims-sim 0\n")
-        self.assertTrue(text("prune").startswith("- prune (decision; with SIM_SPEC; ppspp): The node pruned"))
+        self.assertTrue(text("prune").startswith("- prune (decision; env_gate SIM_SPEC; ppspp): The node pruned"))
         self.assertEqual(text("old_kind"), "- old_kind (ppspp): not in the vocabulary\n"
                                            "  - events: ppspp 5 (2026-11-09 to 2026-11-10)\n")
-        self.assertIn("Event kinds: collapse, join, old_kind, prune\n", text())
+        self.assertIn("Event kinds: collapse, join, old_kind, parent_lost, prune\n", text())
         with self.assertRaisesRegex(ValueError, r"^no topic 'jion' \(did you mean join\?\)"):
             text("jion")
 

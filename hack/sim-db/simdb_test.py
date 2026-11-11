@@ -1328,7 +1328,8 @@ class Catalog(unittest.TestCase):
         self.put(F1, "viewer_seconds", ["viewer", "sec", "lag_ms", "frames"],
                  [("k1", 0, s, 100 if s else -1, 1 if s else 0) for s in range(5)])
         self.put(F1, "events", ["t_us", "kind", "node", "peer", "value", "detail"], [
-            ("k1", 1000, "parent_lost", 7, 8, -1, "abrupt"), ("k1", 2000, "join", -1, -1, 0, "from=3 to=4")])
+            ("k1", 1000, "parent_lost", 7, 8, -1, "abrupt"), ("k1", 2000, "join", -1, -1, 0, "from=3 to=4"),
+            ("k1", 3000, "parent_noticed", 7, 8, 40, "")])
         self.put(F1, "seconds", ["sec", "present", "written"], [("k1", 0, 2, -1), ("k1", 1, 2, 10)])
         self.put(F1, "bins", ["bin", "t_ms", "seed_meter"], [("k1", 0, 0, -1), ("k1", 1, 100, 5)])
         (simdb.cache_root() / "cache" / F1 / "manifest.json").write_text(json.dumps(
@@ -1432,7 +1433,9 @@ class Catalog(unittest.TestCase):
         ev = {r["kind"]: r for r in self.q("SELECT * FROM events WHERE k = 'k1'")}
         self.assertEqual((ev["join"]["node"], ev["join"]["peer"], ev["join"]["t_ms"]), (None, None, 2.0))
         self.assertEqual(ev["join"]["detail_map"], {"from": "3", "to": "4"})
+        # A retired parent_lost's -1, a loss never noticed, reads NULL; its replacements' values are their own.
         self.assertEqual((ev["parent_lost"]["value"], ev["parent_lost"]["detail_map"]), (None, None))
+        self.assertEqual(ev["parent_noticed"]["value"], 40)
         self.assertEqual([r["written"] for r in self.q("SELECT written FROM seconds ORDER BY sec")], [None, 10])
         self.assertEqual([r["seed_meter"] for r in self.q("SELECT seed_meter FROM bins ORDER BY bin")], [None, 5])
 
@@ -1502,7 +1505,11 @@ class Catalog(unittest.TestCase):
         t = {r["name"] for r in self.q("SELECT name FROM table_catalog")}
         self.assertTrue({"jobs", "experiments", "viewers", "verdicts", "availability"} <= t)
         kinds = {(r["sim"], r["kind"]) for r in self.q("SELECT sim, kind FROM event_kinds")}
-        self.assertTrue({("strims-sim", "join"), ("strims-sim", "parent_lost"), ("derived", "start")} <= kinds)
+        self.assertTrue({("strims-sim", "join"), ("strims-sim", "parent_lost"), ("strims-sim", "parent_noticed"),
+                         ("derived", "start")} <= kinds)
+        retired = {r["sim"]: r["replaced_by"] for r in self.q("SELECT sim, replaced_by FROM event_kinds "
+                                                              "WHERE kind = 'parent_lost'")}
+        self.assertEqual(retired, {"strims-sim": "parent_noticed", "ppspp": "parent_departed"})
 
 
 if __name__ == "__main__":
