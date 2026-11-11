@@ -15,10 +15,12 @@ Claude writing and running SQL over the catalog: the console's Ask panel.
     .conversation(id) -> dict
                  a conversation's questions and their events, or None
   system_prompt(schema, saved) -> str
-                 the system prompt: ask_prompt.md, then the catalog's
-                 tables and columns, macros, metrics and event kinds
-                 (catalog.schema's) and the saved views, sorted and free of
-                 counts and times, so the same catalog gives the same bytes
+                 the system prompt: ask_prompt.md with the glossary's
+                 sections where it names them (glossary.md), then the
+                 catalog's tables and columns, macros, metrics and event
+                 kinds (catalog.schema's) and the saved views, as
+                 simlab.describe writes them: sorted and free of counts
+                 and times, so the same catalog gives the same bytes
   TOOLS          the tools' definitions
   priced(message, requested) -> [Iteration]
                  a response's usage as the ledger prices it: one entry per
@@ -81,9 +83,10 @@ from pathlib import Path
 import anthropic
 
 from . import catalog as catalog_module
-from . import engine, regenerate, scoring, store_host, views
+from . import describe, engine, regenerate, scoring, store_host, views
 from . import farm as farm_module
 from . import suite as suite_module
+from .describe import clipped
 
 MODEL = "claude-opus-5-5"
 MAX_TOKENS = 64_000
@@ -140,117 +143,25 @@ def ledger_path():
 
 # --- the prompt -----------------------------------------------------------------------------------
 
-
-def text_of(v):
-    """A catalog value as the prompt writes it: a list or object as compact
-    JSON with sorted keys."""
-    if v is None:
-        return ""
-    if isinstance(v, (list, dict)):
-        return json.dumps(v, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return str(v)
+# What the saved views are to Claude: worked examples, and what run_view runs.
+VIEWS_INTRO = ("The console's pages, each one statement whose `$name`s its params bind (run_view runs one). They "
+               "are worked examples of the catalog's joins and of suite.py's formulas.")
+# A line of ask_prompt.md that stands for a section of the glossary.
+GLOSSARY_LINE = re.compile(r"^<!-- glossary: (.+?) -->$", re.M)
 
 
-def clipped(s, n):
-    s = " ".join(str(s).split())
-    return s if len(s) <= n else s[:n - 1].rstrip() + "…"
-
-
-MACRO_KINDS = ("macro", "table macro", "macros")
-# A column's catalog note, at most this long.
-NOTE_CHARS = 240
-
-
-def schema_text(schema):
-    """The catalog's part of the prompt: main's tables and views with
-    their columns and the catalog's notes, raw's names, the macros, the
-    scored metrics and the event kinds, each sorted by name."""
-    about = {t["name"]: t for t in schema.get("table_catalog") or []}
-    columns = collections_by(schema.get("metric_catalog") or [], "tbl")
-    out = ["# The catalog", "",
-           "Query the `main` schema's tables and views (the default). `raw` holds the sources they fold, which "
-           "you rarely need: " + ", ".join(sorted(t["name"] for t in schema.get("tables") or []
-                                                  if t["schema"] == "raw")) + ".", "",
-           "## Tables and views", ""]
-    for t in sorted((t for t in schema.get("tables") or [] if t["schema"] == "main"), key=lambda t: t["name"]):
-        a = about.get(t["name"], {})
-        out.append(f"### {t['name']}" + (f" ({a['kind']})" if a.get("kind") else ""))
-        meta = [f"{k}: {clipped(a[k], 400)}" for k in ("grain", "keys", "joins") if a.get(k)]
-        if meta:
-            out.append("; ".join(meta))
-        if a.get("description"):
-            out.append(clipped(a["description"], 2000))
-        cat = {m["name"]: m for m in columns.get(t["name"], [])}
-        cols = []
-        for c in t["columns"]:
-            unit = (cat.get(c["name"]) or {}).get("unit")
-            cols.append(f"{c['name']} {c['type']}" + (f" [{unit}]" if unit else ""))
-        out.append("columns: " + ", ".join(cols))
-        notes = {}
-        for c in t["columns"]:
-            d = (cat.get(c["name"]) or {}).get("description")
-            if d:
-                notes.setdefault(clipped(d, NOTE_CHARS), []).append(c["name"])
-        for note, names in sorted(notes.items(), key=lambda kv: kv[1]):
-            out.append(f"- {', '.join(names)}: {note}")
-        out.append("")
-    out += ["## Macros", ""]
-    for m in sorted((t for t in schema.get("table_catalog") or [] if t.get("kind") in MACRO_KINDS),
-                    key=lambda t: t["name"]):
-        head = m["name"] + (m["keys"] if m.get("keys") and str(m["keys"]).startswith("(") else "")
-        out.append(f"- `{head}` ({m['kind']}): {clipped(m.get('description') or '', 2000)}")
-    out += ["", "## Scored metrics", "",
-            "metric_catalog's tbl = 'suite' rows: what the scoring macros score, by name (better: the direction "
-            "that is better; kind: ratio or diff; tie: the band within which an effect is a tie; source: the "
-            "SQL over a run's row r and verdict v).", ""]
-    for m in sorted(columns.get("suite", []), key=lambda m: m["name"]):
-        fields = [f"{k} {text_of(m[k])}" for k in ("better", "kind", "tie", "guard", "unit") if m.get(k) is not None]
-        line = f"- {m['name']}: " + ", ".join(fields)
-        if m.get("source"):
-            line += f"; source `{clipped(m['source'], 300)}`"
-        if m.get("description"):
-            line += f"; {clipped(m['description'], NOTE_CHARS)}"
-        out.append(line)
-    out += ["", "## Event kinds", "", "event_kinds: the `events` and `derived_events` kinds by sim.", ""]
-    for e in sorted(schema.get("event_kinds") or [], key=lambda e: (str(e.get("sim")), str(e.get("kind")))):
-        line = f"- {e.get('kind')} ({e.get('sim')}): {clipped(e.get('description') or '', NOTE_CHARS)}"
-        if e.get("value_meaning"):
-            line += f"; value: {clipped(e['value_meaning'], 120)}"
-        out.append(line)
-    return "\n".join(out) + "\n"
-
-
-def collections_by(rows, key):
-    out = {}
-    for r in rows:
-        out.setdefault(r.get(key), []).append(r)
-    return out
-
-
-def views_text(saved):
-    """The saved views as examples: each one's name, title, description,
-    params and SQL."""
-    out = ["# The saved views", "",
-           "The console's pages, each one statement whose `$name`s its params bind (run_view runs one). They "
-           "are worked examples of the catalog's joins and of suite.py's formulas.", ""]
-    for v in sorted(saved, key=lambda v: v.name):
-        out.append(f"## {v.name}: {v.title}")
-        if v.description:
-            out.append(v.description)
-        if v.params:
-            out.append("params: " + ", ".join(
-                f"{p.name} ({p.kind}" + (f", default {text_of(p.default) or repr(p.default)}" if p.default is not None
-                                         else "") + ")" for p in v.params))
-        sql = "\n".join(line for line in v.sql.splitlines() if not re.match(r"--\s*(Copyright|SPDX)", line))
-        out += ["```sql", sql.strip("\n"), "```", ""]
-    return "\n".join(out)
+def prompt_text():
+    """ask_prompt.md, its leading comment left out and each GLOSSARY_LINE
+    the glossary's section it names (describe.glossary_section)."""
+    text = describe.COMMENT.sub("", PROMPT.read_text())
+    return GLOSSARY_LINE.sub(lambda m: describe.glossary_section(m.group(1)), text)
 
 
 def system_prompt(schema, saved):
     """The system prompt for `schema` (catalog.schema's parts) and `saved`
     (views.saved's views): byte for byte the same for the same inputs."""
-    glossary = re.sub(r"\A<!--.*?-->\s*", "", PROMPT.read_text(), flags=re.S)
-    return glossary.rstrip("\n") + "\n\n" + schema_text(schema) + "\n" + views_text(saved)
+    return (prompt_text().rstrip("\n") + "\n\n" + describe.catalog_text(schema) + "\n"
+            + describe.views_text(saved, VIEWS_INTRO))
 
 
 # --- the tools ------------------------------------------------------------------------------------

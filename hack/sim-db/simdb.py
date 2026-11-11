@@ -3,11 +3,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """The sims' tables: a store of runs' data, and views over them in DuckDB.
 
-  hack/sim-db/simdb.py duckdb
-  hack/sim-db/simdb.py fold DB JOB_DIR... [--src SRC]
-  hack/sim-db/simdb.py export DB DEST
-  hack/sim-db/simdb.py pull --run RUN [--reads [--cell C] [--arm A] [--seed N]] [--dry-run]
-  hack/sim-db/simdb.py gc [--days N]
+  hack/sim-db/simdb.py describe [TOPIC]
+  hack/sim-db/simdb.py lake QUERY [--param NAME=VALUE ...] [--json]
+  hack/sim-db/simdb.py view [NAME] [--param NAME=VALUE ...] [--json] [--max-rows N]
+  hack/sim-db/simdb.py index [--workers N] [--quiet]
+  hack/sim-db/simdb.py fetch --exp E [--cells C,...] [--arms A,...] [--tables reads,forecast]
   hack/sim-db/simdb.py sql QUERY [selection] [--reads] [--json]
   hack/sim-db/simdb.py pooled [selection] [--by none|phase|bin|viewer] [--bin MS] [--json]
   hack/sim-db/simdb.py aligned EVENT [selection] [--field F] [--bin MS] [--per run|node] [--node N] [--peer N]
@@ -16,17 +16,30 @@
   hack/sim-db/simdb.py spec [selection] [--by phase|none] [--json]
   hack/sim-db/simdb.py osc [selection] [--json]
   hack/sim-db/simdb.py rows [selection] [--fields A,B,...]
-  hack/sim-db/simdb.py index [--workers N] [--quiet]
-  hack/sim-db/simdb.py fetch --exp E [--cells C,...] [--arms A,...] [--tables reads,forecast]
-  hack/sim-db/simdb.py lake QUERY [--json]
+  hack/sim-db/simdb.py duckdb
+  hack/sim-db/simdb.py fold DB JOB_DIR... [--src SRC]
+  hack/sim-db/simdb.py export DB DEST
+  hack/sim-db/simdb.py pull --run RUN [--reads [--cell C] [--arm A] [--seed N]] [--dry-run]
+  hack/sim-db/simdb.py gc [--days N]
 
-`index`, `fetch` and `lake` are the catalog's (hack/sim-db/catalog.py):
-every result the cache, the farm's and the suite's indexes know, in one
-DuckLake, whose tables answer a question in one SQL statement. The
-selections and queries are hack/simlab/query.py's and the cache's pulls
-hack/simlab/store.py's, in the duckdb module: every command but `duckdb`,
-`fold` and `export` (the store's, in the CLI, under any python3) runs
-under hack/'s uv venv, which the script execs itself into.
+`describe`, `lake`, `view`, `index` and `fetch` are the catalog's
+(hack/sim-db/catalog.py, whose docs say more): every result the cache,
+the farm's and the suite's indexes know, in one DuckLake, whose tables
+answer a question in one SQL statement, suite.py's scoring among its
+macros. Start with `describe`, which lists the topics (`describe
+glossary` the terms, `describe TABLE` a table's columns). `lake` queries
+the whole catalog, across experiments, its `--param`s binding a
+statement's `$name`s, and `view` runs one of the console's saved views
+by name. `sql` and the queries after it read a selection of the cache's
+runs instead (`--src`, `--cell`, `--arm`, `--seed`), for the deep dives
+into a few runs: they pull the bulky sample tables (reads, forecast,
+arrivals, asks) from S3 where the cache lacks them (`sql --reads`), and
+the catalog holds only those the cache has (`fetch --tables` brings an
+experiment's in). The selections and queries are hack/simlab/query.py's
+and the cache's pulls hack/simlab/store.py's, in the duckdb module: every
+command but `duckdb`, `fold` and `export` (the store's, in the CLI, under
+any python3) runs under hack/'s uv venv, which the script execs itself
+into.
 
 A run of either sim given an output dir (`SIM_OUT`, `STRIMS_SIM_OUT`)
 writes its tables there as CSV files, each beside a `<table>.schema.json`
@@ -450,27 +463,10 @@ def main():
     raw = argparse.RawDescriptionHelpFormatter
     ap = argparse.ArgumentParser(description=__doc__, epilog=SQL_DOC, formatter_class=raw)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("duckdb", help="fetch the pinned DuckDB CLI")
-    f = sub.add_parser("fold", help="fold job dirs into a store (each a dir holding the tables and a job.json)")
-    f.add_argument("db")
-    f.add_argument("dirs", nargs="+")
-    f.add_argument("--src", default="manual")
-    e = sub.add_parser("export")
-    e.add_argument("db")
-    e.add_argument("dest")
-    p = sub.add_parser("pull")
-    p.add_argument("--run", required=True)
-    p.add_argument("--reads", action="store_true",
-                   help="the reads, forecast, arrivals and asks logs too (sim-samples/)")
-    p.add_argument("--cell", action="append", help="only these cells' reads, globs")
-    p.add_argument("--arm", action="append", help="only these arms' reads, globs")
-    p.add_argument("--seed", action="append", type=int, help="only these seeds' reads")
-    p.add_argument("--dry-run", action="store_true", help="list the reads' files a pull would fetch, asking S3 nothing")
-    g = sub.add_parser("gc")
-    g.add_argument("--days", type=float, default=7)
     lake = catalog().add_commands(sub)
     qs = {}
-    qs["sql"] = sub.add_parser("sql", help="a query over the views", description=SQL_DOC, formatter_class=raw)
+    qs["sql"] = sub.add_parser("sql", help="a query over a selection of the cache's runs, pulling their reads with "
+                               "--reads (lake: the whole catalog)", description=SQL_DOC, formatter_class=raw)
     qs["sql"].add_argument("query")
     qs["sql"].add_argument("--reads", action="store_true",
                            help="pull the selection's reads, forecast, arrivals and asks logs first, where the "
@@ -513,6 +509,24 @@ def main():
         x.add_argument("--pull-mb", type=float, default=PULL_MB,
                        help="the most of the reads it pulls from S3 for the selection, MB")
         x.add_argument("--json", action="store_true")
+    sub.add_parser("duckdb", help="fetch the pinned DuckDB CLI")
+    f = sub.add_parser("fold", help="fold job dirs into a store (each a dir holding the tables and a job.json)")
+    f.add_argument("db")
+    f.add_argument("dirs", nargs="+")
+    f.add_argument("--src", default="manual")
+    e = sub.add_parser("export")
+    e.add_argument("db")
+    e.add_argument("dest")
+    p = sub.add_parser("pull")
+    p.add_argument("--run", required=True)
+    p.add_argument("--reads", action="store_true",
+                   help="the reads, forecast, arrivals and asks logs too (sim-samples/)")
+    p.add_argument("--cell", action="append", help="only these cells' reads, globs")
+    p.add_argument("--arm", action="append", help="only these arms' reads, globs")
+    p.add_argument("--seed", action="append", type=int, help="only these seeds' reads")
+    p.add_argument("--dry-run", action="store_true", help="list the reads' files a pull would fetch, asking S3 nothing")
+    g = sub.add_parser("gc")
+    g.add_argument("--days", type=float, default=7)
     a = ap.parse_args()
     if a.cmd == "duckdb":
         print(duckdb_bin())

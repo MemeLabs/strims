@@ -19,8 +19,9 @@ target/console/dist: until there is a build the page answers 503,
 The dev server proxies /console to it too (webpack.config.js). The catalog
 is simlab.lake_root() (simdb.py's cache root: `SIM_DB_ROOT`, else the main
 checkout's target/sim-db), read through a pool of simlab.engine's guarded
-readers; an index runs every 2 minutes (`--no-index` for none), and the
-queries after one that succeeded see the new catalog.
+readers (simlab.catalog.pool); an index runs every 2 minutes
+(`--no-index` for none), and the queries after one that succeeded see
+the new catalog.
 
   POST /console/sql          {sql, params?, max_rows?, timeout_s?}: one SELECT (or EXPLAIN of
                              one), run as given, `$name`s bound from params; returns {columns:
@@ -110,7 +111,6 @@ from simlab import bootstrap  # noqa: E402
 if __name__ == "__main__":
     bootstrap.engine(__file__)
 
-import simlab  # noqa: E402
 from simlab import ask, catalog, engine, farm, regenerate, suite, views  # noqa: E402
 from simlab.regenerate import NAME, bad_name  # noqa: E402
 
@@ -972,10 +972,8 @@ def main(argv=None):
     elif old := stale():
         print(f"console: the build in {DIST} is older than {', '.join(str(s.relative_to(ROOT)) for s in old)}: "
               f"run {' '.join(BUILD)} (or --build)", file=sys.stderr)
-    engine.ensure_extensions()
-    lake = simlab.lake_root()
-    pool = engine.Pool(lake, lake.parent / "tmp" / "console", size=a.connections,
-                       guard=engine.Guard(memory_limit=a.memory, threads=a.threads))
+    pool = catalog.pool("console", a.connections, engine.Guard(memory_limit=a.memory, threads=a.threads))
+    lake = pool.lake
     console = Console(pool, index_every=0 if a.no_index else INDEX_EVERY_S, hosts=a.allow_host,
                       origins=a.allow_origin)
     server = console.listen(a.port, a.host)

@@ -13,6 +13,10 @@ DuckLake, so that any question is one SQL statement over it.
   lake(sql, write=False, out="json")
                  a script over the catalog, in a connection of its own:
                  a reader, or the indexer's writer
+  pool(name, size=1, guard=engine.Guard()) -> engine.Pool
+                 guarded readers of the catalog (the console's, the Ask
+                 eval's, and the CLI's for a query with params, a saved
+                 view and describe), spilling under the cache's tmp/<name>/
   schema(pool) -> dict
                  what the console's GET /console/schema answers, from an
                  engine.Pool's readers: {tables (each table's schema,
@@ -31,11 +35,12 @@ DuckLake, so that any question is one SQL statement over it.
   scoring_sql(cols, temp=False, suite=None)
                  the scoring objects, as SQL (below)
 
-hack/sim-db/simdb.py's index, fetch and lake commands call these
-(hack/sim-db/catalog.py's), printing an index's and a fetch's Progress
-on stderr; the console's server runs index and fetch in a forkserver
-child, sending their Progress to its streams. A failure raises (SystemExit
-with a CLI's message where one said why): the catalog is then as it was.
+hack/sim-db/simdb.py's index, fetch, lake, view and describe commands
+call these (hack/sim-db/catalog.py's), printing an index's and a fetch's
+Progress on stderr; the console's server runs index and fetch in a
+forkserver child, sending their Progress to its streams. A failure raises
+(SystemExit with a CLI's message where one said why): the catalog is then
+as it was.
 
 The catalog is a DuckLake (the `ducklake` extension, EXTENSIONS, from
 simlab.engine, pins its build for the pinned DuckDB) whose metadata is SQLite,
@@ -2239,6 +2244,17 @@ def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, pr
     index(workers, progress)
     out.s3_usd, out.ledger_lines = s3_spent(before)
     return out
+
+
+# --- the readers ----------------------------------------------------------------------
+
+
+def pool(name, size=1, guard=engine.Guard()):
+    """An engine.Pool of `size` guarded readers of the catalog, `guard`'s
+    limits theirs, spilling under the cache's tmp/<name>/; the extensions
+    installed and checked first (extensions)."""
+    extensions()
+    return engine.Pool(lake_root(), store_host.cache_root() / "tmp" / name, size=size, guard=guard)
 
 
 # --- the console's schema ------------------------------------------------------------

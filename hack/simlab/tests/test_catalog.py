@@ -20,6 +20,11 @@ simlab.verdict's derive pool:
                parks, arrivals), folded by the store, as they are; forecast
                in either schema (tail_ms and extrapolated, or first_sight
                and lazy), the other's columns NULL
+  Commands     simdb.py's lake --param, view and describe over the
+               catalog, as a caller runs them: params bound typed or as
+               text, one missing named; the saved views listed, run with
+               their defaults or params, an unknown one refused; describe's
+               every topic and name, none naming the Ask panel's tools
 
   python3 hack/simlab/tests/test_catalog.py
 """
@@ -29,7 +34,9 @@ import dataclasses
 import json
 import multiprocessing
 import os
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -48,7 +55,7 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import catalog, engine, store, store_host, suite, verdict  # noqa: E402
+from simlab import ask, catalog, describe, engine, store, store_host, suite, verdict, views  # noqa: E402
 
 
 class Fixture(unittest.TestCase):
@@ -348,6 +355,92 @@ class Tables(Fixture):
                                         "first_sight": False, "lazy": True, "held_ms": None})
         names = {r["name"] for r in catalog.lake("SELECT name FROM table_catalog;")}
         self.assertTrue({"spec_requests", "parks", "arrivals"} <= names)
+
+
+
+class Commands(Fixture):
+    def cli(self, *args):
+        """simdb.py ARGS as golden_cli runs it: (exit code, stdout, stderr)."""
+        p = subprocess.run([sys.executable, str(golden_cli.SIMDB), *args], cwd=self.root,
+                           env=golden_cli.environment(self.root), capture_output=True, text=True, timeout=300)
+        return p.returncode, p.stdout, p.stderr
+
+    def test_lake_binds_its_params(self):
+        self.index()
+        code, out, err = self.cli("lake", "SELECT $s AS s, $n AS n, $f AS f, $l AS l, $b AS b, $q AS q", "--param",
+                                  "s=sf0001", "--param", "n=7", "--param", "f=2.5", "--param", "l=[1, 2]",
+                                  "--param", "b=true", "--param", 'q="007"', "--json")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(json.loads(out), [{"s": "sf0001", "n": 7, "f": 2.5, "l": [1, 2], "b": True, "q": "007"}])
+        code, out, err = self.cli("lake", "SELECT exp_id, jobs FROM experiments WHERE exp_id = $exp", "--param",
+                                  "exp=sf0001")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(out.splitlines()[1:4], ["| exp_id | jobs |", "+--------+------+", "| sf0001 | 7    |"])
+        # The same statement as a script, its literal inline, prints the same.
+        self.assertEqual(self.cli("lake", "SELECT exp_id, jobs FROM experiments WHERE exp_id = 'sf0001'")[1], out)
+        code, out, err = self.cli("lake", "SELECT count(*) AS n FROM structural($exp)", "--param", "exp=sf0001",
+                                  "--json")
+        self.assertEqual((code, err, len(json.loads(out))), (0, "", 1))
+
+    def test_a_param_missing_is_named(self):
+        self.index()
+        code, out, err = self.cli("lake", "SELECT * FROM experiments WHERE exp_id = $exp", "--param", "other=1")
+        self.assertEqual((code, out, err), (1, "", "lake: no value for $exp\n"))
+        code, _, err = self.cli("lake", "SELECT 1", "--param", "nope")
+        self.assertEqual(code, 2)
+        self.assertIn("'nope' is no NAME=VALUE", err)
+
+    def test_the_saved_views_listed_run_and_refused(self):
+        self.index()
+        saved = views.saved()
+        code, out, err = self.cli("view")
+        self.assertEqual((code, err), (0, ""))
+        for v in saved:
+            self.assertRegex(out, rf"(?m)^\| {re.escape(v.name)} +\| {re.escape(v.title)} +\| ")
+        code, out, _ = self.cli("view", "--json")
+        self.assertEqual([v["name"] for v in json.loads(out)], [v.name for v in saved])
+        # experiments' $search takes its default, '': every experiment.
+        code, out, err = self.cli("view", "experiments", "--json")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(sorted(r["exp_id"] for r in json.loads(out)), ["sf0001", "suite/wt/inv1", "suite/wt/inv2"])
+        code, out, err = self.cli("view", "experiments", "--param", "search=inv2")
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("suite/wt/inv2", out)
+        self.assertNotIn("sf0001", out)
+        code, out, err = self.cli("view", "scorecard", "--param", "exp=sf0001", "--param", "arm=a", "--param",
+                                  "arm2=off", "--json")
+        self.assertEqual((code, err), (0, ""))
+        cells = {r["cell"] for r in catalog.lake("SELECT cell FROM experiment_cells WHERE exp_id = 'sf0001';")}
+        self.assertEqual({r["cell"] for r in json.loads(out)}, cells)
+        code, out, err = self.cli("view", "experiments", "--max-rows", "1")
+        self.assertEqual((code, err), (0, "view experiments: its first 1 rows; --max-rows for more\n"))
+        self.assertEqual(len([line for line in out.splitlines() if line.startswith("| ")]), 2)
+        code, out, err = self.cli("view", "scorecard", "--param", "exp=sf0001")
+        self.assertEqual((code, out), (1, ""))
+        self.assertEqual(err, "view scorecard: no value for $arm (its params: exp (exp), arm (arm), arm2 (arm2))\n")
+        code, out, err = self.cli("view", "nope")
+        self.assertEqual((code, out), (1, ""))
+        self.assertTrue(err.startswith("view: no view 'nope': collapse_diff, "), err)
+
+    def test_describe_every_topic_and_name(self):
+        self.index()
+        code, out, err = self.cli("describe")
+        self.assertEqual((code, err), (0, ""))
+        pool = catalog.pool("test", size=1, guard=engine.Guard("1GB", 1, "1GiB"))
+        self.addCleanup(pool.close)
+        self.assertEqual(out, describe.describe(None, pool))
+        schema = catalog.schema(pool)
+        names = sorted({t["name"] for t in schema["tables"] if t["schema"] == "main"}
+                       | {m["name"] for m in describe.macros(schema)} | {v.name for v in views.saved()})
+        self.assertTrue({"experiments", "verdicts", "structural", "effects", "scorecard"} <= set(names))
+        for topic in [*describe.TOPICS, *names]:
+            got = describe.describe(topic, pool)
+            self.assertTrue(got.strip(), topic)
+            for tool in (t["name"] for t in ask.TOOLS if "_" in t["name"]):
+                self.assertNotRegex(got, rf"\b{tool}\b", topic)
+        code, out, err = self.cli("describe", "verdict")
+        self.assertEqual((code, out), (1, ""))
+        self.assertTrue(err.startswith("describe: no topic 'verdict' (did you mean verdicts"), err)
 
 
 if __name__ == "__main__":

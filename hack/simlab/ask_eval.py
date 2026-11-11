@@ -41,8 +41,7 @@ from simlab import bootstrap  # noqa: E402
 if __name__ == "__main__":
     bootstrap.engine(__file__)
 
-import simlab  # noqa: E402
-from simlab import ask, catalog, engine, store_host  # noqa: E402
+from simlab import ask, catalog, store_host  # noqa: E402
 
 QUESTIONS = HERE / "ask_eval.json"
 # A ratio's x (x1.016), and a name holding digits (star-15-10-end-abrupt,
@@ -108,9 +107,7 @@ def flat(v):
 
 
 def pool(size=2):
-    engine.ensure_extensions()
-    lake = simlab.lake_root()
-    return engine.Pool(lake, lake.parent / "tmp" / "ask-eval", size=size)
+    return catalog.pool("ask-eval", size)
 
 
 def check(args):

@@ -16,13 +16,15 @@ todo?}).
                                    removed when it has none) and returns it
                                    as read back: ValueError for a bad name
                                    or view (check)
-  run(pool, name, params, root=VIEWS, max_rows=..., timeout_s=...)
+  run(pool, name, params, root=VIEWS, max_rows=..., timeout_s=..., text=False)
                                    -> engine.Result: the view's SQL through
                                    the pool's gate, each param not given
                                    (or given "" or None) taking its
                                    default, and a seed's or number's
                                    string its number, as the UI's pickers
-                                   give them (selection.ts viewParams)
+                                   give them (selection.ts viewParams);
+                                   with `text` its values DuckDB's strings
+                                   (engine.run), as the CLI prints them
 
 A view's name is NAME; files of other names are
 none. A param's name is one the UI finds in a statement (`$name`), its
@@ -225,9 +227,10 @@ def value(p, v):
     return int(n) if n.is_integer() else n
 
 
-def run(pool, name, params=None, root=VIEWS, max_rows=10_000, timeout_s=30.0):
-    """View `name`'s rows over `pool` (engine.Pool): KeyError for no such
-    view, QueryError for a param missing or the query failing."""
+def run(pool, name, params=None, root=VIEWS, max_rows=10_000, timeout_s=30.0, text=False):
+    """View `name`'s rows over `pool` (engine.Pool), with `text` as DuckDB's
+    strings: KeyError for no such view, QueryError for a param missing or
+    the query failing."""
     view = get(name, root)
     given = params or {}
     values = {k: v for k, v in given.items() if k not in {p.name for p in view.params}}
@@ -237,4 +240,4 @@ def run(pool, name, params=None, root=VIEWS, max_rows=10_000, timeout_s=30.0):
             v = p.default
         if v is not None:
             values[p.name] = value(p, v)
-    return pool.query(view.sql, values, max_rows=max_rows, timeout_s=timeout_s)
+    return pool.query(view.sql, values, max_rows=max_rows, timeout_s=timeout_s, text=text)

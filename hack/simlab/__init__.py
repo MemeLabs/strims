@@ -17,6 +17,8 @@ server (hack/console).
             the store as the farm hosts run it: stdlib and the DuckDB CLI
   verdict   analyze.py's verdicts, and the derived tables made from them
   catalog   the DuckLake catalog: index, fetch, availability, schema
+  describe  the catalog in words, a topic at a time: simdb.py describe's
+            text, and the catalog's part of the Ask prompt
   query     simdb.py's selections and queries, as results
   suite     suite.py's tiers, cells, metrics, local runs and farm matrices
   scoring   the catalog's scoring macros, as scorecards and arm scores
