@@ -6,7 +6,7 @@ import "../../../../components/VideoPlayer/VideoControls.scss";
 import React, { useState } from "react";
 
 import VideoVolume from "../../../../components/VideoPlayer/VideoVolume";
-import { Story } from "../../../storybook";
+import { Catalog, Story } from "../../../storybook";
 import { PlayerFrame } from "./video";
 
 // The slider beside the controls' volume button, shown as under the
@@ -51,3 +51,6 @@ const stories: Story[] = [
 ];
 
 export default stories;
+
+// The volume and progress bars' slider.
+export const catalog: Catalog = { covers: ["components/VideoPlayer/Slider.tsx"] };

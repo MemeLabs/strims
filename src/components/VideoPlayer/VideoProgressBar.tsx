@@ -3,56 +3,9 @@
 
 import clsx from "clsx";
 import React, { useEffect, useState } from "react";
-import {
-  GetHandleProps,
-  GetTrackProps,
-  Handles,
-  Rail,
-  Slider,
-  SliderItem,
-  Tracks,
-} from "react-compound-slider";
 
 import { VideoControls, VideoState } from "../../hooks/useVideo";
-
-interface HandleProps {
-  domain: [number, number];
-  handle: SliderItem;
-  getHandleProps: GetHandleProps;
-}
-
-export const Handle: React.FC<HandleProps> = ({
-  domain: [min, max],
-  handle: { id, value, percent },
-  getHandleProps,
-}) => (
-  <div
-    role="slider"
-    aria-valuemin={min}
-    aria-valuemax={max}
-    aria-valuenow={value}
-    style={{ left: `${percent}%` }}
-    className="video_progress_bar__handle"
-    {...getHandleProps(id)}
-  />
-);
-
-interface TrackProps {
-  source: SliderItem;
-  target: SliderItem;
-  getTrackProps: GetTrackProps;
-}
-
-export const Track: React.FC<TrackProps> = ({ source, target, getTrackProps }) => (
-  <div
-    className="video_progress_bar__track"
-    style={{
-      left: `${source.percent}%`,
-      width: `${target.percent - source.percent}%`,
-    }}
-    {...getTrackProps()}
-  />
-);
+import Slider from "./Slider";
 
 interface VideoProgressBarProps {
   videoState: VideoState;
@@ -89,7 +42,7 @@ const VideoProgressBar: React.FC<VideoProgressBarProps> = ({ videoState, videoCo
 
   const clampValue = (value: number) => Math.min(bufferEnd, value);
 
-  const handleUpdate = ([newValue]: number[]) => {
+  const handleUpdate = (newValue: number) => {
     const clampedValue = clampValue(newValue);
     if (dragging && clampedValue !== value) {
       setCurrentTime(clampedValue);
@@ -121,45 +74,16 @@ const VideoProgressBar: React.FC<VideoProgressBarProps> = ({ videoState, videoCo
 
   return (
     <Slider
-      mode={1}
-      step={0.01}
+      block="video_progress_bar"
       className={sliderClassNames}
       domain={[domainStart, domainEnd]}
+      step={0.01}
+      value={value}
       onUpdate={handleUpdate}
       onSlideStart={handleSlideStart}
       onSlideEnd={handleSlideEnd}
-      values={[value]}
     >
-      <Rail>
-        {({ getRailProps }) => (
-          <div className="video_progress_bar__rail" {...getRailProps()}>
-            <div className="video_progress_bar__rail__buffer" style={bufferStyle} />
-          </div>
-        )}
-      </Rail>
-      <Handles>
-        {({ handles, getHandleProps }) => (
-          <div>
-            {handles.map((handle) => (
-              <Handle
-                key={handle.id}
-                handle={handle}
-                domain={[0, 1]}
-                getHandleProps={getHandleProps}
-              />
-            ))}
-          </div>
-        )}
-      </Handles>
-      <Tracks right={false}>
-        {({ tracks, getTrackProps }) => (
-          <div>
-            {tracks.map(({ id, source, target }) => (
-              <Track key={id} source={source} target={target} getTrackProps={getTrackProps} />
-            ))}
-          </div>
-        )}
-      </Tracks>
+      <div className="video_progress_bar__rail__buffer" style={bufferStyle} />
     </Slider>
   );
 };

@@ -206,6 +206,35 @@
     }
   }
 
+  // A slider's range input, transparent over its rail and handle: wider than
+  // the rail by the handle, so its thumb's box is the handle's at every value.
+  .video_slider__input {
+    position: absolute;
+    top: -6px;
+    left: -11px;
+    z-index: 3;
+    width: calc(100% + 18px);
+    height: 18px;
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    cursor: pointer;
+    appearance: none;
+    background: none;
+
+    &::-webkit-slider-thumb {
+      width: 18px;
+      height: 18px;
+      appearance: none;
+    }
+
+    &::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border: 0;
+    }
+  }
+
   &.visible:not(.visible100) {
     .video_progress_bar__rail__buffer,
     .video_progress_bar__track,

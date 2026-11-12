@@ -3,58 +3,11 @@
 
 import clsx from "clsx";
 import React, { useCallback, useRef, useState } from "react";
-import {
-  GetHandleProps,
-  GetTrackProps,
-  Handles,
-  Rail,
-  Slider,
-  SliderItem,
-  Tracks,
-} from "react-compound-slider";
 import { useUpdateEffect } from "react-use";
 
 import useIdleTimeout from "../../hooks/useIdleTimeout";
 import useReady from "../../hooks/useReady";
-
-interface HandleProps {
-  domain: [number, number];
-  handle: SliderItem;
-  getHandleProps: GetHandleProps;
-}
-
-export const Handle: React.FC<HandleProps> = ({
-  domain: [min, max],
-  handle: { id, value, percent },
-  getHandleProps,
-}) => (
-  <div
-    role="slider"
-    aria-valuemin={min}
-    aria-valuemax={max}
-    aria-valuenow={value}
-    style={{ left: `${percent}%` }}
-    className="video_volume__handle"
-    {...getHandleProps(id)}
-  />
-);
-
-interface TrackProps {
-  source: SliderItem;
-  target: SliderItem;
-  getTrackProps: GetTrackProps;
-}
-
-export const Track: React.FC<TrackProps> = ({ source, target, getTrackProps }) => (
-  <div
-    className="video_volume__track"
-    style={{
-      left: `${source.percent}%`,
-      width: `${target.percent - source.percent}%`,
-    }}
-    {...getTrackProps()}
-  />
-);
+import Slider from "./Slider";
 
 interface VolumeProps {
   value: number;
@@ -81,8 +34,6 @@ const VideoVolume: React.FC<VolumeProps> = ({
     dragging,
     active: !idle,
   });
-
-  const handleUpdate = useCallback((values: number[]) => onUpdate(values[0]), []);
 
   const handleSlideStart = useCallback(() => {
     onSlideStart();
@@ -115,42 +66,15 @@ const VideoVolume: React.FC<VolumeProps> = ({
   return (
     <div ref={ref}>
       <Slider
-        mode={1}
-        step={0.01}
+        block="video_volume"
         className={sliderClassNames}
         domain={[0, 1]}
-        onUpdate={handleUpdate}
+        step={0.01}
+        value={value}
+        onUpdate={onUpdate}
         onSlideStart={handleSlideStart}
         onSlideEnd={handleSlideEnd}
-        values={[value]}
-      >
-        <Rail>
-          {({ getRailProps }) => <div className="video_volume__rail" {...getRailProps()} />}
-        </Rail>
-        <Handles>
-          {({ handles, getHandleProps }) => (
-            <div>
-              {handles.map((handle) => (
-                <Handle
-                  key={handle.id}
-                  handle={handle}
-                  domain={[0, 1]}
-                  getHandleProps={getHandleProps}
-                />
-              ))}
-            </div>
-          )}
-        </Handles>
-        <Tracks right={false}>
-          {({ tracks, getTrackProps }) => (
-            <div>
-              {tracks.map(({ id, source, target }) => (
-                <Track key={id} source={source} target={target} getTrackProps={getTrackProps} />
-              ))}
-            </div>
-          )}
-        </Tracks>
-      </Slider>
+      />
     </div>
   );
 };
