@@ -78,6 +78,28 @@
     }
   }
 
+  &__reader {
+    position: relative;
+
+    &__video {
+      display: block;
+      width: 100%;
+    }
+
+    // The picture around the scanned square.
+    &__shade {
+      position: absolute;
+      inset: 0;
+      box-sizing: border-box;
+      border: 0 solid rgba(0, 0, 0, 0.48);
+    }
+
+    &__corner {
+      position: absolute;
+      background: #fff;
+    }
+  }
+
   &__result {
     display: flex;
     flex-direction: row;
