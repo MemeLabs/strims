@@ -126,6 +126,11 @@ pub use scheduler_peer::push::seed::{
     AllocCounters, ReportCounters, SeedAllocationStats, SeedNeighbour,
 };
 pub use scheduler_peer::push::{PARENT_LOG_CAP, ParentChange, ParentWhy, PushStats};
+pub use scheduler_peer::seed_log::{
+    CancelOpen, SEED_LOG_CAP, SeedBar, SeedCheck, SeedClose, SeedDecision, SeedDecisionKind,
+    SeedLogTake, SeedRequest, SeedSend, SeedWindow, SendFate, SendHow, WindowPhase,
+    admit_rule_name, holder_left_name,
+};
 pub use scheduler_peer::{
     ChannelSchedulerStats, FORECAST_CAP, LagForecast, LagSnapshot, SwarmCounters,
     SwarmSchedulerStats,

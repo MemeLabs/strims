@@ -34,6 +34,7 @@ use crate::scheduler::PeerPriority;
 use crate::scheduler_peer::log::{HaveRecord, Held, RequestRecord};
 use crate::scheduler_peer::push::seed::SeedAllocationStats;
 use crate::scheduler_peer::push::{ParentChange, ParentLog, PushStats, UploadInfo};
+use crate::scheduler_peer::seed_log::{SeedLog, SeedLogTake};
 use crate::scheduler_peer::{
     ChannelSchedulerStats, FORECAST_CAP, LagForecast, PeerSwarmScheduler, SchedulerError,
     StreamOpenOutcome, SwarmCounters, SwarmSchedulerStats, WriteDataError,
@@ -166,6 +167,8 @@ struct ForecastLog {
     haves_lost: u64,
     requests: Vec<RequestRecord>,
     requests_lost: u64,
+    /// The seed log ([`Runner::take_seed_log`]), bound by its own caps.
+    seed: SeedLog,
 }
 
 impl ForecastLog {
@@ -183,6 +186,7 @@ impl ForecastLog {
         let (requests, lost) = sched.take_requests(true, now);
         self.requests_lost += lost;
         extend_capped(&mut self.requests, requests, &mut self.requests_lost);
+        self.seed.absorb(sched.take_seed_log(true, now));
     }
 
     /// Its samples, and how many samples and chunks the caps left out.
@@ -202,6 +206,7 @@ impl ForecastLog {
             && self.haves_lost == 0
             && self.requests.is_empty()
             && self.requests_lost == 0
+            && self.seed.is_empty()
     }
 
     /// Logs the chunks of `b`, stored at `now` while the swarm had no
@@ -816,7 +821,9 @@ fn handle_payload(
                     ch.metrics_in.rejected = ch.metrics_in.rejected.saturating_add(1);
                 }
             }
-            Message::Cancel(c) => sched.handle_cancel(peer, c.bin, swarm.store().window_start(), q),
+            Message::Cancel(c) => {
+                sched.handle_cancel(peer, c.bin, swarm.store().window_start(), now, q)
+            }
             Message::Choke => sched.handle_choke(peer, true),
             Message::Unchoke => sched.handle_choke(peer, false),
             Message::Ping(p) => sched.handle_ping(peer, p.nonce),
@@ -827,7 +834,7 @@ fn handle_payload(
                     ch.metrics_in.rejected = ch.metrics_in.rejected.saturating_add(1);
                 }
             }
-            Message::StreamCancel(s) => sched.handle_stream_cancel(peer, s.stream)?,
+            Message::StreamCancel(s) => sched.handle_stream_cancel(peer, s.stream, now)?,
             Message::StreamOpen(s) => {
                 match sched.handle_stream_open(peer, s.stream, s.bin, now, q)? {
                     StreamOpenOutcome::Accepted | StreamOpenOutcome::BeforeHandshake => {}
@@ -1480,7 +1487,7 @@ impl Runner {
             transmit: &mut events.transmit,
         };
         if rs.channels.len() == 1 && rs.seed_pin.is_some() {
-            sched.pin_allocation(rs.seed_pin.clone(), &mut q);
+            sched.pin_allocation(rs.seed_pin.clone(), now, &mut q);
         }
         sched.add_channel(peer, &id, now, &mut q);
         // The link's latest round trip, for an adaptive seed's holder
@@ -1531,7 +1538,7 @@ impl Runner {
         };
         if let Some(sched) = rs.scheduler.as_mut() {
             sched.close_requests(peer, *last_now);
-            sched.close_channel(peer, &rs.swarm, &mut q);
+            sched.close_channel(peer, &rs.swarm, *last_now, &mut q);
         }
         if rs.channels.is_empty()
             && let Some(mut sched) = rs.scheduler.take()
@@ -2018,6 +2025,15 @@ impl Runner {
             &mut waits,
         );
         self.push_waits = waits;
+        if self.requests {
+            let (rate, reading) = (self.answer_rate.rate(), self.answer_rate.reading());
+            let engaged = self.answer_rate.engaged();
+            for rs in self.swarms.values_mut() {
+                if let Some(s) = rs.scheduler.as_mut() {
+                    s.seed_answer_rate(rate, reading, engaged, now);
+                }
+            }
+        }
         let tapped = (self.answer_rate.rate(), self.answer_rate.reading());
         if self.tap_level == TapLevel::All && self.tapped_rate != Some(tapped) {
             self.tapped_rate = Some(tapped);
@@ -2228,7 +2244,10 @@ impl Runner {
     /// ([`HaveRecord`], [`Self::take_haves`]), and each request the request
     /// round makes, with what it knew of the chunk, the rivals it weighed
     /// and how it ended ([`RequestRecord`], [`Self::take_requests`]); the
-    /// held log too ([`Self::take_held`]). It changes no decision.
+    /// held log too ([`Self::take_held`]); and in a swarm the node seeds,
+    /// the seed log ([`crate::scheduler_peer::seed_log`]): its decisions
+    /// about its neighbours and what became of each chunk it sent, kept
+    /// until [`Self::take_seed_log`]. It changes no decision.
     pub fn set_request_log(&mut self, on: bool) {
         self.requests = on;
         for rs in self.swarms.values_mut() {
@@ -2280,6 +2299,23 @@ impl Runner {
             let (log, lost) = s.take_requests(false, now);
             out.0.extend(log);
             out.1 += lost;
+        }
+        self.forget_removed(swarm);
+        out
+    }
+
+    /// With the request log on, the seed log of a swarm this node seeds
+    /// since the last call ([`SeedLogTake`]): its decisions about its
+    /// neighbours and what became of each chunk it pushed or answered, and
+    /// how many records its caps left out. The log outlives the swarm's
+    /// schedulers, whose pushes still queued end closed as they go, and the
+    /// swarm.
+    pub fn take_seed_log(&mut self, swarm: SwarmKey) -> SeedLogTake {
+        let now = self.last_now;
+        let (kept, sched) = self.forecast_logs(swarm);
+        let mut out = kept.map(|l| l.seed.take()).unwrap_or_default();
+        if let Some(s) = sched {
+            out.extend(s.take_seed_log(false, now));
         }
         self.forget_removed(swarm);
         out
@@ -2418,6 +2454,7 @@ impl Runner {
             swarms,
             peers,
             events,
+            last_now,
             ..
         } = self;
         let rs = swarms.get_mut(swarm).ok_or(RunnerError::UnknownSwarm)?;
@@ -2427,7 +2464,7 @@ impl Runner {
                 peers,
                 transmit: &mut events.transmit,
             };
-            sched.pin_allocation(pin, &mut q);
+            sched.pin_allocation(pin, *last_now, &mut q);
         }
         Ok(())
     }

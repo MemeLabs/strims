@@ -9,8 +9,8 @@ use strims_kademlia::ID;
 use strims_ppspp::codec::Stream;
 use strims_ppspp::{
     ChannelMetrics, ChannelStats, ChannelTotals, HaveRecord, LagForecast, MetricsSnapshot,
-    ParentWhy, PeerStats, PushStats, RequestRecord, SwarmCounters, SwarmId, SwarmKey,
-    SwarmSchedulerStats,
+    ParentWhy, PeerStats, PushStats, RequestRecord, SeedDecision, SeedSend, SwarmCounters, SwarmId,
+    SwarmKey, SwarmSchedulerStats,
 };
 use strims_vnic::{HostMetrics, LinkKind, LinkMetrics, LinkPath};
 use strims_vpn::{Delivery, ExchangeOutcome, NetworkId};
@@ -203,6 +203,22 @@ pub struct NodeMetrics {
     pub haves_lost: u64,
     pub requests: Vec<RequestInfo>,
     pub requests_lost: u64,
+    /// With [`crate::NodeConfig::request_log`], the seed log of each swarm
+    /// the node seeds since the last snapshot (`Runner::take_seed_log`):
+    /// its decisions about its neighbours, what became of each chunk it
+    /// pushed or answered, and the records its caps left out.
+    pub seed_decisions: Vec<LogInfo<SeedDecision>>,
+    pub seed_sends: Vec<LogInfo<SeedSend>>,
+    pub seed_log_lost: u64,
+}
+
+/// A record of the ppspp runner's seed log ([`NodeMetrics::seed_decisions`],
+/// [`NodeMetrics::seed_sends`]), its peer named by host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LogInfo<T> {
+    pub swarm: SwarmKey,
+    pub peer: Option<ID>,
+    pub record: T,
 }
 
 /// A chunk the node first held ([`NodeMetrics::held`]): its swarm, its

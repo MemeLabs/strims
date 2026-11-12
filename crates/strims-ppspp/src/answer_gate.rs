@@ -398,6 +398,11 @@ impl AnswerRate {
 
     /// The queueing delay read at the last update: the links' latest
     /// excess, or the pushing peers' oldest pushes' wait if longer.
+    /// Whether the rate binds now.
+    pub(crate) fn engaged(&self) -> bool {
+        self.engaged
+    }
+
     pub(crate) fn reading(&self) -> Option<Duration> {
         self.reading
     }

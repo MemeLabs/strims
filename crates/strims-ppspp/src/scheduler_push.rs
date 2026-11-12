@@ -233,6 +233,7 @@ use strims_base::stats::Sma;
 use strims_base::time::{Duration, Time};
 use strims_binmap::{Bin, Cursor, Map};
 
+use super::seed_log::{SeedClose, SeedDecisionKind, SeedRequest, SendFate};
 use super::{
     PeerChannelScheduler, PeerSwarmScheduler, REQUEST_BACKOFF, StreamMessage, SwarmState,
     max_pending_requests,
@@ -246,7 +247,7 @@ use crate::codec::{
 use crate::options::PushMode;
 use crate::route::ROUTE_MARGIN;
 use crate::runner::{PeerKey, SwarmKey};
-use crate::scheduler::PeerTaskQueue;
+use crate::scheduler::{PeerPriority, PeerTaskQueue};
 use crate::tap::{
     Admission, AdmitRule, LagEstimate, ParentAction, ParentChoice, Prune, Shed, TapKind, Upload,
 };
@@ -2081,6 +2082,22 @@ impl PeerSwarmScheduler {
             held: granted.map_or(0, |g| g.held as u64),
             per_holder: granted.map_or(0, |g| g.per_holder as u64),
         };
+        if let Some(l) = s.seed_log.as_mut() {
+            l.decide(
+                now,
+                Some(peer),
+                SeedDecisionKind::Request(SeedRequest {
+                    stream,
+                    granted: ok,
+                    rule,
+                    subscribers: stream_children,
+                    holders: granted.map_or(0, |g| g.holders),
+                    copies: granted.map_or(0, |g| g.copies),
+                    held: granted.map_or(0, |g| g.held),
+                    per_holder: granted.map_or(0, |g| g.per_holder),
+                }),
+            );
+        }
         if ok {
             s.tap.emit(s.key, Some(peer), || TapKind::Admitted {
                 stream,
@@ -2097,7 +2114,7 @@ impl PeerSwarmScheduler {
             why: why(),
         });
         p.stats.rejected = p.stats.rejected.saturating_add(1);
-        self.close_subscriber(peer, stream, q);
+        self.close_subscriber(peer, stream, SeedClose::Declined, now, q);
         (false, extra)
     }
 
@@ -2144,14 +2161,32 @@ impl PeerSwarmScheduler {
                 stream,
                 why: Shed::Silent,
             });
-            self.close_subscriber(peer, stream, q);
+            self.close_subscriber(peer, stream, SeedClose::Silent, now, q);
         }
     }
 
-    /// Ends `peer`'s subscription to `stream`, if any, with a STREAM_CLOSE.
-    fn close_subscriber(&mut self, peer: PeerKey, stream: Stream, q: &mut impl PeerTaskQueue) {
+    /// Ends `peer`'s subscription to `stream`, if any, with a STREAM_CLOSE,
+    /// at `now` (`why`, for the seed log).
+    fn close_subscriber(
+        &mut self,
+        peer: PeerKey,
+        stream: Stream,
+        why: SeedClose,
+        now: Time,
+        q: &mut impl PeerTaskQueue,
+    ) {
         if let Some(st) = self.s.streams.get_mut(usize::from(stream)) {
-            self.s.subscribers_changed |= st.remove_subscriber(peer);
+            let removed = st.remove_subscriber(peer);
+            self.s.subscribers_changed |= removed;
+            if removed {
+                let subscribers = st.subscribers.len();
+                self.s
+                    .seed_decide(now, Some(peer), |_| SeedDecisionKind::Closed {
+                        stream,
+                        why,
+                        subscribers,
+                    });
+            }
         }
         if let Some(c) = self.channels.get_mut(&peer) {
             c.extra.push_stream(stream, StreamMessage::Close);
@@ -2903,7 +2938,7 @@ impl PeerSwarmScheduler {
         // Extra streams first, then the newest.
         victims.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
         for &(_, _, stream, peer) in victims.iter().take(n) {
-            self.close_subscriber(peer, stream, q);
+            self.close_subscriber(peer, stream, SeedClose::Saturated, now, q);
             let key = self.s.key;
             self.s.tap.emit(key, Some(peer), || TapKind::Shed {
                 stream,
@@ -2956,12 +2991,15 @@ impl PeerSwarmScheduler {
         for pc in self.channels.values_mut().filter_map(|c| c.push.as_mut()) {
             pc.cancelled.reset_before(window_start);
         }
+        if let Some(l) = self.s.seed_log.as_mut() {
+            l.forget_before(window_start);
+        }
     }
 
-    /// Hybrid CANCEL: the peer doesn't want `b` from us, so a push of it is
-    /// dropped. Bins behind our window or more than a live window past our
-    /// newest chunk are ignored.
-    pub(crate) fn push_cancelled(&mut self, peer: PeerKey, b: Bin, window_start: Bin) {
+    /// Hybrid CANCEL at `now`: the peer doesn't want `b` from us, so a push
+    /// of it is dropped. Bins behind our window or more than a live window
+    /// past our newest chunk are ignored.
+    pub(crate) fn push_cancelled(&mut self, peer: PeerKey, b: Bin, window_start: Bin, now: Time) {
         let s = &self.s;
         let ok = crate::peer_bin_ok(b, s.window)
             && b.base_left() >= window_start
@@ -2971,6 +3009,10 @@ impl PeerSwarmScheduler {
         }
         if let Some(pc) = self.channels.get_mut(&peer).and_then(|c| c.push.as_mut()) {
             pc.cancelled.set(b);
+            if let Some(l) = self.s.seed_log.as_mut() {
+                let bits = self.s.stream_bits;
+                l.cancel(peer, b, |x| ((x.0 >> 1) & bits) as Stream, now);
+            }
         }
     }
 
@@ -3016,6 +3058,7 @@ impl PeerSwarmScheduler {
                 .tap
                 .emit(key, Some(peer), || TapKind::PushStale { bin: b, queued: t });
             self.note_push(peer, b, t, seed::PushFate::Stale, now);
+            self.seed_push_dropped(peer, b, t, SendFate::Stale, now);
             return true;
         }
         let Some(c) = self.channels.get(&peer) else {
@@ -3026,6 +3069,7 @@ impl PeerSwarmScheduler {
             self.s
                 .tap
                 .emit(key, Some(peer), || TapKind::PushSuppressed { bin: b });
+            self.seed_push_dropped(peer, b, t, SendFate::Suppressed, now);
             return true;
         }
         if c.push.as_ref().is_some_and(|pc| pc.cancelled.filled_at(b)) {
@@ -3034,9 +3078,26 @@ impl PeerSwarmScheduler {
                 .tap
                 .emit(key, Some(peer), || TapKind::PushCancelled { bin: b });
             self.note_push(peer, b, t, seed::PushFate::Cancelled, now);
+            self.seed_push_dropped(peer, b, t, SendFate::Cancelled, now);
             return true;
         }
         false
+    }
+
+    /// With the seed log on, the push of `b` to `peer`, queued at `t`,
+    /// dropped at write time as `fate`.
+    fn seed_push_dropped(&mut self, peer: PeerKey, b: Bin, t: Time, fate: SendFate, now: Time) {
+        let PeerSwarmScheduler { s, channels } = self;
+        s.seed_sent(
+            peer,
+            channels.get(&peer),
+            b,
+            t,
+            PeerPriority::High,
+            fate,
+            0,
+            now,
+        );
     }
 
     /// Push/pull state for diagnostics and tests.

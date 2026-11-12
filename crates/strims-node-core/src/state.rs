@@ -60,9 +60,9 @@ use crate::config::{
 use crate::driver::{IdleOk, Interfaces, LinkProbe, TaskGuard};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
-    ChannelInfo, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo, LinkInfo, NetworkInfo, NodeBin,
-    NodeEvent, NodeMetrics, ParentInfo, PeerInfo, RequestInfo, RunnerMetrics, RunnerPeerInfo,
-    SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
+    ChannelInfo, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo, LinkInfo, LogInfo, NetworkInfo,
+    NodeBin, NodeEvent, NodeMetrics, ParentInfo, PeerInfo, RequestInfo, RunnerMetrics,
+    RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
 };
 
 /// Bin edges [`NodeConfig::stats_bins`] keeps between snapshots; past it the
@@ -1552,6 +1552,9 @@ impl State {
             haves_lost: logs.haves_lost,
             requests: logs.requests,
             requests_lost: logs.requests_lost,
+            seed_decisions: logs.seed_decisions,
+            seed_sends: logs.seed_sends,
+            seed_log_lost: logs.seed_log_lost,
         }
     }
 
@@ -1681,6 +1684,20 @@ impl State {
                         swarm: key,
                         peer: host(Some(record.asked.peer)),
                         rivals: record.rivals.iter().map(|w| host(Some(w.peer))).collect(),
+                        record,
+                    }));
+                let seed = self.runner.take_seed_log(key);
+                out.seed_log_lost += seed.lost;
+                out.seed_decisions
+                    .extend(seed.decisions.into_iter().map(|record| LogInfo {
+                        swarm: key,
+                        peer: host(record.peer),
+                        record,
+                    }));
+                out.seed_sends
+                    .extend(seed.sends.into_iter().map(|record| LogInfo {
+                        swarm: key,
+                        peer: host(Some(record.peer)),
                         record,
                     }));
             }
@@ -2414,4 +2431,7 @@ struct TakenLogs {
     haves_lost: u64,
     requests: Vec<RequestInfo>,
     requests_lost: u64,
+    seed_decisions: Vec<LogInfo<strims_ppspp::SeedDecision>>,
+    seed_sends: Vec<LogInfo<strims_ppspp::SeedSend>>,
+    seed_log_lost: u64,
 }

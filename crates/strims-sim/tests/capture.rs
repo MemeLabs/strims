@@ -92,10 +92,16 @@ fn a_captured_run_keeps_its_trace() {
 /// A seed and three viewers on cable in Chicago, each linked to the
 /// others over TCP, with the WAN model's windows and access queues.
 fn wan_mesh() -> Scenario {
+    wan_mesh_of(3, None)
+}
+
+/// [`wan_mesh`] with `n` viewers, and the seed's uplink `seed_up` bytes a
+/// second if set.
+fn wan_mesh_of(n: usize, seed_up: Option<u64>) -> Scenario {
     let mut s = Scenario::new("capture_wan");
     let site = Site::new(City::Chicago, Access::Cable);
-    let src = s.host_at("seed", site);
-    let viewers: Vec<_> = (0..3).map(|i| s.host_at(&format!("v{i}"), site)).collect();
+    let src = s.host_at("seed", seed_up.map_or(site, |up| site.with_up(up)));
+    let viewers: Vec<_> = (0..n).map(|i| s.host_at(&format!("v{i}"), site)).collect();
     let all: Vec<_> = std::iter::once(src)
         .chain(viewers.iter().copied())
         .collect();
@@ -593,6 +599,148 @@ fn budget_reading_is_the_budgets(r: &strims_sim::Report, d: &Path) {
     assert!(seconds.iter().any(|&c| c > 0));
     assert!(seconds.iter().all(|c| *c == -1 || readings.contains(c)));
     assert!(column("bins").iter().any(|&c| c > 0));
+}
+
+/// With the scheduler's logs on, the seed's tables say what it decided and
+/// what became of each chunk it sent ([`seed_tables_say_what_the_seed_did`]),
+/// on the asks test's mesh: 8 viewers behind a seed with the uplink for
+/// about 3 copies of the stream, so it holds copies at some and declines
+/// the rest.
+#[test]
+fn the_seed_tables_say_what_the_seed_did() {
+    let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "the_seed_tables_say_what_the_seed_did-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&d);
+    let bin = Duration::from_millis(1000);
+    let mut spec = wan_mesh_of(8, Some(200_000));
+    spec.wire_bins = Some(bin);
+    spec.request_logs = true;
+    let r = run(spec, 1).unwrap();
+    r.write_tables(&d, bin, true).unwrap();
+    seed_tables_say_what_the_seed_did(&r, &d);
+    let meta = std::fs::read_to_string(d.join("series_meta.json")).unwrap();
+    assert!(meta.contains("\"seed_log_lost\":0"), "{meta}");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// The seed's `seed_sends` and `seed_decisions` against what the rest of
+/// the run shows: every push written to a holder has the holder's hold in
+/// `arrivals` (a push written in the run's last second may arrive past its
+/// end); its sends' fates count what its runner's counters count (pushes
+/// and answers written, pushes dropped as stale, and as cancelled or
+/// announced by the peer's HAVEs); every
+/// open of a push parent at the seed (`parents`) follows a request the seed
+/// granted that neighbour for that stream; and every row is the seed's.
+fn seed_tables_say_what_the_seed_did(r: &strims_sim::Report, d: &Path) {
+    let seed = r.scenario.swarms[0].seed as i64;
+    let sends = table_rows(d, "seed_sends");
+    let decisions = table_rows(d, "seed_decisions");
+    assert!(!sends.is_empty() && !decisions.is_empty());
+    assert!(
+        sends
+            .iter()
+            .chain(&decisions)
+            .all(|x| int(x, "node") == Some(seed))
+    );
+    let count = |how: &str, fate: &str| {
+        sends
+            .iter()
+            .filter(|x| x["how"] == how && x["fate"] == fate)
+            .count() as u64
+    };
+    let c = r.hosts[r.scenario.swarms[0].seed].runner.swarm(0);
+    assert_eq!(count("push", "written"), c.pushed_chunks, "{c:?}");
+    assert_eq!(
+        count("answer", "written"),
+        c.chunks_sent - c.pushed_chunks,
+        "{c:?}"
+    );
+    assert_eq!(count("push", "stale"), c.stale_drops, "{c:?}");
+    assert_eq!(
+        count("push", "cancelled") + count("push", "suppressed"),
+        c.suppressed,
+        "{c:?}"
+    );
+    assert!(count("push", "written") > 0);
+
+    // Each host's holds, by chunk and incarnation.
+    let mut held: BTreeSet<(i64, i64, i64)> = BTreeSet::new();
+    for a in table_rows(d, "arrivals") {
+        held.insert((
+            int(&a, "node").unwrap(),
+            int(&a, "seq").unwrap(),
+            int(&a, "incarnation").unwrap(),
+        ));
+    }
+    let end =
+        r.scenario.duration.as_millis() as i64 - r.scenario.swarms[0].start.as_millis() as i64;
+    let mut checked = 0;
+    for x in sends
+        .iter()
+        .filter(|x| x["how"] == "push" && x["fate"] == "written")
+    {
+        let t = int(x, "t_ms").unwrap();
+        let key = (
+            int(x, "peer").unwrap(),
+            int(x, "seq").unwrap(),
+            int(x, "peer_incarnation").unwrap(),
+        );
+        assert!(
+            held.contains(&key) || t > end - 1000,
+            "a written push never held: {x:?}"
+        );
+        // Written, a push left the seed's queue no sooner than it entered.
+        assert!(int(x, "queued_ms").unwrap() <= t, "{x:?}");
+        assert!(int(x, "bytes").unwrap() > 0, "{x:?}");
+        checked += 1;
+    }
+    assert!(checked > 0);
+
+    // Each open of the seed as a push parent follows the seed's grant of
+    // that neighbour's request for that stream.
+    let grants: Vec<(i64, i64, i64)> = decisions
+        .iter()
+        .filter(|x| x["kind"] == "request" && x["granted"] == "true")
+        .map(|x| {
+            (
+                int(x, "peer").unwrap(),
+                int(x, "stream").unwrap(),
+                int(x, "t_ms").unwrap(),
+            )
+        })
+        .collect();
+    let mut opens = 0;
+    for p in table_rows(d, "parents") {
+        if int(&p, "parent") != Some(seed) || !["open", "switch"].contains(&p["reason"].as_str()) {
+            continue;
+        }
+        let (node, stream, t) = (
+            int(&p, "node").unwrap(),
+            int(&p, "stream").unwrap(),
+            int(&p, "t_ms").unwrap(),
+        );
+        assert!(
+            grants
+                .iter()
+                .any(|&(n, s, at)| n == node && s == stream && at <= t),
+            "an open with no grant before it: {p:?}"
+        );
+        opens += 1;
+    }
+    assert!(opens > 0);
+    // Declines too: the seed holds a few copies and turns the rest away.
+    assert!(
+        decisions
+            .iter()
+            .any(|x| x["kind"] == "request" && x["granted"] == "false")
+    );
+    // An allocation check a second, each with the window and the holders'
+    // readings.
+    for kind in ["window", "check", "holder_joined"] {
+        assert!(decisions.iter().any(|x| x["kind"] == kind), "{kind}");
+    }
 }
 
 /// A table's rows, each by column name.

@@ -407,6 +407,73 @@ fn the_forecast_log_outlives_its_scheduler_and_swarm() {
     assert!(p.leech.runner.removed_logs.is_empty());
 }
 
+/// The seed's seed log, with the request log on, outlives its scheduler and
+/// its swarm as the other decision logs do; the leech, no seed, keeps none.
+#[test]
+fn the_seed_log_outlives_its_scheduler_and_swarm() {
+    use crate::{SeedClose, SeedDecisionKind, SendFate, SendHow};
+    let run = || {
+        let mut p = Pair::with(hybrid(), hybrid());
+        p.seed.runner.set_request_log(true);
+        p.leech.runner.set_request_log(true);
+        push_to_leech(&mut p, 2);
+        p
+    };
+    let take = |n: &mut Node| n.runner.take_seed_log(n.swarm);
+    // The live scheduler's: the leech's request, granted by the pin, and
+    // the pushes written to it.
+    let mut p = run();
+    let live = take(&mut p.seed);
+    assert!(live.decisions.iter().any(|d| matches!(
+        d.kind,
+        SeedDecisionKind::Request(r) if r.granted && r.rule == crate::AdmitRule::Pin
+    )));
+    assert!(
+        live.sends
+            .iter()
+            .any(|s| s.how == SendHow::Push && s.fate == SendFate::Written)
+    );
+    assert_eq!(live.lost, 0);
+    assert_eq!(take(&mut p.seed), Default::default());
+    assert_eq!(take(&mut p.leech), Default::default());
+    // The subscription ends with the channel.
+    let closed = |kept: &crate::SeedLogTake| {
+        kept.decisions.starts_with(&live.decisions)
+            && kept.sends.starts_with(&live.sends)
+            && kept.decisions[live.decisions.len()..].iter().any(|d| {
+                matches!(
+                    d.kind,
+                    SeedDecisionKind::Closed {
+                        why: SeedClose::Channel,
+                        ..
+                    }
+                )
+            })
+    };
+
+    // The scheduler goes with the last channel: what it held stays.
+    let mut p = run();
+    p.seed.runner.stop_swarm(p.seed.peer, p.seed.swarm);
+    assert!(p.seed.runner.swarm_stats(p.seed.swarm).is_none());
+    let kept = take(&mut p.seed);
+    assert!(closed(&kept), "{kept:?}");
+    assert_eq!(take(&mut p.seed), Default::default());
+
+    // The swarm goes.
+    let mut p = run();
+    assert!(p.seed.runner.remove_swarm(p.seed.swarm).is_some());
+    let kept = take(&mut p.seed);
+    assert!(closed(&kept), "{kept:?}");
+    assert_eq!(take(&mut p.seed), Default::default());
+    // Kept with the request log's, it goes once they're taken too.
+    let (r, s) = (&mut p.seed.runner, p.seed.swarm);
+    r.take_held(s);
+    r.take_held_lost(s);
+    r.take_haves(s);
+    r.take_requests(s);
+    assert!(r.removed_logs.is_empty());
+}
+
 #[test]
 fn the_held_log_has_every_chunk_a_seed_writes_with_or_without_a_channel() {
     let mut p = Pair::with(hybrid(), hybrid());
