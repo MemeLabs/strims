@@ -34,11 +34,12 @@ const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) 
     mode: "onBlur",
   });
 
+  // A refused call shows its error in the form: the submit doesn't reject.
   const onSubmit = handleSubmit(({ name, icon }) =>
     createNetwork({
       name,
       icon: icon ? fromFormImageValue(icon) : null,
-    })
+    }).catch(() => undefined)
   );
 
   return (
