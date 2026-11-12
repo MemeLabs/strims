@@ -10,6 +10,8 @@ class MessageSizeCache {
   private offsets: FenwickTree;
   private lastSet = 0;
   public onchange?: () => void;
+  /** Counts resets, which drop every measurement. */
+  public generation = 0;
 
   constructor(
     private size: number,
@@ -39,6 +41,7 @@ class MessageSizeCache {
   }
 
   public reset() {
+    this.generation++;
     this.settled.fill(false);
     this.margins.fill(0);
     this.heights.fill(this.estimate);

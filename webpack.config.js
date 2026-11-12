@@ -23,7 +23,7 @@ module.exports = (env, argv) => {
         transform: {
           useDefineForClassFields: false,
           react: {
-            runtime: "classic",
+            runtime: "automatic",
             development: !isProduction,
             refresh,
           },

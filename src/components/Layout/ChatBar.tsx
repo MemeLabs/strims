@@ -116,7 +116,7 @@ const ChatBar: React.FC = () => {
 
   const [{ popoutTopics }, { setPopoutTopicCapacity }] = useChat();
 
-  const ref = useRef<HTMLDivElement>();
+  const ref = useRef<HTMLDivElement>(null);
   const size = useSize(ref);
 
   const capacity = Math.floor(size?.width / 330);

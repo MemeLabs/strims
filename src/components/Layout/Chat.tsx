@@ -45,7 +45,7 @@ const Chat: React.FC = () => {
   const menuLocked = !mainActiveTopic;
   const menuOpen = menuOpenToggled || menuLocked;
 
-  const ref = useRef<HTMLDivElement>();
+  const ref = useRef<HTMLDivElement>(null);
   useClickAway(ref, () => toggleMenuOpen(menuLocked));
 
   useHotkeys("alt+r", () => toggleShowChat(), {

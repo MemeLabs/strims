@@ -48,10 +48,10 @@ const VideoVolume: React.FC<VolumeProps> = ({
   // state dispatchers invoked with a callback from outside react event handler
   // call stacks throw errors so we have to smuggle the current value into the
   // event handler in a reference.
-  const valueRef = useRef<number>();
+  const valueRef = useRef<number>(undefined);
   valueRef.current = value;
 
-  const ref = useRef<HTMLDivElement>();
+  const ref = useRef<HTMLDivElement>(null);
   useReady(() => {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();

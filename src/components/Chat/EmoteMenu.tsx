@@ -102,7 +102,7 @@ const EmoteMenu: React.FC<EmoteMenuProps> = ({ onSelect, onClose }) => {
   const [preview, setPreview] = useState<CategoryItem>(null);
   const [focusIndex, setFocusIndex] = useState(0);
 
-  const scroller = useRef<ScrollerControl>();
+  const scroller = useRef<ScrollerControl>(null);
   const handleNavSelect = (index: number) => {
     scroller.current.scrollToIndex(index);
   };
@@ -156,7 +156,7 @@ interface SearchProps {
 }
 
 const Search: React.FC<SearchProps> = ({ onChange }) => {
-  const ref = useRef<HTMLInputElement>();
+  const ref = useRef<HTMLInputElement>(null);
   const handleChange = useStableCallback(() => onChange(ref.current.value));
   const handleFocus = useStableCallback(() => {
     if (DEVICE_TYPE == DeviceType.Portable) {
@@ -384,7 +384,7 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
       }
     }, [uiConfig, category, width]);
 
-    const ref = useRef<HTMLDivElement>();
+    const ref = useRef<HTMLDivElement>(null);
     sizeRef.current = useSize(ref);
 
     return (
@@ -421,7 +421,7 @@ interface ScrollerControl {
 
 const Scroller = React.memo<ScrollerProps>(
   ({ className, categories, onScroll, control, ...panelProps }) => {
-    const scrollbars = useRef<ScrollbarsHandle>();
+    const scrollbars = useRef<ScrollbarsHandle>(null);
     const viewportSize = useSize(useCallback(() => scrollbars.current?.container, []));
 
     const sizes: React.MutableRefObject<DOMRectReadOnly>[] = [];

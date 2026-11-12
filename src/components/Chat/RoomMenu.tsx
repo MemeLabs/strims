@@ -107,7 +107,7 @@ export const RoomButtons: React.FC<RoomMenuProps> = ({ onChange, onClose }) => {
     }
   })();
 
-  const ref = useRef();
+  const ref = useRef<HTMLDivElement>(null);
   const size = useSize(ref);
 
   return (

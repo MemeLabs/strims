@@ -94,7 +94,7 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
       return { start, end };
     }, [reset, pruned, scrollTop, viewportHeight]);
 
-    const ref = useRef<HTMLDivElement>();
+    const ref = useRef<HTMLDivElement>(null);
     const ignoreScroll = useRef(false);
     const height = messageSizeCache.getOffset(messageCount);
     const [, { toggleMessageGC }] = useRoom();
@@ -149,6 +149,7 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
           unstable={i === indexRange.start || i === indexRange.end - 1}
           offset={messageSizeCache.getOffset(i)}
           settled={messageSizeCache.isSettled(i)}
+          generation={messageSizeCache.generation}
         />
       );
     }
@@ -245,11 +246,23 @@ interface MessageMeasurerProps {
   unstable: boolean;
   offset: number;
   settled: boolean;
+  // The cache's resets (a new emote bundle, the UI config) drop every
+  // measurement: the first and last messages, never settled, measure again.
+  generation: number;
 }
 
 const MessageMeasurer = React.memo<MessageMeasurerProps>(
-  ({ index, renderMessage, messageSizeCache, viewportWidth, unstable, offset, settled }) => {
-    const ref = useRef<HTMLDivElement>();
+  ({
+    index,
+    renderMessage,
+    messageSizeCache,
+    viewportWidth,
+    unstable,
+    offset,
+    settled,
+    generation,
+  }) => {
+    const ref = useRef<HTMLDivElement>(null);
 
     useLayoutEffect(() => {
       if (!settled) {
@@ -263,7 +276,7 @@ const MessageMeasurer = React.memo<MessageMeasurerProps>(
           parseFloat(marginBottom)
         );
       }
-    }, [viewportWidth, unstable, settled]);
+    }, [viewportWidth, unstable, settled, generation]);
 
     const style = useMemo<React.CSSProperties>(() => {
       return {
@@ -282,7 +295,8 @@ const MessageMeasurer = React.memo<MessageMeasurerProps>(
     prev.viewportWidth === next.viewportWidth &&
     prev.unstable === next.unstable &&
     prev.offset === next.offset &&
-    prev.settled === next.settled
+    prev.settled === next.settled &&
+    prev.generation === next.generation
 );
 
 MessageMeasurer.displayName = "Scroller.MessageMeasurer";

@@ -56,7 +56,7 @@ const canShareScreen = (): boolean => !!navigator.mediaDevices?.getDisplayMedia;
 
 const BroadcastPage: React.FC = () => {
   const client = useClient();
-  const videoRef = useRef<HTMLVideoElement>();
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const [broadcastState, setBroadcastState] = useState<BroadcastState>(null);
   const [error, setError] = useState<string>(null);

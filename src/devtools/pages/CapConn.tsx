@@ -98,7 +98,7 @@ const Sparkline: React.FC<SparklineProps> = ({
   xScale = scale(bounds(x), [margin, width - margin]),
   yScale = scale(bounds(y), [height - margin - 2, margin]),
 }) => {
-  const canvas = React.useRef<HTMLCanvasElement>();
+  const canvas = React.useRef<HTMLCanvasElement>(null);
 
   React.useEffect(() => {
     if (!canvas.current || x.length === 0) {

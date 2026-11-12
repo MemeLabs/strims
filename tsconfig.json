@@ -10,7 +10,7 @@
     "noImplicitAny": false,
     "module": "ESNext",
     "target": "es6",
-    "jsx": "react",
+    "jsx": "react-jsx",
     "allowJs": true,
     "moduleResolution": "bundler",
     "esModuleInterop": true,

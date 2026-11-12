@@ -13,7 +13,7 @@ interface EmoteProps {
 }
 
 const Emote: React.FC<EmoteProps> = () => {
-  const canvas = useRef<HTMLCanvasElement>();
+  const canvas = useRef<HTMLCanvasElement>(null);
   const { value: img } = useAsync(async () => (await fetch(catJAM)).arrayBuffer());
   const [count, setCount] = useState(0);
   const [url, setURL] = useState("");

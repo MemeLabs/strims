@@ -336,7 +336,7 @@ const Composer: React.FC<ComposerProps> = ({
     setSelectedMatch(defaultSelectedMatch);
   };
 
-  const ref = useRef<HTMLDivElement>();
+  const ref = useRef<HTMLDivElement>(null);
 
   useDrag(
     ({ dragging, movement: [mx, my] }) => {
@@ -356,8 +356,8 @@ const Composer: React.FC<ComposerProps> = ({
   );
 
   const [showMenu, toggleMenu] = useToggle(false);
-  const emoteMenu = useRef<HTMLDivElement>();
-  const emoteMenuButton = useRef<HTMLButtonElement>();
+  const emoteMenu = useRef<HTMLDivElement>(null);
+  const emoteMenuButton = useRef<HTMLButtonElement>(null);
   useClickAway([emoteMenu, emoteMenuButton], () => toggleMenu(false), { enable: showMenu });
 
   return (

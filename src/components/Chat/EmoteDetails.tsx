@@ -25,7 +25,7 @@ const EmoteDetails: React.FC<EmoteDetailsProps> = ({ name, modifiers, anchor, on
   const layout = useLayout();
   const { Portal } = usePortal({ target: layout.root });
 
-  const ref = useRef<HTMLDivElement>();
+  const ref = useRef<HTMLDivElement>(null);
   useClickAway(ref, onClose);
 
   const [room] = useRoom();

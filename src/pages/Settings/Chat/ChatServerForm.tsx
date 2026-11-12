@@ -73,7 +73,7 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
           {submitLabel}
         </Button>
       </ButtonSet>
-      {id && (
+      {!!id && (
         <>
           <ForwardLink to={`/settings/chat-servers/${id}/icon`} title="Server Icon" />
           <ForwardLink to={`/settings/chat-servers/${id}/emotes`} title="Emotes" />

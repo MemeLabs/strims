@@ -1096,7 +1096,7 @@ export const ThreadProvider: React.FC<ThreadProviderProps> = (props) => {
 ThreadProvider.displayName = "Thread.Provider";
 
 const useMessageAccessors = (messages: Message[]) => {
-  const ref = useRef<Message[]>();
+  const ref = useRef<Message[]>(undefined);
   ref.current = messages;
 
   const getMessage = useCallback((index: number): Message => ref.current[index], []);

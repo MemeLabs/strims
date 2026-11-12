@@ -58,13 +58,13 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   className,
 }) => {
   const { t } = useTranslation();
-  const rootRef = useRef();
+  const rootRef = useRef<HTMLDivElement>(null);
   const [controlsHidden, renewControlsTimeout, clearControlsTimeout] = useIdleTimeout();
   const [isFullscreen, toggleFullscreen] = useFullscreen();
   // A player outside the app's layout (the watch page's) has no theater
   // mode, and closes by its close button.
   const layout = useLayout();
-  const videoRef = useRef<HTMLVideoElement>();
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [videoState, videoProps, videoControls] = useVideo(videoRef);
   const remote = useRemotePlayback({ networkKey, swarmUri, mimeType, videoRef });
 

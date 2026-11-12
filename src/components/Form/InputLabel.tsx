@@ -4,14 +4,14 @@
 import "./InputLabel.scss";
 
 import clsx from "clsx";
-import React, { ReactHTML, ReactNode } from "react";
+import React, { HTMLElementType, ReactNode } from "react";
 
 export interface InputLabelProps {
   required?: boolean;
   text: string;
   description?: string;
   inputType?: string;
-  component?: keyof ReactHTML;
+  component?: HTMLElementType;
   children: ReactNode;
   inlineInput?: boolean;
   onClick?: React.MouseEventHandler;

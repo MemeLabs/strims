@@ -259,7 +259,7 @@ type Entity =
 class MessageFormatter {
   private bounds: number[];
   private runes: string[];
-  public body: ReactNode[];
+  public body: (string | React.ReactElement)[];
 
   constructor(body: string) {
     this.body = [body];
@@ -391,7 +391,7 @@ const ComboMessage: React.FC<MessageImplProps> = ({
     "chat__message--failed": messageState === MessageState.MESSAGE_STATE_FAILED,
   });
 
-  const ref = useRef<HTMLElement>();
+  const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     ref.current.classList.remove(`chat__combo_message--hit`);
     const rafId = requestAnimationFrame(() =>

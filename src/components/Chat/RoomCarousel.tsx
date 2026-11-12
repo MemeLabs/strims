@@ -35,7 +35,7 @@ const RoomCarouselGem: React.FC<RoomCarouselGemProps> = (props) => {
   const topic = { type, topicKey };
   const [{ popoutTopicCapacity }, chatActions] = useChat();
 
-  const ref = useRef<HTMLDivElement>();
+  const ref = useRef<HTMLDivElement>(null);
   useDrag(
     ({ movement: [, my], swipe: [, sy], dragging, first }) => {
       ref.current.style.setProperty("--drag-offset", `${my}px`);
@@ -175,7 +175,7 @@ export interface RoomCarouselProps {
 
 const RoomCarousel: React.FC<RoomCarouselProps> = ({ className, onChange }) => {
   const [{ rooms, whispers, mainTopics, mainActiveTopic }] = useChat();
-  const ref = useRef<HTMLDivElement>();
+  const ref = useRef<HTMLDivElement>(null);
   const size = useSize(ref);
 
   const slidesPerView = size ? Math.round(size?.width / 52) : 1;

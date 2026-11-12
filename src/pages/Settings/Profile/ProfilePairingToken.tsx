@@ -29,7 +29,7 @@ const ProfilePairingToken = () => {
   );
 
   // The canvas renders only with a token, so the code is drawn once both are.
-  const canvas = useRef<HTMLCanvasElement>();
+  const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (code) {
       void QRCode.toCanvas(canvas.current, code, { margin: 15 });

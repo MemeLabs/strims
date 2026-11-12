@@ -17,7 +17,7 @@ import Stopwatch from "./Stopwatch";
 
 const VideoMeta: React.FC = () => {
   const { listingId: listingId } = useContext(PlayerContext);
-  return listingId && <VideoMetaContent />;
+  return listingId ? <VideoMetaContent /> : null;
 };
 
 export default VideoMeta;
@@ -59,7 +59,7 @@ const VideoMetaContent: React.FC = () => {
             <HiOutlineUser />
             {formatNumber(listing.userCount)}
           </span>
-          {snippet?.startTime && (
+          {!!snippet?.startTime && (
             <span className="video_meta__runtime">
               <Stopwatch startTime={Number(snippet?.startTime)} />
             </span>

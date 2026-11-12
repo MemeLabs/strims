@@ -220,7 +220,7 @@ const Portlet: React.FC<PortletProps> = ({
     e.stopPropagation();
   }, []);
 
-  const dragContainer = useRef(null);
+  const dragContainer = useRef<HTMLDivElement>(null);
 
   useClickAway(dragContainer, () => setPos((pos) => ({ ...pos, dragging: false })));
 

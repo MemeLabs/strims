@@ -80,12 +80,12 @@ export const useContextMenu = () => {
   };
 };
 
-type MenuItemProps<T extends keyof JSX.IntrinsicElements> = React.ComponentProps<T> & {
+type MenuItemProps<T extends keyof React.JSX.IntrinsicElements> = React.ComponentProps<T> & {
   component?: T;
   disabled?: boolean;
 };
 
-export const MenuItem = <T extends keyof JSX.IntrinsicElements>({
+export const MenuItem = <T extends keyof React.JSX.IntrinsicElements>({
   component,
   className,
   children,
