@@ -17,11 +17,17 @@ crates/strims-wan/fields.toml.
                unit (and names that all carry one declare it), percentiles
                are _pNN, families hold names for each of their sims and
                lines, every entry or table no sim writes names its lines
+  FarmNames    the row fields the farm reads are declared rows: worker.py's
+               THIN, those store_host.py reads of a row, farm.py's report
+               defaults, and every test matrix's [report] and [[derive]]
+               fields (farm.py's Matrix.row_fields); the farm's code is
+               read, never changed
 
   python3 hack/simlab/tests/test_semantic.py
 """
 
 import copy
+import importlib.util
 import re
 import sys
 import tempfile
@@ -164,6 +170,60 @@ class Naming(unittest.TestCase):
             if not e["sims"]:
                 with self.subTest(where):
                     self.assertTrue(e.get("lines"))
+
+
+FARM = HACK / "sim-farm"
+
+
+def farm_module(name):
+    """hack/sim-farm's `name`.py, loaded as a module of its own (farm.py
+    imports worker beside it)."""
+    if str(FARM) not in sys.path:
+        sys.path.insert(0, str(FARM))
+    spec = importlib.util.spec_from_file_location(f"sim_farm_{name}", FARM / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class FarmNames(unittest.TestCase):
+    """The names the farm reads of a job's row are declared, so a rename
+    (Phase 2's) knows every reader. The farm's hosts run worker.py and
+    store_host.py, and the controller farm.py: they never rename one."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = set(vocab.declared()["rows"])
+
+    def test_the_hosts_names(self):
+        worker = farm_module("worker")
+        self.assertEqual(sorted(set(worker.THIN) - self.rows), [], "worker.THIN")
+        store_host = (HACK / "simlab" / "store_host.py").read_text()
+        read = set(re.findall(r'\brow\.get\("([a-z_][a-z0-9_]*)"\)', store_host))
+        self.assertTrue({"trace", "frames", "bytes"} <= read, read)
+        # But `series`, the JSON an older binary's row carried, which the
+        # fold refuses (no sim writes it now).
+        self.assertEqual(sorted(read - self.rows), ["series"], "store_host's row.get")
+
+    def test_the_controllers_names(self):
+        farm = farm_module("farm")
+        # A test matrix with no [report] reports these (farm.py's Matrix).
+        defaults = ["delivery", "lag_p50_ms", "lag_p99_ms"]
+        self.assertIn('columns = ["delivery:mean,min", "lag_p50_ms:median", "lag_p99_ms:median,max"]',
+                      (FARM / "farm.py").read_text())
+        self.assertEqual(sorted(set(defaults) - self.rows), [])
+        matrices = sorted((FARM / "matrices").glob("*.toml"))
+        self.assertTrue(matrices)
+        tests = 0
+        for path in matrices:
+            m = farm.Matrix(str(path))
+            # A testbed matrix's rows are the testbed harness's, not a sim's.
+            if m.kind != "test":
+                continue
+            tests += 1
+            with self.subTest(matrix=path.name):
+                self.assertEqual(sorted(set(m.row_fields()) - self.rows), [])
+        self.assertGreater(tests, 30)
 
 
 if __name__ == "__main__":
