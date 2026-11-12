@@ -12,6 +12,7 @@ import { Provider as ThemeProvider, useTheme } from "../../../contexts/Theme";
 import { StoryHostContext, StoryHostValue } from "../context";
 import { IndexData, buildIndex, matchRoute } from "./catalog";
 import { StoryJson, jsonScript } from "./ErrorList";
+import { reportMissingKeys } from "./missingKeys";
 import type { FrameDocument } from "./preload";
 import { Theme, postToPage } from "./protocol";
 import { Session, activate } from "./recorder";
@@ -112,8 +113,9 @@ export const renderFrame = (root: HTMLElement, doc: FrameDocument): void => {
     return;
   }
   // Recording from before the first render, so errors made while the story
-  // loads and renders count.
+  // loads and renders count, a translation key en lacks among them.
   const session = new Session(doc.route);
   activate(session);
+  reportMissingKeys();
   createRoot(root).render(<StoryFrame doc={doc} session={session} />);
 };
