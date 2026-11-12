@@ -24,7 +24,8 @@
     "Quality": "Quality",
     "Auto": "Auto",
     "Auto playing": "Auto ({rendition})",
-    "Unplayable format": "This stream's format can't play here."
+    "Unplayable format": "This stream's format can't play here.",
+    "Unplayable": "This stream can't play here."
   },
 
   "layout": {

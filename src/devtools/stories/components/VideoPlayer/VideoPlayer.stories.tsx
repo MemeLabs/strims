@@ -72,7 +72,8 @@ interface PlayerStoryProps {
 }
 
 // The swarm player as the layout's player column holds it, its controls
-// shown; nothing it is given plays here (no node, no player worker).
+// shown; nothing it is given plays here (no node, and a player worker
+// without its wasm remuxer), so each says it can't play.
 const PlayerStory: React.FC<PlayerStoryProps> = ({
   mimeType = UNITS,
   controls = true,
@@ -102,7 +103,10 @@ const PlayerStory: React.FC<PlayerStoryProps> = ({
 
 const stories: Story[] = [
   {
-    name: "Loading",
+    // A unit-format stream of one rendition, which the player gives up on
+    // here: the console build has no wasm, so the player worker's remuxer
+    // doesn't load. With nothing else to play, the player says so and why.
+    name: "Gave up",
     component: () => <PlayerStory />,
   },
   {

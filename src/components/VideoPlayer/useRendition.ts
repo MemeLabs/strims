@@ -52,6 +52,11 @@ export interface RenditionChoice {
   mimeType: string;
   /** The player gave up on the stream it was given. */
   unplayable: (message: string) => void;
+  /**
+   * What the player said when it gave up on the listing's own stream, once
+   * nothing else is left to play; null while something is.
+   */
+  failure: string | null;
   /** The renditions the viewer can pick, largest first; none for a stream of one. */
   options: RenditionOption[];
   /** The rendition playing, and the one the viewer picked (null: the choice's). */
@@ -69,6 +74,8 @@ interface Watched {
   confirmed: string[];
   /** The rendition the viewer picked. */
   picked: string | null;
+  /** What the player said when it gave up on the listing's own stream. */
+  mainFailure: string | null;
 }
 
 // The page's local storage, or none where the page may not use it.
@@ -126,6 +133,10 @@ const label = (r: Rendition) => `${optionLabel(r)} (${r.video})`;
  * the size it ranks by is the largest it held for RESIZE_SETTLE_MS, so a
  * player that shrinks keeps its rendition. Once the listing goes, the
  * renditions its last snippet named stay.
+ *
+ * The listing's own stream is left out too once its player gives up on it,
+ * so another rendition plays if one is left; when none is, the choice is
+ * the listing's own again and `failure` says why it can't play.
  *
  * The viewer can pick any rendition the browser says it plays (`pick`),
  * which plays in place of the choice, on trial as the choice is, until it
@@ -219,19 +230,21 @@ export const useRendition = ({
     };
   }, [swarmUri]);
 
-  const [watchedState, setWatched] = useState<Watched>({
-    main: swarmUri,
+  const unwatched = (main: string): Watched => ({
+    main,
     failed: [],
     confirmed: [],
     picked: null,
+    mainFailure: null,
   });
-  const fresh = (s: Watched): Watched =>
-    s.main === swarmUri ? s : { main: swarmUri, failed: [], confirmed: [], picked: null };
+  const [watchedState, setWatched] = useState<Watched>(() => unwatched(swarmUri));
+  const fresh = (s: Watched): Watched => (s.main === swarmUri ? s : unwatched(swarmUri));
   const watched = fresh(watchedState);
 
   const isPortable = useMemo(portable, []);
   // The renditions the browser says it plays that haven't failed, the
-  // listing's own always among them; null while the choice waits.
+  // listing's own among them until it fails, and alone (failed or not) for a
+  // stream of one; null while the choice waits.
   const pool = useMemo((): Assessment[] | null => {
     if (!snippet && waited !== swarmUri) return null;
     if (candidates.length < 2) {
@@ -269,7 +282,9 @@ export const useRendition = ({
     [pool]
   );
 
-  const fail = (r: Rendition) =>
+  // Leaves `r` out of the choice; the listing's own keeps the player's
+  // `message` for when nothing else is left.
+  const fail = (r: Rendition, message?: string) =>
     setWatched((s) => {
       const w = fresh(s);
       if (w.failed.includes(r.id)) return w;
@@ -277,6 +292,7 @@ export const useRendition = ({
         ...w,
         failed: [...w.failed, r.id],
         picked: w.picked === r.id ? null : w.picked,
+        mainFailure: r.main ? message ?? "" : w.mainFailure,
       };
     });
   const pick = useMemo(
@@ -306,10 +322,10 @@ export const useRendition = ({
 
   const unplayable = useMemo(
     () => (message: string) => {
-      if (!choice || choice.main) return;
+      if (!choice) return;
       // eslint-disable-next-line no-console
       console.warn(`the rendition ${label(choice)} stopped playing:`, message);
-      fail(choice);
+      fail(choice, message);
     },
     [choice?.id, swarmUri]
   );
@@ -318,6 +334,7 @@ export const useRendition = ({
     swarmUri: choice?.swarmUri ?? null,
     mimeType: choice?.mimeType ?? mimeType,
     unplayable,
+    failure: choice?.main ? watched.mainFailure : null,
     options: options.length > 1 ? options : [],
     playing: choice?.id ?? null,
     picked: options.some((o) => o.id === watched.picked) ? watched.picked : null,

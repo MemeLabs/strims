@@ -92,13 +92,21 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
     videoRef,
     active: !!SwarmMedia && !remote.casting,
   });
-  const unplayable = kind === PlayerKind.None;
   useEffect(() => {
-    if (unplayable) {
+    if (kind === PlayerKind.None) {
       // eslint-disable-next-line no-console
       console.warn("this stream's format can't play here:", mimeType);
     }
-  }, [unplayable, mimeType]);
+  }, [kind, mimeType]);
+  // Why nothing plays, in place of the spinner: a format no player takes,
+  // or the listing's own stream, which its player gave up on with no other
+  // rendition left (a cast plays it elsewhere); null while something can.
+  const unplayable =
+    kind === PlayerKind.None
+      ? { message: t("player.Unplayable format"), detail: mimeType }
+      : rendition.failure !== null && !remote.casting
+      ? { message: t("player.Unplayable"), detail: rendition.failure }
+      : null;
 
   const handleToggleFullscreen = useCallback(() => {
     if (typeof videoRef.current.webkitSetPresentationMode === "function") {
@@ -148,7 +156,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         playsInline
         {...videoProps}
       />
-      {SwarmMedia && rendition.swarmUri && !remote.casting && (
+      {SwarmMedia && rendition.swarmUri && rendition.failure === null && !remote.casting && (
         <SwarmMedia
           key={`${kind}:${networkKey}:${rendition.swarmUri}`}
           networkKey={networkKey}
@@ -165,8 +173,10 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
       {unplayable ? (
         <div className="video_player__unplayable" role="alert">
           <LogoButton error />
-          <div className="video_player__unplayable__message">{t("player.Unplayable format")}</div>
-          <div className="video_player__unplayable__detail">{mimeType}</div>
+          <div className="video_player__unplayable__message">{unplayable.message}</div>
+          {unplayable.detail && (
+            <div className="video_player__unplayable__detail">{unplayable.detail}</div>
+          )}
         </div>
       ) : (
         <div
