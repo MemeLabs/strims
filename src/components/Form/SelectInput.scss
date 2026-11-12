@@ -26,6 +26,15 @@
     border-style: none;
     background: var(--color-background-input);
     color: var(--color-text-input);
+
+    &--is-disabled {
+      background: var(--color-background-input-disabled);
+    }
+  }
+
+  &__single-value--is-disabled,
+  &__multi-value--is-disabled .input_select__multi-value__label {
+    color: var(--color-text-input-disabled);
   }
 
   &__value-container {
