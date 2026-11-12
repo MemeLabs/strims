@@ -97,7 +97,7 @@ const EmoteMenu: React.FC<EmoteMenuProps> = ({ onSelect, onClose }) => {
     }
 
     return categories;
-  }, [liveEmotes, debouncedSearchQuery]);
+  }, [liveEmotes, emoji, debouncedSearchQuery]);
 
   const [preview, setPreview] = useState<CategoryItem>(null);
   const [focusIndex, setFocusIndex] = useState(0);
