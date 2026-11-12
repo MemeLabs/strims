@@ -27,12 +27,16 @@ const BootstrapEditForm: React.FC = () => {
   });
 
   const onSubmit = React.useCallback(async (data: BootstrapFormData) => {
-    await updateBootstrap({
-      id: BigInt(clientId),
-      clientOptions: {
-        websocketOptions: data,
-      },
-    });
+    try {
+      await updateBootstrap({
+        id: BigInt(clientId),
+        clientOptions: {
+          websocketOptions: data,
+        },
+      });
+    } catch {
+      // The form shows updateRes.error.
+    }
   }, []);
 
   if (getRes.loading) {

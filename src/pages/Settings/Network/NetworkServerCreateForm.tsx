@@ -28,7 +28,13 @@ const CreateForm: React.FC = () => {
     mode: "onBlur",
   });
 
-  const onSubmit = handleSubmit((data) => createNetwork(data));
+  const onSubmit = handleSubmit(async (data) => {
+    try {
+      await createNetwork(data);
+    } catch {
+      // The form shows error.
+    }
+  });
 
   return (
     <>

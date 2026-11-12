@@ -42,33 +42,38 @@ const NetworkDirectoryEditForm: React.FC = () => {
 
   const { serverConfig } = network;
 
-  const onSubmit = (data: NetworkDirectoryFormData) =>
-    updateServerConfig({
-      networkId: BigInt(networkId),
-      serverConfig: {
-        ...serverConfig,
-        directory: {
-          ...serverConfig.directory,
-          integrations: {
-            angelthump: {
-              enable: data.angelthumpEnable,
-            },
-            twitch: {
-              enable: data.twitchEnable,
-              clientId: data.twitchClientId,
-              clientSecret: data.twitchClientSecret,
-            },
-            youtube: {
-              enable: data.youtubeEnable,
-              publicApiKey: data.youtubePublicApiKey,
-            },
-            swarm: {
-              enable: data.swarmEnable,
+  const onSubmit = async (data: NetworkDirectoryFormData) => {
+    try {
+      await updateServerConfig({
+        networkId: BigInt(networkId),
+        serverConfig: {
+          ...serverConfig,
+          directory: {
+            ...serverConfig.directory,
+            integrations: {
+              angelthump: {
+                enable: data.angelthumpEnable,
+              },
+              twitch: {
+                enable: data.twitchEnable,
+                clientId: data.twitchClientId,
+                clientSecret: data.twitchClientSecret,
+              },
+              youtube: {
+                enable: data.youtubeEnable,
+                publicApiKey: data.youtubePublicApiKey,
+              },
+              swarm: {
+                enable: data.swarmEnable,
+              },
             },
           },
         },
-      },
-    });
+      });
+    } catch {
+      // The form shows updateRes.error.
+    }
+  };
 
   const data: NetworkDirectoryFormData = {
     angelthumpEnable: serverConfig.directory?.integrations?.angelthump?.enable,

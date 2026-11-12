@@ -28,12 +28,16 @@ const JoinForm: React.FC = () => {
     mode: "onBlur",
   });
 
-  const onSubmit = handleSubmit(({ alias, invitationB64 }) =>
-    create({
-      alias,
-      invitation: { invitationB64 },
-    })
-  );
+  const onSubmit = handleSubmit(async ({ alias, invitationB64 }) => {
+    try {
+      await create({
+        alias,
+        invitation: { invitationB64 },
+      });
+    } catch {
+      // The form shows error.
+    }
+  });
 
   return (
     <>

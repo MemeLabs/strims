@@ -43,14 +43,20 @@ const NetworkIconEditForm: React.FC = () => {
 
   const { serverConfig } = network;
 
-  const onSubmit = (data: NetworkIconFormData) =>
-    updateServerConfig({
-      networkId: BigInt(networkId),
-      serverConfig: {
-        ...serverConfig,
-        icon: fromFormImageValue(data.image),
-      },
-    });
+  const onSubmit = async (data: NetworkIconFormData) => {
+    const icon = fromFormImageValue(data.image);
+    try {
+      await updateServerConfig({
+        networkId: BigInt(networkId),
+        serverConfig: {
+          ...serverConfig,
+          icon,
+        },
+      });
+    } catch {
+      // The form shows updateRes.error.
+    }
+  };
 
   const data: NetworkIconFormData = {
     image: serverConfig.icon ? toFormImageValue(serverConfig.icon) : null,

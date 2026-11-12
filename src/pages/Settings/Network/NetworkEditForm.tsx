@@ -37,11 +37,16 @@ const NetworkEditForm: React.FC = () => {
     );
   }
 
-  const onSubmit = (data: NetworkFormData) =>
-    updateAlias({
-      id: network.id,
-      alias: data.alias,
-    });
+  const onSubmit = async (data: NetworkFormData) => {
+    try {
+      await updateAlias({
+        id: network.id,
+        alias: data.alias,
+      });
+    } catch {
+      // The form shows updateRes.error.
+    }
+  };
 
   const data: NetworkFormData = {
     alias: network.alias,

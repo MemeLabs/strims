@@ -30,13 +30,17 @@ const BootstrapConfigForm = ({ onCreate, config }: BootstrapConfigFormProps) => 
     },
   });
 
-  const onSubmit = handleSubmit((data) =>
-    setConfig({
-      config: {
-        enablePublishing: data.enablePublishing,
-      },
-    })
-  );
+  const onSubmit = handleSubmit(async (data) => {
+    try {
+      await setConfig({
+        config: {
+          enablePublishing: data.enablePublishing,
+        },
+      });
+    } catch {
+      // The form shows error.
+    }
+  });
 
   return (
     <form className="thing_form" onSubmit={onSubmit}>

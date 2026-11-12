@@ -79,14 +79,18 @@ const VNICForm = ({ onCreate, config }: VNICFormProps) => {
     },
   });
 
-  const onSubmit = handleSubmit((data) =>
-    setConfig({
-      config: {
-        maxUploadBytesPerSecond: parseUnits(data.maxUploadBytesPerSecond),
-        maxPeers: data.maxPeers,
-      },
-    })
-  );
+  const onSubmit = handleSubmit(async (data) => {
+    try {
+      await setConfig({
+        config: {
+          maxUploadBytesPerSecond: parseUnits(data.maxUploadBytesPerSecond),
+          maxPeers: data.maxPeers,
+        },
+      });
+    } catch {
+      // The form shows error.
+    }
+  });
 
   return (
     <form className="thing_form" onSubmit={onSubmit}>
