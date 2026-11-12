@@ -66,6 +66,15 @@ const stories: Story[] = [
     ),
   },
   {
+    // A peer budget must be a whole number of peers.
+    name: "Invalid peers",
+    component: () => <SettingsStory path={PATH} steps={[fill("maxPeers", "2.5"), submit()]} />,
+  },
+  {
+    name: "Negative peers",
+    component: () => <SettingsStory path={PATH} steps={[fill("maxPeers", "-3"), submit()]} />,
+  },
+  {
     name: "Save error",
     component: () => (
       <SettingsStory

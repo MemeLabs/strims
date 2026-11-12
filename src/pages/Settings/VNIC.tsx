@@ -36,6 +36,9 @@ const units: { [key: string]: bigint } = {
 
 const ratePattern = new RegExp(`^[0-9\\.,]+\\s*(${Object.keys(units).join("|")})$`);
 
+// The largest peer budget the config holds (a uint32).
+const MAX_PEERS = 2 ** 32 - 1;
+
 const formatUnits = (n: bigint) => {
   let minSize = Infinity;
   let minS = "";
@@ -93,8 +96,8 @@ const VNICForm = ({ onCreate, config }: VNICFormProps) => {
   });
 
   return (
-    <form className="thing_form" onSubmit={onSubmit}>
-      {error && <InputError error={error.message || "Error creating network"} />}
+    <form className="thing_form" onSubmit={onSubmit} noValidate>
+      {error && <InputError error={error.message || "Error storing the config"} />}
       <TextInput
         control={control}
         rules={{
@@ -118,14 +121,16 @@ const VNICForm = ({ onCreate, config }: VNICFormProps) => {
             value: true,
             message: "Value is required",
           },
-          pattern: {
-            value: ratePattern,
-            message: "Invalid format",
-          },
+          validate: (v: number) =>
+            (Number.isInteger(v) && v >= 0 && v <= MAX_PEERS) ||
+            `Enter a whole number from 0 to ${MAX_PEERS}`,
         }}
         label="Max Peers"
+        description="0 for no limit"
         name="maxPeers"
         type="number"
+        min={0}
+        step={1}
         placeholder="ex. 25"
       />
       <ButtonSet>
