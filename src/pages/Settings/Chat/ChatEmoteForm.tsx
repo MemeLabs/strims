@@ -75,10 +75,8 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
   });
   const { handleSubmit, control, watch } = formMethods;
 
-  if (onChange) {
-    const values = watch();
-    useEffect(() => onChange(values), [values]);
-  }
+  const formValues = watch();
+  useEffect(() => onChange?.(formValues), [formValues]);
 
   const animated = watch("animated");
 
