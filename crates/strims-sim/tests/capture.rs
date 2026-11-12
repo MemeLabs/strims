@@ -512,8 +512,9 @@ fn a_runs_events_are_its_scenarios_and_losses() {
 /// it leaves, gracefully or by a crash: with half the viewers gone
 /// mid-stream, every read and every honest answer and HAVE still has its
 /// hold in `arrivals` ([`every_read_and_answer_has_its_hold`]), the
-/// leavers' last ones too, and the expired requests are the runners'
-/// timed out ones, the leavers' among them.
+/// leavers' last ones too, every record of a leaver names it
+/// ([`the_logs_name_their_peers`]), and the expired requests are the
+/// runners' timed out ones, the leavers' among them.
 #[test]
 fn a_departures_logs_keep_every_hold() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
@@ -531,6 +532,7 @@ fn a_departures_logs_keep_every_hold() {
         r.write_tables(&d, Duration::from_millis(1000), true)
             .unwrap();
         every_read_and_answer_has_its_hold(&r, &d);
+        the_logs_name_their_peers(&d, how);
         let expired = table_rows(&d, "asks")
             .iter()
             .filter(|a| a["picked"] == "true" && a["outcome"] == "expired")
@@ -539,6 +541,30 @@ fn a_departures_logs_keep_every_hold() {
         assert_eq!(expired, a + b + c, "{how}");
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Every record of a neighbour names its host, a neighbour gone before
+/// the logs' take among them (node-core keeps a removed peer's host until
+/// the next take): the seed's sends, its decisions but a window's and an
+/// answer rate's (about the allocation), the asks and the HAVEs.
+fn the_logs_name_their_peers(d: &Path, how: &str) {
+    for t in ["seed_sends", "seed_decisions", "asks", "haves"] {
+        let rows = table_rows(d, t);
+        assert!(!rows.is_empty(), "{how}: {t}");
+        let unnamed = rows
+            .iter()
+            .filter(|x| x["peer"] == "-1")
+            .filter(|x| {
+                !(t == "seed_decisions" && ["window", "answer_rate"].contains(&x["kind"].as_str()))
+            })
+            .count();
+        assert_eq!(
+            unnamed,
+            0,
+            "{how}: {unnamed} of {t}'s {} rows name no peer",
+            rows.len()
+        );
+    }
 }
 
 /// The seed's `budget_capacity` is the reading its budget was measured

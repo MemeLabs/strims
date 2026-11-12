@@ -388,6 +388,11 @@ pub(crate) struct State {
     /// With either log, the swarms removed since the last snapshot,
     /// whose logs the runner keeps for it. Bound: the app's calls.
     removed_swarms: Vec<SwarmKey>,
+    /// With either log, the hosts of the peers removed since the last
+    /// snapshot, so that what the runner logged of a peer before it went
+    /// still names its host there ([`State::take_forecasts`]). Bound:
+    /// the peers' removals between two snapshots.
+    gone_peers: Vec<(PpsppPeer, ID)>,
     /// See [`NodeConfig::parent_log`].
     parent_sink: Option<ParentSink>,
     /// See [`NodeConfig::last_metrics`]: the node task's drop hands it
@@ -538,6 +543,7 @@ impl State {
             forecast_log: config.forecast_log,
             request_log: config.request_log,
             removed_swarms: Vec::new(),
+            gone_peers: Vec::new(),
             parent_sink: config.parent_log.clone(),
             last_metrics: config.last_metrics.clone(),
             scratch_links: Vec::new(),
@@ -1081,6 +1087,9 @@ impl State {
                 // The changes so far may name the peer.
                 self.drain_parents(now);
                 if let Some(ps) = self.peers.remove(peer) {
+                    if self.forecast_log || self.request_log {
+                        self.gone_peers.push((ps.pp, ps.host_id));
+                    }
                     self.runner.remove_peer(ps.pp);
                     self.ppspp_peers.remove(ps.pp);
                 }
@@ -1639,14 +1648,17 @@ impl State {
     }
 
     /// The runner's forecast and request logs since the last call, peers
-    /// named by host, with how many records their caps left out.
+    /// named by host (a peer removed since the last call too, by
+    /// `gone_peers`), with how many records their caps left out.
     fn take_forecasts(&mut self) -> TakenLogs {
         let mut out = TakenLogs::default();
         if !self.forecast_log && !self.request_log {
             return out;
         }
-        let hosts: BTreeMap<PpsppPeer, ID> =
-            self.peers.values().map(|ps| (ps.pp, ps.host_id)).collect();
+        let hosts: BTreeMap<PpsppPeer, ID> = std::mem::take(&mut self.gone_peers)
+            .into_iter()
+            .chain(self.peers.values().map(|ps| (ps.pp, ps.host_id)))
+            .collect();
         let host = |p: Option<PpsppPeer>| p.and_then(|p| hosts.get(&p).copied());
         let removed = std::mem::take(&mut self.removed_swarms);
         for &key in self.swarms.iter().chain(&removed) {

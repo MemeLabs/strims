@@ -7569,7 +7569,9 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
 /// may arrive past its end); the sends' fates count what the seed's runner
 /// counts (pushes and answers written, pushes dropped as stale, and as
 /// cancelled or suppressed); every row is the seed's, numbered from 0 in its
-/// log's order; and the log lost nothing.
+/// log's order; every row of a neighbour names it (strims-sim's
+/// `the_logs_name_their_peers` checks its leavers); and the log lost
+/// nothing.
 fn sim_seed_tables_say_what_the_seed_did(sim: &Sim, d: &Path) {
     let rows = |t: &str| -> Vec<BTreeMap<String, String>> {
         let csv = read_table(d, t).unwrap();
@@ -7592,6 +7594,16 @@ fn sim_seed_tables_say_what_the_seed_did(sim: &Sim, d: &Path) {
         assert!(t.iter().all(|r| int(r, "node") == Some(0)));
         let n: Vec<i64> = t.iter().map(|r| int(r, "n").unwrap()).collect();
         assert_eq!(n, (0..t.len() as i64).collect::<Vec<_>>());
+    }
+    // Every record of a neighbour names it, with its incarnation: every
+    // send, and every decision but those about the allocation.
+    for r in sends.iter().chain(
+        decisions
+            .iter()
+            .filter(|r| !["window", "answer_rate"].contains(&r["kind"].as_str())),
+    ) {
+        assert!(int(r, "peer").is_some_and(|p| p >= 0), "{r:?}");
+        assert!(int(r, "peer_incarnation").is_some(), "{r:?}");
     }
     let count = |how: &str, fates: &[&str]| {
         sends
