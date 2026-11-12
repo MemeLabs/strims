@@ -108,8 +108,9 @@ module.exports = (env, argv) => {
     {
       test: /\.json$/i,
       include: [path.resolve(__dirname, "assets", "locales")],
-      loader: "json5-loader",
-      type: "javascript/auto",
+      // The locales are JSON5 (comments, trailing commas).
+      type: "json",
+      parser: { parse: JSON5.parse },
     },
   ];
 
