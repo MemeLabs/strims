@@ -1162,7 +1162,8 @@ impl Report {
     /// offsets (`clock_offsets_ms`, each host's in host order;
     /// `clock_max_ms`, the largest; `clock_<class>`, the hosts per
     /// [`SkewClass::name`]), as the ppspp sim's rows name them, then per
-    /// scenario swarm 0 its delivery, lag (overall and per bucket), its
+    /// scenario swarm 0 its stream count (`streams`, at least 1, as the
+    /// ppspp sim's rows name it), delivery, lag (overall and per bucket), its
     /// viewers' playback at each delay `D` of [`DELAYS_MS`]
     /// (`stalls_per_min_D`, `stalled_share_D`, `startup_ms_D`: [`Totals`]
     /// of their playouts, and with hostile hosts the honest viewers' with
@@ -1223,7 +1224,13 @@ impl Report {
         }
         let lag = self.lag(swarm);
         let buckets = self.lag_buckets(swarm);
-        j.num("delivery", self.delivery(swarm))
+        let streams = self
+            .scenario
+            .swarms
+            .get(swarm)
+            .map_or(1, |s| s.options.stream_count.max(1));
+        j.int("streams", streams as u64)
+            .num("delivery", self.delivery(swarm))
             .int("lag_p50_ms", u64::from(lag.p50))
             .int("lag_p99_ms", u64::from(lag.p99))
             .ints("bucket_p50_ms", buckets.iter().map(|p| u64::from(p.p50)))
