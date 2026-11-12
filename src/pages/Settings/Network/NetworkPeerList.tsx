@@ -108,7 +108,9 @@ const NetworkPeerList: React.FC = () => {
     <>
       <TableTitleBar label="Network peers" backLink={`/settings/networks/${networkId}`} />
       {error ? (
-        <InputError error={error.message || "Error loading peers"} />
+        <div className="thing_form">
+          <InputError error={error.message || "Error loading peers"} />
+        </div>
       ) : (
         <PeerTable peers={value.peers} onChange={listPeers} />
       )}

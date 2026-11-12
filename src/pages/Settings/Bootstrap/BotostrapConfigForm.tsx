@@ -63,7 +63,11 @@ const BootstrapConfigPage: React.FC = () => {
   return (
     <>
       <TableTitleBar label="Edit Bootstrap Config" />
-      {error && <InputError error={error.message || "Error loading config"} />}
+      {error && (
+        <div className="thing_form">
+          <InputError error={error.message || "Error loading config"} />
+        </div>
+      )}
       {value && <BootstrapConfigForm config={value.config} onCreate={() => getConfig()} />}
     </>
   );

@@ -103,7 +103,9 @@ const NetworkAliasReservationList: React.FC = () => {
         backLink={`/settings/networks/${networkId}`}
       />
       {error ? (
-        <InputError error={error.message || "Error loading alias reservations"} />
+        <div className="thing_form">
+          <InputError error={error.message || "Error loading alias reservations"} />
+        </div>
       ) : (
         <AliasReservationTable
           aliasReservations={value.aliasReservations}

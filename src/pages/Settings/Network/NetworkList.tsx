@@ -103,7 +103,9 @@ const NetworkList: React.FC = () => {
         </TableMenu>
       </TableTitleBar>
       {error ? (
-        <InputError error={error.message || "Error loading networks"} />
+        <div className="thing_form">
+          <InputError error={error.message || "Error loading networks"} />
+        </div>
       ) : (
         <NetworkTable networks={value.networks} onDelete={() => getServers()} />
       )}

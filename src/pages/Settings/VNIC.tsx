@@ -144,7 +144,11 @@ const VNICsPage: React.FC = () => {
   return (
     <>
       <TableTitleBar label="VNIC" />
-      {error && <InputError error={error.message || "Error loading config"} />}
+      {error && (
+        <div className="thing_form">
+          <InputError error={error.message || "Error loading config"} />
+        </div>
+      )}
       {value && <VNICForm config={value.config} onCreate={() => getConfig()} />}
     </>
   );

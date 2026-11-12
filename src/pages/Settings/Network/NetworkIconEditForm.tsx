@@ -33,7 +33,9 @@ const NetworkIconEditForm: React.FC = () => {
     return (
       <>
         <TableTitleBar label="Edit Network" backLink={`/settings/networks/${networkId}`} />
-        <InputError error={getRes.error?.message || "Error loading network"} />
+        <div className="thing_form">
+          <InputError error={getRes.error?.message || "Error loading network"} />
+        </div>
       </>
     );
   }

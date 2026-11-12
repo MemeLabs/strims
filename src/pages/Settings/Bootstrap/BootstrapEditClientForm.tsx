@@ -46,7 +46,9 @@ const BootstrapEditForm: React.FC = () => {
     return (
       <>
         <TableTitleBar label="Edit Bootstrap" backLink="/settings/bootstrap/clients" />
-        <InputError error={getRes.error?.message || "Error loading bootstrap"} />
+        <div className="thing_form">
+          <InputError error={getRes.error?.message || "Error loading bootstrap"} />
+        </div>
       </>
     );
   }

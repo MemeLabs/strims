@@ -70,7 +70,9 @@ const DevicesList = () => {
     return (
       <>
         <TableTitleBar label="Profile" backLink="/settings/profile" />
-        <InputError error={error.message || "Error loading devices"} />
+        <div className="thing_form">
+          <InputError error={error.message || "Error loading devices"} />
+        </div>
       </>
     );
   }
