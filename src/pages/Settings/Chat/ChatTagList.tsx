@@ -7,6 +7,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { Tag } from "../../../apis/strims/chat/v1/chat";
+import { InputError } from "../../../components/Form";
 import {
   MenuCell,
   MenuItem,
@@ -25,14 +26,22 @@ export interface ChatTagTableProps {
 }
 
 const ChatTagTable: React.FC<ChatTagTableProps> = ({ serverId, tags, onDelete }) => {
-  const [, deleteChatTag] = useLazyCall("chatServer", "deleteTag", { onComplete: onDelete });
+  const [{ error }, deleteChatTag] = useLazyCall("chatServer", "deleteTag", {
+    onComplete: onDelete,
+  });
 
   if (!tags) {
     return null;
   }
 
   const rows = tags.map((modifier) => {
-    const handleDelete = () => deleteChatTag({ serverId, id: modifier.id });
+    const handleDelete = async () => {
+      try {
+        await deleteChatTag({ serverId, id: modifier.id });
+      } catch {
+        // The table shows error.
+      }
+    };
 
     return (
       <tr key={modifier.id.toString()}>
@@ -40,21 +49,28 @@ const ChatTagTable: React.FC<ChatTagTableProps> = ({ serverId, tags, onDelete })
           <Link to={`/settings/chat-servers/${serverId}/tags/${modifier.id}`}>{modifier.name}</Link>
         </TableCell>
         <MenuCell>
-          <MenuItem label="Delete" onClick={handleDelete} />
+          <MenuItem label="Delete" onClick={() => void handleDelete()} />
         </MenuCell>
       </tr>
     );
   });
   return (
-    <Table>
-      <thead>
-        <tr>
-          <th>Title</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>{rows}</tbody>
-    </Table>
+    <>
+      {error && (
+        <div className="thing_form">
+          <InputError error={error.message || "Error deleting the tag"} />
+        </div>
+      )}
+      <Table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </Table>
+    </>
   );
 };
 

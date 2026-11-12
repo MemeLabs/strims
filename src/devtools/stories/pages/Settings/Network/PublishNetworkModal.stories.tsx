@@ -7,7 +7,7 @@ import { PublishNetworkToBootstrapPeerRequest } from "../../../../../apis/strims
 import PublishNetworkModal from "../../../../../pages/Settings/Network/PublishNetworkModal";
 import BootstrapService, { bootstrapPeers } from "../../../../mocks/bootstrap/service";
 import { Story, fixtures } from "../../../../storybook";
-import { SettingsStory, Step, choose, click, openSelect, submit } from "./harness";
+import { SettingsStory, Step, choose, click, openSelect, submit, waitFor } from "./harness";
 
 const noop = (): void => undefined;
 
@@ -21,6 +21,12 @@ const Modal: React.FC<{ bootstrap?: () => BootstrapService; steps?: Step[] }> = 
     steps={steps}
   />
 );
+
+class FailingPublishService extends BootstrapService {
+  publishNetworkToPeer(): never {
+    throw new Error("the bootstrap peer refused the network");
+  }
+}
 
 // A bootstrap service that says each time it publishes.
 class PublishCounter extends BootstrapService {
@@ -96,6 +102,16 @@ const stories: Story[] = [
     // Cancel with a peer chosen closes the modal and publishes nothing.
     name: "Cancelled",
     component: Cancelled,
+  },
+  {
+    // Publishing fails: the modal stays open with the error.
+    name: "Publish error",
+    component: () => (
+      <Modal
+        bootstrap={() => new FailingPublishService()}
+        steps={[openSelect(), choose("strims.gg:443"), submit(), waitFor(".input_error")]}
+      />
+    ),
   },
 ];
 

@@ -1,7 +1,8 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { useCallback } from "react";
+import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
+import React, { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useTitle } from "react-use";
 
@@ -22,15 +23,29 @@ interface DeviceTableItemProps {
   device: Device;
   checkpoint: Checkpoint;
   onDelete: () => void;
+  onDeleteError: (error: Error) => void;
   current?: boolean;
 }
 
-const DeviceTableItem = ({ device, checkpoint, onDelete, current }: DeviceTableItemProps) => {
+const DeviceTableItem = ({
+  device,
+  checkpoint,
+  onDelete,
+  onDeleteError,
+  current,
+}: DeviceTableItemProps) => {
   const [, deleteClient] = useLazyCall("profile", "deleteDevice", {
     onComplete: onDelete,
+    onError: onDeleteError,
   });
 
-  const handleDelete = useCallback(() => deleteClient({ id: device.id }), [device]);
+  const handleDelete = async () => {
+    try {
+      await deleteClient({ id: device.id });
+    } catch {
+      // The list shows error.
+    }
+  };
 
   console.log(checkpoint);
 
@@ -44,7 +59,7 @@ const DeviceTableItem = ({ device, checkpoint, onDelete, current }: DeviceTableI
         <TableCell />
       ) : (
         <MenuCell>
-          <MenuItem label="Delete" onClick={handleDelete} />
+          <MenuItem label="Delete" onClick={() => void handleDelete()} />
         </MenuCell>
       )}
     </tr>
@@ -58,7 +73,10 @@ const DevicesList = () => {
   const [devicesRes, listDevices] = useCall("profile", "listDevices");
   const [checkpointsRes, listCheckpointsRes] = useCall("replication", "listCheckpoints");
 
+  // A failed delete's error, until a delete succeeds.
+  const [deleteError, setDeleteError] = useState<Error>(null);
   const handleDelete = useCallback(() => {
+    setDeleteError(null);
     void listDevices();
     void listCheckpointsRes();
   }, [listDevices, listCheckpointsRes]);
@@ -85,6 +103,7 @@ const DevicesList = () => {
         device={device}
         checkpoint={checkpointsRes.value.checkpoints.find(({ id }) => id === device.id)}
         onDelete={handleDelete}
+        onDeleteError={setDeleteError}
       />
     );
   });
@@ -94,6 +113,11 @@ const DevicesList = () => {
   return (
     <>
       <TableTitleBar label="Profile" backLink="/settings/profile" />
+      {deleteError && (
+        <div className="thing_form">
+          <InputError error={deleteError.message || "Error deleting the device"} />
+        </div>
+      )}
       <Table>
         <thead>
           <tr>
@@ -110,6 +134,7 @@ const DevicesList = () => {
             device={currentDevice}
             checkpoint={checkpointsRes.value.checkpoints.find(({ id }) => id === currentDevice.id)}
             onDelete={handleDelete}
+            onDeleteError={setDeleteError}
             current
           />
           {rows}

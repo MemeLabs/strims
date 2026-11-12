@@ -8,8 +8,8 @@ import { useTranslation } from "react-i18next";
 import { useTitle } from "react-use";
 
 import { Network } from "../../../apis/strims/network/v1/network";
-import { SelectInput } from "../../../components/Form";
-import { useCall, useClient } from "../../../contexts/FrontendApi";
+import { InputError, SelectInput } from "../../../components/Form";
+import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { useLayout } from "../../../contexts/Layout";
 
 const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: () => void }) => {
@@ -17,7 +17,11 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
   useTitle(t("settings.network.title"));
 
   const [bootstrapPeersRes] = useCall("bootstrap", "listPeers");
-  const client = useClient();
+  const [{ error, loading }, publishNetworkToPeer] = useLazyCall(
+    "bootstrap",
+    "publishNetworkToPeer",
+    { onComplete: () => onClose() }
+  );
   const layout = useLayout();
   const { handleSubmit, control } = useForm<{
     peer: {
@@ -28,12 +32,16 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
     mode: "onBlur",
   });
 
-  const onSubmit = handleSubmit((data) => {
-    void client.bootstrap.publishNetworkToPeer({
-      peerId: data.peer.value,
-      networkId: network.id,
-    });
-    onClose();
+  // The modal closes once the network is published.
+  const onSubmit = handleSubmit(async (data) => {
+    try {
+      await publishNetworkToPeer({
+        peerId: data.peer.value,
+        networkId: network.id,
+      });
+    } catch {
+      // The form shows error.
+    }
   });
 
   if (bootstrapPeersRes.loading) {
@@ -45,6 +53,7 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
       <div className="thing_list__modal_mask"></div>
       <div className="thing_list__modal">
         <form className="thing_form" onSubmit={onSubmit}>
+          {error && <InputError error={error.message || "Error publishing the network"} />}
           <SelectInput
             control={control}
             rules={{
@@ -65,7 +74,9 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
             <button type="button" className="input input_button" onClick={onClose}>
               Cancel
             </button>
-            <button className="input input_button">Publish Network</button>
+            <button className="input input_button" disabled={loading}>
+              Publish Network
+            </button>
           </div>
         </form>
       </div>

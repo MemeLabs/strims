@@ -22,6 +22,12 @@ class FailingReplicationService extends ReplicationService {
   }
 }
 
+class FailingDeleteService extends ProfileService {
+  deleteDevice(): never {
+    throw new Error("the device is still signed in");
+  }
+}
+
 // The second row: the first device after the current one.
 const secondRowMenu = ".thing_table tbody tr:nth-child(2) .thing_table__row_menu";
 
@@ -64,6 +70,21 @@ const stories: Story[] = [
           click(`${secondRowMenu} .dropdown__anchor`),
           click(`${secondRowMenu} button`, "Delete"),
           waitFor(".thing_table tbody tr:nth-child(2) td:nth-child(2)", "web"),
+        ]}
+      />
+    ),
+  },
+  {
+    // Deleting the first other device fails: the error shows above the list.
+    name: "Delete error",
+    component: () => (
+      <SettingsStory
+        path={PATH}
+        services={() => ({ profile: new FailingDeleteService() })}
+        steps={[
+          click(`${secondRowMenu} .dropdown__anchor`),
+          click(`${secondRowMenu} button`, "Delete"),
+          waitFor(".thing_form .input_error"),
         ]}
       />
     ),

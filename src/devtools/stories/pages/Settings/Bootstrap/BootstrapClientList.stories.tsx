@@ -23,6 +23,12 @@ class FailingBootstrapService extends BootstrapService {
   }
 }
 
+class FailingDeleteService extends BootstrapService {
+  deleteClient(): never {
+    throw new Error("the node isn't answering");
+  }
+}
+
 const firstRowMenu = ".thing_table tbody tr:first-child .thing_table__row_menu";
 
 const stories: Story[] = [
@@ -98,6 +104,21 @@ const stories: Story[] = [
             ".thing_table tbody tr:first-child a",
             "wss://bootstrap.example.org:8082/_bootstrap"
           ),
+        ]}
+      />
+    ),
+  },
+  {
+    // The first client's Delete fails: the error shows above the list.
+    name: "Delete error",
+    component: () => (
+      <SettingsStory
+        path={PATH}
+        services={() => ({ bootstrap: new FailingDeleteService() })}
+        steps={[
+          click(`${firstRowMenu} .dropdown__anchor`),
+          click(`${firstRowMenu} button`, "Delete"),
+          waitFor(".thing_form .input_error"),
         ]}
       />
     ),

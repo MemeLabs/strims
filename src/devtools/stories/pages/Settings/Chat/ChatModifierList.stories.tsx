@@ -5,9 +5,15 @@ import React from "react";
 
 import ChatServerService from "../../../../mocks/chatserver/service";
 import { Story } from "../../../../storybook";
-import { ChatSettings, click } from "./harness";
+import { ChatSettings, click, failFirstDelete } from "./harness";
 
 const path = "/settings/chat-servers/1/modifiers";
+
+class FailingService extends ChatServerService {
+  deleteModifier(): never {
+    throw new Error("the chat server isn't answering");
+  }
+}
 
 const stories: Story[] = [
   {
@@ -25,6 +31,13 @@ const stories: Story[] = [
     name: "Empty",
     component: () => (
       <ChatSettings path={path} service={() => new ChatServerService({ modifiers: 0 })} />
+    ),
+  },
+  {
+    // The first modifier's Delete fails: the error shows above the table.
+    name: "Delete error",
+    component: () => (
+      <ChatSettings path={path} service={() => new FailingService()} act={failFirstDelete} />
     ),
   },
 ];

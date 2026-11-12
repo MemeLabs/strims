@@ -5,9 +5,19 @@ import React from "react";
 
 import ChatServerService from "../../../../mocks/chatserver/service";
 import { Story } from "../../../../storybook";
-import { ChatSettings, click, typeInto, waitFor } from "./harness";
+import { ChatSettings, click, failFirstDelete, typeInto, waitFor } from "./harness";
 
 const path = "/settings/chat-servers/1/emotes";
+
+class FailingService extends ChatServerService {
+  deleteEmote(): never {
+    throw new Error("the chat server isn't answering");
+  }
+
+  updateEmotes(): never {
+    throw new Error("the chat server isn't answering");
+  }
+}
 
 const stories: Story[] = [
   {
@@ -67,6 +77,38 @@ const stories: Story[] = [
     name: "Empty",
     component: () => (
       <ChatSettings path={path} service={() => new ChatServerService({ emotes: 0 })} />
+    ),
+  },
+  {
+    // The first emote's Delete fails: the error shows above the table.
+    name: "Delete error",
+    component: () => (
+      <ChatSettings path={path} service={() => new FailingService()} act={failFirstDelete} />
+    ),
+  },
+  {
+    // Enabling two checked emotes fails: the error shows above the table.
+    name: "Enable error",
+    component: () => (
+      <ChatSettings
+        path={path}
+        service={() => new FailingService()}
+        act={async (root) => {
+          const boxes = "tbody .thing_table_checkbox_cell input";
+          await waitFor(root, boxes);
+          const inputs = root.querySelectorAll<HTMLInputElement>(boxes);
+          for (const i of [1, 2]) {
+            inputs[i].click();
+          }
+          await click(root, ".thing_table_dropdown");
+          await click(
+            root,
+            ".thing_table_dropdown .thing_table_item_dropdown__button",
+            (b) => b.textContent === "Enable selected"
+          );
+          await waitFor(root, ".thing_form .input_error");
+        }}
+      />
     ),
   },
 ];

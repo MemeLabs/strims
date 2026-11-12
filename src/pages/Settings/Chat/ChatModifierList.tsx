@@ -7,6 +7,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { Modifier } from "../../../apis/strims/chat/v1/chat";
+import { InputError } from "../../../components/Form";
 import {
   MenuCell,
   MenuItem,
@@ -25,7 +26,7 @@ export interface ChatModifierTableProps {
 }
 
 const ChatModifierTable: React.FC<ChatModifierTableProps> = ({ serverId, modifiers, onDelete }) => {
-  const [, deleteChatModifier] = useLazyCall("chatServer", "deleteModifier", {
+  const [{ error }, deleteChatModifier] = useLazyCall("chatServer", "deleteModifier", {
     onComplete: onDelete,
   });
 
@@ -34,7 +35,13 @@ const ChatModifierTable: React.FC<ChatModifierTableProps> = ({ serverId, modifie
   }
 
   const rows = modifiers.map((modifier) => {
-    const handleDelete = () => deleteChatModifier({ serverId, id: modifier.id });
+    const handleDelete = async () => {
+      try {
+        await deleteChatModifier({ serverId, id: modifier.id });
+      } catch {
+        // The table shows error.
+      }
+    };
 
     return (
       <tr key={modifier.id.toString()}>
@@ -44,21 +51,28 @@ const ChatModifierTable: React.FC<ChatModifierTableProps> = ({ serverId, modifie
           </Link>
         </TableCell>
         <MenuCell>
-          <MenuItem label="Delete" onClick={handleDelete} />
+          <MenuItem label="Delete" onClick={() => void handleDelete()} />
         </MenuCell>
       </tr>
     );
   });
   return (
-    <Table>
-      <thead>
-        <tr>
-          <th>Title</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>{rows}</tbody>
-    </Table>
+    <>
+      {error && (
+        <div className="thing_form">
+          <InputError error={error.message || "Error deleting the modifier"} />
+        </div>
+      )}
+      <Table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </Table>
+    </>
   );
 };
 

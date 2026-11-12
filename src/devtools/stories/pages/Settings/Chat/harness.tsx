@@ -175,6 +175,14 @@ export const click = async (
   test?: (el: HTMLElement) => boolean
 ): Promise<void> => (await waitFor(root, selector, test)).click();
 
+// Clicks Delete in the table's first row's menu, then waits for the error the
+// page shows above its table (the stories' services refuse the delete).
+export const failFirstDelete = async (root: HTMLElement): Promise<void> => {
+  await click(root, "tbody .thing_table_item_dropdown");
+  await click(root, "tbody .thing_table_item_dropdown__button", (b) => b.textContent === "Delete");
+  await waitFor(root, ".thing_form .input_error");
+};
+
 // Drops the PNGs `files` on a file input, one by one, waiting after each
 // until `dropped(count)` says the page took it.
 export const dropFiles = async (

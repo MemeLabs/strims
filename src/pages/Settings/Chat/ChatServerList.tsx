@@ -7,6 +7,7 @@ import { Link, Navigate } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { Server } from "../../../apis/strims/chat/v1/chat";
+import { InputError } from "../../../components/Form";
 import {
   MenuCell,
   MenuItem,
@@ -33,7 +34,13 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ servers, onDelete }) 
   }
 
   const rows = servers.map((server) => {
-    const handleDelete = () => deleteChatServer({ id: server.id });
+    const handleDelete = async () => {
+      try {
+        await deleteChatServer({ id: server.id });
+      } catch {
+        // The table shows error.
+      }
+    };
 
     return (
       <tr key={server.id.toString()}>
@@ -41,21 +48,28 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ servers, onDelete }) 
           <Link to={`/settings/chat-servers/${server.id}`}>{server.room.name || "no title"}</Link>
         </TableCell>
         <MenuCell>
-          <MenuItem label="Delete" onClick={handleDelete} />
+          <MenuItem label="Delete" onClick={() => void handleDelete()} />
         </MenuCell>
       </tr>
     );
   });
   return (
-    <Table>
-      <thead>
-        <tr>
-          <th>Title</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>{rows}</tbody>
-    </Table>
+    <>
+      {error && (
+        <div className="thing_form">
+          <InputError error={error.message || "Error deleting the chat server"} />
+        </div>
+      )}
+      <Table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </Table>
+    </>
   );
 };
 

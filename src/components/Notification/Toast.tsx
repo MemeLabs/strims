@@ -90,7 +90,9 @@ const Toast: React.FC<ToastProps> = ({ timeoutMs = 5000, closeDurationMs = 500 }
         items.push({
           closing: age - timeoutMs > 0,
           notification,
-          onClick: () => client.notification.dismiss({ ids: [notification.id] }),
+          // A failed dismiss leaves the toast to time out.
+          onClick: () =>
+            void client.notification.dismiss({ ids: [notification.id] }).catch(() => undefined),
         });
       }
     }

@@ -18,7 +18,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { Emote, ListEmotesRequest } from "../../../apis/strims/chat/v1/chat";
-import { Button } from "../../../components/Form";
+import { Button, InputError } from "../../../components/Form";
 import Label from "../../../components/Settings/Label";
 import Search from "../../../components/Settings/Search";
 import {
@@ -52,7 +52,9 @@ const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({
   search,
   tableRef,
 }) => {
-  const [, deleteChatEmote] = useLazyCall("chatServer", "deleteEmote", { onComplete: onDelete });
+  const [{ error }, deleteChatEmote] = useLazyCall("chatServer", "deleteEmote", {
+    onComplete: onDelete,
+  });
 
   if (!emotes) {
     return null;
@@ -65,7 +67,13 @@ const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({
       continue;
     }
 
-    const handleDelete = () => deleteChatEmote({ serverId, id: emote.id });
+    const handleDelete = async () => {
+      try {
+        await deleteChatEmote({ serverId, id: emote.id });
+      } catch {
+        // The table shows error.
+      }
+    };
 
     rows.push(
       <tr key={emote.id.toString()}>
@@ -82,24 +90,31 @@ const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({
           ))}
         </TableCell>
         <MenuCell>
-          <MenuItem label="Delete" onClick={handleDelete} />
+          <MenuItem label="Delete" onClick={() => void handleDelete()} />
         </MenuCell>
       </tr>
     );
   }
   return (
-    <Table ref={tableRef}>
-      <thead>
-        <tr>
-          <CheckboxHeader name="id" />
-          <th></th>
-          <th>Title</th>
-          <TableHeader showFor="md"></TableHeader>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>{rows}</tbody>
-    </Table>
+    <>
+      {error && (
+        <div className="thing_form">
+          <InputError error={error.message || "Error deleting the emote"} />
+        </div>
+      )}
+      <Table ref={tableRef}>
+        <thead>
+          <tr>
+            <CheckboxHeader name="id" />
+            <th></th>
+            <th>Title</th>
+            <TableHeader showFor="md"></TableHeader>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </Table>
+    </>
   );
 };
 
@@ -124,12 +139,22 @@ const ChatEmoteList: React.FC = () => {
 
   const table = useRef<TableState>(null);
   const client = useClient();
+  // The list reloads after an update; a failure shows above the table until
+  // the next update.
+  const [updateError, setUpdateError] = useState<string>(null);
   const updateEmotesEnabled = async (value: boolean): Promise<void> => {
-    await client.chatServer.updateEmotes({
-      serverId: BigInt(serverId),
-      ids: [...new Set(table.current.values.get("id"))],
-      enable: { value },
-    });
+    setUpdateError(null);
+    try {
+      await client.chatServer.updateEmotes({
+        serverId: BigInt(serverId),
+        ids: [...new Set(table.current.values.get("id"))],
+        enable: { value },
+      });
+    } catch (e) {
+      const action = value ? "enabling" : "disabling";
+      setUpdateError(`Error ${action} the emotes: ${(e as Error).message || "unknown error"}`);
+      return;
+    }
     void getEmotes();
   };
 
@@ -157,6 +182,11 @@ const ChatEmoteList: React.FC = () => {
           />
         </TableMenu>
       </TableTitleBar>
+      {updateError && (
+        <div className="thing_form">
+          <InputError error={updateError} />
+        </div>
+      )}
       <ChatEmoteTable
         serverId={BigInt(serverId)}
         emotes={value.emotes}

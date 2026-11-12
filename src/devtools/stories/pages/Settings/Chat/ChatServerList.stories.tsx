@@ -6,9 +6,15 @@ import React from "react";
 import { server } from "../../../../mocks/chatserver/fixtures";
 import ChatServerService from "../../../../mocks/chatserver/service";
 import { Catalog, Story } from "../../../../storybook";
-import { ChatSettings, click } from "./harness";
+import { ChatSettings, click, failFirstDelete } from "./harness";
 
 const path = "/settings/chat-servers";
+
+class FailingService extends ChatServerService {
+  deleteServer(): never {
+    throw new Error("the chat server is still running");
+  }
+}
 
 const stories: Story[] = [
   {
@@ -53,6 +59,13 @@ const stories: Story[] = [
     name: "Empty",
     component: () => (
       <ChatSettings path={path} service={() => new ChatServerService({ servers: 0 })} />
+    ),
+  },
+  {
+    // The first server's Delete fails: the error shows above the table.
+    name: "Delete error",
+    component: () => (
+      <ChatSettings path={path} service={() => new FailingService()} act={failFirstDelete} />
     ),
   },
 ];

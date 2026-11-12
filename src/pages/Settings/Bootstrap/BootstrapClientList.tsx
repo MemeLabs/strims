@@ -1,12 +1,14 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { useCallback } from "react";
+import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { BootstrapClient } from "../../../apis/strims/network/v1/bootstrap/bootstrap";
+import { InputError } from "../../../components/Form";
 import {
   MenuCell,
   MenuItem,
@@ -21,14 +23,22 @@ import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 interface BootstrapTableItemProps {
   client: BootstrapClient;
   onDelete: () => void;
+  onDeleteError: (error: Error) => void;
 }
 
-const BootstrapTableItem = ({ client, onDelete }: BootstrapTableItemProps) => {
+const BootstrapTableItem = ({ client, onDelete, onDeleteError }: BootstrapTableItemProps) => {
   const [, deleteClient] = useLazyCall("bootstrap", "deleteClient", {
     onComplete: onDelete,
+    onError: onDeleteError,
   });
 
-  const handleDelete = useCallback(() => deleteClient({ id: client.id }), [client]);
+  const handleDelete = async () => {
+    try {
+      await deleteClient({ id: client.id });
+    } catch {
+      // The list shows error.
+    }
+  };
 
   let url: string;
   switch (client.clientOptions.case) {
@@ -45,7 +55,7 @@ const BootstrapTableItem = ({ client, onDelete }: BootstrapTableItemProps) => {
         <Link to={`/settings/bootstrap/clients/${client.id}`}>{url}</Link>
       </TableCell>
       <MenuCell>
-        <MenuItem label="Delete" onClick={handleDelete} />
+        <MenuItem label="Delete" onClick={() => void handleDelete()} />
       </MenuCell>
     </tr>
   );
@@ -56,6 +66,12 @@ const BootstrapsList = () => {
   useTitle(t("settings.bootstrap.title"));
 
   const [clientsRes, listClients] = useCall("bootstrap", "listClients");
+  // A failed delete's error, until a delete succeeds.
+  const [deleteError, setDeleteError] = useState<Error>(null);
+  const handleDelete = () => {
+    setDeleteError(null);
+    void listClients();
+  };
 
   if (clientsRes.loading) {
     return null;
@@ -65,7 +81,14 @@ const BootstrapsList = () => {
   }
 
   const rows = clientsRes.value?.bootstrapClients?.map((client) => {
-    return <BootstrapTableItem key={client.id.toString()} client={client} onDelete={listClients} />;
+    return (
+      <BootstrapTableItem
+        key={client.id.toString()}
+        client={client}
+        onDelete={handleDelete}
+        onDeleteError={setDeleteError}
+      />
+    );
   });
 
   return (
@@ -75,6 +98,11 @@ const BootstrapsList = () => {
           <MenuLink label="Create Client" to="/settings/bootstrap/clients/new" />
         </TableMenu>
       </TableTitleBar>
+      {deleteError && (
+        <div className="thing_form">
+          <InputError error={deleteError.message || "Error deleting the bootstrap client"} />
+        </div>
+      )}
       <Table>
         <thead>
           <tr>
