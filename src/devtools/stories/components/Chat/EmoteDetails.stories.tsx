@@ -56,6 +56,11 @@ const stories: Story[] = [
   },
   { name: "Animated", component: () => <Details name="PeepoRun" modifiers={["jam"]} /> },
   { name: "Wide emote", component: () => <Details name="Abathur" /> },
+  {
+    // Details of an emote the room's bundle no longer has close themselves.
+    name: "Removed",
+    component: () => <Details name="NoLongerAnEmote" />,
+  },
 ];
 
 export default stories;

@@ -3,7 +3,7 @@
 
 import "./EmoteDetails.scss";
 
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { FiExternalLink } from "react-icons/fi";
 import { MdClose } from "react-icons/md";
 import usePortal from "use-portal";
@@ -30,6 +30,17 @@ const EmoteDetails: React.FC<EmoteDetailsProps> = ({ name, modifiers, anchor, on
 
   const [room] = useRoom();
   const emote = room.liveEmotes.find((e) => e.name === name);
+
+  // An asset bundle can remove the emote while its details are open.
+  const gone = !emote;
+  useEffect(() => {
+    if (gone) {
+      onClose();
+    }
+  }, [gone]);
+  if (gone) {
+    return null;
+  }
 
   return (
     <Portal>
