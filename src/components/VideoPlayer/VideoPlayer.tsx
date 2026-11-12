@@ -5,6 +5,7 @@ import "./VideoPlayer.scss";
 
 import clsx from "clsx";
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { MdLoop } from "react-icons/md";
 import useFullscreen from "use-fullscreen";
 
@@ -15,6 +16,7 @@ import { lowLatencySupport } from "../../lib/media/lowlatency/support";
 import { streamFormat } from "../../lib/media/mime";
 import { PlayerKind, choosePlayer, preferredPlayer } from "../../lib/media/players";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
+import LogoButton from "./LogoButton";
 import { useRemotePlayback } from "./RemotePlayback";
 import RenditionMenu from "./RenditionMenu";
 import { SwarmMediaProps, UnitsMedia } from "./SwarmMedia";
@@ -55,6 +57,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   handleClose,
   className,
 }) => {
+  const { t } = useTranslation();
   const rootRef = useRef();
   const [controlsHidden, renewControlsTimeout, clearControlsTimeout] = useIdleTimeout();
   const [isFullscreen, toggleFullscreen] = useFullscreen();
@@ -89,16 +92,13 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
     videoRef,
     active: !!SwarmMedia && !remote.casting,
   });
+  const unplayable = kind === PlayerKind.None;
   useEffect(() => {
-    if (kind === PlayerKind.None) {
+    if (unplayable) {
       // eslint-disable-next-line no-console
       console.warn("this stream's format can't play here:", mimeType);
     }
-  }, [kind, mimeType]);
-
-  useEffect(() => {
-    console.log(">>>", videoState.error);
-  }, [videoState.error]);
+  }, [unplayable, mimeType]);
 
   const handleToggleFullscreen = useCallback(() => {
     if (typeof videoRef.current.webkitSetPresentationMode === "function") {
@@ -162,16 +162,24 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         />
       )}
       {remote.overlay}
-      <div
-        className={clsx({
-          "video_player__waiting_spinner": true,
-          "video_player__waiting_spinner--waiting": videoState.waiting,
-          "video_player__waiting_spinner--loaded": videoState.loaded,
-          "video_player__waiting_spinner--stalled": !videoState.playing && !videoState.paused,
-        })}
-      >
-        <MdLoop />
-      </div>
+      {unplayable ? (
+        <div className="video_player__unplayable" role="alert">
+          <LogoButton error />
+          <div className="video_player__unplayable__message">{t("player.Unplayable format")}</div>
+          <div className="video_player__unplayable__detail">{mimeType}</div>
+        </div>
+      ) : (
+        <div
+          className={clsx({
+            "video_player__waiting_spinner": true,
+            "video_player__waiting_spinner--waiting": videoState.waiting,
+            "video_player__waiting_spinner--loaded": videoState.loaded,
+            "video_player__waiting_spinner--stalled": !videoState.playing && !videoState.paused,
+          })}
+        >
+          <MdLoop />
+        </div>
+      )}
       <VideoControls
         videoState={videoState}
         videoControls={videoControls}

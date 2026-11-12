@@ -106,6 +106,8 @@ const stories: Story[] = [
     component: () => <PlayerStory />,
   },
   {
+    // An MPEG-TS stream, which no player here takes: the logo's error state
+    // and the format in place of the spinner.
     name: "Unplayable format",
     component: () => <PlayerStory mimeType="video/mp2t" />,
   },
