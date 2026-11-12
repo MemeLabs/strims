@@ -320,6 +320,16 @@ def without(doc, kid, sims=None):
     return out
 
 
+def kind_lines(err):
+    """An index's warnings of event kinds, of its stderr `err`."""
+    return [s for s in err.getvalue().splitlines() if s.startswith("index: event kind ")]
+
+
+def gap_lines(err):
+    """An index's warnings of columns without a doc of their own."""
+    return [s for s in err.getvalue().splitlines() if "'s columns without a doc of their own" in s]
+
+
 class Kinds(Fixture):
     def test_the_kinds_are_the_vocabularys_and_the_runs(self):
         # A vocabulary that lacks uplink_rate (strims-sim's step jobs write
@@ -329,7 +339,7 @@ class Kinds(Fixture):
         with mock.patch.object(vocab, "load", lambda path=None: doc), contextlib.redirect_stderr(err):
             self.index()
             docs = catalog.kind_docs()
-        self.assertEqual(err.getvalue().splitlines(), [
+        self.assertEqual(kind_lines(err), [
             "index: event kind latency (ppspp) isn't in the vocabulary, crates/strims-wan/vocab.toml",
             "index: event kind uplink_rate (strims-sim) isn't in the vocabulary, crates/strims-wan/vocab.toml"])
         rows = catalog.lake("SELECT * EXCLUDE (first_seen, last_seen) FROM event_kinds ORDER BY sim, kind;")
@@ -652,8 +662,8 @@ class Docs(DocsFixture):
             err = io.StringIO()
             with mock.patch.object(vocab, "load", lambda path=None: doc), contextlib.redirect_stderr(err):
                 lacking = self.docs_index()
-            self.assertEqual(err.getvalue(), "index: event kind uplink_rate (strims-sim) isn't in the vocabulary, "
-                                             "crates/strims-wan/vocab.toml\n")
+            self.assertEqual(kind_lines(err), ["index: event kind uplink_rate (strims-sim) isn't in the vocabulary, "
+                                               "crates/strims-wan/vocab.toml"])
             was = next(r for r in kinds if (r["kind"], r["sim"]) == ("uplink_rate", "strims-sim"))
             now = next(r for r in self.kinds() if (r["kind"], r["sim"]) == ("uplink_rate", "strims-sim"))
             self.assertGreater(was["n"], 0)
@@ -665,6 +675,67 @@ class Docs(DocsFixture):
         self.assertEqual(self.docs_index(), first)
         self.assertEqual(self.kinds(), kinds)
         self.assertNotIn(self.MARK, self.described("viewers"))
+
+    def test_an_index_warns_of_columns_without_a_doc_of_their_own(self):
+        self.index()
+        self.assertFalse(self.index()[0].changed)
+        first = self.info()["docs_version"]
+        self.assertIn("churned", {r["name"] for r in catalog.lake(
+            "SELECT name FROM metric_catalog WHERE tbl = 'viewers';")})
+        gaps = catalog.column_gaps()
+        # The fixture's tables as main's docs leave them: no table only a
+        # branch documents, and viewers' churned its own.
+        self.assertFalse(set(gaps) - {*catalog.doc_tables()["strims-sim"], *catalog.VERDICT_TABLES})
+        self.assertNotIn("churned", [c for cs in gaps.get("viewers", {}).values() for c in cs])
+        # churned's own words gone from both sims' doc rows, in copies.
+        d = self.root / "gap-files"
+        d.mkdir(exist_ok=True)
+        copies = [Path(shutil.copy(p, d / p.name)) for p in catalog.DOC_FILES]
+        for path, own in ((copies[0], "`churned` (it restarted)"), (copies[1], "`churned` (it left at least once)")):
+            text = path.read_text()
+            self.assertEqual(text.count(own), 1, own)
+            path.write_text(text.replace(own, "`churned`"))
+        err = io.StringIO()
+        with mock.patch.object(catalog, "DOC_FILES", tuple(copies)), contextlib.redirect_stderr(err):
+            self.docs_index()
+            edited = catalog.column_gaps()
+        self.assertTrue(any("churned" in cs for cs in edited["viewers"].values()), edited["viewers"])
+        self.assertEqual({v: g for v, g in edited.items() if v != "viewers"},
+                         {v: g for v, g in gaps.items() if v != "viewers"})
+        # The warning is column_gaps', a line a table.
+        lines = gap_lines(err)
+        self.assertEqual([s.split("'s columns", 1)[0] for s in lines], [f"index: {v}" for v in edited])
+        viewers = next(s for s in lines if s.startswith("index: viewers's "))
+        self.assertIn("churned", viewers)
+        self.assertIn("gap-files", viewers)
+        self.assertEqual(self.docs_index(), first)
+
+
+class ColumnDocs(unittest.TestCase):
+    CELL = ("`a` (one), `b` and `c` (both), `d`, `e` (`silent` (a value), `f`), `g` (the first), "
+            "`h`: the rest, `i` (eye), `j` (`h`)")
+
+    def test_a_cells_own_docs_are_its_top_level_names_with_their_meanings(self):
+        own = catalog.own_docs(self.CELL)
+        self.assertEqual(own, {"a": ("paren", "one"), "c": ("paren", "both"), "e": ("paren", "`silent` (a value), `f`"),
+                               "g": ("paren", "the first"), "h": ("colon", "the rest, `i` (eye), `j` (`h`)"),
+                               "i": ("paren", "eye"), "j": ("paren", "`h`")})
+        # column_docs gives a nested name the text after it too.
+        self.assertEqual(catalog.column_docs(self.CELL)["silent"], "a value")
+
+    def test_a_column_without_its_own_doc_is_a_gap_by_what_it_has(self):
+        docs = {"strims-sim": {"t": ("a row", self.CELL), "w": ("a row", "`x` (ex)")},
+                "ppspp": {"t": ("a row", "`d` (dee), `k`")}}
+        cols = {c: "text" for c in "acdeghij"} | {"b": "a sentence", "silent": "a value", "k": None}
+        tables = {"t": ("t", cols), "w": ("w", {"x": "ex"}), "u": ("u", {"y": None}),
+                  "verdicts": (None, {"onset": "doc", "lag_x": None, "lag_y": "a sentence"})}
+        self.assertEqual(catalog.doc_gaps(docs, tables, {"onset": None}), {
+            # t: b documented nowhere of its own (its text a sentence's), k
+            # by nothing, silent only inside e's parentheses, h's colon doc
+            # taking in i's and j's; d is the ppspp sim's own. u, which no
+            # doc table documents, is left out, and w has no gap.
+            "t": {"none": ["k"], "sentence": ["b"], "nested": ["silent"], "runs on": ["h"]},
+            "verdicts": {"none": ["lag_x"], "sentence": ["lag_y"]}})
 
 
 class DocsMain(DocsFixture):

@@ -103,7 +103,8 @@ for questions in plain language; `metric_catalog` holds each column and
 metric, `event_kinds` each event kind, the vocabulary's,
 crates/strims-wan/vocab.toml (simlab.vocab), with how many of each the
 runs hold: an index warns on stderr of a kind the runs hold that it
-lacks):
+lacks, and of each table whose columns have no doc of their own,
+column_gaps'):
 
   experiments       one an experiment: a suite farm run (exp_id its name,
                     s7ae7e), or a local suite invocation (exp_id its cache
@@ -2193,12 +2194,101 @@ def undocumented():
     return out
 
 
+def own_docs(text):
+    """The columns a doc table's columns cell documents in their own
+    words, {name: (form, text)}: each backticked name outside every
+    parenthesis with its meaning right after it, in parentheses (form
+    "paren") or after a colon to the cell's end ("colon"), as
+    column_docs reads it. A name inside another's parentheses is a value
+    or a cross-reference there (`reason`'s `silent`), no column's doc,
+    though column_docs takes its text for the column of that name."""
+    out, depth, at = {}, 0, 0
+    for m in BACKTICK.finditer(text):
+        between = text[at:m.start()]
+        depth, at = depth + between.count("(") - between.count(")"), m.start()
+        name = m.group(1)
+        if depth or name in out:
+            continue
+        p = paren(text, m.end() + 1) if text[m.end():m.end() + 1] == " " else None
+        if p:
+            out[name] = ("paren", p)
+        elif text[m.end():m.end() + 2] == ": " and text[m.end() + 2:].strip():
+            out[name] = ("colon", text[m.end() + 2:].strip())
+    return out
+
+
+# What a column's doc is when it isn't its own (doc_gaps), in the order
+# warn_undocumented gives them.
+GAPS = {"none": "no doc", "sentence": "a doc sentence's, not the column's own",
+        "nested": "text inside another column's parentheses",
+        "runs on": "a colon's doc running on into other columns' docs"}
+
+
+def doc_gaps(docs, tables, verdict_docs):
+    """The columns among `tables` ({view: (the sims' table it is or None,
+    {column: its description in metric_catalog})}) whose doc isn't their
+    own, {view: {gap: [column]}} (GAPS). A sims' table's own docs are
+    its doc tables' (`docs`, doc_tables'), own_docs' of either sim's
+    cell; a verdict table's are `verdict_docs`' names. A sims' table no
+    doc table documents is left out: the log of a mechanism only a
+    branch has keeps its docs in that branch's sims."""
+    out = {}
+    for view, (t, cols) in sorted(tables.items()):
+        if t is None:
+            own, nested, cells = verdict_docs, set(), []
+        else:
+            cells = [docs[s][t][1] for s in sorted(docs) if t in docs[s]]
+            if not cells:
+                continue
+            own = {c: d for cell in cells for c, d in own_docs(cell).items()}
+            nested = {c for cell in cells for c in column_docs(cell)}
+        gaps = {}
+        for c, desc in sorted(cols.items()):
+            if c in own:
+                form, text = own[c] if t is not None else ("paren", "")
+                gap = "runs on" if form == "colon" and set(BACKTICK.findall(text)) - {c} & set(cols) else None
+            else:
+                gap = "none" if desc is None else "nested" if c in nested else "sentence"
+            if gap:
+                gaps.setdefault(gap, []).append(c)
+        if gaps:
+            out[view] = {g: gaps[g] for g in GAPS if g in gaps}
+    return out
+
+
+def column_gaps():
+    """doc_gaps over the catalog: the columns of the sims' tables and the
+    verdict tables, as metric_catalog holds them, against the docs this
+    process reads."""
+    views = {v: t for t, v in sim_tables(lake_columns()).items()}
+    tables = {}
+    for r in lake("SELECT tbl, name, description FROM metric_catalog WHERE tbl NOT IN ('rows', 'suite');"):
+        t = views.get(r["tbl"])
+        if t is not None or r["tbl"] in VERDICT_TABLES:
+            tables.setdefault(r["tbl"], (t, {}))[1][r["name"]] = r["description"]
+    # A verdict column's own doc, as catalogs_sql takes it.
+    metrics = run_metric_docs()
+    verdict_docs = {c: None for t, cols in tables.values() if t is None for c in cols
+                    if c in VERDICT_DOCS or c in metrics or c.replace("_censored", "") in metrics}
+    return doc_gaps(doc_tables(), tables, verdict_docs)
+
+
+def names_text(names, most=8):
+    return ", ".join(names[:most]) + (f" and {len(names) - most} more" if len(names) > most else "")
+
+
 def warn_undocumented():
-    """Warns on stderr of each kind of undocumented's: a kind the sims
-    write that the vocabulary should name."""
+    """Warns on stderr of each kind of undocumented's, a kind the sims
+    write that the vocabulary should name; and of each table's columns
+    column_gaps finds, whose doc isn't their own."""
     for kind, sims in undocumented().items():
         print(f"index: event kind {kind} ({', '.join(sims)}) isn't in the vocabulary, "
               f"{vocab.DOCUMENT.relative_to(ROOT)}", file=sys.stderr)
+    where = " and ".join(str(p.relative_to(ROOT) if p.is_relative_to(ROOT) else p) for p in DOC_FILES[:2])
+    for view, gaps in column_gaps().items():
+        source = "catalog.VERDICT_DOCS or verdict.run_metrics' docstring" if view in VERDICT_TABLES else where
+        print(f"index: {view}'s columns without a doc of their own ({source}): "
+              + "; ".join(f"{GAPS[g]} for {names_text(cs)}" for g, cs in gaps.items()), file=sys.stderr)
 
 
 # --- scoring ----------------------------------------------------------------------
