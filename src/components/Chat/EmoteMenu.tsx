@@ -148,17 +148,8 @@ const EmoteMenu: React.FC<EmoteMenuProps> = ({ onSelect, onClose }) => {
 
 export default EmoteMenu;
 
-const testEmojiPattern = (e: CompactEmoji, pattern?: RegExp): boolean => {
-  if (!pattern) {
-    return true;
-  }
-  for (const t of e.tags) {
-    if (pattern.test(t)) {
-      return true;
-    }
-  }
-  return false;
-};
+const testEmojiPattern = (e: CompactEmoji, pattern?: RegExp): boolean =>
+  !pattern || pattern.test(e.label) || (e.tags ?? []).some((t) => pattern.test(t));
 
 interface SearchProps {
   onChange: (v: string) => void;
