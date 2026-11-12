@@ -516,7 +516,12 @@ ASK_TRUTH = {
     "held_by_p50": "h.held_ms <= a.predicted_ms",
     "held_by_p90": "h.held_ms <= a.predicted_p90_ms",
     "held_by_p99": "h.held_ms <= a.predicted_p99_ms",
+    "held_by_horizon": "h.held_ms <= a.predicted_horizon_ms",
 }
+# ASK_TRUTH's columns that read a column some logs lack, with its type:
+# NULL in their views (the park4 line's asks predict quantiles, main's a
+# horizon).
+ASK_TRUTH_NEEDS = {"held_by_horizon": ("predicted_horizon_ms", "BOOLEAN")}
 
 
 # The tables whose views add their truth, and the views of the tables as
@@ -610,7 +615,8 @@ def asks_view(name, asks, arrivals, asks_cols, arrivals_cols):
     peer, seq and incarnation = peer_incarnation. All NULL, `live` false,
     without such a hold; all NULL, `live` too, for a job the relation holds
     no hold of (known_relation), as where arrivals lacks `incarnation`:
-    its truth unknown, not never held. `live` is
+    its truth unknown, not never held; and a truth whose column the log
+    lacks (ASK_TRUTH_NEEDS) NULL. `live` is
     computed in whole ms, so a hold in the ms the requester's incarnation
     began or its channel opened counts, where spec_requests' (the sims')
     compares the times finer. A log that carries its truth (the branch's
@@ -620,8 +626,13 @@ def asks_view(name, asks, arrivals, asks_cols, arrivals_cols):
     held = held_relation(arrivals, arrivals_cols)
     own = [c for c in ASK_TRUTH if c in asks_cols]
     star = "a.*" + (f" EXCLUDE ({', '.join(own)})" if own else "")
-    truth = ", ".join((f"coalesce(a.{c}, {known(e)})" if c in own else known(e)) + f" AS {c}"
-                      for c, e in ASK_TRUTH.items())
+
+    def expr(c, e):
+        col, typ = ASK_TRUTH_NEEDS.get(c, (None, None))
+        if col is not None and col not in asks_cols:
+            return f"NULL::{typ}"
+        return f"coalesce(a.{c}, {known(e)})" if c in own else known(e)
+    truth = ", ".join(f"{expr(c, e)} AS {c}" for c, e in ASK_TRUTH.items())
     return (f"CREATE OR REPLACE VIEW {name} AS SELECT {star}, {truth} FROM {asks} a LEFT JOIN ({held}) h "
             "ON h.k = a.k AND h.src = a.src AND h.node = a.peer AND h.seq = a.seq "
             "AND h.incarnation = a.peer_incarnation "

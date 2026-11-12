@@ -971,13 +971,14 @@ class Tables(Fixture):
         cols = {"k": "VARCHAR", "src": "VARCHAR", "t_ms": "BIGINT", "node": "BIGINT", "parent": "BIGINT"}
         self.assertIn("NULL::BIGINT AS n", catalog.view_sql("parents", cols, "parents", {}))
         self.assertNotIn("NULL::BIGINT AS n", catalog.view_sql("parents", {**cols, "n": "BIGINT"}, "parents", {}))
-        # The asks view's truth: the peer's hold, from arrivals.
-        asks = catalog.lake("SELECT peer, held_ms, live, err_ms, pred_err_ms, held_by_p50, held_by_p90 FROM asks "
-                            f"WHERE k = {catalog.q(tail)} ORDER BY peer;")
+        # The asks view's truth: the peer's hold, from arrivals; a log
+        # without a horizon has no held_by_horizon.
+        asks = catalog.lake("SELECT peer, held_ms, live, err_ms, pred_err_ms, held_by_p50, held_by_p90, "
+                            f"held_by_horizon FROM asks WHERE k = {catalog.q(tail)} ORDER BY peer;")
         self.assertEqual(asks, [{"peer": 1, "held_ms": 1150, "live": True, "err_ms": 140, "pred_err_ms": 50,
-                                 "held_by_p50": False, "held_by_p90": True},
+                                 "held_by_p50": False, "held_by_p90": True, "held_by_horizon": None},
                                 {"peer": 3, "held_ms": None, "live": False, "err_ms": None, "pred_err_ms": None,
-                                 "held_by_p50": None, "held_by_p90": None}])
+                                 "held_by_p50": None, "held_by_p90": None, "held_by_horizon": None}])
         # arrivals' and haves' -1 for no node read NULL (NORMALIZED).
         got = catalog.lake("SELECT node, viewer, peer, parent, last_ask_peer FROM arrivals WHERE k = "
                            f"{catalog.q(tail)} ORDER BY node;")

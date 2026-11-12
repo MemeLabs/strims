@@ -844,7 +844,8 @@ fn request_logs_say_what_they_are(r: &strims_sim::Report, d: &Path) {
             "{r:?}"
         );
         assert!(
-            int(r, "predicted_ms") <= int(r, "predicted_p90_ms"),
+            int(r, "predicted_ms") <= int(r, "predicted_horizon_ms")
+                && r["predicted_p90_ms"].is_empty(),
             "{r:?}"
         );
     }

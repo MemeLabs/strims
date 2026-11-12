@@ -407,10 +407,12 @@ class Asks(unittest.TestCase):
             cols = [r["column_name"] for r in v.records("DESCRIBE asks;")]
         self.assertFalse(log & set(truth))
         self.assertEqual(cols, [c for c in cols if c in log] + truth)
-        want = [(0, 2, 150, True, 40, 30, False, True, True),
-                (0, 3, None, False, None, None, None, None, None),
-                (0, 4, 90, False, -30, None, None, None, None),
-                (1, 2, 150, True, -60, 0, True, True, True)]
+        # The line's asks predict quantiles, no horizon: held_by_horizon
+        # NULL.
+        want = [(0, 2, 150, True, 40, 30, False, True, True, None),
+                (0, 3, None, False, None, None, None, None, None, None),
+                (0, 4, 90, False, -30, None, None, None, None, None),
+                (1, 2, 150, True, -60, 0, True, True, True, None)]
         self.assertEqual(got, [dict(zip(["ask", "peer", *truth], w)) for w in want])
 
     def test_a_pull_of_the_asks_brings_their_truth(self):
@@ -502,20 +504,25 @@ class Haves(unittest.TestCase):
             query.need({"asks", "reads"}, "asks", "reads")
 
     def test_mains_asks_take_the_view_of_the_lines(self):
-        asks = ("(SELECT * FROM (VALUES ('k', 's', 100, 1, 0, 'flight', true, 2, 6, 20, 500, NULL, NULL, NULL, 95, "
-                "10, 0, 1), ('k', 's', 100, 1, 0, 'flight', false, 3, 6, 30, NULL, 130, 170, NULL, NULL, 10, 0, 0)) "
-                "v(k, src, t_ms, node, ask, round, picked, peer, seq, rtt_ms, timeout_ms, predicted_ms, "
-                "predicted_p90_ms, predicted_p99_ms, have_ms, channel_open_ms, since_ms, peer_incarnation))")
+        # A rival's route expectation is a mean and a horizon, no
+        # quantiles: held_by_horizon is its truth, held_by_p90 NULL.
+        asks = ("(SELECT * FROM (VALUES ('k', 's', 100, 1, 0, 'flight', true, 2, 6, 20, 500, NULL, NULL, NULL, NULL, "
+                "95, 10, 0, 1), ('k', 's', 100, 1, 0, 'flight', false, 3, 6, 30, NULL, 130, NULL, NULL, 170, NULL, "
+                "10, 0, 0), ('k', 's', 100, 1, 0, 'flight', false, 4, 6, 40, NULL, 80, NULL, NULL, 100, NULL, 10, 0, "
+                "0)) v(k, src, t_ms, node, ask, round, picked, peer, seq, rtt_ms, timeout_ms, predicted_ms, "
+                "predicted_p90_ms, predicted_p99_ms, predicted_horizon_ms, have_ms, channel_open_ms, since_ms, "
+                "peer_incarnation))")
         cols = {"k", "src", "t_ms", "node", "ask", "round", "picked", "peer", "seq", "rtt_ms", "timeout_ms",
-                "predicted_ms", "predicted_p90_ms", "predicted_p99_ms", "have_ms", "channel_open_ms", "since_ms",
-                "peer_incarnation"}
+                "predicted_ms", "predicted_p90_ms", "predicted_p99_ms", "predicted_horizon_ms", "have_ms",
+                "channel_open_ms", "since_ms", "peer_incarnation"}
         view = query.asks_view("v", asks, self.ARRIVALS, cols, {"incarnation"})
-        got = query.records(f"{view} SELECT peer, held_ms, live, err_ms, pred_err_ms, held_by_p50 FROM v "
-                            "ORDER BY peer;")
-        self.assertEqual(got, [{"peer": 2, "held_ms": 150, "live": True, "err_ms": 40, "pred_err_ms": None,
-                                "held_by_p50": None},
-                               {"peer": 3, "held_ms": None, "live": False, "err_ms": None, "pred_err_ms": None,
-                                "held_by_p50": None}])
+        got = query.records(f"{view} SELECT peer, held_ms, live, err_ms, pred_err_ms, held_by_p50, held_by_p90, "
+                            "held_by_horizon FROM v ORDER BY peer;")
+        none = {"pred_err_ms": None, "held_by_p50": None, "held_by_p90": None, "held_by_horizon": None}
+        self.assertEqual(got, [{"peer": 2, "held_ms": 150, "live": True, "err_ms": 40, **none},
+                               {"peer": 3, "held_ms": None, "live": False, "err_ms": None, **none},
+                               {"peer": 4, "held_ms": 90, "live": True, "err_ms": -30, "pred_err_ms": 10,
+                                "held_by_p50": False, "held_by_p90": None, "held_by_horizon": True}])
 
     def test_the_catalogs_view_is_the_same(self):
         sql = catalog.view_sql("haves", {"t_ms": "BIGINT"}, "haves", {}, {"incarnation": "BIGINT"})
