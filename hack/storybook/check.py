@@ -84,7 +84,8 @@ on the clock renders once i18next has its strings. Then finite
 animations and transitions jump to their end, infinite ones (spinners,
 animated emotes) and SVG animations hold at their start, videos pause,
 images decode and fonts load, until nothing changes; each index's
-hostMask selectors (the landing page's build hash) and the story's
+hostMask selectors (the landing page's build hash, its text first set to
+a fixed string so the box is the same in both builds) and the story's
 `visual.mask` are painted over in both shots, and a story whose
 `visual.skip` holds isn't shot (src/devtools/storybook/types.ts). The
 root is shot until two shots two frames apart match (up to STABLE_SHOTS
@@ -1070,9 +1071,9 @@ FINISH_SCRIPT = r"""(async () => {
 
 # Paints over the masked selectors' boxes, as their own element at the end
 # of the body: the number painted, or {error} for a selector that isn't one.
-MASK_SCRIPT = r"""((selectors) => {
+MASK_SCRIPT = r"""((masks) => {
   let n = 0;
-  for (const sel of selectors) {
+  for (const [sel, text] of masks) {
     let found;
     try {
       found = document.querySelectorAll(sel);
@@ -1080,6 +1081,7 @@ MASK_SCRIPT = r"""((selectors) => {
       return { error: `mask selector ${JSON.stringify(sel)}: ${e.message}` };
     }
     for (const el of found) {
+      if (text != null) el.textContent = text;
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) continue;
       // Out to whole pixels, so no edge blends with what's under it.
@@ -1393,8 +1395,18 @@ def compare_story(browser, builds, mode, route, args):
     if skip:
         res.update(kind="skipped", reason=skip.get("reason", ""))
         return res
-    masks = sorted({m["selector"] for b in builds for m in (b.index or {}).get("hostMask", [])}
-                   | {s for v in visual for s in v.get("mask", [])})
+    # [selector, text]: a host mask may name text to put in its element before
+    # it's measured, so build-dependent text (the git hash) masks the same box
+    # in both builds; an older base's entries lack it, so the head's wins.
+    texts = {}
+    for b in builds:
+        for m in (b.index or {}).get("hostMask", []):
+            if m.get("text") is not None or m["selector"] not in texts:
+                texts[m["selector"]] = m.get("text")
+    for v in visual:
+        for s in v.get("mask", []):
+            texts.setdefault(s, None)
+    masks = sorted(texts.items())
     shots = {}
     for b in builds:
         if entries[b.name]:

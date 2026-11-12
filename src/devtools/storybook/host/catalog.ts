@@ -101,9 +101,20 @@ export interface IndexStory {
 }
 
 // Build-dependent content that hack/storybook/check.py --compare paints
-// over in every story's screenshots, each with why.
-export const HOST_MASK: { selector: string; reason: string }[] = [
-  { selector: ".landing_page__header__revision", reason: "the build's git hash" },
+// over in every story's screenshots, each with why. `text` replaces the
+// element's text before it's measured, so the box is the same in every build.
+export interface HostMask {
+  selector: string;
+  text?: string;
+  reason: string;
+}
+
+export const HOST_MASK: HostMask[] = [
+  {
+    selector: ".landing_page__header__revision",
+    text: "rev. 0000000",
+    reason: "the build's git hash",
+  },
 ];
 
 export interface IndexData {
@@ -114,7 +125,7 @@ export interface IndexData {
   /** covers/skips naming files outside the catalog, and skips of covered files. */
   stale: { module: string; path: string; kind: "covers" | "skips" | "skips-covered" }[];
   hostAllowErrors: { pattern: string; reason: string }[];
-  hostMask: { selector: string; reason: string }[];
+  hostMask: HostMask[];
 }
 
 // Loads every story module and resolves the catalog against them.
