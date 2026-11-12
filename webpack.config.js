@@ -5,10 +5,10 @@ const HtmlWebpackPlugin = require("html-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const ReactRefreshWebpackPlugin = require("@pmmmwh/react-refresh-webpack-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
-const WebpackPwaManifest = require("webpack-pwa-manifest");
 const webpack = require("webpack");
 const JSON5 = require("json5");
 const { ChunkManifestPlugin } = require("./webpack/lib/ChunkManifestPlugin");
+const { PwaManifestPlugin } = require("./webpack/lib/PwaManifestPlugin");
 
 module.exports = (env, argv) => {
   const isProduction = argv.mode === "production";
@@ -122,25 +122,6 @@ module.exports = (env, argv) => {
     },
   };
 
-  // Emits the named pages as their HtmlWebpackPlugin made them, without
-  // what other plugins add as they're emitted: WebpackPwaManifest puts the
-  // app's manifest and icons in every page.
-  const bareHtmlPlugin = (filenames) => ({
-    apply: (compiler) =>
-      compiler.hooks.compilation.tap("BareHtmlPlugin", (compilation) => {
-        const hooks = HtmlWebpackPlugin.getHooks(compilation);
-        const made = new Map();
-        hooks.beforeEmit.tap({ name: "BareHtmlPlugin", stage: -100 }, (data) => {
-          if (filenames.includes(data.outputName)) made.set(data.outputName, data.html);
-          return data;
-        });
-        hooks.beforeEmit.tap({ name: "BareHtmlPlugin", stage: 100 }, (data) => {
-          if (made.has(data.outputName)) data.html = made.get(data.outputName);
-          return data;
-        });
-      }),
-  });
-
   const providePlugin = () =>
     new webpack.ProvidePlugin({
       // With the extension: an ES module's requests are fully specified (vega's are).
@@ -182,23 +163,21 @@ module.exports = (env, argv) => {
       title: "",
       ...htmlWebpackPluginOptions,
     }),
-    bareHtmlPlugin(["watch.html"]),
-    new WebpackPwaManifest({
-      name: "Strims",
-      short_name: "Strims",
-      description: "Live stream viewing with friends",
-      background_color: "#222933",
-      display: "fullscreen",
-      // start_url: "/devtools.html",
-      start_url: "/",
-      orientation: "omit",
-      ios: true,
-      icons: [
-        {
-          src: path.resolve("assets/sggL.png"),
-          sizes: [96, 128, 192, 256, 384, 512],
-        },
-      ],
+    new PwaManifestPlugin(HtmlWebpackPlugin, {
+      manifest: {
+        name: "Strims",
+        short_name: "Strims",
+        display: "fullscreen",
+        start_url: "/",
+        description: "Live stream viewing with friends",
+        background_color: "#222933",
+      },
+      // assets/sggL.png at each size, largest first.
+      icons: [512, 384, 256, 192, 128, 96].map((size) => ({
+        src: path.resolve(__dirname, "assets", "icons", `icon_${size}x${size}.png`),
+        size,
+      })),
+      exclude: ["watch.html"],
     }),
     new CopyWebpackPlugin({
       patterns: [

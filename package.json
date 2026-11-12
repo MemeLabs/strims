@@ -122,8 +122,7 @@
     "vega-lite": "6.5.0",
     "webpack": "^5.75.0",
     "webpack-cli": "^5.0.1",
-    "webpack-dev-server": "^4.11.1",
-    "webpack-pwa-manifest": "^4.3.0"
+    "webpack-dev-server": "^4.11.1"
   },
   "browserslist": [
     "defaults"
