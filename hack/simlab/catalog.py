@@ -173,7 +173,10 @@ seconds to verdict_seconds USING (k, src, sec); a viewer's second
 (viewer_seconds, a read's t_ms // 1000) to viewer_phases ON (k, src,
 viewer) with start <= sec < stop, its phase; the request and HAVE logs
 (asks, haves, spec_requests, parks) to the holds in arrivals, as
-table_catalog's joins say.
+table_catalog's joins say; the seed log (seed_decisions, seed_sends) to
+viewers and arrivals on its peer (viewers.node = peer; a written push's
+hold, arrivals.node = peer, seq, incarnation = peer_incarnation), and to
+each other ON (k, src, node, peer, seq).
 
   SELECT e.cell, e.arm_label, count(*) AS runs, sum(v.collapsed::INT) AS collapsed
   FROM experiment_jobs e JOIN verdicts v USING (k, src)
@@ -1653,6 +1656,9 @@ def view_sql(t, cols, name, viewers, arrivals=None):
     if t == "parents":
         sel = ["x.k", "x.src"] + [nullify(c) if c == "parent" else plain(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
+    if t == "seed_decisions":
+        sel = ["x.k", "x.src"] + [nullify(c) if c == "peer" else plain(c) for c in rest]
+        return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "asks":
         return query.asks_view(f"main.{ident(name)}", f"(SELECT x.* {canon(t)})",
                                f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
@@ -1996,6 +2002,27 @@ NORMALIZED = {
              "incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation; NULL "
              "if none), delay_ms (t_ms - held_ms: the knowledge delay) and live (held by channel_open_ms: not "
              "a backlog the channel's first HAVEs announce).",
+    "seed_decisions": "The seed's own decisions (its seed log, both sims, SPEC): a row per decision, n its "
+                      "place in the seed's log (k, node, n key it), its kind saying which columns hold it, the "
+                      "rest NULL; peer NULL for a decision about the allocation (window, answer_rate). A request "
+                      "row's subscribers are the stream's before the answer, its holders, copies, held and "
+                      "per_holder NULL where no admission read them; a released or closed row's subscribers "
+                      "those left; a window's capacity_bps NULL until measured, its signals (pushed, behind, "
+                      "overloaded, in_use, saturated) a check's alone. A check reads what the holder said of its "
+                      "due push, and the world decides how it said it: its latest STATE on the HAVE-removal lines "
+                      "(frontier_seq, hole_seq, state_age_ms; silent counts the checks its frontier hadn't "
+                      "reached the push), its HAVEs on main (those three NULL; silent counts the checks its HAVEs "
+                      "didn't announce it).",
+    "seed_sends": "Every chunk the seed pushed or answered, once its send ended (its seed log, both sims, SPEC): "
+                  "n is its place in the seed's log (k, node, n key it), t_ms the end (written to the frame, or "
+                  "dropped), queued_ms the push's queueing or the answered request's arrival; bytes NULL unless "
+                  "written; cancel_ms NULL without the peer's CANCEL of the chunk by the end. fate 'suppressed' "
+                  "is main's alone (the peer's HAVEs announced the chunk). declared reads what the peer said of "
+                  "the chunk as the world has it said: its latest STATE covering it on the HAVE-removal lines "
+                  "(by its frontier, after its hole), its HAVEs on main (asks' declares, the requester's side, "
+                  "reads the same). A written push's delivery is arrivals' earliest row of node = peer, seq, "
+                  "incarnation = peer_incarnation, none where the chunk never reached the peer (written is the "
+                  "seed's side: the peer left with the push in flight, or never held the chunk).",
 }
 STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewers": "k, viewer",
                  "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",
@@ -2003,7 +2030,8 @@ STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewe
                  "stalls": "k, viewer, delay_ms, t_ms", "parents": "k, node, stream, t_ms",
                  "asks": "k, node, ask, peer", "haves": "k, node, peer, seq",
                  "arrivals": "k, node, seq, incarnation", "spec_requests": "k, node, peer, seq, t_ms",
-                 "parks": "k, node, peer, seq, t_ms"}
+                 "parks": "k, node, peer, seq, t_ms",
+                 "seed_decisions": "k, node, n", "seed_sends": "k, node, n"}
 STANDARD_JOINS = {"seconds": "jobs USING (k, src); verdict_seconds USING (k, src, sec)",
                   "bins": "jobs USING (k, src) (bin_ms, the bins' width); node_bins USING (k, src, bin) (each "
                           "node's in the bin); seconds and verdict_seconds ON (k, src) and sec = t_ms // 1000 (the "
@@ -2033,7 +2061,15 @@ STANDARD_JOINS = {"seconds": "jobs USING (k, src); verdict_seconds USING (k, src
                           "arrivals.incarnation = asks.peer_incarnation (the peer's holds, the view's truth)",
                   "haves": "viewers USING (k, src, node); arrivals ON (k, src) and arrivals.node = haves.peer, seq, "
                            "arrivals.incarnation = haves.peer_incarnation (the peer's holds, the view's truth); "
-                           "asks ON (k, src, node, peer, seq) for a request's knowledge"}
+                           "asks ON (k, src, node, peer, seq) for a request's knowledge",
+                  "seed_decisions": "viewers ON (k, src) and viewers.node = seed_decisions.peer (the neighbour); "
+                                    "parents ON (k, src) and parents.node = seed_decisions.peer, stream (the "
+                                    "child's side of a grant or a close); seed_sends ON (k, src, node, peer, seq) "
+                                    "for a cancel's or a check's push",
+                  "seed_sends": "viewers ON (k, src) and viewers.node = seed_sends.peer (the neighbour); arrivals "
+                                "ON (k, src) and arrivals.node = seed_sends.peer, seq, arrivals.incarnation = "
+                                "seed_sends.peer_incarnation (the holder's hold: the push's delivery); "
+                                "seed_decisions ON (k, src, node, peer, seq) for a CANCEL"}
 VERDICT_DOCS = {
     "onset": "the first second a trigger held (trees, delivery or latency), NULL if none",
     "trees": "the first second of TREES_SECS with the smoothed hit share under TREES_SHARE",

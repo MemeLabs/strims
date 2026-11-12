@@ -311,7 +311,10 @@ forecast, arrivals, spec_requests, parks, asks and haves to viewers USING (k, sr
 node) (`node` in both sims; strims-sim's viewers also name it `host`),
 and asks and haves to arrivals on the peer's holds (arrivals.node =
 asks.peer, seq, arrivals.incarnation = asks.peer_incarnation, as haves':
-the views' truth); seconds
+the views' truth); seed_decisions and seed_sends (the seed's, node the
+seed) to viewers ON viewers.node = their peer, seed_sends to arrivals on
+a written push's hold (arrivals.node = peer, seq, arrivals.incarnation =
+peer_incarnation), and to each other ON (k, src, node, peer, seq); seconds
 to verdict_seconds USING (k, src, sec) (macros.sql's `sec`).
 runs' frames and bytes are its row's: beside viewer_seconds' frames, name
 them runs.frames and runs.bytes.
