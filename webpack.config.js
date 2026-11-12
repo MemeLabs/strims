@@ -134,6 +134,22 @@ module.exports = (env, argv) => {
     { module: /node_modules\/sass\/sass\.dart\.js$/, message: /^Critical dependency/ },
   ];
 
+  // The emojibase-data locales the chat provider can ask for (EMOJI_LANG) and
+  // the files of each it reads, both matched within the package: an absolute
+  // path's own directories (a checkout under /ui) could match the locale part.
+  const emojiDataDir = path.resolve(__dirname, "node_modules", "emojibase-data");
+  const emojiLang = /^[a-z]{2}(?:-[a-z]{2,})?$/i;
+  const emojiDataCopy = {
+    from: emojiDataDir,
+    to: "emoji",
+    filter: (file) => {
+      const [lang, ...rest] = path.relative(emojiDataDir, file).split(path.sep);
+      return (
+        emojiLang.test(lang) && /^(?:compact|messages|shortcodes\/cldr)\.json$/.test(rest.join("/"))
+      );
+    },
+  };
+
   const providePlugin = () =>
     new webpack.ProvidePlugin({
       // With the extension: an ES module's requests are fully specified (vega's are).
@@ -153,11 +169,7 @@ module.exports = (env, argv) => {
       // The origin of the native node whose bootstrap API the watch page
       // reads (WATCH_API_URL=https://host:port); unset, the page's own.
       WATCH_API_URL: JSON.stringify(process.env.WATCH_API_URL || ""),
-      EMOJI_LANG: JSON.stringify(
-        fs
-          .readdirSync(path.resolve(__dirname, "node_modules", "emojibase-data"))
-          .filter((path) => path.match(/^[a-z]{2}(?:-[a-z]{2,})?$/i))
-      ),
+      EMOJI_LANG: JSON.stringify(fs.readdirSync(emojiDataDir).filter((dir) => emojiLang.test(dir))),
     });
 
   const plugins = [
@@ -198,12 +210,7 @@ module.exports = (env, argv) => {
           to: "locales",
           transform: (content) => JSON.stringify(JSON5.parse(content)),
         },
-        {
-          from: path.resolve(__dirname, "node_modules", "emojibase-data"),
-          to: "emoji",
-          filter: (path) =>
-            path.match(/\/[a-z]{2}(?:-[a-z]{2})?\/.*(compact|messages|cldr)\.json$/i),
-        },
+        emojiDataCopy,
       ],
     }),
     providePlugin(),
@@ -417,12 +424,7 @@ module.exports = (env, argv) => {
                   transform: (content) => JSON.stringify(JSON5.parse(content)),
                 },
                 // The chat provider's emoji data, as the web target has it.
-                {
-                  from: path.resolve(__dirname, "node_modules", "emojibase-data"),
-                  to: "emoji",
-                  filter: (path) =>
-                    path.match(/\/[a-z]{2}(?:-[a-z]{2})?\/.*(compact|messages|cldr)\.json$/i),
-                },
+                emojiDataCopy,
               ],
             }),
             new webpack.DefinePlugin({
