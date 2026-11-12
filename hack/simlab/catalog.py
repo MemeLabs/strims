@@ -1733,10 +1733,15 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=()):
 def lake_scoring(cols):
     """The catalog's scoring objects (scoring_sql, from this checkout's
     suite.py) over the raw tables' columns `cols`, and their
-    scoring_version; none, with a warning, when suite.py doesn't load."""
+    scoring_version; none, with a warning, when suite.py doesn't load.
+    The views main_sql makes of them are the database's tables (have), so
+    a macro that needs one the catalog lacks fails saying so when called
+    (needed): DuckDB binds a table macro as it makes it, and one reading a
+    table that isn't there would fail the index."""
+    have = {name: set(cols[t]) for t, name in sim_tables(cols).items()} | {t: set(c) for t, c in cols.items()}
     try:
         sv = scoring_version()
-        return [scoring_sql(scoring_cols({t: cols.get(t, {}) for t in ("rows", "verdicts")}))], sv
+        return [scoring_sql(scoring_cols({t: cols.get(t, {}) for t in ("rows", "verdicts")}, have=have))], sv
     except Exception as e:
         print(f"index: no scoring macros: suite.py's METRICS don't load ({e})", file=sys.stderr)
         return [], None
