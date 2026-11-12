@@ -2020,8 +2020,8 @@ pub(crate) mod cols {
     use super::{at, of};
     use std::fmt::Display;
 
-    /// The `seconds` table's columns: a row per second of
-    /// `Report::series_data`.
+    /// The `seconds` table's columns: a row per second of the run, from the
+    /// stream's start.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum Seconds {
         /// The second, from the stream's start: second k is \[k, k + 1) s after
@@ -2174,7 +2174,7 @@ pub(crate) mod cols {
     }
 
     /// The `viewer_seconds` table's columns: a row per viewer and second it was
-    /// there (`Report::presence`).
+    /// there.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum ViewerSeconds {
         /// The viewer, numbered as the viewers table numbers it.
@@ -2225,8 +2225,8 @@ pub(crate) mod cols {
         }
     }
 
-    /// The `reads` table's columns: a row per frame a viewer read (duplicates
-    /// too).
+    /// The `reads` table's columns: a row per unit a viewer read: a frame in
+    /// strims-sim (its duplicates too), a chunk in the ppspp sim.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum Reads {
         /// The viewer that read the frame, numbered as the viewers table
@@ -2328,7 +2328,8 @@ pub(crate) mod cols {
         }
     }
 
-    /// The `bins` table's columns: a row per bin of `Scenario::wire_bins`.
+    /// The `bins` table's columns: a row per bin of the run's bin width
+    /// (series_meta.json's `bin_ms`).
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum Bins {
         /// A node's counters in the bins beyond the series', as the ppspp sim's
@@ -2634,8 +2635,8 @@ pub(crate) mod cols {
     /// `{who}_rtos`'s names for strims-sim.
     const COLS_BINS_WHO_RTOS: [&str; 2] = ["viewer_rtos", "seed_rtos"];
 
-    /// The `viewers` table's columns: a row per viewer, in `viewer_seconds`'
-    /// and `reads`' numbering.
+    /// The `viewers` table's columns: a row per viewer, numbered as
+    /// viewer_seconds and reads number them.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum Viewers {
         /// The viewer's number, as viewer_seconds, reads and stalls number it.
@@ -2770,8 +2771,8 @@ pub(crate) mod cols {
         }
     }
 
-    /// The `parents` table's columns: a row per change of a node's push parent
-    /// of a stream (`Report::parent_changes`).
+    /// The `parents` table's columns: a row per change of a node's open parent
+    /// of a stream.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum Parents {
         /// When the node's push parent of the stream changed, in ms of true
@@ -3121,8 +3122,8 @@ pub(crate) mod cols {
         }
     }
 
-    /// The `arrivals` table's columns: a row per chunk a host first held (its
-    /// held log, `strims_ppspp::Held`).
+    /// The `arrivals` table's columns: a row per chunk a node stored, from its
+    /// held log (`strims_ppspp::Held`).
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum Arrivals {
         /// when it first held it: the `forecast` table's `held_ms` is this
@@ -3408,8 +3409,8 @@ pub(crate) mod cols {
     }
 
     /// The `haves` table's columns: a row per chunk a HAVE first announced to a
-    /// host on a channel (its request log, `strims_ppspp::HaveRecord`): once
-    /// per chunk and channel, past the tracked history none.
+    /// node on a channel, from its request log (`strims_ppspp::HaveRecord`):
+    /// once per chunk and channel.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum Haves {
         /// the HAVE arrived

@@ -48,9 +48,9 @@ python3) runs under hack/'s uv venv, which the script execs itself into.
 A run of either sim given an output dir (`SIM_OUT`, `STRIMS_SIM_OUT`)
 writes its tables there as CSV files (the large ones zstd-compressed,
 `<table>.csv.zst`), each beside a `<table>.schema.json` of its columns'
-names and types, and a `series_meta.json`. The sims' rustdoc documents
-them (crates/strims-sim/src/tables.rs, and the ppspp sim's
-`Sim::write_tables`), and the catalog reads those docs: `describe
+names and types, and a `series_meta.json`. crates/strims-wan/fields.toml
+declares them, every table, column and row field with what it holds, and
+the catalog reads its docs: `describe
 tables` lists the tables with their grains, and `describe TABLE` gives a
 table's grain, keys, joins and what each column holds, `describe events`
 the event kinds and `describe phases` the parents table's reasons. The

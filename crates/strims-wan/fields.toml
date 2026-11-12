@@ -25,7 +25,7 @@
 #   unit          ms, us, s, bytes, fraction, ...
 #   none          how a sim writes "none" where it isn't left out: empty
 #                 (an empty field), -1, 0, negative (a time before the
-#                 start)
+#                 start), null (a row's JSON null)
 #   params        a family's {param = values}: a list, or a table of lists
 #                 by sim (and line); a list of such tables is their union
 #   code.<sim>    {param = [Rust expressions]}: the code's arrays a param's
@@ -1952,13 +1952,13 @@ description = "With the request logs on, the park and event logs' records their 
 
 [tables.seconds]
 sims = ["strims-sim", "ppspp"]
-grain = "second of `Report::series_data`"
+grain = "second of the run, from the stream's start"
 keys = "k, sec"
 joins = "jobs USING (k, src); verdict_seconds USING (k, src, sec)"
 sample = false
 zstd = false
 normalized = "-1 (no reading) NULL."
-notes.ppspp = "grain: second of `Sim::series`"
+description = "The first swarm second by second (strims-sim's `Report::series_data`, the ppspp sim's `Sim::series`): the honest viewers' pushes on time, deadlines released to pull, prunes and open parents, the seed's meter, its copies and what it sent, the overhead the seed and the honest viewers wrote, and a media run's chunks written."
 
 [columns.seconds.sec]
 sims = ["strims-sim", "ppspp"]
@@ -2059,13 +2059,13 @@ description = "A media swarm's chunks published: those holding media, then with 
 
 [tables.viewer_seconds]
 sims = ["strims-sim", "ppspp"]
-grain = "viewer and second it was there (`Report::presence`)"
+grain = "viewer and second it was there"
 keys = "k, viewer, sec"
 joins = "viewers USING (k, src, viewer)"
 sample = false
 zstd = false
 normalized = "only the seconds the viewer was there (its stay overlaps the second), in both sims; lag_ms NULL in a second without a read."
-notes.ppspp = "grain: viewer and second"
+description = "Each viewer's lag and what it read, each second it was there."
 
 [columns.viewer_seconds.viewer]
 sims = ["strims-sim", "ppspp"]
@@ -2094,12 +2094,12 @@ notes.ppspp = "Every second has a row; a viewer not there reads none."
 
 [tables.reads]
 sims = ["strims-sim", "ppspp"]
-grain = "frame a viewer read (duplicates too)"
+grain = "unit a viewer read: a frame in strims-sim (its duplicates too), a chunk in the ppspp sim"
 keys = "k, viewer, t_ms"
 joins = "viewers USING (k, src, viewer)"
 sample = true
 zstd = true
-notes.ppspp = "grain: chunk a viewer read"
+description = "Every frame or chunk each viewer read: when, its sequence number and its lag."
 
 [columns.reads.viewer]
 sims = ["strims-sim", "ppspp"]
@@ -2132,6 +2132,7 @@ joins = "viewers USING (k, src, viewer)"
 sample = false
 zstd = false
 normalized = "The unit played is the sim's: a frame in strims-sim, a chunk in the ppspp sim, whose stalls are one chunk's lateness and so often far shorter than a frame's. A unit read twice counts at its first read. scoring.sql's playback_of(runs, delay_ms) plays reads the same way at any delay."
+description = "Each viewer's playout stalls at each playout delay, played over its reads: when each began and how long it lasted."
 
 [columns.stalls.viewer]
 sims = ["strims-sim", "ppspp"]
@@ -2158,13 +2159,13 @@ description = "`playout::play` over the viewer's `reads`, as `hack/sim-db`'s `pl
 
 [tables.bins]
 sims = ["strims-sim", "ppspp"]
-grain = "bin of `Scenario::wire_bins`"
+grain = "bin of the run's bin width (series_meta.json's `bin_ms`)"
 keys = "k, bin"
 joins = "jobs USING (k, src) (bin_ms, the bins' width); node_bins USING (k, src, bin) (each node's in the bin); seconds and verdict_seconds ON (k, src) and sec = t_ms // 1000 (the second the bin starts in)"
 sample = false
 zstd = false
 normalized = "-1 (no reading) NULL."
-notes.ppspp = "grain: bin of `Sim::keep_tables`' width"
+description = "The run in bins finer than its seconds: what the honest viewers present at both of a bin's edges did in it, summed; the seed's meter, its copies and what it sent; and the nodes' counters, summed over those viewers (`viewer_`) and the seed's (`seed_`)."
 
 [columns.bins."{who}_{counter}"]
 sims = ["strims-sim", "ppspp"]
@@ -2330,13 +2331,13 @@ description = "the capacity reading the seed's budget was measured from, at the 
 
 [tables.viewers]
 sims = ["strims-sim", "ppspp"]
-grain = "viewer, in `viewer_seconds`' and `reads`' numbering"
+grain = "viewer, numbered as viewer_seconds and reads number them"
 keys = "k, viewer"
 joins = "reads, viewer_seconds, stalls USING (k, src, viewer)"
 sample = false
 zstd = false
 normalized = "node is the viewer's node in both sims (strims-sim's host); churned BOOLEAN; arrive_ms NULL for a viewer there from the start; up NULL without a limit; hostile false where a sim didn't say."
-notes.ppspp = "grain: viewer"
+description = "Each viewer: its node, its uplink, whether it was hostile or churned, its clock's offset, and when it arrived and left for good."
 
 [columns.viewers.viewer]
 sims = ["strims-sim", "ppspp"]
@@ -2406,7 +2407,7 @@ joins = "viewers USING (k, src, node)"
 sample = false
 zstd = true
 normalized = "kind the vocabulary's current id: a retired kind's replacement for the run's sim (event_kinds' replaced_by), and strims-sim's retired parent_lost of value -1 (its viewer never stopped counting on the parent) parent_departed, its value NULL (vocab.toml's notes on parent_lost); written_kind the id the run wrote; t_ms = t_us / 1000; node and peer NULL for none; detail_map: detail as a MAP where it is key=value pairs."
-notes.ppspp = "grain: timed event (`TimedEvent`)"
+description = "The run's timed events, each kind's node, peer, value and detail as the vocabulary (crates/strims-wan/vocab.toml) gives them."
 
 [columns.events.t_us]
 sims = ["strims-sim", "ppspp"]
@@ -2444,13 +2445,13 @@ description = "The event's detail: its kind's, as crates/strims-wan/vocab.toml g
 
 [tables.parents]
 sims = ["strims-sim", "ppspp"]
-grain = "change of a node's push parent of a stream (`Report::parent_changes`)"
+grain = "change of a node's open parent of a stream"
 keys = "k, node, n"
 joins = "viewers USING (k, src, node)"
 sample = false
 zstd = false
 normalized = "parent NULL for none; n NULL where the sim wrote none. Only hybrid push gives a stream push parents: empty in other modes."
-notes.ppspp = "grain: change of a node's open parent of a stream of its swarm (`Sim::take_parents`)"
+description = "Each node's push parents, stream by stream, as a history of changes in order: a parent opened, switched, pruned, shed or lost."
 
 [columns.parents.t_ms]
 sims = ["strims-sim", "ppspp"]
@@ -2497,6 +2498,7 @@ knobs = ["BIN_NODES"]
 sample = false
 zstd = true
 normalized = "viewer NULL for the seed and hostile hosts."
+description = "Each node's counters in each bin, as the bins sum them."
 
 [columns.node_bins."{counter}"]
 sims = ["strims-sim", "ppspp"]
@@ -2593,7 +2595,7 @@ knobs = ["FORECAST"]
 sample = true
 zstd = true
 normalized = "horizon_ms, held_ms and mean_ms NULL where -1 (no estimate, never held)."
-notes.ppspp = "grain: sample of a node's forecast log (`Runner::set_forecasts`)"
+description = "A node's announcement-lag samples: each HAVE's lag against its peer's estimate before it, and when the peer stored the chunk."
 
 [columns.forecast.t_ms]
 sims = ["strims-sim", "ppspp"]
@@ -2723,13 +2725,13 @@ description = "the signing time is the signing clock's extrapolation"
 [tables.spec_requests]
 sims = []
 lines = ["decl", "p4tf"]
-grain = "speculative request of a node's park log, once it ended (`Scenario::sched_logs`)"
+grain = "speculative request of a node's park log, once it ended"
 keys = "k, node, peer, seq, t_ms"
 joins = "viewers USING (k, src, node) (the requester); asks USING (k, src, t_ms, node, peer, seq) for round 'spec' AND picked (the decision; its rivals by ask); parks ON (k, src) and parks.node = peer, parks.peer = node, seq, parks.t_ms between t_ms and t_outcome_ms (the holder's park or refusal); arrivals ON (k, src) and arrivals.node = peer, seq, arrivals.t_ms = held_ms (the holder's hold)"
 knobs = ["SPEC"]
 sample = false
 zstd = false
-notes.ppspp = "grain: speculative request of a node's park log (`Runner::set_park_log`), once it ended"
+description = "A HAVE-removal line's speculative requests (the decl and p4tf lines'); main's sims don't write it."
 
 [columns.spec_requests.t_ms]
 sims = []
@@ -2920,6 +2922,7 @@ joins = "viewers USING (k, src, node) (the holder); spec_requests ON (k, src) an
 knobs = ["SPEC"]
 sample = false
 zstd = false
+description = "A HAVE-removal line's park log (the decl and p4tf lines'); main's sims don't write it."
 
 [columns.parks.t_ms]
 sims = []
@@ -3016,14 +3019,14 @@ notes.ppspp = "the holder's own first hold of the chunk, from its data's arrival
 
 [tables.arrivals]
 sims = ["strims-sim", "ppspp"]
-grain = "chunk a host first held (its held log, `strims_ppspp::Held`)"
+grain = "chunk a node stored, from its held log (`strims_ppspp::Held`)"
 keys = "k, node, seq, incarnation"
 joins = "viewers USING (k, src, node); asks and haves ON (k, src) and arrivals.node = their peer, seq, arrivals.incarnation = their peer_incarnation (the peer's holds: the earliest is their views' truth); spec_requests ON (k, src) and arrivals.node = spec_requests.peer, seq, arrivals.t_ms = held_ms, and parks ON (k, src, node, seq) and arrivals.t_ms = parks.held_ms (the holder's hold)"
 knobs = ["FORECAST", "SPEC"]
 sample = true
 zstd = true
 normalized = "peer, parent, last_ask_peer and viewer NULL where -1: no source (a chunk the node published), no open parent, no request, a node that is no viewer (the seed)."
-notes.ppspp = "grain: chunk a node stored (its held log, `Runner::take_held`, `Held`)"
+description = "Each chunk a node stored: how it came (its own, a push, an answer, other), from whom, and what the node expected and asked of it before. A node's earliest row of a chunk in an incarnation is the forecast table's `held_ms`."
 
 [columns.arrivals.t_ms]
 sims = ["strims-sim", "ppspp"]
@@ -3122,8 +3125,9 @@ knobs = ["SPEC"]
 sample = true
 zstd = true
 normalized = "Every rival kept, in both rounds: a row per request and channel it weighed, the asked row (picked) first; grace_ms, outcome, reason and t_outcome_ms are the asked row's, NULL on a rival's. The sims write what a request was decided on (peer_honest the peer's at the request); the view adds its truth from arrivals, as spec_requests' columns are: held_ms, the peer's first hold of the chunk in its incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation; NULL if none), and from it live (held by since_ms and channel_open_ms, in whole ms), err_ms, pred_err_ms, held_by_p50, held_by_p90 and held_by_p99, and held_by_horizon (held by predicted_horizon_ms, NULL where a log has none), all NULL (live too) for a job whose arrivals the catalog lacks: unknown, not never held. Main's (the HAVE world's request log) has one round, 'flight'; its predicted_ms and predicted_horizon_ms are a rival's route expectation (first sight plus its announcement lag's mean, and plus its horizon), NULL on the asked row, which a HAVE decided, and its predicted_p90_ms and predicted_p99_ms NULL (it predicts no quantiles); timeout_ms, predicted_horizon_ms, have_ms (the row's peer's HAVE of the chunk) and released_ms (push's release of it to pull) are its own; grace_ms, frontier_seq, hole_seq and state_age_ms are NULL there."
-description = "The line's `grace_ms` (requests here carry none), `frontier_seq`, `hole_seq` and `state_age_ms` (no STATE summaries) are absent. The truth (`held_ms`, `live`, `err_ms`, `pred_err_ms`, `held_by_p50/p90/p99`, and `held_by_horizon` by the horizon) is `hack/sim-db`'s view's, from `arrivals`, as the line's"
-notes.ppspp = "grain: channel a request of a node's weighed, from its request log (`Runner::take_requests`, `RequestRecord`): every request the request round made, once it ended, the asked peer's row and then one per rival A node whose place a new viewer takes leaves its requests still open unrecorded. The truth is `hack/sim-db`'s view's, from `arrivals`"
+description = "Every request a node made and the rival channels its request round weighed: the asked peer's row first, then one per rival, with what each route expected. The HAVE-removal lines' `grace_ms`, `frontier_seq`, `hole_seq` and `state_age_ms` are absent on main (no grace, no STATE summaries); the truth (`held_ms`, `live`, `err_ms`, `pred_err_ms`, `held_by_p50/p90/p99`, `held_by_horizon`) is the catalog's view's, from `arrivals`."
+notes.strims-sim = "A node that crashes leaves its requests still open unrecorded."
+notes.ppspp = "A node whose place a new viewer takes leaves its requests still open unrecorded."
 
 [columns.asks.t_ms]
 sims = ["strims-sim", "ppspp"]
@@ -3308,15 +3312,14 @@ description = "that STATE's age at the decision: the request's time less its arr
 
 [tables.haves]
 sims = ["strims-sim", "ppspp"]
-grain = "chunk a HAVE first announced to a host on a channel (its request log, `strims_ppspp::HaveRecord`): once per chunk and channel, past the tracked history none"
+grain = "chunk a HAVE first announced to a node on a channel, from its request log (`strims_ppspp::HaveRecord`): once per chunk and channel"
 keys = "k, node, peer, seq"
 joins = "viewers USING (k, src, node); arrivals ON (k, src) and arrivals.node = haves.peer, seq, arrivals.incarnation = haves.peer_incarnation (the peer's holds, the view's truth); asks ON (k, src, node, peer, seq) for a request's knowledge"
 knobs = ["SPEC"]
 sample = true
 zstd = true
 normalized = "Main's HAVE log: a row per chunk a HAVE first announced on a channel; peer NULL where -1 (a key that named no link). The sims write the HAVE (haves_log); the view adds held_ms, the announcing peer's first hold of the chunk in its incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation; NULL if none), delay_ms (t_ms - held_ms: the knowledge delay) and live (held by channel_open_ms: not a backlog the channel's first HAVEs announce), all NULL (live too) for a job whose arrivals the catalog lacks."
-description = "The `forecast` table samples the same HAVEs in the hybrid, where the chunk's first sight is known, under its own cap; this table has every one. The knowledge delay is `t_ms` less the peer's hold, `arrivals`' earliest `t_ms` of node = peer, seq and incarnation = peer_incarnation"
-notes.ppspp = "grain: chunk a HAVE first announced to a node on a channel (its request log, `Runner::take_haves`, `HaveRecord`) The `forecast` table samples a capped subset of these HAVEs; the knowledge delay is `t_ms` less the peer's hold in that incarnation, from `arrivals` (`hack/sim-db`'s view)"
+description = "Every chunk a peer's HAVE first announced to a node on each channel, none past the node's tracked history. The forecast table samples the same HAVEs under a cap of its own; this table has every one. The knowledge delay is `t_ms` less the peer's hold: `arrivals`' earliest `t_ms` of node = peer, seq and incarnation = peer_incarnation."
 
 [columns.haves.t_ms]
 sims = ["strims-sim", "ppspp"]
@@ -3380,6 +3383,7 @@ sample = false
 zstd = false
 normalized = "The seed's own decisions (its seed log, both sims, SPEC): a row per decision, n its place in the seed's log (k, node, n key it), its kind saying which columns hold it, the rest NULL; peer NULL for a decision about the allocation (window, answer_rate; an older run's -1 reads NULL too). A request row's subscribers are the stream's before the answer, its holders, copies, held and per_holder NULL where no admission read them; a released or closed row's subscribers those left; a window's capacity_bps NULL until measured, its signals (pushed, behind, overloaded, in_use, saturated) a check's alone. A check reads what the holder said of its due push, and the world decides how it said it: its latest STATE on the HAVE-removal lines (frontier_seq, hole_seq, state_age_ms; silent counts the checks its frontier hadn't reached the push), its HAVEs on main (those three NULL; silent counts the checks its HAVEs didn't announce it)."
 shared = "seed_log"
+description = "The seed's own decisions, in the order it logged them: requests answered or deferred, subscriptions released or closed, holders that joined, left or were barred, its allocation checks, CANCELs, windows and answer rates; a row's kind says which columns hold it."
 
 [columns.seed_decisions.t_ms]
 sims = ["strims-sim", "ppspp"]
@@ -3628,6 +3632,7 @@ sample = false
 zstd = false
 normalized = "Every chunk the seed pushed or answered, once its send ended (its seed log, both sims, SPEC): n is its place in the seed's log (k, node, n key it), peer the neighbour (an older run's -1, a neighbour gone before the log's take, reads NULL), t_ms the end (written to the frame, or dropped), queued_ms the push's queueing or the answered request's arrival; bytes NULL unless written; cancel_ms NULL without the peer's CANCEL of the chunk by the end. fate 'suppressed' is main's alone (the peer's HAVEs announced the chunk). declared reads what the peer said of the chunk as the world has it said: its latest STATE covering it on the HAVE-removal lines (by its frontier, after its hole), its HAVEs on main (asks' declares, the requester's side, reads the same). The sims write the send (seed_sends_log); the view adds held_ms, the peer's first hold of the chunk in its incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation), a written push's delivery where it comes after queued_ms; NULL where the peer never held the chunk in that incarnation (written is the seed's side: the peer left with the push in flight, or never held the chunk), and NULL for a job whose arrivals the catalog lacks: unknown, not never held."
 shared = "seed_log"
+description = "Every chunk the seed pushed or answered, once its send ended: how, to whom, its fate and its bytes."
 
 [columns.seed_sends.t_ms]
 sims = ["strims-sim", "ppspp"]

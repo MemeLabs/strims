@@ -812,30 +812,19 @@ pub enum ColumnType {
 }
 
 /// A column of the sims' `seed_decisions` and `seed_sends` tables: its
-/// name, type and doc. Both sims write every column through
-/// [`decision_fields`] and [`send_fields`], and document them with
-/// [`doc_row`]'s text, each doc the column's own parenthesis there, so the
-/// tables and their docs are one in both.
+/// name and type, as `crates/strims-wan/fields.toml` declares it, with what
+/// it holds. Both sims write every column through [`decision_fields`] and
+/// [`send_fields`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Column {
     pub name: &'static str,
     pub ty: ColumnType,
-    pub doc: &'static str,
 }
 
 #[path = "seed_log_columns.rs"]
 mod columns;
 pub use columns::{DECISION_COLUMNS, SEND_COLUMNS};
 use columns::{DecisionCol, HeadCol, SendCol};
-
-/// The `seed_decisions` table's grain, as both sims' doc rows give it
-/// before the setting that writes it ([`doc_row`]).
-pub const DECISIONS_GRAIN: &str =
-    "decision of the seed's seed log ([`strims_ppspp::SeedDecision`])";
-
-/// The `seed_sends` table's grain, as both sims' doc rows give it
-/// before the setting that writes it ([`doc_row`]).
-pub const SENDS_GRAIN: &str = "chunk the seed pushed or answered, once its send ended, from its seed log ([`strims_ppspp::SeedSend`])";
 
 /// The columns a sim fills for a row ([`decision_fields`], [`send_fields`]):
 /// its time in the tables' ms, the seed (`node`), the record's place in the
@@ -1028,59 +1017,19 @@ pub fn send_fields(head: &RowHead, s: &SeedSend, ms: &dyn Fn(Time) -> i64) -> Ve
     ordered(&SEND_COLUMNS, row)
 }
 
-/// A table's doc row, as both sims' rustdoc carries it and `hack/sim-db`'s
-/// catalog reads it: `| `name` | grain, with `knob` | `column` (doc), ... |`,
-/// `knob` the sim's setting that writes the table, each column's doc its
-/// own parenthesis.
-pub fn doc_row(name: &str, grain: &str, knob: &str, columns: &[Column]) -> String {
-    let cells: Vec<String> = columns
-        .iter()
-        .map(|c| format!("`{}` ({})", c.name, c.doc))
-        .collect();
-    format!(
-        "| `{name}` | {grain}, with `{knob}` | {} |",
-        cells.join(", ")
-    )
-}
-
-/// Both tables' doc rows ([`doc_row`]) in a sim whose setting `knob`
-/// writes them (strims-sim's `STRIMS_SIM_SPEC=1`, the ppspp sim's
-/// `SIM_SPEC=1`): `seed_decisions`', then `seed_sends`'.
-pub fn doc_rows(knob: &str) -> [String; 2] {
-    [
-        doc_row("seed_decisions", DECISIONS_GRAIN, knob, &DECISION_COLUMNS),
-        doc_row("seed_sends", SENDS_GRAIN, knob, &SEND_COLUMNS),
-    ]
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
 
-    /// Each column's doc is its own: its parenthesis balanced and free of
-    /// what would end it or the row (`|`, a backtick), every name once.
+    /// Each table names each column once.
     #[test]
-    fn every_column_has_a_doc_of_its_own() {
+    fn every_column_is_named_once() {
         for cols in [&DECISION_COLUMNS[..], &SEND_COLUMNS[..]] {
             let mut names: Vec<&str> = cols.iter().map(|c| c.name).collect();
             names.sort_unstable();
             names.dedup();
             assert_eq!(names.len(), cols.len());
-            for c in cols {
-                assert!(!c.doc.is_empty(), "{}", c.name);
-                assert!(!c.doc.contains(['|', '`']), "{}", c.name);
-                let mut depth = 0i32;
-                for ch in c.doc.chars() {
-                    depth += match ch {
-                        '(' => 1,
-                        ')' => -1,
-                        _ => 0,
-                    };
-                    assert!(depth >= 0, "{}", c.name);
-                }
-                assert_eq!(depth, 0, "{}", c.name);
-            }
         }
     }
 

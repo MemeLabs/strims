@@ -31,6 +31,9 @@ fields.toml) and rustfmt; the script runs under hack/'s venv for them.
   products(params, who)        a family's params for a sim or a line, as
                                products {param: [values]}
   expand(key, entry, who)      the names an entry holds for `who`
+  declared(path=None, doc=None)
+                               every name fields.toml declares, by where
+                               it's recorded, each with its entry
   field_outputs(path=None)     fields.toml's files {path: text}
 
   load(path=None) -> dict      the document (DOCUMENT by default), checked:
@@ -723,6 +726,28 @@ def expand(key, entry, who):
     return out
 
 
+def declared(path=None, doc=None):
+    """Every name fields.toml (`doc`, parsed, else the file at `path`)
+    declares, by where it's recorded: {"rows": {name: (id, entry)}, "meta":
+    {...}, "columns": {table: {name: (id, entry)}}}. A family's names are
+    those it holds for any sim or line (expand), the first entry to hold a
+    name keeping it."""
+    doc = fields(path) if doc is None else doc
+
+    def names(entries):
+        out = {}
+        for key, e in entries.items():
+            for who in (*SIMS, *LINES):
+                if who in e.get("sims", ()) or who in e.get("lines", ()) or (
+                        who in LINES and "{" in key and products(e.get("params") or {}, who)):
+                    for n in expand(key, e, who):
+                        out.setdefault(n, (key, e))
+        return out
+
+    return {"rows": names(doc.get("rows", {})), "meta": names(doc.get("meta", {})),
+            "columns": {t: names(cols) for t, cols in doc.get("columns", {}).items()}}
+
+
 def camel(name):
     """A name's Rust variant: `lag_p99_ms` is `LagP99Ms`."""
     return "".join(p[:1].upper() + p[1:] for p in name.split("_") if p)
@@ -944,7 +969,6 @@ def _jinja():
     import jinja2
     env = jinja2.Environment(loader=jinja2.FileSystemLoader(TEMPLATES), trim_blocks=True, lstrip_blocks=True,
                              keep_trailing_newline=True, undefined=jinja2.StrictUndefined)
-    env.filters["rust_str"] = lambda s: json.dumps(s, ensure_ascii=False)
     return env
 
 
@@ -959,8 +983,7 @@ def shared_module(doc, kind, header):
         if tab.get("shared") != kind or not tab.get("sims"):
             continue
         const, fields_fn, enum = sh["consts"][t]
-        cols = [{"name": k, "variant": camel(k), "ty": COLUMN_TYPES[e["type"]], "doc": e.get("description") or "",
-                 "type": e["type"]}
+        cols = [{"name": k, "variant": camel(k), "ty": COLUMN_TYPES[e["type"]], "type": e["type"]}
                 for k, e in doc.get("columns", {}).get(t, {}).items() if e.get("sims")]
         tables.append({"table": t, "const": const, "enum": enum, "what": f"[`{fields_fn}`](super::{fields_fn})",
                        "columns": cols})

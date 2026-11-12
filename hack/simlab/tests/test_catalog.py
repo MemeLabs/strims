@@ -62,11 +62,12 @@ simlab.verdict's derive pool:
                replacement for the job's sim (strims-sim's parent_lost by
                its value), written_kind the id written; a parent_lost in a
                job with the scheduler log on warned of
-  Docs         a change to the docs alone (a registry's entry, a doc row
-               of a sim's file, the vocabulary) makes the doc tables again
-               and nothing else, describe showing it, the event counts
-               kept, then nothing to do; the docs as they were give the
-               version they had
+  Docs         a change to the docs alone (a registry's entry, a column's
+               doc in fields.toml, the vocabulary) makes the doc tables
+               again and nothing else, describe showing it, the event
+               counts kept, then nothing to do; the docs as they were give
+               the version they had; an index warns of the columns the
+               runs hold that fields.toml doesn't declare
   DocsMain     the shared catalog's docs are main's: an index whose doc
                files are main's records them at main's key; one whose code
                isn't main's (a branch's, the console server's) and whose
@@ -84,10 +85,10 @@ simlab.verdict's derive pool:
                name catalogs_sql's code reads
   Registries   every one of store_host's TABLES has its STANDARD_KEYS
                and STANDARD_JOINS, and they name no other; SAMPLE_TABLES
-               are TABLES; the two sims' doc tables (doc_tables) document
-               the same tables, each of them one of TABLES, and their
-               grains the knobs query.TABLE_KNOBS gives; the two sims'
-               ZSTD lists name the same tables
+               are TABLES; fields.toml's tables are TABLES, each main
+               writes written by both sims, with the knobs
+               query.TABLE_KNOBS gives; the two sims' ZSTD lists name the
+               same tables
   Commands     simdb.py's lake --param, view and describe over the
                catalog, as a caller runs them: params bound typed or as
                text, one missing named; the saved views listed, run with
@@ -810,9 +811,10 @@ def kind_lines(err):
     return [s for s in err.getvalue().splitlines() if s.startswith("index: event kind ")]
 
 
-def gap_lines(err):
-    """An index's warnings of columns without a doc of their own."""
-    return [s for s in err.getvalue().splitlines() if "'s columns without a doc of their own" in s]
+def undeclared_lines(err):
+    """An index's warnings of fields and columns fields.toml doesn't
+    declare."""
+    return [s for s in err.getvalue().splitlines() if " aren't declared in " in s]
 
 
 class Kinds(Fixture):
@@ -1300,21 +1302,19 @@ class Docs(DocsFixture):
         # The entry as it was: the version it had.
         self.assertEqual(self.docs_index(), first)
         self.assertNotIn("k, viewer, marker", self.described("viewers"))
-        # A doc row of a sim's file, in a copy of it: the same text
+        # A column's doc in a copy of fields.toml: the same text
         # elsewhere is the same version.
-        copies = []
         (self.root / "doc-files").mkdir()
-        for p in catalog.DOC_FILES:
-            copies.append(Path(shutil.copy(p, self.root / "doc-files" / p.name)))
-        with mock.patch.object(catalog, "DOC_FILES", tuple(copies)):
+        copy = Path(shutil.copy(catalog.FIELDS, self.root / "doc-files" / "fields.toml"))
+        with mock.patch.object(catalog, "FIELDS", copy):
             self.assertFalse(self.index()[0].changed)
-            row = "/// | `viewers` | viewer | `viewer`, "
-            text = copies[1].read_text()
-            self.assertEqual(text.count(row), 1)
-            copies[1].write_text(text.replace(row, f"/// | `viewers` | viewer | {self.MARK} `viewer`, "))
+            entry = '[columns.viewers.churned]\nsims = ["strims-sim", "ppspp"]\ntype = "bool"\ndescription = "'
+            text = copy.read_text()
+            self.assertEqual(text.count(entry), 1)
+            copy.write_text(text.replace(entry, entry + self.MARK + " "))
             edited = self.docs_index()
-            desc = catalog.lake("SELECT description FROM table_catalog WHERE name = 'viewers';")[0]["description"]
-            self.assertTrue(desc.startswith(f"ppspp: {self.MARK} `viewer`, "), desc)
+            desc = catalog.lake("SELECT description FROM metric_catalog WHERE tbl = 'viewers' AND name = 'churned';")
+            self.assertTrue(desc[0]["description"].startswith(f"{self.MARK} "), desc)
             self.assertIn(self.MARK, self.described("viewers"))
             # The vocabulary: a kind the runs hold that it lacks keeps its
             # count, undocumented.
@@ -1336,66 +1336,42 @@ class Docs(DocsFixture):
         self.assertEqual(self.kinds(), kinds)
         self.assertNotIn(self.MARK, self.described("viewers"))
 
-    def test_an_index_warns_of_columns_without_a_doc_of_their_own(self):
+    def test_an_index_warns_of_the_columns_fields_toml_doesnt_declare(self):
         self.index()
         self.assertFalse(self.index()[0].changed)
         first = self.info()["docs_version"]
-        self.assertIn("churned", {r["name"] for r in catalog.lake(
-            "SELECT name FROM metric_catalog WHERE tbl = 'viewers';")})
-        gaps = catalog.column_gaps()
-        # The fixture's tables as main's docs leave them: no table only a
-        # branch documents, and viewers' churned its own.
-        self.assertFalse(set(gaps) - {*catalog.doc_tables()["strims-sim"], *catalog.VERDICT_TABLES})
-        self.assertNotIn("churned", [c for cs in gaps.get("viewers", {}).values() for c in cs])
-        # churned's own words gone from both sims' doc rows, in copies.
-        d = self.root / "gap-files"
+        # The fixture's runs hold names of its own (golden_cli's), and
+        # viewers' declared ones, each with a doc.
+        before = catalog.undeclared()
+        self.assertNotIn("viewers", before)
+        self.assertNotIn("lag_p99_ms", before.get("rows", []))
+        docs = {r["name"]: r["description"] for r in catalog.lake(
+            "SELECT name, description FROM metric_catalog WHERE tbl = 'viewers';")}
+        self.assertTrue(docs["churned"])
+        # churned and a row field gone from a copy of fields.toml.
+        d = self.root / "undeclared"
         d.mkdir(exist_ok=True)
-        copies = [Path(shutil.copy(p, d / p.name)) for p in catalog.DOC_FILES]
-        for path, own in ((copies[0], "`churned` (it restarted)"), (copies[1], "`churned` (it left at least once)")):
-            text = path.read_text()
-            self.assertEqual(text.count(own), 1, own)
-            path.write_text(text.replace(own, "`churned`"))
+        copy = Path(shutil.copy(catalog.FIELDS, d / "fields.toml"))
+        text = copy.read_text()
+        for key in ("[columns.viewers.churned]", "[rows.lag_p99_ms]"):
+            i = text.index(key + "\n")
+            text = text[:i] + text[text.index("\n\n", i) + 2:]
+        copy.write_text(text)
         err = io.StringIO()
-        with mock.patch.object(catalog, "DOC_FILES", tuple(copies)), contextlib.redirect_stderr(err):
+        with mock.patch.object(catalog, "FIELDS", copy), contextlib.redirect_stderr(err):
             self.docs_index()
-            edited = catalog.column_gaps()
-        self.assertTrue(any("churned" in cs for cs in edited["viewers"].values()), edited["viewers"])
-        self.assertEqual({v: g for v, g in edited.items() if v != "viewers"},
-                         {v: g for v, g in gaps.items() if v != "viewers"})
-        # The warning is column_gaps', a line a table.
-        lines = gap_lines(err)
-        self.assertEqual([s.split("'s columns", 1)[0] for s in lines], [f"index: {v}" for v in edited])
-        viewers = next(s for s in lines if s.startswith("index: viewers's "))
-        self.assertIn("churned", viewers)
-        self.assertIn("gap-files", viewers)
+            self.assertEqual(catalog.undeclared(),
+                             {**before, "rows": sorted([*before.get("rows", []), "lag_p99_ms"]), "viewers": ["churned"]})
+            docs = {r["name"]: r["description"] for r in catalog.lake(
+                "SELECT name, description FROM metric_catalog WHERE tbl = 'viewers';")}
+            self.assertIsNone(docs["churned"])
+        # The warning is undeclared's, a line a table.
+        lines = undeclared_lines(err)
+        self.assertEqual([s.split("'s ", 1)[0] for s in lines], [f"index: {t}" for t in sorted({*before, "rows",
+                                                                                              "viewers"})])
+        self.assertIn(f"index: viewers's columns churned aren't declared in {catalog.relative(copy)}", lines)
+        self.assertIn("lag_p99_ms", next(s for s in lines if s.startswith("index: rows's fields ")))
         self.assertEqual(self.docs_index(), first)
-
-
-class ColumnDocs(unittest.TestCase):
-    CELL = ("`a` (one), `b` and `c` (both), `d`, `e` (`silent` (a value), `f`), `g` (the first), "
-            "`h`: the rest, `i` (eye), `j` (`h`)")
-
-    def test_a_cells_own_docs_are_its_top_level_names_with_their_meanings(self):
-        own = catalog.own_docs(self.CELL)
-        self.assertEqual(own, {"a": ("paren", "one"), "c": ("paren", "both"), "e": ("paren", "`silent` (a value), `f`"),
-                               "g": ("paren", "the first"), "h": ("colon", "the rest, `i` (eye), `j` (`h`)"),
-                               "i": ("paren", "eye"), "j": ("paren", "`h`")})
-        # column_docs gives a nested name the text after it too.
-        self.assertEqual(catalog.column_docs(self.CELL)["silent"], "a value")
-
-    def test_a_column_without_its_own_doc_is_a_gap_by_what_it_has(self):
-        docs = {"strims-sim": {"t": ("a row", self.CELL), "w": ("a row", "`x` (ex)")},
-                "ppspp": {"t": ("a row", "`d` (dee), `k`")}}
-        cols = {c: "text" for c in "acdeghij"} | {"b": "a sentence", "silent": "a value", "k": None}
-        tables = {"t": ("t", cols), "w": ("w", {"x": "ex"}), "u": ("u", {"y": None}),
-                  "verdicts": (None, {"onset": "doc", "lag_x": None, "lag_y": "a sentence"})}
-        self.assertEqual(catalog.doc_gaps(docs, tables, {"onset": None}), {
-            # t: b documented nowhere of its own (its text a sentence's), k
-            # by nothing, silent only inside e's parentheses, h's colon doc
-            # taking in i's and j's; d is the ppspp sim's own. u, which no
-            # doc table documents, is left out, and w has no gap.
-            "t": {"none": ["k"], "sentence": ["b"], "nested": ["silent"], "runs on": ["h"]},
-            "verdicts": {"none": ["lag_x"], "sentence": ["lag_y"]}})
 
 
 class DocsMain(DocsFixture):
@@ -1490,14 +1466,17 @@ class MainDocs(unittest.TestCase):
             main = catalog.main_docs()
         self.assertIsNotNone(main)
         for p in ("hack/simlab/catalog.py", "hack/simlab/sql/scoring.sql", "hack/sim-suite/suite.py",
-                  "crates/strims-wan/vocab.toml", *(catalog.relative(f) for f in catalog.DOC_FILES)):
-            self.assertEqual(main[p], git("rev-parse", f"main:{p}"), p)
+                  "crates/strims-wan/vocab.toml", catalog.relative(catalog.FIELDS)):
+            # A doc file main lacks yet, it doesn't name.
+            have = subprocess.run(["git", "rev-parse", "-q", "--verify", f"main:{p}"], cwd=catalog.ROOT,
+                                  capture_output=True, text=True).stdout.strip()
+            self.assertEqual(main.get(p), have or None, p)
         self.assertTrue(all(catalog.docs_path(p) for p in main))
         # This checkout's: its files as they loaded or as an index reads
         # them, as git names their contents.
         ids = catalog.docs_ids()
         self.assertTrue(all(catalog.docs_path(p) for p in ids))
-        for p in ("hack/simlab/catalog.py", "hack/simlab/sql/scoring.sql", catalog.relative(catalog.DOC_FILES[1])):
+        for p in ("hack/simlab/catalog.py", "hack/simlab/sql/scoring.sql", catalog.relative(catalog.FIELDS)):
             self.assertEqual(ids[p], git("hash-object", p), p)
         # Another lake (a fixture's, SIM_DB_ROOT's elsewhere) has no main
         # to keep its docs for.
@@ -1544,16 +1523,13 @@ class Registries(unittest.TestCase):
     def test_the_sample_tables_are_tables(self):
         self.assertEqual(sorted(set(store_host.SAMPLE_TABLES) - set(store_host.TABLES)), [])
 
-    def test_both_sims_document_the_same_tables(self):
-        docs = catalog.doc_tables()
-        self.assertEqual(sorted(docs), ["ppspp", "strims-sim"])
-        self.assertEqual(sorted(set(docs["strims-sim"]) ^ set(docs["ppspp"])), [],
-                         "a table one sim's doc table documents and the other's doesn't")
-
-    def test_every_documented_table_is_a_table(self):
-        documented = {t for tables in catalog.doc_tables().values() for t in tables}
-        self.assertEqual(sorted(documented - set(store_host.TABLES)), [],
-                         "the sims document tables store_host.TABLES lacks: register them on main first")
+    def test_fields_tables_are_tables_both_sims_write(self):
+        tables = vocab.fields(catalog.FIELDS)["tables"]
+        self.assertEqual(sorted(set(tables) - set(store_host.TABLES)), [],
+                         "fields.toml declares tables store_host.TABLES lacks: register them on main first")
+        for t, tab in tables.items():
+            with self.subTest(table=t):
+                self.assertIn(tab["sims"], ([], ["strims-sim", "ppspp"]), "a table one sim writes and the other doesn't")
 
     def test_both_sims_compress_the_same_tables(self):
         lists = {}
@@ -1565,13 +1541,15 @@ class Registries(unittest.TestCase):
         self.assertEqual(lists["strims-sim"], lists["ppspp"], "the sims' ZSTD lists")
         self.assertEqual(sorted(set(lists["ppspp"]) - set(store_host.TABLES)), [])
 
-    def test_the_knobs_are_the_sims_docs(self):
+    def test_the_knobs_are_fields_tomls(self):
         self.assertEqual(sorted(set(query.TABLE_KNOBS) - set(store_host.TABLES)), [])
-        for sim, prefix in (("ppspp", "SIM_"), ("strims-sim", "STRIMS_SIM_")):
-            for t, (grain, _) in catalog.doc_tables()[sim].items():
-                with self.subTest(sim=sim, table=t):
-                    self.assertEqual(sorted(re.findall(rf"`{prefix}([A-Z_]+)=1`", grain)),
-                                     sorted(query.TABLE_KNOBS.get(t, ())), f"query.TABLE_KNOBS against {grain!r}")
+        for t, tab in vocab.fields(catalog.FIELDS)["tables"].items():
+            with self.subTest(table=t):
+                self.assertEqual(sorted(tab.get("knobs", ())), sorted(query.TABLE_KNOBS.get(t, ())))
+        # A table's grain names them, in each sim.
+        grain = catalog.field_docs()["tables"]["arrivals"][0]
+        self.assertTrue(grain.endswith(", with `STRIMS_SIM_FORECAST=1` or `STRIMS_SIM_SPEC=1` in strims-sim, "
+                                       "`SIM_FORECAST=1` or `SIM_SPEC=1` in the ppspp sim"), grain)
 
 
 class Commands(Fixture):

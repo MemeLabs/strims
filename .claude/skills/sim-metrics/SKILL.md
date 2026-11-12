@@ -22,8 +22,8 @@ its module (`crates/strims-sim/src/fields.rs`,
 farm's hosts run that same file. The catalog (`hack/simlab/catalog.py`)
 indexes the cache into the DuckLake: views over the tables, the
 verdict's derived tables, the scoring macros, and the doc tables, which
-it reads from the sims' rustdoc (`catalog.DOC_FILES`), the vocabulary
-and the registries below. The work is simlab's: scoring, the verdict,
+it reads from fields.toml (`catalog.FIELDS`), the event vocabulary and
+the registries below. The work is simlab's: scoring, the verdict,
 the analysis modules. `simdb.py`, `ui.py`, the console server and the
 saved views only parse, format or select.
 
@@ -80,12 +80,14 @@ the Rust and Python checks, and what each golden diff means.
   `effects_of` (through `effects`) are called by `simlab.scoring` and
   the console's `hack/console/views/scorecard.sql` (ac121f30 removed the
   console's own port of the scoring, which had drifted).
-- **Code docs are the authority.** The catalog's descriptions come from
-  the sims' rustdoc, the module docs and the registries
-  (`references/sim-tables.md` and `references/row-fields.md` say where
-  each is read), so a doc edit there moves the cli golden. No dev logs;
-  rationale goes in rustdoc or module docs; results go in the commit
-  message and in notebooks under target/, never in tracked files.
+- **The vocabulary is the authority.** What a field, a table or a
+  column holds is its `crates/strims-wan/fields.toml` entry's
+  description, with each sim's notes: the catalog's descriptions come
+  from it (`catalog.field_docs`), from the event vocabulary and from the
+  registries, so an edit there moves the cli golden. The sims' doc
+  tables point at it. No dev logs; rationale goes in rustdoc or module
+  docs; results go in the commit message and in notebooks under target/,
+  never in tracked files.
 - **Main registers first.** Python registration of a table lands on main
   in its own commit, and each line gets it by merging main: tooling kept
   on a branch was lost when the branch merged main (9af57af6). test_catalog's
@@ -168,7 +170,7 @@ Read these rather than any copy of them, this skill included:
 - `crates/strims-wan/fields.toml`, every name the sims record, whose
   schema is `hack/simlab/spec.py`
 - `store_host.TABLES`, `store_host.SAMPLE_TABLES`; `query.TABLE_KNOBS`
-- `catalog.DOC_FILES`, `catalog.NORMALIZED`, `catalog.STANDARD_KEYS`,
+- `catalog.FIELDS`, `catalog.NORMALIZED`, `catalog.STANDARD_KEYS`,
   `catalog.STANDARD_JOINS`, `catalog.TABLE_DOCS`, `catalog.VERDICT_DOCS`,
   `catalog.UNITS`
 - `suite.METRICS`, `suite.GUARDRAILS`, `suite.SHOWN`,

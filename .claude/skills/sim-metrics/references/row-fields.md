@@ -10,30 +10,25 @@ don't).
    `crates/strims-wan/fields.toml` (its `rows` entry: the sims that
    write it, its type, unit, none and description; a family's `{param}`
    parts with their values), then run
-   `python3 hack/simlab/vocab.py write`. `Report::row` in
+   `python3 hack/simlab/vocab.py write`. The description is the field's
+   doc in the catalog (`catalog.field_docs`): what it counts or
+   measures, over whom and when, in words of its own, and a sim's note
+   where that sim's reading says more or differs. `Report::row` in
    `crates/strims-sim/src/measures.rs` writes the row through the
    generated names (`crates/strims-sim/src/fields.rs`):
    `j.int(RowInt::Streams, n)`, `j.num`, `j.nums`, ..., a family's name
    by its constructor (`RowNum::delivery_who`), each key taking its
-   declared type. Document the field with a sentence of measures.rs's
-   module docs that names it in backticks: `catalog.row_docs` takes the
-   first sentence of the sims'
-   docs (`catalog.DOC_FILES`) and of suite.py's module docs that names
-   a field, an upper-case part of a name (`stalls_per_min_D`) standing
-   for any digits.
+   declared type.
    - A per-second series field is a `seconds` column: declared under
-     fields.toml's `columns.seconds`, written in `Report::series_data`
-     (its doc table, and its `cols::Seconds` column), and in the
-     `seconds` row of tables.rs's doc table.
+     fields.toml's `columns.seconds` and written in
+     `Report::series_data` (its doc table, and its `cols::Seconds`
+     column).
    - A bins counter goes in `NODE_BIN_COUNTERS` and `bin_cols`.
 2. **The ppspp sim.** Declared as step 1 says, the field is written by
    `job_row` in `crates/strims-ppspp/tests/sim.rs` through the generated
    names (`crates/strims-ppspp/tests/sim/fields.rs`):
-   `row.int(RowInt::Streams, n)`, `row.num`, ..., with comment lines
-   right above the line
-   that writes the field: `catalog.row_docs` reads up to 12 lines above
-   it when no doc sentence names it. Its series and bins are
-   `Sim::write_tables`' (`series_data`, `bin_cols`).
+   `row.int(RowInt::Streams, n)`, `row.num`, .... Its series and bins
+   are `Sim::write_tables`' (`series_data`, `bin_cols`).
 3. **One name in both sims** where the meaning is the same, and each
    sim's meaning documented where they differ. 8f6f4977 gave one reading
    two names (`meter_budget_seeds` in strims-sim, `budget_capacity` in
@@ -42,11 +37,10 @@ don't).
    a median in the other are two readings, whatever their names. Where
    hostile hosts split a value, add the `_honest` variant beside it, as
    `lag_p99_ms_honest` is.
-4. **A row field named like a table column** takes that column's
-   sentence: `catalog.row_docs` takes the first doc sentence naming a
-   field before any comment, and reads tables.rs's docs first. Check
-   the field's doc in `simdb.py describe rows`, and give it a name of
-   its own where the meanings differ.
+4. **A row field named like a table column** is a name of its own
+   in fields.toml (the rows' and each table's names are apart): give it
+   a description of its own, and a name of its own where the meanings
+   differ. Check the field's doc in `simdb.py describe rows`.
 5. **Readings come from counters the runners keep**, or from new ones
    that only count. Nothing new draws randomness or feeds a decision: a
    run's trace and every table stay the parent's, and its row differs by

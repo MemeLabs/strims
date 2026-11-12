@@ -449,10 +449,10 @@ VOLATILE = re.compile(r'("(?:at|sha256|bytes)": )(?:"[^"]*"|-?[0-9.e+]+)')
 VOLATILE_COLS = ("indexed_at", "written_at", "mtime_ns", "inode", "bytes", "size")
 VOLATILE_KEYS = ("indexed_at",)
 # Its tables of what it read of the checkout's code, which moves as the
-# code does; and catalog_info's keys alike: docs_version hashes the sims'
-# rustdoc, which moves with any doc comment of theirs (the doc tables'
-# fingerprints hold what reaches the catalog), and docs_main main's doc
-# files.
+# code does; and catalog_info's keys alike: docs_version hashes fields.toml
+# and the code that reads it, which moves with any edit of theirs (the doc
+# tables' fingerprints hold what reaches the catalog), and docs_main main's
+# doc files.
 CODE_TABLES = ("raw.inputs",)
 CODE_KEYS = ("docs_version", "docs_main")
 # A table with at most this many rows is dumped whole.

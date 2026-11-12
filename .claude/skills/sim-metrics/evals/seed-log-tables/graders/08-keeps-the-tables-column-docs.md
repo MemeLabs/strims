@@ -4,4 +4,4 @@ focus: trace
 weight: 1
 ---
 
-The answer keeps the tables' column docs in the branches' sims (main's catalog showing those columns undocumented until the mechanism lands) rather than copying the doc rows or notes onto main.
+The answer declares the tables and their columns in crates/strims-wan/fields.toml on main first, with sims = [] and the branches' lines in `lines`, rather than leaving their docs on the branches.

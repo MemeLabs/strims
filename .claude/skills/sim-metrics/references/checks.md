@@ -73,7 +73,7 @@ scorecards set takes minutes).
 
 | The diff | Why it moved | What to do |
 |---|---|---|
-| `cli: catalog` | a doc the catalog reads (`catalog.DOC_FILES`, a module's docstring, `catalog.NORMALIZED`, `catalog.TABLE_DOCS`), a registry (`store_host.SAMPLE_TABLES` is in availability's doc) | re-capture, and say why |
+| `cli: catalog` | a doc the catalog reads (fields.toml, `catalog.FIELDS`; a module's docstring, `catalog.NORMALIZED`, `catalog.TABLE_DOCS`), a registry (`store_host.SAMPLE_TABLES` is in availability's doc) | re-capture, and say why |
 | `cli: help`, `cli: sql-help` | simdb.py's docs, the vocabulary's kinds, the registries its help is made from | re-capture, and say why |
 | `cli` outputs that read verdicts | `VERDICT_VERSION` or a derived table moved (`references/derived.md`) | re-capture after `golden.py real` |
 | `engine` | a fixture lacks what the change added (test_store's FoldExport without a new table) | fix the fixture, never the assertion |

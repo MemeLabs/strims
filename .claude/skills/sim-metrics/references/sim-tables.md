@@ -82,29 +82,21 @@ main (SKILL.md's order of work).
      column's name where it means the same and give a new meaning a new
      name. The catalog reads every file's schema as it is written, and
      a column a file lacks is NULL.
-6. **Docs**, which the catalog reads:
-   - A row in each sim's doc table: strims-sim's tables module docs
-     (`crates/strims-sim/src/tables.rs`) and the ppspp sim's
-     `Sim::write_tables` docs, in the form
-     `` | `name` | grain, with `STRIMS_SIM_X=1` | `col` (meaning), ... | ``
-     (the ppspp sim's grain names `SIM_X=1`). `catalog.doc_tables` reads
-     the rows, and `catalog.column_docs` a column's meaning from the
-     parenthesized text right after its backticked name, or the text
-     after `name`: when no parenthesis follows. The grain names the
-     knob, which test_catalog holds to `query.TABLE_KNOBS`.
-   - One parenthetical per column. In `` `a` and `b` (...) `` only `b`
-     is documented, and a bare name documents nothing: the catalog then
-     falls back to the first doc sentence naming the column
-     (`catalog.row_docs`), which is often another column's.
-   - A wide log with per-kind columns documents each column once, with
-     its meanings by kind inside that column's own parentheses. Better,
-     the sims' doc rows come from the shared formatter's column list,
-     and the formatter covers the whole row (head columns, types and
-     docs), so the two sims' rows can't drift: the seed log's formatter
-     (`crates/strims-ppspp/src/scheduler_seed_log.rs`) takes its
-     columns from the generated `crates/strims-ppspp/src/seed_log_columns.rs`.
-   - The `series_meta.json` paragraph and the paragraph listing the
-     logs, in both files.
+6. **Docs**, which the catalog reads from fields.toml
+   (`catalog.field_docs`):
+   - The table's entry: its grain (one row per what), a description of
+     its own, a sim's note where it differs, and its `knobs`, which the
+     grain names in each sim and test_catalog holds to
+     `query.TABLE_KNOBS`.
+   - Each column's description, in words of its own (a column's doc is
+     never another's sentence), a sim's note where its reading differs.
+     A wide log with per-kind columns says each column's meaning by
+     kind in that column's description. A shared formatter's columns
+     are one list both sims write (the seed log's formatter,
+     `crates/strims-ppspp/src/scheduler_seed_log.rs`, takes its columns
+     from the generated `crates/strims-ppspp/src/seed_log_columns.rs`).
+   - The `series_meta.json` key in fields.toml's `meta`, and the sims'
+     paragraphs listing the logs.
 7. **Truth that needs later holds** goes in the lab's view, not the sim:
    the sims log what a decision was made on, and the view joins what
    became of it (e18b801c, `asks` joined to `arrivals`).
@@ -122,13 +114,13 @@ main (SKILL.md's order of work).
      that takes the path the change touches (departures and crashes for
      what `NodeConfig::last_metrics` hands over).
 9. **Neutrality and size:** `checks.md`.
-10. **The cli golden:** a doc edit in a file of `catalog.DOC_FILES`
+10. **The cli golden:** an edit to fields.toml's docs (`catalog.FIELDS`)
     moves the catalog's outputs. Re-capture in the same commit: e7dfc404
     landed with the golden failing and cf9fb1bc re-captured it after.
 
-A mechanism that exists only on a branch keeps its log's docs in that
-branch's sims (SKILL.md's rules); main registers the table (below) and
-shows its columns undocumented.
+A mechanism that exists only on a branch has its table and columns
+declared on main all the same, with `sims = []` and the branch's line
+in `lines` (SKILL.md's rules); main registers the table (below).
 
 ## Python: on main, a commit of its own, `-- hack/`
 
@@ -176,13 +168,12 @@ Main's examples: 9af57af6, 7973c432, b16bf6a3, 051596ac.
     a branch's checkout writes that branch's docs, keys and views into
     the catalog every session reads): `simdb.py index`, then
     `simdb.py describe NAME`. Read every column's doc: each must be the
-    column's own text from its doc row, not a sentence borrowed from
-    another column and not empty. The verdict tables' columns get the
-    same reading. The index warns of each table whose columns lack a doc
-    of their own (`catalog.column_gaps`: none, a doc sentence's, text
-    inside another column's parentheses, a colon's doc running on into
-    other columns'), and the land gate wants no such line for the
-    change's tables. The empty ones:
+    column's own description from fields.toml, not empty. The verdict
+    tables' columns get the same reading. The index warns of the columns
+    the runs hold that fields.toml doesn't declare
+    (`catalog.undeclared`), and of a verdict table's columns without a
+    doc (`catalog.verdict_gaps`); the land gate wants no such line for
+    the change's tables. The empty ones:
 
         python3 hack/sim-db/simdb.py lake 'SELECT tbl, name FROM metric_catalog WHERE tbl = $t AND description IS NULL' --param t=NAME
 

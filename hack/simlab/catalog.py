@@ -165,8 +165,9 @@ for questions in plain language; `metric_catalog` holds each column and
 metric, `event_kinds` each event kind, the vocabulary's,
 crates/strims-wan/vocab.toml (simlab.vocab), with how many of each the
 runs hold: an index warns on stderr of a kind the runs hold that it
-lacks, and of each table whose columns have no doc of their own,
-column_gaps'):
+lacks, of the fields and columns the runs hold that
+crates/strims-wan/fields.toml doesn't declare (undeclared), which it
+documents, and of a verdict table's columns without a doc):
 
   experiments       one an experiment: a suite farm run (exp_id its name,
                     s7ae7e), or a local suite invocation (exp_id its cache
@@ -281,7 +282,6 @@ The physical tables are in schema `raw`, a source's rows each under its
 `src`; the views above read them through `jobs`.
 """
 
-import ast
 import collections
 import contextlib
 import dataclasses
@@ -299,6 +299,7 @@ import subprocess
 import sys
 import threading
 import time
+import tomllib
 from pathlib import Path
 
 from . import engine, query, store, store_host, verdict, vocab
@@ -754,13 +755,6 @@ def suite_module():
     return suite
 
 
-def suite_doc():
-    """suite.py's module docs, read rather than run."""
-    with contextlib.suppress(OSError, SyntaxError):
-        return ast.get_docstring(ast.parse(SUITE_PY.read_text()), clean=False) or ""
-    return ""
-
-
 def suite_runs(paths):
     """The suite farm runs' indexes: (runs, cells) records."""
     runs, cells = [], []
@@ -809,135 +803,55 @@ def s3_prices():
 
 # --- docs -----------------------------------------------------------------------
 
-DOC_FILES = (ROOT / "crates" / "strims-sim" / "src" / "tables.rs", ROOT / "crates" / "strims-ppspp" / "tests" / "sim.rs",
-             ROOT / "crates" / "strims-sim" / "src" / "measures.rs")
-BACKTICK = re.compile(r"`([a-z][a-z0-9_*]*)`")
+# The recorded names' document, crates/strims-wan/fields.toml (simlab.vocab's
+# NAMES): the sims' tables, their columns and the rows' fields, each with its
+# description, the sims' notes and its unit, which the doc tables take. An
+# index reads it as it is then (field_docs), as docs_ids names it.
+FIELDS = vocab.NAMES
+# A table's knob in each sim: the setting's prefix.
+KNOB_PREFIX = {"strims-sim": "STRIMS_SIM_", "ppspp": "SIM_"}
 
 
-def doc_tables():
-    """The sims' doc tables of their tables ({sim: {table: (grain, text)}}):
-    strims-sim's tables module docs, the ppspp sim's write_tables docs."""
-    out = {}
-    for sim, path, prefix in (("strims-sim", DOC_FILES[0], "//!"), ("ppspp", DOC_FILES[1], "///")):
-        with contextlib.suppress(OSError):
-            for line in path.read_text().splitlines():
-                s = line.strip()
-                if not s.startswith(prefix):
-                    continue
-                s = s[len(prefix):].strip()
-                m = re.match(r"^\| `([a-z_]+)` \| (.*?) \| (.*) \|$", s)
-                if m:
-                    out.setdefault(sim, {})[m.group(1)] = (clean(m.group(2)), clean(m.group(3)))
+def field_text(e):
+    """A declared name's (or a table's) doc, fields.toml's entry `e`: its
+    description, then each sim's note, after a semicolon where the
+    description isn't a sentence."""
+    out = e["description"]
+    for s, n in sorted((e.get("notes") or {}).items()):
+        out += f"{' ' if out.endswith('.') else '; '}{s}: {n}"
     return out
 
 
-def clean(s):
-    """Rustdoc text as plain text: links' targets dropped."""
-    s = re.sub(r"\[`([^`]+)`\]\([^)]*\)", r"`\1`", s)
-    return re.sub(r"\[`([^`]+)`\]", r"`\1`", s)
+def knob_text(knobs, sims):
+    """The settings that write a table (`knobs`, without their prefix) in
+    each of `sims`: ", with `STRIMS_SIM_SPEC=1` in strims-sim, `SIM_SPEC=1`
+    in the ppspp sim"."""
+    if not knobs:
+        return ""
+    where = {"strims-sim": "strims-sim", "ppspp": "the ppspp sim"}
+    return ", with " + ", ".join(" or ".join(f"`{KNOB_PREFIX[s]}{k}=1`" for k in knobs) + f" in {where[s]}"
+                                 for s in sims)
 
 
-def paren(text, start):
-    """The parenthesized text at `start` (a "(" there), else None."""
-    if start >= len(text) or text[start] != "(":
-        return None
-    depth = 0
-    for i in range(start, len(text)):
-        depth += {"(": 1, ")": -1}.get(text[i], 0)
-        if depth == 0:
-            return text[start + 1:i]
-    return None
+def field_docs():
+    """fields.toml's docs as the doc tables take them, read now: {"tables":
+    {table: (grain, description)}, "rows": {name: (doc, unit)}, "columns":
+    {table: {name: (doc, unit)}}}, a family's every name for a sim or a
+    line (vocab.declared). A table's grain names the knobs that write it,
+    in each sim (a table only lines write, in both)."""
+    doc = tomllib.loads(Path(FIELDS).read_text())
+    decl = vocab.declared(doc=doc)
+    tables = {}
+    for t, tab in doc.get("tables", {}).items():
+        grain = (tab.get("grain") or f"a row of {t}") + knob_text(tab.get("knobs"), tab.get("sims") or vocab.SIMS)
+        desc = field_text({**tab, "description": tab.get("description") or f"A sim's {t} table."})
+        tables[t] = (grain, desc)
 
+    def names(entries):
+        return {n: (field_text(e), e.get("unit")) for n, (_, e) in entries.items()}
 
-def column_docs(text):
-    """A doc table's columns cell, by column: the parenthesized text after
-    each backticked name, where one follows it, or the cell's rest after
-    one followed by a colon."""
-    out = {}
-    for m in BACKTICK.finditer(text):
-        p = paren(text, m.end() + 1) if text[m.end():m.end() + 1] == " " else None
-        if p is None and text[m.end():m.end() + 2] == ": ":
-            p = text[m.end() + 2:].strip()
-        if p and m.group(1) not in out:
-            out[m.group(1)] = p
-    return out
-
-
-ROW_METHODS = re.compile(r'\.(?:int|num|text|bool|nums|opt_num|opt_int|uint|f64|str|list|ints|field|set)\(\s*"([a-z0-9_]+)"')
-
-
-def doc_sentences():
-    """The sentences of the sims' rustdoc (their tables and rows' modules:
-    DOC_FILES) and of suite.py's module docs, each with the backticked
-    names it holds, a name's upper-case part (`stalls_per_min_D`) standing
-    for any digits."""
-    paras = []
-    for path in DOC_FILES:
-        with contextlib.suppress(OSError):
-            cur = []
-            for line in path.read_text().splitlines():
-                s = line.strip()
-                # A doc table's rows are column_docs'.
-                if s.startswith(("///", "//!")) and not s[3:].strip().startswith("|"):
-                    cur.append(s[3:].strip())
-                elif cur:
-                    paras.append(" ".join(cur))
-                    cur = []
-    with contextlib.suppress(OSError):
-        doc = suite_doc()
-        paras += [" ".join(p.split()) for p in doc.split("\n\n")]
-    out = []
-    for p in paras:
-        for s in re.split(r"(?<=[.;:])\s+(?=[A-Z(`])", clean(p)):
-            names = [n for n in re.findall(r"`([a-z][A-Za-z0-9_{}]*)`", s)]
-            pats = [re.compile("^" + re.sub(r"(_[A-Z]+|\{[a-z]+\})", r"_?[0-9a-z_]*", re.escape(n).replace(r"\{", "{")
-                                                                   .replace(r"\}", "}")) + "$") for n in names]
-            if pats:
-                out.append((s, pats))
-    return out
-
-
-def row_docs(names):
-    """The rows' fields' docs, {field: text}: the first sentence of the
-    sims' and suite.py's docs naming the field (doc_sentences), else the
-    comment lines nearest above the line that writes it into a sim's row
-    (row_comments)."""
-    sentences = doc_sentences()
-    out = {}
-    for n in names:
-        for s, pats in sentences:
-            if any(p.match(n) for p in pats):
-                out[n] = s if len(s) <= 600 else s[:597] + "..."
-                break
-    return out | {n: text for n, text in row_comments().items() if n not in out}
-
-
-def row_comments():
-    """The comment lines nearest above the first line that writes each
-    field into a sim's row with any (strims-sim's measures, the ppspp
-    sim's job_row), {field: text}."""
-    out = {}
-    for path in DOC_FILES[1:]:
-        with contextlib.suppress(OSError):
-            lines = path.read_text().splitlines()
-            for i, line in enumerate(lines):
-                for m in ROW_METHODS.finditer(line):
-                    name = m.group(1)
-                    if name in out:
-                        continue
-                    j, got = i - 1, []
-                    while j >= 0 and i - j <= 12:
-                        s = lines[j].strip()
-                        if s.startswith("//"):
-                            got.insert(0, s.lstrip("/!").strip())
-                        elif got:
-                            break
-                        elif s.endswith(";") or s.endswith("{") or s.endswith("}"):
-                            break
-                        j -= 1
-                    if got:
-                        out[name] = clean(" ".join(got))
-    return out
+    return {"tables": tables, "rows": names(decl["rows"]),
+            "columns": {t: names(cols) for t, cols in decl["columns"].items()}}
 
 
 def run_metric_docs():
@@ -2285,8 +2199,8 @@ def derived_text():
 
 
 # The catalog's tables: (kind, grain, keys, joins, description). The sims'
-# tables add their own, from the sims' docs (doc_tables); the vocabulary
-# gives the kinds and phases.
+# tables add their own, from fields.toml (field_docs); the vocabulary gives
+# the kinds and phases.
 TABLE_DOCS = {
     "experiments": (
         "table", "an experiment", "exp_id", "experiment_cells, experiment_jobs USING (exp_id)",
@@ -2609,15 +2523,14 @@ def catalogs_sql(cols, tmp, recount=True):
     """metric_catalog, event_kinds and table_catalog, made again: the
     events of each kind counted again, or without `recount` kept as
     event_kinds holds them (the runs unchanged)."""
-    docs = doc_tables()
+    docs = field_docs()
     out = []
     # table_catalog
     tables = []
     for name, (kind, grain, keys, joins, desc) in TABLE_DOCS.items():
         tables.append({"name": name, "kind": kind, "grain": grain, "keys": keys, "joins": joins, "description": desc})
     for t, view in sim_tables(cols).items():
-        grain = "; ".join(f"{s}: {docs[s][t][0]}" for s in sorted(docs) if t in docs[s]) or f"a row of {t}"
-        desc = " ".join(f"{s}: {docs[s][t][1]}" for s in sorted(docs) if t in docs[s]) or f"A sim's {t} table."
+        grain, desc = docs["tables"].get(t, (f"a row of {t}", f"A sim's {t} table."))
         if t in NORMALIZED:
             desc += f" Normalized: {NORMALIZED[t]}"
         tables.append({"name": view, "kind": "view", "grain": grain, "keys": STANDARD_KEYS.get(t, "k"),
@@ -2627,14 +2540,10 @@ def catalogs_sql(cols, tmp, recount=True):
              "description": "VARCHAR"}
     out.append(f"CREATE OR REPLACE TABLE main.table_catalog AS SELECT * FROM "
                f"{read_jsonl(jsonl(tmp / 'table_catalog.jsonl', tables), tcols)};")
-    # metric_catalog
-    col_docs = collections.defaultdict(dict)
-    for sim, ts in docs.items():
-        for t, (_, text) in ts.items():
-            for c, d in column_docs(text).items():
-                col_docs[(t, c)][sim] = d
-    names = {c for c in (n for t in cols.values() for n in t) if c not in ("k", "src")} | {m[0] for m in suite_metrics()}
-    rdocs, mdocs = row_docs(names), run_metric_docs()
+    # metric_catalog: a sims' table's columns and the rows' fields as
+    # fields.toml declares them, the unit unit_of's where it declares none
+    rdocs = {n: d for n, (d, _) in docs["rows"].items()}
+    mdocs = run_metric_docs()
     metrics = suite_metrics()
     plain, guard = {}, guards()
     for name, fields, better, kind, tie, text, _ in metrics:
@@ -2644,17 +2553,18 @@ def catalogs_sql(cols, tmp, recount=True):
     recs = []
     names = {"rows": "rows", **sim_tables(cols)}
     for t, view in [*names.items(), *((v, v) for v in VERDICT_TABLES)]:
+        own = docs["rows"] if t == "rows" else docs["columns"].get(t, {})
         for c in cols.get(t, {}):
             if c in ("k", "src"):
                 continue
-            by = col_docs.get((t, c), {})
-            desc = (rdocs.get(c) if t == "rows" else
-                    (VERDICT_DOCS.get(c) or mdocs.get(c) or mdocs.get(c.replace("_censored", "")))
-                    if t in VERDICT_TABLES else
-                    ("; ".join(f"{s}: {d}" for s, d in sorted(by.items())) if len(set(by.values())) > 1
-                     else next(iter(by.values()), None))) or rdocs.get(c)
+            if t in VERDICT_TABLES:
+                desc = (VERDICT_DOCS.get(c) or mdocs.get(c) or mdocs.get(c.replace("_censored", ""))
+                        or rdocs.get(c))
+                unit = None
+            else:
+                desc, unit = own.get(c, (None, None))
             better, kind, tie, metric = plain.get(c, (None, None, None, None))
-            recs.append({"name": c, "tbl": view, "type": cols[t][c], "unit": unit_of(c), "description": desc,
+            recs.append({"name": c, "tbl": view, "type": cols[t][c], "unit": unit or unit_of(c), "description": desc,
                          "better": better, "kind": kind, "tie": tie, "guard": guard.get(metric or c),
                          "fields": None, "source": None, "metric": metric})
     for name, fields, better, kind, tie, text, comment in metrics:
@@ -2713,83 +2623,31 @@ def undocumented():
     return out
 
 
-def own_docs(text):
-    """The columns a doc table's columns cell documents in their own
-    words, {name: (form, text)}: each backticked name outside every
-    parenthesis with its meaning right after it, in parentheses (form
-    "paren") or after a colon to the cell's end ("colon"), as
-    column_docs reads it. A name inside another's parentheses is a value
-    or a cross-reference there (`reason`'s `silent`), no column's doc,
-    though column_docs takes its text for the column of that name."""
-    out, depth, at = {}, 0, 0
-    for m in BACKTICK.finditer(text):
-        between = text[at:m.start()]
-        depth, at = depth + between.count("(") - between.count(")"), m.start()
-        name = m.group(1)
-        if depth or name in out:
-            continue
-        p = paren(text, m.end() + 1) if text[m.end():m.end() + 1] == " " else None
-        if p:
-            out[name] = ("paren", p)
-        elif text[m.end():m.end() + 2] == ": " and text[m.end() + 2:].strip():
-            out[name] = ("colon", text[m.end() + 2:].strip())
-    return out
-
-
-# What a column's doc is when it isn't its own (doc_gaps), in the order
-# warn_undocumented gives them.
-GAPS = {"none": "no doc", "sentence": "a doc sentence's, not the column's own",
-        "nested": "text inside another column's parentheses",
-        "runs on": "a colon's doc running on into other columns' docs"}
-
-
-def doc_gaps(docs, tables, verdict_docs):
-    """The columns among `tables` ({view: (the sims' table it is or None,
-    {column: its description in metric_catalog})}) whose doc isn't their
-    own, {view: {gap: [column]}} (GAPS). A sims' table's own docs are
-    its doc tables' (`docs`, doc_tables'), own_docs' of either sim's
-    cell; a verdict table's are `verdict_docs`' names. A sims' table no
-    doc table documents is left out: the log of a mechanism only a
-    branch has keeps its docs in that branch's sims."""
+def undeclared():
+    """The fields and columns the sources hold (raw.fields) that fields.toml
+    doesn't declare for any sim or line, {table: [name]}, the rows' as
+    `rows`: undocumented in metric_catalog until it does."""
+    decl = vocab.declared(doc=tomllib.loads(Path(FIELDS).read_text()))
+    tables = set(decl["columns"]) | set(sim_tables(lake_columns()))
     out = {}
-    for view, (t, cols) in sorted(tables.items()):
-        if t is None:
-            own, nested, cells = verdict_docs, set(), []
-        else:
-            cells = [docs[s][t][1] for s in sorted(docs) if t in docs[s]]
-            if not cells:
-                continue
-            own = {c: d for cell in cells for c, d in own_docs(cell).items()}
-            nested = {c for cell in cells for c in column_docs(cell)}
-        gaps = {}
-        for c, desc in sorted(cols.items()):
-            if c in own:
-                form, text = own[c] if t is not None else ("paren", "")
-                gap = "runs on" if form == "colon" and set(BACKTICK.findall(text)) - {c} & set(cols) else None
-            else:
-                gap = "none" if desc is None else "nested" if c in nested else "sentence"
-            if gap:
-                gaps.setdefault(gap, []).append(c)
-        if gaps:
-            out[view] = {g: gaps[g] for g in GAPS if g in gaps}
+    for r in lake("SELECT DISTINCT tbl, name FROM raw.fields ORDER BY tbl, name;"):
+        t, c = r["tbl"], r["name"]
+        if c in ("k", "src") or (t != "rows" and t not in tables):
+            continue
+        if c not in (decl["rows"] if t == "rows" else decl["columns"].get(t, {})):
+            out.setdefault(t, []).append(c)
     return out
 
 
-def column_gaps():
-    """doc_gaps over the catalog: the columns of the sims' tables and the
-    verdict tables, as metric_catalog holds them, against the docs this
-    process reads."""
-    views = {v: t for t, v in sim_tables(lake_columns()).items()}
-    tables = {}
-    for r in lake("SELECT tbl, name, description FROM metric_catalog WHERE tbl NOT IN ('rows', 'suite');"):
-        t = views.get(r["tbl"])
-        if t is not None or r["tbl"] in VERDICT_TABLES:
-            tables.setdefault(r["tbl"], (t, {}))[1][r["name"]] = r["description"]
-    # A verdict column's own doc, as catalogs_sql takes it.
-    metrics = run_metric_docs()
-    verdict_docs = {c: None for t, cols in tables.values() if t is None for c in cols
-                    if c in VERDICT_DOCS or c in metrics or c.replace("_censored", "") in metrics}
-    return doc_gaps(doc_tables(), tables, verdict_docs)
+def verdict_gaps():
+    """The verdict tables' columns metric_catalog holds without a doc,
+    {table: [column]}: catalog.VERDICT_DOCS and verdict.run_metrics'
+    docstring document them."""
+    out = {}
+    for r in lake("SELECT tbl, name FROM metric_catalog WHERE description IS NULL ORDER BY tbl, name;"):
+        if r["tbl"] in VERDICT_TABLES:
+            out.setdefault(r["tbl"], []).append(r["name"])
+    return out
 
 
 def names_text(names, most=8):
@@ -2819,16 +2677,18 @@ def warn_branch_ids():
 
 def warn_undocumented():
     """Warns on stderr of each kind of undocumented's, a kind the sims
-    write that the vocabulary should name; and of each table's columns
-    column_gaps finds, whose doc isn't their own."""
+    write that the vocabulary should name; of each table's fields or
+    columns undeclared's, which fields.toml should declare; and of each
+    verdict table's columns without a doc (verdict_gaps)."""
     for kind, sims in undocumented().items():
         print(f"index: event kind {kind} ({', '.join(sims)}) isn't in the vocabulary, "
               f"{vocab.DOCUMENT.relative_to(ROOT)}", file=sys.stderr)
-    where = " and ".join(str(p.relative_to(ROOT) if p.is_relative_to(ROOT) else p) for p in DOC_FILES[:2])
-    for view, gaps in column_gaps().items():
-        source = "catalog.VERDICT_DOCS or verdict.run_metrics' docstring" if view in VERDICT_TABLES else where
-        print(f"index: {view}'s columns without a doc of their own ({source}): "
-              + "; ".join(f"{GAPS[g]} for {names_text(cs)}" for g, cs in gaps.items()), file=sys.stderr)
+    for t, names in undeclared().items():
+        print(f"index: {t}'s {'fields' if t == 'rows' else 'columns'} {names_text(names)} aren't declared in "
+              f"{relative(FIELDS)}", file=sys.stderr)
+    for t, names in verdict_gaps().items():
+        print(f"index: {t}'s columns without a doc (catalog.VERDICT_DOCS or verdict.run_metrics' docstring): "
+              f"{names_text(names)}", file=sys.stderr)
 
 
 # --- scoring ----------------------------------------------------------------------
@@ -3135,11 +2995,10 @@ def scoring_docs():
 def docs_version():
     """A hash of what the doc tables (catalogs_sql's) are made from but the
     catalog's columns, which change only with an index that makes them
-    again anyway: what the catalog reads of the sims' docs (DOC_FILES: their
-    doc tables, sentences and row comments), of suite.py's (its module
-    docs' sentences, METRICS with their comments, GUARDRAILS), of
-    run_metrics' docstring, of scoring.sql (scoring_docs) and of the
-    vocabulary (kind_docs), each as DOCS_VALUES gives it now; the registries
+    again anyway: what the catalog reads of fields.toml (field_docs), of
+    suite.py (METRICS with their comments, GUARDRAILS), of run_metrics'
+    docstring, of scoring.sql (scoring_docs) and of the vocabulary
+    (kind_docs), each as DOCS_VALUES gives it now; the registries
     (DOCS_DATA), as this process holds them; and the code that puts them
     together with the columns (DOCS_CODE), as it loaded."""
     parts = [canonical(f()) for f in DOCS_VALUES] + [canonical(globals()[n]) for n in DOCS_DATA]
@@ -3176,10 +3035,10 @@ def canonical(v):
 # as the module loads, so a process hashes the code it runs (as
 # SCORING_SOURCES are). catalogs_sql reads nothing else but the columns and
 # the SQL helpers (q, ident, jsonl, read_jsonl).
-DOCS_VALUES = (doc_tables, doc_sentences, row_comments, run_metric_docs, suite_metrics, guards, scoring_docs, kind_docs)
+DOCS_VALUES = (field_docs, run_metric_docs, suite_metrics, guards, scoring_docs, kind_docs)
 DOCS_DATA = ("TABLE_DOCS", "NORMALIZED", "STANDARD_KEYS", "STANDARD_JOINS", "VERDICT_DOCS", "VERDICT_TABLES",
-             "KIND_COLS", "DERIVED_SIM", "UNITS", "PLAIN", "BACKTICK", "OWN", "META")
-DOCS_CODE = (catalogs_sql, sim_tables, row_docs, column_docs, paren, unit_of)
+             "KIND_COLS", "DERIVED_SIM", "UNITS", "PLAIN", "OWN", "META")
+DOCS_CODE = (catalogs_sql, sim_tables, unit_of)
 DOCS_SOURCES = tuple(inspect.getsource(f) for f in DOCS_CODE)
 
 
@@ -3218,10 +3077,10 @@ def docs_kept(docs):
 def docs_ids():
     """The files the doc tables are made from, as this process has them,
     {path from the checkout's root: git blob id}: simlab's modules and the
-    vocabulary as they loaded (LOADED_DOCS), the sims' docs (DOC_FILES),
-    suite.py's and simlab's SQL as an index reads them."""
+    vocabulary as they loaded (LOADED_DOCS), fields.toml (FIELDS), suite.py
+    and simlab's SQL as an index reads them."""
     out = dict(LOADED_DOCS)
-    for p in (*DOC_FILES, SUITE_PY, *sorted(SCORING.parent.glob("*.sql"))):
+    for p in (FIELDS, SUITE_PY, *sorted(SCORING.parent.glob("*.sql"))):
         with contextlib.suppress(OSError):
             out[relative(p)] = blob_id(Path(p).read_bytes())
     return out
@@ -3237,7 +3096,7 @@ def main_docs():
         if lake_root().resolve() != (common / "target" / "sim-db" / "lake").resolve():
             return None
         listed = store_host.git("ls-tree", "main", "--", "hack/simlab/", "hack/simlab/sql/",
-                                *(relative(p) for p in (*DOC_FILES, SUITE_PY, vocab.DOCUMENT)), cwd=ROOT)
+                                *(relative(p) for p in (FIELDS, SUITE_PY, vocab.DOCUMENT)), cwd=ROOT)
     except (subprocess.CalledProcessError, OSError):
         return None
     out = {}
@@ -3251,7 +3110,7 @@ def main_docs():
 def docs_path(path):
     """Whether `path` (from the checkout's root) is one of docs_ids'."""
     return (bool(re.fullmatch(r"hack/simlab/[^/]+\.py|hack/simlab/sql/[^/]+\.sql", path))
-            or path in {relative(p) for p in (*DOC_FILES, SUITE_PY, vocab.DOCUMENT)})
+            or path in {relative(p) for p in (FIELDS, SUITE_PY, vocab.DOCUMENT)})
 
 
 def docs_key(ids):

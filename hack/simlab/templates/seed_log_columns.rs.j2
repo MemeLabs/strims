@@ -20,7 +20,7 @@ impl {{ name }} {
 {% endmacro %}
 {{ header }}
 //! The seed log's tables' columns, as `crates/strims-wan/fields.toml`
-//! declares them: each table's list of its columns' names, types and docs,
+//! declares them: each table's list of its columns' names and types,
 //! in the order both sims write them through
 //! [`decision_fields`](super::decision_fields) and
 //! [`send_fields`](super::send_fields), and their names as enums, which the
@@ -37,13 +37,12 @@ pub const {{ t.const }}: [Column; {{ t.columns | length }}] = [
     Column {
         name: "{{ c.name }}",
         ty: ColumnType::{{ c.ty }},
-        doc: {{ c.doc | rust_str }},
     },
 {% endfor %}
 ];
 {% endfor %}
 
-{{ col_enum(head_enum, "/// The columns every seed table opens with, which [`RowHead`](super::RowHead)\n/// fills; each table's docs say what each holds there.", head) }}
+{{ col_enum(head_enum, "/// The columns every seed table opens with, which [`RowHead`](super::RowHead)\n/// fills; fields.toml says what each holds in each table.", head) }}
 {% for t in tables %}
 
 {{ col_enum(t.enum, "/// The `" ~ t.table ~ "` table's own columns, after [`" ~ head_enum ~ "`]'s.", t.own) }}

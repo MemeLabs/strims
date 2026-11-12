@@ -4,7 +4,7 @@
 // the document, then run `python3 hack/simlab/vocab.py write`.
 
 //! The seed log's tables' columns, as `crates/strims-wan/fields.toml`
-//! declares them: each table's list of its columns' names, types and docs,
+//! declares them: each table's list of its columns' names and types,
 //! in the order both sims write them through
 //! [`decision_fields`](super::decision_fields) and
 //! [`send_fields`](super::send_fields), and their names as enums, which the
@@ -19,217 +19,174 @@ pub const DECISION_COLUMNS: [Column; 43] = [
     Column {
         name: "t_ms",
         ty: ColumnType::Int,
-        doc: "when the seed decided, in ms of true time from the stream's start, as the sim's other tables count it",
     },
     Column {
         name: "node",
         ty: ColumnType::Int,
-        doc: "the seed: its host in strims-sim, its node in the ppspp sim",
     },
     Column {
         name: "n",
         ty: ColumnType::Int,
-        doc: "the decision's place in the seed's log, from 0, in the order the seed logged its decisions; with node it keys the table",
     },
     Column {
         name: "peer",
         ty: ColumnType::Int,
-        doc: "the neighbour the decision is about, numbered as node is; empty for a decision about the allocation, a window or answer_rate row",
     },
     Column {
         name: "peer_incarnation",
         ty: ColumnType::Int,
-        doc: "the neighbour's incarnation then, as the sim's arrivals count them; empty without a peer",
     },
     Column {
         name: "kind",
         ty: ColumnType::Text,
-        doc: "what the seed decided: request, a STREAM_REQUEST answered; deferred, one the first wave's ramp held, answered later by a request row; released, the peer's STREAM_CANCEL of a subscription; closed, a subscription the seed ended; holder_joined and holder_left, the peer took or gave up a copy; barred, the peer may hold none for a while; check, a holder's reading at an allocation check, once a second; cancel, the peer's CANCEL of a chunk; window, the allocation's window; answer_rate, the answer gate's pace as it changed",
     },
     Column {
         name: "stream",
         ty: ColumnType::Int,
-        doc: "the stream of a request, deferred, released or closed row; of a check's due push; of a cancel's chunk",
     },
     Column {
         name: "seq",
         ty: ColumnType::Int,
-        doc: "a chunk: a check's due push, or a cancel's chunk (the CANCEL's bin's first where why is none)",
     },
     Column {
         name: "why",
         ty: ColumnType::Text,
-        doc: "a request's rule: seed_holder, seed_no_copy, seed_barred, seed_streams_held, subscribed (the peer asked again), silent, pin, measured or unmeasured; a closed row's reason: a holder's leaving's (silent, unserved, past_copies, idle or closed), silent (the peer went silent), spill, pin, saturated, declined, or channel (its channel closed: no STREAM_CLOSE went); a holder_left's: silent, unserved, past_copies, idle or closed; a bar's: silent or unserved; a cancel's, where the seed's push of the chunk stood: none, queued (dropped at write time) or written; a window's phase: check, first_wave, ramp or ramp_end",
     },
     Column {
         name: "granted",
         ty: ColumnType::Bool,
-        doc: "a request's: accepted, a STREAM_OPEN following, or declined with a STREAM_CLOSE",
     },
     Column {
         name: "subscribers",
         ty: ColumnType::Int,
-        doc: "the stream's subscribers: a request's before its answer, a released or closed row's left after it",
     },
     Column {
         name: "holders",
         ty: ColumnType::Int,
-        doc: "the holders of a copy: a request's as the seed's admission read them (empty where none did: a pin, a peer asking again, a silent one); a holder_joined's after it; a holder_left's left; a window's",
     },
     Column {
         name: "copies",
         ty: ColumnType::Int,
-        doc: "the copies in effect: a request's as the seed's admission read them (empty where none did); a holder_joined's, a holder_left's or a window's",
     },
     Column {
         name: "held",
         ty: ColumnType::Int,
-        doc: "the streams the peer held: a request's as the seed's admission read them (empty where none did); a check's, the holder's subscriptions",
     },
     Column {
         name: "per_holder",
         ty: ColumnType::Int,
-        doc: "the streams a holder may hold: a request's (empty where no admission read it) or a window's; empty before the budget is measured",
     },
     Column {
         name: "satellite",
         ty: ColumnType::Bool,
-        doc: "a holder_joined's or a check's: the peer holds streams spilled from other holders, with no copy of its own",
     },
     Column {
         name: "kept",
         ty: ColumnType::Bool,
-        doc: "a released row's: a holder's cancel of a stream of its copy, which the seed keeps for a near satellite to take while no one else does",
     },
     Column {
         name: "rtt_ms",
         ty: ColumnType::Int,
-        doc: "the peer's link's smallest round trip over the last one or two windows: a holder_joined's, a holder_left's or a check's",
     },
     Column {
         name: "until_ms",
         ty: ColumnType::Int,
-        doc: "a bar's: the peer holds no copy until then, in ms as t_ms",
     },
     Column {
         name: "bars",
         ty: ColumnType::Int,
-        doc: "a bar's: the peer's bars so far, this one included",
     },
     Column {
         name: "reporters",
         ty: ColumnType::Int,
-        doc: "a bar's: the reporters that voted on the peer at the latest check",
     },
     Column {
         name: "due_ms",
         ty: ColumnType::Int,
-        doc: "a check's: when the due push was written, the first written to the holder in the interval before last, in ms as t_ms",
     },
     Column {
         name: "judged",
         ty: ColumnType::Bool,
-        doc: "a check's: the due push was written at least ANNOUNCE_TIMEOUT before, so this check judged it",
     },
     Column {
         name: "frontier_seq",
         ty: ColumnType::Int,
-        doc: "a check's, where peers send STATE summaries: the holder's latest STATE's newest chunk of the due push's stream; empty without one, or where peers send HAVEs",
     },
     Column {
         name: "hole_seq",
         ty: ColumnType::Int,
-        doc: "a check's: that STATE's newest chunk before its frontier the holder lacked; empty without one",
     },
     Column {
         name: "state_age_ms",
         ty: ColumnType::Int,
-        doc: "a check's: that STATE's age at the check; empty without one",
     },
     Column {
         name: "silent",
         ty: ColumnType::Int,
-        doc: "a check's: the checks in a row at which the holder didn't say it holds its due push (its HAVEs didn't announce it, or its latest STATE's frontier hadn't reached it), after this one; a bar comes at SILENT_CHECKS",
     },
     Column {
         name: "queue_ms",
         ty: ColumnType::Int,
-        doc: "a check's: how far the holder's link's least round trip since the last check stood above its smallest, the queue below the runner its pushes waited behind",
     },
     Column {
         name: "delivered_bps",
         ty: ColumnType::Int,
-        doc: "a check's: the least delivery rate the holder's link read since the last check, in bytes per second",
     },
     Column {
         name: "wait_ms",
         ty: ColumnType::Int,
-        doc: "a check's: the shortest wait in the seed's queue of a push written to the holder or cancelled by it since the last check",
     },
     Column {
         name: "stale",
         ty: ColumnType::Bool,
-        doc: "a check's: a push to the holder went stale since the last check",
     },
     Column {
         name: "budget",
         ty: ColumnType::Int,
-        doc: "a window's: the budget in stream slots",
     },
     Column {
         name: "measured",
         ty: ColumnType::Bool,
-        doc: "a window's: the budget is measured",
     },
     Column {
         name: "capacity_bps",
         ty: ColumnType::Int,
-        doc: "a window's: the capacity reading the budget was measured from, in bytes per second; empty until measured",
     },
     Column {
         name: "pushed",
         ty: ColumnType::Int,
-        doc: "a window's at a check: the holders with a push written or gone stale since the last check",
     },
     Column {
         name: "behind",
         ty: ColumnType::Int,
-        doc: "a window's at a check: those of them behind, a push waiting past PUSH_WAIT_TARGET or gone stale",
     },
     Column {
         name: "overloaded",
         ty: ColumnType::Int,
-        doc: "a window's at a check: those of them overloaded, a push waiting past PUSH_WAIT_OVERLOAD or gone stale",
     },
     Column {
         name: "in_use",
         ty: ColumnType::Int,
-        doc: "a window's at a check: the holders of a copy with a subscription",
     },
     Column {
         name: "saturated",
         ty: ColumnType::Bool,
-        doc: "a window's at a check: the uplink was busy at least SHED_UTILIZATION of the time",
     },
     Column {
         name: "unconstrained",
         ty: ColumnType::Bool,
-        doc: "a window's: the budget has room for every neighbour's every stream",
     },
     Column {
         name: "rate_bps",
         ty: ColumnType::Int,
-        doc: "an answer_rate's: the pace of the node's hybrid answers, in bytes per second",
     },
     Column {
         name: "reading_ms",
         ty: ColumnType::Int,
-        doc: "an answer_rate's: the node's queueing delay below the runner the answer gate read; empty without a reading",
     },
     Column {
         name: "engaged",
         ty: ColumnType::Bool,
-        doc: "an answer_rate's: the pace binds the answers",
     },
 ];
 
@@ -238,77 +195,63 @@ pub const SEND_COLUMNS: [Column; 14] = [
     Column {
         name: "t_ms",
         ty: ColumnType::Int,
-        doc: "when the send ended, written to the frame or dropped, in ms of true time from the stream's start, as the sim's other tables count it",
     },
     Column {
         name: "node",
         ty: ColumnType::Int,
-        doc: "the seed: its host in strims-sim, its node in the ppspp sim",
     },
     Column {
         name: "n",
         ty: ColumnType::Int,
-        doc: "the send's place in the seed's log, from 0, in the order the seed's sends ended; with node it keys the table",
     },
     Column {
         name: "peer",
         ty: ColumnType::Int,
-        doc: "the neighbour sent to, numbered as node is; empty if the sim can't name it",
     },
     Column {
         name: "peer_incarnation",
         ty: ColumnType::Int,
-        doc: "the neighbour's incarnation when the chunk was queued, as the sim's arrivals count them",
     },
     Column {
         name: "how",
         ty: ColumnType::Text,
-        doc: "push, to a subscriber of the chunk's stream, or answer, to the peer's request",
     },
     Column {
         name: "stream",
         ty: ColumnType::Int,
-        doc: "the chunk's stream",
     },
     Column {
         name: "seq",
         ty: ColumnType::Int,
-        doc: "the chunk",
     },
     Column {
         name: "queued_ms",
         ty: ColumnType::Int,
-        doc: "when the push was queued, or the answered request came (a released park's: its release), in ms as t_ms",
     },
     Column {
         name: "fate",
         ty: ColumnType::Text,
-        doc: "written, to the peer's frame; stale, a push dropped at write time for waiting past PUSH_STALE; cancelled, a push dropped at write time, the peer having cancelled the chunk; suppressed, a push dropped at write time, the peer's HAVEs having announced the chunk (where peers send HAVEs); refused, the peer's queue was full; dropped, unwritable at write time (its data gone, data-less, or too large for an empty frame); closed, a push still queued when the peer's channel closed",
     },
     Column {
         name: "bytes",
         ty: ColumnType::Int,
-        doc: "the frame bytes written for the chunk, integrity included (an answer of several chunks: its share); empty unless written",
     },
     Column {
         name: "cancel_ms",
         ty: ColumnType::Int,
-        doc: "the peer's first CANCEL of the chunk, if it came by the end, in ms as t_ms; empty without one",
     },
     Column {
         name: "declared",
         ty: ColumnType::Bool,
-        doc: "at the end, the peer said it holds the chunk: its HAVEs announced it, or, where peers send STATE summaries, its latest STATE covered it (at or after its oldest chunk, by its frontier, after its hole)",
     },
     Column {
         name: "subscribed",
         ty: ColumnType::Bool,
-        doc: "at the end, the peer was subscribed to the chunk's stream",
     },
 ];
 
 /// The columns every seed table opens with, which [`RowHead`](super::RowHead)
-/// fills; each table's docs say what each holds there.
+/// fills; fields.toml says what each holds in each table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum HeadCol {
     TMs,

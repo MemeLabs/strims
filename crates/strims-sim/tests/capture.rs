@@ -853,21 +853,6 @@ fn seed_tables_say_what_the_seed_did(r: &strims_sim::Report, d: &Path) {
     }
 }
 
-/// Both seed tables' doc rows in tables.rs are the seed log's own
-/// (`seed_log::doc_rows`): every column documented as its formatter writes
-/// it, and as the ppspp sim's rows document it.
-#[test]
-fn the_seed_tables_doc_rows_are_the_seed_logs() {
-    let src = include_str!("../src/tables.rs");
-    for row in strims_ppspp::scheduler_peer::seed_log::doc_rows("STRIMS_SIM_SPEC=1") {
-        assert!(
-            src.lines()
-                .any(|l| l.strip_prefix("//! ") == Some(row.as_str())),
-            "tables.rs lacks the row:\n//! {row}"
-        );
-    }
-}
-
 /// A table's rows, each by column name.
 fn table_rows(d: &Path, t: &str) -> Vec<BTreeMap<String, String>> {
     let csv = strims_sim::tables::read_table(d, t).unwrap();
