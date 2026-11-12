@@ -51,7 +51,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SKILLS = ROOT / ".claude" / "skills"
 # What a skill names before it is on main: a path, or `SCRIPT SUB`, with
 # the branch that adds it.
-PENDING = {"hack/simlab/neutral.py": "trace-neutral-harness", "suite.py neutral": "trace-neutral-harness"}
+PENDING: dict[str, str] = {}
 SOURCE_EXTS = (".rs", ".py", ".sql", ".ts", ".tsx", ".toml", ".sh", ".js", ".scss")
 # A name alone with one of these is a file, never module.NAME.
 FILE_EXTS = {"py", "rs", "md", "sql", "toml", "json", "ts", "tsx", "scss", "csv", "zst", "gz", "txt", "sh", "html",

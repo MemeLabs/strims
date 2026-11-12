@@ -9,9 +9,10 @@ every row key, every column of every table and `series_meta.json`:
 
     python3 hack/sim-suite/suite.py neutral --base PARENT [--head REF] [--cells SET|CELL,...] [--seeds ...] [--expect TABLE.COL ...] [--json]
 
-- `--base` is the commit the change sits on; for a merge, run it
-  against each parent. `--head` names the change's ref (the harness's
-  docs give its default).
+- `--base` defaults to the head's parents, so a merge is checked against
+  each of them; name a base to compare against another commit. `--head`
+  defaults to HEAD, built from a worktree of its own; `--head .` checks a
+  snapshot of the working tree, untracked files included.
 - `--cells` takes a named set or cells. The harness's module docs
   (`hack/simlab/neutral.py`) say what its sets hold; add cells that
   exercise what the change touches (cc950b02 ran 16 cells, so that every
