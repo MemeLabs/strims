@@ -21,19 +21,17 @@ const Dropdown: React.FC<DropdownProps> = ({ baseClassName, anchor, items }) => 
   const [open, toggleOpen] = useToggle(false);
   useClickAway(ref, () => toggleOpen(false), { events: ["click"] });
 
+  // The base's classes beside the dropdown's own, when there is a base.
+  const base = (suffix = "") => baseClassName && `${baseClassName}${suffix}`;
+
   return (
     <div
-      className={clsx({
-        "dropdown": true,
-        "dropdown--open": open,
-        [baseClassName]: true,
-        [`${baseClassName}--open`]: open,
-      })}
+      className={clsx("dropdown", base(), open && ["dropdown--open", base("--open")])}
       ref={ref}
       onClick={() => toggleOpen()}
     >
-      <div className={clsx("dropdown__anchor", `${baseClassName}__anchor`)}>{anchor}</div>
-      <div className={clsx("dropdown__menu", `${baseClassName}__menu`)}>{items}</div>
+      <div className={clsx("dropdown__anchor", base("__anchor"))}>{anchor}</div>
+      <div className={clsx("dropdown__menu", base("__menu"))}>{items}</div>
     </div>
   );
 };

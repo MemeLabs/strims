@@ -5,7 +5,7 @@
 import "../../../../components/Settings/Table.scss";
 import "../core.stories.scss";
 
-import React, { ReactNode, useEffect, useRef } from "react";
+import React, { ReactNode, useEffect, useRef, useState } from "react";
 import { BsThreeDots } from "react-icons/bs";
 
 import Dropdown from "../../../../components/Dropdown";
@@ -28,6 +28,35 @@ const Opened: React.FC<{ children: ReactNode }> = ({ children }) => {
     <div ref={ref} className="core_story__row core_story__row--end">
       {children}
     </div>
+  );
+};
+
+// The class lists of the dropdown inside it and its anchor and menu, as
+// they change.
+const Classes: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [classes, setClasses] = useState<string[]>([]);
+  useEffect(() => {
+    const read = () =>
+      setClasses(
+        [".dropdown", ".dropdown__anchor", ".dropdown__menu"].map(
+          (selector) => `${selector}: ${ref.current.querySelector(selector)?.className}`
+        )
+      );
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(ref.current, { attributes: true, subtree: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <>
+      <div ref={ref}>{children}</div>
+      <code className="core_story__caption">
+        {classes.map((c) => (
+          <div key={c}>{c}</div>
+        ))}
+      </code>
+    </>
   );
 };
 
@@ -99,11 +128,14 @@ const stories: Story[] = [
     component: () => (
       <div className="core_story">
         <p className="core_story__caption">
-          Without a base class the menu has Dropdown.scss&apos;s placement alone.
+          Without a base class the menu has Dropdown.scss&apos;s placement alone, and the
+          dropdown&apos;s own classes.
         </p>
-        <Opened>
-          <Dropdown anchor="Options" items={items(["First", "Second"], "")} />
-        </Opened>
+        <Classes>
+          <Opened>
+            <Dropdown anchor="Options" items={items(["First", "Second"], "")} />
+          </Opened>
+        </Classes>
       </div>
     ),
   },
