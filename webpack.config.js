@@ -462,6 +462,13 @@ module.exports = (env, argv) => {
                   to: "locales",
                   transform: (content) => JSON.stringify(JSON5.parse(content)),
                 },
+                // The chat provider's emoji data, as the web target has it.
+                {
+                  from: path.resolve(__dirname, "node_modules", "emojibase-data"),
+                  to: "emoji",
+                  filter: (path) =>
+                    path.match(/\/[a-z]{2}(?:-[a-z]{2})?\/.*(compact|messages|cldr)\.json$/i),
+                },
               ],
             }),
             new webpack.DefinePlugin({

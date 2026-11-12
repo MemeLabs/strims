@@ -1,0 +1,381 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// The storybook page (pages/Storybook.tsx), over main.scss's .storybook
+// rules: a toolbar above a stage that holds the story's frame, and the
+// story's errors below it.
+
+$chrome-bg: #f4f4f4;
+$chrome-fg: #222;
+$chrome-border: #ccc;
+
+.storybook {
+  height: calc(100vh - 35px);
+  color: $chrome-fg;
+
+  .storybook__nav {
+    flex: 0 0 220px;
+    overflow: auto;
+    margin-top: 0;
+    padding: 8px 4px 40px 8px;
+    box-sizing: border-box;
+    font-size: 13px;
+  }
+
+  .storybook__content {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    height: auto;
+    margin: 8px 8px 8px 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .storybook__toolbar {
+    position: static;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 6px;
+    background: $chrome-bg;
+    color: $chrome-fg;
+    border-bottom: 1px solid $chrome-border;
+    border-radius: 0;
+    font: 12px/1.4 monospace;
+  }
+
+  .storybook__toolbar_title {
+    font-weight: bold;
+  }
+
+  .storybook__router_path {
+    margin-left: 12px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: #dde7f3;
+
+    &::before {
+      content: "router: ";
+      opacity: 0.6;
+    }
+  }
+
+  .storybook__toolbar_spacer {
+    flex: 1;
+  }
+
+  .storybook__toolbar_button {
+    display: flex;
+    padding: 2px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: none;
+    color: $chrome-fg;
+    cursor: pointer;
+
+    &--active {
+      border-color: #888;
+      background: #fff;
+    }
+
+    svg {
+      height: 1.3rem;
+      width: 1.3rem;
+    }
+  }
+
+  .storybook__stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+    overflow: auto;
+
+    &--portrait,
+    &--landscape {
+      display: flex;
+      padding: 16px;
+      background: repeating-conic-gradient(#0000 0 25%, #8881 0 50%) 0 0 / 24px 24px;
+    }
+
+    &--catalog {
+      background: #fff;
+    }
+  }
+
+  .storybook__message {
+    padding: 1rem;
+  }
+
+  &--fullscreen .storybook__content {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    z-index: 100;
+  }
+}
+
+// The story's root: Layout's classes and variables, which main.scss's
+// `.storybook .layout` rule doesn't touch (it isn't .layout).
+.storybook_frame {
+  // Layout.scss sets these on .layout.
+  --layout-chat-width: 260px;
+  --network-nav-collapsed-width: 60px;
+  --network-nav-expanded-width: 200px;
+
+  &.layout--min_width_xl {
+    --layout-chat-width: 420px;
+  }
+
+  position: relative;
+  box-sizing: border-box;
+  background: var(--color-background-layout-body);
+  overflow: auto;
+
+  &--pc {
+    width: 100%;
+    height: 100%;
+  }
+
+  &--portrait,
+  &--landscape {
+    flex: none;
+    margin: auto;
+    overflow: hidden;
+    outline: 8px solid #333;
+    border-radius: 2px;
+    box-shadow: 0 0 0 9px #555, 0 6px 24px 8px rgba(0, 0, 0, 0.3);
+  }
+}
+
+.storybook_crash {
+  margin: 1rem;
+  padding: 1rem;
+  border: 2px solid #c62828;
+  border-radius: 4px;
+  background: #fff3f3;
+  color: #4a0000;
+  font-family: sans-serif;
+
+  h3 {
+    margin: 0 0 0.5rem;
+  }
+
+  pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+  }
+
+  &__stack {
+    opacity: 0.75;
+  }
+}
+
+.storybook_errors {
+  flex: 0 0 auto;
+  max-height: 40%;
+  overflow: auto;
+  background: #fff8e1;
+  color: #4a3500;
+  border-top: 1px solid #e0c060;
+  font: 12px/1.4 monospace;
+
+  &--empty {
+    display: none;
+  }
+
+  &--failing {
+    background: #fff0f0;
+    color: #600;
+    border-top-color: #c62828;
+  }
+
+  &__summary {
+    width: 100%;
+    padding: 4px 8px;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: bold;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  &__list {
+    margin: 0;
+    padding: 0 8px 8px 32px;
+  }
+
+  &__item {
+    margin-bottom: 6px;
+
+    pre {
+      margin: 2px 0 0;
+      max-height: 16em;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    &--allowed {
+      opacity: 0.6;
+    }
+  }
+
+  &__kind,
+  &__allowed {
+    margin-right: 8px;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.08);
+  }
+}
+
+.storybook_router_away {
+  padding: 1rem;
+
+  button {
+    margin-right: 0.5rem;
+  }
+}
+
+.storybook_nav {
+  .storybook_nav__toggle {
+    display: block;
+    width: 100%;
+    padding: 1px 2px;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &--module {
+      font-style: italic;
+    }
+  }
+
+  .storybook_nav__content {
+    border-left-color: $chrome-border;
+  }
+
+  .storybook_nav__error {
+    color: #c62828;
+    white-space: pre-wrap;
+  }
+}
+
+.storybook_nav__link {
+  display: block;
+  padding: 1px 4px;
+  color: #1a4d8f;
+  text-decoration: none;
+
+  &--active {
+    background: orange;
+    color: #000;
+  }
+}
+
+.storybook_catalog {
+  padding: 1rem 1.5rem 3rem;
+  color: $chrome-fg;
+  font: 13px/1.5 sans-serif;
+
+  h2 {
+    margin: 0 0 0.25rem;
+  }
+
+  &__counts {
+    margin: 0 0 0.75rem;
+  }
+
+  &__error,
+  &__not_found,
+  &__stale {
+    color: #c62828;
+  }
+
+  &__filters {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 1rem;
+  }
+
+  &__filter {
+    padding: 2px 8px;
+    border: 1px solid $chrome-border;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+
+    &--active {
+      border-color: #333;
+      background: #333;
+      color: #fff;
+    }
+  }
+
+  &__group {
+    margin-bottom: 1rem;
+
+    h3 {
+      margin: 0 0 0.25rem;
+      font: bold 13px monospace;
+    }
+
+    ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+  }
+
+  &__group_counts {
+    font-weight: normal;
+    opacity: 0.6;
+  }
+
+  &__file {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    padding: 1px 0 1px 12px;
+  }
+
+  &__status {
+    flex: 0 0 60px;
+    font: 11px monospace;
+    text-transform: uppercase;
+  }
+
+  &__file--covered &__status {
+    color: #2e7d32;
+  }
+
+  &__file--skipped &__status {
+    color: #777;
+  }
+
+  &__file--missing &__status {
+    color: #c62828;
+  }
+
+  &__name {
+    font-family: monospace;
+  }
+
+  &__story {
+    color: #1a4d8f;
+  }
+
+  &__reason {
+    color: #666;
+  }
+}

@@ -3,14 +3,13 @@
 
 import { PassThrough } from "stream";
 
-import { Base64 } from "js-base64";
-
 import * as directoryv1 from "../../../apis/strims/network/v1/directory/directory";
 import {
   DirectoryFrontendService,
   UnimplementedDirectoryFrontendService,
 } from "../../../apis/strims/network/v1/directory/directory_rpc";
 import { ImageType } from "../../../apis/strims/type/image";
+import { listingItem, listingsNetwork } from "../../storybook/fixtures/listings";
 import images from "../images";
 import events from "./events";
 
@@ -62,16 +61,26 @@ export default class DirectoryService
     return new directoryv1.FrontendGetUsersResponse();
   }
 
+  // A listing by id (an unknown id, or a query by content, gives the first).
+  getListing(req: directoryv1.FrontendGetListingRequest) {
+    const query = req.query?.query;
+    const item =
+      (query?.case === directoryv1.ListingQuery.QueryCase.ID && listingItem(query.id)) ||
+      events[0];
+    return new directoryv1.FrontendGetListingResponse({
+      ...item,
+      moderation: {},
+      userCount: Number(item.snippet?.userCount ?? 0),
+      recentUserCount: 0,
+    });
+  }
+
   getListings(req: directoryv1.FrontendGetListingsRequest) {
     console.log("getListings", req);
     return new directoryv1.FrontendGetListingsResponse({
       listings: [
         {
-          network: {
-            id: BigInt(1),
-            key: Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE="),
-            name: "test",
-          },
+          network: listingsNetwork(),
           listings: events.map((e) => ({
             ...e,
             userCount: 0,
@@ -91,11 +100,7 @@ export default class DirectoryService
             event: {
               change: {
                 listings: {
-                  network: {
-                    id: BigInt(1),
-                    key: Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE="),
-                    name: "test",
-                  },
+                  network: listingsNetwork(),
                   listings: events.map((e) => ({
                     ...e,
                     moderation: {},
@@ -119,18 +124,18 @@ export default class DirectoryService
     return ch;
   }
 
+  // Icons for networks 1..images.length, the network fixtures' ids.
   watchAssetBundles() {
     const ch = new PassThrough({ objectMode: true });
 
-    let i = 0;
-    for (const url of images) {
+    images.forEach((url, i) => {
       void (async () => {
         const res = await fetch(url);
         const buf = await res.arrayBuffer();
 
         ch.push(
           new directoryv1.FrontendWatchAssetBundlesResponse({
-            networkId: BigInt(i++),
+            networkId: BigInt(i + 1),
             assetBundle: {
               icon: {
                 type: ImageType.IMAGE_TYPE_PNG,
@@ -140,7 +145,7 @@ export default class DirectoryService
           })
         );
       })();
-    }
+    });
 
     return ch;
   }

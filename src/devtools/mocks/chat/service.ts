@@ -108,6 +108,14 @@ class ChatService {
     return ch;
   }
 
+  // An empty thread with the peer.
+  listWhispers(req: chatv1.ListWhispersRequest): chatv1.ListWhispersResponse {
+    return new chatv1.ListWhispersResponse({
+      thread: new chatv1.WhisperThread({ peerKey: req.peerKey, alias: `peer_${req.peerKey[0]}` }),
+      whispers: [],
+    });
+  }
+
   watchWhispers(): Readable<chatv1.WatchWhispersResponse> {
     return new PassThrough({ objectMode: true });
   }

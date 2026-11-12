@@ -4,21 +4,32 @@
 import "../../../components/Layout/Layout.scss";
 
 import React from "react";
+import { Route } from "react-router-dom";
 
 import Header from "../../../components/Layout/Header";
 import { Provider as ThemeProvider } from "../../../contexts/Theme";
+import { Story, StoryRouter } from "../../storybook";
 
 const Test: React.FC = () => (
   <ThemeProvider>
-    <div className="layout layout--dark">
-      <Header search={null} />
-    </div>
+    <StoryRouter>
+      <Route
+        path="/*"
+        element={
+          <div className="layout layout--dark">
+            <Header search={null} />
+          </div>
+        }
+      />
+    </StoryRouter>
   </ThemeProvider>
 );
 
-export default [
+const stories: Story[] = [
   {
     name: "header",
     component: () => <Test />,
   },
 ];
+
+export default stories;

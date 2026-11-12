@@ -14,6 +14,7 @@ import NotificationToast from "../Notification/Toast";
 import { withTheme } from "../Theme";
 import Footer from "./Footer";
 import Header from "./Header";
+import { layoutShapeClassNames, layoutStateClassNames } from "./shape";
 
 export type Breakpoint = "sm" | "md" | "lg" | "xl";
 
@@ -178,7 +179,6 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
   useEffect(() => layout.toggleFullScreenChat(false), [location]);
 
   const { height, width, orientation } = viewportShape;
-  const aspectRatio = width / height;
 
   const style = !FORCE_FIXED_SIZE
     ? {
@@ -203,32 +203,8 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
         "layout": true,
         [`layout--${DEVICE_TYPE}`]: true,
         "layout--pwa": IS_PWA,
-        "layout--portrait": orientation === 0,
-        "layout--landscape_ccw": orientation === 90,
-        "layout--landscape_cw": orientation === -90,
-        "layout--min_aspect_ratio_0_6": aspectRatio >= 0.6,
-        "layout--min_aspect_ratio_1_2": aspectRatio >= 1.2,
-        "layout--min_aspect_ratio_2": aspectRatio >= 2,
-        "layout--min_aspect_ratio_4": aspectRatio >= 3,
-        "layout--max_aspect_ratio_0_6": aspectRatio < 0.6,
-        "layout--max_aspect_ratio_1_2": aspectRatio < 1.2,
-        "layout--max_aspect_ratio_2": aspectRatio < 2,
-        "layout--max_aspect_ratio_4": aspectRatio < 3,
-        "layout--min_width_sm": width >= 576,
-        "layout--min_width_md": width >= 768,
-        "layout--min_width_lg": width >= 992,
-        "layout--min_width_xl": width >= 1200,
-        "layout--max_width_sm": width < 576,
-        "layout--max_width_md": width < 768,
-        "layout--max_width_lg": width < 992,
-        "layout--max_width_xl": width < 1200,
-        "layout--meme_open": layout.overlayState.open,
-        "layout--swap": layout.swapMainPanels,
-        "layout--show_chat": layout.showChat,
-        "layout--show_video": layout.showVideo,
-        "layout--full_screen_chat": layout.fullScreenChat,
-        "layout--theater_mode": layout.theaterMode,
-        "layout--expand_nav": layout.expandNav,
+        ...layoutShapeClassNames(width, height, orientation),
+        ...layoutStateClassNames(layout),
       })}
     >
       <NotificationToast />

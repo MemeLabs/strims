@@ -1,224 +1,177 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import "../styles/storybook.scss";
+
 import clsx from "clsx";
-import React, { ReactNode, Suspense, lazy, useCallback, useEffect, useState } from "react";
-import { MdFullscreen } from "react-icons/md";
-import { Location, Navigate, Route, Routes, useLocation } from "react-router";
-import { NavLink } from "react-router-dom";
-import { useSessionStorage, useToggle } from "react-use";
+import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import {
+  MdComputer,
+  MdDarkMode,
+  MdFullscreen,
+  MdFullscreenExit,
+  MdLightMode,
+  MdRefresh,
+  MdSmartphone,
+  MdStayCurrentLandscape,
+} from "react-icons/md";
+import { useLocation, useSearchParams } from "react-router-dom";
 
 import { WithThemeProps, withTheme } from "../../components/Theme";
-import { WithRootRefProps, withLayoutContext } from "../../contexts/Layout";
-import { Provider as ThemeProvider } from "../../contexts/Theme";
+import { Provider as ThemeProvider, useTheme } from "../../contexts/Theme";
 import Nav from "../components/Nav";
+import { StoryHostContext, StoryHostValue } from "../storybook/context";
+import CatalogPage from "../storybook/host/CatalogPage";
+import { ROOT, matchRoute } from "../storybook/host/catalog";
+import ErrorList from "../storybook/host/ErrorList";
+import StorybookNav from "../storybook/host/Nav";
+import { Session, activate } from "../storybook/host/recorder";
+import { DEVICES, Device, StoryView } from "../storybook/host/StoryView";
 
-const stories = require.context("../stories/", true, /\.stories\.tsx$/, "lazy");
-
-type StoriesModule = {
-  default: {
-    name: string;
-    component: React.ComponentType;
-  }[];
-};
-
-type Nav = {
-  name: string;
-  path: string[];
-  nodes: Nav[];
-  module?: string;
-  component?: React.ComponentType;
-};
-
-type Extend = (path: string[], mod: StoriesModule) => void;
-
-const useStorybookNav = (): [Nav, Extend] => {
-  const [root, setRoot] = useState(() => {
-    const root: Nav = {
-      name: "root",
-      path: [],
-      nodes: [],
-    };
-    for (const module of stories.keys().sort((a, b) => a.localeCompare(b))) {
-      let node = root;
-      let path: string[] = [];
-      const parts = module.replace(/(\.\/|\.stories.tsx)/g, "").split("/");
-
-      for (const name of parts) {
-        path = [...path, name];
-        let next = node.nodes.find((p) => p.name === name);
-        if (!next) {
-          next = {
-            name,
-            path,
-            nodes: [],
-          };
-          node.nodes.push(next);
-        }
-        node = next;
-      }
-      node.module = module;
-    }
-    return root;
-  });
-
-  const extend = useCallback(
-    (path: string[], mod: StoriesModule) =>
-      setRoot((prev) => {
-        const root = { ...prev };
-        let node = root;
-        for (const name of path) {
-          const i = node.nodes.findIndex((p) => p.name === name);
-          node.nodes = [...node.nodes];
-          const next = { ...node.nodes[i] };
-          node.nodes[i] = next;
-          node = next;
-        }
-
-        const nodes = node.nodes;
-        let changed = nodes.length !== mod.default.length;
-        node.nodes = [];
-        for (const story of mod.default) {
-          let next = nodes.find((p) => p.component === story.component);
-
-          if (!next) {
-            next = {
-              ...story,
-              path: [...path, story.name],
-              nodes: [],
-            };
-            changed = true;
+// The toolbar's state lives in the route's query, so links (and
+// hack/storybook/check.py) set it: theme=dark|light, device=pc|portrait|landscape,
+// fullscreen=1.
+const useToolbarParams = () => {
+  const [params, setParams] = useSearchParams();
+  const theme = params.get("theme") === "light" ? "light" : "dark";
+  const device = (["portrait", "landscape"].find((d) => d === params.get("device")) ?? "pc") as Device;
+  const fullscreen = params.get("fullscreen") === "1";
+  const set = useCallback(
+    (name: string, value: string | null) =>
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value === null) {
+            next.delete(name);
+          } else {
+            next.set(name, value);
           }
-
-          node.nodes.push(next);
-        }
-        return changed ? root : prev;
-      }),
-    []
+          return next;
+        },
+        { replace: true }
+      ),
+    [setParams]
   );
-
-  return [root, extend];
+  return { theme, device, fullscreen, set } as const;
 };
 
-const formatPath = (...parts: string[]) => "/storybook/" + parts.join("/");
-
-interface StorybookNavProps {
-  node: Nav;
-  shouldExpand?: boolean;
-  extend: Extend;
-}
-
-const StorybookNav: React.FC<StorybookNavProps> = ({ node, shouldExpand = true, extend }) => {
-  const path = formatPath(...node.path);
-
-  const location = useLocation();
-  const [expanded, toggleExpanded] = useToggle(shouldExpand || location.pathname.startsWith(path));
-
-  useEffect(() => {
-    if (expanded && node.module) {
-      const mod = stories(node.module) as Promise<StoriesModule>;
-      void mod.then((mod) => extend(node.path, mod));
+const ThemeSync: React.FC<{ theme: "dark" | "light" }> = ({ theme }) => {
+  const { colorScheme, setColorScheme } = useTheme();
+  useLayoutEffect(() => {
+    if (colorScheme !== theme) {
+      setColorScheme(theme);
     }
-  }, [expanded, node, stories]);
-
-  if (node.component) {
-    return (
-      <NavLink
-        className={({ isActive }) =>
-          clsx({
-            "storybook_nav__link": true,
-            "storybook_nav__link--active": isActive,
-          })
-        }
-        to={path}
-      >
-        {node.name}
-      </NavLink>
-    );
-  }
-
-  return (
-    <div className={"storybook_nav"}>
-      <NavLink to={path} onClick={() => toggleExpanded()}>
-        {node.name}
-      </NavLink>
-      <div
-        className={clsx({
-          "storybook_nav__content": true,
-          "storybook_nav__content--expanded": expanded,
-        })}
-      >
-        {node.nodes.map((node) => (
-          <StorybookNav key={node.name} node={node} shouldExpand={false} extend={extend} />
-        ))}
-      </div>
-    </div>
-  );
+  }, [theme, colorScheme]);
+  return null;
 };
 
-const storybookRoutes = (location: Location, node: Nav, extend: Extend): React.ReactElement[] => {
-  const C = lazy(async (): Promise<{ default: React.ComponentType }> => {
-    const mod = (await stories(node.module)) as StoriesModule;
-    extend(node.path, mod);
-    const story = mod.default.find((p) => formatPath(...node.path, p.name) === location.pathname);
-    if (story) {
-      return { default: story.component };
-    }
-    const route = mod.default[0];
-    return {
-      default: () => <Navigate to={formatPath(...node.path, route.name)} />,
-    };
-  });
+const StoryContainer = withTheme<{ children: ReactNode }>(
+  ({ className, children }: WithThemeProps & { children: ReactNode }) => (
+    <div className={clsx(className, "storybook__content")}>{children}</div>
+  )
+);
 
-  const routes = node.nodes.map((node) => storybookRoutes(location, node, extend)).flat();
-  if (node.module) {
-    routes.push(<Route key={node.name} path={node.path.join("/") + "/*"} element={<C />} />);
-  }
-  return routes;
-};
-
-interface StoryContainerProps extends WithThemeProps, WithRootRefProps {
+interface ToolButtonProps {
+  title: string;
+  active?: boolean;
+  onClick: () => void;
   children: ReactNode;
 }
 
-const StoryContainerBase: React.FC<StoryContainerProps> = ({ className, rootRef, children }) => (
-  <div className={clsx(className, "storybook__content layout--pc")} ref={rootRef}>
+const ToolButton: React.FC<ToolButtonProps> = ({ title, active, onClick, children }) => (
+  <button
+    className={clsx("storybook__toolbar_button", { "storybook__toolbar_button--active": active })}
+    title={title}
+    onClick={onClick}
+  >
     {children}
-  </div>
+  </button>
 );
 
-const StoryContainer = withTheme(withLayoutContext(StoryContainerBase));
-
-const LoadingMessage = () => <p className="loading_message">loading</p>;
+const DEVICE_ICONS: Record<Device, ReactNode> = {
+  pc: <MdComputer />,
+  portrait: <MdSmartphone />,
+  landscape: <MdStayCurrentLandscape />,
+};
 
 const Storybook: React.FC = () => {
-  const [node, extend] = useStorybookNav();
-  const location = useLocation();
-  const [fullscreen, setFullscreen] = useSessionStorage("storybook_fullscreen", false);
-  const toggleFullscreen = useCallback(() => setFullscreen(!fullscreen), [fullscreen]);
+  const { pathname } = useLocation();
+  const { theme, device, fullscreen, set } = useToolbarParams();
+  const match = matchRoute(pathname);
+
+  const [nonce, setNonce] = useState(0);
+  const [routerPath, setRouterPath] = useState<string>(null);
+  const host = useMemo<StoryHostValue>(() => ({ setRouterPath }), []);
+
+  // A session per mount of a story, active from its first render, so errors
+  // made while it renders count.
+  const session = useMemo(() => {
+    if (!match) {
+      return null;
+    }
+    const session = new Session(pathname);
+    activate(session);
+    return session;
+  }, [match?.key, pathname, nonce]);
+  useEffect(() => (session ? activate(session) : undefined), [session]);
 
   return (
     <>
       <Nav />
-      <div
-        className={clsx({
-          "storybook": true,
-          "storybook--fullscreen": fullscreen,
-        })}
-      >
+      <div className={clsx("storybook", { "storybook--fullscreen": fullscreen })}>
         <div className="storybook__nav">
-          <StorybookNav node={node} extend={extend} />
+          <StorybookNav />
         </div>
         <ThemeProvider>
+          <ThemeSync theme={theme} />
           <StoryContainer>
             <div className="storybook__toolbar">
-              <button className="storybook__toolbar_button" onClick={toggleFullscreen}>
-                <MdFullscreen />
-              </button>
+              <span className="storybook__toolbar_title">{match ? pathname.substring(ROOT.length + 1) : "catalog"}</span>
+              {routerPath !== null && (
+                <span className="storybook__router_path" title="the story's own router's path">
+                  {routerPath}
+                </span>
+              )}
+              <span className="storybook__toolbar_spacer" />
+              <ToolButton
+                title={`theme: ${theme}`}
+                onClick={() => set("theme", theme === "dark" ? "light" : null)}
+              >
+                {theme === "dark" ? <MdDarkMode /> : <MdLightMode />}
+              </ToolButton>
+              {(Object.keys(DEVICES) as Device[]).map((d) => (
+                <ToolButton
+                  key={d}
+                  title={`device: ${d}`}
+                  active={d === device}
+                  onClick={() => set("device", d === "pc" ? null : d)}
+                >
+                  {DEVICE_ICONS[d]}
+                </ToolButton>
+              ))}
+              <ToolButton title="remount" onClick={() => setNonce((n) => n + 1)}>
+                <MdRefresh />
+              </ToolButton>
+              <ToolButton title="fullscreen" onClick={() => set("fullscreen", fullscreen ? null : "1")}>
+                {fullscreen ? <MdFullscreenExit /> : <MdFullscreen />}
+              </ToolButton>
             </div>
-            <Suspense fallback={<LoadingMessage />}>
-              <Routes>{storybookRoutes(location, node, extend)}</Routes>
-            </Suspense>
+            <div className={clsx("storybook__stage", `storybook__stage--${match ? device : "catalog"}`)}>
+              {match ? (
+                <StoryHostContext.Provider value={host}>
+                  <StoryView
+                    key={`${pathname}#${nonce}`}
+                    moduleKey={match.key}
+                    name={match.name}
+                    device={device}
+                    session={session}
+                  />
+                </StoryHostContext.Provider>
+              ) : (
+                <CatalogPage notFound={pathname.replace(/\/$/, "") === ROOT ? undefined : pathname} />
+              )}
+            </div>
+            {session && <ErrorList session={session} />}
           </StoryContainer>
         </ThemeProvider>
       </div>

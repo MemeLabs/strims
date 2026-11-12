@@ -33,7 +33,7 @@ const LayoutTest: React.FC = () => {
     const svc = new ServiceRegistry();
     const chatService = new ChatService(new Emitter({ ivl: 100, limit: 250, preload: 0 }));
     registerChatFrontendService(svc, chatService);
-    registerNetworkFrontendService(svc, new NetworkService(8));
+    registerNetworkFrontendService(svc, new NetworkService({ count: 8 }));
     registerDirectoryFrontendService(svc, new DirectoryService());
     registerNotificationFrontendService(svc, new NotificationService());
 

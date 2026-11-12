@@ -20,7 +20,7 @@ const LayoutTest: React.FC = () => {
     const svc = new ServiceRegistry();
     const chatService = new ChatService();
     registerChatFrontendService(svc, chatService);
-    registerNetworkFrontendService(svc, new NetworkService(8));
+    registerNetworkFrontendService(svc, new NetworkService({ count: 8 }));
 
     const [a, b] = [new AsyncPassThrough(), new AsyncPassThrough()];
     new Host(a, b, svc);
