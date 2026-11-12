@@ -2,10 +2,13 @@
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
 """simlab.forecast and simlab.regimes over a fixture catalog of their own:
-four strims-sim jobs (arms decl and main, seeds 1 and 2) of golden_cli's
-job dirs, each with the decision logs the study reads (arrivals, asks, and
-main's haves) and parents, folded and exported by simdb.py into a local
-suite invocation's source and indexed by the catalog:
+four strims-sim jobs (arms decl and main, seeds 1 and 2) and a ppspp sim
+job (arm pp, decl's seed-1 decisions) of golden_cli's job dirs, each with
+the decision logs the study reads (arrivals, asks, and main's haves) and
+parents, folded and exported by simdb.py into a local suite invocation's
+source, and a second invocation's source that labels two of them again
+(decl's seed 1 in a cell of its own, star-5b; its seed 2 in star-5, as
+the first has it), indexed by the catalog:
 
   Prepare      the study's rows: the seed, the publishing interval, each
                asked row's path, supply, position and whether a rival but
@@ -17,6 +20,9 @@ suite invocation's source and indexed by the catalog:
                staleness' buckets, aligned's parent changes, selection's
                curse and regret (the seed among the rivals), bound's HAVE
                delay quantiles and main's outcomes
+  Grain        a job counts in each cell and arm the selection labels it
+               with, once in each; the ppspp sim's job reads as decl's
+               seed 1
   Cli          simdb.py forecast-report's tables and JSON, as a caller runs
                it
   Hsmm         the forward-backward against enumerating every
@@ -54,8 +60,12 @@ import simlab  # noqa: E402
 from simlab import catalog, forecast, regimes, store_host  # noqa: E402
 
 SRC = "suite/wt/fs"
+# The second invocation, whose jobs are SRC's labelled again.
+RELABEL = "suite/wt/fs-relabel"
 ARMS = {"decl": "strims-sim-decl", "main": "strims-sim-main"}
-NAMES = {label: arm for arm, label in ARMS.items()}
+# The ppspp sim's job's arm label.
+PP = "ppspp-decl"
+NAMES = {label: arm for arm, label in ARMS.items()} | {PP: "pp"}
 SEL = forecast.Selection(exp=[SRC], names=NAMES)
 END_MS = 35500
 
@@ -178,10 +188,21 @@ def build(root):
                 golden_cli.write_table(d, "asks", MAIN_ASK_COLS, main_asks())
                 golden_cli.write_table(d, "haves", HAVE_COLS, haves())
             jobs.append(rec)
+    d = root / "jobs" / "pp-1"
+    rec = golden_cli.job_dir(d, (SRC, f"{PP}:star-5:1", "ppspp", "sim_job", "star-5", PP, 1, golden_cli.PP_ENV,
+                                 golden_cli.T0, None))
+    golden_cli.write_table(d, "arrivals", ARRIVAL_COLS, arrivals())
+    golden_cli.write_table(d, "parents", PARENT_COLS, PARENTS)
+    golden_cli.write_table(d, "asks", ASK_COLS, decl_asks(1))
+    jobs.append(rec)
     db = root / "store.duckdb"
     sm.fold(db, jobs, SRC)
     sm.export(db, root / "target" / "sim-db" / "cache" / SRC)
     db.unlink()
+    label = ARMS["decl"]
+    golden_cli.relabel(root, RELABEL, [
+        (f"{label}:star-5:{seed}", "strims-sim", "calibration_star", cell, label, seed, golden_cli.SS_ENV)
+        for seed, cell in ((1, "star-5b"), (2, "star-5"))])
     subprocess.run(["git", "init", "-q", str(root)], check=True)
 
 
@@ -373,6 +394,33 @@ class Sections(Fixture):
         self.assertEqual((asks["failed"], asks["failed_seed_min"], asks["failed_seed_max"]), (0.5, 0.5, 0.5))
 
 
+class Grain(Fixture):
+    def test_a_job_counts_in_each_of_its_labels_once(self):
+        sel = forecast.Selection(exp=[SRC, RELABEL], names=NAMES)
+        with forecast.connected() as c:
+            forecast.prepare(c, sel)
+            jobs = c.execute("SELECT arm, cell, seed FROM fs_sel ORDER BY ALL").fetchall()
+        # decl's seed 1 in star-5 and star-5b; its seed 2 once in star-5,
+        # though both invocations name it there.
+        self.assertEqual(jobs, [("decl", "star-5", 1), ("decl", "star-5", 2), ("decl", "star-5b", 1),
+                                ("main", "star-5", 1), ("main", "star-5", 2), ("pp", "star-5", 1)])
+        got = {(r["arm"], r["cell"]): r for r in forecast.report(sel, ["runs"])["runs"].records()}
+        # star-5's decl as SEL alone gives it; star-5b's is seed 1's four
+        # kept asks, three failing (D2 answered).
+        self.assertEqual(got[("decl", "star-5")], self.one("runs", arm="decl"))
+        b = got[("decl", "star-5b")]
+        self.assertEqual((b["runs"], b["seeds"], b["asks"], b["fail_rate"]), (1, [1], 4, 3 / 4))
+
+    def test_the_ppspp_sims_job(self):
+        # decl's seed-1 decisions in the ppspp sim's dirs read as decl's seed
+        # 1 does.
+        r = self.one("runs", arm="pp")
+        self.assertEqual((r["runs"], r["seeds"], r["asks"], r["fail_rate"], r["seed_only"], r["hole_behind"]),
+                         (1, [1], 4, 3 / 4, 1 / 4, 2 / 4))
+        flight = self.one("bound", arm="pp", what="ask flight")
+        self.assertEqual((flight["n"], flight["answered"], flight["failed"]), (3, 1 / 3, 2 / 3))
+
+
 class Cli(Fixture):
     def cli(self, *args):
         env = golden_cli.environment(self.root)
@@ -382,7 +430,7 @@ class Cli(Fixture):
         return p.stdout
 
     def test_its_tables_and_json(self):
-        names = [f"--name={arm}={label}" for arm, label in ARMS.items()]
+        names = [f"--name={arm}={label}" for label, arm in NAMES.items()]
         text = self.cli("--exp", SRC, *names, "--section", "decompose", "--section", "bound")
         self.assertTrue(text.startswith("## decompose\n"))
         self.assertIn("## bound\n", text)
@@ -491,7 +539,7 @@ class Regimes(Fixture):
         with forecast.connected() as c:
             forecast.prepare(c, SEL)
             seqs = {(s.arm, s.seed, s.peer, s.stream): s for s in regimes.sequences(c, None)}
-        self.assertEqual(len(seqs), 2 * 2 * 5 * 2)
+        self.assertEqual(len(seqs), (2 * 2 + 1) * 5 * 2)
         pulled = seqs[("decl", 1, 4, 1)]
         self.assertEqual((pulled.t0, len(pulled.obs)), (25, 10))
         self.assertEqual(set(pulled.obs), {(1, 1, 1)})

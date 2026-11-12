@@ -76,6 +76,9 @@ import math
 import random
 from pathlib import Path
 
+from . import vocab
+from .store_host import q
+
 # The grid, the join grace, the lag classes' edges (main's hold lag p99 in
 # the steady cells is about the first; three times it; past the delivery
 # target and push's candidate freshness), and the swarm gap.
@@ -141,7 +144,7 @@ def observations_sql(sample, grid_ms=GRID_MS):
 WITH n AS (
     -- A run's streams: every node opens a parent for each (a chunk's
     -- stream is its number modulo their count).
-    SELECT p.k, count(DISTINCT p.stream) AS n FROM parents p JOIN fs_jobs j USING (k, src) GROUP BY p.k
+    SELECT p.k, count(DISTINCT p.stream) AS n FROM parents p SEMI JOIN fs_jobs USING (k, src) GROUP BY p.k
 ), chunks AS (
     SELECT p.k, p.seq, p.pub_ms, p.first_ms, p.seq % n.n AS stream, p.pub_ms // {grid_ms} AS sec
     FROM fs_pub p JOIN n USING (k) WHERE p.pub_ms IS NOT NULL
@@ -163,7 +166,7 @@ WITH n AS (
 SELECT q.arm, q.cell, q.seed, q.k, q.node AS peer, q.stream, c.sec,
        max(coalesce(h.held_ms - c.pub_ms, 1e9)) AS worst_lag_ms,
        bool_or(h.how IN ('answer', 'other')) AS pulled, any_value(w.gap) AS gap,
-       any_value(coalesce(ph.phase, 'tail')) AS phase
+       any_value(coalesce(ph.phase, {q(vocab.TAIL)})) AS phase
 FROM kept q JOIN chunks c ON c.k = q.k AND c.stream = q.stream AND c.sec >= q.s0 AND c.sec < q.s1
 LEFT JOIN firsts h ON h.k = q.k AND h.node = q.node AND h.seq = c.seq
 LEFT JOIN swarm w ON w.k = q.k AND w.stream = q.stream AND w.sec = c.sec
@@ -706,15 +709,15 @@ def event_times(conn):
     kinds = ", ".join(f"'{k}'" for k in EVENT_KINDS)
     out = {}
     for k, kind, t in conn.execute(f"""
-SELECT e.k, e.kind, min(e.t_ms)::BIGINT FROM events e JOIN fs_jobs j USING (k, src)
+SELECT e.k, e.kind, min(e.t_ms)::BIGINT FROM events e SEMI JOIN fs_jobs USING (k, src)
 WHERE e.kind IN ({kinds}) AND e.t_ms > 0 GROUP BY ALL""").fetchall():
         out.setdefault(k, {})[kind] = t
     for k, node, stream, t in conn.execute("""
-SELECT p.k, p.node, p.stream, p.t_ms FROM parents p JOIN fs_jobs j USING (k, src) WHERE p.t_ms > 0
+SELECT p.k, p.node, p.stream, p.t_ms FROM parents p SEMI JOIN fs_jobs USING (k, src) WHERE p.t_ms > 0
 ORDER BY ALL""").fetchall():
         out.setdefault(("parent", k, node, stream), []).append(t)
     for k, node, arrive in conn.execute("""
-SELECT v.k, v.node, v.arrive_ms FROM viewers v JOIN fs_jobs j USING (k, src)""").fetchall():
+SELECT v.k, v.node, v.arrive_ms FROM viewers v SEMI JOIN fs_jobs USING (k, src)""").fetchall():
         out[(k, node)] = arrive
     return out
 

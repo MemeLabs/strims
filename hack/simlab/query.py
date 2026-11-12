@@ -66,7 +66,7 @@ import dataclasses
 import json
 from pathlib import Path
 
-from . import engine, store, store_host, verdict
+from . import engine, store, store_host, verdict, vocab
 from .store import Refused, have_src, manifest_of, sources  # noqa: F401
 from .store_host import SAMPLE_TABLES, TABLES, ident, q, struct
 from .verdict import DERIVED, derived_dir, files, judge, load_series, plist, wanted
@@ -84,9 +84,9 @@ TABLE_KNOBS = {"node_bins": ("BIN_NODES",), "forecast": ("FORECAST",), "arrivals
 # macros.sql: the views' macros.
 MACROS = Path(__file__).with_name("sql") / "macros.sql"
 # The phase `pooled` gives a read past its viewer's phases and `spec` a
-# request past the verdict's seconds (the vocabulary's phase of that
-# name): the verdict's phases are the others.
-TAIL = "tail"
+# request past the verdict's seconds (the vocabulary's): the verdict's
+# phases are the others.
+TAIL = vocab.TAIL
 
 
 @dataclasses.dataclass

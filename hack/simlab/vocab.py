@@ -86,8 +86,10 @@ SCOPES = ("run", "viewer")
 # A kind's keys that make it an anchor, and define the phase rule.
 ANCHOR_KEYS = ("phase", "level", "until", "scope", "horizon_s")
 # The phases no kind anchors: steady, every second no window holds, and
-# tail, past the verdict's seconds.
-UNANCHORED = ("steady", "tail")
+# TAIL, past the verdict's seconds (a read, a request or a chunk there is
+# in no other phase).
+STEADY, TAIL = "steady", "tail"
+UNANCHORED = (STEADY, TAIL)
 ID = re.compile(r"[a-z][a-z0-9_]*\Z")
 COLOUR = re.compile(r"#[0-9a-f]{6}\Z")
 

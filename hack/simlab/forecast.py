@@ -21,6 +21,9 @@ knowledge delay, and its requests on that knowledge).
                  the study's tables on a connection (prepare_sql), and a
                  reader of the catalog for them; simlab.regimes builds on
                  both
+  jobs_sql(sel, table)
+                 the statement making a selection's jobs, a row a job and
+                 label, with their verdicts
   explained_sql(explainers, source, cols), state_explained_sql(),
   agreement_sql()
                  explained's statement for other classes (regimes' decoded
@@ -130,13 +133,16 @@ The sections (SECTIONS):
              (FAILED) and its least and greatest over the seeds
 
 Every section is grouped by arm and cell. Runs carry structure that a
-pooled number hides, so each section keeps its groups apart.
+pooled number hides, so each section keeps its groups apart. A job counts
+once in each cell and arm the selected experiments label it with
+(jobs_sql): a farm job reused in another cell counts in both, and one
+two experiments share under one label counts once.
 """
 
 import contextlib
 import dataclasses
 
-from . import engine
+from . import engine, vocab
 from .store_host import q
 
 SECTIONS = ("runs", "decompose", "explained", "scores", "aligned", "baselines", "staleness", "selection", "bound")
@@ -235,9 +241,32 @@ def position_sql(row):
             f"WHEN {r}.seq = {r}.hole_seq THEN 'hole' WHEN {r}.seq < {r}.hole_seq THEN 'behind' ELSE 'declared' END")
 
 
+def jobs_sql(sel, table):
+    """The statement making temp table `table` of `sel`'s jobs, a row a job
+    and label: k, src, arm (by `sel.names`), cell, seed, sim and collapsed
+    (its verdict's, false without one), those `sel.collapsed` keeps. A job
+    counts once in each cell and arm the selected experiments label it
+    with: a job two experiments share under one label is one row, and one
+    they label apart (a farm job reused in another cell, an arm a --sets
+    run names otherwise) a row each."""
+    seeds = f"seed IN ({', '.join(str(int(s)) for s in sel.seed)})" if sel.seed else "true"
+    collapsed = "true" if sel.collapsed is None else ("collapsed" if sel.collapsed else "NOT collapsed")
+    where = " AND ".join([globs("exp_id", sel.exp), globs("cell", sel.cell), globs("arm_label", sel.arm), seeds])
+    return f"""
+CREATE OR REPLACE TEMP TABLE {table} AS
+SELECT DISTINCT * FROM (
+    SELECT e.k, e.src, {arm_name(sel)} AS arm, e.cell, e.seed, e.sim, coalesce(v.collapsed, false) AS collapsed
+    FROM exp_runs e LEFT JOIN verdicts v USING (k, src) WHERE {where}
+) WHERE {collapsed};"""
+
+
 def prepare_sql(sel):
     """The statements making the study's tables for `sel`:
 
+      fs_sel     the jobs, a row a job and label (jobs_sql); the tables
+                 of a job's own (fs_arr, fs_seed, fs_pub, fs_rate,
+                 fs_holds, fs_phase) are a row a job's, and those of the
+                 decisions (fs_all, fs_asks) a row each of its labels
       fs_jobs    k, src, arm, cell, seed, sim, collapsed (its verdict's),
                  end_ms (the run's last hold: a never-held chunk's
                  censoring time)
@@ -253,18 +282,9 @@ def prepare_sql(sel):
                  every section reads only those, but `aligned`)
       fs_asks    the asked rows (module docs), with their structure
     """
-    seeds = f"seed IN ({', '.join(str(int(s)) for s in sel.seed)})" if sel.seed else "true"
-    collapsed = "true" if sel.collapsed is None else ("collapsed" if sel.collapsed else "NOT collapsed")
-    where = " AND ".join([globs("exp_id", sel.exp), globs("cell", sel.cell), globs("arm_label", sel.arm), seeds])
-    return f"""
-CREATE OR REPLACE TEMP TABLE fs_sel AS
-SELECT * FROM (
-    SELECT e.k, any_value(e.src) AS src, any_value({arm_name(sel)}) AS arm, any_value(e.cell) AS cell,
-           any_value(e.seed) AS seed, any_value(e.sim) AS sim, coalesce(any_value(v.collapsed), false) AS collapsed
-    FROM exp_runs e LEFT JOIN verdicts v USING (k, src) WHERE {where} GROUP BY e.k
-) WHERE {collapsed};
+    return f"""{jobs_sql(sel, "fs_sel")}
 CREATE OR REPLACE TEMP TABLE fs_arr AS
-SELECT x.k, x.node, x.seq, x.incarnation, x.t_ms, x.how FROM arrivals x JOIN fs_sel j USING (k, src);
+SELECT x.k, x.node, x.seq, x.incarnation, x.t_ms, x.how FROM arrivals x SEMI JOIN fs_sel USING (k, src);
 CREATE OR REPLACE TEMP TABLE fs_jobs AS
 SELECT j.*, e.end_ms FROM fs_sel j LEFT JOIN (SELECT k, max(t_ms) AS end_ms FROM fs_arr GROUP BY k) e USING (k);
 CREATE OR REPLACE TEMP TABLE fs_seed AS
@@ -281,14 +301,15 @@ CREATE OR REPLACE TEMP TABLE fs_holds AS
 SELECT k, node, seq, incarnation, min(t_ms) AS held_ms, arg_min(how, t_ms) AS how FROM fs_arr GROUP BY ALL;
 CREATE OR REPLACE TEMP TABLE fs_phase AS
 SELECT v.k, v.node, unnest(range(p.start, p.stop)) AS sec, p.phase
-FROM viewers v JOIN fs_sel j USING (k, src) JOIN viewer_phases p ON p.k = v.k AND p.src = v.src AND p.viewer = v.viewer;
+FROM viewers v SEMI JOIN fs_sel USING (k, src)
+JOIN viewer_phases p ON p.k = v.k AND p.src = v.src AND p.viewer = v.viewer;
 CREATE OR REPLACE TEMP VIEW fs_all AS
 SELECT j.arm, j.cell, j.seed, j.sim, j.end_ms, a.k, a.t_ms, a.node, a.ask, a.round, a.picked, a.declares,
        a.peer, a.stream, a.seq, coalesce(a.grace_ms, 0) AS grace_ms, a.rtt_ms,
        a.predicted_ms AS p50, a.predicted_p90_ms AS p90, a.predicted_p99_ms AS p99,
        a.frontier_seq, a.hole_seq, a.state_age_ms, a.outcome, a.reason, a.t_outcome_ms, a.peer_incarnation,
        a.held_ms, a.pred_err_ms, a.t_ms + a.rtt_ms // 2 AS arrive_ms,
-       a.t_ms + a.rtt_ms // 2 + coalesce(a.grace_ms, 0) AS tau_ms, coalesce(p.phase, 'tail') AS phase,
+       a.t_ms + a.rtt_ms // 2 + coalesce(a.grace_ms, 0) AS tau_ms, coalesce(p.phase, {q(vocab.TAIL)}) AS phase,
        {phase_filter(sel, "p.phase")} AS kept
 FROM asks a JOIN fs_jobs j USING (k, src)
 LEFT JOIN fs_phase p ON p.k = a.k AND p.node = a.node AND p.sec = a.t_ms // 1000
@@ -556,10 +577,10 @@ def aligned_sql():
     span = f"a.t_ms - e.t_ms >= -{ALIGN_BEFORE_S * 1000} AND a.t_ms - e.t_ms < {ALIGN_AFTER_S * 1000}"
     return f"""
 WITH ev AS (
-    SELECT e.k, e.kind, min(e.t_ms) AS t_ms FROM events e JOIN fs_jobs j USING (k, src)
+    SELECT e.k, e.kind, min(e.t_ms) AS t_ms FROM events e SEMI JOIN fs_jobs USING (k, src)
     WHERE e.kind IN ({kinds}) AND e.t_ms > 0 GROUP BY ALL
 ), pc AS (
-    SELECT p.k, p.node, p.stream, p.t_ms FROM parents p JOIN fs_jobs j USING (k, src) WHERE p.t_ms > 0
+    SELECT p.k, p.node, p.stream, p.t_ms FROM parents p SEMI JOIN fs_jobs USING (k, src) WHERE p.t_ms > 0
 ), run_level AS (
     SELECT a.*, e.kind, a.t_ms - e.t_ms AS off_ms FROM fs_asks a JOIN ev e ON e.k = a.k WHERE {span}
 ), per_peer AS (
@@ -642,7 +663,7 @@ def bucket(col, edges, unit=""):
 def staleness_sql():
     return f"""
 WITH pc AS (
-    SELECT p.k, p.node, p.stream, p.t_ms FROM parents p JOIN fs_jobs j USING (k, src)
+    SELECT p.k, p.node, p.stream, p.t_ms FROM parents p SEMI JOIN fs_jobs USING (k, src)
 ), x AS (
     SELECT a.*, 'state_age' AS axis, {bucket('a.state_age_ms', STATE_AGES_MS, 'ms')} AS bucket
     FROM fs_asks a WHERE a.kept
@@ -746,7 +767,8 @@ WITH per AS (
            count(a.k) FILTER (WHERE a.round = 'flight') AS flight,
            count(a.k) FILTER (WHERE a.supply = 'seed_only') AS seed_only,
            count(a.k) FILTER (WHERE a.position IN ('hole', 'behind')) AS hole_behind
-    FROM fs_jobs j LEFT JOIN fs_asks a ON a.k = j.k AND a.kept GROUP BY ALL
+    FROM fs_jobs j LEFT JOIN fs_asks a ON a.k = j.k AND a.arm = j.arm AND a.cell = j.cell AND a.kept
+    GROUP BY ALL
 )
 SELECT arm, cell, collapsed, count(*) AS runs, list(seed ORDER BY seed) AS seeds, sum(asks) AS asks,
        quantile_cont(asks, [0, 0.5, 1]) AS asks_per_run, sum(fails) / nullif(sum(asks), 0) AS fail_rate,

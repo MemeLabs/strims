@@ -136,6 +136,26 @@ def series(sim, stays, shape):
     return s
 
 
+def relabel(root, src, labels):
+    """Folds and exports suite source `src` under `root`'s cache holding
+    only labels of jobs another source holds, `labels` each (k, sim, test,
+    cell, arm, seed, env): an experiment that names a job under a cell or
+    arm of its own (a farm job reused in another cell, a --sets run's
+    arm), or under the one it has elsewhere, its tables the other
+    source's."""
+    sm = simdb_test().simdb
+    recs = []
+    for i, (k, sim, test, cell, arm, seed, env) in enumerate(labels):
+        d = root / "labels" / src.replace("/", "_") / str(i)
+        d.mkdir(parents=True)
+        recs.append({"k": k, "dir": str(d), "sim": sim, "test": test, "cell": cell, "arm": arm, "seed": seed,
+                     "env": env, "row": {}, "wall_s": 1.0, "rss_mb": 40.0, "at": AT})
+    db = root / "labels.duckdb"
+    sm.fold(db, recs, src)
+    sm.export(db, root / "target" / "sim-db" / "cache" / src)
+    db.unlink()
+
+
 def write_table(d, name, cols, rows):
     (d / f"{name}.schema.json").write_text(json.dumps([[n, t] for n, t in cols]))
     with open(d / f"{name}.csv", "w") as f:
