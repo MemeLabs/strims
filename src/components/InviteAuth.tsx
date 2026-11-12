@@ -126,6 +126,7 @@ const InviteAuthForm: React.FC<InviteAuthFormProps> = ({
     onComplete: () => navigate(`/directory/${Base64.fromUint8Array(networkCert.key, true)}`),
   });
 
+  // A refused call shows its error in the form: the submit doesn't reject.
   const onSubmit = handleSubmit(({ alias, enabledBootstrapClients }) =>
     create({
       alias,
@@ -145,7 +146,7 @@ const InviteAuthForm: React.FC<InviteAuthFormProps> = ({
           })
         ).finish(),
       },
-    })
+    }).catch(() => undefined)
   );
 
   return (
