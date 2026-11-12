@@ -3,7 +3,7 @@
 
 import "./Navigation.scss";
 
-import React, { ComponentProps } from "react";
+import React, { ComponentProps, useEffect } from "react";
 import {
   Navigate as RouterNavigate,
   useHref,
@@ -31,10 +31,8 @@ export const Link: React.FC<LinkProps> = ({ to, back, replace, ...props }) => {
 };
 
 export const Navigate: React.FC<LinkProps> = ({ to, replace }) => {
-  if (useInNavigationContext()) {
-    useNavigation().push(to, { replace });
-    return null;
-  }
+  const navigation = useNavigation();
+  useEffect(() => navigation?.push(to, { replace }), [to, replace]);
 
-  return <RouterNavigate to={to} replace={replace} />;
+  return navigation ? null : <RouterNavigate to={to} replace={replace} />;
 };
