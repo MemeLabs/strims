@@ -374,7 +374,7 @@ fn departing_wan(how: &str) -> Scenario {
 /// ([`strims_sim::Report::parent_losses`]) is a `parent_departed` at its
 /// parent's `depart` (the streams it parented, how it left) and, once the
 /// viewer noticed, a `parent_noticed` (the ms since); `series_meta.json`
-/// names the seed.
+/// names the seed and the stream count.
 #[test]
 fn a_runs_events_are_its_scenarios_and_losses() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
@@ -412,6 +412,8 @@ fn a_runs_events_are_its_scenarios_and_losses() {
             serde_json::from_str(&std::fs::read_to_string(d.join("series_meta.json")).unwrap())
                 .unwrap();
         assert_eq!(meta["seed"], seed, "{how}");
+        let streams = r.scenario.swarms[0].options.stream_count.max(1);
+        assert_eq!(meta["streams"], streams, "{how}");
         let seed_up: Vec<(f64, i64)> = meta["seed_up"]
             .as_array()
             .unwrap()
