@@ -27,6 +27,7 @@ interface NetworkTableProps {
 
 const NetworkTable: React.FC<NetworkTableProps> = ({ networks, onDelete }) => {
   const client = useClient();
+  const navigate = useNavigate();
   const [publishNetwork, setPublishNetwork] = useState<Network>();
 
   if (!networks) {
@@ -34,7 +35,6 @@ const NetworkTable: React.FC<NetworkTableProps> = ({ networks, onDelete }) => {
   }
 
   const rows = networks.map((network) => {
-    const navigate = useNavigate();
     const handleDelete = async () => {
       await client.network.delete({ id: network.id });
       onDelete();
