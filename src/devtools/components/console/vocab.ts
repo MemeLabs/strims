@@ -90,6 +90,25 @@ export const REASONS = [
   },
 ] as const;
 
+/** The state a run is in, by the verdict: collapse_grid's `state`. */
+export const RUN_STATES = [
+  {
+    name: "healthy",
+    description: "The verdict found no collapse in the run.",
+    colour: "#e9e8e3",
+  },
+  {
+    name: "ramp",
+    description: "A collapse whose honest q0.9 lag never passed DELIVERY_MAX_MS (4250 ms): viewers some seconds behind who catch up.",
+    colour: "#fab219",
+  },
+  {
+    name: "collapse",
+    description: "A collapse whose honest q0.9 lag passed DELIVERY_MAX_MS (4250 ms): an unhealthy spell of COLLAPSED_SECS (8 s) or more past the run's startup.",
+    colour: "#d03b3b",
+  },
+] as const;
+
 /** Every kind of event the `events` tables and `derived_events` hold, retired ones too. */
 export const KINDS = [
   {

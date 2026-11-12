@@ -764,6 +764,11 @@ description = "Whether a run collapsed, by the verdict: an unhealthy spell lasti
 values = [true, false]
 column = "verdicts.collapsed"
 
+[dimensions.run_state]
+description = "The state a run is in, by the verdict: healthy, a ramp (a collapse whose honest q0.9 lag never passed DELIVERY_MAX_MS) or a collapse (collapse_grid's state)."
+values = "vocab:run_states"
+column = "collapse_grid.state"
+
 [dimensions.delay_ms]
 description = "A playout delay: DELAYS_MS, the delivery target (1250 ms) and max (4250 ms)."
 values = [1250, 4250]

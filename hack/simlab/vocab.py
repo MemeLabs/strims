@@ -104,14 +104,14 @@ TS = ROOT / "src" / "devtools" / "components" / "console" / "vocab.ts"
 
 SIMS = ("strims-sim", "ppspp")
 CLASSES = ("scenario", "observation", "decision", "derived")
-SECTIONS = ("kinds", "phases", "episodes", "reasons")
+SECTIONS = ("kinds", "phases", "episodes", "reasons", "run_states")
 # A kind's columns, as the document describes them.
 FIELDS = ("node", "peer", "value", "unit", "detail")
 # A kind's keys, in the order the generated files give them. `phase`,
 # `level`, `until`, `scope` and `horizon_s` make a kind a phase's anchor.
 KIND_KEYS = ("class", "sims", "env_gate", "description", *FIELDS, "details", "notes", "replaced_by", "phase",
              "level", "until", "scope", "horizon_s")
-SECTION_KEYS = {s: ("description", "colour") for s in ("phases", "episodes", "reasons")}
+SECTION_KEYS = {s: ("description", "colour") for s in ("phases", "episodes", "reasons", "run_states")}
 SCOPES = ("run", "viewer")
 # A kind's keys that make it an anchor, and define the phase rule.
 ANCHOR_KEYS = ("phase", "level", "until", "scope", "horizon_s")
@@ -626,6 +626,8 @@ def typescript(doc):
         _ts_list("EPISODES", "A run's spells.", named("episodes")),
         _ts_list("REASONS", "Why a node's push parent of a stream changed: the `parents` table's `reason`.",
                  named("reasons")),
+        _ts_list("RUN_STATES", "The state a run is in, by the verdict: collapse_grid's `state`.",
+                 named("run_states")),
         _ts_list("KINDS", "Every kind of event the `events` tables and `derived_events` hold, retired ones too.",
                  kinds_),
         _ts_list("ALIGNS", "The kinds a curve aligns on: the derived kinds, then the scenario ones.", aligns(doc)),

@@ -59,16 +59,7 @@
         "type": "nominal",
         "title": "run",
         "scale": {
-          "domain": [
-            "healthy",
-            "ramp",
-            "collapse"
-          ],
-          "range": [
-            "#e9e8e3",
-            "#fab219",
-            "#d03b3b"
-          ]
+          "vocab": "run_states"
         }
       },
       "detail": {

@@ -18,7 +18,7 @@
  * vocabularies lack, throws.
  */
 
-import { EPISODES, PHASES, REASONS } from "./vocab";
+import { EPISODES, PHASES, REASONS, RUN_STATES } from "./vocab";
 
 type Spec = Record<string, unknown>;
 
@@ -35,6 +35,7 @@ export const VOCABS: Readonly<Record<string, readonly Named[]>> = {
   phases: PHASES,
   episodes: EPISODES,
   reasons: REASONS,
+  run_states: RUN_STATES,
 };
 
 const list = (v: unknown): v is string[] =>

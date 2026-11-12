@@ -397,7 +397,7 @@ COLOURS = ("color", "fill", "stroke")
 # Transforms whose rows are their groupby's: the columns past them.
 GROUPED = ("aggregate", "pivot", "regression", "loess", "density", "quantile")
 # The vocabularies a spec's references name (domains.ts VOCABS).
-VOCAB_SECTIONS = ("phases", "episodes", "reasons")
+VOCAB_SECTIONS = ("phases", "episodes", "reasons", "run_states")
 SERVER = "python3 hack/console/server.py"
 BUILD = "npm run console:build"
 TAB_TIMEOUT_S = 5

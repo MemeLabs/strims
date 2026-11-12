@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from "fs";
 import path from "path";
 
 import { VOCABS, expandVocab } from "./domains";
-import { ALIGNS, EPISODES, KINDS, PHASES, REASONS } from "./vocab";
+import { ALIGNS, EPISODES, KINDS, PHASES, REASONS, RUN_STATES } from "./vocab";
 
 type Spec = Record<string, unknown>;
 
@@ -41,7 +41,7 @@ const colours = (names: readonly { name: string; colour: string }[], only: strin
   only.map((n) => names.find((x) => x.name === n)?.colour);
 
 describe("vocab", () => {
-  it("lists the document's phases, episodes and reasons", () => {
+  it("lists the document's phases, episodes, reasons and run states", () => {
     assert.deepStrictEqual(
       PHASES.map((p) => p.name),
       headers("phases")
@@ -53,6 +53,10 @@ describe("vocab", () => {
     assert.deepStrictEqual(
       REASONS.map((r) => r.name),
       headers("reasons")
+    );
+    assert.deepStrictEqual(
+      RUN_STATES.map((r) => r.name),
+      headers("run_states")
     );
   });
 
@@ -158,7 +162,7 @@ describe("expandVocab", () => {
   it("throws on a vocabulary or a name the document lacks, and on a reference out of place", () => {
     const throws = (spec: Spec, message: RegExp) =>
       assert.throws(() => expandVocab(spec), { message });
-    throws({ scale: { vocab: "kinds" } }, /^scale: no vocabulary "kinds" \(phases, episodes, reasons\)$/);
+    throws({ scale: { vocab: "kinds" } }, /^scale: no vocabulary "kinds" \(phases, episodes, reasons, run_states\)$/);
     throws({ scale: { vocab: "toString" } }, /no vocabulary "toString"/);
     throws({ scale: { vocab: [] } }, /vocab is a vocabulary or a list of them/);
     throws(
@@ -176,10 +180,10 @@ describe("expandVocab", () => {
 });
 
 describe("the saved views", () => {
-  // collapse_grid colours a run's state (healthy, ramp, collapse), which the document doesn't hold.
-  const STATES = "collapse_grid.vl.json:spec.encoding.color.scale.domain";
-  const names = new Map<string, string>();
-  for (const [v, ns] of Object.entries(VOCABS)) for (const n of ns) names.set(n.name, v);
+  // A name's vocabularies: episodes and run_states share healthy and collapse.
+  const names = new Map<string, string[]>();
+  for (const [v, ns] of Object.entries(VOCABS))
+    for (const n of ns) names.set(n.name, [...(names.get(n.name) ?? []), v]);
 
   it("name the document's phases, episodes and reasons only through vocab references", () => {
     let refs = 0;
@@ -189,8 +193,7 @@ describe("the saved views", () => {
         if (typeof v !== "string" || !names.has(v)) continue;
         // A field or a title is a column or a label, not a list of the vocabulary's.
         if (key === "field" || key === "title") continue;
-        if (`${f}:${at.replace(/\[\d+\]$/, "")}` === STATES) continue;
-        assert.fail(`${f}: ${at} spells ${names.get(v)}' ${JSON.stringify(v)}: use a vocab reference`);
+        assert.fail(`${f}: ${at} spells ${names.get(v)?.join(" or ")}' ${JSON.stringify(v)}: use a vocab reference`);
       }
     }
     assert.ok(refs >= 10, "the views colour and sort by the vocabulary");
@@ -204,7 +207,10 @@ describe("the saved views", () => {
         for (const x of vs)
           assert.ok(Object.keys(VOCABS).includes(x), `${f}: ${at}: no vocabulary ${x}`);
         for (const n of (v.only as string[] | undefined) ?? [])
-          assert.ok(vs.includes(names.get(n) ?? ""), `${f}: ${at}: ${n} is no name of ${vs.join(" or ")}`);
+          assert.ok(
+            (names.get(n) ?? []).some((s) => vs.includes(s)),
+            `${f}: ${at}: ${n} is no name of ${vs.join(" or ")}`
+          );
       }
     for (const [f, spec] of views()) assert.doesNotThrow(() => expandVocab(spec), f);
   });

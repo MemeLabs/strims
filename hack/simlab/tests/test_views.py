@@ -732,7 +732,7 @@ class Graphs(unittest.TestCase):
                 "layer": [{"mark": "rect", "encoding": {"x": {"datum": {"vocab": 1}}, "y": {"sort": ["a"]}}}]}
         self.assertEqual(views.expand_vocab(same), same)
         for spec, message in [
-            ({"scale": {"vocab": "kinds"}}, r"^scale: no vocabulary \"kinds\" \(phases, episodes, reasons\)$"),
+            ({"scale": {"vocab": "kinds"}}, r"^scale: no vocabulary \"kinds\" \(phases, episodes, reasons, run_states\)$"),
             ({"scale": {"vocab": []}}, r"vocab is a vocabulary or a list of them"),
             ({"vconcat": [{"encoding": {"color": {"scale": {"vocab": "phases", "only": ["departure"]}}}}]},
              r"^vconcat\[0\]\.encoding\.color\.scale: \"departure\" is no name of phases$"),

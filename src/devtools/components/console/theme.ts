@@ -18,7 +18,7 @@ export const SERIES = [
   "#e34948",
 ];
 
-/** Status colours, for states (healthy, ramp, collapse), never for series. */
+/** Status colours, for states (vocab.toml's run_states and episodes), never for series. */
 export const STATUS = {
   good: "#0ca30c",
   warning: "#fab219",

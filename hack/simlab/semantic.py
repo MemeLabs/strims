@@ -56,7 +56,6 @@ VIEWS_DIR = ROOT / "hack" / "console" / "views"
 HOST_FIELDS = ("rss_mb", "wall_s")
 FIELD = re.compile(r"\b([rvj])\.([a-z_][a-z0-9_]*)\b")
 MACRO = re.compile(r"^CREATE OR REPLACE MACRO ([a-z_][a-z0-9_]*)\(", re.M)
-VOCAB_SECTIONS = ("kinds", "phases", "episodes", "reasons")
 
 
 class MetricsError(ValueError):
@@ -177,7 +176,7 @@ def problems(doc=None):
         v = d.get("values")
         if isinstance(v, str):
             kind, _, name = v.partition(":")
-            if kind == "vocab" and name not in VOCAB_SECTIONS:
+            if kind == "vocab" and name not in vocab.SECTIONS:
                 out.append(f"[dimensions.{n}]: values {v}: no vocabulary section {name}")
             elif kind == "fields" and name not in params:
                 out.append(f"[dimensions.{n}]: values {v}: no fields.toml param {name}")

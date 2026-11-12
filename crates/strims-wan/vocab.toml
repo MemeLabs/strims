@@ -1,6 +1,7 @@
 # The sims' event vocabulary: every kind of event an `events` table holds
 # (both sims', and the verdict's `derived_events`), the verdict's phases
-# and episodes, and the `parents` table's reasons. Rust embeds it and names
+# and episodes, the `parents` table's reasons, and the states a run is in
+# by the verdict (collapse_grid's). Rust embeds it and names
 # its kinds (src/vocab.rs), simlab reads it (hack/simlab/vocab.py), and the
 # console takes its lists (src/devtools/components/console/vocab.ts).
 # `python3 hack/simlab/vocab.py write` makes the generated files from it;
@@ -48,7 +49,7 @@
 # whose latest events came at once, the one listed first holds the
 # second.
 #
-# [phases.<name>], [episodes.<name>], [reasons.<name>]
+# [phases.<name>], [episodes.<name>], [reasons.<name>], [run_states.<name>]
 #   description  what it is
 #   colour       its colour in the console's charts, #rrggbb, one to a name
 #                of its section
@@ -635,3 +636,20 @@ colour = "#eda100"
 [reasons.shed]
 description = "The parent closed the subscription (STREAM_CLOSE)."
 colour = "#e87ba4"
+
+# --- run states ---------------------------------------------------------------
+# The state a run is in, by the verdict (the console's collapse_grid):
+# healthy, a ramp or a collapse. Colours: the status scale (theme.ts'
+# STATUS), quiet, warning and critical.
+
+[run_states.healthy]
+description = "The verdict found no collapse in the run."
+colour = "#e9e8e3"
+
+[run_states.ramp]
+description = "A collapse whose honest q0.9 lag never passed DELIVERY_MAX_MS (4250 ms): viewers some seconds behind who catch up."
+colour = "#fab219"
+
+[run_states.collapse]
+description = "A collapse whose honest q0.9 lag passed DELIVERY_MAX_MS (4250 ms): an unhealthy spell of COLLAPSED_SECS (8 s) or more past the run's startup."
+colour = "#d03b3b"

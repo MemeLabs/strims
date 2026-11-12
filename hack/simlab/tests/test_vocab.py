@@ -40,14 +40,16 @@ colour = "#{i:06x}"
 
 def document(kinds=(("a", "scenario", ["ppspp"]),), phases=("steady",), extra=""):
     """A small document: `kinds` (id, class, sims or None), `phases` (each
-    its own colour), one episode and one reason, then `extra`."""
+    its own colour), one episode, one reason and one run state, then
+    `extra`."""
     out = []
     for kid, cls, sims in kinds:
         s = "" if sims is None else "sims = [" + ", ".join(f'"{x}"' for x in sims) + "]\n"
         out.append(KIND.format(kid=kid, cls=cls, sims=s))
     out += [PHASE.format(name=p, i=i) for i, p in enumerate(phases)]
     out.append('\n[episodes.healthy]\ndescription = "a spell"\ncolour = "#000000"\n'
-               '\n[reasons.open]\ndescription = "a reason"\ncolour = "#000000"\n')
+               '\n[reasons.open]\ndescription = "a reason"\ncolour = "#000000"\n'
+               '\n[run_states.healthy]\ndescription = "a state"\ncolour = "#000000"\n')
     return "".join(out) + extra
 
 
@@ -189,7 +191,7 @@ class Document(unittest.TestCase):
 
     def test_sections_and_colours(self):
         self.assertEqual(problems(document() + '\n[colours.x]\ndescription = "x"\n'),
-                         ["[colours]: not a section (kinds, phases, episodes, reasons)"])
+                         ["[colours]: not a section (kinds, phases, episodes, reasons, run_states)"])
         two = document(phases=("steady", "tail"))
         self.assertEqual(problems(two), [])
         # A colour is one to a name of its section, whichever section; another section's may be the same.
