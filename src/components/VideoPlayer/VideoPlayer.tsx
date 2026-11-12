@@ -7,9 +7,9 @@ import clsx from "clsx";
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { MdLoop } from "react-icons/md";
-import useFullscreen from "use-fullscreen";
 
 import { useLayout } from "../../contexts/Layout";
+import useFullscreen from "../../hooks/useFullscreen";
 import useIdleTimeout from "../../hooks/useIdleTimeout";
 import useVideo from "../../hooks/useVideo";
 import { lowLatencySupport } from "../../lib/media/lowlatency/support";

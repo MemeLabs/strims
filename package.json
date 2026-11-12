@@ -110,7 +110,6 @@
     "upng-js": "^2.1.0",
     "url-regex-safe": "^3.0.0",
     "use-events": "^1.4.2",
-    "use-fullscreen": "0.0.5",
     "use-portal": "^0.2.1",
     "vega": "6.4.0",
     "vega-embed": "7.3.0",
@@ -121,10 +120,5 @@
   },
   "browserslist": [
     "defaults"
-  ],
-  "overrides": {
-    "use-fullscreen": {
-      "react": "$react"
-    }
-  }
+  ]
 }
