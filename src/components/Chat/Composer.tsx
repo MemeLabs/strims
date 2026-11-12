@@ -388,7 +388,7 @@ const Composer: React.FC<ComposerProps> = ({
         </div>
       </div>
       <div className="chat_composer__editor" ref={ref}>
-        <Slate editor={editor} value={initialValue} onChange={onChange}>
+        <Slate editor={editor} initialValue={initialValue} onChange={onChange}>
           <Editable
             className="chat_composer__textbox"
             placeholder={t("chat.composer.placeholder")}
