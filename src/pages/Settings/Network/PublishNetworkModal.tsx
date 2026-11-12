@@ -10,6 +10,7 @@ import { useTitle } from "react-use";
 import { Network } from "../../../apis/strims/network/v1/network";
 import { SelectInput } from "../../../components/Form";
 import { useCall, useClient } from "../../../contexts/FrontendApi";
+import { useLayout } from "../../../contexts/Layout";
 
 const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: () => void }) => {
   const { t } = useTranslation();
@@ -17,6 +18,7 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
 
   const [bootstrapPeersRes] = useCall("bootstrap", "listPeers");
   const client = useClient();
+  const layout = useLayout();
   const { handleSubmit, control } = useForm<{
     peer: {
       value: bigint;
@@ -68,7 +70,7 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
         </form>
       </div>
     </>,
-    document.body
+    layout?.root ?? document.body
   );
 };
 
