@@ -51,8 +51,9 @@ simlab.verdict's derive pool:
                name catalogs_sql's code reads
   Registries   every one of store_host's TABLES has its STANDARD_KEYS
                and STANDARD_JOINS, and they name no other; SAMPLE_TABLES
-               are TABLES
-  Commands    simdb.py's lake --param, view and describe over the
+               are TABLES; the two sims' doc tables (doc_tables) document
+               the same tables, each of them one of TABLES
+  Commands     simdb.py's lake --param, view and describe over the
                catalog, as a caller runs them: params bound typed or as
                text, one missing named; the saved views listed, run with
                their defaults or params, an unknown one refused; describe's
@@ -809,6 +810,17 @@ class Registries(unittest.TestCase):
 
     def test_the_sample_tables_are_tables(self):
         self.assertEqual(sorted(set(store_host.SAMPLE_TABLES) - set(store_host.TABLES)), [])
+
+    def test_both_sims_document_the_same_tables(self):
+        docs = catalog.doc_tables()
+        self.assertEqual(sorted(docs), ["ppspp", "strims-sim"])
+        self.assertEqual(sorted(set(docs["strims-sim"]) ^ set(docs["ppspp"])), [],
+                         "a table one sim's doc table documents and the other's doesn't")
+
+    def test_every_documented_table_is_a_table(self):
+        documented = {t for tables in catalog.doc_tables().values() for t in tables}
+        self.assertEqual(sorted(documented - set(store_host.TABLES)), [],
+                         "the sims document tables store_host.TABLES lacks: register them on main first")
 
 
 class Commands(Fixture):
