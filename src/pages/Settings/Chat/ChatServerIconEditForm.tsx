@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
-import { ImageValue } from "../../../components/Form";
+import { ImageValue, InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { fromFormImageValue, toFormImageValue } from "../../../lib/image";
@@ -37,6 +37,15 @@ const ChatServerIconEditForm: React.FC = () => {
 
   if (getRes.loading) {
     return null;
+  }
+
+  if (getRes.error) {
+    return (
+      <>
+        <TableTitleBar label="Edit Server Icon" backLink={`/settings/chat-servers/${serverId}`} />
+        <InputError error={getRes.error.message || "Error loading server icon"} />
+      </>
+    );
   }
 
   const data: ChatServerIconFormData = {
