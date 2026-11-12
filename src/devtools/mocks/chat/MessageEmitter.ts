@@ -249,36 +249,46 @@ type LegacyMessage = {
   entities: Message.IEntities;
 };
 
+// A nick's peer key in the mocks: its UTF-8 bytes.
+export const peerKey = (nick: string): Uint8Array => new TextEncoder().encode(nick);
+
 const historyMessages = history
   .map((v) => JSON.parse(v.substring(4)) as unknown as LegacyMessage)
   .map(
     ({ nick, timestamp, data, entities }) =>
       new Message({
         nick: nick,
-        peerKey: new TextEncoder().encode(nick),
-        // sentTime: BigInt(timestamp),
+        peerKey: peerKey(nick),
         serverTime: BigInt(timestamp),
         body: data,
         entities: new Message.Entities({
           ...entities,
           nicks: entities.nicks?.map((nick) => ({
             ...nick,
-            peerKey: new TextEncoder().encode(nick.nick),
+            peerKey: peerKey(nick.nick),
           })),
         }),
       })
   );
 
+/** About 235 lines of a real chat's history, in order. */
 export const messages = historyMessages;
 
 interface EmitterOptions {
+  /** Milliseconds between batches. */
   ivl?: number;
+  /** Messages a batch after the first. */
   batchSize?: number;
+  /** Messages in all, after which it stops. */
   limit?: number;
+  /** Messages in the first batch. */
   preload?: number;
+  /** What it replays, from the start, again from the start once done. */
   messages?: Message[];
 }
 
+// Replays `messages` in batches, a stream of Message[] as the chat mock's
+// openClient reads them.
 class Emitter extends PassThrough {
   tid: number;
   i = 0;
@@ -294,15 +304,16 @@ class Emitter extends PassThrough {
 
     let n = preload || 1;
     this.tid = window.setInterval(() => {
-      if (this.i === limit) {
+      if (this.i >= limit || messages.length === 0) {
         clearInterval(this.tid);
         return;
       }
 
       const batch = [];
+      n = Math.min(n, limit - this.i);
       while (n > 0) {
-        const start = this.i % history.length;
-        const end = Math.min(start + n, history.length);
+        const start = this.i % messages.length;
+        const end = Math.min(start + n, messages.length);
 
         this.i += end - start;
         n -= end - start;
@@ -315,10 +326,15 @@ class Emitter extends PassThrough {
     }, ivl);
   }
 
-  destroy(e: Error) {
+  destroy(e?: Error) {
     clearInterval(this.tid);
     return super.destroy(e);
   }
 }
+
+// An emitter that gives `messages` in one batch and stops: a chat whose
+// history is all there once it opens.
+export const replay = (messages: Message[] = historyMessages): Emitter =>
+  new Emitter({ ivl: 10, preload: messages.length, limit: messages.length, messages });
 
 export default Emitter;

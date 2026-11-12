@@ -1,0 +1,120 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// Frames for the chat components' stories: a chat column as wide as the
+// app's (420px, or the device's width), full height.
+.chat_story {
+  box-sizing: border-box;
+  width: min(420px, 100%);
+  height: 100%;
+  --chat-width: min(420px, 100%);
+  --chat-height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  // A column of messages in the flow, no scroller.
+  &--messages {
+    height: auto;
+    min-height: 100%;
+    justify-content: flex-start;
+    padding: 6px 0;
+  }
+
+  // The composer at the bottom, room above for its menus.
+  &--composer {
+    justify-content: flex-end;
+
+    .chat_story__filler {
+      flex: 1;
+    }
+  }
+
+  &--wide {
+    width: min(600px, 100%);
+  }
+
+  // The emote menu as the composer opens it, sized by the chat's size.
+  &--emote_menu {
+    --chat-width: 420px;
+    --chat-height: 600px;
+    height: auto;
+    padding: 10px;
+  }
+
+  // Side by side: a chat column and another (settings, a caption).
+  &--pair {
+    flex-direction: row;
+    width: min(840px, 100%);
+
+    & > * {
+      flex: 1 1 0;
+      min-width: 0;
+      position: relative;
+    }
+  }
+
+  &__caption {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    line-height: 1.2rem;
+    color: var(--color-text-chat-time, #888);
+    font-family: sans-serif;
+  }
+
+  &__panel {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+// The chat column's header, where Layout's Chat puts the room carousel.
+.chat_story_header {
+  display: flex;
+  flex-direction: row;
+  flex: 0 0 52px;
+  height: 52px;
+  border-bottom: 1px solid var(--color-opac-w-2);
+  background: var(--color-background-layout-chat);
+}
+
+// A grid of labelled cells (emotes, indicators), over Shell's .chat (a flex
+// column) where it's the room's scope.
+.chat_story_grid,
+.chat.chat_story_grid {
+  box-sizing: border-box;
+  display: grid;
+  grid-gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  padding: 8px;
+  background: var(--body-foreground);
+  font-size: 0.8rem;
+  min-height: 100%;
+  align-content: start;
+
+  &--wide {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+  &__cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 64px;
+    padding: 4px;
+    border-radius: 4px;
+    border: 1px solid var(--color-opac-w-2, #8884);
+    text-align: center;
+  }
+
+  &__label {
+    font-size: 0.7rem;
+    line-height: 1rem;
+    opacity: 0.7;
+    word-break: break-all;
+  }
+}
