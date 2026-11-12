@@ -9,6 +9,7 @@ import { useTitle } from "react-use";
 
 import { ListingSnippetImage } from "../../../apis/strims/network/v1/directory/directory";
 import { VideoChannel } from "../../../apis/strims/video/v1/channel";
+import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { toFileType, toImageType } from "../../../lib/image";
@@ -58,6 +59,16 @@ const VideoChannelEditForm: React.FC = () => {
 
   if (getRes.loading) {
     return null;
+  }
+  if (getRes.error) {
+    return (
+      <>
+        <TableTitleBar label="Edit Channel" backLink="/settings/video/channels" />
+        <div className="thing_form">
+          <InputError error={getRes.error.message || "Error loading channel"} />
+        </div>
+      </>
+    );
   }
 
   const { channel } = value;

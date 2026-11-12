@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
+import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import AutoseedRuleForm, { AutoseedRuleFormData } from "./AutoseedRuleForm";
@@ -45,6 +46,16 @@ const AutoseedRuleEditForm: React.FC = () => {
 
   if (getRes.loading) {
     return null;
+  }
+  if (getRes.error) {
+    return (
+      <>
+        <TableTitleBar label="Edit Rule" backLink="/settings/autoseed/rules" />
+        <div className="thing_form">
+          <InputError error={getRes.error.message || "Error loading rule"} />
+        </div>
+      </>
+    );
   }
 
   const { rule } = value;
