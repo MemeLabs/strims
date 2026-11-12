@@ -1,0 +1,33 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// A settings page filling the frame (.layout as the app's, so the settings
+// styles' breakpoints apply), and the clipboard's line below it.
+.settings_story {
+  display: flex;
+  flex-direction: column;
+
+  &__page {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  &__clipboard {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 25%;
+    overflow: auto;
+    padding: 8px 20px;
+    border-top: 1px solid var(--color-border-form-label);
+    background: var(--color-background-table-header);
+    font-size: 12px;
+
+    code {
+      font-family: monospace;
+      word-break: break-all;
+    }
+  }
+}
