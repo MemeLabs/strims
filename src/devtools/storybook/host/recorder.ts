@@ -21,7 +21,7 @@ interface AllowRule {
 }
 
 // Third-party noise any story may make, each entry with why it's noise. The
-// stories so far make none: react-beautiful-dnd's dev warnings go to
+// stories so far make none: @hello-pangea/dnd's dev warnings go to
 // console.warn (its console.errors are setup problems, worth failing on), and
 // the devtools page's failed wss://HOST/api socket is a network log, not a
 // console.error.

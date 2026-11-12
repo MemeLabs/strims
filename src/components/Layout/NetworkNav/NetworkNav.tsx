@@ -3,10 +3,10 @@
 
 import "./NetworkNav.scss";
 
+import { DragDropContext, Draggable, DropResult, Droppable } from "@hello-pangea/dnd";
 import clsx from "clsx";
 import { Base64 } from "js-base64";
 import React, { ComponentProps, useContext, useMemo } from "react";
-import { DragDropContext, Draggable, DropResult, Droppable } from "react-beautiful-dnd";
 import Scrollbars from "react-custom-scrollbars-2";
 import { Trans, useTranslation } from "react-i18next";
 import { BiNetworkChart } from "react-icons/bi";
