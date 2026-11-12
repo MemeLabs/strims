@@ -149,9 +149,7 @@ on it is in `CONVENTIONS.md`.
     bootstrap API's invitations;
   - a container image, for infra's leader, seeder and invites
     deployments.
-- Desktop: the Electron app (`src/desktop`) spawns its node from
-  `dist/desktop/svc`, which nothing builds; run strims-svc as that
-  sidecar, or move to Tauri.
+- Desktop: a desktop app (Tauri, say) with strims-svc as its node.
 - Mobile: the `android/` and `ios/` apps have no node bridge; bind
   strims-node-core with uniffi.
 - strims-node's TLS runs on ring, which compiles C, so each desktop and

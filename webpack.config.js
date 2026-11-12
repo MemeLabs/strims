@@ -280,30 +280,6 @@ module.exports = (env, argv) => {
     devtool = "eval-source-map";
   }
 
-  const createElectronBuild = (target, fileName) => ({
-    target: `electron-${target}`,
-    entry: {
-      [target]: path.join(__dirname, "src", "desktop", fileName || `${target}.ts`),
-    },
-    devtool,
-    output: {
-      filename: "[name].js",
-      chunkFilename: "[id].js",
-      path: path.resolve(__dirname, "dist", "desktop"),
-    },
-    module: {
-      rules: sharedRules,
-    },
-    resolve: {
-      extensions: [".tsx", ".ts", ".js"],
-    },
-    node: {
-      __dirname: false,
-      __filename: false,
-    },
-    optimization,
-  });
-
   const tlsCertRoot = path.join(__dirname, "hack", "tls");
   const devServerOptions = fs.existsSync(path.join(tlsCertRoot, "development.key"))
     ? {
@@ -324,18 +300,6 @@ module.exports = (env, argv) => {
   };
 
   switch (env.TARGET) {
-    case "app":
-      return [
-        Object.assign(createElectronBuild("renderer", "renderer.tsx"), {
-          plugins: [
-            new HtmlWebpackPlugin({
-              title: "Loading...",
-            }),
-          ],
-        }),
-        createElectronBuild("main"),
-        createElectronBuild("preload"),
-      ];
     // The pages the strims-wasm browser tests load: test.html and e2e.html.
     // A static server serves dist/wasm-e2e at its root; asset URLs start at /.
     case "wasm-e2e":
