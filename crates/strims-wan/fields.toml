@@ -791,27 +791,45 @@ description = "A media swarm's media rate: media bytes over the stream's seconds
 [rows."meter_{role}"]
 sims = ["strims-sim"]
 type = "nums"
-params = { role = ["seeds", "forwarders", "others"] }
-description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over each role's samples (`meter_seeds`, `meter_forwarders`, `meter_others`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
-notes.strims-sim = "Pair: the ppspp sim's `meter_{role}_p{p}` hold the same reading as scalars, its roles `seed` (here `seeds`), `relays` (honest viewers with a child; here `forwarders`, hosts that answered a STREAM_REQUEST, another population) and `others`."
+params = { role = ["forwarders", "others"] }
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over the forwarders' samples and the others' (`meter_forwarders`, `meter_others`; the seed's are `meter_seed_p*`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
+notes.strims-sim = "Pair: the ppspp sim's `meter_{role}_p{p}` hold the same reading as scalars, its roles `relays` (honest viewers with a child; here `forwarders`, hosts that answered a STREAM_REQUEST, another population) and `others`."
 
 [rows."meter_{role}_p{p}"]
 sims = ["ppspp"]
 type = "num"
-params = { role = ["seed", "relays", "others"], p = ["10", "50", "90"] }
+params = { role = ["relays", "others"], p = ["10", "50", "90"] }
 consts.ppspp = ["p"]
-description = "Per sample of each honest node whose upload meter has a capacity: the capacity (the relay busy-time reading, `PushStats::upload_capacity`, the seed's too) over the node's true uplink, for the seed, relays and the other viewers: the row's `meter_seed_p*`, `meter_relays_p*` and `meter_others_p*`."
-notes.ppspp = "Pair: strims-sim's `meter_{role}` hold the same reading as one list of p10/p50/p90 by role: `seeds`, `forwarders` (hosts that answered a STREAM_REQUEST, not this sim's `relays`) and `others`."
+description = "Per sample of each honest viewer whose upload meter has a capacity: the capacity (the relay busy-time reading, `PushStats::upload_capacity`) over the node's true uplink, for relays and the other viewers: the row's `meter_relays_p*` and `meter_others_p*` (the seed's are `meter_seed_p*`)."
+notes.ppspp = "Pair: strims-sim's `meter_{role}` hold the same reading as one list of p10/p50/p90 by role: `forwarders` (hosts that answered a STREAM_REQUEST, not this sim's `relays`) and `others`."
+
+[rows."meter_seed_p{p}"]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+params = { p = ["10", "50", "90"] }
+consts.strims-sim = ["p"]
+consts.ppspp = ["p"]
+description = "The first swarm's seed's upload meter: its capacity (the relay busy-time reading admission and shedding take, `PushStats::upload_capacity`) over what the seed could upload, at each of its samples from the end of the startup phase (`STARTUP_SECS`, vocab.toml's `start` horizon, after the stream's first write) to the stream's last write: their p10, p50 and p90 (`meter_seed_p10`, `meter_seed_p50`, `meter_seed_p90`); left out without a sample there (a stream no longer than its startup)."
+notes.strims-sim = "Each sample one with a capacity (`Report::seed_meter`)."
+notes.ppspp = "A sample a second (`Sim::sample_shape`), each with a capacity."
+
+[rows."meter_budget_seed_p{p}"]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+params = { p = ["10", "50", "90"] }
+consts.strims-sim = ["p"]
+consts.ppspp = ["p"]
+description = "The first swarm's seed's budget reading: the capacity its latest allocation check measured its budget from (`PushStats::seed_budget_capacity`) over what the seed could upload, at each of `meter_seed_p*`'s samples once it was measured: their p10, p50 and p90; left out without one (a seed that isn't adaptive, or never measured there)."
 
 [rows.meter_bucket_forwarders]
 sims = ["strims-sim"]
 type = "nums"
-description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over each role's samples (`meter_seeds`, `meter_forwarders`, `meter_others`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over the forwarders' samples and the others' (`meter_forwarders`, `meter_others`; the seed's are `meter_seed_p*`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
 
 [rows.meter_bucket_seeds]
 sims = ["strims-sim"]
 type = "nums"
-description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over each role's samples (`meter_seeds`, `meter_forwarders`, `meter_others`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over the forwarders' samples and the others' (`meter_forwarders`, `meter_others`; the seed's are `meter_seed_p*`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
 
 [rows.meter_budget_seed_bps_p50]
 sims = ["ppspp"]
@@ -819,20 +837,14 @@ type = "int"
 unit = "bytes/s"
 none = "null"
 description = "The capacity reading the seed's budget was measured from (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`), in bytes per second: its median over the samples after the warm-up while it writes, once measured; null if never."
-notes.ppspp = "Pair: strims-sim's `meter_budget_seeds` is the same reading, as its p10/p50/p90 over the seed's uplink."
-
-[rows.meter_budget_seeds]
-sims = ["strims-sim"]
-type = "nums"
-description = "An adaptive seed's budget takes its own reading (`MeterSample::budget_capacity`): its p10/p50/p90 ÷ the uplink over the seeds' samples once measured (`meter_budget_seeds`, `Report::budget_readings`)."
-notes.strims-sim = "Pair: the ppspp sim's `meter_budget_seed_bps_p50` is the same reading, its median in bytes per second."
+notes.ppspp = "In bytes per second; `meter_budget_seed_p*` are its quantiles over the seed's uplink, from the end of the startup phase."
 
 [rows.meter_seed_bps_p50]
 sims = ["ppspp"]
 type = "int"
 unit = "bytes/s"
 description = "The seed's capacity estimate (`AllocSample::capacity`, `PushStats::upload_capacity`), the relay busy-time reading (not its budget's, `meter_budget_seed_bps_p50`), in bytes per second: its median over the samples after the warm-up while it writes (0 without one)."
-notes.ppspp = "Pair: strims-sim's `meter_seeds` holds the same reading, as its p10/p50/p90 over the seed's uplink."
+notes.ppspp = "In bytes per second; `meter_seed_p*` are its quantiles over the seed's uplink, from the end of the startup phase."
 
 [rows.mismatches]
 sims = ["ppspp"]
@@ -854,7 +866,7 @@ description = "The hosts of each role (Report::roles): the swarms' seeds (`seeds
 sims = ["strims-sim"]
 type = "nums"
 params = { change = ["drop", "rise"] }
-description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over each role's samples (`meter_seeds`, `meter_forwarders`, `meter_others`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over the forwarders' samples and the others' (`meter_forwarders`, `meter_others`; the seed's are `meter_seed_p*`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
 
 [rows."off_{change}_n"]
 sims = ["strims-sim"]
@@ -1944,6 +1956,18 @@ rename = true
 type = "int"
 unit = "bytes/s"
 description = "The seed's capacity estimate (`AllocSample::capacity`, `PushStats::upload_capacity`), the relay busy-time reading (not its budget's, `budget_capacity`), median over the samples after the warm-up while it writes (0 without one)."
+
+[rows.meter_budget_seeds]
+sims = []
+retired = ["strims-sim"]
+type = "nums"
+description = "An adaptive seed's budget reading (`MeterSample::budget_capacity`, once measured) ÷ its uplink: its p10/p50/p90 over the samples of every swarm's seed while any swarm streamed, from the stream's first write (its startup in), and every swarm's budget, as a list (`Report::budget_readings`)."
+
+[rows.meter_seeds]
+sims = []
+retired = ["strims-sim"]
+type = "nums"
+description = "The upload meter's capacity (`PushStats::upload_capacity`) ÷ the host's uplink: its p10/p50/p90 over the samples of every swarm's seed while any swarm streamed, from the stream's first write (its startup in), as a list (`Report::meter_deciles` over the seeds)."
 
 [meta.sim]
 sims = ["strims-sim", "ppspp"]

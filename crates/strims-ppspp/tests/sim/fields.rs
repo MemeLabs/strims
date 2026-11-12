@@ -633,8 +633,8 @@ pub(crate) enum RowInt {
     /// bytes per second: its median over the samples after the warm-up while it
     /// writes, once measured; null if never.
     ///
-    /// ppspp: Pair: strims-sim's `meter_budget_seeds` is the same reading, as
-    /// its p10/p50/p90 over the seed's uplink.
+    /// ppspp: In bytes per second; `meter_budget_seed_p*` are its quantiles
+    /// over the seed's uplink, from the end of the startup phase.
     ///
     /// Unit: bytes/s. None is written as null.
     MeterBudgetSeedBpsP50,
@@ -643,8 +643,8 @@ pub(crate) enum RowInt {
     /// budget's, `meter_budget_seed_bps_p50`), in bytes per second: its median
     /// over the samples after the warm-up while it writes (0 without one).
     ///
-    /// ppspp: Pair: strims-sim's `meter_seeds` holds the same reading, as its
-    /// p10/p50/p90 over the seed's uplink.
+    /// ppspp: In bytes per second; `meter_seed_p*` are its quantiles over the
+    /// seed's uplink, from the end of the startup phase.
     ///
     /// Unit: bytes/s.
     MeterSeedBpsP50,
@@ -1553,16 +1553,33 @@ pub(crate) enum RowNum {
     /// A media swarm's media rate: media bytes over the stream's seconds, in
     /// kbit/s; left out without media.
     MediaKbit,
-    /// Per sample of each honest node whose upload meter has a capacity: the
-    /// capacity (the relay busy-time reading, `PushStats::upload_capacity`, the
-    /// seed's too) over the node's true uplink, for the seed, relays and the
-    /// other viewers: the row's `meter_seed_p*`, `meter_relays_p*` and
-    /// `meter_others_p*`.
+    /// Per sample of each honest viewer whose upload meter has a capacity: the
+    /// capacity (the relay busy-time reading, `PushStats::upload_capacity`)
+    /// over the node's true uplink, for relays and the other viewers: the row's
+    /// `meter_relays_p*` and `meter_others_p*` (the seed's are
+    /// `meter_seed_p*`).
     ///
     /// ppspp: Pair: strims-sim's `meter_{role}` hold the same reading as one
-    /// list of p10/p50/p90 by role: `seeds`, `forwarders` (hosts that answered
-    /// a STREAM_REQUEST, not this sim's `relays`) and `others`.
+    /// list of p10/p50/p90 by role: `forwarders` (hosts that answered a
+    /// STREAM_REQUEST, not this sim's `relays`) and `others`.
     MeterRolePP(u16),
+    /// The first swarm's seed's upload meter: its capacity (the relay busy-time
+    /// reading admission and shedding take, `PushStats::upload_capacity`) over
+    /// what the seed could upload, at each of its samples from the end of the
+    /// startup phase (`STARTUP_SECS`, vocab.toml's `start` horizon, after the
+    /// stream's first write) to the stream's last write: their p10, p50 and p90
+    /// (`meter_seed_p10`, `meter_seed_p50`, `meter_seed_p90`); left out without
+    /// a sample there (a stream no longer than its startup).
+    ///
+    /// ppspp: A sample a second (`Sim::sample_shape`), each with a capacity.
+    MeterSeedPP(u16),
+    /// The first swarm's seed's budget reading: the capacity its latest
+    /// allocation check measured its budget from
+    /// (`PushStats::seed_budget_capacity`) over what the seed could upload, at
+    /// each of `meter_seed_p*`'s samples once it was measured: their p10, p50
+    /// and p90; left out without one (a seed that isn't adaptive, or never
+    /// measured there).
+    MeterBudgetSeedPP(u16),
     /// Messages per channel payload, over the honest hosts' outbound ppspp
     /// (ChannelMetrics messages over payloads).
     MsgsPerPayload,
@@ -1755,6 +1772,14 @@ impl RowNum {
     /// loops over.
     pub(crate) const P_OF_METER_ROLE_P_P: [u8; 3] = [10, 50, 90];
 
+    /// `meter_seed_p{p}`'s `p` values for ppspp, which its code
+    /// loops over.
+    pub(crate) const P_OF_METER_SEED_P_P: [u8; 3] = [10, 50, 90];
+
+    /// `meter_budget_seed_p{p}`'s `p` values for ppspp, which its code
+    /// loops over.
+    pub(crate) const P_OF_METER_BUDGET_SEED_P_P: [u8; 3] = [10, 50, 90];
+
     /// `viewer_util_p{p}`'s `p` values for ppspp, which its code
     /// loops over.
     pub(crate) const P_OF_VIEWER_UTIL_P_P: [u8; 3] = [50, 90, 95];
@@ -1788,6 +1813,8 @@ impl RowNum {
             RowNum::Mbit => "mbit",
             RowNum::MediaKbit => "media_kbit",
             RowNum::MeterRolePP(i) => at(&ROWNUM_METER_ROLE_P_P, i),
+            RowNum::MeterSeedPP(i) => at(&ROWNUM_METER_SEED_P_P, i),
+            RowNum::MeterBudgetSeedPP(i) => at(&ROWNUM_METER_BUDGET_SEED_P_P, i),
             RowNum::MsgsPerPayload => "msgs_per_payload",
             RowNum::OvhLeafP50 => "ovh_leaf_p50",
             RowNum::OvhLeafP90 => "ovh_leaf_p90",
@@ -1848,6 +1875,21 @@ impl RowNum {
         RowNum::MeterRolePP(of(
             &ROWNUM_METER_ROLE_P_P,
             format_args!("meter_{role}_p{p}"),
+        ))
+    }
+
+    /// `meter_seed_p{p}`'s name of `p`: a panic for values
+    /// `fields.toml` doesn't give ppspp.
+    pub(crate) fn meter_seed_p_p(p: impl Display) -> RowNum {
+        RowNum::MeterSeedPP(of(&ROWNUM_METER_SEED_P_P, format_args!("meter_seed_p{p}")))
+    }
+
+    /// `meter_budget_seed_p{p}`'s name of `p`: a panic for values
+    /// `fields.toml` doesn't give ppspp.
+    pub(crate) fn meter_budget_seed_p_p(p: impl Display) -> RowNum {
+        RowNum::MeterBudgetSeedPP(of(
+            &ROWNUM_METER_BUDGET_SEED_P_P,
+            format_args!("meter_budget_seed_p{p}"),
         ))
     }
 
@@ -1920,16 +1962,23 @@ const ROWNUM_DEPTH_HOPS: [&str; 6] = [
 ];
 
 /// `meter_{role}_p{p}`'s names for ppspp.
-const ROWNUM_METER_ROLE_P_P: [&str; 9] = [
-    "meter_seed_p10",
-    "meter_seed_p50",
-    "meter_seed_p90",
+const ROWNUM_METER_ROLE_P_P: [&str; 6] = [
     "meter_relays_p10",
     "meter_relays_p50",
     "meter_relays_p90",
     "meter_others_p10",
     "meter_others_p50",
     "meter_others_p90",
+];
+
+/// `meter_seed_p{p}`'s names for ppspp.
+const ROWNUM_METER_SEED_P_P: [&str; 3] = ["meter_seed_p10", "meter_seed_p50", "meter_seed_p90"];
+
+/// `meter_budget_seed_p{p}`'s names for ppspp.
+const ROWNUM_METER_BUDGET_SEED_P_P: [&str; 3] = [
+    "meter_budget_seed_p10",
+    "meter_budget_seed_p50",
+    "meter_budget_seed_p90",
 ];
 
 /// `stalled_share_{delay}{pop}`'s names for ppspp.

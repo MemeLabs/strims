@@ -67,6 +67,8 @@ in its order:
   unwritten()                  the current kinds no sim here writes: other
                                builds' runs hold them
   retired()                    the kinds with `replaced_by`
+  startup_secs()               the startup phase's length from the
+                               stream's start (`start`'s horizon)
   derived(), scenario()        the current kinds of those classes
   aligns()                     what a curve aligns on: derived, then
                                scenario
@@ -349,6 +351,12 @@ def anchors(doc=None):
     return {kid: kind(kid, doc) for kid in kinds(doc=doc) if "phase" in kind(kid, doc)}
 
 
+def startup_secs(doc=None):
+    """The startup phase's length from the stream's start, in seconds: the
+    `start` kind's horizon (the verdict's STARTUP_SECS)."""
+    return anchors(doc)["start"]["horizon_s"]
+
+
 def rule_kinds(doc=None):
     """The current kinds of the sims' events the phase rule reads, in the
     document's order: the anchors a sim writes (not the derived `start`)
@@ -540,8 +548,9 @@ def rust(text, doc):
         "//! The sims' event vocabulary, [`DOCUMENT`] (`crates/strims-wan/vocab.toml`,\n"
         "//! whose header says what it holds): the kinds of the `events` tables, as\n"
         "//! [`Kind`] for those a sim here writes ([`Kind::written_by`]), and the\n"
-        "//! others' names ([`UNWRITTEN`], [`RETIRED`], [`DERIVED`]); and the `parents`\n"
-        "//! table's reasons ([`REASONS`]). `hack/simlab/vocab.py` reads the\n"
+        "//! others' names ([`UNWRITTEN`], [`RETIRED`], [`DERIVED`]); the `parents`\n"
+        "//! table's reasons ([`REASONS`]); and the startup phase's length\n"
+        "//! ([`STARTUP_SECS`]). `hack/simlab/vocab.py` reads the\n"
         "//! document, and makes this file and the console's lists from it.\n\n")
     o.append(f"/// The vocabulary, as `crates/strims-wan/vocab.toml` holds it.\npub const DOCUMENT: &str = {_raw(text)};\n\n")
     o.append("/// A sim that writes `events` tables.\n#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]\npub enum Sim {\n")
@@ -606,7 +615,11 @@ def rust(text, doc):
     o.append(f"pub const DERIVED: &[&str] = {_strs(derived(doc), 0)};\n\n")
     o.append("/// Why a node's push parent of a stream changed: the `parents` table's\n"
              "/// `reason`, `strims_ppspp::ParentWhy`'s names.\n")
-    o.append(f"pub const REASONS: &[&str] = {_strs(reasons(doc), 0)};\n")
+    o.append(f"pub const REASONS: &[&str] = {_strs(reasons(doc), 0)};\n\n")
+    o.append("/// The run's startup phase, in seconds from the stream's start: the\n"
+             "/// `start` kind's horizon, the verdict's `STARTUP_SECS`, which a sim's\n"
+             "/// measures over its steady stream leave out.\n")
+    o.append(f"pub const STARTUP_SECS: u64 = {startup_secs(doc)};\n")
     return "".join(o)
 
 

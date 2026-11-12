@@ -6,8 +6,9 @@
 //! The sims' event vocabulary, [`DOCUMENT`] (`crates/strims-wan/vocab.toml`,
 //! whose header says what it holds): the kinds of the `events` tables, as
 //! [`Kind`] for those a sim here writes ([`Kind::written_by`]), and the
-//! others' names ([`UNWRITTEN`], [`RETIRED`], [`DERIVED`]); and the `parents`
-//! table's reasons ([`REASONS`]). `hack/simlab/vocab.py` reads the
+//! others' names ([`UNWRITTEN`], [`RETIRED`], [`DERIVED`]); the `parents`
+//! table's reasons ([`REASONS`]); and the startup phase's length
+//! ([`STARTUP_SECS`]). `hack/simlab/vocab.py` reads the
 //! document, and makes this file and the console's lists from it.
 
 /// The vocabulary, as `crates/strims-wan/vocab.toml` holds it.
@@ -1151,3 +1152,8 @@ pub const REASONS: &[&str] = &[
     "prune",
     "shed",
 ];
+
+/// The run's startup phase, in seconds from the stream's start: the
+/// `start` kind's horizon, the verdict's `STARTUP_SECS`, which a sim's
+/// measures over its steady stream leave out.
+pub const STARTUP_SECS: u64 = 25;

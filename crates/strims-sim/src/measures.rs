@@ -13,15 +13,18 @@
 //!   reading admission and shedding take (`PushStats::upload_capacity`,
 //!   [`MeterSample::capacity`]), a seed's too, ÷ the host's uplink at each
 //!   sample while a swarm streams ([`Report::meter_readings`]): its
-//!   p10/p50/p90 over each role's samples (`meter_seeds`,
-//!   `meter_forwarders`, `meter_others`), its median per bucket
+//!   p10/p50/p90 over the forwarders' samples and the others'
+//!   (`meter_forwarders`, `meter_others`), its median per bucket
 //!   (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked
-//!   changes (`off_drop`, `off_rise`, below). An adaptive seed's budget
-//!   takes its own reading ([`MeterSample::budget_capacity`]): its
-//!   p10/p50/p90 ÷ the uplink over the seeds' samples once measured
-//!   (`meter_budget_seeds`, [`Report::budget_readings`]). The first
-//!   wave's `seed_first_wave_capacity` is the budget's busy time's
-//!   unbounded reading, neither of them.
+//!   changes (`off_drop`, `off_rise`, below).
+//! - **seed meter** ([`Report::seed_meter`]): the first swarm's seed's
+//!   meter readings from the end of the startup phase to the stream's end
+//!   ([`Report::seed_meter_window`]), their p10/p50/p90
+//!   (`meter_seed_p10`, ...), and an adaptive seed's budget's own reading
+//!   ([`MeterSample::budget_capacity`]) ÷ the uplink over the same samples
+//!   once measured (`meter_budget_seed_p10`, ...). The first wave's
+//!   `seed_first_wave_capacity` is the budget's busy time's unbounded
+//!   reading, neither of them.
 //! - **standing queue** ([`Report::standing_queue`]): the share of a set of
 //!   hosts' uplink queue samples, while a swarm streams, that wait longer
 //!   than [`STANDING_QUEUE`] (WAN mode).
@@ -229,6 +232,13 @@ fn honest_reach(g: &[Vec<HostIx>], honest: &[bool], from: HostIx) -> Vec<bool> {
         }
     }
     seen
+}
+
+/// The `p`th percentile of sorted `v`, ranked as [`deciles`] ranks; None
+/// for none.
+fn percentile(v: &[f64], p: u8) -> Option<f64> {
+    let i = ((v.len().max(1) - 1) as f64 * f64::from(p) / 100.0).round() as usize;
+    v.get(i).copied()
 }
 
 fn deciles(v: &mut [f64]) -> [f64; 3] {
@@ -1273,22 +1283,24 @@ impl Report {
             );
         self.playback_cols(swarm, &mut j);
         let roles = self.roles();
-        for (name, hosts) in [
-            ("seeds", &roles.seeds),
-            ("forwarders", &roles.forwarders),
-            ("others", &roles.others),
-        ] {
+        j.int(RowInt::n_role("seeds"), roles.seeds.len() as u64);
+        for (name, hosts) in [("forwarders", &roles.forwarders), ("others", &roles.others)] {
             let d = self.meter_deciles(hosts);
             j.nums(RowNums::meter_role(name), d)
                 .int(RowInt::n_role(name), hosts.len() as u64);
         }
-        let mut budget: Vec<f64> = roles
-            .seeds
-            .iter()
-            .flat_map(|&h| self.budget_readings(h))
-            .collect();
-        if !budget.is_empty() {
-            j.nums(RowNums::MeterBudgetSeeds, deciles(&mut budget));
+        let (mut capacity, mut budget) = self.seed_meter(swarm);
+        capacity.sort_by(f64::total_cmp);
+        budget.sort_by(f64::total_cmp);
+        for p in RowNum::P_OF_METER_SEED_P_P {
+            if let Some(x) = percentile(&capacity, p) {
+                j.num(RowNum::meter_seed_p_p(p), x);
+            }
+        }
+        for p in RowNum::P_OF_METER_BUDGET_SEED_P_P {
+            if let Some(x) = percentile(&budget, p) {
+                j.num(RowNum::meter_budget_seed_p_p(p), x);
+            }
         }
         j.nums(
             RowNums::MeterBucketSeeds,

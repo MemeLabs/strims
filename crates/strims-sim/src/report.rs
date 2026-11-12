@@ -1120,29 +1120,51 @@ impl Report {
             .collect()
     }
 
-    /// An adaptive seed's budget readings at `h` while a swarm was live:
-    /// the capacity each of its scenario swarms' latest allocation check
-    /// measured its budget from
-    /// ([`MeterSample::budget_capacity`](crate::stats::MeterSample::budget_capacity)),
-    /// once measured, ÷ what the host could upload at the sample. Empty
-    /// without a cap, and at other hosts.
-    pub fn budget_readings(&self, h: HostIx) -> Vec<f64> {
-        let Some(host) = self.hosts.get(h) else {
-            return Vec::new();
+    /// Swarm `swarm`'s seed meter over its window
+    /// ([`seed_meter_window`](Report::seed_meter_window)), the row's
+    /// `meter_seed_p*` and `meter_budget_seed_p*`: at each of the seed's
+    /// samples there, the meter's capacity ÷ what the seed could upload
+    /// ([`meter_series`](Report::meter_series)); and once the seed's budget
+    /// for the swarm is measured, the capacity its latest allocation check
+    /// measured it from
+    /// ([`MeterSample::budget_capacity`](crate::stats::MeterSample::budget_capacity))
+    /// ÷ the same. Both empty without a window or a cap.
+    pub fn seed_meter(&self, swarm: usize) -> (Vec<f64>, Vec<f64>) {
+        let (Some(spec), Some((from, to))) = (
+            self.scenario.swarms.get(swarm),
+            self.seed_meter_window(swarm),
+        ) else {
+            return (Vec::new(), Vec::new());
         };
-        let mut out = Vec::new();
-        for m in host.runner.meter.iter().filter(|m| self.live(m.t)) {
-            let Some(cap) = self.upload_cap_at(h, m.t) else {
-                continue;
-            };
-            out.extend(
-                m.budget_capacity
-                    .values()
-                    .filter(|&&c| c > 0)
-                    .map(|&c| c as f64 / cap as f64),
-            );
-        }
-        out
+        let within = |t: Duration| t >= from && t <= to;
+        let capacity = self
+            .meter_series(spec.seed)
+            .into_iter()
+            .filter(|&(t, _, _)| within(t))
+            .map(|(_, c, _)| c)
+            .collect();
+        let budget = self.hosts.get(spec.seed).map_or(Vec::new(), |host| {
+            host.runner
+                .meter
+                .iter()
+                .filter(|m| within(m.t))
+                .filter_map(|m| {
+                    let c = *m.budget_capacity.get(&swarm).filter(|&&c| c > 0)?;
+                    Some(c as f64 / self.upload_cap_at(spec.seed, m.t)? as f64)
+                })
+                .collect()
+        });
+        (capacity, budget)
+    }
+
+    /// Swarm `swarm`'s seed meter's window: from the end of its startup
+    /// phase, [`STARTUP_SECS`](strims_wan::vocab::STARTUP_SECS) after its
+    /// stream's first write, to its last; None for a stream no longer than
+    /// its startup.
+    pub fn seed_meter_window(&self, swarm: usize) -> Option<(Duration, Duration)> {
+        let s = self.scenario.swarms.get(swarm)?;
+        let from = s.start + Duration::from_secs(strims_wan::vocab::STARTUP_SECS);
+        (from <= s.stop).then_some((from, s.stop))
     }
 
     /// Whether any swarm streams at `t`.

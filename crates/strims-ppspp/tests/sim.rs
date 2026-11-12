@@ -1785,12 +1785,19 @@ struct Shape {
     /// and honest viewers.
     relays: u64,
     viewers: u64,
-    /// Per sample of each honest node whose upload meter has a capacity:
+    /// Per sample of each honest viewer whose upload meter has a capacity:
     /// the capacity (the relay busy-time reading,
-    /// `PushStats::upload_capacity`, the seed's too) over the node's true
-    /// uplink, for the seed, relays and the other viewers: the row's
-    /// `meter_seed_p*`, `meter_relays_p*` and `meter_others_p*`.
-    meter: [Vec<f64>; 3],
+    /// `PushStats::upload_capacity`) over the node's true uplink, for
+    /// relays and the other viewers: the row's `meter_relays_p*` and
+    /// `meter_others_p*`.
+    meter: [Vec<f64>; 2],
+    /// The seed's, over its window ([`Sim::seed_meter_window`]) at each
+    /// sample with a capacity: the capacity over its uplink, the row's
+    /// `meter_seed_p*`; and once its budget is measured, the capacity it
+    /// was measured from (`PushStats::seed_budget_capacity`) over the same,
+    /// `meter_budget_seed_p*`.
+    seed_meter: Vec<f64>,
+    seed_budget: Vec<f64>,
     /// Per sample of each honest relay: its push subscribers, all streams.
     fanout: Vec<u64>,
     /// STREAM_REQUESTs honest viewers declined over the samples, and those
@@ -4860,6 +4867,18 @@ impl Sim {
         });
     }
 
+    /// The seed meter's window ([`Shape::seed_meter`]): from the end of the
+    /// startup phase, [`vocab::STARTUP_SECS`] after the stream's first
+    /// write, to its last, as strims-sim's `Report::seed_meter_window`.
+    /// Empty for a stream no longer than its startup.
+    fn seed_meter_window(&self) -> (Time, Time) {
+        let first = t0() + Duration::SECOND;
+        (
+            first + Duration::from_secs(vocab::STARTUP_SECS as i64),
+            first + Duration::from_secs(self.cfg.stream_secs as i64),
+        )
+    }
+
     /// Samples [`Sim::shape`]: every honest viewer's chain of open parents
     /// per stream, and every honest node's meter against its uplink.
     fn sample_shape(&mut self) {
@@ -4873,6 +4892,8 @@ impl Sim {
             self.sample_loops(&parents);
         }
         let parent = |i: usize, s: usize| parents.get(i).and_then(|v| v.get(s)).copied().flatten();
+        let (from, to) = self.seed_meter_window();
+        let seed_window = self.now >= from && self.now <= to;
         let shape = &mut self.shape;
         for (i, n) in self.nodes.iter().enumerate() {
             let push = n.runner.push_stats(n.swarm);
@@ -4880,12 +4901,18 @@ impl Sim {
                 && let Some(p) = &push
                 && p.upload_capacity > 0
             {
-                let role = match (n.role, p.children) {
-                    (Role::Seed, _) => 0,
-                    (_, 0) => 2,
-                    _ => 1,
-                };
-                shape.meter[role].push(p.upload_capacity as f64 / n.up_bw.max(1) as f64);
+                let up = n.up_bw.max(1) as f64;
+                match (n.role, p.children) {
+                    (Role::Seed, _) if seed_window => {
+                        shape.seed_meter.push(p.upload_capacity as f64 / up);
+                        if p.seed_budget_capacity > 0 {
+                            shape.seed_budget.push(p.seed_budget_capacity as f64 / up);
+                        }
+                    }
+                    (Role::Seed, _) => {}
+                    (_, 0) => shape.meter[1].push(p.upload_capacity as f64 / up),
+                    _ => shape.meter[0].push(p.upload_capacity as f64 / up),
+                }
             }
             if n.role != Role::Peer {
                 continue;
@@ -11177,13 +11204,29 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     row.int(RowInt::RelayAccepted, acc)
         .int(RowInt::RelayRejected, rej)
         .int(RowInt::ShedsSent, shed);
-    for (name, v) in ["seed", "relays", "others"].iter().zip(&sh.meter) {
+    let sorted = |v: &Vec<f64>| {
         let mut v = v.clone();
         v.sort_by(f64::total_cmp);
+        v
+    };
+    let at = |v: &[f64], p: usize| v.get((v.len().saturating_sub(1)) * p / 100).copied();
+    for (name, v) in ["relays", "others"].iter().zip(&sh.meter) {
+        let v = sorted(v);
         for p in RowNum::P_OF_METER_ROLE_P_P.map(usize::from) {
-            if let Some(&x) = v.get((v.len().saturating_sub(1)) * p / 100) {
+            if let Some(x) = at(&v, p) {
                 row.num(RowNum::meter_role_p_p(name, p), x);
             }
+        }
+    }
+    let (capacity, budget) = (sorted(&sh.seed_meter), sorted(&sh.seed_budget));
+    for p in RowNum::P_OF_METER_SEED_P_P.map(usize::from) {
+        if let Some(x) = at(&capacity, p) {
+            row.num(RowNum::meter_seed_p_p(p), x);
+        }
+    }
+    for p in RowNum::P_OF_METER_BUDGET_SEED_P_P.map(usize::from) {
+        if let Some(x) = at(&budget, p) {
+            row.num(RowNum::meter_budget_seed_p_p(p), x);
         }
     }
     // How push loops formed (`SIM_LOOPS=1`): how many, by how their newest

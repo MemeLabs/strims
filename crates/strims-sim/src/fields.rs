@@ -1216,6 +1216,23 @@ pub(crate) enum RowNum {
     /// A media swarm's media rate: media bytes over the stream's seconds, in
     /// kbit/s; left out without media.
     MediaKbit,
+    /// The first swarm's seed's upload meter: its capacity (the relay busy-time
+    /// reading admission and shedding take, `PushStats::upload_capacity`) over
+    /// what the seed could upload, at each of its samples from the end of the
+    /// startup phase (`STARTUP_SECS`, vocab.toml's `start` horizon, after the
+    /// stream's first write) to the stream's last write: their p10, p50 and p90
+    /// (`meter_seed_p10`, `meter_seed_p50`, `meter_seed_p90`); left out without
+    /// a sample there (a stream no longer than its startup).
+    ///
+    /// strims-sim: Each sample one with a capacity (`Report::seed_meter`).
+    MeterSeedPP(u16),
+    /// The first swarm's seed's budget reading: the capacity its latest
+    /// allocation check measured its budget from
+    /// (`PushStats::seed_budget_capacity`) over what the seed could upload, at
+    /// each of `meter_seed_p*`'s samples once it was measured: their p10, p50
+    /// and p90; left out without one (a seed that isn't adaptive, or never
+    /// measured there).
+    MeterBudgetSeedPP(u16),
     /// Messages per channel payload, over the honest hosts' outbound ppspp
     /// (ChannelMetrics messages over payloads).
     MsgsPerPayload,
@@ -1404,6 +1421,14 @@ pub(crate) enum RowNum {
 }
 
 impl RowNum {
+    /// `meter_seed_p{p}`'s `p` values for strims-sim, which its code
+    /// loops over.
+    pub(crate) const P_OF_METER_SEED_P_P: [u8; 3] = [10, 50, 90];
+
+    /// `meter_budget_seed_p{p}`'s `p` values for strims-sim, which its code
+    /// loops over.
+    pub(crate) const P_OF_METER_BUDGET_SEED_P_P: [u8; 3] = [10, 50, 90];
+
     /// `upq_ms_p{p}`'s `p` values for strims-sim, which its code
     /// loops over.
     pub(crate) const P_OF_UPQ_MS_P_P: [u8; 2] = [50, 90];
@@ -1444,6 +1469,8 @@ impl RowNum {
             RowNum::LinksDroppedPerHostMin => "links_dropped_per_host_min",
             RowNum::LinksFormedPerHostMin => "links_formed_per_host_min",
             RowNum::MediaKbit => "media_kbit",
+            RowNum::MeterSeedPP(i) => at(&ROWNUM_METER_SEED_P_P, i),
+            RowNum::MeterBudgetSeedPP(i) => at(&ROWNUM_METER_BUDGET_SEED_P_P, i),
             RowNum::MsgsPerPayload => "msgs_per_payload",
             RowNum::OvhLeafP50 => "ovh_leaf_p50",
             RowNum::OvhLeafP90 => "ovh_leaf_p90",
@@ -1537,6 +1564,21 @@ impl RowNum {
     /// `fields.toml` doesn't give strims-sim.
     pub(crate) fn depth_hops(hops: impl Display) -> RowNum {
         RowNum::DepthHops(of(&ROWNUM_DEPTH_HOPS, format_args!("depth_{hops}")))
+    }
+
+    /// `meter_seed_p{p}`'s name of `p`: a panic for values
+    /// `fields.toml` doesn't give strims-sim.
+    pub(crate) fn meter_seed_p_p(p: impl Display) -> RowNum {
+        RowNum::MeterSeedPP(of(&ROWNUM_METER_SEED_P_P, format_args!("meter_seed_p{p}")))
+    }
+
+    /// `meter_budget_seed_p{p}`'s name of `p`: a panic for values
+    /// `fields.toml` doesn't give strims-sim.
+    pub(crate) fn meter_budget_seed_p_p(p: impl Display) -> RowNum {
+        RowNum::MeterBudgetSeedPP(of(
+            &ROWNUM_METER_BUDGET_SEED_P_P,
+            format_args!("meter_budget_seed_p{p}"),
+        ))
     }
 
     /// `stalled_share_{delay}{pop}`'s name of `delay`, `pop`: a panic for values
@@ -1651,6 +1693,16 @@ const ROWNUM_DELIVERY_WHO: [&str; 2] = ["delivery_honest", "delivery_hostile"];
 /// `depth_{hops}`'s names for strims-sim.
 const ROWNUM_DEPTH_HOPS: [&str; 6] = [
     "depth_1", "depth_2", "depth_3", "depth_4", "depth_5", "depth_6",
+];
+
+/// `meter_seed_p{p}`'s names for strims-sim.
+const ROWNUM_METER_SEED_P_P: [&str; 3] = ["meter_seed_p10", "meter_seed_p50", "meter_seed_p90"];
+
+/// `meter_budget_seed_p{p}`'s names for strims-sim.
+const ROWNUM_METER_BUDGET_SEED_P_P: [&str; 3] = [
+    "meter_budget_seed_p10",
+    "meter_budget_seed_p50",
+    "meter_budget_seed_p90",
 ];
 
 /// `stalled_share_{delay}{pop}`'s names for strims-sim.
@@ -1789,50 +1841,42 @@ pub(crate) enum RowNums {
     /// reading admission and shedding take (`PushStats::upload_capacity`,
     /// `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each
     /// sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90
-    /// over each role's samples (`meter_seeds`, `meter_forwarders`,
-    /// `meter_others`), its median per bucket (`meter_bucket_seeds`,
-    /// `meter_bucket_forwarders`), and how it tracked changes (`off_drop`,
-    /// `off_rise`, below).
+    /// over the forwarders' samples and the others' (`meter_forwarders`,
+    /// `meter_others`; the seed's are `meter_seed_p*`), its median per bucket
+    /// (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked
+    /// changes (`off_drop`, `off_rise`, below).
     ///
     /// strims-sim: Pair: the ppspp sim's `meter_{role}_p{p}` hold the same
-    /// reading as scalars, its roles `seed` (here `seeds`), `relays` (honest
-    /// viewers with a child; here `forwarders`, hosts that answered a
-    /// STREAM_REQUEST, another population) and `others`.
+    /// reading as scalars, its roles `relays` (honest viewers with a child;
+    /// here `forwarders`, hosts that answered a STREAM_REQUEST, another
+    /// population) and `others`.
     MeterRole(u16),
     /// **meter readings**: the upload meter's capacity, the relay busy-time
     /// reading admission and shedding take (`PushStats::upload_capacity`,
     /// `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each
     /// sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90
-    /// over each role's samples (`meter_seeds`, `meter_forwarders`,
-    /// `meter_others`), its median per bucket (`meter_bucket_seeds`,
-    /// `meter_bucket_forwarders`), and how it tracked changes (`off_drop`,
-    /// `off_rise`, below).
+    /// over the forwarders' samples and the others' (`meter_forwarders`,
+    /// `meter_others`; the seed's are `meter_seed_p*`), its median per bucket
+    /// (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked
+    /// changes (`off_drop`, `off_rise`, below).
     MeterBucketForwarders,
     /// **meter readings**: the upload meter's capacity, the relay busy-time
     /// reading admission and shedding take (`PushStats::upload_capacity`,
     /// `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each
     /// sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90
-    /// over each role's samples (`meter_seeds`, `meter_forwarders`,
-    /// `meter_others`), its median per bucket (`meter_bucket_seeds`,
-    /// `meter_bucket_forwarders`), and how it tracked changes (`off_drop`,
-    /// `off_rise`, below).
+    /// over the forwarders' samples and the others' (`meter_forwarders`,
+    /// `meter_others`; the seed's are `meter_seed_p*`), its median per bucket
+    /// (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked
+    /// changes (`off_drop`, `off_rise`, below).
     MeterBucketSeeds,
-    /// An adaptive seed's budget takes its own reading
-    /// (`MeterSample::budget_capacity`): its p10/p50/p90 ÷ the uplink over the
-    /// seeds' samples once measured (`meter_budget_seeds`,
-    /// `Report::budget_readings`).
-    ///
-    /// strims-sim: Pair: the ppspp sim's `meter_budget_seed_bps_p50` is the
-    /// same reading, its median in bytes per second.
-    MeterBudgetSeeds,
     /// **meter readings**: the upload meter's capacity, the relay busy-time
     /// reading admission and shedding take (`PushStats::upload_capacity`,
     /// `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each
     /// sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90
-    /// over each role's samples (`meter_seeds`, `meter_forwarders`,
-    /// `meter_others`), its median per bucket (`meter_bucket_seeds`,
-    /// `meter_bucket_forwarders`), and how it tracked changes (`off_drop`,
-    /// `off_rise`, below).
+    /// over the forwarders' samples and the others' (`meter_forwarders`,
+    /// `meter_others`; the seed's are `meter_seed_p*`), its median per bucket
+    /// (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked
+    /// changes (`off_drop`, `off_rise`, below).
     OffChange(u16),
     /// The p10, p50 and p90 in ms of the seeds' meters' queueing delay while a
     /// swarm streams, over the samples that had one
@@ -1849,7 +1893,6 @@ impl RowNums {
             RowNums::MeterRole(i) => at(&ROWNUMS_METER_ROLE, i),
             RowNums::MeterBucketForwarders => "meter_bucket_forwarders",
             RowNums::MeterBucketSeeds => "meter_bucket_seeds",
-            RowNums::MeterBudgetSeeds => "meter_budget_seeds",
             RowNums::OffChange(i) => at(&ROWNUMS_OFF_CHANGE, i),
             RowNums::QueueDelaySeedsMs => "queue_delay_seeds_ms",
         }
@@ -1877,7 +1920,7 @@ impl Key for RowNums {
 }
 
 /// `meter_{role}`'s names for strims-sim.
-const ROWNUMS_METER_ROLE: [&str; 3] = ["meter_seeds", "meter_forwarders", "meter_others"];
+const ROWNUMS_METER_ROLE: [&str; 2] = ["meter_forwarders", "meter_others"];
 
 /// `off_{change}`'s names for strims-sim.
 const ROWNUMS_OFF_CHANGE: [&str; 2] = ["off_drop", "off_rise"];
