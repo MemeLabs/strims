@@ -7,7 +7,6 @@ import { useTranslation } from "react-i18next";
 import { useTitle } from "react-use";
 
 import { Device } from "../../../apis/strims/profile/v1/profile";
-import { Checkpoint } from "../../../apis/strims/replication/v1/replication";
 import { InputError } from "../../../components/Form";
 import {
   MenuCell,
@@ -21,19 +20,12 @@ import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 
 interface DeviceTableItemProps {
   device: Device;
-  checkpoint: Checkpoint;
   onDelete: () => void;
   onDeleteError: (error: Error) => void;
   current?: boolean;
 }
 
-const DeviceTableItem = ({
-  device,
-  checkpoint,
-  onDelete,
-  onDeleteError,
-  current,
-}: DeviceTableItemProps) => {
+const DeviceTableItem = ({ device, onDelete, onDeleteError, current }: DeviceTableItemProps) => {
   const [, deleteClient] = useLazyCall("profile", "deleteDevice", {
     onComplete: onDelete,
     onError: onDeleteError,
@@ -46,8 +38,6 @@ const DeviceTableItem = ({
       // The list shows error.
     }
   };
-
-  console.log(checkpoint);
 
   return (
     <tr>
@@ -101,7 +91,6 @@ const DevicesList = () => {
       <DeviceTableItem
         key={device.id.toString()}
         device={device}
-        checkpoint={checkpointsRes.value.checkpoints.find(({ id }) => id === device.id)}
         onDelete={handleDelete}
         onDeleteError={setDeleteError}
       />
@@ -132,7 +121,6 @@ const DevicesList = () => {
           <DeviceTableItem
             key={currentDevice.id.toString()}
             device={currentDevice}
-            checkpoint={checkpointsRes.value.checkpoints.find(({ id }) => id === currentDevice.id)}
             onDelete={handleDelete}
             onDeleteError={setDeleteError}
             current

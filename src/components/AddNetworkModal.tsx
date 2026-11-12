@@ -3,7 +3,6 @@
 
 import "./AddNetworkModal.scss";
 
-import { Base64 } from "js-base64";
 import React from "react";
 import { useForm } from "react-hook-form";
 import { MdClose } from "react-icons/md";

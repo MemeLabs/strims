@@ -47,7 +47,6 @@ const VideoChannelTableItem = ({
 
   const handleCopyKey = () => {
     void navigator.clipboard.writeText(channelURLRes.value.streamKey);
-    console.log("copied stream key to clipboard");
   };
 
   return (

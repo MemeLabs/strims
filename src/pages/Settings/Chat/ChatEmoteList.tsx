@@ -18,7 +18,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { Emote, ListEmotesRequest } from "../../../apis/strims/chat/v1/chat";
-import { Button, InputError } from "../../../components/Form";
+import { InputError } from "../../../components/Form";
 import Label from "../../../components/Settings/Label";
 import Search from "../../../components/Settings/Search";
 import {
