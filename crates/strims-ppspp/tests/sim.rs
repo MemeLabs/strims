@@ -4138,8 +4138,8 @@ impl Sim {
     /// | `arrivals` | chunk a node stored, with `SIM_FORECAST=1` or `SIM_SPEC=1` (its held log, [`Runner::take_held`], [`Held`]) | strims-sim's `arrivals` columns: `t_ms`, `node`, `viewer`, `seq`, `how`, `peer` and `parent` (nodes, -1 for none), `expected_ms`, `released_ms`, `asked_ms`, `asks`, `last_ask_peer`, `last_ask_ms`, `rtt_ms`, `incarnation` (the node's then: its joins by the hold, [`Sim::joined`], the seed's 0); its earliest row of a node, chunk and incarnation is the `forecast` table's `held_ms` |
     /// | `haves` | chunk a HAVE first announced to a node on a channel, with `SIM_SPEC=1` (its request log, [`Runner::take_haves`], [`HaveRecord`]) | strims-sim's `haves` columns: `t_ms` (the HAVE arrived), `node`, `honest` (the node is the seed or its incarnation then an honest viewer's, [`Sim::joined`]), `peer` (-1 for a key that named no link), `peer_honest` (the same, in its incarnation then), `stream`, `seq`, `channel_open_ms`, `peer_incarnation` (as `arrivals`' `incarnation`; empty without a peer). The `forecast` table samples a capped subset of these HAVEs; the knowledge delay is `t_ms` less the peer's hold in that incarnation, from `arrivals` (`hack/sim-db`'s view) |
     /// | `asks` | channel a request of a node's weighed, from its request log ([`Runner::take_requests`], [`RequestRecord`]): every request the request round made, once it ended, the asked peer's row and then one per rival, with `SIM_SPEC=1` | strims-sim's `asks` columns: `t_ms`, `node`, `honest` and `peer_honest` (as `haves`'), `ask`, `round` (`flight`), `peer`, `picked`, `declares` (a HAVE from the row's peer had announced the chunk), `stream`, `seq`, `timeout_ms` (the asked row's), `rtt_ms`, `predicted_ms` and `predicted_p90_ms` (a rival's route expectation; empty on the asked row), `predicted_p99_ms` (empty), `have_ms` (the row's peer's HAVE of the chunk), `released_ms` (push released the chunk to pull), `outcome` (`answered`, `expired`, `elsewhere` or `closed`; the asked row's), `reason` (`timeout`), `t_outcome_ms`, `channel_open_ms`, `since_ms` (when the requester's incarnation then joined), `peer_incarnation`. A node whose place a new viewer takes leaves its requests still open unrecorded. The truth is `hack/sim-db`'s view's, from `arrivals` |
-    /// | `seed_decisions` | decision of the seed's seed log ([`Runner::take_seed_log`], [`strims_ppspp::SeedDecision`]), with `SIM_SPEC=1` | strims-sim's `seed_decisions` columns: `t_ms`, `node` (the seed, 0), `peer` (the neighbour's node, -1 for a decision about the allocation), `peer_incarnation` (the neighbour's then, as `arrivals`' `incarnation` counts them), then those [`strims_ppspp::scheduler_peer::seed_log::decision_fields`] writes: `kind` (`request`, `deferred`, `released`, `closed`, `holder_joined`, `holder_left`, `barred`, `check`, `cancel`, `window` or `answer_rate`), `stream`, `seq`, `why` (a request's rule, a close's, leave's or bar's reason, a cancel's `none`, `queued` or `written`, a window's phase), `granted`, `subscribers`, `holders`, `copies`, `held`, `per_holder`, `satellite`, `kept`, `rtt_ms`, `until_ms`, `bars`, `reporters`, `due_ms`, `judged`, `frontier_seq`, `hole_seq` and `state_age_ms` (empty here, without STATE summaries), `silent`, `queue_ms`, `delivered`, `wait_ms`, `stale`, `budget`, `measured`, `capacity`, `pushed`, `behind`, `overloaded`, `in_use`, `saturated`, `unconstrained`, `rate`, `reading_ms` and `engaged`, each as strims-sim's table says, empty where the kind has none |
-    /// | `seed_sends` | chunk the seed pushed or answered, once its send ended, from its seed log ([`strims_ppspp::SeedSend`]), with `SIM_SPEC=1` | strims-sim's `seed_sends` columns: `t_ms` (the send ended), `node` (the seed, 0), `peer` (the neighbour's node), `peer_incarnation` (its incarnation when the chunk was queued), `how` (`push` or `answer`), `stream`, `seq`, `queued_ms` (the push was queued, or the answered request came), `fate` (`written`, `stale`, `cancelled`, `suppressed` (the peer's HAVEs announced it), `refused`, `dropped` or `closed`), `bytes` (written: the frame bytes, integrity included), `cancel_ms` (the peer's first CANCEL of the chunk by the end), `declared` (the peer's HAVEs had announced it at the end), `subscribed` (the peer was subscribed to its stream at the end) |
+    /// | `seed_decisions` | decision of the seed's seed log ([`strims_ppspp::SeedDecision`]), with `SIM_SPEC=1` | `t_ms` (when the seed decided, in ms of true time from the stream's start, as the sim's other tables count it), `node` (the seed: its host in strims-sim, its node in the ppspp sim), `n` (the decision's place in the seed's log, from 0, in the order the seed logged its decisions; with node it keys the table), `peer` (the neighbour the decision is about, numbered as node is; -1 for a decision about the allocation, a window or answer_rate row), `peer_incarnation` (the neighbour's incarnation then, as the sim's arrivals count them; empty without a peer), `kind` (what the seed decided: request, a STREAM_REQUEST answered; deferred, one the first wave's ramp held, answered later by a request row; released, the peer's STREAM_CANCEL of a subscription; closed, a subscription the seed ended; holder_joined and holder_left, the peer took or gave up a copy; barred, the peer may hold none for a while; check, a holder's reading at an allocation check, once a second; cancel, the peer's CANCEL of a chunk; window, the allocation's window; answer_rate, the answer gate's pace as it changed), `stream` (the stream of a request, deferred, released or closed row; of a check's due push; of a cancel's chunk), `seq` (a chunk: a check's due push, or a cancel's chunk (the CANCEL's bin's first where why is none)), `why` (a request's rule: seed_holder, seed_no_copy, seed_barred, seed_streams_held, subscribed (the peer asked again), silent, pin, measured or unmeasured; a closed row's reason: a holder's leaving's (silent, unserved, past_copies, idle or closed), silent (the peer went silent), spill, pin, saturated, declined, or channel (its channel closed: no STREAM_CLOSE went); a holder_left's: silent, unserved, past_copies, idle or closed; a bar's: silent or unserved; a cancel's, where the seed's push of the chunk stood: none, queued (dropped at write time) or written; a window's phase: check, first_wave, ramp or ramp_end), `granted` (a request's: accepted, a STREAM_OPEN following, or declined with a STREAM_CLOSE), `subscribers` (the stream's subscribers: a request's before its answer, a released or closed row's left after it), `holders` (the holders of a copy: a request's as the seed's admission read them (empty where none did: a pin, a peer asking again, a silent one); a holder_joined's after it; a holder_left's left; a window's), `copies` (the copies in effect: a request's as the seed's admission read them (empty where none did); a holder_joined's, a holder_left's or a window's), `held` (the streams the peer held: a request's as the seed's admission read them (empty where none did); a check's, the holder's subscriptions), `per_holder` (the streams a holder may hold: a request's (empty where no admission read it) or a window's; empty before the budget is measured), `satellite` (a holder_joined's or a check's: the peer holds streams spilled from other holders, with no copy of its own), `kept` (a released row's: a holder's cancel of a stream of its copy, which the seed keeps for a near satellite to take while no one else does), `rtt_ms` (the peer's link's smallest round trip over the last one or two windows: a holder_joined's, a holder_left's or a check's), `until_ms` (a bar's: the peer holds no copy until then, in ms as t_ms), `bars` (a bar's: the peer's bars so far, this one included), `reporters` (a bar's: the reporters that voted on the peer at the latest check), `due_ms` (a check's: when the due push was written, the first written to the holder in the interval before last, in ms as t_ms), `judged` (a check's: the due push was written at least ANNOUNCE_TIMEOUT before, so this check judged it), `frontier_seq` (a check's, where peers send STATE summaries: the holder's latest STATE's newest chunk of the due push's stream; empty without one, or where peers send HAVEs), `hole_seq` (a check's: that STATE's newest chunk before its frontier the holder lacked; empty without one), `state_age_ms` (a check's: that STATE's age at the check; empty without one), `silent` (a check's: the checks in a row at which the holder didn't say it holds its due push (its HAVEs didn't announce it, or its latest STATE's frontier hadn't reached it), after this one; a bar comes at SILENT_CHECKS), `queue_ms` (a check's: how far the holder's link's least round trip since the last check stood above its smallest, the queue below the runner its pushes waited behind), `delivered_bps` (a check's: the least delivery rate the holder's link read since the last check, in bytes per second), `wait_ms` (a check's: the shortest wait in the seed's queue of a push written to the holder or cancelled by it since the last check), `stale` (a check's: a push to the holder went stale since the last check), `budget` (a window's: the budget in stream slots), `measured` (a window's: the budget is measured), `capacity_bps` (a window's: the capacity reading the budget was measured from, in bytes per second; empty until measured), `pushed` (a window's at a check: the holders with a push written or gone stale since the last check), `behind` (a window's at a check: those of them behind, a push waiting past PUSH_WAIT_TARGET or gone stale), `overloaded` (a window's at a check: those of them overloaded, a push waiting past PUSH_WAIT_OVERLOAD or gone stale), `in_use` (a window's at a check: the holders of a copy with a subscription), `saturated` (a window's at a check: the uplink was busy at least SHED_UTILIZATION of the time), `unconstrained` (a window's: the budget has room for every neighbour's every stream), `rate_bps` (an answer_rate's: the pace of the node's hybrid answers, in bytes per second), `reading_ms` (an answer_rate's: the node's queueing delay below the runner the answer gate read; empty without a reading), `engaged` (an answer_rate's: the pace binds the answers) |
+    /// | `seed_sends` | chunk the seed pushed or answered, once its send ended, from its seed log ([`strims_ppspp::SeedSend`]), with `SIM_SPEC=1` | `t_ms` (when the send ended, written to the frame or dropped, in ms of true time from the stream's start, as the sim's other tables count it), `node` (the seed: its host in strims-sim, its node in the ppspp sim), `n` (the send's place in the seed's log, from 0, in the order the seed's sends ended; with node it keys the table), `peer` (the neighbour sent to, numbered as node is), `peer_incarnation` (the neighbour's incarnation when the chunk was queued, as the sim's arrivals count them), `how` (push, to a subscriber of the chunk's stream, or answer, to the peer's request), `stream` (the chunk's stream), `seq` (the chunk), `queued_ms` (when the push was queued, or the answered request came (a released park's: its release), in ms as t_ms), `fate` (written, to the peer's frame; stale, a push dropped at write time for waiting past PUSH_STALE; cancelled, a push dropped at write time, the peer having cancelled the chunk; suppressed, a push dropped at write time, the peer's HAVEs having announced the chunk (where peers send HAVEs); refused, the peer's queue was full; dropped, unwritable at write time (its data gone, data-less, or too large for an empty frame); closed, a push still queued when the peer's channel closed), `bytes` (the frame bytes written for the chunk, integrity included (an answer of several chunks: its share); empty unless written), `cancel_ms` (the peer's first CANCEL of the chunk, if it came by the end, in ms as t_ms; empty without one), `declared` (at the end, the peer said it holds the chunk: its HAVEs announced it, or, where peers send STATE summaries, its latest STATE covered it (at or after its oldest chunk, by its frontier, after its hole)), `subscribed` (at the end, the peer was subscribed to the chunk's stream) |
     ///
     /// `series_meta.json` holds the `seed` (its node, 0), the stream's
     /// `rate`, `chunk`, `frame` and `secs`, the seed's `seed_up` steps and
@@ -4418,8 +4418,9 @@ impl Sim {
 
     /// The `seed_decisions` and `seed_sends` tables: the seed log's
     /// records, `us` mapping a true time to the tables' µs, each peer's
-    /// incarnation at the record ([`Sim::incarnation`]), the columns past
-    /// the nodes' as `strims_ppspp`'s seed log writes them.
+    /// incarnation at the record ([`Sim::incarnation`]), each record
+    /// numbered by its place in its seed's log (the order taken), every
+    /// column as `strims_ppspp`'s seed log writes it.
     fn seed_tables(
         &self,
         dir: &Path,
@@ -4427,62 +4428,53 @@ impl Sim {
         us: &dyn Fn(Time) -> i64,
     ) -> io::Result<(Table, Table)> {
         use strims_ppspp::scheduler_peer::seed_log::{
-            DECISION_COLUMNS, SEND_COLUMNS, decision_fields, send_fields,
+            Column, ColumnType, DECISION_COLUMNS, RowHead, SEND_COLUMNS, decision_fields,
+            send_fields,
         };
-        let cols = |more: &[(&'static str, &'static str)]| -> Vec<(&'static str, &'static str)> {
-            [
-                ("t_ms", "BIGINT"),
-                ("node", "BIGINT"),
-                ("peer", "BIGINT"),
-                ("peer_incarnation", "BIGINT"),
-            ]
-            .into_iter()
-            .chain(more.iter().map(|&(n, t)| {
-                let c = match t {
-                    "text" => "VARCHAR",
-                    "bool" => "BOOLEAN",
-                    _ => "BIGINT",
-                };
-                (n, c)
-            }))
-            .collect()
+        let cols = |c: &[Column]| -> Vec<(&'static str, &'static str)> {
+            c.iter()
+                .map(|c| {
+                    let ty = match c.ty {
+                        ColumnType::Text => "VARCHAR",
+                        ColumnType::Bool => "BOOLEAN",
+                        ColumnType::Int => "BIGINT",
+                    };
+                    (c.name, ty)
+                })
+                .collect()
         };
         let mut t = Table::typed(dir, "seed_decisions", &cols(&DECISION_COLUMNS))?;
         let mut sends = Table::typed(dir, "seed_sends", &cols(&SEND_COLUMNS))?;
         let ms_of = |at: Time| us(at).div_euclid(1000);
-        // A row's time, the seed, the peer and its incarnation at `then`
-        // (true times).
-        let head = |at: Time, n: usize, p: usize, then: Time| {
+        // A row's time, the seed, its place in the seed's log, and the peer
+        // with its incarnation at `then` (true times).
+        let head = |at: Time, node: usize, n: usize, p: usize, then: Time| {
             let known = p != usize::MAX;
-            vec![
-                ms_of(at).to_string(),
-                n.to_string(),
-                if known {
-                    p.to_string()
-                } else {
-                    "-1".to_owned()
-                },
-                if known {
-                    self.incarnation(p, then).to_string()
-                } else {
-                    String::new()
-                },
-            ]
+            RowHead {
+                t_ms: ms_of(at),
+                node: node as u64,
+                n: n as u64,
+                peer: known.then_some(p as u64),
+                peer_incarnation: known.then(|| self.incarnation(p, then) as u64),
+            }
         };
-        for &(n, p, r) in &log.seed_decisions {
-            let node = &self.nodes[n];
+        let mut next: BTreeMap<usize, usize> = BTreeMap::new();
+        for &(i, p, r) in &log.seed_decisions {
+            let node = &self.nodes[i];
             let ms = |x: Time| ms_of(node.true_time(x));
             let at = node.true_time(r.at);
-            let mut row = head(at, n, p, at);
-            row.extend(decision_fields(&r, &ms));
-            t.fields(&row);
+            let n = next.entry(i).or_default();
+            t.fields(&decision_fields(&head(at, i, *n, p, at), &r, &ms));
+            *n += 1;
         }
-        for &(n, p, r) in &log.seed_sends {
-            let node = &self.nodes[n];
+        next.clear();
+        for &(i, p, r) in &log.seed_sends {
+            let node = &self.nodes[i];
             let ms = |x: Time| ms_of(node.true_time(x));
-            let mut row = head(node.true_time(r.ended), n, p, node.true_time(r.queued));
-            row.extend(send_fields(&r, &ms));
-            sends.fields(&row);
+            let n = next.entry(i).or_default();
+            let h = head(node.true_time(r.ended), i, *n, p, node.true_time(r.queued));
+            sends.fields(&send_fields(&h, &r, &ms));
+            *n += 1;
         }
         Ok((t, sends))
     }
@@ -7549,6 +7541,7 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
         }
         sim_held_truth_meets_the_reads(&sim, &d);
         sim_request_logs_say_what_they_are(&sim, &d);
+        sim_seed_tables_say_what_the_seed_did(&sim, &d);
         // The seed's budget reading: what its budget was measured from,
         // once measured, in the series and the bins.
         let column = |t: &str| -> Vec<i64> {
@@ -7567,6 +7560,101 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
         assert!(!adaptive || r.seed_capacity == 0 || r.budget_capacity > 0);
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The seed's tables ([`Sim::write_tables`]: `seed_decisions`, `seed_sends`)
+/// against the rest of the run, as strims-sim's
+/// `the_seed_tables_say_what_the_seed_did`: every push written to a holder
+/// has the holder's hold in `arrivals` (one written in the run's last second
+/// may arrive past its end); the sends' fates count what the seed's runner
+/// counts (pushes and answers written, pushes dropped as stale, and as
+/// cancelled or suppressed); every row is the seed's, numbered from 0 in its
+/// log's order; and the log lost nothing.
+fn sim_seed_tables_say_what_the_seed_did(sim: &Sim, d: &Path) {
+    let rows = |t: &str| -> Vec<BTreeMap<String, String>> {
+        let csv = read_table(d, t).unwrap();
+        let mut lines = csv.lines();
+        let head: Vec<&str> = lines.next().unwrap().split(',').collect();
+        lines
+            .map(|l| {
+                head.iter()
+                    .zip(l.split(','))
+                    .map(|(&c, v)| (c.to_owned(), v.to_owned()))
+                    .collect()
+            })
+            .collect()
+    };
+    let int = |r: &BTreeMap<String, String>, c: &str| -> Option<i64> { r[c].parse().ok() };
+    let sends = rows("seed_sends");
+    let decisions = rows("seed_decisions");
+    assert!(!sends.is_empty() && !decisions.is_empty());
+    for t in [&sends, &decisions] {
+        assert!(t.iter().all(|r| int(r, "node") == Some(0)));
+        let n: Vec<i64> = t.iter().map(|r| int(r, "n").unwrap()).collect();
+        assert_eq!(n, (0..t.len() as i64).collect::<Vec<_>>());
+    }
+    let count = |how: &str, fates: &[&str]| {
+        sends
+            .iter()
+            .filter(|r| r["how"] == how && fates.contains(&r["fate"].as_str()))
+            .count() as u64
+    };
+    let seed = &sim.nodes[0];
+    let st = seed.runner.swarm_stats(seed.swarm).unwrap();
+    let push = seed.runner.push_stats(seed.swarm).unwrap();
+    assert_eq!(count("push", &["written"]), st.pushed_chunks);
+    assert_eq!(
+        count("answer", &["written"]),
+        st.chunks_sent - st.pushed_chunks
+    );
+    assert_eq!(count("push", &["stale"]), push.stale_drops);
+    assert_eq!(count("push", &["cancelled", "suppressed"]), push.suppressed);
+    assert!(count("push", &["written"]) > 0);
+    let mut held: BTreeSet<(i64, i64, i64)> = BTreeSet::new();
+    let mut end = 0;
+    for a in rows("arrivals") {
+        let t = int(&a, "t_ms").unwrap();
+        end = end.max(t);
+        held.insert((
+            int(&a, "node").unwrap(),
+            int(&a, "seq").unwrap(),
+            int(&a, "incarnation").unwrap(),
+        ));
+    }
+    for r in sends
+        .iter()
+        .filter(|r| r["how"] == "push" && r["fate"] == "written")
+    {
+        let t = int(r, "t_ms").unwrap();
+        let key = (
+            int(r, "peer").unwrap(),
+            int(r, "seq").unwrap(),
+            int(r, "peer_incarnation").unwrap(),
+        );
+        assert!(
+            held.contains(&key) || t > end - 1000,
+            "a written push never held: {r:?}"
+        );
+        assert!(int(r, "queued_ms").unwrap() <= t, "{r:?}");
+        assert!(int(r, "bytes").unwrap() > 0, "{r:?}");
+    }
+    let meta = std::fs::read_to_string(d.join("series_meta.json")).unwrap();
+    assert!(meta.contains("\"seed_log_lost\":0"), "{meta}");
+}
+
+/// Both tables' doc rows here are the seed log's own
+/// (`seed_log::doc_rows`): every column documented as its formatter writes
+/// it, and as strims-sim's rows document it.
+#[test]
+fn sim_seed_tables_doc_rows_are_the_seed_logs() {
+    let src = include_str!("sim.rs");
+    for row in strims_ppspp::scheduler_peer::seed_log::doc_rows("SIM_SPEC=1") {
+        assert!(
+            src.lines()
+                .any(|l| l.strip_prefix("    /// ") == Some(row.as_str())),
+            "sim.rs's write_tables docs lack the row:\n    /// {row}"
+        );
+    }
 }
 
 /// The request log's tables ([`Sim::keep_requests`]) against the run: HAVEs, requests and reads against

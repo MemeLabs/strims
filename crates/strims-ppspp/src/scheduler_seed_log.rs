@@ -3,29 +3,30 @@
 
 //! The seed log: what a seed decided about its neighbours and what became
 //! of every chunk it sent, record by record, for a driver's tables to join
-//! with what its neighbours held. On only at a seed, with the request log
-//! ([`Runner::set_request_log`](crate::Runner::set_request_log)), and
-//! taken with [`Runner::take_seed_log`](crate::Runner::take_seed_log); it
-//! draws no randomness and no decision reads it, so a run with it traces
-//! as one without. A holder sends no STATE summaries here, so a check's
-//! `frontier`, `hole` and `state_at` are `None`, the silent check reading
-//! its HAVEs, and a send's `declared` is whether its HAVEs announced the
-//! chunk.
+//! with what its neighbours held. On only at a seed, with the runner's
+//! log that [`Runner::take_seed_log`](crate::Runner::take_seed_log) names,
+//! and taken with it; it draws no randomness and no decision reads it, so a
+//! run with it traces as one without.
+//!
+//! The log is the same wherever peers say what they hold in HAVEs or in
+//! STATE summaries: what a peer said is the caller's reading
+//! ([`SeedSend::declared`], [`SeedCheck`]), and a kind a world doesn't produce
+//! (a HAVE-suppressed push, a STATE's frontier) is simply absent.
 //!
 //! - **Decisions** ([`SeedDecision`]): each STREAM_REQUEST answered and
 //!   the rule that answered it, with the stream's subscribers before it;
 //!   requests the first wave's ramp held; STREAM_CANCELs and the
 //!   subscriptions the seed closed, and why; holders joining, leaving and
 //!   barred; each holder's reading at each allocation check (its sampled
-//!   push and the STATE it is judged by, its link's queue and delivery
+//!   push and what the holder said of it, its link's queue and delivery
 //!   rate, its pushes' wait); each CANCEL and where the seed's push of the
 //!   chunk stood then; the allocation's window at each check and each ramp
 //!   step; and the answer gate's pace as it changes.
 //! - **Sends** ([`SeedSend`]): one per chunk the seed pushed or answered,
 //!   once it ended: written to the frame, dropped at write time (stale,
 //!   cancelled by the peer, announced by its HAVEs, or unwritable),
-//!   refused by the peer's full
-//!   queue, or still queued when the channel closed. A push opens when it
+//!   refused by the peer's full queue, or still queued when the channel
+//!   closed. A push opens when it
 //!   is queued; an answer is recorded as it is written or dropped, from
 //!   the request's time.
 //!
@@ -141,14 +142,14 @@ pub struct SeedRequest {
     /// The stream's subscribers before the answer.
     pub subscribers: usize,
     /// An adaptive seed's holders of a copy and its copies, the streams
-    /// the peer held and the streams a holder may hold (`usize::MAX`
-    /// before the budget is measured), as its admission read them; zero
-    /// where no admission of the seed's read them (a pin, a subscriber
-    /// asking again, a silent peer).
-    pub holders: usize,
-    pub copies: usize,
-    pub held: usize,
-    pub per_holder: usize,
+    /// the peer held and the streams a holder may hold (`None` before the
+    /// budget is measured), as its admission read them; `None` where no
+    /// admission of the seed's read them (a pin, a subscriber asking
+    /// again, a silent peer).
+    pub holders: Option<usize>,
+    pub copies: Option<usize>,
+    pub held: Option<usize>,
+    pub per_holder: Option<usize>,
 }
 
 /// Why the seed ended a subscription ([`SeedDecisionKind::Closed`]).
@@ -245,21 +246,23 @@ pub struct SeedCheck {
     /// The streams it is subscribed to.
     pub streams: usize,
     /// The push sampled at the check before last (the first written to it
-    /// in that interval), its stream and when it was written, which its
-    /// STATEs must declare by this check; `judged`: it was written at least
+    /// in that interval), its stream and when it was written, which the
+    /// holder must say it holds by this check; `judged`: it was written at
+    /// least
     /// [`ANNOUNCE_TIMEOUT`](crate::scheduler_peer::push::seed::ANNOUNCE_TIMEOUT)
     /// before, so this check judged it.
     pub due: Option<(Bin, Time)>,
     pub stream: Option<Stream>,
     pub judged: bool,
-    /// Its latest STATE's newest chunk of the due push's stream, the
-    /// newest before it the peer lacked, and when that STATE arrived;
-    /// `None` without one (or without a due push).
+    /// Where peers send STATE summaries: the holder's latest STATE's
+    /// newest chunk of the due push's stream, the newest before it the
+    /// peer lacked, and when that STATE arrived; `None` without one (or
+    /// without a due push, or where peers send HAVEs).
     pub frontier: Option<Bin>,
     pub hole: Option<Bin>,
     pub state_at: Option<Time>,
-    /// The checks in a row at which its due push wasn't declared, after
-    /// this one.
+    /// The checks in a row at which the holder didn't say it holds its due
+    /// push (its HAVEs, or its latest STATE's frontier), after this one.
     pub silent: u8,
     /// How far its link's least round trip since the last check stood
     /// above its smallest (the queue below the runner its pushes waited
@@ -306,15 +309,15 @@ impl WindowPhase {
 pub struct SeedWindow {
     pub phase: WindowPhase,
     /// The budget in stream slots, whether it is measured, and the
-    /// capacity reading it was measured from (bytes per second; 0 until
-    /// measured).
+    /// capacity reading it was measured from (bytes per second; `None`
+    /// until measured).
     pub budget: usize,
     pub measured: bool,
-    pub capacity: u64,
-    /// The copies in effect, the streams a holder may take (`usize::MAX`
-    /// before the budget is measured), and the holders of a copy.
+    pub capacity: Option<u64>,
+    /// The copies in effect, the streams a holder may take (`None` before
+    /// the budget is measured), and the holders of a copy.
     pub copies: usize,
-    pub streams: usize,
+    pub streams: Option<usize>,
     pub holders: usize,
     /// At a check: the holders with a push written or gone stale since
     /// the last, those of them behind and overloaded, the holders with a
@@ -357,7 +360,8 @@ pub enum SendFate {
     Stale,
     /// A push dropped at write time: the peer cancelled the chunk.
     Cancelled,
-    /// A push dropped at write time: the peer's HAVEs announced the chunk.
+    /// A push dropped at write time: the peer's HAVEs announced the chunk
+    /// (where peers send HAVEs).
     Suppressed,
     /// The peer's queue was full: never queued.
     Refused,
@@ -403,7 +407,9 @@ pub struct SeedSend {
     pub bytes: u64,
     /// The peer's first CANCEL of the chunk, if it came before the end.
     pub cancel: Option<Time>,
-    /// At the end, the peer's HAVEs announced the chunk.
+    /// At the end, the peer said it holds the chunk: its HAVEs announced
+    /// it, or, where peers send STATE summaries, its latest STATE covered
+    /// it (at or after its oldest chunk, by its frontier, after its hole).
     pub declared: bool,
     /// At the end, the peer was subscribed to the chunk's stream.
     pub subscribed: bool,
@@ -763,7 +769,7 @@ impl SeedLog {
     }
 
     /// Adds the records of a scheduler that goes, its open pushes closed
-    /// ([`super::PeerSwarmScheduler::take_seed_log`]).
+    /// ([`SeedLog::close`]).
     pub(crate) fn absorb(&mut self, o: SeedLogTake) {
         for d in o.decisions {
             self.decide(d.at, d.peer, d.kind);
@@ -794,110 +800,361 @@ impl SeedLogTake {
     }
 }
 
-/// A column of the sims' `seed_decisions` and `seed_sends` tables: its name
-/// and type (`int`, `text` or `bool`). The sims write a record's time,
-/// their hosts and the peer's incarnation first (`t_ms`, `node`, `peer`,
-/// `peer_incarnation`), then these, from [`decision_fields`] and
-/// [`send_fields`], so both write the same columns.
-pub type Column = (&'static str, &'static str);
+/// A column's type in the sims' tables.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColumnType {
+    Int,
+    Text,
+    Bool,
+}
 
-/// The `seed_decisions` table's columns past the sims' own; see
-/// [`decision_fields`] for what each holds.
-pub const DECISION_COLUMNS: [Column; 38] = [
-    ("kind", "text"),
-    ("stream", "int"),
-    ("seq", "int"),
-    ("why", "text"),
-    ("granted", "bool"),
-    ("subscribers", "int"),
-    ("holders", "int"),
-    ("copies", "int"),
-    ("held", "int"),
-    ("per_holder", "int"),
-    ("satellite", "bool"),
-    ("kept", "bool"),
-    ("rtt_ms", "int"),
-    ("until_ms", "int"),
-    ("bars", "int"),
-    ("reporters", "int"),
-    ("due_ms", "int"),
-    ("judged", "bool"),
-    ("frontier_seq", "int"),
-    ("hole_seq", "int"),
-    ("state_age_ms", "int"),
-    ("silent", "int"),
-    ("queue_ms", "int"),
-    ("delivered", "int"),
-    ("wait_ms", "int"),
-    ("stale", "bool"),
-    ("budget", "int"),
-    ("measured", "bool"),
-    ("capacity", "int"),
-    ("pushed", "int"),
-    ("behind", "int"),
-    ("overloaded", "int"),
-    ("in_use", "int"),
-    ("saturated", "bool"),
-    ("unconstrained", "bool"),
-    ("rate", "int"),
-    ("reading_ms", "int"),
-    ("engaged", "bool"),
+/// A column of the sims' `seed_decisions` and `seed_sends` tables: its
+/// name, type and doc. Both sims write every column through
+/// [`decision_fields`] and [`send_fields`], and document them with
+/// [`doc_row`]'s text, each doc the column's own parenthesis there, so the
+/// tables and their docs are one in both.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Column {
+    pub name: &'static str,
+    pub ty: ColumnType,
+    pub doc: &'static str,
+}
+
+const fn col(name: &'static str, ty: ColumnType, doc: &'static str) -> Column {
+    Column { name, ty, doc }
+}
+
+use ColumnType::{Bool, Int, Text};
+
+/// The `seed_decisions` table's grain, as both sims' doc rows give it
+/// before the setting that writes it ([`doc_row`]).
+pub const DECISIONS_GRAIN: &str =
+    "decision of the seed's seed log ([`strims_ppspp::SeedDecision`])";
+
+/// The `seed_sends` table's grain, as both sims' doc rows give it
+/// before the setting that writes it ([`doc_row`]).
+pub const SENDS_GRAIN: &str = "chunk the seed pushed or answered, once its send ended, from its seed log ([`strims_ppspp::SeedSend`])";
+
+/// The `seed_decisions` table's columns ([`decision_fields`]); a row's
+/// kind says which hold its numbers, the rest empty.
+pub const DECISION_COLUMNS: [Column; 43] = [
+    col(
+        "t_ms",
+        Int,
+        "when the seed decided, in ms of true time from the stream's start, as the sim's other tables count it",
+    ),
+    col(
+        "node",
+        Int,
+        "the seed: its host in strims-sim, its node in the ppspp sim",
+    ),
+    col(
+        "n",
+        Int,
+        "the decision's place in the seed's log, from 0, in the order the seed logged its decisions; with node it keys the table",
+    ),
+    col(
+        "peer",
+        Int,
+        "the neighbour the decision is about, numbered as node is; -1 for a decision about the allocation, a window or answer_rate row",
+    ),
+    col(
+        "peer_incarnation",
+        Int,
+        "the neighbour's incarnation then, as the sim's arrivals count them; empty without a peer",
+    ),
+    col(
+        "kind",
+        Text,
+        "what the seed decided: request, a STREAM_REQUEST answered; deferred, one the first wave's ramp held, answered later by a request row; released, the peer's STREAM_CANCEL of a subscription; closed, a subscription the seed ended; holder_joined and holder_left, the peer took or gave up a copy; barred, the peer may hold none for a while; check, a holder's reading at an allocation check, once a second; cancel, the peer's CANCEL of a chunk; window, the allocation's window; answer_rate, the answer gate's pace as it changed",
+    ),
+    col(
+        "stream",
+        Int,
+        "the stream of a request, deferred, released or closed row; of a check's due push; of a cancel's chunk",
+    ),
+    col(
+        "seq",
+        Int,
+        "a chunk: a check's due push, or a cancel's chunk (the CANCEL's bin's first where why is none)",
+    ),
+    col(
+        "why",
+        Text,
+        "a request's rule: seed_holder, seed_no_copy, seed_barred, seed_streams_held, subscribed (the peer asked again), silent, pin, measured or unmeasured; a closed row's reason: a holder's leaving's (silent, unserved, past_copies, idle or closed), silent (the peer went silent), spill, pin, saturated, declined, or channel (its channel closed: no STREAM_CLOSE went); a holder_left's: silent, unserved, past_copies, idle or closed; a bar's: silent or unserved; a cancel's, where the seed's push of the chunk stood: none, queued (dropped at write time) or written; a window's phase: check, first_wave, ramp or ramp_end",
+    ),
+    col(
+        "granted",
+        Bool,
+        "a request's: accepted, a STREAM_OPEN following, or declined with a STREAM_CLOSE",
+    ),
+    col(
+        "subscribers",
+        Int,
+        "the stream's subscribers: a request's before its answer, a released or closed row's left after it",
+    ),
+    col(
+        "holders",
+        Int,
+        "the holders of a copy: a request's as the seed's admission read them (empty where none did: a pin, a peer asking again, a silent one); a holder_joined's after it; a holder_left's left; a window's",
+    ),
+    col(
+        "copies",
+        Int,
+        "the copies in effect: a request's as the seed's admission read them (empty where none did); a holder_joined's, a holder_left's or a window's",
+    ),
+    col(
+        "held",
+        Int,
+        "the streams the peer held: a request's as the seed's admission read them (empty where none did); a check's, the holder's subscriptions",
+    ),
+    col(
+        "per_holder",
+        Int,
+        "the streams a holder may hold: a request's (empty where no admission read it) or a window's; empty before the budget is measured",
+    ),
+    col(
+        "satellite",
+        Bool,
+        "a holder_joined's or a check's: the peer holds streams spilled from other holders, with no copy of its own",
+    ),
+    col(
+        "kept",
+        Bool,
+        "a released row's: a holder's cancel of a stream of its copy, which the seed keeps for a near satellite to take while no one else does",
+    ),
+    col(
+        "rtt_ms",
+        Int,
+        "the peer's link's smallest round trip over the last one or two windows: a holder_joined's, a holder_left's or a check's",
+    ),
+    col(
+        "until_ms",
+        Int,
+        "a bar's: the peer holds no copy until then, in ms as t_ms",
+    ),
+    col(
+        "bars",
+        Int,
+        "a bar's: the peer's bars so far, this one included",
+    ),
+    col(
+        "reporters",
+        Int,
+        "a bar's: the reporters that voted on the peer at the latest check",
+    ),
+    col(
+        "due_ms",
+        Int,
+        "a check's: when the due push was written, the first written to the holder in the interval before last, in ms as t_ms",
+    ),
+    col(
+        "judged",
+        Bool,
+        "a check's: the due push was written at least ANNOUNCE_TIMEOUT before, so this check judged it",
+    ),
+    col(
+        "frontier_seq",
+        Int,
+        "a check's, where peers send STATE summaries: the holder's latest STATE's newest chunk of the due push's stream; empty without one, or where peers send HAVEs",
+    ),
+    col(
+        "hole_seq",
+        Int,
+        "a check's: that STATE's newest chunk before its frontier the holder lacked; empty without one",
+    ),
+    col(
+        "state_age_ms",
+        Int,
+        "a check's: that STATE's age at the check; empty without one",
+    ),
+    col(
+        "silent",
+        Int,
+        "a check's: the checks in a row at which the holder didn't say it holds its due push (its HAVEs didn't announce it, or its latest STATE's frontier hadn't reached it), after this one; a bar comes at SILENT_CHECKS",
+    ),
+    col(
+        "queue_ms",
+        Int,
+        "a check's: how far the holder's link's least round trip since the last check stood above its smallest, the queue below the runner its pushes waited behind",
+    ),
+    col(
+        "delivered_bps",
+        Int,
+        "a check's: the least delivery rate the holder's link read since the last check, in bytes per second",
+    ),
+    col(
+        "wait_ms",
+        Int,
+        "a check's: the shortest wait in the seed's queue of a push written to the holder or cancelled by it since the last check",
+    ),
+    col(
+        "stale",
+        Bool,
+        "a check's: a push to the holder went stale since the last check",
+    ),
+    col("budget", Int, "a window's: the budget in stream slots"),
+    col("measured", Bool, "a window's: the budget is measured"),
+    col(
+        "capacity_bps",
+        Int,
+        "a window's: the capacity reading the budget was measured from, in bytes per second; empty until measured",
+    ),
+    col(
+        "pushed",
+        Int,
+        "a window's at a check: the holders with a push written or gone stale since the last check",
+    ),
+    col(
+        "behind",
+        Int,
+        "a window's at a check: those of them behind, a push waiting past PUSH_WAIT_TARGET or gone stale",
+    ),
+    col(
+        "overloaded",
+        Int,
+        "a window's at a check: those of them overloaded, a push waiting past PUSH_WAIT_OVERLOAD or gone stale",
+    ),
+    col(
+        "in_use",
+        Int,
+        "a window's at a check: the holders of a copy with a subscription",
+    ),
+    col(
+        "saturated",
+        Bool,
+        "a window's at a check: the uplink was busy at least SHED_UTILIZATION of the time",
+    ),
+    col(
+        "unconstrained",
+        Bool,
+        "a window's: the budget has room for every neighbour's every stream",
+    ),
+    col(
+        "rate_bps",
+        Int,
+        "an answer_rate's: the pace of the node's hybrid answers, in bytes per second",
+    ),
+    col(
+        "reading_ms",
+        Int,
+        "an answer_rate's: the node's queueing delay below the runner the answer gate read; empty without a reading",
+    ),
+    col(
+        "engaged",
+        Bool,
+        "an answer_rate's: the pace binds the answers",
+    ),
 ];
 
-/// The `seed_sends` table's columns past the sims' own; see
-/// [`send_fields`] for what each holds.
-pub const SEND_COLUMNS: [Column; 9] = [
-    ("how", "text"),
-    ("stream", "int"),
-    ("seq", "int"),
-    ("queued_ms", "int"),
-    ("fate", "text"),
-    ("bytes", "int"),
-    ("cancel_ms", "int"),
-    ("declared", "bool"),
-    ("subscribed", "bool"),
+/// The `seed_sends` table's columns ([`send_fields`]).
+pub const SEND_COLUMNS: [Column; 14] = [
+    col(
+        "t_ms",
+        Int,
+        "when the send ended, written to the frame or dropped, in ms of true time from the stream's start, as the sim's other tables count it",
+    ),
+    col(
+        "node",
+        Int,
+        "the seed: its host in strims-sim, its node in the ppspp sim",
+    ),
+    col(
+        "n",
+        Int,
+        "the send's place in the seed's log, from 0, in the order the seed's sends ended; with node it keys the table",
+    ),
+    col("peer", Int, "the neighbour sent to, numbered as node is"),
+    col(
+        "peer_incarnation",
+        Int,
+        "the neighbour's incarnation when the chunk was queued, as the sim's arrivals count them",
+    ),
+    col(
+        "how",
+        Text,
+        "push, to a subscriber of the chunk's stream, or answer, to the peer's request",
+    ),
+    col("stream", Int, "the chunk's stream"),
+    col("seq", Int, "the chunk"),
+    col(
+        "queued_ms",
+        Int,
+        "when the push was queued, or the answered request came (a released park's: its release), in ms as t_ms",
+    ),
+    col(
+        "fate",
+        Text,
+        "written, to the peer's frame; stale, a push dropped at write time for waiting past PUSH_STALE; cancelled, a push dropped at write time, the peer having cancelled the chunk; suppressed, a push dropped at write time, the peer's HAVEs having announced the chunk (where peers send HAVEs); refused, the peer's queue was full; dropped, unwritable at write time (its data gone, data-less, or too large for an empty frame); closed, a push still queued when the peer's channel closed",
+    ),
+    col(
+        "bytes",
+        Int,
+        "the frame bytes written for the chunk, integrity included (an answer of several chunks: its share); empty unless written",
+    ),
+    col(
+        "cancel_ms",
+        Int,
+        "the peer's first CANCEL of the chunk, if it came by the end, in ms as t_ms; empty without one",
+    ),
+    col(
+        "declared",
+        Bool,
+        "at the end, the peer said it holds the chunk: its HAVEs announced it, or, where peers send STATE summaries, its latest STATE covered it (at or after its oldest chunk, by its frontier, after its hole)",
+    ),
+    col(
+        "subscribed",
+        Bool,
+        "at the end, the peer was subscribed to the chunk's stream",
+    ),
 ];
 
-/// `d`'s fields by [`DECISION_COLUMNS`], `ms` reading the node's clock as
-/// the table's ms; empty where its kind has none. `kind` is
-/// [`SeedDecisionKind::name`], and by kind:
-///
-/// - `request`: `stream`, `why` (the rule, [`admit_rule_name`]),
-///   `granted`, `subscribers` (before), `holders`, `copies`, `held`,
-///   `per_holder` (empty before the budget is measured);
-/// - `deferred`: `stream`;
-/// - `released`: `stream`, `subscribers` (after), `kept`;
-/// - `closed`: `stream`, `why` ([`SeedClose::name`]), `subscribers`
-///   (after);
-/// - `holder_joined`: `satellite`, `rtt_ms`, `holders`, `copies`;
-/// - `holder_left`: `why` ([`holder_left_name`]), `rtt_ms`, `holders`,
-///   `copies`;
-/// - `barred`: `why` ([`SeedBar::name`]), `until_ms`, `bars`,
-///   `reporters`;
-/// - `check` ([`SeedCheck`]): `satellite`, `held` (its streams), `stream`,
-///   `seq` and `due_ms` (the due push), `judged`, `frontier_seq`,
-///   `hole_seq`, `state_age_ms` (the decision's time less the STATE's),
-///   `silent`, `queue_ms`, `delivered`, `wait_ms`, `stale`, `rtt_ms`;
-/// - `cancel`: `stream`, `seq` (the chunk, or the CANCEL's bin's first
-///   with `none`), `why` ([`CancelOpen::name`]);
-/// - `window` ([`SeedWindow`]): `why` ([`WindowPhase::name`]), `budget`,
-///   `measured`, `capacity`, `copies`, `per_holder`, `holders`, `pushed`,
-///   `behind`, `overloaded`, `in_use`, `saturated`, `unconstrained`;
-/// - `answer_rate`: `rate`, `reading_ms`, `engaged`.
-pub fn decision_fields(d: &SeedDecision, ms: &dyn Fn(Time) -> i64) -> Vec<String> {
+/// The columns a sim fills for a row ([`decision_fields`], [`send_fields`]):
+/// its time in the tables' ms, the seed (`node`), the record's place in the
+/// seed's log of its kind (`n`: the order the sim took the records, a
+/// decision's and a send's apart), and the peer with its incarnation then,
+/// each numbered as the sim numbers its hosts or nodes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RowHead {
+    pub t_ms: i64,
+    pub node: u64,
+    pub n: u64,
+    pub peer: Option<u64>,
+    pub peer_incarnation: Option<u64>,
+}
+
+impl RowHead {
+    fn put(&self, row: &mut BTreeMap<&'static str, String>) {
+        row.insert("t_ms", self.t_ms.to_string());
+        row.insert("node", self.node.to_string());
+        row.insert("n", self.n.to_string());
+        row.insert("peer", self.peer.map_or("-1".to_owned(), |p| p.to_string()));
+        row.insert("peer_incarnation", opt(self.peer_incarnation));
+    }
+}
+
+fn opt<T: ToString>(x: Option<T>) -> String {
+    x.map_or(String::new(), |x| x.to_string())
+}
+
+fn ordered(columns: &[Column], mut row: BTreeMap<&'static str, String>) -> Vec<String> {
+    columns
+        .iter()
+        .map(|c| row.remove(c.name).unwrap_or_default())
+        .collect()
+}
+
+/// `d`'s row by [`DECISION_COLUMNS`] (whose docs say what each holds),
+/// `ms` reading the node's clock as the table's ms; empty where its kind
+/// has none.
+pub fn decision_fields(head: &RowHead, d: &SeedDecision, ms: &dyn Fn(Time) -> i64) -> Vec<String> {
     use SeedDecisionKind as K;
     let mut row: BTreeMap<&'static str, String> = BTreeMap::new();
+    head.put(&mut row);
     let mut put = |c: &'static str, v: String| {
         row.insert(c, v);
     };
-    let dur = |x: Option<Duration>| x.map_or(String::new(), |x| x.as_millis().to_string());
-    let count = |n: usize| {
-        if n == usize::MAX {
-            String::new()
-        } else {
-            n.to_string()
-        }
-    };
+    let dur = |x: Option<Duration>| opt(x.map(|x| x.as_millis()));
     let seq = |b: Bin| b.base_offset().to_string();
     put("kind", d.kind.name().to_owned());
     match d.kind {
@@ -906,10 +1163,10 @@ pub fn decision_fields(d: &SeedDecision, ms: &dyn Fn(Time) -> i64) -> Vec<String
             put("why", admit_rule_name(q.rule).to_owned());
             put("granted", q.granted.to_string());
             put("subscribers", q.subscribers.to_string());
-            put("holders", q.holders.to_string());
-            put("copies", q.copies.to_string());
-            put("held", q.held.to_string());
-            put("per_holder", count(q.per_holder));
+            put("holders", opt(q.holders));
+            put("copies", opt(q.copies));
+            put("held", opt(q.held));
+            put("per_holder", opt(q.per_holder));
         }
         K::Deferred { stream } => put("stream", stream.to_string()),
         K::Released {
@@ -970,23 +1227,14 @@ pub fn decision_fields(d: &SeedDecision, ms: &dyn Fn(Time) -> i64) -> Vec<String
                 put("seq", seq(bin));
                 put("due_ms", ms(at).to_string());
             }
-            if let Some(s) = c.stream {
-                put("stream", s.to_string());
-            }
+            put("stream", opt(c.stream));
             put("judged", c.judged.to_string());
-            if let Some(b) = c.frontier {
-                put("frontier_seq", seq(b));
-            }
-            if let Some(b) = c.hole {
-                put("hole_seq", seq(b));
-            }
+            put("frontier_seq", opt(c.frontier.map(seq)));
+            put("hole_seq", opt(c.hole.map(seq)));
             put("state_age_ms", dur(c.state_at.map(|s| d.at - s)));
             put("silent", c.silent.to_string());
             put("queue_ms", dur(c.queue));
-            put(
-                "delivered",
-                c.delivered.map_or(String::new(), |x| x.to_string()),
-            );
+            put("delivered_bps", opt(c.delivered));
             put("wait_ms", dur(c.wait));
             put("stale", c.stale.to_string());
             put("rtt_ms", dur(c.rtt));
@@ -1000,53 +1248,152 @@ pub fn decision_fields(d: &SeedDecision, ms: &dyn Fn(Time) -> i64) -> Vec<String
             put("why", w.phase.name().to_owned());
             put("budget", w.budget.to_string());
             put("measured", w.measured.to_string());
-            put("capacity", w.capacity.to_string());
+            put("capacity_bps", opt(w.capacity));
             put("copies", w.copies.to_string());
-            put("per_holder", count(w.streams));
+            put("per_holder", opt(w.streams));
             put("holders", w.holders.to_string());
-            put("pushed", w.pushed.to_string());
-            put("behind", w.behind.to_string());
-            put("overloaded", w.overloaded.to_string());
-            put("in_use", w.in_use.to_string());
-            put("saturated", w.saturated.to_string());
             put("unconstrained", w.unconstrained.to_string());
+            // The signals are a check's alone.
+            if w.phase == WindowPhase::Check {
+                put("pushed", w.pushed.to_string());
+                put("behind", w.behind.to_string());
+                put("overloaded", w.overloaded.to_string());
+                put("in_use", w.in_use.to_string());
+                put("saturated", w.saturated.to_string());
+            }
         }
         K::AnswerRate {
             rate,
             reading,
             engaged,
         } => {
-            put("rate", rate.to_string());
+            put("rate_bps", rate.to_string());
             put("reading_ms", dur(reading));
             put("engaged", engaged.to_string());
         }
     }
-    DECISION_COLUMNS
-        .iter()
-        .map(|(c, _)| row.remove(c).unwrap_or_default())
-        .collect()
+    ordered(&DECISION_COLUMNS, row)
 }
 
-/// `s`'s fields by [`SEND_COLUMNS`], `ms` reading the node's clock as the
-/// table's ms: `how` ([`SendHow::name`]), `stream`, `seq`, `queued_ms`,
-/// `fate` ([`SendFate::name`]: `suppressed` here, in the HAVE world, for a
-/// push the peer's HAVEs announced), `bytes` (empty unless written),
-/// `cancel_ms` (empty without a CANCEL by the end), `declared`,
-/// `subscribed`. The sims' `t_ms` is the end's.
-pub fn send_fields(s: &SeedSend, ms: &dyn Fn(Time) -> i64) -> Vec<String> {
-    vec![
-        s.how.name().to_owned(),
-        s.stream.to_string(),
-        s.bin.base_offset().to_string(),
-        ms(s.queued).to_string(),
-        s.fate.name().to_owned(),
-        if s.fate == SendFate::Written {
-            s.bytes.to_string()
-        } else {
-            String::new()
-        },
-        s.cancel.map_or(String::new(), |c| ms(c).to_string()),
-        s.declared.to_string(),
-        s.subscribed.to_string(),
+/// `s`'s row by [`SEND_COLUMNS`] (whose docs say what each holds), `ms`
+/// reading the node's clock as the table's ms; `head.t_ms` is the send's
+/// end.
+pub fn send_fields(head: &RowHead, s: &SeedSend, ms: &dyn Fn(Time) -> i64) -> Vec<String> {
+    let mut row: BTreeMap<&'static str, String> = BTreeMap::new();
+    head.put(&mut row);
+    let written = s.fate == SendFate::Written;
+    for (c, v) in [
+        ("how", s.how.name().to_owned()),
+        ("stream", s.stream.to_string()),
+        ("seq", s.bin.base_offset().to_string()),
+        ("queued_ms", ms(s.queued).to_string()),
+        ("fate", s.fate.name().to_owned()),
+        ("bytes", opt(written.then_some(s.bytes))),
+        ("cancel_ms", opt(s.cancel.map(ms))),
+        ("declared", s.declared.to_string()),
+        ("subscribed", s.subscribed.to_string()),
+    ] {
+        row.insert(c, v);
+    }
+    ordered(&SEND_COLUMNS, row)
+}
+
+/// A table's doc row, as both sims' rustdoc carries it and `hack/sim-db`'s
+/// catalog reads it: `| `name` | grain, with `knob` | `column` (doc), ... |`,
+/// `knob` the sim's setting that writes the table, each column's doc its
+/// own parenthesis.
+pub fn doc_row(name: &str, grain: &str, knob: &str, columns: &[Column]) -> String {
+    let cells: Vec<String> = columns
+        .iter()
+        .map(|c| format!("`{}` ({})", c.name, c.doc))
+        .collect();
+    format!(
+        "| `{name}` | {grain}, with `{knob}` | {} |",
+        cells.join(", ")
+    )
+}
+
+/// Both tables' doc rows ([`doc_row`]) in a sim whose setting `knob`
+/// writes them (strims-sim's `STRIMS_SIM_SPEC=1`, the ppspp sim's
+/// `SIM_SPEC=1`): `seed_decisions`', then `seed_sends`'.
+pub fn doc_rows(knob: &str) -> [String; 2] {
+    [
+        doc_row("seed_decisions", DECISIONS_GRAIN, knob, &DECISION_COLUMNS),
+        doc_row("seed_sends", SENDS_GRAIN, knob, &SEND_COLUMNS),
     ]
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+
+    /// Each column's doc is its own: its parenthesis balanced and free of
+    /// what would end it or the row (`|`, a backtick), every name once.
+    #[test]
+    fn every_column_has_a_doc_of_its_own() {
+        for cols in [&DECISION_COLUMNS[..], &SEND_COLUMNS[..]] {
+            let mut names: Vec<&str> = cols.iter().map(|c| c.name).collect();
+            names.sort_unstable();
+            names.dedup();
+            assert_eq!(names.len(), cols.len());
+            for c in cols {
+                assert!(!c.doc.is_empty(), "{}", c.name);
+                assert!(!c.doc.contains(['|', '`']), "{}", c.name);
+                let mut depth = 0i32;
+                for ch in c.doc.chars() {
+                    depth += match ch {
+                        '(' => 1,
+                        ')' => -1,
+                        _ => 0,
+                    };
+                    assert!(depth >= 0, "{}", c.name);
+                }
+                assert_eq!(depth, 0, "{}", c.name);
+            }
+        }
+    }
+
+    /// A row fills every column, the head's from the sim's part.
+    #[test]
+    fn a_row_fills_the_columns_in_order() {
+        let head = RowHead {
+            t_ms: 7,
+            node: 0,
+            n: 3,
+            peer: None,
+            peer_incarnation: None,
+        };
+        let d = SeedDecision {
+            at: Time::EPOCH,
+            peer: None,
+            kind: SeedDecisionKind::AnswerRate {
+                rate: 1000,
+                reading: None,
+                engaged: true,
+            },
+        };
+        let row = decision_fields(&head, &d, &|_| 0);
+        assert_eq!(row.len(), DECISION_COLUMNS.len());
+        let at = |name: &str| {
+            let i = DECISION_COLUMNS
+                .iter()
+                .position(|c| c.name == name)
+                .unwrap();
+            row[i].as_str()
+        };
+        assert_eq!(
+            [
+                at("t_ms"),
+                at("n"),
+                at("peer"),
+                at("peer_incarnation"),
+                at("kind"),
+                at("rate_bps"),
+                at("engaged")
+            ],
+            ["7", "3", "-1", "", "answer_rate", "1000", "true"]
+        );
+        assert_eq!(at("reading_ms"), "");
+    }
 }

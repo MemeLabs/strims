@@ -644,6 +644,11 @@ fn seed_tables_say_what_the_seed_did(r: &strims_sim::Report, d: &Path) {
             .chain(&decisions)
             .all(|x| int(x, "node") == Some(seed))
     );
+    // Each table numbers the seed's records from 0, in its log's order.
+    for t in [&sends, &decisions] {
+        let n: Vec<i64> = t.iter().map(|x| int(x, "n").unwrap()).collect();
+        assert_eq!(n, (0..t.len() as i64).collect::<Vec<_>>());
+    }
     let count = |how: &str, fate: &str| {
         sends
             .iter()
@@ -740,6 +745,21 @@ fn seed_tables_say_what_the_seed_did(r: &strims_sim::Report, d: &Path) {
     // readings.
     for kind in ["window", "check", "holder_joined"] {
         assert!(decisions.iter().any(|x| x["kind"] == kind), "{kind}");
+    }
+}
+
+/// Both seed tables' doc rows in tables.rs are the seed log's own
+/// (`seed_log::doc_rows`): every column documented as its formatter writes
+/// it, and as the ppspp sim's rows document it.
+#[test]
+fn the_seed_tables_doc_rows_are_the_seed_logs() {
+    let src = include_str!("../src/tables.rs");
+    for row in strims_ppspp::scheduler_peer::seed_log::doc_rows("STRIMS_SIM_SPEC=1") {
+        assert!(
+            src.lines()
+                .any(|l| l.strip_prefix("//! ") == Some(row.as_str())),
+            "tables.rs lacks the row:\n//! {row}"
+        );
     }
 }
 

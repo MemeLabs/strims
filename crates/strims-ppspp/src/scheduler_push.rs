@@ -2091,10 +2091,10 @@ impl PeerSwarmScheduler {
                     granted: ok,
                     rule,
                     subscribers: stream_children,
-                    holders: granted.map_or(0, |g| g.holders),
-                    copies: granted.map_or(0, |g| g.copies),
-                    held: granted.map_or(0, |g| g.held),
-                    per_holder: granted.map_or(0, |g| g.per_holder),
+                    holders: granted.map(|g| g.holders),
+                    copies: granted.map(|g| g.copies),
+                    held: granted.map(|g| g.held),
+                    per_holder: granted.map(|g| g.per_holder).filter(|&n| n != usize::MAX),
                 }),
             );
         }

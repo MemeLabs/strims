@@ -4692,12 +4692,12 @@ fn the_seed_log_records_a_decline_of_an_uncovered_stream() {
     assert_eq!(requests[0].0, Some(peers[0]));
     assert_eq!(
         row(requests[0].1),
-        (0, true, crate::AdmitRule::SeedHolder, 0, 0, 1)
+        (0, true, crate::AdmitRule::SeedHolder, 0, Some(0), Some(1))
     );
     assert_eq!(requests[1].0, Some(peers[1]));
     assert_eq!(
         row(requests[1].1),
-        (1, false, crate::AdmitRule::SeedNoCopy, 0, 1, 1)
+        (1, false, crate::AdmitRule::SeedNoCopy, 0, Some(1), Some(1))
     );
     // The first became a holder as its request was granted, before its
     // answer.
