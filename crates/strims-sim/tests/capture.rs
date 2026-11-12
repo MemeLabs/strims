@@ -553,7 +553,7 @@ fn the_logs_name_their_peers(d: &Path, how: &str) {
         assert!(!rows.is_empty(), "{how}: {t}");
         let unnamed = rows
             .iter()
-            .filter(|x| x["peer"] == "-1")
+            .filter(|x| x["peer"] == "-1" || x["peer"].is_empty())
             .filter(|x| {
                 !(t == "seed_decisions" && ["window", "answer_rate"].contains(&x["kind"].as_str()))
             })

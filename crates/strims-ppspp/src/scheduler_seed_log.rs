@@ -856,7 +856,7 @@ pub const DECISION_COLUMNS: [Column; 43] = [
     col(
         "peer",
         Int,
-        "the neighbour the decision is about, numbered as node is; -1 for a decision about the allocation, a window or answer_rate row",
+        "the neighbour the decision is about, numbered as node is; empty for a decision about the allocation, a window or answer_rate row",
     ),
     col(
         "peer_incarnation",
@@ -1064,7 +1064,11 @@ pub const SEND_COLUMNS: [Column; 14] = [
         Int,
         "the send's place in the seed's log, from 0, in the order the seed's sends ended; with node it keys the table",
     ),
-    col("peer", Int, "the neighbour sent to, numbered as node is"),
+    col(
+        "peer",
+        Int,
+        "the neighbour sent to, numbered as node is; empty if the sim can't name it",
+    ),
     col(
         "peer_incarnation",
         Int,
@@ -1113,7 +1117,9 @@ pub const SEND_COLUMNS: [Column; 14] = [
 /// its time in the tables' ms, the seed (`node`), the record's place in the
 /// seed's log of its kind (`n`: the order the sim took the records, a
 /// decision's and a send's apart), and the peer with its incarnation then,
-/// each numbered as the sim numbers its hosts or nodes.
+/// each numbered as the sim numbers its hosts or nodes (none, written
+/// empty, for a decision about the allocation or a peer the sim can't
+/// name).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RowHead {
     pub t_ms: i64,
@@ -1128,7 +1134,7 @@ impl RowHead {
         row.insert("t_ms", self.t_ms.to_string());
         row.insert("node", self.node.to_string());
         row.insert("n", self.n.to_string());
-        row.insert("peer", self.peer.map_or("-1".to_owned(), |p| p.to_string()));
+        row.insert("peer", opt(self.peer));
         row.insert("peer_incarnation", opt(self.peer_incarnation));
     }
 }
@@ -1392,7 +1398,7 @@ mod tests {
                 at("rate_bps"),
                 at("engaged")
             ],
-            ["7", "3", "-1", "", "answer_rate", "1000", "true"]
+            ["7", "3", "", "", "answer_rate", "1000", "true"]
         );
         assert_eq!(at("reading_ms"), "");
     }
