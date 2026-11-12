@@ -53,7 +53,7 @@ import collections
 import dataclasses
 import math
 
-from . import catalog, engine, store_host, verdict
+from . import catalog, engine, store, store_host, verdict
 
 q = store_host.q
 
@@ -68,8 +68,16 @@ def query(sql):
     the scoring objects as simlab.suite defines them (catalog.scoring_sql,
     TEMP: its METRICS, whatever the catalog's indexer had); a macro that
     reads a table the catalog's indexer didn't make fails saying so, and
-    the others still score."""
-    run = (lambda s: catalog.lake(s)) if SCORE_DB is None else (lambda s: store_host.duck(s, db=SCORE_DB))
+    the others still score. Over the catalog the session is one reader,
+    pinned at one snapshot (catalog.connected)."""
+    if SCORE_DB is None:
+        with catalog.connected() as conn:
+            return scored(lambda s: store.results(conn, s), sql)
+    return scored(lambda s: store_host.duck(s, db=SCORE_DB), sql)
+
+
+def scored(run, sql):
+    """query's session over `run` (a script's rows)."""
     cols = {r["t"]: set(r["c"]) for r in run(
         "SELECT table_name AS t, list(column_name) AS c FROM duckdb_columns() WHERE database_name = "
         "current_database() AND schema_name = 'main' GROUP BY ALL;")}

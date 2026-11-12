@@ -13,6 +13,21 @@ simlab.verdict's derive pool:
                stays busy
   Child       an index in a forkserver's child, as the console runs one,
                its derives in a pool of the child's
+  Locks        locks other processes hold on the metadata (HOLD): an index
+               commits while another process reads throughout (WAL); with
+               a rollback journal its commit waits for the reader in
+               flight, the switch giving way, and the next index makes it
+               WAL; readers (lake, a pool's) wait out BEGIN EXCLUSIVE in a
+               rollback journal and aren't held up in WAL; a write the
+               lock refused lets go of it and is tried again; an index
+               that can't read the catalog's record fails, the catalog
+               kept, not made again; two indexes
+               at once do the work once; compacting the lock refuses is
+               skipped, the index succeeding, and the next index compacts
+  Pins         a connection reads one snapshot through an index and its
+               compacting (the snapshot it superseded kept, however old;
+               older ones let go), and pinned()'s readers share one
+               across connections, an index inside reading the latest
   Derive       the forkserver pool's derived tables are those made in this
                process, with a DuckDB connection open here; a source that
                fails comes back failed, the others judged
@@ -75,7 +90,6 @@ import multiprocessing
 import os
 import re
 import shutil
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -219,14 +233,9 @@ class Snapshot(Fixture):
         if catalog.snapshot() is None:
             self.index()
         latest = catalog.snapshot()
-        held = sqlite3.connect(catalog.catalog_path())
-        try:
-            held.execute("BEGIN EXCLUSIVE")
-            with mock.patch.object(catalog, "SNAPSHOT_BUSY_S", 0.05):
-                self.assertIsNone(catalog.snapshot())
-        finally:
-            held.rollback()
-            held.close()
+        # Exclusive locking mode: nothing else reads it, WAL or not.
+        with Held("sole"), mock.patch.object(catalog, "SNAPSHOT_BUSY_S", 0.05):
+            self.assertIsNone(catalog.snapshot())
         self.assertEqual(catalog.snapshot(), latest)
 
 
@@ -250,6 +259,319 @@ class Child(Fixture):
         self.assertEqual((sorted(got["judged"]), got["failed"]), (sorted(catalog.scan_cache()), {}))
         self.assertIn("derive", kinds)
         self.assertFalse(catalog.index(0).changed)
+
+
+# Holds a lock on a SQLite file, in a process of its own, until a line
+# comes on its stdin: `kind` read (a read transaction, as a reader's query
+# holds one), write (BEGIN IMMEDIATE: the write lock), exclusive (BEGIN
+# EXCLUSIVE: no reader either while the journal is rollback's) or sole
+# (exclusive locking mode and a write: nothing else reads or writes it,
+# whatever the journal).
+HOLD = r"""
+import sqlite3, sys
+s = sqlite3.connect(sys.argv[1], isolation_level=None, timeout=60)
+kind = sys.argv[2]
+if kind == "sole":
+    s.execute("PRAGMA locking_mode=EXCLUSIVE")
+if kind == "read":
+    s.execute("BEGIN")
+    s.execute("SELECT count(*) FROM ducklake_snapshot").fetchall()
+else:
+    s.execute("BEGIN IMMEDIATE" if kind == "write" else "BEGIN EXCLUSIVE")
+    if kind == "sole":
+        s.execute("UPDATE ducklake_metadata SET value = value")
+print("held", flush=True)
+sys.stdin.readline()
+s.execute("ROLLBACK")
+s.close()
+print("released", flush=True)
+"""
+# How long a held lock outlasts what the sqlite extension waits by itself.
+PAST_DEFAULT_S = 6
+
+
+class Held:
+    """HOLD's lock of `kind` on the catalog's metadata, from its start
+    until release() (from any thread) or the block's end."""
+
+    def __init__(self, kind):
+        self.proc = subprocess.Popen([sys.executable, "-c", HOLD, str(catalog.catalog_path()), kind],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        self.released_at = None
+        self._lock = threading.Lock()
+        if self.proc.stdout.readline().strip() != "held":
+            self.proc.kill()
+            raise AssertionError(f"no {kind} lock held")
+
+    def release(self):
+        with self._lock:
+            if self.released_at is None:
+                self.proc.stdin.write("\n")
+                self.proc.stdin.flush()
+                said = self.proc.stdout.readline().strip()
+                self.proc.wait(timeout=60)
+                self.released_at = time.monotonic()
+                assert said == "released", said
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            self.release()
+        finally:
+            if self.proc.poll() is None:
+                self.proc.kill()
+
+
+def sqlite(sql):
+    """The first value `sql` gives on the catalog's metadata, run with
+    stdlib sqlite3 in a process of its own: in this one it would be a
+    second SQLite beside the lake's connections (catalog.snapshot's
+    docs)."""
+    code = ("import sqlite3, sys\nc = sqlite3.connect(sys.argv[1])\nrow = c.execute(sys.argv[2]).fetchone()\n"
+            "c.commit()\nc.close()\nprint(row[0] if row else '')")
+    return subprocess.run([sys.executable, "-c", code, str(catalog.catalog_path()), sql], capture_output=True,
+                          text=True, check=True).stdout.strip()
+
+
+def journal(mode=None):
+    """The catalog's journal mode, set to `mode` first where given."""
+    got = sqlite("PRAGMA journal_mode" + (f"={mode}" if mode else ""))
+    if mode:
+        assert got == mode, got
+    return got
+
+
+class Locks(Fixture):
+    """Indexes and readers against locks other processes hold on the
+    catalog's SQLite metadata: each waits, or tries again, rather than
+    fail."""
+
+    def setUp(self):
+        super().setUp()
+        self.index()
+        self.assertEqual(journal(), "wal")
+
+    def count(self, src):
+        return catalog.lake(f"SELECT count(*) AS n FROM raw.sources WHERE src = {catalog.q(src)};")[0]["n"]
+
+    def test_an_index_commits_while_another_process_reads_throughout(self):
+        self.add_source("suite/wt/locks-read")
+        with Held("read"):
+            got, _ = self.index()
+            self.assertEqual(self.count("suite/wt/locks-read"), 1)
+        self.assertTrue(got.changed)
+        self.assertIn("suite/wt/locks-read", got.sources)
+        self.assertIsNone(got.compact_skipped)
+
+    def test_a_rollback_journals_commit_waits_for_the_reader_in_flight_then_an_index_makes_it_wal(self):
+        journal("delete")
+        self.add_source("suite/wt/locks-rollback")
+        hot = catalog.catalog_path().with_name("catalog.sqlite-journal")
+        writing, events, seen = threading.Event(), [], []
+
+        def progress(p):
+            events.append(p.message)
+            if p.message.startswith("index: writing"):
+                writing.set()
+        with Held("read") as held:
+            def release():
+                # The commit's journal while the reader holds the metadata:
+                # the commit can't end before the reader does.
+                writing.wait(300)
+                end = time.monotonic() + 300
+                while not hot.exists() and time.monotonic() < end:
+                    time.sleep(0.005)
+                seen.append((hot.exists(), time.monotonic()))
+                time.sleep(PAST_DEFAULT_S)
+                held.release()
+            t = threading.Thread(target=release)
+            t.start()
+            try:
+                with mock.patch.object(catalog, "WAL_SWITCH_S", 0.2):
+                    got = catalog.index(2, progress)
+                ended = time.monotonic()
+            finally:
+                t.join()
+        self.assertEqual([s[0] for s in seen], [True])
+        self.assertGreaterEqual(ended - seen[0][1], PAST_DEFAULT_S)
+        self.assertTrue(got.changed)
+        self.assertEqual(self.count("suite/wt/locks-rollback"), 1)
+        self.assertFalse([m for m in events if "locked" in m], events)
+        # The reader kept the switch from its lock; with none, the next
+        # index switches.
+        self.assertEqual(journal(), "delete")
+        self.assertFalse(self.index()[0].changed)
+        self.assertEqual(journal(), "wal")
+
+    def test_readers_wait_out_a_writers_lock(self):
+        pool = catalog.pool("test-locks", size=1, guard=engine.Guard("1GB", 1, "1GiB"))
+        self.addCleanup(pool.close)
+        sql = "SELECT count(*) AS n FROM jobs"
+        want = catalog.lake(sql + ";")
+        journal("delete")
+        with Held("exclusive") as held:
+            t0 = time.monotonic()
+            threading.Timer(PAST_DEFAULT_S, held.release).start()
+            with cf.ThreadPoolExecutor(2) as ex:
+                lake = ex.submit(catalog.lake, sql + ";")
+                pooled = ex.submit(pool.query, sql)
+                self.assertEqual((lake.result(), pooled.result().records()), (want, want))
+            self.assertGreaterEqual(time.monotonic() - t0, PAST_DEFAULT_S)
+        # WAL: a writer's transaction holds up no reader.
+        journal("wal")
+        pool.refresh()
+        with Held("exclusive"):
+            t0 = time.monotonic()
+            self.assertEqual((catalog.lake(sql + ";"), pool.query(sql).records()), (want, want))
+            self.assertLess(time.monotonic() - t0, PAST_DEFAULT_S - 1)
+
+    def test_a_write_the_lock_refuses_lets_go_of_it_and_is_tried_again(self):
+        journal("delete")
+        probe = "CREATE TABLE raw.locks_probe AS SELECT 1 AS a;"
+        self.addCleanup(catalog.lake, "DROP TABLE IF EXISTS raw.locks_probe;", write=True, out=None)
+        said = []
+        with mock.patch.object(engine, "BUSY_TIMEOUT_S", 0.3), mock.patch.object(catalog, "WRITE_RETRY_S", (1, 1)):
+            with Held("read") as held:
+                with self.assertRaisesRegex(store_host.DuckError, "database is locked"):
+                    catalog.lake(probe, write=True, out=None)
+                held.release()
+                # The failed commit's lock went with its connection.
+                self.assertEqual(catalog.lake("SELECT count(*) AS n FROM raw.info WHERE key = 'catalog_version';"),
+                                 [{"n": 1}])
+            with Held("read") as held:
+                def say(kind, message):
+                    # The first try failed under the reader; the next comes
+                    # once it's gone.
+                    said.append((kind, message))
+                    held.release()
+                catalog.written(probe, say, "the probe")
+        self.assertEqual(catalog.lake("SELECT a FROM raw.locks_probe;"), [{"a": 1}])
+        self.assertEqual(said, [("write", "index: the catalog is locked (the probe): trying again in 1 s")])
+
+    def test_an_index_that_cant_read_the_record_fails_and_keeps_the_catalog(self):
+        latest, sources = catalog.snapshot(), catalog.lake("SELECT count(*) AS n FROM raw.sources;")
+        results = store.results
+
+        def locked(conn, sql, out="json"):
+            if "FROM raw.info" in sql:
+                raise store_host.DuckError("Failed to query: database is locked")
+            return results(conn, sql, out)
+        with mock.patch.object(store, "results", locked):
+            with self.assertRaisesRegex(store_host.DuckError, "database is locked"):
+                self.index()
+        self.assertEqual((catalog.snapshot(), catalog.lake("SELECT count(*) AS n FROM raw.sources;")),
+                         (latest, sources))
+
+    def test_two_indexes_at_once_do_the_work_once(self):
+        src = "suite/wt/locks-twice"
+        self.add_source(src)
+        lock = catalog.lake_root() / "index.lock"
+        with cf.ProcessPoolExecutor(1, mp_context=multiprocessing.get_context("forkserver")) as ex:
+            first = ex.submit(child_index, str(self.root))
+            end = time.monotonic() + 300
+            while True:
+                with store_host.locked(lock, block=False) as free:
+                    pass
+                if not free:
+                    break
+                self.assertFalse(first.done() or time.monotonic() > end, "the child's index never held the lock")
+                time.sleep(0.005)
+            self.assertIsNone(catalog.index(0, wait=False))
+            second = catalog.index(0)
+            got, _ = first.result(timeout=300)
+        self.assertTrue(got["changed"])
+        self.assertIn(src, got["sources"])
+        self.assertFalse(second.changed)
+        self.assertEqual(self.count(src), 1)
+        self.assertEqual(catalog.lake(f"SELECT count(*) AS n FROM jobs WHERE src = {catalog.q(src)};"), [{"n": 1}])
+
+    def test_compacting_the_lock_refuses_is_skipped_and_the_next_index_compacts(self):
+        src = "suite/wt/locks-compact"
+        self.add_source(src)
+        held, events = [], []
+
+        def progress(p):
+            events.append(p.message)
+            if p.message.startswith("index: compacting ("):
+                held.append(Held("sole"))
+        with mock.patch.object(engine, "BUSY_TIMEOUT_S", 0.2), \
+                mock.patch.object(catalog, "WRITE_RETRY_S", (0.05, 0.05)):
+            try:
+                got = catalog.index(2, progress)
+            finally:
+                for h in held:
+                    h.release()
+        self.assertEqual(len(held), 1)
+        self.assertTrue(got.changed)
+        self.assertIn(src, got.sources)
+        self.assertEqual(self.count(src), 1)
+        self.assertRegex(got.compact_skipped, r"^the catalog stayed locked through 3 tries: .*database is locked")
+        self.assertEqual([m for m in events if m.startswith("index: the catalog is locked")],
+                         ["index: the catalog is locked (compacting): trying again in 0.05 s"] * 2)
+        self.assertIn(f"index: compacting skipped ({got.compact_skipped}); the next index compacts", events)
+        self.assertRegex(events[-1], r"^index: done in ")
+        self.assertEqual(catalog.skipped_path().read_text(), got.compact_skipped + "\n")
+        again, events = self.index()
+        self.assertFalse(again.changed)
+        self.assertIsNone(again.compact_skipped)
+        self.assertEqual([e.message for e in events][:1], ["index: compacting (the last index skipped it)"])
+        self.assertRegex(events[-1].message, r"^the catalog is up to date \(")
+        self.assertFalse(catalog.skipped_path().exists())
+        third, events = self.index()
+        self.assertEqual([e.message for e in events if "compacting" in e.message], [])
+
+
+class Pins(Fixture):
+    """Readers at one snapshot while indexes commit and compact: a
+    connection's (lake's, a scoring session's), and pinned()'s across
+    connections."""
+
+    SQL = ("SELECT (SELECT count(*) FROM raw.sources) AS sources, (SELECT count(*) FROM jobs) AS jobs, "
+           "(SELECT id FROM ducklake_current_snapshot('lake')) AS at;")
+
+    def setUp(self):
+        super().setUp()
+        self.index()
+
+    def snapshots(self):
+        return [r["id"] for r in catalog.lake("SELECT snapshot_id AS id FROM ducklake_snapshots('lake') ORDER BY id;")]
+
+    def test_a_connection_reads_one_snapshot_through_an_index_and_its_compacting(self):
+        # Every snapshot an hour old: compacting keeps the one the next
+        # index supersedes, whatever its age, and lets the others go.
+        sqlite("UPDATE ducklake_snapshot SET snapshot_time = '2026-01-01 00:00:00.000000+00'")
+        old = self.snapshots()
+        with catalog.connected() as conn:
+            before = store.results(conn, self.SQL)
+            self.add_source("suite/wt/pins-connection")
+            got, _ = self.index()
+            self.assertTrue(got.changed)
+            # jobs, raw.sources and the snapshots as the index found them,
+            # their files kept.
+            self.assertEqual(store.results(conn, self.SQL), before)
+        now = catalog.lake(self.SQL)[0]
+        self.assertEqual((now["sources"], now["jobs"]), (before[0]["sources"] + 1, before[0]["jobs"] + 1))
+        kept = self.snapshots()
+        self.assertEqual([v for v in old if v in kept], [old[-1]])
+        self.assertGreater(kept[-1], old[-1])
+
+    def test_pinned_readers_share_one_snapshot_across_connections(self):
+        with catalog.pinned() as version:
+            before = catalog.lake(self.SQL)
+            self.assertEqual(before[0]["at"], version)
+            self.add_source("suite/wt/pins-block")
+            # The index reads, and writes, the latest.
+            got, _ = self.index()
+            self.assertIn("suite/wt/pins-block", got.sources)
+            with catalog.pinned() as inner:
+                self.assertEqual(inner, version)
+                self.assertEqual(catalog.lake(self.SQL), before)
+            self.assertEqual(catalog.lake(self.SQL), before)
+        after = catalog.lake(self.SQL)[0]
+        self.assertEqual(after["sources"], before[0]["sources"] + 1)
+        self.assertGreater(after["at"], version)
 
 
 class Derive(Fixture):

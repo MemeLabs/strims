@@ -14,7 +14,9 @@ Connections. Each is a new in-memory instance with extension autoloading
 and autoinstalling off:
 
   reader(lake)       the catalog (lake_root's catalog.sqlite) attached
-                     READ_ONLY as `lake`, and used
+                     READ_ONLY as `lake`, and used; with `pin` (or a
+                     `version`) at one snapshot, the latest as it opens
+                     (latest_snapshot), whatever an index commits after
   reader(lake, guard, tmp)
                      the same, then shut in before any query runs: no
                      external access but the lake's data files and the
@@ -26,7 +28,22 @@ and autoinstalling off:
                      come with it
   writer(lake)       the catalog for the indexer: new data under data/,
                      none of it inlined in the SQLite file
+  close(conn)        a reader's or the writer's end: a transaction left
+                     open rolled back and the catalog detached, then closed
   store(db)          a fold's DuckDB file
+
+Every attach of the catalog waits out another connection's lock on its
+SQLite metadata for up to BUSY_TIMEOUT_S (the sqlite extension's
+busy_timeout, META_BUSY_TIMEOUT to DuckLake) rather than fail at once or
+after the extension's 5 s: a reader for a writer's commit, the writer for
+the readers in flight (their transactions hold the metadata while the
+journal is rollback's) or for another writer. SQLite refuses at once,
+whatever the timeout, a transaction that read and then asks to write
+while another connection writes (rather than deadlock): the index's
+retries (simlab.catalog) meet that. A DuckLake whose commit failed keeps
+its metadata's lock, the transaction never rolled back, until it is
+detached: closing the connection leaves it, and every other connection
+then waits on it until the process exits; `close` detaches first.
 
 Queries. `run` executes one statement on a connection: `gate` first for
 an untrusted one, its `$name` parameters bound (`bind`), its rows
@@ -99,6 +116,9 @@ CONFIG = {"autoinstall_known_extensions": "false", "autoload_known_extensions": 
           "allow_community_extensions": "false"}
 # The largest integer a double holds exactly, and its negation.
 SAFE = 2 ** 53 - 1
+# How long a connection to the catalog's SQLite metadata waits out
+# another's lock before it fails (the module docs).
+BUSY_TIMEOUT_S = 300
 
 
 class PinError(RuntimeError):
@@ -184,13 +204,21 @@ def catalog_file(lake):
     return Path(lake) / "catalog.sqlite"
 
 
-def attach_sql(lake, write=False):
-    """The ATTACH of the catalog at `lake` as `lake`: read-only, or for the
-    indexer writing new data under data/ (none of it inlined in the SQLite
-    file)."""
-    how = (f"(DATA_PATH {q(str(Path(lake) / 'data') + '/')}, DATA_INLINING_ROW_LIMIT 0)" if write
-           else "(READ_ONLY)")
-    return f"ATTACH {q('ducklake:sqlite:' + str(catalog_file(lake)))} AS lake {how}"
+def busy_ms():
+    """BUSY_TIMEOUT_S, as the sqlite extension's busy_timeout takes it."""
+    return max(1, round(BUSY_TIMEOUT_S * 1000))
+
+
+def attach_sql(lake, write=False, version=None):
+    """The ATTACH of the catalog at `lake` as `lake`: read-only (at snapshot
+    `version` where given: DuckLake's SNAPSHOT_VERSION, which every query
+    on it then reads), or for the indexer writing new data under data/
+    (none of it inlined in the SQLite file); either waits out a lock on the
+    metadata for BUSY_TIMEOUT_S."""
+    how = ([f"DATA_PATH {q(str(Path(lake) / 'data') + '/')}", "DATA_INLINING_ROW_LIMIT 0"] if write
+           else ["READ_ONLY", *([f"SNAPSHOT_VERSION {int(version)}"] if version is not None else [])])
+    how.append(f"META_BUSY_TIMEOUT {busy_ms()}")
+    return f"ATTACH {q('ducklake:sqlite:' + str(catalog_file(lake)))} AS lake ({', '.join(how)})"
 
 
 def settings_sql(threads=None, memory=None, tmp=None):
@@ -204,16 +232,32 @@ def settings_sql(threads=None, memory=None, tmp=None):
     return out
 
 
-def reader(lake, guard=None, tmp=None, cursors=0, threads=None, memory=None):
-    """The catalog at `lake` attached READ_ONLY, in use. With `guard` (a
-    Guard), shut in before it returns: external access only to the lake's
-    data/ and the spill directory `tmp` (made), its limits, the
-    configuration locked. With `cursors`, (conn, [cursor, ...]): that many
-    more connections of the instance, each using the catalog. `threads`
-    and `memory` set an unguarded one's limits."""
+def latest_snapshot(conn, lake):
+    """The latest snapshot of the catalog at `lake` (its id), read on `conn`
+    (an instance of connect()'s, the catalog not attached there) from the
+    SQLite metadata through the sqlite extension."""
+    conn.execute(f"ATTACH {q(str(catalog_file(lake)))} AS lake_meta (TYPE sqlite, READ_ONLY, "
+                 f"BUSY_TIMEOUT {busy_ms()})")
+    try:
+        return conn.execute("SELECT max(snapshot_id) FROM lake_meta.ducklake_snapshot").fetchone()[0]
+    finally:
+        conn.execute("DETACH lake_meta")
+
+
+def reader(lake, guard=None, tmp=None, cursors=0, threads=None, memory=None, pin=False, version=None):
+    """The catalog at `lake` attached READ_ONLY, in use: at snapshot
+    `version`, or with `pin` the latest as it opens, else each query at the
+    latest as it starts. With `guard` (a Guard), shut in before it
+    returns: external access only to the lake's data/ and the spill
+    directory `tmp` (made), its limits, the configuration locked. With
+    `cursors`, (conn, [cursor, ...]): that many more connections of the
+    instance, each using the catalog. `threads` and `memory` set an
+    unguarded one's limits."""
     conn = connect()
     try:
-        conn.execute(attach_sql(lake) + "; USE lake;")
+        if pin and version is None:
+            version = latest_snapshot(conn, lake)
+        conn.execute(attach_sql(lake, version=version) + "; USE lake;")
         more = [conn.cursor() for _ in range(cursors)]
         for c in more:
             c.execute("USE lake")
@@ -249,9 +293,27 @@ def writer(lake, threads=None, memory=None, tmp=None):
         for s in settings_sql(threads, memory, tmp):
             conn.execute(s)
     except BaseException:
-        conn.close()
+        close(conn)
         raise
     return conn
+
+
+def close(conn):
+    """Closes a connection to the catalog (reader's or writer's): a
+    transaction left open rolled back, and the catalog detached first, so
+    that a DuckLake whose commit failed lets go of its metadata's lock (the
+    module docs). The detach is a cursor's, whose database is the in-memory
+    one: on the connection, whose is the catalog, any statement but the
+    rollback first reads the catalog, which that lock refuses."""
+    with contextlib.suppress(Exception):
+        conn.execute("ROLLBACK")
+    with contextlib.suppress(Exception):
+        cur = conn.cursor()
+        try:
+            cur.execute("DETACH DATABASE IF EXISTS lake")
+        finally:
+            cur.close()
+    conn.close()
 
 
 def store(db, threads=2, memory="1GB", tmp=None):

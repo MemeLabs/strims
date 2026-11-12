@@ -5,7 +5,8 @@ DuckLake, so that any question is one SQL statement over it.
 
   index(workers=None, progress=None, wait=True) -> Indexed | None
                  brings the catalog up to date (below); None when `wait`
-                 is false and another index holds lake/index.lock
+                 is false and another index holds lake/index.lock (one
+                 that waits for it then does only what it left)
   fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None,
         progress=None) -> Fetched
                  copies what S3 still holds of experiment `exp`'s jobs
@@ -13,6 +14,11 @@ DuckLake, so that any question is one SQL statement over it.
   lake(sql, write=False, out="json")
                  a script over the catalog, in a connection of its own:
                  a reader, or the indexer's writer
+  connected(write=False)
+                 lake's connection, as a block's, for a session of
+                 several scripts
+  pinned()       this thread's readers opened in the block at one
+                 snapshot (below)
   pool(name, size=1, guard=engine.Guard()) -> engine.Pool
                  guarded readers of the catalog (the console's, the Ask
                  eval's, and the CLI's for a query with params, a saved
@@ -34,7 +40,10 @@ DuckLake, so that any question is one SQL statement over it.
                  experiment `exp`'s jobs)
   compact(keep_minutes=15)
                  merges the written tables' small files, and lets go of
-                 old snapshots
+                 the snapshots superseded more than keep_minutes ago
+  wal() -> bool
+                 puts the catalog's metadata in WAL mode (below), as each
+                 index does
   scoring_sql(cols, temp=False, suite=None)
                  the scoring objects, as SQL (below)
   docs_version() -> str
@@ -64,9 +73,43 @@ read-only,
   USE lake;
 
 and each query sees one snapshot, whatever the indexer is writing.
+`connected`'s and `lake`'s readers are pinned (SNAPSHOT_VERSION) at the
+latest snapshot as they open, so every statement of a script, or of a
+session of several on one connection (simlab.scoring's), reads the
+catalog as one index left it: the tables, views and macros an index
+makes again stay under them. Inside `pinned()` every reader the thread
+opens takes the block's one snapshot (the scorecards golden scores an
+experiment in one); `index` and `compact` read the latest whatever pin
+is set. A snapshot stays until `compact` finds it superseded more than
+keep_minutes ago, so a reader on it keeps its tables, and the files they
+read, for that long after the next index; one pinned past that fails
+(DuckLake: no snapshot at that version) rather than read a catalog whose
+files went. Pools' readers (the console's, engine.Pool) aren't pinned:
+each query reads the latest as it starts, and the console refreshes them.
 `snapshot` reads the latest from the SQLite metadata alone, without
-DuckDB: a reader whose snapshot isn't it was opened before an index,
+DuckLake: a reader whose snapshot isn't it was opened before an index,
 whichever process ran that one (the console refreshes its readers then).
+
+The metadata's journal is WAL (`wal`, at the start of each index, under
+its lock): a reader's transaction, which holds the metadata for the
+whole of its query, never holds up the writer's commit, nor the commit a
+reader, and other processes' connections, whatever code they run, read
+and write it as WAL from then on. Every connection simlab opens to the
+metadata is the sqlite extension's, one SQLite in the process: a second
+(stdlib's sqlite3) lets go of the others' file locks when it closes the
+file, and in WAL takes itself for the last connection and removes the
+-wal under them. With a rollback journal (a catalog no
+index has made WAL yet, or one whose readers kept the switch from its
+lock for WAL_SWITCH_S: the next index tries again) a commit waits for
+the readers in flight to finish, and the readers that come meanwhile for
+the commit. Every connection waits out a lock for up to
+engine.BUSY_TIMEOUT_S rather than fail (simlab.engine's docs), and the
+index's writes (the transaction, the statistics' flag, compacting) are
+tried again after each of WRITE_RETRY_S's waits while the lock refuses
+them: a refusal SQLite gives at once, or one that outlasted the timeout.
+Compacting that the lock refuses past them is skipped, the index saying
+why and succeeding (its data are in); lake/compact.skipped says so until
+an index compacts, the next one doing it even with nothing else to do.
 
 `index` brings the catalog up to date with the cache (the suite's and
 the farm's flushes), the suite's and the farm's indexes, the farm's costs
@@ -80,8 +123,9 @@ new to the lake takes the type most of its files give it) is rewritten,
 cast. A source gone from the cache (simdb.py gc) leaves the catalog at
 the next index, and its files with it. The rows, the verdicts and the
 metadata tables are written by the lake, and its small files are merged
-at the end of each index (ducklake_merge_adjacent_files); snapshots older
-than 15 minutes, and the files only they read, go then too. After each
+at the end of each index (ducklake_merge_adjacent_files); snapshots
+superseded more than 15 minutes before, and the files only they read, go
+then too. After each
 write the tables' statistics are marked as holding NULLs (null_stats).
 The verdicts are the derived tables (simlab.verdict's derive_source:
 verdict and run_metrics), made for every source that lacks them in a
@@ -95,7 +139,8 @@ and returns what S3 charged for it, from the farm's S3 ledger.
 Progress events are Progress(kind, message, done, total): kind "index"
 (the lock, a catalog made again), "scan" (what changed), "derive" (the
 verdicts: done of total sources), "write" (the transaction, then
-compacting), "pull" (a fetch's pulls) or "done"; message is the line the
+compacting, a write the lock refused and its next try, compacting
+skipped), "pull" (a fetch's pulls) or "done"; message is the line the
 CLI prints.
 
 The tables (`table_catalog` holds this, by table, for the console and
@@ -221,10 +266,10 @@ import math
 import os
 import re
 import shutil
-import sqlite3
 import statistics
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -254,6 +299,20 @@ WRITTEN = ("rows", *VERDICT_TABLES, "farm_index", "fields")
 NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 # How long snapshot() waits out a busy catalog metadata before it gives up.
 SNAPSHOT_BUSY_S = 2
+# How long the switch to WAL waits for the readers in flight: while it
+# waits, readers that come wait for it, and a connection opened by older
+# code fails past the sqlite extension's 5 s.
+WAL_SWITCH_S = 2
+# The waits (s) before each try again of a write the catalog's lock
+# refused (the module docs).
+WRITE_RETRY_S = (1, 4, 15)
+# SQLite's refusals for a lock (SQLITE_BUSY's message, and SQLITE_LOCKED's).
+LOCKED = re.compile(r"database (?:table )?is locked", re.I)
+# This thread's pinned() snapshot (`version`), if any.
+PIN = threading.local()
+# snapshot()'s instance, made in each process that reads one (`pid`,
+# `conn`), and the lock its reads take.
+SNAPSHOTS = {"lock": threading.Lock()}
 
 q, ident = store_host.q, store_host.ident
 
@@ -290,17 +349,20 @@ def spill():
 
 @contextlib.contextmanager
 def connected(write=False, threads=None, memory=None):
-    """A connection to the catalog of its own, closed after the block (a
-    transaction left open rolls back): a reader (engine.reader: READ_ONLY)
-    unless `write`, the indexer's writer (engine.writer: new data under
-    lake/data/, none of it inlined), spilling to the cache's tmp/;
-    store_host.DuckError when it doesn't attach."""
+    """A connection to the catalog of its own, closed after the block
+    (engine.close: a transaction left open rolls back, and the catalog's
+    lock goes with it): a reader (engine.reader: READ_ONLY, pinned at the
+    latest snapshot as it opens, or at pinned()'s) unless `write`, the
+    indexer's writer (engine.writer: new data under lake/data/, none of it
+    inlined), spilling to the cache's tmp/; store_host.DuckError when it
+    doesn't attach."""
     tmp = spill()
     try:
         if write:
             conn = engine.writer(lake_root(), threads, memory, tmp)
         else:
-            conn = engine.reader(lake_root(), threads=threads, memory=memory)
+            conn = engine.reader(lake_root(), threads=threads, memory=memory, pin=True,
+                                 version=getattr(PIN, "version", None))
     except engine.duckdb.Error as e:
         raise store_host.DuckError(str(e)) from None
     try:
@@ -309,7 +371,7 @@ def connected(write=False, threads=None, memory=None):
                 conn.execute(x)
         yield conn
     finally:
-        conn.close()
+        engine.close(conn)
 
 
 def lake(sql, write=False, out="json", threads=None, memory=None):
@@ -319,6 +381,85 @@ def lake(sql, write=False, out="json", threads=None, memory=None):
     store_host.DuckError, DuckDB's message, on a failure."""
     with connected(write, threads, memory) as conn:
         return store.results(conn, sql, out)
+
+
+@contextlib.contextmanager
+def pinned():
+    """The readers this thread opens in the block (connected's, lake's) at
+    one snapshot, the latest as the block starts (an enclosing block's, for
+    one inside another); yields its id. store_host.DuckError when the
+    catalog can't be read."""
+    have = getattr(PIN, "version", None)
+    if have is not None:
+        yield have
+        return
+    try:
+        conn = engine.connect()
+        try:
+            PIN.version = engine.latest_snapshot(conn, lake_root())
+        finally:
+            conn.close()
+    except engine.duckdb.Error as e:
+        raise store_host.DuckError(str(e)) from None
+    try:
+        yield PIN.version
+    finally:
+        PIN.version = None
+
+
+@contextlib.contextmanager
+def latest():
+    """This thread's readers at the latest snapshot in the block, a pin
+    set aside (an index's and compacting's own reads)."""
+    saved = getattr(PIN, "version", None)
+    PIN.version = None
+    try:
+        yield
+    finally:
+        PIN.version = saved
+
+
+def locked_out(e):
+    """Whether failure `e` is the catalog's lock refusing it."""
+    return bool(LOCKED.search(str(e)))
+
+
+def retried(fn, say=None, what="write"):
+    """fn(), a write to the catalog that rolls back whole where it fails,
+    tried again after each of WRITE_RETRY_S's waits while the catalog's
+    lock refuses it (saying so, as Progress "write", to `say`);
+    store_host.DuckError once the waits run out, or at any other
+    failure."""
+    for wait in (*WRITE_RETRY_S, None):
+        try:
+            return fn()
+        except store_host.DuckError as e:
+            if wait is None or not locked_out(e):
+                raise
+            if say is not None:
+                say("write", f"index: the catalog is locked ({what}): trying again in {wait} s")
+            time.sleep(wait)
+
+
+def written(sql, say=None, what="write"):
+    """The write script `sql` (lake's, write=True), retried while the lock
+    refuses it."""
+    return retried(lambda: lake(sql, write=True, out=None), say, what)
+
+
+def wal():
+    """Puts the catalog's SQLite metadata in WAL mode where its journal is
+    still rollback's (the module docs), through the sqlite extension, the
+    SQLite the lake's connections use, as their own open does it; one whose
+    readers in flight keep the lock from it for WAL_SWITCH_S stays as it
+    was. Whether it is WAL."""
+    try:
+        got = store.execute(f"LOAD sqlite; ATTACH {q(str(catalog_path()))} AS lake_meta (TYPE sqlite, "
+                            f"JOURNAL_MODE 'wal', BUSY_TIMEOUT {max(1, round(WAL_SWITCH_S * 1000))});\n"
+                            "SELECT journal_mode FROM sqlite_query('lake_meta', 'PRAGMA journal_mode');")
+    except store_host.DuckError:
+        return False
+    return bool(got) and got[0]["journal_mode"] == "wal"
 
 
 def duck(sql):
@@ -759,15 +900,18 @@ CREATE TABLE IF NOT EXISTS raw.info (key VARCHAR, value VARCHAR);
 
 def recorded():
     """The catalog's record of what it holds: (info, files, inputs, sources),
-    or None without a catalog, or one of another CATALOG_VERSION."""
+    or None without a catalog, or one of another CATALOG_VERSION (one
+    without raw.info is none an index made); store_host.DuckError when it
+    can't be read (a lock past the busy timeout), which is no reason to
+    make it again."""
     if not catalog_path().exists():
         return None
     with connected() as conn:
         rows = lambda sql: store.results(conn, sql)  # noqa: E731
-        try:
-            info = {r["key"]: r["value"] for r in rows("SELECT key, value FROM raw.info;")}
-        except store_host.DuckError:
+        if not rows("SELECT count(*) AS n FROM information_schema.tables WHERE table_catalog = 'lake' "
+                    "AND table_schema = 'raw' AND table_name = 'info';")[0]["n"]:
             return None
+        info = {r["key"]: r["value"] for r in rows("SELECT key, value FROM raw.info;")}
         if info.get("catalog_version") != str(CATALOG_VERSION):
             return None
         files = {(r["src"], r["tbl"]): r for r in rows(
@@ -821,26 +965,32 @@ def snapshot(lake=None):
     every index that changes the catalog (its sources, metadata, verdicts
     or scoring objects) moves it, whichever process runs the index, and
     one with nothing to do doesn't. It is one row of the SQLite metadata,
-    read read-only with stdlib sqlite3 (no DuckDB instance, so cheap
-    enough for every request), the connection closed before it returns so
-    that it never holds up the next index's commit. None without a
-    catalog, and while the metadata stays busy past SNAPSHOT_BUSY_S (a
-    writer's commit: its journal is rollback's) or can't be read: callers
-    keep the last one they read."""
+    read through the sqlite extension, attached read-only for that read
+    alone, on one in-memory DuckDB instance this process keeps (cheap
+    enough for every request): the SQLite the lake's own connections use,
+    since a second SQLite in the process (stdlib's sqlite3) lets go of
+    their file locks when it closes the file, and in WAL takes itself for
+    the file's last connection and checkpoints and removes the -wal under
+    them. None without a catalog, and while the metadata stays busy past
+    SNAPSHOT_BUSY_S (a writer's commit, while its journal is rollback's:
+    wal) or can't be read: callers keep the last one they read."""
     path = engine.catalog_file(lake_root() if lake is None else lake)
     if not path.is_file():
         return None
-    try:
-        conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=SNAPSHOT_BUSY_S)
-    except sqlite3.Error:
-        return None
-    try:
-        rows = conn.execute("SELECT snapshot_id, snapshot_time FROM ducklake_snapshot "
-                            "ORDER BY snapshot_id DESC LIMIT 1").fetchall()
-    except sqlite3.Error:
-        return None
-    finally:
-        conn.close()
+    with SNAPSHOTS["lock"]:
+        try:
+            if SNAPSHOTS.get("pid") != os.getpid():
+                SNAPSHOTS.update(pid=os.getpid(), conn=engine.connect())
+            conn = SNAPSHOTS["conn"]
+            conn.execute(f"ATTACH {q(str(path.resolve()))} AS lake_snapshot (TYPE sqlite, READ_ONLY, "
+                         f"BUSY_TIMEOUT {max(1, round(SNAPSHOT_BUSY_S * 1000))})")
+            try:
+                rows = conn.execute("SELECT snapshot_id, snapshot_time FROM lake_snapshot.ducklake_snapshot "
+                                    "ORDER BY snapshot_id DESC LIMIT 1").fetchall()
+            finally:
+                conn.execute("DETACH lake_snapshot")
+        except (engine.duckdb.Error, engine.PinError):
+            return None
     if not rows:
         return None
     n, at = rows[0]
@@ -869,7 +1019,7 @@ def availability(exp=None):
 def wipe():
     """Removes the catalog, for a CATALOG_VERSION it wasn't made under."""
     for p in (catalog_path(), catalog_path().with_name(catalog_path().name + "-wal"),
-              catalog_path().with_name(catalog_path().name + "-shm")):
+              catalog_path().with_name(catalog_path().name + "-shm"), skipped_path()):
         p.unlink(missing_ok=True)
     shutil.rmtree(data_path(), ignore_errors=True)
 
@@ -946,7 +1096,8 @@ class Indexed:
     (`docs_kept`: docs_of); the cache sources whose files it added,
     replaced or let go, and how many files each way; the sources it judged
     (their verdicts made, or found made), and those whose verdicts failed,
-    {src: why} (they wait for the next index)."""
+    {src: why} (they wait for the next index); why it skipped compacting
+    (the catalog's lock refused it: the next index compacts), or None."""
     changed: bool = False
     sources: list = dataclasses.field(default_factory=list)
     judged: list = dataclasses.field(default_factory=list)
@@ -958,6 +1109,7 @@ class Indexed:
     docs: bool = False
     docs_kept: bool = False
     elapsed_s: float = 0.0
+    compact_skipped: str = None
 
 
 @dataclasses.dataclass
@@ -988,7 +1140,7 @@ def index(workers=None, progress=None, wait=True):
     t0 = time.monotonic()
     took = lambda: time.monotonic() - t0  # noqa: E731
     lake_root().mkdir(parents=True, exist_ok=True)
-    with store_host.locked(lake_root() / "index.lock", block=wait) as mine:
+    with latest(), store_host.locked(lake_root() / "index.lock", block=wait) as mine:
         if not mine:
             say("index", "another index holds lake/index.lock")
             return None
@@ -1006,6 +1158,7 @@ def index(workers=None, progress=None, wait=True):
                    for t, c in (("runs", store_host.RUN_COLS), ("scalars", store_host.SCALAR_COLS))]
             lake(BASE_SQL + "\n".join(own), write=True, out=None)
             rec = ({}, {}, {}, {})
+        wal()
         info, have, seen, _ = rec
         x = look(rec)
         cache, ins, version = x["cache"], x["ins"], x["version"]
@@ -1025,27 +1178,30 @@ def index(workers=None, progress=None, wait=True):
             if kept:
                 say("index", docs_kept(docs))
             if not moved:
+                skipped = owed(say)
                 say("done", f"the catalog is up to date ({took():.1f} s)")
-                return Indexed(docs_kept=kept, elapsed_s=took())
+                return Indexed(docs_kept=kept, elapsed_s=took(), compact_skipped=skipped)
             # Only the docs or the scoring objects changed: the doc tables,
             # the scoring objects where theirs did, and the versions, alone;
             # the events counted again where an index left the doc tables
             # behind the data.
             gone_keys = [*moved, *(["docs_behind"] if remade else [])]
             with scratch() as tmp:
-                lake("\n".join(["BEGIN;", *(catalogs_sql(cols, tmp, recount=bool(info.get("docs_behind")))
-                                            if remade else []),
-                                *(scoring if "scoring_version" in moved else []),
-                                f"DELETE FROM raw.info WHERE key IN ({', '.join(q(k) for k in gone_keys)});",
-                                "INSERT INTO raw.info VALUES " + ", ".join(f"({q(k)}, {q(v)})" for k, v in moved.items())
-                                + ";", "COMMIT;"]), write=True, out=None)
+                written("\n".join(["BEGIN;", *(catalogs_sql(cols, tmp, recount=bool(info.get("docs_behind")))
+                                               if remade else []),
+                                   *(scoring if "scoring_version" in moved else []),
+                                   f"DELETE FROM raw.info WHERE key IN ({', '.join(q(k) for k in gone_keys)});",
+                                   "INSERT INTO raw.info VALUES "
+                                   + ", ".join(f"({q(k)}, {q(v)})" for k, v in moved.items()) + ";", "COMMIT;"]),
+                        say, "the docs")
             warn_undocumented()
+            skipped = owed(say)
             what = " and ".join(w for w, on in (("the scoring macros", "scoring_version" in moved), ("the docs", remade))
                                 if on)
             say("done", f"index: {what} made again ({', '.join(f'{k} {v}' for k, v in moved.items())}; "
                 f"{took():.1f} s)")
             return Indexed(changed=True, scoring="scoring_version" in moved, docs=remade, docs_kept=kept,
-                           elapsed_s=took())
+                           elapsed_s=took(), compact_skipped=skipped)
         say("scan", f"index: {len(new)} new files, {len(changed)} changed, {len(gone)} gone; "
             f"{len(ins_changed)} metadata files changed; verdicts for {len(need_verdicts)} sources")
         kept = not docs["own"] and not fresh
@@ -1061,8 +1217,7 @@ def index(workers=None, progress=None, wait=True):
                         [s for s in need_verdicts if s not in failed], version, tmp, docs, failed)
             say("write", f"index: writing ({took():.0f} s in)")
             try:
-                lake(sql, write=True, out=None)
-                null_stats()
+                written(sql, say, "the transaction")
             except store_host.DuckError as e:
                 # The transaction rolled back: the catalog is as it was. The
                 # SQL and the files it read stay in lake/failed/.
@@ -1071,13 +1226,19 @@ def index(workers=None, progress=None, wait=True):
                 shutil.copytree(tmp, failed_dir)
                 (failed_dir / "index.sql").write_text(sql.replace(str(tmp), str(failed_dir)))
                 sys.exit(f"index: {e}\n(the SQL: {failed_dir / 'index.sql'}; the catalog is as it was)")
+        try:
+            retried(null_stats, say, "the statistics' NULLs")
+        except store_host.DuckError as e:
+            # Compacting marks them too, or the next index's.
+            if not locked_out(e):
+                raise
         warn_undocumented()
         say("write", f"index: compacting ({took():.0f} s in)")
-        compact()
+        skipped = compacted(say)
         say("done", f"index: done in {took():.0f} s")
         return Indexed(changed=True, sources=sorted({s for s, _ in [*new, *changed, *gone]}), judged=derived.judged,
                        failed=failed, new=len(new), replaced=len(changed), gone=len(gone), docs_kept=kept,
-                       elapsed_s=took())
+                       elapsed_s=took(), compact_skipped=skipped)
 
 
 def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of, need_verdicts, version, tmp, docs,
@@ -1185,7 +1346,8 @@ def null_stats():
     The table-wide flag only loses that folding; the files' own statistics,
     which prune them, are right. A reader between the index's commit and
     this sees the folding for that moment."""
-    store.execute(f"LOAD sqlite; ATTACH {q(str(catalog_path()))} AS lake_meta (TYPE sqlite);\n"
+    store.execute(f"LOAD sqlite; ATTACH {q(str(catalog_path()))} AS lake_meta (TYPE sqlite, "
+                  f"BUSY_TIMEOUT {engine.busy_ms()});\n"
                   "UPDATE lake_meta.ducklake_table_column_stats SET contains_null = 1 WHERE contains_null = 0;",
                   out=None)
 
@@ -2718,14 +2880,55 @@ LOADED_DOCS = {relative(p): blob_id(p.read_bytes())
 
 def compact(keep_minutes=15):
     """Merges the written tables' small files, and lets go of the snapshots
-    (and the files only they read) older than `keep_minutes`: a reader's
-    query that started before then may lose its files."""
-    have = set(lake_columns())
-    sql = [f"CALL ducklake_merge_adjacent_files('lake', {q(t)}, schema => 'raw');" for t in WRITTEN if t in have]
-    sql += [f"CALL ducklake_expire_snapshots('lake', older_than => now() - INTERVAL {int(keep_minutes)} MINUTE);",
-            f"CALL ducklake_cleanup_old_files('lake', older_than => now() - INTERVAL {int(keep_minutes)} MINUTE);"]
-    lake("\n".join(sql), write=True, out=None)
-    null_stats()
+    the next one superseded more than `keep_minutes` ago (and the files
+    only they read): a reader opened on a snapshot while it was the latest
+    has that long after the next index before its catalog goes (the latest
+    stays whatever its age)."""
+    with latest():
+        have = set(lake_columns())
+        gone = [r["id"] for r in lake(
+            "SELECT snapshot_id AS id FROM (SELECT snapshot_id, lead(snapshot_time) OVER (ORDER BY snapshot_id) AS "
+            "next FROM ducklake_snapshots('lake')) "
+            f"WHERE next < now() - INTERVAL {int(keep_minutes)} MINUTE ORDER BY id;")]
+        sql = [f"CALL ducklake_merge_adjacent_files('lake', {q(t)}, schema => 'raw');" for t in WRITTEN if t in have]
+        if gone:
+            sql.append(f"CALL ducklake_expire_snapshots('lake', versions => [{', '.join(str(int(v)) for v in gone)}]);")
+        sql.append(f"CALL ducklake_cleanup_old_files('lake', older_than => now() - INTERVAL {int(keep_minutes)} MINUTE);")
+        lake("\n".join(sql), write=True, out=None)
+        null_stats()
+
+
+def skipped_path():
+    """lake/compact.skipped: why the last index to compact skipped it (the
+    module docs); there until an index compacts."""
+    return lake_root() / "compact.skipped"
+
+
+def compacted(say):
+    """compact(), retried while the catalog's lock refuses it (each of its
+    steps rolls back whole, and the merges again find what is left): None
+    once done, or why it was skipped, the lock refusing it past the retries
+    (skipped_path keeps it, and the next index compacts)."""
+    try:
+        retried(compact, say, "compacting")
+    except store_host.DuckError as e:
+        if not locked_out(e):
+            raise
+        why = f"the catalog stayed locked through {len(WRITE_RETRY_S) + 1} tries: " + " ".join(str(e).split())
+        skipped_path().write_text(why + "\n")
+        say("write", f"index: compacting skipped ({why}); the next index compacts")
+        return why
+    skipped_path().unlink(missing_ok=True)
+    return None
+
+
+def owed(say):
+    """The compacting an earlier index skipped (skipped_path), done by an
+    index with nothing else to do: compacted()'s, or None with none owed."""
+    if not skipped_path().exists():
+        return None
+    say("write", "index: compacting (the last index skipped it)")
+    return compacted(say)
 
 
 # --- fetch ------------------------------------------------------------------------

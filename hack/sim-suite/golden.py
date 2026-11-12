@@ -13,7 +13,11 @@ ways and compares what they print: the reference (suite.py at REV,
 REFERENCE by default, scoring its rows in Python), this checkout's
 scoring (simlab.scoring: the macros) over the sides suite.py reads from
 the farm's indexes, and over the experiment's arms as the catalog's
-experiment_jobs has them (arm_side). Each prints the arm score, ranked by
+experiment_jobs has them (arm_side), all of an experiment's at one snapshot
+of the catalog (catalog.pinned), the latest once its farm rows are read
+(and indexed), and again at the latest where that one goes from under
+them. Each
+prints the arm score, ranked by
 lag and for overhead (with no budget, and with one of 1.05), and the
 scorecard, every metric and the default's. The reference's t table is the
 macros' (t975), and both score the METRICS both have (ref_metrics: those
@@ -50,13 +54,16 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "hack") not in sys.path:
     sys.path.insert(0, str(ROOT / "hack"))
-from simlab import scoring, suite as lab  # noqa: E402
+from simlab import catalog, scoring, store_host, suite as lab  # noqa: E402
 
 # The last suite.py that scored in Python.
 REFERENCE = "4eee6065"
 WORK = ROOT / "target" / "golden"
 FIXTURES = Path(__file__).with_name("testdata") / "golden"
 RANKS = {"lag": (None,), "overhead": (None, 1.05)}
+# How many times an experiment is scored at one snapshot before a
+# snapshot gone from under it fails the check (compared_pinned).
+PIN_TRIES = 3
 
 
 def load(path, name):
@@ -253,19 +260,50 @@ def compared(a, ref):
     for e in experiments(a.n, a.exps) if a.n or a.exps else ():
         ref_rows = ref.farm_rows(e["exp"], e["cells"], e["knob"])
         new = suite().farm_rows(e["exp"], e["cells"], e["knob"])
-        cat = scoring.sides(e["exp"], [e["base"], *e["arms"]])
-        for arm in e["arms"]:
-            want = ref_texts(ref, e["cells"], ref_rows[e["base"]], ref_rows[arm], e["exp"], e["base"], arm)
-            for how, sides in (("suite.py", new), ("arm_side", cat)):
-                got = texts(e["cells"], sides[e["base"]], sides[arm], e["exp"], e["base"], arm)
-                same = all(compare(f"{how} {e['exp']}:{arm} {k}", want[k], got[k]) for k in want)
-                ok &= same
-                cells, marked, moved = stats(want["scorecard all=False"])
-                breaks = want["arm lag None"].splitlines()[1].split("guardrails ", 1)[-1]
-                print(f"{e['exp']} {arm} against {e['base']} ({how}): {'same' if same else 'DIFFERENT'}; "
-                      f"{cells} cells, {marked} marked lines, {moved}; guardrails {breaks[:100]}")
-                sys.stdout.flush()
+        ok &= compared_pinned(ref, e, ref_rows, new)
     sys.exit(0 if ok else 1)
+
+
+def compared_pinned(ref, e, ref_rows, new):
+    """compared_experiment with every score at one snapshot of the catalog
+    (catalog.pinned), whatever other checkouts index meanwhile; scored
+    again at the latest, up to PIN_TRIES times, where that snapshot goes
+    from under it (compacting keeps one keep_minutes past the next: one
+    that ran longer, or another process's compacting), what it printed
+    printed once."""
+    for left in range(PIN_TRIES - 1, -1, -1):
+        out, version = io.StringIO(), None
+        try:
+            with catalog.pinned() as version, contextlib.redirect_stdout(out):
+                ok = compared_experiment(ref, e, ref_rows, new)
+        except store_host.DuckError as err:
+            if not left or "No snapshot found at version" not in str(err):
+                raise
+            print(f"{e['exp']}: snapshot {version} went while it scored: again at the latest", file=sys.stderr)
+            continue
+        print(out.getvalue(), end="")
+        sys.stdout.flush()
+        return ok
+
+
+def compared_experiment(ref, e, ref_rows, new):
+    """Each arm of experiment `e` against its base, the reference's text
+    against the macros' over suite.py's sides (`new`) and arm_side's,
+    printed; whether every one is the same."""
+    ok = True
+    cat = scoring.sides(e["exp"], [e["base"], *e["arms"]])
+    for arm in e["arms"]:
+        want = ref_texts(ref, e["cells"], ref_rows[e["base"]], ref_rows[arm], e["exp"], e["base"], arm)
+        for how, sides in (("suite.py", new), ("arm_side", cat)):
+            got = texts(e["cells"], sides[e["base"]], sides[arm], e["exp"], e["base"], arm)
+            same = all(compare(f"{how} {e['exp']}:{arm} {k}", want[k], got[k]) for k in want)
+            ok &= same
+            cells, marked, moved = stats(want["scorecard all=False"])
+            breaks = want["arm lag None"].splitlines()[1].split("guardrails ", 1)[-1]
+            print(f"{e['exp']} {arm} against {e['base']} ({how}): {'same' if same else 'DIFFERENT'}; "
+                  f"{cells} cells, {marked} marked lines, {moved}; guardrails {breaks[:100]}")
+            sys.stdout.flush()
+    return ok
 
 
 # --- fixtures -------------------------------------------------------------------
