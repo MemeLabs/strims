@@ -1838,9 +1838,13 @@ def view_sql(t, cols, name, viewers, arrivals=None):
     if t == "arrivals":
         sel = ["x.k", "x.src"] + [nullify(c) if c in ARRIVAL_NONE else plain(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
-    if t in ("seed_decisions", "seed_sends"):
+    if t == "seed_decisions":
         sel = ["x.k", "x.src"] + [nullify(c) if c == "peer" else plain(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
+    if t == "seed_sends":
+        star = "x.* REPLACE (nullif(x.peer, -1) AS peer)" if "peer" in cols else "x.*"
+        return query.seed_sends_view(f"main.{ident(name)}", f"(SELECT {star} {canon(t)})",
+                                     f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
     if t == "asks":
         return query.asks_view(f"main.{ident(name)}", f"(SELECT x.* {canon(t)})",
                                f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
@@ -2219,9 +2223,12 @@ NORMALIZED = {
                   "is main's alone (the peer's HAVEs announced the chunk). declared reads what the peer said of "
                   "the chunk as the world has it said: its latest STATE covering it on the HAVE-removal lines "
                   "(by its frontier, after its hole), its HAVEs on main (asks' declares, the requester's side, "
-                  "reads the same). A written push's delivery is arrivals' earliest row of node = peer, seq, "
-                  "incarnation = peer_incarnation, none where the chunk never reached the peer (written is the "
-                  "seed's side: the peer left with the push in flight, or never held the chunk).",
+                  "reads the same). The sims write the send (seed_sends_log); the view adds held_ms, the "
+                  "peer's first hold of the chunk in its incarnation then (arrivals' earliest row of node = peer, "
+                  "seq, incarnation = peer_incarnation), a written push's delivery where it comes after queued_ms; "
+                  "NULL where the peer never held the chunk in that incarnation (written is the seed's side: the "
+                  "peer left with the push in flight, or never held the chunk), and NULL for a job whose "
+                  "arrivals the catalog lacks: unknown, not never held.",
 }
 STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewers": "k, viewer",
                  "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",
@@ -2273,8 +2280,8 @@ STANDARD_JOINS = {"seconds": "jobs USING (k, src); verdict_seconds USING (k, src
                                     "too, or a push of it written before",
                   "seed_sends": "viewers ON (k, src) and viewers.node = seed_sends.peer (the neighbour); arrivals "
                                 "ON (k, src) and arrivals.node = seed_sends.peer, seq, arrivals.incarnation = "
-                                "seed_sends.peer_incarnation (the holder's hold: the push's delivery, at "
-                                "most one); seed_decisions ON (k, src, node, peer, peer_incarnation, seq) and "
+                                "seed_sends.peer_incarnation (the holder's hold, the view's held_ms: the "
+                                "push's delivery, at most one); seed_decisions ON (k, src, node, peer, peer_incarnation, seq) and "
                                 "seed_decisions.kind = 'cancel' for the CANCELs of its chunk, not one to one (a "
                                 "peer cancels a chunk more than once, and a CANCEL of several chunks is logged "
                                 "at its first): the one at seed_decisions.t_ms = seed_sends.cancel_ms is the "
@@ -3101,16 +3108,18 @@ def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, pr
     holding their tables (store.pull of each farm run the cache lacks one
     of), and with `tables` (of SAMPLE_TABLES) the fewest flushes giving the
     jobs those, and the tables their truth comes from (store's
-    sample_plan and pull_samples, which refuses past `limit_mb`; asks and
-    haves bring arrivals). Returns what it pulled and what S3 charged for
-    it."""
+    sample_plan and pull_samples, which refuses past `limit_mb`; asks,
+    haves and seed_sends bring arrivals: seed_sends comes with sim-data,
+    so `tables` takes it for its truth). Returns what it pulled and what S3
+    charged for it."""
     say = sayer(progress)
     if not catalog_path().exists():
         index(workers, progress)
-    bad = [t for t in tables if t not in store_host.SAMPLE_TABLES]
+    bad = [t for t in tables if t not in store_host.SAMPLE_TABLES and t not in store.TRUTH]
     if bad:
-        sys.exit(f"--tables {', '.join(bad)}: fetch takes the sample tables ({', '.join(store_host.SAMPLE_TABLES)}); "
-                 "the others come with a flush's sim-data")
+        truth_of = ", ".join(t for t in store.TRUTH if t not in store_host.SAMPLE_TABLES)
+        sys.exit(f"--tables {', '.join(bad)}: fetch takes the sample tables ({', '.join(store_host.SAMPLE_TABLES)}) "
+                 f"and the tables whose truth they are ({truth_of}); the others come with a flush's sim-data")
     where = [f"exp_id = {q(exp)}"]
     if cells:
         where.append(f"cell IN ({', '.join(q(c) for c in cells)})")

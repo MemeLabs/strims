@@ -526,7 +526,10 @@ class Haves(unittest.TestCase):
 class SeedLog(unittest.TestCase):
     """The seed log's tables: kept as tables, not samples (a few thousand
     rows a run), with their notes, keys, joins and knob; both views read an
-    older run's peer -1 (none) as NULL, as the sims now write it."""
+    older run's peer -1 (none) as NULL, as the sims now write it; the sends'
+    view takes each chunk's hold by the peer from arrivals, its truth, which
+    a job whose holds the views lack doesn't have, and which need and a
+    pull bring along."""
 
     def test_the_tables_are_kept_with_their_notes(self):
         for t in ("seed_decisions", "seed_sends"):
@@ -548,8 +551,34 @@ class SeedLog(unittest.TestCase):
         self.assertIn('nullif(x."peer", -1) AS "peer"', sql)
         self.assertIn('x."kind"', sql)
         sends = catalog.view_sql("seed_sends", {**cols, "fate": "VARCHAR"}, "seed_sends", {})
-        self.assertIn('nullif(x."peer", -1) AS "peer"', sends)
-        self.assertIn('x."fate"', sends)
+        self.assertIn("nullif(x.peer, -1) AS peer", sends)
+        self.assertIn("AS held_ms", sends)
+
+    def test_the_sends_view_takes_the_peers_hold(self):
+        # Pushes of chunk 6 to peer 2 (its second incarnation held it at
+        # 150) and to peer 3 (never held it), an answer to peer 4 (held it
+        # at 90), and job k2's push, of a source the arrivals relation
+        # holds nothing of: unknown, not never held.
+        sends = ("(SELECT * FROM (VALUES ('k', 's', 160, 0, 0, 2, 1, 'push', 6, 'written', 120), "
+                 "('k', 's', 180, 0, 1, 3, 0, 'push', 6, 'written', 170), "
+                 "('k', 's', 100, 0, 2, 4, 0, 'answer', 6, 'written', 80), "
+                 "('k2', 's2', 100, 0, 0, 2, 1, 'push', 6, 'written', 90)) "
+                 "v(k, src, t_ms, node, n, peer, peer_incarnation, how, seq, fate, queued_ms))")
+        cols = {"k", "src", "t_ms", "node", "n", "peer", "peer_incarnation", "how", "seq", "fate", "queued_ms"}
+        view = query.seed_sends_view("v", sends, Haves.ARRIVALS, cols, {"incarnation"})
+        got = query.records(f"{view} SELECT k, n, held_ms FROM v ORDER BY k, n;")
+        self.assertEqual(got, [{"k": "k", "n": 0, "held_ms": 150}, {"k": "k", "n": 1, "held_ms": None},
+                               {"k": "k", "n": 2, "held_ms": 90}, {"k": "k2", "n": 0, "held_ms": None}])
+        none = query.seed_sends_view("v", sends, Haves.ARRIVALS, cols, set())
+        self.assertEqual(query.records(f"{none} SELECT count(held_ms) AS n FROM v;"), [{"n": 0}])
+        self.assertEqual(query.LOGGED["seed_sends"], "seed_sends_log")
+
+    def test_the_sends_bring_their_truth(self):
+        self.assertEqual(store.with_truth(("seed_sends",)), ("seed_sends", "arrivals"))
+        query.need({"seed_sends", "arrivals"}, "seed_sends")
+        with self.assertRaisesRegex(store.Refused, r"^the selection has no arrivals \(nor does S3: run with "
+                                                   r"SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 or SIM_SPEC=1"):
+            query.need({"seed_sends", "reads"}, "seed_sends", "reads")
 
 
 if __name__ == "__main__":

@@ -911,8 +911,8 @@ class Tables(Fixture):
         return meta["k"]
 
     def test_a_job_without_arrivals_has_no_truth(self):
-        # Its asks and HAVEs, in a catalog without arrivals, then beside a
-        # job with them: their truth unknown, not never held.
+        # Its asks, HAVEs and seed sends, in a catalog without arrivals,
+        # then beside a job with them: their truth unknown, not never held.
         k = self.fold("suite/wt/noarr", self.FORECASTS["suite/wt/tail"], arrivals=False)
         unknown = ([{"peer": p, "held_ms": None, "live": None, "err_ms": None} for p in (1, 3)],
                    [{"peer": 1, "held_ms": None, "live": None}, {"peer": None, "held_ms": None, "live": None}])
@@ -923,8 +923,13 @@ class Tables(Fixture):
             asks = f"SELECT peer, held_ms, live, err_ms FROM asks WHERE k = {catalog.q(k)} ORDER BY peer;"
             haves = f"SELECT peer, held_ms, live FROM haves WHERE k = {catalog.q(k)} ORDER BY seq;"
             self.assertEqual((catalog.lake(asks), catalog.lake(haves)), unknown, other)
+            sends = f"SELECT count(*) AS n, count(held_ms) AS held FROM seed_sends WHERE k = {catalog.q(k)};"
+            self.assertEqual(catalog.lake(sends), [{"n": 4, "held": 0}], other)
         self.assertEqual([r["live"] for r in catalog.lake(f"SELECT live FROM asks WHERE k = {catalog.q(held)} "
                                                           "ORDER BY peer;")], [True, False])
+        self.assertEqual([r["held_ms"] for r in catalog.lake(f"SELECT held_ms FROM seed_sends WHERE k = "
+                                                             f"{catalog.q(held)} ORDER BY n;")],
+                         [1150, 1150, None, None])
 
     def test_tables_without_code_and_both_forecasts(self):
         keys = {src: self.fold(src, f) for src, f in self.FORECASTS.items()}
@@ -976,6 +981,10 @@ class Tables(Fixture):
                             "a.src = s.src AND a.node = s.peer AND a.seq = s.seq AND a.incarnation = "
                             f"s.peer_incarnation WHERE s.k = {catalog.q(tail)} AND s.how = 'push';")
         self.assertEqual(held, [{"seq": 6, "held": 1150}])
+        # The sends' view's truth: node 1's hold of chunk 6 for its push and
+        # answer, none of chunk 7, none for a peer an older run couldn't name.
+        held = catalog.lake(f"SELECT n, held_ms FROM seed_sends WHERE k = {catalog.q(tail)} ORDER BY n;")
+        self.assertEqual([r["held_ms"] for r in held], [1150, 1150, None, None])
         # A cancel's and a check's push, one to one by the documented join:
         # without how and due_ms the check meets the answer of chunk 6 too.
         pairs = catalog.lake(

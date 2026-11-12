@@ -126,10 +126,11 @@ class Refused(SystemExit):
     """An operation refused, its message why (the module docs)."""
 
 
-# The sample tables whose views take their truth from others' (simlab.query's
-# asks_view and haves_view: the peers' holds in arrivals), which a pull of
-# them brings along.
-TRUTH = {"asks": ("arrivals",), "haves": ("arrivals",)}
+# The tables whose views take their truth from others' (simlab.query's
+# asks_view, haves_view and seed_sends_view: the peers' holds in arrivals),
+# which a pull of them brings along: the sample tables asks and haves, and
+# seed_sends, which comes with sim-data while its truth is a sample table.
+TRUTH = {"asks": ("arrivals",), "haves": ("arrivals",), "seed_sends": ("arrivals",)}
 
 
 def with_truth(tables):

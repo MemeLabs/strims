@@ -42,11 +42,14 @@ holds joined from arrivals, as spec_requests' columns hold theirs
 (asks_view, which makes the catalog's asks view too). The HAVE log's
 view, haves, is main's table as written (haves_log) with the announcing
 peer's hold from arrivals and the knowledge delay from it (haves_view).
+The seed's sends, seed_sends, are the table as written (seed_sends_log)
+with the peer's hold of each chunk from arrivals (seed_sends_view).
 
 and the selection's parts, which other modules use too:
 
   asks_view(name, asks, arrivals, asks_cols, arrivals_cols) -> sql
   haves_view(name, haves, arrivals, haves_cols, arrivals_cols) -> sql
+  seed_sends_view(name, sends, arrivals, sends_cols, arrivals_cols) -> sql
   columns(paths) -> {column}
   sources(patterns) -> [src]          (simlab.store's)
   reused(srcs, stored) -> (sql | None, [src])
@@ -448,6 +451,9 @@ def views(sel, derived=True, fetch=True, say=None):
     if "haves" in have:
         sql.append(haves_view("haves", "haves_log", "arrivals", columns(files(srcs, "haves")),
                               columns(files(srcs, "arrivals"))))
+    if "seed_sends" in have:
+        sql.append(seed_sends_view("seed_sends", "seed_sends_log", "arrivals", columns(files(srcs, "seed_sends")),
+                                   columns(files(srcs, "arrivals"))))
     if derived:
         for t in JUDGED:
             if f := derived_files(t, srcs):
@@ -515,7 +521,7 @@ ASK_TRUTH = {
 
 # The tables whose views add their truth, and the views of the tables as
 # the sims write them.
-LOGGED = {"asks": "asks_log", "haves": "haves_log"}
+LOGGED = {"asks": "asks_log", "haves": "haves_log", "seed_sends": "seed_sends_log"}
 
 # A HAVE's truth, from h.held_ms: the announcing peer's first hold of the
 # chunk in its incarnation then; the knowledge delay, from that hold to
@@ -565,6 +571,30 @@ def haves_view(name, haves, arrivals, haves_cols, arrivals_cols):
     lacks `incarnation`: its truth unknown, not never held."""
     truth = ", ".join(f"{known(e)} AS {c}" for c, e in HAVE_TRUTH.items())
     return (f"CREATE OR REPLACE VIEW {name} AS SELECT a.*, {truth} FROM {haves} a LEFT JOIN "
+            f"({held_relation(arrivals, arrivals_cols)}) h ON h.k = a.k AND h.src = a.src AND h.node = a.peer "
+            "AND h.seq = a.seq AND h.incarnation = a.peer_incarnation "
+            f"LEFT JOIN ({known_relation(arrivals, arrivals_cols)}) kn ON kn.k = a.k AND kn.src = a.src;")
+
+
+# A seed send's truth (catalog.NORMALIZED's seed_sends), from h.held_ms: the
+# peer's first hold of the chunk in its incarnation then; NULL for a job
+# whose holds the views lack (known).
+SEND_TRUTH = {"held_ms": "h.held_ms"}
+
+
+def seed_sends_view(name, sends, arrivals, sends_cols, arrivals_cols):
+    """The statement making view `name`: the seed's sends `sends` (a
+    relation of the table as the sims write it, its columns `sends_cols`)
+    with SEND_TRUTH from the peer's first hold of the chunk in its
+    incarnation at the send's queueing, the `arrivals` relation's earliest
+    row (columns `arrivals_cols`) of node = peer, seq and incarnation =
+    peer_incarnation: held_ms, a written push's delivery where it comes
+    after the queueing. NULL without such a hold (the peer never held the
+    chunk in that incarnation); NULL too for a job the relation holds no
+    hold of (known_relation), as where arrivals lacks `incarnation`: its
+    truth unknown, not never held."""
+    truth = ", ".join(f"{known(e)} AS {c}" for c, e in SEND_TRUTH.items())
+    return (f"CREATE OR REPLACE VIEW {name} AS SELECT a.*, {truth} FROM {sends} a LEFT JOIN "
             f"({held_relation(arrivals, arrivals_cols)}) h ON h.k = a.k AND h.src = a.src AND h.node = a.peer "
             "AND h.seq = a.seq AND h.incarnation = a.peer_incarnation "
             f"LEFT JOIN ({known_relation(arrivals, arrivals_cols)}) kn ON kn.k = a.k AND kn.src = a.src;")
@@ -629,7 +659,8 @@ def scoring_macros(have):
 
 def need(have, *tables):
     """Refused unless the views have every one of `tables` and the tables
-    their truth comes from (store.TRUTH: asks' and haves' arrivals), saying
+    their truth comes from (store.TRUTH: asks', haves' and seed_sends'
+    arrivals), saying
     of the missing ones the settings that write them (knobs_text) and, of a
     sample table (SAMPLE_TABLES), that S3 lacks it too: a query pulls
     those first."""
