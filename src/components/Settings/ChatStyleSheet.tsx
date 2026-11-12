@@ -74,6 +74,8 @@ export const ChatStyleSheetInput: React.FC = () => {
         }}
         name="scss"
         label="SCSS"
+        rows={16}
+        spellCheck={false}
       />
       {...assetInputs}
       <ButtonSet>
