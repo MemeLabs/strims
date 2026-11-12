@@ -1,0 +1,13 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// The settings layout fills its parent's height in the app's flex column.
+.chat_settings_story {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  .settings {
+    min-height: 0;
+  }
+}
