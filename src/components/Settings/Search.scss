@@ -8,7 +8,7 @@
   overflow: hidden;
   align-items: center;
   padding: 0.4rem;
-  border: 1px solid var(--color-opac-w-3);
+  border: 1px solid var(--color-border-control);
   background-color: var(--color-background-input);
   flex: 0 1 200px;
 
@@ -17,6 +17,15 @@
     background: transparent;
     display: flex;
     min-width: 0;
+  }
+
+  &:has(&__input:disabled) {
+    background-color: var(--color-background-input-disabled);
+  }
+
+  &__input:disabled,
+  &:has(&__input:disabled) &__icon {
+    color: var(--color-text-input-disabled);
   }
 
   &__icon {

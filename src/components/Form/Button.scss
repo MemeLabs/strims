@@ -40,7 +40,9 @@
     color: var(--color-text-input-disabled);
   }
 
-  &--borderless {
+  // No background, disabled too: the disabled text color says it.
+  &--borderless,
+  &--borderless:disabled {
     background: unset;
     border: none;
     box-shadow: none;
