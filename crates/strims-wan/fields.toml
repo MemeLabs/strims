@@ -362,7 +362,7 @@ description = "The run's departures profile, its knob's text (STRIMS_SIM_DEPART,
 [rows.depart_excess_lag_area_ms_s]
 sims = ["strims-sim", "ppspp"]
 type = "int"
-unit = "ms"
+unit = "ms x s"
 description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
 notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
 
@@ -749,6 +749,7 @@ description = "With SIM_LOOPS=1, the decision tap's events dropped between drain
 [rows.mbit]
 sims = ["ppspp"]
 type = "num"
+unit = "Mbit/s"
 description = "The stream's rate, in Mbit/s (Config::stream_rate)."
 
 [rows.media]
@@ -1134,6 +1135,7 @@ notes.ppspp = "SIM_SCENARIO's: cable-seed (the default), or the AbScenario the j
 [rows.secs]
 sims = ["ppspp"]
 type = "int"
+unit = "s"
 description = "The stream's length, in s (Config::stream_secs)."
 
 [rows.seed]

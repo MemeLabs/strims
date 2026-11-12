@@ -169,6 +169,9 @@ Read these rather than any copy of them, this skill included:
 
 - `crates/strims-wan/fields.toml`, every name the sims record, whose
   schema is `hack/simlab/spec.py`
+- `crates/strims-wan/metrics.toml`, every scored metric, run metric, lake
+  metric and dimension (`hack/simlab/semantic.py` reads it; test_semantic
+  holds it to `suite.METRICS` and the naming rules to fields.toml)
 - `store_host.TABLES`, `store_host.SAMPLE_TABLES`; `query.TABLE_KNOBS`
 - `catalog.FIELDS`, `catalog.NORMALIZED`, `catalog.STANDARD_KEYS`,
   `catalog.STANDARD_JOINS`, `catalog.TABLE_DOCS`, `catalog.VERDICT_DOCS`,

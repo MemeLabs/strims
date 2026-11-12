@@ -19,10 +19,13 @@ files made from them, committed beside their readers:
                                              once a sim writes them
   crates/strims-wan/vocab.schema.json        fields.toml's schema, for an
                                              editor (spec.py's)
+  crates/strims-wan/metrics.schema.json      metrics.toml's (spec.py's,
+                                             simlab.semantic's)
 
   python3 hack/simlab/vocab.py write         makes them
   python3 hack/simlab/vocab.py check         exits 1 while one differs, or
-                                             fields.toml doesn't check
+                                             fields.toml or metrics.toml
+                                             doesn't check
 
 Making the fields' files takes jinja2, pydantic (spec.py, which checks
 fields.toml) and rustfmt; the script runs under hack/'s venv for them.
@@ -1004,7 +1007,8 @@ def shared_module(doc, kind, header):
 
 
 def all_outputs():
-    return {**outputs(), **field_outputs()}
+    from . import semantic
+    return {**outputs(), **field_outputs(), **semantic.outputs()}
 
 
 def _main_stale():

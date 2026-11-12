@@ -1,0 +1,431 @@
+{
+  "$defs": {
+    "Collapsed": {
+      "additionalProperties": false,
+      "properties": {
+        "macro": {
+          "title": "Macro",
+          "type": "string"
+        },
+        "better": {
+          "enum": [
+            "lower",
+            "higher"
+          ],
+          "title": "Better",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "guard": {
+          "title": "Guard",
+          "type": "string"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "macro",
+        "better",
+        "kind",
+        "guard",
+        "description"
+      ],
+      "title": "Collapsed",
+      "type": "object"
+    },
+    "Dimension": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "values": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Its values: a list, vocab:<section> (the vocabulary's names) or fields:<param> (fields.toml's params of that name).",
+          "title": "Values"
+        },
+        "column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The column that gives it, table.column.",
+          "title": "Column"
+        },
+        "macro": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The macro that gives it.",
+          "title": "Macro"
+        }
+      },
+      "required": [
+        "description"
+      ],
+      "title": "Dimension",
+      "type": "object"
+    },
+    "LakeMetric": {
+      "additionalProperties": false,
+      "properties": {
+        "macro": {
+          "title": "Macro",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "restated": {
+          "default": [],
+          "description": "Patterns that would restate its definition outside its macro.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Restated",
+          "type": "array"
+        }
+      },
+      "required": [
+        "macro",
+        "description"
+      ],
+      "title": "LakeMetric",
+      "type": "object"
+    },
+    "RunMetric": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description"
+      ],
+      "title": "RunMetric",
+      "type": "object"
+    },
+    "Score": {
+      "additionalProperties": false,
+      "description": "How the suite scores a metric.",
+      "properties": {
+        "kind": {
+          "description": "ratio (geometric) or diff (absolute).",
+          "enum": [
+            "ratio",
+            "diff"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "tie": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "The band an effect is a tie within.",
+          "title": "Tie"
+        },
+        "guard": {
+          "anyOf": [
+            {
+              "enum": [
+                "worse",
+                "lo",
+                "hi"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How arm_score breaks an arm on it: worse (marked worse in a cell), lo (its ratio interval past GUARD_RATIO), hi (its ratio interval under 1).",
+          "title": "Guard"
+        },
+        "shown": {
+          "default": false,
+          "description": "A scorecard shows it in every cell, ties too.",
+          "title": "Shown",
+          "type": "boolean"
+        },
+        "host": {
+          "default": false,
+          "description": "A host's number: marked h and kept out of the scorecard's totals.",
+          "title": "Host",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "tie"
+      ],
+      "title": "Score",
+      "type": "object"
+    },
+    "Scored": {
+      "additionalProperties": false,
+      "description": "A metric the suite scores.",
+      "properties": {
+        "name": {
+          "pattern": "^[a-z][a-z0-9_/]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "sql": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Its value, SQL over a job's row r, verdict v and job j.",
+          "title": "Sql"
+        },
+        "share": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Share"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "num over den, none where den is 0."
+        },
+        "per_useful": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The row's fields summed, per byte of the stream the honest viewers read.",
+          "title": "Per Useful"
+        },
+        "better": {
+          "anyOf": [
+            {
+              "enum": [
+                "lower",
+                "higher"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Better"
+        },
+        "score": {
+          "$ref": "#/$defs/Score"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What it measures; one that reads one field takes the field's where it has none.",
+          "title": "Description"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How it scores, beside its description.",
+          "title": "Note"
+        }
+      },
+      "required": [
+        "name",
+        "score"
+      ],
+      "title": "Scored",
+      "type": "object"
+    },
+    "Share": {
+      "additionalProperties": false,
+      "properties": {
+        "num": {
+          "title": "Num",
+          "type": "string"
+        },
+        "den": {
+          "title": "Den",
+          "type": "string"
+        }
+      },
+      "required": [
+        "num",
+        "den"
+      ],
+      "title": "Share",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "guardrails": {
+      "description": "The guarded metrics, in the order arm_score checks them.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Guardrails",
+      "type": "array"
+    },
+    "scored": {
+      "items": {
+        "$ref": "#/$defs/Scored"
+      },
+      "title": "Scored",
+      "type": "array"
+    },
+    "collapsed": {
+      "$ref": "#/$defs/Collapsed"
+    },
+    "run_metrics": {
+      "additionalProperties": {
+        "$ref": "#/$defs/RunMetric"
+      },
+      "title": "Run Metrics",
+      "type": "object"
+    },
+    "lake": {
+      "additionalProperties": {
+        "$ref": "#/$defs/LakeMetric"
+      },
+      "title": "Lake",
+      "type": "object"
+    },
+    "dimensions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Dimension"
+      },
+      "title": "Dimensions",
+      "type": "object"
+    }
+  },
+  "required": [
+    "guardrails",
+    "scored",
+    "collapsed",
+    "run_metrics",
+    "lake",
+    "dimensions"
+  ],
+  "title": "crates/strims-wan/metrics.toml",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

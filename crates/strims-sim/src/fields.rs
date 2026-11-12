@@ -362,7 +362,7 @@ pub(crate) enum RowInt {
     /// `depart_excess_lag_area_ms_s`, `depart_recover_ms` and
     /// `depart_recover_censored`.
     ///
-    /// Unit: ms.
+    /// Unit: ms x s.
     DepartExcessLagAreaMsS,
     /// with departures, the stayers' recovery (`Report::departure_recovery`):
     /// `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`,

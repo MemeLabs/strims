@@ -410,7 +410,7 @@ pub(crate) enum RowInt {
     /// summed (`depart_excess_lag_area_ms_s`) and the time back under
     /// `CAUGHT_U...
     ///
-    /// Unit: ms.
+    /// Unit: ms x s.
     DepartExcessLagAreaMsS,
     /// with departures, the stayers' recovery (`Report::departure_recovery`):
     /// `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`,
@@ -770,6 +770,8 @@ pub(crate) enum RowInt {
     /// (store::Error::StreamReset), summed.
     Resets,
     /// The stream's length, in s (Config::stream_secs).
+    ///
+    /// Unit: s.
     Secs,
     /// The run's seed.
     Seed,
@@ -1555,6 +1557,8 @@ pub(crate) enum RowNum {
     /// after the warm-up, the share at liars.
     LiarSlots,
     /// The stream's rate, in Mbit/s (Config::stream_rate).
+    ///
+    /// Unit: Mbit/s.
     Mbit,
     /// A media swarm's media rate: media bytes over the stream's seconds, in
     /// kbit/s; left out without media.

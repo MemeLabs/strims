@@ -1,0 +1,774 @@
+#:schema metrics.schema.json
+# The sims' metrics and dimensions: what the suite scores, what the verdict
+# derives, the lab's macro metrics, and the dimensions results are cut by,
+# each declared once. hack/simlab/semantic.py reads it, suite.py's METRICS,
+# GUARDRAILS, SHOWN and HOST_METRICS are made from it, and the catalog's
+# metric_catalog and describe take its descriptions. hack/simlab/spec.py
+# checks it (test_semantic) and writes its schema, metrics.schema.json.
+#
+# guardrails: the guarded metrics (score.guard), in the order arm_score
+# checks them.
+# [[scored]]: a metric the suite scores, in its scorecards' order.
+#   name          the metric's name
+#   sql           its value: SQL over a job's row r, verdict v and job j;
+#                 or share = {num, den} (num over den, none where den is
+#                 0), or per_useful = [fields] (the row's fields summed,
+#                 per byte of the stream the honest viewers read)
+#   better        lower or higher; none for a metric that only describes
+#   score         {kind (ratio or diff), tie (the band an effect is a tie
+#                 within), guard (how arm_score breaks an arm on it: worse,
+#                 lo, hi), shown (a scorecard shows it, ties too), host (a
+#                 host's number: marked h, kept out of totals)}
+#   unit          its unit
+#   description   what it measures; a metric that reads one field takes
+#                 that field's (fields.toml's rows, the verdict's) where it
+#                 has none
+#   note          how it scores, beside its description
+#
+# [collapsed]: the collapse test, by collapse_test_of.
+# [run_metrics.<name>]: verdict.run_metrics' scalars, each run's.
+# [lake.<name>]: a metric the lab's macros compute (macro), with the
+#   patterns that would restate its definition elsewhere (restated: the
+#   restatement lint, test_semantic's).
+# [dimensions.<name>]: what results are cut by: its description, its
+#   values (a list, vocab:<section> for the vocabulary's names, fields:<param>
+#   for fields.toml's params) and the column or macro that gives it.
+
+guardrails = ["delivery", "lag_p99_ms", "lag_p99_ms_weak", "join_p90_ms", "caught_up_p90_ms", "defector_gain"]
+
+[[scored]]
+name = "lag_p50_ms"
+sql = "coalesce(r.lag_p50_ms_honest, r.lag_p50_ms)"
+better = "lower"
+score = { kind = "ratio", tie = 0.05, shown = true }
+unit = "ms"
+note = "A row with hostile viewers scores its honest ones'."
+
+[[scored]]
+name = "lag_p99_ms"
+sql = "coalesce(r.lag_p99_ms_honest, r.lag_p99_ms)"
+better = "lower"
+score = { kind = "ratio", tie = 0.05, guard = "lo", shown = true }
+unit = "ms"
+note = "A row with hostile viewers scores its honest ones'."
+
+[[scored]]
+name = "unhealthy"
+sql = "v.unhealthy"
+better = "lower"
+score = { kind = "diff", tie = 0.03, shown = true }
+
+[[scored]]
+name = "collapses"
+sql = "v.collapses"
+better = "lower"
+score = { kind = "diff", tie = 0.5 }
+
+[[scored]]
+name = "flaps_per_min"
+sql = "v.flaps_per_min"
+better = "lower"
+score = { kind = "diff", tie = 0.2 }
+unit = "per minute"
+
+[[scored]]
+name = "unhealthy_dwell_p90_s"
+sql = "v.unhealthy_dwell_p90_s"
+better = "lower"
+score = { kind = "diff", tie = 2 }
+unit = "s"
+
+[[scored]]
+name = "onset_after_drop_s"
+sql = "v.onset_after_drop_s"
+better = "higher"
+score = { kind = "diff", tie = 2 }
+unit = "s"
+
+[[scored]]
+name = "recover_after_rise_s"
+sql = "v.recover_after_rise_s"
+better = "lower"
+score = { kind = "diff", tie = 2 }
+unit = "s"
+
+[[scored]]
+name = "excess_lag_area"
+sql = "v.excess_lag_area_ms_s"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+unit = "ms x s"
+
+[[scored]]
+name = "osc_amp_ms"
+sql = "v.osc_amp_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+unit = "ms"
+
+[[scored]]
+name = "delivery"
+sql = "coalesce(r.delivery_honest, r.delivery)"
+better = "higher"
+score = { kind = "diff", tie = 0.002, guard = "worse", shown = true }
+unit = "fraction"
+note = "A row with hostile viewers scores its honest ones'."
+
+[[scored]]
+name = "timeouts"
+sql = "r.timeouts"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+
+[[scored]]
+name = "request_timeouts"
+sql = "r.request_timeouts"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+note = "Rows from before speculative requests lack it."
+
+[[scored]]
+name = "timeouts_spec_expired"
+sql = "r.timeouts_spec_expired"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+note = "Rows from before speculative requests lack it."
+
+[[scored]]
+name = "timeouts_spec_not_yet"
+sql = "r.timeouts_spec_not_yet"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+note = "Rows from before speculative requests lack it."
+
+[[scored]]
+name = "wasted/read"
+share = { num = "r.wasted", den = "r.chunks_read" }
+better = "lower"
+score = { kind = "diff", tie = 0.01 }
+description = "Chunks wasted per chunk read: the row's `wasted` over `chunks_read`."
+
+[[scored]]
+name = "seed_answer_share"
+sql = "r.seed_pull_share"
+score = { kind = "diff", tie = 0.02 }
+unit = "fraction"
+
+[[scored]]
+name = "viewer_util_p50"
+sql = "r.viewer_util_p50"
+score = { kind = "diff", tie = 0.02 }
+
+[[scored]]
+name = "viewer_util_p90"
+sql = "r.viewer_util_p90"
+score = { kind = "diff", tie = 0.02 }
+
+[[scored]]
+name = "relay_share"
+sql = "r.relay_share"
+score = { kind = "diff", tie = 0.03 }
+unit = "fraction"
+
+[[scored]]
+name = "depth_mean"
+sql = "CASE WHEN coalesce(r.depth_1, 0) + coalesce(r.depth_2, 0) + coalesce(r.depth_3, 0) + coalesce(r.depth_4, 0) + coalesce(r.depth_5, 0) + coalesce(r.depth_6, 0) <> 0 THEN coalesce(1 * coalesce(r.depth_1, 0) + 2 * coalesce(r.depth_2, 0) + 3 * coalesce(r.depth_3, 0) + 4 * coalesce(r.depth_4, 0) + 5 * coalesce(r.depth_5, 0) + 6 * coalesce(r.depth_6, 0), 0) / (coalesce(r.depth_1, 0) + coalesce(r.depth_2, 0) + coalesce(r.depth_3, 0) + coalesce(r.depth_4, 0) + coalesce(r.depth_5, 0) + coalesce(r.depth_6, 0)) END"
+score = { kind = "ratio", tie = 0.05 }
+description = "The mean hops to the seed over the samples whose chain of open parents reaches it, from the row's `depth_1` to `depth_6` shares (the ppspp sim's)."
+
+[[scored]]
+name = "depth_cycle"
+sql = "r.depth_cycle"
+better = "lower"
+score = { kind = "diff", tie = 0.01 }
+
+[[scored]]
+name = "depth_pull_rooted"
+sql = "r.depth_pull_rooted"
+better = "lower"
+score = { kind = "diff", tie = 0.01 }
+
+[[scored]]
+name = "fanout_p50"
+sql = "r.fanout_p50"
+score = { kind = "ratio", tie = 0.1 }
+
+[[scored]]
+name = "fanout_p90"
+sql = "r.fanout_p90"
+score = { kind = "ratio", tie = 0.1 }
+
+[[scored]]
+name = "parent_changes_per_min"
+sql = "r.parent_changes_per_min"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+unit = "per minute"
+
+[[scored]]
+name = "relay_declines"
+share = { num = "r.relay_rejected", den = "coalesce(r.relay_rejected, 0) + coalesce(r.relay_accepted, 0)" }
+score = { kind = "diff", tie = 0.03 }
+description = "The share of STREAM_REQUESTs the honest relays rejected: `relay_rejected` over `relay_rejected` and `relay_accepted`."
+
+[[scored]]
+name = "declines_idle"
+sql = "r.declines_idle"
+better = "lower"
+score = { kind = "diff", tie = 0.05 }
+
+[[scored]]
+name = "declined_wrongly"
+share = { num = "r.declined_wrongly", den = "coalesce(r.declined, 0)" }
+better = "lower"
+score = { kind = "diff", tie = 0.05 }
+description = "The share of declined STREAM_REQUESTs declined wrongly: `declined_wrongly` over `declined`."
+
+[[scored]]
+name = "meter_relays_p50"
+sql = "CASE WHEN r.meter_relays_p50 <> 0 THEN r.meter_relays_p50 ELSE r.meter_forwarders[2] END"
+score = { kind = "ratio", tie = 0.1 }
+description = "The relays' median upload meter: the row's `meter_relays_p50` (the ppspp sim's), else the middle of strims-sim's `meter_forwarders` (p10, p50, p90)."
+
+[[scored]]
+name = "meter_others_p50"
+sql = "CASE WHEN r.meter_others_p50 <> 0 THEN r.meter_others_p50 ELSE r.meter_others[2] END"
+score = { kind = "ratio", tie = 0.1 }
+description = "The other hosts' median upload meter: the row's `meter_others_p50` (the ppspp sim's), else the middle of strims-sim's `meter_others` (p10, p50, p90)."
+
+[[scored]]
+name = "holder_short"
+sql = "r.holder_short"
+better = "lower"
+score = { kind = "diff", tie = 0.03 }
+
+[[scored]]
+name = "join_p50_ms"
+sql = "r.join_p50_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+unit = "ms"
+
+[[scored]]
+name = "join_p90_ms"
+sql = "r.join_p90_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.1, guard = "lo" }
+unit = "ms"
+
+[[scored]]
+name = "caught_up_p50_ms"
+sql = "r.caught_up_p50_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+unit = "ms"
+
+[[scored]]
+name = "caught_up_p90_ms"
+sql = "r.caught_up_p90_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.1, guard = "lo" }
+unit = "ms"
+
+[[scored]]
+name = "caught_up_never"
+sql = "r.caught_up_never"
+better = "lower"
+score = { kind = "diff", tie = 0.5 }
+
+[[scored]]
+name = "depart_lag_peak_ms"
+sql = "r.depart_lag_peak_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+unit = "ms"
+
+[[scored]]
+name = "depart_excess_area"
+sql = "r.depart_excess_lag_area_ms_s"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+unit = "ms x s"
+
+[[scored]]
+name = "depart_recover_ms"
+sql = "r.depart_recover_ms"
+better = "lower"
+score = { kind = "diff", tie = 2000 }
+unit = "ms"
+
+[[scored]]
+name = "depart_stranded"
+sql = "r.depart_stranded"
+better = "lower"
+score = { kind = "diff", tie = 0.5 }
+
+[[scored]]
+name = "parent_lost_noticed_p90_ms"
+sql = "r.parent_lost_noticed_p90_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+unit = "ms"
+
+[[scored]]
+name = "lag_p99_startup_ms"
+sql = "v.lag_p99_startup_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+unit = "ms"
+
+[[scored]]
+name = "lag_p99_steady_ms"
+sql = "v.lag_p99_steady_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.05 }
+unit = "ms"
+
+[[scored]]
+name = "signed_lag_p99_ms"
+sql = "r.signed_lag_p99_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.05 }
+unit = "ms"
+
+[[scored]]
+name = "wire/media"
+sql = "r.wire_per_media"
+better = "lower"
+score = { kind = "ratio", tie = 0.02 }
+
+[[scored]]
+name = "wire/useful"
+sql = "r.wire_per_useful"
+better = "lower"
+score = { kind = "ratio", tie = 0.02 }
+unit = "per useful byte"
+
+[[scored]]
+name = "packets/useful"
+per_useful = ["packets_up"]
+better = "lower"
+score = { kind = "ratio", tie = 0.02 }
+unit = "per useful byte"
+description = "Uplink packets (`packets_up`) per byte of the stream the honest viewers read (`useful_bytes`)."
+
+[[scored]]
+name = "dup/useful"
+per_useful = ["dup_bytes"]
+better = "lower"
+score = { kind = "diff", tie = 0.002 }
+unit = "per useful byte"
+description = "Duplicate data bytes the honest viewers received (`dup_bytes`) per useful byte (`useful_bytes`)."
+
+[[scored]]
+name = "ovh_seed"
+sql = "r.ovh_seed"
+better = "lower"
+score = { kind = "diff", tie = 0.005 }
+
+[[scored]]
+name = "ovh_leaf_p90"
+sql = "r.ovh_leaf_p90"
+better = "lower"
+score = { kind = "diff", tie = 0.005 }
+
+[[scored]]
+name = "have/useful"
+per_useful = ["up_have"]
+score = { kind = "ratio", tie = 0.05 }
+unit = "per useful byte"
+description = "The uplinks' HAVE bytes (`up_have`) per useful byte (`useful_bytes`)."
+
+[[scored]]
+name = "state/useful"
+per_useful = ["up_state"]
+score = { kind = "ratio", tie = 0.05 }
+unit = "per useful byte"
+description = "The uplinks' STATE bytes (`up_state`) per useful byte (`useful_bytes`)."
+
+[[scored]]
+name = "ack/useful"
+per_useful = ["up_ack"]
+score = { kind = "ratio", tie = 0.05 }
+unit = "per useful byte"
+description = "The uplinks' ppspp ACK bytes (`up_ack`) per useful byte (`useful_bytes`)."
+
+[[scored]]
+name = "request/useful"
+per_useful = ["up_request"]
+score = { kind = "ratio", tie = 0.05 }
+unit = "per useful byte"
+description = "The uplinks' request bytes (`up_request`) per useful byte (`useful_bytes`)."
+
+[[scored]]
+name = "integrity/useful"
+per_useful = ["up_integrity", "up_signed"]
+score = { kind = "ratio", tie = 0.05 }
+unit = "per useful byte"
+description = "The uplinks' integrity and signature bytes (`up_integrity` and `up_signed`) per useful byte (`useful_bytes`)."
+
+[[scored]]
+name = "transport/useful"
+per_useful = ["up_transport"]
+score = { kind = "ratio", tie = 0.05 }
+unit = "per useful byte"
+description = "The uplinks' transport overhead bytes (`up_transport`) per useful byte (`useful_bytes`)."
+
+[[scored]]
+name = "acks/useful"
+per_useful = ["up_acks"]
+score = { kind = "ratio", tie = 0.05 }
+unit = "per useful byte"
+description = "The uplinks' transport acknowledgement bytes (`up_acks`) per useful byte (`useful_bytes`)."
+
+[[scored]]
+name = "links_p50"
+sql = "r.links_p50"
+score = { kind = "diff", tie = 0.5 }
+
+[[scored]]
+name = "links_p90"
+sql = "r.links_p90"
+score = { kind = "diff", tie = 0.5 }
+
+[[scored]]
+name = "links_dropped/min"
+sql = "r.links_dropped_per_host_min"
+better = "lower"
+score = { kind = "diff", tie = 0.1 }
+unit = "per minute"
+
+[[scored]]
+name = "eclipsed_share"
+sql = "r.eclipsed_share"
+better = "lower"
+score = { kind = "diff", tie = 0.005 }
+unit = "fraction"
+
+[[scored]]
+name = "honest_lag_p99_ms"
+sql = "r.lag_p99_ms_honest"
+better = "lower"
+score = { kind = "ratio", tie = 0.05 }
+unit = "ms"
+
+[[scored]]
+name = "hostile_lag_p99_ms"
+sql = "r.lag_p99_ms_hostile"
+score = { kind = "ratio", tie = 0.05 }
+unit = "ms"
+
+[[scored]]
+name = "hostile_delivery"
+sql = "r.delivery_hostile"
+score = { kind = "diff", tie = 0.002 }
+
+[[scored]]
+name = "cut_from_seed_share"
+sql = "r.cut_from_seed_share"
+better = "lower"
+score = { kind = "diff", tie = 0.005 }
+unit = "fraction"
+
+[[scored]]
+name = "cap_depth_rho"
+sql = "r.cap_depth_rho"
+better = "lower"
+score = { kind = "diff", tie = 0.05 }
+
+[[scored]]
+name = "cap_depth_rho_startup"
+sql = "r.cap_depth_rho_startup"
+better = "lower"
+score = { kind = "diff", tie = 0.05 }
+
+[[scored]]
+name = "cap_fanout_rho"
+sql = "r.cap_fanout_rho"
+better = "higher"
+score = { kind = "diff", tie = 0.05 }
+
+[[scored]]
+name = "cap_hops_rho"
+sql = "r.cap_hops_rho"
+better = "lower"
+score = { kind = "diff", tie = 0.05 }
+
+[[scored]]
+name = "seed_nbr_up_p50"
+sql = "r.seed_nbr_up_p50"
+better = "higher"
+score = { kind = "ratio", tie = 0.1 }
+
+[[scored]]
+name = "depth1_up_p50"
+sql = "r.depth1_up_p50"
+better = "higher"
+score = { kind = "ratio", tie = 0.1 }
+
+[[scored]]
+name = "top_seed_link_s"
+sql = "r.top_seed_link_s"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+unit = "s"
+
+[[scored]]
+name = "lag_p99_ms_weak"
+sql = "r.lag_p99_ms_weak"
+better = "lower"
+score = { kind = "ratio", tie = 0.05, guard = "lo" }
+unit = "ms"
+
+[[scored]]
+name = "seed_offers_per_min"
+sql = "r.seed_offers_per_min"
+score = { kind = "ratio", tie = 0.1 }
+unit = "per minute"
+
+[[scored]]
+name = "links_formed/min"
+sql = "r.links_formed_per_host_min"
+score = { kind = "ratio", tie = 0.1 }
+unit = "per minute"
+
+[[scored]]
+name = "pool_trials/min"
+sql = "r.pool_trials_per_host_min"
+score = { kind = "diff", tie = 0.1 }
+unit = "per minute"
+
+[[scored]]
+name = "pool_trial_wins"
+sql = "r.pool_trial_wins"
+score = { kind = "diff", tie = 0.05 }
+
+[[scored]]
+name = "rejoin_p90_ms"
+sql = "r.rejoin_p90_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
+unit = "ms"
+
+[[scored]]
+name = "defector_gain"
+sql = "CASE WHEN r.lag_p99_ms_hostile <> 0 AND r.lag_p99_ms_honest <> 0 THEN r.lag_p99_ms_hostile / r.lag_p99_ms_honest END"
+better = "higher"
+score = { kind = "ratio", tie = 0.05, guard = "hi" }
+description = "The hostile hosts' lag p99 over the honest viewers' (`lag_p99_ms_hostile` over `lag_p99_ms_honest`): under 1, defecting pays."
+
+[[scored]]
+name = "exch_rejected"
+sql = "r.exch_rejected"
+score = { kind = "diff", tie = 1 }
+
+[[scored]]
+name = "rss_mb"
+sql = "j.rss_mb"
+better = "lower"
+score = { kind = "diff", tie = 100, host = true }
+unit = "MB"
+description = "The job's peak resident memory in MB, as its host measured it."
+note = "What the machine running a job sets as much as the change: shown, marked h, and kept out of the scorecard's totals."
+
+[[scored]]
+name = "wall_s"
+sql = "j.wall_s"
+better = "lower"
+score = { kind = "ratio", tie = 0.2, host = true }
+unit = "s"
+description = "The job's wall-clock seconds, as its host measured it."
+note = "What the machine running a job sets as much as the change: shown, marked h, and kept out of the scorecard's totals."
+
+[collapsed]
+macro = "collapse_test_of"
+better = "lower"
+kind = "count"
+guard = "collapsed"
+description = "Collapsed runs of a cell, A against B, judged by their counts' Fisher exact p (suite.py collapses and fisher)."
+
+[run_metrics.collapses]
+description = "Collapse spells (`episodes`' collapse kind)."
+
+[run_metrics.flaps_per_min]
+unit = "per minute"
+description = "Changes between healthy and unhealthy seconds after the run's startup, a minute."
+
+[run_metrics.healthy_dwell_p50_s]
+unit = "s"
+description = "The median length of the run's healthy spells."
+
+[run_metrics.healthy_dwell_p90_s]
+unit = "s"
+description = "The p90 length of the run's healthy spells."
+
+[run_metrics.unhealthy_dwell_p50_s]
+unit = "s"
+description = "The median length of the run's unhealthy spells."
+
+[run_metrics.unhealthy_dwell_p90_s]
+unit = "s"
+description = "The p90 length of the run's unhealthy spells."
+
+[run_metrics.onset_after_drop_s]
+unit = "s"
+description = "Seconds from the first uplink step down to its first unhealthy second, at most the window (the next step, STEP_SECS, or the stream's end)."
+
+[run_metrics.onset_after_drop_censored]
+description = "Onset_after_drop_s reached its window's end with no unhealthy second."
+
+[run_metrics.recover_after_rise_s]
+unit = "s"
+description = "Seconds from the first step up after a step down to a healthy spell of RECOVER_SECS, at most the stream's end."
+
+[run_metrics.recover_after_rise_censored]
+description = "Recover_after_rise_s reached the stream's end with no such spell."
+
+[run_metrics.excess_lag_area_ms_s]
+unit = "ms x s"
+description = "The lag past DELIVERY_TARGET_MS summed over seconds."
+
+[run_metrics.excess_lag_peak_ms]
+unit = "ms"
+description = "The largest second's lag past DELIVERY_TARGET_MS."
+
+[run_metrics.osc_amp_ms]
+unit = "ms"
+description = "Half the p10-p90 spread of the lag after the startup."
+
+[run_metrics.osc_period_s]
+unit = "s"
+description = "The period of the lag's autocorrelation's highest peak past OSC_ACF at OSC_MIN_PERIOD or more, when one is."
+
+[run_metrics.osc_acf]
+description = "That peak's autocorrelation."
+
+[run_metrics.lag_p99_startup_ms]
+unit = "ms"
+description = "The p99 of the honest viewers' lag over their seconds of startup, the run's and their own joins' (`phase_lags`)."
+
+[run_metrics.lag_p99_steady_ms]
+unit = "ms"
+description = "The p99 of the honest viewers' lag over their seconds of steady state (`phase_lags`)."
+
+[lake.viewer_phases]
+macro = "viewer_phases_of"
+description = "Each run's viewers' seconds by phase: every span of a viewer's seconds in one of the vocabulary's phases, the tail after the verdict's last second."
+restated = ["coalesce\\(\\s*[a-z_]+\\.phase\\s*,\\s*'steady'\\s*\\)"]
+
+[lake.viewer_lag]
+macro = "viewer_lag_of"
+unit = "ms"
+description = "The honest viewers' lag each second, carried from a viewer's last second with a read +1000 ms a second without one, as analyze.py's lags() does."
+
+[lake.playback]
+macro = "playback_of"
+unit = "ms"
+description = "The viewers' playout stalls of the runs at a playout delay, played over their reads as the sims' stalls tables are."
+
+[lake.dynamics_phases]
+macro = "dynamics_phases"
+unit = "ms"
+description = "An experiment's lag by phase, by cell and arm: the honest viewers' seconds of each phase and their lag's p50, p90, p99 and max."
+
+[lake.lag_since]
+macro = "lag_since"
+unit = "ms"
+description = "An experiment's lag against the seconds since each phase window's anchor (phase_windows), by cell, arm, kind and phase."
+
+[lake.effects]
+macro = "effects_of"
+description = "Each metric's paired effect of one arm against another in each cell: the geometric mean ratio or the mean difference over the seeds paired, with its 95 % t-interval."
+
+[lake.fisher]
+macro = "fisher_p"
+description = "The two-sided Fisher exact p of two counts out of two totals, as collapse_test_of judges collapsed runs."
+
+[lake.coverage_runs]
+macro = "coverage_runs_of"
+description = "Each run's seed coverage frame: its streams, chunk interval, end and the arrivals and parents rows it has."
+
+[lake.seed_children]
+macro = "seed_children_of"
+description = "The seed's push children over the runs, from parents."
+
+[lake.coverage_chunks]
+macro = "coverage_chunks_of"
+description = "Each chunk the runs published, with its first holds by the seed's children and others, from arrivals and parents."
+
+[lake.seed_cover]
+macro = "seed_cover_of"
+description = "The runs' seed coverage: how soon a non-seed host first held each chunk the seed published."
+
+[dimensions.sim]
+description = "The sim a job ran: strims-sim (the real stack) or the ppspp sim."
+values = ["strims-sim", "ppspp"]
+column = "jobs.sim"
+
+[dimensions.cell]
+description = "A suite cell: one named setting of a sim's test and env (suite.TIERS' cells)."
+column = "experiment_jobs.cell"
+
+[dimensions.arm]
+description = "An experiment's arm: the commit and env one side of its comparison ran."
+column = "experiment_jobs.arm_label"
+
+[dimensions.seed]
+description = "A job's seed: the runs of one cell and arm at different seeds are its samples, paired by seed across arms."
+column = "jobs.seed"
+
+[dimensions.commit]
+description = "The commit a job's binary was built from."
+column = "jobs.commit"
+
+[dimensions.tier]
+description = "The suite tiers an experiment's cells came from (suite.TIERS)."
+column = "experiments.tiers"
+
+[dimensions.phase]
+description = "A viewer's second's phase: its startup (the run's or its own join's), steady state, after an event, or the run's tail."
+values = "vocab:phases"
+macro = "viewer_phases_of"
+
+[dimensions.run_phase]
+description = "A run's phase windows: each event's window of seconds and the phase it holds them in."
+values = "vocab:phases"
+column = "phase_windows.phase"
+
+[dimensions.episode]
+description = "A run's spells by the verdict: healthy, unhealthy and collapse."
+values = "vocab:episodes"
+column = "episodes.kind"
+
+[dimensions.reason]
+description = "Why a node's push parent of a stream changed."
+values = "vocab:reasons"
+column = "parents.reason"
+
+[dimensions.event_kind]
+description = "A timed event's kind, as the vocabulary gives each."
+values = "vocab:kinds"
+column = "events.kind"
+
+[dimensions.role]
+description = "The hosts a per-role field covers: the `{role}` part of its name (fields.toml's params)."
+values = "fields:role"
+
+[dimensions.honest]
+description = "Whether a host is honest (not hostile): the experience metrics count honest viewers."
+values = [true, false]
+column = "viewers.hostile"
+
+[dimensions.collapsed]
+description = "Whether a run collapsed, by the verdict: an unhealthy spell lasting past its startup."
+values = [true, false]
+column = "verdicts.collapsed"
+
+[dimensions.delay_ms]
+description = "A playout delay: DELAYS_MS, the delivery target (1250 ms) and max (4250 ms)."
+values = [1250, 4250]
+column = "stalls.delay_ms"
+
+[dimensions.stream]
+description = "One of a swarm's streams, from 0 below series_meta.json's `streams`."
+column = "parents.stream"

@@ -1,14 +1,20 @@
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
-"""The recorded names' document, crates/strims-wan/fields.toml, as typed
-models (pydantic): what each key may hold, and the cross-references a key
-alone can't check. vocab.py reads the document with tomllib and imports
-this module only to check it or write what's made from it, so the plain
-python3 still reads the vocabulary.
+"""The recorded names' document, crates/strims-wan/fields.toml, and the
+metrics' and dimensions', crates/strims-wan/metrics.toml, as typed models
+(pydantic): what each key may hold, and the cross-references a key alone
+can't check. vocab.py and semantic.py read the documents with tomllib and
+import this module only to check them or write what's made from them, so
+the plain python3 still reads them.
 
-  check(doc) -> [str]       what's wrong with a parsed document, one a line
-  schema() -> dict          the document's JSON schema (vocab.schema.json,
-                            which an editor's TOML support validates with)
+  check(doc) -> [str]       what's wrong with a parsed fields.toml, one a line
+  schema() -> dict          its JSON schema (vocab.schema.json, which an
+                            editor's TOML support validates with)
+  check_metrics(doc) -> [str]
+                            what's wrong with a parsed metrics.toml, as its
+                            models alone see it (semantic.problems checks
+                            what it names)
+  metrics_schema() -> dict  its JSON schema (metrics.schema.json)
 """
 
 import re
@@ -223,4 +229,142 @@ def schema():
     s = Document.model_json_schema()
     s["$schema"] = "https://json-schema.org/draft/2020-12/schema"
     s["title"] = "crates/strims-wan/fields.toml"
+    return s
+
+
+# --- metrics.toml -------------------------------------------------------------------
+
+Better = Literal["lower", "higher"]
+GUARDS = ("worse", "lo", "hi")
+
+
+class Score(BaseModel):
+    """How the suite scores a metric."""
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["ratio", "diff"] = Field(description="ratio (geometric) or diff (absolute).")
+    tie: int | float = Field(description="The band an effect is a tie within.")
+    guard: Literal["worse", "lo", "hi"] | None = Field(
+        None, description="How arm_score breaks an arm on it: worse (marked worse in a cell), lo (its ratio "
+                          "interval past GUARD_RATIO), hi (its ratio interval under 1).")
+    shown: bool = Field(False, description="A scorecard shows it in every cell, ties too.")
+    host: bool = Field(False, description="A host's number: marked h and kept out of the scorecard's totals.")
+
+
+class Share(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    num: str
+    den: str
+
+
+class Scored(BaseModel):
+    """A metric the suite scores."""
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(pattern=r"^[a-z][a-z0-9_/]*$")
+    sql: str | None = Field(None, description="Its value, SQL over a job's row r, verdict v and job j.")
+    share: Share | None = Field(None, description="num over den, none where den is 0.")
+    per_useful: list[str] | None = Field(
+        None, description="The row's fields summed, per byte of the stream the honest viewers read.")
+    better: Better | None = None
+    score: Score
+    unit: str | None = None
+    description: str | None = Field(
+        None, description="What it measures; one that reads one field takes the field's where it has none.")
+    note: str | None = Field(None, description="How it scores, beside its description.")
+
+    @model_validator(mode="after")
+    def one_value(self):
+        if sum(x is not None for x in (self.sql, self.share, self.per_useful)) != 1:
+            raise ValueError(f"{self.name}: one of sql, share and per_useful")
+        return self
+
+
+class Collapsed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    macro: str
+    better: Better
+    kind: str
+    guard: str
+    description: str = Field(min_length=1)
+
+
+class RunMetric(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    unit: str | None = None
+    description: str = Field(min_length=1)
+
+
+class LakeMetric(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    macro: str
+    unit: str | None = None
+    description: str = Field(min_length=1)
+    restated: list[str] = Field([], description="Patterns that would restate its definition outside its macro.")
+
+
+class Dimension(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    description: str = Field(min_length=1)
+    values: list[str | int | bool] | str | None = Field(
+        None, description="Its values: a list, vocab:<section> (the vocabulary's names) or fields:<param> "
+                          "(fields.toml's params of that name).")
+    column: str | None = Field(None, description="The column that gives it, table.column.")
+    macro: str | None = Field(None, description="The macro that gives it.")
+
+
+class Metrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    guardrails: list[str] = Field(description="The guarded metrics, in the order arm_score checks them.")
+    scored: list[Scored]
+    collapsed: Collapsed
+    run_metrics: dict[str, RunMetric]
+    lake: dict[str, LakeMetric]
+    dimensions: dict[str, Dimension]
+
+    @model_validator(mode="after")
+    def references(self):
+        out = []
+        names = [m.name for m in self.scored]
+        out += [f"[[scored]] {n}: named twice" for n in sorted({n for n in names if names.count(n) > 1})]
+        guarded = [m.name for m in self.scored if m.score.guard]
+        if sorted(self.guardrails) != sorted(guarded) or len(set(self.guardrails)) != len(self.guardrails):
+            out.append(f"guardrails {self.guardrails} aren't the guarded metrics {guarded}, each once")
+        for n in [*self.run_metrics, *self.lake, *self.dimensions]:
+            if not NAME.match(n):
+                out.append(f"{n}: not a lower snake case name")
+        for n, d in self.dimensions.items():
+            if (d.column is None) == (d.macro is None) and not (isinstance(d.values, str)
+                                                               and d.values.startswith("fields:")):
+                out.append(f"[dimensions.{n}]: one of column and macro")
+        if out:
+            raise ValueError("\n".join(out))
+        return self
+
+
+def _errors(model, raw):
+    try:
+        model.model_validate(raw)
+    except ValidationError as e:
+        out = []
+        for err in e.errors():
+            loc = ".".join(str(x) for x in err["loc"])
+            msg = err["msg"]
+            if err["type"] == "value_error":
+                out += [m for m in str(err.get("ctx", {}).get("error", msg)).splitlines()]
+            else:
+                out.append(f"{loc}: {msg}")
+        return out
+    return []
+
+
+def check_metrics(raw):
+    """What's wrong with a parsed metrics.toml (`raw`), one a line, as its
+    models see it."""
+    return _errors(Metrics, raw)
+
+
+def metrics_schema():
+    """metrics.toml's JSON schema."""
+    s = Metrics.model_json_schema()
+    s["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    s["title"] = "crates/strims-wan/metrics.toml"
     return s
