@@ -48,6 +48,7 @@ const NetworkDirectoryEditForm: React.FC = () => {
       serverConfig: {
         ...serverConfig,
         directory: {
+          ...serverConfig.directory,
           integrations: {
             angelthump: {
               enable: data.angelthumpEnable,
