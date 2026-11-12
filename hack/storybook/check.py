@@ -45,12 +45,71 @@ covered nor skipped, and on stale catalog entries. `--list` prints the
 stories and the coverage without loading them. `-j N` runs N browsers
 (default 4). `-v` prints every error of a failing story, not just its
 first. Exits 1 when a story (or, with --strict, the catalog) fails.
+
+  python3 hack/storybook/check.py (--port N | --url URL --base-port M)
+                                  --compare REF [--build] [-j N] [--only PREFIX]...
+                                  [--theme dark|light] [--device pc|portrait|landscape]
+                                  [--all-modes] [--tolerance N] [--report DIR]
+                                  [--fail-on-diff] [--rebuild-base] [--settle MS] [--timeout S]
+
+`--compare REF` is visual regression: each story of either build, this
+checkout's (head) and REF's (base), is shot in both, in the same browser
+one after the other, and the two diffed. REF builds once per commit, in a
+detached worktree at target/storybook/base/<sha>/src with the main
+checkout's node_modules, kept as target/storybook/base/<sha>/dist (the
+worktree removed; `--rebuild-base` builds it again), and is served by
+hack/console/server.py --dist on `--base-port` (default `--port` + 1). A
+mode is a theme and a device: dark (pc), light (pc), portrait and
+landscape (dark); `--all-modes` runs all four, else `--theme` and
+`--device` name one. A build from before the per-story frames loads its
+stories in the storybook page at 1600x1100, as it did then, shot by its
+story root.
+
+A capture holds everything that moves still, so a build compared with
+itself diffs to nothing: before its own scripts each document gets a
+clock only the checker moves (Date, performance.now and Intl's default
+date start at 2026-01-01T00:00:00Z; timeouts, intervals, animation
+frames, idle callbacks and CSS animations and transitions run on it), a
+seeded Math.random and crypto random, empty local and session storage,
+no text caret and no smooth scrolling (CAPTURE_SCRIPT); the time zone is
+UTC, the locale en-US and the page always focused; requests off the
+build's server (https://, a third-party embed's iframe among them) get
+stubs, a grey page for a document. The clock moves only while the
+network (workers' requests included) has been quiet for NET_QUIET_S and
+no worker is new or has just exchanged a message, after the page has
+laid out what changed: to the next timer until the root leaves
+"loading", then on to `--settle` ms of clock time after it (and while
+the root is empty, on in 100 ms steps up to `--timeout` s). A story frame
+on the clock renders once i18next has its strings. Then finite
+animations and transitions jump to their end, infinite ones (spinners,
+animated emotes) and SVG animations hold at their start, videos pause,
+images decode and fonts load, until nothing changes; each index's
+hostMask selectors (the landing page's build hash) and the story's
+`visual.mask` are painted over in both shots, and a story whose
+`visual.skip` holds isn't shot (src/devtools/storybook/types.ts). The
+root is shot until two shots two frames apart match (up to STABLE_SHOTS
+more; the report notes one that never did).
+
+The diff runs in Chromium (canvas pixels): a pixel changes when a channel
+moves by more than `--tolerance` (default 2 of 255) or only one shot has
+it (a size change). The report (`--report DIR`, default
+target/storybook/compare/<time>-<head>-vs-<base>) is one directory:
+index.html, report.json and PNGs of the stories not unchanged: changed
+ones, the most changed first, with base, head and a diff (changed pixels
+magenta over a greyed head), then failing (on either side), added,
+removed and skipped ones. It prints a table per mode, the changed stories
+and the report's path. A story the checker itself fails on (a browser
+that stalls or goes) gets a fresh browser and one more try. Exits 0, 1
+with `--fail-on-diff` when a story changed, failed, or is added or
+removed, and 2 on a checker error.
 """
 
 import argparse
 import base64
 import concurrent.futures
+import fcntl
 import glob
+import html
 import json
 import os
 import queue
@@ -89,6 +148,32 @@ CHROMIUM_FLAGS = [
 INDEX_TIMEOUT_S = 60
 QUIET_S = 0.25
 EXTRA_SETTLE_S = 3.0
+
+# Compare mode's browsers, besides CHROMIUM_FLAGS: animations run on the
+# main thread, where the capture clock holds them (one the compositor ran
+# leaves its layer rastered at a scale of its own: an animated emote's
+# sprite resampled), a tile changed in part is rastered whole (a partial
+# raster's edges blend a few levels apart: a badge's corners over an
+# image), and colours are sRGB's.
+COMPARE_FLAGS = ["--disable-threaded-animation", "--disable-partial-raster", "--force-color-profile=srgb"]
+# Compare mode. A mode is a theme and a device; --all-modes runs these.
+MODES = {"dark": ("dark", "pc"), "light": ("light", "pc"),
+         "portrait": ("dark", "portrait"), "landscape": ("dark", "landscape")}
+# The storybook page's own size, which a build from before the per-story
+# frames (no src/devtools/storybook/host/protocol.ts) renders its stories in.
+PAGE_VIEWPORT = (1600, 1100)
+# The capture clock's Date.now() at 0: 2026-01-01T00:00:00Z.
+FIXTURE_TIME_MS = 1767225600000
+# The network's quiet, in real seconds, before the capture clock moves on.
+NET_QUIET_S = 0.05
+# The capture clock's step while an empty root waits for content (ms).
+EMPTY_STEP_MS = 100
+# Shots of a capture after its first, until two in a row match.
+STABLE_SHOTS = 5
+# A third-party document (an embed's iframe), answered by stub.
+STUB_DOCUMENT = base64.b64encode(b'<!doctype html><html style="background:#808080"></html>').decode()
+BASES = ROOT / "target" / "storybook" / "base"
+REPORTS = ROOT / "target" / "storybook" / "compare"
 
 
 # --- a minimal WebSocket client (RFC 6455, text messages) ---
@@ -206,6 +291,20 @@ class Page:
         self.next_id = 0
         self.inflight = set()
         self.exceptions = []
+        # When the network last moved (a request sent, finished or failed).
+        self.net_at = time.monotonic()
+        # Requests answered by stub (compare mode: off the build's server).
+        self.stubbed = set()
+        # Compare mode's attached targets (workers, out-of-process frames):
+        # each one's requests, which end with it.
+        self.sessions = {}
+
+    def send(self, method, params=None, session=None):
+        """A command whose result nobody waits for (to an attached target's
+        `session`, else the page)."""
+        self.next_id += 1
+        self.ws.send(json.dumps({"id": self.next_id, "method": method, "params": params or {},
+                                 **({"sessionId": session} if session else {})}))
 
     def call(self, method, params=None, timeout=30):
         self.next_id += 1
@@ -233,13 +332,34 @@ class Page:
             if msg is not None:
                 self.event(json.loads(msg))
 
+    def drain(self):
+        """Handles the events already sent, without waiting for more."""
+        while (msg := self.ws.recv(0.001)) is not None:
+            self.event(json.loads(msg))
+
     def event(self, m):
         method, p = m.get("method"), m.get("params", {})
         if method == "Network.requestWillBeSent":
-            if not p.get("request", {}).get("url", "").startswith(("data:", "blob:")):
+            self.net_at = time.monotonic()
+            if (not p.get("request", {}).get("url", "").startswith(("data:", "blob:"))
+                    and p["requestId"] not in self.stubbed):
                 self.inflight.add(p["requestId"])
+                if m.get("sessionId") in self.sessions:
+                    self.sessions[m["sessionId"]].add(p["requestId"])
         elif method in ("Network.loadingFinished", "Network.loadingFailed"):
+            self.net_at = time.monotonic()
             self.inflight.discard(p.get("requestId"))
+        elif method == "Fetch.requestPaused":
+            self.stub(p)
+        elif method == "Target.attachedToTarget":
+            # A worker's requests (its script's end among them) come on its
+            # own session; it waits for this before it runs.
+            sid = p["sessionId"]
+            self.sessions[sid] = set()
+            self.send("Network.enable", session=sid)
+            self.send("Runtime.runIfWaitingForDebugger", session=sid)
+        elif method == "Target.detachedFromTarget":
+            self.inflight -= self.sessions.pop(p.get("sessionId"), set())
         elif method == "Runtime.exceptionThrown":
             d = p.get("exceptionDetails", {})
             self.exceptions.append(d.get("exception", {}).get("description") or d.get("text", "exception"))
@@ -257,9 +377,25 @@ class Page:
         except CDPError:
             return None
 
+    def stub(self, p):
+        """Answers a request Fetch paused (one off the build's server): a
+        document with a neutral page, anything else with a failure, so a
+        third-party embed is a plain box of its frame's size."""
+        self.net_at = time.monotonic()
+        if p.get("networkId"):
+            self.stubbed.add(p["networkId"])
+            self.inflight.discard(p["networkId"])
+        if p.get("resourceType") == "Document":
+            self.send("Fetch.fulfillRequest", {
+                "requestId": p["requestId"], "responseCode": 200, "body": STUB_DOCUMENT,
+                "responseHeaders": [{"name": "Content-Type", "value": "text/html"}]})
+        else:
+            self.send("Fetch.failRequest", {"requestId": p["requestId"], "errorReason": "BlockedByClient"})
+
     def navigate(self, url):
         self.call("Page.navigate", {"url": "about:blank"})
         self.inflight.clear()
+        self.stubbed.clear()
         self.exceptions = []
         self.call("Page.navigate", {"url": url})
 
@@ -274,11 +410,11 @@ def find_chromium(name):
 class Browser:
     """A headless Chromium of its own, with one page `viewport` (w, h) in size."""
 
-    def __init__(self, exe, profiles, i, viewport):
+    def __init__(self, exe, profiles, i, viewport, flags=()):
         self.profile = Path(tempfile.mkdtemp(prefix=f"b{i}-", dir=profiles))
         self.log = open(self.profile.parent / f"{self.profile.name}.log", "wb")
         self.proc = subprocess.Popen(
-            [exe, *CHROMIUM_FLAGS, f"--user-data-dir={self.profile}",
+            [exe, *CHROMIUM_FLAGS, *flags, f"--user-data-dir={self.profile}",
              f"--window-size={viewport[0]},{viewport[1]}", "about:blank"],
             stdin=subprocess.DEVNULL, stdout=self.log, stderr=self.log, start_new_session=True)
         port_file = self.profile / "DevToolsActivePort"
@@ -295,10 +431,31 @@ class Browser:
         self.page = Page(WebSocket(target["webSocketDebuggerUrl"]))
         self.page.call("Network.enable")
         self.page.call("Runtime.enable")
+        self.viewport = None
+        self.set_viewport(viewport)
+
+    def set_viewport(self, viewport):
+        if viewport == self.viewport:
+            return
         # Not "mobile": the storybook page's iframes are desktop documents too;
         # the frame's own preload makes the realm a phone's.
         self.page.call("Emulation.setDeviceMetricsOverride", {
             "width": viewport[0], "height": viewport[1], "deviceScaleFactor": 1, "mobile": False})
+        self.viewport = viewport
+
+    def enable_capture(self):
+        """Compare mode's page: every document starts on the capture clock
+        (CAPTURE_SCRIPT), requests off the build's server get stubs, and
+        the time zone, locale and focus are fixed."""
+        self.page.call("Page.enable")  # else no script evaluates on new documents
+        self.page.call("Page.addScriptToEvaluateOnNewDocument",
+                       {"source": CAPTURE_SCRIPT.replace("__T0__", str(FIXTURE_TIME_MS))})
+        self.page.call("Fetch.enable", {"patterns": [{"urlPattern": "https://*"}]})
+        self.page.call("Target.setAutoAttach", {"autoAttach": True, "waitForDebuggerOnStart": True,
+                                                "flatten": True})
+        self.page.call("Emulation.setTimezoneOverride", {"timezoneId": "UTC"})
+        self.page.call("Emulation.setLocaleOverride", {"locale": "en-US"})
+        self.page.call("Emulation.setFocusEmulationEnabled", {"enabled": True})
 
     def close(self):
         if getattr(self, "page", None):
@@ -356,8 +513,8 @@ def frame_url(base, route, args):
             + (f"?{query}" if query else ""))
 
 
-def load_index(browser, base):
-    browser.page.navigate(f"{base}/devtools.html#/storybook-index")
+def load_index(browser, base, route="/storybook-index"):
+    browser.page.navigate(f"{base}/devtools.html#{route}")
     deadline = time.monotonic() + INDEX_TIMEOUT_S
     while time.monotonic() < deadline:
         text = browser.page.try_eval('document.getElementById("storybook-index")?.textContent ?? null')
@@ -467,18 +624,18 @@ def build():
     print(f"check: built in {time.monotonic() - start:.1f} s", file=sys.stderr)
 
 
-def start_server(port, log_dir):
-    log = open(log_dir / "server.log", "wb")
+def start_server(port, log_dir, dist=None, log_name="server.log"):
+    log = open(log_dir / log_name, "wb")
     proc = subprocess.Popen(
         [sys.executable, str(ROOT / "hack" / "console" / "server.py"), "--port", str(port),
-         "--host", "127.0.0.1", "--no-index"],
+         "--host", "127.0.0.1", "--no-index", *(["--dist", str(dist)] if dist else [])],
         cwd=ROOT, stdin=subprocess.DEVNULL, stdout=log, stderr=log)
     base = f"http://127.0.0.1:{port}"
     deadline = time.monotonic() + 60
     while True:
         if proc.poll() is not None:
             log.close()
-            sys.exit(f"check: the console server exited: {(log_dir / 'server.log').read_text()[-2000:]}")
+            sys.exit(f"check: the console server exited: {(log_dir / log_name).read_text()[-2000:]}")
         try:
             with urllib.request.urlopen(f"{base}/devtools.html", timeout=2) as res:
                 if res.status == 200:
@@ -535,6 +692,1000 @@ def print_table(results, verbose):
             print("\n".join(text.splitlines()[:40 if verbose else 20]))
 
 
+# --- compare mode: each story's screenshot in two builds, diffed ---
+
+
+# Evaluated in every document of a compare-mode page before its own
+# scripts, so the story renders the same state however long the machine
+# takes. Time is a clock only the checker moves (__storybookCapture.step):
+# Date, performance.now and Intl's default date start at the fixture time,
+# and setTimeout, setInterval, requestAnimationFrame and
+# requestIdleCallback run on it, each callback in a task of its own, nested
+# timeouts clamped as browsers clamp them; so do CSS animations and
+# transitions (paused, and set to the clock's time since they began).
+# Math.random and crypto's getRandomValues and randomUUID are a seeded
+# PRNG. The document starts with empty local and session storage, no text
+# caret, and no smooth scrolling (CSS's or a script's). DOM changes,
+# scrolls, focus and animations' moves are counted, so a step lets the
+# page lay out and its observers and events run (real frames) before the
+# clock moves.
+CAPTURE_SCRIPT = r"""(() => {
+  if (window.__storybookCapture) return;
+  const T0 = __T0__;
+  let now = 0;
+  const realFrame = window.requestAnimationFrame.bind(window);
+
+  const RealDate = Date;
+  function CaptureDate(...args) {
+    if (!new.target) return new RealDate(T0 + now).toString();
+    return args.length ? new RealDate(...args) : new RealDate(T0 + now);
+  }
+  CaptureDate.prototype = RealDate.prototype;
+  CaptureDate.now = () => Math.floor(T0 + now);
+  CaptureDate.parse = RealDate.parse;
+  CaptureDate.UTC = RealDate.UTC;
+  Object.defineProperty(CaptureDate, "length", { value: 7 });
+  window.Date = CaptureDate;
+  const realNow = performance.now.bind(performance);
+  performance.now = () => now;
+  const dtf = Intl.DateTimeFormat.prototype;
+  const format = Object.getOwnPropertyDescriptor(dtf, "format");
+  Object.defineProperty(dtf, "format", {
+    ...format,
+    get() {
+      const f = format.get.call(this);
+      return (d) => f(d === undefined ? T0 + now : d);
+    },
+  });
+  const formatToParts = dtf.formatToParts;
+  dtf.formatToParts = function (d) {
+    return formatToParts.call(this, d === undefined ? T0 + now : d);
+  };
+
+  let seed = 0x5eed;
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  Math.random = random;
+  if (window.crypto) {
+    crypto.getRandomValues = (a) => {
+      const bytes = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+      for (let i = 0; i < bytes.length; i++) bytes[i] = (random() * 256) | 0;
+      return a;
+    };
+    crypto.randomUUID = () => {
+      const b = crypto.getRandomValues(new Uint8Array(16));
+      b[6] = (b[6] & 0x0f) | 0x40;
+      b[8] = (b[8] & 0x3f) | 0x80;
+      const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+      return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+    };
+  }
+
+  if (window.top === window) {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch {}
+  }
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(
+    "*, *::before, *::after { caret-color: transparent !important; scroll-behavior: auto !important; }");
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  // Changes a real frame must follow before the clock moves: the DOM's,
+  // and scrolls and focus, whose events and observers come with a frame.
+  let mutations = 0;
+  new MutationObserver(() => mutations++).observe(document, {
+    subtree: true, childList: true, attributes: true, characterData: true });
+  const instant = (o) =>
+    o && typeof o === "object" && o.behavior === "smooth" ? { ...o, behavior: "instant" } : o;
+  for (const target of [Element.prototype, window]) {
+    for (const name of ["scroll", "scrollTo", "scrollBy"]) {
+      const f = target[name];
+      target[name] = function (o, ...rest) {
+        mutations++;
+        return f.call(this, instant(o), ...rest);
+      };
+    }
+  }
+  const scrollIntoView = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = function (o) {
+    mutations++;
+    return scrollIntoView.call(this, instant(o));
+  };
+  for (const prop of ["scrollTop", "scrollLeft"]) {
+    const d = Object.getOwnPropertyDescriptor(Element.prototype, prop);
+    Object.defineProperty(Element.prototype, prop, {
+      ...d,
+      set(v) {
+        mutations++;
+        d.set.call(this, v);
+      },
+    });
+  }
+  const focus = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function (...args) {
+    mutations++;
+    return focus.apply(this, args);
+  };
+
+  // Workers run on real time: the clock holds while one is new (up to 5 s
+  // before it first answers) or has just exchanged a message.
+  let workerAt = -Infinity;
+  const unanswered = new Map();
+  if (window.Worker) {
+    const RealWorker = window.Worker;
+    const heard = (w) => {
+      workerAt = realNow();
+      unanswered.delete(w);
+    };
+    window.Worker = class Worker extends RealWorker {
+      constructor(...args) {
+        super(...args);
+        workerAt = realNow();
+        unanswered.set(this, workerAt);
+        for (const type of ["message", "messageerror", "error"]) {
+          this.addEventListener(type, () => heard(this));
+        }
+      }
+      postMessage(...args) {
+        workerAt = realNow();
+        return super.postMessage(...args);
+      }
+      terminate() {
+        unanswered.delete(this);
+        return super.terminate();
+      }
+    };
+  }
+  const workersBusy = (quietMs) => {
+    const t = realNow();
+    if (t - workerAt < quietMs) return true;
+    for (const at of unanswered.values()) if (t - at < 5000) return true;
+    return false;
+  };
+
+  const timers = new Map();
+  let ids = 0;
+  let nesting = 0;
+  const add = (fn, ms, args, repeat) => {
+    const id = ++ids;
+    const level = nesting + 1;
+    let delay = Math.max(0, Number(ms) || 0);
+    if (level > 5 && delay < 4) delay = 4;
+    if (repeat && delay < 1) delay = 1;
+    timers.set(id, { id, fn, args, due: now + delay, every: repeat ? delay : 0, level });
+    return id;
+  };
+  const clear = (id) => {
+    timers.delete(id);
+  };
+  window.setTimeout = (fn, ms, ...args) => add(fn, ms, args, false);
+  window.setInterval = (fn, ms, ...args) => add(fn, ms, args, true);
+  window.clearTimeout = window.clearInterval = clear;
+  const FRAME = 1000 / 60;
+  let frames = new Map();
+  let frameTimer = 0;
+  window.requestAnimationFrame = (cb) => {
+    const id = ++ids;
+    frames.set(id, cb);
+    if (!frameTimer) {
+      frameTimer = add(() => {
+        frameTimer = 0;
+        const due = frames;
+        frames = new Map();
+        for (const f of due.values()) {
+          try {
+            f(now);
+          } catch (e) {
+            reportError(e);
+          }
+        }
+      }, (Math.floor(now / FRAME) + 1) * FRAME - now, [], false);
+    }
+    return id;
+  };
+  window.cancelAnimationFrame = (id) => {
+    frames.delete(id);
+  };
+  window.requestIdleCallback = (cb) =>
+    add(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 1, [], false);
+  window.cancelIdleCallback = clear;
+
+  // A real task's turn: what the page queued before it runs first.
+  const channel = new MessageChannel();
+  const turns = [];
+  channel.port1.onmessage = () => turns.shift()?.();
+  const turn = () => new Promise((r) => {
+    turns.push(r);
+    channel.port2.postMessage(0);
+  });
+  const frame = () => new Promise((r) => realFrame(() => r()));
+  // CSS animations and transitions run on the clock too: each is held from
+  // the clock's time when a step first sees it (the time it began, as the
+  // clock only moves in steps), and set to the clock's time since; once
+  // that passes its end, it finishes.
+  const began = new WeakMap();
+  let held = false;
+  const animate = () => {
+    if (held) return;
+    for (const a of document.getAnimations()) {
+      let t0 = began.get(a);
+      if (t0 === undefined) {
+        began.set(a, (t0 = now));
+        try {
+          a.pause();
+        } catch {}
+      }
+      if (a.playState === "finished") continue;
+      const end = a.effect?.getComputedTiming().endTime;
+      if (Number.isFinite(end) && now - t0 >= end) {
+        // Done, so it ends as a played one does (its events, its effect gone).
+        try {
+          a.finish();
+        } catch {}
+        mutations++;
+      } else if (a.currentTime !== now - t0) {
+        try {
+          a.currentTime = now - t0;
+        } catch {}
+        mutations++;
+      }
+    }
+  };
+  const next = () => {
+    let due = Infinity;
+    for (const t of timers.values()) due = Math.min(due, t.due);
+    return due;
+  };
+
+  // Lets the page settle (a task's turn, and real frames while the DOM
+  // changes: its layout, observers and scroll events), then fires the
+  // timers due first, each in a task of its own, if they're due now or,
+  // with `advance` (the network quiet) and no worker busy for `quietMs`, by
+  // `limit` (null: whenever); else, so, moves the clock to `limit`.
+  let seen = 0;
+  const step = async (limit, advance, quietMs) => {
+    await turn();
+    for (let i = 0; i < 10 && mutations !== seen; i++) {
+      seen = mutations;
+      await frame();
+      await turn();
+      await turn();
+    }
+    const waiting = advance && workersBusy(quietMs);
+    advance = advance && !waiting;
+    animate();
+    const due = next();
+    let fired = 0;
+    if (due <= now || (advance && due <= (limit ?? Infinity))) {
+      now = Math.max(now, due);
+      animate();
+      const batch = [...timers.values()].filter((t) => t.due <= now)
+        .sort((a, b) => a.due - b.due || a.id - b.id);
+      for (const t of batch) {
+        if (!timers.has(t.id)) continue;
+        if (t.every) t.due += t.every;
+        else timers.delete(t.id);
+        nesting = t.level;
+        fired++;
+        try {
+          if (typeof t.fn === "function") t.fn.apply(window, t.args);
+          else (0, eval)(String(t.fn));
+        } catch (e) {
+          reportError(e);
+        } finally {
+          nesting = 0;
+        }
+        await turn();
+      }
+    } else if (advance && limit !== null && limit > now) {
+      now = limit;
+      animate();
+    }
+    const root = document.querySelector("[data-story-root]");
+    const after = next();
+    return { now, fired, waiting, next: Number.isFinite(after) ? after : null,
+             state: root ? root.dataset.storyState ?? null : null };
+  };
+  // Stops the clock's hold on animations, for FINISH_SCRIPT's.
+  const hold = () => {
+    held = true;
+  };
+  window.__storybookCapture = { step, turn, frame, hold, now: () => now, mutations: () => mutations };
+})()"""
+
+# Holds what still moves before the screenshot: finite animations and
+# transitions jump to their end, infinite ones (spinners, animated emotes'
+# sprites) and SVG animations hold at their start, videos pause; then
+# images decode, fonts load, two real frames pass and the timers due now
+# fire, until a round changes nothing (the round, or -1 if none did).
+FINISH_SCRIPT = r"""(async () => {
+  const c = window.__storybookCapture;
+  c.hold();
+  // A composited layer keeps paint from its history (a move by part of a
+  // pixel isn't painted again), so each transformed element (a message's
+  // translateZ(0)) spends two frames untransformed, transitions off, and
+  // its layer is made anew.
+  const moved = [...document.querySelectorAll("*")].filter((e) => getComputedStyle(e).transform !== "none");
+  if (moved.length) {
+    const still = new CSSStyleSheet();
+    still.replaceSync("*, *::before, *::after { transition: none !important; }");
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, still];
+    const saved = moved.map((e) => [e, e.getAttribute("style")]);
+    for (const [e] of saved) e.style.setProperty("transform", "none", "important");
+    await c.frame();
+    await c.frame();
+    for (const [e, style] of saved) {
+      if (style === null) e.removeAttribute("style");
+      else e.setAttribute("style", style);
+    }
+    await c.frame();
+    await c.frame();
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== still);
+  }
+  for (let round = 0; round < 10; round++) {
+    const before = c.mutations();
+    let changed = 0;
+    for (const a of document.getAnimations()) {
+      if (a.playState === "finished" || (a.playState === "paused" && a.currentTime === 0)) continue;
+      changed++;
+      try {
+        if (Number.isFinite(a.effect?.getComputedTiming().endTime)) {
+          a.finish();
+        } else {
+          a.pause();
+          a.currentTime = 0;
+        }
+      } catch {}
+    }
+    for (const svg of document.querySelectorAll("svg")) {
+      if (svg.animationsPaused && !svg.animationsPaused()) {
+        svg.pauseAnimations();
+        svg.setCurrentTime(0);
+        changed++;
+      }
+    }
+    for (const v of document.querySelectorAll("video")) {
+      if (!v.paused) {
+        v.pause();
+        changed++;
+      }
+    }
+    await Promise.all([...document.images].map((i) => Promise.race([
+      i.decode().catch(() => {}), new Promise((r) => c.frame().then(c.frame).then(r))])));
+    await document.fonts.ready;
+    await c.frame();
+    await c.frame();
+    const s = await c.step(null, false);
+    changed += s.fired + (c.mutations() !== before);
+    if (!changed) return round;
+  }
+  return -1;
+})()"""
+
+# Paints over the masked selectors' boxes, as their own element at the end
+# of the body: the number painted, or {error} for a selector that isn't one.
+MASK_SCRIPT = r"""((selectors) => {
+  let n = 0;
+  for (const sel of selectors) {
+    let found;
+    try {
+      found = document.querySelectorAll(sel);
+    } catch (e) {
+      return { error: `mask selector ${JSON.stringify(sel)}: ${e.message}` };
+    }
+    for (const el of found) {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      // Out to whole pixels, so no edge blends with what's under it.
+      const left = Math.floor(r.left + scrollX), top = Math.floor(r.top + scrollY);
+      const width = Math.ceil(r.right + scrollX) - left, height = Math.ceil(r.bottom + scrollY) - top;
+      const box = document.createElement("div");
+      box.style.cssText = `position: absolute; left: ${left}px; top: ${top}px; width: ${width}px;
+        height: ${height}px; background: #ff00ff; z-index: 2147483647; pointer-events: none`;
+      document.body.appendChild(box);
+      n++;
+    }
+  }
+  return { n };
+})"""
+
+# Diffs two PNGs (data URLs) pixel by pixel: changed where a channel moves
+# by more than `tol`, or where only one image has the pixel. The diff image
+# is the head dimmed to grey with changed pixels in magenta.
+DIFF_SCRIPT = r"""(async (a, b, tol) => {
+  const load = async (src) => {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const x = c.getContext("2d", { willReadFrequently: true });
+    x.drawImage(img, 0, 0);
+    return x.getImageData(0, 0, c.width, c.height);
+  };
+  const [A, B] = await Promise.all([load(a), load(b)]);
+  const w = Math.max(A.width, B.width);
+  const h = Math.max(A.height, B.height);
+  const out = new ImageData(w, h);
+  const o = out.data, pa = A.data, pb = B.data;
+  let changed = 0, delta = 0;
+  const box = [w, h, -1, -1];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const inA = x < A.width && y < A.height;
+      const inB = x < B.width && y < B.height;
+      const ia = (y * A.width + x) * 4;
+      const ib = (y * B.width + x) * 4;
+      let diff = !(inA && inB);
+      for (let k = 0; !diff && k < 4; k++) {
+        const d = Math.abs(pa[ia + k] - pb[ib + k]);
+        diff = d > tol;
+        if (diff) delta = Math.max(delta, d);
+      }
+      if (diff) {
+        changed++;
+        box[0] = Math.min(box[0], x); box[1] = Math.min(box[1], y);
+        box[2] = Math.max(box[2], x); box[3] = Math.max(box[3], y);
+        o[i] = 255; o[i + 1] = 0; o[i + 2] = 170; o[i + 3] = 255;
+      } else {
+        const g = 0.299 * pb[ib] + 0.587 * pb[ib + 1] + 0.114 * pb[ib + 2];
+        o[i] = o[i + 1] = o[i + 2] = 255 - (255 - g) * 0.3;
+        o[i + 3] = 255;
+      }
+    }
+  }
+  let diff = null;
+  if (changed) {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    c.getContext("2d").putImageData(out, 0, 0);
+    diff = c.toDataURL("image/png");
+  }
+  return { changed, width: w, height: h, base: [A.width, A.height], head: [B.width, B.height],
+           box: changed ? [box[0], box[1], box[2] - box[0] + 1, box[3] - box[1] + 1] : null, delta, diff };
+})"""
+
+
+class Build:
+    """A build of the storybook as compare mode serves it: `name` (head or
+    base), its server's base URL, its commit, and how its stories load
+    (`frames`: each in its frame document; `page`: in the storybook page,
+    before the per-story frames)."""
+
+    def __init__(self, name, url, commit, protocol):
+        self.name, self.url, self.commit, self.protocol = name, url, commit, protocol
+        self.index = None
+        self.stories = {}
+
+    def viewport(self, device):
+        return VIEWPORTS[device] if self.protocol == "frames" else PAGE_VIEWPORT
+
+    def index_route(self):
+        return "/storybook-index" if self.protocol == "frames" else "/storybook"
+
+    def story_url(self, route, theme, device):
+        query = urllib.parse.urlencode({k: v for k, v in (("theme", theme), ("device", device))
+                                        if v not in ("dark", "pc")})
+        path = (f"/storybook-frame/{route.removeprefix('/storybook/')}" if self.protocol == "frames"
+                else route)
+        return f"{self.url}/devtools.html#{path}" + (f"?{query}" if query else "")
+
+
+def protocol_of(root):
+    """`frames` when the source tree at `root` has the per-story frames'
+    protocol module, else `page`."""
+    return "frames" if (root / "src" / "devtools" / "storybook" / "host" / "protocol.ts").exists() else "page"
+
+
+def git(*args, cwd=ROOT):
+    res = subprocess.run(["git", *args], cwd=cwd, stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    if res.returncode:
+        raise RuntimeError(f"git {' '.join(args)}: {res.stderr.strip()}")
+    return res.stdout.strip()
+
+
+def main_checkout():
+    """The repository's main checkout (where node_modules lives)."""
+    return Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent
+
+
+def drop_worktree(src):
+    """Removes a base build's worktree, registered or not (`worktree add
+    --force` takes a path still registered once its dir is gone)."""
+    if src.exists():
+        try:
+            git("worktree", "remove", "--force", "--force", str(src))
+        except RuntimeError:
+            pass
+        shutil.rmtree(src, ignore_errors=True)
+
+
+def build_base(ref, rebuild):
+    """REF's build: (sha, dist, protocol), built once per commit in a
+    detached worktree under target/storybook/base/<sha>/src (node_modules
+    the main checkout's), its target/console/dist kept as
+    target/storybook/base/<sha>/dist and the worktree removed."""
+    try:
+        sha = git("rev-parse", "--verify", f"{ref}^{{commit}}")
+    except RuntimeError as e:
+        sys.exit(f"check: --compare {ref}: {e}")
+    home = BASES / sha
+    record = home / "build.json"
+    home.mkdir(parents=True, exist_ok=True)
+    with open(BASES / f"{sha}.lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if record.is_file() and not rebuild:
+            rec = json.loads(record.read_text())
+            print(f"check: base {sha[:12]} ({ref}): cached build ({rec['protocol']} protocol)", file=sys.stderr)
+            return sha, home / "dist", rec["protocol"]
+        src, dist = home / "src", home / "dist"
+        record.unlink(missing_ok=True)
+        drop_worktree(src)
+        shutil.rmtree(dist, ignore_errors=True)
+        git("worktree", "add", "--force", "--detach", str(src), sha)
+        try:
+            modules = main_checkout() / "node_modules"
+            if not modules.is_dir():
+                modules = (ROOT / "node_modules").resolve()
+            (src / "node_modules").symlink_to(modules)
+            protocol = protocol_of(src)
+            npm, env = npm_command()
+            start = time.monotonic()
+            print(f"check: building base {sha[:12]} ({ref}) in {src.relative_to(ROOT)}", file=sys.stderr)
+            res = subprocess.run([npm, "run", "console:build"], cwd=src, env=env, stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            if res.returncode:
+                (home / "build.log").write_text(res.stdout)
+                print(res.stdout[-6000:], file=sys.stderr)
+                sys.exit(f"check: the base's npm run console:build failed (its log: {home / 'build.log'})")
+            shutil.move(src / "target" / "console" / "dist", dist)
+            took = time.monotonic() - start
+            record.write_text(json.dumps({"commit": sha, "ref": ref, "protocol": protocol,
+                                          "build_s": round(took, 1)}) + "\n")
+            print(f"check: built base {sha[:12]} in {took:.1f} s ({protocol} protocol)", file=sys.stderr)
+        finally:
+            drop_worktree(src)
+    return sha, dist, protocol
+
+
+def evaluate(page, expression, timeout=30):
+    """Runtime.evaluate awaiting a promise: its value, or CDPError naming
+    the exception."""
+    r = page.call("Runtime.evaluate", {"expression": expression, "awaitPromise": True,
+                                       "returnByValue": True}, timeout)
+    if "exceptionDetails" in r:
+        d = r["exceptionDetails"]
+        raise CDPError(d.get("exception", {}).get("description") or d.get("text", "evaluation failed"))
+    return r.get("result", {}).get("value")
+
+
+def clock_step(page, limit, advance):
+    """One step of the capture clock (CAPTURE_SCRIPT's step), or None while
+    the page has no document with the clock in it yet."""
+    try:
+        return evaluate(page, f"window.__storybookCapture.step({json.dumps(limit)}, {json.dumps(advance)}, "
+                              f"{NET_QUIET_S * 1000})")
+    except CDPError:
+        return None
+
+
+def capture(browser, build, route, theme, device, masks, args):
+    """One story's screenshot in `build`, on the capture clock: the clock
+    moves only while the network is quiet, to the next timer until the
+    story's root leaves "loading", then on to --settle ms after that, then
+    (an empty root) by EMPTY_STEP_MS until it shows something or --timeout
+    s of clock time pass. Then FINISH_SCRIPT holds what still moves, masks
+    are painted, and the root is shot. {status, error, errors, png, time,
+    rounds (FINISH_SCRIPT's), clock_ms, unstable (no two shots matched)}."""
+    page = browser.page
+    start = time.monotonic()
+    deadline = start + args.timeout
+    out = {"status": "ok", "error": "", "errors": [], "png": None}
+
+    def fail(error, errors=None):
+        out.update(status="FAIL", error=first_line(error), errors=errors or [error],
+                   time=time.monotonic() - start)
+        return out
+
+    browser.set_viewport(build.viewport(device))
+    page.call("Storage.clearDataForOrigin", {"origin": build.url, "storageTypes": "all"})
+    page.navigate(build.story_url(route, theme, device))
+    phase, limit, mounted, now = "load", None, None, 0
+    while True:
+        if time.monotonic() > deadline:
+            return fail(f"timeout after {args.timeout} s ({phase}, clock at {now:.0f} ms)",
+                        [f"timeout after {args.timeout} s ({phase})", *page.exceptions])
+        page.drain()
+        quiet = not page.inflight and time.monotonic() - page.net_at >= NET_QUIET_S
+        r = clock_step(page, limit, quiet)
+        if r is None:
+            page.pump(0.05)
+            continue
+        quiet = quiet and not r["waiting"]
+        now = r["now"]
+        if phase == "load" and r["state"] in ("ok", "error"):
+            phase, mounted = "settle", now
+            limit = mounted + args.settle
+            continue
+        idle = quiet and not r["fired"] and (r["next"] is None or r["next"] > (limit or 0))
+        if phase != "load" and idle and now >= limit:
+            probe = json.loads(page.eval(STORY_PROBE))
+            if probe.get("state") == "error" or probe.get("visible") or probe.get("text"):
+                break
+            if now - mounted >= args.timeout * 1000:
+                break
+            phase, limit = "empty", limit + EMPTY_STEP_MS
+            continue
+        if not r["fired"] and (not quiet or (phase == "load" and r["next"] is None)):
+            # Waiting on the network, or on the page's own work.
+            page.pump(0.01)
+
+    rounds = evaluate(page, FINISH_SCRIPT, timeout=max(5, deadline - time.monotonic()))
+    probe = json.loads(page.eval(STORY_PROBE))
+    errors = (probe.get("story") or {}).get("errors", [])
+    failing = [f"[{e['kind']}] {e['text']}" for e in errors if not e.get("allowedBy")]
+    if probe.get("state") == "error":
+        fail(failing[0] if failing else "error state", failing)
+    elif not probe.get("visible") and not probe.get("text"):
+        fail("empty story root")
+    out["rounds"] = rounds
+    out["clock_ms"] = now
+    if probe.get("root"):
+        if masks:
+            painted = page.eval(f"({MASK_SCRIPT})({json.dumps(masks)})")
+            if painted.get("error"):
+                return fail(painted["error"])
+        r = probe["rect"]
+        clip = {"x": max(0, r["x"]), "y": max(0, r["y"]), "width": max(1, r["width"]),
+                "height": max(1, r["height"]), "scale": 1}
+        vw, vh = browser.viewport
+        beyond = clip["x"] + clip["width"] > vw or clip["y"] + clip["height"] > vh
+
+        def shot():
+            return base64.b64decode(page.call("Page.captureScreenshot", {
+                "format": "png", "clip": clip, "captureBeyondViewport": beyond})["data"])
+
+        # The raster can still change with nothing left to move (a late
+        # decode): shots two frames apart until two match.
+        out["png"] = shot()
+        for _ in range(STABLE_SHOTS):
+            evaluate(page, "window.__storybookCapture.frame().then(window.__storybookCapture.frame)")
+            again = shot()
+            if again == out["png"]:
+                break
+            out["png"] = again
+        else:
+            out["unstable"] = True
+    out["time"] = time.monotonic() - start
+    return out
+
+
+def diff_images(browser, base_png, head_png, tolerance):
+    """DIFF_SCRIPT over two PNGs, in `browser`'s page as the last capture
+    left it: {changed, width, height, base, head (their sizes), diff (PNG
+    bytes or None)}."""
+    url = lambda png: "data:image/png;base64," + base64.b64encode(png).decode()
+    r = evaluate(browser.page, f"({DIFF_SCRIPT})({json.dumps(url(base_png))}, {json.dumps(url(head_png))}, "
+                               f"{tolerance})", timeout=120)
+    if r["diff"]:
+        r["diff"] = base64.b64decode(r["diff"].split(",", 1)[1])
+    return r
+
+
+def compare_story(browser, builds, mode, route, args):
+    """A story in one mode: its capture in each build that has it, and their
+    diff. {mode, route, kind (changed, unchanged, added, removed, failing,
+    skipped), ...}."""
+    theme, device = MODES[mode]
+    entries = {b.name: b.stories.get(route) for b in builds}
+    res = {"mode": mode, "route": route, "time": 0.0}
+    visual = [e.get("visual") for e in entries.values() if e and e.get("visual")]
+    skip = next((v for v in visual if v.get("skip")), None)
+    if skip:
+        res.update(kind="skipped", reason=skip.get("reason", ""))
+        return res
+    masks = sorted({m["selector"] for b in builds for m in (b.index or {}).get("hostMask", [])}
+                   | {s for v in visual for s in v.get("mask", [])})
+    shots = {}
+    for b in builds:
+        if entries[b.name]:
+            shots[b.name] = capture(browser, b, route, theme, device, masks, args)
+            res["time"] += shots[b.name]["time"]
+    res["shots"] = shots
+    if "base" not in shots:
+        res["kind"] = "added"
+    elif "head" not in shots:
+        res["kind"] = "removed"
+    else:
+        res["kind"] = "unchanged"
+    if any(s["status"] != "ok" for s in shots.values()):
+        res["kind"] = "failing"
+    if "base" in shots and "head" in shots and shots["base"]["png"] and shots["head"]["png"]:
+        a, b = shots["base"]["png"], shots["head"]["png"]
+        if a == b:
+            res["changed"], res["ratio"] = 0, 0.0
+        else:
+            d = diff_images(browser, a, b, args.tolerance)
+            res.update(changed=d["changed"], ratio=d["changed"] / (d["width"] * d["height"]),
+                       sizes=(d["base"], d["head"]), box=d["box"], delta=d["delta"], diff=d["diff"])
+            if d["changed"] and res["kind"] == "unchanged":
+                res["kind"] = "changed"
+    return res
+
+
+def slug(route):
+    return route.removeprefix("/storybook/").replace("/", "__")
+
+
+def write_report(path, results, builds, modes, args, elapsed):
+    """index.html, report.json and the PNGs of every story that isn't
+    unchanged, under `path`."""
+    head, base = builds
+    path.mkdir(parents=True, exist_ok=True)
+
+    def save(r, side, png):
+        if not png:
+            return None
+        name = f"{r['mode']}/{slug(r['route'])}.{side}.png"
+        (path / r["mode"]).mkdir(exist_ok=True)
+        (path / name).write_bytes(png)
+        return urllib.parse.quote(name)
+
+    esc = html.escape
+    rows = []
+    for r in results:
+        if r["kind"] == "unchanged":
+            continue
+        shots = r.get("shots", {})
+        imgs = {side: save(r, side, shots.get(side, {}).get("png")) for side in ("base", "head")}
+        imgs["diff"] = save(r, "diff", r.get("diff"))
+        rows.append((r, imgs))
+    order = {"changed": 0, "failing": 1, "added": 2, "removed": 3, "skipped": 4}
+    rows.sort(key=lambda x: (order[x[0]["kind"]], -x[0].get("ratio", 0), x[0]["mode"], x[0]["route"]))
+
+    def counts(mode):
+        c = {k: 0 for k in ("changed", "unchanged", "added", "removed", "failing", "skipped")}
+        for r in results:
+            if r["mode"] == mode:
+                c[r["kind"]] += 1
+        return c
+
+    summary = "".join(
+        f"<tr><td>{m}</td>" + "".join(f"<td class='n{' hot' if k != 'unchanged' and v else ''}'>{v}</td>"
+                                      for k, v in counts(m).items()) + "</tr>"
+        for m in modes)
+    cards = []
+    for r, imgs in rows:
+        story = urllib.parse.unquote(r["route"].removeprefix("/storybook/"))
+        if r["kind"] == "changed":
+            (bw, bh), (hw, hh) = r["sizes"]
+            size = "" if (bw, bh) == (hw, hh) else f" · size {bw}×{bh} → {hw}×{hh}"
+            x, y, cw, ch = r["box"]
+            what = (f"{100 * r['ratio']:.2f}% · {r['changed']:,} px in {cw}×{ch} at {x},{y}"
+                    f" · channels up to {r['delta']}/255 apart{size}")
+        elif r["kind"] == "skipped":
+            what = f"not compared: {esc(r['reason'])}"
+        else:
+            what = r["kind"]
+        notes = []
+        for side, s in r.get("shots", {}).items():
+            if s["status"] != "ok":
+                notes.append(f"<pre><b>{side}:</b> {esc(chr(10).join(s['errors'][:3]))}</pre>")
+            if s.get("rounds") == -1:
+                notes.append(f"<p class='note'>{side}: still moving after 10 rounds</p>")
+            if s.get("unstable"):
+                notes.append(f"<p class='note'>{side}: no two shots in a row matched</p>")
+        figs = "".join(
+            f"<figure><figcaption>{k}</figcaption><a href='{imgs[k]}'><img loading='lazy' src='{imgs[k]}'></a>"
+            f"</figure>" for k in ("base", "head", "diff") if imgs.get(k))
+        cards.append(f"<section class='card {r['kind']}'><h3><span class='mode'>{r['mode']}</span> "
+                     f"{esc(story)} <span class='what'>{what}</span></h3>"
+                     f"{''.join(notes)}<div class='figs'>{figs}</div></section>")
+    title = f"storybook: {head.commit[:12]} vs {base.commit[:12]}"
+    doc = f"""<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{esc(title)}</title>
+<style>
+:root {{ --bg: #fff; --fg: #1b1f24; --muted: #5d6670; --line: #d8dde3; --card: #f6f8fa; --hot: #c0007a; }}
+@media (prefers-color-scheme: dark) {{
+  :root {{ --bg: #14171b; --fg: #e3e7eb; --muted: #98a2ad; --line: #2c3238; --card: #1b1f24; --hot: #ff5cbc; }}
+}}
+body {{ margin: 0; padding: 16px 24px; background: var(--bg); color: var(--fg);
+  font: 14px/1.45 system-ui, sans-serif; }}
+h1 {{ font-size: 20px; margin: 0 0 4px; }}
+.meta {{ color: var(--muted); margin: 0 0 16px; }}
+table {{ border-collapse: collapse; margin: 0 0 24px; }}
+th, td {{ border-bottom: 1px solid var(--line); padding: 4px 12px; text-align: left; }}
+td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
+td.hot {{ color: var(--hot); font-weight: 600; }}
+.card {{ background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px;
+  margin: 0 0 16px; }}
+.card h3 {{ font-size: 14px; margin: 0 0 8px; font-weight: 600; overflow-wrap: anywhere; }}
+.mode {{ display: inline-block; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px;
+  font-weight: 400; color: var(--muted); }}
+.what {{ color: var(--hot); font-weight: 400; margin-left: 8px; }}
+.links {{ font-weight: 400; margin-left: 8px; }}
+.links a {{ color: var(--muted); }}
+.figs {{ display: flex; gap: 8px; align-items: flex-start; overflow-x: auto; }}
+figure {{ margin: 0; flex: 1 1 0; min-width: 120px; max-width: 33%; }}
+figcaption {{ color: var(--muted); font-size: 12px; }}
+figure img {{ width: 100%; height: auto; border: 1px solid var(--line); display: block; }}
+pre {{ white-space: pre-wrap; font-size: 12px; margin: 4px 0; }}
+.note {{ color: var(--muted); margin: 4px 0; }}
+</style></head><body>
+<h1>{esc(title)}</h1>
+<p class="meta">base {esc(base.commit)} ({esc(args.compare)}) · head {esc(head.commit)} · tolerance {args.tolerance}
+ per channel · settle {args.settle} ms · {elapsed:.0f} s</p>
+<table><tr><th>mode</th><th>changed</th><th>unchanged</th><th>added</th><th>removed</th><th>failing</th>
+<th>skipped</th></tr>{summary}</table>
+{''.join(cards) or '<p>No story changed.</p>'}
+</body></html>
+"""
+    (path / "index.html").write_text(doc)
+    (path / "report.json").write_text(json.dumps({
+        "base": {"commit": base.commit, "ref": args.compare}, "head": {"commit": head.commit},
+        "tolerance": args.tolerance, "modes": modes, "elapsed_s": round(elapsed, 1),
+        "stories": [{k: v for k, v in r.items() if k not in ("shots", "diff")}
+                    | {"status": {s: v["status"] for s, v in r.get("shots", {}).items()},
+                       "errors": {s: v["errors"][:3] for s, v in r.get("shots", {}).items() if v["errors"]},
+                       "unstable": [s for s, v in r.get("shots", {}).items() if v.get("unstable")]}
+                    for r in results]}, indent=1) + "\n")
+    return path / "index.html"
+
+
+def print_compare(results, modes, report, elapsed, times):
+    kinds = ("changed", "added", "removed", "failing", "skipped", "unchanged")
+    print(f"{'mode':10}  {'stories':>7}  " + "  ".join(f"{k:>9}" for k in kinds) + "  done at")
+    for m in modes:
+        rs = [r for r in results if r["mode"] == m]
+        print(f"{m:10}  {len(rs):7}  " + "  ".join(f"{sum(r['kind'] == k for r in rs):9}" for k in kinds)
+              + f"  {times.get(m, 0):.0f} s")
+    changed = sorted((r for r in results if r["kind"] == "changed"), key=lambda r: -r["ratio"])
+    if changed:
+        print("\nchanged, by the share of pixels:")
+        width = max(len(r["route"]) for r in changed[:40]) - len("/storybook/")
+        for r in changed[:40]:
+            x, y, cw, ch = r["box"]
+            print(f"  {r['mode']:10}  {r['route'].removeprefix('/storybook/').ljust(width)}  "
+                  f"{100 * r['ratio']:6.2f}%  {r['changed']:>9,} px  in {cw}x{ch} at {x},{y}")
+        if len(changed) > 40:
+            print(f"  ... and {len(changed) - 40} more")
+    for kind in ("added", "removed", "failing", "skipped"):
+        rs = [r for r in results if r["kind"] == kind]
+        if rs:
+            print(f"\n{kind}:")
+            for r in rs[:40]:
+                detail = ""
+                if kind == "failing":
+                    detail = "; ".join(f"{s}: {v['error']}" for s, v in r["shots"].items() if v["status"] != "ok")
+                elif kind == "skipped":
+                    detail = r["reason"]
+                print(f"  {r['mode']:10}  {r['route'].removeprefix('/storybook/')}  {detail}")
+            if len(rs) > 40:
+                print(f"  ... and {len(rs) - 40} more")
+    unstable = [(r, s) for r in results for s, v in r.get("shots", {}).items() if v.get("unstable")]
+    if unstable:
+        print("\nno two shots in a row matched:")
+        for r, side in unstable:
+            print(f"  {r['mode']:10}  {r['route'].removeprefix('/storybook/')}  ({side})")
+    print(f"\n{len({r['route'] for r in results})} stories in {len(modes)} mode(s) compared in {elapsed:.0f} s")
+    print(f"report: {report}")
+
+
+def compare_main(args, exe, work):
+    """--compare: every story of either build in each mode, captured in both
+    and diffed; the report; the exit code."""
+    modes = list(MODES) if args.all_modes else [
+        next(m for m, td in MODES.items() if td == (args.theme, args.device))]
+    base_port = args.base_port or (args.port + 1 if args.port else None)
+    if not base_port:
+        sys.exit("check: --compare with --url needs --base-port")
+    sha, dist, base_protocol = build_base(args.compare, args.rebuild_base)
+    servers, browsers = [], []
+    started = time.monotonic()
+    try:
+        if args.port:
+            servers.append(start_server(args.port, work))
+            head_url = servers[-1][2]
+        else:
+            head_url = args.url.rstrip("/").removesuffix("/devtools.html")
+        servers.append(start_server(base_port, work, dist=dist, log_name="base-server.log"))
+        dirty = bool(git("status", "--porcelain", "--untracked-files=no", "--", "src", "assets",
+                         "package-lock.json", "webpack.config.js"))
+        head = Build("head", head_url, git("rev-parse", "HEAD") + ("+dirty" if dirty else ""),
+                     protocol_of(ROOT))
+        base = Build("base", servers[-1][2], sha, base_protocol)
+        builds = (head, base)
+
+        new_browser = lambda i: Browser(exe, work, i, VIEWPORTS["pc"], COMPARE_FLAGS)
+        browsers.append(new_browser(0))
+        prefixes = [o if o.startswith("/") else f"/storybook/{o}" for o in args.only]
+        for b in builds:
+            b.index = load_index(browsers[0], b.url, b.index_route())
+            b.stories = {s["route"]: s for s in b.index["stories"]
+                         if not prefixes or any(s["route"].startswith(x) for x in prefixes)}
+        routes = sorted(set(head.stories) | set(base.stories))
+        if not routes:
+            print(f"check: no story's route starts with {' or '.join(prefixes)}", file=sys.stderr)
+            return 2
+        tasks = [(m, r) for m in modes for r in routes]
+        jobs = max(1, min(args.jobs, len(tasks)))
+        with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
+            browsers += list(pool.map(new_browser, range(1, jobs)))
+        for b in browsers:
+            b.enable_capture()
+        todo = queue.Queue()
+        for t in tasks:
+            todo.put(t)
+        results, lock = [], threading.Lock()
+        mode_done = {}
+
+        def worker(slot):
+            while True:
+                try:
+                    mode, route = todo.get_nowait()
+                except queue.Empty:
+                    return
+                # The checker's own failure (the browser stalled or went) gets
+                # a fresh browser and one more try.
+                for attempt in range(2):
+                    try:
+                        r = compare_story(browsers[slot], builds, mode, route, args)
+                        break
+                    except (CDPError, TimeoutError, ConnectionError, OSError, json.JSONDecodeError) as e:
+                        r = {"mode": mode, "route": route, "kind": "failing", "time": 0.0, "checker": str(e),
+                             "shots": {"head": {"status": "FAIL", "error": f"checker: {first_line(str(e))}",
+                                                "errors": [f"checker: {e}"], "png": None}}}
+                        browsers[slot].close()
+                        try:
+                            browsers[slot] = new_browser(slot)
+                            browsers[slot].enable_capture()
+                        except (RuntimeError, CDPError, TimeoutError, OSError) as e:
+                            r["checker"] += f"; no fresh browser: {e}"
+                            break
+                with lock:
+                    results.append(r)
+                    mode_done[mode] = time.monotonic() - started
+                    print(f"[{len(results)}/{len(tasks)}] {r['kind']:9} {r['time']:4.1f}s {mode:9} {route}",
+                          file=sys.stderr)
+
+        threads = [threading.Thread(target=worker, args=(i,), daemon=True) for i in range(jobs)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        elapsed = time.monotonic() - started
+        results.sort(key=lambda r: (modes.index(r["mode"]), r["route"]))
+        report_dir = Path(args.report) if args.report else (
+            REPORTS / f"{time.strftime('%Y%m%dT%H%M%S')}-{head.commit[:8]}-vs-{sha[:8]}")
+        report = write_report(report_dir.resolve(), results, builds, modes, args, elapsed)
+        print_compare(results, modes, report, elapsed, mode_done)
+        if any(r.get("checker") for r in results):
+            return 2
+        if args.fail_on_diff and any(r["kind"] not in ("unchanged", "skipped") for r in results):
+            return 1
+        return 0
+    finally:
+        for b in browsers:
+            b.close()
+        for proc, log, _ in servers:
+            proc.terminate()
+            try:
+                proc.wait(15)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            log.close()
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     where = p.add_mutually_exclusive_group(required=True)
@@ -555,7 +1706,23 @@ def main(argv=None):
     p.add_argument("--timeout", type=float, default=20, metavar="S", help="per story (default 20)")
     p.add_argument("--chromium", help="the browser (default the snap's, else chromium on PATH)")
     p.add_argument("-v", "--verbose", action="store_true", help="every error of a failing story")
+    cmp = p.add_argument_group("compare mode")
+    cmp.add_argument("--compare", metavar="REF", help="diff every story's screenshot against REF's build")
+    cmp.add_argument("--base-port", type=int, metavar="N", help="the base's server (default --port + 1)")
+    cmp.add_argument("--all-modes", action="store_true",
+                     help="dark, light, portrait and landscape in one run (else --theme and --device's)")
+    cmp.add_argument("--tolerance", type=int, default=2, metavar="N",
+                     help="a channel's change that still counts as the same pixel (default 2 of 255)")
+    cmp.add_argument("--report", metavar="DIR", help="the report's directory (default under target/storybook/compare)")
+    cmp.add_argument("--fail-on-diff", action="store_true", help="exit 1 when any story differs")
+    cmp.add_argument("--rebuild-base", action="store_true", help="build REF again even if cached")
     args = p.parse_args(argv)
+    if args.compare and (args.list or args.screenshots or args.strict or args.files):
+        p.error("--compare takes none of --list, --screenshots, --strict, --files")
+    if args.compare and args.all_modes and (args.theme, args.device) != ("dark", "pc"):
+        p.error("--all-modes takes no --theme or --device")
+    if args.compare and (args.theme, args.device) not in MODES.values():
+        p.error(f"--compare's modes are {', '.join(f'{t}/{d}' for t, d in MODES.values())}")
 
     exe = find_chromium(args.chromium)
     if args.build:
@@ -567,6 +1734,11 @@ def main(argv=None):
     profiles_root = (Path.home() / "snap" / "chromium" / "common") if "/snap/" in exe else Path(tempfile.gettempdir())
     profiles_root.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="storybook-check-", dir=profiles_root))
+    if args.compare:
+        try:
+            return compare_main(args, exe, work)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
 
     server = None
     browsers = []

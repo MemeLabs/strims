@@ -7,7 +7,7 @@ into it, and the console's page.
 
   python3 hack/console/server.py [--port 8086] [--host ADDR] [--connections 2]
                                  [--memory 8GB] [--threads 8] [--no-index] [--build]
-                                 [--allow-host NAME]... [--allow-origin ORIGIN]...
+                                 [--dist DIR] [--allow-host NAME]... [--allow-origin ORIGIN]...
 
 It listens on every interface, IPv6's and IPv4's where the machine has
 both (`--host 127.0.0.1` for this machine alone), and says its loopback
@@ -15,9 +15,11 @@ URL and one for each of the machine's other IPv4 addresses. `/` redirects
 to the console's page, the devtools app's Console
 (src/devtools/pages/Console.tsx) as `npm run console:build` builds it into
 target/console/dist: until there is a build the page answers 503,
-`--build` builds it first, and one older than its sources gets a warning.
-The dev server proxies /console to it too (webpack.config.js). The catalog
-is simlab.lake_root() (simdb.py's cache root: `SIM_DB_ROOT`, else the main
+`--build` builds it first, and one older than its sources gets a warning;
+`--dist DIR` serves another build of the page in its place (another
+commit's, as hack/storybook/check.py --compare builds it). The dev
+server proxies /console to it too (webpack.config.js). The catalog is
+simlab.lake_root() (simdb.py's cache root: `SIM_DB_ROOT`, else the main
 checkout's target/sim-db), read through a pool of simlab.engine's guarded
 readers (simlab.catalog.pool); an index runs every 2 minutes
 (`--no-index` for none), and the queries after one that succeeded see
@@ -1097,6 +1099,8 @@ def main(argv=None):
     p.add_argument("--threads", type=int, default=8, help="the readers' threads")
     p.add_argument("--no-index", action="store_true", help="no index every 2 minutes")
     p.add_argument("--build", action="store_true", help=f"{' '.join(BUILD)} first")
+    p.add_argument("--dist", type=Path, default=DIST, metavar="DIR",
+                   help="the page's build to serve (default this checkout's target/console/dist)")
     p.add_argument("--allow-host", action="append", default=[], metavar="NAME",
                    help="a Host name requests may give besides this machine's")
     p.add_argument("--allow-origin", action="append", default=[], metavar="ORIGIN",
@@ -1104,14 +1108,14 @@ def main(argv=None):
     a = p.parse_args(argv)
     if a.build and subprocess.run(BUILD, cwd=ROOT).returncode:
         sys.exit(f"console: {' '.join(BUILD)} failed")
-    if not (DIST / "devtools.html").is_file():
-        print(f"console: no build in {DIST}: run {' '.join(BUILD)} (or --build) for the page", file=sys.stderr)
-    elif old := stale():
+    if not (a.dist / "devtools.html").is_file():
+        print(f"console: no build in {a.dist}: run {' '.join(BUILD)} (or --build) for the page", file=sys.stderr)
+    elif a.dist == DIST and (old := stale()):
         print(f"console: the build in {DIST} is older than {', '.join(str(s.relative_to(ROOT)) for s in old)}: "
               f"run {' '.join(BUILD)} (or --build)", file=sys.stderr)
     pool = catalog.pool("console", a.connections, engine.Guard(memory_limit=a.memory, threads=a.threads))
     lake = pool.lake
-    console = Console(pool, index_every=0 if a.no_index else INDEX_EVERY_S, hosts=a.allow_host,
+    console = Console(pool, dist=a.dist, index_every=0 if a.no_index else INDEX_EVERY_S, hosts=a.allow_host,
                       origins=a.allow_origin)
     server = console.listen(a.port, a.host)
     port = server.server_address[1]
