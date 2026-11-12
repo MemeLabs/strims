@@ -52,13 +52,17 @@ const DebugConfigForm = () => {
   useCall("debug", "getConfig", { onComplete: (res) => setValues(res) });
 
   const onSubmit = handleSubmit(async (data) => {
-    const res = await setConfig({
-      config: {
-        enableMockStreams: data.enableMockStreams,
-        mockStreamNetworkKey: Base64.toUint8Array(data.mockStreamNetworkKey),
-      },
-    });
-    setValues(res);
+    try {
+      const res = await setConfig({
+        config: {
+          enableMockStreams: data.enableMockStreams,
+          mockStreamNetworkKey: Base64.toUint8Array(data.mockStreamNetworkKey),
+        },
+      });
+      setValues(res);
+    } catch {
+      // The form shows setConfigRes.error.
+    }
   });
 
   return (

@@ -23,26 +23,30 @@ const ChatModifierCreateFormPage: React.FC = () => {
   });
 
   const onSubmit = React.useCallback(async (data: VideoChannelFormData) => {
-    await createChannel({
-      directoryListingSnippet: {
-        channelName: data.channelName,
-        channelLogo: {
-          sourceOneof: {
-            image: {
-              data: Base64.toUint8Array(data.channelLogo.data),
-              type: toImageType(data.channelLogo.type),
-              height: data.channelLogo.height,
-              width: data.channelLogo.width,
+    try {
+      await createChannel({
+        directoryListingSnippet: {
+          channelName: data.channelName,
+          channelLogo: {
+            sourceOneof: {
+              image: {
+                data: Base64.toUint8Array(data.channelLogo.data),
+                type: toImageType(data.channelLogo.type),
+                height: data.channelLogo.height,
+                width: data.channelLogo.width,
+              },
             },
           },
+          title: data.title,
+          description: data.description,
+          tags: data.tags.map(({ value }) => value),
+          themeColor: data.themeColor?.value,
         },
-        title: data.title,
-        description: data.description,
-        tags: data.tags.map(({ value }) => value),
-        themeColor: data.themeColor?.value,
-      },
-      networkKey: Base64.toUint8Array(data.networkKey),
-    });
+        networkKey: Base64.toUint8Array(data.networkKey),
+      });
+    } catch {
+      // The form shows error.
+    }
   }, []);
 
   const backLink = value?.channels.length ? `/settings/video/channels` : `/settings/video/ingress`;

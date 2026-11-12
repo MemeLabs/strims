@@ -43,12 +43,16 @@ const AutoseedConfigForm = () => {
   useCall("autoseed", "getConfig", { onComplete: (res) => setValues(res) });
 
   const onSubmit = handleSubmit(async (data) => {
-    const res = await setConfig({
-      config: {
-        enable: data.enable,
-      },
-    });
-    setValues(res);
+    try {
+      const res = await setConfig({
+        config: {
+          enable: data.enable,
+        },
+      });
+      setValues(res);
+    } catch {
+      // The form shows setConfigRes.error.
+    }
   });
 
   return (

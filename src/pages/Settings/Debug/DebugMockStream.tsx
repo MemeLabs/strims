@@ -137,12 +137,16 @@ const DebugMockStream = () => {
   });
 
   const onSubmit = handleSubmit(async (data) => {
-    return startMockStream({
-      bitrateKbps: data.bitrateKbps,
-      segmentIntervalMs: data.segmentIntervalMs,
-      timeoutMs: data.timeoutMs.value,
-      networkKey: Base64.toUint8Array(data.networkKey),
-    });
+    try {
+      await startMockStream({
+        bitrateKbps: data.bitrateKbps,
+        segmentIntervalMs: data.segmentIntervalMs,
+        timeoutMs: data.timeoutMs.value,
+        networkKey: Base64.toUint8Array(data.networkKey),
+      });
+    } catch {
+      // The form shows startMockStreamRes.error.
+    }
   });
 
   const rows = mockStreamsRes.value?.mockStreams.map((mockStream) => {

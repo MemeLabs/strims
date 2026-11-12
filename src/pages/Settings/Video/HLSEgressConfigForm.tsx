@@ -50,13 +50,17 @@ const HLSEgressConfigForm = () => {
   useCall("hlsEgress", "getConfig", { onComplete: (res) => setValues(res) });
 
   const onSubmit = handleSubmit(async (data) => {
-    const res = await setConfig({
-      config: {
-        enabled: data.enabled,
-        publicServerAddr: data.publicServerAddr,
-      },
-    });
-    setValues(res);
+    try {
+      const res = await setConfig({
+        config: {
+          enabled: data.enabled,
+          publicServerAddr: data.publicServerAddr,
+        },
+      });
+      setValues(res);
+    } catch {
+      // The form shows setConfigRes.error.
+    }
   });
 
   return (

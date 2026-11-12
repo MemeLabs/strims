@@ -23,14 +23,18 @@ const ChatModifierCreateFormPage: React.FC = () => {
   });
 
   const onSubmit = React.useCallback(async (data: AutoseedRuleFormData) => {
-    await createRule({
-      rule: {
-        label: data.label,
-        networkKey: Base64.toUint8Array(data.networkKey),
-        swarmId: new Uint8Array(base32Decode(data.swarmId, "RFC4648")),
-        salt: new TextEncoder().encode(data.salt),
-      },
-    });
+    try {
+      await createRule({
+        rule: {
+          label: data.label,
+          networkKey: Base64.toUint8Array(data.networkKey),
+          swarmId: new Uint8Array(base32Decode(data.swarmId, "RFC4648")),
+          salt: new TextEncoder().encode(data.salt),
+        },
+      });
+    } catch {
+      // The form shows error.
+    }
   }, []);
 
   const backLink = value?.rules.length ? "/settings/autoseed/rules" : "/settings/autoseed/config";

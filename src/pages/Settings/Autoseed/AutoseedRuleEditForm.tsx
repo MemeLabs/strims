@@ -28,15 +28,19 @@ const AutoseedRuleEditForm: React.FC = () => {
   });
 
   const onSubmit = React.useCallback(async (data: AutoseedRuleFormData) => {
-    await updateAutoseedRule({
-      id: BigInt(ruleId),
-      rule: {
-        label: data.label,
-        networkKey: Base64.toUint8Array(data.networkKey),
-        swarmId: new Uint8Array(base32Decode(data.swarmId, "RFC4648")),
-        salt: new TextEncoder().encode(data.salt),
-      },
-    });
+    try {
+      await updateAutoseedRule({
+        id: BigInt(ruleId),
+        rule: {
+          label: data.label,
+          networkKey: Base64.toUint8Array(data.networkKey),
+          swarmId: new Uint8Array(base32Decode(data.swarmId, "RFC4648")),
+          salt: new TextEncoder().encode(data.salt),
+        },
+      });
+    } catch {
+      // The form shows updateRes.error.
+    }
   }, []);
 
   if (getRes.loading) {

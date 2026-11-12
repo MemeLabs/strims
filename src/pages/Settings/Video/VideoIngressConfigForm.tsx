@@ -60,15 +60,19 @@ const VideoIngressConfigForm = () => {
   useCall("videoIngress", "getConfig", { onComplete: (res) => setValues(res) });
 
   const onSubmit = handleSubmit(async (data) => {
-    const res = await setConfig({
-      config: {
-        enabled: data.enabled,
-        serverAddr: data.serverAddr,
-        publicServerAddr: data.publicServerAddr,
-        serviceNetworkKeys: data.serviceNetworkKeys?.map((value) => Base64.toUint8Array(value)),
-      },
-    });
-    setValues(res);
+    try {
+      const res = await setConfig({
+        config: {
+          enabled: data.enabled,
+          serverAddr: data.serverAddr,
+          publicServerAddr: data.publicServerAddr,
+          serviceNetworkKeys: data.serviceNetworkKeys?.map((value) => Base64.toUint8Array(value)),
+        },
+      });
+      setValues(res);
+    } catch {
+      // The form shows setConfigRes.error.
+    }
   });
 
   return (

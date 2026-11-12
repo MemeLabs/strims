@@ -29,27 +29,31 @@ const VideoChannelEditForm: React.FC = () => {
   });
 
   const onSubmit = React.useCallback(async (data: VideoChannelFormData) => {
-    await updateVideoChannel({
-      id: BigInt(channelId),
-      directoryListingSnippet: {
-        channelName: data.channelName,
-        channelLogo: {
-          sourceOneof: {
-            image: {
-              data: Base64.toUint8Array(data.channelLogo.data),
-              type: toImageType(data.channelLogo.type),
-              height: data.channelLogo.height,
-              width: data.channelLogo.width,
+    try {
+      await updateVideoChannel({
+        id: BigInt(channelId),
+        directoryListingSnippet: {
+          channelName: data.channelName,
+          channelLogo: {
+            sourceOneof: {
+              image: {
+                data: Base64.toUint8Array(data.channelLogo.data),
+                type: toImageType(data.channelLogo.type),
+                height: data.channelLogo.height,
+                width: data.channelLogo.width,
+              },
             },
           },
+          title: data.title,
+          description: data.description,
+          tags: data.tags.map(({ value }) => value),
+          themeColor: data.themeColor?.value,
         },
-        title: data.title,
-        description: data.description,
-        tags: data.tags.map(({ value }) => value),
-        themeColor: data.themeColor?.value,
-      },
-      networkKey: Base64.toUint8Array(data.networkKey),
-    });
+        networkKey: Base64.toUint8Array(data.networkKey),
+      });
+    } catch {
+      // The form shows updateRes.error.
+    }
   }, []);
 
   if (getRes.loading) {
