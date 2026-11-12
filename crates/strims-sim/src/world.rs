@@ -21,7 +21,7 @@ use strims_base::rng::{DetRng, det_rng};
 use strims_base::time::Time;
 use strims_crypto::key_from_seed;
 use strims_node::config::{MetricsSink, ParentSink};
-use strims_node::event::ParentInfo;
+use strims_node::event::{ParentInfo, ParentLogEntry};
 use strims_node::{
     ExchangeOutcome, HostId, NetworkId, Node, NodeConfig, NodeMetrics, PpsppCapture, SwarmKey,
     WebRtcConfig,
@@ -140,6 +140,8 @@ pub(crate) struct HostState {
     pub seed_decisions: Vec<SeedDecisionHostRecord>,
     pub seed_sends: Vec<SeedSendHostRecord>,
     pub seed_log_lost: u64,
+    /// See [`HostReport::parents_lost`].
+    pub parents_lost: u64,
     /// When it left for good ([`crate::Fault::Depart`]), in ms.
     pub departed: Option<u64>,
     /// Crashed, and not restarted yet.
@@ -175,6 +177,7 @@ impl HostState {
         r.seed_decisions = self.seed_decisions.clone();
         r.seed_sends = self.seed_sends.clone();
         r.seed_log_lost = self.seed_log_lost;
+        r.parents_lost = self.parents_lost;
         r
     }
 
@@ -281,8 +284,8 @@ pub(crate) struct World {
     /// ([`NodeConfig::parent_log`]): they send from inside the nodes'
     /// passes, and the records take what came at each stats sample, so it
     /// holds a sample's at most.
-    parent_tx: mpsc::Sender<(HostIx, u32, ParentInfo)>,
-    parent_rx: mpsc::Receiver<(HostIx, u32, ParentInfo)>,
+    parent_tx: mpsc::Sender<(HostIx, u32, ParentLogEntry)>,
+    parent_rx: mpsc::Receiver<(HostIx, u32, ParentLogEntry)>,
     /// With the tables, the nodes' last snapshots' channel
     /// ([`NodeConfig::last_metrics`]): a node task sends its own as it
     /// goes, which [`World::observe_stopped`] takes.
@@ -1424,9 +1427,22 @@ impl World {
         }
     }
 
-    /// Moves what the nodes' parent sinks sent into the records.
-    fn take_parents(&self) {
-        self.record(|st| st.parents.extend(self.parent_rx.try_iter()));
+    /// Moves what the nodes' parent sinks sent into the records: the
+    /// changes, and each host's count of those its logs' caps left out
+    /// ([`HostState::parents_lost`]).
+    pub(crate) fn take_parents(&self) {
+        self.record(|st| {
+            for (h, inc, e) in self.parent_rx.try_iter() {
+                match e {
+                    ParentLogEntry::Change(p) => st.parents.push((h, inc, p)),
+                    ParentLogEntry::Lost(n) => {
+                        if let Some(hs) = st.hosts.get_mut(h) {
+                            hs.parents_lost += n;
+                        }
+                    }
+                }
+            }
+        });
     }
 
     /// Every node's parent changes of the first scenario swarm

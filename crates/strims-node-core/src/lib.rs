@@ -130,8 +130,8 @@ pub use driver::{
 pub use error::{NodeError, ReadError};
 pub use event::{
     ChannelInfo, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo, LinkInfo, LogInfo, NetworkInfo,
-    NodeBin, NodeEvent, NodeMetrics, ParentInfo, PeerInfo, RequestInfo, RunnerMetrics,
-    RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
+    NodeBin, NodeEvent, NodeMetrics, ParentInfo, ParentLogEntry, PeerInfo, RequestInfo,
+    RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
 };
 pub use handle::{
     HashTableGet, Node, NodeEvents, NodeInfo, PeerIndexSearch, SpawnNode, SwarmReader, SwarmWriter,

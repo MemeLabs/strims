@@ -319,6 +319,17 @@ pub struct ParentInfo {
     pub why: ParentWhy,
 }
 
+/// What a node's parent log hands its sink
+/// ([`crate::NodeConfig::parent_log`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParentLogEntry {
+    /// A change of a hybrid stream's open parent.
+    Change(ParentInfo),
+    /// Changes the runner's log caps (ppspp's `PARENT_LOG_CAP`) left out
+    /// since the last entry: what the sink lacks of the log.
+    Lost(u64),
+}
+
 /// The ppspp runner's state.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RunnerMetrics {

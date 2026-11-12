@@ -340,6 +340,8 @@ fn report(
     memory: Option<MemoryReport>,
     wan: Option<WanReport>,
 ) -> Report {
+    // The nodes' last parent log entries, their lost counts the hosts'.
+    w.take_parents();
     let mut st = w.st.borrow_mut();
     let mut vpn = st.vpn.clone();
     if w.spec.probes.is_some() {

@@ -61,8 +61,8 @@ use crate::driver::{IdleOk, Interfaces, LinkProbe, TaskGuard};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
     ChannelInfo, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo, LinkInfo, LogInfo, NetworkInfo,
-    NodeBin, NodeEvent, NodeMetrics, ParentInfo, PeerInfo, RequestInfo, RunnerMetrics,
-    RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
+    NodeBin, NodeEvent, NodeMetrics, ParentInfo, ParentLogEntry, PeerInfo, RequestInfo,
+    RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
 };
 
 /// Bin edges [`NodeConfig::stats_bins`] keeps between snapshots; past it the
@@ -1623,27 +1623,27 @@ impl State {
 
     /// Hands the runner's parent changes since the last call to the sink
     /// (`NodeConfig::parent_log`), each at `now` and its parent named by
-    /// host.
+    /// host, and how many its caps left out.
     fn drain_parents(&mut self, now: Time) {
         let Some(sink) = &self.parent_sink else {
             return;
         };
         let (changes, lost) = self.runner.take_parent_changes();
         if lost > 0 {
-            tracing::warn!(lost, "parent changes past the log's cap");
+            (sink.0)(ParentLogEntry::Lost(lost));
         }
         for c in changes {
             let parent = c.parent.and_then(|pp| {
                 let link = self.ppspp_peers.get(pp)?;
                 Some(self.peers.get(*link)?.host_id)
             });
-            (sink.0)(ParentInfo {
+            (sink.0)(ParentLogEntry::Change(ParentInfo {
                 at: now,
                 swarm: c.swarm,
                 stream: c.stream,
                 parent,
                 why: c.why,
-            });
+            }));
         }
     }
 

@@ -189,6 +189,10 @@ pub struct HostReport {
     pub seed_decisions: Vec<SeedDecisionHostRecord>,
     pub seed_sends: Vec<SeedSendHostRecord>,
     pub seed_log_lost: u64,
+    /// With [`Scenario::wire_bins`], the changes of its parent log
+    /// (`NodeConfig::parent_log`, [`Report::parent_changes`]) the runner's
+    /// caps left out, every incarnation.
+    pub parents_lost: u64,
 }
 
 /// A decision of a seed's ([`HostReport::seed_decisions`]): when (true

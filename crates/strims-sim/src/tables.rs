@@ -32,11 +32,12 @@
 //! the stream's `rate`, `chunk`, `frame` and `secs`, the seed's `seed_up`
 //! steps and the viewers' `viewer_up` as the series has them, the number
 //! of `seconds`, the bins' `bin_ms`, the hostile viewers' numbers
-//! (`hostile`), and the forecast samples the nodes' caps left out
-//! (`forecasts_lost`); with `STRIMS_SIM_SPEC=1`, the held log's, the HAVE
-//! log's and the request log's (`held_lost`, `haves_lost`, `asks_lost`:
-//! requests, each with its rivals). With it too, the seed log's decisions
-//! and sends its caps left out are `seed_log_lost`.
+//! (`hostile`), and the forecast samples and parent changes the nodes'
+//! caps left out (`forecasts_lost`, `parents_lost`: every host's, summed);
+//! with `STRIMS_SIM_SPEC=1`, the held log's, the HAVE log's and the request
+//! log's (`held_lost`, `haves_lost`, `asks_lost`: requests, each with its
+//! rivals). With it too, the seed log's decisions and sends its caps left
+//! out are `seed_log_lost`.
 //!
 //! The runners' counters reach the bins from the nodes themselves
 //! (`NodeConfig::stats_bins`), read at each edge before the node's first
@@ -706,9 +707,10 @@ impl Report {
             );
         }
         let lost: u64 = self.hosts.iter().map(|h| h.forecasts_lost).sum();
+        let parents_lost: u64 = self.hosts.iter().map(|h| h.parents_lost).sum();
         let _ = write!(
             meta,
-            ",\"viewers\":{},\"bin_ms\":{},\"forecasts_lost\":{lost}",
+            ",\"viewers\":{},\"bin_ms\":{},\"forecasts_lost\":{lost},\"parents_lost\":{parents_lost}",
             viewers.len(),
             width.as_millis()
         );

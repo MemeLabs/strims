@@ -148,9 +148,10 @@ pub struct NodeConfig {
     pub request_log: bool,
     /// Hands every change of a hybrid stream's open parent (the ppspp
     /// runner's parent log, `Runner::set_parent_log`) to the sink as it
-    /// happens: at the end of the node's pass that made it, before the pass
-    /// forgets the peer it names; `None` (the default, and every real
-    /// node's) keeps none. It changes no decision.
+    /// happens, and how many the log's caps left out: at the end of the
+    /// node's pass that made it, before the pass forgets the peer it names;
+    /// `None` (the default, and every real node's) keeps none. It changes
+    /// no decision.
     pub parent_log: Option<ParentSink>,
     /// Hands a last `Node::metrics` snapshot, taken at the node's last pass,
     /// to the sink when the node task goes: a node that stops, or one
@@ -163,7 +164,7 @@ pub struct NodeConfig {
 /// Where a node's parent changes go ([`NodeConfig::parent_log`]), for a
 /// simulation's tables.
 #[derive(Clone)]
-pub struct ParentSink(pub Arc<dyn Fn(crate::event::ParentInfo) + Send + Sync>);
+pub struct ParentSink(pub Arc<dyn Fn(crate::event::ParentLogEntry) + Send + Sync>);
 
 impl fmt::Debug for ParentSink {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
