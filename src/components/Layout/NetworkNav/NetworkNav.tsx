@@ -6,7 +6,7 @@ import "./NetworkNav.scss";
 import { DragDropContext, Draggable, DropResult, Droppable } from "@hello-pangea/dnd";
 import clsx from "clsx";
 import { Base64 } from "js-base64";
-import React, { ComponentProps, useContext, useMemo } from "react";
+import React, { ComponentProps, ReactElement, useContext, useMemo } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { BiNetworkChart } from "react-icons/bi";
 import { BsArrowBarLeft, BsArrowBarRight } from "react-icons/bs";
@@ -21,7 +21,7 @@ import NetworkAddButton from "./NetworkAddButton";
 import NetworkGem from "./NetworkGem";
 import Tooltip from "./Tooltip";
 
-const ScrollbarView: React.FC<ComponentProps<"div">> = (props) => (
+const ScrollbarView = (props: ComponentProps<"div">): ReactElement => (
   <div className="network_nav__list_content" {...props} />
 );
 
