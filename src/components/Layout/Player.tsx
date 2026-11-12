@@ -5,7 +5,6 @@ import "./Player.scss";
 
 import clsx from "clsx";
 import React, { ReactNode, useCallback, useContext, useEffect, useRef } from "react";
-import { Scrollbars } from "react-custom-scrollbars-2";
 import { BsBoxArrowUpRight } from "react-icons/bs";
 import { FiX } from "react-icons/fi";
 import { Link } from "react-router-dom";
@@ -14,6 +13,7 @@ import { useResizeObserver } from "use-events";
 import { useLayout } from "../../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../../contexts/Player";
 import EmbedPlayer from "../EmbedPlayer";
+import Scrollbars, { ScrollbarsHandle } from "../Scrollbars";
 import VideoPlayer from "../VideoPlayer";
 
 interface PlayerProps {
@@ -48,7 +48,7 @@ const Player: React.FC<PlayerProps> = ({ children }) => {
   const embedRef = useRef<HTMLDivElement>(null);
   const [, height] = useResizeObserver(embedRef);
 
-  const scrollbarRef = useRef<Scrollbars>(null);
+  const scrollbarRef = useRef<ScrollbarsHandle>(null);
   useEffect(() => {
     scrollbarRef.current.scrollToTop();
   }, [theaterMode]);

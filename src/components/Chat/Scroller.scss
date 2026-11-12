@@ -3,16 +3,22 @@
 
 .chat {
   &__scroller {
-    &__scrollbar_handle {
-      border-radius: 3px;
-      opacity: 0;
-      transition: opacity 0.2s ease-in-out 1s;
-      background: var(--color-background-chat-scroll-handle);
+    // The thumb shows while the reader scrolls back through the messages or
+    // the pointer is over them.
+    &__scrollbars .os-scrollbar.os-theme-strims {
+      --os-handle-bg: var(--color-background-chat-scroll-handle);
+      --os-handle-bg-hover: var(--color-background-chat-scroll-handle);
+      --os-handle-bg-active: var(--color-background-chat-scroll-handle);
 
-      &--scrolling {
-        transition-delay: 0.1s;
-        opacity: 1;
+      .os-scrollbar-handle {
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out 1s;
       }
+    }
+
+    &__scrollbars--scrolling .os-scrollbar.os-theme-strims .os-scrollbar-handle {
+      transition-delay: 0.1s;
+      opacity: 1;
     }
 
     &__resume_autoscroll {

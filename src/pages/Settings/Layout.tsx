@@ -5,10 +5,10 @@ import "./Layout.scss";
 
 import clsx from "clsx";
 import React, { ReactElement, Suspense, useCallback, useEffect } from "react";
-import Scrollbars from "react-custom-scrollbars-2";
 import { NavLink, Outlet } from "react-router-dom";
 
 import LoadingPlaceholder from "../../components/LoadingPlaceholder";
+import Scrollbars from "../../components/Scrollbars";
 import SwipablePanel from "../../components/SwipablePanel";
 import { useCall } from "../../contexts/FrontendApi";
 

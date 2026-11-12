@@ -1,0 +1,23 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// A 6 px thumb, 2 px in from the view's edge and its ends, over the content.
+.os-scrollbar.os-theme-strims {
+  box-sizing: border-box;
+  --os-size: 10px;
+  --os-padding-perpendicular: 2px;
+  --os-padding-axis: 2px;
+  --os-track-border-radius: 3px;
+  --os-handle-border-radius: 3px;
+  --os-handle-bg: rgba(0, 0, 0, 0.2);
+  --os-handle-bg-hover: rgba(0, 0, 0, 0.2);
+  --os-handle-bg-active: rgba(0, 0, 0, 0.2);
+  --os-handle-min-size: 30px;
+  transition:
+    opacity 200ms,
+    visibility 200ms;
+
+  .os-scrollbar-handle {
+    cursor: pointer;
+  }
+}

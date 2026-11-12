@@ -6,12 +6,12 @@ import "./chat.stories.scss";
 import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
 import React, { useEffect, useState } from "react";
-import Scrollbars from "react-custom-scrollbars-2";
 
 import { AssetBundle, EmoteScale, MessageState } from "../../../../apis/strims/chat/v1/chat";
 import Emote, { EmoteProps } from "../../../../components/Chat/Emote";
 import ChatMessage from "../../../../components/Chat/Message";
 import ChatScroller, { MessageProps } from "../../../../components/Chat/Scroller";
+import Scrollbars from "../../../../components/Scrollbars";
 import { useChat, useRoom } from "../../../../contexts/Chat";
 import ChatEmoteForm, { ChatEmoteFormData } from "../../../../pages/Settings/Chat/ChatEmoteForm";
 import { toEmoteProps } from "../../../../pages/Settings/Chat/utils";

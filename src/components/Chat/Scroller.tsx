@@ -13,7 +13,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import Scrollbars from "react-custom-scrollbars-2";
 import { Trans } from "react-i18next";
 import { FiArrowDownCircle } from "react-icons/fi";
 import { usePrevious } from "react-use";
@@ -23,6 +22,7 @@ import useRefs from "../../hooks/useRefs";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import MessageSizeCache from "../../lib/MessageSizeCache";
+import Scrollbars, { ScrollbarsHandle } from "../Scrollbars";
 
 export interface MessageProps {
   index: number;
@@ -164,7 +164,7 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
 ScrollerView.displayName = "Scroller.ScrollerView";
 
 const Scroller: React.FC<ScrollerProps> = (props) => {
-  const ref = useRef<Scrollbars>(null);
+  const ref = useRef<ScrollbarsHandle>(null);
   const size = useSize(useCallback(() => ref.current?.container, []));
   const [, { resetSelectedPeers, toggleMessageGC }] = useRoom();
   const [autoScroll, setAutoScroll] = useState(true);
@@ -184,16 +184,6 @@ const Scroller: React.FC<ScrollerProps> = (props) => {
     }
   });
 
-  const renderScrollThumb = (props) => (
-    <div
-      {...props}
-      className={clsx({
-        "chat__scroller__scrollbar_handle": true,
-        "chat__scroller__scrollbar_handle--scrolling": (scrolling && !autoScroll) || hovering,
-      })}
-    />
-  );
-
   const renderView = (renderProps) => (
     <ScrollerView
       {...props}
@@ -209,9 +199,11 @@ const Scroller: React.FC<ScrollerProps> = (props) => {
     <>
       <Scrollbars
         ref={ref}
-        style={{ overflowX: "hidden" }}
+        className={clsx({
+          "chat__scroller__scrollbars": true,
+          "chat__scroller__scrollbars--scrolling": (scrolling && !autoScroll) || hovering,
+        })}
         renderView={renderView}
-        renderThumbVertical={renderScrollThumb}
         onScrollStart={handleScrollStart}
         onScrollStop={handleScrollStop}
         onMouseEnter={handleScrollMouseEnter}

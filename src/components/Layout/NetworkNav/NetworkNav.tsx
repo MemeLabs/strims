@@ -7,7 +7,6 @@ import { DragDropContext, Draggable, DropResult, Droppable } from "@hello-pangea
 import clsx from "clsx";
 import { Base64 } from "js-base64";
 import React, { ComponentProps, useContext, useMemo } from "react";
-import Scrollbars from "react-custom-scrollbars-2";
 import { Trans, useTranslation } from "react-i18next";
 import { BiNetworkChart } from "react-icons/bi";
 import { BsArrowBarLeft, BsArrowBarRight } from "react-icons/bs";
@@ -17,16 +16,13 @@ import { Link } from "react-router-dom";
 import { useLayout } from "../../../contexts/Layout";
 import { NetworkContext } from "../../../contexts/Network";
 import { certificateRoot } from "../../../lib/certificate";
+import Scrollbars from "../../Scrollbars";
 import NetworkAddButton from "./NetworkAddButton";
 import NetworkGem from "./NetworkGem";
 import Tooltip from "./Tooltip";
 
-const ScrollbarView: React.FC<ComponentProps<"div">> = ({ style, ...props }) => (
-  <div
-    className="network_nav__list_content"
-    {...props}
-    style={{ ...style, overflowX: "hidden", marginBottom: 0 }}
-  />
+const ScrollbarView: React.FC<ComponentProps<"div">> = (props) => (
+  <div className="network_nav__list_content" {...props} />
 );
 
 const NetworkNav: React.FC = () => {
@@ -90,7 +86,7 @@ const NetworkNav: React.FC = () => {
         </div>
       </Tooltip>
       <div className="network_nav__list">
-        <Scrollbars autoHide renderView={ScrollbarView} style={{ overflowX: "hidden" }}>
+        <Scrollbars autoHide scrollX={false} renderView={ScrollbarView}>
           <DragDropContext onDragEnd={onDragEnd}>
             <Droppable droppableId="networks">
               {({ innerRef, droppableProps, placeholder }) => (

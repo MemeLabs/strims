@@ -6,13 +6,13 @@ import "./SettingsDrawer.scss";
 import { Base64 } from "js-base64";
 import { pick } from "lodash";
 import React, { useEffect, useRef } from "react";
-import Scrollbars from "react-custom-scrollbars-2";
 import { useForm } from "react-hook-form";
 import { Trans, useTranslation } from "react-i18next";
 
 import { UIConfig } from "../../apis/strims/chat/v1/chat";
 import { SelectInput, TextAreaInput, TextInput, ToggleInput } from "../../components/Form";
 import { useChat } from "../../contexts/Chat";
+import Scrollbars from "../Scrollbars";
 
 interface SettingsFormData {
   showTime: boolean;

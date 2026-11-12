@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { ReactNode, Suspense, useEffect } from "react";
-import { Scrollbars } from "react-custom-scrollbars-2";
 import { Outlet } from "react-router";
 import { useToggle } from "react-use";
 
 import NetworkNav from "../../components/Layout/NetworkNav";
 import { useLayout } from "../../contexts/Layout";
 import LoadingPlaceholder from "../LoadingPlaceholder";
+import Scrollbars from "../Scrollbars";
 import SwipablePanel, { DragState } from "../SwipablePanel";
 import VideoMeta from "../VideoMeta";
 import Chat from "./Chat";

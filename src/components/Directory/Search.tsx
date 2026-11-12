@@ -7,7 +7,6 @@ import clsx from "clsx";
 import escapeStringRegexp from "escape-string-regexp";
 import { Base64 } from "js-base64";
 import React, { RefObject, useEffect, useMemo, useRef, useState } from "react";
-import Scrollbars from "react-custom-scrollbars-2";
 import { Trans, useTranslation } from "react-i18next";
 import { FiSearch } from "react-icons/fi";
 import { useToggle } from "react-use";
@@ -27,6 +26,7 @@ import useClickAway from "../../hooks/useClickAway";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { createEmbedFromURL } from "../../lib/directory";
 import SnippetImage from "../Directory/SnippetImage";
+import Scrollbars from "../Scrollbars";
 
 interface EmbedMenuItemProps {
   embed: Listing.IEmbed;

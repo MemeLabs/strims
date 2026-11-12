@@ -7,7 +7,6 @@ import clsx from "clsx";
 import { CompactEmoji } from "emojibase";
 import { escapeRegExp } from "lodash";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Scrollbars } from "react-custom-scrollbars-2";
 import { BiSearch } from "react-icons/bi";
 import {
   FaBasketballBall,
@@ -32,6 +31,7 @@ import { useStableCallback } from "../../hooks/useStableCallback";
 import balanceRows from "../../lib/balanceRows";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
 import Dropdown from "../Dropdown";
+import Scrollbars, { ScrollbarsHandle } from "../Scrollbars";
 import Emoji from "./Emoji";
 import Emote from "./Emote";
 import { computeEmoteWidth } from "./StyleSheet";
@@ -419,13 +419,9 @@ interface ScrollerControl {
   scrollToIndex(index: number): void;
 }
 
-interface ScrollbarsInternal {
-  view: HTMLElement;
-}
-
 const Scroller = React.memo<ScrollerProps>(
   ({ className, categories, onScroll, control, ...panelProps }) => {
-    const scrollbars = useRef<Scrollbars & ScrollbarsInternal>();
+    const scrollbars = useRef<ScrollbarsHandle>();
     const viewportSize = useSize(useCallback(() => scrollbars.current?.container, []));
 
     const sizes: React.MutableRefObject<DOMRectReadOnly>[] = [];
