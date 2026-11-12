@@ -21,7 +21,8 @@ const Stopwatch: React.FC<StopwatchProps> = ({ startTime }) => {
     };
   }, []);
 
-  let d = now - startTime;
+  // A start time ahead of this clock (the streamer's runs fast) reads 0:00:00.
+  let d = Math.max(0, now - startTime);
   const h = Math.floor(d / 3600);
   d %= 3600;
   const m = Math.floor(d / 60);
