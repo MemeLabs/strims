@@ -33,8 +33,9 @@ console.error calls and render errors, marks each one its allow lists
 (the host's and the story's allowErrors) cover, and says them in
 <script id="storybook-story">; a story fails on data-story-state="error"
 (a crash or an error no allow list covers), on nothing visible in its
-root or in what it portals into the document's body, or on not loading
-within `--timeout` s (default 20).
+root or in what it portals into the document's body by `--timeout` s
+(an empty root is polled until then), or on not loading within
+`--timeout` s (default 20).
 
 `--only PREFIX` keeps the stories whose route (with or without its
 /storybook/ prefix) starts with PREFIX. `--screenshots DIR` writes one
@@ -401,7 +402,21 @@ def check_story(browser, base, story, args):
             break
         page.pump(0.05)
 
+    # A story whose content comes late (a mock's stream, a step of its own) can
+    # still be empty once the network is quiet on a loaded machine: an empty
+    # root fails only when it's still empty at --timeout, and late content
+    # gets a moment to settle before it's read.
     probe = json.loads(page.eval(STORY_PROBE))
+    waited = False
+    while probe.get("state") != "error" and not probe.get("visible") and not probe.get("text"):
+        if time.monotonic() - start > args.timeout:
+            break
+        waited = True
+        page.pump(0.1)
+        probe = json.loads(page.eval(STORY_PROBE))
+    if waited:
+        page.pump(QUIET_S * 2)
+        probe = json.loads(page.eval(STORY_PROBE))
     errors = (probe.get("story") or {}).get("errors", [])
     failing = [e for e in errors if not e.get("allowedBy")]
     result["allowed"] = len(errors) - len(failing)
