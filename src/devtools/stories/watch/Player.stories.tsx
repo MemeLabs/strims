@@ -9,8 +9,8 @@ import PlayerPage from "../../../watch/Player";
 import { AnonymousSession } from "../../../watch/session";
 import NetworkService from "../../mocks/network/service";
 import { MockApi, Story, StoryRouter, fixtures } from "../../storybook";
-import { FetchRoute, FetchStub } from "../pages/fetchStub";
 import { StorySession } from "../pages/StorySession";
+import { FetchRoute, FetchStub } from "../pages/fetchStub";
 import { WatchRoot, swarmStream } from "./streams";
 
 // A network the node doesn't hold (the mock holds networks 1..3).

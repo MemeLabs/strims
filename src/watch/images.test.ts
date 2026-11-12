@@ -40,8 +40,8 @@ const shown = (events: FrontendWatchListingsResponse.Event[]) =>
             i?.sourceOneof.case === ListingSnippetImage.SourceOneofCase.URL
               ? i.sourceOneof.url
               : i
-              ? "inline"
-              : null
+                ? "inline"
+                : null
           )
         )
       : []

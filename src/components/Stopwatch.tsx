@@ -11,9 +11,12 @@ const Stopwatch: React.FC<StopwatchProps> = ({ startTime }) => {
   const [now, setNow] = useState(Date.now() / 1000);
 
   useEffect(() => {
-    let id = setTimeout(() => {
-      id = setInterval(() => setNow(Date.now() / 1000), 1000);
-    }, 1000 - (Date.now() % 1000));
+    let id = setTimeout(
+      () => {
+        id = setInterval(() => setNow(Date.now() / 1000), 1000);
+      },
+      1000 - (Date.now() % 1000)
+    );
 
     return () => {
       clearTimeout(id);

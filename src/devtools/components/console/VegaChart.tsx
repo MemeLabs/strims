@@ -185,7 +185,7 @@ const VegaChart: React.FC<VegaChartProps> = ({ spec, rows, sel = null, onSel }) 
         view.addEventListener("pointerdown", (event, item) => {
           const e = event as PointerEvent;
           const it = item as Item | null | undefined;
-          down = { x: e.clientX, y: e.clientY, path: it?.mark ? pathOf(it.mark) ?? "0" : null };
+          down = { x: e.clientX, y: e.clientY, path: it?.mark ? (pathOf(it.mark) ?? "0") : null };
           dragged = false;
         });
         const moved = (e: PointerEvent) => {

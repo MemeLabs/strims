@@ -25,7 +25,10 @@ class FakeElement extends EventTarget {
   src = "";
   webkitCurrentPlaybackTargetIsWireless = false;
 
-  constructor(readonly tag: string, readonly ownerDocument: FakeDocument) {
+  constructor(
+    readonly tag: string,
+    readonly ownerDocument: FakeDocument
+  ) {
     super();
   }
 

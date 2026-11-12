@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import "swiper/css";
-
 import "./RoomCarousel.scss";
 
 import { useDrag } from "@use-gesture/react";

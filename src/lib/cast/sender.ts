@@ -235,10 +235,10 @@ export class CastSender {
     const error = !url
       ? "the node doesn't serve this stream as HLS"
       : !reachable(url)
-      ? `a receiver can't reach the node's HLS address (${
-          new URL(url).host
-        }): set its public address`
-      : null;
+        ? `a receiver can't reach the node's HLS address (${
+            new URL(url).host
+          }): set its public address`
+        : null;
     if (error) {
       this.set({ error });
       if (started) this.context.endCurrentSession(true);

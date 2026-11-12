@@ -6,6 +6,11 @@ import "../styles/console.scss";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 
+import Nav from "../components/Nav";
+import Ask from "../components/console/Ask";
+import Experiments from "../components/console/Experiments";
+import ViewPanel from "../components/console/ViewPanel";
+import Workbench from "../components/console/Workbench";
 import {
   getIndex,
   getSchema,
@@ -14,14 +19,9 @@ import {
   startTabReports,
 } from "../components/console/api";
 import type { IndexState, Json, SavedView, Schema, Snapshot } from "../components/console/api";
-import Ask from "../components/console/Ask";
-import Experiments from "../components/console/Experiments";
 import { carried, useOptions, useSelection } from "../components/console/selection";
 import type { Selection } from "../components/console/selection";
-import ViewPanel from "../components/console/ViewPanel";
 import { ALIGNS } from "../components/console/vocab";
-import Workbench from "../components/console/Workbench";
-import Nav from "../components/Nav";
 
 /** The views in the console's menu, in order; any other saved view follows them. */
 const ORDER = [
@@ -216,10 +216,10 @@ const IndexStatus: React.FC<IndexStatusProps> = ({ state, unreachable, onIndexed
   const text = unreachable
     ? "console server unreachable (npm run console:build once, then python3 hack/console/server.py)"
     : state === null
-    ? ""
-    : state.running
-    ? "indexing…"
-    : `indexed ${String(at ?? "?")}`;
+      ? ""
+      : state.running
+        ? "indexing…"
+        : `indexed ${String(at ?? "?")}`;
   const go = () => {
     setBusy(true);
     startIndex().then(

@@ -86,7 +86,7 @@ const upsertProps = (prev: PropList, ...vs: Prop[]): PropList => [
 ];
 
 const deleteMatchingCSSRules = (sheet: CSSStyleSheet, filter: (rule: CSSRule) => boolean): void => {
-  for (let i = 0; i < sheet.cssRules.length; ) {
+  for (let i = 0; i < sheet.cssRules.length;) {
     if (filter(sheet.cssRules.item(i))) {
       sheet.deleteRule(i);
     } else {

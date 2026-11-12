@@ -4,16 +4,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import ResultTable from "./ResultTable";
+import SqlEditor from "./SqlEditor";
+import VegaChart from "./VegaChart";
+import { SelectionChip, useGraphSel } from "./ViewPanel";
 import { rowObjects, runSql, saveView } from "./api";
 import type { Param, QueryResult, Schema, ViewParam } from "./api";
-import ResultTable from "./ResultTable";
 import { WORKBENCH_KEYS, paramNames } from "./sel";
 import type { Chart } from "./sel";
 import { CHART, SEL, isKey, ordered } from "./selection";
 import type { Selection } from "./selection";
-import SqlEditor from "./SqlEditor";
-import VegaChart from "./VegaChart";
-import { SelectionChip, useGraphSel } from "./ViewPanel";
 
 const START = `-- An experiment's collapses by cell and arm. Ctrl+Enter runs.
 SELECT e.cell, e.arm_label, count(*) AS runs, sum(v.collapsed::INT) AS collapsed
@@ -27,8 +27,8 @@ const kindOf = (name: string): string =>
   ["exp", "cell", "arm", "arm2", "seed"].includes(name)
     ? name
     : ["delay", "min_stall_ms", "t"].includes(name)
-    ? "number"
-    : "text";
+      ? "number"
+      : "text";
 
 const MARKS = ["line", "point", "bar", "area", "rect", "tick"];
 
@@ -219,7 +219,7 @@ const Workbench: React.FC<WorkbenchProps> = ({ schema, sel, onSaved }) => {
   // The address's value of a `$name`: the selection's for its keys, else its own key's; a name the
   // workbench's own keys take has none but what's typed.
   const fromAddress = (n: string): string =>
-    WORKBENCH_KEYS.includes(n) ? values[n] ?? "" : isKey(n) ? sel[n] : query.get(n) ?? "";
+    WORKBENCH_KEYS.includes(n) ? (values[n] ?? "") : isKey(n) ? sel[n] : (query.get(n) ?? "");
   const value = (n: string): string => values[n] ?? fromAddress(n);
 
   useEffect(() => {

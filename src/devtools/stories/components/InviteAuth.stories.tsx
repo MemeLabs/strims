@@ -149,8 +149,10 @@ interface InviteStoryProps {
   submitAlias?: string;
 }
 
-const Ready: React.FC<{ answer: InvitationAnswer; children: ReactNode }> = ({ answer, children }) =>
-  useInviteServer(answer) ? <>{children}</> : null;
+const Ready: React.FC<{ answer: InvitationAnswer; children: ReactNode }> = ({
+  answer,
+  children,
+}) => (useInviteServer(answer) ? <>{children}</> : null);
 
 // The invite page's modal over the page; accepting or rejecting the
 // invitation navigates inside the story.

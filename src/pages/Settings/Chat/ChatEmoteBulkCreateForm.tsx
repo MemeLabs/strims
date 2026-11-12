@@ -67,8 +67,8 @@ const ChatEmoteCreateFormPage: React.FC = () => {
                 image.height > 100
                   ? EmoteScale.EMOTE_SCALE_4X
                   : image.height > 50
-                  ? EmoteScale.EMOTE_SCALE_2X
-                  : EmoteScale.EMOTE_SCALE_1X,
+                    ? EmoteScale.EMOTE_SCALE_2X
+                    : EmoteScale.EMOTE_SCALE_1X,
             },
           ],
           labels: data.labels?.map(({ value }) => value),

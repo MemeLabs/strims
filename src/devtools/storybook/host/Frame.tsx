@@ -11,13 +11,13 @@ import { MemoryRouter } from "react-router-dom";
 import { Provider as BackgroundRouteProvider } from "../../../contexts/BackgroundRoute";
 import { Provider as ThemeProvider, useTheme } from "../../../contexts/Theme";
 import { StoryHostContext, StoryHostValue } from "../context";
-import { IndexData, buildIndex, matchRoute } from "./catalog";
 import { StoryJson, jsonScript } from "./ErrorList";
+import { StoryView } from "./StoryView";
+import { IndexData, buildIndex, matchRoute } from "./catalog";
 import { reportMissingKeys } from "./missingKeys";
 import type { FrameDocument } from "./preload";
 import { Theme, postToPage } from "./protocol";
 import { Session, activate } from "./recorder";
-import { StoryView } from "./StoryView";
 
 const ThemeSync: React.FC<{ theme: Theme }> = ({ theme }) => {
   const { colorScheme, setColorScheme } = useTheme();

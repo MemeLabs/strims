@@ -14,8 +14,8 @@ import {
   UnimplementedChatFrontendService,
   UnimplementedChatServerFrontendService,
 } from "../../../apis/strims/chat/v1/chat_rpc";
-import assetBundle, { modifiers } from "../../mocks/chat/assetBundle";
 import MessageEmitter, { peerKey } from "../../mocks/chat/MessageEmitter";
+import assetBundle, { modifiers } from "../../mocks/chat/assetBundle";
 import { profileKey } from "../../storybook/fixtures/profile";
 
 /** The chat UI's defaults, as the Chat provider starts with them. */

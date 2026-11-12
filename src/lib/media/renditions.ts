@@ -392,8 +392,8 @@ export const rankRenditions = (assessed: Assessment[], viewport: Viewport): Rend
       r.width && r.height
         ? [r.width, r.height]
         : largest
-        ? [largest.width, largest.height]
-        : [0, 0];
+          ? [largest.width, largest.height]
+          : [0, 0];
     const short = width && height ? Math.min(width, height) : Infinity;
     const covers =
       known &&

@@ -221,7 +221,10 @@ class FakeAudio implements DecoderLike<AudioDecoderConfig> {
   state = "unconfigured";
   pending: number[] = [];
   private outputs = 0;
-  constructor(private readonly world: World, private readonly output: (d: AudioDataLike) => void) {}
+  constructor(
+    private readonly world: World,
+    private readonly output: (d: AudioDataLike) => void
+  ) {}
   get decodeQueueSize() {
     return this.pending.length;
   }

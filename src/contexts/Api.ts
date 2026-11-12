@@ -17,7 +17,7 @@ type MethodReturnType<T> = T extends AnyFunction ? ReturnType<T> : never;
 export interface Options<
   C extends Client,
   S extends keyof C,
-  M extends FunctionPropertyNames<C[S]>
+  M extends FunctionPropertyNames<C[S]>,
 > {
   skip?: boolean;
   args?: MethodParameters<C[S][M]>;
@@ -28,7 +28,7 @@ export interface Options<
 export interface CallHookState<
   C extends Client,
   S extends keyof C,
-  M extends FunctionPropertyNames<C[S]>
+  M extends FunctionPropertyNames<C[S]>,
 > {
   value?: MethodResultType<C[S][M]>;
   error?: Error;
@@ -39,7 +39,7 @@ export interface CallHookState<
 export type CallHookDispatcher<
   C extends Client,
   S extends keyof C,
-  M extends FunctionPropertyNames<C[S]>
+  M extends FunctionPropertyNames<C[S]>,
 > = (...arg: MethodParameters<C[S][M]>) => MethodReturnType<C[S][M]>;
 
 export type CallHook<C extends Client> = <S extends keyof C, M extends FunctionPropertyNames<C[S]>>(

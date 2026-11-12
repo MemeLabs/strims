@@ -188,7 +188,8 @@
       & > .chat__message__code,
       & > .chat__message__link {
         transform: scale(1);
-        transition: opacity var(--timing-medium) ease-in-out,
+        transition:
+          opacity var(--timing-medium) ease-in-out,
           transform var(--timing-medium) ease-in-out;
       }
 
@@ -278,7 +279,8 @@
       font-style: normal;
       display: inline-block;
       vertical-align: middle;
-      text-shadow: -1px -1px 0 var(--color-text-shadow-chat-combo),
+      text-shadow:
+        -1px -1px 0 var(--color-text-shadow-chat-combo),
         1px -1px 0 var(--color-text-shadow-chat-combo),
         -1px 1px 0 var(--color-text-shadow-chat-combo),
         1px 1px 0 var(--color-text-shadow-chat-combo);

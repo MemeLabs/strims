@@ -119,8 +119,8 @@ const names = (v: unknown): string[] =>
   typeof v === "string"
     ? [v]
     : Array.isArray(v)
-    ? v.filter((x): x is string => typeof x === "string")
-    : [];
+      ? v.filter((x): x is string => typeof x === "string")
+      : [];
 
 const transforms = (s: Spec): Spec[] =>
   Array.isArray(s.transform) ? s.transform.filter(isSpec) : [];
@@ -151,8 +151,8 @@ const markOf = (s: Spec): string | null =>
   typeof s.mark === "string"
     ? s.mark
     : isSpec(s.mark) && typeof s.mark.type === "string"
-    ? s.mark.type
-    : null;
+      ? s.mark.type
+      : null;
 
 const titleOf = (s: Spec): string | null => {
   let t = s.title;
@@ -527,7 +527,7 @@ const measures = (p: Panel): Set<string> => {
 export const added = (ps: Panel[], old: Sel, add: Sel): Sel => {
   const id = add.panel ?? old.panel;
   const panel =
-    id !== undefined ? ps.find((p) => p.id === id) ?? null : ps.length === 1 ? ps[0] : null;
+    id !== undefined ? (ps.find((p) => p.id === id) ?? null) : ps.length === 1 ? ps[0] : null;
   const time = panel ? panel.time : timeField(ps);
   const keep = time !== null && Array.isArray(old.at[time]);
   const measured = panel ? measures(panel) : new Set<string>();
@@ -624,8 +624,8 @@ const ring = (c: unknown, panel: Panel, sel: Sel, name: string): Spec | null => 
     const detail: unknown[] = Array.isArray(enc.detail)
       ? (enc.detail as unknown[])
       : enc.detail
-      ? [enc.detail]
-      : [];
+        ? [enc.detail]
+        : [];
     if (path && groups.length > 0) enc.detail = [...detail, ...groups];
   } else enc.strokeOpacity = { condition: { test, value: 1 }, value: 0 };
   const given: Spec = isSpec(c.mark) ? { ...c.mark } : { type: m };
@@ -741,8 +741,8 @@ export const highlighted = (spec: Spec, sel: Sel | null): Highlight => {
     sel.panel !== undefined
       ? ps.filter((p) => p.id === sel.panel)
       : ps.length === 1
-      ? ps
-      : ps.filter((p) => fields.every((f) => p.encoded.includes(f)));
+        ? ps
+        : ps.filter((p) => fields.every((f) => p.encoded.includes(f)));
   let n = 0;
   const next = () => `ring_${n++}`;
   let out = spec;

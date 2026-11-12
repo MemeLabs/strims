@@ -60,7 +60,8 @@
     font-size: 0.8rem;
     user-select: none;
     box-sizing: border-box;
-    transition: transform var(--timing-short) ease-in-out,
+    transition:
+      transform var(--timing-short) ease-in-out,
       border-radius var(--timing-medium) ease-in-out;
     transform: translateY(calc(min(var(--drag-offset, 0px), 0px)));
     position: relative;

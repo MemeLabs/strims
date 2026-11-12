@@ -14,7 +14,9 @@
 
   &__item {
     .network_nav__link {
-      transition: transform var(--timing-medium) ease-out, filter var(--timing-medium) ease-out;
+      transition:
+        transform var(--timing-medium) ease-out,
+        filter var(--timing-medium) ease-out;
     }
 
     &--dragging .network_nav__link {

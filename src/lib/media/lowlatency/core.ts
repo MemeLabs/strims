@@ -234,7 +234,10 @@ export class PlayerCore {
   private width = 0;
   private height = 0;
 
-  constructor(private readonly env: CoreEnv, private output: AudioOutput | null) {
+  constructor(
+    private readonly env: CoreEnv,
+    private output: AudioOutput | null
+  ) {
     if (output) this.openAudio(output);
   }
 
@@ -352,8 +355,8 @@ export class PlayerCore {
         this.state === State.Waiting || this.state === State.Preroll
           ? "none"
           : this.audioMode(now)
-          ? "audio"
-          : "free",
+            ? "audio"
+            : "free",
       silent: !!this.audioTrack && !this.output?.running,
       joined: this.joinTime !== null,
       joinTime: this.joinTime,
@@ -446,7 +449,7 @@ export class PlayerCore {
   // The furthest the master track's media arrived.
   private frontier(): number | null {
     const m = this.master();
-    return m === null ? null : this.ends.get(m) ?? null;
+    return m === null ? null : (this.ends.get(m) ?? null);
   }
 
   // The live edge at `now`; an ended stream's is its end.

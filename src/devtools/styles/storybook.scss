@@ -122,7 +122,9 @@ $chrome-border: #ccc;
       margin: auto;
       outline: 8px solid #333;
       border-radius: 2px;
-      box-shadow: 0 0 0 9px #555, 0 6px 24px 8px rgba(0, 0, 0, 0.3);
+      box-shadow:
+        0 0 0 9px #555,
+        0 6px 24px 8px rgba(0, 0, 0, 0.3);
     }
   }
 

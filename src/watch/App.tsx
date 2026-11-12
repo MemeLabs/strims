@@ -5,11 +5,11 @@ import React, { Suspense } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { APIDialer, Provider as SessionProvider } from "../contexts/Session";
-import { BootstrapListingsProvider } from "./listings";
 import PlayerPage from "./Player";
-import { useAnonymousSession } from "./session";
 import Status from "./Status";
 import Tiles from "./Tiles";
+import { BootstrapListingsProvider } from "./listings";
+import { useAnonymousSession } from "./session";
 
 // The node in the page signs in as the page loads, so a stream opened from
 // the tiles starts without waiting on it.

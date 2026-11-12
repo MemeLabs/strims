@@ -186,14 +186,14 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
         "--layout-width": "100vw",
       }
     : viewportShape.useFixedSize
-    ? {
-        "--layout-height": `${height}px`,
-        "--layout-width": `${width}px`,
-      }
-    : {
-        "--layout-height": "100%",
-        "--layout-width": "100%",
-      };
+      ? {
+          "--layout-height": `${height}px`,
+          "--layout-width": `${width}px`,
+        }
+      : {
+          "--layout-height": "100%",
+          "--layout-width": "100%",
+        };
 
   return (
     <div

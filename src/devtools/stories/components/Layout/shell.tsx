@@ -105,7 +105,10 @@ export const ShellProviders: React.FC<ShellProvidersProps> = ({
 // meta asks) answers that listing alone, `snippet` over its own; other
 // watches answer all of the fixtures' listings.
 export class ListingDirectoryService extends DirectoryService {
-  constructor(private snippet: IListingSnippet = {}, private userCount = 1234) {
+  constructor(
+    private snippet: IListingSnippet = {},
+    private userCount = 1234
+  ) {
     super();
   }
 

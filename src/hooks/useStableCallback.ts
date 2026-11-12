@@ -22,7 +22,7 @@ type ReturnTypes<T> = {
 
 export const useStableCallbacks = <
   R extends ReturnTypes<T>,
-  T extends { [key: string]: (...args: any[]) => R }
+  T extends { [key: string]: (...args: any[]) => R },
 >(
   callbacks: T
 ) => {

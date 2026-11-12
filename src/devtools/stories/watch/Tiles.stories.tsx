@@ -6,8 +6,8 @@ import { Route } from "react-router-dom";
 
 import { NetworkListingsItem } from "../../../apis/strims/network/v1/directory/directory";
 import { NetworkListingsMap } from "../../../lib/listings";
-import { BootstrapListings, BootstrapListingsContext } from "../../../watch/listings";
 import Tiles from "../../../watch/Tiles";
+import { BootstrapListings, BootstrapListingsContext } from "../../../watch/listings";
 import { Catalog, Story, StoryRouter } from "../../storybook";
 import { WatchRoot, mediaListings } from "./streams";
 

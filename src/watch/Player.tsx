@@ -14,11 +14,11 @@ import { PlayerContext, Provider as PlayerProvider } from "../contexts/Player";
 import { useSession } from "../contexts/Session";
 import { useListings } from "../hooks/directory";
 import { swarmId } from "../lib/media/renditions";
+import Status from "./Status";
 import { InvitationError, fetchInvitation } from "./api";
 import { useBootstrapListings } from "./listings";
 import { joinNetwork } from "./membership";
 import { AnonymousSession } from "./session";
-import Status from "./Status";
 
 /** How long a refused watch of the node's own listings waits to ask again. */
 const LISTINGS_RETRY_MS = 2000;

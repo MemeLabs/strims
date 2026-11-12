@@ -11,8 +11,8 @@ import { useTitle } from "react-use";
 import { Listing, ListingSnippet } from "../apis/strims/network/v1/directory/directory";
 import { DirectoryListing, DirectoryTile } from "../components/Directory/Grid";
 import { NetworkListingsMap } from "../lib/listings";
-import { useBootstrapListings } from "./listings";
 import Status from "./Status";
+import { useBootstrapListings } from "./listings";
 
 const EMPTY_SNIPPET = new ListingSnippet();
 

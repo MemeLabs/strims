@@ -20,8 +20,8 @@ import LogoButton from "./LogoButton";
 import { useRemotePlayback } from "./RemotePlayback";
 import RenditionMenu from "./RenditionMenu";
 import { SwarmMediaProps, UnitsMedia } from "./SwarmMedia";
-import { useRendition } from "./useRendition";
 import VideoControls from "./VideoControls";
+import { useRendition } from "./useRendition";
 
 interface SwarmPlayerProps extends Pick<SwarmMediaProps, "networkKey" | "swarmUri" | "mimeType"> {
   defaultControlsVisible?: boolean;
@@ -105,8 +105,8 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
     kind === PlayerKind.None
       ? { message: t("player.unplayableFormat"), detail: mimeType }
       : rendition.failure !== null && !remote.casting
-      ? { message: t("player.unplayable"), detail: rendition.failure }
-      : null;
+        ? { message: t("player.unplayable"), detail: rendition.failure }
+        : null;
 
   const handleToggleFullscreen = useCallback(() => {
     if (typeof videoRef.current.webkitSetPresentationMode === "function") {

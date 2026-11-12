@@ -89,7 +89,10 @@ class FakeContext implements CastContext {
 }
 
 class FakeMediaInfo implements MediaInfo {
-  constructor(public contentId: string, public contentType: string) {}
+  constructor(
+    public contentId: string,
+    public contentType: string
+  ) {}
 }
 
 class FakeLoadRequest implements LoadRequest {

@@ -41,9 +41,9 @@ import { FrontendJoinResponse } from "../apis/strims/network/v1/directory/direct
 import { Image } from "../apis/strims/type/image";
 import { useUserList } from "../hooks/chat";
 import { useStableCallback } from "../hooks/useStableCallback";
+import MessageSizeCache from "../lib/MessageSizeCache";
 import { compareBigInts } from "../lib/bigint";
 import curryDispatchActions from "../lib/curryDispatchActions";
-import MessageSizeCache from "../lib/MessageSizeCache";
 import { applyActionInStateMap, deleteFromStateMap, setInStateMap } from "../lib/stateMap";
 import { useClient } from "./FrontendApi";
 

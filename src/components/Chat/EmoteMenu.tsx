@@ -367,7 +367,7 @@ const CategoryPanel = React.memo<CategoryPanelProps>(
       } else {
         return category.emoji.map((emoji) => {
           const variant = uiConfig.emojiSkinTone
-            ? emoji.skins?.find((s) => s.unicode.endsWith(uiConfig.emojiSkinTone)) ?? emoji
+            ? (emoji.skins?.find((s) => s.unicode.endsWith(uiConfig.emojiSkinTone)) ?? emoji)
             : emoji;
 
           return (

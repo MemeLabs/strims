@@ -76,8 +76,8 @@ const CaptionsButton: React.FC<CaptionsButtonProps> = ({ videoState, cycle }) =>
     captions === "subtitles"
       ? t("player.subtitles")
       : captions === "captions"
-      ? t("player.captions")
-      : t("player.captionsOff");
+        ? t("player.captions")
+        : t("player.captionsOff");
   return (
     <Button
       className={clsx("captions", { on: captions !== null })}

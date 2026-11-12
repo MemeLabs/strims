@@ -7,8 +7,7 @@ import clsx from "clsx";
 import React, { ComponentProps, ReactElement } from "react";
 import { FieldValues, useController } from "react-hook-form";
 
-import { CompatibleUseControllerProps } from "./Form";
-import { isRequired } from "./Form";
+import { CompatibleUseControllerProps, isRequired } from "./Form";
 import InputError from "./InputError";
 import InputLabel from "./InputLabel";
 

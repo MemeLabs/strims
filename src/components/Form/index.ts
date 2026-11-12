@@ -11,26 +11,13 @@ export * from "./TextAreaInput";
 export * from "./TextInput";
 export * from "./ToggleInput";
 
-import Button from "./Button";
-import CreatableSelectInput from "./CreatableSelectInput";
-import ImageInput from "./ImageInput";
-import InputError from "./InputError";
-import InputLabel from "./InputLabel";
-import NetworkSelectInput from "./NetworkSelectInput";
-import SelectInput from "./SelectInput";
-import TextAreaInput from "./TextAreaInput";
-import TextInput from "./TextInput";
-import ToggleInput from "./ToggleInput";
-
-export {
-  CreatableSelectInput,
-  ImageInput,
-  SelectInput,
-  TextAreaInput,
-  TextInput,
-  ToggleInput,
-  InputError,
-  InputLabel,
-  Button,
-  NetworkSelectInput,
-};
+export { default as Button } from "./Button";
+export { default as CreatableSelectInput } from "./CreatableSelectInput";
+export { default as ImageInput } from "./ImageInput";
+export { default as InputError } from "./InputError";
+export { default as InputLabel } from "./InputLabel";
+export { default as NetworkSelectInput } from "./NetworkSelectInput";
+export { default as SelectInput } from "./SelectInput";
+export { default as TextAreaInput } from "./TextAreaInput";
+export { default as TextInput } from "./TextInput";
+export { default as ToggleInput } from "./ToggleInput";

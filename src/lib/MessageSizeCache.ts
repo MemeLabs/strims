@@ -11,7 +11,10 @@ class MessageSizeCache {
   private lastSet = 0;
   public onchange?: () => void;
 
-  constructor(private size: number, private estimate: number) {
+  constructor(
+    private size: number,
+    private estimate: number
+  ) {
     this.size = size = this.roundSize(size);
     this.settled = new Array<boolean>(size).fill(false);
     this.margins = new Array<number>(size * 2).fill(0);

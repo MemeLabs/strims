@@ -22,7 +22,7 @@ const sourceText = (source: PlayerSource | null): string =>
     ? JSON.stringify(
         source,
         (_: string, v: unknown): unknown =>
-          v instanceof Map ? Object.fromEntries(v as Map<string, string>) : v ?? null,
+          v instanceof Map ? Object.fromEntries(v as Map<string, string>) : (v ?? null),
         2
       )
     : "none";

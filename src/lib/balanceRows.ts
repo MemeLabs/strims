@@ -96,7 +96,7 @@ class Layout {
     let next = cur.clone();
 
     let [errs, err] = cur.error();
-    for (let rank = 0; rank < cur.size(); ) {
+    for (let rank = 0; rank < cur.size();) {
       const i = Layout.getErrRankedIndex(errs, rank);
       if (errs[i] < 0) {
         if (i + 1 < cur.size() && (i === 0 || errs[i - 1] < errs[i + 1])) {

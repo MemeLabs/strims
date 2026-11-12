@@ -19,12 +19,12 @@ import {
 import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 
 import Nav from "../components/Nav";
-import { ROOT, matchRoute, modulePath } from "../storybook/host/catalog";
 import CatalogPage from "../storybook/host/CatalogPage";
-import { DEVICES, Device, isDevice } from "../storybook/host/devices";
 import ErrorList from "../storybook/host/ErrorList";
-import { StoryIframe, documentUrl, useStoryIndex } from "../storybook/host/frames";
 import StorybookNav from "../storybook/host/Nav";
+import { ROOT, matchRoute, modulePath } from "../storybook/host/catalog";
+import { DEVICES, Device, isDevice } from "../storybook/host/devices";
+import { StoryIframe, documentUrl, useStoryIndex } from "../storybook/host/frames";
 import { frameRoute } from "../storybook/host/protocol";
 import type { SessionSnapshot } from "../storybook/host/recorder";
 

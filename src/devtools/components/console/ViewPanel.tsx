@@ -4,16 +4,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import ResultTable from "./ResultTable";
+import SqlEditor from "./SqlEditor";
+import VegaChart from "./VegaChart";
 import { rowObjects, runSql } from "./api";
 import type { Param, QueryResult, SavedView } from "./api";
 import { expandVocab } from "./domains";
-import ResultTable from "./ResultTable";
 import { WORKBENCH_KEYS, panels, paramNames, readSel, selJson, selText, textOf } from "./sel";
 import type { Panel, Read, Sel } from "./sel";
 import { carried, ordered, useSel, viewParams } from "./selection";
 import type { Selection } from "./selection";
-import SqlEditor from "./SqlEditor";
-import VegaChart from "./VegaChart";
 
 /** A query's state: running, failed, or its result. */
 export interface Run {

@@ -10,8 +10,8 @@ import { Network } from "../../../apis/strims/network/v1/network";
 import Invite from "../../../pages/Invite";
 import NetworkService from "../../mocks/network/service";
 import { MockApi, MockServices, Story, StoryRouter, fixtures } from "../../storybook";
-import { FetchStub, inviteRoute } from "./fetchStub";
 import { StorySession } from "./StorySession";
+import { FetchStub, inviteRoute } from "./fetchStub";
 
 // The network the invitation is to, by its peer jbpratt.
 const invitedNetwork = (): Network => fixtures.network(6, { alias: "jbpratt", owner: false });

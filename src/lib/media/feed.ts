@@ -127,7 +127,10 @@ export class Credit {
   private unaskedBytes = 0;
   private unaskedBatches = 0;
 
-  constructor(readonly maxBytes: number, readonly maxBatches: number) {}
+  constructor(
+    readonly maxBytes: number,
+    readonly maxBatches: number
+  ) {}
 
   // Another batch may be posted.
   get open(): boolean {

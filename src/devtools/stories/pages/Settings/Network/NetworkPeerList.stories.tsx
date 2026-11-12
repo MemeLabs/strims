@@ -47,18 +47,17 @@ class FailingNetworkService extends NetworkService {
 }
 
 // The first row's menu item `label`, failing: the error shows above the table.
-const failedAction = (label: string) => () =>
-  (
-    <SettingsStory
-      path={PATH}
-      services={() => ({ network: new FailingNetworkService({ count: 5 }) })}
-      steps={[
-        click(`${firstRowMenu} .dropdown__anchor`),
-        click(`${firstRowMenu} button`, label),
-        waitFor(".thing_form .input_error"),
-      ]}
-    />
-  );
+const failedAction = (label: string) => () => (
+  <SettingsStory
+    path={PATH}
+    services={() => ({ network: new FailingNetworkService({ count: 5 }) })}
+    steps={[
+      click(`${firstRowMenu} .dropdown__anchor`),
+      click(`${firstRowMenu} button`, label),
+      waitFor(".thing_form .input_error"),
+    ]}
+  />
+);
 
 const stories: Story[] = [
   {

@@ -55,7 +55,7 @@ interface FormProps extends Partial<ChatModifierFormProps> {
 }
 
 const Form: React.FC<FormProps> = ({ load, act, values: valuesProp, ...props }) => {
-  const values = useLoaded(async () => (load ? load() : valuesProp ?? null));
+  const values = useLoaded(async () => (load ? load() : (valuesProp ?? null)));
   if (values === undefined) {
     return null;
   }

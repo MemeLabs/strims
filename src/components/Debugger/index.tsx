@@ -8,8 +8,8 @@ import React, { useState } from "react";
 
 import { ActivityChart, MockStreamChart, RTCChart, SwarmChart } from "./ActivityChart";
 import Portlet, { PortletProps } from "./Portlet";
-import { latest } from "./series";
 import Snapshot from "./Snapshot";
+import { latest } from "./series";
 import useMetricsHistory from "./useMetricsHistory";
 
 type Tab = "activity" | "swarms" | "mock streams" | "rtc" | "snapshot";

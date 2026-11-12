@@ -276,11 +276,14 @@ export const runLowLatencyWorker = (scope: DedicatedWorkerGlobalScope, load: Cor
       if (timer && timerAt <= at) return;
       if (timer) clearTimeout(timer);
       timerAt = at;
-      timer = setTimeout(() => {
-        timer = null;
-        timerAt = Infinity;
-        if (!stopped) timed(() => core?.tick());
-      }, Math.max(0, delay * 1000));
+      timer = setTimeout(
+        () => {
+          timer = null;
+          timerAt = Infinity;
+          if (!stopped) timed(() => core?.tick());
+        },
+        Math.max(0, delay * 1000)
+      );
     },
     fail: (message, final, fallback) => stop(message, final, fallback),
   };

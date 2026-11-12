@@ -115,7 +115,7 @@ export const joinNetwork = async (
   await ensureMember(network, key, invite);
   if (signal.aborted) return;
   onMember();
-  for (let renames = 0; !signal.aborted; ) {
+  for (let renames = 0; !signal.aborted;) {
     const s = standing((await network.list()).networks, key);
     switch (s.state) {
       case "certified":

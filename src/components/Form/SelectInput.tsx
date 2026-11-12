@@ -9,8 +9,7 @@ import { FieldValues, useController } from "react-hook-form";
 import Select, { Props as SelectProps } from "react-select";
 
 import { useLayout } from "../../contexts/Layout";
-import { CompatibleUseControllerProps } from "./Form";
-import { isRequired } from "./Form";
+import { CompatibleUseControllerProps, isRequired } from "./Form";
 import InputError from "./InputError";
 import InputLabel from "./InputLabel";
 
@@ -19,8 +18,10 @@ export interface SelectOption<T> {
   value: T;
 }
 
-export interface SelectInputProps<T extends SelectOption<any>, M extends boolean>
-  extends SelectProps<T, M> {
+export interface SelectInputProps<
+  T extends SelectOption<any>,
+  M extends boolean,
+> extends SelectProps<T, M> {
   label: string;
   description?: string;
   menuPortalTarget?: HTMLElement;

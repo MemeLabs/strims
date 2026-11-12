@@ -12,8 +12,7 @@ import Select, { PropsValue, Props as SelectProps } from "react-select";
 import { useCall } from "../../contexts/FrontendApi";
 import { useLayout } from "../../contexts/Layout";
 import { certificateRoot } from "../../lib/certificate";
-import { CompatibleUseControllerProps } from "./Form";
-import { isRequired } from "./Form";
+import { CompatibleUseControllerProps, isRequired } from "./Form";
 import InputError from "./InputError";
 import InputLabel from "./InputLabel";
 

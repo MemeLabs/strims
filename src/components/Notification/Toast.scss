@@ -18,8 +18,13 @@
     opacity: 0;
     box-sizing: border-box;
     transform-origin: top center;
-    transition: transform var(--timing-medium) ease-out, opacity var(--timing-short) ease-out;
-    transition: transform 500ms ease-out, opacity 500ms ease-out, height 500ms ease-out;
+    transition:
+      transform var(--timing-medium) ease-out,
+      opacity var(--timing-short) ease-out;
+    transition:
+      transform 500ms ease-out,
+      opacity 500ms ease-out,
+      height 500ms ease-out;
     margin: 5px;
     cursor: default;
     width: 300px;

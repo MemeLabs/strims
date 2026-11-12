@@ -75,7 +75,7 @@ const hello = async (w: FakeWorker) => {
 const feeds = () => {
   const opened: { port: MessagePort; replaces: Feed | null; feed: Feed; closes: number }[] = [];
   const open = (port: MessagePort, replaces: Feed | null): Feed => {
-    const entry: typeof opened[number] = { port, replaces, feed: null, closes: 0 };
+    const entry: (typeof opened)[number] = { port, replaces, feed: null, closes: 0 };
     entry.feed = { id: opened.length + 1, close: () => entry.closes++ };
     opened.push(entry);
     return entry.feed;

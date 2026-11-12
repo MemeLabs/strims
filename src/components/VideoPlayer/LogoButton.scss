@@ -4,7 +4,9 @@
 .logo_button {
   width: 200px;
   height: 200px;
-  transition: 200ms filter ease-in-out, 300ms opacity ease-in-out;
+  transition:
+    200ms filter ease-in-out,
+    300ms opacity ease-in-out;
 
   .background {
     fill: #000;
@@ -60,14 +62,18 @@
     animation: pulse-opacity 2s linear infinite;
 
     &.spin {
-      animation: spin 1.5s linear infinite, pulse-opacity 2s linear infinite;
+      animation:
+        spin 1.5s linear infinite,
+        pulse-opacity 2s linear infinite;
     }
   }
 
   &.error {
     animation: none;
     transform: rotate(-90deg) scale(0.8);
-    transition: opacity 0.8s ease-in-out, transform 0.8s ease-in-out;
+    transition:
+      opacity 0.8s ease-in-out,
+      transform 0.8s ease-in-out;
 
     // On the black video, red-11 pulsing between 0.9 and 0.8 opacity is 3.9:1 to 3.3:1.
     .network {

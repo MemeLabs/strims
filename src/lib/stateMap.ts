@@ -5,7 +5,7 @@ export const applyActionInStateMap = <
   K extends string,
   V,
   T extends Record<K, Map<string, V>>,
-  A extends any[]
+  A extends any[],
 >(
   state: T,
   c: K,

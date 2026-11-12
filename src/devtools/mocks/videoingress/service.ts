@@ -44,8 +44,7 @@ export default class VideoIngressService
 
   // A union, so a story's subclass can answer late.
   isSupported():
-    | Promise<ingressv1.VideoIngressIsSupportedResponse>
-    | ingressv1.VideoIngressIsSupportedResponse {
+    Promise<ingressv1.VideoIngressIsSupportedResponse> | ingressv1.VideoIngressIsSupportedResponse {
     return new ingressv1.VideoIngressIsSupportedResponse({ supported: this.supported });
   }
 

@@ -156,7 +156,7 @@ export const useRendition = ({
       ? listing.listing.content.media
       : null;
   const listed =
-    media && swarmId(media.swarmUri) === swarmId(swarmUri) ? listing.snippet ?? null : null;
+    media && swarmId(media.swarmUri) === swarmId(swarmUri) ? (listing.snippet ?? null) : null;
 
   const [known, setKnown] = useState<{ main: string; snippet: ListingSnippet } | null>(null);
   useEffect(() => {
@@ -292,7 +292,7 @@ export const useRendition = ({
         ...w,
         failed: [...w.failed, r.id],
         picked: w.picked === r.id ? null : w.picked,
-        mainFailure: r.main ? message ?? "" : w.mainFailure,
+        mainFailure: r.main ? (message ?? "") : w.mainFailure,
       };
     });
   const pick = useMemo(

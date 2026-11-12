@@ -5,8 +5,8 @@ import clsx from "clsx";
 import React, { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-import { FileStatus, IndexData, IndexFile } from "./catalog";
 import { jsonScript } from "./ErrorList";
+import { FileStatus, IndexData, IndexFile } from "./catalog";
 
 type Filter = FileStatus | "all";
 

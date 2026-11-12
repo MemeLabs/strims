@@ -6,8 +6,8 @@ import "../../../../components/Debugger/Debugger.scss";
 import React, { useEffect, useMemo, useRef } from "react";
 
 import Portlet from "../../../../components/Debugger/Portlet";
-import { latest } from "../../../../components/Debugger/series";
 import Snapshot from "../../../../components/Debugger/Snapshot";
+import { latest } from "../../../../components/Debugger/series";
 import { Story } from "../../../storybook";
 import { metricsHistory } from "./metrics";
 import { usePortletPlacement } from "./portlet";

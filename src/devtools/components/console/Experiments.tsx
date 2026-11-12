@@ -3,11 +3,11 @@
 
 import React, { useEffect, useState } from "react";
 
+import ResultTable from "./ResultTable";
+import ViewPanel from "./ViewPanel";
 import { approveRegeneration, fetchData, getRegeneration, newResults, regenerate } from "./api";
 import type { QueryResult, Regeneration, SavedView, Snapshot } from "./api";
-import ResultTable from "./ResultTable";
 import type { Selection } from "./selection";
-import ViewPanel from "./ViewPanel";
 
 const split = (s: string): string[] =>
   s

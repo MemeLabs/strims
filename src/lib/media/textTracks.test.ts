@@ -6,13 +6,20 @@ import assert from "assert";
 import { CUES_CHANGED, CUE_BACK_BUFFER, CueTracks, cueKinds, cueTrack } from "./textTracks";
 
 export class FakeCue {
-  constructor(public startTime: number, public endTime: number, public text: string) {}
+  constructor(
+    public startTime: number,
+    public endTime: number,
+    public text: string
+  ) {}
 }
 
 export class FakeTextTrack {
   mode = "disabled";
   list: FakeCue[] = [];
-  constructor(public kind: string, public label: string) {}
+  constructor(
+    public kind: string,
+    public label: string
+  ) {}
   get cues() {
     return this.mode === "disabled" ? null : this.list;
   }
@@ -39,7 +46,7 @@ export class FakeTextVideo extends EventTarget {
 const globals = globalThis as unknown as Record<string, unknown>;
 
 const cue = (id: number, kind: "subtitles" | "captions", start: number, end: number, text = "x") =>
-  ({ type: "cue", id, kind, start, end, text } as const);
+  ({ type: "cue", id, kind, start, end, text }) as const;
 
 const times = (t: TextTrack | null) =>
   Array.from((t as unknown as FakeTextTrack).list, (c) => [c.startTime, c.endTime, c.text]);

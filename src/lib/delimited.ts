@@ -107,8 +107,8 @@ export const readDelimited = async (
     idle
       ? new Error("stream idle")
       : signal.reason instanceof Error
-      ? signal.reason
-      : new Error("stream aborted");
+        ? signal.reason
+        : new Error("stream aborted");
 
   try {
     renew();

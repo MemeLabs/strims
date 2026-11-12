@@ -17,9 +17,9 @@ import { WithThemeProps, withTheme } from "../../../components/Theme";
 import { WithRootRefProps, useLayout, withLayoutContext } from "../../../contexts/Layout";
 import { DEVICE_TYPE } from "../../../lib/userAgent";
 import type { Story } from "../types";
+import StoryErrorBoundary from "./ErrorBoundary";
 import { loadModule } from "./catalog";
 import { DEVICES, Device } from "./devices";
-import StoryErrorBoundary from "./ErrorBoundary";
 import { Session } from "./recorder";
 
 // The frame document's viewport: the device's size on the storybook page

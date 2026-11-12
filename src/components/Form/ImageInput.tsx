@@ -49,7 +49,7 @@ const formatSize = (n: number) =>
 const rejectionMessage = ({ errors: [error] }: FileRejection, maxSize: number) =>
   error?.code === ErrorCode.FileTooLarge
     ? `Image is larger than ${formatSize(maxSize)}`
-    : error?.message ?? "Invalid file";
+    : (error?.message ?? "Invalid file");
 
 export interface ImageInput {
   maxSize?: number;

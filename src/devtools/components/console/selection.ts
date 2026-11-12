@@ -158,7 +158,7 @@ export const viewParams = (
     const raw =
       (sel as unknown as Record<string, string>)[p.name] ??
       (sel as unknown as Record<string, string>)[p.kind];
-    let v: Param = raw !== undefined && raw !== "" ? raw : p.default ?? null;
+    let v: Param = raw !== undefined && raw !== "" ? raw : (p.default ?? null);
     if (typeof v === "string" && NUMBER_KINDS.has(p.kind)) v = Number(v);
     if (v === null || (typeof v === "number" && Number.isNaN(v))) missing.push(p.label ?? p.name);
     else params[p.name] = v;
