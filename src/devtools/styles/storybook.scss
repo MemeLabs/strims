@@ -130,11 +130,6 @@ $chrome-border: #ccc;
   }
 
   position: relative;
-  // The containing block of the story's position: fixed elements (landing
-  // pages, modals), which would otherwise cover the storybook's window.
-  // Portals into document.body, viewport units and media queries still read
-  // the window.
-  transform: translateZ(0);
   box-sizing: border-box;
   background: var(--color-background-layout-body);
   overflow: auto;
