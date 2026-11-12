@@ -8,6 +8,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { EmoteEffect } from "../../../apis/strims/chat/v1/chat";
+import { InputError } from "../../../components/Form";
 import { toStyleSheetFormValue } from "../../../components/Settings/ChatStyleSheet";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
@@ -37,6 +38,15 @@ const ChatEmoteEditFormPage: React.FC = () => {
 
   if (getRes.loading) {
     return null;
+  }
+
+  if (getRes.error) {
+    return (
+      <>
+        <TableTitleBar label="Edit Emote" backLink={`/settings/chat-servers/${serverId}/emotes`} />
+        <InputError error={getRes.error.message || "Error loading emote"} />
+      </>
+    );
   }
 
   const { emote } = value;
