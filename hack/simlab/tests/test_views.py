@@ -26,6 +26,13 @@ console's addresses:
               run_timeline, a range and a viewer on its stall track, a
               collapse_grid cell, a workbench chart; check's problems: a
               bad experiment, cell or seed, a selection matching no row
+  Played      run_timeline's stalls of a run without the sims' are its
+              reads played by playback_of
+  Overhead    overhead's bytes per useful byte are the rows' totals,
+              METRICS' where it has them, split by the bins
+  Phases      viewer_phases_of over runs going on past the verdict's
+              seconds: playback's and p99_sources' seconds and stalls in
+              one phase, tail past the verdict
 
   python3 hack/simlab/tests/test_views.py [--write-panels]
 """
@@ -856,6 +863,130 @@ CREATE OR REPLACE VIEW main.rows AS
 SELECT *, 1.0 AS stalls_per_min_1250, 1.0 AS stalls_per_min_4250, 900 AS startup_ms_1250, 950 AS startup_ms_4250
 FROM main.rows_written;
 """
+
+
+class Played(unittest.TestCase):
+    """run_timeline's stall track for a run without the sims' stalls:
+    golden_cli's fixture catalog with f-a-2001's stalls left out, its
+    reads played by playback_of (simdb_test's Playback holds it to the
+    sims' own)."""
+
+    RUN = {"exp": "sf0001", "cell": "star-5", "arm": "a", "seed": "2001", "min_stall_ms": "0"}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory(prefix="simlab-views-played-")
+        root = Path(cls.tmp.name)
+        lake = catalog_fixture(root / "fixture")
+        w = engine.writer(lake)
+        try:
+            w.execute("CREATE TABLE main.stalls_written AS SELECT * FROM main.stalls; CREATE OR REPLACE VIEW "
+                      "main.stalls AS SELECT * FROM main.stalls_written WHERE k <> 'f-a-2001';")
+        finally:
+            w.close()
+        cls.pool = engine.Pool(lake, root / "spill", size=1, guard=engine.Guard("1GB", 1, "1GiB"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.pool.close()
+        cls.tmp.cleanup()
+
+    def test_a_run_without_stalls_plays_its_reads(self):
+        for delay in (1250, 4250):
+            got = sorted((r["viewer"], r["t_s"], r["t2_s"], r["value"]) for r in views.run(
+                self.pool, "run_timeline", {**self.RUN, "delay": str(delay)}).records() if r["track"] == "stall")
+            played = self.pool.query(
+                "SELECT viewer, t_ms, stall_ms FROM playback_of((SELECT list({'k': k, 'src': src}) FROM experiment_jobs "
+                f"WHERE exp_id = 'sf0001' AND cell = 'star-5' AND arm_label = 'a' AND seed = 2001), {delay})").records()
+            self.assertTrue(played, delay)
+            self.assertEqual(got, sorted((r["viewer"], r["t_ms"] / 1000, (r["t_ms"] + r["stall_ms"]) / 1000,
+                                          r["stall_ms"]) for r in played), delay)
+
+
+# golden_cli's rows and bins hold no ledger: each run's rows a fixed one
+# (bytes of each kind, every host's) and the wire per useful byte, and
+# its bins the seed's and the viewers' HAVE bytes (100 and 300 a bin), the
+# viewers' uplink (1000 a bin) beside the seed's (BINS'); job_metrics made
+# again over them.
+LEDGER = """
+CREATE TABLE main.rows_written AS SELECT * FROM main.rows;
+CREATE OR REPLACE VIEW main.rows AS
+SELECT *, 1000.0 AS up_have, 0.0 AS up_ack, 50.0 AS up_request, 400.0 AS up_integrity, 100.0 AS up_signed,
+       20.0 AS up_announce, 30.0 AS up_ping, 60.0 AS up_chan_hdr, 9000.0 AS up_payload, 70.0 AS up_stream,
+       80.0 AS up_session, NULL::DOUBLE AS up_state, 2.0 AS wire_per_useful
+FROM main.rows_written;
+CREATE TABLE main.bins_written AS SELECT * FROM main.bins;
+CREATE OR REPLACE VIEW main.bins AS
+SELECT *, 300 AS viewer_have_bytes, 0 AS seed_up_ack_bytes, 0 AS seed_up_sack_bytes, 1000 AS viewer_up_bytes,
+       0 AS viewer_up_ack_bytes, 0 AS viewer_up_sack_bytes, 7 AS seed_stream_bytes, 21 AS viewer_session_bytes
+FROM main.bins_written;
+"""
+
+
+class Overhead(unittest.TestCase):
+    """overhead over golden_cli's fixture catalog given a ledger (LEDGER):
+    each kind's bytes per useful byte the rows' totals, suite.py's metric
+    where METRICS has one (job_metrics), weighted by the runs' useful
+    bytes, split between the seed and the viewers by their bins."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory(prefix="simlab-views-overhead-")
+        root = Path(cls.tmp.name)
+        lake = catalog_fixture(root / "fixture")
+        w = engine.writer(lake)
+        try:
+            w.execute(LEDGER)
+            cols = {t: set(c) for t, c in w.execute(
+                "SELECT table_name, list(column_name) FROM duckdb_columns() WHERE database_name = current_database() "
+                "AND schema_name = 'main' GROUP BY ALL").fetchall()}
+            w.execute(catalog.scoring_sql(catalog.scoring_cols(cols, have=cols)))
+        finally:
+            w.close()
+        cls.pool = engine.Pool(lake, root / "spill", size=1, guard=engine.Guard("1GB", 1, "1GiB"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.pool.close()
+        cls.tmp.cleanup()
+
+    def sql(self, sql):
+        return self.pool.query(sql).records()
+
+    def test_the_rows_totals_split_by_the_bins(self):
+        got = {(r["part"], r["arm"], r["cell"], r["who"], r["kind"]): r["per_useful"]
+               for r in views.run(self.pool, "overhead", {"exp": "sf0001"}).records()}
+        # The runs with bins, their useful bytes, and METRICS' values.
+        runs = ("SELECT DISTINCT e.arm_label AS arm, e.cell, e.k, e.src FROM experiment_jobs e SEMI JOIN bins b "
+                "USING (k, src) WHERE e.exp_id = 'sf0001'")
+        want = {(r["arm"], r["cell"], r["metric"]): r["v"] for r in self.sql(
+            f"SELECT r.arm, r.cell, m.metric, sum(m.value * w.useful_bytes) / sum(w.useful_bytes) AS v "
+            f"FROM ({runs}) r JOIN rows w USING (k, src) JOIN job_metrics m USING (k, src) "
+            "WHERE m.metric IN ('have/useful', 'integrity/useful', 'wire/useful') GROUP BY ALL")}
+        useful = {(r["arm"], r["cell"]): (r["u"], r["n"]) for r in self.sql(
+            f"SELECT r.arm, r.cell, sum(w.useful_bytes) AS u, count(*) AS n FROM ({runs}) r JOIN rows w USING (k, src) "
+            "GROUP BY ALL")}
+        self.assertEqual({(a, c) for a, c, _ in want}, set(useful))
+        for (arm, cell), (u, n) in useful.items():
+            with self.subTest(arm=arm, cell=cell):
+                have = want[(arm, cell, "have/useful")]
+                self.assertAlmostEqual(have, 1000 * n / u)
+                # The seed's 100 of every bin's 400 HAVE bytes.
+                self.assertAlmostEqual(got[("bytes", arm, cell, "seed", "have")], 0.25 * have)
+                self.assertAlmostEqual(got[("bytes", arm, cell, "viewers", "have")], 0.75 * have)
+                # integrity/useful is up_integrity and up_signed; the bins
+                # here hold none of it, so nothing splits it.
+                self.assertAlmostEqual(want[(arm, cell, "integrity/useful")], 500 * n / u)
+                self.assertNotIn(("bytes", arm, cell, "seed", "integrity"), got)
+                # The rows' own fields where METRICS has no metric: state is
+                # up_stream and up_session (and up_state), the bins' state
+                # every bin's seed stream and viewer session bytes.
+                self.assertAlmostEqual(got[("bytes", arm, cell, "seed", "state")]
+                                       + got[("bytes", arm, cell, "viewers", "state")], 150 * n / u)
+                self.assertAlmostEqual(got[("bytes", arm, cell, "seed", "state")], 0.25 * 150 * n / u)
+                self.assertAlmostEqual(got[("wire", arm, cell, "seed", None)] + got[("wire", arm, cell, "viewers", None)],
+                                       want[(arm, cell, "wire/useful")])
+                self.assertAlmostEqual(want[(arm, cell, "wire/useful")], 2.0)
 
 
 class Phases(unittest.TestCase):

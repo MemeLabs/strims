@@ -1,6 +1,6 @@
 {
   "title": "Overhead",
-  "description": "What each arm writes besides the stream, per cell: the seed's and the viewers' message bytes by kind per useful byte (data apart, as the stream itself), their uplinks' wire bytes per useful byte, and packets per second. Pick no cell for every cell. The relay and leaf split needs per-node bins, which the catalog doesn't hold yet.",
+  "description": "What each arm writes besides the stream, per cell: the seed's and the viewers' message bytes by kind per useful byte (data apart, as the stream itself), their uplinks' wire bytes per useful byte, and packets per second. Bytes per useful byte are the rows' totals, suite.py's metrics where it has them (have/useful, wire/useful, ...), split between the seed and the viewers by their bins. Pick no cell for every cell. The relay and leaf split needs per-node bins, which the catalog doesn't hold yet.",
   "params": [
     {
       "name": "exp",

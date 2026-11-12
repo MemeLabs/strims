@@ -325,6 +325,34 @@ CREATE OR REPLACE MACRO viewer_phases_of(runs) AS TABLE
     SELECT w.k, w.src, w.viewer, @{tail}, end_.stop, 9223372036854775807::BIGINT
     FROM viewers w JOIN end_ USING (k, src);
 
+-- Each viewer's stalls in the runs `runs`, a list of structs with a run's
+-- `k` and `src` (its tables' source; other fields left alone), at a
+-- playout delay of `delay_ms`, played from their reads as the sims'
+-- `stalls` tables have them (strims-wan's `playout`): a unit read twice
+-- counts at its first read, the units due at one time (t_ms - lag_ms)
+-- play together, as late as the latest of them, and in due order each
+-- plays at due + offset, the offset the most of `delay_ms` and the lags
+-- so far. Every rise of the offset past the first unit's is a stall: it
+-- starts at the unit's play time at the old offset (t_ms, the reads'
+-- clock) and lasts the rise (stall_ms): k, src, viewer, delay_ms, t_ms,
+-- stall_ms. macros.sql's playback(delay_ms) is it over every run of
+-- simdb.py's views.
+-- needs: reads
+CREATE OR REPLACE MACRO playback_of(runs, delay_ms) AS TABLE
+    WITH j_ AS (SELECT DISTINCT k, src FROM (SELECT unnest(runs, recursive := true))),
+    firsts_ AS (
+        SELECT r.k, r.src, r.viewer, r.t_ms - r.lag_ms AS due, r.lag_ms FROM reads r SEMI JOIN j_ USING (k, src)
+        QUALIFY row_number() OVER (PARTITION BY r.k, r.src, r.viewer, r.seq ORDER BY r.t_ms, r.lag_ms) = 1),
+    dues_ AS (SELECT k, src, viewer, due, max(lag_ms) AS lag_ms FROM firsts_ GROUP BY k, src, viewer, due),
+    played_ AS (
+        SELECT k, src, viewer, due,
+               greatest(delay_ms, max(lag_ms) OVER (PARTITION BY k, src, viewer ORDER BY due
+                                                    ROWS UNBOUNDED PRECEDING)) AS offset_ms
+        FROM dues_),
+    steps_ AS (SELECT *, lag(offset_ms) OVER (PARTITION BY k, src, viewer ORDER BY due) AS before_ms FROM played_)
+    SELECT k, src, viewer, delay_ms::BIGINT AS delay_ms, due + before_ms AS t_ms, offset_ms - before_ms AS stall_ms
+    FROM steps_ WHERE offset_ms > before_ms;
+
 -- The honest viewers' lag each second of the runs `jobs`, a list of
 -- structs with a job's `k` (its tables its own source's, jobs.src; other
 -- fields left alone, so a side serves): k, src, viewer, sec, lag_ms,

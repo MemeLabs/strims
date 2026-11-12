@@ -90,7 +90,7 @@ TAIL = vocab.TAIL
 # scoring.sql's macros the views over the cache hold too (where they have
 # the tables each needs), so the lab's queries and the catalog's read one
 # definition.
-SCORING_MACROS = ("viewer_phases_of",)
+SCORING_MACROS = ("viewer_phases_of", "playback_of")
 # The retired kinds whose rows of a sim read as another kind by their
 # value, as vocab.toml's notes on the kind say: {(id, sim): (value, current
 # id)}, the row's value then none. strims-sim's parent_lost of -1, a
@@ -452,8 +452,9 @@ def views(sel, derived=True, fetch=True, say=None):
             if f := derived_files(t, srcs):
                 sql.append(f"CREATE VIEW {t} AS SELECT x.* FROM {f} SEMI JOIN runs USING (k, src);")
                 have.add(t)
-    sql += macros(have)
+    # macros.sql's call scoring.sql's: those first.
     sql += scoring_macros(have)
+    sql += macros(have)
     return Views("\n".join(sql), have)
 
 

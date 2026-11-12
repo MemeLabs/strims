@@ -2166,7 +2166,7 @@ NORMALIZED = {
     "node_bins": "viewer NULL for the seed and hostile hosts.",
     "stalls": "The unit played is the sim's: a frame in strims-sim, a chunk in the ppspp sim, whose stalls are "
               "one chunk's lateness and so often far shorter than a frame's. A unit read twice counts at its "
-              "first read. macros.sql's playback(delay_ms) plays reads the same way at any delay.",
+              "first read. scoring.sql's playback_of(runs, delay_ms) plays reads the same way at any delay.",
     "parents": "parent NULL for none. Only hybrid push gives a stream push parents: empty in other modes.",
     "forecast": "horizon_ms, held_ms and mean_ms NULL where -1 (no estimate, never held).",
     "arrivals": "peer, parent, last_ask_peer and viewer NULL where -1: no source (a chunk the node published), no "

@@ -13,7 +13,7 @@
 --   stall    each stall at a playout delay of $delay ms, $min_stall_ms or
 --            longer (the ppspp sim stalls per 4 KiB chunk: many are tiny):
 --            the sims' `stalls` table, or for a run without one, its
---            reads played as macros.sql's playback() plays them
+--            reads played (scoring.sql's playback_of)
 --   phase    the verdict's phase each second (the vocabulary's: startup,
 --            after_down, ..., steady), and `unhealthy` seconds
 --   episode  the verdict's unhealthy spells and collapses
@@ -39,27 +39,14 @@ WITH job AS (
 ), lag AS (
     SELECT sec, quantile_cont(lag_ms, 0.5) AS p50, quantile_cont(lag_ms, 0.99) AS p99, max(lag_ms) AS max
     FROM vs GROUP BY sec
-), written AS (
-    -- The sims' own stalls at $delay.
-    SELECT s.viewer, s.t_ms, s.stall_ms FROM job JOIN stalls s USING (k, src) WHERE s.delay_ms = $delay
-), firsts AS (
-    -- For a run without a stalls table: playback($delay) over its reads.
-    SELECT r.viewer, r.t_ms - r.lag_ms AS due, r.lag_ms
-    FROM job JOIN reads r USING (k, src)
-    WHERE NOT EXISTS (SELECT 1 FROM job JOIN stalls USING (k, src))
-    QUALIFY row_number() OVER (PARTITION BY r.viewer, r.seq ORDER BY r.t_ms, r.lag_ms) = 1
-), dues AS (
-    SELECT viewer, due, max(lag_ms) AS lag_ms FROM firsts GROUP BY ALL
-), played AS (
-    SELECT viewer, due,
-           greatest($delay, max(lag_ms) OVER (PARTITION BY viewer ORDER BY due ROWS UNBOUNDED PRECEDING)) AS offset_ms
-    FROM dues
-), steps AS (
-    SELECT *, lag(offset_ms) OVER (PARTITION BY viewer ORDER BY due) AS before_ms FROM played
 ), stall AS (
-    SELECT viewer, t_ms, stall_ms FROM written
+    -- The sims' own stalls at $delay, or for a run without a stalls table
+    -- its reads played.
+    SELECT s.viewer, s.t_ms, s.stall_ms FROM job JOIN stalls s USING (k, src) WHERE s.delay_ms = $delay
     UNION ALL
-    SELECT viewer, due + before_ms, offset_ms - before_ms FROM steps WHERE offset_ms > before_ms
+    SELECT viewer, t_ms, stall_ms
+    FROM playback_of((SELECT list({'k': k, 'src': src}) FROM job
+                      WHERE NOT EXISTS (SELECT 1 FROM job JOIN stalls USING (k, src))), $delay)
 ), b AS (
     SELECT bn.* FROM job JOIN bins bn USING (k, src)
 )
