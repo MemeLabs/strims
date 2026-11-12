@@ -34,7 +34,15 @@ const units: { [key: string]: bigint } = {
   (unit) => (units[unit.toLowerCase()] = units[unit])
 );
 
-const ratePattern = new RegExp(`^[0-9\\.,]+\\s*(${Object.keys(units).join("|")})$`);
+// A rate as the form takes it: a number, its thousands grouped with commas or
+// not and a decimal fraction allowed, and a unit, e.g. "50mbps",
+// "1.5 MiBps" or "1,000Kbps".
+const ratePattern = new RegExp(
+  `^(\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.(\\d+))?\\s*(${Object.keys(units).join("|")})$`
+);
+
+// The largest rate the config holds (a uint64 of bytes per second).
+const MAX_RATE = BigInt("18446744073709551615");
 
 // The largest peer budget the config holds (a uint32).
 const MAX_PEERS = 2 ** 32 - 1;
@@ -52,14 +60,28 @@ const formatUnits = (n: bigint) => {
   return minS;
 };
 
-const parseUnits = (s: string): bigint => {
-  const unit = Object.keys(units).find((unit) => s.endsWith(unit));
-  const [n, k] = unit ? [s.substring(0, s.length - unit.length), units[unit]] : [s, BigInt(1)];
-  try {
-    return BigInt(n.trim()) * k;
-  } catch {
-    return BigInt(-1);
+// The bytes per second a rate says, to the nearest byte (the config holds
+// whole bytes), exact for any decimal fraction, and at least one byte for a
+// rate above zero (0 is no limit); null when it isn't a rate.
+const parseUnits = (s: string): bigint | null => {
+  const m = ratePattern.exec(s.trim());
+  if (!m) {
+    return null;
   }
+  const [, whole, fraction = "", unit] = m;
+  const scale = BigInt(`1${"0".repeat(fraction.length)}`);
+  const scaled = BigInt(whole.replace(/,/g, "") + fraction) * units[unit];
+  const n = (scaled + scale / BigInt(2)) / scale;
+  return n === BigInt(0) && scaled > BigInt(0) ? BigInt(1) : n;
+};
+
+// The form's rule for a rate, the parser's verdict.
+const validateRate = (v: string) => {
+  const n = parseUnits(v);
+  if (n === null) {
+    return "Enter a number and a unit, e.g. 50mbps or 1.5 MiBps";
+  }
+  return n <= MAX_RATE || "Too large";
 };
 
 interface VNICFormProps {
@@ -105,10 +127,7 @@ const VNICForm = ({ onCreate, config }: VNICFormProps) => {
             value: true,
             message: "Value is required",
           },
-          pattern: {
-            value: ratePattern,
-            message: "Invalid format",
-          },
+          validate: validateRate,
         }}
         label="Max Upload Rate"
         name="maxUploadBytesPerSecond"
