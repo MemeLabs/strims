@@ -1769,6 +1769,8 @@ def canon(t):
 
 
 NUMERIC = ("BIGINT", "INTEGER", "DOUBLE", "FLOAT", "HUGEINT", "SMALLINT", "TINYINT", "UBIGINT", "UINTEGER", "DECIMAL")
+# arrivals' nodes the sims write -1 for none; its times they leave empty.
+ARRIVAL_NONE = ("peer", "parent", "last_ask_peer", "viewer")
 
 
 def view_sql(t, cols, name, viewers, arrivals=None):
@@ -1827,11 +1829,15 @@ def view_sql(t, cols, name, viewers, arrivals=None):
     if t == "parents":
         sel = ["x.k", "x.src"] + [nullify(c) if c == "parent" else plain(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
+    if t == "arrivals":
+        sel = ["x.k", "x.src"] + [nullify(c) if c in ARRIVAL_NONE else plain(c) for c in rest]
+        return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "asks":
         return query.asks_view(f"main.{ident(name)}", f"(SELECT x.* {canon(t)})",
                                f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
     if t == "haves":
-        return query.haves_view(f"main.{ident(name)}", f"(SELECT x.* {canon(t)})",
+        star = "x.* REPLACE (nullif(x.peer, -1) AS peer)" if "peer" in cols else "x.*"
+        return query.haves_view(f"main.{ident(name)}", f"(SELECT {star} {canon(t)})",
                                 f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
     return f"{head} x.* {canon(t)};"
 
@@ -2163,6 +2169,8 @@ NORMALIZED = {
               "first read. macros.sql's playback(delay_ms) plays reads the same way at any delay.",
     "parents": "parent NULL for none. Only hybrid push gives a stream push parents: empty in other modes.",
     "forecast": "horizon_ms, held_ms and mean_ms NULL where -1 (no estimate, never held).",
+    "arrivals": "peer, parent, last_ask_peer and viewer NULL where -1: no source (a chunk the node published), no "
+                "open parent, no request, a node that is no viewer (the seed).",
     "asks": "Every rival kept, in both rounds: a row per request and channel it weighed, the asked row (picked) "
             "first; grace_ms, outcome, reason and t_outcome_ms are the asked row's, NULL on a rival's. The sims "
             "write what a request was decided on (peer_honest the peer's at the request); the view adds its "
@@ -2175,11 +2183,11 @@ NORMALIZED = {
             "HAVE decided; timeout_ms, have_ms (the row's peer's HAVE of the chunk) and released_ms (push's "
             "release of it to pull) are its own; grace_ms, frontier_seq, hole_seq and state_age_ms are NULL "
             "there.",
-    "haves": "Main's HAVE log: a row per chunk a HAVE first announced on a channel. The sims write the HAVE "
-             "(haves_log); the view adds held_ms, the announcing peer's first hold of the chunk in its "
-             "incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation; NULL "
-             "if none), delay_ms (t_ms - held_ms: the knowledge delay) and live (held by channel_open_ms: not "
-             "a backlog the channel's first HAVEs announce).",
+    "haves": "Main's HAVE log: a row per chunk a HAVE first announced on a channel; peer NULL where -1 (a key "
+             "that named no link). The sims write the HAVE (haves_log); the view adds held_ms, the announcing "
+             "peer's first hold of the chunk in its incarnation then (arrivals' earliest row of node = peer, seq, "
+             "incarnation = peer_incarnation; NULL if none), delay_ms (t_ms - held_ms: the knowledge delay) and "
+             "live (held by channel_open_ms: not a backlog the channel's first HAVEs announce).",
 }
 STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewers": "k, viewer",
                  "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",

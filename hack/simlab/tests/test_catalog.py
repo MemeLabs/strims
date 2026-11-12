@@ -41,9 +41,10 @@ simlab.verdict's derive pool:
   Tiers        an experiment's tiers from its cells' names, tests and env,
                its index recording none
   Tables       a sim's tables the catalog has no code for (spec_requests,
-               parks, arrivals), folded by the store, as they are; forecast
-               in either schema (tail_ms and extrapolated, or first_sight
-               and lazy), the other's columns NULL
+               parks), folded by the store, as they are; arrivals' and
+               haves' -1 for no node NULL; forecast in either schema
+               (tail_ms and extrapolated, or first_sight and lazy), the
+               other's columns NULL
   Retired      a job of each sim whose events hold retired ids: the
                catalog's events view and the cache's read each as its
                replacement for the job's sim (strims-sim's parent_lost by
@@ -867,9 +868,18 @@ class Tables(Fixture):
                                [(900, 1, 5, None, None), (950, 1, 6, 1150, True)])
         golden_cli.write_table(d, "parks", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
                                             ("outcome", "VARCHAR")], [(800, 1, 5, "sent")])
-        golden_cli.write_table(d, "arrivals", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
-                                               ("how", "VARCHAR"), ("peer", "BIGINT"), ("incarnation", "BIGINT")],
-                               [(1150, 1, 6, "answer", 2, 0)])
+        # Node 1's answer from node 2, and the seed's own publish: no source,
+        # parent or request, and no viewer.
+        golden_cli.write_table(d, "arrivals", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("viewer", "BIGINT"),
+                                               ("seq", "BIGINT"), ("how", "VARCHAR"), ("peer", "BIGINT"),
+                                               ("parent", "BIGINT"), ("last_ask_peer", "BIGINT"),
+                                               ("incarnation", "BIGINT")],
+                               [(1150, 1, 0, 6, "answer", 2, 2, 2, 0), (1000, 0, -1, 6, "own", -1, -1, -1, 0)])
+        # HAVEs to node 2 of chunk 6 from node 1, and of chunk 7 on a key
+        # that named no link.
+        golden_cli.write_table(d, "haves", [(c, "BIGINT") for c in ("t_ms", "node", "peer", "seq", "channel_open_ms",
+                                                                     "peer_incarnation")],
+                               [(1200, 2, 1, 6, 500, 0), (1300, 2, -1, 7, 500, 0)])
         # Node 2's request of chunk 6: of node 1, which held it at 1150,
         # and a rival, node 3, which never did.
         golden_cli.write_table(d, "asks", [(c, "BIGINT") for c in (
@@ -887,7 +897,7 @@ class Tables(Fixture):
         self.assertEqual(got.failed, {})
         for t in ("spec_requests", "parks", "arrivals"):
             rows = catalog.lake(f"SELECT k FROM {t} WHERE k IN ({', '.join(catalog.q(k) for k in keys.values())});")
-            self.assertEqual(len(rows), len(keys) * (2 if t == "spec_requests" else 1), t)
+            self.assertEqual(len(rows), len(keys) * (1 if t == "parks" else 2), t)
         held = catalog.lake("SELECT seq, held_ms, held_by_p90 FROM spec_requests WHERE k = "
                             f"{catalog.q(keys['suite/wt/tail'])} ORDER BY seq;")
         self.assertEqual(held, [{"seq": 5, "held_ms": None, "held_by_p90": None},
@@ -910,6 +920,15 @@ class Tables(Fixture):
                                  "held_by_p50": False, "held_by_p90": True},
                                 {"peer": 3, "held_ms": None, "live": False, "err_ms": None, "pred_err_ms": None,
                                  "held_by_p50": None, "held_by_p90": None}])
+        # arrivals' and haves' -1 for no node read NULL (NORMALIZED).
+        got = catalog.lake("SELECT node, viewer, peer, parent, last_ask_peer FROM arrivals WHERE k = "
+                           f"{catalog.q(tail)} ORDER BY node;")
+        self.assertEqual(got, [{"node": 0, "viewer": None, "peer": None, "parent": None, "last_ask_peer": None},
+                               {"node": 1, "viewer": 0, "peer": 2, "parent": 2, "last_ask_peer": 2}])
+        self.assertIn("last_ask_peer", catalog.NORMALIZED["arrivals"])
+        got = catalog.lake(f"SELECT peer, seq, held_ms, live FROM haves WHERE k = {catalog.q(tail)} ORDER BY seq;")
+        self.assertEqual(got, [{"peer": 1, "seq": 6, "held_ms": 1150, "live": True},
+                               {"peer": None, "seq": 7, "held_ms": None, "live": False}])
 
 
 
