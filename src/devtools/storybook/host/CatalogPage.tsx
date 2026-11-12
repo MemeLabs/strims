@@ -3,7 +3,7 @@
 
 import clsx from "clsx";
 import React, { useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router";
 
 import { jsonScript } from "./ErrorList";
 import { FileStatus, IndexData, IndexFile } from "./catalog";

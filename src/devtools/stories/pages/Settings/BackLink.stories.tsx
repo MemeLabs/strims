@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { ReactNode } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import BackLink from "../../../../pages/Settings/BackLink";
 import { Story, StoryRouter } from "../../../storybook";

@@ -9,7 +9,7 @@ import { Base64 } from "js-base64";
 import { isEqual, uniq } from "lodash";
 import React, { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiExternalLink } from "react-icons/fi";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 import { MessageState, UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import { Listing } from "../../apis/strims/network/v1/directory/directory";

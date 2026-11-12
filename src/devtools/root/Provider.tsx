@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { ReactNode } from "react";
-import { HashRouter, MemoryRouter } from "react-router-dom";
+import { HashRouter, MemoryRouter } from "react-router";
 
 import { DevToolsClient } from "../../apis/client";
 import { Provider as BackgroundRouteProvider } from "../../contexts/BackgroundRoute";

@@ -4,7 +4,7 @@
 import "../styles/console.scss";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router";
 
 import Nav from "../components/Nav";
 import Ask from "../components/console/Ask";

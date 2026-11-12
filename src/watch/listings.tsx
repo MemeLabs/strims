@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { ReactNode, createContext, useContext, useEffect, useState } from "react";
-import { useMatch } from "react-router-dom";
+import { useMatch } from "react-router";
 
 import { FrontendWatchListingsResponse } from "../apis/strims/network/v1/directory/directory";
 import { readDelimited } from "../lib/delimited";

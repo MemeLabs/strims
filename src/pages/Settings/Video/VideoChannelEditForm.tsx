@@ -4,7 +4,7 @@
 import { Base64 } from "js-base64";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
 import { ListingSnippetImage } from "../../../apis/strims/network/v1/directory/directory";

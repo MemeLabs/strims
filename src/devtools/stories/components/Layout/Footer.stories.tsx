@@ -4,7 +4,7 @@
 import "./Layout.stories.scss";
 
 import React from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import Footer from "../../../../components/Layout/Footer";
 import DirectoryService from "../../../mocks/directory/service";

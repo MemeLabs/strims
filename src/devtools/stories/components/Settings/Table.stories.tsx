@@ -5,7 +5,7 @@ import "./Settings.stories.scss";
 
 import { Base64 } from "js-base64";
 import React, { ReactNode, useEffect, useRef } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import Search from "../../../../components/Settings/Search";
 import {

@@ -3,7 +3,7 @@
 
 import React, { useContext, useEffect } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-import { useLocation, useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router";
 
 import VideoTitle from "../components/VideoTitle";
 import { useLayout } from "../contexts/Layout";

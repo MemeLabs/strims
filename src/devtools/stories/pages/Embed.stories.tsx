@@ -3,7 +3,7 @@
 
 import qs from "qs";
 import React from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import { ServiceSlug } from "../../../lib/directory";
 import Embed from "../../../pages/Embed";

@@ -4,7 +4,7 @@
 import { Base64 } from "js-base64";
 import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { useTitle } from "react-use";
 
 import { Listing, ListingContentType } from "../apis/strims/network/v1/directory/directory";
@@ -85,9 +85,9 @@ const useClose = () => {
   const location = useLocation();
   return useCallback(() => {
     if (location.key !== "default") {
-      navigate(-1);
+      void navigate(-1);
     } else {
-      navigate("/", { replace: true });
+      void navigate("/", { replace: true });
     }
   }, [location.key]);
 };

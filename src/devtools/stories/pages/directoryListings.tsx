@@ -9,7 +9,7 @@ import { PassThrough } from "stream";
 
 import { isEqual } from "lodash";
 import React, { ReactNode } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import {
   Network as DirectoryNetwork,

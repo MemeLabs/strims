@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import { LinkedProfile } from "../../../apis/strims/auth/v1/auth";
 import AuthGate from "../../../components/AuthGate";

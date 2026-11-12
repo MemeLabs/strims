@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import { GetInvitationResponse } from "../../../apis/strims/network/v1/invite/invite";
 import { UnimplementedInviteLinkService } from "../../../apis/strims/network/v1/invite/invite_rpc";

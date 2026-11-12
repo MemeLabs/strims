@@ -4,7 +4,7 @@
 import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router";
 import { useTitle } from "react-use";
 
 import { VideoChannel } from "../../../apis/strims/video/v1/channel";

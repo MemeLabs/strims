@@ -6,7 +6,7 @@ import "../../styles/storybook.scss";
 import i18n from "i18next";
 import React, { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 
 import { Provider as BackgroundRouteProvider } from "../../../contexts/BackgroundRoute";
 import { Provider as ThemeProvider, useTheme } from "../../../contexts/Theme";

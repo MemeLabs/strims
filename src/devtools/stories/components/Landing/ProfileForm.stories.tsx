@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { ComponentProps, ReactNode, useEffect, useRef } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import ProfileForm from "../../../../components/Landing/ProfileForm";
 import LandingPageLayout from "../../../../components/LandingPageLayout";

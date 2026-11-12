@@ -5,7 +5,7 @@ import "../../../../components/Layout/Layout.scss";
 import "./Layout.stories.scss";
 
 import React from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import DirectoryGrid from "../../../../components/Directory/Grid";
 import LayoutBody from "../../../../components/Layout/Body";

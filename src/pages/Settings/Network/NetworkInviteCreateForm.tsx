@@ -69,7 +69,7 @@ const NetworkInviteCreateForm: React.FC = () => {
       status: Notification.Status.STATUS_SUCCESS,
       message: "Invitation code copied to clipboard",
     });
-    navigate("/settings/networks");
+    void navigate("/settings/networks");
   });
 
   return (

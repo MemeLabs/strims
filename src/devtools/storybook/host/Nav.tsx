@@ -3,7 +3,7 @@
 
 import clsx from "clsx";
 import React, { useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation } from "react-router";
 
 import { IndexData, ROOT, moduleKeys, modulePath, storyRoute } from "./catalog";
 

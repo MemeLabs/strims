@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 
-import { approveRegeneration, askStream, getRegeneration, getSpend, rowObjects } from "./api";
-import type { AskEvent, AskResult, Json, Param, Regeneration, Spend } from "./api";
 import Markdown from "./Markdown";
 import ResultTable from "./ResultTable";
-import { chartOf } from "./sel";
 import VegaChart from "./VegaChart";
 import { workbenchHref } from "./ViewPanel";
+import { approveRegeneration, askStream, getRegeneration, getSpend, rowObjects } from "./api";
+import type { AskEvent, AskResult, Json, Param, Regeneration, Spend } from "./api";
+import { chartOf } from "./sel";
 
 /** The task budget a question gets unless the box says otherwise, and the least the API takes. */
 const BUDGET = 200_000;
@@ -54,7 +54,8 @@ interface Question {
   startedAt: number;
 }
 
-const usd = (x: number | undefined): string => `$${(x ?? 0).toFixed(x !== undefined && x < 1 ? 4 : 2)}`;
+const usd = (x: number | undefined): string =>
+  `$${(x ?? 0).toFixed(x !== undefined && x < 1 ? 4 : 2)}`;
 
 const thousands = (n: number): string => n.toLocaleString("en-US");
 
@@ -208,14 +209,7 @@ const ToolView: React.FC<{ step: ToolStep }> = ({ step }) => {
   // The workbench's address of a statement and its values, and of its chart where the auto-chart
   // draws it (one mark of an x and a y field).
   const open = (sql: Sql, spec?: Record<string, unknown>) =>
-    navigate(
-      workbenchHref(
-        location.search,
-        { sql: sql.sql },
-        sql.params,
-        chartOf(spec) ?? {}
-      )
-    );
+    navigate(workbenchHref(location.search, { sql: sql.sql }, sql.params, chartOf(spec) ?? {}));
   const said = step.input?.purpose ?? step.input?.title;
   const purpose = typeof said === "string" ? said : "";
   const others = Object.entries(step.input ?? {}).filter(
@@ -271,12 +265,14 @@ const ToolView: React.FC<{ step: ToolStep }> = ({ step }) => {
       {step.result && (
         <>
           <ResultTable result={step.result} limit={50} />
-          {step.result.row_count !== undefined && step.result.row_count > step.result.rows.length && (
-            <div className="console__meta">
-              {thousands(step.result.row_count)}
-              {step.result.truncated ? "+" : ""} rows in all; Claude saw the first {step.result.rows.length}
-            </div>
-          )}
+          {step.result.row_count !== undefined &&
+            step.result.row_count > step.result.rows.length && (
+              <div className="console__meta">
+                {thousands(step.result.row_count)}
+                {step.result.truncated ? "+" : ""} rows in all; Claude saw the first{" "}
+                {step.result.rows.length}
+              </div>
+            )}
         </>
       )}
       {step.chart && (
@@ -311,7 +307,11 @@ const QuestionView: React.FC<{ q: Question; running: boolean }> = ({ q, running 
         switch (s.kind) {
           case "thinking":
             return (
-              <details key={i} className="console__step console__thinking" open={running || undefined}>
+              <details
+                key={i}
+                className="console__step console__thinking"
+                open={running || undefined}
+              >
                 <summary>Thinking</summary>
                 <Markdown text={s.text} />
               </details>
@@ -403,7 +403,9 @@ const Ask: React.FC = () => {
         const cancelled = controller.signal.aborted;
         update((q) =>
           applied(
-            cancelled ? q : applied(q, { type: "error", message: e instanceof Error ? e.message : String(e) }),
+            cancelled
+              ? q
+              : applied(q, { type: "error", message: e instanceof Error ? e.message : String(e) }),
             {
               type: "done",
               stop_reason: cancelled ? "cancelled" : "error",
@@ -421,7 +423,10 @@ const Ask: React.FC = () => {
   };
 
   const today = spend?.days.find((d) => d.day === new Date().toLocaleDateString("en-CA"));
-  const conversationUsd = questions.reduce((s, q) => s + (q.done?.usd ?? q.usage?.question_usd ?? 0), 0);
+  const conversationUsd = questions.reduce(
+    (s, q) => s + (q.done?.usd ?? q.usage?.question_usd ?? 0),
+    0
+  );
 
   return (
     <div className="console__view console__ask">

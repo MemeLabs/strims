@@ -4,7 +4,7 @@
 import "../../../../../components/Layout/Layout.scss";
 
 import React, { useEffect, useRef } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import NetworkNav from "../../../../../components/Layout/NetworkNav";
 import { Provider as NetworkProvider } from "../../../../../contexts/Network";

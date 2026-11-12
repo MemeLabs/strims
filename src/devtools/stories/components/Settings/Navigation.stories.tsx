@@ -4,7 +4,7 @@
 import "./Settings.stories.scss";
 
 import React, { ReactNode, useEffect, useRef, useState } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import { Link, Navigate } from "../../../../components/Settings/Navigation";
 import { Provider, useNavigation } from "../../../../contexts/SettingsNavigation";

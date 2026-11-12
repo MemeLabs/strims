@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 const Nav: React.FC = () => (
   <div className="nav">

@@ -10,7 +10,7 @@ import clsx from "clsx";
 import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
 import React, { ReactNode, useEffect, useRef } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import { Message, MessageState } from "../../apis/strims/chat/v1/chat";
 import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";

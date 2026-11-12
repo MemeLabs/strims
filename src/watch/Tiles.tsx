@@ -5,7 +5,7 @@ import { Base64 } from "js-base64";
 import qs from "qs";
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useTitle } from "react-use";
 
 import { Listing, ListingSnippet } from "../apis/strims/network/v1/directory/directory";

@@ -3,7 +3,7 @@
 
 import { Base64 } from "js-base64";
 import React, { useCallback, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { CreateServerResponse } from "../../../apis/strims/network/v1/network";
 import { useLayout } from "../../../contexts/Layout";
@@ -21,7 +21,7 @@ const NetworkAddButton: React.FC<React.ComponentProps<"button">> = ({ children, 
   const closePortal = useCallback(() => setOpen(false), []);
 
   const handleCreate = (res: CreateServerResponse) => {
-    navigate(
+    void navigate(
       `/directory/${Base64.fromUint8Array(certificateRoot(res.network.certificate).key, true)}`
     );
     closePortal();

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React from "react";
-import { BrowserRouter, MemoryRouter } from "react-router-dom";
+import { BrowserRouter, MemoryRouter } from "react-router";
 
 import { APIDialer } from "../contexts/Session";
 import { IS_PWA } from "../lib/userAgent";

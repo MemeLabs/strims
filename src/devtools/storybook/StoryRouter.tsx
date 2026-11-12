@@ -10,19 +10,21 @@ import {
   UNSAFE_RouteContext,
   useLocation,
   useNavigate,
-} from "react-router-dom";
+} from "react-router";
 
 import { Provider as BackgroundRouteProvider } from "../../contexts/BackgroundRoute";
 import { useStoryHost } from "./context";
 
 // A Router refuses to render inside another while LocationContext holds a
-// value (react-router 6.6's useInRouterContext), and a nested <Routes>
-// matches below its parent route's pathname (RouteContext): both reset, the
-// MemoryRouter's routes match its own paths from /.
+// value (react-router's useInRouterContext), and a nested <Routes> matches
+// below its parent route's pathname (RouteContext): both reset, the
+// MemoryRouter's routes match its own paths from /. isDataRoute: none of the
+// storybook's routers is a data router.
 const outerLocation = null as React.ContextType<typeof UNSAFE_LocationContext>;
 const rootRoute: React.ContextType<typeof UNSAFE_RouteContext> = {
   outlet: null,
   matches: [],
+  isDataRoute: false,
 };
 
 const PathReporter: React.FC = () => {

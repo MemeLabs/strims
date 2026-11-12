@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { FiActivity, FiUser } from "react-icons/fi";
 import { MdClose, MdOutlineChat, MdOutlineChatBubbleOutline } from "react-icons/md";
-import { Link, Routes, useNavigate, useResolvedPath } from "react-router-dom";
+import { Link, Routes, useNavigate, useResolvedPath } from "react-router";
 import { useToggle } from "react-use";
 
 import { useBackgroundRoute } from "../../contexts/BackgroundRoute";
@@ -103,12 +103,14 @@ const SettingsModal: React.FC<ModalProps> = ({ onClose }) => {
   const { Portal } = usePortal({ target: layout.root });
 
   const backgroundRoute = useBackgroundRoute();
-  const path = useResolvedPath("settings");
+  // The settings beside the splat route the layout renders in (the app's
+  // root): ".." leaves it, whose relative paths take in the whole URL.
+  const path = useResolvedPath("../settings");
   const navigate = useNavigate();
 
   useEffect(() => {
     backgroundRoute.toggle(true);
-    navigate(path);
+    void navigate(path);
     return () => backgroundRoute.toggle(false);
   }, []);
 

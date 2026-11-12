@@ -16,7 +16,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import { Image, ImageType } from "../../../../../apis/strims/type/image";
 import Toast from "../../../../../components/Notification/Toast";

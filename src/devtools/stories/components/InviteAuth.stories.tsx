@@ -6,7 +6,7 @@ import { PassThrough } from "stream";
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import React, { ReactNode, useEffect, useRef, useState } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import { GetInvitationResponse } from "../../../apis/strims/network/v1/invite/invite";
 import {

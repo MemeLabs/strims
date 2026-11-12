@@ -3,7 +3,7 @@
 
 import React from "react";
 import { MdChevronRight } from "react-icons/md";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 interface ForwardLinkProps {
   to: string;

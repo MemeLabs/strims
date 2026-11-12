@@ -6,8 +6,7 @@ import "./Footer.scss";
 import clsx from "clsx";
 import React, { RefObject, useCallback, useEffect, useRef } from "react";
 import { FiList, FiMenu, FiSearch, FiUser } from "react-icons/fi";
-import { useResolvedPath } from "react-router";
-import { Link, Routes, useNavigate } from "react-router-dom";
+import { Link, Routes, useNavigate, useResolvedPath } from "react-router";
 import { useToggle } from "react-use";
 
 import { useBackgroundRoute } from "../../contexts/BackgroundRoute";
@@ -35,12 +34,13 @@ const SettingsModal: React.FC<ModalProps> = ({ onClose }) => {
   const navigate = useNavigate();
   const backgroundRoute = useBackgroundRoute();
 
-  const path = useResolvedPath("settings");
+  // As Header's: the settings beside the splat route the layout renders in.
+  const path = useResolvedPath("../settings");
 
   useEffect(() => {
     const tid = setTimeout(() => {
       backgroundRoute.toggle(true);
-      navigate(path);
+      void navigate(path);
     });
     return () => clearTimeout(tid);
   }, []);

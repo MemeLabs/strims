@@ -6,7 +6,7 @@ import qs from "qs";
 import React, { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { FiUser } from "react-icons/fi";
-import { Navigate } from "react-router-dom";
+import { Navigate } from "react-router";
 import { useTitle } from "react-use";
 
 import { LinkedProfile, PairingToken } from "../apis/strims/auth/v1/auth";

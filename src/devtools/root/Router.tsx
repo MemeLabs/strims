@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { lazy } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router";
 
 import { useBackgroundRoute } from "../../contexts/BackgroundRoute";
 import NotFound from "../pages/NotFound";

@@ -4,6 +4,7 @@
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import React from "react";
+import { Route, Routes } from "react-router";
 
 import { FrontendClient } from "../../apis/client";
 import { registerChatFrontendService } from "../../apis/strims/chat/v1/chat_rpc";
@@ -52,12 +53,21 @@ const LayoutTest: React.FC = () => {
             <NotificationProvider>
               <ChatProvider>
                 <PlayerProvider>
-                  <LayoutPage>
-                    <LayoutControl />
-                    <LayoutBody>
-                      <Directory />
-                    </LayoutBody>
-                  </LayoutPage>
+                  {/* In a splat route, as the app's layout is: its settings modal
+                      opens beside it, at /layout/settings. */}
+                  <Routes>
+                    <Route
+                      path="*"
+                      element={
+                        <LayoutPage>
+                          <LayoutControl />
+                          <LayoutBody>
+                            <Directory />
+                          </LayoutBody>
+                        </LayoutPage>
+                      }
+                    />
+                  </Routes>
                 </PlayerProvider>
               </ChatProvider>
             </NotificationProvider>

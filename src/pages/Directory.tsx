@@ -4,7 +4,7 @@
 import { Base64 } from "js-base64";
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { useTitle } from "react-use";
 
 import { ListingContentType } from "../apis/strims/network/v1/directory/directory";

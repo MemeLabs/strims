@@ -3,7 +3,7 @@
 
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router";
 import { useTitle } from "react-use";
 
 import { Network } from "../../../apis/strims/network/v1/network";

@@ -9,7 +9,7 @@ import {
   Navigate as RouterNavigate,
   useHref,
   useInRouterContext,
-} from "react-router-dom";
+} from "react-router";
 
 import {
   useInNavigationContext,

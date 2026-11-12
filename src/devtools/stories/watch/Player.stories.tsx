@@ -3,7 +3,7 @@
 
 import qs from "qs";
 import React, { useMemo, useState } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import PlayerPage from "../../../watch/Player";
 import { AnonymousSession } from "../../../watch/session";

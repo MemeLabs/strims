@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import { NetworkListingsItem } from "../../../apis/strims/network/v1/directory/directory";
 import { NetworkListingsMap } from "../../../lib/listings";

@@ -27,7 +27,7 @@ export const useOpenListing = () => {
     if (DEVICE_TYPE !== DeviceType.Portable) {
       const path = formatUri(networkKey, listing);
       player.setPath(path);
-      navigate(path);
+      void navigate(path);
     }
   }, []);
 };

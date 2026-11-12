@@ -6,7 +6,7 @@ import React, { MouseEvent, ReactNode, useCallback, useMemo } from "react";
 import Dropzone from "react-dropzone";
 import { Control, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
 import { EmoteScale } from "../../../apis/strims/chat/v1/chat";
@@ -78,7 +78,7 @@ const ChatEmoteCreateFormPage: React.FC = () => {
       // The form shows error and keeps the staged emotes.
       return;
     }
-    navigate(`/settings/chat-servers/${serverId}/emotes`, { replace: true });
+    void navigate(`/settings/chat-servers/${serverId}/emotes`, { replace: true });
   };
 
   const [listLabelsRes] = useCall("chatServer", "listEmoteLabels", { args: [{ serverId }] });

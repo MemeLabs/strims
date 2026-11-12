@@ -5,7 +5,7 @@ import "./Layout.scss";
 
 import clsx from "clsx";
 import React, { ReactElement, Suspense, useCallback, useEffect } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet } from "react-router";
 
 import LoadingPlaceholder from "../../components/LoadingPlaceholder";
 import Scrollbars from "../../components/Scrollbars";

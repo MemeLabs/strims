@@ -35,7 +35,7 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
     (enabled: boolean) =>
       setState((prev) => {
         if (prev.enabled && !enabled) {
-          navigate(prev.backgroundLocation);
+          void navigate(prev.backgroundLocation);
         }
 
         return {

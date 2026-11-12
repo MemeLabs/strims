@@ -4,7 +4,7 @@
 import "./Directory.stories.scss";
 
 import React, { ReactNode } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import {
   IListingSnippet,

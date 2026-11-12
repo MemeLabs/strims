@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 
 import ResultTable from "./ResultTable";
 import SqlEditor from "./SqlEditor";
@@ -118,7 +118,7 @@ export const SelectionChip: React.FC<SelectionChipProps> = ({ panels: ps, read, 
     q.set("cell", run.cell);
     q.set("seed", run.seed);
     if (run.arm) q.set("arm", run.arm);
-    navigate(`/console/run_timeline?${ordered(q).toString()}`);
+    void navigate(`/console/run_timeline?${ordered(q).toString()}`);
   };
   return (
     <div className={`console__chip${read.error ? " console__chip--bad" : ""}`} role="status">

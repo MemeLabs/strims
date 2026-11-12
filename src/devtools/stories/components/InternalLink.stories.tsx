@@ -4,7 +4,7 @@
 import "./core.stories.scss";
 
 import React, { ReactNode } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import InternalLink from "../../../components/InternalLink";
 import { Story, StoryRouter } from "../../storybook";

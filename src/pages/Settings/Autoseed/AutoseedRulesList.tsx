@@ -5,7 +5,7 @@ import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import base32Encode from "base32-encode";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router";
 import { useTitle } from "react-use";
 
 import { Rule } from "../../../apis/strims/autoseed/v1/autoseed";

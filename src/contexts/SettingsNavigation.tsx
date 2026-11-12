@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { ReactNode, createContext, useCallback, useContext, useMemo, useState } from "react";
-import { Location, useLocation as useRouterLocation } from "react-router-dom";
+import { Location, useLocation as useRouterLocation } from "react-router";
 
 interface NavigationPushOptions {
   back?: boolean;

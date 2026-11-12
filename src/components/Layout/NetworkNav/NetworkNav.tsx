@@ -11,7 +11,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { BiNetworkChart } from "react-icons/bi";
 import { BsArrowBarLeft, BsArrowBarRight } from "react-icons/bs";
 import { FiPlus } from "react-icons/fi";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 import { useLayout } from "../../../contexts/Layout";
 import { NetworkContext } from "../../../contexts/Network";

@@ -3,7 +3,7 @@
 
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
 import { Tag } from "../../../apis/strims/chat/v1/chat";

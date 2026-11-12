@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import React, { ReactElement, lazy } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router";
 
 import LayoutBody from "../components/Layout/Body";
 import { useBackgroundRoute } from "../contexts/BackgroundRoute";
@@ -27,8 +27,10 @@ const Home = lazy(() => import("../pages/Home"));
 const Player = lazy(() => import("../pages/Player"));
 const Streams = lazy(() => import("../pages/Streams"));
 
+// Not a splat route: the layout's nav links resolve against /settings, where
+// react-router 7 resolves a splat route's against the whole URL.
 export const createSettingsRoutes = (layout: ReactElement) => (
-  <Route path="settings/*" element={layout}>
+  <Route path="settings" element={layout}>
     <Route index element={<Navigate replace to="profile" />} />
     <Route path="profile/*" element={<Profile />} />
     <Route path="networks/*" element={<Network />} />

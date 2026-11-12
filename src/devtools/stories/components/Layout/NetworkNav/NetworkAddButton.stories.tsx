@@ -8,7 +8,7 @@ import "../Layout.stories.scss";
 import React, { useEffect, useRef } from "react";
 import { Trans } from "react-i18next";
 import { FiPlus } from "react-icons/fi";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import NetworkAddButton from "../../../../../components/Layout/NetworkNav/NetworkAddButton";
 import NetworkService from "../../../../mocks/network/service";

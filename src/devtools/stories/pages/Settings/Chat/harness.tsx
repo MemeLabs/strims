@@ -4,7 +4,7 @@
 import "./harness.stories.scss";
 
 import React, { ReactElement, ReactNode, useEffect, useRef, useState } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import { HLSEgressIsSupportedResponse } from "../../../../../apis/strims/video/v1/hls_egress";
 import { UnimplementedHLSEgressService } from "../../../../../apis/strims/video/v1/hls_egress_rpc";

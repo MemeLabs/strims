@@ -4,7 +4,7 @@
 import "./Directory.stories.scss";
 
 import React, { ComponentProps, useEffect, useRef } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import Search from "../../../../components/Directory/Search";
 import { DEVICE_TYPE, DeviceType } from "../../../../lib/userAgent";

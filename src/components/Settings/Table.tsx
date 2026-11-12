@@ -16,7 +16,7 @@ import React, {
 } from "react";
 import { BsThreeDots } from "react-icons/bs";
 import { MdChevronLeft } from "react-icons/md";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 import { setRef } from "../../lib/ref";
 import Dropdown from "../Dropdown";

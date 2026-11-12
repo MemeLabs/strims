@@ -8,7 +8,7 @@ import clsx from "clsx";
 import React, { ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { BsBoxArrowUpRight } from "react-icons/bs";
 import { FiX } from "react-icons/fi";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 import { useLayout } from "../../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../../contexts/Player";

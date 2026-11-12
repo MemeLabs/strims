@@ -5,7 +5,7 @@ import "../../../../components/Layout/Layout.scss";
 import "./Layout.stories.scss";
 
 import React, { ReactNode, useEffect, useRef } from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import Header from "../../../../components/Layout/Header";
 import DirectoryService from "../../../mocks/directory/service";

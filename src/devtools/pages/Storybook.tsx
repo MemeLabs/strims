@@ -16,7 +16,7 @@ import {
   MdSmartphone,
   MdStayCurrentLandscape,
 } from "react-icons/md";
-import { Navigate, useLocation, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useSearchParams } from "react-router";
 
 import Nav from "../components/Nav";
 import CatalogPage from "../storybook/host/CatalogPage";

@@ -4,7 +4,7 @@
 import "./Form.stories.scss";
 
 import React from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import { Button, ButtonSet } from "../../../../components/Form";
 import InternalLink from "../../../../components/InternalLink";

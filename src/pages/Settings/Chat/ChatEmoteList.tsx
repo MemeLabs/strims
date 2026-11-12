@@ -14,7 +14,7 @@ import React, {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { BsDot, BsThreeDots } from "react-icons/bs";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
 import { Emote, ListEmotesRequest } from "../../../apis/strims/chat/v1/chat";

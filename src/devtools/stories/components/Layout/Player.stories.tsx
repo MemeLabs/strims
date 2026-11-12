@@ -7,7 +7,7 @@ import { PassThrough } from "stream";
 
 import { Base64 } from "js-base64";
 import React from "react";
-import { Route } from "react-router-dom";
+import { Route } from "react-router";
 
 import { UnimplementedEgressService } from "../../../../apis/strims/video/v1/egress_rpc";
 import {

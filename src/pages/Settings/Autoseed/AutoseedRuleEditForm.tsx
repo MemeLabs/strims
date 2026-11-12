@@ -6,7 +6,7 @@ import base32Encode from "base32-encode";
 import { Base64 } from "js-base64";
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
 import { InputError } from "../../../components/Form";
