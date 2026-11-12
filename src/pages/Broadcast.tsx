@@ -158,8 +158,15 @@ const BroadcastPage: React.FC = () => {
       });
     };
 
-    videoRef.current.addEventListener("playing", () => void generateThumbnail(), { once: true });
-    const ivl = setInterval(() => void generateThumbnail(), 30 * 1000);
+    // The listing keeps its last thumbnail when an update fails (the video
+    // gone, the capture closed, the node refusing): the next tries again.
+    const updateThumbnail = () =>
+      void generateThumbnail().catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn("the broadcast's thumbnail didn't update:", e);
+      });
+    videoRef.current.addEventListener("playing", updateThumbnail, { once: true });
+    const ivl = setInterval(updateThumbnail, 30 * 1000);
 
     return () => {
       clearInterval(ivl);
