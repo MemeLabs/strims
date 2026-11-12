@@ -11,7 +11,7 @@ import Header from "../../../../components/Layout/Header";
 import DirectoryService from "../../../mocks/directory/service";
 import { MockApi, StaticPlayer, Story, StoryRouter } from "../../../storybook";
 import { DebugService } from "../Debugger/metrics";
-import { usePortletInFrame } from "../Debugger/portlet";
+import { usePortletPlacement } from "../Debugger/portlet";
 import { LayoutState } from "./shell";
 
 // Focuses the header's search and types `text`, as a viewer would (a page
@@ -36,7 +36,7 @@ const OpenDebugger: React.FC<{ root: React.RefObject<HTMLElement> }> = ({ root }
   useEffect(() => {
     root.current.querySelectorAll<HTMLElement>(".layout_header__user_nav__link")[1].click();
   }, []);
-  usePortletInFrame(() => document.querySelector(".debugger__tabs"), { y: 66 });
+  usePortletPlacement(() => document.querySelector(".debugger__tabs"), { y: 66 });
   return null;
 };
 

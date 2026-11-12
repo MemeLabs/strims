@@ -1,8 +1,6 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import "./Landing.stories.scss";
-
 import { Base64 } from "js-base64";
 import React, { ReactNode, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
@@ -26,14 +24,12 @@ const Form: React.FC<{ token?: string; children?: ReactNode }> = ({ token = "", 
     defaultValues: { pairingTokenString: token },
   });
   return (
-    <div className="landing_story">
-      <LandingPageLayout>
-        <form onSubmit={(e) => e.preventDefault()}>
-          <PairingTokenInput control={control} />
-          {children}
-        </form>
-      </LandingPageLayout>
-    </div>
+    <LandingPageLayout>
+      <form onSubmit={(e) => e.preventDefault()}>
+        <PairingTokenInput control={control} />
+        {children}
+      </form>
+    </LandingPageLayout>
   );
 };
 
@@ -47,7 +43,7 @@ const PasteOpened: React.FC = () => {
     paste.click();
   }, []);
   return (
-    <div ref={ref} style={{ height: "100%" }}>
+    <div ref={ref}>
       <Form />
     </div>
   );

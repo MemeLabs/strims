@@ -1,8 +1,6 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import "./Landing.stories.scss";
-
 import React, { ComponentProps, ReactNode, useEffect, useRef } from "react";
 import { Route } from "react-router-dom";
 
@@ -19,14 +17,7 @@ const noop = (): void => undefined;
 // router link.
 const Page: React.FC<{ children: ReactNode }> = ({ children }) => (
   <StoryRouter initialPath="/login">
-    <Route
-      path="/login"
-      element={
-        <div className="landing_story">
-          <LandingPageLayout>{children}</LandingPageLayout>
-        </div>
-      }
-    />
+    <Route path="/login" element={<LandingPageLayout>{children}</LandingPageLayout>} />
   </StoryRouter>
 );
 

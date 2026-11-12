@@ -1,21 +1,6 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// A containing block for position: fixed, the size of the story's frame.
-.pages_story_frame_root {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  transform: translateZ(0);
-
-  // Sized in viewport units, which read the storybook's window rather than
-  // the frame that stands in for the viewport.
-  .invite_auth {
-    width: 100%;
-    height: 100%;
-  }
-}
-
 .pages_story_player {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);

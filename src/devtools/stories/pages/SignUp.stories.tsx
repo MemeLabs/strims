@@ -7,7 +7,6 @@ import { Route } from "react-router-dom";
 import { State } from "../../../contexts/Session";
 import SignUp from "../../../pages/SignUp";
 import { Story, StoryRouter, fixtures } from "../../storybook";
-import { FrameRoot } from "./FrameRoot";
 import { StorySession } from "./StorySession";
 import { SubmitOnMount } from "./SubmitOnMount";
 
@@ -19,13 +18,11 @@ interface SignUpStoryProps {
 }
 
 const SignUpStory: React.FC<SignUpStoryProps> = ({ state, failWith, initialPath = "/signup" }) => (
-  <FrameRoot>
-    <StorySession state={state} failWith={failWith}>
-      <StoryRouter initialPath={initialPath}>
-        <Route path="/signup" element={<SignUp />} />
-      </StoryRouter>
-    </StorySession>
-  </FrameRoot>
+  <StorySession state={state} failWith={failWith}>
+    <StoryRouter initialPath={initialPath}>
+      <Route path="/signup" element={<SignUp />} />
+    </StoryRouter>
+  </StorySession>
 );
 
 const signUpError = new Error("a profile named test_user exists");

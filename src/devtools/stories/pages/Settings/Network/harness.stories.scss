@@ -1,9 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// A settings page filling the frame (.layout as the app's, so the settings
-// styles' breakpoints apply), and the clipboard's line below it.
+// A settings page filling the frame, and the clipboard's line below it.
 .settings_story {
+  height: 100%;
   display: flex;
   flex-direction: column;
 

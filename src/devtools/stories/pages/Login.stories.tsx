@@ -8,7 +8,6 @@ import { LinkedProfile } from "../../../apis/strims/auth/v1/auth";
 import { State } from "../../../contexts/Session";
 import Login from "../../../pages/Login";
 import { Story, StoryRouter, fixtures } from "../../storybook";
-import { FrameRoot } from "./FrameRoot";
 import { StorySession } from "./StorySession";
 import { SubmitOnMount } from "./SubmitOnMount";
 
@@ -54,13 +53,11 @@ const LoginStory: React.FC<LoginStoryProps> = ({
   initialPath = "/login",
   newLogin,
 }) => (
-  <FrameRoot>
-    <StorySession state={state} failWith={failWith}>
-      <StoryRouter initialPath={initialPath}>
-        <Route path="/login" element={<Login newLogin={newLogin} />} />
-      </StoryRouter>
-    </StorySession>
-  </FrameRoot>
+  <StorySession state={state} failWith={failWith}>
+    <StoryRouter initialPath={initialPath}>
+      <Route path="/login" element={<Login newLogin={newLogin} />} />
+    </StoryRouter>
+  </StorySession>
 );
 
 const signInError = new Error("invalid name or password");

@@ -8,18 +8,6 @@ import React, { useLayoutEffect, useRef } from "react";
 import { MenuItem, useContextMenu } from "../../../components/ContextMenu";
 import { Story } from "../../storybook";
 
-// Where position: fixed puts 0, 0 inside `parent`: the viewport's corner, or
-// the corner of an ancestor that contains fixed descendants (the story's
-// frame holds both the target and the menu's portal).
-const fixedOrigin = (parent: HTMLElement): [number, number] => {
-  const probe = document.createElement("div");
-  probe.style.cssText = "position: fixed; left: 0; top: 0;";
-  parent.appendChild(probe);
-  const { left, top } = probe.getBoundingClientRect();
-  probe.remove();
-  return [left, top];
-};
-
 interface HarnessProps {
   /** Where the target sits: the story's top left, or its bottom right corner. */
   corner?: boolean;
@@ -37,8 +25,7 @@ const Harness: React.FC<HarnessProps> = ({ corner, openAtEnd }) => {
   useLayoutEffect(() => {
     const rect = ref.current.getBoundingClientRect();
     const [x, y] = openAtEnd ? [rect.right, rect.bottom] : [rect.left + 24, rect.top + 24];
-    const [left, top] = fixedOrigin(ref.current.parentElement);
-    openMenu({ pageX: x - left, pageY: y - top } as React.MouseEvent);
+    openMenu({ pageX: x, pageY: y } as React.MouseEvent);
   }, []);
 
   return (

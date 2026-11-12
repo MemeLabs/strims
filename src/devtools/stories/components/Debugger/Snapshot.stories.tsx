@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import "../../../../components/Debugger/Debugger.scss";
-import "./Debugger.stories.scss";
 
 import React, { useEffect, useMemo, useRef } from "react";
 
@@ -11,7 +10,7 @@ import { latest } from "../../../../components/Debugger/series";
 import Snapshot from "../../../../components/Debugger/Snapshot";
 import { Story } from "../../../storybook";
 import { metricsHistory } from "./metrics";
-import { usePortletInFrame } from "./portlet";
+import { usePortletPlacement } from "./portlet";
 
 // Opens the branches at these paths of keys below the root, outermost
 // first, as a viewer clicking them would.
@@ -49,16 +48,14 @@ const useOpenBranches = (root: React.RefObject<HTMLElement>, paths: string[][]) 
 const SnapshotStory: React.FC<{ open?: string[][] }> = ({ open = [] }) => {
   const snapshot = useMemo(() => latest(metricsHistory({ count: 2 })), []);
   const ref = useRef<HTMLDivElement>(null);
-  usePortletInFrame(() => ref.current, { width: 560, height: 520 });
+  usePortletPlacement(() => ref.current, { width: 560, height: 520 });
   useOpenBranches(ref, open);
   return (
-    <div className="debugger_story">
-      <Portlet isOpen onClose={() => undefined}>
-        <div ref={ref}>
-          <Snapshot snapshot={snapshot} />
-        </div>
-      </Portlet>
-    </div>
+    <Portlet isOpen onClose={() => undefined}>
+      <div ref={ref}>
+        <Snapshot snapshot={snapshot} />
+      </div>
+    </Portlet>
   );
 };
 

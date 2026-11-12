@@ -7,7 +7,7 @@ import React, { useRef } from "react";
 
 import Portlet, { usePortletSize } from "../../../../components/Debugger/Portlet";
 import { Story } from "../../../storybook";
-import { PortletPlacement, usePortletInFrame } from "./portlet";
+import { PortletPlacement, usePortletPlacement } from "./portlet";
 
 const Content: React.FC<{ contentRef: React.Ref<HTMLDivElement> }> = ({ contentRef }) => {
   const { width, height } = usePortletSize();
@@ -26,13 +26,11 @@ const Content: React.FC<{ contentRef: React.Ref<HTMLDivElement> }> = ({ contentR
 
 const PortletStory: React.FC<PortletPlacement> = (placement) => {
   const ref = useRef<HTMLDivElement>(null);
-  usePortletInFrame(() => ref.current, placement);
+  usePortletPlacement(() => ref.current, placement);
   return (
-    <div className="debugger_story">
-      <Portlet isOpen onClose={() => undefined}>
-        <Content contentRef={ref} />
-      </Portlet>
-    </div>
+    <Portlet isOpen onClose={() => undefined}>
+      <Content contentRef={ref} />
+    </Portlet>
   );
 };
 

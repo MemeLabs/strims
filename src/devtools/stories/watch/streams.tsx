@@ -1,7 +1,8 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import "./watch.stories.scss";
+// The watch page's own stylesheet, which its entry (watch/index.tsx) loads.
+import "../../../watch/watch.scss";
 
 import React, { ReactNode } from "react";
 

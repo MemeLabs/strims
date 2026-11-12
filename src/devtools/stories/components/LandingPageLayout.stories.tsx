@@ -1,20 +1,13 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import "./core.stories.scss";
-
 import React from "react";
 import { FiUser } from "react-icons/fi";
 
 import LandingPageLayout from "../../../components/LandingPageLayout";
 import { Story } from "../../storybook";
 
-// The layout fills the viewport (position: fixed): the story's frame here.
-const Viewport: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="core_story__viewport core_story__viewport--fill">
-    <LandingPageLayout>{children}</LandingPageLayout>
-  </div>
-);
+// The layout fills the viewport (position: fixed), the story's frame.
 
 // Login's saved profiles, whose styles LandingPageLayout.scss holds.
 const ProfileList: React.FC<{ names: string[] }> = ({ names }) => (
@@ -35,25 +28,25 @@ const stories: Story[] = [
   {
     name: "Default",
     component: () => (
-      <Viewport>
+      <LandingPageLayout>
         <ProfileList names={["test_user", "second_profile"]} />
-      </Viewport>
+      </LandingPageLayout>
     ),
   },
   {
     name: "Text",
     component: () => (
-      <Viewport>
+      <LandingPageLayout>
         <p>Pick a profile to sign in with, or create one.</p>
-      </Viewport>
+      </LandingPageLayout>
     ),
   },
   {
     name: "Long content",
     component: () => (
-      <Viewport>
+      <LandingPageLayout>
         <ProfileList names={Array.from({ length: 12 }, (_, i) => `profile_${i + 1}`)} />
-      </Viewport>
+      </LandingPageLayout>
     ),
   },
 ];

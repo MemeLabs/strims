@@ -1,15 +1,12 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import "./Debugger.stories.scss";
-
-import clsx from "clsx";
 import React, { useEffect } from "react";
 
 import Debugger from "../../../../components/Debugger";
 import { MockApi, Story } from "../../../storybook";
 import { DebugService, MetricsMode } from "./metrics";
-import { PortletPlacement, usePortletInFrame } from "./portlet";
+import { PortletPlacement, usePortletPlacement } from "./portlet";
 import { useFakePeerConnections } from "./rtc";
 
 const findTabs = () => document.querySelector(".debugger__tabs");
@@ -41,17 +38,16 @@ interface DebuggerStoryProps extends PortletPlacement {
 }
 
 const Placed: React.FC<DebuggerStoryProps> = ({ tab, ...placement }) => {
-  usePortletInFrame(findTabs, placement);
+  usePortletPlacement(findTabs, placement);
   useSelectTab(tab);
   return null;
 };
 
+// The debugger's window opens at the page's top left, as in the app.
 const DebuggerStory: React.FC<DebuggerStoryProps> = ({ mode = "history", ...props }) => (
   <MockApi services={() => ({ debug: new DebugService(mode) })}>
-    <div className={clsx("debugger_story", { "debugger_story--large": props.height > 600 })}>
-      <Debugger isOpen onClose={() => undefined} />
-      <Placed {...props} />
-    </div>
+    <Debugger isOpen onClose={() => undefined} />
+    <Placed {...props} />
   </MockApi>
 );
 

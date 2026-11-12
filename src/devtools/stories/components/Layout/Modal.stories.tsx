@@ -3,21 +3,13 @@
 
 import "./Modal.stories.scss";
 
-import React, { ReactNode } from "react";
+import React from "react";
 
 import Modal from "../../../../components/Layout/Modal";
-import { WithRootRefProps, withLayoutContext } from "../../../../contexts/Layout";
 import { Story } from "../../../storybook";
 
-// A layout root of the story's own, which the modal portals into: it is the
-// modal's viewport (see Modal.stories.scss).
-const Viewport = withLayoutContext<{ children: ReactNode }>(
-  ({ rootRef, children }: { children: ReactNode } & WithRootRefProps) => (
-    <div ref={rootRef} className="modal_story">
-      {children}
-    </div>
-  )
-);
+// The modal portals into the layout's root, the story's frame, and fills
+// the viewport (see Modal.stories.scss for the desktop frame).
 
 const Paragraphs: React.FC<{ count: number }> = ({ count }) => (
   <div className="modal_story__body">
@@ -37,55 +29,45 @@ const stories: Story[] = [
   {
     name: "Title",
     component: () => (
-      <Viewport>
-        <Modal title="Settings" onClose={noop}>
-          <Paragraphs count={2} />
-        </Modal>
-      </Viewport>
+      <Modal title="Settings" onClose={noop}>
+        <Paragraphs count={2} />
+      </Modal>
     ),
   },
   {
     name: "No header",
     component: () => (
-      <Viewport>
-        <Modal onClose={noop}>
-          <Paragraphs count={2} />
-        </Modal>
-      </Viewport>
+      <Modal onClose={noop}>
+        <Paragraphs count={2} />
+      </Modal>
     ),
   },
   {
     name: "Header without title",
     component: () => (
-      <Viewport>
-        <Modal showHeader onClose={noop}>
-          <Paragraphs count={2} />
-        </Modal>
-      </Viewport>
+      <Modal showHeader onClose={noop}>
+        <Paragraphs count={2} />
+      </Modal>
     ),
   },
   {
     // One line, cut short with an ellipsis before the close button.
     name: "Long title",
     component: () => (
-      <Viewport>
-        <Modal
-          title="A title long enough that it runs past the width of a phone-sized header, so it ends in an ellipsis on one line"
-          onClose={noop}
-        >
-          <Paragraphs count={1} />
-        </Modal>
-      </Viewport>
+      <Modal
+        title="A title long enough that it runs past the width of a phone-sized header, so it ends in an ellipsis on one line"
+        onClose={noop}
+      >
+        <Paragraphs count={1} />
+      </Modal>
     ),
   },
   {
     name: "Long content",
     component: () => (
-      <Viewport>
-        <Modal title="Settings" onClose={noop}>
-          <Paragraphs count={40} />
-        </Modal>
-      </Viewport>
+      <Modal title="Settings" onClose={noop}>
+        <Paragraphs count={40} />
+      </Modal>
     ),
   },
 ];

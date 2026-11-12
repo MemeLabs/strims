@@ -11,7 +11,6 @@ import Invite from "../../../pages/Invite";
 import NetworkService from "../../mocks/network/service";
 import { MockApi, MockServices, Story, StoryRouter, fixtures } from "../../storybook";
 import { FetchStub, inviteRoute } from "./fetchStub";
-import { FrameRoot } from "./FrameRoot";
 import { StorySession } from "./StorySession";
 
 // The network the invitation is to, by its peer jbpratt.
@@ -44,17 +43,15 @@ const InviteStory: React.FC<InviteStoryProps> = ({
   network = () => new NetworkService({ count: 3 }),
   invitation = invitedNetwork(),
 }) => (
-  <FrameRoot>
-    <FetchStub route={inviteRoute(new InviteLinkService(invitation))}>
-      <MockApi services={() => ({ network: network() })}>
-        <StorySession state={{ profile: fixtures.profile() }}>
-          <StoryRouter initialPath="/invite/bhPfc3a9">
-            <Route path="/invite/:code" element={<Invite />} />
-          </StoryRouter>
-        </StorySession>
-      </MockApi>
-    </FetchStub>
-  </FrameRoot>
+  <FetchStub route={inviteRoute(new InviteLinkService(invitation))}>
+    <MockApi services={() => ({ network: network() })}>
+      <StorySession state={{ profile: fixtures.profile() }}>
+        <StoryRouter initialPath="/invite/bhPfc3a9">
+          <Route path="/invite/:code" element={<Invite />} />
+        </StoryRouter>
+      </StorySession>
+    </MockApi>
+  </FetchStub>
 );
 
 // Networks 1..3 whose list answers after 4 s.

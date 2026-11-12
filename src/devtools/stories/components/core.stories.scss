@@ -32,8 +32,8 @@
     opacity: 0.7;
   }
 
-  // A box fixed-position content (SwipablePanel, LoadingPlaceholder) is
-  // placed in: a transform makes it their containing block.
+  // A small viewport for one of several SwipablePanels side by side (they
+  // are position: fixed): a transform makes it their containing block.
   &__viewport {
     position: relative;
     overflow: hidden;
@@ -42,12 +42,6 @@
     height: 220px;
     border: 1px solid var(--color-opac-w-5);
     background: var(--color-background-layout-body);
-
-    &--fill {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
   }
 
   &__panel {

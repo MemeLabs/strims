@@ -8,7 +8,6 @@
 
 import "./harness.stories.scss";
 
-import clsx from "clsx";
 import React, {
   ReactElement,
   ReactNode,
@@ -201,26 +200,6 @@ const useClipboard = (): string => {
   return copied;
 };
 
-// --- the frame ---
-
-// The frame's layout--* classes, which the settings styles key on `.layout`.
-const useFrameLayoutClasses = (ref: React.RefObject<HTMLElement>): string[] => {
-  const [classes, setClasses] = useState<string[]>([]);
-  useLayoutEffect(() => {
-    const frame = ref.current?.closest("[data-story-root]");
-    if (!frame) {
-      return;
-    }
-    const read = () =>
-      setClasses(Array.from(frame.classList).filter((c) => c.startsWith("layout--")));
-    read();
-    const observer = new MutationObserver(read);
-    observer.observe(frame, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
-  return classes;
-};
-
 const STORY_PATH = "/settings/story";
 
 export interface SettingsStoryProps {
@@ -246,14 +225,13 @@ export const SettingsStory: React.FC<SettingsStoryProps> = ({
   children,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
-  const classes = useFrameLayoutClasses(ref);
   const copied = useClipboard();
   useSteps(ref, steps);
 
   return (
     <MockApi services={() => ({ ...settingsServices(), ...services?.() })}>
       <MockNotifications>
-        <div ref={ref} className={clsx("layout", "settings_story", classes)}>
+        <div ref={ref} className="settings_story">
           <div className="settings_story__page">
             <StoryRouter initialPath={path ?? STORY_PATH}>
               <Route path="/settings" element={<SettingsLayout nav={null} />}>

@@ -1,27 +1,19 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// The modal's viewport: a transform makes it the containing block of the
-// fixed-position modal, sized by the frame's --layout-width/height.
-.modal_story {
-  position: relative;
-  height: 100%;
-  overflow: hidden;
-  transform: translateZ(0);
+// The app opens a Modal on portable devices alone (the footer's panels). Off
+// them SwipablePanel renders a plain div, which leaves the modal below the
+// viewport (top: var(--layout-height)), where an open panel's transform
+// lifts it from: the desktop frame shows it lifted.
+.layout--pc .modal {
+  top: 0;
+}
 
-  // Off portable devices SwipablePanel renders a plain div, which leaves the
-  // modal below the layout (top: var(--layout-height)), where an open
-  // panel's transform lifts it from: the story shows it lifted.
-  .modal {
-    top: 0;
-  }
+.modal_story__body {
+  padding: 0 1rem;
+  line-height: 1.5;
 
-  &__body {
-    padding: 0 1rem;
-    line-height: 1.5;
-
-    p {
-      margin: 1rem 0;
-    }
+  p {
+    margin: 1rem 0;
   }
 }

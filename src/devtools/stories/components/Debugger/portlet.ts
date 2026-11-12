@@ -4,12 +4,10 @@
 import { useEffect } from "react";
 
 // The Portlet portals into document.body at the page's top left, 400 px
-// square: outside the story's frame (and its screenshot). Stories move it
-// over the frame, and size it, the way a viewer would: by its resize handle
-// and its header.
+// square. Stories size it, and may move it, the way a viewer would: by its
+// resize handle and its header.
 
 const DEFAULT_SIZE = 400;
-const MARGIN = 16;
 
 const fire = (el: Element, type: string, x: number, y: number) =>
   el.dispatchEvent(
@@ -35,40 +33,39 @@ const portletParts = (content: Element) => {
 export interface PortletPlacement {
   width?: number;
   height?: number;
-  /** Its offset into the frame (default 16 px each way). */
+  /** Where its top left goes (default where it opens, the page's corner). */
   x?: number;
   y?: number;
 }
 
-// Once `find` gives an element the portlet's children rendered, moves the
-// portlet into the story's frame, (`x`, `y`) from its top left, `width` x
-// `height`.
-export const usePortletInFrame = (
+// Once `find` gives an element the portlet's children rendered, sizes the
+// portlet `width` x `height` and moves it to (`x`, `y`).
+export const usePortletPlacement = (
   find: () => Element | null,
-  { width = DEFAULT_SIZE, height = DEFAULT_SIZE, x = MARGIN, y = MARGIN }: PortletPlacement = {}
+  { width = DEFAULT_SIZE, height = DEFAULT_SIZE, x = 0, y = 0 }: PortletPlacement = {}
 ): void =>
   useEffect(() => {
     let frame = 0;
     const place = () => {
       const content = find();
       const parts = content && portletParts(content);
-      const root = document.querySelector("[data-story-root]");
-      if (!parts || !root) {
+      if (!parts) {
         frame = requestAnimationFrame(place);
         return;
       }
       const { header, resizeHandle, container } = parts;
-      const dw = width - DEFAULT_SIZE;
-      const dh = height - DEFAULT_SIZE;
-      fire(resizeHandle, "mousedown", 0, 0);
-      fire(container, "mousemove", dw, dh);
-      fire(container, "mouseup", dw, dh);
-
-      const { left, top } = root.getBoundingClientRect();
-      const to = [left + x + window.scrollX, top + y + window.scrollY] as const;
-      fire(header, "mousedown", 0, 0);
-      fire(container, "mousemove", ...to);
-      fire(container, "mouseup", ...to);
+      if (width !== DEFAULT_SIZE || height !== DEFAULT_SIZE) {
+        const dw = width - DEFAULT_SIZE;
+        const dh = height - DEFAULT_SIZE;
+        fire(resizeHandle, "mousedown", 0, 0);
+        fire(container, "mousemove", dw, dh);
+        fire(container, "mouseup", dw, dh);
+      }
+      if (x || y) {
+        fire(header, "mousedown", 0, 0);
+        fire(container, "mousemove", x, y);
+        fire(container, "mouseup", x, y);
+      }
     };
     frame = requestAnimationFrame(place);
     return () => cancelAnimationFrame(frame);

@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import "../../../../components/Debugger/Debugger.scss";
-import "./Debugger.stories.scss";
 
-import clsx from "clsx";
 import React, { ReactNode, useMemo, useRef } from "react";
 
 import {
@@ -16,7 +14,7 @@ import {
 import Portlet from "../../../../components/Debugger/Portlet";
 import { Story } from "../../../storybook";
 import { MetricsOptions, metricsHistory } from "./metrics";
-import { PortletPlacement, usePortletInFrame } from "./portlet";
+import { PortletPlacement, usePortletPlacement } from "./portlet";
 import { useFakePeerConnections } from "./rtc";
 
 // The charts size themselves by the portlet they're in.
@@ -25,13 +23,11 @@ const InPortlet: React.FC<PortletPlacement & { children: ReactNode }> = ({
   ...placement
 }) => {
   const ref = useRef<HTMLDivElement>(null);
-  usePortletInFrame(() => ref.current, placement);
+  usePortletPlacement(() => ref.current, placement);
   return (
-    <div className={clsx("debugger_story", { "debugger_story--large": placement.height > 600 })}>
-      <Portlet isOpen onClose={() => undefined}>
-        <div ref={ref}>{children}</div>
-      </Portlet>
-    </div>
+    <Portlet isOpen onClose={() => undefined}>
+      <div ref={ref}>{children}</div>
+    </Portlet>
   );
 };
 
