@@ -1,0 +1,11 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+@use "sass:meta";
+
+// The watch page's own stylesheet, which its entry (watch/index.tsx) loads
+// and the devtools build doesn't, kept to the story's frame: its #root rule
+// would pin the devtools page's root too.
+.storybook_frame {
+  @include meta.load-css("../../../watch/watch");
+}
