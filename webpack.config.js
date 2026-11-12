@@ -228,7 +228,7 @@ module.exports = (env, argv) => {
     plugins.unshift(
       new ReactRefreshWebpackPlugin({
         exclude:
-          /node_modules|\/target\/|\.(shared-)?worker\.ts|\/src\/(web|watch)\/index\.tsx|src\/lib\/i18n\.ts$/,
+          /node_modules|\/target\/|\.(shared-)?worker\.ts|\/src\/web\/sw\.ts$|\/src\/(web|watch)\/index\.tsx|src\/lib\/i18n\.ts$/,
         overlay: false,
       }),
       new HtmlWebpackPlugin({
@@ -431,7 +431,6 @@ module.exports = (env, argv) => {
           },
           entry: {
             index: path.join(__dirname, "src", "web", "index.tsx"),
-            sw: path.join(__dirname, "src", "web", "sw.ts"),
             watch: path.join(__dirname, "src", "watch", "index.tsx"),
             ...entries,
           },

@@ -10,8 +10,8 @@ export { ROOT };
 const stories = require.context("../../stories/", true, /\.stories\.tsx$/, "lazy");
 
 // Every UI file's path, keys only: "weak" puts none of them in a chunk
-// (webpack still compiles them). Not watch/index.tsx, the watch page's entry:
-// its service-worker-loader import would emit sw.js.
+// (webpack still compiles them). Not watch/index.tsx, the watch page's entry,
+// which mounts the page and exports no component.
 const sources = require.context(
   "../../../",
   true,

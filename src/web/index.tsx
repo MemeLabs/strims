@@ -6,7 +6,6 @@ import "../lib/i18n";
 
 import React from "react";
 import { Root, createRoot } from "react-dom/client";
-import registerServiceWorker from "service-worker-loader!./sw";
 
 import App from "./App";
 import { apiDialer } from "./dialer";
@@ -19,7 +18,14 @@ void (async () => {
   }
 })();
 
-void registerServiceWorker({ scope: "/" });
+// The worker is emitted as /sw.js, at the root its scope needs.
+if ("serviceWorker" in navigator) {
+  void navigator.serviceWorker.register(
+    /* webpackChunkName: "sw", webpackEntryOptions: { filename: "sw.js" } */
+    new URL("./sw.ts", import.meta.url),
+    { scope: "/" }
+  );
+}
 
 class Runner {
   rootElement: HTMLDivElement;

@@ -99,7 +99,6 @@
     "resolve-url-loader": "^5.0.0",
     "sass": "^1.57.1",
     "sass-loader": "^13.2.0",
-    "service-worker-loader": "^4.0.2",
     "slate": "^0.87.0",
     "slate-history": "^0.86.0",
     "slate-react": "^0.88.0",
@@ -142,9 +141,6 @@
     },
     "use-fullscreen": {
       "react": "$react"
-    },
-    "service-worker-loader": {
-      "webpack": "$webpack"
     }
   }
 }
