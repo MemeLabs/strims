@@ -5,7 +5,8 @@
 //! dump per host that reads back. And a run's tables
 //! ([`strims_sim::tables`]): the same trace at any bin width, over TCP and
 //! as browsers, seconds that are the series', bins that add up to the
-//! row's totals, and events that are the scenario's and the report's.
+//! row's totals, events that are the scenario's and the report's, stalls
+//! that are the reads' playout and parents that are the trees' changes.
 
 #![allow(
     clippy::unwrap_used,
@@ -27,6 +28,7 @@ use strims_sim::topology::random_mesh;
 use strims_sim::{
     Fault, Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport, WanHostReport, run,
 };
+use strims_wan::playout::DELAYS_MS;
 use strims_wan::{Access, City, Site};
 
 #[global_allocator]
@@ -322,6 +324,8 @@ fn a_run_with_tables_keeps_its_trace() {
             budget_reading_is_the_budgets(&r, &d);
             held_truth_meets_the_reads(&r, &d);
             request_logs_say_what_they_are(&r, &d);
+            stalls_say_how_playout_went(&d);
+            parents_say_how_the_trees_changed(&r, &d);
         }
     }
     let _ = std::fs::remove_dir_all(&dir);
@@ -515,8 +519,10 @@ fn a_runs_events_are_its_scenarios_and_losses() {
 /// mid-stream, every read and every honest answer and HAVE still has its
 /// hold in `arrivals` ([`every_read_and_answer_has_its_hold`]), the
 /// leavers' last ones too, every record of a leaver names it
-/// ([`the_logs_name_their_peers`]), and the expired requests are the
-/// runners' timed out ones, the leavers' among them.
+/// ([`the_logs_name_their_peers`]), the expired requests are the
+/// runners' timed out ones, the leavers' among them, and the stalls and
+/// parents tables say how playout went and how the trees changed
+/// ([`stalls_say_how_playout_went`], [`parents_say_how_the_trees_changed`]).
 #[test]
 fn a_departures_logs_keep_every_hold() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
@@ -541,6 +547,8 @@ fn a_departures_logs_keep_every_hold() {
             .count() as u64;
         let (a, b, c) = r.timeouts(0);
         assert_eq!(expired, a + b + c, "{how}");
+        stalls_say_how_playout_went(&d);
+        parents_say_how_the_trees_changed(&r, &d);
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -567,6 +575,48 @@ fn the_logs_name_their_peers(d: &Path, how: &str) {
             rows.len()
         );
     }
+}
+
+/// [`wan_mesh`] whose seed's site uplink falls to half the stream's rate
+/// from 4 s to 7 s into the run (2 s to 5 s into the stream), then comes
+/// back: the viewers fall behind and stall.
+fn starved_wan() -> Scenario {
+    let mut s = wan_mesh();
+    let seed = s.swarms[0].seed;
+    let up = s.hosts[seed].site.unwrap().profile.up;
+    s.hosts[seed].up_steps = vec![
+        (Duration::from_secs(4), 32 * 1024),
+        (Duration::from_secs(7), up),
+    ];
+    s
+}
+
+/// The `stalls` and `parents` tables of a run whose viewers stall, its
+/// seed starved for 3 s ([`starved_wan`]), say how their playout went and
+/// how the trees changed ([`stalls_say_how_playout_went`],
+/// [`parents_say_how_the_trees_changed`]): stalls at the shorter delay.
+#[test]
+fn a_starved_runs_stalls_are_its_reads_playout() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "a_starved_runs_stalls_are_its_reads_playout-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut spec = starved_wan();
+    spec.wire_bins = Some(Duration::from_secs(1));
+    let r = run(spec, 1).unwrap();
+    r.write_tables(&dir, Duration::from_secs(1), false).unwrap();
+    let stalls = stalls_say_how_playout_went(&dir);
+    let short = table_rows(&dir, "stalls")
+        .iter()
+        .filter(|s| int(s, "delay_ms") == Some(DELAYS_MS[0]))
+        .count();
+    assert!(
+        stalls > 0 && short > 0,
+        "{stalls} stalls, {short} at the shorter delay"
+    );
+    parents_say_how_the_trees_changed(&r, &dir);
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The seed's `budget_capacity` is the reading its budget was measured
@@ -861,6 +911,120 @@ fn request_logs_say_what_they_are(r: &strims_sim::Report, d: &Path) {
     for lost in ["held_lost", "haves_lost", "asks_lost"] {
         assert!(meta.contains(&format!("\"{lost}\":0")), "{meta}");
     }
+}
+
+/// The `stalls` table says how each viewer's playout went at each delay of
+/// [`DELAYS_MS`], from its `reads` (each unit at its first read, due at the
+/// read less its lag; the units due at once as late as the latest):
+/// playback starts at the first due units' time plus the delay, or plus
+/// their lag if more; each stall waits on the units due at one time, from
+/// their play at the offset so far until they came, a rise of the offset
+/// to their lag; the stalls come in time order, and add up to the viewer's
+/// most lag past the offset it started at, so a longer delay stalls no
+/// longer. The stalls the table holds.
+fn stalls_say_how_playout_went(d: &Path) -> usize {
+    // Each viewer's units' first reads: seq -> (t_ms, lag_ms).
+    let mut units: BTreeMap<i64, BTreeMap<i64, (i64, i64)>> = BTreeMap::new();
+    for r in table_rows(d, "reads") {
+        let (v, t, s, l) = (
+            int(&r, "viewer").unwrap(),
+            int(&r, "t_ms").unwrap(),
+            int(&r, "seq").unwrap(),
+            int(&r, "lag_ms").unwrap(),
+        );
+        let e = units.entry(v).or_default().entry(s).or_insert((t, l));
+        if t < e.0 {
+            *e = (t, l);
+        }
+    }
+    let mut stalls: BTreeMap<(i64, i64), Vec<(i64, i64)>> = BTreeMap::new();
+    let rows = table_rows(d, "stalls");
+    for r in &rows {
+        let (v, delay) = (int(r, "viewer").unwrap(), int(r, "delay_ms").unwrap());
+        assert!(
+            DELAYS_MS.contains(&delay) && units.contains_key(&v),
+            "{r:?}"
+        );
+        let s = (int(r, "t_ms").unwrap(), int(r, "stall_ms").unwrap());
+        stalls.entry((v, delay)).or_default().push(s);
+    }
+    for (&v, us) in &units {
+        // The units by due time, each time's the latest lag.
+        let mut due: BTreeMap<i64, i64> = BTreeMap::new();
+        for &(t, l) in us.values() {
+            let e = due.entry(t - l).or_insert(l);
+            *e = (*e).max(l);
+        }
+        let first = *due.values().next().unwrap();
+        let most = *due.values().max().unwrap();
+        let mut stalled = Vec::new();
+        for delay in DELAYS_MS {
+            let start = delay.max(first);
+            let (mut offset, mut last) = (start, i64::MIN);
+            for &(t, ms) in stalls.get(&(v, delay)).into_iter().flatten() {
+                assert!(ms > 0 && t > last, "viewer {v} at {delay} ms: {t} {ms}");
+                assert_eq!(
+                    due.get(&(t - offset)),
+                    Some(&(offset + ms)),
+                    "viewer {v} at {delay} ms: the stall at {t} waits on units due then"
+                );
+                (offset, last) = (offset + ms, t);
+            }
+            assert_eq!(offset, start.max(most), "viewer {v} at {delay} ms");
+            stalled.push(offset - start);
+        }
+        assert!(
+            stalled.windows(2).all(|w| w[0] >= w[1]),
+            "viewer {v}: {stalled:?}"
+        );
+    }
+    rows.len()
+}
+
+/// The `parents` table says how each node's push parents changed: a node's
+/// changes in order (`n` from 0, `t_ms` never falling), each stream's an
+/// `open` from no parent, `switch`es to another, and an end (`prune`,
+/// `shed`, `lost`) back to none; the seed takes none and no node is its own
+/// parent; the switches are the runners' (`switched`), and the logs' caps
+/// left none out (`parents_lost`).
+fn parents_say_how_the_trees_changed(r: &strims_sim::Report, d: &Path) {
+    let rows = table_rows(d, "parents");
+    assert!(!rows.is_empty());
+    let seed = r.scenario.swarms[0].seed as i64;
+    let mut order: BTreeMap<i64, (i64, i64)> = BTreeMap::new();
+    let mut open: BTreeMap<(i64, i64), i64> = BTreeMap::new();
+    let mut switches = 0;
+    for p in &rows {
+        let (t, node, n, stream) = (
+            int(p, "t_ms").unwrap(),
+            int(p, "node").unwrap(),
+            int(p, "n").unwrap(),
+            int(p, "stream").unwrap(),
+        );
+        let parent = int(p, "parent").filter(|&x| x >= 0);
+        let (next, last) = order.entry(node).or_insert((0, i64::MIN));
+        assert_eq!((n, t >= *last), (*next, true), "{p:?}");
+        (*next, *last) = (n + 1, t);
+        assert!(node != seed && parent != Some(node), "{p:?}");
+        let had = open.get(&(node, stream)).copied();
+        let ok = match p["reason"].as_str() {
+            "open" => had.is_none() && parent.is_some(),
+            "switch" => had.is_some() && parent.is_some() && parent != had,
+            "prune" | "shed" | "lost" => had.is_some() && parent.is_none(),
+            _ => false,
+        };
+        assert!(ok, "{p:?} after {had:?}");
+        match parent {
+            Some(x) => open.insert((node, stream), x),
+            None => open.remove(&(node, stream)),
+        };
+        switches += u64::from(p["reason"] == "switch");
+    }
+    assert_eq!(switches, r.swarm_counters(0).switched);
+    let meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(d.join("series_meta.json")).unwrap())
+            .unwrap();
+    assert_eq!(meta["parents_lost"], 0, "{meta}");
 }
 
 /// Every honest peer's HAVE and answer came once it held the chunk, and

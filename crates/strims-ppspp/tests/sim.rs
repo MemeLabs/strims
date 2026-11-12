@@ -7502,8 +7502,9 @@ fn sim_parent_reasons_are_the_vocabularys() {
 
 /// The tables ([`Sim::write_tables`]) leave the run as it was, at any bin
 /// width, and their seconds are the series': read through getters, their
-/// counters change nothing. Behind an admission seed and an adaptive one,
-/// whose budget's reading the series and the bins carry.
+/// counters change nothing. Their stalls are the reads' playout and their
+/// parents the trees' changes. Behind an admission seed and an adaptive
+/// one, whose budget's reading the series and the bins carry.
 #[test]
 fn sim_tables_change_no_trace() {
     let mut cfg = Config::new(5, 8);
@@ -7581,6 +7582,8 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
         sim_held_truth_meets_the_reads(&sim, &d);
         sim_request_logs_say_what_they_are(&sim, &d);
         sim_seed_tables_say_what_the_seed_did(&sim, &d);
+        sim_stalls_say_how_playout_went(&d);
+        sim_parents_say_how_the_trees_changed(&sim, &d);
         // The seed's budget reading: what its budget was measured from,
         // once measured, in the series and the bins.
         let column = |t: &str| -> Vec<i64> {
@@ -7787,6 +7790,180 @@ fn sim_seed_tables_doc_rows_are_the_seed_logs() {
             "sim.rs's write_tables docs lack the row:\n    /// {row}"
         );
     }
+}
+
+/// The `stalls` and `parents` tables of a run whose viewers stall, the
+/// seed's uplink falling to half the stream's rate from 2 s to 4 s after
+/// the start, say how their playout went and how the trees changed
+/// ([`sim_stalls_say_how_playout_went`],
+/// [`sim_parents_say_how_the_trees_changed`]): stalls at the shorter delay.
+#[test]
+fn sim_starved_runs_stalls_are_its_reads_playout() {
+    let mut cfg = Config::new(5, 8);
+    cfg.stream_secs = 6;
+    cfg.degree = 4;
+    cfg.push_mode = PushMode::Hybrid;
+    cfg.stream_count = 4;
+    cfg.steps = vec![
+        (2, SeedStep::Uplink(cfg.stream_rate / 2)),
+        (4, SeedStep::Uplink(cfg.seed_up)),
+    ];
+    let mut sim = Sim::new(cfg);
+    sim.keep_tables(Duration::from_millis(1000), false, false);
+    sim.run();
+    let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "sim_starved_runs_stalls_are_its_reads_playout-{}",
+        std::process::id()
+    ));
+    sim.write_tables(&d).unwrap();
+    let stalls = sim_stalls_say_how_playout_went(&d);
+    let short = table_rows(&d, "stalls")
+        .iter()
+        .filter(|s| row_int(s, "delay_ms") == Some(DELAYS_MS[0]))
+        .count();
+    assert!(
+        stalls > 0 && short > 0,
+        "{stalls} stalls, {short} at the shorter delay"
+    );
+    sim_parents_say_how_the_trees_changed(&sim, &d);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// A table's rows, each by column name.
+fn table_rows(d: &Path, t: &str) -> Vec<BTreeMap<String, String>> {
+    let csv = read_table(d, t).unwrap();
+    let mut lines = csv.lines();
+    let head: Vec<&str> = lines.next().unwrap().split(',').collect();
+    lines
+        .map(|l| {
+            head.iter()
+                .zip(l.split(','))
+                .map(|(&c, v)| (c.to_owned(), v.to_owned()))
+                .collect()
+        })
+        .collect()
+}
+
+/// A row's integer, `None` for an empty field.
+fn row_int(r: &BTreeMap<String, String>, c: &str) -> Option<i64> {
+    r[c].parse().ok()
+}
+
+/// The `stalls` table says how each viewer's playout went at each delay of
+/// [`DELAYS_MS`], from its `reads` (each chunk at its first read, due at
+/// the read less its lag; the chunks due at once as late as the latest):
+/// playback starts at the first due chunks' time plus the delay, or plus
+/// their lag if more; each stall waits on the chunks due at one time, from
+/// their play at the offset so far until they came, a rise of the offset
+/// to their lag; the stalls come in time order, and add up to the viewer's
+/// most lag past the offset it started at, so a longer delay stalls no
+/// longer. The stalls the table holds.
+fn sim_stalls_say_how_playout_went(d: &Path) -> usize {
+    // Each viewer's chunks' first reads: seq -> (t_ms, lag_ms).
+    let mut units: BTreeMap<i64, BTreeMap<i64, (i64, i64)>> = BTreeMap::new();
+    for r in table_rows(d, "reads") {
+        let (v, t, s, l) = (
+            row_int(&r, "viewer").unwrap(),
+            row_int(&r, "t_ms").unwrap(),
+            row_int(&r, "seq").unwrap(),
+            row_int(&r, "lag_ms").unwrap(),
+        );
+        let e = units.entry(v).or_default().entry(s).or_insert((t, l));
+        if t < e.0 {
+            *e = (t, l);
+        }
+    }
+    let mut stalls: BTreeMap<(i64, i64), Vec<(i64, i64)>> = BTreeMap::new();
+    let rows = table_rows(d, "stalls");
+    for r in &rows {
+        let (v, delay) = (
+            row_int(r, "viewer").unwrap(),
+            row_int(r, "delay_ms").unwrap(),
+        );
+        assert!(
+            DELAYS_MS.contains(&delay) && units.contains_key(&v),
+            "{r:?}"
+        );
+        let s = (row_int(r, "t_ms").unwrap(), row_int(r, "stall_ms").unwrap());
+        stalls.entry((v, delay)).or_default().push(s);
+    }
+    for (&v, us) in &units {
+        // The chunks by due time, each time's the latest lag.
+        let mut due: BTreeMap<i64, i64> = BTreeMap::new();
+        for &(t, l) in us.values() {
+            let e = due.entry(t - l).or_insert(l);
+            *e = (*e).max(l);
+        }
+        let first = *due.values().next().unwrap();
+        let most = *due.values().max().unwrap();
+        let mut stalled = Vec::new();
+        for delay in DELAYS_MS {
+            let start = delay.max(first);
+            let (mut offset, mut last) = (start, i64::MIN);
+            for &(t, ms) in stalls.get(&(v, delay)).into_iter().flatten() {
+                assert!(ms > 0 && t > last, "viewer {v} at {delay} ms: {t} {ms}");
+                assert_eq!(
+                    due.get(&(t - offset)),
+                    Some(&(offset + ms)),
+                    "viewer {v} at {delay} ms: the stall at {t} waits on chunks due then"
+                );
+                (offset, last) = (offset + ms, t);
+            }
+            assert_eq!(offset, start.max(most), "viewer {v} at {delay} ms");
+            stalled.push(offset - start);
+        }
+        assert!(
+            stalled.windows(2).all(|w| w[0] >= w[1]),
+            "viewer {v}: {stalled:?}"
+        );
+    }
+    rows.len()
+}
+
+/// The `parents` table says how each node's open parents changed: a node's
+/// changes in order (`n` from 0, `t_ms` never falling), each stream's an
+/// `open` from no parent, `switch`es to another, and an end (`prune`,
+/// `shed`, `lost`) back to none; the seed takes none and no node is its own
+/// parent; a node whose place was never taken again switched as its runner
+/// counts (`switched`); and the logs' caps left none out (`parents_lost`).
+fn sim_parents_say_how_the_trees_changed(sim: &Sim, d: &Path) {
+    let rows = table_rows(d, "parents");
+    assert!(!rows.is_empty());
+    let mut order: BTreeMap<i64, (i64, i64)> = BTreeMap::new();
+    let mut open: BTreeMap<(i64, i64), i64> = BTreeMap::new();
+    let mut switches: BTreeMap<usize, u64> = BTreeMap::new();
+    for p in &rows {
+        let (t, node, n, stream) = (
+            row_int(p, "t_ms").unwrap(),
+            row_int(p, "node").unwrap(),
+            row_int(p, "n").unwrap(),
+            row_int(p, "stream").unwrap(),
+        );
+        let parent = row_int(p, "parent").filter(|&x| x >= 0);
+        let (next, last) = order.entry(node).or_insert((0, i64::MIN));
+        assert_eq!((n, t >= *last), (*next, true), "{p:?}");
+        (*next, *last) = (n + 1, t);
+        assert!(node != 0 && parent != Some(node), "{p:?}");
+        let had = open.get(&(node, stream)).copied();
+        let ok = match p["reason"].as_str() {
+            "open" => had.is_none() && parent.is_some(),
+            "switch" => had.is_some() && parent.is_some() && parent != had,
+            "prune" | "shed" | "lost" => had.is_some() && parent.is_none(),
+            _ => false,
+        };
+        assert!(ok, "{p:?} after {had:?}");
+        match parent {
+            Some(x) => open.insert((node, stream), x),
+            None => open.remove(&(node, stream)),
+        };
+        *switches.entry(node as usize).or_default() += u64::from(p["reason"] == "switch");
+    }
+    for (i, n) in sim.nodes.iter().enumerate().filter(|(_, n)| !n.churned) {
+        let counted = n.runner.push_stats(n.swarm).map_or(0, |p| p.switched);
+        assert_eq!(switches.get(&i).copied().unwrap_or(0), counted, "node {i}");
+    }
+    let meta = std::fs::read_to_string(d.join("series_meta.json")).unwrap();
+    assert!(meta.contains("\"parents_lost\":0"), "{meta}");
 }
 
 /// The request log's tables ([`Sim::keep_requests`]) against the run: HAVEs, requests and reads against
