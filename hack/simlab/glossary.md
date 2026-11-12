@@ -52,10 +52,12 @@ them, so a change here changes that prompt too.
   departing or leaving, a crash), `after_disruption` (a latency step, a
   partition, the seed's new epoch), else `steady`. Each event opens a
   window for its kind's horizon (a span to its end, then the horizon);
-  the latest event's window holds a second. Read a viewer-second's phase
-  from `viewer_phases` (each viewer's [start, stop) spans: its own
-  startups among them), not from `verdict_seconds.phase`, which is the
-  run's; `phase_windows` explains either. A viewer doesn't count in the
+  the latest event's window holds a second; a second past the verdict's
+  is `tail`, the run's tail. Read a viewer-second's phase from
+  `viewer_phases_of(runs)` (`viewer_phases`' [start, stop) spans, each
+  viewer's own startups among them, then its `tail`), not from
+  `verdict_seconds.phase`, which is the run's; `phase_windows` explains
+  either. A viewer doesn't count in the
   verdict for 20 s after each of its joins, whatever phase those seconds
   are.
 - **Lag and playout delays.** A viewer's lag is from the seed's publish

@@ -46,6 +46,9 @@ DuckLake, so that any question is one SQL statement over it.
                  index does
   scoring_sql(cols, temp=False, suite=None)
                  the scoring objects, as SQL (below)
+  scoring_statements(names, have) -> [str]
+                 scoring.sql's statements making `names`, for views over
+                 the cache (simlab.query's) that take them
   docs_version() -> str
                  a hash of what the doc tables are made from but the
                  catalog's columns (below)
@@ -215,8 +218,10 @@ viewer_seconds and stalls to viewers USING (k, src, viewer); events,
 node_bins, parents, forecast, arrivals, spec_requests and parks to
 viewers USING (k, src, node); bins to node_bins USING (k, src, bin);
 seconds to verdict_seconds USING (k, src, sec); a viewer's second
-(viewer_seconds, a read's t_ms // 1000) to viewer_phases ON (k, src,
-viewer) with start <= sec < stop, its phase; the request and HAVE logs
+(viewer_seconds, a read's or a stall's t_ms // 1000) to
+viewer_phases_of(runs) ON (k, src, viewer) with start <= sec < stop, its
+phase (viewer_phases', then tail past the verdict's seconds); the request
+and HAVE logs
 (asks, haves, spec_requests, parks) to the holds in arrivals, as
 table_catalog's joins say.
 
@@ -2086,7 +2091,8 @@ TABLE_DOCS = {
         "view", "a viewer's span of one phase", "k, viewer, start",
         "jobs USING (k, src); viewer_seconds, reads (t_ms // 1000) and stalls ON (k, src, viewer) with start <= "
         "sec < stop",
-        "Each viewer's phases (analyze.viewer_phases), the one source of a viewer-second's phase: [start, stop) "
+        "Each viewer's phases (analyze.viewer_phases), which viewer_phases_of(runs) reads a viewer-second's phase "
+        "from (tail past the verdict's seconds): [start, stop) "
         "seconds in phase, the seconds it was there any part of, within the verdict's seconds: each incarnation's "
         "from its join's second (0 for a viewer there from the start) to its departure's, leave's or crash's. A "
         "second's phase is the window that holds it of the run's and the viewer's own joins' (phase_windows; the "
@@ -2518,8 +2524,10 @@ def scoring_consts(suite=None):
     return {"guard_ratio": s.GUARD_RATIO, "lag_ceiling": a.DELIVERY_TARGET_MS,
             "delay_target_ms": a.DELIVERY_TARGET_MS, "delay_max_ms": a.DELIVERY_MAX_MS,
             "t975_df": T975_DF, "t975_z": double(z),
-            # The vocabulary's phases, in its order (dynamics_phases').
+            # The vocabulary's phases, in its order (dynamics_phases'), and
+            # the one past the verdict's seconds (viewer_phases_of's).
             "phases": "[" + ", ".join(q(p) for p in a.VOCAB["phases"]) + "]",
+            "tail": q(query.TAIL),
             **{f"t975_g{i}": double(c) for i, c in enumerate(g, 1)}}
 
 
@@ -2652,6 +2660,21 @@ SELECT k, src, metric, value FROM (UNPIVOT (
     out.append(needed(text, cols.get("have")))
     sql = "\n".join(out)
     return TEMP.sub(lambda m: f"CREATE OR REPLACE TEMP {m.group(1)} ", sql) if temp else sql
+
+
+def scoring_statements(names, have):
+    """scoring.sql's statements making the objects `names`, their @{...}
+    constants filled in, each one whose `-- needs:` tables are all in
+    `have` (a set of table names): the macros simlab.query's views over
+    the cache take from it, so a definition both read is one."""
+    consts = scoring_consts()
+    text = CONST.sub(lambda m: str(consts[m.group(1)]), SCORING.read_text())
+    out = []
+    for m in MACRO.finditer(text):
+        needs = {n for line in comment_above(text, m.start()) if (x := NEEDS.match(line)) for n in x.group(1).split()}
+        if m.group(2) in names and needs <= set(have):
+            out.append(text[m.start():text.find(";", m.end()) + 1])
+    return out
 
 
 def scoring_version(suite=None):

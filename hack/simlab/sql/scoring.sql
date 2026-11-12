@@ -298,6 +298,33 @@ CREATE OR REPLACE MACRO structural(exp_name) AS TABLE
     GROUP BY e.cell HAVING bool_and(v.collapsed)
     ORDER BY min(e.matrix), e.cell;
 
+-- Each viewer's phases in the runs `runs`, a list of structs with a run's
+-- `k` and `src` (its tables' source, experiment_jobs' or jobs'; other
+-- fields left alone), as spans of its seconds start <= sec < stop: k,
+-- src, viewer, phase, start, stop. A viewer's second, and a read or a
+-- stall in it, is in the phase of the span holding it: over the
+-- verdict's seconds, viewer_phases' (the verdict's phase rule, its own
+-- joins' startups among it); from the verdict's last second on (the end
+-- of verdict_seconds and of the viewers' spans; a run the verdict didn't
+-- judge from its start), @{tail}, the run's tail, every viewer's
+-- (viewers). A second of the verdict's that none of its viewer's spans
+-- holds (the viewer wasn't there, by the verdict's timeline) is in no
+-- phase. A query joins its rows to the spans, its counts and what it
+-- divides them by alike.
+-- needs: viewer_phases verdict_seconds viewers
+CREATE OR REPLACE MACRO viewer_phases_of(runs) AS TABLE
+    WITH j_ AS (SELECT DISTINCT k, src FROM (SELECT unnest(runs, recursive := true))),
+    spans_ AS (SELECT x.k, x.src, x.viewer, x.phase, x.start, x.stop FROM viewer_phases x SEMI JOIN j_ USING (k, src)),
+    end_ AS (
+        SELECT j_.k, j_.src, coalesce(max(e.stop), 0) AS stop
+        FROM j_ LEFT JOIN (SELECT k, src, stop FROM spans_ UNION ALL
+                           SELECT k, src, sec + 1 FROM verdict_seconds SEMI JOIN j_ USING (k, src)) e USING (k, src)
+        GROUP BY j_.k, j_.src)
+    SELECT * FROM spans_
+    UNION ALL
+    SELECT w.k, w.src, w.viewer, @{tail}, end_.stop, 9223372036854775807::BIGINT
+    FROM viewers w JOIN end_ USING (k, src);
+
 -- The honest viewers' lag each second of the runs `jobs`, a list of
 -- structs with a job's `k` (its tables its own source's, jobs.src; other
 -- fields left alone, so a side serves): k, src, viewer, sec, lag_ms,
@@ -328,12 +355,14 @@ CREATE OR REPLACE MACRO viewer_lag_of(jobs) AS TABLE
 --                            step, a departure, a disruption), over the
 --                            runs: viewer_lag_of's carried lag. A
 --                            second's phase is the viewer's
---                            (viewer_phases: the verdict's rule, its own
---                            joins' startups among it); dynamics_phases
---                            gives each phase's apart;
---   spike_s_<D>              per run, the seconds past startup, the run's
---                            and its own, in which an honest viewer lags
---                            past D ms: a player D behind would stall then;
+--                            (viewer_phases_of: the verdict's rule, its
+--                            own joins' startups among it), over the
+--                            verdict's seconds; dynamics_phases gives
+--                            each phase's apart;
+--   spike_s_<D>              per run, the verdict's seconds past startup,
+--                            the run's and its own, in which an honest
+--                            viewer lags past D ms: a player D behind
+--                            would stall then;
 --   stalls_per_min_<D>,      the rows' playback at delay D (the mean over
 --   stalled_share_<D>,       runs; NULL in rows from before the sims
 --   startup_ms_<D>           played them);
@@ -341,7 +370,7 @@ CREATE OR REPLACE MACRO viewer_lag_of(jobs) AS TABLE
 --   unhealthy_p50_s          run, and the median of each run's longest;
 -- for D in @{delay_target_ms} and @{delay_max_ms} (analyze.py's
 -- DELIVERY_TARGET_MS and DELIVERY_MAX_MS).
--- needs: viewer_phases
+-- needs: viewer_phases verdict_seconds viewers
 CREATE OR REPLACE MACRO dynamics(exp_name) AS TABLE
     WITH ej AS (
         SELECT DISTINCT cell, arm_label, k, src, matrix FROM experiment_jobs WHERE exp_id = exp_name),
@@ -349,8 +378,10 @@ CREATE OR REPLACE MACRO dynamics(exp_name) AS TABLE
         FROM viewer_lag_of((SELECT list({'k': k}) FROM experiment_jobs WHERE exp_id = exp_name))),
     phased AS (
         SELECT c.*, p.phase
-        FROM lags c JOIN viewer_phases p ON p.k = c.k AND p.src = c.src AND p.viewer = c.viewer
-                                         AND c.sec >= p.start AND c.sec < p.stop),
+        FROM lags c
+        JOIN viewer_phases_of((SELECT list({'k': k, 'src': src}) FROM experiment_jobs WHERE exp_id = exp_name)) p
+          ON p.k = c.k AND p.src = c.src AND p.viewer = c.viewer AND c.sec >= p.start AND c.sec < p.stop
+        WHERE p.phase <> @{tail}),
     lagq AS (
         SELECT e.cell, e.arm_label,
                quantile_cont(p.lag_ms, 0.99) FILTER (WHERE p.phase = 'startup') AS lag_p99_startup_ms,
@@ -387,9 +418,10 @@ CREATE OR REPLACE MACRO dynamics(exp_name) AS TABLE
 -- arm_label, phase (the vocabulary's, in its order), viewer_s (the honest
 -- viewers' seconds of the phase with a lag, over the runs), share (of the
 -- cell and arm's), and the lag's lag_p50_ms, lag_p90_ms, lag_p99_ms and
--- lag_max_ms over them: viewer_lag_of's carried lag, each second in its
--- viewer's phase (viewer_phases), as dynamics reads them.
--- needs: viewer_phases
+-- lag_max_ms over them: viewer_lag_of's carried lag over the verdict's
+-- seconds, each in its viewer's phase (viewer_phases_of), as dynamics
+-- reads them.
+-- needs: viewer_phases verdict_seconds viewers
 CREATE OR REPLACE MACRO dynamics_phases(exp_name) AS TABLE
     WITH ej AS (
         SELECT DISTINCT cell, arm_label, k, src, matrix FROM experiment_jobs WHERE exp_id = exp_name),
@@ -397,9 +429,10 @@ CREATE OR REPLACE MACRO dynamics_phases(exp_name) AS TABLE
         FROM viewer_lag_of((SELECT list({'k': k}) FROM experiment_jobs WHERE exp_id = exp_name))),
     phased AS (
         SELECT c.*, p.phase
-        FROM lags c JOIN viewer_phases p ON p.k = c.k AND p.src = c.src AND p.viewer = c.viewer
-                                         AND c.sec >= p.start AND c.sec < p.stop
-        WHERE c.lag_ms IS NOT NULL),
+        FROM lags c
+        JOIN viewer_phases_of((SELECT list({'k': k, 'src': src}) FROM experiment_jobs WHERE exp_id = exp_name)) p
+          ON p.k = c.k AND p.src = c.src AND p.viewer = c.viewer AND c.sec >= p.start AND c.sec < p.stop
+        WHERE c.lag_ms IS NOT NULL AND p.phase <> @{tail}),
     q AS (
         SELECT e.cell, e.arm_label, any_value(e.matrix) AS matrix, p.phase, count(*) AS viewer_s,
                quantile_cont(p.lag_ms, 0.5) AS lag_p50_ms, quantile_cont(p.lag_ms, 0.9) AS lag_p90_ms,

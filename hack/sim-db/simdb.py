@@ -126,7 +126,8 @@ manifest's `at`), then a farm flush's later seq, by number
            derived ones, and macros.sql's), their keys and joins below
   pooled   read lags pooled over the selected runs, by cell and arm: the
            quantiles of every read, beside the mean of the runs' own p99s;
-           `--by` splits them by phase (its viewer's, viewer_phases'),
+           `--by` splits them by phase (its viewer's, viewer_phases_of's:
+           tail past the verdict's seconds),
            by `--bin` of read time, or by viewer, each group's columns its
            own (its runs those with a read in it, their p99s of those
            reads)
@@ -312,7 +313,11 @@ node) (`node` in both sims; strims-sim's viewers also name it `host`),
 and asks and haves to arrivals on the peer's holds (arrivals.node =
 asks.peer, seq, arrivals.incarnation = asks.peer_incarnation, as haves':
 the views' truth); seconds
-to verdict_seconds USING (k, src, sec) (macros.sql's `sec`).
+to verdict_seconds USING (k, src, sec) (macros.sql's `sec`); a viewer's
+second (viewer_seconds' sec, a read's or a stall's t_ms // 1000) to
+scoring.sql's viewer_phases_of((SELECT list({'k': k, 'src': src}) FROM
+runs)) ON (k, src, viewer) with start <= sec < stop, its phase (the
+verdict's, then tail past its seconds).
 runs' frames and bytes are its row's: beside viewer_seconds' frames, name
 them runs.frames and runs.bytes.
 

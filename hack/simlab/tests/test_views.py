@@ -191,13 +191,15 @@ class Saved(unittest.TestCase):
     @unittest.skipIf(engine.duckdb is None, "needs the duckdb module (uv)")
     def test_the_phases_and_reasons_a_view_makes_are_the_documents(self):
         doc = {"phase": set(vocab.phases()), "reason": set(vocab.reasons())}
-        made = set()
+        made = {col: set() for col in doc}
         for v in views.saved():
             with self.subTest(view=v.name):
                 for col, got in returned(v.sql, doc).items():
                     self.assertLessEqual(got, doc[col], f"{v.name}'s {col}s")
-                    made |= got
-        self.assertIn("steady", made, "a view's unknown phase falls back to steady")
+                    made[col] |= got
+        # A second's phase is the tables' (viewer_phases_of: the verdict's,
+        # then the vocabulary's tail): no view gives one a phase of its own.
+        self.assertEqual(made["phase"], set())
 
     @unittest.skipIf(engine.duckdb is None, "needs the duckdb module (uv)")
     def test_the_values_a_column_can_hold(self):
@@ -836,6 +838,98 @@ class Selections(unittest.TestCase):
         self.assertRegex(self.check("run_timeline", self.RUN, {"at": {"lane": "x"}})[0], "encodes no column 'lane'")
         self.assertEqual(self.check("nope", {}), ["no view 'nope': " + ", ".join(v.name for v in views.saved())
                                                   + ", or workbench"])
+
+
+# golden_cli's runs end with the verdict's 40 seconds; the sims' run on:
+# their viewers' last 5 seconds again past them, f-a-2001's stalls at 18 s
+# again at 41 s, and the rows' playback summary.
+PAST = """
+CREATE TABLE main.vs_written AS SELECT * FROM main.viewer_seconds;
+CREATE OR REPLACE VIEW main.viewer_seconds AS
+SELECT * FROM main.vs_written UNION ALL SELECT * REPLACE (sec + 5 AS sec) FROM main.vs_written WHERE sec >= 35;
+CREATE TABLE main.stalls_written AS SELECT * FROM main.stalls;
+CREATE OR REPLACE VIEW main.stalls AS
+SELECT * FROM main.stalls_written UNION ALL
+SELECT * REPLACE (t_ms + 23000 AS t_ms) FROM main.stalls_written WHERE k = 'f-a-2001' AND t_ms = 18000;
+CREATE TABLE main.rows_written AS SELECT * FROM main.rows;
+CREATE OR REPLACE VIEW main.rows AS
+SELECT *, 1.0 AS stalls_per_min_1250, 1.0 AS stalls_per_min_4250, 900 AS startup_ms_1250, 950 AS startup_ms_4250
+FROM main.rows_written;
+"""
+
+
+class Phases(unittest.TestCase):
+    """viewer_phases_of over golden_cli's fixture catalog whose runs go on
+    past the verdict's seconds (PAST): playback and p99_sources take each
+    second's and each stall's phase from it, the seconds past the verdict
+    tail, in what they count and what they divide by alike."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory(prefix="simlab-views-phases-")
+        root = Path(cls.tmp.name)
+        lake = catalog_fixture(root / "fixture")
+        w = engine.writer(lake)
+        try:
+            w.execute(PAST)
+        finally:
+            w.close()
+        cls.pool = engine.Pool(lake, root / "spill", size=1, guard=engine.Guard("1GB", 1, "1GiB"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.pool.close()
+        cls.tmp.cleanup()
+
+    def sql(self, sql):
+        return self.pool.query(sql).records()
+
+    def counts(self, secs):
+        """{(cell, arm, phase): n} of `secs`, rows of sf0001's runs with
+        cell, arm, k, src, viewer and sec, in their viewer's viewer_phases
+        span, else tail from the verdict's last second (40) on."""
+        return {(r["cell"], r["arm"], r["phase"]): r["n"] for r in self.sql(f"""
+            WITH x AS ({secs})
+            SELECT x.cell, x.arm, coalesce(p.phase, CASE WHEN x.sec >= 40 THEN 'tail' END) AS phase, count(*) AS n
+            FROM x LEFT JOIN viewer_phases p ON p.k = x.k AND p.src = x.src AND p.viewer = x.viewer
+                                            AND x.sec >= p.start AND x.sec < p.stop
+            GROUP BY ALL""")}
+
+    def test_each_viewer_runs_on_into_the_tail(self):
+        runs = "(SELECT list({'k': k, 'src': src}) FROM experiment_jobs WHERE exp_id = 'sf0001')"
+        tails = self.sql(f"SELECT k, viewer, start, stop FROM viewer_phases_of({runs}) WHERE phase = 'tail'")
+        jobs = "(SELECT k, src FROM experiment_jobs WHERE exp_id = 'sf0001')"
+        viewers = self.sql(f"SELECT DISTINCT k, viewer FROM viewer_phases SEMI JOIN {jobs} USING (k, src)")
+        self.assertEqual(sorted((r["k"], r["viewer"]) for r in tails), sorted((r["k"], r["viewer"]) for r in viewers))
+        self.assertEqual({(r["start"], r["stop"]) for r in tails}, {(40, 2 ** 63 - 1)})
+        self.assertEqual(self.sql(f"SELECT count(*) AS n FROM viewer_phases_of({runs}) WHERE phase <> 'tail'"),
+                         self.sql(f"SELECT count(*) AS n FROM viewer_phases SEMI JOIN {jobs} USING (k, src)"))
+        self.assertIn("tail", vocab.phases())
+
+    def test_playback_counts_stalls_and_seconds_in_one_phase(self):
+        rate = {(r["cell"], r["arm"], r["phase"]): r for r in views.run(self.pool, "playback", {"exp": "sf0001"})
+                .records() if r["part"] == "rate" and r["metric"] == "stalls per viewer-minute"}
+        jobs = "SELECT cell, arm_label AS arm, k, src FROM experiment_jobs WHERE exp_id = 'sf0001'"
+        secs = self.counts(f"SELECT j.*, v.viewer, v.sec FROM ({jobs}) j JOIN viewer_seconds v USING (k, src) "
+                           "WHERE v.lag_ms >= 0")
+        stalls = self.counts(f"SELECT j.*, s.viewer, s.t_ms // 1000 AS sec FROM ({jobs}) j "
+                             "JOIN stalls s USING (k, src) WHERE s.delay_ms = 1250")
+        self.assertEqual({k: r["viewer_s"] for k, r in rate.items()}, secs)
+        self.assertEqual({k: r["stalls"] for k, r in rate.items() if r["stalls"]}, stalls)
+        self.assertEqual(stalls[("star-5", "a", "tail")], 5)
+        self.assertEqual(sum(n for (_, _, p), n in stalls.items() if p != "tail"), 10)
+        self.assertEqual({p for _, _, p in secs}, set(vocab.phases()))
+
+    def test_p99_sources_reads_the_tail_apart(self):
+        got = {(r["arm"], r["phase"]): r["viewer_s"] for r in
+               views.run(self.pool, "p99_sources", {"exp": "sf0001"}).records() if r["part"] == "phase"}
+        jobs = "SELECT cell, arm_label AS arm, k, src FROM experiment_jobs WHERE exp_id = 'sf0001'"
+        want = {}
+        for (_, arm, phase), n in self.counts(f"SELECT j.*, v.viewer, v.sec FROM ({jobs}) j "
+                                               "JOIN viewer_seconds v USING (k, src) WHERE v.lag_ms >= 0").items():
+            want[(arm, phase)] = want.get((arm, phase), 0) + n
+        self.assertEqual(got, want)
+        self.assertGreater(want[("a", "tail")], 0)
 
 
 if __name__ == "__main__":

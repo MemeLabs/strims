@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS viewer_seconds (k VARCHAR, src VARCHAR, viewer BIGINT
     frames BIGINT);
 CREATE TABLE IF NOT EXISTS viewer_phases (k VARCHAR, src VARCHAR, viewer BIGINT, phase VARCHAR, start BIGINT,
     stop BIGINT);
+CREATE TABLE IF NOT EXISTS verdict_seconds (k VARCHAR, src VARCHAR, sec BIGINT, phase VARCHAR);
 CREATE TABLE IF NOT EXISTS phase_windows (k VARCHAR, src VARCHAR, viewer BIGINT, kind VARCHAR, node BIGINT,
     phase VARCHAR, anchor_s DOUBLE, end_s DOUBLE, stop_s DOUBLE, horizon_s DOUBLE);
 CREATE TABLE IF NOT EXISTS episodes (k VARCHAR, src VARCHAR, kind VARCHAR, len BIGINT);

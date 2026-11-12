@@ -83,10 +83,14 @@ TABLE_KNOBS = {"node_bins": ("BIN_NODES",), "forecast": ("FORECAST",), "arrivals
                "spec_requests": ("SPEC",), "parks": ("SPEC",), "asks": ("SPEC",), "haves": ("SPEC",)}
 # macros.sql: the views' macros.
 MACROS = Path(__file__).with_name("sql") / "macros.sql"
-# The phase `pooled` gives a read past its viewer's phases and `spec` a
-# request past the verdict's seconds (the vocabulary's): the verdict's
-# phases are the others.
+# The phase of a second past the verdict's (the vocabulary's):
+# scoring.sql's viewer_phases_of gives a viewer's, `pooled` a read's
+# through it, and `spec` a request's. The verdict's phases are the others.
 TAIL = vocab.TAIL
+# scoring.sql's macros the views over the cache hold too (where they have
+# the tables each needs), so the lab's queries and the catalog's read one
+# definition.
+SCORING_MACROS = ("viewer_phases_of",)
 
 
 @dataclasses.dataclass
@@ -430,6 +434,7 @@ def views(sel, derived=True, fetch=True, say=None):
                 sql.append(f"CREATE VIEW {t} AS SELECT x.* FROM {f} SEMI JOIN runs USING (k, src);")
                 have.add(t)
     sql += macros(have)
+    sql += scoring_macros(have)
     return Views("\n".join(sql), have)
 
 
@@ -536,6 +541,14 @@ def knobs_text(table):
     (TABLE_KNOBS: "SIM_SPEC=1 / STRIMS_SIM_SPEC=1"), alternatives joined
     by "or"; None for a table every run writes."""
     return " or ".join(f"SIM_{k}=1 / STRIMS_SIM_{k}=1" for k in TABLE_KNOBS[table]) if table in TABLE_KNOBS else None
+
+
+def scoring_macros(have):
+    """scoring.sql's SCORING_MACROS whose `-- needs:` tables the views
+    have (simlab.catalog's scoring_statements)."""
+    from . import catalog
+
+    return catalog.scoring_statements(SCORING_MACROS, have)
 
 
 def need(have, *tables):
@@ -645,15 +658,19 @@ def sql_text(results):
 
 def pooled(sel, by="none", say=None):
     """Read lags pooled over the selection's runs, by cell and arm, and by
-    `by` (none, phase: its viewer's, viewer_phases, bin or viewer)."""
+    `by` (none, phase: its viewer's, viewer_phases_of's, bin or viewer)."""
     v = with_samples(sel, views(sel, say=say), ("reads",), say=say)
     with v:
         need(v.have, "reads")
+        if by == "phase":
+            need(v.have, "viewer_phases", "verdict_seconds", "viewers")
         group = {"none": "NULL", "bin": f"(t_ms // {sel.bin}) * {sel.bin}", "viewer": "viewer",
-                 "phase": f"coalesce(vp.phase, {q(TAIL)})"}[by]
-        # A read's phase is its viewer's in the second it read in.
-        join = ("LEFT JOIN viewer_phases vp ON vp.k = x.k AND vp.src = x.src AND vp.viewer = x.viewer "
-                "AND x.t_ms // 1000 >= vp.start AND x.t_ms // 1000 < vp.stop" if by == "phase" else "")
+                 "phase": "vp.phase"}[by]
+        # A read's phase is its viewer's in the second it read in, none
+        # where the viewer wasn't there.
+        join = ("JOIN viewer_phases_of((SELECT list({'k': k, 'src': src}) FROM runs)) vp ON vp.k = x.k "
+                "AND vp.src = x.src AND vp.viewer = x.viewer AND x.t_ms // 1000 >= vp.start "
+                "AND x.t_ms // 1000 < vp.stop" if by == "phase" else "")
         where = time_filter(sel, "x.t_ms")
         # Every column is the group's: its runs are those with a read in it,
         # and each run's p99 is of its reads there.

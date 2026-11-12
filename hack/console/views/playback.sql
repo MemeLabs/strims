@@ -9,8 +9,9 @@
 --   rate     stalls per viewer-minute and the share of viewing time
 --            stalled, per cell, arm and phase; viewing time is the seconds
 --            viewers were there and reading (viewer_seconds), each in its
---            viewer's phase then (viewer_phases: its own startup, then the
---            verdict's phase)
+--            viewer's phase then (viewer_phases_of: its own startup, then
+--            the verdict's phase, and past the verdict's seconds tail), a
+--            stall in its viewer's phase of the second it began in
 --   startup  the runs' startup time at the delay (rows' startup_ms_D):
 --            median and p90 over seeds, per cell and arm
 --   cdf      how long stalls last, per arm: the share p of the
@@ -23,20 +24,21 @@ WITH runs AS (
 ), with_stalls AS (
     -- The runs whose sim played them (their rows carry its summary).
     SELECT k, src FROM runs JOIN rows USING (k, src) WHERE stalls_per_min_1250 IS NOT NULL
+), spans AS (
+    FROM viewer_phases_of((SELECT list({'k': k, 'src': src}) FROM with_stalls))
 ), watched AS (
     SELECT r.cell, r.arm, p.phase, count(*) AS viewer_s
     FROM runs r JOIN with_stalls USING (k, src)
     JOIN viewer_seconds v USING (k, src)
-    JOIN viewer_phases p ON p.k = v.k AND p.src = v.src AND p.viewer = v.viewer AND v.sec >= p.start
-                            AND v.sec < p.stop
+    JOIN spans p ON p.k = v.k AND p.src = v.src AND p.viewer = v.viewer AND v.sec >= p.start AND v.sec < p.stop
     WHERE v.lag_ms >= 0
     GROUP BY ALL
 ), stalled AS (
-    -- A stall counts in its viewer's phase of the second it began in.
-    SELECT r.cell, r.arm, coalesce(p.phase, 'steady') AS phase, s.stall_ms
-    FROM runs r JOIN stalls s USING (k, src)
-    LEFT JOIN viewer_phases p ON p.k = s.k AND p.src = s.src AND p.viewer = s.viewer
-                                 AND s.t_ms // 1000 >= p.start AND s.t_ms // 1000 < p.stop
+    SELECT r.cell, r.arm, p.phase, s.stall_ms
+    FROM runs r JOIN with_stalls USING (k, src)
+    JOIN stalls s USING (k, src)
+    JOIN spans p ON p.k = s.k AND p.src = s.src AND p.viewer = s.viewer
+                 AND s.t_ms // 1000 >= p.start AND s.t_ms // 1000 < p.stop
     WHERE s.delay_ms = $delay
 ), rates AS (
     SELECT w.cell, w.arm, w.phase, w.viewer_s,

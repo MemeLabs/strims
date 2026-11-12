@@ -3,9 +3,10 @@
 --
 -- Where an arm's lag tail comes from: each viewer-second's lag
 -- (viewer_seconds) by what the run and the viewer were doing then: the
--- viewer's phase (viewer_phases: the verdict's, the vocabulary's phases,
--- its own startup after it joined among them). $cell '' takes every cell
--- of the experiment. Long form:
+-- viewer's phase (viewer_phases_of: the verdict's, the vocabulary's
+-- phases, its own startup after it joined among them, and tail past the
+-- verdict's seconds). $cell '' takes every cell of the experiment. Long
+-- form:
 --
 --   phase    per arm and phase: viewer-seconds, their share, lag quantiles,
 --            the share over the playout delays (1250 and 4250 ms), and
@@ -17,10 +18,10 @@ WITH runs AS (
     SELECT arm_label AS arm, k, src FROM experiment_jobs
     WHERE exp_id = $exp AND ($cell = '' OR cell = $cell)
 ), secs AS (
-    SELECT r.arm, v.lag_ms, coalesce(p.phase, 'steady') AS phase
+    SELECT r.arm, v.lag_ms, p.phase
     FROM runs r JOIN viewer_seconds v USING (k, src)
-    LEFT JOIN viewer_phases p ON p.k = v.k AND p.src = v.src AND p.viewer = v.viewer AND v.sec >= p.start
-                                 AND v.sec < p.stop
+    JOIN viewer_phases_of((SELECT list({'k': k, 'src': src}) FROM runs)) p
+      ON p.k = v.k AND p.src = v.src AND p.viewer = v.viewer AND v.sec >= p.start AND v.sec < p.stop
     WHERE v.lag_ms >= 0
 ), arms AS (
     SELECT arm, quantile_cont(lag_ms, 0.99) AS p99, count(*) AS n FROM secs GROUP BY arm
