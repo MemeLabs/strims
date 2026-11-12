@@ -44,7 +44,6 @@
     "base32-decode": "^1.0.0",
     "base32-encode": "^2.0.0",
     "buffer": "^6.0.3",
-    "clean-webpack-plugin": "^4.0.0",
     "clsx": "^1.2.1",
     "copy-webpack-plugin": "^11.0.0",
     "css-loader": "^6.7.3",
