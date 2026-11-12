@@ -71,9 +71,15 @@
     }
   }
 
-  &__plot {
+  // Vega's SVG: its axis, grid and zero rule in the debugger's tokens.
+  &__plot,
+  &__plot.vega-embed {
+    display: block;
+
     text {
+      font-family: inherit;
       font-size: 0.5rem;
+      fill: var(--color-text-debugger-muted);
     }
 
     line {

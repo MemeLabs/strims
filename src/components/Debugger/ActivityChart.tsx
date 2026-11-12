@@ -3,15 +3,9 @@
 
 import clsx from "clsx";
 import { format } from "d3-format";
-import React, { useEffect, useState } from "react";
-import {
-  AreaSeries,
-  HorizontalGridLines,
-  LineSeries,
-  LineSeriesPoint,
-  XYPlot,
-  YAxis,
-} from "react-vis";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import type { Result, VisualizationSpec } from "vega-embed";
+import type { TopLevelSpec } from "vega-lite";
 
 import { Metrics } from "../../apis/strims/debug/v1/metrics";
 import { usePortletSize } from "./Portlet";
@@ -54,6 +48,10 @@ const COLORS = [
 
 const lineColor = (i: number) => COLORS[i % COLORS.length];
 
+// A swarm's data in and out.
+const IN_COLOR = COLORS[0];
+const OUT_COLOR = COLORS[1];
+
 const formatValue = format(".3~s");
 
 const lastValue = (points: { y: number }[]) => {
@@ -66,15 +64,151 @@ const seriesDomain = (v: { x: number }[], d: number = 240): [number, number] => 
   return [max - d, max];
 };
 
-interface AbstractGraphProps {
-  label: string;
+// A plotted point: its line's index and color, its time in seconds before
+// the end of its x range, and its value.
+interface PlotRow {
+  s: number;
+  c: string;
+  x: number;
+  y: number;
+}
+
+// A layered spec's layers.
+type Layers = Extract<TopLevelSpec, { layer: unknown }>["layer"];
+
+interface PlotSize {
   height: number;
   width: number;
   showAxes: boolean;
 }
 
+// A plot of `width` px less 10, as the portlet's padding leaves it, the y
+// axis and its grid in the left margin when there's room for them. Its
+// points are the "points" data set; its colors, but the lines' own, are the
+// debugger's tokens (Debugger.scss).
+const plotSpec = (
+  { height, width, showAxes }: PlotSize,
+  span: number,
+  layer: Layers,
+  zero: boolean
+): TopLevelSpec => {
+  const margin = showAxes ? PLOT_MARGIN_LARGE : PLOT_MARGIN_SMALL;
+  return {
+    width: Math.max(1, width - 10 - margin.left - margin.right),
+    height: Math.max(1, height - margin.top - margin.bottom),
+    autosize: { type: "none" },
+    padding: margin,
+    background: "transparent",
+    data: { name: "points" },
+    encoding: {
+      x: {
+        field: "x",
+        type: "quantitative",
+        scale: { domain: [-span, 0], nice: false, zero: false },
+        axis: null,
+      },
+      y: {
+        field: "y",
+        type: "quantitative",
+        scale: { nice: false, zero },
+        axis: showAxes
+          ? {
+              title: null,
+              grid: true,
+              tickCount: 5,
+              labelFontSize: 8,
+              labelExpr: "format(datum.value, '~s')",
+            }
+          : null,
+      },
+    },
+    layer,
+    config: { view: { stroke: null } },
+  };
+};
+
+// vega-embed, loaded once a plot draws: it stays out of the app's bundle.
+const loadEmbed = () =>
+  import(/* webpackChunkName: "vega" */ "vega-embed").then(({ default: embed }) => embed);
+
+interface PlotProps {
+  spec: VisualizationSpec;
+  rows: PlotRow[];
+}
+
+// Draws `spec` once, and its points again as they change.
+const Plot: React.FC<PlotProps> = ({ spec, rows }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const result = useRef<Result>(null);
+  const latestRows = useRef(rows);
+  latestRows.current = rows;
+
+  useEffect(() => {
+    let live = true;
+    void loadEmbed()
+      .then((embed) =>
+        live ? embed(ref.current, spec, { actions: false, renderer: "svg" }) : null
+      )
+      .then((r) => {
+        if (!r) {
+          return;
+        }
+        if (!live) {
+          r.finalize();
+          return;
+        }
+        result.current = r;
+        return r.view.data("points", latestRows.current).runAsync();
+      });
+    return () => {
+      live = false;
+      result.current?.finalize();
+      result.current = null;
+    };
+  }, [spec]);
+
+  useEffect(() => {
+    void result.current?.view.data("points", rows).runAsync();
+  }, [rows]);
+
+  return <div className="debugger_graph__plot" ref={ref} />;
+};
+
+const LINES: Layers = [
+  {
+    mark: { type: "line", strokeWidth: 1 },
+    encoding: {
+      color: { field: "c", type: "nominal", scale: null, legend: null },
+      detail: { field: "s", type: "nominal" },
+    },
+  },
+];
+
+// Data in above the axis, out below it, and the axis.
+const SWARM: Layers = [
+  {
+    transform: [{ filter: "datum.s === 0" }],
+    mark: { type: "area", color: IN_COLOR, opacity: 0.7 },
+    encoding: { y2: { datum: 0 } },
+  },
+  {
+    transform: [{ filter: "datum.s === 1" }],
+    mark: { type: "area", color: OUT_COLOR, opacity: 0.7 },
+    encoding: { y2: { datum: 0 } },
+  },
+  {
+    data: { values: [{}] },
+    mark: "rule",
+    encoding: { x: { value: 0 }, x2: { value: "width" }, y: { datum: 0 } },
+  },
+];
+
+interface AbstractGraphProps extends PlotSize {
+  label: string;
+}
+
 interface LineGraphProps extends AbstractGraphProps {
-  values: LineSeriesPoint[][];
+  values: Point[][];
   // Names the lines in a legend with their latest values.
   labels?: string[];
   // The x range; by default each line's last 240 s.
@@ -91,44 +225,42 @@ const LineGraph: React.FC<LineGraphProps> = ({
   height,
   width,
   showAxes,
-}) => (
-  <div className={clsx("debugger_graph", className)}>
-    <div className="debugger_graph__label">
-      {label}
-      {!labels && values.length === 1 && (
-        <span className="debugger_graph__value">{lastValue(values[0])}</span>
+}) => {
+  const span = domain ? domain[1] - domain[0] : 240;
+  const spec = useMemo(
+    () => plotSpec({ height, width, showAxes }, span, LINES, false),
+    [height, width, showAxes, span]
+  );
+  const rows = useMemo(
+    () =>
+      values.flatMap((points, s) => {
+        const end = (domain ?? seriesDomain(points))[1];
+        return points.map(({ x, y }) => ({ s, c: lineColor(s), x: x - end, y }));
+      }),
+    [values, domain?.[1]]
+  );
+  return (
+    <div className={clsx("debugger_graph", className)}>
+      <div className="debugger_graph__label">
+        {label}
+        {!labels && values.length === 1 && (
+          <span className="debugger_graph__value">{lastValue(values[0])}</span>
+        )}
+      </div>
+      <Plot spec={spec} rows={rows} />
+      {labels && (
+        <div className="debugger_graph__legend">
+          {labels.map((label, i) => (
+            <span key={i} className="debugger_graph__legend__item">
+              <i style={{ background: lineColor(i) }} />
+              {label} <span className="debugger_graph__value">{lastValue(values[i] ?? [])}</span>
+            </span>
+          ))}
+        </div>
       )}
     </div>
-    <XYPlot
-      className="debugger_graph__plot"
-      width={width - 10}
-      height={height}
-      margin={showAxes ? PLOT_MARGIN_LARGE : PLOT_MARGIN_SMALL}
-    >
-      {showAxes && <HorizontalGridLines />}
-      {showAxes && <YAxis tickFormat={format("~s")} />}
-      {values.map((data, i) => (
-        <LineSeries
-          key={i}
-          data={data}
-          xDomain={domain ?? seriesDomain(data)}
-          color={lineColor(i)}
-          style={{ fill: "none" }}
-        />
-      ))}
-    </XYPlot>
-    {labels && (
-      <div className="debugger_graph__legend">
-        {labels.map((label, i) => (
-          <span key={i} className="debugger_graph__legend__item">
-            <i style={{ background: lineColor(i) }} />
-            {label} <span className="debugger_graph__value">{lastValue(values[i] ?? [])}</span>
-          </span>
-        ))}
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 interface SeriesGraphProps extends AbstractGraphProps {
   series: Series[];
@@ -219,35 +351,31 @@ const SwarmGraph: React.FC<SwarmGraphProps> = ({
   height,
   width,
   showAxes,
-}) => (
-  <div className="debugger_graph">
-    <div className="debugger_graph__label">
-      {label}
-      <span className="debugger_graph__value">
-        in {lastValue(values.in)}B/s out {lastValue(values.out)}B/s
-      </span>
+}) => {
+  const span = domain[1] - domain[0];
+  const spec = useMemo(
+    () => plotSpec({ height, width, showAxes }, span, SWARM, true),
+    [height, width, showAxes, span]
+  );
+  const rows = useMemo(
+    () => [
+      ...values.in.map(({ x, y }) => ({ s: 0, c: IN_COLOR, x: x - domain[1], y })),
+      ...values.out.map(({ x, y }) => ({ s: 1, c: OUT_COLOR, x: x - domain[1], y: -y })),
+    ],
+    [values, domain[1]]
+  );
+  return (
+    <div className="debugger_graph">
+      <div className="debugger_graph__label">
+        {label}
+        <span className="debugger_graph__value">
+          in {lastValue(values.in)}B/s out {lastValue(values.out)}B/s
+        </span>
+      </div>
+      <Plot spec={spec} rows={rows} />
     </div>
-    <XYPlot
-      className="debugger_graph__plot"
-      width={width - 10}
-      height={height}
-      margin={showAxes ? PLOT_MARGIN_LARGE : PLOT_MARGIN_SMALL}
-    >
-      {showAxes && <HorizontalGridLines />}
-      {showAxes && <YAxis tickFormat={format("~s")} />}
-      <AreaSeries data={values.in} xDomain={domain} />
-      <AreaSeries data={values.out.map(({ x, y }) => ({ x, y: -y }))} xDomain={domain} />
-      <LineSeries
-        data={[
-          { x: 0, y: 0 },
-          { x: 1, y: 0 },
-        ]}
-        xDomain={[0, 1]}
-        style={{ fill: "none" }}
-      />
-    </XYPlot>
-  </div>
-);
+  );
+};
 
 export const SwarmChart: React.FC<ChartProps> = ({ history }) => {
   const size = useGraphSize(80);
@@ -337,7 +465,7 @@ export const MockStreamChart: React.FC<ChartProps> = ({ history }) => {
 
 interface RTCSeries {
   lastValue: { [id: string]: number };
-  values: { [id: string]: LineSeriesPoint[] };
+  values: { [id: string]: Point[] };
 }
 
 interface RTCChartValues {
