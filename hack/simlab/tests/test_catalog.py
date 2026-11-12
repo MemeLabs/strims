@@ -1558,7 +1558,7 @@ class Registries(unittest.TestCase):
     def test_both_sims_compress_the_same_tables(self):
         lists = {}
         for sim, path in (("strims-sim", catalog.ROOT / "crates" / "strims-sim" / "src" / "fields.rs"),
-                          ("ppspp", catalog.DOC_FILES[1])):
+                          ("ppspp", catalog.ROOT / "crates" / "strims-ppspp" / "tests" / "sim" / "fields.rs")):
             m = re.search(r"\bZSTD: \[&str; \d+\] = \[(.*?)\];", path.read_text(), re.S)
             self.assertIsNotNone(m, f"{path}: no ZSTD list")
             lists[sim] = sorted(re.findall(r'"([a-z_]+)"', m.group(1)))

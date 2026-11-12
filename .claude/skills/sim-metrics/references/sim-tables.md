@@ -54,14 +54,14 @@ main (SKILL.md's order of work).
      and lost nothing.
 4. **The ppspp sim** (`crates/strims-ppspp/tests/sim.rs`): `Sim::keep_*`
    (`Sim::keep_requests`), the table in `Sim::write_tables` through
-   `Table::typed`, the same `ZSTD` entry (test_catalog's `Registries`
-   holds the two lists alike), the `series_meta.json` key, and the knob,
+   `Table::new` and its generated columns, compressed by the same
+   generated `ZSTD`, the `series_meta.json` key, and the knob,
    `SIM_<X>`, read with `knob::<u32>` where the job starts.
 5. **Columns.**
    - Declared first: the table in fields.toml's `tables` (its sims,
      grain and keys) and each column in its `columns` table (type, unit,
      none, description). `python3 hack/simlab/vocab.py write` generates
-     each sim's `cols` enums, which strims-sim's tables take.
+     each sim's `cols` enums, which both sims' tables take.
    - Keys: a log stamped once per pass needs an order column, and a
      wide log whose records repeat every natural key (several of one
      kind at one ms) needs an ordinal column, so its key is unique.

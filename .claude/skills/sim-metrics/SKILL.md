@@ -15,8 +15,9 @@ Both sims (strims-sim, and the ppspp sim in
 line), its tables (CSV beside a schema file each) and its events. Every
 name they record is declared in `crates/strims-wan/fields.toml` (its
 schema is `hack/simlab/spec.py`): `python3 hack/simlab/vocab.py write`
-generates each sim's typed names from it, and strims-sim writes through
-its module (`crates/strims-sim/src/fields.rs`).
+generates each sim's typed names from it, and each sim writes through
+its module (`crates/strims-sim/src/fields.rs`,
+`crates/strims-ppspp/tests/sim/fields.rs`).
 `hack/simlab/store_host.py` folds a job's tables into the cache, and the
 farm's hosts run that same file. The catalog (`hack/simlab/catalog.py`)
 indexes the cache into the DuckLake: views over the tables, the

@@ -26,8 +26,11 @@ don't).
      (its doc table, and its `cols::Seconds` column), and in the
      `seconds` row of tables.rs's doc table.
    - A bins counter goes in `NODE_BIN_COUNTERS` and `bin_cols`.
-2. **The ppspp sim.** `job_row` in `crates/strims-ppspp/tests/sim.rs`
-   (`row.int`, `row.num`, ...), with comment lines right above the line
+2. **The ppspp sim.** Declared as step 1 says, the field is written by
+   `job_row` in `crates/strims-ppspp/tests/sim.rs` through the generated
+   names (`crates/strims-ppspp/tests/sim/fields.rs`):
+   `row.int(RowInt::Streams, n)`, `row.num`, ..., with comment lines
+   right above the line
    that writes the field: `catalog.row_docs` reads up to 12 lines above
    it when no doc sentence names it. Its series and bins are
    `Sim::write_tables`' (`series_data`, `bin_cols`).

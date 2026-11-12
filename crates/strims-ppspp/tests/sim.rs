@@ -114,6 +114,9 @@
     clippy::panic
 )]
 
+#[path = "sim/fields.rs"]
+mod fields;
+
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
@@ -122,6 +125,9 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
+use fields::{
+    Column, JsonRow, MetaInt, MetaJson, MetaText, RowInt, RowInts, RowNum, RowText, ZSTD, cols,
+};
 use rand_core::Rng;
 use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter, PathReading, PathSample};
 use strims_base::rng::{DetRng, det_rng, fork};
@@ -1432,63 +1438,66 @@ const WAIT_COLS: [&str; 6] = [
 /// network's, then [`NODE_COLS`] and [`WAIT_COLS`] summed over the viewers
 /// (`viewer_`) and the seed's (`seed_`), then the capacity the seed's budget
 /// was measured from (`budget_capacity`).
-fn bin_cols() -> Vec<String> {
-    let mut cols: Vec<String> = [
-        "bin",
-        "t_ms",
-        "present",
-        "hits",
-        "misses",
-        "pruned",
-        "parents",
-        "viewer_ovh",
-        "viewer_up_bytes",
-        "viewer_up_packets",
-        "viewer_small_packets",
-        "capacity",
-        "busy",
-        "avail",
-        "copies",
-        "sent",
-        "pushed",
-        "seed_ovh",
-        "seed_up_bytes",
-        "seed_up_packets",
-        "seed_small_packets",
+fn bin_cols() -> Vec<cols::Bins> {
+    let mut cols: Vec<cols::Bins> = [
+        cols::Bins::Bin,
+        cols::Bins::TMs,
+        cols::Bins::Present,
+        cols::Bins::Hits,
+        cols::Bins::Misses,
+        cols::Bins::Pruned,
+        cols::Bins::Parents,
+        cols::Bins::ViewerOvh,
+        cols::Bins::ViewerUpBytes,
+        cols::Bins::ViewerUpPackets,
+        cols::Bins::ViewerSmallPackets,
+        cols::Bins::Capacity,
+        cols::Bins::Busy,
+        cols::Bins::Avail,
+        cols::Bins::Copies,
+        cols::Bins::Sent,
+        cols::Bins::Pushed,
+        cols::Bins::SeedOvh,
+        cols::Bins::SeedUpBytes,
+        cols::Bins::SeedUpPackets,
+        cols::Bins::SeedSmallPackets,
     ]
-    .map(String::from)
     .to_vec();
-    for who in ["viewer", "seed"] {
+    for who in cols::Bins::WHO_OF_WHO_COUNTER {
         cols.extend(
             NODE_COLS
                 .iter()
                 .chain(&WAIT_COLS)
-                .map(|c| format!("{who}_{c}")),
+                .map(|c| cols::Bins::who_counter(who, c)),
         );
     }
-    cols.push("budget_capacity".into());
+    cols.push(cols::Bins::BudgetCapacity);
     cols
 }
 
 /// The `node_bins` table's columns: a node's in one bin.
-fn node_bin_cols() -> Vec<String> {
-    let mut cols: Vec<String> = [
-        "bin",
-        "t_ms",
-        "node",
-        "viewer",
-        "hits",
-        "misses",
-        "pruned",
-        "parents",
-        "ovh",
-        "up_bytes",
-        "up_packets",
-        "small_packets",
+fn node_bin_cols() -> Vec<cols::NodeBins> {
+    let mut cols: Vec<cols::NodeBins> = [
+        cols::NodeBins::Bin,
+        cols::NodeBins::TMs,
+        cols::NodeBins::Node,
+        cols::NodeBins::Viewer,
+        cols::NodeBins::Hits,
+        cols::NodeBins::Misses,
+        cols::NodeBins::Pruned,
+        cols::NodeBins::Parents,
+        cols::NodeBins::Ovh,
+        cols::NodeBins::UpBytes,
+        cols::NodeBins::UpPackets,
+        cols::NodeBins::SmallPackets,
     ]
-    .map(String::from)
     .to_vec();
-    cols.extend(NODE_COLS.iter().chain(&WAIT_COLS).map(|c| c.to_string()));
+    cols.extend(
+        NODE_COLS
+            .iter()
+            .chain(&WAIT_COLS)
+            .map(cols::NodeBins::counter),
+    );
     cols
 }
 
@@ -1851,13 +1860,13 @@ impl Windows {
         ] {
             for &p in ps {
                 if let Some(x) = h.percentile(f64::from(p)) {
-                    row.num(&format!("{name}_p{p}"), x as f64 / unit);
+                    row.num(RowNum::window_p_p(name, p), x as f64 / unit);
                 }
             }
         }
         if let Some(n) = self.requests_out.max() {
-            row.int("reqs_out_max", n).num(
-                "reqs_out_share",
+            row.int(RowInt::ReqsOutMax, n).num(
+                RowNum::ReqsOutShare,
                 requests.count() as f64 / self.requests_out.count() as f64,
             );
         }
@@ -4089,22 +4098,25 @@ impl Sim {
             None => self.cfg.stream_rate,
         };
         let mut cols = vec![
-            ("present", pairs().map(|w| both(w).len() as i64).collect()),
-            ("hits", pooled(0)),
-            ("misses", pooled(1)),
-            ("pruned", pooled(2)),
-            ("parents", parents),
-            ("capacity", seed(0)),
-            ("busy", seed(1)),
-            ("avail", seed(5)),
-            ("copies", seed(2)),
-            ("sent", seed_delta(3)),
-            ("pushed", seed_delta(4)),
-            ("seed_ovh", seed_delta(6)),
-            ("viewer_ovh", pooled(4)),
+            (
+                cols::Seconds::Present,
+                pairs().map(|w| both(w).len() as i64).collect(),
+            ),
+            (cols::Seconds::Hits, pooled(0)),
+            (cols::Seconds::Misses, pooled(1)),
+            (cols::Seconds::Pruned, pooled(2)),
+            (cols::Seconds::Parents, parents),
+            (cols::Seconds::Capacity, seed(0)),
+            (cols::Seconds::Busy, seed(1)),
+            (cols::Seconds::Avail, seed(5)),
+            (cols::Seconds::Copies, seed(2)),
+            (cols::Seconds::Sent, seed_delta(3)),
+            (cols::Seconds::Pushed, seed_delta(4)),
+            (cols::Seconds::SeedOvh, seed_delta(6)),
+            (cols::Seconds::ViewerOvh, pooled(4)),
             // Empty until measured.
             (
-                "budget_capacity",
+                cols::Seconds::BudgetCapacity,
                 seed(7)
                     .into_iter()
                     .map(|c| if c > 0 { c } else { NONE })
@@ -4125,7 +4137,7 @@ impl Sim {
                     *w += i64::from(!self.publish_times[c].is_nil());
                 }
             }
-            cols.push(("written", written));
+            cols.push((cols::Seconds::Written, written));
         }
         Some(SeriesData {
             rate,
@@ -4184,15 +4196,14 @@ impl Sim {
     /// than each second's first event ([`Sim::sample_bins`]), so a bin's
     /// sums can differ from its second's at the edges.
     fn write_tables(&self, dir: &Path) -> io::Result<()> {
-        use std::fmt::Write;
         std::fs::create_dir_all(dir)?;
         let start = t0() + Duration::SECOND;
         let series = self.series_data();
         let honest = self.honest();
         if let Some(s) = &series {
-            let mut names = vec!["sec"];
+            let mut names = vec![cols::Seconds::Sec];
             names.extend(s.cols.iter().map(|(n, _)| *n));
-            let mut t = Table::new(dir, "seconds", &names)?;
+            let mut t = Table::new(dir, &names)?;
             for k in 0..s.len() {
                 let mut row = vec![k as i64];
                 row.extend(s.cols.iter().map(|(_, v)| v.get(k).copied().unwrap_or(-1)));
@@ -4201,8 +4212,12 @@ impl Sim {
             t.finish()?;
             let mut t = Table::new(
                 dir,
-                "viewer_seconds",
-                &["viewer", "sec", "lag_ms", "frames"],
+                &[
+                    cols::ViewerSeconds::Viewer,
+                    cols::ViewerSeconds::Sec,
+                    cols::ViewerSeconds::LagMs,
+                    cols::ViewerSeconds::Frames,
+                ],
             )?;
             for (i, (lag, frames)) in s.lag.iter().zip(&s.frames).enumerate() {
                 for (k, (l, f)) in lag.iter().zip(frames).enumerate() {
@@ -4211,8 +4226,24 @@ impl Sim {
             }
             t.finish()?;
         }
-        let mut t = Table::new(dir, "reads", &["viewer", "t_ms", "seq", "lag_ms"])?;
-        let mut stalls = Table::new(dir, "stalls", &["viewer", "delay_ms", "t_ms", "stall_ms"])?;
+        let mut t = Table::new(
+            dir,
+            &[
+                cols::Reads::Viewer,
+                cols::Reads::TMs,
+                cols::Reads::Seq,
+                cols::Reads::LagMs,
+            ],
+        )?;
+        let mut stalls = Table::new(
+            dir,
+            &[
+                cols::Stalls::Viewer,
+                cols::Stalls::DelayMs,
+                cols::Stalls::TMs,
+                cols::Stalls::StallMs,
+            ],
+        )?;
         for (i, v) in honest.iter().enumerate() {
             let reads = read_rows(v);
             for &(at, seq, lag) in &reads {
@@ -4226,16 +4257,15 @@ impl Sim {
         }
         t.finish()?;
         stalls.finish()?;
-        let mut t = Table::typed(
+        let mut t = Table::new(
             dir,
-            "parents",
             &[
-                ("t_ms", "BIGINT"),
-                ("node", "BIGINT"),
-                ("n", "BIGINT"),
-                ("stream", "BIGINT"),
-                ("parent", "BIGINT"),
-                ("reason", "VARCHAR"),
+                cols::Parents::TMs,
+                cols::Parents::Node,
+                cols::Parents::N,
+                cols::Parents::Stream,
+                cols::Parents::Parent,
+                cols::Parents::Reason,
             ],
         )?;
         // Each node's changes so far: one call's share its time, and
@@ -4254,7 +4284,7 @@ impl Sim {
             *n += 1;
         }
         t.finish()?;
-        let mut t = Table::new(dir, "bins", &bin_cols())?;
+        let mut t = Table::new(dir, &bin_cols())?;
         for row in self.bins.iter().flat_map(|b| &b.rows) {
             t.ints(row);
         }
@@ -4267,7 +4297,7 @@ impl Sim {
             }
         }
         if let Some(rows) = self.bins.as_ref().and_then(|b| b.node_rows.as_ref()) {
-            let mut t = Table::new(dir, "node_bins", &node_bin_cols())?;
+            let mut t = Table::new(dir, &node_bin_cols())?;
             for row in rows {
                 let mut row = row.clone();
                 row[3] = viewer.get(row[2] as usize).copied().unwrap_or(-1);
@@ -4282,18 +4312,17 @@ impl Sim {
                 -(start - at).as_micros()
             }
         };
-        let mut t = Table::typed(
+        let mut t = Table::new(
             dir,
-            "viewers",
             &[
-                ("viewer", "BIGINT"),
-                ("node", "BIGINT"),
-                ("up", "BIGINT"),
-                ("hostile", "BOOLEAN"),
-                ("churned", "BOOLEAN"),
-                ("clock_ms", "BIGINT"),
-                ("arrive_ms", "BIGINT"),
-                ("depart_ms", "BIGINT"),
+                cols::Viewers::Viewer,
+                cols::Viewers::Node,
+                cols::Viewers::Up,
+                cols::Viewers::Hostile,
+                cols::Viewers::Churned,
+                cols::Viewers::ClockMs,
+                cols::Viewers::ArriveMs,
+                cols::Viewers::DepartMs,
             ],
         )?;
         for (i, v) in honest.iter().enumerate() {
@@ -4315,16 +4344,15 @@ impl Sim {
         }
         t.finish()?;
         if let Some(events) = &self.timeline {
-            let mut t = Table::typed(
+            let mut t = Table::new(
                 dir,
-                "events",
                 &[
-                    ("t_us", "BIGINT"),
-                    ("kind", "VARCHAR"),
-                    ("node", "BIGINT"),
-                    ("peer", "BIGINT"),
-                    ("value", "BIGINT"),
-                    ("detail", "VARCHAR"),
+                    cols::Events::TUs,
+                    cols::Events::Kind,
+                    cols::Events::Node,
+                    cols::Events::Peer,
+                    cols::Events::Value,
+                    cols::Events::Detail,
                 ],
             )?;
             for e in events {
@@ -4354,37 +4382,30 @@ impl Sim {
             decisions.finish()?;
             sends.finish()?;
         }
-        let mut meta = String::from("{\"sim\":\"ppspp\",\"seed\":0");
-        let _ = write!(meta, ",\"streams\":{}", self.cfg.stream_count.max(1));
+        let mut meta = JsonRow::default();
+        meta.str(MetaText::Sim, "ppspp").int(MetaInt::Seed, 0);
+        meta.int(MetaInt::Streams, self.cfg.stream_count.max(1));
         if let Some(s) = &series {
-            let _ = write!(
-                meta,
-                ",\"rate\":{},\"chunk\":{},\"frame\":{},\"secs\":{},\"seed_up\":[{}],\"viewer_up\":{},\"seconds\":{}",
-                s.rate,
-                s.chunk,
-                s.chunk,
-                s.secs,
-                s.seed_up.join(","),
-                s.viewer_up,
-                s.len(),
-            );
+            meta.int(MetaInt::Rate, s.rate)
+                .int(MetaInt::Chunk, s.chunk)
+                .int(MetaInt::Frame, s.chunk)
+                .int(MetaInt::Secs, s.secs)
+                .json(MetaJson::SeedUp, format_args!("[{}]", s.seed_up.join(",")))
+                .int(MetaInt::ViewerUp, s.viewer_up)
+                .int(MetaInt::Seconds, s.len());
         }
         let width = self.bins.as_ref().map_or(0, |b| b.width.as_millis());
-        let _ = write!(
-            meta,
-            ",\"viewers\":{},\"bin_ms\":{width},\"forecasts_lost\":{},\"parents_lost\":{}",
-            honest.len(),
-            self.forecasts_lost,
-            self.parents_lost
-        );
+        meta.int(MetaInt::Viewers, honest.len())
+            .int(MetaInt::BinMs, width)
+            .int(MetaInt::ForecastsLost, self.forecasts_lost)
+            .int(MetaInt::ParentsLost, self.parents_lost);
         if let Some(r) = &self.requests {
-            let _ = write!(
-                meta,
-                ",\"held_lost\":{},\"haves_lost\":{},\"asks_lost\":{},\"seed_log_lost\":{}",
-                r.held_lost, r.haves_lost, r.asks_lost, r.seed_log_lost
-            );
+            meta.int(MetaInt::HeldLost, r.held_lost)
+                .int(MetaInt::HavesLost, r.haves_lost)
+                .int(MetaInt::AsksLost, r.asks_lost)
+                .int(MetaInt::SeedLogLost, r.seed_log_lost);
         }
-        meta.push('}');
+        let mut meta = meta.finish();
         meta.push('\n');
         std::fs::write(dir.join("series_meta.json"), meta)
     }
@@ -4399,25 +4420,24 @@ impl Sim {
         viewer: &[i64],
         us: &dyn Fn(Time) -> i64,
     ) -> io::Result<Table> {
-        let mut t = Table::typed(
+        let mut t = Table::new(
             dir,
-            "arrivals",
             &[
-                ("t_ms", "BIGINT"),
-                ("node", "BIGINT"),
-                ("viewer", "BIGINT"),
-                ("seq", "BIGINT"),
-                ("how", "VARCHAR"),
-                ("peer", "BIGINT"),
-                ("parent", "BIGINT"),
-                ("expected_ms", "BIGINT"),
-                ("released_ms", "BIGINT"),
-                ("asked_ms", "BIGINT"),
-                ("asks", "BIGINT"),
-                ("last_ask_peer", "BIGINT"),
-                ("last_ask_ms", "BIGINT"),
-                ("rtt_ms", "BIGINT"),
-                ("incarnation", "BIGINT"),
+                cols::Arrivals::TMs,
+                cols::Arrivals::Node,
+                cols::Arrivals::Viewer,
+                cols::Arrivals::Seq,
+                cols::Arrivals::How,
+                cols::Arrivals::Peer,
+                cols::Arrivals::Parent,
+                cols::Arrivals::ExpectedMs,
+                cols::Arrivals::ReleasedMs,
+                cols::Arrivals::AskedMs,
+                cols::Arrivals::Asks,
+                cols::Arrivals::LastAskPeer,
+                cols::Arrivals::LastAskMs,
+                cols::Arrivals::RttMs,
+                cols::Arrivals::Incarnation,
             ],
         )?;
         for a in stored {
@@ -4463,24 +4483,9 @@ impl Sim {
         log: &RequestLogs,
         us: &dyn Fn(Time) -> i64,
     ) -> io::Result<(Table, Table)> {
-        use strims_ppspp::scheduler_peer::seed_log::{
-            Column, ColumnType, DECISION_COLUMNS, RowHead, SEND_COLUMNS, decision_fields,
-            send_fields,
-        };
-        let cols = |c: &[Column]| -> Vec<(&'static str, &'static str)> {
-            c.iter()
-                .map(|c| {
-                    let ty = match c.ty {
-                        ColumnType::Text => "VARCHAR",
-                        ColumnType::Bool => "BOOLEAN",
-                        ColumnType::Int => "BIGINT",
-                    };
-                    (c.name, ty)
-                })
-                .collect()
-        };
-        let mut t = Table::typed(dir, "seed_decisions", &cols(&DECISION_COLUMNS))?;
-        let mut sends = Table::typed(dir, "seed_sends", &cols(&SEND_COLUMNS))?;
+        use strims_ppspp::scheduler_peer::seed_log::{RowHead, decision_fields, send_fields};
+        let mut t = Table::new(dir, &cols::SeedDecisions::all())?;
+        let mut sends = Table::new(dir, &cols::SeedSends::all())?;
         let ms_of = |at: Time| us(at).div_euclid(1000);
         // A row's time, the seed, its place in the seed's log, and the peer
         // with its incarnation at `then` (true times).
@@ -4524,19 +4529,18 @@ impl Sim {
         haves: &[HaveRow],
         us: &dyn Fn(Time) -> i64,
     ) -> io::Result<Table> {
-        let mut t = Table::typed(
+        let mut t = Table::new(
             dir,
-            "haves",
             &[
-                ("t_ms", "BIGINT"),
-                ("node", "BIGINT"),
-                ("honest", "BOOLEAN"),
-                ("peer", "BIGINT"),
-                ("peer_honest", "BOOLEAN"),
-                ("stream", "BIGINT"),
-                ("seq", "BIGINT"),
-                ("channel_open_ms", "BIGINT"),
-                ("peer_incarnation", "BIGINT"),
+                cols::Haves::TMs,
+                cols::Haves::Node,
+                cols::Haves::Honest,
+                cols::Haves::Peer,
+                cols::Haves::PeerHonest,
+                cols::Haves::Stream,
+                cols::Haves::Seq,
+                cols::Haves::ChannelOpenMs,
+                cols::Haves::PeerIncarnation,
             ],
         )?;
         for x in haves {
@@ -4572,7 +4576,7 @@ impl Sim {
         asks: &[AskRow],
         us: &dyn Fn(Time) -> i64,
     ) -> io::Result<Table> {
-        let mut t = Table::typed(dir, "asks", &ASK_COLS)?;
+        let mut t = Table::new(dir, &ASK_COLS)?;
         for (ask, x) in asks.iter().enumerate() {
             let n = &self.nodes[x.node];
             let r = &x.record;
@@ -4633,29 +4637,28 @@ impl Sim {
         viewer: &[i64],
         us: &dyn Fn(Time) -> i64,
     ) -> io::Result<Table> {
-        let mut t = Table::typed(
+        let mut t = Table::new(
             dir,
-            "forecast",
             &[
-                ("t_ms", "BIGINT"),
-                ("node", "BIGINT"),
-                ("viewer", "BIGINT"),
-                ("peer", "BIGINT"),
-                ("peer_honest", "BOOLEAN"),
-                ("stream", "BIGINT"),
-                ("seq", "BIGINT"),
-                ("sample_ms", "BIGINT"),
-                ("mean_ms", "BIGINT"),
-                ("horizon_ms", "BIGINT"),
-                ("samples", "BIGINT"),
-                ("fresh", "BOOLEAN"),
-                ("lazy", "BOOLEAN"),
-                ("first_sight", "BOOLEAN"),
-                ("run", "BIGINT"),
-                ("seen_ms", "BIGINT"),
-                ("held_ms", "BIGINT"),
-                ("channel_open_ms", "BIGINT"),
-                ("live", "BOOLEAN"),
+                cols::Forecast::TMs,
+                cols::Forecast::Node,
+                cols::Forecast::Viewer,
+                cols::Forecast::Peer,
+                cols::Forecast::PeerHonest,
+                cols::Forecast::Stream,
+                cols::Forecast::Seq,
+                cols::Forecast::SampleMs,
+                cols::Forecast::MeanMs,
+                cols::Forecast::HorizonMs,
+                cols::Forecast::Samples,
+                cols::Forecast::Fresh,
+                cols::Forecast::Lazy,
+                cols::Forecast::FirstSight,
+                cols::Forecast::Run,
+                cols::Forecast::SeenMs,
+                cols::Forecast::HeldMs,
+                cols::Forecast::ChannelOpenMs,
+                cols::Forecast::Live,
             ],
         )?;
         let ms_of = |at: Time| us(at).div_euclid(1000);
@@ -10904,129 +10907,135 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         });
     let seed_push = seed.runner.push_stats(seed.swarm).unwrap_or_default();
     let mut row = JsonRow::default();
-    row.str("scenario", scenario)
-        .str("case", case)
-        .int("seed", cfg.seed)
-        .int("peers", cfg.peers as u64)
-        .num("mbit", cfg.stream_rate as f64 * 8e-6)
-        .int("chunk", cfg.chunk_size as u64)
-        .int("streams", cfg.stream_count as u64)
-        .int("secs", cfg.stream_secs)
-        .int("warm", cfg.warm_secs as u64)
+    row.str(RowText::Scenario, scenario)
+        .str(RowText::Case, case)
+        .int(RowInt::Seed, cfg.seed)
+        .int(RowInt::Peers, cfg.peers as u64)
+        .num(RowNum::Mbit, cfg.stream_rate as f64 * 8e-6)
+        .int(RowInt::Chunk, cfg.chunk_size as u64)
+        .int(RowInt::Streams, cfg.stream_count as u64)
+        .int(RowInt::Secs, cfg.stream_secs)
+        .int(RowInt::Warm, cfg.warm_secs as u64)
         .str(
-            "access",
+            RowText::Access,
             &cfg.wan
                 .as_ref()
                 .map_or("-".into(), |w| w.sites[0].access.to_string()),
         )
-        .int("greedy", u64::from(knob::<u32>("SIM_GREEDY") != Some(0)))
         .int(
-            "collude",
+            RowInt::Greedy,
+            u64::from(knob::<u32>("SIM_GREEDY") != Some(0)),
+        )
+        .int(
+            RowInt::Collude,
             u64::from(knob::<u32>("SIM_COLLUDE").is_some_and(|c| c != 0)),
         )
-        .str("run_tag", &run_tag(cfg))
-        .str("trace", &format!("{:016x}", r.trace))
-        .str("reads_hash", &format!("{:016x}", sim.reads_hash()))
-        .int("frames", r.frames)
-        .int("bytes", r.bytes)
-        .int("payload_bytes", sim.chunks_read() * cfg.chunk_size as u64)
-        .num("delivery", r.delivery)
+        .str(RowText::RunTag, &run_tag(cfg))
+        .str(RowText::Trace, &format!("{:016x}", r.trace))
+        .str(RowText::ReadsHash, &format!("{:016x}", sim.reads_hash()))
+        .int(RowInt::Frames, r.frames)
+        .int(RowInt::Bytes, r.bytes)
+        .int(
+            RowInt::PayloadBytes,
+            sim.chunks_read() * cfg.chunk_size as u64,
+        )
+        .num(RowNum::Delivery, r.delivery)
         .num(
-            "cross_delivery",
+            RowNum::CrossDelivery,
             r.cross.as_ref().map_or(0.0, |c| c.delivery),
         )
         .int(
-            "cross_p50_ms",
+            RowInt::CrossP50Ms,
             r.cross.as_ref().map_or(0, |c| ms(c.lag_p50) as u64),
         )
         .int(
-            "cross_p99_ms",
+            RowInt::CrossP99Ms,
             r.cross.as_ref().map_or(0, |c| ms(c.lag_p99) as u64),
         )
-        .int("lag_p50_ms", ms(r.lag_p50) as u64)
-        .int("lag_p99_ms", ms(r.lag_p99) as u64)
-        .int("lag_max_ms", ms(r.lag_max) as u64)
-        .int("stripe_p90_ms", ms(r.stripe_p90) as u64)
-        .int("stripe_p99_ms", ms(r.stripe_p99) as u64)
+        .int(RowInt::LagP50Ms, ms(r.lag_p50) as u64)
+        .int(RowInt::LagP99Ms, ms(r.lag_p99) as u64)
+        .int(RowInt::LagMaxMs, ms(r.lag_max) as u64)
+        .int(RowInt::StripeP90Ms, ms(r.stripe_p90) as u64)
+        .int(RowInt::StripeP99Ms, ms(r.stripe_p99) as u64)
         .int(
-            "worst_region_p99_ms",
+            RowInt::WorstRegionP99Ms,
             r.regions.iter().map(|&(_, l)| ms(l)).max().unwrap_or(0) as u64,
         )
-        .num("stream_end_s", 1.0 + cfg.stream_secs as f64)
-        .num("reads_end_s", span)
-        .int("mismatches", r.mismatches)
-        .int("underruns", r.underruns)
-        .int("resets", r.resets)
-        .int("wasted", r.wasted)
-        .int("chunks_read", sim.chunks_read())
-        .int("push_hits", p.hits)
-        .int("push_misses", p.misses)
-        .int("push_late", p.late)
-        .int("push_unsolicited", p.unsolicited)
-        .num("seed_mb_up", up as f64 / 1e6)
-        .num("seed_uplink", up as f64 / (seed.up_bw as f64 * span))
-        .num("seed_share", r.seed_share)
-        .num("seed_pull_share", r.seed_pull_share)
-        .num("seed_distinct", r.seed_distinct)
-        .num("seed_slots", r.seed_slots)
-        .int("seed_up_bw", seed.up_bw)
-        .int("seed_capacity", r.seed_capacity)
+        .num(RowNum::StreamEndS, 1.0 + cfg.stream_secs as f64)
+        .num(RowNum::ReadsEndS, span)
+        .int(RowInt::Mismatches, r.mismatches)
+        .int(RowInt::Underruns, r.underruns)
+        .int(RowInt::Resets, r.resets)
+        .int(RowInt::Wasted, r.wasted)
+        .int(RowInt::ChunksRead, sim.chunks_read())
+        .int(RowInt::PushHits, p.hits)
+        .int(RowInt::PushMisses, p.misses)
+        .int(RowInt::PushLate, p.late)
+        .int(RowInt::PushUnsolicited, p.unsolicited)
+        .num(RowNum::SeedMbUp, up as f64 / 1e6)
+        .num(RowNum::SeedUplink, up as f64 / (seed.up_bw as f64 * span))
+        .num(RowNum::SeedShare, r.seed_share)
+        .num(RowNum::SeedPullShare, r.seed_pull_share)
+        .num(RowNum::SeedDistinct, r.seed_distinct)
+        .num(RowNum::SeedSlots, r.seed_slots)
+        .int(RowInt::SeedUpBw, seed.up_bw)
+        .int(RowInt::SeedCapacity, r.seed_capacity)
         // The capacity reading the seed's budget was measured from, its
         // median over the samples after the warm-up once measured; null if
         // it never was.
-        .opt_int("budget_capacity", r.budget_capacity)
-        .int("seed_first_wave", seed_push.seed_first_wave as u64)
+        .int(RowInt::BudgetCapacity, r.budget_capacity)
+        .int(RowInt::SeedFirstWave, seed_push.seed_first_wave as u64)
         .int(
-            "seed_first_wave_capacity",
+            RowInt::SeedFirstWaveCapacity,
             seed_push.seed_first_wave_capacity,
         )
-        .int("seed_objective_ms", ms(r.seed_objective) as u64)
-        .num("settled_s", r.settled.as_secs_f64())
-        .int("holder_changes", r.holder_changes as u64)
-        .int("super_peer_children", super_peer.map_or(0, |s| s.0))
-        .int("super_peer_declined", super_peer.map_or(0, |s| s.1))
-        .int("free_riders", r.greedy.0 as u64)
-        .int("liars", r.greedy.1 as u64)
-        .num("free_rider_slots", r.greedy_slots.0)
-        .num("liar_slots", r.greedy_slots.1)
-        .int("grabbers", r.grabbers.0 as u64)
-        .num("grabber_slots", r.grabbers.1)
-        .num("holder_short", r.holder_short)
-        .num("holder_copy", r.holder_copy)
-        .int("greedy_held_s", r.greedy_held.as_secs() as u64)
-        .num("liar_grafts", r.liar_grafts)
-        .int("liar_graft_span_ms", ms(r.liar_graft_span) as u64)
-        .int("barred", r.barred.0)
-        .int("barred_honest", r.barred.1)
-        .int("v_honest", v.honest)
-        .int("v_with_children", v.with_children)
-        .int("v_with_reporters", v.with_reporters)
-        .int("v_judged", v.judged)
-        .int("v_served", v.served)
-        .int("v_served_childless", v.served_childless)
-        .int("v_liars", v.liars)
-        .int("v_liars_judged", v.liars_judged)
-        .int("v_liars_served", v.liars_served)
-        .int("v_not_kept", v.not_kept)
-        .int("v_barred_with_children", v.barred_with_children)
-        .num("liar_hold_s", r.liar_hold.0.as_secs_f64())
-        .num("liar_hold_max_s", r.liar_hold.1.as_secs_f64())
-        .int("reports_tallied", c.tallied)
-        .int("reports_unknown", c.unknown)
-        .int("reports_invalid", c.invalid)
-        .int("reports_reporter_fed", c.reporter_fed)
-        .int("reports_subject_unfed", c.subject_unfed)
-        .int("reports_reporter_silent", c.reporter_silent)
-        .int("reports_too_early", c.too_early)
-        .int("reports_misses_unseen", c.misses_unseen)
-        .int("announces", r.announce.0)
-        .int("announce_bytes", r.announce.1)
+        .int(RowInt::SeedObjectiveMs, ms(r.seed_objective) as u64)
+        .num(RowNum::SettledS, r.settled.as_secs_f64())
+        .int(RowInt::HolderChanges, r.holder_changes as u64)
+        .int(RowInt::SuperPeerChildren, super_peer.map_or(0, |s| s.0))
+        .int(RowInt::SuperPeerDeclined, super_peer.map_or(0, |s| s.1))
+        .int(RowInt::FreeRiders, r.greedy.0 as u64)
+        .int(RowInt::Liars, r.greedy.1 as u64)
+        .num(RowNum::FreeRiderSlots, r.greedy_slots.0)
+        .num(RowNum::LiarSlots, r.greedy_slots.1)
+        .int(RowInt::Grabbers, r.grabbers.0 as u64)
+        .num(RowNum::GrabberSlots, r.grabbers.1)
+        .num(RowNum::HolderShort, r.holder_short)
+        .num(RowNum::HolderCopy, r.holder_copy)
+        .int(RowInt::GreedyHeldS, r.greedy_held.as_secs() as u64)
+        .num(RowNum::LiarGrafts, r.liar_grafts)
+        .int(RowInt::LiarGraftSpanMs, ms(r.liar_graft_span) as u64)
+        .int(RowInt::Barred, r.barred.0)
+        .int(RowInt::BarredHonest, r.barred.1)
+        .int(RowInt::VHonest, v.honest)
+        .int(RowInt::VWithChildren, v.with_children)
+        .int(RowInt::VWithReporters, v.with_reporters)
+        .int(RowInt::VJudged, v.judged)
+        .int(RowInt::VServed, v.served)
+        .int(RowInt::VServedChildless, v.served_childless)
+        .int(RowInt::VLiars, v.liars)
+        .int(RowInt::VLiarsJudged, v.liars_judged)
+        .int(RowInt::VLiarsServed, v.liars_served)
+        .int(RowInt::VNotKept, v.not_kept)
+        .int(RowInt::VBarredWithChildren, v.barred_with_children)
+        .num(RowNum::LiarHoldS, r.liar_hold.0.as_secs_f64())
+        .num(RowNum::LiarHoldMaxS, r.liar_hold.1.as_secs_f64())
+        .int(RowInt::ReportsTallied, c.tallied)
+        .int(RowInt::ReportsUnknown, c.unknown)
+        .int(RowInt::ReportsInvalid, c.invalid)
+        .int(RowInt::ReportsReporterFed, c.reporter_fed)
+        .int(RowInt::ReportsSubjectUnfed, c.subject_unfed)
+        .int(RowInt::ReportsReporterSilent, c.reporter_silent)
+        .int(RowInt::ReportsTooEarly, c.too_early)
+        .int(RowInt::ReportsMissesUnseen, c.misses_unseen)
+        .int(RowInt::Announces, r.announce.0)
+        .int(RowInt::AnnounceBytes, r.announce.1)
         .num(
-            "announce_bps",
+            RowNum::AnnounceBps,
             r.announce.1 as f64 / cfg.stream_secs.max(1) as f64,
         )
-        .num("announce_share", r.announce.2)
-        .int("asks", r.asks);
+        .num(RowNum::AnnounceShare, r.announce.2)
+        .int(RowInt::Asks, r.asks);
     playback_cols(&mut row, sim);
     // Requests timed out ([`Sim::timeouts`]): the honest viewers' over
     // every incarnation, the seed's, and with greedy viewers or adversaries
@@ -11069,34 +11078,34 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             .filter(|l| l.path.reading(sim.now).is_none())
             .count()
     };
-    row.int("timeouts", timeouts)
-        .int("seed_timeouts", seed_timeouts);
+    row.int(RowInt::Timeouts, timeouts)
+        .int(RowInt::SeedTimeouts, seed_timeouts);
     if hostile {
-        row.int("timeouts_hostile", hostile_timeouts);
+        row.int(RowInt::TimeoutsHostile, hostile_timeouts);
     }
-    row.int("echo_forged", forged);
+    row.int(RowInt::EchoForged, forged);
     sim.windows.cols(&mut row);
     if let Some(ms) = median_rtt(false) {
-        row.int("seed_rtt_honest_ms", ms as u64);
+        row.int(RowInt::SeedRttHonestMs, ms as u64);
     }
     if let Some(ms) = median_rtt(true) {
-        row.int("seed_rtt_greedy_ms", ms as u64);
+        row.int(RowInt::SeedRttGreedyMs, ms as u64);
     }
-    row.int("seed_unmeasured_honest", unmeasured(false) as u64)
-        .int("seed_unmeasured_greedy", unmeasured(true) as u64);
+    row.int(RowInt::SeedUnmeasuredHonest, unmeasured(false) as u64)
+        .int(RowInt::SeedUnmeasuredGreedy, unmeasured(true) as u64);
     // The seed's chunks pushed and answered, the requests it queued and
     // refused and the answers it dropped, and how long pushes and answers
     // waited in its queues.
     if let Some(st) = seed.runner.swarm_stats(seed.swarm) {
-        row.int("seed_pushed", st.pushed_chunks)
-            .int("seed_answered", st.chunks_sent - st.pushed_chunks)
-            .int("seed_answers_queued", st.answers_queued)
-            .int("seed_answers_refused", st.answers_refused)
-            .int("seed_answers_dropped", st.answers_dropped);
+        row.int(RowInt::SeedPushed, st.pushed_chunks)
+            .int(RowInt::SeedAnswered, st.chunks_sent - st.pushed_chunks)
+            .int(RowInt::SeedAnswersQueued, st.answers_queued)
+            .int(RowInt::SeedAnswersRefused, st.answers_refused)
+            .int(RowInt::SeedAnswersDropped, st.answers_dropped);
         for (name, h) in [("push", st.push_wait), ("answer", st.answer_wait)] {
-            for p in [50, 99] {
+            for p in RowInt::P_OF_SEED_QUEUE_WAIT_P_P_MS {
                 if let Some(d) = h.percentile(f64::from(p)) {
-                    row.int(&format!("seed_{name}_wait_p{p}_ms"), ms(d) as u64);
+                    row.int(RowInt::seed_queue_wait_p_p_ms(name, p), ms(d) as u64);
                 }
             }
         }
@@ -11108,31 +11117,34 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     let samples = sh.depth.iter().sum::<u64>().max(1) as f64;
     for (k, &n) in sh.depth.iter().enumerate() {
         let name = match k {
-            0 => "depth_none".to_owned(),
-            k if k <= DEPTH_HOPS => format!("depth_{k}"),
-            k if k == DEPTH_HOPS + 1 => "depth_deeper".to_owned(),
-            k if k == DEPTH_HOPS + 2 => "depth_cycle".to_owned(),
-            _ => "depth_pull_rooted".to_owned(),
+            0 => RowNum::DepthNone,
+            k if k <= DEPTH_HOPS => RowNum::depth_hops(k),
+            k if k == DEPTH_HOPS + 1 => RowNum::DepthDeeper,
+            k if k == DEPTH_HOPS + 2 => RowNum::DepthCycle,
+            _ => RowNum::DepthPullRooted,
         };
-        row.num(&name, n as f64 / samples);
+        row.num(name, n as f64 / samples);
     }
-    row.num("relay_share", sh.relays as f64 / sh.viewers.max(1) as f64);
-    for (name, x) in ["have_lazy_out_share", "have_lazy_in_share"]
+    row.num(
+        RowNum::RelayShare,
+        sh.relays as f64 / sh.viewers.max(1) as f64,
+    );
+    for (name, x) in [RowNum::HaveLazyOutShare, RowNum::HaveLazyInShare]
         .iter()
         .zip(sh.lazy)
     {
-        row.num(name, x / sh.lazy_samples.max(1) as f64);
+        row.num(*name, x / sh.lazy_samples.max(1) as f64);
     }
     let mut fanout = sh.fanout.clone();
     fanout.sort_unstable();
-    for p in [50, 90] {
+    for p in RowInt::P_OF_FANOUT_P_P.map(usize::from) {
         if let Some(&f) = fanout.get(fanout.len().saturating_sub(1) * p / 100) {
-            row.int(&format!("fanout_p{p}"), f);
+            row.int(RowInt::fanout_p_p(p), f);
         }
     }
     if sh.declines > 0 {
         row.num(
-            "declines_idle",
+            RowNum::DeclinesIdle,
             sh.declines_idle as f64 / sh.declines as f64,
         );
     }
@@ -11163,7 +11175,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         viewers * minutes
     };
     row.num(
-        "parent_changes_per_min",
+        RowNum::ParentChangesPerMin,
         (p.pruned + p.switched) as f64 / viewer_minutes,
     );
     // Each viewer's uplink use while it was there.
@@ -11176,9 +11188,9 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         })
         .collect();
     util.sort_by(f64::total_cmp);
-    for p in [50, 90, 95] {
+    for p in RowNum::P_OF_VIEWER_UTIL_P_P.map(usize::from) {
         if let Some(&u) = util.get((util.len().saturating_sub(1)) * p / 100) {
-            row.num(&format!("viewer_util_p{p}"), u);
+            row.num(RowNum::viewer_util_p_p(p), u);
         }
     }
     let (mut acc, mut rej, mut shed) = (0, 0, 0);
@@ -11189,15 +11201,15 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             shed += p.sheds_sent;
         }
     }
-    row.int("relay_accepted", acc)
-        .int("relay_rejected", rej)
-        .int("relay_sheds", shed);
+    row.int(RowInt::RelayAccepted, acc)
+        .int(RowInt::RelayRejected, rej)
+        .int(RowInt::RelaySheds, shed);
     for (name, v) in ["seed", "relays", "others"].iter().zip(&sh.meter) {
         let mut v = v.clone();
         v.sort_by(f64::total_cmp);
-        for p in [10, 50, 90] {
+        for p in RowNum::P_OF_METER_ROLE_P_P.map(usize::from) {
             if let Some(&x) = v.get((v.len().saturating_sub(1)) * p / 100) {
-                row.num(&format!("meter_{name}_p{p}"), x);
+                row.num(RowNum::meter_role_p_p(name, p), x);
             }
         }
     }
@@ -11209,30 +11221,30 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         lens.sort_unstable();
         let mut lives = l.lives.clone();
         lives.sort_unstable();
-        row.int("loops", lens.len() as u64)
-            .int("loops_alive", l.active.len() as u64)
-            .int("loops_tap_lost", l.lost)
-            .int("grafts", l.grafts)
-            .int("grafts_down", l.grafts_down)
-            .int("switches", l.switches)
-            .int("switches_down", l.switches_down);
+        row.int(RowInt::Loops, lens.len() as u64)
+            .int(RowInt::LoopsAlive, l.active.len() as u64)
+            .int(RowInt::LoopsTapLost, l.lost)
+            .int(RowInt::Grafts, l.grafts)
+            .int(RowInt::GraftsDown, l.grafts_down)
+            .int(RowInt::Switches, l.switches)
+            .int(RowInt::SwitchesDown, l.switches_down);
         for (k, n) in ["held_by_none", "held_by_1_2", "held_by_3_plus"]
             .iter()
             .zip(l.seed_asks)
         {
-            row.int(&format!("seed_asks_{k}"), n);
+            row.int(RowInt::seed_asks_held(k), n);
         }
-        row.int("seed_asks_held_by_none_parentless", l.seed_asks_parentless);
+        row.int(RowInt::SeedAsksHeldByNoneParentless, l.seed_asks_parentless);
         for (how, n) in &l.closed_by {
-            row.int(&format!("loops_by_{}", how.replace(' ', "_")), *n);
+            row.int(RowInt::loops_by_how(how.replace(' ', "_")), *n);
         }
         if let Some(&m) = lens.get(lens.len() / 2) {
-            row.int("loop_len_p50", m);
+            row.int(RowInt::LoopLenP50, m);
         }
-        for p in [50, 90] {
+        for p in RowInt::P_OF_LOOP_LIFE_P_P_MS.map(usize::from) {
             if !lives.is_empty() {
                 row.int(
-                    &format!("loop_life_p{p}_ms"),
+                    RowInt::loop_life_p_p_ms(p),
                     ms(percentile(&lives, p)) as u64,
                 );
             }
@@ -11245,11 +11257,14 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         let unread = sim.nodes.iter().filter(|n| n.rejoined.is_some()).count();
         let mut joins = sim.joins.clone();
         joins.sort_unstable();
-        row.int("churn_leaves", leaves as u64)
-            .int("join_unread", unread as u64);
-        for p in [50, 90] {
+        row.int(RowInt::ChurnLeaves, leaves as u64)
+            .int(RowInt::JoinUnread, unread as u64);
+        for p in RowInt::P_OF_EVENT_P_P_MS.map(usize::from) {
             if !joins.is_empty() {
-                row.int(&format!("join_p{p}_ms"), ms(percentile(&joins, p)) as u64);
+                row.int(
+                    RowInt::event_p_p_ms("join", p),
+                    ms(percentile(&joins, p)) as u64,
+                );
             }
         }
     }
@@ -11287,13 +11302,13 @@ fn playback_cols(row: &mut JsonRow, sim: &Sim) {
     }
     for (t, d) in totals.iter().zip(DELAYS_MS) {
         if let Some(x) = t.stalls_per_min() {
-            row.num(&format!("stalls_per_min_{d}"), x);
+            row.num(RowNum::stalls_per_min_delay_pop(d, ""), x);
         }
         if let Some(x) = t.stalled_share() {
-            row.num(&format!("stalled_share_{d}"), x);
+            row.num(RowNum::stalled_share_delay_pop(d, ""), x);
         }
         if let Some(x) = t.startup_ms() {
-            row.int(&format!("startup_ms_{d}"), x.max(0) as u64);
+            row.int(RowInt::startup_ms_delay_pop(d, ""), x.max(0) as u64);
         }
     }
 }
@@ -11317,33 +11332,33 @@ fn playback_cols(row: &mut JsonRow, sim: &Sim) {
 /// that left (`relinks`, [`Sim::relink`]).
 fn audience_cols(row: &mut JsonRow, sim: &Sim) {
     let a = sim.audience_report();
-    row.str("arrivals", &sim.cfg.arrivals.to_string());
+    row.str(RowText::Arrivals, &sim.cfg.arrivals.to_string());
     if let Some(d) = sim.cfg.depart {
-        row.str("depart", &d.to_string());
+        row.str(RowText::Depart, &d.to_string());
     }
-    row.int("arrived", a.arrived.0 as u64)
-        .int("arrived_honest", a.arrived.1 as u64)
-        .int("departed", a.departed.0 as u64)
-        .int("departed_honest", a.departed.1 as u64);
+    row.int(RowInt::Arrived, a.arrived.0 as u64)
+        .int(RowInt::ArrivedHonest, a.arrived.1 as u64)
+        .int(RowInt::Departed, a.departed.0 as u64)
+        .int(RowInt::DepartedHonest, a.departed.1 as u64);
     for (name, v) in [("join", &a.joins), ("caught_up", &a.caught_up)] {
-        for p in [50, 90] {
+        for p in RowInt::P_OF_EVENT_P_P_MS.map(usize::from) {
             if !v.is_empty() {
-                row.int(&format!("{name}_p{p}_ms"), ms(percentile(v, p)) as u64);
+                row.int(RowInt::event_p_p_ms(name, p), ms(percentile(v, p)) as u64);
             }
         }
     }
-    row.int("join_unread", a.unread as u64)
-        .int("caught_up_never", a.behind as u64)
-        .int("parent_lost", a.parent_lost.0)
-        .int("parent_lost_streams", a.parent_lost.1);
+    row.int(RowInt::JoinUnread, a.unread as u64)
+        .int(RowInt::CaughtUpNever, a.behind as u64)
+        .int(RowInt::ParentLost, a.parent_lost.0)
+        .int(RowInt::ParentLostStreams, a.parent_lost.1);
     if let Some(r) = &a.recovery {
-        row.int("depart_stayed", r.stayed as u64)
-            .int("depart_stranded", r.stranded as u64)
-            .int("depart_lag_peak_ms", ms(r.peak) as u64)
-            .int("depart_excess_lag_area_ms_s", r.excess_ms_s as u64)
-            .int("depart_recover_ms", ms(r.recover) as u64)
-            .int("depart_recover_censored", u64::from(r.censored))
-            .int("relinks", sim.relinks);
+        row.int(RowInt::DepartStayed, r.stayed as u64)
+            .int(RowInt::DepartStranded, r.stranded as u64)
+            .int(RowInt::DepartLagPeakMs, ms(r.peak) as u64)
+            .int(RowInt::DepartExcessLagAreaMsS, r.excess_ms_s as u64)
+            .int(RowInt::DepartRecoverMs, ms(r.recover) as u64)
+            .int(RowInt::DepartRecoverCensored, u64::from(r.censored))
+            .int(RowInt::Relinks, sim.relinks);
     }
 }
 
@@ -11354,15 +11369,17 @@ fn audience_cols(row: &mut JsonRow, sim: &Sim) {
 /// read (of those due them, [`Sim::delivered`], with arrivals or
 /// departures) and their lag p99 after their warm-ups.
 fn clock_cols(row: &mut JsonRow, sim: &Sim) {
-    let offsets: Vec<String> = sim.nodes.iter().map(|n| ms(n.clock).to_string()).collect();
     let largest = sim.nodes.iter().map(|n| n.clock.abs()).max();
-    row.str("clock_skew", &sim.cfg.clock_skew.to_string())
-        .field("clock_offsets_ms", format_args!("[{}]", offsets.join(",")))
-        .int("clock_max_ms", largest.map_or(0, |d| ms(d) as u64));
+    row.str(RowText::ClockSkew, &sim.cfg.clock_skew.to_string())
+        .ints(
+            RowInts::ClockOffsetsMs,
+            sim.nodes.iter().map(|n| ms(n.clock)),
+        )
+        .int(RowInt::ClockMaxMs, largest.map_or(0, |d| ms(d) as u64));
     for (k, name) in CLOCK_CLASSES.iter().enumerate() {
         let of = |n: &&Node| clock_class(n.clock) == k;
         row.int(
-            &format!("clock_{name}"),
+            RowInt::clock_class(name),
             sim.nodes.iter().filter(of).count() as u64,
         );
         let viewers: Vec<&Node> = sim
@@ -11393,13 +11410,13 @@ fn clock_cols(row: &mut JsonRow, sim: &Sim) {
             .flat_map(|n| sim.steady(n, &n.lags))
             .collect();
         lags.sort();
-        row.int(&format!("clock_{name}_viewers"), viewers.len() as u64)
+        row.int(RowInt::clock_class_viewers(name), viewers.len() as u64)
             .num(
-                &format!("clock_{name}_delivery"),
+                RowNum::clock_class_delivery(name),
                 read as f64 / all.max(1) as f64,
             )
             .int(
-                &format!("clock_{name}_lag_p99_ms"),
+                RowInt::clock_class_lag_p99_ms(name),
                 ms(percentile(&lags, 99)) as u64,
             );
     }
@@ -11451,30 +11468,30 @@ fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
     let waste = down
         .data_bytes
         .saturating_sub(down.new_bytes + down.stale_bytes + down.invalid_bytes);
-    row.int("up_payload", up.data_bytes)
-        .int("up_data_hdr", up.data_header_bytes)
-        .int("up_integrity", up.integrity_bytes)
-        .int("up_signed", up.signed_integrity_bytes)
-        .int("up_have", up.have_bytes)
-        .int("up_ack", up.ack_bytes)
-        .int("up_request", up.request_bytes)
-        .int("up_ping", up.ping_bytes)
-        .int("up_stream", up.stream_bytes)
-        .int("up_announce", up.announce_bytes)
-        .int("up_session", up.session_bytes)
-        .int("up_chan_hdr", up.header_bytes)
-        .int("up_hostile", sent.hostile_bytes)
-        .int("up_vnic", sent.ctl_bytes)
-        .int("up_ports", 0)
-        .int("up_transport", sent.transport_bytes)
-        .int("up_acks", 0)
-        .int("up_wire", wire.up_bytes)
-        .int("down_wire", wire.down_bytes)
-        .int("dup_bytes", waste)
-        .int("stale_bytes", down.stale_bytes)
-        .int("useful_bytes", useful)
+    row.int(RowInt::UpPayload, up.data_bytes)
+        .int(RowInt::UpDataHdr, up.data_header_bytes)
+        .int(RowInt::UpIntegrity, up.integrity_bytes)
+        .int(RowInt::UpSigned, up.signed_integrity_bytes)
+        .int(RowInt::UpHave, up.have_bytes)
+        .int(RowInt::UpAck, up.ack_bytes)
+        .int(RowInt::UpRequest, up.request_bytes)
+        .int(RowInt::UpPing, up.ping_bytes)
+        .int(RowInt::UpStream, up.stream_bytes)
+        .int(RowInt::UpAnnounce, up.announce_bytes)
+        .int(RowInt::UpSession, up.session_bytes)
+        .int(RowInt::UpChanHdr, up.header_bytes)
+        .int(RowInt::UpHostile, sent.hostile_bytes)
+        .int(RowInt::UpVnic, sent.ctl_bytes)
+        .int(RowInt::UpPorts, 0)
+        .int(RowInt::UpTransport, sent.transport_bytes)
+        .int(RowInt::UpAcks, 0)
+        .int(RowInt::UpWire, wire.up_bytes)
+        .int(RowInt::DownWire, wire.down_bytes)
+        .int(RowInt::DupBytes, waste)
+        .int(RowInt::StaleBytes, down.stale_bytes)
+        .int(RowInt::UsefulBytes, useful)
         .num(
-            "wire_per_useful",
+            RowNum::WirePerUseful,
             wire.up_bytes as f64 / useful.max(1) as f64,
         );
 
@@ -11495,35 +11512,35 @@ fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
     for v in [&mut relays, &mut leaves, &mut pps] {
         v.sort_by(f64::total_cmp);
     }
-    row.num("ovh_seed", share(&sim.nodes[0])).num(
-        "seed_wire_per_written",
+    row.num(RowNum::OvhSeed, share(&sim.nodes[0])).num(
+        RowNum::SeedWirePerWritten,
         sim.nodes[0].wire.up_bytes as f64
             / (sim.nodes[0].wire.up_bytes - sim.nodes[0].sent.transport_bytes).max(1) as f64,
     );
     for (name, v, p) in [
-        ("ovh_relay_p50", &relays, 50),
-        ("ovh_leaf_p50", &leaves, 50),
-        ("ovh_leaf_p90", &leaves, 90),
-        ("pps_p50", &pps, 50),
-        ("pps_p90", &pps, 90),
+        (RowNum::OvhRelayP50, &relays, 50),
+        (RowNum::OvhLeafP50, &leaves, 50),
+        (RowNum::OvhLeafP90, &leaves, 90),
+        (RowNum::PpsP50, &pps, 50),
+        (RowNum::PpsP90, &pps, 90),
     ] {
         if let Some(&x) = v.get(v.len().saturating_sub(1) * p / 100) {
             row.num(name, x);
         }
     }
-    row.int("packets_up", wire.up_packets)
-        .int("packets_ack", 0)
+    row.int(RowInt::PacketsUp, wire.up_packets)
+        .int(RowInt::PacketsAck, 0)
         .num(
-            "small_packet_share",
+            RowNum::SmallPacketShare,
             wire.small_packets as f64 / wire.up_packets.max(1) as f64,
         )
-        .num("seed_pps", sim.nodes[0].wire.up_packets as f64 / span)
+        .num(RowNum::SeedPps, sim.nodes[0].wire.up_packets as f64 / span)
         .num(
-            "frame_bytes_mean",
+            RowNum::FrameBytesMean,
             sent.frame_bytes as f64 / sent.frames.max(1) as f64,
         )
         .num(
-            "msgs_per_payload",
+            RowNum::MsgsPerPayload,
             up.messages() as f64 / up.payloads.max(1) as f64,
         );
 }
@@ -11538,25 +11555,25 @@ fn media_cols(row: &mut JsonRow, sim: &Sim, m: &MediaRun, r: &Report) {
     let secs = sim.cfg.stream_secs.max(1) as f64;
     let waits = p.sign_waits();
     let wire: u64 = sim.nodes.iter().map(|n| n.wire.up_bytes).sum();
-    row.str("media", &m.media.encoder.to_string())
-        .str("sign", &m.media.sign.to_string())
-        .int("unit", p.unit_chunks)
-        .num("media_kbit", p.media_bytes as f64 * 8e-3 / secs)
-        .num("sent_kbit", p.sent_bytes as f64 * 8e-3 / secs)
+    row.str(RowText::Media, &m.media.encoder.to_string())
+        .str(RowText::Sign, &m.media.sign.to_string())
+        .int(RowInt::Unit, p.unit_chunks)
+        .num(RowNum::MediaKbit, p.media_bytes as f64 * 8e-3 / secs)
+        .num(RowNum::SentKbit, p.sent_bytes as f64 * 8e-3 / secs)
         .num(
-            "stream_per_media",
+            RowNum::StreamPerMedia,
             p.sent_bytes as f64 / p.media_bytes.max(1) as f64,
         )
-        .num("units_per_s", p.units() as f64 / secs)
-        .int("sign_wait_p50_ms", ms(percentile(&waits, 50)) as u64)
-        .int("sign_wait_p99_ms", ms(percentile(&waits, 99)) as u64)
-        .int("signed_lag_p50_ms", ms(r.sign_lag_p50) as u64)
-        .int("signed_lag_p99_ms", ms(r.sign_lag_p99) as u64)
+        .num(RowNum::UnitsPerS, p.units() as f64 / secs)
+        .int(RowInt::SignWaitP50Ms, ms(percentile(&waits, 50)) as u64)
+        .int(RowInt::SignWaitP99Ms, ms(percentile(&waits, 99)) as u64)
+        .int(RowInt::SignedLagP50Ms, ms(r.sign_lag_p50) as u64)
+        .int(RowInt::SignedLagP99Ms, ms(r.sign_lag_p99) as u64)
         .num(
-            "wire_per_media",
+            RowNum::WirePerMedia,
             wire as f64 / (p.media_bytes.max(1) as f64 * sim.cfg.peers.max(1) as f64),
         )
-        .int("dataless_msgs", sim.dataless_on_wire);
+        .int(RowInt::DatalessMsgs, sim.dataless_on_wire);
 }
 
 /// The run second by second ([`Sim::series`]): the stream, each honest
@@ -11575,7 +11592,7 @@ struct SeriesData {
     viewer_up: u64,
     lag: Vec<Vec<i64>>,
     frames: Vec<Vec<i64>>,
-    cols: Vec<(&'static str, Vec<i64>)>,
+    cols: Vec<(cols::Seconds, Vec<i64>)>,
 }
 
 impl SeriesData {
@@ -11588,19 +11605,6 @@ impl SeriesData {
 /// How much of a [`Table`]'s CSV it holds before writing it to its file.
 const SPILL: usize = 1 << 20;
 
-/// The tables that grow with a run's nodes and its length, written
-/// zstd-compressed, `<name>.csv.zst` (`hack/sim-db` reads either), as
-/// strims-sim's are: the others are a run's summaries, `<name>.csv`.
-const ZSTD: [&str; 7] = [
-    "reads",
-    "node_bins",
-    "events",
-    "forecast",
-    "arrivals",
-    "haves",
-    "asks",
-];
-
 /// A node by its index, `-1` for none (`usize::MAX`).
 fn node_of(n: usize) -> String {
     match n {
@@ -11610,32 +11614,32 @@ fn node_of(n: usize) -> String {
 }
 
 /// The `asks` table's columns ([`Sim::write_tables`]), strims-sim's.
-const ASK_COLS: [(&str, &str); 25] = [
-    ("t_ms", "BIGINT"),
-    ("node", "BIGINT"),
-    ("honest", "BOOLEAN"),
-    ("ask", "BIGINT"),
-    ("round", "VARCHAR"),
-    ("peer", "BIGINT"),
-    ("peer_honest", "BOOLEAN"),
-    ("picked", "BOOLEAN"),
-    ("declares", "BOOLEAN"),
-    ("stream", "BIGINT"),
-    ("seq", "BIGINT"),
-    ("timeout_ms", "BIGINT"),
-    ("rtt_ms", "BIGINT"),
-    ("predicted_ms", "BIGINT"),
-    ("predicted_p90_ms", "BIGINT"),
-    ("predicted_p99_ms", "BIGINT"),
-    ("predicted_horizon_ms", "BIGINT"),
-    ("have_ms", "BIGINT"),
-    ("released_ms", "BIGINT"),
-    ("outcome", "VARCHAR"),
-    ("reason", "VARCHAR"),
-    ("t_outcome_ms", "BIGINT"),
-    ("channel_open_ms", "BIGINT"),
-    ("since_ms", "BIGINT"),
-    ("peer_incarnation", "BIGINT"),
+const ASK_COLS: [cols::Asks; 25] = [
+    cols::Asks::TMs,
+    cols::Asks::Node,
+    cols::Asks::Honest,
+    cols::Asks::Ask,
+    cols::Asks::Round,
+    cols::Asks::Peer,
+    cols::Asks::PeerHonest,
+    cols::Asks::Picked,
+    cols::Asks::Declares,
+    cols::Asks::Stream,
+    cols::Asks::Seq,
+    cols::Asks::TimeoutMs,
+    cols::Asks::RttMs,
+    cols::Asks::PredictedMs,
+    cols::Asks::PredictedP90Ms,
+    cols::Asks::PredictedP99Ms,
+    cols::Asks::PredictedHorizonMs,
+    cols::Asks::HaveMs,
+    cols::Asks::ReleasedMs,
+    cols::Asks::Outcome,
+    cols::Asks::Reason,
+    cols::Asks::TOutcomeMs,
+    cols::Asks::ChannelOpenMs,
+    cols::Asks::SinceMs,
+    cols::Asks::PeerIncarnation,
 ];
 
 /// Where a [`Table`]'s rows go: its file, or a zstd stream onto it.
@@ -11701,23 +11705,20 @@ struct Table {
 }
 
 impl Table {
-    /// A table of integer columns, its file in `dir`.
-    fn new(dir: &Path, name: &'static str, cols: &[impl AsRef<str>]) -> io::Result<Table> {
-        let cols: Vec<(&str, &'static str)> = cols.iter().map(|c| (c.as_ref(), "BIGINT")).collect();
-        Table::typed(dir, name, &cols)
-    }
-
-    /// A table of columns with their types (`BIGINT`, `BOOLEAN`,
-    /// `VARCHAR`): creates its file in `dir` ([`ZSTD`]), its header the
-    /// first line.
-    fn typed(dir: &Path, name: &'static str, cols: &[(&str, &'static str)]) -> io::Result<Table> {
+    /// The table of columns `cols`: creates its file in `dir` ([`ZSTD`]),
+    /// its header the first line.
+    fn new<C: Column>(dir: &Path, cols: &[C]) -> io::Result<Table> {
+        let name = C::TABLE;
         let file = sink(dir, name)?;
-        let names: Vec<&str> = cols.iter().map(|(n, _)| *n).collect();
+        let names: Vec<&str> = cols.iter().map(|c| c.name()).collect();
         let mut csv = names.join(",");
         csv.push('\n');
         Ok(Table {
             name,
-            cols: cols.iter().map(|&(n, t)| (n.to_owned(), t)).collect(),
+            cols: cols
+                .iter()
+                .map(|c| (c.name().to_owned(), c.ty().sql()))
+                .collect(),
             dir: dir.to_owned(),
             file,
             csv,
@@ -11780,52 +11781,6 @@ impl Table {
             self.dir.join(format!("{}.schema.json", self.name)),
             format!("{{\"columns\":[{}]}}\n", cols.join(",")),
         )
-    }
-}
-
-/// A flat JSON object, field by field: numbers and plain tokens.
-#[derive(Default)]
-struct JsonRow(String);
-
-impl JsonRow {
-    fn field(&mut self, key: &str, value: std::fmt::Arguments) -> &mut Self {
-        use std::fmt::Write;
-        self.0.push(if self.0.is_empty() { '{' } else { ',' });
-        write!(self.0, "\"{key}\":{value}").unwrap();
-        self
-    }
-
-    fn int(&mut self, key: &str, v: u64) -> &mut Self {
-        self.field(key, format_args!("{v}"))
-    }
-
-    /// An integer, null for `None`: a reading the run doesn't have.
-    fn opt_int(&mut self, key: &str, v: Option<u64>) -> &mut Self {
-        match v {
-            Some(v) => self.int(key, v),
-            None => self.field(key, format_args!("null")),
-        }
-    }
-
-    /// A number; JSON has no NaN or infinity, so those are null.
-    fn num(&mut self, key: &str, v: f64) -> &mut Self {
-        match v.is_finite() {
-            true => self.field(key, format_args!("{v}")),
-            false => self.field(key, format_args!("null")),
-        }
-    }
-
-    fn str(&mut self, key: &str, v: &str) -> &mut Self {
-        assert!(
-            !v.contains(|c: char| c == '"' || c == '\\' || c.is_control()),
-            "{v:?}"
-        );
-        self.field(key, format_args!("\"{v}\""))
-    }
-
-    fn finish(&mut self) -> String {
-        self.0.push('}');
-        std::mem::take(&mut self.0)
     }
 }
 
