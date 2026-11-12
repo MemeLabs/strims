@@ -27,6 +27,7 @@ const stories: Story[] = [
     component: () => <SettingsStory path={PATH} steps={[openSelect()]} />,
   },
   {
+    // No bootstraps to name: the select's options are empty.
     name: "No bootstraps",
     component: () => (
       <SettingsStory

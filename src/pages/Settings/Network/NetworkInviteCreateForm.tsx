@@ -46,8 +46,8 @@ const NetworkInviteCreateForm: React.FC = () => {
             });
             break;
         }
-        setOptions(options);
       }
+      setOptions(options);
     },
   });
 
