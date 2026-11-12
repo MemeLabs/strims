@@ -201,9 +201,25 @@ const install = (): void => {
         : `${e.message} (${e.filename}:${e.lineno}:${e.colno})`
     )
   );
-  window.addEventListener("unhandledrejection", (e: PromiseRejectionEvent) =>
-    active?.record("unhandledrejection", errorText(e.reason))
-  );
+  window.addEventListener("unhandledrejection", (e: PromiseRejectionEvent) => {
+    if (answered.has(e.reason as object)) {
+      e.preventDefault();
+      return;
+    }
+    active?.record("unhandledrejection", errorText(e.reason));
+  });
+};
+
+// Errors a mock's promise rejected with, which the RPC host answers as the
+// call's error. The host also chains `void res.then(...)` on the promise, and
+// that derived promise's rejection goes unhandled; it isn't the story's error.
+// Only objects (Errors) can be told apart this way.
+const answered = new WeakSet<object>();
+
+export const answeredRejection = (e: unknown): void => {
+  if (typeof e === "object" && e !== null) {
+    answered.add(e);
+  }
 };
 
 // Makes `session` the one errors go to, until the returned function runs.

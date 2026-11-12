@@ -8,6 +8,7 @@ import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import React, { ReactNode, createContext, useContext, useEffect, useState } from "react";
 
 import { FrontendClient } from "../../apis/client";
+import { answeredRejection } from "./host/recorder";
 import {
   AuthFrontendService,
   registerAuthFrontendService,
@@ -150,10 +151,16 @@ const checked = (name: string, method: Method, self: object): Method => {
         : e;
     }
     if (res instanceof Promise) {
-      return res.then((v) => {
-        checkMessage(name, v);
-        return v as unknown;
-      });
+      return res.then(
+        (v) => {
+          checkMessage(name, v);
+          return v as unknown;
+        },
+        (e: unknown) => {
+          answeredRejection(e);
+          throw e;
+        }
+      );
     }
     if (res instanceof Readable) {
       res.on("data", (v) => checkMessage(`${name}'s stream`, v));
