@@ -1294,7 +1294,7 @@ class Renamed(Fixture):
         fields.write_text(fields.read_text() + self.ENTRY)
         with mock.patch.object(catalog, "FIELDS", fields), mock.patch.object(vocab, "NAMES", fields), \
                 contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(vocab.renames(), [("join_old_ms", "join_p90_ms", ["ppspp"])])
+            self.assertEqual(vocab.renames()[-1], ("join_old_ms", "join_p90_ms", ["ppspp"]))
             got, _ = self.index()
             self.assertTrue(got.docs)
             self.assertEqual(got.sources, [])

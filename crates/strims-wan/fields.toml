@@ -201,14 +201,6 @@ type = "ints"
 unit = "ms"
 description = "Per BUCKET (30 s) of the first swarm's stream time from its start, the p99 lag in ms of the frames its viewers read (Report::lag_buckets)."
 
-[rows.budget_capacity]
-sims = ["ppspp"]
-type = "int"
-unit = "bytes/s"
-none = "null"
-description = "The capacity reading the seed's budget was measured from (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`), median over the samples after the warm-up while it writes, once measured; null if never."
-notes.ppspp = "Pair: strims-sim's `meter_budget_seeds` is the same reading, as deciles over the seed's uplink."
-
 [rows.busy_seeds_p50]
 sims = ["strims-sim"]
 type = "num"
@@ -821,11 +813,26 @@ sims = ["strims-sim"]
 type = "nums"
 description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over each role's samples (`meter_seeds`, `meter_forwarders`, `meter_others`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
 
+[rows.meter_budget_seed_bps_p50]
+sims = ["ppspp"]
+type = "int"
+unit = "bytes/s"
+none = "null"
+description = "The capacity reading the seed's budget was measured from (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`), in bytes per second: its median over the samples after the warm-up while it writes, once measured; null if never."
+notes.ppspp = "Pair: strims-sim's `meter_budget_seeds` is the same reading, as its p10/p50/p90 over the seed's uplink."
+
 [rows.meter_budget_seeds]
 sims = ["strims-sim"]
 type = "nums"
 description = "An adaptive seed's budget takes its own reading (`MeterSample::budget_capacity`): its p10/p50/p90 ÷ the uplink over the seeds' samples once measured (`meter_budget_seeds`, `Report::budget_readings`)."
-notes.strims-sim = "Pair: the ppspp sim's `budget_capacity` is the same reading, its median in bytes per second."
+notes.strims-sim = "Pair: the ppspp sim's `meter_budget_seed_bps_p50` is the same reading, its median in bytes per second."
+
+[rows.meter_seed_bps_p50]
+sims = ["ppspp"]
+type = "int"
+unit = "bytes/s"
+description = "The seed's capacity estimate (`AllocSample::capacity`, `PushStats::upload_capacity`), the relay busy-time reading (not its budget's, `meter_budget_seed_bps_p50`), in bytes per second: its median over the samples after the warm-up while it writes (0 without one)."
+notes.ppspp = "Pair: strims-sim's `meter_seeds` holds the same reading, as its p10/p50/p90 over the seed's uplink."
 
 [rows.mismatches]
 sims = ["ppspp"]
@@ -1041,8 +1048,8 @@ description = "The p10, p50 and p90 in ms of the seeds' meters' queueing delay w
 sims = ["ppspp"]
 type = "num"
 unit = "s"
-description = "When the run ended (Report::finish), in s from t0: the span the seed's and the viewers' rates are over."
-notes.ppspp = "Pair, if their definitions match: strims-sim's `sim_secs`."
+description = "When the run ended (Report::finish), in s from t0: once every peer had read the whole stream, else at the run's deadline, 20 s past the stream's length from t0; the span the seed's and the viewers' rates are over."
+notes.ppspp = "Not strims-sim's `sim_secs`, its scenario's duration whatever its viewers read."
 
 [rows.reads_hash]
 sims = ["strims-sim", "ppspp"]
@@ -1075,12 +1082,6 @@ sims = ["ppspp"]
 type = "num"
 unit = "fraction"
 description = "Over the samples, the honest viewers with at least one push subscriber over the honest viewers (Shape::relays, Shape::viewers)."
-
-[rows.relay_sheds]
-sims = ["ppspp"]
-type = "int"
-description = "Subscribers the honest viewers closed because their uplink saturated: PushStats' sheds_sent, summed over the honest viewers at the run's end."
-notes.ppspp = "Pair: strims-sim's row's `sheds_sent` is the same counter (PushStats' sheds_sent over the honest viewers), the name Phase 2 gives this."
 
 [rows.relinks]
 sims = ["ppspp"]
@@ -1228,13 +1229,6 @@ sims = ["strims-sim"]
 type = "num"
 unit = "per minute"
 description = "An adaptive seed's budget changes per minute of stream: consecutive seed samples of the first swarm, from its start to its stop, whose budgets differ."
-
-[rows.seed_capacity]
-sims = ["ppspp"]
-type = "int"
-unit = "bytes/s"
-description = "The seed's capacity estimate (`AllocSample::capacity`, `PushStats::upload_capacity`), the relay busy-time reading despite its name (not its budget's, `budget_capacity`), median over the samples after the warm-up while it writes (0 without one)."
-notes.ppspp = "Pair: strims-sim's `meter_seeds` holds the same reading (the seed's relay busy-time capacity), as deciles over its uplink; Phase 2 names it meter_seed_bps_p50."
 
 [rows.seed_copies]
 sims = ["strims-sim"]
@@ -1405,10 +1399,10 @@ type = "int"
 description = "Parents lost because the parent closed the subscription: the first swarm's runner counters summed over every host (SwarmCounters::shed)."
 
 [rows.sheds_sent]
-sims = ["strims-sim"]
+sims = ["strims-sim", "ppspp"]
 type = "int"
-description = "Subscribers the honest viewers closed because their uplink saturated: PushStats' sheds_sent, summed over the first swarm's honest viewers and their incarnations at the run's end (Report::honest_relay_counters)."
-notes.strims-sim = "Pair: the ppspp sim's `relay_sheds` is the same counter; the bins' and node_bins' `sheds_sent` count it per bin."
+description = "Subscribers the honest viewers closed because their uplink saturated: PushStats' sheds_sent, summed over the first swarm's honest viewers at the run's end."
+notes.strims-sim = "Over their incarnations too (Report::honest_relay_counters); the bins' and node_bins' `sheds_sent` count it per bin."
 
 [rows.sign]
 sims = ["strims-sim", "ppspp"]
@@ -1443,8 +1437,8 @@ description = "In a media run, the p99 lag in ms of the media chunks the honest 
 sims = ["strims-sim"]
 type = "num"
 unit = "s"
-description = "The run's simulated length in seconds: turmoil's elapsed time when the run ended."
-notes.strims-sim = "Pair, if their definitions match: the ppspp sim's `reads_end_s`."
+description = "The run's simulated length in seconds: turmoil's elapsed time when the run ended, its scenario's duration and the controller's last sample after it."
+notes.strims-sim = "Not the ppspp sim's `reads_end_s`, whose run ends once every peer has read the stream: a run here lasts its scenario's duration, whatever its viewers read."
 
 [rows.small_packet_share]
 sims = ["strims-sim", "ppspp"]
@@ -1923,6 +1917,33 @@ retired = ["strims-sim"]
 type = "int"
 unit = "bytes"
 description = "With vnic's uplink trains (`STRIMS_SIM_EXP=trains`, `trains-seed` or `trains-slow`, a meter line's), the bytes of their filler records every host wrote on its keepalive port behind a train's probes, a part of `up_wire` that `up_vnic` left out."
+
+[rows.budget_capacity]
+sims = []
+retired = ["ppspp"]
+replaced_by = "meter_budget_seed_bps_p50"
+rename = true
+type = "int"
+unit = "bytes/s"
+none = "null"
+description = "The capacity reading the seed's budget was measured from (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`), median over the samples after the warm-up while it writes, once measured; null if never."
+
+[rows.relay_sheds]
+sims = []
+retired = ["ppspp"]
+replaced_by = "sheds_sent"
+rename = true
+type = "int"
+description = "Subscribers the honest viewers closed because their uplink saturated: PushStats' sheds_sent, summed over the honest viewers at the run's end."
+
+[rows.seed_capacity]
+sims = []
+retired = ["ppspp"]
+replaced_by = "meter_seed_bps_p50"
+rename = true
+type = "int"
+unit = "bytes/s"
+description = "The seed's capacity estimate (`AllocSample::capacity`, `PushStats::upload_capacity`), the relay busy-time reading (not its budget's, `budget_capacity`), median over the samples after the warm-up while it writes (0 without one)."
 
 [meta.sim]
 sims = ["strims-sim", "ppspp"]

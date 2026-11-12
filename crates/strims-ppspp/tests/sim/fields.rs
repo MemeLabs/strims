@@ -317,16 +317,6 @@ pub(crate) enum RowInt {
     Barred,
     /// Of the neighbours an adaptive seed barred, the honest ones.
     BarredHonest,
-    /// The capacity reading the seed's budget was measured from
-    /// (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`),
-    /// median over the samples after the warm-up while it writes, once
-    /// measured; null if never.
-    ///
-    /// ppspp: Pair: strims-sim's `meter_budget_seeds` is the same reading, as
-    /// deciles over the seed's uplink.
-    ///
-    /// Unit: bytes/s. None is written as null.
-    BudgetCapacity,
     /// The bytes of the frames with ppspp data every node sent over the run.
     ///
     /// Unit: bytes.
@@ -638,6 +628,26 @@ pub(crate) enum RowInt {
     LoopsByHow(u16),
     /// With SIM_LOOPS=1, the decision tap's events dropped between drains.
     LoopsTapLost,
+    /// The capacity reading the seed's budget was measured from
+    /// (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`), in
+    /// bytes per second: its median over the samples after the warm-up while it
+    /// writes, once measured; null if never.
+    ///
+    /// ppspp: Pair: strims-sim's `meter_budget_seeds` is the same reading, as
+    /// its p10/p50/p90 over the seed's uplink.
+    ///
+    /// Unit: bytes/s. None is written as null.
+    MeterBudgetSeedBpsP50,
+    /// The seed's capacity estimate (`AllocSample::capacity`,
+    /// `PushStats::upload_capacity`), the relay busy-time reading (not its
+    /// budget's, `meter_budget_seed_bps_p50`), in bytes per second: its median
+    /// over the samples after the warm-up while it writes (0 without one).
+    ///
+    /// ppspp: Pair: strims-sim's `meter_seeds` holds the same reading, as its
+    /// p10/p50/p90 over the seed's uplink.
+    ///
+    /// Unit: bytes/s.
+    MeterSeedBpsP50,
     /// Bytes the honest viewers read that weren't the stream's (a media run's:
     /// the padded media's), summed.
     Mismatches,
@@ -706,13 +716,6 @@ pub(crate) enum RowInt {
     /// Subscriptions the honest viewers rejected as parents: PushStats'
     /// rejected, summed over the honest viewers at the run's end.
     RelayRejected,
-    /// Subscribers the honest viewers closed because their uplink saturated:
-    /// PushStats' sheds_sent, summed over the honest viewers at the run's end.
-    ///
-    /// ppspp: Pair: strims-sim's row's `sheds_sent` is the same counter
-    /// (PushStats' sheds_sent over the honest viewers), the name Phase 2 gives
-    /// this.
-    RelaySheds,
     /// The columns of a run with arrivals or departures (`Sim::audience`,
     /// `AudienceReport`): the knobs; the viewers that arrived after the start
     /// and that left for good (`_honest` of them); over every honest viewer,
@@ -793,17 +796,6 @@ pub(crate) enum RowInt {
     /// With SIM_LOOPS=1, of the chunks asked of the seed that no other
     /// neighbour held, those whose stream had no open parent at the asker.
     SeedAsksHeldByNoneParentless,
-    /// The seed's capacity estimate (`AllocSample::capacity`,
-    /// `PushStats::upload_capacity`), the relay busy-time reading despite its
-    /// name (not its budget's, `budget_capacity`), median over the samples
-    /// after the warm-up while it writes (0 without one).
-    ///
-    /// ppspp: Pair: strims-sim's `meter_seeds` holds the same reading (the
-    /// seed's relay busy-time capacity), as deciles over its uplink; Phase 2
-    /// names it meter_seed_bps_p50.
-    ///
-    /// Unit: bytes/s.
-    SeedCapacity,
     /// An adaptive seed's first wave: the most copies its window opened before
     /// its budget was measured (PushStats::seed_first_wave); 0 for another
     /// seed.
@@ -839,6 +831,10 @@ pub(crate) enum RowInt {
     SeedUnmeasuredHonest,
     /// The seed's uplink, in bytes per second.
     SeedUpBw,
+    /// Subscribers the honest viewers closed because their uplink saturated:
+    /// PushStats' sheds_sent, summed over the first swarm's honest viewers at
+    /// the run's end.
+    ShedsSent,
     /// The median wait in ms of each media chunk to be signed; left out without
     /// media.
     ///
@@ -1125,7 +1121,6 @@ impl RowInt {
             RowInt::Asks => "asks",
             RowInt::Barred => "barred",
             RowInt::BarredHonest => "barred_honest",
-            RowInt::BudgetCapacity => "budget_capacity",
             RowInt::Bytes => "bytes",
             RowInt::CaughtUpNever => "caught_up_never",
             RowInt::Chunk => "chunk",
@@ -1171,6 +1166,8 @@ impl RowInt {
             RowInt::LoopsAlive => "loops_alive",
             RowInt::LoopsByHow(i) => at(&ROWINT_LOOPS_BY_HOW, i),
             RowInt::LoopsTapLost => "loops_tap_lost",
+            RowInt::MeterBudgetSeedBpsP50 => "meter_budget_seed_bps_p50",
+            RowInt::MeterSeedBpsP50 => "meter_seed_bps_p50",
             RowInt::Mismatches => "mismatches",
             RowInt::PacketsAck => "packets_ack",
             RowInt::PacketsUp => "packets_up",
@@ -1184,7 +1181,6 @@ impl RowInt {
             RowInt::PushUnsolicited => "push_unsolicited",
             RowInt::RelayAccepted => "relay_accepted",
             RowInt::RelayRejected => "relay_rejected",
-            RowInt::RelaySheds => "relay_sheds",
             RowInt::Relinks => "relinks",
             RowInt::ReportsInvalid => "reports_invalid",
             RowInt::ReportsMissesUnseen => "reports_misses_unseen",
@@ -1205,7 +1201,6 @@ impl RowInt {
             RowInt::SeedAnswersRefused => "seed_answers_refused",
             RowInt::SeedAsksHeld(i) => at(&ROWINT_SEED_ASKS_HELD, i),
             RowInt::SeedAsksHeldByNoneParentless => "seed_asks_held_by_none_parentless",
-            RowInt::SeedCapacity => "seed_capacity",
             RowInt::SeedFirstWave => "seed_first_wave",
             RowInt::SeedFirstWaveCapacity => "seed_first_wave_capacity",
             RowInt::SeedObjectiveMs => "seed_objective_ms",
@@ -1216,6 +1211,7 @@ impl RowInt {
             RowInt::SeedUnmeasuredGreedy => "seed_unmeasured_greedy",
             RowInt::SeedUnmeasuredHonest => "seed_unmeasured_honest",
             RowInt::SeedUpBw => "seed_up_bw",
+            RowInt::ShedsSent => "sheds_sent",
             RowInt::SignWaitP50Ms => "sign_wait_p50_ms",
             RowInt::SignWaitP99Ms => "sign_wait_p99_ms",
             RowInt::SignedLagP50Ms => "signed_lag_p50_ms",
@@ -1614,10 +1610,13 @@ pub(crate) enum RowNum {
     /// ppspp: The p90 over the honest viewers of their packets up per second
     /// they were there.
     PpsP90,
-    /// When the run ended (Report::finish), in s from t0: the span the seed's
-    /// and the viewers' rates are over.
+    /// When the run ended (Report::finish), in s from t0: once every peer had
+    /// read the whole stream, else at the run's deadline, 20 s past the
+    /// stream's length from t0; the span the seed's and the viewers' rates are
+    /// over.
     ///
-    /// ppspp: Pair, if their definitions match: strims-sim's `sim_secs`.
+    /// ppspp: Not strims-sim's `sim_secs`, its scenario's duration whatever its
+    /// viewers read.
     ///
     /// Unit: s.
     ReadsEndS,

@@ -2050,13 +2050,14 @@ struct Report {
     /// The seed's objective ([`AllocSample::objective`]), median over the
     /// samples after the warm-up.
     seed_objective: Duration,
-    /// The seed's capacity estimate ([`AllocSample::capacity`]), median
-    /// over the samples after the warm-up while it writes: the row's
-    /// `seed_capacity`, the relay busy-time reading despite its name ...
+    /// The seed's capacity estimate ([`AllocSample::capacity`]), the relay
+    /// busy-time reading, median over the samples after the warm-up while
+    /// it writes: the row's `meter_seed_bps_p50` ...
     seed_capacity: u64,
     /// ... and the reading its budget was measured from
     /// ([`AllocSample::budget_capacity`]), median over the same samples
-    /// once measured: the row's `budget_capacity` (`None`, null, if never).
+    /// once measured: the row's `meter_budget_seed_bps_p50` (`None`, null,
+    /// if never).
     budget_capacity: Option<u64>,
     /// When the seed's holders ([`AllocSample::holders`]) last changed,
     /// after the stream started.
@@ -10951,11 +10952,11 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         .num(RowNum::SeedDistinct, r.seed_distinct)
         .num(RowNum::SeedSlots, r.seed_slots)
         .int(RowInt::SeedUpBw, seed.up_bw)
-        .int(RowInt::SeedCapacity, r.seed_capacity)
+        .int(RowInt::MeterSeedBpsP50, r.seed_capacity)
         // The capacity reading the seed's budget was measured from, its
         // median over the samples after the warm-up once measured; null if
         // it never was.
-        .int(RowInt::BudgetCapacity, r.budget_capacity)
+        .int(RowInt::MeterBudgetSeedBpsP50, r.budget_capacity)
         .int(RowInt::SeedFirstWave, seed_push.seed_first_wave as u64)
         .int(
             RowInt::SeedFirstWaveCapacity,
@@ -11175,7 +11176,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     }
     row.int(RowInt::RelayAccepted, acc)
         .int(RowInt::RelayRejected, rej)
-        .int(RowInt::RelaySheds, shed);
+        .int(RowInt::ShedsSent, shed);
     for (name, v) in ["seed", "relays", "others"].iter().zip(&sh.meter) {
         let mut v = v.clone();
         v.sort_by(f64::total_cmp);

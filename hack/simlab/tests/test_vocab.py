@@ -394,9 +394,10 @@ class Fields(unittest.TestCase):
 
     def test_renames_and_aliases(self):
         doc = self.renamed_doc()
-        self.assertEqual(vocab.renames(doc=doc), [("lag_old_ms", "lag_p99_ms", ["ppspp"]),
-                                                  ("share_old", "seed_data_share", ["strims-sim"]),
-                                                  ("share_old", "seed_share", ["ppspp"])])
+        self.assertEqual([r for r in vocab.renames(doc=doc) if r[0] in ("lag_old_ms", "share_old")],
+                         [("lag_old_ms", "lag_p99_ms", ["ppspp"]), ("share_old", "seed_data_share", ["strims-sim"]),
+                          ("share_old", "seed_share", ["ppspp"])])
+        self.assertEqual(vocab.renames(doc=doc)[:-3], vocab.renames())
         self.assertEqual(vocab.aliases("lag_p99_ms", doc=doc), ["lag_p99_ms", "lag_old_ms"])
         self.assertEqual(vocab.aliases("lag_old_ms", doc=doc), ["lag_p99_ms", "lag_old_ms"])
         self.assertEqual(vocab.aliases("seed_share", doc=doc), ["seed_share", "share_old"])

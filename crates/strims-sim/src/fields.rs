@@ -609,11 +609,11 @@ pub(crate) enum RowInt {
     /// swarm's runner counters summed over every host (SwarmCounters::shed).
     Shed,
     /// Subscribers the honest viewers closed because their uplink saturated:
-    /// PushStats' sheds_sent, summed over the first swarm's honest viewers and
-    /// their incarnations at the run's end (Report::honest_relay_counters).
+    /// PushStats' sheds_sent, summed over the first swarm's honest viewers at
+    /// the run's end.
     ///
-    /// strims-sim: Pair: the ppspp sim's `relay_sheds` is the same counter; the
-    /// bins' and node_bins' `sheds_sent` count it per bin.
+    /// strims-sim: Over their incarnations too (Report::honest_relay_counters);
+    /// the bins' and node_bins' `sheds_sent` count it per bin.
     ShedsSent,
     /// The median wait in ms of each media chunk to be signed; left out without
     /// media.
@@ -1316,10 +1316,12 @@ pub(crate) enum RowNum {
     /// the stream's seconds, in kbit/s; left out without media.
     SentKbit,
     /// The run's simulated length in seconds: turmoil's elapsed time when the
-    /// run ended.
+    /// run ended, its scenario's duration and the controller's last sample
+    /// after it.
     ///
-    /// strims-sim: Pair, if their definitions match: the ppspp sim's
-    /// `reads_end_s`.
+    /// strims-sim: Not the ppspp sim's `reads_end_s`, whose run ends once every
+    /// peer has read the stream: a run here lasts its scenario's duration,
+    /// whatever its viewers read.
     ///
     /// Unit: s.
     SimSecs,
@@ -1820,8 +1822,8 @@ pub(crate) enum RowNums {
     /// seeds' samples once measured (`meter_budget_seeds`,
     /// `Report::budget_readings`).
     ///
-    /// strims-sim: Pair: the ppspp sim's `budget_capacity` is the same reading,
-    /// its median in bytes per second.
+    /// strims-sim: Pair: the ppspp sim's `meter_budget_seed_bps_p50` is the
+    /// same reading, its median in bytes per second.
     MeterBudgetSeeds,
     /// **meter readings**: the upload meter's capacity, the relay busy-time
     /// reading admission and shedding take (`PushStats::upload_capacity`,
