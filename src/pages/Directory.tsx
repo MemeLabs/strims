@@ -72,10 +72,7 @@ const Directory: React.FC = () => {
         });
       }
     }
-    return gridListings.sort((a, b) => {
-      const d = a.userCount - b.userCount;
-      return d != 0 ? d : Number(a.id - b.id);
-    });
+    return gridListings.sort((a, b) => b.userCount - a.userCount || Number(a.id - b.id));
   }, [listings]);
 
   return (
