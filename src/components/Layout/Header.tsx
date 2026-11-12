@@ -10,10 +10,10 @@ import { FiActivity, FiUser } from "react-icons/fi";
 import { MdClose, MdOutlineChat, MdOutlineChatBubbleOutline } from "react-icons/md";
 import { Link, Routes, useNavigate, useResolvedPath } from "react-router-dom";
 import { useToggle } from "react-use";
-import usePortal from "use-portal";
 
 import { useBackgroundRoute } from "../../contexts/BackgroundRoute";
 import { useLayout } from "../../contexts/Layout";
+import usePortal from "../../hooks/usePortal";
 import Layout from "../../pages/Settings/Layout";
 import { createSettingsRoutes } from "../../root/MainRouter";
 import Debugger from "../Debugger";

@@ -3,10 +3,10 @@
 
 import React from "react";
 import { useParams } from "react-router";
-import usePortal from "use-portal";
 
 import InviteAuth from "../components/InviteAuth";
 import { useLayout } from "../contexts/Layout";
+import usePortal from "../hooks/usePortal";
 
 const Invite: React.FC = () => {
   const layout = useLayout();

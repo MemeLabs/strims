@@ -6,11 +6,11 @@ import "./EmoteDetails.scss";
 import React, { useEffect, useRef } from "react";
 import { FiExternalLink } from "react-icons/fi";
 import { MdClose } from "react-icons/md";
-import usePortal from "use-portal";
 
 import { useRoom } from "../../contexts/Chat";
 import { useLayout } from "../../contexts/Layout";
 import useClickAway from "../../hooks/useClickAway";
+import usePortal from "../../hooks/usePortal";
 import ExternalLink from "../ExternalLink";
 import Emote from "./Emote";
 

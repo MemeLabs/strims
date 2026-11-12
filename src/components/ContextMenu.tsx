@@ -5,10 +5,10 @@ import "./ContextMenu.scss";
 
 import clsx from "clsx";
 import React, { ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import usePortal from "use-portal";
 
 import { useLayout } from "../contexts/Layout";
 import useClickAway, { suppressClickAway } from "../hooks/useClickAway";
+import usePortal from "../hooks/usePortal";
 import useSize from "../hooks/useSize";
 
 interface MenuProps {

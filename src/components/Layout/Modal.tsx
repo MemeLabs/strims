@@ -7,9 +7,9 @@ import clsx from "clsx";
 import React, { ReactNode, useRef } from "react";
 import { BsArrowBarDown } from "react-icons/bs";
 import { useToggle, useUpdateEffect } from "react-use";
-import usePortal from "use-portal";
 
 import { useLayout } from "../../contexts/Layout";
+import usePortal from "../../hooks/usePortal";
 import SwipablePanel, { DragState } from "../SwipablePanel";
 
 interface ModalProps {

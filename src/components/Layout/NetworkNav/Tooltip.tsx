@@ -4,9 +4,9 @@
 import "./NetworkNav.scss";
 
 import React, { ReactNode, RefObject, useMemo, useRef, useState } from "react";
-import usePortal from "use-portal";
 
 import { useLayout } from "../../../contexts/Layout";
+import usePortal from "../../../hooks/usePortal";
 
 export interface TooltipOverlayProps {
   anchor: RefObject<HTMLElement>;
