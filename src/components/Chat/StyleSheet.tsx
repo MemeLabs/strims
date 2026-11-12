@@ -279,7 +279,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
     const sanitizeUrl = (node: csstree.Url, uris: Map<string, string>) => {
       if (typeof node.value === "string") {
         const ok = uris.has(node.value);
-        node.value = uris.get(node.value) as unknown as csstree.Raw;
+        node.value = uris.get(node.value);
         return ok;
       }
       return false;
