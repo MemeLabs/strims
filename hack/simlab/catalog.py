@@ -162,7 +162,9 @@ CLI prints.
 
 The tables (`table_catalog` holds this, by table, for the console and
 for questions in plain language; `metric_catalog` holds each column and
-metric, `event_kinds` each event kind, the vocabulary's,
+metric, and crates/strims-wan/metrics.toml's lake metrics (tbl 'lake')
+and dimensions (tbl 'dimension': fields their values, source the column
+or macro that gives them), `event_kinds` each event kind, the vocabulary's,
 crates/strims-wan/vocab.toml (simlab.vocab), with how many of each the
 runs hold: an index warns on stderr of a kind the runs hold that it
 lacks, of the fields and columns the runs hold that
@@ -302,7 +304,7 @@ import time
 import tomllib
 from pathlib import Path
 
-from . import engine, query, store, store_host, verdict, vocab
+from . import engine, query, semantic, store, store_host, verdict, vocab
 from .engine import EXTENSIONS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -808,6 +810,11 @@ def s3_prices():
 # description, the sims' notes and its unit, which the doc tables take. An
 # index reads it as it is then (field_docs), as docs_ids names it.
 FIELDS = vocab.NAMES
+# The metrics' and dimensions' document, crates/strims-wan/metrics.toml
+# (simlab.semantic's METRICS): what the scored metrics, the run metrics,
+# the collapse test, the lake metrics and the dimensions hold, read as
+# FIELDS is.
+METRICS_DOC = semantic.METRICS
 # A table's knob in each sim: the setting's prefix.
 KNOB_PREFIX = {"strims-sim": "STRIMS_SIM_", "ppspp": "SIM_"}
 
@@ -854,40 +861,36 @@ def field_docs():
             "columns": {t: names(cols) for t, cols in decl["columns"].items()}}
 
 
+def metric_doc():
+    """metrics.toml, read now (METRICS_DOC)."""
+    return semantic.load(METRICS_DOC)
+
+
 def run_metric_docs():
-    """verdict.run_metrics' docstring, by metric: its lines indented under
-    the first (inspect.cleandoc's, whether or not the compiler dedented
-    the docstring), a metric's name, then its text."""
-    doc = inspect.cleandoc(verdict.run_metrics.__doc__ or "")
-    out, cur = {}, None
-    for line in doc.splitlines():
-        m = re.match(r"^\s{1,8}([a-z][a-z0-9_]*)\s{2,}(.*)$", line)
-        if m:
-            cur = m.group(1)
-            out[cur] = m.group(2).strip()
-        elif cur and line.strip() and re.match(r"^\s{20,}", line):
-            out[cur] += " " + line.strip()
-        else:
-            cur = None
-    return out
+    """verdict.run_metrics' scalars, {name: (description, unit)}, as
+    metrics.toml's run_metrics give them."""
+    return {n: (e["description"], e.get("unit")) for n, e in metric_doc()["run_metrics"].items()}
 
 
 def suite_metrics():
-    """suite.py's METRICS: (name, fields read, better, kind, tie, its SQL,
-    the comment above it, in simlab.suite, which holds them)."""
-    suite = suite_module()
-    src = (ROOT / "hack" / "simlab" / "suite.py").read_text().splitlines()
+    """suite.py's METRICS, as metrics.toml says what each holds: (name,
+    fields read, better, kind, tie, its SQL, its description, its note, its
+    unit), each of the last three None where metrics.toml gives none."""
+    by = {m["name"]: m for m in metric_doc()["scored"]}
     out = []
-    for name, sql, better, kind, tie in suite.METRICS:
-        line = next((i for i, s in enumerate(src) if re.match(rf'^\s*\("{re.escape(name)}",', s)), None)
-        comment = []
-        k = (line or 0) - 1
-        while line is not None and k >= 0 and src[k].strip().startswith("#"):
-            comment.insert(0, src[k].strip().lstrip("# "))
-            k -= 1
+    for name, sql, better, kind, tie in suite_module().METRICS:
+        m = by.get(name, {})
         fields = sorted({f for _, f in FIELD.findall(sql)})
-        out.append((name, fields, better, kind, tie, sql, " ".join(comment) or None))
+        out.append((name, fields, better, kind, tie, sql, m.get("description"), m.get("note"), m.get("unit")))
     return out
+
+
+def lake_docs():
+    """metrics.toml's collapse test, lake metrics and dimensions, as
+    metric_catalog takes them: (collapsed, {name: lake metric}, {name:
+    dimension})."""
+    doc = metric_doc()
+    return doc["collapsed"], doc["lake"], doc["dimensions"]
 
 
 # How suite.py's arm_score breaks an arm on a metric (its GUARDRAILS).
@@ -2543,10 +2546,11 @@ def catalogs_sql(cols, tmp, recount=True):
     # metric_catalog: a sims' table's columns and the rows' fields as
     # fields.toml declares them, the unit unit_of's where it declares none
     rdocs = {n: d for n, (d, _) in docs["rows"].items()}
-    mdocs = run_metric_docs()
+    mdocs = {n: d for n, (d, _) in run_metric_docs().items()}
+    munits = {n: u for n, (_, u) in run_metric_docs().items() if u}
     metrics = suite_metrics()
     plain, guard = {}, guards()
-    for name, fields, better, kind, tie, text, _ in metrics:
+    for name, fields, better, kind, tie, text, *_ in metrics:
         if PLAIN.match(text):
             for f in fields:
                 plain.setdefault(f, (better, kind, tie, name))
@@ -2558,25 +2562,40 @@ def catalogs_sql(cols, tmp, recount=True):
             if c in ("k", "src"):
                 continue
             if t in VERDICT_TABLES:
-                desc = (VERDICT_DOCS.get(c) or mdocs.get(c) or mdocs.get(c.replace("_censored", ""))
-                        or rdocs.get(c))
-                unit = None
+                desc = VERDICT_DOCS.get(c) or mdocs.get(c) or rdocs.get(c)
+                unit = munits.get(c)
             else:
                 desc, unit = own.get(c, (None, None))
             better, kind, tie, metric = plain.get(c, (None, None, None, None))
             recs.append({"name": c, "tbl": view, "type": cols[t][c], "unit": unit or unit_of(c), "description": desc,
                          "better": better, "kind": kind, "tie": tie, "guard": guard.get(metric or c),
                          "fields": None, "source": None, "metric": metric})
-    for name, fields, better, kind, tie, text, comment in metrics:
-        recs.append({"name": name, "tbl": "suite", "type": "DOUBLE", "unit": unit_of(name),
-                     "description": comment or rdocs.get(name) or next((rdocs[f] for f in fields if f in rdocs), None),
+    # a scored metric's own description, else its first field's (a row's,
+    # a run metric's, a verdict's), then how it scores (its note)
+    for name, fields, better, kind, tie, text, desc, note, unit in metrics:
+        desc = desc or next((d for f in fields if (d := rdocs.get(f) or mdocs.get(f) or VERDICT_DOCS.get(f))), None)
+        if note:
+            desc = f"{desc} {note}" if desc else note
+        recs.append({"name": name, "tbl": "suite", "type": "DOUBLE", "unit": unit, "description": desc,
                      "better": better, "kind": kind, "tie": tie, "guard": guard.get(name),
                      "fields": fields, "source": text, "metric": name})
+    collapsed, lake_metrics, dimensions = lake_docs()
     recs.append({"name": "collapsed", "tbl": "suite", "type": "BOOLEAN", "unit": None,
-                 "description": "collapsed runs of a cell, A against B, judged by their counts' Fisher exact p "
-                                "(suite.py collapses and fisher)", "better": "lower", "kind": "count",
-                 "tie": None, "guard": guard["collapsed"], "fields": ["collapsed"], "source": None,
+                 "description": collapsed["description"], "better": collapsed["better"], "kind": collapsed["kind"],
+                 "tie": None, "guard": guard["collapsed"], "fields": ["collapsed"], "source": collapsed["macro"],
                  "metric": "collapsed"})
+    # the lab's macro metrics (tbl 'lake'), and the dimensions results are
+    # cut by (tbl 'dimension': fields their values, source what gives them)
+    for name, e in lake_metrics.items():
+        recs.append({"name": name, "tbl": "lake", "type": None, "unit": e.get("unit"),
+                     "description": e["description"], "better": None, "kind": None, "tie": None, "guard": None,
+                     "fields": None, "source": e["macro"], "metric": None})
+    for name, e in dimensions.items():
+        values = e.get("values")
+        recs.append({"name": name, "tbl": "dimension", "type": None, "unit": None, "description": e["description"],
+                     "better": None, "kind": None, "tie": None, "guard": None,
+                     "fields": None if values is None else [str(v) for v in values] if isinstance(values, list)
+                     else [values], "source": e.get("column") or e.get("macro"), "metric": None})
     mcols = {"name": "VARCHAR", "tbl": "VARCHAR", "type": "VARCHAR", "unit": "VARCHAR", "description": "VARCHAR",
              "better": "VARCHAR", "kind": "VARCHAR", "tie": "DOUBLE", "guard": "VARCHAR", "fields": "VARCHAR[]",
              "source": "VARCHAR", "metric": "VARCHAR"}
@@ -2641,8 +2660,8 @@ def undeclared():
 
 def verdict_gaps():
     """The verdict tables' columns metric_catalog holds without a doc,
-    {table: [column]}: catalog.VERDICT_DOCS and verdict.run_metrics'
-    docstring document them."""
+    {table: [column]}: catalog.VERDICT_DOCS and metrics.toml's run_metrics
+    document them."""
     out = {}
     for r in lake("SELECT tbl, name FROM metric_catalog WHERE description IS NULL ORDER BY tbl, name;"):
         if r["tbl"] in VERDICT_TABLES:
@@ -2687,7 +2706,7 @@ def warn_undocumented():
         print(f"index: {t}'s {'fields' if t == 'rows' else 'columns'} {names_text(names)} aren't declared in "
               f"{relative(FIELDS)}", file=sys.stderr)
     for t, names in verdict_gaps().items():
-        print(f"index: {t}'s columns without a doc (catalog.VERDICT_DOCS or verdict.run_metrics' docstring): "
+        print(f"index: {t}'s columns without a doc (catalog.VERDICT_DOCS or metrics.toml's run_metrics): "
               f"{names_text(names)}", file=sys.stderr)
 
 
@@ -2996,8 +3015,9 @@ def docs_version():
     """A hash of what the doc tables (catalogs_sql's) are made from but the
     catalog's columns, which change only with an index that makes them
     again anyway: what the catalog reads of fields.toml (field_docs), of
-    suite.py (METRICS with their comments, GUARDRAILS), of run_metrics'
-    docstring, of scoring.sql (scoring_docs) and of the vocabulary
+    metrics.toml (suite.py's METRICS with what each holds, the run metrics,
+    the collapse test, the lake metrics and the dimensions), of suite.py
+    (GUARDRAILS), of scoring.sql (scoring_docs) and of the vocabulary
     (kind_docs), each as DOCS_VALUES gives it now; the registries
     (DOCS_DATA), as this process holds them; and the code that puts them
     together with the columns (DOCS_CODE), as it loaded."""
@@ -3035,7 +3055,7 @@ def canonical(v):
 # as the module loads, so a process hashes the code it runs (as
 # SCORING_SOURCES are). catalogs_sql reads nothing else but the columns and
 # the SQL helpers (q, ident, jsonl, read_jsonl).
-DOCS_VALUES = (field_docs, run_metric_docs, suite_metrics, guards, scoring_docs, kind_docs)
+DOCS_VALUES = (field_docs, run_metric_docs, suite_metrics, lake_docs, guards, scoring_docs, kind_docs)
 DOCS_DATA = ("TABLE_DOCS", "NORMALIZED", "STANDARD_KEYS", "STANDARD_JOINS", "VERDICT_DOCS", "VERDICT_TABLES",
              "KIND_COLS", "DERIVED_SIM", "UNITS", "PLAIN", "OWN", "META")
 DOCS_CODE = (catalogs_sql, sim_tables, unit_of)
@@ -3077,10 +3097,11 @@ def docs_kept(docs):
 def docs_ids():
     """The files the doc tables are made from, as this process has them,
     {path from the checkout's root: git blob id}: simlab's modules and the
-    vocabulary as they loaded (LOADED_DOCS), fields.toml (FIELDS), suite.py
-    and simlab's SQL as an index reads them."""
+    vocabulary as they loaded (LOADED_DOCS), fields.toml and metrics.toml
+    (FIELDS, METRICS_DOC), suite.py and simlab's SQL as an index reads
+    them."""
     out = dict(LOADED_DOCS)
-    for p in (FIELDS, SUITE_PY, *sorted(SCORING.parent.glob("*.sql"))):
+    for p in (FIELDS, METRICS_DOC, SUITE_PY, *sorted(SCORING.parent.glob("*.sql"))):
         with contextlib.suppress(OSError):
             out[relative(p)] = blob_id(Path(p).read_bytes())
     return out
@@ -3096,7 +3117,7 @@ def main_docs():
         if lake_root().resolve() != (common / "target" / "sim-db" / "lake").resolve():
             return None
         listed = store_host.git("ls-tree", "main", "--", "hack/simlab/", "hack/simlab/sql/",
-                                *(relative(p) for p in (FIELDS, SUITE_PY, vocab.DOCUMENT)), cwd=ROOT)
+                                *(relative(p) for p in (FIELDS, METRICS_DOC, SUITE_PY, vocab.DOCUMENT)), cwd=ROOT)
     except (subprocess.CalledProcessError, OSError):
         return None
     out = {}
@@ -3110,7 +3131,7 @@ def main_docs():
 def docs_path(path):
     """Whether `path` (from the checkout's root) is one of docs_ids'."""
     return (bool(re.fullmatch(r"hack/simlab/[^/]+\.py|hack/simlab/sql/[^/]+\.sql", path))
-            or path in {relative(p) for p in (FIELDS, SUITE_PY, vocab.DOCUMENT)})
+            or path in {relative(p) for p in (FIELDS, METRICS_DOC, SUITE_PY, vocab.DOCUMENT)})
 
 
 def docs_key(ids):

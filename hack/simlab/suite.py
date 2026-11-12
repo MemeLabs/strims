@@ -10,7 +10,9 @@
                  settings (`env`, KEY=VALUE) set
   METRICS        [(name, its value as SQL, better, kind, tie band)], and
                  GUARDRAILS, HOST_METRICS, SHOWN and GUARD_RATIO: what the
-                 catalog's scoring macros score (catalog.scoring_sql)
+                 catalog's scoring macros score (catalog.scoring_sql), as
+                 crates/strims-wan/metrics.toml declares them
+                 (simlab.semantic)
   base_binary(sha, sim, rebuild), tree_binary(sim, base)
                  a sim's test binary at a commit and in the working tree,
                  built once (target/sim-suite/bin/LABEL), beside the
@@ -56,7 +58,7 @@ import time
 from pathlib import Path
 
 import simlab
-from simlab import store
+from simlab import semantic, store
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / "target" / "sim-suite"
@@ -500,151 +502,26 @@ def cells(tier, only=None, env=()):
 
 
 # Metrics: (name, its value as SQL, better: "lower", "higher" or None,
-# kind: "ratio" (geometric) or "diff" (absolute), tie band). The SQL reads
-# a job's row (r: the catalog's `rows`, a column a field), its verdict and
-# run metrics (v: `verdicts`, analyze.py's) and its host's numbers (j:
-# `jobs`); a field the catalog's rows lack reads NULL, and NULL is no
-# value (simlab.catalog's job_metrics, scoring.sql's macros).
+# kind: "ratio" (geometric) or "diff" (absolute), tie band), each as
+# crates/strims-wan/metrics.toml declares it, with what it measures. The SQL
+# reads a job's row (r: the catalog's `rows`, a column a field), its verdict
+# and run metrics (v: `verdicts`, analyze.py's) and its host's numbers (j:
+# `jobs`); a field the catalog's rows lack reads NULL, and NULL is no value
+# (simlab.catalog's job_metrics, scoring.sql's macros).
 LOWER, HIGHER = "lower", "higher"
-
-
-def share(num, den):
-    """`num` over `den`, none where `den` is 0."""
-    return f"CASE WHEN {den} <> 0 THEN coalesce({num}, 0) / ({den}) END"
-
-
-def per_useful(*fields):
-    """The row's `fields` summed, per byte of the stream the honest viewers
-    read (`useful_bytes`); none without all of them."""
-    return f"CASE WHEN r.useful_bytes <> 0 THEN ({' + '.join(f'r.{f}' for f in fields)}) / r.useful_bytes END"
-
-
-# The mean hops to the seed over chains that reach it (ppspp sim).
-DEPTH_MEAN = share(" + ".join(f"{k} * coalesce(r.depth_{k}, 0)" for k in range(1, 7)),
-                   " + ".join(f"coalesce(r.depth_{k}, 0)" for k in range(1, 7)))
-
-METRICS = [
-    # A row with hostile viewers scores its honest ones'.
-    ("lag_p50_ms", "coalesce(r.lag_p50_ms_honest, r.lag_p50_ms)", LOWER, "ratio", 0.05),
-    ("lag_p99_ms", "coalesce(r.lag_p99_ms_honest, r.lag_p99_ms)", LOWER, "ratio", 0.05),
-    ("unhealthy", "v.unhealthy", LOWER, "diff", 0.03),
-    # The run's health over time (analyze.run_metrics).
-    ("collapses", "v.collapses", LOWER, "diff", 0.5),
-    ("flaps_per_min", "v.flaps_per_min", LOWER, "diff", 0.2),
-    ("unhealthy_dwell_p90_s", "v.unhealthy_dwell_p90_s", LOWER, "diff", 2),
-    ("onset_after_drop_s", "v.onset_after_drop_s", HIGHER, "diff", 2),
-    ("recover_after_rise_s", "v.recover_after_rise_s", LOWER, "diff", 2),
-    ("excess_lag_area", "v.excess_lag_area_ms_s", LOWER, "ratio", 0.10),
-    ("osc_amp_ms", "v.osc_amp_ms", LOWER, "ratio", 0.10),
-    ("delivery", "coalesce(r.delivery_honest, r.delivery)", HIGHER, "diff", 0.002),
-    ("timeouts", "r.timeouts", LOWER, "ratio", 0.10),
-    # timeouts' kinds: requests that timed out unanswered, and speculative
-    # ones that expired or that their holder answered NOT_YET (the rows'
-    # spec_expired and spec_not_yet are the park counters). Rows from
-    # before speculative requests lack them.
-    ("request_timeouts", "r.request_timeouts", LOWER, "ratio", 0.10),
-    ("timeouts_spec_expired", "r.timeouts_spec_expired", LOWER, "ratio", 0.10),
-    ("timeouts_spec_not_yet", "r.timeouts_spec_not_yet", LOWER, "ratio", 0.10),
-    ("wasted/read", share("r.wasted", "r.chunks_read"), LOWER, "diff", 0.01),
-    ("seed_answer_share", "r.seed_pull_share", None, "diff", 0.02),
-    ("viewer_util_p50", "r.viewer_util_p50", None, "diff", 0.02),
-    ("viewer_util_p90", "r.viewer_util_p90", None, "diff", 0.02),
-    ("relay_share", "r.relay_share", None, "diff", 0.03),
-    ("depth_mean", DEPTH_MEAN, None, "ratio", 0.05),
-    ("depth_cycle", "r.depth_cycle", LOWER, "diff", 0.01),
-    ("depth_pull_rooted", "r.depth_pull_rooted", LOWER, "diff", 0.01),
-    ("fanout_p50", "r.fanout_p50", None, "ratio", 0.10),
-    ("fanout_p90", "r.fanout_p90", None, "ratio", 0.10),
-    ("parent_changes_per_min", "r.parent_changes_per_min", LOWER, "ratio", 0.10),
-    ("relay_declines", share("r.relay_rejected", "coalesce(r.relay_rejected, 0) + coalesce(r.relay_accepted, 0)"),
-     None, "diff", 0.03),
-    ("declines_idle", "r.declines_idle", LOWER, "diff", 0.05),
-    ("declined_wrongly", share("r.declined_wrongly", "coalesce(r.declined, 0)"), LOWER, "diff", 0.05),
-    # A median the row has as a field, else its forwarders' (others') list's
-    # middle (p10, p50, p90).
-    ("meter_relays_p50", "CASE WHEN r.meter_relays_p50 <> 0 THEN r.meter_relays_p50 ELSE r.meter_forwarders[2] END",
-     None, "ratio", 0.10),
-    ("meter_others_p50", "CASE WHEN r.meter_others_p50 <> 0 THEN r.meter_others_p50 ELSE r.meter_others[2] END",
-     None, "ratio", 0.10),
-    ("holder_short", "r.holder_short", LOWER, "diff", 0.03),
-    # Each viewer from its own join (with arrivals or departures): to its
-    # first read or frame, to its first under the delivery target, the
-    # viewers that never did.
-    ("join_p50_ms", "r.join_p50_ms", LOWER, "ratio", 0.10),
-    ("join_p90_ms", "r.join_p90_ms", LOWER, "ratio", 0.10),
-    ("caught_up_p50_ms", "r.caught_up_p50_ms", LOWER, "ratio", 0.10),
-    ("caught_up_p90_ms", "r.caught_up_p90_ms", LOWER, "ratio", 0.10),
-    ("caught_up_never", "r.caught_up_never", LOWER, "diff", 0.5),
-    # The viewers that stayed through departures: their worst lag, their lag
-    # p90's excess over the delivery target summed, the time back under it,
-    # those left with no neighbour; and how soon a child noticed its parent
-    # gone (strims-sim).
-    ("depart_lag_peak_ms", "r.depart_lag_peak_ms", LOWER, "ratio", 0.10),
-    ("depart_excess_area", "r.depart_excess_lag_area_ms_s", LOWER, "ratio", 0.10),
-    ("depart_recover_ms", "r.depart_recover_ms", LOWER, "diff", 2000),
-    ("depart_stranded", "r.depart_stranded", LOWER, "diff", 0.5),
-    ("parent_lost_noticed_p90_ms", "r.parent_lost_noticed_p90_ms", LOWER, "ratio", 0.10),
-    # The honest viewers' lag p99 over their seconds of startup, and of
-    # steady state (the verdict's phases: verdict.phase_lags).
-    ("lag_p99_startup_ms", "v.lag_p99_startup_ms", LOWER, "ratio", 0.10),
-    ("lag_p99_steady_ms", "v.lag_p99_steady_ms", LOWER, "ratio", 0.05),
-    ("signed_lag_p99_ms", "r.signed_lag_p99_ms", LOWER, "ratio", 0.05),
-    ("wire/media", "r.wire_per_media", LOWER, "ratio", 0.02),
-    # Where the uplinks' bytes go (the sims' `up_*` ledger), per byte read.
-    ("wire/useful", "r.wire_per_useful", LOWER, "ratio", 0.02),
-    ("packets/useful", per_useful("packets_up"), LOWER, "ratio", 0.02),
-    ("dup/useful", per_useful("dup_bytes"), LOWER, "diff", 0.002),
-    ("ovh_seed", "r.ovh_seed", LOWER, "diff", 0.005),
-    ("ovh_leaf_p90", "r.ovh_leaf_p90", LOWER, "diff", 0.005),
-    ("have/useful", per_useful("up_have"), None, "ratio", 0.05),
-    ("state/useful", per_useful("up_state"), None, "ratio", 0.05),
-    ("ack/useful", per_useful("up_ack"), None, "ratio", 0.05),
-    ("request/useful", per_useful("up_request"), None, "ratio", 0.05),
-    ("integrity/useful", per_useful("up_integrity", "up_signed"), None, "ratio", 0.05),
-    ("transport/useful", per_useful("up_transport"), None, "ratio", 0.05),
-    ("acks/useful", per_useful("up_acks"), None, "ratio", 0.05),
-    ("links_p50", "r.links_p50", None, "diff", 0.5),
-    ("links_p90", "r.links_p90", None, "diff", 0.5),
-    ("links_dropped/min", "r.links_dropped_per_host_min", LOWER, "diff", 0.1),
-    ("eclipsed_share", "r.eclipsed_share", LOWER, "diff", 0.005),
-    ("honest_lag_p99_ms", "r.lag_p99_ms_honest", LOWER, "ratio", 0.05),
-    ("hostile_lag_p99_ms", "r.lag_p99_ms_hostile", None, "ratio", 0.05),
-    ("hostile_delivery", "r.delivery_hostile", None, "diff", 0.002),
-    ("cut_from_seed_share", "r.cut_from_seed_share", LOWER, "diff", 0.005),
-    # Where strong uplinks sit (`Report::capacity_position`).
-    ("cap_depth_rho", "r.cap_depth_rho", LOWER, "diff", 0.05),
-    ("cap_depth_rho_startup", "r.cap_depth_rho_startup", LOWER, "diff", 0.05),
-    ("cap_fanout_rho", "r.cap_fanout_rho", HIGHER, "diff", 0.05),
-    ("cap_hops_rho", "r.cap_hops_rho", LOWER, "diff", 0.05),
-    ("seed_nbr_up_p50", "r.seed_nbr_up_p50", HIGHER, "ratio", 0.10),
-    ("depth1_up_p50", "r.depth1_up_p50", HIGHER, "ratio", 0.10),
-    ("top_seed_link_s", "r.top_seed_link_s", LOWER, "ratio", 0.10),
-    ("lag_p99_ms_weak", "r.lag_p99_ms_weak", LOWER, "ratio", 0.05),
-    ("seed_offers_per_min", "r.seed_offers_per_min", None, "ratio", 0.10),
-    ("links_formed/min", "r.links_formed_per_host_min", None, "ratio", 0.10),
-    ("pool_trials/min", "r.pool_trials_per_host_min", None, "diff", 0.1),
-    ("pool_trial_wins", "r.pool_trial_wins", None, "diff", 0.05),
-    ("rejoin_p90_ms", "r.rejoin_p90_ms", LOWER, "ratio", 0.10),
-    # What a defector's lag is to an honest viewer's: under 1, defecting pays.
-    ("defector_gain", "CASE WHEN r.lag_p99_ms_hostile <> 0 AND r.lag_p99_ms_honest <> 0 "
-     "THEN r.lag_p99_ms_hostile / r.lag_p99_ms_honest END", HIGHER, "ratio", 0.05),
-    ("exch_rejected", "r.exch_rejected", None, "diff", 1),
-    # What the machine running a job sets as much as the change: shown,
-    # marked h, and kept out of the scorecard's totals (HOST_METRICS).
-    ("rss_mb", "j.rss_mb", LOWER, "diff", 100),
-    ("wall_s", "j.wall_s", LOWER, "ratio", 0.20),
-]
-HOST_METRICS = ("rss_mb", "wall_s")
+METRICS = semantic.scored()
+# Its metrics a job's host sets as much as the change: shown, marked h, and
+# kept out of the scorecard's totals.
+HOST_METRICS = semantic.host_metrics()
 # The metrics a scorecard shows in every cell, ties too.
-SHOWN = ("lag_p50_ms", "lag_p99_ms", "unhealthy", "delivery")
+SHOWN = semantic.shown()
 # arm_score's guardrails, in the order it checks them: "worse" breaks an
 # arm marked worse in a cell; "lo" one whose ratio interval lies past
 # GUARD_RATIO in a cell the base never collapsed (past --lag-budget when
 # ranked for overhead, and none without one); "hi" one whose ratio
 # interval lies under 1. More collapsed runs with a Fisher p under 0.05
 # break an arm too.
-GUARDRAILS = {"delivery": "worse", "lag_p99_ms": "lo", "lag_p99_ms_weak": "lo", "join_p90_ms": "lo",
-              "caught_up_p90_ms": "lo", "defector_gain": "hi"}
+GUARDRAILS = semantic.guardrails()
 GUARD_RATIO = 1.10
 
 

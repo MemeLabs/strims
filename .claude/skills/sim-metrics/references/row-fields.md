@@ -48,17 +48,23 @@ don't).
 
 ## Scoring, in a simlab commit
 
-6. A `suite.METRICS` tuple in `hack/simlab/suite.py`: (name, its SQL
-   over `r.` (the row), `v.` (the verdict) and `j.` (the job), better,
-   ratio or diff, tie band), with a comment right above it, which
-   becomes metric_catalog's description (`catalog.suite_metrics`). One
-   comment per tuple: a comment over a group of tuples documents only
-   the first. A field one sim's rows lack reads NULL, which is no value.
+6. A `[[scored]]` entry in `crates/strims-wan/metrics.toml`, in the
+   scorecards' order (`semantic.scored` makes `suite.METRICS` of them):
+   its name, its `sql` over `r.` (the row), `v.` (the verdict) and `j.`
+   (the job), or a `share` or `per_useful`; better; `score` (kind: ratio
+   or diff, tie band); its unit; and a description where it isn't one
+   field's plain reading (else it takes the field's), a note where how
+   it scores says more: metric_catalog's description
+   (`catalog.suite_metrics`). A field one sim's rows lack reads NULL,
+   which is no value. `semantic.problems` (`python3 hack/simlab/vocab.py
+   check`) holds every field it reads to fields.toml.
 7. The tie band from `python3 hack/sim-suite/suite.py calibrate`, whose
    output gives each metric's spread between seeds; the commit gives the
    spread the band came from.
-8. `suite.GUARDRAILS` and `suite.SHOWN` change only with the user's
-   decision: they change `arm_score`'s verdicts.
+8. A metric's `guard` and `shown` (in its `score`; metrics.toml's
+   `guardrails` gives the guards' order; `suite.GUARDRAILS` and
+   `suite.SHOWN`) change only with the user's decision: they change
+   `arm_score`'s verdicts.
 9. `catalog.scoring_version` hashes METRICS and scoring.sql, so the
    catalog's scoring is made again at the next index.
 

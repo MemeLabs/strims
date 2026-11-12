@@ -4,9 +4,9 @@
 """simlab.semantic: crates/strims-wan/metrics.toml and the naming rules of
 crates/strims-wan/fields.toml.
 
-  Scored       the scored metrics are suite.py's METRICS tuple for tuple,
-               GUARDRAILS in their order, SHOWN and HOST_METRICS; a share
-               and a per_useful compile to suite.py's SQL
+  Scored       suite.py's METRICS, GUARDRAILS (in their order), SHOWN and
+               HOST_METRICS are metrics.toml's; a share and a per_useful
+               compile to their SQL
   Problems     the document checks, every field a metric reads declared,
                the run metrics verdict.run_metrics', every macro the lab's,
                every dimension's values a section; each kind of break is
@@ -57,15 +57,16 @@ def suffix_unit(name):
 
 
 class Scored(unittest.TestCase):
-    def test_the_scored_metrics_are_suites(self):
+    def test_suites_metrics_are_metrics_tomls(self):
         self.assertEqual(repr(semantic.scored()), repr(suite.METRICS))
         self.assertEqual(list(semantic.guardrails().items()), list(suite.GUARDRAILS.items()))
         self.assertEqual(semantic.shown(), suite.SHOWN)
         self.assertEqual(semantic.host_metrics(), suite.HOST_METRICS)
 
-    def test_a_share_and_a_per_useful_compile_to_suites_sql(self):
-        self.assertEqual(semantic.share("r.a", "r.b"), suite.share("r.a", "r.b"))
-        self.assertEqual(semantic.per_useful("x", "y"), suite.per_useful("x", "y"))
+    def test_a_share_and_a_per_useful_compile_to_their_sql(self):
+        self.assertEqual(semantic.share("r.a", "r.b"), "CASE WHEN r.b <> 0 THEN coalesce(r.a, 0) / (r.b) END")
+        self.assertEqual(semantic.per_useful("x", "y"),
+                         "CASE WHEN r.useful_bytes <> 0 THEN (r.x + r.y) / r.useful_bytes END")
         doc = semantic.load()
         kinds = {k for m in doc["scored"] for k in ("sql", "share", "per_useful") if k in m}
         self.assertEqual(kinds, {"sql", "share", "per_useful"})

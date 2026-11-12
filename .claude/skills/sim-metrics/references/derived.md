@@ -7,10 +7,12 @@ verdict's phases from the runs' scenario events).
 ## Where it goes
 
 1. **`hack/simlab/verdict.py`.**
-   - A run metric: `verdict.run_metrics`, whose docstring holds one
-     indented `name  text` line per metric, the catalog's doc of its
-     column (`catalog.run_metric_docs`). A `_censored` companion takes
-     its base metric's doc, so the base's text says what is censored.
+   - A run metric: `verdict.run_metrics`, and its `run_metrics` entry
+     in `crates/strims-wan/metrics.toml` (its description and unit), the
+     catalog's doc of its column (`catalog.run_metric_docs`); a
+     `_censored` companion is an entry of its own. test_catalog holds
+     the entries to the scalars `verdict.run_metrics` writes
+     (`semantic.run_metric_names`).
    - A derived table: `verdict.DERIVED` (its columns),
      `verdict.derive_source` (what makes it), `verdict.DERIVE_CODE`
      (the code its version hashes) and `verdict.VERDICT_COLS` for a

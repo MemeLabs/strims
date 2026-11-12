@@ -130,8 +130,8 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import (ask, catalog, describe, engine, forecast, query, store, store_host, suite, verdict,  # noqa: E402
-                    views, vocab)
+from simlab import (ask, catalog, describe, engine, forecast, query, semantic, store, store_host, suite,  # noqa: E402
+                    verdict, views, vocab)
 
 
 class Fixture(unittest.TestCase):
@@ -887,19 +887,14 @@ class Kinds(Fixture):
             self.assertIn(p, catalog.VERDICT_DOCS["phase"])
         self.assertNotIn(query.TAIL, seconds + catalog.VERDICT_DOCS["phase"])
 
-    def test_the_run_metrics_docs_are_their_docstrings(self):
-        # metric_catalog's docs of run_metrics' columns, whether the
-        # compiler dedented the docstring (Python 3.13 on) or kept it
-        # indented.
+    def test_the_run_metrics_docs_are_metrics_tomls(self):
+        # metric_catalog's docs of run_metrics' columns: metrics.toml's
+        # run_metrics, one of each scalar run_metrics writes.
         got = catalog.run_metric_docs()
-        self.assertEqual(got["collapses"], "collapse spells (`episodes`)")
-        self.assertTrue(got["lag_p99_startup_ms"].startswith("the p99 of the honest viewers' lag over their seconds "
-                                                             "of startup"), got)
-        self.assertTrue(got["lag_p99_steady_ms"].endswith("of steady state (`phase_lags`)"), got)
-        first, *rest = verdict.run_metrics.__doc__.splitlines()
-        indented = "\n".join([first, *("    " + line if line else line for line in rest)])
-        with mock.patch.object(verdict.run_metrics, "__doc__", indented):
-            self.assertEqual(catalog.run_metric_docs(), got)
+        self.assertEqual(sorted(got), sorted(semantic.run_metric_names()))
+        doc = semantic.load()["run_metrics"]
+        self.assertEqual(got["collapses"], (doc["collapses"]["description"], None))
+        self.assertEqual(got["lag_p99_steady_ms"][1], "ms")
 
 
 class Fetch(Fixture):

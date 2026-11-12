@@ -170,14 +170,15 @@ Read these rather than any copy of them, this skill included:
 - `crates/strims-wan/fields.toml`, every name the sims record, whose
   schema is `hack/simlab/spec.py`
 - `crates/strims-wan/metrics.toml`, every scored metric, run metric, lake
-  metric and dimension (`hack/simlab/semantic.py` reads it; test_semantic
-  holds it to `suite.METRICS` and the naming rules to fields.toml)
+  metric and dimension (`hack/simlab/semantic.py` reads it, and makes
+  `suite.METRICS`, `suite.GUARDRAILS`, `suite.SHOWN` and
+  `suite.HOST_METRICS` of it; test_semantic holds fields.toml to the
+  naming rules)
 - `store_host.TABLES`, `store_host.SAMPLE_TABLES`; `query.TABLE_KNOBS`
 - `catalog.FIELDS`, `catalog.NORMALIZED`, `catalog.STANDARD_KEYS`,
   `catalog.STANDARD_JOINS`, `catalog.TABLE_DOCS`, `catalog.VERDICT_DOCS`,
   `catalog.UNITS`
-- `suite.METRICS`, `suite.GUARDRAILS`, `suite.SHOWN`,
-  `suite.MEASURE_LOGS`, `suite.TIERS` (`hack/simlab/suite.py`)
+- `suite.MEASURE_LOGS`, `suite.TIERS` (`hack/simlab/suite.py`)
 - `verdict.DERIVED`, `verdict.DERIVE_CODE`
 - `crates/strims-wan/vocab.toml`, whose header gives its schema
 - `views.KINDS`, `views.KEYS`

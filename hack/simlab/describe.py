@@ -22,7 +22,8 @@ prints, and the catalog's part of the console's Ask prompt
   catalog_text(schema) -> str
                  the catalog (catalog.schema's parts): main's tables and
                  views with their columns and the catalog's notes, raw's
-                 names, the macros, the scored metrics and the event kinds
+                 names, the macros, the scored and lake metrics, the
+                 dimensions and the event kinds
   phases_text() -> str
                  the vocabulary's phases, episodes and reasons, each with
                  its description
@@ -52,7 +53,7 @@ from . import catalog, views, vocab
 GLOSSARY = Path(__file__).resolve().parent / "glossary.md"
 # A markdown file's leading comment (its licence and what it is for).
 COMMENT = re.compile(r"\A<!--.*?-->\s*", re.S)
-TOPICS = ("glossary", "tables", "macros", "metrics", "events", "phases", "views")
+TOPICS = ("glossary", "tables", "macros", "metrics", "dimensions", "events", "phases", "views")
 MACRO_KINDS = ("macro", "table macro", "macros")
 # A column's catalog note, at most this long; a grain in `tables`' lines;
 # an event kind's description, note or column.
@@ -197,6 +198,36 @@ def metrics_lines(schema):
     return out
 
 
+def lake_lines(schema):
+    """metric_catalog's lake metrics (tbl 'lake'): each one's macro, unit
+    and definition."""
+    out = ["## Lake metrics", "",
+           "metric_catalog's tbl = 'lake' rows: what the lab's macros compute (source: the macro).", ""]
+    for m in sorted(collections_by(schema.get("metric_catalog") or [], "tbl").get("lake", []),
+                    key=lambda m: m["name"]):
+        unit = f", unit {m['unit']}" if m.get("unit") else ""
+        out.append(f"- {m['name']}: macro `{m['source']}`{unit}; {clipped(m.get('description') or '', NOTE_CHARS)}")
+    return out
+
+
+def dimensions_lines(schema):
+    """metric_catalog's dimensions (tbl 'dimension'): each one's definition,
+    values and the column or macro that gives it."""
+    out = ["## Dimensions", "",
+           "What results are cut by, each defined once (metric_catalog's tbl = 'dimension' rows: fields its "
+           "values, a list or vocab:<section> for the vocabulary's names; source the column or macro that "
+           "gives it).", ""]
+    for d in sorted(collections_by(schema.get("metric_catalog") or [], "tbl").get("dimension", []),
+                    key=lambda d: d["name"]):
+        line = f"- {d['name']}: {clipped(d.get('description') or '', NOTE_CHARS)}"
+        if d.get("fields"):
+            line += f" Values: {', '.join(text_of(v) for v in d['fields'])}."
+        if d.get("source"):
+            line += f" From `{d['source']}`."
+        out.append(line)
+    return out
+
+
 def kinds_by(schema):
     """event_kinds' rows by kind, each kind's by sim."""
     out = {}
@@ -320,10 +351,11 @@ def phases_text():
 
 
 def catalog_text(schema):
-    """The catalog's tables and views, macros, scored metrics and event
-    kinds, under one heading."""
+    """The catalog's tables and views, macros, scored metrics, lake
+    metrics, dimensions and event kinds, under one heading."""
     out = (["# The catalog", "", raw_line(schema), ""] + tables_lines(schema) + macros_lines(schema)
-           + [""] + metrics_lines(schema) + [""] + events_lines(schema))
+           + [""] + metrics_lines(schema) + [""] + lake_lines(schema) + [""] + dimensions_lines(schema)
+           + [""] + events_lines(schema))
     return "\n".join(out) + "\n"
 
 
@@ -390,7 +422,10 @@ TOPIC_DOCS = {
     "macros": "the macros, suite.py's scoring (effects, collapse_test, arm_score, structural, dynamics, "
               "fisher_p, ...), with their parameters",
     "MACRO": "a macro's line of `macros`",
-    "metrics": "the scored metrics: each one's better direction, kind, tie band, guard, unit and SQL",
+    "metrics": "the scored metrics: each one's better direction, kind, tie band, guard, unit and SQL; and the "
+               "lab's macro metrics",
+    "dimensions": "what results are cut by (crates/strims-wan/metrics.toml's dimensions): each one's definition, "
+                  "values and the column or macro that gives it",
     "events": "the event kinds of `events` and `derived_events`, the vocabulary's (crates/strims-wan/vocab.toml), "
               "by class: each one's sims, columns and notes, and how many the catalog holds",
     "KIND": "an event kind's line of `events`",
@@ -408,7 +443,8 @@ def wrapped(label, names):
 def index_text(schema, saved):
     names = [t["name"] for t in main_tables(schema)]
     lines = ["# The sims' results catalog", "", "`simdb.py describe TOPIC` describes one of:", ""]
-    lines += [textwrap.fill(v, width=100, initial_indent=f"  {k:<10}", subsequent_indent=" " * 12)
+    w = max(map(len, TOPIC_DOCS)) + 1
+    lines += [textwrap.fill(v, width=100, initial_indent=f"  {k:<{w}}", subsequent_indent=" " * (w + 2))
               for k, v in TOPIC_DOCS.items()]
     lines += ["", wrapped("Tables and views", names), wrapped("Macros", [m["name"] for m in macros(schema)]),
               wrapped("Saved views", sorted(v.name for v in saved))]
@@ -440,7 +476,8 @@ def describe(topic=None, pool=None, views_root=views.VIEWS):
                                            collections_by(schema.get("metric_catalog") or [], "tbl")
                                            .get(topic, []))))
     fixed = {"tables": lambda: tables_text(schema), "macros": lambda: "\n".join(macros_lines(schema)) + "\n",
-             "metrics": lambda: "\n".join(metrics_lines(schema)) + "\n",
+             "metrics": lambda: "\n".join(metrics_lines(schema) + [""] + lake_lines(schema)) + "\n",
+             "dimensions": lambda: "\n".join(dimensions_lines(schema)) + "\n",
              "events": lambda: "\n".join(events_lines(schema, counts=True)) + "\n"}
     if topic in fixed:
         parts.append(fixed[topic]())
