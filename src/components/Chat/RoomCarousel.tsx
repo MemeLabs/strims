@@ -9,7 +9,7 @@ import clsx from "clsx";
 import { Base64 } from "js-base64";
 import { isEqual } from "lodash";
 import React, { MouseEventHandler, ReactNode, useCallback, useRef } from "react";
-import { FreeMode, Mousewheel } from "swiper";
+import { FreeMode, Mousewheel } from "swiper/modules";
 import { Swiper, SwiperSlide } from "swiper/react";
 
 import { Image } from "../../apis/strims/type/image";

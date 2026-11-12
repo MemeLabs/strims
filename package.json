@@ -98,7 +98,7 @@
     "stream-browserify": "^3.0.0",
     "style-loader": "^4.0.0",
     "swc-loader": "^0.2.7",
-    "swiper": "^8.4.5",
+    "swiper": "^14.4.0",
     "terser-webpack-plugin": "^5.6.1",
     "ts-key-enum": "^2.0.12",
     "tsx": "^4.23.15",
