@@ -4,7 +4,15 @@
 import "./Scroller.scss";
 
 import clsx from "clsx";
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import Scrollbars from "react-custom-scrollbars-2";
 import { Trans } from "react-i18next";
 import { FiArrowDownCircle } from "react-icons/fi";
@@ -65,9 +73,14 @@ const ScrollerView = React.forwardRef<HTMLDivElement, ScrollerViewProps>(
     }
     messageSizeCache.grow(messageCount);
 
+    // Measured messages move the ones after them: follow the bottom while
+    // autoscrolling, else lay them out again where they are.
+    const [, relayout] = useReducer((n: number) => n + 1, 0);
     messageSizeCache.onchange = () => {
       if (autoScroll) {
         setScrollTop(messageSizeCache.getOffset(messageCount) - viewportHeight);
+      } else {
+        relayout();
       }
     };
     useEffect(() => () => (messageSizeCache.onchange = null), []);
