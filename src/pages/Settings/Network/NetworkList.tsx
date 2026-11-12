@@ -31,14 +31,24 @@ const NetworkTable: React.FC<NetworkTableProps> = ({ networks, onDelete }) => {
   const client = useClient();
   const navigate = useNavigate();
   const [publishNetwork, setPublishNetwork] = useState<Network>();
+  const [error, setError] = useState<string>(null);
 
   if (!networks) {
     return null;
   }
 
   const rows = networks.map((network) => {
+    // The list reloads after a delete; a failure shows above the table
+    // until the next delete.
     const handleDelete = async () => {
-      await client.network.delete({ id: network.id });
+      setError(null);
+      try {
+        await client.network.delete({ id: network.id });
+      } catch (e) {
+        const name = certificateRoot(network.certificate).subject || "the network";
+        setError(`Error deleting ${name}: ${(e as Error).message || "unknown error"}`);
+        return;
+      }
       onDelete();
     };
 
@@ -57,7 +67,7 @@ const NetworkTable: React.FC<NetworkTableProps> = ({ networks, onDelete }) => {
           {new Date(Number(certificateBody(network.certificate).notAfter) * 1000).toLocaleString()}
         </TableCell>
         <MenuCell>
-          <MenuItem label="Delete" onClick={handleDelete} />
+          <MenuItem label="Delete" onClick={() => void handleDelete()} />
           <MenuItem label="Create Invite" onClick={handleCreateInvite} />
           <MenuItem label="Publish" onClick={handlePublish} />
         </MenuCell>
@@ -72,6 +82,11 @@ const NetworkTable: React.FC<NetworkTableProps> = ({ networks, onDelete }) => {
   return (
     <>
       {modal}
+      {error && (
+        <div className="thing_form">
+          <InputError error={error} />
+        </div>
+      )}
       <Table>
         <thead>
           <tr>

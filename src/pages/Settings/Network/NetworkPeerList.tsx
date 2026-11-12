@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
@@ -25,6 +25,7 @@ interface NetworkTableProps {
 
 const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
   const client = useClient();
+  const [error, setError] = useState<string>(null);
 
   const sortedPeers = useMemo(
     () => (peers ? peers.sort((a, b) => a.alias.localeCompare(b.alias)) : []),
@@ -35,22 +36,33 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
     return null;
   }
 
-  const handleGrantInvitation = async (id: bigint) => {
-    await client.network.grantPeerInvitation({ id, count: 1 });
+  // Runs a row's action, the list reloading after it; a failure shows above
+  // the table until the next action.
+  const act = async (failure: string, action: () => Promise<unknown>) => {
+    setError(null);
+    try {
+      await action();
+    } catch (e) {
+      setError(`${failure}: ${(e as Error).message || "unknown error"}`);
+      return;
+    }
     onChange();
   };
-  const handleBan = async (id: bigint, value: boolean) => {
-    await client.network.togglePeerBan({ id, value });
-    onChange();
-  };
-  const handleResetRenameCooldown = async (id: bigint) => {
-    await client.network.resetPeerRenameCooldown({ id });
-    onChange();
-  };
-  const handleDelete = async (id: bigint) => {
-    await client.network.deletePeer({ id });
-    onChange();
-  };
+
+  const handleBan = ({ id, alias, isBanned }: Peer) =>
+    act(`Error ${isBanned ? "unbanning" : "banning"} ${alias}`, () =>
+      client.network.togglePeerBan({ id, value: !isBanned })
+    );
+  const handleGrantInvitation = ({ id, alias }: Peer) =>
+    act(`Error granting ${alias} an invitation`, () =>
+      client.network.grantPeerInvitation({ id, count: 1 })
+    );
+  const handleResetRenameCooldown = ({ id, alias }: Peer) =>
+    act(`Error resetting ${alias}'s rename cooldown`, () =>
+      client.network.resetPeerRenameCooldown({ id })
+    );
+  const handleDelete = ({ id, alias }: Peer) =>
+    act(`Error deleting ${alias}`, () => client.network.deletePeer({ id }));
 
   const rows = sortedPeers.map((peer) => {
     return (
@@ -63,16 +75,13 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
         </TableCell>
         <TableCell>{peer.isBanned ? "true" : "false"}</TableCell>
         <MenuCell>
-          <MenuItem
-            label={peer.isBanned ? "Unban" : "Ban"}
-            onClick={() => handleBan(peer.id, !peer.isBanned)}
-          />
-          <MenuItem label="Grant invitation" onClick={() => handleGrantInvitation(peer.id)} />
+          <MenuItem label={peer.isBanned ? "Unban" : "Ban"} onClick={() => void handleBan(peer)} />
+          <MenuItem label="Grant invitation" onClick={() => void handleGrantInvitation(peer)} />
           <MenuItem
             label="Reset rename cooldown"
-            onClick={() => handleResetRenameCooldown(peer.id)}
+            onClick={() => void handleResetRenameCooldown(peer)}
           />
-          <MenuItem label="Delete" onClick={() => handleDelete(peer.id)} />
+          <MenuItem label="Delete" onClick={() => void handleDelete(peer)} />
         </MenuCell>
       </tr>
     );
@@ -80,6 +89,11 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
 
   return (
     <>
+      {error && (
+        <div className="thing_form">
+          <InputError error={error} />
+        </div>
+      )}
       <Table>
         <thead>
           <tr>

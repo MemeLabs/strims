@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
@@ -24,6 +24,7 @@ interface NetworkTableProps {
 
 const AliasReservationTable: React.FC<NetworkTableProps> = ({ aliasReservations, onChange }) => {
   const client = useClient();
+  const [error, setError] = useState<string>(null);
 
   const sortedAliasReservations = useMemo(
     () =>
@@ -35,8 +36,16 @@ const AliasReservationTable: React.FC<NetworkTableProps> = ({ aliasReservations,
     return null;
   }
 
-  const handleResetCooldown = async (id: bigint) => {
-    await client.network.resetAliasReservationCooldown({ id });
+  // The list reloads after a reset; a failure shows above the table until
+  // the next reset.
+  const handleResetCooldown = async ({ id, alias }: AliasReservation) => {
+    setError(null);
+    try {
+      await client.network.resetAliasReservationCooldown({ id });
+    } catch (e) {
+      setError(`Error resetting ${alias}'s cooldown: ${(e as Error).message || "unknown error"}`);
+      return;
+    }
     onChange();
   };
 
@@ -57,7 +66,10 @@ const AliasReservationTable: React.FC<NetworkTableProps> = ({ aliasReservations,
         <TableCell>{state}</TableCell>
         <MenuCell>
           {reservation.peerKey.length === 0 && (
-            <MenuItem label="Reset cooldown" onClick={() => handleResetCooldown(reservation.id)} />
+            <MenuItem
+              label="Reset cooldown"
+              onClick={() => void handleResetCooldown(reservation)}
+            />
           )}
         </MenuCell>
       </tr>
@@ -66,6 +78,11 @@ const AliasReservationTable: React.FC<NetworkTableProps> = ({ aliasReservations,
 
   return (
     <>
+      {error && (
+        <div className="thing_form">
+          <InputError error={error} />
+        </div>
+      )}
       <Table>
         <thead>
           <tr>

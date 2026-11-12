@@ -46,6 +46,13 @@ const states = (): AliasReservation[] => {
 
 const cooldownRowMenu = ".thing_table tbody tr:nth-child(2) .thing_table__row_menu";
 
+// A node whose cooldown resets fail.
+class FailingNetworkService extends NetworkService {
+  resetAliasReservationCooldown(): never {
+    throw new Error("only the network's owner can reset a cooldown");
+  }
+}
+
 const stories: Story[] = [
   {
     // Every reservation held by a peer.
@@ -105,6 +112,25 @@ const stories: Story[] = [
           click(`${cooldownRowMenu} .dropdown__anchor`),
           click(`${cooldownRowMenu} button`, "Reset cooldown"),
           waitFor(".thing_table tbody tr:nth-child(2) td:nth-child(2)", "Free"),
+        ]}
+      />
+    ),
+  },
+  {
+    // Resetting jbpratt's cooldown fails: the error shows above the table.
+    name: "Reset error",
+    component: () => (
+      <SettingsStory
+        path={PATH}
+        services={() => {
+          const network = new FailingNetworkService({ count: 5 });
+          network.reservations.set(BigInt(1), states());
+          return { network };
+        }}
+        steps={[
+          click(`${cooldownRowMenu} .dropdown__anchor`),
+          click(`${cooldownRowMenu} button`, "Reset cooldown"),
+          waitFor(".thing_form .input_error"),
         ]}
       />
     ),

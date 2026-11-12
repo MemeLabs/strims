@@ -15,6 +15,13 @@ class FailingNetworkService extends NetworkService {
   }
 }
 
+// A node that lists its networks but can't delete them.
+class FailingDeleteService extends NetworkService {
+  delete(): never {
+    throw new Error("the network's servers are still running");
+  }
+}
+
 const longName =
   "The Extremely Long Network Name Of The Late Night Speedrun And Film Appreciation Society";
 
@@ -83,6 +90,21 @@ const stories: Story[] = [
           click(`${firstRowMenu} .dropdown__anchor`),
           click(`${firstRowMenu} button`, "Delete"),
           waitFor(".thing_table tbody tr:first-child a", fixtures.networkName(2)),
+        ]}
+      />
+    ),
+  },
+  {
+    // The first network's Delete fails: the error shows above the list, unchanged.
+    name: "Delete error",
+    component: () => (
+      <SettingsStory
+        path={PATH}
+        services={() => ({ network: new FailingDeleteService({ count: 5 }) })}
+        steps={[
+          click(`${firstRowMenu} .dropdown__anchor`),
+          click(`${firstRowMenu} button`, "Delete"),
+          waitFor(".thing_form .input_error"),
         ]}
       />
     ),

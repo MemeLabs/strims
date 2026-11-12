@@ -27,6 +27,39 @@ const longAliases = [
 
 const firstRowMenu = ".thing_table tbody tr:first-child .thing_table__row_menu";
 
+// A node whose peer actions all fail.
+class FailingNetworkService extends NetworkService {
+  togglePeerBan(): never {
+    throw new Error("only the network's owner can ban its peers");
+  }
+
+  grantPeerInvitation(): never {
+    throw new Error("only the network's owner can grant invitations");
+  }
+
+  resetPeerRenameCooldown(): never {
+    throw new Error("only the network's owner can reset a rename cooldown");
+  }
+
+  deletePeer(): never {
+    throw new Error("the node isn't answering");
+  }
+}
+
+// The first row's menu item `label`, failing: the error shows above the table.
+const failedAction = (label: string) => () =>
+  (
+    <SettingsStory
+      path={PATH}
+      services={() => ({ network: new FailingNetworkService({ count: 5 }) })}
+      steps={[
+        click(`${firstRowMenu} .dropdown__anchor`),
+        click(`${firstRowMenu} button`, label),
+        waitFor(".thing_form .input_error"),
+      ]}
+    />
+  );
+
 const stories: Story[] = [
   {
     // An admin (jbpratt) and a banned peer (KartoffelKopf).
@@ -91,6 +124,10 @@ const stories: Story[] = [
       />
     ),
   },
+  { name: "Ban error", component: failedAction("Ban") },
+  { name: "Grant invitation error", component: failedAction("Grant invitation") },
+  { name: "Reset rename cooldown error", component: failedAction("Reset rename cooldown") },
+  { name: "Delete error", component: failedAction("Delete") },
 ];
 
 export default stories;
