@@ -1,0 +1,77 @@
+{
+  // video player
+  "player": {
+    "Exit theater mode": "Kinomodus beenden",
+    "Theater mode": "Theatermodus",
+    "Exit full screen": "Vollbildmodus beenden",
+    "Full screen": "Vollbildschirm",
+    "Mute": "Stumm",
+    "Unmute": "Stummschaltung",
+    "Pause": "Pause",
+    "Play": "Spiel",
+    "Miniplayer": "Minispieler"
+  },
+
+  "chat": {
+    "More messages below": "Weitere Nachrichten unten",
+
+    "composer": {
+      "members": "Mitglieder",
+      "tags": "Stichworte",
+      "commands": "Befehle",
+      "emotes": "Emotes",
+      "modifiers": "Modifikatoren",
+      "Write a message": "Eine Nachricht schreiben..."
+    },
+
+    "drawers": {
+      "Emotes": "Emotes",
+      "Whispers": "Flüstert",
+      "Settings": "Einstellungen",
+      "Users": "Benutzer"
+    },
+
+    "settings": {
+      "Messages": "Mitteilungen",
+      "Whispers": "Flüstert",
+      "Highlights, focus, and tags": "Hebt Fokus und Tags hervor",
+      "Autocomplete": "Automatische Vervollständigung",
+      "Message formatters": "Nachrichtenformatierer",
+
+      "Show flair": "Flair zeigen",
+      "Show time": "Show Time",
+      "Harsh ignore": "Hartes Ignorieren",
+      "Hide messages tagged nsfw or nsfl": "Mit nsfw oder nsfl gekennzeichnete Nachrichten ausblenden",
+      "Loop animated emotes forever": "Loop animierte Emotes für immer",
+      "Disable spoilers": "Spoiler deaktivieren",
+      "Shorten long links": "Lange Links kürzen",
+      "Legacy emote spacing": "Alter Emote-Abstand",
+      "Maximum messages": "Maximale Nachrichten",
+      "Stream viewer indicators": "Anzeigen für Stream-Viewer",
+      "Banned messages": "Gesperrte Nachrichten",
+      "In-line messages": "Inline-Nachrichten",
+      "Highlight when mentioned": "Hervorheben, wenn erwähnt",
+      "Include mentions when focused": "Erwähnungen einschließen, wenn fokussiert",
+      "Increase visibility of tagged users": "Sichtbarkeit von markierten Benutzern erhöhen",
+      "Custom highlights": "Benutzerdefinierte Highlights",
+      "Comma separated": "Komma getrennt...",
+      "Autocomplete helper": "Autovervollständigen-Helfer",
+      "Show emote previews": "Emote-Vorschau anzeigen",
+      "Greentext": "Grüntext",
+      "Emotes": "Emotes",
+      "Combos": "Kombinationen",
+      "Modifiers": "Modifikatoren",
+
+      // viewer state indicator options
+      "Disable": "Deaktivieren",
+      "Bar": "Bar",
+      "Dot": "Punkt",
+      "Array": "Anordnung",
+
+      // banned messages options
+      "Remove": "Entfernen",
+      "Censor": "Zensieren",
+      "Do nothing": "Nichts tun"
+    }
+  }
+}
