@@ -23,8 +23,13 @@
     background: var(--color-slate-4);
     border-radius: 10px;
     width: 400px;
+    max-width: calc(100% - 20px);
     position: relative;
     box-shadow: var(--shadow-elevation-4);
+
+    @at-root .theme--light & {
+      background: var(--body-foreground);
+    }
   }
 
   &__close_button {
