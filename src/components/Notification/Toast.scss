@@ -23,6 +23,7 @@
     margin: 5px;
     cursor: default;
     width: 300px;
+    gap: 5px;
 
     &--open {
       opacity: 1;
@@ -34,7 +35,13 @@
 
     &__icon {
       display: block;
-      margin-right: 5px;
+      flex: none;
+    }
+
+    // The message, after the title: long words wrap inside the toast.
+    &__title + &__title {
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
   }
 }
