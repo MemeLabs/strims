@@ -1,6 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import clsx from "clsx";
 import React, {
   MouseEvent,
   MouseEventHandler,
@@ -12,6 +13,8 @@ import React, {
 import ReactDOM from "react-dom";
 import { FiXSquare } from "react-icons/fi";
 import { useClickAway } from "react-use";
+
+import { useTheme } from "../../contexts/Theme";
 
 const SizeContext = React.createContext<Size>({
   height: 0,
@@ -76,6 +79,7 @@ const Portlet: React.FC<PortletProps> = ({
   handleSize = 8,
 }) => {
   const [pos, setPos] = useState(DEFAULT_POS);
+  const { colorScheme } = useTheme();
 
   const handleDragStart = useCallback<MouseEventHandler>((e) => {
     setPos((pos) => ({
@@ -236,9 +240,11 @@ const Portlet: React.FC<PortletProps> = ({
     return null;
   }
 
+  // It portals out of the layout's .theme, so it carries the theme's classes.
   const container = (
     <div
       ref={dragContainer}
+      className={clsx("theme", `theme--${colorScheme}`)}
       style={dragContainerStyle}
       onMouseUp={handleDragEnd}
       onMouseMove={handleDrag}
@@ -299,7 +305,8 @@ const Portlet: React.FC<PortletProps> = ({
           <div
             style={{
               flex: "1",
-              background: "white",
+              background: "var(--color-background-debugger)",
+              boxShadow: "var(--shadow-elevation-3)",
               flexDirection: "column",
               display: "flex",
             }}
@@ -307,7 +314,7 @@ const Portlet: React.FC<PortletProps> = ({
             <div
               style={{
                 flex: `0 0 ${headerSize}px`,
-                background: "orange",
+                background: "var(--color-background-debugger-header)",
                 display: "flex",
                 justifyContent: "flex-end",
                 alignItems: "center",
