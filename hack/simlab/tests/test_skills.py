@@ -119,7 +119,7 @@ def glob_of(s, upper=False):
     `upper`), or None without any."""
     g = PLACEHOLDER.sub("*", s)
     g = UPPER.sub("*", g) if upper else g
-    return g if g != s else None
+    return g if PLACEHOLDER.search(s) or upper and UPPER.search(s) else None
 
 
 def matcher(glob):
@@ -428,6 +428,15 @@ class Skills(unittest.TestCase):
 
 class Checks(unittest.TestCase):
     """Each check finds what's missing, and passes what's there."""
+
+    def test_globs(self):
+        # A bare `*` is a placeholder as the others are: the glob is the
+        # name itself.
+        for name, glob in (("viewer_lag_*", "viewer_lag_*"), ("query.<t>_view", "query.*_view"),
+                           ("{name}.sql", "*.sql"), ("stalls_per_min_…", "stalls_per_min_*"), ("held_ms", None)):
+            self.assertEqual(glob_of(name), glob, name)
+        self.assertEqual((glob_of("NAME.sql", upper=True), glob_of("NAME.sql")), ("*.sql", None))
+        self.assertTrue(re.fullmatch(matcher(glob_of("viewer_lag_*")), "viewer_lag_of"))
 
     def test_paths(self):
         skill = SKILLS / "sim-lab"
