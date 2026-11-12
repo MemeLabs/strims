@@ -65,11 +65,12 @@ const stories: Story[] = [
     ),
   },
   {
+    // One line, cut short with an ellipsis before the close button.
     name: "Long title",
     component: () => (
       <Viewport>
         <Modal
-          title="A title long enough that it runs past the width of a phone-sized header and wraps"
+          title="A title long enough that it runs past the width of a phone-sized header, so it ends in an ellipsis on one line"
           onClose={noop}
         >
           <Paragraphs count={1} />

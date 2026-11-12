@@ -26,11 +26,19 @@
 
     &__title {
       flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      min-width: 0;
       padding: 0 0.5rem;
       display: flex;
       align-items: center;
+
+      // One line, cut short with an ellipsis: the title's text is a flex
+      // item of its own, which text-overflow needs.
+      &__text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
     }
 
     &__close {

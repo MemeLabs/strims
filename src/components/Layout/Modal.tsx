@@ -59,7 +59,11 @@ const Modal: React.FC<ModalProps> = ({
       >
         {showHeader && (
           <div ref={header} className="modal__header">
-            {title && <div className="modal__header__title">{title}</div>}
+            {title && (
+              <div className="modal__header__title">
+                <span className="modal__header__title__text">{title}</span>
+              </div>
+            )}
             <button className="modal__header__close" onClick={() => toggleModalOpen(false)}>
               <BsArrowBarDown className="modal__header__close__icon" />
             </button>
