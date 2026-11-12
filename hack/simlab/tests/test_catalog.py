@@ -62,7 +62,11 @@ simlab.verdict's derive pool:
                replacement for the job's sim (strims-sim's parent_lost by
                its value), written_kind the id written; a parent_lost in a
                job with the scheduler log on warned of
-  Docs         a change to the docs alone (a registry's entry, a column's
+  Renamed      a row field fields.toml renames for one sim: the rows and
+               scalars views and the cache's rows read that sim's older
+               value under the current name, raw.rows as written; the
+               index that makes the docs again alone makes them again
+  Docs       a change to the docs alone (a registry's entry, a column's
                doc in fields.toml, the vocabulary) makes the doc tables
                again and nothing else, describe showing it, the event
                counts kept, then nothing to do; the docs as they were give
@@ -1241,6 +1245,83 @@ class Retired(Fixture):
         # Read as a departure all the same.
         self.assertEqual(catalog.lake(f"SELECT written_kind, kind FROM events WHERE k = {catalog.q(k)};"),
                          [{"written_kind": "parent_lost", "kind": "parent_noticed"}])
+
+
+class Renamed(Fixture):
+    """A row field fields.toml renames for one sim (`rename`, a copy of
+    it): the catalog's rows and scalars views, and the cache's rows
+    (query.rows), read an older run's value under the current name for
+    that sim's jobs alone; raw.rows keeps what was written; an index that
+    makes the doc tables again alone makes the views again too."""
+
+    ENTRY = ('\n[rows.join_old_ms]\nsims = []\nretired = ["strims-sim", "ppspp"]\n'
+             'replaced_by = { ppspp = "join_p90_ms" }\nrename = true\ntype = "int"\nunit = "ms"\n'
+             'description = "An older join p90."\n')
+
+    def fold(self, src, job, row):
+        k = f"k-{src.rsplit('/', 1)[1]}"
+        d = self.root / "jobs-renamed" / src.replace("/", "~")
+        meta = golden_cli.job_dir(d, (src, k, *golden_cli.JOBS[job][2:]))
+        meta["row"] = row(meta["row"])
+        db = self.root / "jobs-renamed" / f"{src.replace('/', '~')}.duckdb"
+        store_host.fold(db, [meta], src)
+        store_host.export(db, store_host.cache_root() / "cache" / src)
+        return k
+
+    def views(self, pp, ss):
+        rows = {r["k"]: r for r in catalog.lake(f"SELECT k, join_p90_ms, join_old_ms FROM rows WHERE k IN "
+                                                f"({catalog.q(pp)}, {catalog.q(ss)});")}
+        scalars = {(r["k"], r["name"]): r["value"] for r in catalog.lake(
+            f"SELECT k, name, value FROM scalars WHERE k IN ({catalog.q(pp)}, {catalog.q(ss)}) "
+            "AND name IN ('join_p90_ms', 'join_old_ms');")}
+        return rows, scalars
+
+    def test_a_renamed_field_reads_under_its_current_name(self):
+        def old_pp(row):
+            return {**{n: v for n, v in row.items() if n != "join_p90_ms"}, "join_old_ms": 777}
+
+        pp = self.fold("suite/wt/renamed-pp", 0, old_pp)
+        ss = self.fold("suite/wt/renamed-ss", 2, lambda row: {**row, "join_old_ms": 555})
+        d = self.root / "renamed"
+        d.mkdir()
+        fields = Path(shutil.copy(catalog.FIELDS, d / "fields.toml"))
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(self.index()[0].failed, {})
+        # Without the rename, as written.
+        rows, scalars = self.views(pp, ss)
+        self.assertEqual({k: (r["join_p90_ms"], r["join_old_ms"]) for k, r in rows.items()},
+                         {pp: (None, 777), ss: (910, 555)})
+        fields.write_text(fields.read_text() + self.ENTRY)
+        with mock.patch.object(catalog, "FIELDS", fields), mock.patch.object(vocab, "NAMES", fields), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(vocab.renames(), [("join_old_ms", "join_p90_ms", ["ppspp"])])
+            got, _ = self.index()
+            self.assertTrue(got.docs)
+            self.assertEqual(got.sources, [])
+            rows, scalars = self.views(pp, ss)
+            # The ppspp job's under the current name; strims-sim's, no
+            # rename, as written.
+            self.assertEqual({k: (r["join_p90_ms"], r["join_old_ms"]) for k, r in rows.items()},
+                             {pp: (777, None), ss: (910, 555)})
+            self.assertEqual(scalars, {(pp, "join_p90_ms"): 777.0, (ss, "join_p90_ms"): 910.0,
+                                       (ss, "join_old_ms"): 555.0})
+            self.assertEqual(catalog.lake(f"SELECT join_p90_ms, join_old_ms FROM raw.rows WHERE k = {catalog.q(pp)};"),
+                             [{"join_p90_ms": None, "join_old_ms": 777.0}])
+            got = query.rows([("suite/wt/renamed-pp", pp), ("suite/wt/renamed-ss", ss)])
+            self.assertEqual((got[("suite/wt/renamed-pp", pp)]["join_p90_ms"],
+                              "join_old_ms" in got[("suite/wt/renamed-pp", pp)]), (777, False))
+            self.assertEqual({n: got[("suite/wt/renamed-ss", ss)][n] for n in ("join_p90_ms", "join_old_ms")},
+                             {"join_p90_ms": 910, "join_old_ms": 555})
+            doc = catalog.lake("SELECT description FROM metric_catalog WHERE tbl = 'rows' AND name = 'join_old_ms';")
+            self.assertEqual(doc, [{"description": "An older join p90. Retired: only the older runs of strims-sim and "
+                                                   "the ppspp sim hold it; `join_p90_ms` in the ppspp sim took its "
+                                                   "place, meaning the same, and the rows view reads its values under "
+                                                   "that name."}])
+        # fields.toml as it is: the views as written again.
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertTrue(self.index()[0].docs)
+        rows, _ = self.views(pp, ss)
+        self.assertEqual(rows[pp]["join_p90_ms"], None)
 
 
 class DocsFixture(Fixture):

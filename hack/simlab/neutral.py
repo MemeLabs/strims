@@ -7,7 +7,7 @@ series_meta stays the same byte for byte, but for what the change means
 to move (`expect`).
 
   check(bases=(), head="HEAD", cells=None, seeds=SEEDS, expect=(),
-        slots=None, mem_gib=None, log=None) -> Report
+        slots=None, mem_gib=None, log=None, renamed=()) -> Report
                  builds the head and each base (build), runs every cell at
                  every seed under each with every table and log on (run),
                  and compares each base's runs with the head's (compare);
@@ -32,7 +32,7 @@ to move (`expect`).
                  each binary dir's runs, kept by commit, cell, settings and
                  seed (target/neutral/runs/SHA12/), each run's tables and
                  its record: its row and its files' digests (manifest)
-  compare(a, b, expect) -> [Move]
+  compare(a, b, expect, renamed=None) -> [Move]
                  what moved from run `a` to run `b`
   manifest(dir) -> {name: {file, sha256, bytes, lines, zst?}}
                  every file of a run's tables dir by name, `.zst` left off,
@@ -44,7 +44,10 @@ presence, TABLE.COL for one column's values, type or presence, row.KEY
 for a field of the run's ROW, series_meta.KEY for one of series_meta's.
 `expect` allows a move by its name or its table's (`row` allows every
 field but trace and reads_hash, the behaviour itself, which only their
-own names allow).
+own names allow). `renamed` (`--renamed OLD=NEW`) compares a field of the
+base's row, or a key of its series_meta, that the head writes under
+another name under the head's: a rename moves nothing, the value it
+carries alone.
 
 A table that differs is diagnosed streaming, a row at a time: with the
 same row count, column by column at each row (TABLE.COL, its count and
@@ -565,6 +568,38 @@ class Expect:
         return sorted(self.names - self.used)
 
 
+class Renamed:
+    """The renames `--renamed` names: OLD=NEW, a field of the base's row
+    or a key of its series_meta (OLD) the head writes as NEW, compared
+    under NEW; comma-separated too. Which renamed a key is kept."""
+
+    def __init__(self, pairs=()):
+        self.names = {}
+        for x in pairs:
+            for s in x.split(","):
+                old, eq, new = s.strip().partition("=")
+                if s.strip() and not (eq and old and new and old != new):
+                    raise ValueError(f"--renamed {s.strip()}: OLD=NEW, two names")
+                if s.strip():
+                    self.names[old] = new
+        self.used = set()
+
+    def __call__(self, obj):
+        """`obj` (a base's row or series_meta) with its renamed keys under
+        their new names, but where it holds the new one too."""
+        out = {}
+        for k, v in obj.items():
+            n = self.names.get(k)
+            if n is not None and n not in obj:
+                self.used.add(k)
+                k = n
+            out[k] = v
+        return out
+
+    def unused(self):
+        return sorted(f"{o}={n}" for o, n in self.names.items() if o not in self.used)
+
+
 @dataclasses.dataclass
 class Move:
     """One thing that moved: its name (as `--expect` names it), its kind
@@ -893,11 +928,13 @@ def table_moves(table, a, b, expect, diagnose=True):
     return out
 
 
-def compare(a, b, expect):
+def compare(a, b, expect, renamed=None):
     """What moved from Run `a` to Run `b`: the row's fields, then each file
     that differs (by its decompressed digest), the tables diagnosed unless
-    the trace moved."""
-    out = keyed_moves("row", a.row, b.row, expect, HOST_KEYS)
+    the trace moved; `a`'s row fields and series_meta keys `renamed`
+    (Renamed) under the names `b` writes."""
+    renamed = renamed or Renamed()
+    out = keyed_moves("row", renamed(a.row), b.row, expect, HOST_KEYS)
     traced = any(m.name == "row.trace" for m in out)
     fa, fb = a.files, b.files
     for name in sorted(fa.keys() | fb.keys()):
@@ -919,7 +956,7 @@ def compare(a, b, expect):
             out += schema_moves(table, json.loads(a.path(name).read_text()), json.loads(b.path(name).read_text()),
                                 expect)
         elif name == "series_meta.json":
-            out += keyed_moves("series_meta", json.loads(a.path(name).read_text()),
+            out += keyed_moves("series_meta", renamed(json.loads(a.path(name).read_text())),
                                json.loads(b.path(name).read_text()), expect)
         else:
             out.append(Move(name, "bytes", expect(name), f"{name}: its bytes differ"))
@@ -968,6 +1005,7 @@ class Report:
     failures: list
     times: dict
     peak_mib: int
+    renamed: Renamed = dataclasses.field(default_factory=Renamed)
 
     def unexpected(self):
         return sum(p.unexpected() for p in self.pairs)
@@ -1045,6 +1083,9 @@ class Report:
             out.append(f"every move: --expect {' '.join(self.suggested())}")
         if self.expect.unused():
             out.append(f"--expect that allowed nothing: {' '.join(self.expect.unused())}")
+        if self.renamed.names:
+            out.append(f"--renamed {' '.join(f'{o}={n}' for o, n in self.renamed.names.items())}"
+                       + (f"; renamed nothing: {' '.join(self.renamed.unused())}" if self.renamed.unused() else ""))
         big = self.largest_run()
         if big:
             out.append(f"peak memory: this process {self.peak_mib} MiB; the largest run {big.record['rss_mb']} MiB "
@@ -1071,6 +1112,7 @@ class Report:
                 "pairs": [{"base": p.base, "head": p.head, "unexpected": p.unexpected(),
                            "runs": [run_json(r) for r in p.runs]} for p in self.pairs],
                 "expect": sorted(self.expect.names), "unused_expect": self.expect.unused(),
+                "renamed": self.renamed.names, "unused_renamed": self.renamed.unused(),
                 "suggested_expect": self.suggested(), "times": self.times, "peak_mib": self.peak_mib,
                 "unexpected": self.unexpected(), "exit": self.exit_code()}
 
@@ -1079,12 +1121,14 @@ def _log(s):
     print(s, file=sys.stderr, flush=True)
 
 
-def check(bases=(), head="HEAD", cells=None, seeds=SEEDS, expect=(), slots=None, mem_gib=None, log=None):
+def check(bases=(), head="HEAD", cells=None, seeds=SEEDS, expect=(), slots=None, mem_gib=None, log=None,
+          renamed=()):
     """The check, as the module docs say: a Report."""
     log = log or _log
     t0 = time.monotonic()
     cells = cell_set() if cells is None else cells
     expect = Expect(expect)
+    renamed = Renamed(renamed)
     prune()
     h, bs = pairs(bases, head)
     shas = [h, *(b for b in bs if b != h)]
@@ -1111,10 +1155,10 @@ def check(bases=(), head="HEAD", cells=None, seeds=SEEDS, expect=(), slots=None,
                     missing = ", ".join(x[:12] for x, r in ((b, ra), (h, rb)) if r is None)
                     diffs.append(RunDiff(c["name"], s, ra, rb, [], f"no run at {missing}"))
                     continue
-                diffs.append(RunDiff(c["name"], s, ra, rb, compare(ra, rb, expect)))
+                diffs.append(RunDiff(c["name"], s, ra, rb, compare(ra, rb, expect, renamed)))
         out.append(Pair(b, h, diffs))
     total = time.monotonic() - t0
     times = {"total": round(total, 1), "builds": round(t_builds, 1), "runs": round(t_runs, 1),
              "compare": round(total - t_builds - t_runs, 1)}
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024
-    return Report(h, out, cells, list(seeds), expect, builds, failures, times, peak)
+    return Report(h, out, cells, list(seeds), expect, builds, failures, times, peak, renamed)

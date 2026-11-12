@@ -39,6 +39,50 @@
           "title": "Writers",
           "type": "array"
         },
+        "retired": {
+          "default": [],
+          "description": "The sims whose older runs hold it, which no sim writes now: a retired name, kept so their rows and tables still read.",
+          "items": {
+            "enum": [
+              "strims-sim",
+              "ppspp"
+            ],
+            "type": "string"
+          },
+          "title": "Retired",
+          "type": "array"
+        },
+        "replaced_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "enum": [
+                  "strims-sim",
+                  "ppspp"
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A retired name's replacement, the name of its section that took its place: one, or a table by sim; none where no name took it.",
+          "title": "Replaced By"
+        },
+        "rename": {
+          "default": false,
+          "description": "A rows field's replacement means the same: the catalog's rows view reads its values as the replacement's, for the sims it is retired for (replaced_by's).",
+          "title": "Rename",
+          "type": "boolean"
+        },
         "type": {
           "description": "int, num, text, bool, ints (a list of integers), nums (a list of numbers), json (another JSON value).",
           "enum": [

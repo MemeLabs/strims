@@ -23,6 +23,17 @@
 #                 HAVE removal's declared-summary line, seed-cover), p4tf
 #                 (its park4 line, seed-cover-p4tf); a family's values a
 #                 line adds to main's are keyed by the line in its params
+#   retired       the sims whose older runs hold it, where no sim writes it
+#                 now (sims = []): a name whose meaning changes takes a new
+#                 one, and the old stays, retired, so older runs still read
+#   replaced_by   a retired name's replacement, a name of its section the
+#                 sims it replaces it for write now: one, or a table by
+#                 sim; left out where no name took its place
+#   rename        the replacement means the same: the catalog's rows view
+#                 (and scalars) read a retired row field's values under its
+#                 replacement's name for the sims it's replaced for, raw.rows
+#                 keeping what was written, and farm.py's reports read either
+#                 (vocab.resolve, vocab.aliases)
 #   type          int, num, text, bool, ints (a list of integers), nums (a
 #                 list of numbers), json (another JSON value)
 #   unit          ms, us, s, bytes, fraction, ...
@@ -1875,6 +1886,44 @@ type = "int"
 unit = "ms"
 description = "In WAN mode, the worst region's lag p99 in ms: per region, its honest viewers' lag p99 after their warm-ups (Sim::region_p99); 0 outside WAN mode."
 
+# --- retired ----------------------------------------------------------------
+# Names older runs' rows hold, which no sim writes now.
+
+[rows.startup_p50_ms]
+sims = []
+retired = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The lag p50 and p99 in ms (`startup_p50_ms`, `startup_p99_ms`) of the frames the first swarm's viewers read that were written in their own startup, each frame read counted: for a viewer there from the stream's start the swarm's first 30 s, for one that arrived later its first 10 s from its arrival; and of those written in their steady state after it, to their departure (`steady_p50_ms`, `steady_p99_ms`). The verdict's run metrics `lag_p99_startup_ms` and `lag_p99_steady_ms` split a run by its phases instead (`viewer_phases`), counting each honest viewer-second once."
+
+[rows.startup_p99_ms]
+sims = []
+retired = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The lag p50 and p99 in ms (`startup_p50_ms`, `startup_p99_ms`) of the frames the first swarm's viewers read that were written in their own startup, each frame read counted: for a viewer there from the stream's start the swarm's first 30 s, for one that arrived later its first 10 s from its arrival; and of those written in their steady state after it, to their departure (`steady_p50_ms`, `steady_p99_ms`). The verdict's run metrics `lag_p99_startup_ms` and `lag_p99_steady_ms` split a run by its phases instead (`viewer_phases`), counting each honest viewer-second once."
+
+[rows.steady_p50_ms]
+sims = []
+retired = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The lag p50 and p99 in ms (`startup_p50_ms`, `startup_p99_ms`) of the frames the first swarm's viewers read that were written in their own startup, each frame read counted: for a viewer there from the stream's start the swarm's first 30 s, for one that arrived later its first 10 s from its arrival; and of those written in their steady state after it, to their departure (`steady_p50_ms`, `steady_p99_ms`). The verdict's run metrics `lag_p99_startup_ms` and `lag_p99_steady_ms` split a run by its phases instead (`viewer_phases`), counting each honest viewer-second once."
+
+[rows.steady_p99_ms]
+sims = []
+retired = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The lag p50 and p99 in ms (`startup_p50_ms`, `startup_p99_ms`) of the frames the first swarm's viewers read that were written in their own startup, each frame read counted: for a viewer there from the stream's start the swarm's first 30 s, for one that arrived later its first 10 s from its arrival; and of those written in their steady state after it, to their departure (`steady_p50_ms`, `steady_p99_ms`). The verdict's run metrics `lag_p99_startup_ms` and `lag_p99_steady_ms` split a run by its phases instead (`viewer_phases`), counting each honest viewer-second once."
+
+[rows.up_filler]
+sims = []
+retired = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "With vnic's uplink trains (`STRIMS_SIM_EXP=trains`, `trains-seed` or `trains-slow`, a meter line's), the bytes of their filler records every host wrote on its keepalive port behind a train's probes, a part of `up_wire` that `up_vnic` left out."
+
 [meta.sim]
 sims = ["strims-sim", "ppspp"]
 type = "text"
@@ -3655,6 +3704,33 @@ description = "an answer_rate's: the node's queueing delay below the runner the 
 sims = ["strims-sim", "ppspp"]
 type = "bool"
 description = "an answer_rate's: the pace binds the answers"
+
+# Retired: columns older runs' seed logs hold, which no sim writes now.
+
+[columns.seed_decisions.delivered]
+sims = []
+retired = ["strims-sim", "ppspp"]
+replaced_by = "delivered_bps"
+type = "int"
+unit = "bytes/s"
+description = "a check's: the least delivery rate the holder's link read since the last check, in bytes per second"
+
+[columns.seed_decisions.capacity]
+sims = []
+retired = ["strims-sim", "ppspp"]
+replaced_by = "capacity_bps"
+type = "int"
+unit = "bytes/s"
+none = "0"
+description = "a window's: the capacity reading the budget was measured from, in bytes per second; 0 until measured"
+
+[columns.seed_decisions.rate]
+sims = []
+retired = ["strims-sim", "ppspp"]
+replaced_by = "rate_bps"
+type = "int"
+unit = "bytes/s"
+description = "an answer_rate's: the pace of the node's hybrid answers, in bytes per second"
 
 [tables.seed_sends]
 sims = ["strims-sim", "ppspp"]

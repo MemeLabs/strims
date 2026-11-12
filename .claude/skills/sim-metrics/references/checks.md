@@ -7,7 +7,7 @@ parent and the change, runs both sims' cells on the same seeds with
 every table and log on, and compares each run's trace and reads hash,
 every row key, every column of every table and `series_meta.json`:
 
-    python3 hack/sim-suite/suite.py neutral --base PARENT [--head REF] [--cells SET|CELL,...] [--seeds ...] [--expect TABLE.COL ...] [--json]
+    python3 hack/sim-suite/suite.py neutral --base PARENT [--head REF] [--cells SET|CELL,...] [--seeds ...] [--expect TABLE.COL ...] [--renamed OLD=NEW ...] [--json]
 
 - `--base` defaults to the head's parents, so a merge is checked against
   each of them; name a base to compare against another commit. `--head`
@@ -20,6 +20,10 @@ every row key, every column of every table and `series_meta.json`:
 - `--expect TABLE.COL` names a column the change means to add or move.
   Anything else that differs fails the check, and a difference always
   has a cause: the sims are deterministic.
+- `--renamed OLD=NEW` compares the base's row field (or series_meta
+  key) OLD with the head's NEW: a rename (`row-fields.md`) moves
+  nothing, and a value that moved under it is a move of NEW's. The
+  report names a rename that renamed nothing.
 - A vocabulary commit, one that changes how the sims name what they
   record and not what they record (fields.toml, the generated modules,
   their call sites), is neutral with no `--expect`, over the `vocab`

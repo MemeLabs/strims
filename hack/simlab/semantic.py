@@ -155,12 +155,17 @@ def problems(doc=None):
     if out:
         return out
     rows = vocab.declared()["rows"]
-    have = {"r": set(rows), "v": set(verdict.VERDICT_COLS) | set(run_metric_names()), "j": set(HOST_FIELDS)}
-    what = {"r": "fields.toml's rows", "v": "the verdicts' columns or run metrics", "j": "the job's host numbers"}
+    have = {"r": {n for n, (_, e) in rows.items() if not e.get("retired")},
+            "v": set(verdict.VERDICT_COLS) | set(run_metric_names()), "j": set(HOST_FIELDS)}
+    what = {"r": "fields.toml's current rows", "v": "the verdicts' columns or run metrics",
+            "j": "the job's host numbers"}
     for m in doc["scored"]:
         for t, name in sorted(fields_read(sql_of(m))):
             if name not in have[t]:
-                out.append(f"[[scored]] {m['name']}: {t}.{name} isn't one of {what[t]}")
+                cur = vocab.resolve(name) if t == "r" and name in rows else None
+                out.append(f"[[scored]] {m['name']}: {t}.{name} isn't one of {what[t]}"
+                           + ("" if cur is None else " (retired, with no replacement)" if cur == name
+                              else f" (retired: read {cur})"))
     names = run_metric_names()
     if sorted(doc["run_metrics"]) != sorted(names):
         out.append(f"[run_metrics]: {sorted(doc['run_metrics'])} aren't verdict.run_metrics' {sorted(names)}")

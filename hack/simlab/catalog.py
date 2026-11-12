@@ -819,14 +819,37 @@ METRICS_DOC = semantic.METRICS
 KNOB_PREFIX = {"strims-sim": "STRIMS_SIM_", "ppspp": "SIM_"}
 
 
+# A sim's name in the docs' prose.
+SIM_TEXT = {"strims-sim": "strims-sim", "ppspp": "the ppspp sim"}
+
+
 def field_text(e):
     """A declared name's (or a table's) doc, fields.toml's entry `e`: its
-    description, then each sim's note, after a semicolon where the
-    description isn't a sentence."""
+    description, then each sim's note, and a retired name's retirement
+    (retired_text), each after a semicolon where what's before isn't a
+    sentence."""
     out = e["description"]
     for s, n in sorted((e.get("notes") or {}).items()):
         out += f"{' ' if out.endswith('.') else '; '}{s}: {n}"
+    if e.get("retired"):
+        text = retired_text(e)
+        out += f" {text}" if out.endswith(".") else f"; {text[0].lower()}{text[1:]}"
     return out
+
+
+def retired_text(e):
+    """A retired name's (fields.toml's entry `e`), a sentence: whose older
+    runs hold it, and the name that took its place."""
+    r = e.get("replaced_by")
+    if r is None:
+        took = "no name took its place"
+    elif isinstance(r, dict):
+        took = ", ".join(f"`{n}` in {SIM_TEXT[s]}" for s, n in r.items()) + " took its place"
+    else:
+        took = f"`{r}` took its place"
+    if e.get("rename"):
+        took += ", meaning the same, and the rows view reads its values under that name"
+    return f"Retired: only the older runs of {' and '.join(SIM_TEXT[s] for s in e['retired'])} hold it; {took}."
 
 
 def knob_text(knobs, sims):
@@ -835,8 +858,7 @@ def knob_text(knobs, sims):
     in the ppspp sim"."""
     if not knobs:
         return ""
-    where = {"strims-sim": "strims-sim", "ppspp": "the ppspp sim"}
-    return ", with " + ", ".join(" or ".join(f"`{KNOB_PREFIX[s]}{k}=1`" for k in knobs) + f" in {where[s]}"
+    return ", with " + ", ".join(" or ".join(f"`{KNOB_PREFIX[s]}{k}=1`" for k in knobs) + f" in {SIM_TEXT[s]}"
                                  for s in sims)
 
 
@@ -1381,7 +1403,7 @@ def index(workers=None, progress=None, wait=True):
             gone_keys = [*moved, *(["docs_behind"] if remade else [])]
             with scratch() as tmp:
                 written("\n".join(["BEGIN;", *(catalogs_sql(cols, tmp, recount=bool(info.get("docs_behind")))
-                                               if remade else []),
+                                               + rows_views_sql(cols) if remade else []),
                                    *(scoring if "scoring_version" in moved else []),
                                    f"DELETE FROM raw.info WHERE key IN ({', '.join(q(k) for k in gone_keys)});",
                                    "INSERT INTO raw.info VALUES "
@@ -1945,6 +1967,52 @@ CREATE OR REPLACE VIEW main.catalog_info AS SELECT key, value FROM raw.info;
 """
 
 
+def renamed_select(t, have):
+    """main.rows' or main.scalars' select list over raw.`t` (`have` its
+    columns): `x.*`, a renamed field (vocab.renames, fields.toml's
+    `rename`) read under its current name for the jobs of the sims it's
+    renamed for, its own value where a row holds both. In rows its column
+    goes where every sim it's retired for has its values renamed, else
+    reads none for those that have; in scalars the name (a list's
+    `name[i]` too) is the current one."""
+    doc = vocab.fields(FIELDS)
+    renames = vocab.renames(doc=doc)
+    sims = lambda ss: f"j_.sim IN ({', '.join(q(s) for s in ss)})"
+    if t == "scalars":
+        whens = [f"WHEN {sims(ss)} AND (x.name = {q(old)} OR starts_with(x.name, {q(old + '[')})) "
+                 f"THEN {q(new)} || x.name[{len(old) + 1}:]" for old, new, ss in renames]
+        return f"x.* REPLACE (CASE {' '.join(whens)} ELSE x.name END AS name)" if whens else "x.*"
+    renames = [r for r in renames if r[0] in have]
+    if not renames:
+        return "x.*"
+    into, moved = {}, {}
+    for old, new, ss in renames:
+        into.setdefault(new, []).append((old, ss))
+        moved.setdefault(old, set()).update(ss)
+    retired = {old: set(doc["rows"][old]["retired"]) for old in moved}
+    exclude = [ident(o) for o in moved if moved[o] >= retired[o]]
+    replace, add = [], []
+    for o in moved:
+        if moved[o] < retired[o]:
+            replace.append(f"CASE WHEN {sims(sorted(moved[o]))} THEN NULL ELSE x.{ident(o)} END AS {ident(o)}")
+    for new, olds in into.items():
+        own = [f"x.{ident(new)}"] if new in have else []
+        case = " ".join(f"WHEN {sims(ss)} THEN coalesce({', '.join(own + [f'x.{ident(o)}'])})" for o, ss in olds)
+        expr = f"CASE {case} ELSE {own[0] if own else 'NULL'} END AS {ident(new)}"
+        (replace if own else add).append(expr)
+    return ("x.*" + (f" EXCLUDE ({', '.join(exclude)})" if exclude else "")
+            + (f" REPLACE ({', '.join(replace)})" if replace else "") + "".join(f", {a}" for a in add))
+
+
+def rows_views_sql(cols):
+    """main.rows and main.scalars, made again: the jobs' rows, renamed
+    fields read under their current names (renamed_select). fields.toml's
+    renames are in its docs (retired_text), so an index that makes the doc
+    tables again makes these too."""
+    return [f"CREATE OR REPLACE VIEW main.{t} AS SELECT {renamed_select(t, cols[t])} {canon(t)};"
+            for t in ("rows", "scalars") if t in cols]
+
+
 def canon(t):
     """A raw table's rows of the jobs' own sources (jobs.src). An inner
     join, a job a row of jobs: a filter on k reaches jobs through it, and
@@ -2073,9 +2141,7 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=()):
     out += commits_sql(tmp, ins, parsed, commits)
     for t, name in sim_tables(cols).items():
         out.append(view_sql(t, cols[t], name, cols.get("viewers", {}), cols.get("arrivals", {})))
-    for t in ("rows", "scalars"):
-        if t in cols:
-            out.append(f"CREATE OR REPLACE VIEW main.{t} AS SELECT x.* {canon(t)};")
+    out += rows_views_sql(cols)
     for t in VERDICT_TABLES:
         if t in cols:
             out.append(f"CREATE OR REPLACE VIEW main.{t}_all AS SELECT x.* {canon(t)};")
@@ -2275,11 +2341,13 @@ TABLE_DOCS = {
     "rows": (
         "view", "a job", "k", "jobs USING (k, src)",
         "Each job's row (the sims' one-line JSON result), a column a field: numbers DOUBLE, lists of them "
-        "DOUBLE[], strings VARCHAR. Fields a sim or a commit doesn't write are NULL. metric_catalog describes each."),
+        "DOUBLE[], strings VARCHAR. Fields a sim or a commit doesn't write are NULL. metric_catalog describes each. "
+        "A field fields.toml renames (a retired name whose replacement means the same) reads under its current "
+        "name for the sims it's renamed for; raw.rows holds the rows as written."),
     "scalars": (
         "view", "a number of a job's row", "k, name", "jobs USING (k, src)",
         "The rows' numbers in long form, as simdb.py folds them: bools 1.0, list elements name[i], non-finite "
-        "numbers and strings left out."),
+        "numbers and strings left out; a renamed field under its current name, as in rows."),
     "verdicts": (
         "view", "a job", "k", "jobs USING (k, src)",
         "analyze.py's verdict and run metrics of each job (simdb.py's derived `verdicts`), of the current "

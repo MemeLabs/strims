@@ -37,6 +37,19 @@ fields.toml) and rustfmt; the script runs under hack/'s venv for them.
   declared(path=None, doc=None)
                                every name fields.toml declares, by where
                                it's recorded, each with its entry
+  resolve(name, sim=None, section="rows", doc=None)
+                               a recorded name's current one: a retired
+                               name's replacement (for `sim`), else itself
+  renames(section="rows", doc=None)
+                               the rows' renames: [(old, new, sims)]
+  canonical_row(row, sim, doc=None)
+                               a sim's row with its renamed fields under
+                               their current names, as the catalog's rows
+                               view reads it
+  aliases(name, section="rows", doc=None)
+                               the names a row may hold `name`'s value
+                               under: its current one first, then the
+                               retired names renamed into it
   field_outputs(path=None)     fields.toml's files {path: text}
 
   load(path=None) -> dict      the document (DOCUMENT by default), checked:
@@ -735,8 +748,9 @@ def declared(path=None, doc=None):
     """Every name fields.toml (`doc`, parsed, else the file at `path`)
     declares, by where it's recorded: {"rows": {name: (id, entry)}, "meta":
     {...}, "columns": {table: {name: (id, entry)}}}. A family's names are
-    those it holds for any sim or line (expand), the first entry to hold a
-    name keeping it; a name a writer adds (`writers`) is its own."""
+    those it holds for any sim or line (expand), or that older runs of a
+    sim hold (`retired`), the first entry to hold a name keeping it; a name
+    a writer adds (`writers`) is its own."""
     doc = fields(path) if doc is None else doc
 
     def names(entries):
@@ -745,7 +759,7 @@ def declared(path=None, doc=None):
             if e.get("writers") and "{" not in key:
                 out.setdefault(key, (key, e))
             for who in (*SIMS, *LINES):
-                if who in e.get("sims", ()) or who in e.get("lines", ()) or (
+                if who in e.get("sims", ()) or who in e.get("lines", ()) or who in e.get("retired", ()) or (
                         who in LINES and "{" in key and products(e.get("params") or {}, who)):
                     for n in expand(key, e, who):
                         out.setdefault(n, (key, e))
@@ -753,6 +767,62 @@ def declared(path=None, doc=None):
 
     return {"rows": names(doc.get("rows", {})), "meta": names(doc.get("meta", {})),
             "columns": {t: names(cols) for t, cols in doc.get("columns", {}).items()}}
+
+
+def _section(doc, section):
+    """fields.toml's entries of `section`: rows, meta or columns.<table>."""
+    if section.startswith("columns."):
+        return doc.get("columns", {}).get(section.split(".", 1)[1], {})
+    return doc.get(section, {})
+
+
+def resolve(name, sim=None, section="rows", doc=None):
+    """`name`'s current name in `section` (rows, meta or columns.<table>):
+    a retired name's replacement (spec.problems holds it to one its sims
+    write now), where it is by sim `sim`'s, or with no `sim` the one every
+    sim's is; else `name` itself."""
+    r = (_section(fields() if doc is None else doc, section).get(name) or {}).get("replaced_by")
+    if isinstance(r, dict):
+        r = r.get(sim) if sim is not None else (next(iter(r.values())) if len(set(r.values())) == 1 else None)
+    return r or name
+
+
+def renames(section="rows", doc=None):
+    """`section`'s renames, [(old, new, sims)]: each retired name whose
+    replacement means the same (`rename`), with the sims it is retired
+    for, its replacement by sim resolved to the current name."""
+    doc = fields() if doc is None else doc
+    out = []
+    for key, e in _section(doc, section).items():
+        if not e.get("rename"):
+            continue
+        by = {}
+        for s in e.get("retired", ()):
+            by.setdefault(resolve(key, s, section, doc), []).append(s)
+        out += [(key, new, sims) for new, sims in by.items() if new != key]
+    return out
+
+
+def canonical_row(row, sim, doc=None):
+    """`row`, a row `sim` (strims-sim or ppspp) wrote, with its renamed
+    fields (renames) under their current names, as the catalog's rows view
+    reads them: a retired name's value under its replacement's, the
+    replacement's own where the row holds both."""
+    out = dict(row)
+    for old, new, sims in renames(doc=doc):
+        if sim in sims and old in out:
+            v = out.pop(old)
+            out.setdefault(new, v)
+    return out
+
+
+def aliases(name, section="rows", doc=None):
+    """The names a row may hold `name`'s value under, whichever sim wrote
+    it: its current one (resolve's, the one every sim's is) first, then
+    the retired names renamed into it, in fields.toml's order."""
+    doc = fields() if doc is None else doc
+    cur = resolve(name, None, section, doc)
+    return [cur, *dict.fromkeys(old for old, new, _ in renames(section, doc) if new == cur)]
 
 
 def camel(name):

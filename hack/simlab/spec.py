@@ -54,6 +54,14 @@ class Entry(BaseModel):
     writers: list[Writer] = Field([], description="The lab's programs that add it to a sim's row, no sim writing it: "
                                                   "suite (hack/simlab/suite.py's local runs). Its name starts with "
                                                   "an underscore, which a sim's never does.")
+    retired: list[Sim] = Field([], description="The sims whose older runs hold it, which no sim writes now: a "
+                                               "retired name, kept so their rows and tables still read.")
+    replaced_by: str | dict[Sim, str] | None = Field(
+        None, description="A retired name's replacement, the name of its section that took its place: one, or a "
+                          "table by sim; none where no name took it.")
+    rename: bool = Field(False, description="A rows field's replacement means the same: the catalog's rows view "
+                                            "reads its values as the replacement's, for the sims it is retired "
+                                            "for (replaced_by's).")
     type: Type = Field(description="int, num, text, bool, ints (a list of integers), nums (a list of numbers), "
                                    "json (another JSON value).")
     unit: str | None = None
@@ -164,12 +172,23 @@ def entry_problems(where, key, e, sims_of_table=None):
             out.append(f"{where}: params, code or consts on a name")
     if e.writers and family:
         out.append(f"{where}: a family a writer adds")
-    if not e.sims and not e.lines and not e.writers:
-        out.append(f"{where}: no sims, no lines and no writers")
+    if not e.sims and not e.lines and not e.writers and not e.retired:
+        out.append(f"{where}: no sims, no lines, no writers and not retired")
     if len(set(e.sims)) != len(e.sims) or len(set(e.lines)) != len(e.lines):
         out.append(f"{where}: a sim or line twice")
+    if e.retired and (e.sims or e.lines or e.writers):
+        out.append(f"{where}: retired, and written by a sim, a line or a writer")
+    if e.replaced_by is not None and not e.retired:
+        out.append(f"{where}: replaced_by on a name that isn't retired")
+    if isinstance(e.replaced_by, dict) and set(e.replaced_by) - set(e.retired):
+        out.append(f"{where}: replaced_by for {sorted(set(e.replaced_by) - set(e.retired))}, which it isn't "
+                   f"retired for")
+    if e.rename and (e.replaced_by is None or not where.startswith("[rows.")):
+        out.append(f"{where}: rename without replaced_by, or off the rows")
+    if e.replaced_by is not None and family:
+        out.append(f"{where}: replaced_by on a family")
     for s in e.notes:
-        if s not in e.sims and not e.lines:
+        if s not in e.sims and s not in e.retired and not e.lines:
             out.append(f"{where}: a note for {s}, which doesn't write it")
     if sims_of_table is not None:
         extra = set(e.sims) - set(sims_of_table)
@@ -204,6 +223,19 @@ def problems(doc):
         written = {s for e in cols.values() for s in e.sims}
         if set(tab.sims) != written:
             out.append(f"[tables.{t}]: sims {tab.sims} aren't its columns' {sorted(written)}")
+    # a retired name's replacement: a name of its section that each sim it
+    # replaces the name for writes now
+    sections = [("rows", doc.rows), ("meta", doc.meta)] + [(f"columns.{t}", c) for t, c in doc.columns.items()]
+    for section, entries in sections:
+        written = {s: {n for key, e in entries.items() if s in e.sims for n in expand(key, e.params, s)}
+                   for s in SIMS}
+        for key, e in entries.items():
+            if e.replaced_by is None:
+                continue
+            by = e.replaced_by if isinstance(e.replaced_by, dict) else dict.fromkeys(e.retired, e.replaced_by)
+            for s, n in by.items():
+                if n not in written[s]:
+                    out.append(f"[{section}.{key}]: replaced_by {n}, which {s} doesn't write")
     for t, tab in doc.tables.items():
         if t not in doc.columns:
             out.append(f"[tables.{t}]: no columns")

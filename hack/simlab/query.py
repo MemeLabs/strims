@@ -185,9 +185,10 @@ def records(sql):
 
 def rows(pairs, series=False):
     """The rows of `pairs` of (src, k) in the cache, {(src, k): row}: each
-    the sim's row (less its series) with `_verdict` and `_metrics`
-    (analyze.py) from its tables' series, `_wall_s` and `_rss_mb`, and
-    with `series` the series as `_series`."""
+    the sim's row (less its series), its renamed fields under their current
+    names (vocab.canonical_row, as the catalog's rows view), with
+    `_verdict` and `_metrics` (analyze.py) from its tables' series,
+    `_wall_s` and `_rss_mb`, and with `series` the series as `_series`."""
     pairs = sorted(set(pairs))
     runs = files(sorted({s for s, _ in pairs}), "runs")
     if not pairs or not runs:
@@ -195,9 +196,9 @@ def rows(pairs, series=False):
     with store.installed():
         got = load_series(pairs)
     out = {}
-    for r in records(f"SELECT src, k, row_json, wall_s, rss_mb FROM read_parquet({plist(runs)}, union_by_name=true) "
-                     f"SEMI JOIN {wanted(pairs)} USING (src, k);"):
-        row = json.loads(r["row_json"])
+    for r in records(f"SELECT src, k, sim, row_json, wall_s, rss_mb FROM read_parquet({plist(runs)}, "
+                     f"union_by_name=true) SEMI JOIN {wanted(pairs)} USING (src, k);"):
+        row = vocab.canonical_row(json.loads(r["row_json"]), verdict.SIM_NAMES.get(r["sim"], r["sim"]))
         row["_wall_s"], row["_rss_mb"] = r["wall_s"], r["rss_mb"]
         _, s = got.get((r["src"], r["k"]), ({}, None))
         row["_verdict"], row["_metrics"] = judge(s)

@@ -16,13 +16,19 @@ crates/strims-wan/fields.toml.
   Naming       fields.toml's names: a unit suffix agrees with the declared
                unit (and names that all carry one declare it), percentiles
                are _pNN, families hold names for each of their sims and
-               lines, every entry or table no sim writes names its lines
-               or its writers, and a writer's names (only) start with _
+               lines (a retired name, older runs', keeps its own), every
+               entry or table no sim writes names its lines, its writers
+               or the sims whose older runs hold it, and a writer's names
+               (only) start with _
+  Retired      the spec's rules of retired, replaced_by and rename: each
+               kind of break is found
   FarmNames    the row fields the farm reads are declared rows: worker.py's
                THIN, those store_host.py reads of a row, farm.py's report
                defaults, and every test matrix's [report] and [[derive]]
                fields (farm.py's Matrix.row_fields); the farm's code is
-               read, never changed
+               read, never changed; the controller reads a renamed field
+               by its current name (row_fields keep its older names too,
+               current_row and derived_env read them under it)
 
   python3 hack/simlab/tests/test_semantic.py
 """
@@ -34,6 +40,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 HACK = HERE.parents[1]
@@ -89,7 +96,13 @@ class Problems(unittest.TestCase):
         cases = []
         d = copy.deepcopy(doc)
         d["scored"][0]["sql"] = "r.no_such_field"
-        cases.append((d, "[[scored]] lag_p50_ms: r.no_such_field isn't one of fields.toml's rows"))
+        cases.append((d, "[[scored]] lag_p50_ms: r.no_such_field isn't one of fields.toml's current rows"))
+        # A retired name: older runs hold it, and the rows view reads a
+        # renamed one under its replacement's name, which a metric reads.
+        d = copy.deepcopy(doc)
+        d["scored"][0]["sql"] = "r.startup_p99_ms"
+        cases.append((d, "[[scored]] lag_p50_ms: r.startup_p99_ms isn't one of fields.toml's current rows "
+                         "(retired, with no replacement)"))
         d = copy.deepcopy(doc)
         del d["run_metrics"]["osc_acf"]
         cases.append((d, "[run_metrics]: "))
@@ -170,10 +183,58 @@ class Naming(unittest.TestCase):
         for where, key, e in [*self.entries(), *((f"tables.{t}", t, tab) for t, tab in doc["tables"].items())]:
             if not e["sims"]:
                 with self.subTest(where):
-                    self.assertTrue(e.get("lines") or e.get("writers"))
+                    self.assertTrue(e.get("lines") or e.get("writers") or e.get("retired"))
             # A writer's name is apart from a sim's.
             with self.subTest(where, underscore=True):
                 self.assertEqual(key.startswith("_"), bool(e.get("writers")))
+
+
+class Retired(unittest.TestCase):
+    """fields.toml's retired names, as spec.check holds them: no sim, line
+    or writer writes one; a replacement only on a retired name, by sim only
+    for the sims it's retired for, a name of its section those sims write,
+    never a family's; a rename, a rows field's, with its replacement."""
+
+    def test_each_break_is_found(self):
+        from simlab import spec
+        doc = vocab.fields()
+        self.assertEqual(spec.check(doc), [])
+        base = {"type": "int", "description": "x"}
+        cases = [
+            ("rows", "x", {**base, "sims": ["ppspp"], "retired": ["strims-sim"]},
+             "[rows.x]: retired, and written by a sim, a line or a writer"),
+            ("rows", "x", {**base, "sims": [], "writers": ["suite"], "retired": ["ppspp"]},
+             "[rows.x]: retired, and written by a sim, a line or a writer"),
+            ("rows", "x", {**base, "sims": ["ppspp"], "replaced_by": "lag_p99_ms"},
+             "[rows.x]: replaced_by on a name that isn't retired"),
+            ("rows", "x", {**base, "sims": [], "retired": ["ppspp"], "replaced_by": {"strims-sim": "lag_p99_ms"}},
+             "[rows.x]: replaced_by for ['strims-sim'], which it isn't retired for"),
+            ("rows", "x", {**base, "sims": [], "retired": ["ppspp"], "rename": True},
+             "[rows.x]: rename without replaced_by, or off the rows"),
+            ("rows", "x", {**base, "sims": [], "retired": ["strims-sim"], "replaced_by": "worst_region_p99_ms"},
+             "[rows.x]: replaced_by worst_region_p99_ms, which strims-sim doesn't write"),
+            ("rows", "x", {**base, "sims": [], "retired": ["ppspp"], "replaced_by": "startup_p99_ms"},
+             "[rows.x]: replaced_by startup_p99_ms, which ppspp doesn't write"),
+            ("rows", "x_{q}", {**base, "sims": [], "retired": ["ppspp"], "params": {"q": ["a"]},
+                               "replaced_by": "lag_p99_ms"},
+             "[rows.x_{q}]: replaced_by on a family"),
+            ("seed_decisions", "x", {**base, "sims": [], "retired": ["ppspp"], "replaced_by": "rate_bps",
+                                     "rename": True},
+             "[columns.seed_decisions.x]: rename without replaced_by, or off the rows"),
+            ("seed_decisions", "x", {**base, "sims": [], "retired": ["ppspp"], "replaced_by": "lag_p99_ms"},
+             "[columns.seed_decisions.x]: replaced_by lag_p99_ms, which ppspp doesn't write"),
+        ]
+        for where, key, e, want in cases:
+            d = copy.deepcopy(doc)
+            (d["rows"] if where == "rows" else d["columns"][where])[key] = e
+            with self.subTest(want):
+                got = spec.check(d)
+                self.assertIn(want, got)
+        # A rename by sim, each sim's replacement one it writes, is sound.
+        d = copy.deepcopy(doc)
+        d["rows"]["x"] = {**base, "sims": [], "retired": ["strims-sim", "ppspp"], "rename": True,
+                          "replaced_by": {"strims-sim": "lag_p99_ms", "ppspp": "worst_region_p99_ms"}}
+        self.assertEqual(spec.check(d), [])
 
 
 FARM = HACK / "sim-farm"
@@ -228,6 +289,29 @@ class FarmNames(unittest.TestCase):
             with self.subTest(matrix=path.name):
                 self.assertEqual(sorted(set(m.row_fields()) - self.rows), [])
         self.assertGreater(tests, 30)
+
+    def test_the_controller_reads_a_renamed_field_by_its_current_name(self):
+        farm = farm_module("farm")
+        doc = copy.deepcopy(vocab.fields())
+        doc["rows"]["lag_old_ms"] = {"sims": [], "retired": ["ppspp"], "replaced_by": "lag_p99_ms", "rename": True,
+                                     "type": "int", "unit": "ms", "description": "x"}
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(vocab, "fields", lambda path=None: doc):
+            path = Path(d) / "m.toml"
+            path.write_text('package = "strims-ppspp"\ntarget = "sim"\ntest = "sim_job"\n[arms]\na = "HEAD"\n'
+                            '[report]\ncolumns = ["lag_p99_ms:median", "delivery:mean"]\n')
+            m = farm.Matrix(str(path))
+            self.assertEqual(m.sim, "ppspp")
+            # An older binary's row holds the retired name: the index line keeps it.
+            self.assertEqual(m.row_fields(), ["lag_p99_ms", "lag_old_ms", "delivery"])
+            self.assertEqual(farm.current_row("ppspp", {"lag_old_ms": 900, "delivery": 1.0}),
+                             {"lag_p99_ms": 900, "delivery": 1.0})
+            # A testbed's row, no sim's, reads as written.
+            self.assertEqual(farm.current_row(None, {"lag_old_ms": 900}), {"lag_old_ms": 900})
+            job = farm.Job(id="j", arm="a", commit="c", source="s", bin="b", test="t", env=(),
+                           derive=(("SIM_X", "lag_old_ms:round"), ("SIM_Y", "lag_p99_ms")))
+            for row in ({"lag_old_ms": 899.6}, {"lag_p99_ms": 899.6}):
+                with self.subTest(row=row):
+                    self.assertEqual(farm.derived_env(job, row, "ppspp"), ({"SIM_X": "900", "SIM_Y": "899.6"}, None))
 
 
 if __name__ == "__main__":

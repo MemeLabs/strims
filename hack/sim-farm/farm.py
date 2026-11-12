@@ -499,6 +499,10 @@ import worker
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
+# fields.toml's names (simlab.vocab, stdlib alone): a matrix's row fields
+# read by their current names.
+sys.path.append(str(HERE.parent))
+from simlab import vocab  # noqa: E402
 
 
 def main_checkout(root: Path) -> Path:
@@ -653,6 +657,8 @@ PENDING = "pending.jsonl"
 WIND_DOWN_S = 120
 # Each sim's knob naming the dir it writes its tables to (hack/sim-db).
 OUT_KNOBS = {"strims-ppspp": "SIM_OUT", "strims-sim": "STRIMS_SIM_OUT"}
+# A test matrix's sim, as fields.toml names it, by its package.
+SIM_OF_PACKAGE = {"strims-ppspp": "ppspp", "strims-sim": "strims-sim"}
 # Every test index line's key, matrix, offset in its index.jsonl, job id
 # and time, a line each (row_index), and how far each matrix's index.jsonl
 # has been read into it.
@@ -760,12 +766,23 @@ def round_half_away(x: float) -> int:
     return int(math.copysign(r, x))
 
 
-def derived_env(job: "Job", row: dict) -> tuple[dict[str, str], str | None]:
-    """The variables `job` takes from the row of the job it waits on, or
-    why it can't."""
+def current_row(sim: str | None, row: dict) -> dict:
+    """A row `sim` wrote (None: a testbed's, read as it is), its renamed
+    fields under their current names (vocab.canonical_row), as the
+    catalog's rows view reads it."""
+    return row if sim is None else vocab.canonical_row(row, sim)
+
+
+def derived_env(job: "Job", row: dict, sim: str | None = None) -> tuple[dict[str, str], str | None]:
+    """The variables `job` takes from the row of the job it waits on (a
+    row `sim` wrote), or why it can't; a field by its current name
+    (vocab.resolve), the row's renamed fields under theirs (current_row)."""
     out = {}
+    row = current_row(sim, row)
     for var, spec in job.derive:
         field, _, how = spec.partition(":")
+        if sim is not None:
+            field = vocab.resolve(field, sim)
         v = row.get(field)
         if how == "round":
             if isinstance(v, bool) or not isinstance(v, (int, float)):
@@ -810,11 +827,14 @@ class Matrix:
         self.arms = {k: str(v) for k, v in m["arms"].items()}
         self.env = {k: str(v) for k, v in m.get("env", {}).items()}
         self.axes = {k: [str(x) for x in v] for k, v in m.get("axes", {}).items()}
+        # The sim whose rows its jobs write, None for a testbed's.
+        self.sim: str | None = None
         if self.kind == "testbed":
             self.parse_testbed(m)
             columns = TESTBED_COLUMNS
         elif self.kind == "test":
             self.package = m["package"]
+            self.sim = SIM_OF_PACKAGE.get(self.package, self.package)
             self.target = m["target"]
             test = m["test"]
             self.tests = [str(t) for t in test] if isinstance(test, list) else [str(test)]
@@ -886,13 +906,15 @@ class Matrix:
 
     def row_fields(self) -> list[str]:
         """The fields of its rows the controller reads, which a test job's
-        index line keeps: its [report] columns' and [[derive]] tables'."""
+        index line keeps: its [report] columns' and [[derive]] tables', each
+        by every name a row may hold it under (vocab.aliases: an older
+        binary's row its retired one)."""
         out = []
         for spec in self.columns:
             out += spec.partition(":")[0].split("/")
         for d in self.derives:
             out += [s.partition(":")[0] for _, s in d.set]
-        return list(dict.fromkeys(out))
+        return list(dict.fromkeys(n for f in out for n in vocab.aliases(f)))
 
     def derive_of(self, env: dict[str, str]) -> Derive | None:
         hits = [d for d in self.derives if d.matches(env)]
@@ -2556,7 +2578,8 @@ class Run:
         ready = []
         for item in self.waiting.pop(jid, []):
             if item.job.id not in self.derived:
-                took, why = derived_env(item.job, self.rows[jid]["row"])
+                owner = self.owners.get(jid)
+                took, why = derived_env(item.job, self.rows[jid]["row"], owner[0][0].sim if owner else None)
                 if why is not None:
                     self.give_up(None, item, {"error": f"waited on {jid}: {why}"})
                     continue
@@ -4390,20 +4413,23 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
         groups.setdefault(tuple(value(rec, g) for g in group), []).append(rec)
 
     heads, cols = [], []
+    # A column's fields by their current names (vocab.resolve), as its
+    # rows hold them (current_row).
+    name = (lambda f: f) if matrix.sim is None else (lambda f: vocab.resolve(f, matrix.sim))
     for spec in matrix.columns:
         field, _, aggs = spec.partition(":")
         if aggs == "ratio":
             num, den = field.split("/")
             heads.append(f"{field} %")
-            cols.append(("ratio", num, den))
+            cols.append(("ratio", name(num), name(den)))
         else:
             for a in (aggs or "mean").split(","):
                 heads.append(f"{field} {a}")
-                cols.append(("agg", field, a))
+                cols.append(("agg", name(field), a))
     print("| " + " | ".join([*map(short, group), "n", *heads]) + " |")
     print("|" + "---|" * (len(group) + 1 + len(heads)))
     for key, recs in groups.items():
-        rows = [r["row"] for r in recs]
+        rows = [current_row(matrix.sim, r["row"]) for r in recs]
         cells = [*key, str(len(rows))]
         for kind, a, b in cols:
             if kind == "ratio":

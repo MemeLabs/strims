@@ -68,6 +68,27 @@ don't).
 9. `catalog.scoring_version` hashes METRICS and scoring.sql, so the
    catalog's scoring is made again at the next index.
 
+## Renaming or retiring a name
+
+10. **A name is never reused.** A field, a meta key or a table's column
+    whose meaning changes, or that the sims stop writing while older
+    runs hold it, stays in fields.toml, retired: `sims = []`, `retired`
+    the sims whose older runs hold it, `replaced_by` the name that took
+    its place (a table by sim where each sim's is another; left out
+    where none did), and its description what it held. `spec.check`
+    holds a replacement to a name its sims write now, and
+    `semantic.problems` a metric to current names.
+11. **A rename** (`rename = true`, rows only) is a replacement that
+    means the same. The catalog's rows and scalars views, `query.rows`
+    and farm.py's reports read an older run's value under the current
+    name for the sims it's renamed for (`vocab.canonical_row`), raw.rows
+    keeping what was written, and a matrix may name either
+    (`vocab.resolve`). One commit renames the field in both sims, with
+    METRICS reading the new name; it is neutral with `--renamed
+    OLD=NEW` (`checks.md`), and the scorecards golden shows it moves no
+    score. A replacement whose meaning differs is no rename: `--expect`
+    names the fields that moved, and the commit says by how much.
+
 ## Checks
 
 - `golden.py check`. The scorecards set compares the lake's macros with

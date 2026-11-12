@@ -3,9 +3,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """simlab.neutral: what moved between two runs' job dirs (identical; a
 column's values, expected or not; a `.zst` table; a table gone or new;
-rows inserted; a new column; the row's fields and the trace; series_meta)
-in flat memory, the check end to end over stand-in sims (exit statuses,
-kept runs, a failed run), and the commits it checks (a merge's parents,
+rows inserted; a new column; the row's fields and the trace; series_meta;
+a renamed field or key) in flat memory, the check end to end over
+stand-in sims (exit statuses, kept runs, a failed run, a rename), and the
+commits it checks (a merge's parents,
 the working tree's snapshot) in a scratch repository:
 
   python3 hack/simlab/tests/test_neutral.py
@@ -221,6 +222,30 @@ class Compare(unittest.TestCase):
         self.assertEqual([(m.name, m.kind, m.expected) for m in moves],
                          [("series_meta.asks_lost", "value", False), ("series_meta.haves_lost", "new", True)])
 
+    def test_renamed(self):
+        """A row field or series_meta key renamed (Renamed) is compared
+        under its new name: the rename moves nothing, its value may."""
+        a, b = self.pair(base={"row": {"relay_sheds": 4}, "meta": {"sim": "ppspp", "asks_lost": 0, "old_lost": 1}},
+                         head={"row": {"sheds_sent": 4}, "meta": {"sim": "ppspp", "asks_lost": 0, "lost": 1}})
+        self.assertEqual(sorted((m.name, m.kind) for m in neutral.compare(a, b, neutral.Expect())),
+                         [("row.relay_sheds", "gone"), ("row.sheds_sent", "new"), ("series_meta.lost", "new"),
+                          ("series_meta.old_lost", "gone")])
+        renamed = neutral.Renamed(["relay_sheds=sheds_sent", "old_lost=lost,no_such=x"])
+        self.assertEqual(neutral.compare(a, b, neutral.Expect(), renamed), [])
+        self.assertEqual(renamed.unused(), ["no_such=x"])
+        # A value moved under the new name is a move, the new name's.
+        b2 = job(self.root, "b2", row={"sheds_sent": 5}, meta={"sim": "ppspp", "asks_lost": 0, "lost": 1})
+        self.assertEqual([(m.name, m.kind, m.text) for m in neutral.compare(a, b2, neutral.Expect(), renamed)],
+                         [("row.sheds_sent", "value", "row.sheds_sent: 4 -> 5")])
+        # A base that holds the new name too keeps both as written.
+        a2 = job(self.root, "a2", row={"relay_sheds": 4, "sheds_sent": 4}, meta={"sim": "ppspp", "asks_lost": 0,
+                                                                                 "lost": 1})
+        self.assertEqual([(m.name, m.kind) for m in neutral.compare(a2, b, neutral.Expect(), renamed)],
+                         [("row.relay_sheds", "gone")])
+        for bad in ("x", "x=", "=y", "x=x"):
+            with self.subTest(bad):
+                self.assertRaises(ValueError, neutral.Renamed, [bad])
+
     def test_flat_memory(self):
         """A table diagnosed whole would hold every row; streaming holds a
         partition's hashes at a time, so four times the rows take no more
@@ -266,7 +291,8 @@ rtt = 21 if variant == "moved" and seed == 2 else 20
 with open(os.path.join(out, "asks.csv"), "w") as f:
     f.write("t_ms,node,rtt_ms\\n" + "".join(f"{{t}},1,{{rtt if t == 5 else 20}}\\n" for t in range(10)))
 open(os.path.join(out, "series_meta.json"), "w").write(json.dumps({{"seed": seed}}))
-print("ROW " + json.dumps({{"trace": f"t{{seed}}", "reads_hash": "r", "timeouts": seed, "wall_secs": 0.1}}))
+timeouts = "timeouts_all" if variant == "renamed" else "timeouts"
+print("ROW " + json.dumps({{"trace": f"t{{seed}}", "reads_hash": "r", timeouts: seed, "wall_secs": 0.1}}))
 """
 
 
@@ -294,9 +320,9 @@ class Check(unittest.TestCase):
             p.stop()
         self.tmp.cleanup()
 
-    def check(self, expect=()):
+    def check(self, expect=(), renamed=()):
         return neutral.check(["a"], "b", neutral_cells([self.cell]), [1, 2], expect, slots=2, mem_gib=4,
-                             log=lambda s: None)
+                             log=lambda s: None, renamed=renamed)
 
     def runs(self, sha):
         f = self.bins[sha] / "RUNS"
@@ -324,6 +350,22 @@ class Check(unittest.TestCase):
         self.assertEqual((j["exit"], j["unexpected"], j["suggested_expect"]), (0, 0, ["asks.rtt_ms"]))
         self.assertEqual(j["pairs"][0]["runs"][1]["moves"][0]["detail"]["sample"][0]["row"], 5)
         json.dumps(j)
+
+    def test_renamed(self):
+        """The head writes the base's row field `timeouts` as
+        `timeouts_all`: unexpected moves, but under --renamed none."""
+        (self.bins["b" * 40] / "VARIANT").write_text("renamed")
+        r = self.check()
+        self.assertEqual(r.exit_code(), 1)
+        self.assertEqual([sorted((m.name, m.kind) for m in d.moves) for d in r.pairs[0].runs],
+                         [[("row.timeouts", "gone"), ("row.timeouts_all", "new")]] * 2)
+        r = self.check(renamed=["timeouts=timeouts_all", "lost=lost_all"])
+        self.assertEqual(r.exit_code(), 0)
+        self.assertIn("--renamed timeouts=timeouts_all lost=lost_all; renamed nothing: lost=lost_all", r.text())
+        j = r.json()
+        self.assertEqual((j["renamed"], j["unused_renamed"]),
+                         ({"timeouts": "timeouts_all", "lost": "lost_all"}, ["lost=lost_all"]))
+        self.assertRaises(ValueError, self.check, renamed=["timeouts"])
 
     def test_failed_run(self):
         (self.bins["b" * 40] / "VARIANT").write_text("fail")

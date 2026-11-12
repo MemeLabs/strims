@@ -9,11 +9,14 @@ phase, horizon and keys, every phase but steady and tail anchored, a
 colour to each phase, episode and reason, one to a name of its section);
 each
 kind's `sims` the sims whose event writers name it; and the queries over
-it:
+it. fields.toml: who writes each entry, its retired names (declared, in
+no generated module), and a retired name's current one (resolve,
+renames, aliases, canonical_row):
 
   python3 hack/simlab/tests/test_vocab.py
 """
 
+import copy
 import re
 import subprocess
 import sys
@@ -337,8 +340,10 @@ class Fields(unittest.TestCase):
                 self.assertTrue(e.get("description"))
                 self.assertLessEqual(set(e["sims"]), set(vocab.SIMS))
                 self.assertLessEqual(set(e.get("lines", ())), set(vocab.LINES))
-                self.assertTrue(e["sims"] or e.get("lines") or e.get("writers"),
-                                "an entry no sim writes names the lines or the lab's writers that do")
+                self.assertLessEqual(set(e.get("retired", ())), set(vocab.SIMS))
+                self.assertTrue(e["sims"] or e.get("lines") or e.get("writers") or e.get("retired"),
+                                "an entry no sim writes names the lines or the lab's writers that do, or the sims "
+                                "whose older runs hold it")
 
     def test_a_familys_names_are_its_params_by_sim(self):
         key = "stalls_per_min_{delay}{pop}"
@@ -346,6 +351,71 @@ class Fields(unittest.TestCase):
         self.assertEqual(vocab.expand(key, e, "strims-sim"), ["stalls_per_min_1250", "stalls_per_min_1250_honest",
                                                               "stalls_per_min_4250", "stalls_per_min_4250_honest"])
         self.assertEqual(vocab.expand(key, e, "ppspp"), ["stalls_per_min_1250", "stalls_per_min_4250"])
+
+    def renamed_doc(self):
+        """fields.toml with two renames: lag_old_ms, ppspp's older
+        lag_p99_ms, and share_old, each sim's older share by another name."""
+        doc = copy.deepcopy(vocab.fields())
+        doc["rows"]["lag_old_ms"] = {"sims": [], "retired": ["ppspp"], "replaced_by": "lag_p99_ms", "rename": True,
+                                     "type": "int", "unit": "ms", "description": "x"}
+        doc["rows"]["share_old"] = {"sims": [], "retired": ["strims-sim", "ppspp"],
+                                    "replaced_by": {"strims-sim": "seed_data_share", "ppspp": "seed_share"},
+                                    "rename": True, "type": "num", "description": "y"}
+        return doc
+
+    def test_the_retired_names_are_declared(self):
+        decl = vocab.declared()
+        for n in ("startup_p50_ms", "startup_p99_ms", "steady_p50_ms", "steady_p99_ms", "up_filler"):
+            self.assertEqual(decl["rows"][n][1]["retired"], ["strims-sim"], n)
+        for n, cur in (("capacity", "capacity_bps"), ("delivered", "delivered_bps"), ("rate", "rate_bps")):
+            self.assertIn(n, decl["columns"]["seed_decisions"])
+            self.assertEqual(vocab.resolve(n, "ppspp", "columns.seed_decisions"), cur)
+        # Older runs hold them, the generated modules none.
+        outputs = vocab.field_outputs()
+        self.assertIn('RowInt::LagP99Ms => "lag_p99_ms",', "".join(outputs.values()))
+        for path, text in outputs.items():
+            for n in ("startup_p50_ms", "startup_p99_ms", "steady_p50_ms", "steady_p99_ms", "up_filler"):
+                self.assertNotIn(f'=> "{n}",', text, path)
+            for n in ("capacity", "delivered", "rate"):
+                self.assertNotIn(f"DecisionCol::{vocab.camel(n)} =>", text, path)
+        self.assertIn("DecisionCol::CapacityBps =>", "".join(outputs.values()))
+
+    def test_resolve_follows_replaced_by(self):
+        doc = self.renamed_doc()
+        self.assertEqual(vocab.resolve("lag_old_ms", "ppspp", doc=doc), "lag_p99_ms")
+        self.assertEqual(vocab.resolve("lag_old_ms", doc=doc), "lag_p99_ms")
+        self.assertEqual(vocab.resolve("share_old", "strims-sim", doc=doc), "seed_data_share")
+        self.assertEqual(vocab.resolve("share_old", "ppspp", doc=doc), "seed_share")
+        # By sim, each another name: none for every sim.
+        self.assertEqual(vocab.resolve("share_old", doc=doc), "share_old")
+        # A current name, one retired with no replacement, one no entry holds.
+        for n in ("lag_p99_ms", "startup_p99_ms", "no_such_name"):
+            self.assertEqual(vocab.resolve(n, "strims-sim", doc=doc), n)
+
+    def test_renames_and_aliases(self):
+        doc = self.renamed_doc()
+        self.assertEqual(vocab.renames(doc=doc), [("lag_old_ms", "lag_p99_ms", ["ppspp"]),
+                                                  ("share_old", "seed_data_share", ["strims-sim"]),
+                                                  ("share_old", "seed_share", ["ppspp"])])
+        self.assertEqual(vocab.aliases("lag_p99_ms", doc=doc), ["lag_p99_ms", "lag_old_ms"])
+        self.assertEqual(vocab.aliases("lag_old_ms", doc=doc), ["lag_p99_ms", "lag_old_ms"])
+        self.assertEqual(vocab.aliases("seed_share", doc=doc), ["seed_share", "share_old"])
+        self.assertEqual(vocab.aliases("delivery", doc=doc), ["delivery"])
+        # A retired name with a replacement but no rename (a column's) is no alias.
+        self.assertEqual(vocab.renames("columns.seed_decisions"), [])
+
+    def test_a_canonical_row_holds_its_renamed_fields_under_their_current_names(self):
+        doc = self.renamed_doc()
+        row = {"lag_old_ms": 5, "share_old": 0.25, "delivery": 1.0}
+        self.assertEqual(vocab.canonical_row(row, "ppspp", doc=doc),
+                         {"delivery": 1.0, "lag_p99_ms": 5, "seed_share": 0.25})
+        # strims-sim's lag_old_ms is no rename: it stays as written.
+        self.assertEqual(vocab.canonical_row(row, "strims-sim", doc=doc),
+                         {"lag_old_ms": 5, "delivery": 1.0, "seed_data_share": 0.25})
+        # A row holding both keeps the current name's value.
+        self.assertEqual(vocab.canonical_row({"lag_old_ms": 5, "lag_p99_ms": 7}, "ppspp", doc=doc),
+                         {"lag_p99_ms": 7})
+        self.assertEqual(row, {"lag_old_ms": 5, "share_old": 0.25, "delivery": 1.0})
 
 
 if __name__ == "__main__":

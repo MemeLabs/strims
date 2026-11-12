@@ -21,8 +21,8 @@ working tree's sims against the base's, cell by cell, paired by seed.
                                 [--knob SIM_EXP,STRIMS_SIM_EXP] [--all]
   hack/sim-suite/suite.py list [--tier ...] [--only CELL,...]
   hack/sim-suite/suite.py neutral [--base REF ...] [--head REF] [--cells SET|CELL,...]
-                                  [--seeds 2004,3033] [--expect TABLE[.COL] ...] [--json]
-                                  [--slots N] [--mem-gib N]
+                                  [--seeds 2004,3033] [--expect TABLE[.COL] ...]
+                                  [--renamed OLD=NEW ...] [--json] [--slots N] [--mem-gib N]
 
 `run` builds the ppspp sim and strims-sim's scenarios from the working
 tree (the checkout this script is in, changes and all) and from `--base`
@@ -201,7 +201,9 @@ reads, its row's fields, each table (`.zst` ones decompressed) and
 series_meta. `--expect TABLE.COL` (or TABLE, `row`, `series_meta`)
 allows what the change means to move; anything else that moved is
 unexpected, reported with the rows and columns it moved in, and exits 1
-(2 for a build or run that failed). A commit's binaries and runs are kept
+(2 for a build or run that failed). `--renamed OLD=NEW` compares the
+base's row field (or series_meta key) OLD with the head's NEW, a rename's
+(fields.toml's `rename`) values alone. A commit's binaries and runs are kept
 (target/neutral): a check against the same base runs the head alone.
 
 The tiers, cells and metrics, the local runs and the farm's matrices are
@@ -405,8 +407,8 @@ def neutral_check(a):
     except ValueError as e:
         sys.exit(f"neutral: {e}")
     try:
-        report = neutral.check(a.base, a.head, cells, seeds, a.expect, a.slots, a.mem_gib)
-    except neutral.GitError as e:
+        report = neutral.check(a.base, a.head, cells, seeds, a.expect, a.slots, a.mem_gib, renamed=a.renamed)
+    except (neutral.GitError, ValueError) as e:
         sys.exit(f"neutral: {e}")
     print(json.dumps(report.json(), indent=1) if a.json else report.text(), end="\n" if a.json else "")
     sys.exit(report.exit_code())
@@ -484,6 +486,8 @@ def main():
     nt.add_argument("--seeds", default=",".join(map(str, neutral.SEEDS)), help="comma-separated")
     nt.add_argument("--expect", nargs="+", action="extend", default=[], metavar="TABLE[.COL]",
                     help="what the change means to move: a table, row or series_meta, or one column or key")
+    nt.add_argument("--renamed", nargs="+", action="extend", default=[], metavar="OLD=NEW",
+                    help="a row field or series_meta key the base writes as OLD and the head as NEW")
     nt.add_argument("--json", action="store_true", help="the report as JSON")
     nt.add_argument("--slots", type=int, default=None, help="runs at once (default: the cores but one)")
     nt.add_argument("--mem-gib", type=float, default=None,
