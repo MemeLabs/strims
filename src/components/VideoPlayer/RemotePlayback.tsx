@@ -170,7 +170,7 @@ export const useRemotePlayback = ({
       {castButtonVisible(!!cast.sender, cast.served, cast.state) && (
         <Button
           className="cast"
-          tooltip={casting ? t("player.Stop casting") : t("player.Cast")}
+          tooltip={casting ? t("player.stopCasting") : t("player.cast")}
           icon={cast.state.device ? MdCastConnected : MdCast}
           onClick={toggleCast}
         />
@@ -178,7 +178,7 @@ export const useRemotePlayback = ({
       {airPlay.available && airPlay.url && (
         <Button
           className="airplay"
-          tooltip={t("player.AirPlay")}
+          tooltip={t("player.airPlay")}
           icon={MdAirplay}
           onClick={() => showAirPlayPicker(videoRef.current)}
         />
@@ -191,8 +191,8 @@ export const useRemotePlayback = ({
       {casting && (
         <div className="video_player__casting">
           <MdCastConnected />
-          <span>{t("player.Casting to", { device: cast.state.device ?? "" })}</span>
-          <button onClick={() => cast.sender.stop()}>{t("player.Stop casting")}</button>
+          <span>{t("player.castingTo", { device: cast.state.device ?? "" })}</span>
+          <button onClick={() => cast.sender.stop()}>{t("player.stopCasting")}</button>
         </div>
       )}
       {shownError && <div className="video_player__cast_error">{shownError}</div>}

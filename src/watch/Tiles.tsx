@@ -50,8 +50,8 @@ const Tiles: React.FC = () => {
   const tiles = useMemo(() => mediaTiles(networkListings), [networkListings]);
 
   if (tiles.length === 0) {
-    if (connected) return <Status message={t("watch.No streams are live")} />;
-    if (error) return <Status message={t("watch.Can't reach the directory")} />;
+    if (connected) return <Status message={t("watch.noStreams")} />;
+    if (error) return <Status message={t("watch.directoryUnreachable")} />;
     return <Status />;
   }
 

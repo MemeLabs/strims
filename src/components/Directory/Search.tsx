@@ -48,22 +48,22 @@ const EmbedMenuItem: React.FC<EmbedMenuItemProps> = ({
       case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP:
         return {
           logo: imgAngelThump,
-          name: t("directory.embedType.AngelThump"),
+          name: t("directory.embedType.angelThump"),
         };
       case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM:
         return {
           logo: imgTwitch,
-          name: t("directory.embedType.Twitch"),
+          name: t("directory.embedType.twitch"),
         };
       case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD:
         return {
           logo: imgTwitch,
-          name: t("directory.embedType.Twitch VOD"),
+          name: t("directory.embedType.twitchVod"),
         };
       case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE:
         return {
           logo: imgYouTube,
-          name: t("directory.embedType.YouTube"),
+          name: t("directory.embedType.youTube"),
         };
     }
   })();
@@ -78,7 +78,7 @@ const EmbedMenuItem: React.FC<EmbedMenuItemProps> = ({
       onClick={onSelect}
     >
       <img className="search__menu__embed__logo" src={label.logo} />
-      {t("directory.Embed")} {label.name}
+      {t("directory.embed")} {label.name}
     </div>
   );
 };
@@ -323,7 +323,7 @@ const Search: React.FC<SearchProps> = ({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onFocus={handleFocus}
-          placeholder={t("directory.Search")}
+          placeholder={t("directory.searchPlaceholder")}
         />
       </form>
       <FiSearch className="search__icon" />
@@ -335,7 +335,7 @@ const Search: React.FC<SearchProps> = ({
       <div className="search__base">
         {box}
         <button className="search__cancel" onClick={onDone}>
-          <Trans>Cancel</Trans>
+          <Trans i18nKey="cancel" />
         </button>
       </div>
     );

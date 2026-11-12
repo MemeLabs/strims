@@ -91,34 +91,34 @@ const SettingsDrawer: React.FC = () => {
   const userPresenceIndicatorOptions = [
     {
       value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DISABLED,
-      label: t("chat.settings.Disable"),
+      label: t("chat.settings.indicatorDisabled"),
     },
     {
       value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
-      label: t("chat.settings.Bar"),
+      label: t("chat.settings.indicatorBar"),
     },
     {
       value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DOT,
-      label: t("chat.settings.Dot"),
+      label: t("chat.settings.indicatorDot"),
     },
     {
       value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_ARRAY,
-      label: t("chat.settings.Array"),
+      label: t("chat.settings.indicatorArray"),
     },
   ];
 
   const showRemovedOptions = [
     {
       value: UIConfig.ShowRemoved.SHOW_REMOVED_REMOVE,
-      label: t("chat.settings.Remove"),
+      label: t("chat.settings.bannedRemove"),
     },
     {
       value: UIConfig.ShowRemoved.SHOW_REMOVED_CENSOR,
-      label: t("chat.settings.Censor"),
+      label: t("chat.settings.bannedCensor"),
     },
     {
       value: UIConfig.ShowRemoved.SHOW_REMOVED_DO_NOTHING,
-      label: t("chat.settings.Do nothing"),
+      label: t("chat.settings.bannedDoNothing"),
     },
   ];
 
@@ -184,65 +184,65 @@ const SettingsDrawer: React.FC = () => {
         {/* {error && <InputError error={error.message || "Error creating chat server"} />} */}
         <fieldset>
           <legend>
-            <Trans>chat.settings.Messages</Trans>
+            <Trans i18nKey="chat.settings.messagesSection" />
           </legend>
           <ToggleInput
             control={control}
-            label={t("chat.settings.Show flair")}
+            label={t("chat.settings.showFlair")}
             name="showFlairIcons"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Show time")}
+            label={t("chat.settings.showTime")}
             name="showTime"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Harsh ignore")}
+            label={t("chat.settings.harshIgnore")}
             name="ignoreMentions"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Hide messages tagged nsfw or nsfl")}
+            label={t("chat.settings.hideNsfw")}
             name="hideNsfw"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Loop animated emotes forever")}
+            label={t("chat.settings.loopAnimatedEmotes")}
             name="animateForever"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Disable spoilers")}
+            label={t("chat.settings.disableSpoilers")}
             name="disableSpoilers"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Shorten long links")}
+            label={t("chat.settings.shortenLinks")}
             name="shortenLinks"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Compact emote spacing")}
+            label={t("chat.settings.compactEmoteSpacing")}
             name="compactEmoteSpacing"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Normalize alias capitalization")}
+            label={t("chat.settings.normalizeAliasCase")}
             name="normalizeAliasCase"
             onChange={handleChange}
           />
           <TextInput
             control={control}
-            label={t("chat.settings.Maximum messages")}
+            label={t("chat.settings.maxMessages")}
             name="maxLines"
             type="number"
             rules={{
@@ -255,7 +255,7 @@ const SettingsDrawer: React.FC = () => {
           />
           <SelectInput
             control={control}
-            label={t("chat.settings.Stream viewer indicators")}
+            label={t("chat.settings.viewerIndicators")}
             name="userPresenceIndicator"
             options={userPresenceIndicatorOptions}
             onChange={handleChange}
@@ -264,7 +264,7 @@ const SettingsDrawer: React.FC = () => {
           />
           <SelectInput
             control={control}
-            label={t("chat.settings.Banned messages")}
+            label={t("chat.settings.bannedMessages")}
             name="showRemoved"
             options={showRemovedOptions}
             onChange={handleChange}
@@ -274,11 +274,11 @@ const SettingsDrawer: React.FC = () => {
         </fieldset>
         <fieldset>
           <legend>
-            <Trans>chat.settings.Whispers</Trans>
+            <Trans i18nKey="chat.settings.whispersSection" />
           </legend>
           <ToggleInput
             control={control}
-            label={t("chat.settings.In-line messages")}
+            label={t("chat.settings.inlineWhispers")}
             name="showWhispersInChat"
             onChange={handleChange}
           />
@@ -286,87 +286,87 @@ const SettingsDrawer: React.FC = () => {
 
         <fieldset>
           <legend>
-            <Trans>chat.settings.Highlights, focus, and tags</Trans>
+            <Trans i18nKey="chat.settings.highlightsSection" />
           </legend>
           <ToggleInput
             control={control}
-            label={t("chat.settings.Highlight when mentioned")}
+            label={t("chat.settings.highlightMentions")}
             name="highlight"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Include mentions when focused")}
+            label={t("chat.settings.focusMentions")}
             name="focusMentioned"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Increase visibility of tagged users")}
+            label={t("chat.settings.taggedVisibility")}
             name="taggedVisibility"
             onChange={handleChange}
           />
           <TextAreaInput
             control={control}
-            label={t("chat.settings.Custom highlights")}
+            label={t("chat.settings.customHighlights")}
             name="customHighlight"
-            placeholder={t("chat.settings.Comma separated")}
+            placeholder={t("chat.settings.customHighlightsPlaceholder")}
             onBlur={handleChange}
           />
         </fieldset>
         <fieldset>
           <legend>
-            <Trans>chat.settings.Autocomplete</Trans>
+            <Trans i18nKey="chat.settings.autocompleteSection" />
           </legend>
           <ToggleInput
             control={control}
-            label={t("chat.settings.Autocomplete helper")}
+            label={t("chat.settings.autocompleteHelper")}
             name="autocompleteHelper"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Show emote previews")}
+            label={t("chat.settings.emotePreviews")}
             name="autocompleteEmotePreview"
             onChange={handleChange}
           />
         </fieldset>
         <fieldset>
           <legend>
-            <Trans>chat.settings.Message formatters</Trans>
+            <Trans i18nKey="chat.settings.formattersSection" />
           </legend>
           <ToggleInput
             control={control}
-            label={t("chat.settings.Greentext")}
+            label={t("chat.settings.greentext")}
             name="formatterGreen"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Emotes")}
+            label={t("chat.settings.emotes")}
             name="formatterEmote"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Combos")}
+            label={t("chat.settings.combos")}
             name="formatterCombo"
             onChange={handleChange}
           />
           <ToggleInput
             control={control}
-            label={t("chat.settings.Modifiers")}
+            label={t("chat.settings.modifiers")}
             name="emoteModifiers"
             onChange={handleChange}
           />
         </fieldset>
         <fieldset>
           <legend>
-            <Trans>chat.settings.Settings</Trans>
+            <Trans i18nKey="chat.settings.settingsSection" />
           </legend>
           <ToggleInput
             control={control}
-            label={t("chat.settings.Keep synced")}
+            label={t("chat.settings.keepSynced")}
             name="replicate"
             onChange={handleChange}
           />

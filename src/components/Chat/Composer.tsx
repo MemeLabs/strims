@@ -391,7 +391,7 @@ const Composer: React.FC<ComposerProps> = ({
         <Slate editor={editor} value={initialValue} onChange={onChange}>
           <Editable
             className="chat_composer__textbox"
-            placeholder={t("chat.composer.Write a message")}
+            placeholder={t("chat.composer.placeholder")}
             decorate={decorate}
             renderLeaf={renderLeaf}
             onFocus={handleFocus}

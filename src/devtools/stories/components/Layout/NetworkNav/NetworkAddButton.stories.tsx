@@ -53,7 +53,7 @@ const AddStory: React.FC<AddStoryProps> = ({ open, expand }) => {
                         <FiPlus />
                       </div>
                       <div className="network_nav__add__text">
-                        <Trans>layout.networkNav.Add network</Trans>
+                        <Trans i18nKey="layout.networkNav.addNetwork" />
                       </div>
                     </NetworkAddButton>
                   </aside>

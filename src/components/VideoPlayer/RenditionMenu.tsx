@@ -40,7 +40,7 @@ const RenditionMenu: React.FC<RenditionMenuProps> = ({ options, playing, picked,
     <div className="video_player__rendition_menu" ref={ref}>
       <div className="button-wrap renditions">
         <button
-          data-tip={t("player.Quality")}
+          data-tip={t("player.quality")}
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={() => setOpen(!open)}
@@ -53,8 +53,8 @@ const RenditionMenu: React.FC<RenditionMenuProps> = ({ options, playing, picked,
           {item(
             null,
             picked === null && playingLabel
-              ? t("player.Auto playing", { rendition: playingLabel })
-              : t("player.Auto")
+              ? t("player.autoPlaying", { rendition: playingLabel })
+              : t("player.auto")
           )}
           {options.map((o) => item(o.id, o.label))}
         </ul>

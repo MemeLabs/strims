@@ -55,7 +55,7 @@ const PiPButton: React.FC<PiPButtonProps> = ({ supported, toggle }) => {
   return !supported ? null : (
     <Button
       className="pip"
-      tooltip={t("player.Miniplayer")}
+      tooltip={t("player.miniplayer")}
       onClick={toggle}
       icon={MdPictureInPictureAlt}
     />
@@ -74,10 +74,10 @@ const CaptionsButton: React.FC<CaptionsButtonProps> = ({ videoState, cycle }) =>
   if (!cueKinds.length) return null;
   const tooltip =
     captions === "subtitles"
-      ? t("player.Subtitles")
+      ? t("player.subtitles")
       : captions === "captions"
-      ? t("player.Captions")
-      : t("player.Captions off");
+      ? t("player.captions")
+      : t("player.captionsOff");
   return (
     <Button
       className={clsx("captions", { on: captions !== null })}
@@ -98,7 +98,7 @@ const TheaterButton: React.FC<TheaterButtonProps> = ({ enabled, toggle }) => {
   return (
     <Button
       className="theater"
-      tooltip={enabled ? t("player.Exit theater mode") : t("player.Theater mode")}
+      tooltip={enabled ? t("player.exitTheaterMode") : t("player.theaterMode")}
       onClick={() => toggle(!enabled)}
       icon={enabled ? RiLayout6Line : RiLayoutRightLine}
     />
@@ -115,7 +115,7 @@ const FullscreenButton: React.FC<FullscreenButtonProps> = ({ enabled, toggle }) 
   return (
     <Button
       className="fullscreen"
-      tooltip={enabled ? t("player.Exit full screen") : t("player.Full screen")}
+      tooltip={enabled ? t("player.exitFullScreen") : t("player.fullScreen")}
       onClick={toggle}
       icon={enabled ? MdFullscreenExit : MdFullscreen}
     />
@@ -128,7 +128,7 @@ interface CloseButtonProps {
 
 const CloseButton: React.FC<CloseButtonProps> = ({ onClick }) => {
   const { t } = useTranslation();
-  return <Button className="close" tooltip={t("player.Close")} onClick={onClick} icon={MdClose} />;
+  return <Button className="close" tooltip={t("player.close")} onClick={onClick} icon={MdClose} />;
 };
 
 interface VolumeControlProps {
@@ -156,7 +156,7 @@ const VolumeControl: React.FC<VolumeControlProps> = ({
   return (
     <div className="volume button-wrap">
       <button
-        data-tip={volume === 0 ? t("player.Unmute") : t("player.Mute")}
+        data-tip={volume === 0 ? t("player.unmute") : t("player.mute")}
         onClick={handleVolumeClick}
       >
         <VolumeIcon className={`volume-level-${volumeLevel}`} />
@@ -232,7 +232,7 @@ const VideoControls: React.FC<VideoControlsProps> = (props) => {
         {props.showPlayButton && (
           <Button
             className="play"
-            tooltip={playing ? t("player.Pause") : t("player.Play")}
+            tooltip={playing ? t("player.pause") : t("player.play")}
             onClick={playing ? videoControls.pause : videoControls.play}
             icon={playing ? MdPause : MdPlayArrow}
           />

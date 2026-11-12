@@ -239,7 +239,7 @@ const AutoScrollResumer: React.FC<AutoScrollResumerProps> = ({ onClick, disabled
     onClick={onClick}
   >
     <span>
-      <Trans>chat.More messages below</Trans>
+      <Trans i18nKey="chat.moreMessagesBelow" />
     </span>
     <FiArrowDownCircle />
   </div>

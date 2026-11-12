@@ -57,12 +57,12 @@ const InviteAuth: React.FC<InviteAuthProps> = ({ code }) => {
     return (
       <InviteAuthModal>
         <div className="invite_auth__error">{t("inviteAuth.error")}</div>
-        <InternalLink to="/">{t("inviteAuth.Continue")}</InternalLink>
+        <InternalLink to="/">{t("inviteAuth.continue")}</InternalLink>
       </InviteAuthModal>
     );
   }
   if (!inviteRes.value || !networksRes.value) {
-    return <InviteAuthModal>{t("inviteAuth.Loading")}</InviteAuthModal>;
+    return <InviteAuthModal>{t("inviteAuth.loading")}</InviteAuthModal>;
   }
 
   const { networkCert } = inviteRes.value;
@@ -156,19 +156,19 @@ const InviteAuthForm: React.FC<InviteAuthFormProps> = ({
       </span>
       <span className="invite_auth__network_name">{networkCert.subject}</span>
 
-      {error && <InputError error={error.message || t("inviteAuth.Error creating membership")} />}
+      {error && <InputError error={error.message || t("inviteAuth.membershipError")} />}
       <TextInput
         control={control}
         rules={{
           pattern: {
             value: validNamePattern,
-            message: t("inviteAuth.Name contains invalid characters"),
+            message: t("inviteAuth.aliasInvalid"),
           },
         }}
-        label={t("inviteAuth.Alias")}
+        label={t("inviteAuth.alias")}
         name="alias"
-        placeholder={t("inviteAuth.Enter an alternate name for this network")}
-        description={t("inviteAuth.Your name in chat and private messages.")}
+        placeholder={t("inviteAuth.aliasPlaceholder")}
+        description={t("inviteAuth.aliasDescription")}
       />
       {bootstrapClients.length > 0 && (
         <InputLabel
@@ -181,10 +181,10 @@ const InviteAuthForm: React.FC<InviteAuthFormProps> = ({
         </InputLabel>
       )}
       <Button className="invite_auth--primary" disabled={formState.isSubmitting}>
-        {t("inviteAuth.Continue")}
+        {t("inviteAuth.continue")}
       </Button>
       <InternalLink className="invite_auth__reject" to="/">
-        {t("inviteAuth.Reject invitation")}
+        {t("inviteAuth.reject")}
       </InternalLink>
     </form>
   );

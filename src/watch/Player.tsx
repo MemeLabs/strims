@@ -176,16 +176,16 @@ const Joined: React.FC<Stream & { onClose: () => void }> = (props) => {
 
   switch (membership.status) {
     case "joining":
-      return <Status message={t("watch.Joining")} />;
+      return <Status message={t("watch.joining")} />;
     case "failed": {
       const offered = !(membership.error instanceof InvitationError) || membership.retryable;
       return (
         <Status
-          message={offered ? t("watch.Couldn't join") : t("watch.Not offered")}
+          message={offered ? t("watch.joinFailed") : t("watch.notOffered")}
           action={
             membership.retryable
-              ? { label: t("watch.Retry"), onClick: retry }
-              : { label: t("watch.Back"), onClick: props.onClose }
+              ? { label: t("watch.retry"), onClick: retry }
+              : { label: t("watch.back"), onClick: props.onClose }
           }
         />
       );
@@ -222,21 +222,21 @@ const PlayerPage: React.FC<PlayerPageProps> = ({ session }) => {
   if (!key?.length || !swarmUri || !mimeType) {
     return (
       <Status
-        message={t("watch.Not offered")}
-        action={{ label: t("watch.Back"), onClick: onClose }}
+        message={t("watch.notOffered")}
+        action={{ label: t("watch.back"), onClick: onClose }}
       />
     );
   }
   if (session.error) {
     return (
       <Status
-        message={t("watch.Couldn't start")}
-        action={{ label: t("watch.Retry"), onClick: session.retry }}
+        message={t("watch.startFailed")}
+        action={{ label: t("watch.retry"), onClick: session.retry }}
       />
     );
   }
   if (!session.ready) {
-    return <Status message={t("watch.Starting")} />;
+    return <Status message={t("watch.starting")} />;
   }
 
   return (

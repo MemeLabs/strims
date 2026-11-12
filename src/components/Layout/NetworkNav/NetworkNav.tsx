@@ -73,10 +73,10 @@ const NetworkNav: React.FC = () => {
         "network_nav--collapsed": !expandNav,
       })}
     >
-      <Tooltip label={expandNav ? t("layout.networkNav.Collapse") : t("layout.networkNav.Expand")}>
+      <Tooltip label={expandNav ? t("layout.networkNav.collapse") : t("layout.networkNav.expand")}>
         <div className="network_nav__toggle">
           <div className="network_nav__toggle__text">
-            <Trans>layout.networkNav.Networks</Trans>
+            <Trans i18nKey="layout.networkNav.networks" />
           </div>
 
           <button onClick={() => toggleExpandNav()} className="network_nav__toggle__icon">
@@ -136,13 +136,13 @@ const NetworkNav: React.FC = () => {
               )}
             </Droppable>
           </DragDropContext>
-          <Tooltip label={t("layout.networkNav.Add network")} visible={!expandNav}>
+          <Tooltip label={t("layout.networkNav.addNetwork")} visible={!expandNav}>
             <NetworkAddButton className="network_nav__add">
               <div className="network_nav__add__gem">
                 <FiPlus />
               </div>
               <div className="network_nav__add__text">
-                <Trans>layout.networkNav.Add network</Trans>
+                <Trans i18nKey="layout.networkNav.addNetwork" />
               </div>
             </NetworkAddButton>
           </Tooltip>

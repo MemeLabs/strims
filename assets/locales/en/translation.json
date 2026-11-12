@@ -1,59 +1,59 @@
 {
-  "Cancel": "Cancel",
+  "cancel": "Cancel",
   "title": "Strims",
 
   // video player
   "player": {
-    "Exit theater mode": "Exit theater mode",
-    "Theater mode": "Theater mode",
-    "Exit full screen": "Exit full screen",
-    "Full screen": "Full screen",
-    "Mute": "Mute",
-    "Unmute": "Unmute",
-    "Pause": "Pause",
-    "Play": "Play",
-    "Miniplayer": "Miniplayer",
-    "Close": "Close",
-    "Subtitles": "Subtitles",
-    "Captions": "Captions",
-    "Captions off": "Captions off",
-    "Cast": "Cast",
-    "Stop casting": "Stop casting",
-    "Casting to": "Casting to {device}",
-    "AirPlay": "AirPlay",
-    "Quality": "Quality",
-    "Auto": "Auto",
-    "Auto playing": "Auto ({rendition})",
-    "Unplayable format": "This stream's format can't play here.",
-    "Unplayable": "This stream can't play here."
+    "exitTheaterMode": "Exit theater mode",
+    "theaterMode": "Theater mode",
+    "exitFullScreen": "Exit full screen",
+    "fullScreen": "Full screen",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "pause": "Pause",
+    "play": "Play",
+    "miniplayer": "Miniplayer",
+    "close": "Close",
+    "subtitles": "Subtitles",
+    "captions": "Captions",
+    "captionsOff": "Captions off",
+    "cast": "Cast",
+    "stopCasting": "Stop casting",
+    "castingTo": "Casting to {device}",
+    "airPlay": "AirPlay",
+    "quality": "Quality",
+    "auto": "Auto",
+    "autoPlaying": "Auto ({rendition})",
+    "unplayableFormat": "This stream's format can't play here.",
+    "unplayable": "This stream can't play here."
   },
 
   "layout": {
     "header": {
-      "Home": "Home",
-      "Categories": "Categories",
-      "Streams": "Streams",
-      "Broadcast": "Broadcast",
+      "home": "Home",
+      "categories": "Categories",
+      "streams": "Streams",
+      "broadcast": "Broadcast",
 
-      "Search": "Search...",
-      "Close chat": "Close chat",
-      "Open chat": "Open chat",
-      "Settings": "Settings",
-      "Activity monitor": "Activity monitor"
+      "searchPlaceholder": "Search...",
+      "closeChat": "Close chat",
+      "openChat": "Open chat",
+      "settings": "Settings",
+      "activityMonitor": "Activity monitor"
     },
 
     "networkNav": {
-      "Networks": "Networks",
-      "Expand": "Expand",
-      "Collapse": "Collapse",
-      "Add network": "Add network"
+      "networks": "Networks",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "addNetwork": "Add network"
     }
   },
 
   "chat": {
-    "More messages below": "More messages below",
-    "Sending": "Sending...",
-    "Message delivery failed": "Message delivery failed",
+    "moreMessagesBelow": "More messages below",
+    "sending": "Sending...",
+    "deliveryFailed": "Message delivery failed",
 
     "composer": {
       "members": "members",
@@ -62,60 +62,60 @@
       "emotes": "emotes",
       "modifiers": "modifiers",
       "emoji": "emoji",
-      "Write a message": "Write a message..."
+      "placeholder": "Write a message..."
     },
 
     "drawers": {
-      "Emotes": "Emotes",
-      "Whispers": "Whispers",
-      "Settings": "Settings",
-      "Users": "Users"
+      "emotes": "Emotes",
+      "whispers": "Whispers",
+      "settings": "Settings",
+      "users": "Users"
     },
 
     "settings": {
-      "Messages": "Messages",
-      "Whispers": "Whispers",
-      "Highlights, focus, and tags": "Highlights, focus & tags",
-      "Autocomplete": "Autocomplete",
-      "Message formatters": "Message formatters",
+      "messagesSection": "Messages",
+      "whispersSection": "Whispers",
+      "highlightsSection": "Highlights, focus & tags",
+      "autocompleteSection": "Autocomplete",
+      "formattersSection": "Message formatters",
 
-      "Show flair": "Show flair",
-      "Show time": "Show time",
-      "Harsh ignore": "Harsh ignore",
-      "Hide messages tagged nsfw or nsfl": "Hide messages tagged nsfw or nsfl",
-      "Loop animated emotes forever": "Loop animated emotes forever",
-      "Disable spoilers": "Disable spoilers",
-      "Shorten long links": "Shorten long links",
-      "Compact emote spacing": "Compact emote spacing",
-      "Normalize alias capitalization": "Normalize alias capitalization",
-      "Maximum messages": "Maximum messages",
-      "Stream viewer indicators": "Stream viewer indicators",
-      "Banned messages": "Banned messages",
-      "In-line messages": "In-line messages",
-      "Highlight when mentioned": "Highlight when mentioned",
-      "Include mentions when focused": "Include mentions when focused",
-      "Increase visibility of tagged users": "Increase visibility of tagged users",
-      "Custom highlights": "Custom highlights",
-      "Comma separated": "Comma separated...",
-      "Autocomplete helper": "Autocomplete helper",
-      "Show emote previews": "Show emote previews",
-      "Greentext": "Greentext",
-      "Emotes": "Emotes",
-      "Combos": "Combos",
-      "Modifiers": "Modifiers",
-      "Settings": "Settings",
-      "Keep synced": "Keep synced",
+      "showFlair": "Show flair",
+      "showTime": "Show time",
+      "harshIgnore": "Harsh ignore",
+      "hideNsfw": "Hide messages tagged nsfw or nsfl",
+      "loopAnimatedEmotes": "Loop animated emotes forever",
+      "disableSpoilers": "Disable spoilers",
+      "shortenLinks": "Shorten long links",
+      "compactEmoteSpacing": "Compact emote spacing",
+      "normalizeAliasCase": "Normalize alias capitalization",
+      "maxMessages": "Maximum messages",
+      "viewerIndicators": "Stream viewer indicators",
+      "bannedMessages": "Banned messages",
+      "inlineWhispers": "In-line messages",
+      "highlightMentions": "Highlight when mentioned",
+      "focusMentions": "Include mentions when focused",
+      "taggedVisibility": "Increase visibility of tagged users",
+      "customHighlights": "Custom highlights",
+      "customHighlightsPlaceholder": "Comma separated...",
+      "autocompleteHelper": "Autocomplete helper",
+      "emotePreviews": "Show emote previews",
+      "greentext": "Greentext",
+      "emotes": "Emotes",
+      "combos": "Combos",
+      "modifiers": "Modifiers",
+      "settingsSection": "Settings",
+      "keepSynced": "Keep synced",
 
       // viewer state indicator options
-      "Disable": "Disable",
-      "Bar": "Bar",
-      "Dot": "Dot",
-      "Array": "Array",
+      "indicatorDisabled": "Disable",
+      "indicatorBar": "Bar",
+      "indicatorDot": "Dot",
+      "indicatorArray": "Array",
 
       // banned messages options
-      "Remove": "Remove",
-      "Censor": "Censor",
-      "Do nothing": "Do nothing"
+      "bannedRemove": "Remove",
+      "bannedCensor": "Censor",
+      "bannedDoNothing": "Do nothing"
     }
   },
 
@@ -137,42 +137,42 @@
   },
 
   "directory": {
-    "Search": "Search...",
-    "Embed": "Embed",
+    "searchPlaceholder": "Search...",
+    "embed": "Embed",
     "title": "Directory - {network} - Strims",
     "titleFallback": "Directory - Strims",
 
     "embedType": {
-      "AngelThump": "AngelThump stream",
-      "Twitch": "Twitch stream",
-      "Twitch VOD": "Twitch VOD",
-      "YouTube": "YouTube video"
+      "angelThump": "AngelThump stream",
+      "twitch": "Twitch stream",
+      "twitchVod": "Twitch VOD",
+      "youTube": "YouTube video"
     }
   },
 
   "inviteAuth": {
     "header": "{peer} invited you to join",
-    "Error creating membership": "Error creating membership",
+    "membershipError": "Error creating membership",
     "bootstrapServers": "{count, plural, =1 {Bootstrap server} other {Bootstrap servers}}",
-    "Alias": "Alias",
-    "Name contains invalid characters": "Name contains invalid characters",
-    "Enter an alternate name for this network": "Enter an alternate name for this network",
-    "Your name in chat and private messages.": "Your name in chat and private messages.",
-    "Continue": "Continue",
-    "Reject invitation": "Reject invitation",
-    "Loading": "Loading...",
+    "alias": "Alias",
+    "aliasInvalid": "Name contains invalid characters",
+    "aliasPlaceholder": "Enter an alternate name for this network",
+    "aliasDescription": "Your name in chat and private messages.",
+    "continue": "Continue",
+    "reject": "Reject invitation",
+    "loading": "Loading...",
     "error": "An error occurred while loading the invitation."
   },
   "watch": {
     "title": "Live streams",
-    "No streams are live": "No streams are live",
-    "Can't reach the directory": "Can't reach the directory. Retrying…",
-    "Starting": "Starting…",
-    "Joining": "Joining…",
-    "Couldn't start": "This browser couldn't set up a profile.",
-    "Couldn't join": "Couldn't join this stream's network.",
-    "Not offered": "This stream isn't open to visitors.",
-    "Retry": "Retry",
-    "Back": "Back"
+    "noStreams": "No streams are live",
+    "directoryUnreachable": "Can't reach the directory. Retrying…",
+    "starting": "Starting…",
+    "joining": "Joining…",
+    "startFailed": "This browser couldn't set up a profile.",
+    "joinFailed": "Couldn't join this stream's network.",
+    "notOffered": "This stream isn't open to visitors.",
+    "retry": "Retry",
+    "back": "Back"
   }
 }

@@ -103,9 +103,9 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   // rendition left (a cast plays it elsewhere); null while something can.
   const unplayable =
     kind === PlayerKind.None
-      ? { message: t("player.Unplayable format"), detail: mimeType }
+      ? { message: t("player.unplayableFormat"), detail: mimeType }
       : rendition.failure !== null && !remote.casting
-      ? { message: t("player.Unplayable"), detail: rendition.failure }
+      ? { message: t("player.unplayable"), detail: rendition.failure }
       : null;
 
   const handleToggleFullscreen = useCallback(() => {

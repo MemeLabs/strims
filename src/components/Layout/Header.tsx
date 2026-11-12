@@ -47,31 +47,31 @@ const Header: React.FC<HeaderProps> = ({ search = defaultSearch }) => {
     <header className="layout_header">
       <div className="layout_header__primary_nav">
         <Link to="/" className="layout_header__primary_nav__logo">
-          <Trans>layout.header.Home</Trans>
+          <Trans i18nKey="layout.header.home" />
         </Link>
         {/* <NavLink to="/categories" className={linkClassName}>
-          <Trans>layout.header.Categories</Trans>
+          <Trans i18nKey="layout.header.categories" />
         </NavLink>
         <NavLink to="/streams" className={linkClassName}>
-          <Trans>layout.header.Streams</Trans>
+          <Trans i18nKey="layout.header.streams" />
         </NavLink>
         <NavLink to="/broadcast" className={linkClassName}>
-          <Trans>layout.header.Broadcast</Trans>
+          <Trans i18nKey="layout.header.broadcast" />
         </NavLink> */}
       </div>
       <div className="layout_header__search">{search}</div>
       <div className="layout_header__user_nav">
         <button className="layout_header__user_nav__link" onClick={() => layout.toggleShowChat()}>
           {layout.showChat ? (
-            <MdOutlineChatBubbleOutline title={t("layout.header.Close chat")} />
+            <MdOutlineChatBubbleOutline title={t("layout.header.closeChat")} />
           ) : (
-            <MdOutlineChat title={t("layout.header.Open chat")} />
+            <MdOutlineChat title={t("layout.header.openChat")} />
           )}
         </button>
         <button
           onClick={handleDebuggerOpen}
           className="layout_header__user_nav__link"
-          title={t("layout.header.Activity monitor")}
+          title={t("layout.header.activityMonitor")}
         >
           <FiActivity />
         </button>
@@ -83,7 +83,7 @@ const Header: React.FC<HeaderProps> = ({ search = defaultSearch }) => {
         <button
           className="layout_header__user_nav__link"
           onClick={handleSettingsOpen}
-          title={t("layout.header.Settings")}
+          title={t("layout.header.settings")}
         >
           <FiUser />
         </button>

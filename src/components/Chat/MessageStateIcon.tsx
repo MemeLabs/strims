@@ -20,7 +20,7 @@ const MessageStateIcon: React.FC<MessageStateIconProps> = ({ messageState }) => 
     case MessageState.MESSAGE_STATE_FAILED:
       return (
         <BiMessageSquareError
-          title={t("chat.Message delivery failed")}
+          title={t("chat.deliveryFailed")}
           className="chat__message_state_icon chat__message_state_icon--failed"
         />
       );
