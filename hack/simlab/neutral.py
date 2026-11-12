@@ -20,9 +20,9 @@ to move (`expect`).
                  its parents; a merge commit against every parent, whatever
                  the bases
   cell_set(spec=DEFAULT_SET) -> [cell]
-                 a set of SETS (AUDIT, the default), a suite tier, or cell
-                 names, comma-separated (SETS' cells, then the tiers'),
-                 each with LOGS on
+                 a set of SETS (AUDIT, the default, or VOCAB, every
+                 writer's), a suite tier, or cell names, comma-separated
+                 (SETS' cells, then the tiers'), each with LOGS on
   build(sha, log) -> (bin dir, build seconds or None when kept)
                  `sha`'s test binaries of both sims (BUILD), built once in
                  a detached worktree of their own with a CARGO_TARGET_DIR
@@ -138,7 +138,37 @@ AUDIT = [
               "SIM_DEPART": "60:20:5:abrupt"},
              2, "an event's end in the ppspp sim"),
 ]
-SETS = {"audit": AUDIT}
+# The vocabulary's cells: AUDIT's, and every writer the audit leaves off
+# (the loop log, collusion, media, clock skew, hostile viewers, browsers,
+# discovery and the WAN scenarios' hosts), so a change to how the sims
+# name what they record shows on every name.
+VOCAB = AUDIT + [
+    lab.cell("loops-collude", lab.PPSPP, "sim_job",
+             {**lab.PP_CABLE, "SIM_PEERS": "30", "SIM_MBIT": "6", "SIM_SECS": "20", "SIM_LOOPS": "1",
+              "SIM_COLLUDE": "1"},
+             2, "30 peers behind a cable seed, the loop log on, the greedy viewers colluding"),
+    lab.cell("media-sign", lab.PPSPP, "sim_job",
+             {**lab.PP_CABLE, "SIM_PEERS": "30", "SIM_SECS": "20", "SIM_MEDIA": "1500v", "SIM_SIGN": "u8,t200"},
+             2, "a signed 1500 kbit/s VBR stream in the ppspp sim"),
+    lab.cell("skew", lab.PPSPP, "sim_job",
+             {**lab.PP_CABLE, "SIM_PEERS": "30", "SIM_MBIT": "6", "SIM_SECS": "20", "SIM_CLOCK_SKEW": "real"},
+             2, "real-world clock skew in the ppspp sim"),
+    lab.cell("cross-traffic", lab.PPSPP, "sim_job", {**lab.PP_AB, "SIM_SCENARIO": "CrossTraffic", "SIM_SECS": "20"},
+             2, "uplinks shared with cross traffic"),
+    lab.cell("super-peer-20s", lab.PPSPP, "sim_job",
+             {**lab.PP_AB, "SIM_SCENARIO": "WanSuperPeer", "SIM_SECS": "20"}, 2, "a super-peer seed over the WAN"),
+    lab.cell("star-media-sign", lab.SIM, "calibration_star",
+             _star(15, 10, 30, STRIMS_SIM_MEDIA="1500v", STRIMS_SIM_SIGN="u8,t200"),
+             2, "a signed 1500 kbit/s VBR stream on the real stack"),
+    lab.cell("star-skew-liars", lab.SIM, "calibration_star",
+             _star(15, 10, 30, STRIMS_SIM_CLOCK_SKEW="real", STRIMS_SIM_HOSTILE="liar:0.2"),
+             2, "real-world clock skew, a fifth of the viewers liars"),
+    lab.cell("org-browsers-free-riders", lab.SIM, "calibration_star",
+             _star(15, 10, 30, STRIMS_SIM_DISCOVERY="1", STRIMS_SIM_RTC=lab.BROWSERS,
+                   STRIMS_SIM_HOSTILE="free-rider:0.2"),
+             2, "browsers in an organic network, a fifth of the viewers free riders"),
+]
+SETS = {"audit": AUDIT, "vocab": VOCAB}
 DEFAULT_SET = "audit"
 
 # Every table and log, by sim: the measure tier's logs (the forecast log,

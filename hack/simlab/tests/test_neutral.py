@@ -422,6 +422,11 @@ class Cells(unittest.TestCase):
                 self.assertEqual(c["env"][k], v)
         self.assertEqual(neutral.LOGS[lab.SIM], {"STRIMS_SIM_FORECAST": "1", "STRIMS_SIM_SPEC": "1",
                                                  "STRIMS_SIM_BIN_NODES": "1"})
+        # The vocabulary's: the audit's, then cells of their own names.
+        vocab = neutral.cell_set("vocab")
+        self.assertEqual(vocab[:len(audit)], audit)
+        tiers = {c["name"] for t in lab.TIERS.values() for c in t}
+        self.assertFalse({c["name"] for c in vocab[len(audit):]} & tiers)
         # Cells by name, the audit's first, then the tiers'.
         two = neutral.cell_set("star-31-5,jitter-15-10")
         self.assertEqual(two[0]["env"]["STRIMS_SIM_CAL_SECS"], "30")
