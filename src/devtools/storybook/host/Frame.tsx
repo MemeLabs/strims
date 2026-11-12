@@ -3,6 +3,7 @@
 
 import "../../styles/storybook.scss";
 
+import i18n from "i18next";
 import React, { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
@@ -117,5 +118,16 @@ export const renderFrame = (root: HTMLElement, doc: FrameDocument): void => {
   const session = new Session(doc.route);
   activate(session);
   reportMissingKeys();
-  createRoot(root).render(<StoryFrame doc={doc} session={session} />);
+  const render = () => createRoot(root).render(<StoryFrame doc={doc} session={session} />);
+  // Shot by hack/storybook/check.py --compare (its capture clock is in the
+  // realm), the story renders once i18next has its strings, so a <Trans>
+  // shows the same text whichever of them and the story's chunks comes
+  // first.
+  if (CAPTURE_CLOCK in window && !i18n.isInitialized) {
+    i18n.on("initialized", render);
+  } else {
+    render();
+  }
 };
+
+const CAPTURE_CLOCK = "__storybookCapture";

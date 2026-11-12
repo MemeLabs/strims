@@ -1,7 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { Story, StoryModule } from "../types";
+import type { Story, StoryModule, StoryVisual } from "../types";
 import { ROOT } from "./protocol";
 import { HOST_ALLOW } from "./recorder";
 
@@ -97,7 +97,14 @@ export interface IndexStory {
   name: string;
   /** The story's allowErrors as /source/flags. */
   allowErrors: string[];
+  visual?: StoryVisual;
 }
+
+// Build-dependent content that hack/storybook/check.py --compare paints
+// over in every story's screenshots, each with why.
+export const HOST_MASK: { selector: string; reason: string }[] = [
+  { selector: ".landing_page__header__revision", reason: "the build's git hash" },
+];
 
 export interface IndexData {
   stories: IndexStory[];
@@ -107,6 +114,7 @@ export interface IndexData {
   /** covers/skips naming files outside the catalog, and skips of covered files. */
   stale: { module: string; path: string; kind: "covers" | "skips" | "skips-covered" }[];
   hostAllowErrors: { pattern: string; reason: string }[];
+  hostMask: { selector: string; reason: string }[];
 }
 
 // Loads every story module and resolves the catalog against them.
@@ -123,6 +131,7 @@ export const buildIndex = async (): Promise<IndexData> => {
       pattern: String(pattern),
       reason,
     })),
+    hostMask: HOST_MASK,
   };
   const covering = new Map<string, string[]>();
   const skips = new Map<string, { reason: string; module: string }>();
@@ -143,6 +152,7 @@ export const buildIndex = async (): Promise<IndexData> => {
         module,
         name: s.name,
         allowErrors: (s.allowErrors ?? []).map(String),
+        ...(s.visual ? { visual: s.visual } : {}),
       });
     }
 

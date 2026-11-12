@@ -14,6 +14,21 @@ export interface Story {
    * allow list) matches fails the story.
    */
   allowErrors?: RegExp[];
+  /**
+   * What hack/storybook/check.py --compare leaves out of this story's
+   * screenshots, for content no capture setting holds still. Use it
+   * sparingly, and say why.
+   */
+  visual?: StoryVisual;
+}
+
+export interface StoryVisual {
+  /** What in the story varies between captures of the same build. */
+  reason: string;
+  /** Selectors whose boxes both screenshots paint over. */
+  mask?: string[];
+  /** Not compared at all. */
+  skip?: boolean;
 }
 
 /**
