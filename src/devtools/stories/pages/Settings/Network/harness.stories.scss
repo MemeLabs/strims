@@ -13,6 +13,13 @@
     min-height: 0;
   }
 
+  // A story's line below the page, saying what its steps did.
+  &__note {
+    flex: none;
+    padding: 8px 20px;
+    font-size: 12px;
+  }
+
   &__clipboard {
     flex: none;
     display: flex;

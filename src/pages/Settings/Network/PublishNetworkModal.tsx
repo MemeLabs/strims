@@ -62,7 +62,7 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
             }))}
           />
           <div className="input_buttons">
-            <button className="input input_button" onClick={onClose}>
+            <button type="button" className="input input_button" onClick={onClose}>
               Cancel
             </button>
             <button className="input input_button">Publish Network</button>
