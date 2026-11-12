@@ -1889,8 +1889,6 @@ struct Loops {
     grafts_down: u64,
     switches: u64,
     switches_down: u64,
-    /// Every parent decision on either side, counted by kind.
-    kinds: BTreeMap<String, u64>,
     /// Chunks honest viewers asked the seed for, by how many of the
     /// asker's other neighbours had held them for [`HELD_FOR`]: none, one
     /// or two, three or more; and of those held by none, the ones whose
@@ -5348,62 +5346,6 @@ impl Sim {
             node.runner.drain_tap(|e| events.push(e));
             for e in events {
                 let peer = e.peer.and_then(|k| node.runner.peer_id(k)).map(id_node);
-                let who = if i == 0 { "seed" } else { "viewer" };
-                let kind = match e.kind {
-                    TapKind::ParentChoice { choice, .. } => {
-                        Some(format!("check {:?}", choice.action))
-                    }
-                    TapKind::Switched { .. } => Some("switched".to_owned()),
-                    TapKind::Pruned { why, .. } => {
-                        let age = why.age.unwrap_or_default();
-                        let what = match (why.pushes, why.since_hit) {
-                            (0, _) => "never pushed",
-                            (_, Some(h)) if h >= age => "pushed, never a hit",
-                            _ => "hits, then silent",
-                        };
-                        let old = match age.as_millis() {
-                            ..1500 => "under 1.5 s",
-                            1500..5000 => "1.5-5 s",
-                            _ => "over 5 s",
-                        };
-                        Some(format!(
-                            "pruned {}: {what}, at {old}",
-                            if why.silent { "silent" } else { "lossy" }
-                        ))
-                    }
-                    TapKind::ShedBy { .. } => Some("shed by parent".to_owned()),
-                    TapKind::Declined { .. } => Some("declined".to_owned()),
-                    TapKind::OpenTimeout { .. } => Some("open timeout".to_owned()),
-                    TapKind::Admitted { why, .. } => Some(format!(
-                        "{who} admitted {:?}{}",
-                        why.rule,
-                        if why.extra { " extra" } else { "" }
-                    )),
-                    TapKind::Rejected { why, .. } => {
-                        // Whether the true uplink had room at the target.
-                        let need = why.upload_rate.max(why.committed) + why.stream_rate;
-                        let room = (need as f64)
-                            <= node.up_bw as f64 * why.target_permille as f64 / 1000.0;
-                        Some(format!(
-                            "{who} rejected {:?}{}{}",
-                            why.rule,
-                            if why.extra { " extra" } else { "" },
-                            if room { " (uplink had room)" } else { "" }
-                        ))
-                    }
-                    TapKind::Shed { why, .. } => Some(format!(
-                        "{who} shed {}",
-                        match why {
-                            strims_ppspp::Shed::Saturated { .. } => "saturated",
-                            strims_ppspp::Shed::SeedBudget { .. } => "seed budget",
-                            strims_ppspp::Shed::Silent => "silent",
-                        }
-                    )),
-                    _ => None,
-                };
-                if let Some(k) = kind {
-                    *loops.kinds.entry(k).or_default() += 1;
-                }
                 let (stream, d) = match (e.kind, peer) {
                     (TapKind::ParentChoice { stream, choice }, Some(p)) => match choice.action {
                         ParentAction::Graft => (stream, Decision::Graft(p)),
@@ -8669,10 +8611,9 @@ impl Scenario {
 /// `SIM_CLOCK_SKEW`
 /// sets any run's clocks off: `real` as in the wild, `<ms>` either way,
 /// `+<ms>` or `-<ms>` all alike, at most [`MAX_SKEW`]
-/// ([`clock_skew_knob`]). `SIM_LOOPS=1` adds every parent decision,
-/// counted by kind, and how push loops formed to a job's row ([`Loops`]);
-/// it changes no trace. A knob that is set but doesn't parse panics, so a
-/// typo can't run the default unnoticed.
+/// ([`clock_skew_knob`]). `SIM_LOOPS=1` adds how push loops formed to a
+/// job's row ([`Loops`]); it changes no trace. A knob that is set but
+/// doesn't parse panics, so a typo can't run the default unnoticed.
 #[allow(clippy::disallowed_methods)]
 fn knob<T: std::str::FromStr>(name: &str) -> Option<T> {
     let s = std::env::var(name).ok()?;
@@ -11275,9 +11216,6 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             .int("grafts_down", l.grafts_down)
             .int("switches", l.switches)
             .int("switches_down", l.switches_down);
-        for (k, n) in &l.kinds {
-            row.int(&format!("decision {k}"), *n);
-        }
         for (k, n) in ["held_by_none", "held_by_1_2", "held_by_3_plus"]
             .iter()
             .zip(l.seed_asks)
