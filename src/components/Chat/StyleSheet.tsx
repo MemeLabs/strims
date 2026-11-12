@@ -260,7 +260,6 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
         }
         case "animation":
         case "animation-name": {
-          console.log(node, animations);
           csstree.walk(node.value, (node) => {
             if (node.type === "Identifier" && animations.has(node.name)) {
               node.name = animations.get(node.name);
