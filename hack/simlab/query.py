@@ -80,7 +80,8 @@ PULL_MB = 1000
 # doc tables say the same in each table's grain (test_catalog's
 # Registries holds them to it).
 TABLE_KNOBS = {"node_bins": ("BIN_NODES",), "forecast": ("FORECAST",), "arrivals": ("FORECAST", "SPEC"),
-               "spec_requests": ("SPEC",), "parks": ("SPEC",), "asks": ("SPEC",), "haves": ("SPEC",)}
+               "spec_requests": ("SPEC",), "parks": ("SPEC",), "asks": ("SPEC",), "haves": ("SPEC",),
+               "seed_decisions": ("SPEC",), "seed_sends": ("SPEC",)}
 # macros.sql: the views' macros.
 MACROS = Path(__file__).with_name("sql") / "macros.sql"
 # The phase of a second past the verdict's (the vocabulary's):

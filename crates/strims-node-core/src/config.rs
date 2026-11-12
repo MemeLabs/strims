@@ -141,8 +141,10 @@ pub struct NodeConfig {
     /// Keeps the ppspp runner's request log (`Runner::set_request_log`:
     /// the HAVEs' chunks and the request round's requests, with the held
     /// log) for the next `Node::metrics` (`NodeMetrics::haves`,
-    /// `NodeMetrics::requests`, `NodeMetrics::held`); off by default and on
-    /// every real node. It changes no decision.
+    /// `NodeMetrics::requests`, `NodeMetrics::held`), and in each swarm the
+    /// node seeds its seed log (`NodeMetrics::seed_decisions`,
+    /// `NodeMetrics::seed_sends`); off by default and on every real node.
+    /// It changes no decision.
     pub request_log: bool,
     /// Hands every change of a hybrid stream's open parent (the ppspp
     /// runner's parent log, `Runner::set_parent_log`) to the sink as it

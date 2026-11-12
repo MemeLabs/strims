@@ -138,11 +138,12 @@ class Execute(Scratch):
 class FoldExport(Scratch):
     def jobs(self):
         """golden_cli's jobs, written as the sims write them, with the
-        speculative requests', parks', arrivals', asks' and haves' tables
-        golden_cli's don't write: the ppspp sim's, then strims-sim's (whose
-        viewers add host and name, and whose reads, asks and haves are
-        zstd-compressed, `<table>.csv.zst`, as the sims write their large
-        tables), then a job folded again."""
+        speculative requests', parks', arrivals', asks', haves' and the seed
+        log's tables golden_cli's don't write: the ppspp sim's, then
+        strims-sim's (whose viewers add host and name, and whose reads, asks
+        and haves are zstd-compressed, `<table>.csv.zst`, as the sims write
+        their large tables, and the seed log's too, so the fold takes the
+        tables registered last in either form), then a job folded again."""
         jobs = [golden_cli.job_dir(self.dir / "jobs" / f"{i:02d}", j) for i, j in enumerate(golden_cli.JOBS)]
         for n, j in enumerate(jobs):
             d = Path(j["dir"])
@@ -161,8 +162,15 @@ class FoldExport(Scratch):
             golden_cli.write_table(d, "haves", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
                                                 ("seq", "BIGINT"), ("peer_incarnation", "BIGINT")],
                                    [(890 + n, 1, 2, 6, 0)])
+            golden_cli.write_table(d, "seed_decisions", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
+                                                         ("kind", "VARCHAR"), ("stream", "BIGINT"),
+                                                         ("granted", "BOOLEAN")],
+                                   [(880 + n, 0, 1, "request", 2, False), (881 + n, 0, -1, "window", None, None)])
+            golden_cli.write_table(d, "seed_sends", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
+                                                     ("how", "VARCHAR"), ("seq", "BIGINT"), ("fate", "VARCHAR")],
+                                   [(885 + n, 0, 1, "push", 6, "written")])
             if j["sim"].startswith("strims-sim"):
-                for t in ("reads", "asks", "haves"):
+                for t in ("reads", "asks", "haves", "seed_decisions", "seed_sends"):
                     csv = d / f"{t}.csv"
                     (d / f"{t}.csv.zst").write_bytes(zstd.compress(csv.read_bytes()))
                     csv.unlink()
@@ -204,6 +212,11 @@ class FoldExport(Scratch):
         cols, rows = parquet(self.dir / "module" / "asks.parquet")
         self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(runs["k"]))
         cols, rows = parquet(self.dir / "module" / "haves.parquet")
+        self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(runs["k"]))
+        # The seed log's: two decisions and a send a job.
+        cols, rows = parquet(self.dir / "module" / "seed_decisions.parquet")
+        self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(2 * list(runs["k"])))
+        cols, rows = parquet(self.dir / "module" / "seed_sends.parquet")
         self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(runs["k"]))
 
     def test_an_empty_store_exports_nothing(self):

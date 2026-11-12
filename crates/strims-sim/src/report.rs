@@ -43,7 +43,9 @@ use std::time::Duration;
 use strims_base::stats::WaitHistogram;
 use strims_ppspp::scheduler_peer::push::PUSH_OVERHEAD;
 use strims_ppspp::scheduler_peer::push::seed::ALLOC_UTILIZATION;
-use strims_ppspp::{ChannelTotals, HaveRecord, Held, LagForecast, RequestRecord};
+use strims_ppspp::{
+    ChannelTotals, HaveRecord, Held, LagForecast, RequestRecord, SeedDecision, SeedSend,
+};
 use strims_wan::{Access, EndStats, Region, Site};
 
 use crate::spec::{HostIx, Scenario};
@@ -179,6 +181,54 @@ pub struct HostReport {
     pub haves_lost: u64,
     pub requests: Vec<RequestHostRecord>,
     pub requests_lost: u64,
+    /// With [`Scenario::request_logs`], the seed log of its first scenario
+    /// swarm, where it seeds it, every incarnation: its decisions about its
+    /// neighbours ([`SeedDecisionHostRecord`]) and what became of each
+    /// chunk it pushed or answered ([`SeedSendHostRecord`]), and the
+    /// records the runner's caps left out.
+    pub seed_decisions: Vec<SeedDecisionHostRecord>,
+    pub seed_sends: Vec<SeedSendHostRecord>,
+    pub seed_log_lost: u64,
+}
+
+/// A decision of a seed's ([`HostReport::seed_decisions`]): when (true
+/// time from the run's start), the other host, and the record, its times by
+/// the node's clock: [`Self::true_time`] reads them as true time.
+#[derive(Clone, Copy, Debug)]
+pub struct SeedDecisionHostRecord {
+    pub at: Duration,
+    pub peer: Option<HostIx>,
+    /// The node clock's reading at the run's start.
+    pub epoch: strims_base::time::Time,
+    pub record: SeedDecision,
+}
+
+impl SeedDecisionHostRecord {
+    /// The node's clock reading `t`, as true time from the run's start.
+    pub fn true_time(&self, t: strims_base::time::Time) -> Duration {
+        (t - self.epoch).to_std().unwrap_or_default()
+    }
+}
+
+/// A chunk a seed pushed or answered ([`HostReport::seed_sends`]): when it
+/// was queued (an answer's request came) and when its send ended (true
+/// time from the run's start), the peer's host, and the record, its times
+/// by the node's clock: [`Self::true_time`] reads them as true time.
+#[derive(Clone, Copy, Debug)]
+pub struct SeedSendHostRecord {
+    pub queued: Duration,
+    pub ended: Duration,
+    pub peer: Option<HostIx>,
+    /// The node clock's reading at the run's start.
+    pub epoch: strims_base::time::Time,
+    pub record: SeedSend,
+}
+
+impl SeedSendHostRecord {
+    /// The node's clock reading `t`, as true time from the run's start.
+    pub fn true_time(&self, t: strims_base::time::Time) -> Duration {
+        (t - self.epoch).to_std().unwrap_or_default()
+    }
 }
 
 /// A chunk a host first held ([`HostReport::arrivals`]): its times as true

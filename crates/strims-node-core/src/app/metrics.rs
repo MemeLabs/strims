@@ -124,6 +124,9 @@ fn node(m: NodeMetrics) -> v1::NodeMetrics {
         haves_lost: _,
         requests: _,
         requests_lost: _,
+        seed_decisions: _,
+        seed_sends: _,
+        seed_log_lost: _,
     } = m;
     v1::NodeMetrics {
         host: Some(host(h)),

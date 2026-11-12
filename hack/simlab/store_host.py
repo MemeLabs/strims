@@ -61,7 +61,7 @@ DUCKDB_SHA256 = "61238cfbe9dfeaad4bcfcd8a48f6f7123dae2e9603aaadb1f77a4217aeb8980
 
 # The sims' tables, and the store's own.
 TABLES = ("seconds", "viewer_seconds", "reads", "stalls", "bins", "viewers", "events", "parents", "node_bins",
-          "forecast", "spec_requests", "parks", "arrivals", "asks", "haves")
+          "forecast", "spec_requests", "parks", "arrivals", "asks", "haves", "seed_decisions", "seed_sends")
 # The bulky tables: the farm uploads them under sim-samples/, and a pull
 # fetches them only when asked (`--reads`, or a query that reads them).
 SAMPLE_TABLES = ("reads", "forecast", "arrivals", "asks", "haves")

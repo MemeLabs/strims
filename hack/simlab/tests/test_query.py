@@ -522,5 +522,35 @@ class Haves(unittest.TestCase):
         self.assertIn("delay_ms", sql)
         self.assertIn("h.incarnation = a.peer_incarnation", sql)
 
+
+class SeedLog(unittest.TestCase):
+    """The seed log's tables: kept as tables, not samples (a few thousand
+    rows a run), with their notes, keys, joins and knob; both views read an
+    older run's peer -1 (none) as NULL, as the sims now write it."""
+
+    def test_the_tables_are_kept_with_their_notes(self):
+        for t in ("seed_decisions", "seed_sends"):
+            self.assertIn(t, store_host.TABLES)
+            self.assertNotIn(t, store_host.SAMPLE_TABLES)
+            self.assertIn(t, catalog.NORMALIZED)
+            self.assertIn(t, catalog.STANDARD_KEYS)
+            self.assertIn(t, catalog.STANDARD_JOINS)
+            self.assertEqual(query.TABLE_KNOBS[t], ("SPEC",))
+        self.assertIn("arrivals.incarnation = seed_sends.peer_incarnation", catalog.STANDARD_JOINS["seed_sends"])
+        self.assertEqual({t: catalog.STANDARD_KEYS[t] for t in ("seed_decisions", "seed_sends")},
+                         {"seed_decisions": "k, node, n", "seed_sends": "k, node, n"})
+        with self.assertRaisesRegex(query.Refused, r"seed_sends \(run with SIM_SPEC=1"):
+            query.need({"arrivals"}, "seed_sends")
+
+    def test_the_views_read_no_peer_as_null(self):
+        cols = {"k": "VARCHAR", "src": "VARCHAR", "t_ms": "BIGINT", "peer": "BIGINT", "kind": "VARCHAR"}
+        sql = catalog.view_sql("seed_decisions", cols, "seed_decisions", {})
+        self.assertIn('nullif(x."peer", -1) AS "peer"', sql)
+        self.assertIn('x."kind"', sql)
+        sends = catalog.view_sql("seed_sends", {**cols, "fate": "VARCHAR"}, "seed_sends", {})
+        self.assertIn('nullif(x."peer", -1) AS "peer"', sends)
+        self.assertIn('x."fate"', sends)
+
+
 if __name__ == "__main__":
     unittest.main()

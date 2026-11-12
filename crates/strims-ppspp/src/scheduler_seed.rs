@@ -274,6 +274,9 @@ use crate::options::{SeedAllocation, SeedQos};
 use crate::runner::{MAX_PEER_QOS_WEIGHT, MIN_PEER_QOS_WEIGHT, PeerKey};
 use crate::scheduler::PeerTaskQueue;
 use crate::scheduler_peer::PeerSwarmScheduler;
+use crate::scheduler_peer::seed_log::{
+    SeedBar, SeedClose, SeedDecisionKind, SeedWindow, WindowPhase,
+};
 use crate::tap::{AdmitRule, HolderLeft, Shed, TapKind};
 
 #[cfg(doc)]
@@ -1146,6 +1149,8 @@ impl PeerSwarmScheduler {
                 at: now,
             });
         }
+        self.s
+            .seed_decide(now, Some(peer), |_| SeedDecisionKind::Deferred { stream });
         true
     }
 
@@ -1161,6 +1166,7 @@ impl PeerSwarmScheduler {
         let carried = self.holders_subscribed();
         let early = self.s.early_stream_rate(now);
         let streams = usize::from(self.s.stream_count.max(1));
+        let holders = self.holders();
         let Some(p) = self.s.push.as_mut() else {
             return;
         };
@@ -1198,6 +1204,9 @@ impl PeerSwarmScheduler {
             a.window.since = now;
             a.window.probe_at = now + WINDOW_PROBE;
             a.copies = copies;
+            let row = window_row(a, WindowPhase::RampEnd, holders, Signals::default());
+            self.s
+                .seed_decide(now, None, |_| SeedDecisionKind::Window(row));
             return;
         }
         a.over = 0;
@@ -1243,6 +1252,9 @@ impl PeerSwarmScheduler {
         a.window.since = now;
         a.copies = copies;
         a.first_wave = a.first_wave.max(copies);
+        let row = window_row(a, WindowPhase::Ramp, holders, Signals::default());
+        self.s
+            .seed_decide(now, None, |_| SeedDecisionKind::Window(row));
     }
 
     /// The held requests to answer now: all once the ramp ended, those
@@ -1317,6 +1329,7 @@ impl PeerSwarmScheduler {
         if fewest.is_some_and(|f| held > f) {
             return false;
         }
+        let mut joined = None;
         if let Some(h) = self
             .channels
             .get_mut(&peer)
@@ -1326,6 +1339,7 @@ impl PeerSwarmScheduler {
         {
             h.join(now);
             h.satellite = true;
+            joined = Some(h.min_rtt(now));
             let key = self.s.key;
             self.s.tap.emit(key, Some(peer), || TapKind::HolderJoined);
         }
@@ -1334,6 +1348,9 @@ impl PeerSwarmScheduler {
             a.spilled.insert((from, stream), Some(peer));
             a.stats.accepted = a.stats.accepted.saturating_add(1);
         }
+        if let Some(rtt) = joined {
+            self.seed_joined(peer, true, rtt, now);
+        }
         true
     }
 
@@ -1341,9 +1358,10 @@ impl PeerSwarmScheduler {
     /// cancel of a stream of its copy releases the stream: while no one
     /// else takes it from us, the next near neighbour to ask holds it as a
     /// satellite, so the copy stays whole while the holder backs off it.
-    pub(crate) fn holder_released(&mut self, peer: PeerKey, stream: Stream) {
+    /// True if it did.
+    pub(crate) fn holder_released(&mut self, peer: PeerKey, stream: Stream) -> bool {
         if !self.adaptive_seed() {
-            return;
+            return false;
         }
         let primary = self
             .channels
@@ -1351,7 +1369,7 @@ impl PeerSwarmScheduler {
             .and_then(|c| c.push.as_ref())
             .is_some_and(|pc| pc.holder.primary());
         if !primary {
-            return;
+            return false;
         }
         let held = self
             .s
@@ -1360,13 +1378,15 @@ impl PeerSwarmScheduler {
             .filter(|st| st.subscribers.iter().any(|x| x.channel == peer))
             .count();
         let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {
-            return;
+            return false;
         };
         let out = a.spilled.keys().filter(|&&(h, _)| h == peer).count()
             + a.released.iter().filter(|&&(h, _)| h == peer).count();
         if !a.unconstrained && held + out < a.streams {
             a.released.insert((peer, stream));
+            return true;
         }
+        false
     }
 
     /// The holder whose released `stream` `peer` may take: the stream has
@@ -1460,6 +1480,7 @@ impl PeerSwarmScheduler {
         let budget = p.upload.for_budget();
         let cap = budget.capacity();
         let a = p.alloc.get_or_insert_with(|| Allocator::new(now));
+        let seed_log = &mut self.s.seed_log;
         // The first wave's size, from the early measurements.
         if !a.measured
             && !a.ramped
@@ -1490,6 +1511,10 @@ impl PeerSwarmScheduler {
                 a.copies = w;
                 a.first_wave = w;
                 a.first_wave_capacity = cap as u64;
+                if let Some(l) = seed_log.as_mut() {
+                    let row = window_row(a, WindowPhase::FirstWave, holders, Signals::default());
+                    l.decide(now, None, SeedDecisionKind::Window(row));
+                }
                 let others = p.upload.others;
                 self.s
                     .tap
@@ -1512,12 +1537,14 @@ impl PeerSwarmScheduler {
                 .map(|pc| &mut pc.holder)
         {
             h.join(now);
+            let rtt = h.min_rtt(now);
             let key = self.s.key;
             self.s.tap.emit(key, Some(peer), || TapKind::HolderJoined);
             if let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) {
                 a.stats.joined = a.stats.joined.saturating_add(1);
             }
             self.adopt(peer, now);
+            self.seed_joined(peer, false, rtt, now);
         }
         let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) else {
             return Grant {
@@ -1618,6 +1645,11 @@ impl PeerSwarmScheduler {
             };
             let (wait, stale) = (h.wait.take(), std::mem::take(&mut h.stale));
             let (fed, starved) = (h.fed.take(), std::mem::take(&mut h.starved));
+            if let Some(l) = self.s.seed_log.as_mut() {
+                let r = l.check_of(*peer);
+                r.wait = fed;
+                r.stale = starved;
+            }
             h.entries = 0;
             h.items = 0;
             if !h.holds {
@@ -1678,6 +1710,7 @@ impl PeerSwarmScheduler {
             .values()
             .filter(|c| c.handshake_received)
             .count();
+        let holders = self.holders();
         let Some(p) = self.s.push.as_mut() else {
             return;
         };
@@ -1687,6 +1720,9 @@ impl PeerSwarmScheduler {
             return;
         }
         a.next_check = now + ALLOC_CHECK_INTERVAL;
+        if let Some(l) = self.s.seed_log.as_mut() {
+            l.check_begin();
+        }
         let signals = self.window_signals(upload.busy >= SHED_UTILIZATION);
         let upload = upload.for_budget();
         let early = self.s.early_stream_rate(now);
@@ -1756,6 +1792,10 @@ impl PeerSwarmScheduler {
                 others: upload.others as u64,
             });
         }
+        if let Some(l) = self.s.seed_log.as_mut() {
+            let row = window_row(a, WindowPhase::Check, holders, signals);
+            l.decide(now, None, SeedDecisionKind::Window(row));
+        }
         if a.unconstrained {
             return;
         }
@@ -1772,6 +1812,16 @@ impl PeerSwarmScheduler {
 
         // A holder announces what it is pushed: the first push written to
         // it in an interval is due announced at the check after next.
+        // With the seed log on, the streams each neighbour holds.
+        let stream_bits = self.s.stream_bits;
+        let mut subs: BTreeMap<PeerKey, usize> = BTreeMap::new();
+        if self.s.seed_log.is_some() {
+            for st in &self.s.streams {
+                for x in &st.subscribers {
+                    *subs.entry(x.channel).or_default() += 1;
+                }
+            }
+        }
         let mut silent: Vec<PeerKey> = Vec::new();
         for (&peer, c) in &mut self.channels {
             let have = &c.peer_have_bins;
@@ -1783,14 +1833,27 @@ impl PeerSwarmScheduler {
                 h.silent = 0;
                 continue;
             }
+            let mut judged = false;
             if let Some((bin, at)) = due
                 && now - at >= ANNOUNCE_TIMEOUT
             {
+                judged = true;
                 h.silent = if have.filled_at(bin.base_left()) {
                     0
                 } else {
                     h.silent.saturating_add(1)
                 };
+            }
+            if let Some(l) = self.s.seed_log.as_mut() {
+                let r = l.check_of(peer);
+                r.satellite = h.satellite;
+                r.streams = subs.get(&peer).copied().unwrap_or(0);
+                r.due = due;
+                r.stream = due.map(|(bin, _)| ((bin.base_left().0 >> 1) & stream_bits) as Stream);
+                r.judged = judged;
+                r.silent = h.silent;
+                r.rtt = h.min_rtt(now);
+                l.checked(peer, now);
             }
             if h.silent >= SILENT_CHECKS {
                 h.bar(now);
@@ -1800,6 +1863,12 @@ impl PeerSwarmScheduler {
         for &peer in &silent {
             let key = self.s.key;
             self.s.tap.emit(key, Some(peer), || TapKind::HolderSilent);
+            let reporters = self
+                .channels
+                .get(&peer)
+                .and_then(|c| c.push.as_ref())
+                .map_or(0, |pc| usize::from(pc.holder.reporters));
+            self.seed_barred(peer, SeedBar::Silent, reporters, now);
             self.leave(peer, HolderLeft::Silent, now, q);
         }
         let unserved = self.judge(now, q);
@@ -1899,6 +1968,7 @@ impl PeerSwarmScheduler {
             self.leave(peer, why, now, q);
         }
         for &peer in &join {
+            let mut rtt = None;
             if let Some(h) = self
                 .channels
                 .get_mut(&peer)
@@ -1906,10 +1976,12 @@ impl PeerSwarmScheduler {
                 .map(|pc| &mut pc.holder)
             {
                 h.join(now);
+                rtt = h.min_rtt(now);
             }
             let key = self.s.key;
             self.s.tap.emit(key, Some(peer), || TapKind::HolderJoined);
             self.adopt(peer, now);
+            self.seed_joined(peer, false, rtt, now);
         }
         if let Some(a) = self.s.push.as_mut().and_then(|p| p.alloc.as_mut()) {
             let left = leave.len() + silent.len() + unserved;
@@ -1999,6 +2071,11 @@ impl PeerSwarmScheduler {
             };
             let queue = h.take_queue(now);
             let delivered = h.delivered.take();
+            if let Some(l) = self.s.seed_log.as_mut() {
+                let r = l.check_of(peer);
+                r.queue = queue;
+                r.delivered = delivered;
+            }
             let mine = held.get(&peer).map_or(&[][..], Vec::as_slice);
             if !h.holds || mine.is_empty() {
                 h.behind = 0;
@@ -2174,7 +2251,7 @@ impl PeerSwarmScheduler {
             }
         }
         for (peer, stream) in close {
-            self.close_subscriber(peer, stream, q);
+            self.close_subscriber(peer, stream, SeedClose::Spill, now, q);
             let key = self.s.key;
             let room = self
                 .channels
@@ -2263,6 +2340,7 @@ impl PeerSwarmScheduler {
                 .emit(key, Some(peer), || TapKind::HolderUnserved {
                     reporters: n as u64,
                 });
+            self.seed_barred(peer, SeedBar::Unserved, n, now);
             self.leave(peer, HolderLeft::Unserved, now, q);
         }
         unserved.len()
@@ -2452,6 +2530,21 @@ impl PeerSwarmScheduler {
                 .and_then(|c| c.push.as_ref())
                 .and_then(|pc| pc.holder.min_rtt(now)),
         });
+        if self.s.seed_log.is_some() {
+            let rtt = self
+                .channels
+                .get(&peer)
+                .and_then(|c| c.push.as_ref())
+                .and_then(|pc| pc.holder.min_rtt(now));
+            let (holders, copies) = (self.holders(), self.copies());
+            self.s
+                .seed_decide(now, Some(peer), |_| SeedDecisionKind::HolderLeft {
+                    why,
+                    rtt,
+                    holders,
+                    copies,
+                });
+        }
         let streams: Vec<Stream> = self
             .s
             .streams
@@ -2461,13 +2554,13 @@ impl PeerSwarmScheduler {
             .map(|(i, _)| i as Stream)
             .collect();
         for s in streams {
-            self.close_subscriber(peer, s, q);
+            self.close_subscriber(peer, s, SeedClose::Left(why), now, q);
         }
     }
 
-    /// Reports a holder whose channel is closing.
-    pub(crate) fn tap_holder_closed(&mut self, peer: PeerKey) {
-        if !self.s.tap.is_on() {
+    /// Reports a holder whose channel is closing, at `now`.
+    pub(crate) fn tap_holder_closed(&mut self, peer: PeerKey, now: Time) {
+        if !self.s.tap.is_on() && self.s.seed_log.is_none() {
             return;
         }
         let Some(h) = self
@@ -2491,6 +2584,16 @@ impl PeerSwarmScheduler {
             copies,
             rtt: h.rtt.or(h.rtt_before),
         });
+        if self.s.seed_log.is_some() {
+            let holders = self.holders() - usize::from(h.primary());
+            self.s
+                .seed_decide(now, Some(peer), |_| SeedDecisionKind::HolderLeft {
+                    why: HolderLeft::Closed,
+                    rtt: h.min_rtt(now),
+                    holders,
+                    copies: copies as usize,
+                });
+        }
     }
 
     /// Fixes the peers a seed pushes each stream to, one list per stream
@@ -2499,6 +2602,7 @@ impl PeerSwarmScheduler {
     pub(crate) fn pin_allocation(
         &mut self,
         pin: Option<Vec<Vec<PeerKey>>>,
+        now: Time,
         q: &mut impl PeerTaskQueue,
     ) -> bool {
         if !self.s.is_seed {
@@ -2520,9 +2624,53 @@ impl PeerSwarmScheduler {
             }
         }
         for (peer, stream) in outside {
-            self.close_subscriber(peer, stream, q);
+            self.close_subscriber(peer, stream, SeedClose::Pin, now, q);
         }
         true
+    }
+
+    /// The copies in effect; zero before the allocation starts.
+    fn copies(&self) -> usize {
+        self.s
+            .push
+            .as_ref()
+            .and_then(|p| p.alloc.as_ref())
+            .map_or(0, |a| a.copies)
+    }
+
+    /// With the seed log on, `peer` joined as a holder (`satellite`, at
+    /// round trip `rtt`) at `now`.
+    fn seed_joined(&mut self, peer: PeerKey, satellite: bool, rtt: Option<Duration>, now: Time) {
+        if self.s.seed_log.is_none() {
+            return;
+        }
+        let (holders, copies) = (self.holders(), self.copies());
+        self.s
+            .seed_decide(now, Some(peer), |_| SeedDecisionKind::HolderJoined {
+                satellite,
+                rtt,
+                holders,
+                copies,
+            });
+    }
+
+    /// With the seed log on, `peer`, just barred by `why`, at `now`.
+    fn seed_barred(&mut self, peer: PeerKey, why: SeedBar, reporters: usize, now: Time) {
+        let Some(h) = self
+            .channels
+            .get(&peer)
+            .and_then(|c| c.push.as_ref())
+            .map(|pc| pc.holder)
+        else {
+            return;
+        };
+        self.s
+            .seed_decide(now, Some(peer), |_| SeedDecisionKind::Barred {
+                why,
+                until: h.barred_until,
+                bars: h.bars,
+                reporters,
+            });
     }
 
     /// A seed under [`SeedQos::ByAllocation`] raises each channel's weight
@@ -2622,6 +2770,26 @@ fn moves_in(relays: u8, rtt: Duration, kept_relays: u8, kept_rtt: Option<Duratio
         std::cmp::Ordering::Greater => true,
         std::cmp::Ordering::Less => false,
         std::cmp::Ordering::Equal => kept_rtt.is_none_or(|f| rtt + NEAR_MARGIN.max(f / 10) < f),
+    }
+}
+
+/// The seed log's row of the allocation `a` at `phase`, with `holders` of
+/// a copy and a check's `signals`.
+fn window_row(a: &Allocator, phase: WindowPhase, holders: usize, signals: Signals) -> SeedWindow {
+    SeedWindow {
+        phase,
+        budget: a.budget,
+        measured: a.measured,
+        capacity: a.measured.then_some(a.capacity),
+        copies: a.copies,
+        streams: (a.streams != usize::MAX).then_some(a.streams),
+        holders,
+        pushed: signals.pushed,
+        behind: signals.behind,
+        overloaded: signals.overloaded,
+        in_use: signals.in_use,
+        saturated: signals.saturated,
+        unconstrained: a.unconstrained,
     }
 }
 

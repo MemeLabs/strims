@@ -338,7 +338,14 @@ forecast, arrivals, spec_requests, parks, asks and haves to viewers USING (k, sr
 node) (`node` in both sims; strims-sim's viewers also name it `host`),
 and asks and haves to arrivals on the peer's holds (arrivals.node =
 asks.peer, seq, arrivals.incarnation = asks.peer_incarnation, as haves':
-the views' truth); seconds
+the views' truth); seed_decisions and seed_sends (the seed's, node the
+seed) to viewers ON viewers.node = their peer, seed_sends to arrivals on
+a written push's hold (arrivals.node = peer, seq, arrivals.incarnation =
+peer_incarnation), seed_decisions to parents as a history (the child's
+first change at or after the decision's t_ms), and to each other ON (k,
+src, node, peer, peer_incarnation, seq) with seed_sends.how = 'push' (a
+cancel's push or none; a check's with seed_sends.t_ms = due_ms; a send
+meets every CANCEL of its chunk); seconds
 to verdict_seconds USING (k, src, sec) (macros.sql's `sec`); a viewer's
 second (viewer_seconds' sec, a read's or a stall's t_ms // 1000) to
 scoring.sql's viewer_phases_of((SELECT list({'k': k, 'src': src}) FROM

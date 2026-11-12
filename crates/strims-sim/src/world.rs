@@ -33,7 +33,8 @@ use crate::memory::{GroupCounters, MemoryGroup};
 use crate::net::SendBuffers;
 use crate::report::{
     ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport, MediaLog, NodeBinRecord,
-    ParentLoss, ParentRecord, RequestHostRecord, VpnReport,
+    ParentLoss, ParentRecord, RequestHostRecord, SeedDecisionHostRecord, SeedSendHostRecord,
+    VpnReport,
 };
 use crate::skew::OffsetCapture;
 use crate::spec::{HostIx, Scenario, Transport};
@@ -135,6 +136,10 @@ pub(crate) struct HostState {
     pub haves_lost: u64,
     pub requests: Vec<RequestHostRecord>,
     pub requests_lost: u64,
+    /// See [`HostReport::seed_decisions`].
+    pub seed_decisions: Vec<SeedDecisionHostRecord>,
+    pub seed_sends: Vec<SeedSendHostRecord>,
+    pub seed_log_lost: u64,
     /// When it left for good ([`crate::Fault::Depart`]), in ms.
     pub departed: Option<u64>,
     /// Crashed, and not restarted yet.
@@ -167,6 +172,9 @@ impl HostState {
         r.haves_lost = self.haves_lost;
         r.requests = self.requests.clone();
         r.requests_lost = self.requests_lost;
+        r.seed_decisions = self.seed_decisions.clone();
+        r.seed_sends = self.seed_sends.clone();
+        r.seed_log_lost = self.seed_log_lost;
         r
     }
 
@@ -1126,6 +1134,9 @@ impl World {
             && m.haves_lost == 0
             && m.requests.is_empty()
             && m.requests_lost == 0
+            && m.seed_decisions.is_empty()
+            && m.seed_sends.is_empty()
+            && m.seed_log_lost == 0
         {
             return;
         }
@@ -1236,10 +1247,28 @@ impl World {
                     record: x.record.clone(),
                 });
             }
+            for x in m.seed_decisions.iter().filter(|x| Some(x.swarm) == key) {
+                hs.seed_decisions.push(SeedDecisionHostRecord {
+                    at: t(x.record.at),
+                    peer: host(x.peer),
+                    epoch,
+                    record: x.record,
+                });
+            }
+            for x in m.seed_sends.iter().filter(|x| Some(x.swarm) == key) {
+                hs.seed_sends.push(SeedSendHostRecord {
+                    queued: t(x.record.queued),
+                    ended: t(x.record.ended),
+                    peer: host(x.peer),
+                    epoch,
+                    record: x.record,
+                });
+            }
             hs.forecasts_lost += m.forecasts_lost;
             hs.held_lost += m.held_lost;
             hs.haves_lost += m.haves_lost;
             hs.requests_lost += m.requests_lost;
+            hs.seed_log_lost += m.seed_log_lost;
         });
     }
 

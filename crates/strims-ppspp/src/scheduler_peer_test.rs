@@ -23,6 +23,8 @@ pub(crate) struct MockQueue {
     pub(crate) pushed_front: Vec<(PeerKey, Bin, PeerPriority)>,
     pub(crate) removed: Vec<(PeerKey, Bin, PeerPriority)>,
     pub(crate) removed_runner: Vec<PeerKey>,
+    /// Every peer's queue is full: data is refused.
+    pub(crate) full: bool,
 }
 
 impl PeerTaskQueue for MockQueue {
@@ -40,6 +42,9 @@ impl PeerTaskQueue for MockQueue {
         _: Time,
         pri: PeerPriority,
     ) -> bool {
+        if self.full {
+            return false;
+        }
         self.pushed.push((peer, b, pri));
         true
     }
@@ -138,7 +143,7 @@ fn channel_start_queues_it_and_close_removes_it() {
     assert!(f.sched.channels.contains_key(&p));
     assert_eq!(q.enqueued.len(), 1);
 
-    f.sched.close_channel(p, &f.swarm, &mut q);
+    f.sched.close_channel(p, &f.swarm, now(), &mut q);
     assert_eq!(
         q.removed_runner,
         vec![p],
@@ -472,7 +477,7 @@ fn invalid_streams_are_errors() {
             .map(|_| ()),
         e
     );
-    assert_eq!(f.sched.handle_stream_cancel(p, 8), e);
+    assert_eq!(f.sched.handle_stream_cancel(p, 8, now()), e);
     assert_eq!(
         f.sched
             .handle_stream_open(p, 8, Bin(0), now(), &mut MockQueue::default())
@@ -1466,7 +1471,7 @@ fn a_pinned_seed_pushes_each_stream_to_its_pin() {
     // Pinning closes the subscribers outside the pin.
     assert!(
         f.sched
-            .pin_allocation(Some(vec![vec![p], vec![r], vec![], vec![]]), &mut q)
+            .pin_allocation(Some(vec![vec![p], vec![r], vec![], vec![]]), now(), &mut q)
     );
     assert!(!subscribed(&f, r, 0));
     assert!(
@@ -1497,7 +1502,7 @@ fn a_pinned_seed_pushes_each_stream_to_its_pin() {
     assert_eq!(f.sched.push_stats().children, 2);
 
     // Lifted, the admission decides again.
-    assert!(f.sched.pin_allocation(None, &mut q));
+    assert!(f.sched.pin_allocation(None, now(), &mut q));
     f.sched.set_upload(push::UploadInfo {
         rate: 100_000,
         busy: 0.1,
@@ -1510,7 +1515,7 @@ fn a_pinned_seed_pushes_each_stream_to_its_pin() {
 
     // A non-seed can't be pinned.
     let mut f = fixture(hybrid(4));
-    assert!(!f.sched.pin_allocation(Some(vec![vec![]; 4]), &mut q));
+    assert!(!f.sched.pin_allocation(Some(vec![vec![]; 4]), now(), &mut q));
 }
 
 fn adaptive_seed(streams: usize, peers: usize) -> Fixture {
@@ -1852,7 +1857,7 @@ fn an_adaptive_seed_pushes_whole_copies_to_its_nearest() {
     // A holder that gives up every subscription gives its copy back once
     // the grace since it last asked has passed.
     for s in [0, 2] {
-        f.sched.handle_stream_cancel(peers[1], s).unwrap();
+        f.sched.handle_stream_cancel(peers[1], s, t).unwrap();
     }
     t = alloc_check(&mut f, &mut q, t, &[peers[0]], ms(5), (1_200_000, 1.0));
     assert_eq!(holders(&f), peers[..2].to_vec());
@@ -1942,7 +1947,7 @@ fn a_stream_its_holder_cancels_goes_to_a_near_satellite_until_it_asks_again() {
     // It cancels stream 3 and keeps its copy: no one else takes stream 3
     // from the seed, so a neighbour no farther than the holder may hold it
     // as a satellite, and one farther may not.
-    f.sched.handle_stream_cancel(peers[1], 3).unwrap();
+    f.sched.handle_stream_cancel(peers[1], 3, t).unwrap();
     assert!(!ask(&mut f, &mut q, peers[5], 3, t));
     assert!(ask(&mut f, &mut q, peers[0], 3, t));
     t = alloc_check(&mut f, &mut q, t, &[peers[1]], ms(5), one_copy);
@@ -1975,7 +1980,7 @@ fn a_nearer_neighbour_takes_a_copy_once_it_subscribed() {
     assert!(!subscribed(&f, peers[5], 0));
     // ... and a holder left without a subscription gives it back after the
     // grace, for the next to ask.
-    f.sched.handle_stream_cancel(peers[0], 0).unwrap();
+    f.sched.handle_stream_cancel(peers[0], 0, t).unwrap();
     let asked = t - push::seed::ALLOC_CHECK_INTERVAL;
     while t <= asked + push::seed::HOLDER_GRACE {
         t = alloc_check(&mut f, &mut q, t, &[], ms(5), saturated);
@@ -2440,7 +2445,7 @@ fn the_parent_log_keeps_each_change_of_a_parent() {
     let swarm = &f.swarm;
     assert!(f.sched.cancel_stream_sub(a, 0, swarm, now(), &mut q));
     open(&mut f, &mut q, b);
-    f.sched.close_channel(b, &f.swarm, &mut q);
+    f.sched.close_channel(b, &f.swarm, now(), &mut q);
     // Changes only: a repeat OPEN from the parent is none.
     open(&mut f, &mut q, a);
     open(&mut f, &mut q, a);
@@ -2841,7 +2846,7 @@ fn answers_queue_by_push_mode() {
         let p = add_ready(&mut f, &mut q, 0);
         assert!(f.sched.handle_request(p, Bin(2), now(), &mut q));
         assert_eq!(q.pushed, [(p, Bin(2), pri)]);
-        f.sched.handle_cancel(p, Bin(2), Bin(0), &mut q);
+        f.sched.handle_cancel(p, Bin(2), Bin(0), now(), &mut q);
         assert_eq!(q.removed, [(p, Bin(2), pri)]);
     }
 }
@@ -2856,7 +2861,7 @@ fn a_cancelled_push_is_not_sent() {
     let child = ready_channel(&mut f, &mut q);
     let ms = Duration::from_millis;
     let t = now();
-    f.sched.handle_cancel(child, Bin(2), Bin(0), &mut q);
+    f.sched.handle_cancel(child, Bin(2), Bin(0), now(), &mut q);
     assert!(
         q.removed
             .contains(&(child, Bin(2), PeerPriority::Scavenger))
@@ -2885,7 +2890,7 @@ fn a_cancelled_push_is_not_sent() {
     // wider than a window: ignored.
     let past = Bin(f.sched.s.live_window.0 + 2);
     for (b, window_start) in [(Bin(6), Bin(8)), (past, Bin(0)), (Bin::ALL, Bin(0))] {
-        f.sched.handle_cancel(child, b, window_start, &mut q);
+        f.sched.handle_cancel(child, b, window_start, now(), &mut q);
     }
     assert!(!f.sched.push_unwanted(child, Bin(6), t, t));
     assert!(!f.sched.push_unwanted(child, past, t, t));
@@ -3984,7 +3989,7 @@ fn a_backlog_no_one_can_serve_ends() {
     let (mut f, mut q, p) = rewound(pull());
     f.sched.run(now(), &mut f.swarm, &mut q);
     assert!(f.swarm.store().backlog().is_some());
-    f.sched.close_channel(p, &f.swarm, &mut q);
+    f.sched.close_channel(p, &f.swarm, now(), &mut q);
     f.sched.run(now(), &mut f.swarm, &mut q);
     assert_eq!(f.swarm.store().backlog(), None);
     assert!(!f.sched.s.backlog.unwrap().pending);
@@ -4608,7 +4613,7 @@ fn a_seed_asks_prompt_haves_of_its_holders_and_lazy_of_the_rest() {
         assert_eq!(f.sched.channels[&p].pace_out, Lazy);
     }
     // Unsubscribed, it is one of the rest.
-    assert_eq!(f.sched.handle_stream_cancel(holder, 0), Ok(()));
+    assert_eq!(f.sched.handle_stream_cancel(holder, 0, now()), Ok(()));
     f.sched
         .run(t + Duration::from_millis(200), &mut f.swarm, &mut q);
     assert_eq!(f.sched.channels[&holder].pace_out, Lazy);
@@ -4631,4 +4636,503 @@ fn a_viewer_asks_prompt_haves_of_its_child() {
     assert_eq!(r.pace(child), Prompt);
     r.run_to(t + Duration::SECOND);
     assert_eq!(r.paces(), [Prompt, Prompt, Prompt, Lazy]);
+}
+
+// --- the seed log -------------------------------------------------------------
+
+/// Turns the scheduler's request log on, and so a seed's seed log.
+fn seed_log_on(f: &mut Fixture) {
+    f.sched.set_request_log(true);
+}
+
+#[test]
+fn the_seed_log_is_on_only_at_a_seed() {
+    for (options, on) in [(hybrid(1), false), (seed_hybrid(1), true)] {
+        let mut f = fixture(options);
+        seed_log_on(&mut f);
+        assert_eq!(f.sched.s.seed_log.is_some(), on);
+        f.sched.set_request_log(false);
+        assert!(f.sched.s.seed_log.is_none());
+    }
+}
+
+/// A seed that declines a stream no one takes from it logs the request
+/// with no subscriber before it (the invariant that it never does breaks
+/// here), and the rule that declined it.
+#[test]
+fn the_seed_log_records_a_decline_of_an_uncovered_stream() {
+    use seed_log::{SeedDecisionKind, SeedRequest};
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    seed_log_on(&mut f);
+    let t = now();
+    assert!(ask(&mut f, &mut q, peers[0], 0, t));
+    // One copy, and it has its holder: the next neighbour is declined
+    // stream 1, which no one takes from the seed.
+    assert!(!ask(&mut f, &mut q, peers[1], 1, t));
+    let log = f.sched.take_seed_log(false, now());
+    let requests: Vec<(Option<PeerKey>, SeedRequest)> = log
+        .decisions
+        .iter()
+        .filter_map(|d| match d.kind {
+            SeedDecisionKind::Request(r) => Some((d.peer, r)),
+            _ => None,
+        })
+        .collect();
+    let row = |r: SeedRequest| {
+        (
+            r.stream,
+            r.granted,
+            r.rule,
+            r.subscribers,
+            r.holders,
+            r.copies,
+        )
+    };
+    assert_eq!(requests.len(), 2, "{log:?}");
+    assert_eq!(requests[0].0, Some(peers[0]));
+    assert_eq!(
+        row(requests[0].1),
+        (0, true, crate::AdmitRule::SeedHolder, 0, Some(0), Some(1))
+    );
+    assert_eq!(requests[1].0, Some(peers[1]));
+    assert_eq!(
+        row(requests[1].1),
+        (1, false, crate::AdmitRule::SeedNoCopy, 0, Some(1), Some(1))
+    );
+    // The first became a holder as its request was granted, before its
+    // answer.
+    assert!(
+        matches!(
+            log.decisions[0].kind,
+            SeedDecisionKind::HolderJoined {
+                satellite: false,
+                holders: 1,
+                copies: 1,
+                ..
+            }
+        ),
+        "{log:?}"
+    );
+    assert_eq!(log.decisions[0].peer, Some(peers[0]));
+    assert_eq!(log.lost, 0);
+    assert_eq!(f.sched.take_seed_log(false, now()), Default::default());
+}
+
+/// A seed of one stream with the seed log on, its neighbour subscribed,
+/// and a writer of 1 KiB chunks, 8 a signature.
+fn logged_seed() -> (Fixture, MockQueue, PeerKey, crate::Writer) {
+    let (writer, swarm) = crate::Writer::new(
+        crate::WriterOptions {
+            swarm_options: SwarmOptions {
+                chunk_size: 1024,
+                chunks_per_signature: 8,
+                ..seed_hybrid(1)
+            },
+            key: strims_crypto::key_from_seed(&[5; 32]),
+        },
+        now(),
+    )
+    .unwrap();
+    let mut f = fixture_with(swarm);
+    seed_log_on(&mut f);
+    let mut q = MockQueue::default();
+    let p = ready_channel(&mut f, &mut q);
+    assert!(ask(&mut f, &mut q, p, 0, now()));
+    (f, q, p, writer)
+}
+
+/// Writes `b` to `p` from `t` at `at` (a push at High, an answer at the
+/// hybrid's Scavenger), in a frame of `room` bytes that holds nothing
+/// else.
+#[allow(clippy::too_many_arguments)]
+fn write_at(
+    f: &mut Fixture,
+    q: &mut MockQueue,
+    p: PeerKey,
+    b: Bin,
+    t: Time,
+    pri: PeerPriority,
+    at: Time,
+    room: usize,
+) -> Result<(), WriteDataError> {
+    let mut buf = vec![0u8; room];
+    let mut cw = MeteredWriter::new(&mut buf, 1);
+    f.sched
+        .write_data(p, b, t, pri, at, &f.swarm, &mut cw, true, q)
+}
+
+/// Every fate a send of the seed's meets, each logged once as its send
+/// ends: written, stale, cancelled (by a CANCEL before the push was queued
+/// and by one while it was), unwritable, refused by a full queue, and
+/// still queued when the channel closed; an answer written. A CANCEL is
+/// logged with where the push stood: not yet queued, queued, or written.
+#[test]
+fn the_seed_log_ends_each_send_by_its_fate() {
+    use seed_log::{CancelOpen, SeedClose, SeedDecisionKind, SendFate, SendHow};
+    let (mut f, mut q, p, mut writer) = logged_seed();
+    let ms = Duration::from_millis;
+    let t = now();
+    // A CANCEL of chunk 7 before it was published.
+    f.sched.handle_cancel(p, Bin(14), Bin(0), t, &mut q);
+    writer.write(&mut f.swarm, t, &[7; 8 * 1024]).unwrap();
+    drain_published(&mut f, &mut q, t);
+    assert_eq!(q.pushed.len(), 8);
+    let w = |f: &mut Fixture, q: &mut MockQueue, b: u64, pri, at, room| {
+        write_at(f, q, p, Bin(b), t, pri, at, room)
+    };
+    let high = PeerPriority::High;
+    assert_eq!(w(&mut f, &mut q, 0, high, t + ms(5), 4096), Ok(()));
+    let stale = t + push::PUSH_STALE + ms(1);
+    assert!(w(&mut f, &mut q, 2, high, stale, 4096).is_err());
+    let cancel = t + ms(10);
+    f.sched.handle_cancel(p, Bin(4), Bin(0), cancel, &mut q);
+    assert!(w(&mut f, &mut q, 4, high, t + ms(20), 4096).is_err());
+    f.sched.handle_cancel(p, Bin(0), Bin(0), t + ms(30), &mut q);
+    // Too large for an empty frame: dropped.
+    assert!(w(&mut f, &mut q, 6, high, t + ms(40), 64).is_err());
+    assert!(w(&mut f, &mut q, 14, high, t + ms(40), 4096).is_err());
+    let answer = f.sched.s.answer_priority();
+    assert_eq!(w(&mut f, &mut q, 8, answer, t + ms(50), 4096), Ok(()));
+    // The peer's queue is full for the next signature's pushes.
+    q.full = true;
+    let later = t + ms(100);
+    writer.write(&mut f.swarm, later, &[8; 8 * 1024]).unwrap();
+    drain_published(&mut f, &mut q, later);
+    let end = t + ms(200);
+    f.sched.close_channel(p, &f.swarm, end, &mut q);
+
+    let log = f.sched.take_seed_log(false, now());
+    assert_eq!(log.lost, 0);
+    let sends: Vec<(u64, SendHow, SendFate, Option<Time>)> = log
+        .sends
+        .iter()
+        .map(|s| {
+            assert_eq!((s.peer, s.stream), (p, 0));
+            (s.bin.0, s.how, s.fate, s.cancel)
+        })
+        .collect();
+    let push = SendHow::Push;
+    let mut want = vec![
+        (0, push, SendFate::Written, None),
+        (2, push, SendFate::Stale, None),
+        (4, push, SendFate::Cancelled, Some(cancel)),
+        (6, push, SendFate::Dropped, None),
+        (14, push, SendFate::Cancelled, Some(t)),
+        (8, SendHow::Answer, SendFate::Written, None),
+    ];
+    want.extend(
+        (16..32)
+            .step_by(2)
+            .map(|b| (b, push, SendFate::Refused, None)),
+    );
+    want.extend([8, 10, 12].map(|b| (b, push, SendFate::Closed, None)));
+    assert_eq!(sends, want);
+    // The writes' times and sizes; a written push went to a subscriber.
+    let s = &log.sends;
+    assert_eq!((s[0].queued, s[0].ended), (t, t + ms(5)));
+    assert!(s[0].bytes > 1024 && s[0].subscribed, "{:?}", s[0]);
+    assert!(s[5].bytes > 1024, "{:?}", s[5]);
+    assert!(s[1..5].iter().all(|x| x.bytes == 0));
+    assert_eq!(s[6].queued, later);
+    assert!(s[14..].iter().all(|x| x.ended == end && x.queued == t));
+    // The push counters count the drops alike.
+    let st = f.sched.push_stats();
+    assert_eq!((st.stale_drops, st.suppressed), (1, 2));
+
+    let cancels: Vec<(u64, CancelOpen)> = log
+        .decisions
+        .iter()
+        .filter_map(|d| match d.kind {
+            SeedDecisionKind::Cancel { bin, open, .. } => Some((bin.0, open)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        cancels,
+        [
+            (14, CancelOpen::None),
+            (4, CancelOpen::Queued),
+            (0, CancelOpen::Written)
+        ]
+    );
+    // The subscription ended with the channel.
+    assert!(log.decisions.iter().any(|d| matches!(
+        d.kind,
+        SeedDecisionKind::Closed {
+            stream: 0,
+            why: SeedClose::Channel,
+            subscribers: 0
+        }
+    )));
+}
+
+/// A scheduler that goes ends the pushes still queued as closed, and
+/// hands its records over.
+#[test]
+fn a_seed_log_closes_its_open_pushes_when_its_scheduler_goes() {
+    use seed_log::SendFate;
+    let (mut f, mut q, _, mut writer) = logged_seed();
+    let t = now();
+    writer.write(&mut f.swarm, t, &[7; 8 * 1024]).unwrap();
+    drain_published(&mut f, &mut q, t);
+    let end = t + Duration::SECOND;
+    let log = f.sched.take_seed_log(true, end);
+    assert_eq!(log.sends.len(), 8);
+    assert!(
+        log.sends
+            .iter()
+            .all(|s| s.fate == SendFate::Closed && s.ended == end && s.queued == t)
+    );
+}
+
+/// The seed log's leaves, bars and checks: a holder that declares none of
+/// its pushes is checked once a check, its due push undeclared, barred at
+/// the third, and leaves, its subscription closing.
+#[test]
+fn the_seed_log_records_a_silent_holders_checks_and_bar() {
+    use seed_log::{SeedBar, SeedClose, SeedDecisionKind};
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    seed_log_on(&mut f);
+    let ms = Duration::from_millis;
+    let mut t = now();
+    assert!(ask(&mut f, &mut q, peers[0], 0, t));
+    // Its push each interval is written, never declared.
+    for _ in 0..6 {
+        let next = t + push::seed::ALLOC_CHECK_INTERVAL;
+        publish(&mut f, t, next);
+        if subscribed(&f, peers[0], 0) {
+            push_to(&mut f, peers[0], t, t + ms(5), None);
+        }
+        f.sched.set_upload(push::UploadInfo {
+            rate: 2_000_000,
+            busy: 1.0,
+            ..Default::default()
+        });
+        f.sched.run_push(next, &mut q);
+        t = next;
+    }
+    let log = f.sched.take_seed_log(false, now());
+    let checks: Vec<(bool, u8)> = log
+        .decisions
+        .iter()
+        .filter_map(|d| match d.kind {
+            SeedDecisionKind::Check(c) if d.peer == Some(peers[0]) => Some((c.judged, c.silent)),
+            _ => None,
+        })
+        .collect();
+    // No push is due at the first check, nor judged at the second (written
+    // less than ANNOUNCE_TIMEOUT before); then one a check, undeclared.
+    assert_eq!(
+        checks[..4],
+        [(false, 0), (true, 1), (true, 2), (true, 3)],
+        "{checks:?}"
+    );
+    let kinds: Vec<&str> = log
+        .decisions
+        .iter()
+        .filter(|d| d.peer == Some(peers[0]))
+        .map(|d| d.kind.name())
+        .collect();
+    let at = kinds.iter().position(|&k| k == "barred").unwrap();
+    assert_eq!(
+        kinds[at - 1..at + 3],
+        ["check", "barred", "holder_left", "closed"]
+    );
+    let barred = log
+        .decisions
+        .iter()
+        .find_map(|d| match d.kind {
+            SeedDecisionKind::Barred {
+                why, until, bars, ..
+            } => Some((why, until - d.at, bars)),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(barred, (SeedBar::Silent, push::seed::HOLDER_BAR, 1));
+    assert!(log.decisions.iter().any(|d| matches!(
+        d.kind,
+        SeedDecisionKind::Closed {
+            why: SeedClose::Left(crate::HolderLeft::Silent),
+            ..
+        }
+    )));
+    // The allocation's window, a row a check.
+    let windows = log
+        .decisions
+        .iter()
+        .filter(|d| matches!(d.kind, SeedDecisionKind::Window(_)))
+        .count();
+    assert_eq!(windows, 6);
+}
+
+/// In the HAVE world a push of a chunk the peer's HAVEs announced is
+/// suppressed at write time, and logged so.
+#[test]
+fn the_seed_log_ends_a_push_the_peer_announced_as_suppressed() {
+    use seed_log::SendFate;
+    let (mut f, mut q, p, mut writer) = logged_seed();
+    let t = now();
+    writer.write(&mut f.swarm, t, &[7; 8 * 1024]).unwrap();
+    drain_published(&mut f, &mut q, t);
+    assert!(f.sched.handle_have(p, Bin(2), t));
+    let r = write_at(&mut f, &mut q, p, Bin(2), t, PeerPriority::High, t, 4096);
+    assert!(r.is_err());
+    let log = f.sched.take_seed_log(false, t);
+    let s = log.sends.iter().find(|s| s.bin == Bin(2)).unwrap();
+    assert_eq!((s.fate, s.declared), (SendFate::Suppressed, true));
+    assert_eq!(f.sched.push_stats().suppressed, 1);
+}
+
+/// The first wave's ramp in the seed log: the requests its copies don't
+/// cover are deferred, each answered later (a request row), and the
+/// window rows follow the first wave and each step that grew it.
+#[test]
+fn the_seed_log_records_the_ramps_deferred_requests_and_windows() {
+    use seed_log::{SeedDecisionKind, WindowPhase};
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    seed_log_on(&mut f);
+    let step = push::seed::RAMP_STEP;
+    publish(&mut f, now() - Duration::SECOND, now());
+    ramp_upload(&mut f, 0.0, 0);
+    for &p in &peers {
+        ask(&mut f, &mut q, p, 0, now());
+    }
+    let t = now() + step;
+    f.sched.run_push(t, &mut q);
+    let log = f.sched.take_seed_log(false, now());
+    let deferred: Vec<Option<PeerKey>> = log
+        .decisions
+        .iter()
+        .filter(|d| matches!(d.kind, SeedDecisionKind::Deferred { stream: 0 }))
+        .map(|d| d.peer)
+        .collect();
+    assert_eq!(
+        deferred,
+        peers[2..].iter().map(|&p| Some(p)).collect::<Vec<_>>()
+    );
+    // The step to four copies answers the next two: granted, after their
+    // deferral.
+    let granted: Vec<(Option<PeerKey>, Time)> = log
+        .decisions
+        .iter()
+        .filter_map(|d| match d.kind {
+            SeedDecisionKind::Request(r) if r.granted => Some((d.peer, d.at)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        granted,
+        [
+            (Some(peers[0]), now()),
+            (Some(peers[1]), now()),
+            (Some(peers[2]), t),
+            (Some(peers[3]), t)
+        ]
+    );
+    let windows: Vec<(WindowPhase, usize)> = log
+        .decisions
+        .iter()
+        .filter_map(|d| match d.kind {
+            SeedDecisionKind::Window(w) => Some((w.phase, w.copies)),
+            _ => None,
+        })
+        .collect();
+    // The step's run_push checks the allocation too: a window row a check.
+    assert_eq!(
+        windows,
+        [
+            (WindowPhase::FirstWave, 2),
+            (WindowPhase::Ramp, 4),
+            (WindowPhase::Check, 4)
+        ]
+    );
+}
+
+/// A holder's STREAM_CANCEL of a stream of its copy is a release the seed
+/// keeps for a near satellite; the same cancel of a non-holder's
+/// subscription isn't kept.
+#[test]
+fn the_seed_log_records_a_holders_release() {
+    use seed_log::SeedDecisionKind;
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    seed_log_on(&mut f);
+    let ms = Duration::from_millis;
+    for s in 0..4 {
+        assert!(ask(&mut f, &mut q, peers[1], s, now()));
+    }
+    let t = alloc_check(&mut f, &mut q, now(), &[peers[1]], ms(5), (600_000, 1.0));
+    f.sched.take_seed_log(false, now());
+    f.sched.handle_stream_cancel(peers[1], 3, t).unwrap();
+    // A STREAM_CANCEL of no subscription is no release.
+    f.sched.handle_stream_cancel(peers[2], 0, t).unwrap();
+    let log = f.sched.take_seed_log(false, now());
+    let released: Vec<(Option<PeerKey>, SeedDecisionKind)> =
+        log.decisions.iter().map(|d| (d.peer, d.kind)).collect();
+    assert_eq!(
+        released,
+        [(
+            Some(peers[1]),
+            SeedDecisionKind::Released {
+                stream: 3,
+                subscribers: 0,
+                kept: true
+            }
+        )]
+    );
+}
+
+/// The answer gate's pace is logged as it changes, not at every tick, and
+/// a reading's move under a ms is no change.
+#[test]
+fn the_seed_log_records_the_answer_rate_as_it_changes() {
+    use seed_log::SeedDecisionKind;
+    let mut f = fixture(seed_hybrid(1));
+    seed_log_on(&mut f);
+    let ms = Duration::from_millis;
+    let t = now();
+    f.sched.seed_answer_rate(1000, None, false, t);
+    f.sched.seed_answer_rate(1000, None, false, t + ms(10));
+    f.sched
+        .seed_answer_rate(1000, Some(ms(60)), true, t + ms(20));
+    // A reading that moves by less than the ms the tables write is none.
+    f.sched.seed_answer_rate(
+        1000,
+        Some(ms(60) + Duration::from_micros(400)),
+        true,
+        t + ms(30),
+    );
+    f.sched
+        .seed_answer_rate(1000, Some(ms(61)), true, t + ms(40));
+    let log = f.sched.take_seed_log(false, now());
+    let rates: Vec<(Time, SeedDecisionKind)> =
+        log.decisions.iter().map(|d| (d.at, d.kind)).collect();
+    assert_eq!(
+        rates,
+        [
+            (
+                t,
+                SeedDecisionKind::AnswerRate {
+                    rate: 1000,
+                    reading: None,
+                    engaged: false
+                }
+            ),
+            (
+                t + ms(20),
+                SeedDecisionKind::AnswerRate {
+                    rate: 1000,
+                    reading: Some(ms(60)),
+                    engaged: true
+                }
+            ),
+            (
+                t + ms(40),
+                SeedDecisionKind::AnswerRate {
+                    rate: 1000,
+                    reading: Some(ms(61)),
+                    engaged: true
+                }
+            )
+        ]
+    );
 }

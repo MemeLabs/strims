@@ -888,6 +888,23 @@ class Tables(Fixture):
             "t_ms", "node", "ask", "peer", "seq", "rtt_ms", "predicted_ms", "predicted_p90_ms", "predicted_p99_ms",
             "channel_open_ms", "since_ms", "peer_incarnation")],
             [(1000, 2, 0, 1, 6, 20, 1100, 1200, 1300, 500, 0, 0), (1000, 2, 0, 3, 6, 20, 1100, 1200, 1300, 500, 0, 0)])
+        # The seed's log: decisions about the allocation (no peer, as the
+        # sims write it, and an older run's -1), and about node 1: a
+        # request, a check of the push of chunk 6 written at 1100 and a
+        # CANCEL of chunk 7's push, still queued; its sends: that push, an
+        # answer of chunk 6 too, the cancelled push and a push to a peer an
+        # older run couldn't name (-1).
+        golden_cli.write_table(d, "seed_decisions", [(c, "VARCHAR" if c in ("kind", "why") else "BIGINT") for c in (
+            "t_ms", "node", "n", "peer", "peer_incarnation", "kind", "seq", "due_ms", "why", "capacity_bps")],
+            [(900, 0, 0, None, None, "window", None, None, "check", None),
+             (905, 0, 1, -1, None, "answer_rate", None, None, None, None),
+             (950, 0, 2, 1, 0, "request", None, None, None, None),
+             (1150, 0, 3, 1, 0, "cancel", 7, None, "queued", None),
+             (1200, 0, 4, 1, 0, "check", 6, 1100, None, None)])
+        golden_cli.write_table(d, "seed_sends", [(c, "VARCHAR" if c in ("how", "fate") else "BIGINT") for c in (
+            "t_ms", "node", "n", "peer", "peer_incarnation", "how", "seq", "fate", "cancel_ms")],
+            [(1100, 0, 0, 1, 0, "push", 6, "written", None), (1120, 0, 1, 1, 0, "answer", 6, "written", None),
+             (1160, 0, 2, 1, 0, "push", 7, "cancelled", 1150), (1170, 0, 3, -1, None, "push", 8, "closed", None)])
         db = self.root / "jobs-tables" / f"{src.replace('/', '~')}.duckdb"
         store_host.fold(db, [meta], src)
         store_host.export(db, store_host.cache_root() / "cache" / src)
@@ -947,6 +964,32 @@ class Tables(Fixture):
         got = catalog.lake(f"SELECT peer, seq, held_ms, live FROM haves WHERE k = {catalog.q(tail)} ORDER BY seq;")
         self.assertEqual(got, [{"peer": 1, "seq": 6, "held_ms": 1150, "live": True},
                                {"peer": None, "seq": 7, "held_ms": None, "live": False}])
+        # The seed log's views: a decision about the allocation has no peer,
+        # nor has a send an older run couldn't name, and a written push meets
+        # its holder's hold in arrivals, as the tables' joins say; their
+        # keys and joins are table_catalog's.
+        dec = catalog.lake(f"SELECT n, peer, kind FROM seed_decisions WHERE k = {catalog.q(tail)} ORDER BY n;")
+        self.assertEqual([(r["n"], r["peer"]) for r in dec], [(0, None), (1, None), (2, 1), (3, 1), (4, 1)])
+        sends = catalog.lake(f"SELECT n, peer FROM seed_sends WHERE k = {catalog.q(tail)} ORDER BY n;")
+        self.assertEqual([(r["n"], r["peer"]) for r in sends], [(0, 1), (1, 1), (2, 1), (3, None)])
+        held = catalog.lake("SELECT s.seq, a.t_ms AS held FROM seed_sends s JOIN arrivals a ON a.k = s.k AND "
+                            "a.src = s.src AND a.node = s.peer AND a.seq = s.seq AND a.incarnation = "
+                            f"s.peer_incarnation WHERE s.k = {catalog.q(tail)} AND s.how = 'push';")
+        self.assertEqual(held, [{"seq": 6, "held": 1150}])
+        # A cancel's and a check's push, one to one by the documented join:
+        # without how and due_ms the check meets the answer of chunk 6 too.
+        pairs = catalog.lake(
+            "SELECT d.kind, s.n, s.how = 'push' AND (d.kind <> 'check' OR s.t_ms = d.due_ms) AS documented "
+            "FROM seed_decisions d JOIN seed_sends s ON s.k = d.k AND s.src = d.src AND s.node = d.node AND "
+            "s.peer = d.peer AND s.peer_incarnation = d.peer_incarnation AND s.seq = d.seq "
+            f"WHERE d.k = {catalog.q(tail)} ORDER BY d.n, s.n;")
+        self.assertEqual([(r["kind"], r["n"], r["documented"]) for r in pairs],
+                         [("cancel", 2, True), ("check", 0, True), ("check", 1, False)])
+        rows = {r["name"]: r for r in catalog.lake("SELECT name, keys, joins FROM table_catalog WHERE name IN "
+                                                   "('seed_decisions', 'seed_sends');")}
+        self.assertEqual({t: r["keys"] for t, r in rows.items()},
+                         {"seed_decisions": "k, node, n", "seed_sends": "k, node, n"})
+        self.assertIn("arrivals.incarnation = seed_sends.peer_incarnation", rows["seed_sends"]["joins"])
 
 
 
