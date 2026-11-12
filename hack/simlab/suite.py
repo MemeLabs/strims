@@ -866,8 +866,9 @@ def run_jobs(jobs, slots, mem_gib, need_gib):
                 env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             )
             chunks = []
-            for chunk in iter(lambda: p.stdout.read(1 << 16), b""):
-                chunks.append(chunk)
+            with p.stdout:
+                for chunk in iter(lambda: p.stdout.read(1 << 16), b""):
+                    chunks.append(chunk)
             _, status, usage = os.wait4(p.pid, 0)
             p.returncode = os.waitstatus_to_exitcode(status)
             out = b"".join(chunks).decode(errors="replace")

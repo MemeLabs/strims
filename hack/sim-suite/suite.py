@@ -20,6 +20,9 @@ working tree's sims against the base's, cell by cell, paired by seed.
   hack/sim-suite/suite.py score RUN:ARM RUN:ARM [--tier ...] [--only CELL,...]
                                 [--knob SIM_EXP,STRIMS_SIM_EXP] [--all]
   hack/sim-suite/suite.py list [--tier ...] [--only CELL,...]
+  hack/sim-suite/suite.py neutral [--base REF ...] [--head REF] [--cells SET|CELL,...]
+                                  [--seeds 2004,3033] [--expect TABLE[.COL] ...] [--json]
+                                  [--slots N] [--mem-gib N]
 
 `run` builds the ppspp sim and strims-sim's scenarios from the working
 tree (the checkout this script is in, changes and all) and from `--base`
@@ -185,6 +188,22 @@ the seed and lets none leave when the cell's audience wouldn't fit in it
 `list` prints a tier's cells: each one's sim, test, audience (arrivals
 and departures), seeds and settings.
 
+`neutral` is the trace-neutral check of a change that adds a log or a
+metric (simlab.neutral): the head (`--head`, HEAD by default: a commit,
+which the evidence names, built from a tree that edits made while the
+check runs can't reach; `.` for a snapshot of the working tree, untracked
+files in) against each base (`--base`, by default the head's parents; a
+merge commit against every parent as well), each commit built in a
+worktree and target dir of its own, every cell (`--cells`: the audit's
+nine by default, a suite tier, or cells) run at each seed under each with
+every table and log on, and compared byte for byte: each run's trace and
+reads, its row's fields, each table (`.zst` ones decompressed) and
+series_meta. `--expect TABLE.COL` (or TABLE, `row`, `series_meta`)
+allows what the change means to move; anything else that moved is
+unexpected, reported with the rows and columns it moved in, and exits 1
+(2 for a build or run that failed). A commit's binaries and runs are kept
+(target/neutral): a check against the same base runs the head alone.
+
 The tiers, cells and metrics, the local runs and the farm's matrices are
 simlab.suite's (hack/simlab/suite.py), and the scorecards and arm scores
 simlab.scoring's (hack/simlab/scoring.py): this script parses the
@@ -206,7 +225,7 @@ from pathlib import Path
 HACK = Path(__file__).resolve().parents[1]
 if str(HACK) not in sys.path:
     sys.path.insert(0, str(HACK))
-from simlab import bootstrap, scoring, suite as lab, verdict  # noqa: E402
+from simlab import bootstrap, neutral, scoring, suite as lab, verdict  # noqa: E402
 
 
 # --- race -------------------------------------------------------------------
@@ -377,6 +396,22 @@ def score(a, cells):
     print(scoring.scorecard(both, a_rows, b_rows, a.a, a.b, a.all).text(), end="")
 
 
+def neutral_check(a):
+    """`neutral`: simlab.neutral.check's report, its exit status this
+    script's."""
+    try:
+        cells = neutral.cell_set(a.cells)
+        seeds = [int(s) for s in a.seeds.split(",") if s.strip()]
+    except ValueError as e:
+        sys.exit(f"neutral: {e}")
+    try:
+        report = neutral.check(a.base, a.head, cells, seeds, a.expect, a.slots, a.mem_gib)
+    except neutral.GitError as e:
+        sys.exit(f"neutral: {e}")
+    print(json.dumps(report.json(), indent=1) if a.json else report.text(), end="\n" if a.json else "")
+    sys.exit(report.exit_code())
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -440,6 +475,19 @@ def main():
     ls = sub.add_parser("list")
     ls.add_argument("--tier", choices=sorted(lab.TIERS), help="one tier (default: every one)")
     ls.add_argument("--only", help="cells, comma-separated")
+    nt = sub.add_parser("neutral")
+    nt.add_argument("--base", action="append", default=[], metavar="REF",
+                    help="a commit the head is checked against (default: the head's parents)")
+    nt.add_argument("--head", default="HEAD", help="the commit checked, or . for the working tree (default HEAD)")
+    nt.add_argument("--cells", default=neutral.DEFAULT_SET,
+                    help=f"a cell set ({', '.join(neutral.SETS)}), a tier, or cells, comma-separated")
+    nt.add_argument("--seeds", default=",".join(map(str, neutral.SEEDS)), help="comma-separated")
+    nt.add_argument("--expect", nargs="+", action="extend", default=[], metavar="TABLE[.COL]",
+                    help="what the change means to move: a table, row or series_meta, or one column or key")
+    nt.add_argument("--json", action="store_true", help="the report as JSON")
+    nt.add_argument("--slots", type=int, default=None, help="runs at once (default: the cores but one)")
+    nt.add_argument("--mem-gib", type=float, default=None,
+                    help="the runs' memory budget (default: three quarters of what is available)")
     for p in (cal, r, rc, fc):
         p.add_argument("--env", action="append", default=[], metavar="KEY=VALUE",
                        help="set for every arm's runs, as part of each cell")
@@ -456,6 +504,8 @@ def main():
     if a.cmd == "list":
         list_cells(a)
         return
+    if a.cmd == "neutral":
+        neutral_check(a)
     only = a.only.split(",") if a.only else None
     if a.cmd == "score":
         score(a, lab.cells(a.tier, only))

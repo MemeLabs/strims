@@ -24,6 +24,8 @@ server (hack/console).
   query     simdb.py's selections and queries, as results
   suite     suite.py's tiers, cells, metrics, local runs and farm matrices
   scoring   the catalog's scoring macros, as scorecards and arm scores
+  neutral   the trace-neutral check: two commits' runs with every table
+            and log on, compared byte for byte, and what moved
   views     the console's saved views, their graphs, and its addresses:
             links to a view with a selection, and the open tabs'
   farm      farm.py's quotes and approved runs
@@ -36,10 +38,10 @@ server (hack/console).
 
 Each module's docstring says what it offers. `engine` and the modules
 over it need the duckdb module, which hack/pyproject.toml pins (uv's venv,
-hack/.venv); `bootstrap`, `verdict`'s verdict functions, `farm`, `vocab`
-and this module are stdlib alone, so a script under the plain python3
-imports them; `store_host` is self-contained too, as farm.py ships it
-alone.
+hack/.venv); `bootstrap`, `verdict`'s verdict functions, `farm`, `vocab`,
+`neutral` and this module are stdlib alone, so a script under the plain
+python3 imports them; `store_host` is self-contained too, as farm.py
+ships it alone.
 A script puts hack/ on sys.path and imports `simlab`; its `__main__`
 block runs `bootstrap.engine` before anything needs the module.
 """
