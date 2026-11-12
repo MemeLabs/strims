@@ -16,6 +16,7 @@ const stories: Story[] = [
     component: () => <SettingsStory path={PATH} />,
   },
   {
+    // Nothing until the token comes.
     name: "Loading",
     component: () => (
       <SettingsStory
@@ -25,7 +26,7 @@ const stories: Story[] = [
     ),
   },
   {
-    // A profile in no network can't pair.
+    // A profile in no network can't pair: the error alone, no token.
     name: "Error",
     component: () => (
       <SettingsStory

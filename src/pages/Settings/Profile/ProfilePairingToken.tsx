@@ -3,7 +3,7 @@
 
 import { Base64 } from "js-base64";
 import QRCode from "qrcode";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useTitle } from "react-use";
 
@@ -22,24 +22,21 @@ const ProfilePairingToken = () => {
 
   const [createPairingTokenRes] = useCall("replication", "createPairingToken");
 
+  const token = createPairingTokenRes.value?.token;
+  const code = useMemo(
+    () => token && Base64.fromUint8Array(PairingToken.encode(token).finish()),
+    [token]
+  );
+
+  // The canvas renders only with a token, so the code is drawn once both are.
   const canvas = useRef<HTMLCanvasElement>();
   useEffect(() => {
-    const token = createPairingTokenRes.value?.token;
-    if (token) {
-      const data = PairingToken.encode(token).finish();
-      console.log(data.slice());
-
-      const code = Base64.fromUint8Array(data);
-      console.log({ token, data });
-      console.log({ code, length: code.length });
-      // void QRCode.toCanvas(canvas.current, [{ data, mode: "byte" }]);
+    if (code) {
       void QRCode.toCanvas(canvas.current, code, { margin: 15 });
     }
-  }, [createPairingTokenRes.value]);
+  }, [code]);
 
   const handleClick = () => {
-    const { token } = createPairingTokenRes.value;
-    const code = Base64.fromUint8Array(PairingToken.encode(token).finish());
     void navigator.clipboard.writeText(code);
 
     pushTransientNotification({
@@ -54,12 +51,12 @@ const ProfilePairingToken = () => {
       <div className="thing_form">
         {createPairingTokenRes.error && (
           <InputError
-            error={createPairingTokenRes.error.message || "Error saving debug settings"}
+            error={createPairingTokenRes.error.message || "Error creating a pairing token"}
           />
         )}
-        <InputLabel text="token">
-          <canvas ref={canvas} height="500" width="500" />
-          {createPairingTokenRes.value && (
+        {code && (
+          <InputLabel text="token">
+            <canvas ref={canvas} height="500" width="500" />
             <code
               style={{
                 lineBreak: "anywhere",
@@ -69,12 +66,10 @@ const ProfilePairingToken = () => {
               }}
               onClick={handleClick}
             >
-              {Base64.fromUint8Array(
-                PairingToken.encode(createPairingTokenRes.value.token).finish()
-              )}
+              {code}
             </code>
-          )}
-        </InputLabel>
+          </InputLabel>
+        )}
       </div>
     </>
   );
