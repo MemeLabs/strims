@@ -17,6 +17,11 @@ export interface EmoteProps extends ComponentProps<"span"> {
   compactSpacing?: boolean;
 }
 
+const animatedModifier = new Modifier({
+  name: "meme",
+  priority: Number.MAX_VALUE,
+});
+
 const Emote: React.FC<EmoteProps> = ({
   children,
   className,
@@ -35,6 +40,9 @@ const Emote: React.FC<EmoteProps> = ({
   }
 
   const effectiveModifiers = new Set<Modifier>();
+  if (style.animated) {
+    effectiveModifiers.add(animatedModifier);
+  }
   for (const m of style.modifiers) {
     if (room.styles.modifiers.has(m)) {
       effectiveModifiers.add(room.styles.modifiers.get(m));

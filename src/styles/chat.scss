@@ -387,24 +387,32 @@
     }
 
     @mixin weather($name, $duration: 6s) {
+      position: relative;
+      overflow: hidden;
+
       &:before,
       &:after {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        height: calc(100% + 300px);
+        width: calc(100% + 100px);
         background-image: url("/assets/chat/modifiers/#{$name}-static.png");
-        animation: #{$name} $duration 1;
+        animation: #{$name} $duration 1 linear;
       }
 
       @keyframes #{$name} {
         0% {
-          background-image: url("/assets/chat/modifiers/#{$name}.png");
+          transform: translateY(0);
         }
         100% {
-          background-image: url("/assets/chat/modifiers/#{$name}.png");
+          transform: translateY(300px) translateX(-100px);
         }
       }
     }
 
     &--rain {
-      @include weather("rain");
+      @include weather("rain", 3s);
     }
 
     &--snow {
@@ -420,17 +428,10 @@
       &:after {
         content: "";
         display: block;
-        height: 100%;
         left: 0;
         pointer-events: none;
         position: absolute;
-        top: 0;
-        width: 100%;
         z-index: 2;
-      }
-
-      &:after {
-        background-position: 32px 32px;
       }
 
       &:hover,

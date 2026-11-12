@@ -3,7 +3,7 @@
 
 import "./EmoteDetails.scss";
 
-import React, { ReactNode, useRef } from "react";
+import React, { useRef } from "react";
 import { FiExternalLink } from "react-icons/fi";
 import { MdClose } from "react-icons/md";
 import usePortal from "use-portal";

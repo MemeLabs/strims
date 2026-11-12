@@ -29,9 +29,20 @@
     width: var(--width);
     background-repeat: no-repeat;
     z-index: 1;
+  }
 
-    &--animated {
-      background-position-x: calc(-1 * max(var(--animation-end-on-frame) - 1, 0) * var(--width));
+  &__emote_container--meme {
+    height: var(--height);
+    width: var(--width);
+    overflow: hidden;
+    position: relative;
+
+    .chat__emote {
+      top: 0;
+      left: 0;
+      position: absolute;
+      width: var(--animation-spritesheet-width);
+      transform: translateX(calc(-1 * max(var(--animation-end-on-frame) - 1, 0) * var(--width)));
       animation-name: sprite-animation;
       animation-duration: calc(var(--animation-duration-ms) * 1ms);
       animation-timing-function: steps(var(--animation-frame-count));
@@ -39,23 +50,23 @@
       animation-iteration-count: calc(
         var(--animation-iterations) + var(--animation-end-on-frame) / var(--animation-frame-count)
       );
-    }
 
-    &--animate_forever {
-      animation-iteration-count: var(--animation-max-iterations);
-    }
+      &--animate_forever {
+        animation-iteration-count: var(--animation-max-iterations);
+      }
 
-    &:hover {
-      animation-iteration-count: infinite;
+      &:hover {
+        animation-iteration-count: infinite;
+      }
     }
   }
 
   @keyframes sprite-animation {
     0% {
-      background-position-x: 0;
+      transform: translateX(0);
     }
     100% {
-      background-position-x: calc(-1 * var(--animation-spritesheet-width));
+      transform: translateX(calc(-1 * var(--animation-spritesheet-width)));
     }
   }
 }

@@ -15,7 +15,7 @@ void i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    fallbackLng: "en",
+    fallbackLng: "hu",
     supportedLngs: I18N_LANG,
     load: "languageOnly",
     debug: !IS_PRODUCTION,
@@ -31,7 +31,7 @@ void i18n
 
 if (import.meta.webpackHot) {
   import.meta.webpackHot.accept(
-    ["../../assets/locales/en/translation.json"],
-    () => void i18n.reloadResources().then(() => i18n.changeLanguage("en"))
+    ["../../assets/locales/hu/translation.json"],
+    () => void i18n.reloadResources().then(() => i18n.changeLanguage("hu"))
   );
 }
