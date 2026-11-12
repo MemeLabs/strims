@@ -17,6 +17,7 @@ crates/strims-wan/fields.toml.
                unit (and names that all carry one declare it), percentiles
                are _pNN, families hold names for each of their sims and
                lines, every entry or table no sim writes names its lines
+               or its writers, and a writer's names (only) start with _
   FarmNames    the row fields the farm reads are declared rows: worker.py's
                THIN, those store_host.py reads of a row, farm.py's report
                defaults, and every test matrix's [report] and [[derive]]
@@ -132,7 +133,7 @@ class Naming(unittest.TestCase):
         return out
 
     def names(self, key, e):
-        whos = [*e["sims"], *e.get("lines", ())]
+        whos = [*e["sims"], *e.get("lines", ()), *e.get("writers", ())]
         return {n for who in whos for n in vocab.expand(key, e, who)}
 
     def test_a_unit_suffix_agrees_with_the_declared_unit(self):
@@ -164,12 +165,15 @@ class Naming(unittest.TestCase):
                     self.assertTrue(names)
                     self.assertTrue(all("{" not in n for n in names), names)
 
-    def test_what_no_sim_writes_names_its_lines(self):
+    def test_what_no_sim_writes_names_its_lines_or_writers(self):
         doc = vocab.fields()
-        for where, _, e in [*self.entries(), *((f"tables.{t}", t, tab) for t, tab in doc["tables"].items())]:
+        for where, key, e in [*self.entries(), *((f"tables.{t}", t, tab) for t, tab in doc["tables"].items())]:
             if not e["sims"]:
                 with self.subTest(where):
-                    self.assertTrue(e.get("lines"))
+                    self.assertTrue(e.get("lines") or e.get("writers"))
+            # A writer's name is apart from a sim's.
+            with self.subTest(where, underscore=True):
+                self.assertEqual(key.startswith("_"), bool(e.get("writers")))
 
 
 FARM = HACK / "sim-farm"

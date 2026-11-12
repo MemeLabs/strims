@@ -16,6 +16,9 @@
 # with {param} parts, its names those of every value of its params.
 #   sims          the sims that write it: strims-sim, ppspp; [] for one
 #                 only a line writes
+#   writers       the lab's programs that add it to a sim's row, no sim
+#                 writing it: suite (hack/simlab/suite.py's local runs);
+#                 its name starts with an underscore, a sim's never does
 #   lines         the lines that write it and main doesn't: decl (the
 #                 HAVE removal's declared-summary line, seed-cover), p4tf
 #                 (its park4 line, seed-cover-p4tf); a family's values a
@@ -102,6 +105,20 @@ consts.strims-sim = ["p"]
 consts.ppspp = ["p"]
 description = "over every join (`Report::joins`), the ms to its first frame (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read nothing) and to catching up (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`);"
 notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows._rss_mb]
+sims = []
+writers = ["suite"]
+type = "int"
+unit = "MB"
+description = "The job's peak resident memory in MiB, as suite.py's local run measured it (its process's maxrss, or /usr/bin/time's where it timed the run): the host's number, not the sim's. The fold keeps it as the run's rss_mb (job_runs), not as a column of rows."
+
+[rows._wall_s]
+sims = []
+writers = ["suite"]
+type = "num"
+unit = "s"
+description = "The job's wall-clock seconds, as suite.py's local run timed it, to the hundredth: the host's number, not the sim's. The fold keeps it as the run's wall_s (job_runs), not as a column of rows."
 
 [rows.access]
 sims = ["ppspp"]

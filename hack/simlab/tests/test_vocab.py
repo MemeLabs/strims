@@ -337,7 +337,8 @@ class Fields(unittest.TestCase):
                 self.assertTrue(e.get("description"))
                 self.assertLessEqual(set(e["sims"]), set(vocab.SIMS))
                 self.assertLessEqual(set(e.get("lines", ())), set(vocab.LINES))
-                self.assertTrue(e["sims"] or e.get("lines"), "an entry no sim writes names the lines that do")
+                self.assertTrue(e["sims"] or e.get("lines") or e.get("writers"),
+                                "an entry no sim writes names the lines or the lab's writers that do")
 
     def test_a_familys_names_are_its_params_by_sim(self):
         key = "stalls_per_min_{delay}{pop}"

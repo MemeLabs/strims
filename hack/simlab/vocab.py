@@ -736,12 +736,14 @@ def declared(path=None, doc=None):
     declares, by where it's recorded: {"rows": {name: (id, entry)}, "meta":
     {...}, "columns": {table: {name: (id, entry)}}}. A family's names are
     those it holds for any sim or line (expand), the first entry to hold a
-    name keeping it."""
+    name keeping it; a name a writer adds (`writers`) is its own."""
     doc = fields(path) if doc is None else doc
 
     def names(entries):
         out = {}
         for key, e in entries.items():
+            if e.get("writers") and "{" not in key:
+                out.setdefault(key, (key, e))
             for who in (*SIMS, *LINES):
                 if who in e.get("sims", ()) or who in e.get("lines", ()) or (
                         who in LINES and "{" in key and products(e.get("params") or {}, who)):

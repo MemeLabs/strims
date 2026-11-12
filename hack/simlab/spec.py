@@ -28,6 +28,9 @@ SIMS = ("strims-sim", "ppspp")
 LINES = ("decl", "p4tf")
 Sim = Literal["strims-sim", "ppspp"]
 Line = Literal["decl", "p4tf"]
+# The lab's programs that add a field to a sim's row, its name an
+# underscore's: suite (hack/simlab/suite.py's local runs).
+Writer = Literal["suite"]
 TYPES = ("int", "num", "text", "bool", "ints", "nums", "json")
 Type = Literal["int", "num", "text", "bool", "ints", "nums", "json"]
 NONES = ("empty", "-1", "0", "negative")
@@ -48,6 +51,9 @@ class Entry(BaseModel):
     sims: list[Sim] = Field(description="The sims that write it; [] for a name only a line writes.")
     lines: list[Line] = Field([], description="The lines that write it where main doesn't; a family's values a "
                                               "line adds are keyed by the line in its params.")
+    writers: list[Writer] = Field([], description="The lab's programs that add it to a sim's row, no sim writing it: "
+                                                  "suite (hack/simlab/suite.py's local runs). Its name starts with "
+                                                  "an underscore, which a sim's never does.")
     type: Type = Field(description="int, num, text, bool, ints (a list of integers), nums (a list of numbers), "
                                    "json (another JSON value).")
     unit: str | None = None
@@ -147,12 +153,19 @@ def entry_problems(where, key, e, sims_of_table=None):
                 if k not in names:
                     out.append(f"{where}: code for {k}, not a param")
     else:
-        if not NAME.match(key):
+        if e.writers:
+            if not key.startswith("_") or not NAME.match(key[1:]):
+                out.append(f"{where}: a name a writer adds is _ and lower snake case")
+            if e.sims or e.lines:
+                out.append(f"{where}: written by a sim or line and added by a writer")
+        elif not NAME.match(key):
             out.append(f"{where}: not a lower snake case name")
         if e.params is not None or e.code or e.consts:
             out.append(f"{where}: params, code or consts on a name")
-    if not e.sims and not e.lines:
-        out.append(f"{where}: no sims and no lines")
+    if e.writers and family:
+        out.append(f"{where}: a family a writer adds")
+    if not e.sims and not e.lines and not e.writers:
+        out.append(f"{where}: no sims, no lines and no writers")
     if len(set(e.sims)) != len(e.sims) or len(set(e.lines)) != len(e.lines):
         out.append(f"{where}: a sim or line twice")
     for s in e.notes:

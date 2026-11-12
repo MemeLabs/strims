@@ -29,6 +29,16 @@
           "title": "Lines",
           "type": "array"
         },
+        "writers": {
+          "default": [],
+          "description": "The lab's programs that add it to a sim's row, no sim writing it: suite (hack/simlab/suite.py's local runs). Its name starts with an underscore, which a sim's never does.",
+          "items": {
+            "const": "suite",
+            "type": "string"
+          },
+          "title": "Writers",
+          "type": "array"
+        },
         "type": {
           "description": "int, num, text, bool, ints (a list of integers), nums (a list of numbers), json (another JSON value).",
           "enum": [
