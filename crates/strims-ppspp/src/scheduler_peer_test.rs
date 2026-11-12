@@ -5081,7 +5081,8 @@ fn the_seed_log_records_a_holders_release() {
     );
 }
 
-/// The answer gate's pace is logged as it changes, not at every tick.
+/// The answer gate's pace is logged as it changes, not at every tick, and
+/// a reading's move under a ms is no change.
 #[test]
 fn the_seed_log_records_the_answer_rate_as_it_changes() {
     use seed_log::SeedDecisionKind;
@@ -5093,6 +5094,15 @@ fn the_seed_log_records_the_answer_rate_as_it_changes() {
     f.sched.seed_answer_rate(1000, None, false, t + ms(10));
     f.sched
         .seed_answer_rate(1000, Some(ms(60)), true, t + ms(20));
+    // A reading that moves by less than the ms the tables write is none.
+    f.sched.seed_answer_rate(
+        1000,
+        Some(ms(60) + Duration::from_micros(400)),
+        true,
+        t + ms(30),
+    );
+    f.sched
+        .seed_answer_rate(1000, Some(ms(61)), true, t + ms(40));
     let log = f.sched.take_seed_log(false, now());
     let rates: Vec<(Time, SeedDecisionKind)> =
         log.decisions.iter().map(|d| (d.at, d.kind)).collect();
@@ -5112,6 +5122,14 @@ fn the_seed_log_records_the_answer_rate_as_it_changes() {
                 SeedDecisionKind::AnswerRate {
                     rate: 1000,
                     reading: Some(ms(60)),
+                    engaged: true
+                }
+            ),
+            (
+                t + ms(40),
+                SeedDecisionKind::AnswerRate {
+                    rate: 1000,
+                    reading: Some(ms(61)),
                     engaged: true
                 }
             )

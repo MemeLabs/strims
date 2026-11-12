@@ -482,8 +482,9 @@ pub(crate) struct SeedLog {
     /// ([`SeedLog::forget_before`]).
     cancels: BTreeMap<Bin, Vec<(PeerKey, Time)>>,
     written: BTreeMap<Bin, Vec<(PeerKey, Time)>>,
-    /// The answer gate's pace as last logged.
-    rate: Option<(u64, Option<Duration>, bool)>,
+    /// The answer gate's pace as last logged, its reading in the whole ms
+    /// the tables write.
+    rate: Option<(u64, Option<i64>, bool)>,
     /// The allocation check under way: each channel's readings so far.
     /// Bound: the channels.
     check: BTreeMap<PeerKey, SeedCheck>,
@@ -731,7 +732,9 @@ impl SeedLog {
         self.written = self.written.split_off(&start);
     }
 
-    /// The answer gate's pace at `now`: a decision if it changed.
+    /// The answer gate's pace at `now`: a decision if it changed as the
+    /// tables write it, its reading in whole ms (a reading that moved by
+    /// less, its rate and whether it binds the same, is no change).
     pub(crate) fn answer_rate(
         &mut self,
         rate: u64,
@@ -739,7 +742,7 @@ impl SeedLog {
         engaged: bool,
         now: Time,
     ) {
-        let pace = (rate, reading, engaged);
+        let pace = (rate, reading.map(|r| r.as_millis()), engaged);
         if self.rate != Some(pace) {
             self.rate = Some(pace);
             self.decide(
