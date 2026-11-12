@@ -200,10 +200,13 @@ when set.
 
 `fold` adds jobs' tables to a local DuckDB file, one transaction a batch,
 each job's rows under its key `k` and the batch's `src`, beside two of
-its own: `runs` (one a job: its cell, arm, seed, env, the row as JSON and
-the meta) and `scalars` (the row's numbers, long form, for SQL). Columns
-come from the schema files, so a table gains the columns a later sim
-writes (`ADD COLUMN IF NOT EXISTS`); folding a job again replaces it.
+its own: `runs` (one a job: its cell, arm, seed, env, the row as JSON,
+the meta, and the commit its binary was built from, whether the working
+tree's changes went in (dirty) and the binary's sha256 where its folder
+knows them: suite.py's local runs; the farm's are in its indexes) and
+`scalars` (the row's numbers, long form, for SQL). Columns come from
+the schema files, so a table gains the columns a later sim writes
+(`ADD COLUMN IF NOT EXISTS`); folding a job again replaces it.
 `export` writes a store to zstd Parquet, a file a table, with a
 `manifest.json`. suite.py folds its local runs this way and exports each
 invocation's store into the cache, `<main checkout>/target/sim-db/cache/`

@@ -13,10 +13,12 @@
                  catalog's scoring macros score (catalog.scoring_sql)
   base_binary(sha, sim, rebuild), tree_binary(sim, base)
                  a sim's test binary at a commit and in the working tree,
-                 built once (target/sim-suite/bin/LABEL)
+                 built once (target/sim-suite/bin/LABEL), beside the
+                 record of what it was built from (provenance)
   run_cells(cells, runs, slots, mem_gib) -> (sides, failures)
                  local runs of each cell at each binary's seeds, their
-                 tables folded into the cache and indexed: each label's
+                 tables folded into the cache, each with its binary's
+                 commit, sha256 and dirty flag, and indexed: each label's
                  side, {(cell, seed): (k, src)}
   farm_rows(name, cells, knob) -> {arm: side}
                  a farm run's sides by arm, its tables pulled and indexed
@@ -743,12 +745,48 @@ def build_key(sha, sim):
     return hashlib.sha1("\n".join(kept).encode()).hexdigest()[:12]
 
 
+# A binary's record beside it: the commit it was built from, and whether
+# the working tree's changes to that commit's build inputs went into it.
+BUILT = "build.json"
+
+
+def record_build(dest, commit, dirty, replace=True):
+    """Records `dest`'s binary as built from `commit` (`dirty`: with the
+    working tree's changes). Without `replace`, a record already there
+    stays (the build it names made the binary), and a binary without one
+    takes `commit`, whose build inputs (its label's key) are the
+    binary's."""
+    path = dest / BUILT
+    if not replace and path.exists():
+        return
+    tmp = path.with_suffix(f".tmp{os.getpid()}")
+    tmp.write_text(json.dumps({"commit": commit, "dirty": dirty}) + "\n")
+    tmp.replace(path)
+
+
+def provenance(bin_dir, sim):
+    """The fold's provenance of the jobs `bin_dir`'s `sim` binary runs:
+    `commit` and `dirty` from its record (None without one), and
+    `binary_sha256`, its sha256 (None without the binary)."""
+    try:
+        rec = json.loads((Path(bin_dir) / BUILT).read_text())
+    except (OSError, ValueError):
+        rec = {}
+    try:
+        with open(Path(bin_dir) / sim, "rb") as f:
+            digest = hashlib.file_digest(f, "sha256").hexdigest()
+    except OSError:
+        digest = None
+    return {"commit": rec.get("commit"), "dirty": rec.get("dirty"), "binary_sha256": digest}
+
+
 def base_binary(sha, sim, rebuild):
     """The base commit's `sim` binary: its label and directory, built once
-    in a worktree of the commit."""
+    in a worktree of the commit, and recorded as built from it."""
     label = f"{sim}-{build_key(sha, sim)}"
     dest = WORK / "bin" / label
     if not rebuild and (dest / sim).exists():
+        record_build(dest, sha, False, replace=False)
         return label, dest
     # One worktree, moved to each base: cargo's fingerprints hold paths, so
     # a worktree per commit would rebuild every crate.
@@ -758,13 +796,15 @@ def base_binary(sha, sim, rebuild):
     git("checkout", "--detach", "--quiet", sha, cwd=src)
     print(f"building base {sha[:8]} {sim} ({label})", file=sys.stderr)
     build(src, sim, dest)
+    record_build(dest, sha, False)
     return label, dest
 
 
 def tree_binary(sim, base):
     """The working tree's `sim` binary under a label naming its commit's
     build inputs and its changes to them: the base's own (`base`, its
-    label and directory) when they are the same."""
+    label and directory) when they are the same. It is recorded as built
+    from HEAD, dirty when the tree changes what goes into it."""
     names = [f for f in git("diff", "HEAD", "--name-only", "--", *BUILD_PATHS).splitlines()
              if builds_into(f, sim)]
     diff = b""
@@ -780,9 +820,13 @@ def tree_binary(sim, base):
         return base
     label = f"tree-{sim}-{key}+{hashlib.sha1(diff).hexdigest()[:8]}" if diff else f"tree-{sim}-{key}"
     dest = WORK / "bin" / label
+    head = git("rev-parse", "HEAD")
     if not (dest / sim).exists():
         print(f"building working tree {sim} ({label})", file=sys.stderr)
         build(ROOT, sim, dest, TREE_CARGO)
+        record_build(dest, head, bool(diff))
+    else:
+        record_build(dest, head, bool(diff), replace=False)
     return label, dest
 
 
@@ -933,8 +977,9 @@ def run_cells(cells, runs, slots, mem_gib):
     target/sim-suite/rows/<label>.jsonl, a line a run naming the cache
     source of its tables); returns each label's side, its runs' jobs by
     (cell, seed), and the failures. Each job writes its tables into an
-    output dir, folded into the invocation's store (Invocation) as soon as
-    the job ends and then removed (a failed job's at once), so an
+    output dir, folded into the invocation's store (Invocation), with its
+    binary's provenance, as soon as the job ends and then removed (a
+    failed job's at once), so an
     invocation holds the CSV of the jobs running and folding alone; its
     line is written once they are folded. The invocation's tables go to
     the cache, and the catalog indexes them before a side is made of
@@ -965,14 +1010,18 @@ def run_cells(cells, runs, slots, mem_gib):
                 peaks[rec["cell"]] = max(peaks.get(rec["cell"], 0), rec["_rss_mb"])
     need = lambda c: min(c["mem_gib"], 1.25 * peaks[c["name"]] / 1024) if c["name"] in peaks else c["mem_gib"]
     failures = []
+    built = {}
+    for _, bin_dir, c, _, _ in jobs:
+        if (bin_dir, c["sim"]) not in built:
+            built[(bin_dir, c["sim"])] = provenance(bin_dir, c["sim"])
     t0 = time.monotonic()
     files = {label: open(store(label), "a") for label in runs}
 
     def fold(pending):
         batch = [{"k": job_id(label, c, s), "dir": extra[OUT_KNOB[c["sim"]]], "sim": c["sim"], "test": c["test"],
                   "cell": c["name"], "arm": label, "seed": s, "env": c["env"], "row": row,
-                  "wall_s": row.get("_wall_s"), "rss_mb": row.get("_rss_mb")}
-                 for (label, _, c, s, extra), row in pending]
+                  "wall_s": row.get("_wall_s"), "rss_mb": row.get("_rss_mb"), **built[(bin_dir, c["sim"])]}
+                 for (label, bin_dir, c, s, extra), row in pending]
         try:
             simdb().fold(inv.db, batch, inv.src)
         except simdb().FoldError:

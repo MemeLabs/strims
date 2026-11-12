@@ -69,7 +69,7 @@ RUN_COLS = {
     "k": "VARCHAR", "src": "VARCHAR", "sim": "VARCHAR", "test": "VARCHAR", "cell": "VARCHAR", "arm": "VARCHAR",
     "seed": "BIGINT", "env": "VARCHAR", "trace": "VARCHAR", "frames": "BIGINT", "bytes": "BIGINT",
     "wall_s": "DOUBLE", "rss_mb": "DOUBLE", "at": "VARCHAR", "bin_ms": "BIGINT", "wrote": "VARCHAR",
-    "meta": "VARCHAR", "row_json": "VARCHAR",
+    "meta": "VARCHAR", "row_json": "VARCHAR", "commit": "VARCHAR", "binary_sha256": "VARCHAR", "dirty": "BOOLEAN",
 }
 SCALAR_COLS = {"k": "VARCHAR", "src": "VARCHAR", "name": "VARCHAR", "value": "DOUBLE"}
 # Schema files' type names, as DuckDB's.
@@ -382,7 +382,9 @@ def fold(db, jobs, src, threads=2, memory="1GB"):
     """Adds `jobs` to the store `db` in one transaction, under `src`. A job
     is a dict: `k` (its key), `dir` (its output dir), and what `runs`
     keeps of it (`sim`, `test`, `cell`, `arm`, `seed`, `env`, `row`,
-    `wall_s`, `rss_mb`). A job whose dir holds no tables while its row has
+    `wall_s`, `rss_mb`, and where the folder knows them its binary's
+    `commit`, `binary_sha256` and `dirty`: whether a working tree's
+    changes went into it). A job whose dir holds no tables while its row has
     a series ran a binary that writes none: FoldError. Returns the tables
     each job wrote, by key. Two jobs of one key in the batch (a farm job and
     its verify copy, whose tables are the same) fold once, as a refold
@@ -416,7 +418,8 @@ def fold(db, jobs, src, threads=2, memory="1GB"):
                 "wall_s": j.get("wall_s"), "rss_mb": j.get("rss_mb"),
                 "at": j.get("at") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "bin_ms": meta.get("bin_ms"), "wrote": ",".join(have), "meta": json.dumps(meta),
-                "row_json": json.dumps(row),
+                "row_json": json.dumps(row), "commit": j.get("commit"), "binary_sha256": j.get("binary_sha256"),
+                "dirty": j.get("dirty"),
             })
             scal += [(j["k"], name, v) for name, v in scalars(row)]
         (work / "runs.jsonl").write_text("".join(json.dumps(r) + "\n" for r in runs))

@@ -1055,6 +1055,12 @@ def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of,
     """The index's one transaction, as SQL."""
     cols = lake_columns()
     pre, sql = [], ["BEGIN;"]
+    # The store's runs columns, which the jobs table reads, before any file
+    # holds the ones the store gained.
+    for n, ty in store_host.RUN_COLS.items():
+        if "runs" in cols and n not in cols["runs"]:
+            sql.append(f"ALTER TABLE raw.runs ADD COLUMN {ident(n)} {ty};")
+            cols["runs"][n] = ty
     drop = sorted({*gone, *changed})
     # A source's tables leave first: its files gone or changed.
     by_tbl = collections.defaultdict(list)
@@ -1134,7 +1140,7 @@ def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of,
     sql.append("INSERT INTO raw.inputs BY NAME SELECT * FROM " + read_jsonl(
         jsonl(tmp / "inputs.jsonl", [{"path": p, "size": a, "mtime_ns": b, "kind": c} for p, (a, b, c) in ins.items()]),
         {"path": "VARCHAR", "size": "BIGINT", "mtime_ns": "BIGINT", "kind": "VARCHAR"}) + ";")
-    sql += main_sql(cols, version, tmp, ins, parsed)
+    sql += main_sql(cols, version, tmp, ins, parsed, run_commits(cache, add, types))
     sql.append("COMMIT;")
     return "\n".join([*pre, *sql])
 
@@ -1168,6 +1174,19 @@ def sims_of(cache, keys):
         for r in duck(f"SELECT src, list(DISTINCT sim ORDER BY sim) AS sims FROM read_parquet("
                       f"{verdict.plist(part)}, union_by_name=true) GROUP BY src;"):
             out[r["src"]] = sorted({SIMS.get(x, x) for x in r["sims"] if x})
+    return out
+
+
+def run_commits(cache, keys, types):
+    """The commits the runs among `keys` name (their sources' runs files
+    with a commit column, by `types`, schemas' of them)."""
+    paths = [cache[s]["files"][t]["path"] for s, t in keys if t == "runs"]
+    paths = [p for p in paths if "commit" in types.get(p, {})]
+    out = set()
+    for i in range(0, len(paths), 500):
+        out |= {r["c"] for r in duck(f"SELECT DISTINCT commit AS c FROM read_parquet("
+                                     f"{verdict.plist(paths[i:i + 500])}, union_by_name=true) "
+                                     "WHERE commit IS NOT NULL;")}
     return out
 
 
@@ -1363,7 +1382,8 @@ JOBS_SQL = """
 CREATE OR REPLACE TABLE main.jobs AS
 WITH cand AS (
     SELECT r.k, r.src, r.sim, r.test, r.cell, r.arm, r.seed, r.env, r.trace, r.frames, r.bytes, r.wall_s, r.rss_mb,
-           r."at", r.bin_ms, json_extract_string(r.row_json, '$.reads_hash') AS reads_hash,
+           r."at", r.bin_ms, json_extract_string(r.row_json, '$.reads_hash') AS reads_hash, r.commit,
+           r.binary_sha256, r.dirty,
            row_number() OVER (PARTITION BY r.k ORDER BY s.n_tables DESC, coalesce(s.manifest_at, '') DESC,
                               s.seq DESC, r.src DESC) AS rn
     FROM raw.runs r JOIN raw.sources s USING (src)),
@@ -1374,7 +1394,8 @@ held AS (SELECT src, list(tbl ORDER BY tbl) AS tables FROM raw.files GROUP BY sr
 j AS (
     SELECT k, c.src AS csrc, c.sim AS csim, c.test AS ctest, c.seed AS cseed, c.cell, c.arm, c.trace AS ctrace,
            c.frames, c.bytes, c.wall_s AS cwall, c.rss_mb AS crss, c."at" AS cat, c.bin_ms, c.reads_hash AS creads,
-           fi.f, coalesce(fi.f.env, json_transform(c.env, '"MAP(VARCHAR, VARCHAR)"')) AS env
+           c.commit AS ccommit, c.binary_sha256 AS cbinary, c.dirty AS cdirty, fi.f,
+           coalesce(fi.f.env, json_transform(c.env, '"MAP(VARCHAR, VARCHAR)"')) AS env
     FROM (SELECT k FROM canon UNION SELECT k FROM fi) keys LEFT JOIN canon c USING (k) LEFT JOIN fi USING (k)),
 s AS (
     SELECT *, coalesce({csim},
@@ -1383,7 +1404,8 @@ s AS (
     FROM j)
 SELECT k, nsim AS sim, coalesce(ctest, f.test) AS test,
        coalesce(cseed, TRY_CAST(env[CASE WHEN nsim = 'ppspp' THEN 'SIM_SEED' ELSE 'STRIMS_SIM_SEED' END] AS BIGINT)) AS seed,
-       f.commit AS commit, f.binary_sha256 AS binary_sha256, env,
+       coalesce(f.commit, ccommit) AS commit, CASE WHEN f.commit IS NOT NULL THEN false ELSE cdirty END AS dirty,
+       coalesce(f.binary_sha256, cbinary) AS binary_sha256, env,
        CASE WHEN env['STRIMS_SIM_RTC'] IS NOT NULL THEN 'webrtc' WHEN env['STRIMS_SIM_TCP'] = '1' THEN 'tcp' END
            AS transport,
        env['STRIMS_SIM_RTC'] AS rtc_browsers,
@@ -1474,11 +1496,17 @@ SELECT r.exp_id, 'farm' AS kind, coalesce(ej.first_ran, r.written_at) AS started
 FROM raw.suite_runs r LEFT JOIN ej USING (exp_id) LEFT JOIN spend sp USING (exp_id) LEFT JOIN tiers t USING (exp_id)
 LEFT JOIN refs USING (exp_id)
 UNION ALL BY NAME
-SELECT src AS exp_id, 'local' AS kind, min(TRY_CAST("at" AS TIMESTAMPTZ)) AS started_at,
-       max(TRY_CAST("at" AS TIMESTAMPTZ)) AS finished_at, list(DISTINCT seed ORDER BY seed) AS seeds,
-       list(DISTINCT arm ORDER BY arm) AS arm_labels, false AS pending, count(DISTINCT cell) AS cells,
-       count(*) AS jobs
-FROM raw.runs WHERE src LIKE 'suite/%' GROUP BY src;
+SELECT * FROM (
+    SELECT src AS exp_id, 'local' AS kind, min(TRY_CAST("at" AS TIMESTAMPTZ)) AS started_at,
+           max(TRY_CAST("at" AS TIMESTAMPTZ)) AS finished_at, list(DISTINCT seed ORDER BY seed) AS seeds,
+           list(DISTINCT arm ORDER BY arm) AS arm_labels, false AS pending, count(DISTINCT cell) AS cells,
+           count(*) AS jobs
+    FROM raw.runs WHERE src LIKE 'suite/%' GROUP BY src)
+LEFT JOIN (
+    SELECT src AS exp_id, map_from_entries(list({{'key': arm, 'value': commit}} ORDER BY arm)) AS arms
+    FROM (SELECT src, arm, arg_max(commit, "at") AS commit FROM raw.runs
+          WHERE src LIKE 'suite/%' AND arm IS NOT NULL AND commit IS NOT NULL GROUP BY src, arm)
+    GROUP BY src) USING (exp_id);
 """
 
 COSTS_SQL = """
@@ -1619,7 +1647,7 @@ def sim_tables(cols):
     return {t: (t if t not in OWN else f"sim_{t}") for t in sorted(cols) if t not in META}
 
 
-def main_sql(cols, version, tmp, ins, parsed):
+def main_sql(cols, version, tmp, ins, parsed, commits=()):
     """The main tables, made again, and the views."""
     out = [JOBS_SQL.format(csim=sim_case("csim"), promoted=",\n       ".join(
         f"{knob('env', v)} AS {n}" for n, v in PROMOTED.items()),
@@ -1633,7 +1661,7 @@ def main_sql(cols, version, tmp, ins, parsed):
                                       job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]"))
     out.append(AVAILABILITY_SQL.format(days=S3_DAYS))
     out.append(EXP_RUNS_SQL)
-    out += commits_sql(tmp, ins, parsed)
+    out += commits_sql(tmp, ins, parsed, commits)
     for t, name in sim_tables(cols).items():
         out.append(view_sql(t, cols[t], name, cols.get("viewers", {}), cols.get("arrivals", {})))
     for t in ("rows", "scalars"):
@@ -1673,13 +1701,17 @@ def lake_scoring(cols):
         return [], None
 
 
-def commits_sql(tmp, ins, parsed):
-    """main.commits: the commits the farm's indexes and the suite's name,
-    from git: subject, author, date, whether main holds it, and the local
+def commits_sql(tmp, ins, parsed, runs=()):
+    """main.commits: the commits the farm's indexes, the suite's and the
+    local runs' (`runs`, those of the sources this index adds) name, from
+    git: subject, author, date, whether main holds it, and the local
     branches whose tip it is."""
-    shas = set()
-    with contextlib.suppress(store_host.DuckError):
-        shas |= {r["c"] for r in lake("SELECT DISTINCT commit AS c FROM raw.farm_index WHERE commit IS NOT NULL;")}
+    shas = set(runs)
+    for t in ("farm_index", "runs"):
+        # Before the catalog holds the table (or runs their commit column)
+        # its query fails.
+        with contextlib.suppress(store_host.DuckError):
+            shas |= {r["c"] for r in lake(f"SELECT DISTINCT commit AS c FROM raw.{t} WHERE commit IS NOT NULL;")}
     for p, (_, _, kind) in ins.items():
         if kind == "suite_index":
             with contextlib.suppress(OSError, ValueError, AttributeError):
@@ -1761,8 +1793,9 @@ TABLE_DOCS = {
         "ran_at (a farm run's pending index's time before any ran); tiers (a farm run's): suite.py's TIERS, as they "
         "are now, its cells came from, each cell's the tier holding the most of its cells among those with a cell of "
         "its name, test and env (none for a cell whose env no tier's has); seeds; knob (the env variable by sim) and "
-        "sets of a --sets run; arms (name: commit, from its index) and arm_labels (experiment_jobs' arms); base: the "
-        "arm the others are scored against, where its index names it (a --sets run's first set else); question "
+        "sets of a --sets run; arms (name: commit; a farm run's from its index, a local one's its jobs' by label) "
+        "and arm_labels (experiment_jobs' arms); base: the arm the others are scored against, where its index names "
+        "it (a --sets run's first set else); question "
         "(suite.py farm --question); pending: its index still waits for the farm to start it; farm_runs: the farm "
         "runs that ran its matrices; cost_usd and s3_usd: those runs' costs and S3 ledger lines, each shared out "
         "by the jobs its matrices ran of the run's."),
@@ -1785,18 +1818,21 @@ TABLE_DOCS = {
         "experiment_jobs with its jobs' columns (jobs, but k and seed)."),
     "jobs": (
         "table", "a job", "k", "every table USING (k, src); commits ON commits.sha = jobs.commit",
-        "Every job the cache or the farm's indexes know: sim ('ppspp' or 'strims-sim'), test, seed, commit and "
-        "binary_sha256 (the farm's), env (its settings, MAP) and knobs promoted from it (transport: 'tcp' or "
-        "'webrtc' (rtc_browsers the browsers) or NULL for the sim's own model; known_uplink, arrivals, depart and "
-        "exp: the sims' SIM_*/STRIMS_SIM_* settings), env_hash (its settings but seed and output, so equal settings "
-        "match across experiments), trace and reads_hash (the digests a rerun must reproduce), wall_s and rss_mb "
-        "(its host's), ran_at, and src: the cache source its tables come from (simdb.py's source_ranks: the one "
-        "holding the most tables, then the later flush, then the later seq), or the farm flush that holds them "
-        "when the cache doesn't (cached false). tables: the tables src holds; stored_cell and stored_arm: the "
-        "cell (a farm matrix, or a local cell) and arm its source stored it under; bin_ms: its bins' width."),
+        "Every job the cache or the farm's indexes know: sim ('ppspp' or 'strims-sim'), test, seed, commit (the "
+        "one its binary was built from: a farm job's from its index, a local one's from its run), dirty (whether "
+        "the working tree's changes to that commit's build inputs went into the binary; false for the farm's, "
+        "which builds commits alone) and binary_sha256, env (its settings, MAP) and knobs promoted from it "
+        "(transport: 'tcp' or 'webrtc' (rtc_browsers the browsers) or NULL for the sim's own model; known_uplink, "
+        "arrivals, depart and exp: the sims' SIM_*/STRIMS_SIM_* settings), env_hash (its settings but seed and "
+        "output, so equal settings match across experiments), trace and reads_hash (the digests a rerun must "
+        "reproduce), wall_s and rss_mb (its host's), ran_at, and src: the cache source its tables come from "
+        "(simdb.py's source_ranks: the one holding the most tables, then the later flush, then the later seq), or "
+        "the farm flush that holds them when the cache doesn't (cached false). tables: the tables src holds; "
+        "stored_cell and stored_arm: the cell (a farm matrix, or a local cell) and arm its source stored it under; "
+        "bin_ms: its bins' width."),
     "commits": (
         "table", "a commit", "sha", "jobs ON jobs.commit = commits.sha; experiments' arms values",
-        "The commits the farm's jobs and the experiments' arms name, from git: subject, author, committed_at, "
+        "The commits the jobs and the experiments' arms name, from git: subject, author, committed_at, "
         "on_main (main holds it), branches (the local branches whose tip it is). One git doesn't know has NULLs."),
     "costs": (
         "view", "a farm run's cost line", "farm_run", "experiments' farm_runs",

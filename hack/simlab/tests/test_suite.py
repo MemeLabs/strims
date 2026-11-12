@@ -4,13 +4,15 @@
 """simlab.suite: write_matrices called as the console calls it writes what
 `suite.py farm --no-run` writes (golden_suite's golden), and run_cells
 runs a cell's seeds under a binary, folds their tables into the cache (in
-the duckdb module) as each ends, indexes them and gives their sides,
-keeping them for the next call, over a scratch cache and main checkout with
-a stand-in sim that writes golden_cli's job dirs:
+the duckdb module) as each ends, with its binary's commit, dirty flag and
+sha256, indexes them and gives their sides, keeping them for the next call,
+over a scratch cache and main checkout with a stand-in sim that writes
+golden_cli's job dirs:
 
   python3 hack/simlab/tests/test_suite.py
 """
 
+import hashlib
 import io
 import json
 import os
@@ -142,6 +144,42 @@ class LocalRuns(unittest.TestCase):
         again, failures = self.run_cells()
         self.assertEqual(again, rows)
         self.assertEqual(len(failures), 1)
+
+    def test_jobs_carry_their_binary(self):
+        """A recorded binary's jobs come out of the fold and the index with
+        the commit it was built from, its dirty flag and its sha256: in
+        the store's runs, in jobs, as their experiment's arm, and in
+        commits; a binary without a record has none but its sha256."""
+        head = lab.git("rev-parse", "HEAD")
+        digest = hashlib.sha256((self.bin / lab.SIM).read_bytes()).hexdigest()
+        lab.record_build(self.bin, head, True)
+        # A record already there stays; the binary's own sha256 is hashed.
+        lab.record_build(self.bin, "0" * 40, False, replace=False)
+        self.assertEqual(lab.provenance(self.bin, lab.SIM), {"commit": head, "dirty": True, "binary_sha256": digest})
+        bare = self.bin.parent / "bare"
+        bare.mkdir()
+        (bare / lab.SIM).write_text(SIM)
+        (bare / lab.SIM).chmod(0o755)
+        runs = {"fake": (self.bin, lambda c: [1, 2], lab.SIM, {}), "bare": (bare, lambda c: [1], lab.SIM, {})}
+        with mock.patch.object(sys, "stderr", io.StringIO()):
+            rows, failures = lab.run_cells([self.cell], runs, 2, 4)
+        self.assertEqual(failures, [])
+        (src,) = {s for side in rows.values() for _, s in side.values()}
+        stored = store.execute(f"SELECT k, commit, dirty, binary_sha256 FROM read_parquet("
+                               f"{store_host.q(lab.Invocation.dest(src.rsplit('/', 1)[1]) / 'runs.parquet')}) "
+                               "ORDER BY k;")
+        bare_digest = hashlib.sha256((bare / lab.SIM).read_bytes()).hexdigest()
+        want = {lab.job_id("fake", self.cell, s): (head, True, digest) for s in (1, 2)}
+        want[lab.job_id("bare", self.cell, 1)] = (None, None, bare_digest)
+        self.assertEqual({r["k"]: (r["commit"], r["dirty"], r["binary_sha256"]) for r in stored}, want)
+        cat = lab.catalog()
+        got = cat.lake("SELECT k, commit, dirty, binary_sha256, origin FROM jobs ORDER BY k;")
+        self.assertEqual({r["k"]: (r["commit"], r["dirty"], r["binary_sha256"]) for r in got}, want)
+        self.assertEqual({r["origin"] for r in got}, {"suite"})
+        (exp,) = cat.lake(f"SELECT kind, arms, arm_labels FROM experiments WHERE exp_id = {store_host.q(src)};")
+        self.assertEqual((exp["kind"], exp["arms"], exp["arm_labels"]), ("local", {"fake": head}, ["bare", "fake"]))
+        (c,) = cat.lake("SELECT c.sha, c.subject FROM jobs j JOIN commits c ON c.sha = j.commit GROUP BY ALL;")
+        self.assertEqual((c["sha"], c["subject"]), (head, lab.git("log", "-1", "--format=%s", head)))
 
     def test_each_job_folds_as_it_ends(self):
         """One slot, seed 3 (which fails) first: each job folds once it
