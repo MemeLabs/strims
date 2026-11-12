@@ -32,7 +32,7 @@ const ChatModifierCreateFormPage: React.FC = () => {
     <>
       <TableTitleBar
         label="Create Bootstrap"
-        backLink={!!value?.bootstrapClients.values.length && "/settings/bootstrap/clients"}
+        backLink={!!value?.bootstrapClients.length && "/settings/bootstrap/clients"}
       />
       <BootstrapForm
         onSubmit={onSubmit}
