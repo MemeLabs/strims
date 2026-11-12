@@ -77,11 +77,7 @@ const ImageInput = <T extends FieldValues>({
   React.useEffect(() => {
     if (value) {
       const { data, type } = value as ImageValue;
-      setPreviewUrl(
-        URL.createObjectURL(
-          new Blob([Base64.toUint8Array(data) as Uint8Array<ArrayBuffer>], { type })
-        )
-      );
+      setPreviewUrl(URL.createObjectURL(new Blob([Base64.toUint8Array(data)], { type })));
     }
   }, []);
 
