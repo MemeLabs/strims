@@ -167,6 +167,9 @@ pub struct SwarmCounters {
     /// its uplink saturated.
     pub accepted: u64,
     pub sheds_sent: u64,
+    /// STREAM_REQUESTs this node rejected as a parent
+    /// (`PushStats::rejected`).
+    pub requests_rejected: u64,
     /// Pushes dropped as stale, and not sent because the child had the
     /// chunk.
     pub stale_drops: u64,
@@ -224,6 +227,7 @@ impl SwarmCounters {
             self.shed,
             self.accepted,
             self.sheds_sent,
+            self.requests_rejected,
             self.stale_drops,
             self.suppressed,
             self.chunks_sent,
@@ -255,6 +259,7 @@ impl SwarmCounters {
             shed,
             accepted,
             sheds_sent,
+            requests_rejected,
             stale_drops,
             suppressed,
             chunks_sent,
@@ -283,6 +288,7 @@ impl SwarmCounters {
             shed,
             accepted,
             sheds_sent,
+            requests_rejected,
             stale_drops,
             suppressed,
             chunks_sent,
@@ -469,7 +475,7 @@ impl<const N: usize> Tracked<N> {
 }
 
 /// Swarm counters, in [`SwarmCounters`]' field order.
-const SWARM_COUNTERS: usize = 26;
+const SWARM_COUNTERS: usize = 27;
 
 /// Wait histogram counters: pushes' buckets, then answers'.
 const WAIT_COUNTERS: usize = 2 * WAIT_BUCKETS;
@@ -655,6 +661,7 @@ impl HostStats {
                 shed: push.shed,
                 accepted: push.accepted,
                 sheds_sent: push.sheds_sent,
+                requests_rejected: push.rejected,
                 stale_drops: push.stale_drops,
                 suppressed: push.suppressed,
                 chunks_sent: sched.chunks_sent,
@@ -821,6 +828,7 @@ mod tests {
             data_sent: 1,
             hits: 7,
             suppressed: 3,
+            requests_rejected: 5,
             ..SwarmCounters::default()
         };
         assert_eq!(SwarmCounters::from_array(c.to_array()), c);

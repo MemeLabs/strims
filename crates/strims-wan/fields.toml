@@ -1031,16 +1031,16 @@ description = "The p90 in ms from each rejoin's start to its catching up: every 
 notes.strims-sim = "Pair: the ppspp sim writes a churn run's rejoins as `join_p50_ms` and `join_p90_ms`, the first joins' names too."
 
 [rows.relay_accepted]
-sims = ["ppspp"]
+sims = ["strims-sim", "ppspp"]
 type = "int"
 description = "Subscriptions the honest viewers accepted as parents: PushStats' accepted, summed over the honest viewers at the run's end."
-notes.ppspp = "PushStats' accepted over the honest viewers; strims-sim's row writes no counterpart."
+notes.strims-sim = "The first swarm's honest viewers', every incarnation's (Report::honest_relay_counters)."
 
 [rows.relay_rejected]
-sims = ["ppspp"]
+sims = ["strims-sim", "ppspp"]
 type = "int"
 description = "Subscriptions the honest viewers rejected as parents: PushStats' rejected, summed over the honest viewers at the run's end."
-notes.ppspp = "PushStats' rejected over the honest viewers; strims-sim's row writes no counterpart."
+notes.strims-sim = "The first swarm's honest viewers', every incarnation's (Report::honest_relay_counters)."
 
 [rows.relay_share]
 sims = ["ppspp"]
@@ -1052,7 +1052,7 @@ description = "Over the samples, the honest viewers with at least one push subsc
 sims = ["ppspp"]
 type = "int"
 description = "Subscribers the honest viewers closed because their uplink saturated: PushStats' sheds_sent, summed over the honest viewers at the run's end."
-notes.ppspp = "Pair: PushStats' sheds_sent over the honest viewers, the counter strims-sim's bins and node_bins write as `sheds_sent`; strims-sim's row writes none of relay_accepted, relay_rejected or this."
+notes.ppspp = "Pair: strims-sim's row's `sheds_sent` is the same counter (PushStats' sheds_sent over the honest viewers), the name Phase 2 gives this."
 
 [rows.relinks]
 sims = ["ppspp"]
@@ -1375,6 +1375,12 @@ description = "When the seed's holders (AllocSample::holders) last changed after
 sims = ["strims-sim"]
 type = "int"
 description = "Parents lost because the parent closed the subscription: the first swarm's runner counters summed over every host (SwarmCounters::shed)."
+
+[rows.sheds_sent]
+sims = ["strims-sim"]
+type = "int"
+description = "Subscribers the honest viewers closed because their uplink saturated: PushStats' sheds_sent, summed over the first swarm's honest viewers and their incarnations at the run's end (Report::honest_relay_counters)."
+notes.strims-sim = "Pair: the ppspp sim's `relay_sheds` is the same counter; the bins' and node_bins' `sheds_sent` count it per bin."
 
 [rows.sign]
 sims = ["strims-sim", "ppspp"]

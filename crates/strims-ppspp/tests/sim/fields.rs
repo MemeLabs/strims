@@ -702,22 +702,16 @@ pub(crate) enum RowInt {
     PushUnsolicited,
     /// Subscriptions the honest viewers accepted as parents: PushStats'
     /// accepted, summed over the honest viewers at the run's end.
-    ///
-    /// ppspp: PushStats' accepted over the honest viewers; strims-sim's row
-    /// writes no counterpart.
     RelayAccepted,
     /// Subscriptions the honest viewers rejected as parents: PushStats'
     /// rejected, summed over the honest viewers at the run's end.
-    ///
-    /// ppspp: PushStats' rejected over the honest viewers; strims-sim's row
-    /// writes no counterpart.
     RelayRejected,
     /// Subscribers the honest viewers closed because their uplink saturated:
     /// PushStats' sheds_sent, summed over the honest viewers at the run's end.
     ///
-    /// ppspp: Pair: PushStats' sheds_sent over the honest viewers, the counter
-    /// strims-sim's bins and node_bins write as `sheds_sent`; strims-sim's row
-    /// writes none of relay_accepted, relay_rejected or this.
+    /// ppspp: Pair: strims-sim's row's `sheds_sent` is the same counter
+    /// (PushStats' sheds_sent over the honest viewers), the name Phase 2 gives
+    /// this.
     RelaySheds,
     /// The columns of a run with arrivals or departures (`Sim::audience`,
     /// `AudienceReport`): the knobs; the viewers that arrived after the start

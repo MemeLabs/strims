@@ -928,6 +928,30 @@ impl Report {
         ))
     }
 
+    /// Swarm `swarm`'s honest viewers' push subscriptions, summed over
+    /// them and their incarnations at the run's end: those they accepted
+    /// and rejected as a parent, and those they closed because their
+    /// uplink saturated (`PushStats`' accepted, rejected and sheds_sent,
+    /// as the ppspp sim's row sums them).
+    pub fn honest_relay_counters(&self, swarm: usize) -> (u64, u64, u64) {
+        let Some(spec) = self.scenario.swarms.get(swarm) else {
+            return (0, 0, 0);
+        };
+        let (mut accepted, mut rejected, mut sheds) = (0, 0, 0);
+        for &h in &spec.viewers {
+            if self.class(h) != HostClass::Honest {
+                continue;
+            }
+            if let Some(host) = self.hosts.get(h) {
+                let c = host.runner.swarm(swarm);
+                accepted += c.accepted;
+                rejected += c.requests_rejected;
+                sheds += c.sheds_sent;
+            }
+        }
+        (accepted, rejected, sheds)
+    }
+
     /// STREAM_REQUESTs declined while the node's upload rate was under half
     /// of what it could upload, and all declined, over every host.
     pub fn declined(&self) -> (u64, u64) {
@@ -1309,6 +1333,10 @@ impl Report {
         let (wrong, declined) = self.declined();
         j.int(RowInt::DeclinedWrongly, wrong)
             .int(RowInt::Declined, declined);
+        let (accepted, rejected, sheds) = self.honest_relay_counters(swarm);
+        j.int(RowInt::RelayAccepted, accepted)
+            .int(RowInt::RelayRejected, rejected)
+            .int(RowInt::ShedsSent, sheds);
         if let Some((control, pings)) = self.path_overhead() {
             j.num(RowNum::ControlBpsLink, control)
                 .num(RowNum::PingBpsLink, pings);

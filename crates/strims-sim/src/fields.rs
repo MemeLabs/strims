@@ -534,6 +534,18 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     RejoinP90Ms,
+    /// Subscriptions the honest viewers accepted as parents: PushStats'
+    /// accepted, summed over the honest viewers at the run's end.
+    ///
+    /// strims-sim: The first swarm's honest viewers', every incarnation's
+    /// (Report::honest_relay_counters).
+    RelayAccepted,
+    /// Subscriptions the honest viewers rejected as parents: PushStats'
+    /// rejected, summed over the honest viewers at the run's end.
+    ///
+    /// strims-sim: The first swarm's honest viewers', every incarnation's
+    /// (Report::honest_relay_counters).
+    RelayRejected,
     /// The most requests out on an honest host's open channel of the first
     /// swarm at any stats sample (WindowSamples); left out without samples.
     ReqsOutMax,
@@ -596,6 +608,13 @@ pub(crate) enum RowInt {
     /// Parents lost because the parent closed the subscription: the first
     /// swarm's runner counters summed over every host (SwarmCounters::shed).
     Shed,
+    /// Subscribers the honest viewers closed because their uplink saturated:
+    /// PushStats' sheds_sent, summed over the first swarm's honest viewers and
+    /// their incarnations at the run's end (Report::honest_relay_counters).
+    ///
+    /// strims-sim: Pair: the ppspp sim's `relay_sheds` is the same counter; the
+    /// bins' and node_bins' `sheds_sent` count it per bin.
+    ShedsSent,
     /// The median wait in ms of each media chunk to be signed; left out without
     /// media.
     ///
@@ -839,6 +858,8 @@ impl RowInt {
             RowInt::PushHits => "push_hits",
             RowInt::PushMisses => "push_misses",
             RowInt::RejoinP90Ms => "rejoin_p90_ms",
+            RowInt::RelayAccepted => "relay_accepted",
+            RowInt::RelayRejected => "relay_rejected",
             RowInt::ReqsOutMax => "reqs_out_max",
             RowInt::Seed => "seed",
             RowInt::SeedQueueWaitPPMs(i) => at(&ROWINT_SEED_QUEUE_WAIT_P_P_MS, i),
@@ -855,6 +876,7 @@ impl RowInt {
             RowInt::SeedTimeouts => "seed_timeouts",
             RowInt::SendBufferMs => "send_buffer_ms",
             RowInt::Shed => "shed",
+            RowInt::ShedsSent => "sheds_sent",
             RowInt::SignWaitP50Ms => "sign_wait_p50_ms",
             RowInt::SignWaitP99Ms => "sign_wait_p99_ms",
             RowInt::SourceResolvedP90Ms => "source_resolved_p90_ms",
