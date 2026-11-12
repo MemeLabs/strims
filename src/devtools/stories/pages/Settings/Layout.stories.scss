@@ -1,0 +1,9 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// The settings routes fill the frame as they fill the app's .layout.
+.settings_story {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
