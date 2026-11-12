@@ -4,7 +4,8 @@
     "noEmit": true,
     // swc and tsx compile each file in isolation
     "isolatedModules": true,
-    // react-i18next 12's declarations blow up the checker in TS 6+
+    // other packages' declarations don't check: the dom and webworker libs,
+    // emotion's, and those using the global JSX namespace React 19 dropped
     "skipLibCheck": true,
     "strict": false,
     "noImplicitAny": false,
