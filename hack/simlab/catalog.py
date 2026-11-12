@@ -160,10 +160,13 @@ are `experiment_jobs e JOIN reads USING (k, src) WHERE e.exp_id = ...`.
 `JOIN experiment_jobs USING (k, src)` gives a job's experiments, cells,
 arms and seeds. Beside them the tables join on their own columns: reads,
 viewer_seconds and stalls to viewers USING (k, src, viewer); events,
-node_bins, parents and forecast to viewers USING (k, src, node); seconds
-to verdict_seconds USING (k, src, sec); a viewer's second (viewer_seconds,
-a read's t_ms // 1000) to viewer_phases ON (k, src, viewer) with start <=
-sec < stop, its phase.
+node_bins, parents, forecast, arrivals, spec_requests and parks to
+viewers USING (k, src, node); bins to node_bins USING (k, src, bin);
+seconds to verdict_seconds USING (k, src, sec); a viewer's second
+(viewer_seconds, a read's t_ms // 1000) to viewer_phases ON (k, src,
+viewer) with start <= sec < stop, its phase; the request and HAVE logs
+(asks, haves, spec_requests, parks) to the holds in arrivals, as
+table_catalog's joins say.
 
   SELECT e.cell, e.arm_label, count(*) AS runs, sum(v.collapsed::INT) AS collapsed
   FROM experiment_jobs e JOIN verdicts v USING (k, src)
@@ -1893,8 +1896,29 @@ STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewe
                  "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",
                  "reads": "k, viewer, t_ms", "forecast": "k, node, peer, seq",
                  "stalls": "k, viewer, delay_ms, t_ms", "parents": "k, node, stream, t_ms",
-                 "asks": "k, node, ask, peer", "haves": "k, node, peer, seq"}
+                 "asks": "k, node, ask, peer", "haves": "k, node, peer, seq",
+                 "arrivals": "k, node, seq, incarnation", "spec_requests": "k, node, peer, seq, t_ms",
+                 "parks": "k, node, peer, seq, t_ms"}
 STANDARD_JOINS = {"seconds": "jobs USING (k, src); verdict_seconds USING (k, src, sec)",
+                  "bins": "jobs USING (k, src) (bin_ms, the bins' width); node_bins USING (k, src, bin) (each "
+                          "node's in the bin); seconds and verdict_seconds ON (k, src) and sec = t_ms // 1000 (the "
+                          "second the bin starts in)",
+                  "arrivals": "viewers USING (k, src, node); asks and haves ON (k, src) and arrivals.node = their "
+                              "peer, seq, arrivals.incarnation = their peer_incarnation (the peer's holds: the "
+                              "earliest is their views' truth); spec_requests ON (k, src) and arrivals.node = "
+                              "spec_requests.peer, seq, arrivals.t_ms = held_ms, and parks ON (k, src, node, seq) "
+                              "and arrivals.t_ms = parks.held_ms (the holder's hold)",
+                  "spec_requests": "viewers USING (k, src, node) (the requester); asks USING (k, src, t_ms, node, "
+                                   "peer, seq) for round 'spec' AND picked (the decision; its rivals by ask); "
+                                   "parks ON (k, src) and parks.node = peer, parks.peer = node, seq, "
+                                   "parks.t_ms between t_ms and t_outcome_ms (the holder's park or refusal); "
+                                   "arrivals ON (k, src) and arrivals.node = peer, seq, arrivals.t_ms = held_ms (the "
+                                   "holder's hold)",
+                  "parks": "viewers USING (k, src, node) (the holder); spec_requests ON (k, src) and "
+                           "spec_requests.node = parks.peer, spec_requests.peer = parks.node, seq, parks.t_ms "
+                           "between their t_ms and t_outcome_ms (the request as its requester logged it), asks the "
+                           "same with picked (either round's); arrivals ON (k, src, node, seq) and arrivals.t_ms = "
+                           "parks.held_ms (the holder's hold)",
                   "viewer_seconds": "viewers USING (k, src, viewer)", "reads": "viewers USING (k, src, viewer)",
                   "events": "viewers USING (k, src, node)", "node_bins": "viewers USING (k, src, node)",
                   "forecast": "viewers USING (k, src, node)", "stalls": "viewers USING (k, src, viewer)",

@@ -204,7 +204,7 @@ def add_commands(sub):
     f.add_argument("--exp", required=True, help="an experiment's exp_id (a suite farm run's name)")
     f.add_argument("--cells", help="only these cells, comma-separated")
     f.add_argument("--arms", help="only these arms (arm_label), comma-separated")
-    f.add_argument("--tables", help="sample tables too, comma-separated: reads, forecast, arrivals, asks")
+    f.add_argument("--tables", help=f"sample tables too, comma-separated: {', '.join(store_host.SAMPLE_TABLES)}")
     f.add_argument("--workers", type=int)
     f.add_argument("--pull-mb", type=float, default=None, help="the most of the sample tables it pulls, MB")
     return {"describe": cmd_describe, "lake": cmd_lake, "view": cmd_view, "index": cmd_index, "fetch": cmd_fetch}

@@ -29,7 +29,10 @@ simlab.verdict's derive pool:
                parks, arrivals), folded by the store, as they are; forecast
                in either schema (tail_ms and extrapolated, or first_sight
                and lazy), the other's columns NULL
-  Commands     simdb.py's lake --param, view and describe over the
+  Registries   every one of store_host's TABLES has its STANDARD_KEYS
+               and STANDARD_JOINS, and they name no other; SAMPLE_TABLES
+               are TABLES
+  Commands    simdb.py's lake --param, view and describe over the
                catalog, as a caller runs them: params bound typed or as
                text, one missing named; the saved views listed, run with
                their defaults or params, an unknown one refused; describe's
@@ -547,6 +550,19 @@ class Tables(Fixture):
                                 {"peer": 3, "held_ms": None, "live": False, "err_ms": None, "pred_err_ms": None,
                                  "held_by_p50": None, "held_by_p90": None}])
 
+
+
+class Registries(unittest.TestCase):
+    def test_every_sim_table_has_its_keys_and_joins(self):
+        tables = set(store_host.TABLES)
+        for name, registry in (("STANDARD_KEYS", catalog.STANDARD_KEYS), ("STANDARD_JOINS", catalog.STANDARD_JOINS)):
+            with self.subTest(registry=name):
+                self.assertEqual(sorted(tables - set(registry)), [], f"store_host.TABLES without {name}")
+                self.assertEqual(sorted(set(registry) - tables), [], f"{name} beyond store_host.TABLES")
+                self.assertTrue(all(isinstance(v, str) and v.strip() for v in registry.values()), name)
+
+    def test_the_sample_tables_are_tables(self):
+        self.assertEqual(sorted(set(store_host.SAMPLE_TABLES) - set(store_host.TABLES)), [])
 
 
 class Commands(Fixture):
