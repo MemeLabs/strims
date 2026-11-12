@@ -13,6 +13,7 @@ import {
   MenuItem,
   Table,
   TableCell,
+  TableHeader,
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useClient } from "../../../contexts/FrontendApi";
@@ -57,7 +58,9 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
         <TableCell>
           <Link to={peer.id.toString()}>{peer.alias}</Link>
         </TableCell>
-        <TableCell>{new Date(Number(peer.createdAt) * 1000).toLocaleString()}</TableCell>
+        <TableCell showFor="md">
+          {new Date(Number(peer.createdAt) * 1000).toLocaleString()}
+        </TableCell>
         <TableCell>{peer.isBanned ? "true" : "false"}</TableCell>
         <MenuCell>
           <MenuItem
@@ -81,7 +84,7 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
         <thead>
           <tr>
             <th>Name</th>
-            <th>Created at</th>
+            <TableHeader showFor="md">Created at</TableHeader>
             <th>Banned</th>
             <th />
           </tr>

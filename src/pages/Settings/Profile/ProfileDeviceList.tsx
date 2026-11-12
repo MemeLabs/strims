@@ -13,6 +13,7 @@ import {
   MenuItem,
   Table,
   TableCell,
+  TableHeader,
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
@@ -35,9 +36,9 @@ const DeviceTableItem = ({ device, checkpoint, onDelete, current }: DeviceTableI
 
   return (
     <tr>
-      <TableCell>{device.id.toString()}</TableCell>
+      <TableCell showFor="md">{device.id.toString()}</TableCell>
       <TableCell>{device.os}</TableCell>
-      <TableCell>{device.device}</TableCell>
+      <TableCell showFor="sm">{device.device}</TableCell>
       <TableCell>{new Date(Number(device.lastLogin) * 1000).toLocaleString()}</TableCell>
       {current ? (
         <TableCell />
@@ -96,9 +97,9 @@ const DevicesList = () => {
       <Table>
         <thead>
           <tr>
-            <th>ID</th>
+            <TableHeader showFor="md">ID</TableHeader>
             <th>OS</th>
-            <th>Device</th>
+            <TableHeader showFor="sm">Device</TableHeader>
             <th>Last login</th>
             <th></th>
           </tr>
