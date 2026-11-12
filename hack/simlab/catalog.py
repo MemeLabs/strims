@@ -40,6 +40,9 @@ DuckLake, so that any question is one SQL statement over it.
   docs_version() -> str
                  a hash of what the doc tables are made from but the
                  catalog's columns (below)
+  docs_of(info) -> dict
+                 whether this process's docs are main's, which the
+                 shared catalog holds (below)
 
 hack/sim-db/simdb.py's index, fetch, lake, view and describe commands
 call these (hack/sim-db/catalog.py's), printing an index's and a fetch's
@@ -184,7 +187,12 @@ scoring_version); suite.py loads its own into each session, TEMP. It
 makes the doc tables (table_catalog, metric_catalog and event_kinds:
 catalogs_sql) with every change it makes, and on their own whenever the
 docs they are made from change (catalog_info's docs_version: below),
-the counts of what the runs hold kept as they were.
+the counts of what the runs hold kept as they were. The main checkout's
+catalog, which every checkout indexes, holds main's docs: an index whose
+docs aren't main's (a branch's worktree, a process older than main's
+code; docs_of) indexes the data and leaves the doc tables as they are,
+saying so, a table or column only it writes undocumented until its code
+reaches main (catalog_info's docs_main, docs_behind).
 
 An experiment's `tiers` are suite.py's TIERS (as they are now) its cells
 came from: each cell is matched by its name, test and env (a farm cell's
@@ -802,8 +810,7 @@ def state():
     current = current and info.get("verdict_version") == x["version"]
     if current:
         _, sv = lake_scoring(lake_columns())
-        current = all(not v or info.get(k) == v for k, v in (("scoring_version", sv),
-                                                              ("docs_version", lake_docs_version())))
+        current = (not sv or info.get("scoring_version") == sv) and not docs_of(info)["moved"]
     return {"info": info, "current": current}
 
 
@@ -933,8 +940,9 @@ class Progress:
 @dataclasses.dataclass
 class Indexed:
     """What an index did: whether it changed the catalog (only its doc
-    tables, with `docs`, and its scoring objects with them, with
-    `scoring`); the cache sources whose files it added,
+    tables, `docs`, or its scoring objects, `scoring`, or both), and
+    whether it left the doc tables as main's, its own docs not
+    (`docs_kept`: docs_of); the cache sources whose files it added,
     replaced or let go, and how many files each way; the sources it judged
     (their verdicts made, or found made), and those whose verdicts failed,
     {src: why} (they wait for the next index)."""
@@ -947,6 +955,7 @@ class Indexed:
     gone: int = 0
     scoring: bool = False
     docs: bool = False
+    docs_kept: bool = False
     elapsed_s: float = 0.0
 
 
@@ -984,6 +993,7 @@ def index(workers=None, progress=None, wait=True):
             return None
         extensions()
         rec = recorded()
+        fresh = rec is None
         if rec is None:
             if catalog_path().exists():
                 say("index", f"the catalog isn't CATALOG_VERSION {CATALOG_VERSION}'s: making it again")
@@ -1000,36 +1010,54 @@ def index(workers=None, progress=None, wait=True):
         cache, ins, version = x["cache"], x["ins"], x["version"]
         gone, changed, new, ins_changed = x["gone"], x["changed"], x["new"], x["ins_changed"]
         need_verdicts = x["need_verdicts"]
+        docs = docs_of(info) | {"info": info, "fresh": fresh}
+        kept = not docs["own"] and docs["version"] != info.get("docs_version")
         if not (gone or changed or new or ins_changed or need_verdicts) and info.get("verdict_version") == version:
             cols = lake_columns()
             scoring, sv = lake_scoring(cols)
-            moved = {k: v for k, v in (("scoring_version", sv), ("docs_version", lake_docs_version()))
-                     if v and info.get(k) != v}
+            moved = {"scoring_version": sv} if sv and info.get("scoring_version") != sv else {}
+            # The doc tables go with the scoring objects (scoring_docs), as
+            # this process's docs only where they are main's.
+            remade = docs["own"] and (docs["moved"] or bool(moved))
+            if remade:
+                moved |= {k: v for k, v in (("docs_version", docs["version"]), ("docs_main", docs["main"])) if v}
+            if kept:
+                say("index", docs_kept(docs))
             if not moved:
                 say("done", f"the catalog is up to date ({took():.1f} s)")
-                return Indexed(elapsed_s=took())
-            # Only the docs or the scoring objects changed: the doc tables
-            # (scoring_docs among them), the scoring objects where theirs
-            # did, and the versions, alone.
+                return Indexed(docs_kept=kept, elapsed_s=took())
+            # Only the docs or the scoring objects changed: the doc tables,
+            # the scoring objects where theirs did, and the versions, alone;
+            # the events counted again where an index left the doc tables
+            # behind the data.
+            gone_keys = [*moved, *(["docs_behind"] if remade else [])]
             with scratch() as tmp:
-                lake("\n".join(["BEGIN;", *catalogs_sql(cols, tmp, recount=False),
+                lake("\n".join(["BEGIN;", *(catalogs_sql(cols, tmp, recount=bool(info.get("docs_behind")))
+                                            if remade else []),
                                 *(scoring if "scoring_version" in moved else []),
-                                f"DELETE FROM raw.info WHERE key IN ({', '.join(q(k) for k in moved)});",
+                                f"DELETE FROM raw.info WHERE key IN ({', '.join(q(k) for k in gone_keys)});",
                                 "INSERT INTO raw.info VALUES " + ", ".join(f"({q(k)}, {q(v)})" for k, v in moved.items())
                                 + ";", "COMMIT;"]), write=True, out=None)
             warn_undocumented()
-            what = "the scoring macros and the docs" if "scoring_version" in moved else "the docs"
+            what = " and ".join(w for w, on in (("the scoring macros", "scoring_version" in moved), ("the docs", remade))
+                                if on)
             say("done", f"index: {what} made again ({', '.join(f'{k} {v}' for k, v in moved.items())}; "
                 f"{took():.1f} s)")
-            return Indexed(changed=True, scoring="scoring_version" in moved, docs=True, elapsed_s=took())
+            return Indexed(changed=True, scoring="scoring_version" in moved, docs=remade, docs_kept=kept,
+                           elapsed_s=took())
         say("scan", f"index: {len(new)} new files, {len(changed)} changed, {len(gone)} gone; "
             f"{len(ins_changed)} metadata files changed; verdicts for {len(need_verdicts)} sources")
+        kept = not docs["own"] and not fresh
+        if not docs["own"]:
+            say("index", docs_kept(docs) if kept else
+                f"index: the doc tables made from this checkout's docs (docs_version {docs['version']}), which "
+                "aren't main's: there were none to keep")
         derived = verdict.derive(need_verdicts, workers, lambda m, done, total: say("derive", m, done, total))
         failed = derived.failed
         with scratch() as tmp:
             kind_of = {p: v[2] for p, v in seen.items()} | {p: v[2] for p, v in ins.items()}
             sql = build(cache, have, gone, changed, new, x["runs_redo"], ins, ins_changed, kind_of,
-                        [s for s in need_verdicts if s not in failed], version, tmp, failed)
+                        [s for s in need_verdicts if s not in failed], version, tmp, docs, failed)
             say("write", f"index: writing ({took():.0f} s in)")
             try:
                 lake(sql, write=True, out=None)
@@ -1047,12 +1075,13 @@ def index(workers=None, progress=None, wait=True):
         compact()
         say("done", f"index: done in {took():.0f} s")
         return Indexed(changed=True, sources=sorted({s for s, _ in [*new, *changed, *gone]}), judged=derived.judged,
-                       failed=failed, new=len(new), replaced=len(changed), gone=len(gone), elapsed_s=took())
+                       failed=failed, new=len(new), replaced=len(changed), gone=len(gone), docs_kept=kept,
+                       elapsed_s=took())
 
 
-def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of, need_verdicts, version, tmp,
+def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of, need_verdicts, version, tmp, docs,
           failed=()):
-    """The index's one transaction, as SQL."""
+    """The index's one transaction, as SQL; `docs` main_sql's."""
     cols = lake_columns()
     pre, sql = [], ["BEGIN;"]
     # The store's runs columns, which the jobs table reads, before any file
@@ -1140,7 +1169,7 @@ def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of,
     sql.append("INSERT INTO raw.inputs BY NAME SELECT * FROM " + read_jsonl(
         jsonl(tmp / "inputs.jsonl", [{"path": p, "size": a, "mtime_ns": b, "kind": c} for p, (a, b, c) in ins.items()]),
         {"path": "VARCHAR", "size": "BIGINT", "mtime_ns": "BIGINT", "kind": "VARCHAR"}) + ";")
-    sql += main_sql(cols, version, tmp, ins, parsed, run_commits(cache, add, types))
+    sql += main_sql(cols, version, tmp, ins, parsed, docs, run_commits(cache, add, types))
     sql.append("COMMIT;")
     return "\n".join([*pre, *sql])
 
@@ -1647,8 +1676,10 @@ def sim_tables(cols):
     return {t: (t if t not in OWN else f"sim_{t}") for t in sorted(cols) if t not in META}
 
 
-def main_sql(cols, version, tmp, ins, parsed, commits=()):
-    """The main tables, made again, and the views."""
+def main_sql(cols, version, tmp, ins, parsed, docs, commits=()):
+    """The main tables, made again, and the views; the doc tables as
+    `docs` (docs_of's, with the catalog_info it read, `info`, and whether
+    the catalog is new, `fresh`) has them made."""
     out = [JOBS_SQL.format(csim=sim_case("csim"), promoted=",\n       ".join(
         f"{knob('env', v)} AS {n}" for n, v in PROMOTED.items()),
         job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]")]
@@ -1679,12 +1710,21 @@ def main_sql(cols, version, tmp, ins, parsed, commits=()):
     scoring, sv = lake_scoring(cols)
     if sv:
         info["scoring_version"] = sv
-    if dv := lake_docs_version():
-        info["docs_version"] = dv
+    # The doc tables: this process's docs where they are main's, or where
+    # there are none to keep; else kept, behind the data.
+    make = docs["own"] or docs["fresh"]
+    if make and docs["version"]:
+        info["docs_version"] = docs["version"]
+    if make and docs["own"] and docs["main"]:
+        info["docs_main"] = docs["main"]
+    if not make:
+        info |= {k: docs["info"][k] for k in ("docs_version", "docs_main") if k in docs["info"]}
+        info["docs_behind"] = "1"
     out.append("DELETE FROM raw.info;")
     out.append("INSERT INTO raw.info VALUES " + ", ".join(f"({q(k)}, {q(v)})" for k, v in info.items()) + ";")
     # The catalogs first: the scoring macros read event_kinds.
-    out += catalogs_sql(cols, tmp)
+    if make:
+        out += catalogs_sql(cols, tmp)
     out += scoring
     return out
 
@@ -2480,6 +2520,102 @@ DOCS_DATA = ("TABLE_DOCS", "NORMALIZED", "STANDARD_KEYS", "STANDARD_JOINS", "VER
              "KIND_COLS", "DERIVED_SIM", "UNITS", "PLAIN", "BACKTICK", "OWN", "META")
 DOCS_CODE = (catalogs_sql, sim_tables, row_docs, column_docs, paren, unit_of)
 DOCS_SOURCES = tuple(inspect.getsource(f) for f in DOCS_CODE)
+
+
+# --- whose docs ---------------------------------------------------------------------
+
+
+def docs_of(info):
+    """Whose docs an index over a catalog whose catalog_info is `info`
+    makes: {"version": this process's docs_version (None where it doesn't
+    load), "main": main's docs key (main_docs'; None where there is no main
+    to keep the docs for), "own": whether this process's docs are main's,
+    "moved": whether it makes the doc tables again with nothing else to
+    do}. The shared catalog's docs are main's: a process whose doc files
+    (docs_ids) are main's has main's docs; so has one whose docs_version is
+    that of the doc tables made by such a process at main's docs key now
+    (catalog_info's docs_version and docs_main). Any other (a branch's
+    worktree, a process whose code is older than main's: the console
+    server's) leaves the doc tables as they are; an index of its that
+    changes the data marks them behind it (docs_behind), and the next
+    index whose docs are main's makes them again, counting again."""
+    dv = lake_docs_version()
+    main = main_docs()
+    km = None if main is None else docs_key(main)
+    own = (main is None or docs_key(docs_ids()) == km
+           or bool(dv) and info.get("docs_version") == dv and info.get("docs_main") == km)
+    moved = bool(dv) and own and (info.get("docs_version") != dv or bool(info.get("docs_behind"))
+                                  or km is not None and info.get("docs_main") != km)
+    return {"version": dv, "main": km, "own": own, "moved": moved}
+
+
+def docs_kept(docs):
+    """The line an index whose docs aren't main's prints."""
+    return f"index: the doc tables left as main's (this checkout's docs, docs_version {docs['version']}, aren't main's)"
+
+
+def docs_ids():
+    """The files the doc tables are made from, as this process has them,
+    {path from the checkout's root: git blob id}: simlab's modules and the
+    vocabulary as they loaded (LOADED_DOCS), the sims' docs (DOC_FILES),
+    suite.py's and simlab's SQL as an index reads them."""
+    out = dict(LOADED_DOCS)
+    for p in (*DOC_FILES, SUITE_PY, *sorted(SCORING.parent.glob("*.sql"))):
+        with contextlib.suppress(OSError):
+            out[relative(p)] = blob_id(Path(p).read_bytes())
+    return out
+
+
+def main_docs():
+    """The files docs_ids names as main holds them, {path: blob id}, from
+    git; None for a lake other than the main checkout's (a fixture's, or
+    one SIM_DB_ROOT puts elsewhere: its docs are its indexer's), or where
+    git can't say (no repository, no main, or a main without simlab)."""
+    try:
+        common = Path(store_host.git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=ROOT)).parent
+        if lake_root().resolve() != (common / "target" / "sim-db" / "lake").resolve():
+            return None
+        listed = store_host.git("ls-tree", "main", "--", "hack/simlab/", "hack/simlab/sql/",
+                                *(relative(p) for p in (*DOC_FILES, SUITE_PY, vocab.DOCUMENT)), cwd=ROOT)
+    except (subprocess.CalledProcessError, OSError):
+        return None
+    out = {}
+    for line in listed.splitlines():
+        meta, _, path = line.partition("\t")
+        if meta.split()[1:2] == ["blob"] and docs_path(path):
+            out[path] = meta.split()[2]
+    return out if "hack/simlab/catalog.py" in out else None
+
+
+def docs_path(path):
+    """Whether `path` (from the checkout's root) is one of docs_ids'."""
+    return (bool(re.fullmatch(r"hack/simlab/[^/]+\.py|hack/simlab/sql/[^/]+\.sql", path))
+            or path in {relative(p) for p in (*DOC_FILES, SUITE_PY, vocab.DOCUMENT)})
+
+
+def docs_key(ids):
+    """docs_ids' or main_docs' {path: blob id}, hashed."""
+    return hashlib.sha256(json.dumps(sorted(ids.items())).encode()).hexdigest()[:12]
+
+
+def relative(p):
+    """Path `p` from the checkout's root, as git names it."""
+    with contextlib.suppress(ValueError):
+        return Path(p).resolve().relative_to(ROOT).as_posix()
+    return str(p)
+
+
+def blob_id(data):
+    """The git blob id of bytes `data`."""
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+# simlab's modules and the vocabulary, as this process loaded them (read as
+# this module loads, as DOCS_SOURCES are, which in a process that indexes
+# is with the modules it runs): a process that outlives an edit to them
+# names the code it runs.
+LOADED_DOCS = {relative(p): blob_id(p.read_bytes())
+               for p in (*sorted(Path(__file__).parent.glob("*.py")), vocab.DOCUMENT) if p.exists()}
 
 
 # --- maintenance ------------------------------------------------------------------

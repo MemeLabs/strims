@@ -425,9 +425,10 @@ VOLATILE_KEYS = ("indexed_at",)
 # Its tables of what it read of the checkout's code, which moves as the
 # code does; and catalog_info's keys alike: docs_version hashes the sims'
 # rustdoc, which moves with any doc comment of theirs (the doc tables'
-# fingerprints hold what reaches the catalog).
+# fingerprints hold what reaches the catalog), and docs_main main's doc
+# files.
 CODE_TABLES = ("raw.inputs",)
-CODE_KEYS = ("docs_version",)
+CODE_KEYS = ("docs_version", "docs_main")
 # A table with at most this many rows is dumped whole.
 SMALL = 40
 

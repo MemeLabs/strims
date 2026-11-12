@@ -34,6 +34,19 @@ simlab.verdict's derive pool:
                and nothing else, describe showing it, the event counts
                kept, then nothing to do; the docs as they were give the
                version they had
+  DocsMain     the shared catalog's docs are main's: an index whose doc
+               files are main's records them at main's key; one whose code
+               isn't main's (a branch's, the console server's) and whose
+               docs differ leaves the doc tables, saying so, indexes its
+               data and marks them behind it; one whose docs_version is
+               the tables' at main's key makes them again, counting again;
+               when main moves, the tables stay until an index whose files
+               are main's new ones
+  DocsFresh    with no doc tables to keep, an index whose docs aren't
+               main's makes its own, not as main's, and the next whose
+               files are main's makes them again
+  MainDocs     main's doc files from git, for the main checkout's lake
+               alone; this checkout's as git names their contents
   DocsVersion  docs_version hashes the code that loaded, and covers every
                name catalogs_sql's code reads
   Registries   every one of store_host's TABLES has its STANDARD_KEYS
@@ -115,6 +128,16 @@ class Fixture(unittest.TestCase):
         events = []
         return catalog.index(workers, events.append), events
 
+    def add_source(self, src):
+        """A cache source of one job, folded and exported as a suite run's
+        flush is."""
+        job = (src, f"k-{src.rsplit('/', 1)[1]}", *golden_cli.JOBS[0][2:])
+        d = self.root / "jobs-tables" / src.replace("/", "~")
+        meta = golden_cli.job_dir(d, job)
+        db = self.root / "jobs-tables" / f"{src.replace('/', '~')}.duckdb"
+        store_host.fold(db, [meta], src)
+        store_host.export(db, store_host.cache_root() / "cache" / src)
+
 
 class Index(Fixture):
     def test_an_index_says_what_it_does_and_then_that_theres_nothing_to_do(self):
@@ -149,16 +172,6 @@ class Index(Fixture):
 
 
 class Snapshot(Fixture):
-    def add_source(self, src):
-        """A cache source of one job, folded and exported as a suite run's
-        flush is."""
-        job = (src, f"k-{src.rsplit('/', 1)[1]}", *golden_cli.JOBS[0][2:])
-        d = self.root / "jobs-tables" / src.replace("/", "~")
-        meta = golden_cli.job_dir(d, job)
-        db = self.root / "jobs-tables" / f"{src.replace('/', '~')}.duckdb"
-        store_host.fold(db, [meta], src)
-        store_host.export(db, store_host.cache_root() / "cache" / src)
-
     def lakes_latest(self):
         """DuckLake's own latest snapshot id."""
         return catalog.lake("SELECT max(snapshot_id) AS id FROM ducklake_snapshots('lake');")[0]["id"]
@@ -559,8 +572,8 @@ class Tables(Fixture):
 
 
 
-class Docs(Fixture):
-    MARK = "A docs-only marker."
+class DocsFixture(Fixture):
+    """The doc tables' helpers."""
 
     def described(self, topic):
         """describe's text of `topic`, from readers opened now."""
@@ -589,6 +602,13 @@ class Docs(Fixture):
         self.assertFalse(got.changed)
         self.assertRegex(events[-1].message, r"^the catalog is up to date \(")
         return version
+
+    def keys(self, table):
+        return catalog.lake(f"SELECT keys FROM table_catalog WHERE name = {catalog.q(table)};")[0]["keys"]
+
+
+class Docs(DocsFixture):
+    MARK = "A docs-only marker."
 
     def test_a_change_to_the_docs_alone_makes_the_doc_tables_again(self):
         self.index()
@@ -642,6 +662,113 @@ class Docs(Fixture):
         self.assertEqual(self.docs_index(), first)
         self.assertEqual(self.kinds(), kinds)
         self.assertNotIn(self.MARK, self.described("viewers"))
+
+
+class DocsMain(DocsFixture):
+    # main_docs stood in: the fixture's lake isn't the main checkout's.
+    def test_a_checkout_whose_docs_arent_mains_leaves_the_doc_tables(self):
+        ids = catalog.docs_ids()
+        with mock.patch.object(catalog, "main_docs", lambda: dict(ids)):
+            # This checkout's files are main's: the docs are its own, at
+            # main's key.
+            got, _ = self.index()
+            self.assertFalse(got.docs_kept)
+            first, kinds = self.info(), self.kinds()
+            self.assertEqual((first["docs_version"], first["docs_main"]), (catalog.docs_version(), catalog.docs_key(ids)))
+            self.assertNotIn("docs_behind", first)
+            self.assertFalse(self.index()[0].changed)
+            # A process whose code isn't main's (a branch's, or one older
+            # than main's: the console server's), its docs its own.
+            other = {**catalog.LOADED_DOCS, "hack/simlab/catalog.py": "0" * 40}
+            with mock.patch.object(catalog, "LOADED_DOCS", other), \
+                    mock.patch.dict(catalog.STANDARD_KEYS, {"viewers": "k, viewer, branch"}):
+                note = catalog.docs_kept({"version": catalog.docs_version()})
+                got, events = self.index()
+                self.assertEqual((got.changed, got.docs_kept), (False, True))
+                self.assertEqual([e.message for e in events][:1], [note])
+                self.assertEqual(self.info(), first)
+                # Its data indexed, the doc tables left behind it.
+                self.add_source("suite/wt/branch")
+                got, events = self.index()
+                self.assertEqual((got.changed, got.docs_kept, got.sources), (True, True, ["suite/wt/branch"]))
+                self.assertIn(note, [e.message for e in events])
+                info = self.info()
+                self.assertEqual({k: info.get(k) for k in ("docs_version", "docs_main", "docs_behind")},
+                                 {"docs_version": first["docs_version"], "docs_main": first["docs_main"],
+                                  "docs_behind": "1"})
+                self.assertEqual((self.keys("viewers"), self.kinds()), ("k, viewer", kinds))
+                got, events = self.index()
+                self.assertEqual((got.changed, got.docs_kept), (False, True))
+            # One whose docs are main's though its files aren't (its
+            # docs_version the doc tables', at main's key): the doc tables
+            # made again, the events counted again.
+            with mock.patch.object(catalog, "LOADED_DOCS", other):
+                got, events = self.index()
+                self.assertEqual((got.changed, got.docs, got.docs_kept), (True, True, False))
+                info = self.info()
+                self.assertNotIn("docs_behind", info)
+                self.assertEqual((info["docs_version"], info["docs_main"]), (first["docs_version"], first["docs_main"]))
+                n = lambda rows: sum(r["n"] for r in rows)  # noqa: E731
+                self.assertGreater(n(self.kinds()), n(kinds))
+                self.assertFalse(self.index()[0].changed)
+        # Main moves on (its catalog.py another): neither this checkout's
+        # files nor the doc tables are main's now, and they stay.
+        moved = {**ids, "hack/simlab/catalog.py": "1" * 40}
+        with mock.patch.object(catalog, "main_docs", lambda: dict(moved)):
+            self.assertFalse(self.index()[0].changed)
+            self.assertTrue(catalog.state()["current"])
+            # A checkout whose files are main's new ones makes them again,
+            # at main's new key.
+            with mock.patch.object(catalog, "LOADED_DOCS", {**catalog.LOADED_DOCS, "hack/simlab/catalog.py": "1" * 40}):
+                self.assertFalse(catalog.state()["current"])
+                got, events = self.index()
+                self.assertEqual((got.changed, got.docs), (True, True))
+                self.assertEqual(self.info()["docs_main"], catalog.docs_key(moved))
+                self.assertFalse(self.index()[0].changed)
+
+
+class DocsFresh(DocsFixture):
+    def test_with_no_doc_tables_to_keep_a_checkout_makes_its_own_until_mains(self):
+        other = {**catalog.docs_ids(), "hack/simlab/catalog.py": "1" * 40}
+        with mock.patch.object(catalog, "main_docs", lambda: dict(other)):
+            got, events = self.index()
+            self.assertEqual((got.changed, got.docs_kept), (True, False))
+            self.assertIn(f"index: the doc tables made from this checkout's docs (docs_version "
+                          f"{catalog.docs_version()}), which aren't main's: there were none to keep",
+                          [e.message for e in events])
+            info = self.info()
+            self.assertEqual(info["docs_version"], catalog.docs_version())
+            self.assertFalse({"docs_main", "docs_behind"} & set(info))
+            self.assertEqual(self.keys("viewers"), catalog.STANDARD_KEYS["viewers"])
+            self.assertFalse(self.index()[0].changed)
+        # An index whose files are main's makes them again, as main's.
+        with mock.patch.object(catalog, "main_docs", catalog.docs_ids):
+            got, events = self.index()
+            self.assertEqual((got.changed, got.docs), (True, True))
+            self.assertEqual(self.info()["docs_main"], catalog.docs_key(catalog.docs_ids()))
+
+
+class MainDocs(unittest.TestCase):
+    def test_mains_doc_files_from_git_for_the_main_checkouts_lake_alone(self):
+        git = lambda *a: store_host.git(*a, cwd=catalog.ROOT)  # noqa: E731
+        common = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent
+        with mock.patch.object(catalog, "lake_root", lambda: common / "target" / "sim-db" / "lake"):
+            main = catalog.main_docs()
+        self.assertIsNotNone(main)
+        for p in ("hack/simlab/catalog.py", "hack/simlab/sql/scoring.sql", "hack/sim-suite/suite.py",
+                  "crates/strims-wan/vocab.toml", *(catalog.relative(f) for f in catalog.DOC_FILES)):
+            self.assertEqual(main[p], git("rev-parse", f"main:{p}"), p)
+        self.assertTrue(all(catalog.docs_path(p) for p in main))
+        # This checkout's: its files as they loaded or as an index reads
+        # them, as git names their contents.
+        ids = catalog.docs_ids()
+        self.assertTrue(all(catalog.docs_path(p) for p in ids))
+        for p in ("hack/simlab/catalog.py", "hack/simlab/sql/scoring.sql", catalog.relative(catalog.DOC_FILES[1])):
+            self.assertEqual(ids[p], git("hash-object", p), p)
+        # Another lake (a fixture's, SIM_DB_ROOT's elsewhere) has no main
+        # to keep its docs for.
+        with mock.patch.object(catalog, "lake_root", lambda: Path(tempfile.gettempdir()) / "lake"):
+            self.assertIsNone(catalog.main_docs())
 
 
 class DocsVersion(unittest.TestCase):
