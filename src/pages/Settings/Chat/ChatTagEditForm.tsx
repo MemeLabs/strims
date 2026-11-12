@@ -22,12 +22,17 @@ const ChatTagEditForm: React.FC = () => {
     onComplete: () => navigate(`/settings/chat-servers/${serverId}`),
   });
 
-  const onSubmit = (data: ChatTagFormData) =>
-    updateChatTag({
-      id: BigInt(tagId),
-      serverId: BigInt(serverId),
-      ...data,
-    });
+  const onSubmit = async (data: ChatTagFormData) => {
+    try {
+      await updateChatTag({
+        id: BigInt(tagId),
+        serverId: BigInt(serverId),
+        ...data,
+      });
+    } catch {
+      // The form shows updateRes.error.
+    }
+  };
 
   if (getRes.loading) {
     return null;

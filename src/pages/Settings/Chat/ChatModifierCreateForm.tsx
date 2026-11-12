@@ -24,12 +24,14 @@ const ChatModifierCreateFormPage: React.FC = () => {
     onComplete: () => navigate(`/settings/chat-servers/${serverId}/modifiers`, { replace: true }),
   });
 
-  const onSubmit = async (data: ChatModifierFormData) =>
-    createChatModifier({
-      serverId: BigInt(serverId),
-      ...data,
-      styleSheet: await fromStyleSheetFormValue(data),
-    });
+  const onSubmit = async (data: ChatModifierFormData) => {
+    const styleSheet = await fromStyleSheetFormValue(data);
+    try {
+      await createChatModifier({ serverId: BigInt(serverId), ...data, styleSheet });
+    } catch {
+      // The form shows error.
+    }
+  };
 
   const backLink = value?.modifiers.length
     ? `/settings/chat-servers/${serverId}/modifiers`

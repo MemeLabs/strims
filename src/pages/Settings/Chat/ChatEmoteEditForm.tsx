@@ -29,12 +29,14 @@ const ChatEmoteEditFormPage: React.FC = () => {
     onComplete: () => navigate(`/settings/chat-servers/${serverId}/emotes`),
   });
 
-  const onSubmit = async (data: ChatEmoteFormData) =>
-    await updateChatEmote({
-      serverId: BigInt(serverId),
-      id: BigInt(emoteId),
-      ...(await toEmoteProps(data)),
-    });
+  const onSubmit = async (data: ChatEmoteFormData) => {
+    const props = await toEmoteProps(data);
+    try {
+      await updateChatEmote({ serverId: BigInt(serverId), id: BigInt(emoteId), ...props });
+    } catch {
+      // The form shows updateRes.error.
+    }
+  };
 
   if (getRes.loading) {
     return null;

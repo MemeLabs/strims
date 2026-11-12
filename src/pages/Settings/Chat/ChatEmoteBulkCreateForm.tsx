@@ -50,28 +50,33 @@ const ChatEmoteCreateFormPage: React.FC = () => {
   const [{ error, loading }, createChatEmote] = useLazyCall("chatServer", "createEmote");
 
   const onSubmit = async (data: ChatEmoteBulkFormData) => {
-    for (let i = 0; i < data.count; i++) {
-      const image = data[`emote_${i as EmoteIndex}_image`];
-      const name = data[`emote_${i as EmoteIndex}_name`];
-      await createChatEmote({
-        serverId,
-        name,
-        images: [
-          {
-            data: Base64.toUint8Array(image.data),
-            fileType: mimeTypeToFileType(image.type),
-            height: image.height,
-            width: image.width,
-            scale:
-              image.height > 100
-                ? EmoteScale.EMOTE_SCALE_4X
-                : image.height > 50
-                ? EmoteScale.EMOTE_SCALE_2X
-                : EmoteScale.EMOTE_SCALE_1X,
-          },
-        ],
-        labels: data.labels?.map(({ value }) => value),
-      });
+    try {
+      for (let i = 0; i < data.count; i++) {
+        const image = data[`emote_${i as EmoteIndex}_image`];
+        const name = data[`emote_${i as EmoteIndex}_name`];
+        await createChatEmote({
+          serverId,
+          name,
+          images: [
+            {
+              data: Base64.toUint8Array(image.data),
+              fileType: mimeTypeToFileType(image.type),
+              height: image.height,
+              width: image.width,
+              scale:
+                image.height > 100
+                  ? EmoteScale.EMOTE_SCALE_4X
+                  : image.height > 50
+                  ? EmoteScale.EMOTE_SCALE_2X
+                  : EmoteScale.EMOTE_SCALE_1X,
+            },
+          ],
+          labels: data.labels?.map(({ value }) => value),
+        });
+      }
+    } catch {
+      // The form shows error and keeps the staged emotes.
+      return;
     }
     navigate(`/settings/chat-servers/${serverId}/emotes`, { replace: true });
   };

@@ -29,11 +29,16 @@ const ChatServerIconEditForm: React.FC = () => {
     onComplete: () => navigate(`/settings/chat-servers/${serverId}`),
   });
 
-  const onSubmit = (data: ChatServerIconFormData) =>
-    updateServerIcon({
-      serverId: BigInt(serverId),
-      image: fromFormImageValue(data.image),
-    });
+  const onSubmit = async (data: ChatServerIconFormData) => {
+    try {
+      await updateServerIcon({
+        serverId: BigInt(serverId),
+        image: fromFormImageValue(data.image),
+      });
+    } catch {
+      // The form shows updateRes.error.
+    }
+  };
 
   if (getRes.loading) {
     return null;

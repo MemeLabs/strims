@@ -51,7 +51,6 @@ const stories: Story[] = [
         }}
       />
     ),
-    allowErrors: [/tag name in use/],
   },
 ];
 

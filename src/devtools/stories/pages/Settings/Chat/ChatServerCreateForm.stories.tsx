@@ -54,7 +54,6 @@ const stories: Story[] = [
         }}
       />
     ),
-    allowErrors: [/a chat server for this network exists already/],
   },
 ];
 

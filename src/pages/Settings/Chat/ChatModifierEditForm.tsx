@@ -27,13 +27,19 @@ const ChatModifierEditForm: React.FC = () => {
     onComplete: () => navigate(`/settings/chat-servers/${serverId}/modifiers`),
   });
 
-  const onSubmit = async (data: ChatModifierFormData) =>
-    updateChatModifier({
-      id: BigInt(modifierId),
-      serverId: BigInt(serverId),
-      ...data,
-      styleSheet: await fromStyleSheetFormValue(data),
-    });
+  const onSubmit = async (data: ChatModifierFormData) => {
+    const styleSheet = await fromStyleSheetFormValue(data);
+    try {
+      await updateChatModifier({
+        id: BigInt(modifierId),
+        serverId: BigInt(serverId),
+        ...data,
+        styleSheet,
+      });
+    } catch {
+      // The form shows updateRes.error.
+    }
+  };
 
   if (getRes.loading) {
     return null;

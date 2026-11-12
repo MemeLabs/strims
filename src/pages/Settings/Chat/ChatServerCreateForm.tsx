@@ -21,13 +21,18 @@ const ChatServerCreateFormPage: React.FC = () => {
     onComplete: (res) => navigate(`/settings/chat-servers/${res.server.id}`, { replace: true }),
   });
 
-  const onSubmit = (data: ChatServerFormData) =>
-    createChatServer({
-      networkKey: Base64.toUint8Array(data.networkKey),
-      room: {
-        name: data.name,
-      },
-    });
+  const onSubmit = async (data: ChatServerFormData) => {
+    try {
+      await createChatServer({
+        networkKey: Base64.toUint8Array(data.networkKey),
+        room: {
+          name: data.name,
+        },
+      });
+    } catch {
+      // The form shows error.
+    }
+  };
 
   return (
     <>

@@ -24,11 +24,14 @@ const ChatEmoteCreateFormPage: React.FC = () => {
     onComplete: () => navigate(`/settings/chat-servers/${serverId}/emotes`, { replace: true }),
   });
 
-  const onSubmit = async (data: ChatEmoteFormData) =>
-    await createChatEmote({
-      serverId: BigInt(serverId),
-      ...(await toEmoteProps(data)),
-    });
+  const onSubmit = async (data: ChatEmoteFormData) => {
+    const props = await toEmoteProps(data);
+    try {
+      await createChatEmote({ serverId: BigInt(serverId), ...props });
+    } catch {
+      // The form shows error.
+    }
+  };
 
   const backLink = value?.emotes.length
     ? `/settings/chat-servers/${serverId}/emotes`

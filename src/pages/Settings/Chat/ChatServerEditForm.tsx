@@ -26,14 +26,19 @@ const ChatServerEditForm: React.FC = () => {
     onComplete: () => navigate("/settings/chat-servers"),
   });
 
-  const onSubmit = (data: ChatServerFormData) =>
-    updateChatServer({
-      id: BigInt(serverId),
-      networkKey: Base64.toUint8Array(data.networkKey),
-      room: {
-        name: data.name,
-      },
-    });
+  const onSubmit = async (data: ChatServerFormData) => {
+    try {
+      await updateChatServer({
+        id: BigInt(serverId),
+        networkKey: Base64.toUint8Array(data.networkKey),
+        room: {
+          name: data.name,
+        },
+      });
+    } catch {
+      // The form shows updateRes.error.
+    }
+  };
 
   if (getRes.loading) {
     return null;

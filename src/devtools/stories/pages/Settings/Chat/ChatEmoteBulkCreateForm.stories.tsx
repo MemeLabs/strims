@@ -78,7 +78,6 @@ const stories: Story[] = [
         }}
       />
     ),
-    allowErrors: [/emote name in use/],
   },
 ];
 

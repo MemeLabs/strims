@@ -23,11 +23,16 @@ const ChatTagCreateFormPage: React.FC = () => {
     onComplete: () => navigate(`/settings/chat-servers/${serverId}/tags`, { replace: true }),
   });
 
-  const onSubmit = (data: ChatTagFormData) =>
-    createChatTag({
-      serverId: BigInt(serverId),
-      ...data,
-    });
+  const onSubmit = async (data: ChatTagFormData) => {
+    try {
+      await createChatTag({
+        serverId: BigInt(serverId),
+        ...data,
+      });
+    } catch {
+      // The form shows error.
+    }
+  };
 
   const backLink = value?.tags.length
     ? `/settings/chat-servers/${serverId}/tags`
