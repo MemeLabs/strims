@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
+import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatServerForm, { ChatServerFormData } from "./ChatServerForm";
@@ -36,6 +37,15 @@ const ChatServerEditForm: React.FC = () => {
 
   if (getRes.loading) {
     return null;
+  }
+
+  if (getRes.error) {
+    return (
+      <>
+        <TableTitleBar label="Edit Server" backLink="/settings/chat-servers" />
+        <InputError error={getRes.error.message || "Error loading chat server"} />
+      </>
+    );
   }
 
   const { server } = value;
