@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: seed-log-tables
+expected_outcome: |
+  A plan that registers both tables on main first (store_host.TABLES, not sample tables at that size; catalog keys, joins and notes; the knob map), keeps their column docs in the branches' sims, adds them to test_store's FoldExport fixture, re-captures the cli golden with its reason, checks no farm run is live before landing store_host, and has the branches merge main.

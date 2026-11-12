@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: coverage-report
+expected_outcome: |
+  A plan with a hack/simlab module that pins the definition and reads the catalog through simlab.engine, an __init__ line, a thin simdb.py command, a place in describe's index, a fixture-catalog test with hand-worked numbers, the help golden re-captured, and a scoring.sql macro if the console shows the metric too.

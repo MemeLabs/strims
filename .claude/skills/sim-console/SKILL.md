@@ -13,6 +13,9 @@ panel's time field. Each open tab reports its address to the server.
 `hack/console/ui.py` reads and writes these addresses. Run it as
 `python3 hack/console/ui.py` from any checkout or worktree.
 
+Adding or changing a saved view: sim-metrics
+(`.claude/skills/sim-metrics/references/console-views.md`).
+
 ## Start here
 
     python3 hack/console/ui.py describe --tab        # the user's latest focused tab: view, params, selection, graph

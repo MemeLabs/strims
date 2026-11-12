@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: coverage-view
+expected_outcome: |
+  A plan with the view's three files, vocabulary scale references for phases, phases from viewer_phases and jobs through experiment_jobs, the metric as a scoring.sql macro shared with the report, test_views --write-panels, npm run test:js, simdb.py view over the real catalog, ui.py link --check, and the browser.

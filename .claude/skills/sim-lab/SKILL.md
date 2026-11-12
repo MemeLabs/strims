@@ -15,6 +15,10 @@ target/sim-db.
 When the user mentions their selection, chart or console tab, or you're pointing them at a
 result: sim-console (`ui.py`).
 
+Changing what the sims record or the lab computes (a row field, a METRICS
+score, a sim table, an event kind, a report command, a saved view):
+sim-metrics.
+
 ## Start here
 
     python3 hack/sim-db/simdb.py describe            # the topics, and every table, macro, saved view and event kind
@@ -30,6 +34,7 @@ result: sim-console (`ui.py`).
 | What the console's pages show (scorecard, collapse_grid, playback, run_timeline, ...) | `simdb.py view` lists them; `simdb.py view NAME --param exp=... --param arm=...` runs one |
 | Raw tables of a selection of runs, pulling their reads from S3 on demand | `simdb.py sql 'SQL' --src/--cell/--arm/--seed ... [--reads]` |
 | Deep dives into a few runs | `simdb.py pooled`, `aligned EVENT`, `events`, `osc`, `spec`, `forecast`, `rows` (each takes a selection) |
+| A study over the catalog's logs: the arrival forecast (is time the right predictor of when a neighbour holds a chunk?) | `simdb.py forecast-report`; `simdb.py --help` gives each `*-report` command's sections and what it reads |
 | Comparing arms | `python3 hack/sim-suite/suite.py score RUN:ARM RUN:ARM` (farm runs, the base first); `suite.py race --flags A,B,...` races flags in local runs |
 | Data the catalog lacks that S3 still holds (7 days) | `simdb.py fetch --exp EXP [--tables reads]`, which prints what S3 charged |
 | After new local runs | `simdb.py index` |
@@ -37,8 +42,9 @@ result: sim-console (`ui.py`).
 | New farm runs | `suite.py farm ... --no-run` writes the matrices (target/sim-suite/farm/RUN-NN.toml); the main checkout's `python3 hack/sim-farm/farm.py estimate MATRICES...` quotes them; nothing runs without the user's explicit approval |
 
 `simdb.py` is `hack/sim-db/simdb.py`. Each command's `--help` says more:
-`simdb.py --help` holds the cache's tables and selections, and
-`simdb.py sql --help` their joins.
+`simdb.py --help` holds the cache's selections and its tables' list
+(`describe TABLE` gives a table's columns), and `simdb.py sql --help`
+their joins.
 
 - Put a query with `$name`s in single quotes: in double quotes the shell
   expands `$exp` to nothing.

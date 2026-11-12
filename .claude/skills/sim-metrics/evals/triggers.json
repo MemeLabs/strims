@@ -1,0 +1,9 @@
+[
+  {"query": "The seed-cover branches' sims now write two new tables with SIM_SPEC / STRIMS_SIM_SPEC on, seed_decisions and seed_sends, a few thousand rows a run. I want them in the sim lab so the coverage work can query them from the catalog. Give me the plan first: every file and registry to touch, on which branch, and the checks.", "should_trigger": true},
+  {"query": "I want a `simdb.py coverage-report` command: seed coverage per cell and arm, publish to first non-seed hold from arrivals, p50/p90/p99 by the verdict's phase. Plan it with me first, no code yet.", "should_trigger": true},
+  {"query": "next to the coverage report I want a console view plotting seed coverage per arm over stream time with the verdict's phases as bands. what files and checks would that take?", "should_trigger": true},
+  {"query": "Add a row field to both sims: the share of the seed's pushes that went to a peer already holding the chunk, and score it in the suite so the scorecard shows it. Lay out the changes and checks.", "should_trigger": true},
+  {"query": "what's decl's seed-coverage p99 in star-31-5 on the latest measure-tier run?", "should_trigger": false},
+  {"query": "link me the run timeline of seed 2004 in star-31-5 for the last farm experiment, with the first collapse highlighted", "should_trigger": false},
+  {"query": "the HAVE count looks wrong in the haves table for sb4a57's halve-15-10 runs, way fewer rows than asks. can you check what's going on?", "should_trigger": false}
+]
