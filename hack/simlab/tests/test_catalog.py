@@ -28,6 +28,16 @@ simlab.verdict's derive pool:
                compacting (the snapshot it superseded kept, however old;
                older ones let go), and pinned()'s readers share one
                across connections, an index inside reading the latest
+  Crash        every commit of an index names only files fsynced with
+               their directories, its links among them; a write outside a
+               transaction commits by itself; with every file the last
+               index wrote emptied, as a crash left the shared catalog,
+               reads fail, recorded() and state() raise Damaged naming the
+               tables and the repair, and the next index makes them again
+               as they were, then has nothing to do, compacting keeping
+               what they read; an emptied cache file (its link's) leaves
+               its table without its source, saying so, until a new file
+               comes; a lock on the record says nothing is damaged
   Derive       the forkserver pool's derived tables are those made in this
                process, with a DuckDB connection open here; a source that
                fails comes back failed, the others judged
@@ -581,6 +591,150 @@ class Pins(Fixture):
         after = catalog.lake(self.SQL)[0]
         self.assertEqual(after["sources"], before[0]["sources"] + 1)
         self.assertGreater(after["at"], version)
+
+
+class Crash(Fixture):
+    """A crash soon after an index committed: what the OS hadn't written of
+    its files is lost, the metadata (fsynced by SQLite) kept."""
+
+    def setUp(self):
+        super().setUp()
+        self.index()
+
+    def referenced(self):
+        """The files the catalog's latest snapshot reads, {path: (schema,
+        table)}."""
+        out = {}
+        for r in catalog.lake("SELECT table_schema AS s, table_name AS t FROM information_schema.tables "
+                              "WHERE table_catalog = 'lake' AND table_type = 'BASE TABLE';"):
+            for f in catalog.lake(f"SELECT data_file AS d, delete_file AS x FROM ducklake_list_files('lake', "
+                                  f"{catalog.q(r['t'])}, schema => {catalog.q(r['s'])});"):
+                out |= {os.path.realpath(p): (r["s"], r["t"]) for p in (f["d"], f["x"]) if p}
+        return out
+
+    def contents(self):
+        """Every table's row count, and the rows of the record and the main
+        tables the console reads first."""
+        out = {f"{r['s']}.{r['t']}": catalog.lake(f"SELECT count(*) AS n FROM {r['s']}.{r['t']};")[0]["n"]
+               for r in catalog.lake("SELECT table_schema AS s, table_name AS t FROM information_schema.tables "
+                                     "WHERE table_catalog = 'lake' AND table_type = 'BASE TABLE';")}
+        for sql in ("SELECT * EXCLUDE (indexed_at) FROM raw.sources",
+                    "SELECT * FROM raw.info WHERE key <> 'indexed_at'", "SELECT * FROM jobs",
+                    "SELECT * FROM experiment_jobs", "SELECT * FROM experiments", "SELECT * FROM viewers",
+                    "SELECT * FROM verdicts", "SELECT * FROM rows"):
+            out[sql] = catalog.lake(sql + " ORDER BY ALL;")
+        return out
+
+    def test_an_index_commits_only_files_fsynced_with_their_directories(self):
+        self.add_source("suite/wt/crash-durable")
+        before = set(catalog.listing())
+        fsynced, unsynced, commits = set(), [], []
+        fsync, shown = os.fsync, store.shown
+
+        def recorded_fsync(fd):
+            fsynced.add(os.path.realpath(os.readlink(f"/proc/self/fd/{fd}")))
+            return fsync(fd)
+
+        def checked(conn, script, text=False):
+            got = shown(conn, script, text)
+            if catalog.ENDS.match(script):
+                commits.append(script)
+                unsynced.extend(p for p in self.referenced() if p not in before
+                                and not {p, os.path.dirname(p)} <= fsynced)
+            return got
+        with mock.patch.object(os, "fsync", recorded_fsync), mock.patch.object(store, "shown", checked):
+            got, _ = self.index()
+        self.assertIn("suite/wt/crash-durable", got.sources)
+        self.assertGreater(len(commits), 1)
+        self.assertEqual(unsynced, [])
+        links = {os.path.realpath(r["path"]) for r in catalog.lake(
+            "SELECT path FROM raw.files WHERE src = 'suite/wt/crash-durable';")}
+        self.assertTrue(links)
+        self.assertLessEqual(links, fsynced)
+
+    def test_a_write_outside_a_transaction_commits_by_itself(self):
+        with self.assertRaisesRegex(store_host.DuckError, "nowhere"):
+            catalog.lake("CREATE TABLE raw.crash_alone AS SELECT 1 AS x; CREATE TABLE raw.crash_too AS "
+                         "SELECT * FROM nowhere;", write=True, out=None)
+        self.assertEqual(catalog.lake("SELECT x FROM raw.crash_alone;"), [{"x": 1}])
+        catalog.lake("DROP TABLE raw.crash_alone;", write=True, out=None)
+
+    def test_an_index_makes_the_tables_a_crash_left_empty_again(self):
+        self.add_source("suite/wt/crash-empty")
+        before = set(catalog.listing())
+        self.index()
+        want = self.contents()
+        # The crash: what the index wrote of its own (the links are the
+        # cache's files) never reached the disk.
+        made = self.referenced()
+        lost = {p: t for p, t in made.items() if p not in before and "/linked/" not in p}
+        self.assertTrue({("raw", "info"), ("raw", "sources"), ("main", "jobs"), ("main", "experiment_jobs")}
+                        <= set(lost.values()))
+        for p in lost:
+            os.truncate(p, 0)
+        with self.assertRaisesRegex(store_host.DuckError, "too small to be a Parquet file"):
+            catalog.lake("SELECT * FROM experiment_jobs;")
+        for read in (catalog.recorded, catalog.state):
+            with self.assertRaises(catalog.Damaged) as e:
+                read()
+            self.assertRegex(str(e.exception), r"^the catalog's files aren't whole: .*raw\.info \(1 file: \S+ is 0 "
+                             r"bytes, the catalog says \d+\).*; an index \(python3 hack/sim-db/simdb\.py index\) "
+                             "makes their tables again$")
+        self.assertEqual(set(catalog.damaged()), set(lost.values()))
+        got, events = self.index()
+        self.assertEqual(got.repaired, sorted({f"{s}.{t}" for s, t in lost.values()}))
+        self.assertIn("index: damaged files, their tables made again: ", "\n".join(e.message for e in events))
+        self.assertEqual(catalog.damaged(), {})
+        self.assertEqual(self.contents(), want)
+        self.assertFalse(self.index()[0].changed)
+        # The files only the tables let go read go now: none the tables
+        # made again read.
+        catalog.compact(keep_minutes=0)
+        self.assertFalse(any(os.path.exists(p) for p in lost))
+        self.assertEqual(self.contents(), want)
+
+    def test_a_cache_file_a_crash_left_empty_waits_for_its_source(self):
+        src = "suite/wt/crash-cache"
+        self.add_source(src)
+        self.index()
+        want = self.contents()
+        viewers = lambda: catalog.lake(  # noqa: E731
+            "SELECT src, count(*) AS n FROM viewers GROUP BY src ORDER BY src;")
+        each = viewers()
+        self.assertIn(src, [r["src"] for r in each])
+        f = catalog.lake(f"SELECT path, cache_path FROM raw.files WHERE src = {catalog.q(src)} AND tbl = 'viewers';")[0]
+        kept = self.root / "crash-cache-viewers.parquet"
+        shutil.copyfile(f["cache_path"], kept)
+        # The link is the cache's file: both lost.
+        os.truncate(f["path"], 0)
+        got, events = self.index()
+        self.assertEqual(got.repaired, ["raw.viewers"])
+        said = "\n".join(e.message for e in events)
+        self.assertIn(f"index: 1 cache files aren't whole, left out until their sources are run or fetched again: "
+                      f"{f['cache_path']} is 0 bytes", said)
+        self.assertEqual(viewers(), [r for r in each if r["src"] != src])
+        self.assertEqual(catalog.damaged(), {})
+        self.assertFalse(self.index()[0].changed)
+        # Its source run again: a file of its own.
+        os.replace(kept, f["cache_path"])
+        self.assertTrue(self.index()[0].changed)
+        self.assertEqual(self.contents(), want)
+        catalog.compact(keep_minutes=0)
+        self.assertEqual(self.contents(), want)
+
+    def test_a_lock_on_the_record_says_nothing_is_damaged(self):
+        results = store.results
+
+        def locked(conn, sql, out="json"):
+            if "FROM raw.info" in sql:
+                raise store_host.DuckError("Failed to query: database is locked")
+            return results(conn, sql, out)
+        with mock.patch.object(store, "results", locked):
+            with self.assertRaises(store_host.DuckError) as e:
+                catalog.recorded()
+        self.assertNotIsInstance(e.exception, catalog.Damaged)
+        self.assertRegex(str(e.exception), r"^the catalog's record can't be read: its metadata stayed locked past the "
+                         r"busy timeout \(Failed to query: database is locked\); nothing is damaged")
 
 
 class Derive(Fixture):

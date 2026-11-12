@@ -130,6 +130,20 @@ at the end of each index (ducklake_merge_adjacent_files); snapshots
 superseded more than 15 minutes before, and the files only they read, go
 then too. After each
 write the tables' statistics are marked as holding NULLs (null_stats).
+
+DuckDB writes the lake's Parquet files without fsync and commits the
+SQLite metadata with one, so each write's commit first fsyncs the files
+it adds under lake/data/, the links among them, with their directories
+(durably): a crash leaves the catalog as a commit made it, never naming
+files the disk lacks. Each index first checks that every file the latest
+snapshot reads is on disk at the size the metadata gives it (damaged); a
+table with one that isn't (a crash's, under older code) is dropped and
+the index's record forgets what it held (repair_sql), so the same index
+makes it again from the cache and the metadata files, the readers
+failing on it meanwhile as they did on its files. A cache file that
+isn't whole Parquet waits, the index saying so, until its source is run
+or fetched again. recorded() raises Damaged, naming the tables and that
+an index repairs them, or says a lock held it up.
 The verdicts are the derived tables (simlab.verdict's derive_source:
 verdict and run_metrics), made for every source that lacks them in a
 pool of `workers` processes (verdict.derive).
@@ -322,6 +336,11 @@ WAL_SWITCH_S = 2
 WRITE_RETRY_S = (1, 4, 15)
 # SQLite's refusals for a lock (SQLITE_BUSY's message, and SQLITE_LOCKED's).
 LOCKED = re.compile(r"database (?:table )?is locked", re.I)
+# A transaction statement that commits, and one that opens a transaction.
+ENDS = re.compile(r"^\s*(?:COMMIT|END)\b", re.I)
+OPENS = re.compile(r"^\s*BEGIN\b", re.I)
+# The links link() made in lake/data/ that no commit has fsynced yet.
+LINKED = set()
 # This thread's pinned() snapshot (`version`), if any.
 PIN = threading.local()
 # snapshot()'s instance, made in each process that reads one (`pid`,
@@ -392,9 +411,15 @@ def lake(sql, write=False, out="json", threads=None, memory=None):
     """Runs the script `sql` over the catalog in a connection of its own
     (connected): what store_host.duck returns for `out`, the last shown
     statement's rows, the -table text of every shown one, or None;
-    store_host.DuckError, DuckDB's message, on a failure."""
+    store_host.DuckError, DuckDB's message, on a failure. A write's
+    commits wait for its files to be on disk (durably)."""
     with connected(write, threads, memory) as conn:
-        return store.results(conn, sql, out)
+        if not write:
+            return store.results(conn, sql, out)
+        got = durably(conn, sql, text=out == "text")
+    if out == "json":
+        return got[-1].records() if got else []
+    return "".join(r.table() for r in got) if out == "text" else None
 
 
 @contextlib.contextmanager
@@ -459,6 +484,86 @@ def written(sql, say=None, what="write"):
     """The write script `sql` (lake's, write=True), retried while the lock
     refuses it."""
     return retried(lambda: lake(sql, write=True, out=None), say, what)
+
+
+def durably(conn, sql, text=False):
+    """Runs the write script `sql` on the writer `conn` statement by
+    statement, as store.shown does (the Results of those shown), each
+    COMMIT only once the files the metadata will name are on disk: DuckDB
+    writes a DuckLake's Parquet files without fsync and commits its SQLite
+    metadata with one, so a crash soon after an index left committed files
+    empty, every read of their tables failing. Before each commit the
+    files under lake/data/ new or changed since the script began or last
+    committed, and the links the process made there since (LINKED), are
+    fsynced with their directories (synced). A statement outside a
+    transaction of the script's own runs in one by itself, as it would
+    commit by itself; one that writes nothing makes no snapshot.
+    store_host.DuckError at the first that fails, the transaction open
+    rolling back as the connection closes."""
+    try:
+        statements = conn.extract_statements(sql)
+    except engine.duckdb.Error as e:
+        raise store_host.DuckError(str(e)) from None
+    got, seen, inside = [], listing(), False
+    for s in statements:
+        if s.type == engine.duckdb.StatementType.TRANSACTION:
+            if inside and ENDS.match(s.query):
+                seen = synced(seen)
+            inside = bool(OPENS.match(s.query))
+            got += store.shown(conn, s.query, text)
+        elif inside:
+            got += store.shown(conn, s.query, text)
+        else:
+            store.shown(conn, "BEGIN")
+            got += store.shown(conn, s.query, text)
+            seen = synced(seen)
+            store.shown(conn, "COMMIT")
+    return got
+
+
+def listing():
+    """What is under lake/data/: {path: (inode, bytes, mtime_ns)} for each
+    file, {path: None} for each directory (data/ itself among them)."""
+    out, dirs = {}, [str(data_path())]
+    while dirs:
+        d = dirs.pop()
+        try:
+            it = os.scandir(d)
+        except FileNotFoundError:
+            continue
+        out[d] = None
+        with it:
+            for e in it:
+                if e.is_dir(follow_symlinks=False):
+                    dirs.append(e.path)
+                elif e.is_file(follow_symlinks=False):
+                    st = e.stat(follow_symlinks=False)
+                    out[e.path] = (st.st_ino, st.st_size, st.st_mtime_ns)
+    return out
+
+
+def synced(seen):
+    """fsyncs the files under lake/data/ that aren't as `seen` (listing()'s)
+    has them and the links in LINKED, then the directories holding them
+    and those new since `seen` (data/'s own holds it); the listing now.
+    store_host.DuckError where an fsync fails."""
+    now = listing()
+    files = {p for p, v in now.items() if v is not None and seen.get(p) != v} | {p for p in LINKED if p in now}
+    dirs = {os.path.dirname(p) for p in files}
+    dirs |= {x for d, v in now.items() if v is None and d not in seen for x in (d, os.path.dirname(d))}
+    for p in [*sorted(files), *sorted(dirs, key=len, reverse=True)]:
+        try:
+            fd = os.open(p, os.O_RDONLY)
+        except FileNotFoundError:
+            continue
+        try:
+            os.fsync(fd)
+        except OSError as e:
+            raise store_host.DuckError(f"fsync of {p}: {e}") from None
+        finally:
+            os.close(fd)
+    LINKED.clear()
+    return now
 
 
 def wal():
@@ -915,24 +1020,157 @@ CREATE TABLE IF NOT EXISTS raw.info (key VARCHAR, value VARCHAR);
 def recorded():
     """The catalog's record of what it holds: (info, files, inputs, sources),
     or None without a catalog, or one of another CATALOG_VERSION (one
-    without raw.info is none an index made); store_host.DuckError when it
-    can't be read (a lock past the busy timeout), which is no reason to
-    make it again."""
+    without raw.info is none an index made). Where it can't be read, which
+    is no reason to make it again: Damaged where the files it reads aren't
+    whole (damaged()), else store_host.DuckError, saying so where a lock
+    outlasted the busy timeout."""
     if not catalog_path().exists():
         return None
-    with connected() as conn:
-        rows = lambda sql: store.results(conn, sql)  # noqa: E731
-        if not rows("SELECT count(*) AS n FROM information_schema.tables WHERE table_catalog = 'lake' "
-                    "AND table_schema = 'raw' AND table_name = 'info';")[0]["n"]:
-            return None
-        info = {r["key"]: r["value"] for r in rows("SELECT key, value FROM raw.info;")}
-        if info.get("catalog_version") != str(CATALOG_VERSION):
-            return None
-        files = {(r["src"], r["tbl"]): r for r in rows(
-            "SELECT src, tbl, path, cache_path, bytes, inode, mtime_ns, how FROM raw.files;")}
-        ins = {r["path"]: (r["size"], r["mtime_ns"], r["kind"]) for r in rows("SELECT * FROM raw.inputs;")}
-        srcs = {r["src"]: r for r in rows("SELECT src, verdicts FROM raw.sources;")}
+    try:
+        with connected() as conn:
+            rows = lambda sql: store.results(conn, sql)  # noqa: E731
+            if not rows("SELECT count(*) AS n FROM information_schema.tables WHERE table_catalog = 'lake' "
+                        "AND table_schema = 'raw' AND table_name = 'info';")[0]["n"]:
+                return None
+            info = {r["key"]: r["value"] for r in rows("SELECT key, value FROM raw.info;")}
+            if info.get("catalog_version") != str(CATALOG_VERSION):
+                return None
+            files = {(r["src"], r["tbl"]): r for r in rows(
+                "SELECT src, tbl, path, cache_path, bytes, inode, mtime_ns, how FROM raw.files;")}
+            ins = {r["path"]: (r["size"], r["mtime_ns"], r["kind"]) for r in rows("SELECT * FROM raw.inputs;")}
+            srcs = {r["src"]: r for r in rows("SELECT src, verdicts FROM raw.sources;")}
+    except store_host.DuckError as e:
+        if locked_out(e):
+            raise store_host.DuckError(f"the catalog's record can't be read: its metadata stayed locked past the "
+                                       f"busy timeout ({e}); nothing is damaged: index again once the lock "
+                                       "goes") from None
+        bad = damaged()
+        if bad:
+            raise Damaged(bad) from None
+        raise
     return info, files, ins, srcs
+
+
+class Damaged(store_host.DuckError):
+    """The catalog's tables whose files aren't whole, `bad` (damaged()'s),
+    and how to repair them."""
+
+    def __init__(self, bad):
+        self.bad = bad
+        super().__init__(f"the catalog's files aren't whole: {damage_text(bad)}; an index "
+                         "(python3 hack/sim-db/simdb.py index) makes their tables again")
+
+
+def damage_text(bad, most=3):
+    """damaged()'s `bad` in words: each table, how many of its files and
+    the first `most` of them."""
+    return "; ".join(f"{s}.{t} ({len(w)} file{'s' * (len(w) > 1)}: {', '.join(w[:most])}"
+                     f"{', ...' if len(w) > most else ''})" for (s, t), w in sorted(bad.items()))
+
+
+def short(path, size):
+    """Why the file at `path` isn't the `size` bytes the catalog says it
+    is (gone, or a size of its own), or None: a stat alone, so the check
+    of every file an index makes costs no reads of their contents."""
+    try:
+        n = os.stat(path).st_size
+    except OSError as e:
+        return f"{path} can't be read ({e.strerror or e})"
+    return None if n == size else f"{path} is {n} bytes, the catalog says {size}"
+
+
+def unsound(path):
+    """Why the file at `path` isn't a whole Parquet file (it can't be read,
+    or lacks Parquet's PAR1 at either end), or None."""
+    try:
+        with open(path, "rb") as f:
+            n = os.fstat(f.fileno()).st_size
+            if n < 12:
+                return f"{path} is {n} bytes"
+            head = f.read(4)
+            f.seek(-4, os.SEEK_END)
+            tail = f.read(4)
+    except OSError as e:
+        return f"{path} can't be read ({e.strerror or e})"
+    return None if head == tail == b"PAR1" else f"{path} isn't Parquet (no PAR1 at both ends)"
+
+
+def damaged():
+    """The catalog's tables whose files at the latest snapshot aren't on
+    disk as it says (short: gone, or not the size it gives them),
+    {(schema, table): [why, a line each]}: what a crash left of an index
+    that committed before its files were on disk (durably), every read of
+    the table failing. store_host.DuckError where the metadata can't be
+    read."""
+    out = collections.defaultdict(list)
+    try:
+        with latest(), connected() as conn:
+            tables = conn.execute("SELECT table_schema, table_name FROM information_schema.tables WHERE "
+                                  "table_catalog = 'lake' AND table_type = 'BASE TABLE'").fetchall()
+            files = conn.execute(" UNION ALL ".join(
+                f"SELECT {q(s)}, {q(t)}, data_file, data_file_size_bytes, delete_file, delete_file_size_bytes "
+                f"FROM ducklake_list_files('lake', {q(t)}, schema => {q(s)})" for s, t in tables)).fetchall() \
+                if tables else []
+    except engine.duckdb.Error as e:
+        raise store_host.DuckError(str(e)) from None
+    for s, t, f, fb, d, db in files:
+        out[(s, t)] += [why for p, n in ((f, fb), (d, db)) if p is not None and (why := short(p, n))]
+    return {k: v for k, v in out.items() if v}
+
+
+def repair_sql(bad, have):
+    """The transaction that lets go of the damaged tables `bad` (damaged()'s)
+    for the index to make them again, from the cache and the metadata
+    files, in the transaction after it; `have` the raw tables. A damaged
+    table can't be read, so it is dropped, not deleted from, and the
+    index's record forgets what it held: a sim table's files (raw.files'
+    and raw.fields' rows of it: its cache files are new again; the runs
+    and the rows go together, the rows being the runs'; with raw.files or
+    raw.fields themselves, every sim table), the sources' verdicts for a
+    verdict table, every metadata file (raw.inputs, so the index reads
+    them all again and makes the main tables again too). raw.sources,
+    files, fields, inputs, info, runs and scalars are made again empty
+    (raw.info with its catalog_version alone), and the main tables, the
+    metadata tables and the rest as the index makes them. With it, whether
+    a main table went: the doc tables may be among them, so the index
+    makes them whoever's docs it has (main's next index makes them
+    again where they aren't main's)."""
+    raw = {t for s, t in bad if s == "raw"}
+    sims = {t for t in have if t not in META} | {"runs", "scalars"}
+    if raw & {"files", "fields"}:
+        raw |= sims | {"rows", "files", "fields"}
+    if raw & {"runs", "rows"}:
+        raw |= {"runs", "rows"}
+    sql = ["BEGIN;", *(f"DROP TABLE main.{ident(t)};" for s, t in sorted(bad) if s == "main"),
+           *(f"DROP TABLE raw.{ident(t)};" for t in sorted(raw & have)), BASE_SQL]
+    for t, c in (("runs", store_host.RUN_COLS), ("scalars", store_host.SCALAR_COLS)):
+        if t in raw:
+            sql.append(f"CREATE TABLE raw.{t} ({', '.join(f'{ident(n)} {ty}' for n, ty in c.items())});")
+    if "info" in raw:
+        sql.append(f"INSERT INTO raw.info VALUES ('catalog_version', {q(str(CATALOG_VERSION))});")
+    if (forget := sorted(raw & sims)) and "files" not in raw:
+        sql.append(f"DELETE FROM raw.files WHERE tbl IN ({', '.join(q(t) for t in forget)});")
+        fields = [*forget, *(["rows"] if "rows" in raw else [])]
+        sql.append(f"DELETE FROM raw.fields WHERE tbl IN ({', '.join(q(t) for t in fields)});")
+    if raw & set(VERDICT_TABLES) and "sources" not in raw:
+        sql.append("UPDATE raw.sources SET verdicts = NULL;")
+    if "inputs" not in raw:
+        sql.append("DELETE FROM raw.inputs;")
+    sql.append("COMMIT;")
+    return "\n".join(sql), any(s == "main" for s, _ in bad)
+
+
+def repair(say):
+    """Lets go of the catalog's damaged tables (damaged(), repair_sql),
+    saying which, for the index to make them again: their names, and
+    whether a main table went."""
+    bad = damaged()
+    if not bad:
+        return [], False
+    say("index", f"index: damaged files, their tables made again: {damage_text(bad)}")
+    sql, docs = repair_sql(bad, set(lake_columns()))
+    written(sql, say, "the repair")
+    return sorted(f"{s}.{t}" for s, t in bad), docs
 
 
 def look(rec):
@@ -940,17 +1178,21 @@ def look(rec):
     to do: the cache's sources and the metadata files as they are, the
     verdicts' version, the sim tables' files gone, changed and new, the
     metadata files changed, the sources lacking verdicts of the version and
-    those whose runs to read again."""
+    those whose runs to read again. A changed or new file that isn't a
+    whole Parquet file (unsound: a crash's) waits, {key: why} in `broken`,
+    until its source is run or fetched again."""
     _, have, seen, done_srcs = rec
     cache = scan_cache()
     ins = inputs()
     version = verdict.derived_version()
     now = {(s, t): f for s, c in cache.items() for t, f in c["files"].items()}
     same = lambda a, b: (a["inode"], a["bytes"], a["mtime_ns"]) == (b["inode"], b["bytes"], b["mtime_ns"])  # noqa: E731
-    changed = [key for key, f in now.items() if key in have and not same(have[key], f)]
-    new = [key for key in now if key not in have]
+    broken = {key: why for key, f in now.items() if not (key in have and same(have[key], f))
+              and (why := unsound(f["path"]))}
+    changed = [key for key, f in now.items() if key in have and not same(have[key], f) and key not in broken]
+    new = [key for key in now if key not in have and key not in broken]
     return {"cache": cache, "ins": ins, "version": version, "gone": [key for key in have if key not in now],
-            "changed": changed, "new": new,
+            "changed": changed, "new": new, "broken": broken,
             "ins_changed": {p for p, v in ins.items() if seen.get(p) != v} | {p for p in seen if p not in ins},
             "need_verdicts": sorted(s for s in cache if done_srcs.get(s, {}).get("verdicts") != version),
             "runs_redo": sorted({s for s, t in [*changed, *new] if t == "runs"})}
@@ -1061,16 +1303,30 @@ def lake_columns():
 
 def link(cache_file, tbl, src, inode):
     """A hard link of a cache file in the lake's data dir (a copy where the
-    file systems differ)."""
+    file systems differ), fsynced before the next commit (LINKED), under a
+    name no file there has (unused)."""
     d = data_path() / "linked" / tbl
     d.mkdir(parents=True, exist_ok=True)
-    dest = d / f"{src.replace('/', '~')}.{inode}.parquet"
-    if not dest.exists():
-        try:
-            os.link(cache_file, dest)
-        except OSError:
-            shutil.copyfile(cache_file, dest)
+    dest = unused(d / f"{src.replace('/', '~')}.{inode}.parquet")
+    try:
+        os.link(cache_file, dest)
+    except OSError:
+        shutil.copyfile(cache_file, dest)
+    LINKED.add(str(dest))
     return dest
+
+
+def unused(path):
+    """`path`, or the first of its name with .1, .2, ... before its suffix
+    that no file has: a file the lake registered goes when the snapshots
+    reading it do (ducklake_cleanup_old_files), so a name it had (a table
+    made again: repair_sql; a cache file changed in place) is never
+    registered again."""
+    n, p = 0, path
+    while p.exists():
+        n += 1
+        p = path.with_name(f"{path.stem}.{n}{path.suffix}")
+    return p
 
 
 def json_type(t):
@@ -1111,7 +1367,8 @@ class Indexed:
     replaced or let go, and how many files each way; the sources it judged
     (their verdicts made, or found made), and those whose verdicts failed,
     {src: why} (they wait for the next index); why it skipped compacting
-    (the catalog's lock refused it: the next index compacts), or None."""
+    (the catalog's lock refused it: the next index compacts), or None; the
+    tables whose damaged files it made again (repair), "schema.table"."""
     changed: bool = False
     sources: list = dataclasses.field(default_factory=list)
     judged: list = dataclasses.field(default_factory=list)
@@ -1124,6 +1381,7 @@ class Indexed:
     docs_kept: bool = False
     elapsed_s: float = 0.0
     compact_skipped: str = None
+    repaired: list = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -1159,6 +1417,7 @@ def index(workers=None, progress=None, wait=True):
             say("index", "another index holds lake/index.lock")
             return None
         extensions()
+        repaired, main_gone = repair(say) if catalog_path().exists() else ([], False)
         rec = recorded()
         fresh = rec is None
         if rec is None:
@@ -1178,8 +1437,11 @@ def index(workers=None, progress=None, wait=True):
         cache, ins, version = x["cache"], x["ins"], x["version"]
         gone, changed, new, ins_changed = x["gone"], x["changed"], x["new"], x["ins_changed"]
         need_verdicts = x["need_verdicts"]
-        docs = docs_of(info) | {"info": info, "fresh": fresh}
+        docs = docs_of(info) | {"info": info, "fresh": fresh or main_gone}
         kept = not docs["own"] and docs["version"] != info.get("docs_version")
+        if x["broken"]:
+            say("index", f"index: {len(x['broken'])} cache files aren't whole, left out until their sources are run "
+                f"or fetched again: {', '.join(list(x['broken'].values())[:3])}")
         if not (gone or changed or new or ins_changed or need_verdicts) and info.get("verdict_version") == version:
             cols = lake_columns()
             scoring, sv = lake_scoring(cols)
@@ -1218,11 +1480,11 @@ def index(workers=None, progress=None, wait=True):
                            elapsed_s=took(), compact_skipped=skipped)
         say("scan", f"index: {len(new)} new files, {len(changed)} changed, {len(gone)} gone; "
             f"{len(ins_changed)} metadata files changed; verdicts for {len(need_verdicts)} sources")
-        kept = not docs["own"] and not fresh
+        kept = not docs["own"] and not docs["fresh"]
         if not docs["own"]:
             say("index", docs_kept(docs) if kept else
                 f"index: the doc tables made from this checkout's docs (docs_version {docs['version']}), which "
-                "aren't main's: there were none to keep")
+                f"aren't main's: {'there were none to keep' if fresh else 'they were damaged'}")
         derived = verdict.derive(need_verdicts, workers, lambda m, done, total: say("derive", m, done, total))
         failed = derived.failed
         with scratch() as tmp:
@@ -1253,7 +1515,7 @@ def index(workers=None, progress=None, wait=True):
         say("done", f"index: done in {took():.0f} s")
         return Indexed(changed=True, sources=sorted({s for s, _ in [*new, *changed, *gone]}), judged=derived.judged,
                        failed=failed, new=len(new), replaced=len(changed), gone=len(gone), docs_kept=kept,
-                       elapsed_s=took(), compact_skipped=skipped)
+                       elapsed_s=took(), compact_skipped=skipped, repaired=repaired)
 
 
 def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of, need_verdicts, version, tmp, docs,
@@ -1316,7 +1578,7 @@ def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of,
         else:
             # Written beside the links, cast, before the transaction, and
             # registered as the links are.
-            dest = data_path() / "converted" / t / f"{s.replace('/', '~')}.{f['inode']}.parquet"
+            dest = unused(data_path() / "converted" / t / f"{s.replace('/', '~')}.{f['inode']}.parquet")
             dest.parent.mkdir(parents=True, exist_ok=True)
             casts = ", ".join(f"TRY_CAST({ident(n)} AS {table[n]}) AS {ident(n)}" for n in have_cols)
             pre.append(f"COPY (SELECT {casts} FROM read_parquet({q(f['path'])})) TO {q(str(dest))} "
