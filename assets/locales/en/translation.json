@@ -19,11 +19,11 @@
     "Captions off": "Captions off",
     "Cast": "Cast",
     "Stop casting": "Stop casting",
-    "Casting to": "Casting to {{device}}",
+    "Casting to": "Casting to {device}",
     "AirPlay": "AirPlay",
     "Quality": "Quality",
     "Auto": "Auto",
-    "Auto playing": "Auto ({{rendition}})"
+    "Auto playing": "Auto ({rendition})"
   },
 
   "layout": {
