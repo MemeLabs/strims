@@ -7,6 +7,7 @@ import { Link, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { Peer } from "../../../apis/strims/network/v1/network";
+import { InputError } from "../../../components/Form";
 import {
   MenuCell,
   MenuItem,
@@ -96,7 +97,7 @@ const NetworkPeerList: React.FC = () => {
   useTitle(t("settings.network.title"));
 
   const { networkId } = useParams<"networkId">();
-  const [{ loading, value }, listPeers] = useCall("network", "listPeers", {
+  const [{ loading, value, error }, listPeers] = useCall("network", "listPeers", {
     args: [{ networkId: BigInt(networkId) }],
   });
 
@@ -106,7 +107,11 @@ const NetworkPeerList: React.FC = () => {
   return (
     <>
       <TableTitleBar label="Network peers" backLink={`/settings/networks/${networkId}`} />
-      <PeerTable peers={value.peers} onChange={listPeers} />
+      {error ? (
+        <InputError error={error.message || "Error loading peers"} />
+      ) : (
+        <PeerTable peers={value.peers} onChange={listPeers} />
+      )}
     </>
   );
 };

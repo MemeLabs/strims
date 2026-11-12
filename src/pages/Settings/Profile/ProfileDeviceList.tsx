@@ -7,6 +7,7 @@ import { useTitle } from "react-use";
 
 import { Device } from "../../../apis/strims/profile/v1/profile";
 import { Checkpoint } from "../../../apis/strims/replication/v1/replication";
+import { InputError } from "../../../components/Form";
 import {
   MenuCell,
   MenuItem,
@@ -63,6 +64,15 @@ const DevicesList = () => {
 
   if (devicesRes.loading || checkpointsRes.loading) {
     return null;
+  }
+  const error = devicesRes.error || checkpointsRes.error;
+  if (error) {
+    return (
+      <>
+        <TableTitleBar label="Profile" backLink="/settings/profile" />
+        <InputError error={error.message || "Error loading devices"} />
+      </>
+    );
   }
 
   const rows = devicesRes.value?.devices?.map((device) => {

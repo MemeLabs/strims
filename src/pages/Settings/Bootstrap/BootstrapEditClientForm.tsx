@@ -7,6 +7,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { BootstrapClient } from "../../../apis/strims/network/v1/bootstrap/bootstrap";
+import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import BootstrapForm, { BootstrapFormData } from "./BootstrapClientForm";
@@ -36,6 +37,14 @@ const BootstrapEditForm: React.FC = () => {
 
   if (getRes.loading) {
     return null;
+  }
+  if (!value) {
+    return (
+      <>
+        <TableTitleBar label="Edit Bootstrap" backLink="/settings/bootstrap/clients" />
+        <InputError error={getRes.error?.message || "Error loading bootstrap"} />
+      </>
+    );
   }
 
   let data: BootstrapFormData;

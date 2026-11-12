@@ -7,6 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { Network } from "../../../apis/strims/network/v1/network";
+import { InputError } from "../../../components/Form";
 import {
   MenuCell,
   MenuItem,
@@ -88,7 +89,7 @@ const NetworkList: React.FC = () => {
   const { t } = useTranslation();
   useTitle(t("settings.network.title"));
 
-  const [{ loading, value }, getServers] = useCall("network", "list");
+  const [{ loading, value, error }, getServers] = useCall("network", "list");
 
   if (loading) {
     return null;
@@ -101,7 +102,11 @@ const NetworkList: React.FC = () => {
           <MenuLink label="Add invite code" to="/settings/networks/join" />
         </TableMenu>
       </TableTitleBar>
-      <NetworkTable networks={value.networks} onDelete={() => getServers()} />
+      {error ? (
+        <InputError error={error.message || "Error loading networks"} />
+      ) : (
+        <NetworkTable networks={value.networks} onDelete={() => getServers()} />
+      )}
     </>
   );
 };

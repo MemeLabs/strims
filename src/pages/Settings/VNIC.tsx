@@ -135,11 +135,12 @@ const VNICsPage: React.FC = () => {
   const { t } = useTranslation();
   useTitle(t("settings.vnic.title"));
 
-  const [{ value }, getConfig] = useCall("vnic", "getConfig");
+  const [{ value, error }, getConfig] = useCall("vnic", "getConfig");
 
   return (
     <>
       <TableTitleBar label="VNIC" />
+      {error && <InputError error={error.message || "Error loading config"} />}
       {value && <VNICForm config={value.config} onCreate={() => getConfig()} />}
     </>
   );

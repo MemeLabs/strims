@@ -54,11 +54,12 @@ const BootstrapConfigPage: React.FC = () => {
   const { t } = useTranslation();
   useTitle(t("settings.bootstrap.title"));
 
-  const [{ value }, getConfig] = useCall("bootstrap", "getConfig");
+  const [{ value, error }, getConfig] = useCall("bootstrap", "getConfig");
 
   return (
     <>
       <TableTitleBar label="Edit Bootstrap Config" />
+      {error && <InputError error={error.message || "Error loading config"} />}
       {value && <BootstrapConfigForm config={value.config} onCreate={() => getConfig()} />}
     </>
   );

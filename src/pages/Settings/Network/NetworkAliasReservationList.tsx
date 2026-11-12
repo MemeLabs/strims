@@ -7,6 +7,7 @@ import { Link, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
 import { AliasReservation } from "../../../apis/strims/network/v1/network";
+import { InputError } from "../../../components/Form";
 import {
   MenuCell,
   MenuItem,
@@ -84,9 +85,13 @@ const NetworkAliasReservationList: React.FC = () => {
   useTitle(t("settings.network.title"));
 
   const { networkId } = useParams<"networkId">();
-  const [{ loading, value }, listAliasReservations] = useCall("network", "listAliasReservations", {
-    args: [{ networkId: BigInt(networkId) }],
-  });
+  const [{ loading, value, error }, listAliasReservations] = useCall(
+    "network",
+    "listAliasReservations",
+    {
+      args: [{ networkId: BigInt(networkId) }],
+    }
+  );
 
   if (loading) {
     return null;
@@ -97,10 +102,14 @@ const NetworkAliasReservationList: React.FC = () => {
         label="Network alias reservations"
         backLink={`/settings/networks/${networkId}`}
       />
-      <AliasReservationTable
-        aliasReservations={value.aliasReservations}
-        onChange={listAliasReservations}
-      />
+      {error ? (
+        <InputError error={error.message || "Error loading alias reservations"} />
+      ) : (
+        <AliasReservationTable
+          aliasReservations={value.aliasReservations}
+          onChange={listAliasReservations}
+        />
+      )}
     </>
   );
 };

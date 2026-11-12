@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
+import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import NetworkDirectoryForm, { NetworkDirectoryFormData } from "./NetworkDirectoryForm";
@@ -24,7 +25,18 @@ const NetworkDirectoryEditForm: React.FC = () => {
     onComplete: () => navigate(`/settings/networks/${networkId}`),
   });
 
-  if (getRes.loading || !network.serverConfig) {
+  if (getRes.loading) {
+    return null;
+  }
+  if (!network) {
+    return (
+      <>
+        <TableTitleBar label="Edit Network" backLink={`/settings/networks/${networkId}`} />
+        <InputError error={getRes.error?.message || "Error loading network"} />
+      </>
+    );
+  }
+  if (!network.serverConfig) {
     return null;
   }
 
