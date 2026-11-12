@@ -100,7 +100,9 @@ main (SKILL.md's order of work).
      its meanings by kind inside that column's own parentheses. Better,
      the sims' doc rows come from the shared formatter's column list,
      and the formatter covers the whole row (head columns, types and
-     docs), so the two sims' rows can't drift.
+     docs), so the two sims' rows can't drift: the seed log's formatter
+     (`crates/strims-ppspp/src/scheduler_seed_log.rs`) takes its
+     columns from the generated `crates/strims-ppspp/src/seed_log_columns.rs`.
    - The `series_meta.json` paragraph and the paragraph listing the
      logs, in both files.
 7. **Truth that needs later holds** goes in the lab's view, not the sim:

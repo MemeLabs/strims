@@ -823,11 +823,10 @@ pub struct Column {
     pub doc: &'static str,
 }
 
-const fn col(name: &'static str, ty: ColumnType, doc: &'static str) -> Column {
-    Column { name, ty, doc }
-}
-
-use ColumnType::{Bool, Int, Text};
+#[path = "seed_log_columns.rs"]
+mod columns;
+pub use columns::{DECISION_COLUMNS, SEND_COLUMNS};
+use columns::{DecisionCol, HeadCol, SendCol};
 
 /// The `seed_decisions` table's grain, as both sims' doc rows give it
 /// before the setting that writes it ([`doc_row`]).
@@ -837,284 +836,6 @@ pub const DECISIONS_GRAIN: &str =
 /// The `seed_sends` table's grain, as both sims' doc rows give it
 /// before the setting that writes it ([`doc_row`]).
 pub const SENDS_GRAIN: &str = "chunk the seed pushed or answered, once its send ended, from its seed log ([`strims_ppspp::SeedSend`])";
-
-/// The `seed_decisions` table's columns ([`decision_fields`]); a row's
-/// kind says which hold its numbers, the rest empty.
-pub const DECISION_COLUMNS: [Column; 43] = [
-    col(
-        "t_ms",
-        Int,
-        "when the seed decided, in ms of true time from the stream's start, as the sim's other tables count it",
-    ),
-    col(
-        "node",
-        Int,
-        "the seed: its host in strims-sim, its node in the ppspp sim",
-    ),
-    col(
-        "n",
-        Int,
-        "the decision's place in the seed's log, from 0, in the order the seed logged its decisions; with node it keys the table",
-    ),
-    col(
-        "peer",
-        Int,
-        "the neighbour the decision is about, numbered as node is; empty for a decision about the allocation, a window or answer_rate row",
-    ),
-    col(
-        "peer_incarnation",
-        Int,
-        "the neighbour's incarnation then, as the sim's arrivals count them; empty without a peer",
-    ),
-    col(
-        "kind",
-        Text,
-        "what the seed decided: request, a STREAM_REQUEST answered; deferred, one the first wave's ramp held, answered later by a request row; released, the peer's STREAM_CANCEL of a subscription; closed, a subscription the seed ended; holder_joined and holder_left, the peer took or gave up a copy; barred, the peer may hold none for a while; check, a holder's reading at an allocation check, once a second; cancel, the peer's CANCEL of a chunk; window, the allocation's window; answer_rate, the answer gate's pace as it changed",
-    ),
-    col(
-        "stream",
-        Int,
-        "the stream of a request, deferred, released or closed row; of a check's due push; of a cancel's chunk",
-    ),
-    col(
-        "seq",
-        Int,
-        "a chunk: a check's due push, or a cancel's chunk (the CANCEL's bin's first where why is none)",
-    ),
-    col(
-        "why",
-        Text,
-        "a request's rule: seed_holder, seed_no_copy, seed_barred, seed_streams_held, subscribed (the peer asked again), silent, pin, measured or unmeasured; a closed row's reason: a holder's leaving's (silent, unserved, past_copies, idle or closed), silent (the peer went silent), spill, pin, saturated, declined, or channel (its channel closed: no STREAM_CLOSE went); a holder_left's: silent, unserved, past_copies, idle or closed; a bar's: silent or unserved; a cancel's, where the seed's push of the chunk stood: none, queued (dropped at write time) or written; a window's phase: check, first_wave, ramp or ramp_end",
-    ),
-    col(
-        "granted",
-        Bool,
-        "a request's: accepted, a STREAM_OPEN following, or declined with a STREAM_CLOSE",
-    ),
-    col(
-        "subscribers",
-        Int,
-        "the stream's subscribers: a request's before its answer, a released or closed row's left after it",
-    ),
-    col(
-        "holders",
-        Int,
-        "the holders of a copy: a request's as the seed's admission read them (empty where none did: a pin, a peer asking again, a silent one); a holder_joined's after it; a holder_left's left; a window's",
-    ),
-    col(
-        "copies",
-        Int,
-        "the copies in effect: a request's as the seed's admission read them (empty where none did); a holder_joined's, a holder_left's or a window's",
-    ),
-    col(
-        "held",
-        Int,
-        "the streams the peer held: a request's as the seed's admission read them (empty where none did); a check's, the holder's subscriptions",
-    ),
-    col(
-        "per_holder",
-        Int,
-        "the streams a holder may hold: a request's (empty where no admission read it) or a window's; empty before the budget is measured",
-    ),
-    col(
-        "satellite",
-        Bool,
-        "a holder_joined's or a check's: the peer holds streams spilled from other holders, with no copy of its own",
-    ),
-    col(
-        "kept",
-        Bool,
-        "a released row's: a holder's cancel of a stream of its copy, which the seed keeps for a near satellite to take while no one else does",
-    ),
-    col(
-        "rtt_ms",
-        Int,
-        "the peer's link's smallest round trip over the last one or two windows: a holder_joined's, a holder_left's or a check's",
-    ),
-    col(
-        "until_ms",
-        Int,
-        "a bar's: the peer holds no copy until then, in ms as t_ms",
-    ),
-    col(
-        "bars",
-        Int,
-        "a bar's: the peer's bars so far, this one included",
-    ),
-    col(
-        "reporters",
-        Int,
-        "a bar's: the reporters that voted on the peer at the latest check",
-    ),
-    col(
-        "due_ms",
-        Int,
-        "a check's: when the due push was written, the first written to the holder in the interval before last, in ms as t_ms",
-    ),
-    col(
-        "judged",
-        Bool,
-        "a check's: the due push was written at least ANNOUNCE_TIMEOUT before, so this check judged it",
-    ),
-    col(
-        "frontier_seq",
-        Int,
-        "a check's, where peers send STATE summaries: the holder's latest STATE's newest chunk of the due push's stream; empty without one, or where peers send HAVEs",
-    ),
-    col(
-        "hole_seq",
-        Int,
-        "a check's: that STATE's newest chunk before its frontier the holder lacked; empty without one",
-    ),
-    col(
-        "state_age_ms",
-        Int,
-        "a check's: that STATE's age at the check; empty without one",
-    ),
-    col(
-        "silent",
-        Int,
-        "a check's: the checks in a row at which the holder didn't say it holds its due push (its HAVEs didn't announce it, or its latest STATE's frontier hadn't reached it), after this one; a bar comes at SILENT_CHECKS",
-    ),
-    col(
-        "queue_ms",
-        Int,
-        "a check's: how far the holder's link's least round trip since the last check stood above its smallest, the queue below the runner its pushes waited behind",
-    ),
-    col(
-        "delivered_bps",
-        Int,
-        "a check's: the least delivery rate the holder's link read since the last check, in bytes per second",
-    ),
-    col(
-        "wait_ms",
-        Int,
-        "a check's: the shortest wait in the seed's queue of a push written to the holder or cancelled by it since the last check",
-    ),
-    col(
-        "stale",
-        Bool,
-        "a check's: a push to the holder went stale since the last check",
-    ),
-    col("budget", Int, "a window's: the budget in stream slots"),
-    col("measured", Bool, "a window's: the budget is measured"),
-    col(
-        "capacity_bps",
-        Int,
-        "a window's: the capacity reading the budget was measured from, in bytes per second; empty until measured",
-    ),
-    col(
-        "pushed",
-        Int,
-        "a window's at a check: the holders with a push written or gone stale since the last check",
-    ),
-    col(
-        "behind",
-        Int,
-        "a window's at a check: those of them behind, a push waiting past PUSH_WAIT_TARGET or gone stale",
-    ),
-    col(
-        "overloaded",
-        Int,
-        "a window's at a check: those of them overloaded, a push waiting past PUSH_WAIT_OVERLOAD or gone stale",
-    ),
-    col(
-        "in_use",
-        Int,
-        "a window's at a check: the holders of a copy with a subscription",
-    ),
-    col(
-        "saturated",
-        Bool,
-        "a window's at a check: the uplink was busy at least SHED_UTILIZATION of the time",
-    ),
-    col(
-        "unconstrained",
-        Bool,
-        "a window's: the budget has room for every neighbour's every stream",
-    ),
-    col(
-        "rate_bps",
-        Int,
-        "an answer_rate's: the pace of the node's hybrid answers, in bytes per second",
-    ),
-    col(
-        "reading_ms",
-        Int,
-        "an answer_rate's: the node's queueing delay below the runner the answer gate read; empty without a reading",
-    ),
-    col(
-        "engaged",
-        Bool,
-        "an answer_rate's: the pace binds the answers",
-    ),
-];
-
-/// The `seed_sends` table's columns ([`send_fields`]).
-pub const SEND_COLUMNS: [Column; 14] = [
-    col(
-        "t_ms",
-        Int,
-        "when the send ended, written to the frame or dropped, in ms of true time from the stream's start, as the sim's other tables count it",
-    ),
-    col(
-        "node",
-        Int,
-        "the seed: its host in strims-sim, its node in the ppspp sim",
-    ),
-    col(
-        "n",
-        Int,
-        "the send's place in the seed's log, from 0, in the order the seed's sends ended; with node it keys the table",
-    ),
-    col(
-        "peer",
-        Int,
-        "the neighbour sent to, numbered as node is; empty if the sim can't name it",
-    ),
-    col(
-        "peer_incarnation",
-        Int,
-        "the neighbour's incarnation when the chunk was queued, as the sim's arrivals count them",
-    ),
-    col(
-        "how",
-        Text,
-        "push, to a subscriber of the chunk's stream, or answer, to the peer's request",
-    ),
-    col("stream", Int, "the chunk's stream"),
-    col("seq", Int, "the chunk"),
-    col(
-        "queued_ms",
-        Int,
-        "when the push was queued, or the answered request came (a released park's: its release), in ms as t_ms",
-    ),
-    col(
-        "fate",
-        Text,
-        "written, to the peer's frame; stale, a push dropped at write time for waiting past PUSH_STALE; cancelled, a push dropped at write time, the peer having cancelled the chunk; suppressed, a push dropped at write time, the peer's HAVEs having announced the chunk (where peers send HAVEs); refused, the peer's queue was full; dropped, unwritable at write time (its data gone, data-less, or too large for an empty frame); closed, a push still queued when the peer's channel closed",
-    ),
-    col(
-        "bytes",
-        Int,
-        "the frame bytes written for the chunk, integrity included (an answer of several chunks: its share); empty unless written",
-    ),
-    col(
-        "cancel_ms",
-        Int,
-        "the peer's first CANCEL of the chunk, if it came by the end, in ms as t_ms; empty without one",
-    ),
-    col(
-        "declared",
-        Bool,
-        "at the end, the peer said it holds the chunk: its HAVEs announced it, or, where peers send STATE summaries, its latest STATE covered it (at or after its oldest chunk, by its frontier, after its hole)",
-    ),
-    col(
-        "subscribed",
-        Bool,
-        "at the end, the peer was subscribed to the chunk's stream",
-    ),
-];
 
 /// The columns a sim fills for a row ([`decision_fields`], [`send_fields`]):
 /// its time in the tables' ms, the seed (`node`), the record's place in the
@@ -1134,11 +855,11 @@ pub struct RowHead {
 
 impl RowHead {
     fn put(&self, row: &mut BTreeMap<&'static str, String>) {
-        row.insert("t_ms", self.t_ms.to_string());
-        row.insert("node", self.node.to_string());
-        row.insert("n", self.n.to_string());
-        row.insert("peer", opt(self.peer));
-        row.insert("peer_incarnation", opt(self.peer_incarnation));
+        row.insert(HeadCol::TMs.name(), self.t_ms.to_string());
+        row.insert(HeadCol::Node.name(), self.node.to_string());
+        row.insert(HeadCol::N.name(), self.n.to_string());
+        row.insert(HeadCol::Peer.name(), opt(self.peer));
+        row.insert(HeadCol::PeerIncarnation.name(), opt(self.peer_incarnation));
     }
 }
 
@@ -1160,41 +881,41 @@ pub fn decision_fields(head: &RowHead, d: &SeedDecision, ms: &dyn Fn(Time) -> i6
     use SeedDecisionKind as K;
     let mut row: BTreeMap<&'static str, String> = BTreeMap::new();
     head.put(&mut row);
-    let mut put = |c: &'static str, v: String| {
-        row.insert(c, v);
+    let mut put = |c: DecisionCol, v: String| {
+        row.insert(c.name(), v);
     };
     let dur = |x: Option<Duration>| opt(x.map(|x| x.as_millis()));
     let seq = |b: Bin| b.base_offset().to_string();
-    put("kind", d.kind.name().to_owned());
+    put(DecisionCol::Kind, d.kind.name().to_owned());
     match d.kind {
         K::Request(q) => {
-            put("stream", q.stream.to_string());
-            put("why", admit_rule_name(q.rule).to_owned());
-            put("granted", q.granted.to_string());
-            put("subscribers", q.subscribers.to_string());
-            put("holders", opt(q.holders));
-            put("copies", opt(q.copies));
-            put("held", opt(q.held));
-            put("per_holder", opt(q.per_holder));
+            put(DecisionCol::Stream, q.stream.to_string());
+            put(DecisionCol::Why, admit_rule_name(q.rule).to_owned());
+            put(DecisionCol::Granted, q.granted.to_string());
+            put(DecisionCol::Subscribers, q.subscribers.to_string());
+            put(DecisionCol::Holders, opt(q.holders));
+            put(DecisionCol::Copies, opt(q.copies));
+            put(DecisionCol::Held, opt(q.held));
+            put(DecisionCol::PerHolder, opt(q.per_holder));
         }
-        K::Deferred { stream } => put("stream", stream.to_string()),
+        K::Deferred { stream } => put(DecisionCol::Stream, stream.to_string()),
         K::Released {
             stream,
             subscribers,
             kept,
         } => {
-            put("stream", stream.to_string());
-            put("subscribers", subscribers.to_string());
-            put("kept", kept.to_string());
+            put(DecisionCol::Stream, stream.to_string());
+            put(DecisionCol::Subscribers, subscribers.to_string());
+            put(DecisionCol::Kept, kept.to_string());
         }
         K::Closed {
             stream,
             why,
             subscribers,
         } => {
-            put("stream", stream.to_string());
-            put("why", why.name().to_owned());
-            put("subscribers", subscribers.to_string());
+            put(DecisionCol::Stream, stream.to_string());
+            put(DecisionCol::Why, why.name().to_owned());
+            put(DecisionCol::Subscribers, subscribers.to_string());
         }
         K::HolderJoined {
             satellite,
@@ -1202,10 +923,10 @@ pub fn decision_fields(head: &RowHead, d: &SeedDecision, ms: &dyn Fn(Time) -> i6
             holders,
             copies,
         } => {
-            put("satellite", satellite.to_string());
-            put("rtt_ms", dur(rtt));
-            put("holders", holders.to_string());
-            put("copies", copies.to_string());
+            put(DecisionCol::Satellite, satellite.to_string());
+            put(DecisionCol::RttMs, dur(rtt));
+            put(DecisionCol::Holders, holders.to_string());
+            put(DecisionCol::Copies, copies.to_string());
         }
         K::HolderLeft {
             why,
@@ -1213,10 +934,10 @@ pub fn decision_fields(head: &RowHead, d: &SeedDecision, ms: &dyn Fn(Time) -> i6
             holders,
             copies,
         } => {
-            put("why", holder_left_name(why).to_owned());
-            put("rtt_ms", dur(rtt));
-            put("holders", holders.to_string());
-            put("copies", copies.to_string());
+            put(DecisionCol::Why, holder_left_name(why).to_owned());
+            put(DecisionCol::RttMs, dur(rtt));
+            put(DecisionCol::Holders, holders.to_string());
+            put(DecisionCol::Copies, copies.to_string());
         }
         K::Barred {
             why,
@@ -1224,51 +945,51 @@ pub fn decision_fields(head: &RowHead, d: &SeedDecision, ms: &dyn Fn(Time) -> i6
             bars,
             reporters,
         } => {
-            put("why", why.name().to_owned());
-            put("until_ms", ms(until).to_string());
-            put("bars", bars.to_string());
-            put("reporters", reporters.to_string());
+            put(DecisionCol::Why, why.name().to_owned());
+            put(DecisionCol::UntilMs, ms(until).to_string());
+            put(DecisionCol::Bars, bars.to_string());
+            put(DecisionCol::Reporters, reporters.to_string());
         }
         K::Check(c) => {
-            put("satellite", c.satellite.to_string());
-            put("held", c.streams.to_string());
+            put(DecisionCol::Satellite, c.satellite.to_string());
+            put(DecisionCol::Held, c.streams.to_string());
             if let Some((bin, at)) = c.due {
-                put("seq", seq(bin));
-                put("due_ms", ms(at).to_string());
+                put(DecisionCol::Seq, seq(bin));
+                put(DecisionCol::DueMs, ms(at).to_string());
             }
-            put("stream", opt(c.stream));
-            put("judged", c.judged.to_string());
-            put("frontier_seq", opt(c.frontier.map(seq)));
-            put("hole_seq", opt(c.hole.map(seq)));
-            put("state_age_ms", dur(c.state_at.map(|s| d.at - s)));
-            put("silent", c.silent.to_string());
-            put("queue_ms", dur(c.queue));
-            put("delivered_bps", opt(c.delivered));
-            put("wait_ms", dur(c.wait));
-            put("stale", c.stale.to_string());
-            put("rtt_ms", dur(c.rtt));
+            put(DecisionCol::Stream, opt(c.stream));
+            put(DecisionCol::Judged, c.judged.to_string());
+            put(DecisionCol::FrontierSeq, opt(c.frontier.map(seq)));
+            put(DecisionCol::HoleSeq, opt(c.hole.map(seq)));
+            put(DecisionCol::StateAgeMs, dur(c.state_at.map(|s| d.at - s)));
+            put(DecisionCol::Silent, c.silent.to_string());
+            put(DecisionCol::QueueMs, dur(c.queue));
+            put(DecisionCol::DeliveredBps, opt(c.delivered));
+            put(DecisionCol::WaitMs, dur(c.wait));
+            put(DecisionCol::Stale, c.stale.to_string());
+            put(DecisionCol::RttMs, dur(c.rtt));
         }
         K::Cancel { stream, bin, open } => {
-            put("stream", stream.to_string());
-            put("seq", seq(bin.base_left()));
-            put("why", open.name().to_owned());
+            put(DecisionCol::Stream, stream.to_string());
+            put(DecisionCol::Seq, seq(bin.base_left()));
+            put(DecisionCol::Why, open.name().to_owned());
         }
         K::Window(w) => {
-            put("why", w.phase.name().to_owned());
-            put("budget", w.budget.to_string());
-            put("measured", w.measured.to_string());
-            put("capacity_bps", opt(w.capacity));
-            put("copies", w.copies.to_string());
-            put("per_holder", opt(w.streams));
-            put("holders", w.holders.to_string());
-            put("unconstrained", w.unconstrained.to_string());
+            put(DecisionCol::Why, w.phase.name().to_owned());
+            put(DecisionCol::Budget, w.budget.to_string());
+            put(DecisionCol::Measured, w.measured.to_string());
+            put(DecisionCol::CapacityBps, opt(w.capacity));
+            put(DecisionCol::Copies, w.copies.to_string());
+            put(DecisionCol::PerHolder, opt(w.streams));
+            put(DecisionCol::Holders, w.holders.to_string());
+            put(DecisionCol::Unconstrained, w.unconstrained.to_string());
             // The signals are a check's alone.
             if w.phase == WindowPhase::Check {
-                put("pushed", w.pushed.to_string());
-                put("behind", w.behind.to_string());
-                put("overloaded", w.overloaded.to_string());
-                put("in_use", w.in_use.to_string());
-                put("saturated", w.saturated.to_string());
+                put(DecisionCol::Pushed, w.pushed.to_string());
+                put(DecisionCol::Behind, w.behind.to_string());
+                put(DecisionCol::Overloaded, w.overloaded.to_string());
+                put(DecisionCol::InUse, w.in_use.to_string());
+                put(DecisionCol::Saturated, w.saturated.to_string());
             }
         }
         K::AnswerRate {
@@ -1276,9 +997,9 @@ pub fn decision_fields(head: &RowHead, d: &SeedDecision, ms: &dyn Fn(Time) -> i6
             reading,
             engaged,
         } => {
-            put("rate_bps", rate.to_string());
-            put("reading_ms", dur(reading));
-            put("engaged", engaged.to_string());
+            put(DecisionCol::RateBps, rate.to_string());
+            put(DecisionCol::ReadingMs, dur(reading));
+            put(DecisionCol::Engaged, engaged.to_string());
         }
     }
     ordered(&DECISION_COLUMNS, row)
@@ -1292,17 +1013,17 @@ pub fn send_fields(head: &RowHead, s: &SeedSend, ms: &dyn Fn(Time) -> i64) -> Ve
     head.put(&mut row);
     let written = s.fate == SendFate::Written;
     for (c, v) in [
-        ("how", s.how.name().to_owned()),
-        ("stream", s.stream.to_string()),
-        ("seq", s.bin.base_offset().to_string()),
-        ("queued_ms", ms(s.queued).to_string()),
-        ("fate", s.fate.name().to_owned()),
-        ("bytes", opt(written.then_some(s.bytes))),
-        ("cancel_ms", opt(s.cancel.map(ms))),
-        ("declared", s.declared.to_string()),
-        ("subscribed", s.subscribed.to_string()),
+        (SendCol::How, s.how.name().to_owned()),
+        (SendCol::Stream, s.stream.to_string()),
+        (SendCol::Seq, s.bin.base_offset().to_string()),
+        (SendCol::QueuedMs, ms(s.queued).to_string()),
+        (SendCol::Fate, s.fate.name().to_owned()),
+        (SendCol::Bytes, opt(written.then_some(s.bytes))),
+        (SendCol::CancelMs, opt(s.cancel.map(ms))),
+        (SendCol::Declared, s.declared.to_string()),
+        (SendCol::Subscribed, s.subscribed.to_string()),
     ] {
-        row.insert(c, v);
+        row.insert(c.name(), v);
     }
     ordered(&SEND_COLUMNS, row)
 }
