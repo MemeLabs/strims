@@ -572,7 +572,8 @@ fn the_logs_name_their_peers(d: &Path, how: &str) {
 /// it pays for at a subscriber's cost, the cost within a factor of two of
 /// the stream's (the budget takes the store's rate over its last second,
 /// which a bursty writer swings); and the series' and the bins' columns
-/// carry it. ppspp's unit tests check the reading exactly.
+/// carry it, empty until measured. ppspp's unit tests check the reading
+/// exactly.
 fn budget_reading_is_the_budgets(r: &strims_sim::Report, d: &Path) {
     use strims_ppspp::scheduler_peer::push::PUSH_OVERHEAD;
     use strims_ppspp::scheduler_peer::push::seed::{ALLOC_UTILIZATION, OVER_BUDGET};
@@ -623,8 +624,13 @@ fn budget_reading_is_the_budgets(r: &strims_sim::Report, d: &Path) {
         .collect();
     let seconds = column("seconds");
     assert!(seconds.iter().any(|&c| c > 0));
-    assert!(seconds.iter().all(|c| *c == -1 || readings.contains(c)));
-    assert!(column("bins").iter().any(|&c| c > 0));
+    assert!(
+        seconds
+            .iter()
+            .all(|c| *c == -1 || (*c > 0 && readings.contains(c)))
+    );
+    let bins = column("bins");
+    assert!(!bins.is_empty() && bins.iter().all(|&c| c > 0));
 }
 
 /// With the scheduler's logs on, the seed's tables say what it decided and

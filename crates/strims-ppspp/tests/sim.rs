@@ -1584,7 +1584,8 @@ fn bin_row(k: usize, width: Duration, a: &BinSample, b: &BinSample) -> Vec<i64> 
     let (c, w) = counts_delta(&a.seed.1, &b.seed.1);
     row.extend(c);
     row.extend(wait_cols(&w));
-    row.push(gauge(10));
+    // Empty until measured.
+    row.push(if gauge(10) > 0 { gauge(10) } else { NONE });
     row
 }
 
@@ -2048,8 +2049,8 @@ struct Report {
     seed_capacity: u64,
     /// ... and the reading its budget was measured from
     /// ([`AllocSample::budget_capacity`]), median over the same samples
-    /// once measured: the row's `budget_capacity` (0 if never).
-    budget_capacity: u64,
+    /// once measured: the row's `budget_capacity` (`None`, null, if never).
+    budget_capacity: Option<u64>,
     /// When the seed's holders ([`AllocSample::holders`]) last changed,
     /// after the stream started.
     settled: Duration,
@@ -4103,7 +4104,14 @@ impl Sim {
             ("pushed", seed_delta(4)),
             ("seed_ovh", seed_delta(6)),
             ("viewer_ovh", pooled(4)),
-            ("budget_capacity", seed(7)),
+            // Empty until measured.
+            (
+                "budget_capacity",
+                seed(7)
+                    .into_iter()
+                    .map(|c| if c > 0 { c } else { NONE })
+                    .collect(),
+            ),
         ];
         // A media run's chunks sent each second, by their signing: those
         // holding media (`written`, what `frames` counts), as its other
@@ -4145,12 +4153,12 @@ impl Sim {
     ///
     /// | table | one row per | columns |
     /// |---|---|---|
-    /// | `seconds` | second of [`Sim::series`] | `sec`, then the series' per-second fields: `present`, `hits`, `misses`, `pruned`, `parents`, `capacity` (the seed's relay busy-time reading, `PushStats::upload_capacity`, at the second's end, the sample its counters come from: strims-sim's is a tick older), `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, `budget_capacity` (the capacity reading the seed's budget was measured from, `PushStats::seed_budget_capacity`, at the second's end: 0 until measured), and `written` in a media run |
+    /// | `seconds` | second of [`Sim::series`] | `sec`, then the series' per-second fields: `present`, `hits`, `misses`, `pruned`, `parents`, `capacity` (the seed's relay busy-time reading, `PushStats::upload_capacity`, at the second's end, the sample its counters come from: strims-sim's is a tick older), `busy`, `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, `budget_capacity` (the capacity reading the seed's budget was measured from, `PushStats::seed_budget_capacity`, at the second's end: empty until measured), and `written` in a media run |
     /// | `viewer_seconds` | viewer and second | `viewer`, `sec`, `lag_ms` (the series' `lag`, -1 without a read), `frames` |
     /// | `reads` | chunk a viewer read | `viewer`, `t_ms` (when it read it), `seq` (the chunk), `lag_ms` (from its publishing) |
     /// | `stalls` | stall of a viewer's playout at each delay of [`DELAYS_MS`] (`hack/capture/analyze.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`) | `viewer`, `delay_ms`, `t_ms` (when it began, on the `reads`' clock), `stall_ms`: [`playout::play`] over the viewer's `reads`, as `hack/sim-db`'s `playback(delay_ms)` plays them |
     /// | `parents` | change of a node's open parent of a stream of its swarm ([`Sim::take_parents`]) | `t_ms`, `node` (as in `events`), `n` (the change's place among the node's, from 0, in time order: the changes the runner made in one call share its `t_ms`, in the order it made them), `stream`, `parent` (the node from then on, -1 for none), `reason`: `open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their link closed, the stream started anew, or the node left, departed or died) |
-    /// | `bins` | bin of [`Sim::keep_tables`]' width | [`bin_cols`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), the seed's meter, `capacity` (the relay busy-time reading, `PushStats::upload_capacity`) and `busy`, uplink and copies at its end and what it sent in it, then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), then `budget_capacity` (the capacity reading the seed's budget was measured from, at the bin's end: `PushStats::seed_budget_capacity`, 0 until measured) |
+    /// | `bins` | bin of [`Sim::keep_tables`]' width | [`bin_cols`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), the seed's meter, `capacity` (the relay busy-time reading, `PushStats::upload_capacity`) and `busy`, uplink and copies at its end and what it sent in it, then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), then `budget_capacity` (the capacity reading the seed's budget was measured from, at the bin's end: `PushStats::seed_budget_capacity`, empty until measured) |
     /// | `node_bins` | node and bin, with `SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node`, `viewer` (its number here, -1 for none), what it did in the bin |
     /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink at the run's end in bytes per second: an `incident`'s, if one slowed it), `hostile`, `churned` (it left at least once), `clock_ms` (its clock's offset), `arrive_ms` (when it arrived, -1000 for the start; [`Arrivals`]), `depart_ms` (when it left for good, empty if it stayed; [`Depart`]) |
     /// | `events` | timed event ([`TimedEvent`]) | `t_us`, `kind` (its id: the vocabulary, [`strims_wan::vocab`] from `crates/strims-wan/vocab.toml`, gives each kind, the sims that write it and what its other columns hold), `node`, `peer` (-1 for none), `value`, `detail` |
@@ -6091,7 +6099,7 @@ impl Sim {
                     .map(|a| a.budget_capacity)
                     .collect();
                 v.sort_unstable();
-                v.get(v.len() / 2).copied().unwrap_or(0)
+                v.get(v.len() / 2).copied()
             },
             seed_objective: {
                 let mut v: Vec<Duration> = self
@@ -7582,10 +7590,13 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
         };
         let last = seed.runner.push_stats(seed.swarm).unwrap();
         assert_eq!(last.seed_budget_capacity > 0, adaptive);
-        assert_eq!(column("seconds").iter().any(|&c| c > 0), adaptive);
-        assert_eq!(column("bins").iter().any(|&c| c > 0), adaptive);
+        // Empty until measured, so never 0.
+        let (seconds, bins) = (column("seconds"), column("bins"));
+        assert_eq!(!seconds.is_empty(), adaptive);
+        assert_eq!(!bins.is_empty(), adaptive);
+        assert!(seconds.iter().chain(&bins).all(|&c| c > 0));
         // The row's medians take the samples after the warm-up alone.
-        assert!(!adaptive || r.seed_capacity == 0 || r.budget_capacity > 0);
+        assert!(!adaptive || r.seed_capacity == 0 || r.budget_capacity.is_some());
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -10764,7 +10775,10 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         .num("seed_slots", r.seed_slots)
         .int("seed_up_bw", seed.up_bw)
         .int("seed_capacity", r.seed_capacity)
-        .int("budget_capacity", r.budget_capacity)
+        // The capacity reading the seed's budget was measured from, its
+        // median over the samples after the warm-up once measured; null if
+        // it never was.
+        .opt_int("budget_capacity", r.budget_capacity)
         .int("seed_first_wave", seed_push.seed_first_wave as u64)
         .int(
             "seed_first_wave_capacity",
@@ -11590,6 +11604,14 @@ impl JsonRow {
 
     fn int(&mut self, key: &str, v: u64) -> &mut Self {
         self.field(key, format_args!("{v}"))
+    }
+
+    /// An integer, null for `None`: a reading the run doesn't have.
+    fn opt_int(&mut self, key: &str, v: Option<u64>) -> &mut Self {
+        match v {
+            Some(v) => self.int(key, v),
+            None => self.field(key, format_args!("null")),
+        }
     }
 
     /// A number; JSON has no NaN or infinity, so those are null.
