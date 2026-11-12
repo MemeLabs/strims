@@ -259,10 +259,14 @@ class Lake(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = suite.q(f"ducklake:sqlite:{tmp}/catalog.sqlite")
             cat = suite.catalog()
+            # The tables TABLES makes, as the index tells scoring_sql the
+            # catalog's: a macro needing another is made one that fails
+            # saying so (DuckDB binds a table macro as it makes it).
+            have = {t: set() for t in re.findall(r"CREATE TABLE IF NOT EXISTS (?:raw\.)?([a-z_]+)", TABLES)}
             try:
                 suite.simdb().duck("INSTALL ducklake; INSTALL sqlite; LOAD ducklake; LOAD sqlite; "
                                    f"ATTACH {path} AS lake (DATA_PATH {suite.q(tmp + '/data/')}); USE lake;\n"
-                                   + TABLES + cat.scoring_sql(cat.scoring_cols({})), out=None)
+                                   + TABLES + cat.scoring_sql(cat.scoring_cols({}, have=have)), out=None)
             except suite.simdb().DuckError as e:
                 if "ducklake" in str(e).lower() and "extension" in str(e).lower():
                     self.skipTest(f"no ducklake extension: {e}")
@@ -528,6 +532,11 @@ class LagSince(unittest.TestCase):
         with self.assertRaisesRegex(suite.simdb().DuckError, "dynamics_phases reads viewer_phases"):
             scored("SELECT * FROM dynamics_phases('since');")
         self.assertEqual(scored("SELECT * FROM structural('since');"), [])
+        # Without arrivals the coverage macros say so; the asks fallback,
+        # whose comment gives its columns (`-- else none:`), has no rows.
+        with self.assertRaisesRegex(suite.simdb().DuckError, "coverage_runs_of reads arrivals, parents"):
+            scored("SELECT * FROM coverage_runs_of([{'k': 'k1'}]);")
+        self.assertEqual(scored("SELECT * FROM coverage_ask_streams_of([{'k': 'k1'}]);"), [])
 
 
 if __name__ == "__main__":

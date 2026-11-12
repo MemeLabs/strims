@@ -19,6 +19,8 @@
   hack/sim-db/simdb.py forecast-report [--exp E] [--cell C] [--arm A] [--seed N] [--name NAME=GLOB]
                                        [--phases rest|all|P,...] [--collapsed yes|no] [--section S ...]
                                        [--sample N] [--decode-sample N] [--iters N] [--json]
+  hack/sim-db/simdb.py coverage-report [--exp E] [--cell C] [--arm A] [--seed N] [--name NAME=GLOB]
+                                       [--phases all|rest|P,...] [--collapsed yes|no] [--section S ...] [--json]
   hack/sim-db/simdb.py duckdb
   hack/sim-db/simdb.py fold DB JOB_DIR... [--src SRC]
   hack/sim-db/simdb.py export DB DEST
@@ -235,6 +237,28 @@ semi-Markov model of each peer's availability per stream, fit on
 `--sample` streams a run and described on `--decode-sample`, `--iters`
 EM iterations; minutes).
 
+`coverage-report` is the catalog's too (hack/simlab/coverage.py, whose
+docs say why each definition is what it is; the definitions are
+scoring.sql's macros coverage_runs_of, seed_children_of,
+coverage_chunks_of and seed_cover_of, which `describe macros` lists):
+seed coverage, how soon each chunk the seed publishes reaches a node but
+the seed (arrivals), by which route, and the seed's children of its
+stream (parents), over the jobs forecast-report's flags pick, each phase
+kept (`--phases`: all by default, of the chunk's publication or the
+stream-second; a row of phase NULL pools those past startup) and each
+verdict apart, by `--section`: latency (the judged chunks' latency
+quantiles, their shares held late past the run's chunk interval and
+never held, censored ones counted apart), routes (each first copy's
+route and source: the seed's push, an answer, other, never), invariants
+(I1: stream-seconds with no seed child while a viewer watches, the seed's
+children and how their subscriptions ended), late (each late chunk
+classed by the seed's children at its publication: none, released,
+pushed late, never held by them, other), every one by default. Runs
+without arrivals are left out, a selection of none with them refused;
+the warnings (those runs, runs without push parents, an inferred stream
+count) go to stderr, and `--json` gives them as `warnings` beside the
+sections.
+
 Every query takes `--json`: its rows, integer and decimal values (HUGEINT,
 which sum() of integers gives, too) as numbers. The DuckDB CLI is pinned
 (DUCKDB_VERSION, its sha256s) and fetched once into ~/.cache/strims/duckdb/
@@ -274,6 +298,8 @@ from simlab import query, store  # noqa: E402
 from simlab.query import PULL_MB  # noqa: E402, F401
 # The arrival forecast study's sections (hack/simlab/forecast.py).
 from simlab.forecast import SECTIONS as FORECAST_SECTIONS  # noqa: E402
+# The seed coverage report's sections (hack/simlab/coverage.py).
+from simlab.coverage import SECTIONS as COVERAGE_SECTIONS  # noqa: E402
 # The event vocabulary (hack/simlab/vocab.py, stdlib), whose names the
 # docs list.
 from simlab import vocab  # noqa: E402
@@ -407,8 +433,9 @@ def cmd_rows(a):
         print(json.dumps(line))
 
 
-def cmd_forecast_report(a):
-    from simlab import forecast, regimes
+def report_selection(a):
+    """A report's selection (simlab.forecast.Selection) from its flags."""
+    from simlab import forecast
 
     phases = a.phases if a.phases in ("all", forecast.REST) else a.phases.split(",")
     names = {}
@@ -416,8 +443,14 @@ def cmd_forecast_report(a):
         name, glob = x.split("=", 1)
         names[glob] = name
     collapsed = {None: None, "yes": True, "no": False}[a.collapsed]
-    sel = forecast.Selection(exp=a.exp, cell=a.cell, arm=a.arm, seed=a.seed, names=names or None, phases=phases,
-                             collapsed=collapsed)
+    return forecast.Selection(exp=a.exp, cell=a.cell, arm=a.arm, seed=a.seed, names=names or None, phases=phases,
+                              collapsed=collapsed)
+
+
+def cmd_forecast_report(a):
+    from simlab import forecast, regimes
+
+    sel = report_selection(a)
     sections = a.section or list(forecast.SECTIONS)
     say = lambda m: print(m, file=sys.stderr)  # noqa: E731
     sql = [s for s in sections if s != "regimes"]
@@ -434,6 +467,18 @@ def cmd_forecast_report(a):
         print(text, end="")
 
 
+def cmd_coverage_report(a):
+    from simlab import coverage
+
+    warned = []
+    got = coverage.report(report_selection(a), a.section or list(coverage.SECTIONS),
+                          warn=warned.append if a.json else None)
+    if a.json:
+        print(json.dumps({**{s: r.records() for s, r in got.items()}, "warnings": warned}))
+    else:
+        print(coverage.report_text(got), end="")
+
+
 def cmd_pull(a):
     print(query.pull_text(query.pull_run(a.run, a.reads, a.cell, a.arm, a.seed, a.dry_run)))
 
@@ -448,6 +493,18 @@ def catalog():
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
+
+
+def report_flags(p, phases_help, phases):
+    """A report's selection flags (report_selection's) on parser `p`."""
+    p.add_argument("--exp", action="append", help="experiments, globs (experiment_jobs' exp_id)")
+    p.add_argument("--cell", action="append", help="cells, globs")
+    p.add_argument("--arm", action="append", help="arm labels, globs")
+    p.add_argument("--seed", action="append", type=int)
+    p.add_argument("--name", action="append", metavar="NAME=GLOB", help="the arm name of the labels GLOB matches")
+    p.add_argument("--phases", default=phases, help=phases_help)
+    p.add_argument("--collapsed", choices=("yes", "no"), help="only the runs whose verdict collapsed, or only "
+                   "those that didn't")
 
 
 def main():
@@ -500,21 +557,21 @@ def main():
         x.add_argument("--json", action="store_true")
     fr = sub.add_parser("forecast-report", help="the arrival forecast study over the decision logs (simlab's "
                         "forecast and regimes)")
-    fr.add_argument("--exp", action="append", help="experiments, globs (experiment_jobs' exp_id)")
-    fr.add_argument("--cell", action="append", help="cells, globs")
-    fr.add_argument("--arm", action="append", help="arm labels, globs")
-    fr.add_argument("--seed", action="append", type=int)
-    fr.add_argument("--name", action="append", metavar="NAME=GLOB", help="the arm name of the labels GLOB matches")
-    fr.add_argument("--phases", default="rest", help="the requester's phases kept: rest (all but startup), all, or "
-                    "phases, comma-separated")
-    fr.add_argument("--collapsed", choices=("yes", "no"), help="only the runs whose verdict collapsed, or only "
-                    "those that didn't")
+    report_flags(fr, "the requester's phases kept: rest (all but startup), all, or phases, comma-separated", "rest")
     fr.add_argument("--section", action="append", choices=[*FORECAST_SECTIONS, "regimes"],
                     help="the sections (every one but regimes by default)")
     fr.add_argument("--sample", type=int, default=1, help="regimes: streams a run the fit reads")
     fr.add_argument("--decode-sample", type=int, default=2, help="regimes: streams a run it describes")
     fr.add_argument("--iters", type=int, default=12, help="regimes: EM iterations")
     fr.add_argument("--json", action="store_true")
+    cr = sub.add_parser("coverage-report", help="seed coverage: how soon each chunk reaches a node but the seed, "
+                        "by which route, and the seed's children (simlab's coverage)")
+    report_flags(cr, "the phases kept, a chunk's publication's or a stream-second's (the run's): all, rest (all but "
+                 "startup), or phases, comma-separated; each kept phase reports apart, and a row of phase NULL "
+                 "pools the kept ones past startup where a group has two or more", "all")
+    cr.add_argument("--section", action="append", choices=COVERAGE_SECTIONS, help="the sections (every one by "
+                    "default)")
+    cr.add_argument("--json", action="store_true")
     sub.add_parser("duckdb", help="fetch the pinned DuckDB CLI")
     f = sub.add_parser("fold", help="fold job dirs into a store (each a dir holding the tables and a job.json)")
     f.add_argument("db")
@@ -552,6 +609,8 @@ def main():
         lake[a.cmd](a)
     elif a.cmd == "forecast-report":
         cmd_forecast_report(a)
+    elif a.cmd == "coverage-report":
+        cmd_coverage_report(a)
     else:
         {"sql": cmd_sql, "pooled": cmd_pooled, "aligned": cmd_aligned, "events": cmd_events, "osc": cmd_osc,
          "rows": cmd_rows, "forecast": cmd_forecast, "spec": cmd_spec}[a.cmd](a)

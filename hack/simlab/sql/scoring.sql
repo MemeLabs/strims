@@ -10,7 +10,9 @@
 -- field where the rows have it, else NULL. A macro's `-- needs:` line names
 -- the tables (or table.column) it reads that a catalog indexed by older
 -- code may lack: a session's own objects over such a catalog make it one
--- that fails saying so (catalog.needed).
+-- that fails saying so (catalog.needed). A table macro read as a fallback
+-- gives instead, with an `-- else none:` line of its columns, those
+-- columns and no rows.
 --
 -- A side is one arm's runs, a list of {'cell', 'seed', 'k', 'src'}
 -- structs: the job k is that arm's run of the cell at the seed, and src
@@ -517,3 +519,262 @@ CREATE OR REPLACE MACRO lag_since(exp_name, before := 10, after := 120) AS TABLE
     FROM hits h JOIN ej e USING (k, src)
     GROUP BY e.cell, e.arm_label, h.kind, h.phase, h.since, h.rel_s
     ORDER BY min(e.matrix), e.cell, e.arm_label, h.kind, h.phase, h.since, h.rel_s;
+
+-- Seed coverage (simlab.coverage, whose docs say what each definition
+-- gives and why), over the runs `jobs`, a list of structs with a job's
+-- `k` (its tables its own source's, jobs.src). Each `*_of(jobs)` macro is
+-- its `*_in(runs)` body over coverage_runs_of's rows, which a caller that
+-- holds them passes once (`runs`, a list of them) rather than deriving
+-- them again for each. Their CTEs are named cv_*, so a caller's own CTE
+-- isn't read in their place.
+--
+-- The facts of each run, a row a run: k, src, seed_node and seed_from
+-- (the seed the sim recorded, series_meta's `seed`: `series_meta`; else
+-- the node that published the most, arrivals' `own` rows: `arrivals`),
+-- streams and streams_from (the stream count the sim recorded,
+-- series_meta's `streams` or the ppspp sim's row's `streams`:
+-- `series_meta`, `row`; else inferred, one more than the greatest stream
+-- its parents name, `parents`, else its asks', `asks`, else one, NULL;
+-- a chunk's stream is its seq mod streams), interval_ms (the run's chunk
+-- interval: the median gap between consecutive publications within a
+-- stream, the seed's own rows), end_ms (the end of its last second in
+-- `seconds`, or its last hold if that is later: strims-sim runs on past
+-- its stream), and arrivals_rows and parents_rows (the run's rows of
+-- each the catalog holds: without arrivals a run has no chunks, without
+-- parents its I1 and its late chunks' classes are NULL).
+-- needs: arrivals parents
+CREATE OR REPLACE MACRO coverage_runs_of(jobs) AS TABLE
+    WITH cv_job_keys AS (
+        SELECT DISTINCT b.k, b.src FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k),
+    cv_meta AS (
+        SELECT u.k, u.src, max(TRY_CAST(json_extract(u.meta, '$.seed') AS BIGINT)) AS seed,
+               max(TRY_CAST(json_extract(u.meta, '$.streams') AS BIGINT)) AS streams
+        FROM raw.runs u SEMI JOIN cv_job_keys USING (k, src) GROUP BY ALL),
+    cv_own AS MATERIALIZED (
+        SELECT x.k, x.src, x.node, x.seq, x.t_ms FROM arrivals x SEMI JOIN cv_job_keys USING (k, src)
+        WHERE x.how = 'own'),
+    cv_published AS (
+        SELECT k, src, arg_max(node, (n, -node)) AS node
+        FROM (SELECT k, src, node, count(*) AS n FROM cv_own GROUP BY ALL) GROUP BY ALL),
+    cv_seed AS (
+        SELECT j.k, j.src, coalesce(m.seed, p.node) AS node,
+               CASE WHEN m.seed IS NOT NULL THEN 'series_meta' WHEN p.node IS NOT NULL THEN 'arrivals' END
+                   AS seed_from
+        FROM cv_job_keys j LEFT JOIN cv_meta m USING (k, src) LEFT JOIN cv_published p USING (k, src)),
+    cv_row_streams AS (
+        SELECT r.k, r.src, max(@{r.streams})::BIGINT AS n FROM rows r SEMI JOIN cv_job_keys USING (k, src)
+        GROUP BY ALL HAVING max(@{r.streams}) IS NOT NULL),
+    cv_parent_streams AS (
+        SELECT k, src, max(stream) + 1 AS n, count(*) AS rows_n FROM parents SEMI JOIN cv_job_keys USING (k, src)
+        GROUP BY ALL),
+    -- Only a run whose count is neither recorded nor its push parents'
+    -- reads its asks.
+    cv_unknown AS (
+        SELECT j.k FROM cv_job_keys j LEFT JOIN cv_meta m USING (k, src) LEFT JOIN cv_row_streams w USING (k, src)
+        LEFT JOIN cv_parent_streams p USING (k, src) WHERE m.streams IS NULL AND w.n IS NULL AND p.n IS NULL),
+    cv_ask_streams AS (
+        FROM coverage_ask_streams_of((SELECT list({'k': k}) FROM cv_unknown))),
+    cv_streams AS (
+        SELECT j.k, j.src, coalesce(m.streams, w.n, p.n, a.n, 1) AS streams,
+               CASE WHEN m.streams IS NOT NULL THEN 'series_meta' WHEN w.n IS NOT NULL THEN 'row'
+                    WHEN p.n IS NOT NULL THEN 'parents' WHEN a.n IS NOT NULL THEN 'asks' END AS streams_from
+        FROM cv_job_keys j LEFT JOIN cv_meta m USING (k, src) LEFT JOIN cv_row_streams w USING (k, src)
+        LEFT JOIN cv_parent_streams p USING (k, src) LEFT JOIN cv_ask_streams a USING (k, src)),
+    cv_pub AS (
+        SELECT x.k, x.src, x.seq % t.streams AS stream, x.seq, min(x.t_ms) AS pub_ms
+        FROM cv_own x JOIN cv_seed s ON s.k = x.k AND s.src = x.src AND s.node = x.node
+        JOIN cv_streams t ON t.k = x.k AND t.src = x.src GROUP BY ALL),
+    cv_gaps AS (
+        SELECT k, src, median(gap) AS interval_ms FROM (
+            SELECT k, src, pub_ms - lag(pub_ms) OVER (PARTITION BY k, src, stream ORDER BY seq) AS gap FROM cv_pub)
+        WHERE gap IS NOT NULL GROUP BY ALL),
+    cv_secs AS (
+        SELECT k, src, (max(sec) + 1) * 1000 AS end_ms FROM seconds SEMI JOIN cv_job_keys USING (k, src)
+        GROUP BY ALL),
+    cv_holds AS (
+        SELECT k, src, max(t_ms) AS end_ms, count(*) AS rows_n FROM arrivals SEMI JOIN cv_job_keys USING (k, src)
+        GROUP BY ALL)
+    SELECT j.k, j.src, s.node AS seed_node, s.seed_from, t.streams, t.streams_from, g.interval_ms,
+           greatest(e.end_ms, h.end_ms) AS end_ms, coalesce(h.rows_n, 0) AS arrivals_rows,
+           coalesce(p.rows_n, 0) AS parents_rows
+    FROM cv_job_keys j LEFT JOIN cv_seed s USING (k, src) LEFT JOIN cv_streams t USING (k, src)
+    LEFT JOIN cv_gaps g USING (k, src) LEFT JOIN cv_secs e USING (k, src) LEFT JOIN cv_holds h USING (k, src)
+    LEFT JOIN cv_parent_streams p USING (k, src);
+
+-- coverage_runs_of's last fallback for a run's stream count: one more
+-- than the greatest stream the asks of the runs `jobs` name, a row a run
+-- (k, src, n) that has asks. raw.asks, the rows the asks view gives of a
+-- job without its truth (a join of every arrivals row). A catalog
+-- without asks has no rows of it, rather than a macro that fails.
+-- needs: asks
+-- else none: k VARCHAR, src VARCHAR, n BIGINT
+CREATE OR REPLACE MACRO coverage_ask_streams_of(jobs) AS TABLE
+    SELECT a.k, a.src, max(a.stream) + 1 AS n FROM raw.asks a
+    SEMI JOIN (SELECT DISTINCT b.k, b.src FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k)
+        USING (k, src)
+    GROUP BY ALL;
+
+-- The seed's child subscriptions in the runs `runs` (coverage_runs_of's
+-- rows), from parents: k, src, node, stream, open_ms (a row naming the
+-- seed the node's parent of the stream), close_ms (the node's next row of
+-- the stream, else its run's end) and end_reason (that row's reason,
+-- NULL to the run's end). A node's rows of a stream at one ms are ordered
+-- as they can have happened: a @{reason_switch} first, an @{reason_open}
+-- after the ends if the node had a parent before that ms (an open needs
+-- none) and before them if not. A subscription of no length is none.
+-- needs: parents
+CREATE OR REPLACE MACRO seed_children_in(runs) AS TABLE
+    WITH cv_r AS (SELECT unnest(runs, recursive := true)),
+    cv_p AS (
+        SELECT p.k, p.src, p.t_ms, p.node, p.stream, p.parent, p.reason,
+               CASE WHEN p.reason = @{reason_switch} THEN 0 WHEN p.parent IS NULL THEN 1 ELSE 2 END AS pre
+        FROM parents p SEMI JOIN cv_r USING (k, src)),
+    cv_before AS (
+        SELECT *, lag(parent) OVER (PARTITION BY k, src, node, stream ORDER BY t_ms, pre, reason, parent)
+                      AS lag_parent,
+               row_number() OVER (PARTITION BY k, src, node, stream, t_ms ORDER BY pre, reason, parent) AS i
+        FROM cv_p),
+    cv_tied AS (
+        SELECT *, first_value(lag_parent) OVER (PARTITION BY k, src, node, stream, t_ms ORDER BY i) AS before
+        FROM cv_before),
+    cv_ordered AS (
+        SELECT k, src, t_ms, node, stream, parent, reason,
+               row_number() OVER (PARTITION BY k, src, node, stream ORDER BY t_ms,
+                                  CASE WHEN reason = @{reason_switch} OR (reason = @{reason_open} AND before IS NULL)
+                                       THEN 0 WHEN parent IS NULL THEN 1 ELSE 2 END, reason, parent) AS ord
+        FROM cv_tied),
+    cv_spans AS (
+        SELECT o.k, o.src, o.node, o.stream, o.parent, r.seed_node, o.t_ms AS open_ms,
+               coalesce(lead(o.t_ms) OVER w, greatest(r.end_ms, o.t_ms)) AS close_ms,
+               lead(o.reason) OVER w AS end_reason
+        FROM cv_ordered o JOIN cv_r r USING (k, src)
+        WINDOW w AS (PARTITION BY o.k, o.src, o.node, o.stream ORDER BY o.ord))
+    SELECT k, src, node, stream, open_ms, close_ms, end_reason FROM cv_spans
+    WHERE parent = seed_node AND close_ms > open_ms;
+
+-- seed_children_in over the runs `jobs`.
+-- needs: arrivals parents
+CREATE OR REPLACE MACRO seed_children_of(jobs) AS TABLE
+    FROM seed_children_in((SELECT list(cv_run) FROM coverage_runs_of(jobs) cv_run));
+
+-- Each chunk the seed of a run of `runs` (coverage_runs_of's rows)
+-- published, a row a chunk: k, src, seq, stream, pub_ms (the seed's own
+-- arrivals row), phase (the run's, verdict_seconds', of its publication
+-- second; @{tail} past the verdict's seconds), first_ms, first_node
+-- and latency_ms (first_ms - pub_ms) of its earliest hold by any node but
+-- the seed (ties by node, any incarnation), route (that hold's `push` or
+-- `answer`, else `other`, or `never`: no node but the seed held it),
+-- source (`seed`, `peer` or `unnamed`, the hold's peer: a first copy from
+-- a node but the seed, or naming none, is an anomaly; NULL for never),
+-- interval_ms (its run's), judged (published at least @{delay_max_ms} ms,
+-- the latency budget's most, before its run's end: every other chunk,
+-- held or not, is censored), late (never held, or held more than its
+-- run's interval after its publication) and, for a judged late chunk of a
+-- run with parents rows (NULL for the others), the seed's children of
+-- its stream at its publication (seed_children_in's): children (how
+-- many), class (the first that holds: no_seed_child; released, a child's
+-- hold names a release to pull, arrivals' released_ms; pushed_late, a
+-- child holds it by the seed's push; child_never, no child ever held it;
+-- other) and after (for no_seed_child, how the stream's last seed child
+-- before it ended, end_reason's; NULL for a stream that never had one).
+-- needs: arrivals arrivals.released_ms parents
+CREATE OR REPLACE MACRO coverage_chunks_in(runs) AS TABLE
+    WITH cv_r AS (SELECT unnest(runs, recursive := true)),
+    cv_arr AS MATERIALIZED (
+        SELECT x.k, x.src, x.node, x.seq, x.t_ms, x.how, x.peer, x.released_ms, x.node = r.seed_node AS seed
+        FROM arrivals x JOIN cv_r r USING (k, src)),
+    cv_pub AS (
+        SELECT x.k, x.src, x.seq, x.seq % r.streams AS stream, min(x.t_ms) AS pub_ms
+        FROM cv_arr x JOIN cv_r r USING (k, src) WHERE x.seed AND x.how = 'own' GROUP BY ALL),
+    cv_first AS (
+        SELECT k, src, seq, arg_min({'t_ms': t_ms, 'how': how, 'peer': peer, 'node': node}, (t_ms, node)) AS h
+        FROM cv_arr WHERE NOT seed GROUP BY ALL),
+    cv_chunks_of AS (
+        SELECT p.k, p.src, p.seq, p.stream, p.pub_ms, coalesce(v.phase, @{tail}) AS phase,
+               f.h.t_ms AS first_ms, f.h.node AS first_node, f.h.t_ms - p.pub_ms AS latency_ms,
+               CASE WHEN f.h IS NULL THEN 'never' WHEN f.h.how IN ('push', 'answer') THEN f.h.how
+                    ELSE 'other' END AS route,
+               CASE WHEN f.h IS NULL THEN NULL WHEN f.h.peer = r.seed_node THEN 'seed'
+                    WHEN f.h.peer >= 0 THEN 'peer' ELSE 'unnamed' END AS source,
+               r.interval_ms, p.pub_ms + @{delay_max_ms} <= r.end_ms AS judged,
+               f.h IS NULL OR f.h.t_ms - p.pub_ms > r.interval_ms AS late, r.parents_rows > 0 AS parented
+        FROM cv_pub p JOIN cv_r r USING (k, src) LEFT JOIN cv_first f USING (k, src, seq)
+        LEFT JOIN verdict_seconds v ON v.k = p.k AND v.src = p.src AND v.sec = p.pub_ms // 1000),
+    cv_subs AS (FROM seed_children_in(runs)),
+    cv_kids AS (
+        SELECT c.k, c.src, c.seq, s.node FROM cv_chunks_of c
+        JOIN cv_subs s ON s.k = c.k AND s.src = c.src AND s.stream = c.stream AND s.open_ms <= c.pub_ms
+                       AND c.pub_ms < s.close_ms
+        WHERE c.judged AND c.late),
+    cv_kid_holds AS (
+        SELECT x.k, x.src, x.node, x.seq,
+               arg_min({'how': x.how, 'peer': x.peer, 'released_ms': x.released_ms}, x.t_ms) AS h
+        FROM cv_arr x JOIN cv_kids USING (k, src, node, seq) GROUP BY ALL),
+    cv_kid AS (
+        SELECT d.k, d.src, d.seq, count(*) AS children, bool_or(h.h.released_ms IS NOT NULL) AS released,
+               bool_or(h.h.how = 'push' AND h.h.peer = r.seed_node) AS pushed, bool_and(h.h IS NULL) AS never
+        FROM cv_kids d LEFT JOIN cv_kid_holds h USING (k, src, node, seq) JOIN cv_r r ON r.k = d.k AND r.src = d.src
+        GROUP BY ALL),
+    cv_ended AS (
+        SELECT k, src, stream, close_ms, end_reason FROM cv_subs WHERE end_reason IS NOT NULL)
+    SELECT c.* EXCLUDE (parented),
+           CASE WHEN c.judged AND c.late AND c.parented THEN coalesce(d.children, 0) END AS children,
+           CASE WHEN NOT (c.judged AND c.late AND c.parented) THEN NULL WHEN d.children IS NULL THEN 'no_seed_child'
+                WHEN d.released THEN 'released' WHEN d.pushed THEN 'pushed_late'
+                WHEN d.never THEN 'child_never' ELSE 'other' END AS class,
+           CASE WHEN c.judged AND c.late AND c.parented AND d.children IS NULL THEN e.end_reason END AS after
+    FROM cv_chunks_of c LEFT JOIN cv_kid d USING (k, src, seq)
+    ASOF LEFT JOIN cv_ended e ON e.k = c.k AND e.src = c.src AND e.stream = c.stream AND c.pub_ms >= e.close_ms;
+
+-- coverage_chunks_in over the runs `jobs`.
+-- needs: arrivals arrivals.released_ms parents
+CREATE OR REPLACE MACRO coverage_chunks_of(jobs) AS TABLE
+    FROM coverage_chunks_in((SELECT list(cv_run) FROM coverage_runs_of(jobs) cv_run));
+
+-- I1, the invariant that every stream a viewer watches has a seed child,
+-- in the runs `runs` (coverage_runs_of's rows): each stream-second an
+-- honest viewer watched (a viewer_phases second of one; every viewer
+-- wants every stream) within the verdict's seconds: k, src, stream, sec,
+-- phase (the run's), covered_ms (the time in it with a seed child,
+-- seed_children_in's, ms exact: 1000 less it is uncovered) and child_ms
+-- (the seed's children's time in it, summed); both NULL for a run with
+-- no parents rows (no push trees: no seed children to count).
+-- needs: parents viewer_phases
+CREATE OR REPLACE MACRO seed_cover_in(runs) AS TABLE
+    WITH cv_r AS (SELECT unnest(runs, recursive := true)),
+    cv_subs AS (FROM seed_children_in(runs)),
+    cv_ev AS (
+        SELECT k, src, stream, open_ms AS t, 1 AS d FROM cv_subs
+        UNION ALL SELECT k, src, stream, close_ms, -1 FROM cv_subs),
+    cv_net AS (
+        SELECT k, src, stream, t, sum(d) AS d FROM cv_ev GROUP BY ALL),
+    -- The seed children of a stream: c from a to b.
+    cv_seg AS (
+        SELECT k, src, stream, t AS a, lead(t) OVER w AS b, sum(d) OVER (w ROWS UNBOUNDED PRECEDING) AS c
+        FROM cv_net WINDOW w AS (PARTITION BY k, src, stream ORDER BY t)),
+    cv_secs AS (
+        SELECT k, src, stream, a, b, c, unnest(range(a // 1000, (b - 1) // 1000 + 1)) AS sec
+        FROM cv_seg WHERE b > a AND c > 0),
+    cv_covered AS (
+        SELECT k, src, stream, sec, sum(least(b, (sec + 1) * 1000) - greatest(a, sec * 1000)) AS covered_ms,
+               sum(c * (least(b, (sec + 1) * 1000) - greatest(a, sec * 1000))) AS child_ms
+        FROM cv_secs GROUP BY ALL),
+    cv_watch AS (
+        SELECT DISTINCT k, src, sec FROM (
+            SELECT p.k, p.src, unnest(range(p.start, p.stop)) AS sec
+            FROM viewer_phases p SEMI JOIN cv_r USING (k, src)
+            JOIN viewers v ON v.k = p.k AND v.src = p.src AND v.viewer = p.viewer
+            WHERE NOT coalesce(v.hostile, false))),
+    cv_watched AS (
+        SELECT w.k, w.src, unnest(range(r.streams)) AS stream, w.sec, v.phase, r.parents_rows > 0 AS parented
+        FROM cv_watch w JOIN cv_r r USING (k, src)
+        JOIN verdict_seconds v ON v.k = w.k AND v.src = w.src AND v.sec = w.sec)
+    SELECT s.k, s.src, s.stream, s.sec, s.phase,
+           CASE WHEN s.parented THEN coalesce(c.covered_ms, 0) END AS covered_ms,
+           CASE WHEN s.parented THEN coalesce(c.child_ms, 0) END AS child_ms
+    FROM cv_watched s LEFT JOIN cv_covered c USING (k, src, stream, sec);
+
+-- seed_cover_in over the runs `jobs`.
+-- needs: arrivals parents viewer_phases
+CREATE OR REPLACE MACRO seed_cover_of(jobs) AS TABLE
+    FROM seed_cover_in((SELECT list(cv_run) FROM coverage_runs_of(jobs) cv_run));

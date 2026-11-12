@@ -34,7 +34,7 @@ sim-metrics.
 | What the console's pages show (scorecard, collapse_grid, playback, run_timeline, ...) | `simdb.py view` lists them; `simdb.py view NAME --param exp=... --param arm=...` runs one |
 | Raw tables of a selection of runs, pulling their reads from S3 on demand | `simdb.py sql 'SQL' --src/--cell/--arm/--seed ... [--reads]` |
 | Deep dives into a few runs | `simdb.py pooled`, `aligned EVENT`, `events`, `osc`, `spec`, `forecast`, `rows` (each takes a selection) |
-| A study over the catalog's logs: the arrival forecast (is time the right predictor of when a neighbour holds a chunk?) | `simdb.py forecast-report`; `simdb.py --help` gives each `*-report` command's sections and what it reads |
+| A study over the catalog's logs: the arrival forecast (is time the right predictor of when a neighbour holds a chunk?), seed coverage (how soon each chunk reaches a node but the seed, by which route; the seed's children of each stream; why late chunks were late) | `simdb.py forecast-report`, `simdb.py coverage-report` (its definitions are the macros `coverage_runs_of`, `seed_children_of`, `coverage_chunks_of` and `seed_cover_of`: `simdb.py describe macros`); `simdb.py --help` gives each `*-report` command's sections and what it reads |
 | Comparing arms | `python3 hack/sim-suite/suite.py score RUN:ARM RUN:ARM` (farm runs, the base first); `suite.py race --flags A,B,...` races flags in local runs |
 | Data the catalog lacks that S3 still holds (7 days) | `simdb.py fetch --exp EXP [--tables reads]`, which prints what S3 charged |
 | After new local runs | `simdb.py index` |

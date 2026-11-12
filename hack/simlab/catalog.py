@@ -2519,6 +2519,8 @@ TEMP = re.compile(r"^CREATE OR REPLACE (MACRO|TABLE|VIEW) ", re.M)
 # tables (table, or table.column) it reads that a catalog indexed by older
 # code may lack.
 NEEDS = re.compile(r"needs: (.+)")
+# A table macro's columns where its needs are missing: no rows of them.
+ELSE_NONE = re.compile(r"else none: (.+)")
 
 
 def comment_above(text, at):
@@ -2534,7 +2536,10 @@ def needed(text, have):
     """scoring.sql's `text` with each macro whose `-- needs:` names a table
     or column that `have` ({table: its columns}) lacks made one that fails
     saying so when called, so the others still score over a catalog its
-    index made with older code; `text` as it is for `have` None (every
+    index made with older code, or a catalog without that table; or, for a
+    table macro whose comment has an `-- else none:` line of its columns
+    (`name TYPE, ...`), one of those columns and no rows, a fallback its
+    callers read as giving nothing. `text` as it is for `have` None (every
     one there)."""
     if have is None:
         return text
@@ -2551,7 +2556,13 @@ def needed(text, have):
             continue
         end = text.find(";", m.end())
         why = q(f"{m.group(2)} reads {', '.join(missing)}, which this catalog lacks: index it with this checkout")
-        body = f"TABLE SELECT error({why}) AS error" if " AS TABLE" in text[m.end():m.end() + 20] else f"error({why})"
+        table = " AS TABLE" in text[m.end():m.end() + 20]
+        none = next((x.group(1) for line in comment_above(text, m.start()) if (x := ELSE_NONE.match(line))), None)
+        if table and none:
+            cols = [c.strip().split(None, 1) for c in none.split(",")]
+            body = "TABLE SELECT " + ", ".join(f"NULL::{ty} AS {name}" for name, ty in cols) + " WHERE false"
+        else:
+            body = f"TABLE SELECT error({why}) AS error" if table else f"error({why})"
         out.append(f"{text[at:m.start()]}CREATE OR REPLACE MACRO {m.group(2)}{m.group(3) or '()'} AS {body}")
         at = end
     return "".join(out) + text[at:]
@@ -2567,9 +2578,12 @@ def scoring_consts(suite=None):
             "delay_target_ms": a.DELIVERY_TARGET_MS, "delay_max_ms": a.DELIVERY_MAX_MS,
             "t975_df": T975_DF, "t975_z": double(z),
             # The vocabulary's phases, in its order (dynamics_phases'), and
-            # the one past the verdict's seconds (viewer_phases_of's).
+            # the one past the verdict's seconds (viewer_phases_of's and
+            # coverage_chunks_in's); the parents reasons seed_children_in
+            # orders a millisecond's rows by.
             "phases": "[" + ", ".join(q(p) for p in a.VOCAB["phases"]) + "]",
             "tail": q(query.TAIL),
+            "reason_switch": q(vocab.named("reasons", "switch")), "reason_open": q(vocab.named("reasons", "open")),
             **{f"t975_g{i}": double(c) for i, c in enumerate(g, 1)}}
 
 
@@ -2778,7 +2792,7 @@ def scoring_docs():
         header.append(line[2:].strip())
     for m in MACRO.finditer(text):
         kind, name, params = m.groups()
-        comment = [c for c in comment_above(text, m.start()) if not NEEDS.match(c)]
+        comment = [c for c in comment_above(text, m.start()) if not NEEDS.match(c) and not ELSE_NONE.match(c)]
         body = text[m.end():text.find(";", m.end())]
         kind = ("table macro" if " AS TABLE" in body[:200] else "macro") if kind == "MACRO" else kind.lower()
         desc = " ".join(c for c in comment if c) or None

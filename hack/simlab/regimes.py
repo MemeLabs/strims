@@ -79,6 +79,8 @@ from pathlib import Path
 from . import vocab
 from .store_host import q
 
+STARTUP = vocab.named("phases", "startup")
+
 # The grid, the join grace, the lag classes' edges (main's hold lag p99 in
 # the steady cells is about the first; three times it; past the delivery
 # target and push's candidate freshness), and the swarm gap.
@@ -494,7 +496,7 @@ def quantile(xs, p):
 
 
 def rest(phase):
-    return phase not in (None, "startup")
+    return phase not in (None, STARTUP)
 
 
 def states_table(model):
@@ -531,7 +533,7 @@ def occupancy_table(model, seqs, paths):
         for t, j in enumerate(path):
             if seq.obs[t] is None:
                 continue
-            key = (seq.arm, seq.cell, "rest" if rest(seq.phase[t]) else "startup")
+            key = (seq.arm, seq.cell, "rest" if rest(seq.phase[t]) else STARTUP)
             a = acc.setdefault(key, {"n": 0, "changes": 0, **{n: 0 for n in model.names}})
             a["n"] += 1
             a[model.names[j]] += 1

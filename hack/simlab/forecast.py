@@ -167,6 +167,7 @@ STATE_AGES_MS = (0, 50, 100, 250, 500, 1000)
 BREAK_AGES_S = (0, 1, 3, 10, 30)
 # The requester's phases a report keeps by default: every one but startup.
 REST = "rest"
+STARTUP = vocab.named("phases", "startup")
 
 
 @dataclasses.dataclass
@@ -206,7 +207,7 @@ def phase_filter(sel, col="phase"):
     if sel.phases in (None, "all"):
         return "true"
     if sel.phases == REST:
-        return f"coalesce({col}, '') <> 'startup'"
+        return f"coalesce({col}, '') <> {q(STARTUP)}"
     return f"{col} IN ({', '.join(q(p) for p in sel.phases)})"
 
 

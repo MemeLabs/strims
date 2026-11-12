@@ -267,6 +267,10 @@ class Queries(unittest.TestCase):
                                           "after_disruption", "tail"])
         self.assertEqual(vocab.episodes(), ["healthy", "unhealthy", "collapse"])
         self.assertEqual(vocab.reasons(), ["open", "switch", "lost", "prune", "shed"])
+        # An entry code writes by name is the vocabulary's, else it fails.
+        self.assertEqual((vocab.named("phases", "startup"), vocab.named("reasons", "switch")), ("startup", "switch"))
+        with self.assertRaisesRegex(KeyError, "the vocabulary's reasons have no 'graft'"):
+            vocab.named("reasons", "graft")
         # The anchors in the document's order (its ties'): join first of
         # the scenario's, so a viewer's join holds the second a crash's or
         # a leave's span ends in; the start's last, a derived kind's.

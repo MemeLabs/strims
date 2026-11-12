@@ -35,6 +35,9 @@ server (hack/console).
             staleness, selection, main's upper bound
   regimes   the study's hidden semi-Markov model of each peer's
             availability
+  coverage  seed coverage: each chunk's publication to its first hold
+            by a node but the seed, its route, the seed's children of
+            its stream (I1), and why late chunks were late
 
 Each module's docstring says what it offers. `engine` and the modules
 over it need the duckdb module, which hack/pyproject.toml pins (uv's venv,

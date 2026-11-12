@@ -373,8 +373,14 @@ def views_text(saved, intro, sql=True):
 
 # --- the topics -----------------------------------------------------------------------------------
 
-# The console's own CLI, which the index points at.
+# The console's own CLI, and the studies' reports over the catalog, which
+# the index points at.
 UI_DESCRIBE = "python3 hack/console/ui.py describe"
+REPORTS = ("The studies' reports over the catalog (hack/simlab), each with its own selection (--exp, --cell, "
+           "--arm, --seed, --name, --phases, --collapsed) and --section: `simdb.py forecast-report`, the arrival "
+           "forecast study over the decision logs (forecast.py, regimes.py), and `simdb.py coverage-report`, seed "
+           "coverage: how soon each chunk reaches a node but the seed, by which route, the seed's children of its "
+           "stream and why late chunks were late (coverage.py). Each one's --help says more.")
 TOPIC_DOCS = {
     "glossary": "the sims' terms: sims, cells, arms, experiments, the oracle, the verdict and collapses, phases, "
                 "lag and playout delays, structural cells, comparing arms, collapse counts, startup tails and "
@@ -410,7 +416,8 @@ def index_text(schema, saved):
         lines.append(wrapped("Event kinds", kinds))
     lines += ["", textwrap.fill(f"The console's graphs and addresses (a view's panels, the selection in a console URL "
                                 f"or the user's open tab, links to a view): {UI_DESCRIBE}", width=100,
-                                subsequent_indent="  ", break_on_hyphens=False)]
+                                subsequent_indent="  ", break_on_hyphens=False),
+              "", textwrap.fill(REPORTS, width=100, subsequent_indent="  ", break_on_hyphens=False)]
     return "\n".join(lines) + "\n"
 
 

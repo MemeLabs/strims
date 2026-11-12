@@ -17,6 +17,8 @@ the catalog, or over SCORE_DB.
   query(sql) -> [row]
                  the rows of `sql` (the CLI's JSON values) in such a
                  session
+  load(conn)     the scoring objects made in an engine connection's
+                 session, as query's (simlab.coverage's reports)
   scorecard(cells, a, b, a_label, b_label, show_all=False, traces=True)
                  -> Scorecard
                  side B against side A over `cells`: per cell, the collapse
@@ -63,6 +65,11 @@ q = store_host.q
 SCORE_DB = None
 
 
+# The database's tables and their columns, as scoring_cols takes them.
+COLUMNS_SQL = ("SELECT table_name AS t, list(column_name) AS c FROM duckdb_columns() WHERE database_name = "
+               "current_database() AND schema_name = 'main' GROUP BY ALL;")
+
+
 def query(sql):
     """The rows of `sql` over the catalog (or SCORE_DB) in a session holding
     the scoring objects as simlab.suite defines them (catalog.scoring_sql,
@@ -78,10 +85,17 @@ def query(sql):
 
 def scored(run, sql):
     """query's session over `run` (a script's rows)."""
-    cols = {r["t"]: set(r["c"]) for r in run(
-        "SELECT table_name AS t, list(column_name) AS c FROM duckdb_columns() WHERE database_name = "
-        "current_database() AND schema_name = 'main' GROUP BY ALL;")}
+    cols = {r["t"]: set(r["c"]) for r in run(COLUMNS_SQL)}
     return run(catalog.scoring_sql(catalog.scoring_cols(cols, have=cols), temp=True) + "\n" + sql)
+
+
+def load(conn):
+    """The scoring objects, as query's sessions hold them, made TEMP in the
+    session of `conn` (an engine connection using the catalog): this
+    checkout's macros, whatever the catalog's indexer had."""
+    cols = {t: set(c) for t, c in conn.execute(COLUMNS_SQL).fetchall()}
+    for s in conn.extract_statements(catalog.scoring_sql(catalog.scoring_cols(cols, have=cols), temp=True)):
+        conn.execute(s)
 
 
 def sides_sql(**sides):

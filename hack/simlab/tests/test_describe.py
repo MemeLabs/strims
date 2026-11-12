@@ -160,9 +160,14 @@ class Topics(unittest.TestCase):
         self.assertIn("Macros: fisher_p, structural", t)
         self.assertIn("Saved views: by_cell, experiments", t)
         self.assertNotIn("raw", t.split("Tables and views:")[1])
-        self.assertTrue(t.endswith("\n\nThe console's graphs and addresses (a view's panels, the selection in a console "
-                                   "URL or the user's\n  open tab, links to a view): python3 hack/console/ui.py "
-                                   "describe\n"), t[-300:])
+        self.assertIn("\n\nThe console's graphs and addresses (a view's panels, the selection in a console URL or the "
+                      "user's\n  open tab, links to a view): python3 hack/console/ui.py describe\n\n", t)
+        # Then the studies' reports, each by its command.
+        reports = t.split("python3 hack/console/ui.py describe\n\n")[1]
+        self.assertTrue(reports.startswith("The studies' reports over the catalog (hack/simlab)"), reports)
+        self.assertEqual(" ".join(reports.split()), describe.REPORTS)
+        for cmd in ("forecast-report", "coverage-report"):
+            self.assertIn(f"`simdb.py {cmd}`", describe.REPORTS)
 
     def test_the_glossary(self):
         t = text("glossary")

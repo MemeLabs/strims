@@ -51,6 +51,8 @@ in its order:
                                by knob
   phases(), episodes(), reasons()
                                those sections' names
+  named(section, name)         `name`, an entry of one of them that code
+                               writes by name: KeyError for none
   entries(section)             a section's tables, by name
 
   outputs() -> {path: text}    the generated files, as the document makes
@@ -393,6 +395,17 @@ def episodes(doc=None):
 
 def reasons(doc=None):
     return list(_doc(doc)["reasons"])
+
+
+def named(section, name, doc=None):
+    """`name`, an entry of the vocabulary's `section` (phases, episodes or
+    reasons), for code that writes one by name: KeyError where the
+    vocabulary has none of that name, so a renamed entry fails where it is
+    read rather than matching nothing."""
+    names = _doc(doc)[section]
+    if name not in names:
+        raise KeyError(f"the vocabulary's {section} have no {name!r}: {', '.join(names)}")
+    return name
 
 
 def entries(section, doc=None):
