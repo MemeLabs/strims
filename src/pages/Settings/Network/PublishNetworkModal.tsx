@@ -59,12 +59,12 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
             rules={{
               required: {
                 value: true,
-                message: "Network is required",
+                message: "Bootstrap peer is required",
               },
             }}
             name="peer"
-            label="Network"
-            placeholder="Select network"
+            label="Bootstrap peer"
+            placeholder="Select bootstrap peer"
             options={bootstrapPeersRes.value?.peers.map((p) => ({
               value: p.peerId,
               label: p.label,

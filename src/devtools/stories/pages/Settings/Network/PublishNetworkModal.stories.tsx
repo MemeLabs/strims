@@ -95,6 +95,7 @@ const stories: Story[] = [
     component: () => <Modal steps={[openSelect(), choose("strims.gg:443")]} />,
   },
   {
+    // Submitted with no bootstrap peer chosen.
     name: "Required",
     component: () => <Modal steps={[submit()]} />,
   },
