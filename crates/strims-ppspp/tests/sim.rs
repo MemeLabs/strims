@@ -7493,6 +7493,74 @@ fn sim_chunk_codecs_change_no_trace() {
     }
 }
 
+/// A node's logs outlive it: with viewers leaving and new ones taking their
+/// places and a relay dying, or with viewers departing for good, gracefully
+/// or abruptly, the tables leave the run as it was, every read and every
+/// honest answer and HAVE still has its hold in `arrivals`, the leavers'
+/// last ones too, the expired requests are the runners' timed out ones, the
+/// leavers' among them ([`sim_request_logs_say_what_they_are`]), and the
+/// stalls and parents tables say how playout went and the trees changed
+/// ([`sim_stalls_say_how_playout_went`],
+/// [`sim_parents_say_how_the_trees_changed`]).
+#[test]
+fn sim_departures_logs_keep_every_hold() {
+    let mut churn = Config::new(5, 8);
+    churn.stream_secs = 5;
+    churn.warm_secs = 2;
+    churn.degree = 4;
+    churn.push_mode = PushMode::Hybrid;
+    churn.stream_count = 4;
+    churn.churn = Some(Churn {
+        per_min: 30.0,
+        away: Duration::from_secs(1),
+    });
+    churn.incident = Some((2, Incident::Dies));
+    let mut cases = vec![("churn", churn.clone())];
+    for abrupt in [false, true] {
+        let mut cfg = churn.clone();
+        cfg.churn = None;
+        cfg.incident = None;
+        cfg.depart = Some(Depart {
+            share: 0.5,
+            at: Duration::from_secs(2),
+            window: Duration::from_secs(1),
+            abrupt,
+        });
+        cases.push((if abrupt { "abrupt" } else { "graceful" }, cfg));
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "sim_departures_logs_keep_every_hold-{}",
+        std::process::id()
+    ));
+    for (name, cfg) in cases {
+        let mut plain = Sim::new(cfg.clone());
+        let r = plain.run();
+        let plain = (r.trace, r.frames, r.bytes, plain.reads_hash());
+        let mut sim = Sim::new(cfg);
+        sim.keep_tables(Duration::from_millis(1000), false, true);
+        sim.keep_requests();
+        let r = sim.run();
+        assert_eq!(
+            (r.trace, r.frames, r.bytes, sim.reads_hash()),
+            plain,
+            "{name}"
+        );
+        if name == "churn" {
+            assert!(sim.nodes.iter().any(|n| n.churned), "no viewer left");
+            assert!(sim.incident.is_some(), "no relay died");
+        } else {
+            assert!(sim.nodes.iter().any(|n| n.role == Role::Gone), "{name}");
+        }
+        let d = dir.join(name);
+        sim.write_tables(&d).unwrap();
+        sim_held_truth_meets_the_reads(&sim, &d);
+        sim_request_logs_say_what_they_are(&sim, &d);
+        sim_stalls_say_how_playout_went(&d);
+        sim_parents_say_how_the_trees_changed(&sim, &d);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The `parents` table's reasons are the vocabulary's: [`ParentWhy`]'s
 /// names, in its order, are [`vocab::REASONS`].
 #[test]
@@ -8080,14 +8148,18 @@ fn sim_request_logs_say_what_they_are(sim: &Sim, d: &Path) {
 /// seed each chunk as it published it, and the forecast's `held_ms` is the
 /// sampled node's own first store, empty (never -1) without one.
 fn sim_held_truth_meets_the_reads(sim: &Sim, d: &Path) {
-    let first = |n: usize| -> BTreeMap<u64, Time> {
-        let mut m = BTreeMap::new();
-        for &(seq, at) in sim.held.get(n).into_iter().flatten() {
-            let e = m.entry(seq).or_insert(at);
-            *e = (*e).min(at);
-        }
-        m
-    };
+    // Each node's first store of each chunk.
+    let firsts: Vec<BTreeMap<u64, Time>> = (0..sim.nodes.len())
+        .map(|n| {
+            let mut m = BTreeMap::new();
+            for &(seq, at) in sim.held.get(n).into_iter().flatten() {
+                let e = m.entry(seq).or_insert(at);
+                *e = (*e).min(at);
+            }
+            m
+        })
+        .collect();
+    let first = |n: usize| &firsts[n];
     for (i, n) in sim.nodes.iter().enumerate().skip(1) {
         if !n.watched() {
             continue;
@@ -8104,7 +8176,7 @@ fn sim_held_truth_meets_the_reads(sim: &Sim, d: &Path) {
     }
     let seed = first(0);
     assert!(!seed.is_empty());
-    for (&c, &at) in &seed {
+    for (&c, &at) in seed {
         assert_eq!(at, sim.publish_times[c as usize], "the seed's chunk {c}");
     }
     let csv = read_table(d, "forecast").unwrap();

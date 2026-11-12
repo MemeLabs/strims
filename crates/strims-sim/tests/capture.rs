@@ -6,7 +6,9 @@
 //! ([`strims_sim::tables`]): the same trace at any bin width, over TCP and
 //! as browsers, seconds that are the series', bins that add up to the
 //! row's totals, events that are the scenario's and the report's, stalls
-//! that are the reads' playout and parents that are the trees' changes.
+//! that are the reads' playout and parents that are the trees' changes;
+//! and the same trace with viewers departing, gracefully and abruptly, whose
+//! nodes hand over what they logged as they go.
 
 #![allow(
     clippy::unwrap_used,
@@ -327,6 +329,25 @@ fn a_run_with_tables_keeps_its_trace() {
             stalls_say_how_playout_went(&d);
             parents_say_how_the_trees_changed(&r, &d);
         }
+    }
+    // The departure path: a node that goes hands over its last snapshot
+    // (`NodeConfig::last_metrics`) and its parent log's last changes.
+    for how in ["graceful", "abrupt"] {
+        let mut spec = departing_wan(how);
+        spec.transfer_samples = true;
+        let plain = run(spec, 1).unwrap();
+        let mut spec = departing_wan(how);
+        spec.transfer_samples = true;
+        spec.wire_bins = Some(Duration::from_secs(1));
+        spec.forecast_log = true;
+        spec.request_logs = true;
+        let r = run(spec, 1).unwrap();
+        assert_eq!(
+            (&plain.trace_hash, plain.reads_hash()),
+            (&r.trace_hash, r.reads_hash()),
+            "{how}"
+        );
+        assert!(!r.parent_losses.is_empty(), "{how}: no parent departed");
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
