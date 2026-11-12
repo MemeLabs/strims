@@ -40,7 +40,10 @@ export const Provider: React.FC<ProviderProps> = ({ children, initialPath }) => 
         } else if (options?.replace) {
           focusIndexOffset -= 1;
         }
-        return [[...history.slice(0, focusIndexOffset), parseLocation(href)], focusIndexOffset + 1];
+        return [
+          [...history.slice(0, focusIndexOffset + 1), parseLocation(href)],
+          focusIndexOffset + 1,
+        ];
       }),
     []
   );
