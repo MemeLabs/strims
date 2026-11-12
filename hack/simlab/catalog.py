@@ -2355,6 +2355,9 @@ TABLE_DOCS_OF = vocab.fields(FIELDS)["tables"]
 NORMALIZED = {t: e["normalized"] for t, e in TABLE_DOCS_OF.items() if e.get("normalized")}
 STANDARD_KEYS = {t: e["keys"] for t, e in TABLE_DOCS_OF.items() if e.get("keys")}
 STANDARD_JOINS = {t: e["joins"] for t, e in TABLE_DOCS_OF.items() if e.get("joins")}
+# The verdict tables' columns (verdict.DERIVED's, the verdicts'): a
+# column's doc by its name, or by `table.column` where the name means
+# another thing in each table (kind, sec, start, stop).
 VERDICT_DOCS = {
     "onset": "the first second a trigger held (trees, delivery or latency), NULL if none",
     "trees": "the first second of TREES_SECS with the smoothed hit share under TREES_SHARE",
@@ -2380,6 +2383,30 @@ VERDICT_DOCS = {
     "hit_share": "the honest viewers' hits over what they needed",
     "lag_q": "the honest present viewers' nearest-rank q0.9 lag, ms",
     "verdict_version": "the verdicts' version (simdb.derived_version)",
+    # derived_events (verdict.events)
+    "derived_events.sec": "when the event came, s from the stream's start: an uplink step at its time, a collapse "
+                          "at its first second, the others at their second (start at 0)",
+    "derived_events.kind": "which derived kind (event_kinds' sim 'derived'): start, the seed's uplink steps "
+                           "(seed_down, seed_up), the viewers present rising or falling (present_join, "
+                           "present_leave), the verdict's onset and recovered, and each collapse",
+    "derived_events.value": "a step's new uplink over the old (seed_down, seed_up), how many viewers came or went "
+                            "(present_join, present_leave), a collapse's length in seconds; NULL for start, onset "
+                            "and recovered",
+    # episodes (verdict.episodes)
+    "episodes.kind": "healthy or unhealthy, a run of such seconds; collapse, an unhealthy one of COLLAPSED_SECS or "
+                     "more that lasts past the run's startup, listed again as a collapse (the vocabulary's "
+                     "episodes)",
+    "episodes.start": "the spell's first second, from the stream's start",
+    "episodes.stop": "the second after its last: its seconds are start <= sec < stop",
+    "episodes.len": "its length in seconds, stop - start",
+    # phase_windows (verdict.phase_windows)
+    "phase_windows.kind": "the kind of the event that opened the window: start for the stream's start's, else a "
+                          "scenario kind that anchors a phase (the vocabulary's phase, until and horizon_s)",
+    # verdict_seconds and viewer_phases
+    "verdict_seconds.sec": "the second, from the stream's start: second k is [k, k + 1) s after it, as seconds' "
+                           "sec counts it",
+    "viewer_phases.start": "the span's first second, from the stream's start",
+    "viewer_phases.stop": "the second after its last: the viewer's seconds start <= sec < stop are in its phase",
 }
 # event_kinds' columns from the vocabulary, as kind_docs gives them.
 KIND_COLS = {"kind": "VARCHAR", "sim": "VARCHAR", "class": "VARCHAR", "scope": "VARCHAR",
@@ -2447,7 +2474,7 @@ def catalogs_sql(cols, tmp, recount=True):
             if c in ("k", "src"):
                 continue
             if t in VERDICT_TABLES:
-                desc = VERDICT_DOCS.get(c) or mdocs.get(c) or rdocs.get(c)
+                desc = VERDICT_DOCS.get(f"{t}.{c}") or VERDICT_DOCS.get(c) or mdocs.get(c) or rdocs.get(c)
                 unit = munits.get(c)
             else:
                 desc, unit = own.get(c, (None, None))

@@ -1340,6 +1340,14 @@ class Docs(DocsFixture):
         # viewers' declared ones, each with a doc.
         before = catalog.undeclared()
         self.assertNotIn("viewers", before)
+        # Every verdict table's column has a doc (VERDICT_DOCS, by table
+        # where a name means another thing in each; metrics.toml's run
+        # metrics).
+        self.assertEqual(catalog.verdict_gaps(), {})
+        docs = {(r["tbl"], r["name"]): r["description"] for r in catalog.lake(
+            "SELECT tbl, name, description FROM metric_catalog WHERE name IN ('kind', 'start');")}
+        self.assertNotEqual(docs[("episodes", "kind")], docs[("phase_windows", "kind")])
+        self.assertNotEqual(docs[("episodes", "start")], docs[("viewer_phases", "start")])
         self.assertNotIn("lag_p99_ms", before.get("rows", []))
         docs = {r["name"]: r["description"] for r in catalog.lake(
             "SELECT name, description FROM metric_catalog WHERE tbl = 'viewers';")}
