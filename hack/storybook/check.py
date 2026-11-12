@@ -58,7 +58,16 @@ one after the other, and the two diffed. REF builds once per commit, in a
 detached worktree at target/storybook/base/<sha>/src with the main
 checkout's node_modules, kept as target/storybook/base/<sha>/dist (the
 worktree removed; `--rebuild-base` builds it again), and is served by
-hack/console/server.py --dist on `--base-port` (default `--port` + 1). A
+hack/console/server.py --dist on `--base-port` (default `--port` + 1).
+Each build's index says what it was made from (its commit and the time
+its build began: GIT_HASH and BUILD_TIME). The head is refused (exit 2,
+before any story runs) unless it is the tree's: HEAD's commit, and no
+input of the build (HEAD_INPUTS) changed since it began, so a stale
+target/console/dist (or one --url serves from elsewhere) is never compared
+under HEAD's name; `--build` makes it the tree's. Its name is HEAD's
+commit, with +dirty when those inputs have changes git sees (the build
+holds them). A base whose index names another commit than REF's is
+refused too (`--rebuild-base`). A
 mode is a theme and a device: dark (pc), light (pc), portrait and
 landscape (dark); `--all-modes` runs all four, else `--theme` and
 `--device` name one. A build from before the per-story frames loads its
@@ -98,11 +107,12 @@ target/storybook/compare/<time>-<head>-vs-<base>) is one directory:
 index.html, report.json and PNGs of the stories not unchanged: changed
 ones, the most changed first, with base, head and a diff (changed pixels
 magenta over a greyed head), then failing (on either side), added,
-removed and skipped ones. It prints a table per mode, the changed stories
-and the report's path. A story the checker itself fails on (a browser
-that stalls or goes) gets a fresh browser and one more try. Exits 0, 1
-with `--fail-on-diff` when a story changed, failed, or is added or
-removed, and 2 on a checker error.
+removed and skipped ones. It prints a table per mode, the changed
+stories, the two builds' commits and the report's path. A story the
+checker itself fails on (a browser that stalls or goes) gets a fresh
+browser and one more try. Exits 0, 1 with `--fail-on-diff` when a story
+changed, failed, or is added or removed, and 2 on a checker error (a
+refused head or base among them).
 """
 
 import argparse
@@ -175,6 +185,10 @@ STABLE_SHOTS = 5
 STUB_DOCUMENT = base64.b64encode(b'<!doctype html><html style="background:#808080"></html>').decode()
 BASES = ROOT / "target" / "storybook" / "base"
 REPORTS = ROOT / "target" / "storybook" / "compare"
+# What `npm run console:build` reads of the checkout (webpack.config.js's
+# inputs): a build that began before a change to any of them doesn't hold it.
+HEAD_INPUTS = ("src", "assets", "webpack", "vendor_modules", "package.json", "package-lock.json",
+               "webpack.config.js", "tsconfig.json")
 
 
 # --- a minimal WebSocket client (RFC 6455, text messages) ---
@@ -1168,6 +1182,11 @@ class Build:
         self.index = None
         self.stories = {}
 
+    def built(self):
+        """When its build began, as its index says (None: it doesn't)."""
+        b = (self.index or {}).get("build")
+        return built_at(b) if b else None
+
     def viewport(self, device):
         return VIEWPORTS[device] if self.protocol == "frames" else PAGE_VIEWPORT
 
@@ -1198,6 +1217,52 @@ def git(*args, cwd=ROOT):
 def main_checkout():
     """The repository's main checkout (where node_modules lives)."""
     return Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent
+
+
+def changed_since(ms, root=ROOT):
+    """HEAD_INPUTS under `root` changed after `ms` (ms since the epoch):
+    files written since, and directories an entry was added to, removed
+    from or renamed in since."""
+    limit = ms * 1_000_000
+    out = []
+    for name in HEAD_INPUTS:
+        top = root / name
+        paths = ((Path(d) / x for d, _, files in os.walk(top) for x in (".", *files)) if top.is_dir()
+                 else [top])
+        for p in paths:
+            try:
+                if p.lstat().st_mtime_ns > limit:
+                    out.append(p)
+            except OSError:
+                pass
+    return out
+
+
+def built_at(build):
+    """An index's build time (its `build`), as local time."""
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(build["time"] / 1000))
+
+
+def head_build(index):
+    """(name, None) when the head build's index says it is the tree's,
+    name being HEAD's commit (+dirty where HEAD_INPUTS have changes git
+    sees, which the build holds); else (None, why not): it doesn't say, it
+    is another commit's, or an input changed after it began."""
+    head = git("rev-parse", "HEAD")
+    b = index.get("build")
+    if not b:
+        return None, "the head build's index doesn't say what it was built from (a build from before it did)"
+    if b["commit"] != head:
+        ago = (time.time() * 1000 - b["time"]) / 60_000
+        return None, (f"the head build is of {b['commit'][:12]} (built {built_at(b)}, {ago:.0f} min ago), "
+                      f"but HEAD is {head[:12]}")
+    newer = changed_since(b["time"])
+    if newer:
+        names = [str(p.relative_to(ROOT)) for p in newer[:3]]
+        return None, (f"the head build (built {built_at(b)}) is older than changes to {len(newer)} of its inputs "
+                      f"({', '.join(names)}{', ...' if len(newer) > 3 else ''})")
+    dirty = bool(git("status", "--porcelain", "--", *HEAD_INPUTS))
+    return head + ("+dirty" if dirty else ""), None
 
 
 def drop_worktree(src):
@@ -1503,6 +1568,7 @@ def write_report(path, results, builds, modes, args, elapsed):
                      f"{esc(story)} <span class='what'>{what}</span></h3>"
                      f"{''.join(notes)}<div class='figs'>{figs}</div></section>")
     title = f"storybook: {head.commit[:12]} vs {base.commit[:12]}"
+    built = lambda b: f", built {esc(b.built())}" if b.built() else ""  # noqa: E731
     doc = f"""<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title>
@@ -1535,8 +1601,8 @@ pre {{ white-space: pre-wrap; font-size: 12px; margin: 4px 0; }}
 .note {{ color: var(--muted); margin: 4px 0; }}
 </style></head><body>
 <h1>{esc(title)}</h1>
-<p class="meta">base {esc(base.commit)} ({esc(args.compare)}) · head {esc(head.commit)} · tolerance {args.tolerance}
- per channel · settle {args.settle} ms · {elapsed:.0f} s</p>
+<p class="meta">base {esc(base.commit)} ({esc(args.compare)}){built(base)} · head {esc(head.commit)}{built(head)}
+ · tolerance {args.tolerance} per channel · settle {args.settle} ms · {elapsed:.0f} s</p>
 <table><tr><th>mode</th><th>changed</th><th>unchanged</th><th>added</th><th>removed</th><th>failing</th>
 <th>skipped</th></tr>{summary}</table>
 {''.join(cards) or '<p>No story changed.</p>'}
@@ -1544,7 +1610,8 @@ pre {{ white-space: pre-wrap; font-size: 12px; margin: 4px 0; }}
 """
     (path / "index.html").write_text(doc)
     (path / "report.json").write_text(json.dumps({
-        "base": {"commit": base.commit, "ref": args.compare}, "head": {"commit": head.commit},
+        "base": {"commit": base.commit, "ref": args.compare, "built": base.built()},
+        "head": {"commit": head.commit, "built": head.built()},
         "tolerance": args.tolerance, "modes": modes, "elapsed_s": round(elapsed, 1),
         "stories": [{k: v for k, v in r.items() if k not in ("shots", "diff")}
                     | {"status": {s: v["status"] for s, v in r.get("shots", {}).items()},
@@ -1554,7 +1621,7 @@ pre {{ white-space: pre-wrap; font-size: 12px; margin: 4px 0; }}
     return path / "index.html"
 
 
-def print_compare(results, modes, report, elapsed, times):
+def print_compare(results, builds, modes, report, elapsed, times, ref):
     kinds = ("changed", "added", "removed", "failing", "skipped", "unchanged")
     print(f"{'mode':10}  {'stories':>7}  " + "  ".join(f"{k:>9}" for k in kinds) + "  done at")
     for m in modes:
@@ -1590,6 +1657,9 @@ def print_compare(results, modes, report, elapsed, times):
         for r, side in unstable:
             print(f"  {r['mode']:10}  {r['route'].removeprefix('/storybook/')}  ({side})")
     print(f"\n{len({r['route'] for r in results})} stories in {len(modes)} mode(s) compared in {elapsed:.0f} s")
+    head, base = builds
+    built = lambda b: f" (built {b.built()})" if b.built() else ""  # noqa: E731
+    print(f"head {head.commit}{built(head)}\nbase {base.commit} ({ref}){built(base)}")
     print(f"report: {report}")
 
 
@@ -1601,28 +1671,42 @@ def compare_main(args, exe, work):
     base_port = args.base_port or (args.port + 1 if args.port else None)
     if not base_port:
         sys.exit("check: --compare with --url needs --base-port")
-    sha, dist, base_protocol = build_base(args.compare, args.rebuild_base)
     servers, browsers = [], []
-    started = time.monotonic()
     try:
         if args.port:
             servers.append(start_server(args.port, work))
             head_url = servers[-1][2]
         else:
             head_url = args.url.rstrip("/").removesuffix("/devtools.html")
-        servers.append(start_server(base_port, work, dist=dist, log_name="base-server.log"))
-        dirty = bool(git("status", "--porcelain", "--untracked-files=no", "--", "src", "assets",
-                         "package-lock.json", "webpack.config.js"))
-        head = Build("head", head_url, git("rev-parse", "HEAD") + ("+dirty" if dirty else ""),
-                     protocol_of(ROOT))
-        base = Build("base", servers[-1][2], sha, base_protocol)
-        builds = (head, base)
-
         new_browser = lambda i: Browser(exe, work, i, VIEWPORTS["pc"], COMPARE_FLAGS)
         browsers.append(new_browser(0))
+        # The head first: one that isn't the tree's is refused before the
+        # base builds.
+        head = Build("head", head_url, None, protocol_of(ROOT))
+        head.index = load_index(browsers[0], head.url, head.index_route())
+        head.commit, why = head_build(head.index)
+        if why:
+            cure = "the tree changed while it built: run again" if args.build else "--build builds the tree as it is"
+            if args.url:
+                cure += f" (and does {args.url} serve {ROOT / 'target' / 'console' / 'dist'}?)"
+            print(f"check: {why}: {cure}", file=sys.stderr)
+            return 2
+        sha, dist, base_protocol = build_base(args.compare, args.rebuild_base)
+        servers.append(start_server(base_port, work, dist=dist, log_name="base-server.log"))
+        base = Build("base", servers[-1][2], sha, base_protocol)
+        base.index = load_index(browsers[0], base.url, base.index_route())
+        said = (base.index.get("build") or {}).get("commit")
+        if said and said != sha:
+            print(f"check: the base build in {dist} says it is of {said[:12]}, not {sha[:12]} ({args.compare}): "
+                  "--rebuild-base builds it again", file=sys.stderr)
+            return 2
+        builds = (head, base)
+        print(f"check: head {head.commit[:12]} (built {head.built()}) vs base {sha[:12]} ({args.compare})",
+              file=sys.stderr)
+        started = time.monotonic()
+
         prefixes = [o if o.startswith("/") else f"/storybook/{o}" for o in args.only]
         for b in builds:
-            b.index = load_index(browsers[0], b.url, b.index_route())
             b.stories = {s["route"]: s for s in b.index["stories"]
                          if not prefixes or any(s["route"].startswith(x) for x in prefixes)}
         routes = sorted(set(head.stories) | set(base.stories))
@@ -1680,7 +1764,7 @@ def compare_main(args, exe, work):
         report_dir = Path(args.report) if args.report else (
             REPORTS / f"{time.strftime('%Y%m%dT%H%M%S')}-{head.commit[:8]}-vs-{sha[:8]}")
         report = write_report(report_dir.resolve(), results, builds, modes, args, elapsed)
-        print_compare(results, modes, report, elapsed, mode_done)
+        print_compare(results, builds, modes, report, elapsed, mode_done, args.compare)
         if any(r.get("checker") for r in results):
             return 2
         if args.fail_on_diff and any(r["kind"] not in ("unchanged", "skipped") for r in results):

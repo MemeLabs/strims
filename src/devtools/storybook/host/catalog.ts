@@ -126,6 +126,10 @@ export interface IndexData {
   stale: { module: string; path: string; kind: "covers" | "skips" | "skips-covered" }[];
   hostAllowErrors: { pattern: string; reason: string }[];
   hostMask: HostMask[];
+  /** What the build was made from: the commit (GIT_HASH) and the time its
+   * webpack config was read (BUILD_TIME, ms since the epoch), so
+   * hack/storybook/check.py --compare knows a build that isn't the tree's. */
+  build: { commit: string; time: number };
 }
 
 // Loads every story module and resolves the catalog against them.
@@ -143,6 +147,7 @@ export const buildIndex = async (): Promise<IndexData> => {
       reason,
     })),
     hostMask: HOST_MASK,
+    build: { commit: GIT_HASH, time: BUILD_TIME },
   };
   const covering = new Map<string, string[]>();
   const skips = new Map<string, { reason: string; module: string }>();
