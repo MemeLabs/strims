@@ -69,11 +69,12 @@
     transform: rotate(-90deg) scale(0.8);
     transition: opacity 0.8s ease-in-out, transform 0.8s ease-in-out;
 
+    // On the black video, red-11 pulsing between 0.9 and 0.8 opacity is 3.9:1 to 3.3:1.
     .network {
       transition: all 150ms ease-in-out;
-      animation: pulse-opacity 2s linear infinite;
-      fill: #b11623;
-      opacity: 0.8;
+      animation: pulse-error 2s linear infinite;
+      fill: var(--color-red-11);
+      opacity: 0.9;
     }
   }
 
@@ -120,6 +121,18 @@
 
   &:not(.disabled) {
     animation: shake-yes 1.5s linear 1;
+  }
+}
+
+@keyframes pulse-error {
+  0% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0.9;
   }
 }
 
