@@ -75,7 +75,7 @@ export const Provider: React.FC<ProviderProps> = ({ children, initialPath }) => 
 
 export const useNavigation = () => useContext(NavigationContext);
 
-export const useInNavigationContext = () => useNavigation() !== undefined;
+export const useInNavigationContext = () => useNavigation() !== null;
 
 export const parseLocation = (href: string) => ({
   pathname: href,
