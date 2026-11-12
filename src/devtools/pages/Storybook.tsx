@@ -4,29 +4,29 @@
 import "../styles/storybook.scss";
 
 import clsx from "clsx";
-import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import React, { ReactNode, useCallback, useEffect, useState } from "react";
 import {
   MdComputer,
   MdDarkMode,
   MdFullscreen,
   MdFullscreenExit,
   MdLightMode,
+  MdOpenInNew,
   MdRefresh,
   MdSmartphone,
   MdStayCurrentLandscape,
 } from "react-icons/md";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 
-import { WithThemeProps, withTheme } from "../../components/Theme";
-import { Provider as ThemeProvider, useTheme } from "../../contexts/Theme";
 import Nav from "../components/Nav";
-import { StoryHostContext, StoryHostValue } from "../storybook/context";
+import { ROOT, matchRoute, modulePath } from "../storybook/host/catalog";
 import CatalogPage from "../storybook/host/CatalogPage";
-import { ROOT, matchRoute } from "../storybook/host/catalog";
+import { DEVICES, Device, isDevice } from "../storybook/host/devices";
 import ErrorList from "../storybook/host/ErrorList";
+import { StoryIframe, documentUrl, useStoryIndex } from "../storybook/host/frames";
 import StorybookNav from "../storybook/host/Nav";
-import { Session, activate } from "../storybook/host/recorder";
-import { DEVICES, Device, StoryView } from "../storybook/host/StoryView";
+import { frameRoute } from "../storybook/host/protocol";
+import type { SessionSnapshot } from "../storybook/host/recorder";
 
 // The toolbar's state lives in the route's query, so links (and
 // hack/storybook/check.py) set it: theme=dark|light, device=pc|portrait|landscape,
@@ -34,7 +34,8 @@ import { DEVICES, Device, StoryView } from "../storybook/host/StoryView";
 const useToolbarParams = () => {
   const [params, setParams] = useSearchParams();
   const theme = params.get("theme") === "light" ? "light" : "dark";
-  const device = (["portrait", "landscape"].find((d) => d === params.get("device")) ?? "pc") as Device;
+  const deviceParam = params.get("device");
+  const device: Device = isDevice(deviceParam) ? deviceParam : "pc";
   const fullscreen = params.get("fullscreen") === "1";
   const set = useCallback(
     (name: string, value: string | null) =>
@@ -54,22 +55,6 @@ const useToolbarParams = () => {
   );
   return { theme, device, fullscreen, set } as const;
 };
-
-const ThemeSync: React.FC<{ theme: "dark" | "light" }> = ({ theme }) => {
-  const { colorScheme, setColorScheme } = useTheme();
-  useLayoutEffect(() => {
-    if (colorScheme !== theme) {
-      setColorScheme(theme);
-    }
-  }, [theme, colorScheme]);
-  return null;
-};
-
-const StoryContainer = withTheme<{ children: ReactNode }>(
-  ({ className, children }: WithThemeProps & { children: ReactNode }) => (
-    <div className={clsx(className, "storybook__content")}>{children}</div>
-  )
-);
 
 interface ToolButtonProps {
   title: string;
@@ -95,85 +80,118 @@ const DEVICE_ICONS: Record<Device, ReactNode> = {
 };
 
 const Storybook: React.FC = () => {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const { theme, device, fullscreen, set } = useToolbarParams();
   const match = matchRoute(pathname);
+  const { index, error: indexError, frame: indexFrame } = useStoryIndex();
 
+  // The story's frame document; a new one for each story, theme, device and
+  // remount, so each is a fresh realm.
   const [nonce, setNonce] = useState(0);
+  const src = match?.name !== undefined ? frameRoute(pathname, { theme, device }) : null;
+  const [snapshot, setSnapshot] = useState<SessionSnapshot>(null);
   const [routerPath, setRouterPath] = useState<string>(null);
-  const host = useMemo<StoryHostValue>(() => ({ setRouterPath }), []);
+  useEffect(() => {
+    setSnapshot(null);
+    setRouterPath(null);
+  }, [src, nonce]);
 
-  // A session per mount of a story, active from its first render, so errors
-  // made while it renders count.
-  const session = useMemo(() => {
-    if (!match) {
-      return null;
-    }
-    const session = new Session(pathname);
-    activate(session);
-    return session;
-  }, [match?.key, pathname, nonce]);
-  useEffect(() => (session ? activate(session) : undefined), [session]);
+  // A module's route without a story's name: its first story's.
+  const first =
+    match && match.name === undefined
+      ? index?.stories.find((s) => s.module === modulePath(match.key))
+      : undefined;
+
+  let stage: ReactNode;
+  if (src) {
+    stage = (
+      <StoryIframe
+        key={`${src}#${nonce}`}
+        src={src}
+        device={device}
+        onSnapshot={setSnapshot}
+        onRouterPath={setRouterPath}
+      />
+    );
+  } else if (first) {
+    stage = <Navigate to={{ pathname: first.route, search }} replace />;
+  } else if (match && !index && !indexError) {
+    stage = <p className="loading_message">loading the stories</p>;
+  } else if (match) {
+    stage = <p className="storybook__message">{modulePath(match.key)} has no stories</p>;
+  } else {
+    stage = (
+      <CatalogPage
+        data={index}
+        error={indexError}
+        notFound={pathname.replace(/\/$/, "") === ROOT ? undefined : pathname}
+      />
+    );
+  }
 
   return (
     <>
       <Nav />
       <div className={clsx("storybook", { "storybook--fullscreen": fullscreen })}>
         <div className="storybook__nav">
-          <StorybookNav />
+          <StorybookNav index={index} />
         </div>
-        <ThemeProvider>
-          <ThemeSync theme={theme} />
-          <StoryContainer>
-            <div className="storybook__toolbar">
-              <span className="storybook__toolbar_title">{match ? pathname.substring(ROOT.length + 1) : "catalog"}</span>
-              {routerPath !== null && (
-                <span className="storybook__router_path" title="the story's own router's path">
-                  {routerPath}
-                </span>
-              )}
-              <span className="storybook__toolbar_spacer" />
+        <div className="storybook__content">
+          <div className="storybook__toolbar">
+            <span className="storybook__toolbar_title">
+              {match ? pathname.substring(ROOT.length + 1) : "catalog"}
+            </span>
+            {routerPath !== null && (
+              <span className="storybook__router_path" title="the story's own router's path">
+                {routerPath}
+              </span>
+            )}
+            <span className="storybook__toolbar_spacer" />
+            <ToolButton
+              title={`theme: ${theme}`}
+              onClick={() => set("theme", theme === "dark" ? "light" : null)}
+            >
+              {theme === "dark" ? <MdDarkMode /> : <MdLightMode />}
+            </ToolButton>
+            {(Object.keys(DEVICES) as Device[]).map((d) => (
               <ToolButton
-                title={`theme: ${theme}`}
-                onClick={() => set("theme", theme === "dark" ? "light" : null)}
+                key={d}
+                title={`device: ${d}`}
+                active={d === device}
+                onClick={() => set("device", d === "pc" ? null : d)}
               >
-                {theme === "dark" ? <MdDarkMode /> : <MdLightMode />}
+                {DEVICE_ICONS[d]}
               </ToolButton>
-              {(Object.keys(DEVICES) as Device[]).map((d) => (
-                <ToolButton
-                  key={d}
-                  title={`device: ${d}`}
-                  active={d === device}
-                  onClick={() => set("device", d === "pc" ? null : d)}
-                >
-                  {DEVICE_ICONS[d]}
-                </ToolButton>
-              ))}
-              <ToolButton title="remount" onClick={() => setNonce((n) => n + 1)}>
-                <MdRefresh />
-              </ToolButton>
-              <ToolButton title="fullscreen" onClick={() => set("fullscreen", fullscreen ? null : "1")}>
-                {fullscreen ? <MdFullscreenExit /> : <MdFullscreen />}
-              </ToolButton>
-            </div>
-            <div className={clsx("storybook__stage", `storybook__stage--${match ? device : "catalog"}`)}>
-              {match ? (
-                <StoryHostContext.Provider value={host}>
-                  <StoryView
-                    key={`${pathname}#${nonce}`}
-                    moduleKey={match.key}
-                    name={match.name}
-                    device={device}
-                    session={session}
-                  />
-                </StoryHostContext.Provider>
-              ) : (
-                <CatalogPage notFound={pathname.replace(/\/$/, "") === ROOT ? undefined : pathname} />
-              )}
-            </div>
-            {session && <ErrorList session={session} />}
-          </StoryContainer>
-        </ThemeProvider>
+            ))}
+            <ToolButton title="remount" onClick={() => setNonce((n) => n + 1)}>
+              <MdRefresh />
+            </ToolButton>
+            {src && (
+              <a
+                className="storybook__toolbar_button"
+                title="the story's frame alone"
+                href={documentUrl(src)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <MdOpenInNew />
+              </a>
+            )}
+            <ToolButton
+              title="fullscreen"
+              onClick={() => set("fullscreen", fullscreen ? null : "1")}
+            >
+              {fullscreen ? <MdFullscreenExit /> : <MdFullscreen />}
+            </ToolButton>
+          </div>
+          <div
+            className={clsx("storybook__stage", `storybook__stage--${src ? device : "catalog"}`)}
+          >
+            {stage}
+          </div>
+          {snapshot && <ErrorList snapshot={snapshot} />}
+        </div>
+        {indexFrame}
       </div>
     </>
   );

@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import clsx from "clsx";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 
-import type { Story } from "../types";
-import { ROOT, loadModule, moduleKeys, modulePath, storyRoute } from "./catalog";
+import { IndexData, ROOT, moduleKeys, modulePath, storyRoute } from "./catalog";
 
 interface Node {
   name: string;
@@ -36,39 +35,42 @@ const tree = ((): Node => {
 const linkClassName = ({ isActive }: { isActive: boolean }) =>
   clsx("storybook_nav__link", { "storybook_nav__link--active": isActive });
 
-const ModuleStories: React.FC<{ moduleKey: string }> = ({ moduleKey }) => {
-  const { search } = useLocation();
-  const [stories, setStories] = useState<Story[]>(null);
-  const [error, setError] = useState<string>(null);
-  useEffect(() => {
-    loadModule(moduleKey).then(
-      (mod) => setStories(Array.isArray(mod.default) ? mod.default : []),
-      (e) => setError(String(e))
-    );
-  }, [moduleKey]);
+type IndexProp = { index: IndexData | null };
 
+// The module's stories, from the index (null while it loads).
+const ModuleStories: React.FC<{ moduleKey: string } & IndexProp> = ({ moduleKey, index }) => {
+  const { search } = useLocation();
+  const module = modulePath(moduleKey);
+  if (!index) {
+    return <span className="storybook_nav__loading">loading</span>;
+  }
+  const error = index.modules.find((m) => m.module === module)?.error;
   if (error) {
     return <span className="storybook_nav__error">{error}</span>;
   }
   return (
     <>
-      {stories?.map(({ name }) => (
-        <NavLink
-          key={name}
-          className={linkClassName}
-          to={{ pathname: storyRoute(moduleKey, name), search }}
-        >
-          {name}
-        </NavLink>
-      ))}
+      {index.stories
+        .filter((s) => s.module === module)
+        .map(({ name }) => (
+          <NavLink
+            key={name}
+            className={linkClassName}
+            to={{ pathname: storyRoute(moduleKey, name), search }}
+          >
+            {name}
+          </NavLink>
+        ))}
     </>
   );
 };
 
-const NavNode: React.FC<{ node: Node }> = ({ node }) => {
+const NavNode: React.FC<{ node: Node } & IndexProp> = ({ node, index }) => {
   const { pathname } = useLocation();
   const route = `${ROOT}/${node.path}`;
-  const [expanded, setExpanded] = useState(() => pathname === route || pathname.startsWith(route + "/"));
+  const [expanded, setExpanded] = useState(
+    () => pathname === route || pathname.startsWith(route + "/")
+  );
 
   return (
     <div className="storybook_nav">
@@ -84,15 +86,16 @@ const NavNode: React.FC<{ node: Node }> = ({ node }) => {
           "storybook_nav__content--expanded": expanded,
         })}
       >
-        {expanded && node.key && <ModuleStories moduleKey={node.key} />}
-        {expanded && node.children.map((child) => <NavNode key={child.name} node={child} />)}
+        {expanded && node.key && <ModuleStories moduleKey={node.key} index={index} />}
+        {expanded &&
+          node.children.map((child) => <NavNode key={child.name} node={child} index={index} />)}
       </div>
     </div>
   );
 };
 
 // The story modules' tree, below a link to the catalog.
-const StorybookNav: React.FC = () => {
+const StorybookNav: React.FC<IndexProp> = ({ index }) => {
   const { search } = useLocation();
   return (
     <>
@@ -100,7 +103,7 @@ const StorybookNav: React.FC = () => {
         Catalog
       </NavLink>
       {tree.children.map((node) => (
-        <NavNode key={node.name} node={node} />
+        <NavNode key={node.name} node={node} index={index} />
       ))}
     </>
   );

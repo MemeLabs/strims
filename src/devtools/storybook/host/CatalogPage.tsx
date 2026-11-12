@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import clsx from "clsx";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-import { FileStatus, IndexData, IndexFile, buildIndex } from "./catalog";
+import { FileStatus, IndexData, IndexFile } from "./catalog";
 import { jsonScript } from "./ErrorList";
 
 type Filter = FileStatus | "all";
@@ -32,18 +32,20 @@ const FileRow: React.FC<{ file: IndexFile; search: string }> = ({ file, search }
   </li>
 );
 
+interface CatalogPageProps {
+  /** The index its frame built (null while it builds), or why it failed. */
+  data: IndexData | null;
+  error: string | null;
+  notFound?: string;
+}
+
 // The catalog of UI files (src/components, pages and watch), each covered by
 // stories, skipped with a reason, or missing; and, in #storybook-index, the
-// same with every story's route as JSON for hack/storybook/check.py.
-const CatalogPage: React.FC<{ notFound?: string }> = ({ notFound }) => {
+// same with every story's route as JSON (hack/storybook/check.py reads the
+// index frame's).
+const CatalogPage: React.FC<CatalogPageProps> = ({ data, error, notFound }) => {
   const { search } = useLocation();
-  const [data, setData] = useState<IndexData>(null);
-  const [error, setError] = useState<string>(null);
   const [filter, setFilter] = useState<Filter>("all");
-
-  useEffect(() => {
-    buildIndex().then(setData, (e) => setError(String(e)));
-  }, []);
 
   const groups = useMemo(() => {
     const groups = new Map<string, IndexFile[]>();
@@ -70,11 +72,17 @@ const CatalogPage: React.FC<{ notFound?: string }> = ({ notFound }) => {
   }
 
   const { counts } = data;
-  const pct = counts.total ? Math.round(((counts.covered + counts.skipped) / counts.total) * 100) : 100;
+  const pct = counts.total
+    ? Math.round(((counts.covered + counts.skipped) / counts.total) * 100)
+    : 100;
 
   return (
     <div className="storybook_catalog">
-      <script type="application/json" id="storybook-index" dangerouslySetInnerHTML={jsonScript(data)} />
+      <script
+        type="application/json"
+        id="storybook-index"
+        dangerouslySetInnerHTML={jsonScript(data)}
+      />
       {notFound && (
         <p className="storybook_catalog__not_found">
           No story at <code>{notFound}</code>.
@@ -82,8 +90,9 @@ const CatalogPage: React.FC<{ notFound?: string }> = ({ notFound }) => {
       )}
       <h2>Catalog</h2>
       <p className="storybook_catalog__counts">
-        {counts.covered} covered, {counts.skipped} skipped, {counts.missing} missing of {counts.total}{" "}
-        files ({pct}% accounted for); {data.stories.length} stories in {data.modules.length} modules
+        {counts.covered} covered, {counts.skipped} skipped, {counts.missing} missing of{" "}
+        {counts.total} files ({pct}% accounted for); {data.stories.length} stories in{" "}
+        {data.modules.length} modules
       </p>
       {data.modules
         .filter((m) => m.error)
@@ -96,7 +105,10 @@ const CatalogPage: React.FC<{ notFound?: string }> = ({ notFound }) => {
         <ul className="storybook_catalog__stale">
           {data.stale.map((s, i) => (
             <li key={i}>
-              {s.module}: {s.kind === "skips-covered" ? "skips a covered file" : `${s.kind} a file outside the catalog`}{" "}
+              {s.module}:{" "}
+              {s.kind === "skips-covered"
+                ? "skips a covered file"
+                : `${s.kind} a file outside the catalog`}{" "}
               <code>{s.path}</code>
             </li>
           ))}

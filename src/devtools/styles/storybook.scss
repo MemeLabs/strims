@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // The storybook page (pages/Storybook.tsx), over main.scss's .storybook
-// rules: a toolbar above a stage that holds the story's frame, and the
-// story's errors below it.
+// rules: a toolbar above a stage that holds the story's iframe, and the
+// story's errors below it; and the story's root in its frame document
+// (host/Frame.tsx).
 
 $chrome-bg: #f4f4f4;
 $chrome-fg: #222;
@@ -75,6 +76,7 @@ $chrome-border: #ccc;
     background: none;
     color: $chrome-fg;
     cursor: pointer;
+    text-decoration: none;
 
     &--active {
       border-color: #888;
@@ -105,8 +107,28 @@ $chrome-border: #ccc;
     }
   }
 
-  .storybook__message {
-    padding: 1rem;
+  .storybook__iframe {
+    display: block;
+    border: none;
+
+    &--pc {
+      width: 100%;
+      height: 100%;
+    }
+
+    &--portrait,
+    &--landscape {
+      flex: none;
+      margin: auto;
+      outline: 8px solid #333;
+      border-radius: 2px;
+      box-shadow: 0 0 0 9px #555, 0 6px 24px 8px rgba(0, 0, 0, 0.3);
+    }
+  }
+
+  .storybook_nav__loading {
+    padding: 1px 4px;
+    opacity: 0.6;
   }
 
   &--fullscreen .storybook__content {
@@ -117,8 +139,12 @@ $chrome-border: #ccc;
   }
 }
 
-// The story's root: Layout's classes and variables, which main.scss's
-// `.storybook .layout` rule doesn't touch (it isn't .layout).
+.storybook__message {
+  padding: 1rem;
+}
+
+// The story's root, its frame document's viewport: Layout's classes and
+// variables, though it isn't .layout (Layout.scss positions that).
 .storybook_frame {
   // Layout.scss sets these on .layout.
   --layout-chat-width: 260px;
@@ -129,25 +155,11 @@ $chrome-border: #ccc;
     --layout-chat-width: 420px;
   }
 
-  position: relative;
+  position: fixed;
+  inset: 0;
   box-sizing: border-box;
   background: var(--color-background-layout-body);
   overflow: auto;
-
-  &--pc {
-    width: 100%;
-    height: 100%;
-  }
-
-  &--portrait,
-  &--landscape {
-    flex: none;
-    margin: auto;
-    overflow: hidden;
-    outline: 8px solid #333;
-    border-radius: 2px;
-    box-shadow: 0 0 0 9px #555, 0 6px 24px 8px rgba(0, 0, 0, 0.3);
-  }
 }
 
 .storybook_crash {

@@ -17,19 +17,24 @@ uses a server already running (http://HOST:PORT, the page is
 /devtools.html). `--build` runs `npm run console:build` first (npm from
 PATH, else nvm's newest).
 
-The storybook's catalog page (#/storybook) embeds its index as JSON in
+The storybook's index document (#/storybook-index, the page's catalog
+builds its index there) embeds the index as JSON in
 <script id="storybook-index">: every story's route, every UI file under
 src/components, src/pages and src/watch as covered, skipped or missing,
 and catalog entries naming files that don't exist. Each story then loads
-in a fresh page at #<route>?theme=..&device=.. and waits for its root
+as its frame document, the one the storybook page shows in an iframe, at
+#/storybook-frame/<route below /storybook/>?theme=..&device=.., in a fresh
+page whose viewport is the device's (pc 1372x1017, about the page's
+frame; portrait 390x844, landscape 844x390), and waits for its root
 ([data-story-root]) to leave data-story-state="loading", then for
 `--settle` ms (default 1000) and the network to go quiet (up to 3 s more).
 The page records the story's uncaught errors, unhandled rejections,
 console.error calls and render errors, marks each one its allow lists
 (the host's and the story's allowErrors) cover, and says them in
 <script id="storybook-story">; a story fails on data-story-state="error"
-(a crash or an error no allow list covers), on a root with nothing
-visible in it, or on not loading within `--timeout` s (default 20).
+(a crash or an error no allow list covers), on nothing visible in its
+root or in what it portals into the document's body, or on not loading
+within `--timeout` s (default 20).
 
 `--only PREFIX` keeps the stories whose route (with or without its
 /storybook/ prefix) starts with PREFIX. `--screenshots DIR` writes one
@@ -62,7 +67,9 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-VIEWPORT = (1600, 1100)
+# Each device's viewport, as src/devtools/storybook/host/devices.ts sizes its
+# frames (pc: about the storybook page's content area at 1600x1100).
+VIEWPORTS = {"pc": (1372, 1017), "portrait": (390, 844), "landscape": (844, 390)}
 CHROMIUMS = ["/snap/bin/chromium", "chromium", "chromium-browser", "google-chrome"]
 CHROMIUM_FLAGS = [
     "--headless",
@@ -264,14 +271,14 @@ def find_chromium(name):
 
 
 class Browser:
-    """A headless Chromium of its own, with one page."""
+    """A headless Chromium of its own, with one page `viewport` (w, h) in size."""
 
-    def __init__(self, exe, profiles, i):
+    def __init__(self, exe, profiles, i, viewport):
         self.profile = Path(tempfile.mkdtemp(prefix=f"b{i}-", dir=profiles))
         self.log = open(self.profile.parent / f"{self.profile.name}.log", "wb")
         self.proc = subprocess.Popen(
             [exe, *CHROMIUM_FLAGS, f"--user-data-dir={self.profile}",
-             f"--window-size={VIEWPORT[0]},{VIEWPORT[1]}", "about:blank"],
+             f"--window-size={viewport[0]},{viewport[1]}", "about:blank"],
             stdin=subprocess.DEVNULL, stdout=self.log, stderr=self.log, start_new_session=True)
         port_file = self.profile / "DevToolsActivePort"
         deadline = time.monotonic() + 30
@@ -287,8 +294,10 @@ class Browser:
         self.page = Page(WebSocket(target["webSocketDebuggerUrl"]))
         self.page.call("Network.enable")
         self.page.call("Runtime.enable")
+        # Not "mobile": the storybook page's iframes are desktop documents too;
+        # the frame's own preload makes the realm a phone's.
         self.page.call("Emulation.setDeviceMetricsOverride", {
-            "width": VIEWPORT[0], "height": VIEWPORT[1], "deviceScaleFactor": 1, "mobile": False})
+            "width": viewport[0], "height": viewport[1], "deviceScaleFactor": 1, "mobile": False})
 
     def close(self):
         if getattr(self, "page", None):
@@ -312,8 +321,12 @@ STORY_PROBE = """(() => {
   const root = document.querySelector("[data-story-root]");
   const json = document.getElementById("storybook-story")?.textContent;
   if (!root) return JSON.stringify({ root: false });
+  // The story's: what's in its root, and what it portals into the body.
+  const portals = [...document.body.children].filter(
+    (el) => !el.contains(root) && el.tagName !== "SCRIPT");
+  const content = [root, ...portals].flatMap((el) => [...el.querySelectorAll("*")]).concat(portals);
   let visible = false;
-  for (const el of root.querySelectorAll("*")) {
+  for (const el of content) {
     const r = el.getBoundingClientRect();
     if (r.width > 0 && r.height > 0) { visible = true; break; }
   }
@@ -323,7 +336,7 @@ STORY_PROBE = """(() => {
     state: root.dataset.storyState,
     story: json ? JSON.parse(json) : null,
     visible,
-    text: root.innerText.trim().length,
+    text: [root, ...portals].reduce((n, el) => n + el.innerText.trim().length, 0),
     rect: { x: r.x, y: r.y, width: r.width, height: r.height },
   });
 })()"""
@@ -334,14 +347,16 @@ def first_line(text, width=110):
     return line if len(line) <= width else line[:width - 1] + "…"
 
 
-def page_url(base, route, args):
+def frame_url(base, route, args):
+    """A story route's (/storybook/<module>/<name>) frame document."""
     query = urllib.parse.urlencode({k: v for k, v in (("theme", args.theme), ("device", args.device))
                                     if v and v not in ("dark", "pc")})
-    return f"{base}/devtools.html#{route}" + (f"?{query}" if query else "")
+    return (f"{base}/devtools.html#/storybook-frame/{route.removeprefix('/storybook/')}"
+            + (f"?{query}" if query else ""))
 
 
-def load_index(browser, base, args):
-    browser.page.navigate(page_url(base, "/storybook", args))
+def load_index(browser, base):
+    browser.page.navigate(f"{base}/devtools.html#/storybook-index")
     deadline = time.monotonic() + INDEX_TIMEOUT_S
     while time.monotonic() < deadline:
         text = browser.page.try_eval('document.getElementById("storybook-index")?.textContent ?? null')
@@ -349,7 +364,7 @@ def load_index(browser, base, args):
             return json.loads(text)
         browser.page.pump(0.2)
     detail = "; ".join(browser.page.exceptions[:3])
-    sys.exit(f"check: the catalog page gave no #storybook-index in {INDEX_TIMEOUT_S} s"
+    sys.exit(f"check: the index document gave no #storybook-index in {INDEX_TIMEOUT_S} s"
              + (f" ({detail})" if detail else ""))
 
 
@@ -358,7 +373,7 @@ def check_story(browser, base, story, args):
     page = browser.page
     start = time.monotonic()
     result = {"route": route, "status": "ok", "error": "", "errors": [], "allowed": 0}
-    page.navigate(page_url(base, route, args))
+    page.navigate(frame_url(base, route, args))
 
     while True:
         probe = json.loads(page.try_eval(STORY_PROBE) or "{}")
@@ -550,8 +565,9 @@ def main(argv=None):
             if base.endswith("/devtools.html"):
                 base = base.removesuffix("/devtools.html")
 
-        browsers.append(Browser(exe, work, 0))
-        index = load_index(browsers[0], base, args)
+        viewport = VIEWPORTS[args.device]
+        browsers.append(Browser(exe, work, 0, viewport))
+        index = load_index(browsers[0], base)
         prefixes = [o if o.startswith("/") else f"/storybook/{o}" for o in args.only]
         stories = [s for s in index["stories"] if not prefixes or any(s["route"].startswith(x) for x in prefixes)]
         if not stories and prefixes:
@@ -567,7 +583,7 @@ def main(argv=None):
 
         jobs = max(1, min(args.jobs, len(stories)))
         with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
-            browsers += list(pool.map(lambda i: Browser(exe, work, i), range(1, jobs)))
+            browsers += list(pool.map(lambda i: Browser(exe, work, i, viewport), range(1, jobs)))
         todo = queue.Queue()
         for s in stories:
             todo.put(s)

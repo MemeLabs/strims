@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { Story, StoryModule } from "../types";
+import { ROOT } from "./protocol";
 import { HOST_ALLOW } from "./recorder";
+
+export { ROOT };
 
 const stories = require.context("../../stories/", true, /\.stories\.tsx$/, "lazy");
 
@@ -37,8 +40,6 @@ export const catalogFiles: string[] = sources
 
 const catalogSet = new Set(catalogFiles);
 
-export const ROOT = "/storybook";
-
 // A story's route: /storybook/<module path>/<name>.
 export const storyRoute = (key: string, name: string): string =>
   `${ROOT}/${modulePath(key)}/${encodeURIComponent(name)}`;
@@ -67,7 +68,10 @@ export const matchRoute = (pathname: string): { key: string; name?: string } | n
     const path = modulePath(key);
     if (rest === path || rest === path + "/") {
       best = { key };
-    } else if (rest.startsWith(path + "/") && (!best || path.length > modulePath(best.key).length)) {
+    } else if (
+      rest.startsWith(path + "/") &&
+      (!best || path.length > modulePath(best.key).length)
+    ) {
       const name = rest.substring(path.length + 1).split("/")[0];
       best = { key, name: decodeURIComponent(name) };
     }
@@ -115,7 +119,10 @@ export const buildIndex = async (): Promise<IndexData> => {
     files: [],
     counts: { total: catalogFiles.length, covered: 0, skipped: 0, missing: 0 },
     stale: [],
-    hostAllowErrors: HOST_ALLOW.map(({ pattern, reason }) => ({ pattern: String(pattern), reason })),
+    hostAllowErrors: HOST_ALLOW.map(({ pattern, reason }) => ({
+      pattern: String(pattern),
+      reason,
+    })),
   };
   const covering = new Map<string, string[]>();
   const skips = new Map<string, { reason: string; module: string }>();

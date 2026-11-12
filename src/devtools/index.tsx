@@ -1,6 +1,9 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+// First: in a storybook frame it makes the realm the frame's device's
+// before any app module reads the user agent.
+import "./storybook/host/preload";
 import "./styles/main.scss";
 import "../lib/i18n";
 
@@ -12,6 +15,7 @@ import { createRoot } from "react-dom/client";
 import { DevToolsClient } from "../apis/client";
 import { WSReadWriter } from "../lib/ws";
 import App from "./root/App";
+import { frameDocument } from "./storybook/host/preload";
 
 // (() => {
 //   console.log("installing beforeinstallprompt handler");
@@ -46,12 +50,20 @@ import App from "./root/App";
 // })();
 
 (() => {
-  const ws = new WSReadWriter(`wss://${location.host}/api`) as unknown as Readable & Writable;
-  const client = new DevToolsClient(ws, ws);
-
   const root = document.createElement("div");
   root.setAttribute("id", "root");
   document.body.appendChild(root);
 
+  // A storybook frame renders its story (or the story index) alone, without
+  // the devtools API.
+  if (frameDocument) {
+    void import("./storybook/host/Frame").then(({ renderFrame }) =>
+      renderFrame(root, frameDocument)
+    );
+    return;
+  }
+
+  const ws = new WSReadWriter(`wss://${location.host}/api`) as unknown as Readable & Writable;
+  const client = new DevToolsClient(ws, ws);
   createRoot(root).render(<App client={client} />);
 })();
