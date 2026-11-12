@@ -5,7 +5,7 @@ import autoprefixer from "autoprefixer";
 import postcss from "postcss";
 import React, { MouseEvent, ReactNode, useCallback } from "react";
 import { Control, useFormContext } from "react-hook-form";
-import sass, { Logger } from "sass";
+import { Logger, compileString } from "sass";
 
 import { IStyleSheet, StyleSheet } from "../../apis/strims/chat/v1/chat";
 import { fromFormImageValue, toFormImageValue } from "../../lib/image";
@@ -168,7 +168,7 @@ export const toStyleSheetFormValue = (styleSheet?: StyleSheet): ChatStyleSheetFo
 };
 
 export const compileSCSS = (scss: string) => {
-  const res = sass.compileString(scss, {
+  const res = compileString(scss, {
     logger: Logger.silent,
     alertColor: false,
     sourceMap: false,

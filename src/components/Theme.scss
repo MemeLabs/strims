@@ -217,6 +217,8 @@
   --network-nav-collapsed-width: 60px;
   --network-nav-expanded-width: 200px;
 
+  color: var(--color-text-base);
+
   // The themes set the same tokens in the same order. The dark theme's
   // surfaces are slates, lighter as they rise (the navs, the body, the chat,
   // the header), with light grey text; the light theme's are the hinted greys
@@ -632,6 +634,4 @@
     --color-text-context-menu-icon-hover: var(--color-slate-1);
     --color-outline-context-menu-swatch-hover: var(--color-opac-b-7);
   }
-
-  color: var(--color-text-base);
 }

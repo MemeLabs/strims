@@ -93,6 +93,11 @@ module.exports = (env, argv) => {
         loader: "sass-loader",
         options: {
           sourceMap: true,
+          sassOptions: {
+            // What Dart Sass 3 removes and the styles still use: @import and
+            // the global functions (mixins.scss's map-get and the like).
+            silenceDeprecations: ["import", "global-builtin"],
+          },
         },
       },
     ],
@@ -121,6 +126,13 @@ module.exports = (env, argv) => {
       "apple-mobile-web-app-capable": "yes",
     },
   };
+
+  // sass's browser build (the chat style sheet form's compiler) keeps the
+  // bundle's require as a global of its own (self.require = require), for
+  // its Node code paths.
+  const ignoreWarnings = [
+    { module: /node_modules\/sass\/sass\.dart\.js$/, message: /^Critical dependency/ },
+  ];
 
   const providePlugin = () =>
     new webpack.ProvidePlugin({
@@ -385,6 +397,7 @@ module.exports = (env, argv) => {
             rules: [scriptRule(false), ...sharedRules.filter((r) => r !== scriptModuleRule)],
           },
           resolve,
+          ignoreWarnings,
           plugins: [
             new webpack.NormalModuleReplacementPlugin(
               /crates\/[^/]+\/Cargo\.toml$/,
@@ -510,6 +523,7 @@ module.exports = (env, argv) => {
             ],
           },
           resolve,
+          ignoreWarnings,
           optimization,
           plugins,
         },

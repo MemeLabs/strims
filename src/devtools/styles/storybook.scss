@@ -159,15 +159,15 @@ $chrome-border: #ccc;
   --network-nav-collapsed-width: 60px;
   --network-nav-expanded-width: 200px;
 
-  &.layout--min_width_xl {
-    --layout-chat-width: 420px;
-  }
-
   position: fixed;
   inset: 0;
   box-sizing: border-box;
   background: var(--color-background-layout-body);
   overflow: auto;
+
+  &.layout--min_width_xl {
+    --layout-chat-width: 420px;
+  }
 }
 
 .storybook_crash {

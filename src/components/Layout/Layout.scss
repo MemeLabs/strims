@@ -24,12 +24,11 @@ $chat-width-sm: 260px;
   flex-direction: column;
   background: var(--color-background-layout-body);
   box-sizing: border-box;
+  --layout-chat-width: #{$chat-width-sm};
 
   &--landscape_cw {
     padding-right: env(safe-area-inset-right);
   }
-
-  --layout-chat-width: #{$chat-width-sm};
 
   &.layout--min_width_xl {
     --layout-chat-width: #{$chat-width-lg};
