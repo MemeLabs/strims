@@ -314,6 +314,7 @@
 
     --color-background-table: var(--color-slate-10);
     --color-background-table-header: var(--color-slate-11);
+    --color-background-label: var(--color-slate-7);
     // ---
 
     --body-background: #{$slate-300};
@@ -383,6 +384,8 @@
     --color-text-link: var(--color-blue-4);
     --color-text-link-active: var(--color-blue-3);
 
+    --color-background-label: #{$gray-500};
+
     --color-background-layout-chat: #{$gray-400};
     --color-background-layout-body: #{$gray-300};
 
@@ -401,6 +404,26 @@
     --color-icon-input: #{$slate-500};
     --color-text-input: #{$slate-500};
     --color-background-input-toggle: #{$green-200};
+    --color-background-input-focus: #{$gray-500};
+    --color-background-input-active: #{$gray-600};
+    --color-background-input-disabled: #{$gray-300};
+    --color-background-select-item: #{$gray-200};
+    --color-text-input-focus: #{$slate-400};
+    --color-text-input-active: #{$slate-300};
+    --color-text-input-disabled: var(--color-grey-3);
+    --color-text-input-placeholder: var(--color-grey-2);
+    --color-foreground-toggle: #{$gray-700};
+    --color-foreground-toggle-focus: #{$gray-900};
+    --color-foreground-toggle-disabled: #{$gray-500};
+
+    --color-text-form-label: #{$slate-500};
+    --color-border-form-label: var(--color-opac-b-2);
+    --color-background-form-label: #{$gray-500};
+    --color-background-form-label-button-hover: #{$gray-600};
+    --color-background-form-buttonset: #{$gray-600};
+
+    --color-background-table: #{$gray-500};
+    --color-background-table-header: #{$gray-600};
 
     // ---
 
