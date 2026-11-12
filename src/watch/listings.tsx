@@ -103,7 +103,8 @@ const useBootstrapListingsStream = (active: boolean): BootstrapListings => {
   return listings;
 };
 
-const BootstrapListingsContext = createContext<BootstrapListings>(initialListings);
+/** What BootstrapListingsProvider gives; a value of one's own stands in for the stream. */
+export const BootstrapListingsContext = createContext<BootstrapListings>(initialListings);
 
 /**
  * Gives every page under it the native node's listings, streamed while the
