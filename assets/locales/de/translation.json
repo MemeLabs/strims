@@ -1,77 +1,178 @@
 {
+  "cancel": "Abbrechen",
+  "title": "Strims",
+
   // video player
   "player": {
-    "Exit theater mode": "Kinomodus beenden",
-    "Theater mode": "Theatermodus",
-    "Exit full screen": "Vollbildmodus beenden",
-    "Full screen": "Vollbildschirm",
-    "Mute": "Stumm",
-    "Unmute": "Stummschaltung",
-    "Pause": "Pause",
-    "Play": "Spiel",
-    "Miniplayer": "Minispieler"
+    "exitTheaterMode": "Kinomodus beenden",
+    "theaterMode": "Kinomodus",
+    "exitFullScreen": "Vollbildmodus beenden",
+    "fullScreen": "Vollbildmodus",
+    "mute": "Stummschalten",
+    "unmute": "Stummschaltung aufheben",
+    "pause": "Pause",
+    "play": "Abspielen",
+    "miniplayer": "Miniplayer",
+    "close": "Schließen",
+    "subtitles": "Untertitel",
+    "captions": "Untertitel (CC)",
+    "captionsOff": "Untertitel aus",
+    "cast": "Streamen",
+    "stopCasting": "Streamen beenden",
+    "castingTo": "Wird auf {device} gestreamt",
+    "airPlay": "AirPlay",
+    "quality": "Qualität",
+    "auto": "Automatisch",
+    "autoPlaying": "Automatisch ({rendition})",
+    "unplayableFormat": "Das Format dieses Streams kann hier nicht abgespielt werden.",
+    "unplayable": "Dieser Stream kann hier nicht abgespielt werden."
+  },
+
+  "layout": {
+    "header": {
+      "home": "Startseite",
+      "categories": "Kategorien",
+      "streams": "Streams",
+      "broadcast": "Übertragen",
+
+      "searchPlaceholder": "Suchen...",
+      "closeChat": "Chat schließen",
+      "openChat": "Chat öffnen",
+      "settings": "Einstellungen",
+      "activityMonitor": "Aktivitätsanzeige"
+    },
+
+    "networkNav": {
+      "networks": "Netzwerke",
+      "expand": "Ausklappen",
+      "collapse": "Einklappen",
+      "addNetwork": "Netzwerk hinzufügen"
+    }
   },
 
   "chat": {
-    "More messages below": "Weitere Nachrichten unten",
+    "moreMessagesBelow": "Weitere Nachrichten unten",
+    "sending": "Wird gesendet...",
+    "deliveryFailed": "Nachricht konnte nicht zugestellt werden",
 
     "composer": {
       "members": "Mitglieder",
-      "tags": "Stichworte",
+      "tags": "Tags",
       "commands": "Befehle",
       "emotes": "Emotes",
       "modifiers": "Modifikatoren",
-      "Write a message": "Eine Nachricht schreiben..."
+      "emoji": "Emoji",
+      "placeholder": "Nachricht schreiben..."
     },
 
     "drawers": {
-      "Emotes": "Emotes",
-      "Whispers": "Flüstert",
-      "Settings": "Einstellungen",
-      "Users": "Benutzer"
+      "emotes": "Emotes",
+      "whispers": "Flüstern",
+      "settings": "Einstellungen",
+      "users": "Benutzer"
     },
 
     "settings": {
-      "Messages": "Mitteilungen",
-      "Whispers": "Flüstert",
-      "Highlights, focus, and tags": "Hebt Fokus und Tags hervor",
-      "Autocomplete": "Automatische Vervollständigung",
-      "Message formatters": "Nachrichtenformatierer",
+      "messagesSection": "Nachrichten",
+      "whispersSection": "Flüstern",
+      "highlightsSection": "Hervorhebungen, Fokus & Tags",
+      "autocompleteSection": "Autovervollständigung",
+      "formattersSection": "Nachrichtenformatierung",
 
-      "Show flair": "Flair zeigen",
-      "Show time": "Show Time",
-      "Harsh ignore": "Hartes Ignorieren",
-      "Hide messages tagged nsfw or nsfl": "Mit nsfw oder nsfl gekennzeichnete Nachrichten ausblenden",
-      "Loop animated emotes forever": "Loop animierte Emotes für immer",
-      "Disable spoilers": "Spoiler deaktivieren",
-      "Shorten long links": "Lange Links kürzen",
-      "Legacy emote spacing": "Alter Emote-Abstand",
-      "Maximum messages": "Maximale Nachrichten",
-      "Stream viewer indicators": "Anzeigen für Stream-Viewer",
-      "Banned messages": "Gesperrte Nachrichten",
-      "In-line messages": "Inline-Nachrichten",
-      "Highlight when mentioned": "Hervorheben, wenn erwähnt",
-      "Include mentions when focused": "Erwähnungen einschließen, wenn fokussiert",
-      "Increase visibility of tagged users": "Sichtbarkeit von markierten Benutzern erhöhen",
-      "Custom highlights": "Benutzerdefinierte Highlights",
-      "Comma separated": "Komma getrennt...",
-      "Autocomplete helper": "Autovervollständigen-Helfer",
-      "Show emote previews": "Emote-Vorschau anzeigen",
-      "Greentext": "Grüntext",
-      "Emotes": "Emotes",
-      "Combos": "Kombinationen",
-      "Modifiers": "Modifikatoren",
+      "showFlair": "Flair anzeigen",
+      "showTime": "Uhrzeit anzeigen",
+      "harshIgnore": "Striktes Ignorieren",
+      "hideNsfw": "Als nsfw oder nsfl markierte Nachrichten ausblenden",
+      "loopAnimatedEmotes": "Animierte Emotes endlos wiederholen",
+      "disableSpoilers": "Spoiler deaktivieren",
+      "shortenLinks": "Lange Links kürzen",
+      "compactEmoteSpacing": "Kompakter Emote-Abstand",
+      "normalizeAliasCase": "Groß-/Kleinschreibung von Aliasen vereinheitlichen",
+      "maxMessages": "Maximale Anzahl Nachrichten",
+      "viewerIndicators": "Anzeige für Stream-Zuschauer",
+      "bannedMessages": "Nachrichten gesperrter Benutzer",
+      "inlineWhispers": "Inline-Nachrichten",
+      "highlightMentions": "Hervorheben, wenn erwähnt",
+      "focusMentions": "Erwähnungen beim Fokussieren einbeziehen",
+      "taggedVisibility": "Sichtbarkeit markierter Benutzer erhöhen",
+      "customHighlights": "Eigene Hervorhebungen",
+      "customHighlightsPlaceholder": "Durch Kommas getrennt...",
+      "autocompleteHelper": "Autovervollständigungshilfe",
+      "emotePreviews": "Emote-Vorschau anzeigen",
+      "greentext": "Greentext",
+      "emotes": "Emotes",
+      "combos": "Combos",
+      "modifiers": "Modifikatoren",
+      "settingsSection": "Einstellungen",
+      "keepSynced": "Synchron halten",
 
       // viewer state indicator options
-      "Disable": "Deaktivieren",
-      "Bar": "Bar",
-      "Dot": "Punkt",
-      "Array": "Anordnung",
+      "indicatorDisabled": "Deaktivieren",
+      "indicatorBar": "Balken",
+      "indicatorDot": "Punkt",
+      "indicatorArray": "Reihe",
 
       // banned messages options
-      "Remove": "Entfernen",
-      "Censor": "Zensieren",
-      "Do nothing": "Nichts tun"
+      "bannedRemove": "Entfernen",
+      "bannedCensor": "Zensieren",
+      "bannedDoNothing": "Nichts tun"
     }
+  },
+
+  "settings": {
+    "network.title": "Netzwerkeinstellungen - Strims",
+    "bootstrap.title": "Netzwerk-Bootstrap-Einstellungen - Strims",
+    "chat.title": "Chat-Einstellungen - Strims",
+    "videoIngress.title": "Video-Ingress-Einstellungen - Strims",
+    "videoEgress.title": "Video-Egress-Einstellungen - Strims",
+    "videoChannel.title": "Videokanal-Einstellungen - Strims",
+    "autoseed.title": "Autoseed-Einstellungen - Strims",
+    "vnic.title": "VNIC-Einstellungen - Strims",
+    "debug.title": "Debug-Einstellungen - Strims"
+  },
+
+  "landing": {
+    "login.title": "Anmelden - Strims",
+    "signUp.title": "Registrieren - Strims"
+  },
+
+  "directory": {
+    "searchPlaceholder": "Suchen...",
+    "embed": "Einbetten",
+    "title": "Verzeichnis - {network} - Strims",
+    "titleFallback": "Verzeichnis - Strims",
+
+    "embedType": {
+      "angelThump": "AngelThump-Stream",
+      "twitch": "Twitch-Stream",
+      "twitchVod": "Twitch-VOD",
+      "youTube": "YouTube-Video"
+    }
+  },
+
+  "inviteAuth": {
+    "header": "{peer} hat dich eingeladen",
+    "membershipError": "Fehler beim Erstellen der Mitgliedschaft",
+    "bootstrapServers": "{count, plural, =1 {Bootstrap-Server} other {Bootstrap-Server}}",
+    "alias": "Alias",
+    "aliasInvalid": "Der Name enthält ungültige Zeichen",
+    "aliasPlaceholder": "Gib einen anderen Namen für dieses Netzwerk ein",
+    "aliasDescription": "Dein Name im Chat und in privaten Nachrichten.",
+    "continue": "Weiter",
+    "reject": "Einladung ablehnen",
+    "loading": "Wird geladen...",
+    "error": "Beim Laden der Einladung ist ein Fehler aufgetreten."
+  },
+  "watch": {
+    "title": "Livestreams",
+    "noStreams": "Gerade ist kein Stream live",
+    "directoryUnreachable": "Das Verzeichnis ist nicht erreichbar. Neuer Versuch…",
+    "starting": "Wird gestartet…",
+    "joining": "Beitritt läuft…",
+    "startFailed": "Dieser Browser konnte kein Profil einrichten.",
+    "joinFailed": "Dem Netzwerk dieses Streams konnte nicht beigetreten werden.",
+    "notOffered": "Dieser Stream ist nicht für Besucher geöffnet.",
+    "retry": "Erneut versuchen",
+    "back": "Zurück"
   }
 }
