@@ -1,7 +1,15 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import React, { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  ReactNode,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { Event, INotification, Notification } from "../apis/strims/notification/v1/notification";
 import { useStableCallback } from "../hooks/useStableCallback";
@@ -18,7 +26,10 @@ const initialState: State = {
 };
 
 export interface NotificationContextValue extends State {
+  /** Shows a notification of the page's own, which the node never hears of. */
   pushTransientNotification: (notification: INotification) => void;
+  /** Dismisses notification `id`: the page's own here, the node's on the node. */
+  dismissNotification: (id: bigint) => void;
 }
 
 const NotificationContext = createContext<NotificationContextValue>(null);
@@ -52,7 +63,12 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
     return () => events.destroy();
   }, []);
 
-  const pushTransientNotification = useStableCallback((notification: INotification) =>
+  // The page's own notifications take negative ids, which no node
+  // notification (its id a uint64) has, so they dismiss here.
+  const lastTransientId = useRef(BigInt(0));
+  const pushTransientNotification = useStableCallback((notification: INotification) => {
+    lastTransientId.current -= BigInt(1);
+    const id = lastTransientId.current;
     setState((prev) => ({
       ...prev,
       notifications: [
@@ -61,15 +77,30 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
           createdAt: BigInt(Date.now()),
           status: Notification.Status.STATUS_INFO,
           ...notification,
+          id,
         }),
       ],
-    }))
-  );
+    }));
+  });
+
+  // A node notification goes when the node says it's dismissed; a failed
+  // dismiss leaves its toast to time out.
+  const dismissNotification = useStableCallback((id: bigint) => {
+    if (id < BigInt(0)) {
+      setState((prev) => ({
+        ...prev,
+        notifications: prev.notifications.filter((n) => n.id !== id),
+      }));
+    } else {
+      void client.notification.dismiss({ ids: [id] }).catch(() => undefined);
+    }
+  });
 
   const value = useMemo(
     () => ({
       ...state,
       pushTransientNotification,
+      dismissNotification,
     }),
     [state]
   );

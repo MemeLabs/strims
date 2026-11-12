@@ -9,7 +9,6 @@ import ReactDOM from "react-dom";
 import { FiAlertCircle, FiAlertOctagon, FiAlertTriangle, FiCheckCircle } from "react-icons/fi";
 
 import { Notification } from "../../apis/strims/notification/v1/notification";
-import { useClient } from "../../contexts/FrontendApi";
 import { useLayout } from "../../contexts/Layout";
 import { useNotification } from "../../contexts/Notification";
 
@@ -77,8 +76,7 @@ interface ToastProps {
 const Toast: React.FC<ToastProps> = ({ timeoutMs = 5000, closeDurationMs = 500 }) => {
   const { root } = useLayout();
   const [items, setItems] = useState<ToastItemProps[]>([]);
-  const { notifications } = useNotification();
-  const client = useClient();
+  const { notifications, dismissNotification } = useNotification();
 
   const refreshItems = () => {
     const now = Date.now();
@@ -90,9 +88,7 @@ const Toast: React.FC<ToastProps> = ({ timeoutMs = 5000, closeDurationMs = 500 }
         items.push({
           closing: age - timeoutMs > 0,
           notification,
-          // A failed dismiss leaves the toast to time out.
-          onClick: () =>
-            void client.notification.dismiss({ ids: [notification.id] }).catch(() => undefined),
+          onClick: () => dismissNotification(notification.id),
         });
       }
     }

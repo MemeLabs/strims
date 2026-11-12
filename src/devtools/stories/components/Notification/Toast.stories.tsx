@@ -9,6 +9,7 @@ import {
   Notification,
 } from "../../../../apis/strims/notification/v1/notification";
 import Toast from "../../../../components/Notification/Toast";
+import { useNotification } from "../../../../contexts/Notification";
 import NotificationService from "../../../mocks/notification/service";
 import { MockNotifications, Story, useMockService } from "../../../storybook";
 
@@ -28,6 +29,24 @@ const Emit: React.FC<{ notifications: INotification[] }> = ({ notifications }) =
         new Event({ body: { notification: { id: BigInt(i + 1), createdAt, ...n } } })
       )
     );
+  }, []);
+  return null;
+};
+
+// Pushes `notifications` as the page's own (pushTransientNotification), then
+// clicks the first toast once it shows, as a viewer dismissing it would.
+const PushAndDismissFirst: React.FC<{ notifications: INotification[] }> = ({ notifications }) => {
+  const { pushTransientNotification } = useNotification();
+  useEffect(() => {
+    notifications.forEach((n) => pushTransientNotification(n));
+    const timer = setInterval(() => {
+      const first = document.querySelector<HTMLElement>(".notification_toast__item");
+      if (first) {
+        clearInterval(timer);
+        first.click();
+      }
+    }, 50);
+    return () => clearInterval(timer);
   }, []);
   return null;
 };
@@ -53,6 +72,23 @@ const error: INotification = {
 };
 
 const stories: Story[] = [
+  {
+    // Two of the page's own toasts (a copy confirmation, as the invite form
+    // and the pairing token page push), the first clicked: it goes, the
+    // second stays.
+    name: "Page toast dismissed",
+    component: () => (
+      <MockNotifications>
+        <PushAndDismissFirst
+          notifications={[
+            { status: Status.STATUS_SUCCESS, message: "Invitation code copied to clipboard" },
+            { status: Status.STATUS_SUCCESS, message: "Token copied to clipboard" },
+          ]}
+        />
+        <Toast timeoutMs={TIMEOUT_MS} />
+      </MockNotifications>
+    ),
+  },
   {
     name: "Info",
     component: () => <Toasts notifications={[info]} />,
