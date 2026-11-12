@@ -47,7 +47,8 @@
     }
   }
 
-  &__menu {
+  // Above SwipablePanel's .swipable (position: fixed) whichever loads first.
+  &__body &__menu {
     position: absolute;
     box-shadow: var(--shadow-elevation-2);
     background: var(--color-background-layout-chat-menu);
