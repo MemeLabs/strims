@@ -10,7 +10,7 @@ import {
 
 // 50 Mbit/s and 25 peers.
 export const defaultConfig = (): Config =>
-  new Config({ maxUploadBytesPerSecond: BigInt((50 * Math.pow(2, 20)) / 8), maxPeers: 25 });
+  new Config({ maxUploadBytesPerSecond: BigInt(50e6 / 8), maxPeers: 25 });
 
 // The node's VNIC config in memory.
 export default class VNICService
