@@ -3,7 +3,7 @@
 
 import "./Settings.stories.scss";
 
-import React, { ReactNode } from "react";
+import React, { ReactNode, useEffect, useRef, useState } from "react";
 import { Route } from "react-router-dom";
 
 import { Link, Navigate } from "../../../../components/Settings/Navigation";
@@ -35,6 +35,26 @@ const InContext: React.FC<{ initialPath?: string; children: ReactNode }> = ({
   </div>
 );
 
+// The links in it, the first focused (a link needs an href to take focus),
+// with each one's href below them.
+const Hrefs: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [hrefs, setHrefs] = useState<string[]>([]);
+  useEffect(() => {
+    const links = Array.from(ref.current.querySelectorAll("a"));
+    links[0]?.focus();
+    setHrefs(links.map((a) => `${a.textContent.trim()}: ${a.getAttribute("href") ?? "no href"}`));
+  }, []);
+  return (
+    <>
+      <div ref={ref} className="settings_story__row">
+        {children}
+      </div>
+      <pre className="settings_story__state">{hrefs.join("\n")}</pre>
+    </>
+  );
+};
+
 // Outside a navigation context, Link and Navigate use the router's.
 const InRouter: React.FC<{ children: ReactNode }> = ({ children }) => (
   <StoryRouter initialPath="/settings/networks">
@@ -59,6 +79,35 @@ const stories: Story[] = [
           </Link>
         </div>
       </InContext>
+    ),
+  },
+  {
+    // Each link is a real one: it has an href (here the storybook's router's)
+    // and takes focus.
+    name: "Hrefs",
+    component: () => (
+      <InContext>
+        <Hrefs>
+          <Link className="settings_story__link" to="/settings/networks/1">
+            Test Network
+          </Link>
+          <Link className="settings_story__link" to="/settings" back>
+            Back to settings
+          </Link>
+        </Hrefs>
+      </InContext>
+    ),
+  },
+  {
+    name: "Router hrefs",
+    component: () => (
+      <InRouter>
+        <Hrefs>
+          <Link className="settings_story__link" to="/settings/networks/1">
+            Test Network
+          </Link>
+        </Hrefs>
+      </InRouter>
     ),
   },
   {

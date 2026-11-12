@@ -27,8 +27,7 @@
     white-space: pre-wrap;
   }
 
-  a[href],
-  a.settings_story__link {
+  a[href] {
     color: var(--color-text-link);
     cursor: pointer;
   }
