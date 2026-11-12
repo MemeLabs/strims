@@ -52,7 +52,9 @@ simlab.verdict's derive pool:
   Registries   every one of store_host's TABLES has its STANDARD_KEYS
                and STANDARD_JOINS, and they name no other; SAMPLE_TABLES
                are TABLES; the two sims' doc tables (doc_tables) document
-               the same tables, each of them one of TABLES
+               the same tables, each of them one of TABLES, and their
+               grains the knobs query.TABLE_KNOBS gives; the two sims'
+               ZSTD lists name the same tables
   Commands     simdb.py's lake --param, view and describe over the
                catalog, as a caller runs them: params bound typed or as
                text, one missing named; the saved views listed, run with
@@ -821,6 +823,23 @@ class Registries(unittest.TestCase):
         documented = {t for tables in catalog.doc_tables().values() for t in tables}
         self.assertEqual(sorted(documented - set(store_host.TABLES)), [],
                          "the sims document tables store_host.TABLES lacks: register them on main first")
+
+    def test_both_sims_compress_the_same_tables(self):
+        lists = {}
+        for sim, path in (("strims-sim", catalog.DOC_FILES[0]), ("ppspp", catalog.DOC_FILES[1])):
+            m = re.search(r"\bZSTD: \[&str; \d+\] = \[(.*?)\];", path.read_text(), re.S)
+            self.assertIsNotNone(m, f"{path}: no ZSTD list")
+            lists[sim] = sorted(re.findall(r'"([a-z_]+)"', m.group(1)))
+        self.assertEqual(lists["strims-sim"], lists["ppspp"], "the sims' ZSTD lists")
+        self.assertEqual(sorted(set(lists["ppspp"]) - set(store_host.TABLES)), [])
+
+    def test_the_knobs_are_the_sims_docs(self):
+        self.assertEqual(sorted(set(query.TABLE_KNOBS) - set(store_host.TABLES)), [])
+        for sim, prefix in (("ppspp", "SIM_"), ("strims-sim", "STRIMS_SIM_")):
+            for t, (grain, _) in catalog.doc_tables()[sim].items():
+                with self.subTest(sim=sim, table=t):
+                    self.assertEqual(sorted(re.findall(rf"`{prefix}([A-Z_]+)=1`", grain)),
+                                     sorted(query.TABLE_KNOBS.get(t, ())), f"query.TABLE_KNOBS against {grain!r}")
 
 
 class Commands(Fixture):

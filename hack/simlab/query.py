@@ -74,6 +74,13 @@ from .verdict import DERIVED, derived_dir, files, judge, load_series, plist, wan
 # The most a query pulls of the sample tables (SAMPLE_TABLES) by default
 # (`--pull-mb`).
 PULL_MB = 1000
+# The settings a run writes a table under: each knob's name after SIM_
+# (the ppspp sim's) and STRIMS_SIM_ (strims-sim's), any one of them
+# writing it; a table not here every run with tables writes. The sims'
+# doc tables say the same in each table's grain (test_catalog's
+# Registries holds them to it).
+TABLE_KNOBS = {"node_bins": ("BIN_NODES",), "forecast": ("FORECAST",), "arrivals": ("FORECAST", "SPEC"),
+               "spec_requests": ("SPEC",), "parks": ("SPEC",), "asks": ("SPEC",), "haves": ("SPEC",)}
 # macros.sql: the views' macros.
 MACROS = Path(__file__).with_name("sql") / "macros.sql"
 # The phase `pooled` gives a read past its viewer's phases and `spec` a
@@ -434,7 +441,7 @@ def columns(paths):
                                               "union_by_name=true);")}
 
 
-# An ask's truth, as spec_requests' (simdb.py's docs), from h.held_ms: the
+# An ask's truth, as spec_requests' (catalog.NORMALIZED's asks), from h.held_ms: the
 # peer's first hold of the chunk in its incarnation then.
 ASK_TRUTH = {
     "held_ms": "h.held_ms",
@@ -524,16 +531,31 @@ def macros(have):
     return out
 
 
+def knobs_text(table):
+    """The settings that write `table`, as both sims name them
+    (TABLE_KNOBS: "SIM_SPEC=1 / STRIMS_SIM_SPEC=1"), alternatives joined
+    by "or"; None for a table every run writes."""
+    return " or ".join(f"SIM_{k}=1 / STRIMS_SIM_{k}=1" for k in TABLE_KNOBS[table]) if table in TABLE_KNOBS else None
+
+
 def need(have, *tables):
-    """Refused unless the views have every one of `tables`."""
-    missing = [t for t in tables if t not in have]
-    if missing:
-        raise Refused(f"the selection has no {', '.join(missing)}"
-                      + (" (nor does S3: run with the reads)" if "reads" in missing else "")
-                      + (" (nor does S3: run with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1)"
-                         if "forecast" in missing else "")
-                      + (" (run with SIM_SPEC=1 / STRIMS_SIM_SPEC=1)"
-                         if {"spec_requests", "parks", "asks", "haves"} & set(missing) else ""))
+    """Refused unless the views have every one of `tables`, saying of the
+    missing ones the settings that write them (knobs_text) and, of a
+    sample table (SAMPLE_TABLES), that S3 lacks it too: a query pulls
+    those first."""
+    def why(t):
+        how = f"run with {knobs_text(t)}" if t in TABLE_KNOBS else None
+        if t in SAMPLE_TABLES:
+            return f"nor does S3{': ' + how if how else ''}"
+        return how
+
+    by = {}
+    for t in tables:
+        if t not in have:
+            by.setdefault(why(t), []).append(t)
+    if by:
+        raise Refused("the selection has no " + ", ".join(", ".join(ts) + (f" ({w})" if w else "")
+                                                          for w, ts in by.items()))
 
 
 # Columns a table's era may lack, NULL in the queries over it where it
@@ -743,7 +765,7 @@ def field_source(sel, v, field, per):
                           f"({', '.join(READ_FIELDS)}), viewer_seconds' ({', '.join(VIEWER_SECOND_FIELDS)}) and "
                           "node_bins' columns"
                           + ("" if "node_bins" in have else
-                             " (the selection has no node_bins: SIM_BIN_NODES=1 / STRIMS_SIM_BIN_NODES=1 write them)"))
+                             f" (the selection has no node_bins: {knobs_text('node_bins')} write them)"))
     else:
         if f in VERDICT_FIELDS:
             if sel.bin % 1000:

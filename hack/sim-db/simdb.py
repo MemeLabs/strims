@@ -35,164 +35,32 @@ the whole catalog, across experiments, its `--param`s binding a
 statement's `$name`s, and `view` runs one of the console's saved views
 by name. `sql` and the queries after it read a selection of the cache's
 runs instead (`--src`, `--cell`, `--arm`, `--seed`), for the deep dives
-into a few runs: they pull the bulky sample tables (reads, forecast,
-arrivals, asks, haves) from S3 where the cache lacks them (`sql --reads`), and
-the catalog holds only those the cache has (`fetch --tables` brings an
-experiment's in). The selections and queries are hack/simlab/query.py's
-and the cache's pulls hack/simlab/store.py's, in the duckdb module: every
-command but `duckdb`, `fold` and `export` (the store's, in the CLI, under
-any python3) runs under hack/'s uv venv, which the script execs itself
-into.
+into a few runs: they pull the sample tables (below) from S3 where the
+cache lacks them (`sql --reads`), and the catalog holds only those the
+cache has (`fetch --tables` brings an experiment's in). The selections
+and queries are hack/simlab/query.py's and the cache's pulls
+hack/simlab/store.py's, in the duckdb module: every command but
+`duckdb`, `fold` and `export` (the store's, in the CLI, under any
+python3) runs under hack/'s uv venv, which the script execs itself into.
 
 A run of either sim given an output dir (`SIM_OUT`, `STRIMS_SIM_OUT`)
-writes its tables there as CSV files, each beside a `<table>.schema.json`
-of its columns' names and types, and a `series_meta.json` (the sims'
-rustdoc: crates/strims-sim/src/tables.rs, and the ppspp sim's
-`Sim::write_tables`):
+writes its tables there as CSV files (the large ones zstd-compressed,
+`<table>.csv.zst`), each beside a `<table>.schema.json` of its columns'
+names and types, and a `series_meta.json`. The sims' rustdoc documents
+them (crates/strims-sim/src/tables.rs, and the ppspp sim's
+`Sim::write_tables`), and the catalog reads those docs: `describe
+tables` lists the tables with their grains, and `describe TABLE` gives a
+table's grain, keys, joins and what each column holds, `describe events`
+the event kinds and `describe phases` the parents table's reasons. The
+sims' tables (store_host's TABLES), each with the settings that write it
+where a knob does:
 
-  seconds         the run second by second, as the row's `series` has it
-  viewer_seconds  each viewer's p99 lag and reads each second (strims-sim
-                  writes none for a second its viewer wasn't there in)
-  reads           every read: viewer, t_ms (true time from the stream's
-                  start), seq, lag_ms
-  stalls          each viewer's stalls, playing its reads at delays of
-                  1250 and 4250 ms (analyze.py's DELIVERY_TARGET_MS and
-                  DELIVERY_MAX_MS): viewer, delay_ms, t_ms (when the stall
-                  began), stall_ms; macros.sql's playback(delay_ms) plays
-                  `reads` the same way, at any delay
-  bins            finer bins (SIM_BIN_MS / STRIMS_SIM_BIN_MS wide, 100 ms
-                  by default), one wide row a bin: t_ms, then counters
-                  summed over it and gauges at its end: the series'
-                  fields, the uplinks' bytes and packets, and per viewers
-                  (`viewer_`) and seed (`seed_`) timeouts, wasted chunks,
-                  answers refused (a full queue) and dropped (at write
-                  time), parent switches, sheds taken and sent,
-                  message bytes by kind, payloads and HAVE-only ones,
-                  request parking's counters (spec_sent, spec_answered,
-                  spec_not_yet, spec_expired, spec_cancelled,
-                  requests_not_yet, parked, park_released, park_expired,
-                  park_cancelled, park_refused, not_yet_sent,
-                  not_yet_received), retransmits, drops and push and
-                  answer waits (strims-sim
-                  also the window model's window cuts and timeouts, and
-                  the acknowledgements alone it sends, packets and bytes
-                  the uplinks' leave out: TCP's pure ACKs
-                  (*_up_ack_packets, *_up_ack_bytes) and the data
-                  channels' SACKs (*_up_sack_packets, *_up_sack_bytes));
-                  -1 where a run has no reading
-  node_bins       with SIM_BIN_NODES=1 / STRIMS_SIM_BIN_NODES=1, each
-                  node's bins
-  viewers         the viewers, numbered as the others number them, with
-                  hostile and churned, and when each arrived and left for
-                  good (arrive_ms, negative for one there from the start,
-                  and depart_ms), which the verdicts' series carry
-  events          the sims' timed events: t_us, kind, node, peer, value,
-                  detail, of the vocabulary's kinds
-                  (crates/strims-wan/vocab.toml: `describe events` says
-                  what each holds), those a knob gates only with it on
-                  (with the decision logs, tens of thousands of rows a
-                  minute of a hundred viewers):
-                  {kinds}
-  parents         every change of a node's push parent of a stream: t_ms,
-                  node, stream, parent (the node from then on, -1 for
-                  none), reason, nodes numbered as in events; the
-                  vocabulary's reasons (`describe phases`):
-                  {reasons}
-  arrivals        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 or SIM_SPEC=1
-                  / STRIMS_SIM_SPEC=1, every chunk each node first held
-                  and its timeline there: t_ms, node, viewer, seq, how
-                  (own, push, answer, other), peer (the source), parent,
-                  expected_ms, released_ms, asked_ms, asks, last_ask_peer,
-                  last_ask_ms, rtt_ms, incarnation (the node's at the
-                  hold: strims-sim's restarts by then, the first 0; the
-                  ppspp sim's joins by then, the seed's 0; older logs
-                  lack it)
-  spec_requests   with SIM_SPEC=1 / STRIMS_SIM_SPEC=1, every speculative
-                  request once it ended: t_ms, node (the requester),
-                  viewer, honest, peer (the holder), peer_honest, stream,
-                  seq, grace_ms, rtt_ms, predictor (`model`), predicted_ms,
-                  predicted_p90_ms and predicted_p99_ms (the model's hold
-                  by its median, 90th and 99th percentiles), frontier_seq,
-                  hole_seq (the holder's declared newest hole), outcome
-                  (answered, not_yet, expired, cancelled, closed), reason
-                  (an expiry's grace, invalid or window), t_outcome_ms,
-                  held_ms (the holder's true first hold: empty where
-                  never), channel_open_ms, live, err_ms (the request's
-                  earliness: held_ms - (t_ms + rtt_ms / 2), positive when
-                  it reached the holder before the chunk did), pred_err_ms
-                  (held_ms - predicted_ms) and held_by_p50, held_by_p90 and
-                  held_by_p99 (held by each predicted hold; empty without a
-                  hold or a prediction)
-  parks           with SIM_SPEC=1 / STRIMS_SIM_SPEC=1, every request a
-                  holder parked or refused, once it ended: t_ms, node (the
-                  holder), viewer, honest, peer (the requester),
-                  peer_honest, stream, seq, grace_ms, had (the holder had
-                  held the chunk), outcome (released, expired, cancelled,
-                  closed, refused), reason (a refusal's full,
-                  behind_window, ahead, no_grace, range, dropped or
-                  outside; a release's queue_full; an expiry's dataless),
-                  t_outcome_ms, held_ms (the holder's own first hold)
-  asks            with SIM_SPEC=1 / STRIMS_SIM_SPEC=1 (large), every
-                  request either request round made, once it ended, a row
-                  per channel it weighed, every rival's. The sims write
-                  what each was decided on, as its log is taken: t_ms,
-                  node (the requester), honest, ask (its rows share it),
-                  round (spec, the speculative round; flight, the flight
-                  window's, for a chunk the asked peer declared), peer,
-                  peer_honest (the peer's at the request), picked (the
-                  asked peer's row, first; else a rival's), declares,
-                  stream, seq, grace_ms (the asked row's), rtt_ms,
-                  predicted_ms, predicted_p90_ms and predicted_p99_ms (the
-                  model's holds at the decision), frontier_seq, hole_seq,
-                  state_age_ms (the peer's latest STATE's age then),
-                  outcome (the asked row's: spec's as spec_requests',
-                  flight's answered, not_yet, expired, elsewhere, closed),
-                  reason, t_outcome_ms, channel_open_ms, since_ms (when the
-                  requester's incarnation began), peer_incarnation (the
-                  peer's then, as arrivals' incarnation counts). The view
-                  adds the truth from arrivals, as spec_requests' is (the
-                  table as written is sql's asks_log, the lake's
-                  raw.asks): held_ms (the peer's first hold in that
-                  incarnation: arrivals' earliest row of node = peer, seq
-                  and incarnation = peer_incarnation; empty where none),
-                  live (held by since_ms and channel_open_ms, in whole
-                  ms), err_ms, pred_err_ms, held_by_p50, held_by_p90,
-                  held_by_p99. The asked rows of round spec are
-                  spec_requests' rows. Main's (the HAVE world's request
-                  log): round flight only, predicted_ms and
-                  predicted_p90_ms a rival's route expectation (NULL on
-                  the asked row, which a HAVE decided), outcome answered,
-                  expired, elsewhere or closed, and its own timeout_ms
-                  (the asked row's), have_ms (the row's peer's HAVE of the
-                  chunk) and released_ms (push released it to pull);
-                  grace_ms, frontier_seq, hole_seq, state_age_ms NULL
-  haves           main's, with SIM_SPEC=1 / STRIMS_SIM_SPEC=1 (large),
-                  every chunk a HAVE first announced to a node on a
-                  channel: t_ms (the HAVE arrived), node, honest, peer,
-                  peer_honest, stream, seq, channel_open_ms,
-                  peer_incarnation. The view adds held_ms (the peer's
-                  first hold in that incarnation, from arrivals, as asks'),
-                  delay_ms (t_ms - held_ms: the knowledge delay) and live
-                  (held by channel_open_ms); the table as written is sql's
-                  haves_log, the lake's raw.haves. forecast's HAVE samples
-                  are a capped subset of these HAVEs
-  forecast        with SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 (large), in
-                  either of two schemas, told apart by their columns: the
-                  arrival models' predictions (a row per neighbour per
-                  chunk weighed: each channel's first prediction of a
-                  chunk, `extrapolated` and where logged `tail_ms`), or
-                  the HAVE samples (a row per neighbour per chunk
-                  announced: each sample of a neighbour's announcement
-                  lag, with the estimate it updated, `lazy` and
-                  `first_sight`): t_ms, node, viewer, peer, peer_honest,
-                  stream, seq, sample_ms (a prediction's chunk's age),
-                  mean_ms and horizon_ms (a prediction's hold's lag by its
-                  median and 90th percentile), tail_ms (by its 99th),
-                  samples, fresh, extrapolated (the signing time was), lazy,
-                  first_sight, run, seen_ms (the signing), held_ms (when
-                  the peer first held the chunk: empty where never, -1 in
-                  older logs), channel_open_ms, live (held after both
-                  nodes took their places)
+  {tables}
+
+The sample tables, the bulky ones the farm uploads apart and a pull
+fetches only when asked (SAMPLE_TABLES):
+
+  {samples}
 
 A run's `bin_ms` is its bins' width: `--bin` over a bins column is a
 multiple of every selected run's. The CLI's cache root is `SIM_DB_ROOT`
@@ -212,15 +80,14 @@ the schema files, so a table gains the columns a later sim writes
 invocation's store into the cache, `<main checkout>/target/sim-db/cache/`
 (suite/<worktree>/<invocation>/), which every worktree shares; the farm
 puts its instances' flushes in S3, and `pull` copies a run's into the
-cache (farm/<run>/...). Its reads, forecast, arrivals, asks and haves logs (the
-bulky tables, sim-samples/) come with `--reads`: the whole run's, or
-with `--cell`, `--arm` and `--seed` only the flushes holding those jobs
-(the manifests' keys; a job held twice, a verify copy, from the fewest
-flushes), and the queries that read them (pooled, aligned on a read lag,
-forecast, and sql with `--reads`) pull their selection's that way when
-the cache lacks them, noting the size, at most `--pull-mb`. `--dry-run`
-lists what a pull would fetch, asking S3 nothing. What a pull costs S3
-goes to the farm's S3 ledger (pull). Nothing in the cache is kept for
+cache (farm/<run>/...). Its sample tables (sim-samples/) come with
+`--reads`: the whole run's, or with `--cell`, `--arm` and `--seed` only
+the flushes holding those jobs (the manifests' keys; a job held twice, a
+verify copy, from the fewest flushes), and the queries that read them
+(pooled, aligned on a read lag, forecast, and sql with `--reads`) pull
+their selection's that way when the cache lacks them, noting the size,
+at most `--pull-mb`. `--dry-run` lists what a pull would fetch, asking
+S3 nothing. What a pull costs S3 goes to the farm's S3 ledger (pull). Nothing in the cache is kept for
 long: a run is reproduced when it's wanted again, and `gc` deletes
 what's older than `--days` (7).
 
@@ -255,10 +122,8 @@ job's): the one holding the most of them, then the later flush (its
 manifest's `at`), then a farm flush's later seq, by number
 (source_ranks).
 
-  sql      a query over the views (runs, scalars, seconds, viewer_seconds,
-           reads, stalls, bins, viewers, events, parents, node_bins,
-           forecast, the derived ones, and macros.sql's), their keys and
-           joins below
+  sql      a query over the views (runs, scalars, the sims' tables, the
+           derived ones, and macros.sql's), their keys and joins below
   pooled   read lags pooled over the selected runs, by cell and arm: the
            quantiles of every read, beside the mean of the runs' own p99s;
            `--by` splits them by phase (its viewer's, viewer_phases'),
@@ -428,8 +293,10 @@ def listed(doc, fields):
     return re.sub(r"^( *)\{([a-z_]+)\}$", fill, doc, flags=re.M)
 
 
-__doc__ = listed(__doc__, {"kinds": EVENT_KINDS, "reasons": ", ".join(vocab.reasons()),
-                           "derived": ", ".join(DERIVED_KINDS)})
+# The sims' tables, a knob's beside those it writes, and the sample tables.
+TABLES_TEXT = ", ".join(t + (f" ({query.knobs_text(t)})" if t in query.TABLE_KNOBS else "") for t in TABLES)
+SAMPLES_TEXT = ", ".join(SAMPLE_TABLES)
+__doc__ = listed(__doc__, {"tables": TABLES_TEXT, "samples": SAMPLES_TEXT, "derived": ", ".join(DERIVED_KINDS)})
 
 # The views' keys and joins: `sql --help`, and the end of `--help`.
 SQL_DOC = """\
@@ -588,8 +455,8 @@ def main():
                                "--reads (lake: the whole catalog)", description=SQL_DOC, formatter_class=raw)
     qs["sql"].add_argument("query")
     qs["sql"].add_argument("--reads", action="store_true",
-                           help="pull the selection's reads, forecast, arrivals, asks and haves logs first, where the "
-                                "cache lacks them")
+                           help=f"pull the selection's sample tables ({SAMPLES_TEXT}) first, where the cache lacks "
+                                "them")
     qs["pooled"] = sub.add_parser("pooled")
     qs["pooled"].add_argument("--by", choices=("none", "phase", "bin", "viewer"), default="none")
     qs["aligned"] = sub.add_parser("aligned")
@@ -654,7 +521,7 @@ def main():
     p = sub.add_parser("pull")
     p.add_argument("--run", required=True)
     p.add_argument("--reads", action="store_true",
-                   help="the reads, forecast, arrivals, asks and haves logs too (sim-samples/)")
+                   help=f"the sample tables too ({SAMPLES_TEXT}; sim-samples/)")
     p.add_argument("--cell", action="append", help="only these cells' reads, globs")
     p.add_argument("--arm", action="append", help="only these arms' reads, globs")
     p.add_argument("--seed", action="append", type=int, help="only these seeds' reads")
