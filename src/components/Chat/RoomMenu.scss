@@ -107,7 +107,7 @@
   &__header {
     font-size: 1.1rem;
     text-transform: uppercase;
-    color: var(--color-grey-8);
+    color: var(--color-text-chat-menu-heading);
   }
 
   &__content {
@@ -122,13 +122,13 @@
 
   &__network_name {
     flex: 40 0 0;
-    color: var(--color-grey-8);
+    color: var(--color-text-chat-menu-heading);
     padding-top: 0.6rem;
   }
 
   &__network_rooms {
     flex: 60 0 0;
-    color: var(--color-grey-12);
+    color: var(--color-text-chat-menu-rooms);
   }
 
   &__network_rooms_item {
@@ -136,14 +136,14 @@
     flex-direction: row;
     align-items: flex-end;
     cursor: pointer;
-    color: var(--color-grey-10);
+    color: var(--color-text-chat-menu);
     padding-top: 0.6rem;
 
     &:hover {
-      color: var(--color-grey-14);
+      color: var(--color-text-chat-menu-hover);
 
       .rooms_list__network_rooms_item__viewers {
-        color: var(--color-grey-8);
+        color: var(--color-text-chat-menu-heading);
       }
     }
 
@@ -160,7 +160,7 @@
     &__viewers {
       display: flex;
       align-items: center;
-      color: var(--color-grey-6);
+      color: var(--color-text-chat-menu-muted);
       font-size: 0.9rem;
     }
   }
@@ -175,7 +175,7 @@
   &__header {
     font-size: 1.1rem;
     text-transform: uppercase;
-    color: var(--color-grey-8);
+    color: var(--color-text-chat-menu-heading);
   }
 
   &__table {
@@ -187,17 +187,17 @@
   &__row {
     border-radius: var(--border-radius-small);
     cursor: pointer;
-    color: var(--color-grey-10);
+    color: var(--color-text-chat-menu);
 
     td {
       padding-top: 0.6rem;
     }
 
     &:hover {
-      color: var(--color-grey-14);
+      color: var(--color-text-chat-menu-hover);
 
       .whispers_list__unread {
-        color: var(--color-grey-8);
+        color: var(--color-text-chat-menu-heading);
       }
     }
   }
@@ -207,21 +207,21 @@
     vertical-align: center;
 
     &__icon {
-      background-color: var(--color-slate-12);
+      background-color: var(--color-chat-menu-status);
       display: block;
       height: 0.6rem;
       width: 0.6rem;
       border-radius: var(--border-radius-rounded);
 
       &--online {
-        background-color: var(--color-grey-10);
+        background-color: var(--color-chat-menu-status-online);
       }
     }
   }
 
   &__unread {
     display: inline-block;
-    color: var(--color-grey-6);
+    color: var(--color-text-chat-menu-muted);
     margin-left: 0.4rem;
     font-size: 0.9rem;
   }
@@ -234,10 +234,10 @@
     display: block;
     padding-top: 0.6rem;
     cursor: pointer;
-    color: var(--color-grey-10);
+    color: var(--color-text-chat-menu);
 
     &:hover {
-      color: var(--color-grey-14);
+      color: var(--color-text-chat-menu-hover);
     }
   }
 }

@@ -97,7 +97,7 @@
         border-radius: var(--border-radius-rounded);
 
         &:hover {
-          outline: 3px solid var(--color-opac-w-10);
+          outline: 3px solid var(--color-outline-context-menu-swatch-hover);
         }
       }
 
@@ -105,10 +105,10 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        color: var(--color-grey-8);
+        color: var(--color-text-context-menu-icon);
 
         &:hover {
-          color: var(--color-grey-15);
+          color: var(--color-text-context-menu-icon-hover);
         }
       }
     }

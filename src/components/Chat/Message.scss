@@ -71,8 +71,8 @@
     }
 
     &--failed {
-      background: var(--color-red-5);
-      border-right: 4px solid var(--color-red-9);
+      background: var(--color-background-chat-failed);
+      border-right: 4px solid var(--color-border-chat-failed);
     }
 
     &__time {
@@ -83,7 +83,7 @@
 
     &:not(&--self) {
       .chat__message__author {
-        background: var(--card-bg);
+        background: var(--color-background-chat-author);
         border-radius: 3px;
         border: 1px solid var(--card-outset-border-top) var(--card-outset-border-right)
           var(--card-outset-border-bottom) var(--card-outset-border-left);
@@ -115,7 +115,7 @@
     }
 
     &__link {
-      color: var(--color-blue-8);
+      color: var(--color-text-link);
       position: relative;
       word-break: break-all;
 
@@ -125,7 +125,7 @@
 
       &:visited,
       &:visited &__ellipsis {
-        color: var(--color-purple-11);
+        color: var(--color-text-link-visited);
       }
 
       @at-root .chat__message--tagged & {
@@ -149,12 +149,12 @@
 
         &,
         &:visited {
-          color: var(--color-grey-4);
+          color: var(--color-text-chat-external-link);
         }
 
         &:hover {
           text-decoration: none;
-          color: var(--color-grey-7);
+          color: var(--color-text-chat-external-link-hover);
         }
 
         svg {
@@ -180,7 +180,7 @@
       cursor: pointer;
       padding: 0 3px;
       transition: color var(--timing-medium) ease-in-out;
-      background: var(--chat-spoiler-color, black);
+      background: var(--chat-spoiler-color, var(--color-background-chat-spoiler));
 
       & > .chat__emote,
       & > .chat__emoji,
@@ -221,8 +221,8 @@
     &__tag {
       display: inline-block;
       padding: 0 0.4em;
-      background: var(--color-slate-11);
-      border: 1px solid var(--color-slate-9);
+      background: var(--color-background-chat-tag);
+      border: 1px solid var(--color-border-chat-tag);
       border-radius: var(--border-radius-small);
     }
 
@@ -448,7 +448,7 @@
   }
 
   &__hidden_emote {
-    color: var(--color-grey-4);
+    color: var(--color-text-chat-hidden-emote);
 
     @at-root .chat__combo_message & {
       margin: 0 5px;

@@ -5,7 +5,7 @@
   height: min(calc(var(--chat-height) - 10px), 500px);
   width: min(calc(var(--chat-width) - 20px), 380px);
   border-radius: var(--border-radius-small);
-  background: var(--color-slate-7);
+  background: var(--color-background-emote-menu);
   box-shadow: var(--shadow-elevation-2);
   display: flex;
   flex-direction: column;
@@ -28,7 +28,7 @@
 
   &__nav {
     flex: 0 0 40px;
-    background: var(--color-slate-5);
+    background: var(--color-background-emote-menu-nav);
     border-bottom-left-radius: var(--border-radius-small);
   }
 
@@ -40,7 +40,7 @@
 
   &__footer {
     flex: 0 0 50px;
-    background: var(--color-slate-6);
+    background: var(--color-background-emote-menu-footer);
     border-bottom-right-radius: var(--border-radius-small);
     display: flex;
     flex-direction: row;
@@ -134,7 +134,7 @@
 }
 
 .emote_menu_search {
-  background: var(--color-slate-10);
+  background: var(--color-background-emote-menu-control);
   border-radius: var(--border-radius-small);
   display: flex;
   flex-direction: row;
@@ -152,7 +152,7 @@
 
   &__icon {
     flex: 0 0 24px;
-    color: var(--color-slate-16);
+    color: var(--color-icon-input);
     height: 1.4rem;
     width: 1.4rem;
   }
@@ -168,12 +168,12 @@
     border-radius: var(--border-radius-small) var(--border-radius-small) 0 0;
 
     &--open {
-      background: var(--color-slate-10);
+      background: var(--color-background-emote-menu-control);
       box-shadow: var(--shadow-elevation-2);
     }
 
     &__menu {
-      background: var(--color-slate-10);
+      background: var(--color-background-emote-menu-control);
       border-radius: 0 0 var(--border-radius-small) var(--border-radius-small);
       width: 32px;
       padding-bottom: 4px;
@@ -201,15 +201,15 @@
     padding: 4px;
     margin: 2px 0;
     line-height: 0;
-    color: var(--color-grey-6);
+    color: var(--color-text-emote-menu-nav);
 
     &--focus {
-      color: var(--color-grey-15);
+      color: var(--color-text-emote-menu-nav-focus);
     }
 
     &:hover {
-      background: var(--color-slate-10);
-      color: var(--color-grey-12);
+      background: var(--color-background-emote-menu-control);
+      color: var(--color-text-emote-menu-nav-hover);
     }
 
     svg {
@@ -238,13 +238,13 @@
     font-size: 0.8rem;
 
     &__label {
-      color: var(--color-grey-5);
+      color: var(--color-text-emote-menu-preview-label);
       display: inline-block;
       margin-right: 0.2rem;
     }
 
     &__name {
-      color: var(--color-grey-7);
+      color: var(--color-text-emote-menu-preview-name);
     }
   }
 }

@@ -13,7 +13,7 @@
   box-sizing: border-box;
   border-radius: var(--border-radius-medium);
   box-shadow: var(--shadow-elevation-2);
-  background: var(--color-slate-5);
+  background: var(--color-background-emote-details);
   z-index: var(--z-index-modal);
 
   top: calc(min(max(var(--menu-y) - 50px, 0px), 100vh - 120px));
@@ -44,7 +44,7 @@
 
   &__code {
     font-size: 0.9rem;
-    color: var(--color-grey-3);
+    color: var(--color-text-emote-details-code);
   }
 
   &__contributor {
@@ -62,12 +62,12 @@
 
       &,
       &:visited {
-        color: var(--color-grey-4);
+        color: var(--color-text-chat-external-link);
       }
 
       &:hover {
         text-decoration: none;
-        color: var(--color-grey-7);
+        color: var(--color-text-chat-external-link-hover);
       }
     }
   }
@@ -86,7 +86,7 @@
 
     &:active,
     &:hover {
-      background: var(--color-opac-w-2);
+      background: var(--color-background-icon-button-hover);
     }
   }
 }

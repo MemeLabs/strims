@@ -58,18 +58,18 @@
     }
 
     &--spoiler {
-      color: gray;
+      color: var(--color-text-chat-spoiler);
     }
 
     &--url {
-      color: var(--color-blue-8);
+      color: var(--color-text-link);
     }
 
     &--tag {
       display: inline-block;
       padding: 0 0.4em;
-      background: var(--color-slate-11);
-      border: 1px solid var(--color-slate-9);
+      background: var(--color-background-chat-tag);
+      border: 1px solid var(--color-border-chat-tag);
       border-radius: var(--border-radius-small);
     }
 

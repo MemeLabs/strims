@@ -44,7 +44,7 @@
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    background: var(--color-opac-w-1);
+    background: var(--color-background-chat-popout-header);
     padding: 0.2rem 0.2rem 0.2rem 0.6rem;
   }
 
@@ -69,7 +69,7 @@
     border-radius: var(--border-radius-small);
 
     &:hover {
-      background: var(--color-opac-w-1);
+      background: var(--color-background-chat-popout-control-hover);
     }
   }
 
