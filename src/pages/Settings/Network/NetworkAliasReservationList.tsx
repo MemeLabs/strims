@@ -51,7 +51,7 @@ const AliasReservationTable: React.FC<NetworkTableProps> = ({ aliasReservations,
 
     return (
       <tr key={reservation.id.toString()}>
-        <TableCell>
+        <TableCell truncate>
           <Link to={reservation.id.toString()}>{reservation.alias}</Link>
         </TableCell>
         <TableCell>{state}</TableCell>

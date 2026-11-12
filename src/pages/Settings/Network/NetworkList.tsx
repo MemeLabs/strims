@@ -14,6 +14,7 @@ import {
   MenuLink,
   Table,
   TableCell,
+  TableHeader,
   TableMenu,
   TableTitleBar,
 } from "../../../components/Settings/Table";
@@ -47,12 +48,12 @@ const NetworkTable: React.FC<NetworkTableProps> = ({ networks, onDelete }) => {
 
     return (
       <tr key={network.id.toString()}>
-        <TableCell>
+        <TableCell truncate>
           <Link to={network.id.toString()}>
             {certificateRoot(network.certificate).subject || "unknown"}
           </Link>
         </TableCell>
-        <TableCell>
+        <TableCell showFor="md">
           {new Date(Number(certificateBody(network.certificate).notAfter) * 1000).toLocaleString()}
         </TableCell>
         <MenuCell>
@@ -75,7 +76,7 @@ const NetworkTable: React.FC<NetworkTableProps> = ({ networks, onDelete }) => {
         <thead>
           <tr>
             <th>Name</th>
-            <th>Certificate expires</th>
+            <TableHeader showFor="md">Certificate expires</TableHeader>
             <th></th>
           </tr>
         </thead>

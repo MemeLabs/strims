@@ -55,7 +55,7 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
   const rows = sortedPeers.map((peer) => {
     return (
       <tr key={peer.id.toString()}>
-        <TableCell>
+        <TableCell truncate>
           <Link to={peer.id.toString()}>{peer.alias}</Link>
         </TableCell>
         <TableCell showFor="md">
