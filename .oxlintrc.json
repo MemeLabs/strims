@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["eslint", "typescript", "jsdoc"],
-  "jsPlugins": ["eslint-plugin-prefer-arrow"],
+  "jsPlugins": ["./hack/oxlint/prefer-arrow.mjs"],
   "categories": {
     "correctness": "off"
   },

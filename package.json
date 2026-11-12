@@ -54,7 +54,6 @@
     "emojibase-data": "^7.0.1",
     "emojibase-regex": "^6.0.1",
     "escape-string-regexp": "^5.0.0",
-    "eslint-plugin-prefer-arrow": "^1.2.3",
     "html-webpack-plugin": "^5.6.8",
     "i18next": "^27.1.1",
     "i18next-browser-languagedetector": "^8.3.0",
