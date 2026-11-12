@@ -498,7 +498,8 @@ def columns(paths):
 
 
 # An ask's truth, as spec_requests' (catalog.NORMALIZED's asks), from h.held_ms: the
-# peer's first hold of the chunk in its incarnation then.
+# peer's first hold of the chunk in its incarnation then; all NULL for a
+# job whose holds the views lack (known).
 ASK_TRUTH = {
     "held_ms": "h.held_ms",
     "live": "coalesce(h.held_ms >= a.since_ms AND h.held_ms >= a.channel_open_ms, false)",
@@ -525,6 +526,21 @@ HAVE_TRUTH = {
 }
 
 
+def known_relation(arrivals, arrivals_cols):
+    """The (k, src) of the jobs whose holds the `arrivals` relation
+    (columns `arrivals_cols`) holds, whose asks' and HAVEs' truth the views
+    know; none without `incarnation`."""
+    if "incarnation" in arrivals_cols:
+        return f"SELECT DISTINCT k, src FROM {arrivals}"
+    return "SELECT NULL::VARCHAR AS k, NULL::VARCHAR AS src WHERE false"
+
+
+def known(expr):
+    """Truth column `expr`, NULL for a job whose holds the views lack (the
+    known_relation joined as kn)."""
+    return f"CASE WHEN kn.k IS NOT NULL THEN {expr} END"
+
+
 def held_relation(arrivals, arrivals_cols):
     """Each (k, src, node, seq, incarnation)'s first hold, `held_ms`, of the
     `arrivals` relation (columns `arrivals_cols`); none without
@@ -542,11 +558,14 @@ def haves_view(name, haves, arrivals, haves_cols, arrivals_cols):
     its incarnation at the HAVE, the `arrivals` relation's earliest row
     (columns `arrivals_cols`) of node = peer, seq and incarnation =
     peer_incarnation: held_ms, delay_ms (the HAVE's arrival less it) and
-    live. NULL, live false, without such a hold."""
-    truth = ", ".join(f"{e} AS {c}" for c, e in HAVE_TRUTH.items())
+    live. NULL, live false, without such a hold; all NULL, live too, for a
+    job the relation holds no hold of (known_relation), as where arrivals
+    lacks `incarnation`: its truth unknown, not never held."""
+    truth = ", ".join(f"{known(e)} AS {c}" for c, e in HAVE_TRUTH.items())
     return (f"CREATE OR REPLACE VIEW {name} AS SELECT a.*, {truth} FROM {haves} a LEFT JOIN "
             f"({held_relation(arrivals, arrivals_cols)}) h ON h.k = a.k AND h.src = a.src AND h.node = a.peer "
-            "AND h.seq = a.seq AND h.incarnation = a.peer_incarnation;")
+            "AND h.seq = a.seq AND h.incarnation = a.peer_incarnation "
+            f"LEFT JOIN ({known_relation(arrivals, arrivals_cols)}) kn ON kn.k = a.k AND kn.src = a.src;")
 
 
 def asks_view(name, asks, arrivals, asks_cols, arrivals_cols):
@@ -557,7 +576,9 @@ def asks_view(name, asks, arrivals, asks_cols, arrivals_cols):
     first hold of the chunk in its incarnation at the request, the
     `arrivals` relation's earliest row (columns `arrivals_cols`) of node =
     peer, seq and incarnation = peer_incarnation. All NULL, `live` false,
-    without such a hold, as where arrivals lacks `incarnation`. `live` is
+    without such a hold; all NULL, `live` too, for a job the relation holds
+    no hold of (known_relation), as where arrivals lacks `incarnation`:
+    its truth unknown, not never held. `live` is
     computed in whole ms, so a hold in the ms the requester's incarnation
     began or its channel opened counts, where spec_requests' (the sims')
     compares the times finer. A log that carries its truth (the branch's
@@ -567,10 +588,12 @@ def asks_view(name, asks, arrivals, asks_cols, arrivals_cols):
     held = held_relation(arrivals, arrivals_cols)
     own = [c for c in ASK_TRUTH if c in asks_cols]
     star = "a.*" + (f" EXCLUDE ({', '.join(own)})" if own else "")
-    truth = ", ".join((f"coalesce(a.{c}, {e})" if c in own else e) + f" AS {c}" for c, e in ASK_TRUTH.items())
+    truth = ", ".join((f"coalesce(a.{c}, {known(e)})" if c in own else known(e)) + f" AS {c}"
+                      for c, e in ASK_TRUTH.items())
     return (f"CREATE OR REPLACE VIEW {name} AS SELECT {star}, {truth} FROM {asks} a LEFT JOIN ({held}) h "
             "ON h.k = a.k AND h.src = a.src AND h.node = a.peer AND h.seq = a.seq "
-            "AND h.incarnation = a.peer_incarnation;")
+            "AND h.incarnation = a.peer_incarnation "
+            f"LEFT JOIN ({known_relation(arrivals, arrivals_cols)}) kn ON kn.k = a.k AND kn.src = a.src;")
 
 
 def macros(have):
@@ -603,8 +626,9 @@ def scoring_macros(have):
 
 
 def need(have, *tables):
-    """Refused unless the views have every one of `tables`, saying of the
-    missing ones the settings that write them (knobs_text) and, of a
+    """Refused unless the views have every one of `tables` and the tables
+    their truth comes from (store.TRUTH: asks' and haves' arrivals), saying
+    of the missing ones the settings that write them (knobs_text) and, of a
     sample table (SAMPLE_TABLES), that S3 lacks it too: a query pulls
     those first."""
     def why(t):
@@ -614,7 +638,7 @@ def need(have, *tables):
         return how
 
     by = {}
-    for t in tables:
+    for t in store.with_truth(tables):
         if t not in have:
             by.setdefault(why(t), []).append(t)
     if by:

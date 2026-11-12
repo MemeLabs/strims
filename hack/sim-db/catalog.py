@@ -45,7 +45,8 @@ last ran, and makes the verdicts of every source that lacks them,
 `--workers` at a time (0: in its own process): local runs reach the
 catalog with the next index. `fetch` copies what S3 still holds of an
 experiment's jobs into the cache (with `--tables` the bulky sample
-tables of the jobs picked by `--cells` and `--arms`), indexes them, and
+tables of the jobs picked by `--cells` and `--arms`, asks and haves with
+arrivals, their truth), indexes them, and
 prints what S3 charged for it, from the farm's S3 ledger.
 
 The catalog is simlab.catalog's (hack/simlab/catalog.py), whose docs say

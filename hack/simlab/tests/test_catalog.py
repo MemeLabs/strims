@@ -42,7 +42,8 @@ simlab.verdict's derive pool:
                its index recording none
   Tables       a sim's tables the catalog has no code for (spec_requests,
                parks), folded by the store, as they are; arrivals' and
-               haves' -1 for no node NULL; forecast in either schema
+               haves' -1 for no node NULL; asks' and haves' truth, NULL
+               for a job without arrivals; forecast in either schema
                (tail_ms and extrapolated, or first_sight and lazy), the
                other's columns NULL
   Retired      a job of each sim whose events hold retired ids: the
@@ -858,7 +859,7 @@ class Tables(Fixture):
                           [(1000, 1, 0, 2, 0, 5, 60, 50, 80, False, True, -1)]),
     }
 
-    def fold(self, src, forecast):
+    def fold(self, src, forecast, arrivals=True):
         job = (src, f"k-{src.rsplit('/', 1)[1]}", *golden_cli.JOBS[0][2:])
         d = self.root / "jobs-tables" / src.replace("/", "~")
         meta = golden_cli.job_dir(d, job)
@@ -870,11 +871,12 @@ class Tables(Fixture):
                                             ("outcome", "VARCHAR")], [(800, 1, 5, "sent")])
         # Node 1's answer from node 2, and the seed's own publish: no source,
         # parent or request, and no viewer.
-        golden_cli.write_table(d, "arrivals", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("viewer", "BIGINT"),
-                                               ("seq", "BIGINT"), ("how", "VARCHAR"), ("peer", "BIGINT"),
-                                               ("parent", "BIGINT"), ("last_ask_peer", "BIGINT"),
-                                               ("incarnation", "BIGINT")],
-                               [(1150, 1, 0, 6, "answer", 2, 2, 2, 0), (1000, 0, -1, 6, "own", -1, -1, -1, 0)])
+        if arrivals:
+            golden_cli.write_table(d, "arrivals", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("viewer", "BIGINT"),
+                                                   ("seq", "BIGINT"), ("how", "VARCHAR"), ("peer", "BIGINT"),
+                                                   ("parent", "BIGINT"), ("last_ask_peer", "BIGINT"),
+                                                   ("incarnation", "BIGINT")],
+                                   [(1150, 1, 0, 6, "answer", 2, 2, 2, 0), (1000, 0, -1, 6, "own", -1, -1, -1, 0)])
         # HAVEs to node 2 of chunk 6 from node 1, and of chunk 7 on a key
         # that named no link.
         golden_cli.write_table(d, "haves", [(c, "BIGINT") for c in ("t_ms", "node", "peer", "seq", "channel_open_ms",
@@ -890,6 +892,22 @@ class Tables(Fixture):
         store_host.fold(db, [meta], src)
         store_host.export(db, store_host.cache_root() / "cache" / src)
         return meta["k"]
+
+    def test_a_job_without_arrivals_has_no_truth(self):
+        # Its asks and HAVEs, in a catalog without arrivals, then beside a
+        # job with them: their truth unknown, not never held.
+        k = self.fold("suite/wt/noarr", self.FORECASTS["suite/wt/tail"], arrivals=False)
+        unknown = ([{"peer": p, "held_ms": None, "live": None, "err_ms": None} for p in (1, 3)],
+                   [{"peer": 1, "held_ms": None, "live": None}, {"peer": None, "held_ms": None, "live": None}])
+        for other in (None, "suite/wt/witharr"):
+            if other:
+                held = self.fold(other, self.FORECASTS["suite/wt/tail"])
+            self.assertEqual(self.index()[0].failed, {})
+            asks = f"SELECT peer, held_ms, live, err_ms FROM asks WHERE k = {catalog.q(k)} ORDER BY peer;"
+            haves = f"SELECT peer, held_ms, live FROM haves WHERE k = {catalog.q(k)} ORDER BY seq;"
+            self.assertEqual((catalog.lake(asks), catalog.lake(haves)), unknown, other)
+        self.assertEqual([r["live"] for r in catalog.lake(f"SELECT live FROM asks WHERE k = {catalog.q(held)} "
+                                                          "ORDER BY peer;")], [True, False])
 
     def test_tables_without_code_and_both_forecasts(self):
         keys = {src: self.fold(src, f) for src, f in self.FORECASTS.items()}

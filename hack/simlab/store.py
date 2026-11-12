@@ -78,8 +78,12 @@ SAMPLE_TABLES), sim-samples/<run>/<instance>/<seq>/:
                  those of `tables` some of the flushes `srcs` hold (their
                  manifests list), which a pull's lines name
   pull_samples(views, tables, limit_mb=None, say=None) -> bool
-                 the plan fetched, noting its size, refused (Refused) past
-                 `limit_mb`; whether it fetched any
+                 the plan of `tables` and their truth (with_truth) fetched,
+                 noting its size, refused (Refused) past `limit_mb`;
+                 whether it fetched any
+  with_truth(tables) -> tuple
+                 `tables` and the tables their views take their truth
+                 from (TRUTH)
   fetch_samples(plan, gets, got) -> set
                  the tables of sample_plan's `plan`, a GET a file, each
                  checked against its flush's manifest (size and sha256) and
@@ -120,6 +124,18 @@ from . import engine, store_host, verdict
 
 class Refused(SystemExit):
     """An operation refused, its message why (the module docs)."""
+
+
+# The sample tables whose views take their truth from others' (simlab.query's
+# asks_view and haves_view: the peers' holds in arrivals), which a pull of
+# them brings along.
+TRUTH = {"asks": ("arrivals",), "haves": ("arrivals",)}
+
+
+def with_truth(tables):
+    """`tables`, then the tables their views take their truth from (TRUTH)
+    that `tables` lacks."""
+    return tuple(dict.fromkeys([*tables, *(x for t in tables for x in TRUTH.get(t, ()))]))
 
 
 @dataclasses.dataclass
@@ -481,8 +497,9 @@ def pull_samples(views, tables, limit_mb=None, say=None):
     copy of its jobs stands in. Each run's GETs and bytes go to its line
     of the farm's S3 ledger, however the pull ends. Returns whether it
     fetched any. Its lines name the tables the jobs' flushes hold
-    (listed_samples)."""
+    (listed_samples). `tables` bring their truth (with_truth)."""
     say = say or stderr
+    tables = with_truth(tables)
     cands = candidates(views)
     named = listed_samples({s for ss in cands.values() for s in ss}, tables) or list(tables)
     plan, lost = sample_plan(views, tables, cands=cands)

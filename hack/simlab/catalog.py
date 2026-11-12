@@ -2177,7 +2177,8 @@ NORMALIZED = {
             "truth from arrivals, as spec_requests' columns are: held_ms, the peer's first hold of the chunk in "
             "its incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation; "
             "NULL if none), and from it live (held by since_ms and channel_open_ms, in whole ms), err_ms, "
-            "pred_err_ms, held_by_p50, held_by_p90 and held_by_p99. Main's (the HAVE world's request log) "
+            "pred_err_ms, held_by_p50, held_by_p90 and held_by_p99, all NULL (live too) for a job whose "
+            "arrivals the catalog lacks: unknown, not never held. Main's (the HAVE world's request log) "
             "has one round, 'flight'; its predicted_ms and predicted_p90_ms are a rival's route expectation "
             "(first sight plus its announcement lag's mean, plus its horizon), NULL on the asked row, which a "
             "HAVE decided; timeout_ms, have_ms (the row's peer's HAVE of the chunk) and released_ms (push's "
@@ -2187,7 +2188,8 @@ NORMALIZED = {
              "that named no link). The sims write the HAVE (haves_log); the view adds held_ms, the announcing "
              "peer's first hold of the chunk in its incarnation then (arrivals' earliest row of node = peer, seq, "
              "incarnation = peer_incarnation; NULL if none), delay_ms (t_ms - held_ms: the knowledge delay) and "
-             "live (held by channel_open_ms: not a backlog the channel's first HAVEs announce).",
+             "live (held by channel_open_ms: not a backlog the channel's first HAVEs announce), all NULL (live "
+             "too) for a job whose arrivals the catalog lacks.",
 }
 STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewers": "k, viewer",
                  "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",
@@ -3033,8 +3035,10 @@ def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, pr
     the cache, then indexes (`workers`, `progress` index's): the flushes
     holding their tables (store.pull of each farm run the cache lacks one
     of), and with `tables` (of SAMPLE_TABLES) the fewest flushes giving the
-    jobs those (store's sample_plan and pull_samples, which refuses past
-    `limit_mb`). Returns what it pulled and what S3 charged for it."""
+    jobs those, and the tables their truth comes from (store's
+    sample_plan and pull_samples, which refuses past `limit_mb`; asks and
+    haves bring arrivals). Returns what it pulled and what S3 charged for
+    it."""
     say = sayer(progress)
     if not catalog_path().exists():
         index(workers, progress)

@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import catalog, query, store_host  # noqa: E402
+from simlab import catalog, query, store, store_host  # noqa: E402
 
 SUITE = query.Selection(src=["suite/**"])
 
@@ -413,6 +413,21 @@ class Asks(unittest.TestCase):
                 (1, 2, 150, True, -60, 0, True, True, True)]
         self.assertEqual(got, [dict(zip(["ask", "peer", *truth], w)) for w in want])
 
+    def test_a_pull_of_the_asks_brings_their_truth(self):
+        self.cli("pull", "--run", self.RUN)
+        self.gets()
+        self.assertEqual(store.with_truth(("asks", "reads")), ("asks", "reads", "arrivals"))
+        sel = query.Selection(src=[f"farm/{self.RUN}/*/*"], cell=[self.C0])
+        with query.views(sel, derived=False) as v:
+            self.assertTrue(store.pull_samples(v.sql, ("asks",), say=lambda m: None))
+        self.assertEqual(self.gets(), {f"sim-samples/{self.RUN}/i-2/0/asks.parquet",
+                                       f"sim-samples/{self.RUN}/i-2/0/arrivals.parquet"})
+        with query.views(sel, derived=False) as v:
+            self.assertEqual(v.records("SELECT peer, held_ms, live FROM asks WHERE ask = 0 ORDER BY peer;"),
+                             [{"peer": 2, "held_ms": 150, "live": True}, {"peer": 3, "held_ms": None, "live": False},
+                              {"peer": 4, "held_ms": 90, "live": False}])
+            query.need(v.have, "asks")
+
     def test_a_log_that_carries_its_truth_keeps_it(self):
         new = "(SELECT 'k' AS k, 's' AS src, 2 AS peer, 6 AS seq, 1 AS peer_incarnation, 100 AS t_ms, 20 AS rtt_ms, " \
               "120 AS predicted_ms, 160 AS predicted_p90_ms, 200 AS predicted_p99_ms, 0 AS since_ms, " \
@@ -457,7 +472,34 @@ class Haves(unittest.TestCase):
                                {"peer": 3, "held_ms": None, "delay_ms": None, "live": False},
                                {"peer": 4, "held_ms": 90, "delay_ms": 10, "live": False}])
         none = query.haves_view("v", self.HAVES, self.ARRIVALS, cols, set())
-        self.assertEqual(query.records(f"{none} SELECT count(held_ms) AS n FROM v;"), [{"n": 0}])
+        self.assertEqual(query.records(f"{none} SELECT count(held_ms) AS n, count(live) AS live FROM v;"),
+                         [{"n": 0, "live": 0}])
+
+    def test_a_job_whose_holds_the_views_lack_has_no_truth(self):
+        # Job k2's HAVE and ask, of a source the arrivals relation holds
+        # nothing of: their truth unknown, not never held.
+        haves = self.HAVES.replace("('k', 's', 100, 1, 4, 6, 95, 0)",
+                                   "('k', 's', 100, 1, 4, 6, 95, 0), ('k2', 's2', 100, 1, 2, 6, 10, 0)")
+        cols = {"k", "src", "t_ms", "node", "peer", "seq", "channel_open_ms", "peer_incarnation"}
+        view = query.haves_view("v", haves, self.ARRIVALS, cols, {"incarnation"})
+        got = query.records(f"{view} SELECT k, peer, held_ms, delay_ms, live FROM v ORDER BY k, peer;")
+        self.assertEqual(got[-1], {"k": "k2", "peer": 2, "held_ms": None, "delay_ms": None, "live": None})
+        self.assertEqual(got[1], {"k": "k", "peer": 3, "held_ms": None, "delay_ms": None, "live": False})
+        asks = ("(SELECT * FROM (VALUES ('k', 's', 100, 1, 2, 6, 20, 120, 160, 200, 10, 0, 1), "
+                "('k2', 's2', 100, 1, 2, 6, 20, 120, 160, 200, 10, 0, 1)) v(k, src, t_ms, node, peer, seq, rtt_ms, "
+                "predicted_ms, predicted_p90_ms, predicted_p99_ms, channel_open_ms, since_ms, peer_incarnation))")
+        cols = {"k", "src", "t_ms", "node", "peer", "seq", "rtt_ms", "predicted_ms", "predicted_p90_ms",
+                "predicted_p99_ms", "channel_open_ms", "since_ms", "peer_incarnation"}
+        view = query.asks_view("v", asks, self.ARRIVALS, cols, {"incarnation"})
+        got = query.records(f"{view} SELECT k, held_ms, live, err_ms FROM v ORDER BY k;")
+        self.assertEqual(got, [{"k": "k", "held_ms": 150, "live": True, "err_ms": 40},
+                               {"k": "k2", "held_ms": None, "live": None, "err_ms": None}])
+
+    def test_need_refuses_the_logs_without_their_truth(self):
+        query.need({"asks", "haves", "arrivals"}, "asks", "haves")
+        with self.assertRaisesRegex(store.Refused, r"^the selection has no arrivals \(nor does S3: run with "
+                                                   r"SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 or SIM_SPEC=1"):
+            query.need({"asks", "reads"}, "asks", "reads")
 
     def test_mains_asks_take_the_view_of_the_lines(self):
         asks = ("(SELECT * FROM (VALUES ('k', 's', 100, 1, 0, 'flight', true, 2, 6, 20, 500, NULL, NULL, NULL, 95, "
