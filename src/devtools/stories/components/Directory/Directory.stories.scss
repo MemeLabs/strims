@@ -10,6 +10,13 @@
   box-shadow: var(--shadow-elevation-2);
 }
 
+// The search filling the footer's search modal's body.
+.directory_story__modal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .directory_story__tile {
   width: 320px;
   padding: 10px;

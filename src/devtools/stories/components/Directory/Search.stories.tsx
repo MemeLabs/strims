@@ -7,6 +7,7 @@ import React, { ComponentProps, useEffect, useRef } from "react";
 import { Route } from "react-router-dom";
 
 import Search from "../../../../components/Directory/Search";
+import { DEVICE_TYPE, DeviceType } from "../../../../lib/userAgent";
 import DirectoryService from "../../../mocks/directory/service";
 import { MockApi, StaticPlayer, Story, StoryRouter } from "../../../storybook";
 
@@ -27,8 +28,13 @@ interface SearchStoryProps extends ComponentProps<typeof Search> {
   query?: string;
 }
 
-// The search in a header bar; selecting a result sets the player's source
-// and navigates, both inside the story.
+// The props the footer's search modal gives the search.
+const FOOTER_MODAL = { menuOpen: true, scrollMenu: true, showCancel: true };
+
+// The search as the layout has it: on the desktop in the header bar, on
+// phones filling the footer's search modal, its menu open and a cancel
+// button beside it. Selecting a result sets the player's source and
+// navigates, both inside the story.
 const SearchStory: React.FC<SearchStoryProps> = ({ query, ...props }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -36,6 +42,7 @@ const SearchStory: React.FC<SearchStoryProps> = ({ query, ...props }) => {
       typeInto(inputRef.current, query);
     }
   }, []);
+  const portable = DEVICE_TYPE === DeviceType.Portable;
 
   return (
     <MockApi services={() => ({ directory: new DirectoryService() })}>
@@ -44,8 +51,8 @@ const SearchStory: React.FC<SearchStoryProps> = ({ query, ...props }) => {
           <Route
             path="/"
             element={
-              <div className="directory_story__header">
-                <Search inputRef={inputRef} {...props} />
+              <div className={portable ? "directory_story__modal" : "directory_story__header"}>
+                <Search inputRef={inputRef} {...(portable ? FOOTER_MODAL : {})} {...props} />
               </div>
             }
           />

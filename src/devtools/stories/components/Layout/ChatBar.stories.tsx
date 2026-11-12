@@ -18,7 +18,7 @@ import {
 import { messages, replay } from "../../../mocks/chat/MessageEmitter";
 import { chatMessage } from "../../../mocks/chat/messages";
 import ChatService from "../../../mocks/chat/service";
-import { Story, fixtures } from "../../../storybook";
+import { DesktopOnly, Story, fixtures } from "../../../storybook";
 
 const room: RoomTopic = { room: roomServerKey };
 const otherRoom: RoomTopic = { room: fixtures.key("room:2") };
@@ -59,7 +59,7 @@ interface BarStoryProps extends BarProps {
 }
 
 // Opens the topics, then pops some out once ChatBar has measured its room.
-const BarStory: React.FC<BarStoryProps> = ({ topics, popouts, ...props }) => (
+const BarView: React.FC<BarStoryProps> = ({ topics, popouts, ...props }) => (
   <MockChat
     chat={() =>
       new ChatService(replay(messages.slice(0, 40)), {
@@ -86,6 +86,13 @@ const BarStory: React.FC<BarStoryProps> = ({ topics, popouts, ...props }) => (
     <OpenTopics topics={topics} popouts={popouts} />
     <Bar {...props} />
   </MockChat>
+);
+
+// ChatBar renders nothing on portable devices.
+const BarStory: React.FC<BarStoryProps> = (props) => (
+  <DesktopOnly note="The chat bar is desktop-only: on phones ChatBar renders nothing, and chats don't pop out.">
+    <BarView {...props} />
+  </DesktopOnly>
 );
 
 const stories: Story[] = [

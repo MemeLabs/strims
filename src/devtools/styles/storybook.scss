@@ -143,6 +143,14 @@ $chrome-border: #ccc;
   padding: 1rem;
 }
 
+// A story's note in a frame its component doesn't render in (DesktopOnly).
+.storybook_device_note {
+  margin: 0;
+  padding: 1rem;
+  font: 0.85rem/1.5 sans-serif;
+  opacity: 0.75;
+}
+
 // The story's root, its frame document's viewport: Layout's classes and
 // variables, though it isn't .layout (Layout.scss positions that).
 .storybook_frame {

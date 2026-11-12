@@ -6,6 +6,7 @@ import "./core.stories.scss";
 import React from "react";
 
 import SwipablePanel from "../../../components/SwipablePanel";
+import { DEVICE_TYPE, DeviceType } from "../../../lib/userAgent";
 import { Story } from "../../storybook";
 
 type Direction = "up" | "down" | "left" | "right";
@@ -82,10 +83,12 @@ const stories: Story[] = [
     component: () => (
       <div className="core_story">
         <p className="core_story__caption">
-          With the default filterDeviceTypes the panel is a plain div off portable devices.
+          {DEVICE_TYPE === DeviceType.Portable
+            ? "With the default filterDeviceTypes the panel swipes on portable devices: here it is fixed to the frame's bottom."
+            : "With the default filterDeviceTypes the panel is a plain div off portable devices."}
         </p>
         <SwipablePanel direction="up" className="core_story__panel">
-          A panel on the desktop.
+          A panel with the default filterDeviceTypes.
         </SwipablePanel>
       </div>
     ),

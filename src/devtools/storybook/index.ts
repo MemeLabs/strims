@@ -14,6 +14,8 @@
 
 export * from "./types";
 export { useStoryHost } from "./context";
+export { DesktopOnly } from "./DesktopOnly";
+export type { DesktopOnlyProps } from "./DesktopOnly";
 export { MockApi, mockClient, useMockService, useMockServices } from "./MockApi";
 export type { MockApiProps, MockServices, ServiceTypes } from "./MockApi";
 export { StoryRouter } from "./StoryRouter";

@@ -9,7 +9,7 @@ import { Route } from "react-router-dom";
 
 import Header from "../../../../components/Layout/Header";
 import DirectoryService from "../../../mocks/directory/service";
-import { MockApi, StaticPlayer, Story, StoryRouter } from "../../../storybook";
+import { DesktopOnly, MockApi, StaticPlayer, Story, StoryRouter } from "../../../storybook";
 import { DebugService } from "../Debugger/metrics";
 import { usePortletPlacement } from "../Debugger/portlet";
 import { LayoutState } from "./shell";
@@ -49,7 +49,7 @@ interface HeaderStoryProps {
 
 // The header in the layout's header row. Its links, the search's results
 // and the settings modal (which navigates to /settings) stay in the story.
-const HeaderStory: React.FC<HeaderStoryProps> = ({ search, showChat, query, debug }) => {
+const HeaderView: React.FC<HeaderStoryProps> = ({ search, showChat, query, debug }) => {
   const ref = useRef<HTMLDivElement>(null);
   useSearch(ref, query);
   return (
@@ -75,6 +75,13 @@ const HeaderStory: React.FC<HeaderStoryProps> = ({ search, showChat, query, debu
     </MockApi>
   );
 };
+
+// The layout has the header off portable devices alone.
+const HeaderStory: React.FC<HeaderStoryProps> = (props) => (
+  <DesktopOnly note="The header is desktop-only: on phones the layout has the footer (Layout/Footer) in its place.">
+    <HeaderView {...props} />
+  </DesktopOnly>
+);
 
 const stories: Story[] = [
   {
