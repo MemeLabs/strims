@@ -4149,7 +4149,7 @@ impl Sim {
     /// | `viewer_seconds` | viewer and second | `viewer`, `sec`, `lag_ms` (the series' `lag`, -1 without a read), `frames` |
     /// | `reads` | chunk a viewer read | `viewer`, `t_ms` (when it read it), `seq` (the chunk), `lag_ms` (from its publishing) |
     /// | `stalls` | stall of a viewer's playout at each delay of [`DELAYS_MS`] (`hack/capture/analyze.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`) | `viewer`, `delay_ms`, `t_ms` (when it began, on the `reads`' clock), `stall_ms`: [`playout::play`] over the viewer's `reads`, as `hack/sim-db`'s `playback(delay_ms)` plays them |
-    /// | `parents` | change of a node's open parent of a stream of its swarm ([`Sim::take_parents`]) | `t_ms`, `node` (as in `events`), `stream`, `parent` (the node from then on, -1 for none), `reason`: `open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their link closed, the stream started anew, or the node left, departed or died) |
+    /// | `parents` | change of a node's open parent of a stream of its swarm ([`Sim::take_parents`]) | `t_ms`, `node` (as in `events`), `n` (the change's place among the node's, from 0, in time order: the changes the runner made in one call share its `t_ms`, in the order it made them), `stream`, `parent` (the node from then on, -1 for none), `reason`: `open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their link closed, the stream started anew, or the node left, departed or died) |
     /// | `bins` | bin of [`Sim::keep_tables`]' width | [`bin_cols`]: `bin`, `t_ms` (its start), the viewers present at both its edges with what they did in it (pushes, deadlines released, prunes, their median open parents at its end, overhead written, and their uplinks' bytes, packets and small packets), the seed's meter, `capacity` (the relay busy-time reading, `PushStats::upload_capacity`) and `busy`, uplink and copies at its end and what it sent in it, then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), then `budget_capacity` (the capacity reading the seed's budget was measured from, at the bin's end: `PushStats::seed_budget_capacity`, 0 until measured) |
     /// | `node_bins` | node and bin, with `SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node`, `viewer` (its number here, -1 for none), what it did in the bin |
     /// | `viewers` | viewer | `viewer`, `node`, `up` (its uplink at the run's end in bytes per second: an `incident`'s, if one slowed it), `hostile`, `churned` (it left at least once), `clock_ms` (its clock's offset), `arrive_ms` (when it arrived, -1000 for the start; [`Arrivals`]), `depart_ms` (when it left for good, empty if it stayed; [`Depart`]) |
@@ -4224,19 +4224,26 @@ impl Sim {
             &[
                 ("t_ms", "BIGINT"),
                 ("node", "BIGINT"),
+                ("n", "BIGINT"),
                 ("stream", "BIGINT"),
                 ("parent", "BIGINT"),
                 ("reason", "VARCHAR"),
             ],
         )?;
+        // Each node's changes so far: one call's share its time, and
+        // `parents` keeps them in the order the runner made them.
+        let mut made: BTreeMap<usize, u64> = BTreeMap::new();
         for p in self.parents.iter().flatten() {
+            let n = made.entry(p.node).or_default();
             t.fields(&[
                 (p.at - start).as_millis().to_string(),
                 p.node.to_string(),
+                n.to_string(),
                 p.stream.to_string(),
                 p.parent.map_or(-1, |n| n as i64).to_string(),
                 p.why.name().to_owned(),
             ]);
+            *n += 1;
         }
         t.finish()?;
         let mut t = Table::new(dir, "bins", &bin_cols())?;

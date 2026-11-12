@@ -17,15 +17,16 @@ WITH RECURSIVE job AS (
     WHERE exp_id = $exp AND cell = $cell AND arm_label = $arm AND seed = $seed
     LIMIT 1
 ), changes AS (
-    SELECT p.t_ms, p.node, p.stream, p.parent, p.reason FROM job JOIN parents p USING (k, src)
+    SELECT p.t_ms, p.node, p.n, p.stream, p.parent, p.reason FROM job JOIN parents p USING (k, src)
 ), times AS (
     -- Every second of the run, and $t.
     SELECT range::DOUBLE AS t FROM range(0, (SELECT max(t_ms) // 1000 + 2 FROM changes))
     UNION
     SELECT $t::DOUBLE
 ), edges AS (
-    -- Each node's parent of each stream as each second ends.
-    SELECT ts.t, c.stream, c.node, arg_max_null(c.parent, c.t_ms) AS parent
+    -- Each node's parent of each stream as each second ends: its last
+    -- change by then, a pass's changes (one t_ms) in their order, n.
+    SELECT ts.t, c.stream, c.node, arg_max_null(c.parent, (c.t_ms, c.n)) AS parent
     FROM times ts JOIN changes c ON c.t_ms <= ts.t * 1000 + 999
     GROUP BY ALL
 ), depths AS (

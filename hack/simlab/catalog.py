@@ -1834,6 +1834,8 @@ def view_sql(t, cols, name, viewers, arrivals=None):
         return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "parents":
         sel = ["x.k", "x.src"] + [nullify(c) if c == "parent" else plain(c) for c in rest]
+        if "n" not in cols:
+            sel.append("NULL::BIGINT AS n")
         return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "arrivals":
         sel = ["x.k", "x.src"] + [nullify(c) if c in ARRIVAL_NONE else plain(c) for c in rest]
@@ -2180,7 +2182,8 @@ NORMALIZED = {
     "stalls": "The unit played is the sim's: a frame in strims-sim, a chunk in the ppspp sim, whose stalls are "
               "one chunk's lateness and so often far shorter than a frame's. A unit read twice counts at its "
               "first read. scoring.sql's playback_of(runs, delay_ms) plays reads the same way at any delay.",
-    "parents": "parent NULL for none. Only hybrid push gives a stream push parents: empty in other modes.",
+    "parents": "parent NULL for none; n NULL where the sim wrote none. Only hybrid push gives a stream push "
+               "parents: empty in other modes.",
     "forecast": "horizon_ms, held_ms and mean_ms NULL where -1 (no estimate, never held).",
     "arrivals": "peer, parent, last_ask_peer and viewer NULL where -1: no source (a chunk the node published), no "
                 "open parent, no request, a node that is no viewer (the seed).",
@@ -2233,7 +2236,7 @@ NORMALIZED = {
 STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewers": "k, viewer",
                  "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",
                  "reads": "k, viewer, t_ms", "forecast": "k, node, peer, seq",
-                 "stalls": "k, viewer, delay_ms, t_ms", "parents": "k, node, stream, t_ms",
+                 "stalls": "k, viewer, delay_ms, t_ms", "parents": "k, node, n",
                  "asks": "k, node, ask, peer", "haves": "k, node, peer, seq",
                  "arrivals": "k, node, seq, incarnation", "spec_requests": "k, node, peer, seq, t_ms",
                  "parks": "k, node, peer, seq, t_ms",

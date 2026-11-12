@@ -45,7 +45,8 @@ simlab.verdict's derive pool:
                haves' -1 for no node NULL; asks' and haves' truth, NULL
                for a job without arrivals; forecast in either schema
                (tail_ms and extrapolated, or first_sight and lazy), the
-               other's columns NULL
+               other's columns NULL; parents' order of each node's
+               changes, n, NULL where a run's table has none
   Retired      a job of each sim whose events hold retired ids: the
                catalog's events view and the cache's read each as its
                replacement for the job's sim (strims-sim's parent_lost by
@@ -864,6 +865,11 @@ class Tables(Fixture):
         d = self.root / "jobs-tables" / src.replace("/", "~")
         meta = golden_cli.job_dir(d, job)
         golden_cli.write_table(d, "forecast", *forecast)
+        if "first_sight" in dict(forecast[0]):
+            # A parents table without n: two changes in one ms.
+            golden_cli.write_table(d, "parents", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("stream", "BIGINT"),
+                                                  ("parent", "BIGINT"), ("reason", "VARCHAR")],
+                                   [(500, 1, 0, 0, "open"), (500, 1, 0, -1, "shed")])
         golden_cli.write_table(d, "spec_requests", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
                                                     ("held_ms", "BIGINT"), ("held_by_p90", "BOOLEAN")],
                                [(900, 1, 5, None, None), (950, 1, 6, 1150, True)])
@@ -953,6 +959,18 @@ class Tables(Fixture):
                                         "first_sight": False, "lazy": True, "held_ms": None})
         names = {r["name"] for r in catalog.lake("SELECT name FROM table_catalog;")}
         self.assertTrue({"spec_requests", "parks", "arrivals", "asks"} <= names)
+        # Parents: each node's changes in order, n, and n NULL where a
+        # run's table has none.
+        parents = catalog.lake("SELECT k, node, n, parent FROM parents WHERE k IN "
+                               f"({', '.join(catalog.q(k) for k in keys.values())}) ORDER BY k, node, t_ms, n;")
+        self.assertEqual({(r["n"], r["parent"]) for r in parents if r["k"] == lazy}, {(None, 0), (None, None)})
+        mine = [(r["node"], r["n"]) for r in parents if r["k"] == tail]
+        self.assertTrue(mine)
+        self.assertEqual(mine, [(node, i) for node in sorted({x for x, _ in mine})
+                                for i in range(sum(1 for x, _ in mine if x == node))])
+        cols = {"k": "VARCHAR", "src": "VARCHAR", "t_ms": "BIGINT", "node": "BIGINT", "parent": "BIGINT"}
+        self.assertIn("NULL::BIGINT AS n", catalog.view_sql("parents", cols, "parents", {}))
+        self.assertNotIn("NULL::BIGINT AS n", catalog.view_sql("parents", {**cols, "n": "BIGINT"}, "parents", {}))
         # The asks view's truth: the peer's hold, from arrivals.
         asks = catalog.lake("SELECT peer, held_ms, live, err_ms, pred_err_ms, held_by_p50, held_by_p90 FROM asks "
                             f"WHERE k = {catalog.q(tail)} ORDER BY peer;")

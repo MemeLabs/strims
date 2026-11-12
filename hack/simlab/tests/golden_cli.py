@@ -32,6 +32,7 @@ that differs; `capture` rewrites it from today's code.
 """
 
 import argparse
+import collections
 import importlib.util
 import json
 import os
@@ -236,8 +237,13 @@ def job_dir(d, job):
     parents = [(0 if a is None else a * 1000, v + 1, st, 0, "open") for v, (a, _) in enumerate(stays) for st in (0, 1)]
     if shape == "collapse":
         parents += [(18_000, 2, 0, -1, "lost"), (18_400, 2, 0, 3, "switch"), (24_000, 3, 1, 4, "shed")]
-    write_table(d, "parents", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("stream", "BIGINT"), ("parent", "BIGINT"),
-                               ("reason", "VARCHAR")], sorted(parents))
+    made = collections.Counter()
+    numbered = []
+    for t, node, st, parent, reason in sorted(parents):
+        numbered.append((t, node, made[node], st, parent, reason))
+        made[node] += 1
+    write_table(d, "parents", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("n", "BIGINT"), ("stream", "BIGINT"),
+                               ("parent", "BIGINT"), ("reason", "VARCHAR")], numbered)
     if k in FORECAST:
         # The Queries' log, with the estimate's horizon and samples, the
         # stream, the chunk, its pace and the channel's opening beside.

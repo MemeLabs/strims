@@ -14,7 +14,7 @@
 //! | `viewer_seconds` | viewer and second it was there ([`Report::presence`]) | `viewer`, `sec`, `lag_ms` (the series' `lag`: the p99 of the frames read in the second, -1 without any), `frames` |
 //! | `reads` | frame a viewer read (duplicates too) | `viewer`, `t_ms` (when it was read: its write time plus its lag), `seq`, `lag_ms` |
 //! | `stalls` | stall of a viewer's playout at each delay of [`DELAYS_MS`] (`hack/capture/analyze.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`) | `viewer`, `delay_ms`, `t_ms` (when it began, on the `reads`' clock), `stall_ms`: [`playout::play`] over the viewer's `reads`, as `hack/sim-db`'s `playback(delay_ms)` plays them |
-//! | `parents` | change of a node's push parent of a stream ([`Report::parent_changes`]) | `t_ms`, `node` (its host, as in `events`), `stream`, `parent` (the host from then on, -1 for none), `reason`: `open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their channel closed, the stream started anew, or the node stopped without closing its links: a crash, an abrupt departure) |
+//! | `parents` | change of a node's push parent of a stream ([`Report::parent_changes`]) | `t_ms`, `node` (its host, as in `events`), `n` (the change's place among the node's, from 0, in time order: a pass's changes share its `t_ms`, in the order the node made them), `stream`, `parent` (the host from then on, -1 for none), `reason`: `open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their channel closed, the stream started anew, or the node stopped without closing its links: a crash, an abrupt departure) |
 //! | `bins` | bin of [`Scenario::wire_bins`] | [`bin_cols`]: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, `capacity` (the relay busy-time reading, `PushStats::upload_capacity`) and `busy`, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`), then [`ACK_COLS`], the acknowledgements alone their uplinks carried, packets and wire bytes, summed over those viewers and the seed's: TCP's pure ACKs (`*_up_ack_packets`, `*_up_ack_bytes`) and the data channels' SACKs (`*_up_sack_packets`, `*_up_sack_bytes`), none of them in `*_up_bytes`, `*_up_packets` or `*_small_packets`; and `budget_capacity` (the capacity reading the seed's budget was measured from, at the bin's end: `PushStats::seed_budget_capacity`, 0 until measured) |
 //! | `node_bins` | node and bin, with `STRIMS_SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node` (its host), `viewer` (its number in `viewers`, -1 for the seed and hostile hosts), what it did in the bin |
 //! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink at the start in bytes per second, -1 without a limit; its steps are `events`' `uplink_rate`), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset), `arrive_ms` (when it booted, [`HostSpec::arrive_at`]: the run's start, negative, for one that came with it) and `depart_ms` (when it left for good, [`Fault::Depart`]; empty if it stayed) |
@@ -579,19 +579,26 @@ impl Report {
             &[
                 ("t_ms", Col::Int),
                 ("node", Col::Int),
+                ("n", Col::Int),
                 ("stream", Col::Int),
                 ("parent", Col::Int),
                 ("reason", Col::Text),
             ],
         )?;
+        // Each node's changes so far: a pass's share its time, and
+        // `parent_changes` keeps a node's in the order it made them.
+        let mut made: BTreeMap<HostIx, u64> = BTreeMap::new();
         for p in &self.parent_changes {
+            let n = made.entry(p.node).or_default();
             t.fields(&[
                 ms_from(p.at).to_string(),
                 p.node.to_string(),
+                n.to_string(),
                 p.stream.to_string(),
                 p.parent.map_or(-1, |h| h as i64).to_string(),
                 p.why.name().to_owned(),
             ]);
+            *n += 1;
         }
         t.finish()?;
         let hostile = |h: HostIx| {

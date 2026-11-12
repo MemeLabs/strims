@@ -620,7 +620,8 @@ pub struct Report {
     /// With [`Scenario::wire_bins`] (the tables), every change of a node's
     /// push parent of a stream of the first swarm, in time order: the
     /// nodes' parent logs (`NodeConfig::parent_log`), each change at the
-    /// end of the node's pass that made it.
+    /// end of the node's pass that made it, a pass's in the order the node
+    /// made them.
     pub parent_changes: Vec<ParentRecord>,
 }
 
