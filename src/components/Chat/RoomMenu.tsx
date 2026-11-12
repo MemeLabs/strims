@@ -4,7 +4,7 @@
 import "./RoomMenu.scss";
 
 import clsx from "clsx";
-import date from "date-and-time";
+import { format as formatDate } from "date-and-time";
 import { Base64 } from "js-base64";
 import React, { ReactNode, useContext, useMemo, useRef, useState } from "react";
 import { BsArrowBarRight } from "react-icons/bs";
@@ -216,12 +216,12 @@ const useMessageTimeFormatter = () => {
     const sameDay = sameMonth && now.getDate() === time.getDate();
 
     if (sameDay) {
-      return date.format(time, "h:mm A");
+      return formatDate(time, "h:mm A");
     }
     if (sameYear) {
-      return date.format(time, "MMM DD");
+      return formatDate(time, "MMM DD");
     }
-    return date.format(time, "M/D/YY");
+    return formatDate(time, "M/D/YY");
   };
 };
 

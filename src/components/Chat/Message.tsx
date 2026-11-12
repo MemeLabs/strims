@@ -4,7 +4,7 @@
 import "./Message.scss";
 
 import clsx from "clsx";
-import date from "date-and-time";
+import { format as formatDate } from "date-and-time";
 import { Base64 } from "js-base64";
 import { isEqual, uniq } from "lodash";
 import React, { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -332,7 +332,7 @@ const MessageTime: React.FC<MessageTimeProps> = ({ timestamp, format }) => {
   const time = new Date(Number(timestamp));
   return (
     <time className="chat__message__time" title={time.toLocaleString()}>
-      {date.format(time, format)}
+      {formatDate(time, format)}
     </time>
   );
 };
