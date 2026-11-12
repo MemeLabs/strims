@@ -12,7 +12,7 @@
   &__mask {
     height: 100%;
     width: 100%;
-    background: var(--color-slate-8);
+    background: var(--color-background-layout-body);
   }
 
   &__modal {
@@ -22,10 +22,15 @@
     border-radius: var(--border-radius-medium);
     box-sizing: border-box;
     width: 480px;
-    margin-left: -240px;
+    max-width: calc(100% - 20px);
     top: 100px;
     left: 50%;
+    transform: translateX(-50%);
     padding: 20px;
+
+    @at-root .theme--light & {
+      background: var(--body-foreground);
+    }
   }
 
   &__form {
