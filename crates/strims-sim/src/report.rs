@@ -1137,12 +1137,7 @@ impl Report {
             return (Vec::new(), Vec::new());
         };
         let within = |t: Duration| t >= from && t <= to;
-        let capacity = self
-            .meter_series(spec.seed)
-            .into_iter()
-            .filter(|&(t, _, _)| within(t))
-            .map(|(_, c, _)| c)
-            .collect();
+        let capacity = self.window_readings(swarm, &[spec.seed]);
         let budget = self.hosts.get(spec.seed).map_or(Vec::new(), |host| {
             host.runner
                 .meter
@@ -1155,6 +1150,23 @@ impl Report {
                 .collect()
         });
         (capacity, budget)
+    }
+
+    /// The meter's capacity ÷ what the host could upload at each of
+    /// `hosts`' samples in swarm `swarm`'s seed meter window
+    /// ([`seed_meter_window`](Report::seed_meter_window),
+    /// [`meter_series`](Report::meter_series)): the seed's `meter_seed_p*`,
+    /// a population's `meter_{pop}_p*`. Empty without a window.
+    pub fn window_readings(&self, swarm: usize, hosts: &[HostIx]) -> Vec<f64> {
+        let Some((from, to)) = self.seed_meter_window(swarm) else {
+            return Vec::new();
+        };
+        hosts
+            .iter()
+            .flat_map(|&h| self.meter_series(h))
+            .filter(|&(t, _, _)| t >= from && t <= to)
+            .map(|(_, c, _)| c)
+            .collect()
     }
 
     /// Swarm `swarm`'s seed meter's window: from the end of its startup

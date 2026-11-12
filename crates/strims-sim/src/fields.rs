@@ -473,9 +473,12 @@ pub(crate) enum RowInt {
     /// NET_WARM after their arrival on, while they were there
     /// (Report::link_counts).
     LinksP90,
-    /// The hosts of each role (Report::roles): the swarms' seeds (`seeds`);
-    /// forwarders, the other hosts that answered a STREAM_REQUEST, accepted or
-    /// declined (`forwarders`); and the rest (`others`).
+    /// The first swarm's honest viewers in each population
+    /// (`meter_{pop}_p{p}`'s): `n_accepting`, `n_delivering`.
+    NPop(u16),
+    /// The hosts of each role (Report::roles): the swarms' seeds (`seeds`); and
+    /// the hosts but them that never answered a STREAM_REQUEST, accepted or
+    /// declined (`others`).
     NRole(u16),
     /// The changes of a seed's or forwarder's available upload that tracking
     /// measured, drops (`drop`) and rises (`rise`) (Report::tracking); with
@@ -845,6 +848,7 @@ impl RowInt {
             RowInt::LagP99MsWho(i) => at(&ROWINT_LAG_P99_MS_WHO, i),
             RowInt::LinksP50 => "links_p50",
             RowInt::LinksP90 => "links_p90",
+            RowInt::NPop(i) => at(&ROWINT_N_POP, i),
             RowInt::NRole(i) => at(&ROWINT_N_ROLE, i),
             RowInt::OffChangeN(i) => at(&ROWINT_OFF_CHANGE_N, i),
             RowInt::PacketsAck => "packets_ack",
@@ -954,6 +958,12 @@ impl RowInt {
         RowInt::LagP99MsWho(of(&ROWINT_LAG_P99_MS_WHO, format_args!("lag_p99_ms_{who}")))
     }
 
+    /// `n_{pop}`'s name of `pop`: a panic for values
+    /// `fields.toml` doesn't give strims-sim.
+    pub(crate) fn n_pop(pop: impl Display) -> RowInt {
+        RowInt::NPop(of(&ROWINT_N_POP, format_args!("n_{pop}")))
+    }
+
     /// `n_{role}`'s name of `role`: a panic for values
     /// `fields.toml` doesn't give strims-sim.
     pub(crate) fn n_role(role: impl Display) -> RowInt {
@@ -1044,8 +1054,11 @@ const ROWINT_LAG_P50_MS_WHO: [&str; 2] = ["lag_p50_ms_honest", "lag_p50_ms_hosti
 /// `lag_p99_ms_{who}`'s names for strims-sim.
 const ROWINT_LAG_P99_MS_WHO: [&str; 2] = ["lag_p99_ms_honest", "lag_p99_ms_hostile"];
 
+/// `n_{pop}`'s names for strims-sim.
+const ROWINT_N_POP: [&str; 2] = ["n_accepting", "n_delivering"];
+
 /// `n_{role}`'s names for strims-sim.
-const ROWINT_N_ROLE: [&str; 3] = ["n_seeds", "n_forwarders", "n_others"];
+const ROWINT_N_ROLE: [&str; 2] = ["n_seeds", "n_others"];
 
 /// `off_{change}_n`'s names for strims-sim.
 const ROWINT_OFF_CHANGE_N: [&str; 2] = ["off_drop_n", "off_rise_n"];
@@ -1092,19 +1105,21 @@ pub(crate) enum RowNum {
     /// Unit: ms.
     ReadingErrRoleMs(u16),
     /// In WAN mode, the share of the truth's positives that reading `reading`
-    /// read negative, over the meter samples of role `role` (`seeds`,
-    /// `forwarders`) while a swarm streams (Report::queue_delay_accuracy), the
-    /// readings and thresholds as `{reading}_fp_{role}`'s. Left out without
-    /// samples.
+    /// read negative, over the meter samples of role `role` (`seeds`, the
+    /// swarms' seeds; `accepting` and `delivering`, the first swarm's honest
+    /// viewers of each population, `meter_{pop}_p{p}`'s) while a swarm streams
+    /// (Report::queue_delay_accuracy), the readings and thresholds as
+    /// `{reading}_fp_{role}`'s. Left out without samples.
     ReadingFnRole(u16),
     /// In WAN mode, the share of the truth's negatives that reading `reading`
-    /// read positive, over the meter samples of role `role` (`seeds`,
-    /// `forwarders`) while a swarm streams (Report::queue_delay_accuracy):
-    /// `qd`, `qdv` and `qdb` (the meter's delay, vnic's path excess and queued
-    /// time) against the standing queue, `qdbi` and `qdl` (the queued time, the
-    /// latest round trips' excess) against the wait at the moment; positive
-    /// from QUEUE_DELAY_THRESHOLD_MS, the truth from SATURATED_STANDING_MS.
-    /// Left out without samples.
+    /// read positive, over the meter samples of role `role` (`seeds`, the
+    /// swarms' seeds; `accepting` and `delivering`, the first swarm's honest
+    /// viewers of each population, `meter_{pop}_p{p}`'s) while a swarm streams
+    /// (Report::queue_delay_accuracy): `qd`, `qdv` and `qdb` (the meter's
+    /// delay, vnic's path excess and queued time) against the standing queue,
+    /// `qdbi` and `qdl` (the queued time, the latest round trips' excess)
+    /// against the wait at the moment; positive from QUEUE_DELAY_THRESHOLD_MS,
+    /// the truth from SATURATED_STANDING_MS. Left out without samples.
     ReadingFpRole(u16),
     /// Most samples of a push channel have nothing out, so the flight and the
     /// requests out also read over the samples with any (`*_busy_*`), with the
@@ -1216,6 +1231,21 @@ pub(crate) enum RowNum {
     /// A media swarm's media rate: media bytes over the stream's seconds, in
     /// kbit/s; left out without media.
     MediaKbit,
+    /// The upload meter of the first swarm's honest viewers of each population,
+    /// each classed over the run: `accepting`, those that accepted a
+    /// subscription as a parent at least once (`PushStats::accepted`), and
+    /// `delivering`, those that pushed a chunk to a subscriber at least once
+    /// (`pushed_chunks`), a viewer's every sample counting; at each sample from
+    /// the end of the startup phase to the stream's last write
+    /// (`meter_seed_p*`'s window), the meter's capacity (the relay busy-time
+    /// reading, `PushStats::upload_capacity`) over what the viewer could
+    /// upload: their p10, p50 and p90 (`meter_accepting_p10`, ...,
+    /// `meter_delivering_p90`); left out without a sample.
+    ///
+    /// strims-sim: Each viewer's samples with a capacity
+    /// (`Report::populations`, `Report::window_readings`), over its
+    /// incarnations.
+    MeterPopPP(u16),
     /// The first swarm's seed's upload meter: its capacity (the relay busy-time
     /// reading admission and shedding take, `PushStats::upload_capacity`) over
     /// what the seed could upload, at each of its samples from the end of the
@@ -1421,6 +1451,10 @@ pub(crate) enum RowNum {
 }
 
 impl RowNum {
+    /// `meter_{pop}_p{p}`'s `p` values for strims-sim, which its code
+    /// loops over.
+    pub(crate) const P_OF_METER_POP_P_P: [u8; 3] = [10, 50, 90];
+
     /// `meter_seed_p{p}`'s `p` values for strims-sim, which its code
     /// loops over.
     pub(crate) const P_OF_METER_SEED_P_P: [u8; 3] = [10, 50, 90];
@@ -1469,6 +1503,7 @@ impl RowNum {
             RowNum::LinksDroppedPerHostMin => "links_dropped_per_host_min",
             RowNum::LinksFormedPerHostMin => "links_formed_per_host_min",
             RowNum::MediaKbit => "media_kbit",
+            RowNum::MeterPopPP(i) => at(&ROWNUM_METER_POP_P_P, i),
             RowNum::MeterSeedPP(i) => at(&ROWNUM_METER_SEED_P_P, i),
             RowNum::MeterBudgetSeedPP(i) => at(&ROWNUM_METER_BUDGET_SEED_P_P, i),
             RowNum::MsgsPerPayload => "msgs_per_payload",
@@ -1566,6 +1601,12 @@ impl RowNum {
         RowNum::DepthHops(of(&ROWNUM_DEPTH_HOPS, format_args!("depth_{hops}")))
     }
 
+    /// `meter_{pop}_p{p}`'s name of `pop`, `p`: a panic for values
+    /// `fields.toml` doesn't give strims-sim.
+    pub(crate) fn meter_pop_p_p(pop: impl Display, p: impl Display) -> RowNum {
+        RowNum::MeterPopPP(of(&ROWNUM_METER_POP_P_P, format_args!("meter_{pop}_p{p}")))
+    }
+
     /// `meter_seed_p{p}`'s name of `p`: a panic for values
     /// `fields.toml` doesn't give strims-sim.
     pub(crate) fn meter_seed_p_p(p: impl Display) -> RowNum {
@@ -1627,45 +1668,60 @@ impl Key for RowNum {
 const ROWNUM_ROLE_DELACK_MEAN_MS: [&str; 2] = ["seed_delack_mean_ms", "viewer_delack_mean_ms"];
 
 /// `{reading}_err_{role}_ms`'s names for strims-sim.
-const ROWNUM_READING_ERR_ROLE_MS: [&str; 10] = [
+const ROWNUM_READING_ERR_ROLE_MS: [&str; 15] = [
     "qd_err_seeds_ms",
-    "qd_err_forwarders_ms",
+    "qd_err_accepting_ms",
+    "qd_err_delivering_ms",
     "qdv_err_seeds_ms",
-    "qdv_err_forwarders_ms",
+    "qdv_err_accepting_ms",
+    "qdv_err_delivering_ms",
     "qdb_err_seeds_ms",
-    "qdb_err_forwarders_ms",
+    "qdb_err_accepting_ms",
+    "qdb_err_delivering_ms",
     "qdbi_err_seeds_ms",
-    "qdbi_err_forwarders_ms",
+    "qdbi_err_accepting_ms",
+    "qdbi_err_delivering_ms",
     "qdl_err_seeds_ms",
-    "qdl_err_forwarders_ms",
+    "qdl_err_accepting_ms",
+    "qdl_err_delivering_ms",
 ];
 
 /// `{reading}_fn_{role}`'s names for strims-sim.
-const ROWNUM_READING_FN_ROLE: [&str; 10] = [
+const ROWNUM_READING_FN_ROLE: [&str; 15] = [
     "qd_fn_seeds",
-    "qd_fn_forwarders",
+    "qd_fn_accepting",
+    "qd_fn_delivering",
     "qdv_fn_seeds",
-    "qdv_fn_forwarders",
+    "qdv_fn_accepting",
+    "qdv_fn_delivering",
     "qdb_fn_seeds",
-    "qdb_fn_forwarders",
+    "qdb_fn_accepting",
+    "qdb_fn_delivering",
     "qdbi_fn_seeds",
-    "qdbi_fn_forwarders",
+    "qdbi_fn_accepting",
+    "qdbi_fn_delivering",
     "qdl_fn_seeds",
-    "qdl_fn_forwarders",
+    "qdl_fn_accepting",
+    "qdl_fn_delivering",
 ];
 
 /// `{reading}_fp_{role}`'s names for strims-sim.
-const ROWNUM_READING_FP_ROLE: [&str; 10] = [
+const ROWNUM_READING_FP_ROLE: [&str; 15] = [
     "qd_fp_seeds",
-    "qd_fp_forwarders",
+    "qd_fp_accepting",
+    "qd_fp_delivering",
     "qdv_fp_seeds",
-    "qdv_fp_forwarders",
+    "qdv_fp_accepting",
+    "qdv_fp_delivering",
     "qdb_fp_seeds",
-    "qdb_fp_forwarders",
+    "qdb_fp_accepting",
+    "qdb_fp_delivering",
     "qdbi_fp_seeds",
-    "qdbi_fp_forwarders",
+    "qdbi_fp_accepting",
+    "qdbi_fp_delivering",
     "qdl_fp_seeds",
-    "qdl_fp_forwarders",
+    "qdl_fp_accepting",
+    "qdl_fp_delivering",
 ];
 
 /// `{window}_p{p}`'s names for strims-sim.
@@ -1693,6 +1749,16 @@ const ROWNUM_DELIVERY_WHO: [&str; 2] = ["delivery_honest", "delivery_hostile"];
 /// `depth_{hops}`'s names for strims-sim.
 const ROWNUM_DEPTH_HOPS: [&str; 6] = [
     "depth_1", "depth_2", "depth_3", "depth_4", "depth_5", "depth_6",
+];
+
+/// `meter_{pop}_p{p}`'s names for strims-sim.
+const ROWNUM_METER_POP_P_P: [&str; 6] = [
+    "meter_accepting_p10",
+    "meter_accepting_p50",
+    "meter_accepting_p90",
+    "meter_delivering_p10",
+    "meter_delivering_p50",
+    "meter_delivering_p90",
 ];
 
 /// `meter_seed_p{p}`'s names for strims-sim.
@@ -1841,41 +1907,39 @@ pub(crate) enum RowNums {
     /// reading admission and shedding take (`PushStats::upload_capacity`,
     /// `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each
     /// sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90
-    /// over the forwarders' samples and the others' (`meter_forwarders`,
-    /// `meter_others`; the seed's are `meter_seed_p*`), its median per bucket
-    /// (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked
+    /// over the others' samples (`meter_others`; the seed's are
+    /// `meter_seed_p*`, the populations' `meter_accepting_p*` and
+    /// `meter_delivering_p*`), its median per bucket (`meter_bucket_seeds`,
+    /// `meter_bucket_accepting`, `meter_bucket_delivering`), and how it tracked
     /// changes (`off_drop`, `off_rise`, below).
     ///
-    /// strims-sim: Pair: the ppspp sim's `meter_{role}_p{p}` hold the same
-    /// reading as scalars, its roles `relays` (honest viewers with a child;
-    /// here `forwarders`, hosts that answered a STREAM_REQUEST, another
-    /// population) and `others`.
+    /// strims-sim: `others`: the hosts but the seeds that never answered a
+    /// STREAM_REQUEST (`Report::roles`), not the ppspp sim's `meter_others_p*`,
+    /// the samples of honest viewers without a child at the sample.
     MeterRole(u16),
+    /// Per BUCKET (30 s) of the first swarm's stream from its start, the median
+    /// of the upload meter's capacity ÷ the uplink over the samples of each
+    /// population's viewers (`meter_{pop}_p{p}`'s), as `meter_bucket_seeds` is
+    /// the seeds'.
+    MeterBucketPop(u16),
     /// **meter readings**: the upload meter's capacity, the relay busy-time
     /// reading admission and shedding take (`PushStats::upload_capacity`,
     /// `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each
     /// sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90
-    /// over the forwarders' samples and the others' (`meter_forwarders`,
-    /// `meter_others`; the seed's are `meter_seed_p*`), its median per bucket
-    /// (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked
-    /// changes (`off_drop`, `off_rise`, below).
-    MeterBucketForwarders,
-    /// **meter readings**: the upload meter's capacity, the relay busy-time
-    /// reading admission and shedding take (`PushStats::upload_capacity`,
-    /// `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each
-    /// sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90
-    /// over the forwarders' samples and the others' (`meter_forwarders`,
-    /// `meter_others`; the seed's are `meter_seed_p*`), its median per bucket
-    /// (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked
+    /// over the others' samples (`meter_others`; the seed's are
+    /// `meter_seed_p*`, the populations' `meter_accepting_p*` and
+    /// `meter_delivering_p*`), its median per bucket (`meter_bucket_seeds`,
+    /// `meter_bucket_accepting`, `meter_bucket_delivering`), and how it tracked
     /// changes (`off_drop`, `off_rise`, below).
     MeterBucketSeeds,
     /// **meter readings**: the upload meter's capacity, the relay busy-time
     /// reading admission and shedding take (`PushStats::upload_capacity`,
     /// `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each
     /// sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90
-    /// over the forwarders' samples and the others' (`meter_forwarders`,
-    /// `meter_others`; the seed's are `meter_seed_p*`), its median per bucket
-    /// (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked
+    /// over the others' samples (`meter_others`; the seed's are
+    /// `meter_seed_p*`, the populations' `meter_accepting_p*` and
+    /// `meter_delivering_p*`), its median per bucket (`meter_bucket_seeds`,
+    /// `meter_bucket_accepting`, `meter_bucket_delivering`), and how it tracked
     /// changes (`off_drop`, `off_rise`, below).
     OffChange(u16),
     /// The p10, p50 and p90 in ms of the seeds' meters' queueing delay while a
@@ -1891,7 +1955,7 @@ impl RowNums {
     pub(crate) fn name(self) -> &'static str {
         match self {
             RowNums::MeterRole(i) => at(&ROWNUMS_METER_ROLE, i),
-            RowNums::MeterBucketForwarders => "meter_bucket_forwarders",
+            RowNums::MeterBucketPop(i) => at(&ROWNUMS_METER_BUCKET_POP, i),
             RowNums::MeterBucketSeeds => "meter_bucket_seeds",
             RowNums::OffChange(i) => at(&ROWNUMS_OFF_CHANGE, i),
             RowNums::QueueDelaySeedsMs => "queue_delay_seeds_ms",
@@ -1902,6 +1966,15 @@ impl RowNums {
     /// `fields.toml` doesn't give strims-sim.
     pub(crate) fn meter_role(role: impl Display) -> RowNums {
         RowNums::MeterRole(of(&ROWNUMS_METER_ROLE, format_args!("meter_{role}")))
+    }
+
+    /// `meter_bucket_{pop}`'s name of `pop`: a panic for values
+    /// `fields.toml` doesn't give strims-sim.
+    pub(crate) fn meter_bucket_pop(pop: impl Display) -> RowNums {
+        RowNums::MeterBucketPop(of(
+            &ROWNUMS_METER_BUCKET_POP,
+            format_args!("meter_bucket_{pop}"),
+        ))
     }
 
     /// `off_{change}`'s name of `change`: a panic for values
@@ -1920,7 +1993,10 @@ impl Key for RowNums {
 }
 
 /// `meter_{role}`'s names for strims-sim.
-const ROWNUMS_METER_ROLE: [&str; 2] = ["meter_forwarders", "meter_others"];
+const ROWNUMS_METER_ROLE: [&str; 1] = ["meter_others"];
+
+/// `meter_bucket_{pop}`'s names for strims-sim.
+const ROWNUMS_METER_BUCKET_POP: [&str; 2] = ["meter_bucket_accepting", "meter_bucket_delivering"];
 
 /// `off_{change}`'s names for strims-sim.
 const ROWNUMS_OFF_CHANGE: [&str; 2] = ["off_drop", "off_rise"];

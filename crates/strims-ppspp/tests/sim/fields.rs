@@ -628,6 +628,9 @@ pub(crate) enum RowInt {
     LoopsByHow(u16),
     /// With SIM_LOOPS=1, the decision tap's events dropped between drains.
     LoopsTapLost,
+    /// The first swarm's honest viewers in each population
+    /// (`meter_{pop}_p{p}`'s): `n_accepting`, `n_delivering`.
+    NPop(u16),
     /// The capacity reading the seed's budget was measured from
     /// (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`), in
     /// bytes per second: its median over the samples after the warm-up while it
@@ -1166,6 +1169,7 @@ impl RowInt {
             RowInt::LoopsAlive => "loops_alive",
             RowInt::LoopsByHow(i) => at(&ROWINT_LOOPS_BY_HOW, i),
             RowInt::LoopsTapLost => "loops_tap_lost",
+            RowInt::NPop(i) => at(&ROWINT_N_POP, i),
             RowInt::MeterBudgetSeedBpsP50 => "meter_budget_seed_bps_p50",
             RowInt::MeterSeedBpsP50 => "meter_seed_bps_p50",
             RowInt::Mismatches => "mismatches",
@@ -1316,6 +1320,12 @@ impl RowInt {
         RowInt::LoopsByHow(of(&ROWINT_LOOPS_BY_HOW, format_args!("loops_by_{how}")))
     }
 
+    /// `n_{pop}`'s name of `pop`: a panic for values
+    /// `fields.toml` doesn't give ppspp.
+    pub(crate) fn n_pop(pop: impl Display) -> RowInt {
+        RowInt::NPop(of(&ROWINT_N_POP, format_args!("n_{pop}")))
+    }
+
     /// `seed_{queue}_wait_p{p}_ms`'s name of `queue`, `p`: a panic for values
     /// `fields.toml` doesn't give ppspp.
     pub(crate) fn seed_queue_wait_p_p_ms(queue: impl Display, p: impl Display) -> RowInt {
@@ -1397,6 +1407,9 @@ const ROWINT_LOOPS_BY_HOW: [&str; 7] = [
     "loops_by_graft_after_nothing_logged",
     "loops_by_unknown",
 ];
+
+/// `n_{pop}`'s names for ppspp.
+const ROWINT_N_POP: [&str; 2] = ["n_accepting", "n_delivering"];
 
 /// `seed_{queue}_wait_p{p}_ms`'s names for ppspp.
 const ROWINT_SEED_QUEUE_WAIT_P_P_MS: [&str; 4] = [
@@ -1553,16 +1566,30 @@ pub(crate) enum RowNum {
     /// A media swarm's media rate: media bytes over the stream's seconds, in
     /// kbit/s; left out without media.
     MediaKbit,
-    /// Per sample of each honest viewer whose upload meter has a capacity: the
-    /// capacity (the relay busy-time reading, `PushStats::upload_capacity`)
-    /// over the node's true uplink, for relays and the other viewers: the row's
-    /// `meter_relays_p*` and `meter_others_p*` (the seed's are
-    /// `meter_seed_p*`).
+    /// Per sample of each honest viewer whose upload meter has a capacity and
+    /// that has no child at the sample: the capacity (the relay busy-time
+    /// reading, `PushStats::upload_capacity`) over the node's true uplink, from
+    /// t0 + warm_secs to the run's end: the row's `meter_others_p*` (the seed's
+    /// are `meter_seed_p*`, the populations' `meter_accepting_p*` and
+    /// `meter_delivering_p*`).
     ///
-    /// ppspp: Pair: strims-sim's `meter_{role}` hold the same reading as one
-    /// list of p10/p50/p90 by role: `forwarders` (hosts that answered a
-    /// STREAM_REQUEST, not this sim's `relays`) and `others`.
+    /// ppspp: Not strims-sim's `meter_others`, the hosts that never answered a
+    /// STREAM_REQUEST.
     MeterRolePP(u16),
+    /// The upload meter of the first swarm's honest viewers of each population,
+    /// each classed over the run: `accepting`, those that accepted a
+    /// subscription as a parent at least once (`PushStats::accepted`), and
+    /// `delivering`, those that pushed a chunk to a subscriber at least once
+    /// (`pushed_chunks`), a viewer's every sample counting; at each sample from
+    /// the end of the startup phase to the stream's last write
+    /// (`meter_seed_p*`'s window), the meter's capacity (the relay busy-time
+    /// reading, `PushStats::upload_capacity`) over what the viewer could
+    /// upload: their p10, p50 and p90 (`meter_accepting_p10`, ...,
+    /// `meter_delivering_p90`); left out without a sample.
+    ///
+    /// ppspp: A sample a second of each viewer with a capacity
+    /// (`Sim::sample_shape`), over its incarnations.
+    MeterPopPP(u16),
     /// The first swarm's seed's upload meter: its capacity (the relay busy-time
     /// reading admission and shedding take, `PushStats::upload_capacity`) over
     /// what the seed could upload, at each of its samples from the end of the
@@ -1772,6 +1799,10 @@ impl RowNum {
     /// loops over.
     pub(crate) const P_OF_METER_ROLE_P_P: [u8; 3] = [10, 50, 90];
 
+    /// `meter_{pop}_p{p}`'s `p` values for ppspp, which its code
+    /// loops over.
+    pub(crate) const P_OF_METER_POP_P_P: [u8; 3] = [10, 50, 90];
+
     /// `meter_seed_p{p}`'s `p` values for ppspp, which its code
     /// loops over.
     pub(crate) const P_OF_METER_SEED_P_P: [u8; 3] = [10, 50, 90];
@@ -1813,6 +1844,7 @@ impl RowNum {
             RowNum::Mbit => "mbit",
             RowNum::MediaKbit => "media_kbit",
             RowNum::MeterRolePP(i) => at(&ROWNUM_METER_ROLE_P_P, i),
+            RowNum::MeterPopPP(i) => at(&ROWNUM_METER_POP_P_P, i),
             RowNum::MeterSeedPP(i) => at(&ROWNUM_METER_SEED_P_P, i),
             RowNum::MeterBudgetSeedPP(i) => at(&ROWNUM_METER_BUDGET_SEED_P_P, i),
             RowNum::MsgsPerPayload => "msgs_per_payload",
@@ -1876,6 +1908,12 @@ impl RowNum {
             &ROWNUM_METER_ROLE_P_P,
             format_args!("meter_{role}_p{p}"),
         ))
+    }
+
+    /// `meter_{pop}_p{p}`'s name of `pop`, `p`: a panic for values
+    /// `fields.toml` doesn't give ppspp.
+    pub(crate) fn meter_pop_p_p(pop: impl Display, p: impl Display) -> RowNum {
+        RowNum::MeterPopPP(of(&ROWNUM_METER_POP_P_P, format_args!("meter_{pop}_p{p}")))
     }
 
     /// `meter_seed_p{p}`'s name of `p`: a panic for values
@@ -1962,13 +2000,17 @@ const ROWNUM_DEPTH_HOPS: [&str; 6] = [
 ];
 
 /// `meter_{role}_p{p}`'s names for ppspp.
-const ROWNUM_METER_ROLE_P_P: [&str; 6] = [
-    "meter_relays_p10",
-    "meter_relays_p50",
-    "meter_relays_p90",
-    "meter_others_p10",
-    "meter_others_p50",
-    "meter_others_p90",
+const ROWNUM_METER_ROLE_P_P: [&str; 3] =
+    ["meter_others_p10", "meter_others_p50", "meter_others_p90"];
+
+/// `meter_{pop}_p{p}`'s names for ppspp.
+const ROWNUM_METER_POP_P_P: [&str; 6] = [
+    "meter_accepting_p10",
+    "meter_accepting_p50",
+    "meter_accepting_p90",
+    "meter_delivering_p10",
+    "meter_delivering_p50",
+    "meter_delivering_p90",
 ];
 
 /// `meter_seed_p{p}`'s names for ppspp.

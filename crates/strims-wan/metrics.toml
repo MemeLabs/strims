@@ -225,10 +225,14 @@ score = { kind = "diff", tie = 0.05 }
 description = "The share of declined STREAM_REQUESTs declined wrongly: `declined_wrongly` over `declined`."
 
 [[scored]]
-name = "meter_relays_p50"
-sql = "CASE WHEN r.meter_relays_p50 <> 0 THEN r.meter_relays_p50 ELSE r.meter_forwarders[2] END"
+name = "meter_accepting_p50"
+sql = "r.meter_accepting_p50"
 score = { kind = "ratio", tie = 0.1 }
-description = "The relays' median upload meter: the row's `meter_relays_p50` (the ppspp sim's), else the middle of strims-sim's `meter_forwarders` (p10, p50, p90)."
+
+[[scored]]
+name = "meter_delivering_p50"
+sql = "r.meter_delivering_p50"
+score = { kind = "ratio", tie = 0.1 }
 
 [[scored]]
 name = "meter_others_p50"

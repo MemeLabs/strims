@@ -1785,12 +1785,19 @@ struct Shape {
     /// and honest viewers.
     relays: u64,
     viewers: u64,
-    /// Per sample of each honest viewer whose upload meter has a capacity:
-    /// the capacity (the relay busy-time reading,
-    /// `PushStats::upload_capacity`) over the node's true uplink, for
-    /// relays and the other viewers: the row's `meter_relays_p*` and
-    /// `meter_others_p*`.
-    meter: [Vec<f64>; 2],
+    /// Per sample of each honest viewer whose upload meter has a capacity
+    /// and that has no child at the sample: the capacity (the relay
+    /// busy-time reading, `PushStats::upload_capacity`) over the node's
+    /// true uplink, the row's `meter_others_p*`.
+    meter_others: Vec<f64>,
+    /// By node, an honest viewer's same readings over the seed meter's
+    /// window ([`Sim::seed_meter_window`]), and whether it ever accepted a
+    /// subscription (`PushStats::accepted`) and ever pushed a chunk to a
+    /// subscriber (`pushed_chunks`): its populations, `accepting` and
+    /// `delivering`, the row's `meter_{pop}_p*` and `n_{pop}`.
+    node_meter: Vec<Vec<f64>>,
+    accepting: Vec<bool>,
+    delivering: Vec<bool>,
     /// The seed's, over its window ([`Sim::seed_meter_window`]) at each
     /// sample with a capacity: the capacity over its uplink, the row's
     /// `meter_seed_p*`; and once its budget is measured, the capacity it
@@ -4902,21 +4909,40 @@ impl Sim {
                 && p.upload_capacity > 0
             {
                 let up = n.up_bw.max(1) as f64;
+                let reading = p.upload_capacity as f64 / up;
                 match (n.role, p.children) {
                     (Role::Seed, _) if seed_window => {
-                        shape.seed_meter.push(p.upload_capacity as f64 / up);
+                        shape.seed_meter.push(reading);
                         if p.seed_budget_capacity > 0 {
                             shape.seed_budget.push(p.seed_budget_capacity as f64 / up);
                         }
                     }
                     (Role::Seed, _) => {}
-                    (_, 0) => shape.meter[1].push(p.upload_capacity as f64 / up),
-                    _ => shape.meter[0].push(p.upload_capacity as f64 / up),
+                    (_, children) => {
+                        if children == 0 {
+                            shape.meter_others.push(reading);
+                        }
+                        if seed_window {
+                            if shape.node_meter.len() <= i {
+                                shape.node_meter.resize(i + 1, Vec::new());
+                            }
+                            shape.node_meter[i].push(reading);
+                        }
+                    }
                 }
             }
             if n.role != Role::Peer {
                 continue;
             }
+            if shape.accepting.len() <= i {
+                shape.accepting.resize(i + 1, false);
+                shape.delivering.resize(i + 1, false);
+            }
+            shape.accepting[i] |= push.as_ref().is_some_and(|p| p.accepted > 0);
+            shape.delivering[i] |= n
+                .runner
+                .swarm_counters(n.swarm)
+                .is_some_and(|s| s.pushed_chunks > 0);
             shape.viewers += 1;
             if let Some(p) = &push
                 && p.pace_channels > 0
@@ -11210,13 +11236,25 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         v
     };
     let at = |v: &[f64], p: usize| v.get((v.len().saturating_sub(1)) * p / 100).copied();
-    for (name, v) in ["relays", "others"].iter().zip(&sh.meter) {
-        let v = sorted(v);
-        for p in RowNum::P_OF_METER_ROLE_P_P.map(usize::from) {
+    let others = sorted(&sh.meter_others);
+    for p in RowNum::P_OF_METER_ROLE_P_P.map(usize::from) {
+        if let Some(x) = at(&others, p) {
+            row.num(RowNum::meter_role_p_p("others", p), x);
+        }
+    }
+    for (name, flags) in [("accepting", &sh.accepting), ("delivering", &sh.delivering)] {
+        let members: Vec<usize> = (0..flags.len()).filter(|&i| flags[i]).collect();
+        let v: Vec<f64> = members
+            .iter()
+            .flat_map(|&i| sh.node_meter.get(i).into_iter().flatten().copied())
+            .collect();
+        let v = sorted(&v);
+        for p in RowNum::P_OF_METER_POP_P_P.map(usize::from) {
             if let Some(x) = at(&v, p) {
-                row.num(RowNum::meter_role_p_p(name, p), x);
+                row.num(RowNum::meter_pop_p_p(name, p), x);
             }
         }
+        row.int(RowInt::n_pop(name), members.len() as u64);
     }
     let (capacity, budget) = (sorted(&sh.seed_meter), sorted(&sh.seed_budget));
     for p in RowNum::P_OF_METER_SEED_P_P.map(usize::from) {

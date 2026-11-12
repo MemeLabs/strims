@@ -86,20 +86,20 @@ description = "With the window model, the acknowledgements the seed's TCP receiv
 sims = ["strims-sim"]
 type = "num"
 unit = "ms"
-params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"], role = ["seeds", "forwarders"] }
+params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"], role = ["seeds", "accepting", "delivering"] }
 description = "The row's `<reading>_err_<role>_ms`, `<reading>_fp_<role>` and `<reading>_fn_<role>` score the meter's delay (`qd`), vnic's path excess (`qdv`) and queued time (`qdb`) against the standing queue, and the queued time (`qdbi`) and the latest round trips' excess (`qdl`) against the wait at the moment."
 
 [rows."{reading}_fn_{role}"]
 sims = ["strims-sim"]
 type = "num"
-params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"], role = ["seeds", "forwarders"] }
-description = "In WAN mode, the share of the truth's positives that reading `reading` read negative, over the meter samples of role `role` (`seeds`, `forwarders`) while a swarm streams (Report::queue_delay_accuracy), the readings and thresholds as `{reading}_fp_{role}`'s. Left out without samples."
+params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"], role = ["seeds", "accepting", "delivering"] }
+description = "In WAN mode, the share of the truth's positives that reading `reading` read negative, over the meter samples of role `role` (`seeds`, the swarms' seeds; `accepting` and `delivering`, the first swarm's honest viewers of each population, `meter_{pop}_p{p}`'s) while a swarm streams (Report::queue_delay_accuracy), the readings and thresholds as `{reading}_fp_{role}`'s. Left out without samples."
 
 [rows."{reading}_fp_{role}"]
 sims = ["strims-sim"]
 type = "num"
-params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"], role = ["seeds", "forwarders"] }
-description = "In WAN mode, the share of the truth's negatives that reading `reading` read positive, over the meter samples of role `role` (`seeds`, `forwarders`) while a swarm streams (Report::queue_delay_accuracy): `qd`, `qdv` and `qdb` (the meter's delay, vnic's path excess and queued time) against the standing queue, `qdbi` and `qdl` (the queued time, the latest round trips' excess) against the wait at the moment; positive from QUEUE_DELAY_THRESHOLD_MS, the truth from SATURATED_STANDING_MS. Left out without samples."
+params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"], role = ["seeds", "accepting", "delivering"] }
+description = "In WAN mode, the share of the truth's negatives that reading `reading` read positive, over the meter samples of role `role` (`seeds`, the swarms' seeds; `accepting` and `delivering`, the first swarm's honest viewers of each population, `meter_{pop}_p{p}`'s) while a swarm streams (Report::queue_delay_accuracy): `qd`, `qdv` and `qdb` (the meter's delay, vnic's path excess and queued time) against the standing queue, `qdbi` and `qdl` (the queued time, the latest round trips' excess) against the wait at the moment; positive from QUEUE_DELAY_THRESHOLD_MS, the truth from SATURATED_STANDING_MS. Left out without samples."
 
 [rows."{window}_p{p}"]
 sims = ["strims-sim", "ppspp"]
@@ -791,17 +791,39 @@ description = "A media swarm's media rate: media bytes over the stream's seconds
 [rows."meter_{role}"]
 sims = ["strims-sim"]
 type = "nums"
-params = { role = ["forwarders", "others"] }
-description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over the forwarders' samples and the others' (`meter_forwarders`, `meter_others`; the seed's are `meter_seed_p*`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
-notes.strims-sim = "Pair: the ppspp sim's `meter_{role}_p{p}` hold the same reading as scalars, its roles `relays` (honest viewers with a child; here `forwarders`, hosts that answered a STREAM_REQUEST, another population) and `others`."
+params = { role = ["others"] }
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over the others' samples (`meter_others`; the seed's are `meter_seed_p*`, the populations' `meter_accepting_p*` and `meter_delivering_p*`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_accepting`, `meter_bucket_delivering`), and how it tracked changes (`off_drop`, `off_rise`, below)."
+notes.strims-sim = "`others`: the hosts but the seeds that never answered a STREAM_REQUEST (`Report::roles`), not the ppspp sim's `meter_others_p*`, the samples of honest viewers without a child at the sample."
 
 [rows."meter_{role}_p{p}"]
 sims = ["ppspp"]
 type = "num"
-params = { role = ["relays", "others"], p = ["10", "50", "90"] }
+params = { role = ["others"], p = ["10", "50", "90"] }
 consts.ppspp = ["p"]
-description = "Per sample of each honest viewer whose upload meter has a capacity: the capacity (the relay busy-time reading, `PushStats::upload_capacity`) over the node's true uplink, for relays and the other viewers: the row's `meter_relays_p*` and `meter_others_p*` (the seed's are `meter_seed_p*`)."
-notes.ppspp = "Pair: strims-sim's `meter_{role}` hold the same reading as one list of p10/p50/p90 by role: `forwarders` (hosts that answered a STREAM_REQUEST, not this sim's `relays`) and `others`."
+description = "Per sample of each honest viewer whose upload meter has a capacity and that has no child at the sample: the capacity (the relay busy-time reading, `PushStats::upload_capacity`) over the node's true uplink, from t0 + warm_secs to the run's end: the row's `meter_others_p*` (the seed's are `meter_seed_p*`, the populations' `meter_accepting_p*` and `meter_delivering_p*`)."
+notes.ppspp = "Not strims-sim's `meter_others`, the hosts that never answered a STREAM_REQUEST."
+
+[rows."meter_{pop}_p{p}"]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+params = { pop = ["accepting", "delivering"], p = ["10", "50", "90"] }
+consts.strims-sim = ["p"]
+consts.ppspp = ["p"]
+description = "The upload meter of the first swarm's honest viewers of each population, each classed over the run: `accepting`, those that accepted a subscription as a parent at least once (`PushStats::accepted`), and `delivering`, those that pushed a chunk to a subscriber at least once (`pushed_chunks`), a viewer's every sample counting; at each sample from the end of the startup phase to the stream's last write (`meter_seed_p*`'s window), the meter's capacity (the relay busy-time reading, `PushStats::upload_capacity`) over what the viewer could upload: their p10, p50 and p90 (`meter_accepting_p10`, ..., `meter_delivering_p90`); left out without a sample."
+notes.strims-sim = "Each viewer's samples with a capacity (`Report::populations`, `Report::window_readings`), over its incarnations."
+notes.ppspp = "A sample a second of each viewer with a capacity (`Sim::sample_shape`), over its incarnations."
+
+[rows."n_{pop}"]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+params = { pop = ["accepting", "delivering"] }
+description = "The first swarm's honest viewers in each population (`meter_{pop}_p{p}`'s): `n_accepting`, `n_delivering`."
+
+[rows."meter_bucket_{pop}"]
+sims = ["strims-sim"]
+type = "nums"
+params = { pop = ["accepting", "delivering"] }
+description = "Per BUCKET (30 s) of the first swarm's stream from its start, the median of the upload meter's capacity ÷ the uplink over the samples of each population's viewers (`meter_{pop}_p{p}`'s), as `meter_bucket_seeds` is the seeds'."
 
 [rows."meter_seed_p{p}"]
 sims = ["strims-sim", "ppspp"]
@@ -821,15 +843,10 @@ consts.strims-sim = ["p"]
 consts.ppspp = ["p"]
 description = "The first swarm's seed's budget reading: the capacity its latest allocation check measured its budget from (`PushStats::seed_budget_capacity`) over what the seed could upload, at each of `meter_seed_p*`'s samples once it was measured: their p10, p50 and p90; left out without one (a seed that isn't adaptive, or never measured there)."
 
-[rows.meter_bucket_forwarders]
-sims = ["strims-sim"]
-type = "nums"
-description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over the forwarders' samples and the others' (`meter_forwarders`, `meter_others`; the seed's are `meter_seed_p*`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
-
 [rows.meter_bucket_seeds]
 sims = ["strims-sim"]
 type = "nums"
-description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over the forwarders' samples and the others' (`meter_forwarders`, `meter_others`; the seed's are `meter_seed_p*`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over the others' samples (`meter_others`; the seed's are `meter_seed_p*`, the populations' `meter_accepting_p*` and `meter_delivering_p*`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_accepting`, `meter_bucket_delivering`), and how it tracked changes (`off_drop`, `off_rise`, below)."
 
 [rows.meter_budget_seed_bps_p50]
 sims = ["ppspp"]
@@ -859,14 +876,14 @@ description = "Messages per channel payload, over the honest hosts' outbound pps
 [rows."n_{role}"]
 sims = ["strims-sim"]
 type = "int"
-params = { role = ["seeds", "forwarders", "others"] }
-description = "The hosts of each role (Report::roles): the swarms' seeds (`seeds`); forwarders, the other hosts that answered a STREAM_REQUEST, accepted or declined (`forwarders`); and the rest (`others`)."
+params = { role = ["seeds", "others"] }
+description = "The hosts of each role (Report::roles): the swarms' seeds (`seeds`); and the hosts but them that never answered a STREAM_REQUEST, accepted or declined (`others`)."
 
 [rows."off_{change}"]
 sims = ["strims-sim"]
 type = "nums"
 params = { change = ["drop", "rise"] }
-description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over the forwarders' samples and the others' (`meter_forwarders`, `meter_others`; the seed's are `meter_seed_p*`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over the others' samples (`meter_others`; the seed's are `meter_seed_p*`, the populations' `meter_accepting_p*` and `meter_delivering_p*`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_accepting`, `meter_bucket_delivering`), and how it tracked changes (`off_drop`, `off_rise`, below)."
 
 [rows."off_{change}_n"]
 sims = ["strims-sim"]
@@ -1968,6 +1985,53 @@ sims = []
 retired = ["strims-sim"]
 type = "nums"
 description = "The upload meter's capacity (`PushStats::upload_capacity`) ÷ the host's uplink: its p10/p50/p90 over the samples of every swarm's seed while any swarm streamed, from the stream's first write (its startup in), as a list (`Report::meter_deciles` over the seeds)."
+
+[rows."{reading}_err_forwarders_ms"]
+sims = []
+retired = ["strims-sim"]
+type = "num"
+unit = "ms"
+params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"] }
+description = "In WAN mode, `{reading}_err_{role}_ms`, `{reading}_fn_{role}` and `{reading}_fp_{role}` over the forwarders' meter samples: the hosts but the seeds that answered a STREAM_REQUEST, accepted or declined, every one (`Report::roles`), while a swarm streamed."
+
+[rows."{reading}_fn_forwarders"]
+sims = []
+retired = ["strims-sim"]
+type = "num"
+params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"] }
+description = "In WAN mode, `{reading}_err_{role}_ms`, `{reading}_fn_{role}` and `{reading}_fp_{role}` over the forwarders' meter samples: the hosts but the seeds that answered a STREAM_REQUEST, accepted or declined, every one (`Report::roles`), while a swarm streamed."
+
+[rows."{reading}_fp_forwarders"]
+sims = []
+retired = ["strims-sim"]
+type = "num"
+params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"] }
+description = "In WAN mode, `{reading}_err_{role}_ms`, `{reading}_fn_{role}` and `{reading}_fp_{role}` over the forwarders' meter samples: the hosts but the seeds that answered a STREAM_REQUEST, accepted or declined, every one (`Report::roles`), while a swarm streamed."
+
+[rows.meter_bucket_forwarders]
+sims = []
+retired = ["strims-sim"]
+type = "nums"
+description = "Per BUCKET of the first swarm's stream, the median of the upload meter's capacity ÷ the uplink over the forwarders' samples: the hosts but the seeds that answered a STREAM_REQUEST, accepted or declined, every one (`Report::roles`)."
+
+[rows.meter_forwarders]
+sims = []
+retired = ["strims-sim"]
+type = "nums"
+description = "The upload meter's capacity ÷ the uplink, its p10/p50/p90 as a list over the forwarders' samples while any swarm streamed: the hosts but the seeds that answered a STREAM_REQUEST, accepted or declined, every one (`Report::roles`)."
+
+[rows."meter_relays_p{p}"]
+sims = []
+retired = ["ppspp"]
+type = "num"
+params = { p = ["10", "50", "90"] }
+description = "The upload meter's capacity over the uplink at the samples of each honest viewer that had a child at the sample, from t0 + warm_secs to the run's end: their p10, p50 and p90."
+
+[rows.n_forwarders]
+sims = []
+retired = ["strims-sim"]
+type = "int"
+description = "The forwarders: the hosts but the seeds that answered a STREAM_REQUEST, accepted or declined, every one (`Report::roles`)."
 
 [meta.sim]
 sims = ["strims-sim", "ppspp"]
