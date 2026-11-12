@@ -465,14 +465,16 @@ module.exports = (env, argv) => {
                 // (--hls-listen 127.0.0.1:8084).
                 context: "/api/v1",
                 target: "http://localhost:8084",
-                // http-proxy ends the upstream request only on the client
-                // request's "aborted", which Node doesn't emit once a GET's
-                // request has ended: a closed event stream would hold its
+                // The browser's response closing ends the upstream request
+                // (httpxy, http-proxy-middleware's proxy, does so too; this
+                // doesn't depend on it): a closed event stream would hold its
                 // upstream connection, and one of the API's stream slots.
-                onProxyReq: (proxyReq, req, res) => {
-                  res.on("close", () => {
-                    if (!res.writableFinished) proxyReq.destroy();
-                  });
+                on: {
+                  proxyReq: (proxyReq, req, res) => {
+                    res.on("close", () => {
+                      if (!res.writableFinished) proxyReq.destroy();
+                    });
+                  },
                 },
               },
               {
@@ -482,10 +484,12 @@ module.exports = (env, argv) => {
                 target: "http://localhost:8086",
                 changeOrigin: true,
                 // As /api/v1's: a fetch's streamed output ends with the browser's response.
-                onProxyReq: (proxyReq, req, res) => {
-                  res.on("close", () => {
-                    if (!res.writableFinished) proxyReq.destroy();
-                  });
+                on: {
+                  proxyReq: (proxyReq, req, res) => {
+                    res.on("close", () => {
+                      if (!res.writableFinished) proxyReq.destroy();
+                    });
+                  },
                 },
               },
               {
