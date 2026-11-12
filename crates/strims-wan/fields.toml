@@ -25,7 +25,10 @@
 #   unit          ms, us, s, bytes, fraction, ...
 #   none          how a sim writes "none" where it isn't left out: empty
 #                 (an empty field), -1, 0, negative (a time before the
-#                 start), null (a row's JSON null)
+#                 start), null (a row's JSON null); the catalog's views read
+#                 -1 and a negative time as none (NULL)
+#   older_none    -1 where older runs wrote none so, which the views read
+#                 as none too
 #   params        a family's {param = values}: a list, or a table of lists
 #                 by sim (and line); a list of such tables is their union
 #   code.<sim>    {param = [Rust expressions]}: the code's arrays a param's
@@ -38,8 +41,11 @@
 # grain (a row per what), keys and joins (the catalog's), knobs (the
 # settings that write it, less their sim's prefix, STRIMS_SIM_ or SIM_),
 # sample (a sample table: store_host.SAMPLE_TABLES), zstd (written as
-# <name>.csv.zst), normalized (what the catalog's view changes), shared
-# (its columns are a shared formatter's), description, notes.<sim>.
+# <name>.csv.zst), normalized (what the catalog's view changes), none (-1:
+# every numeric column but the ids writes none as -1, declared or not),
+# shared (its columns are a shared formatter's), description, notes.<sim>.
+# The catalog's registries of the tables (its keys, joins and
+# normalization, query.TABLE_KNOBS) are these.
 
 [rows."{role}_ack_{why}"]
 sims = ["strims-sim"]
@@ -1960,6 +1966,7 @@ joins = "jobs USING (k, src); verdict_seconds USING (k, src, sec)"
 sample = false
 zstd = false
 normalized = "-1 (no reading) NULL."
+none = "-1"
 description = "The first swarm second by second (strims-sim's `Report::series_data`, the ppspp sim's `Sim::series`): the honest viewers' pushes on time, deadlines released to pull, prunes and open parents, the seed's meter, its copies and what it sent, the overhead the seed and the honest viewers wrote, and a media run's chunks written."
 
 [columns.seconds.sec]
@@ -2167,6 +2174,7 @@ joins = "jobs USING (k, src) (bin_ms, the bins' width); node_bins USING (k, src,
 sample = false
 zstd = false
 normalized = "-1 (no reading) NULL."
+none = "-1"
 description = "The run in bins finer than its seconds: what the honest viewers present at both of a bin's edges did in it, summed; the seed's meter, its copies and what it sent; and the nodes' counters, summed over those viewers (`viewer_`) and the seed's (`seed_`)."
 
 [columns.bins."{who}_{counter}"]
@@ -3407,6 +3415,7 @@ description = "the decision's place in the seed's log, from 0, in the order the 
 sims = ["strims-sim", "ppspp"]
 type = "int"
 none = "empty"
+older_none = "-1"
 description = "the neighbour the decision is about, numbered as node is; empty for a decision about the allocation, a window or answer_rate row"
 
 [columns.seed_decisions.peer_incarnation]
@@ -3656,6 +3665,7 @@ description = "the send's place in the seed's log, from 0, in the order the seed
 sims = ["strims-sim", "ppspp"]
 type = "int"
 none = "empty"
+older_none = "-1"
 description = "the neighbour sent to, numbered as node is; empty if the sim can't name it"
 
 [columns.seed_sends.peer_incarnation]

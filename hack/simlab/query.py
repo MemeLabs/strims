@@ -77,14 +77,11 @@ from .verdict import DERIVED, derived_dir, files, judge, load_series, plist, wan
 # The most a query pulls of the sample tables (SAMPLE_TABLES) by default
 # (`--pull-mb`).
 PULL_MB = 1000
-# The settings a run writes a table under: each knob's name after SIM_
-# (the ppspp sim's) and STRIMS_SIM_ (strims-sim's), any one of them
-# writing it; a table not here every run with tables writes. fields.toml's
-# tables say the same (`knobs`; test_catalog's Registries holds them to
-# it).
-TABLE_KNOBS = {"node_bins": ("BIN_NODES",), "forecast": ("FORECAST",), "arrivals": ("FORECAST", "SPEC"),
-               "spec_requests": ("SPEC",), "parks": ("SPEC",), "asks": ("SPEC",), "haves": ("SPEC",),
-               "seed_decisions": ("SPEC",), "seed_sends": ("SPEC",)}
+# The settings a run writes a table under, as fields.toml's tables declare
+# them (`knobs`): each knob's name after SIM_ (the ppspp sim's) and
+# STRIMS_SIM_ (strims-sim's), any one of them writing it; a table not here
+# every run with tables writes.
+TABLE_KNOBS = {t: tuple(e["knobs"]) for t, e in vocab.fields()["tables"].items() if e.get("knobs")}
 # macros.sql: the views' macros.
 MACROS = Path(__file__).with_name("sql") / "macros.sql"
 # The phase of a second past the verdict's (the vocabulary's):

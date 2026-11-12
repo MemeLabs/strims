@@ -54,6 +54,8 @@ class Entry(BaseModel):
     none: Literal["empty", "-1", "0", "negative", "null"] | None = Field(
         None, description="How a sim writes none: an empty field, -1, 0, a negative time (before the start), or "
                           "JSON's null.")
+    older_none: Literal["-1"] | None = Field(
+        None, description="How older runs wrote none, which the catalog's view reads as none too.")
     params: Product | list[Product] | None = Field(
         None, description="A family's params: {param = values}, each a list, or a table of lists by sim (and "
                           "line); a list of such tables is their union.")
@@ -78,6 +80,9 @@ class Table(BaseModel):
     sample: bool = Field(False, description="A sample table (store_host.SAMPLE_TABLES): the farm uploads it apart.")
     zstd: bool = Field(False, description="Written zstd-compressed, <table>.csv.zst.")
     normalized: str | None = Field(None, description="What the catalog's view changes.")
+    none: Literal["-1"] | None = Field(
+        None, description="Every numeric column but the ids writes none as -1, declared or not: the view reads "
+                          "-1 as none in each.")
     shared: Literal["seed_log"] | None = Field(
         None, description="Its columns are a shared formatter's, which both sims write through.")
     description: str | None = None

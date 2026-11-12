@@ -558,7 +558,7 @@ class SeedLog(unittest.TestCase):
         self.assertIn('nullif(x."peer", -1) AS "peer"', sql)
         self.assertIn('x."kind"', sql)
         sends = catalog.view_sql("seed_sends", {**cols, "fate": "VARCHAR"}, "seed_sends", {})
-        self.assertIn("nullif(x.peer, -1) AS peer", sends)
+        self.assertIn('nullif(x."peer", -1) AS "peer"', sends)
         self.assertIn("AS held_ms", sends)
 
     def test_the_sends_view_takes_the_peers_hold(self):

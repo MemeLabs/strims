@@ -1954,8 +1954,16 @@ def canon(t):
 
 
 NUMERIC = ("BIGINT", "INTEGER", "DOUBLE", "FLOAT", "HUGEINT", "SMALLINT", "TINYINT", "UBIGINT", "UINTEGER", "DECIMAL")
+# The columns a sim table's view reads -1 in as none (NULL): those
+# fields.toml declares none, or older none, -1; a table whose every numeric
+# column but the ids does (its none) in NONE_ALL. A column it declares a
+# negative time for none reads NULL below 0 (NONE_NEGATIVE).
+VIEW_NONE = {t: frozenset(n for n, (_, e) in cols.items() if "-1" in (e.get("none"), e.get("older_none")))
+             for t, cols in vocab.declared(FIELDS)["columns"].items()}
+NONE_ALL = frozenset(t for t, e in vocab.fields(FIELDS)["tables"].items() if e.get("none") == "-1")
+NONE_NEGATIVE = {t: frozenset(n for n, (_, e) in cols.items() if e.get("none") == "negative")
+                 for t, cols in vocab.declared(FIELDS)["columns"].items()}
 # arrivals' nodes the sims write -1 for none; its times they leave empty.
-ARRIVAL_NONE = ("peer", "parent", "last_ask_peer", "viewer")
 
 
 def view_sql(t, cols, name, viewers, arrivals=None):
@@ -1967,15 +1975,20 @@ def view_sql(t, cols, name, viewers, arrivals=None):
     rest = [c for c in cols if c not in ("k", "src")]
     nullify = lambda c: f"nullif(x.{ident(c)}, -1) AS {ident(c)}" if num(c) else f"x.{ident(c)}"
     plain = lambda c: f"x.{ident(c)}"
+    # fields.toml's none: -1 read as NULL, a negative time too
+    none, negative = VIEW_NONE.get(t, frozenset()), NONE_NEGATIVE.get(t, frozenset())
+    sentinel = lambda c: (nullify(c) if c in none else
+                          f"CASE WHEN x.{ident(c)} >= 0 THEN x.{ident(c)} END AS {ident(c)}" if c in negative
+                          else plain(c))
+    replaced = lambda: ("x.* REPLACE (" + ", ".join(f"nullif(x.{ident(c)}, -1) AS {ident(c)}" for c in rest
+                                                    if c in none) + ")" if any(c in none for c in rest) else "x.*")
     head = f"CREATE OR REPLACE VIEW main.{ident(name)} AS SELECT"
     if t == "viewers":
         node = ("coalesce(x.node, x.host)" if "node" in cols and "host" in cols else
                 "x.node" if "node" in cols else "x.host" if "host" in cols else "NULL::BIGINT")
         sel = ["x.k", "x.src", "x.viewer", f"{node} AS node"]
-        special = {"up": "nullif(x.up, -1) AS up", "hostile": "coalesce(x.hostile, false) AS hostile",
-                   "churned": "x.churned::BOOLEAN AS churned",
-                   "arrive_ms": "CASE WHEN x.arrive_ms >= 0 THEN x.arrive_ms END AS arrive_ms"}
-        sel += [special.get(c, plain(c)) for c in rest if c not in ("viewer", "node", "host")]
+        special = {"hostile": "coalesce(x.hostile, false) AS hostile", "churned": "x.churned::BOOLEAN AS churned"}
+        sel += [special.get(c) or sentinel(c) for c in rest if c not in ("viewer", "node", "host")]
         return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "viewer_seconds":
         stay = []
@@ -1983,7 +1996,7 @@ def view_sql(t, cols, name, viewers, arrivals=None):
             stay.append("(w.arrive_ms IS NULL OR w.arrive_ms < 0 OR (x.sec + 1) * 1000 > w.arrive_ms)")
         if "depart_ms" in viewers:
             stay.append("(w.depart_ms IS NULL OR x.sec * 1000 < w.depart_ms)")
-        sel = ["x.k", "x.src"] + [("nullif(x.lag_ms, -1) AS lag_ms" if c == "lag_ms" else plain(c)) for c in rest]
+        sel = ["x.k", "x.src"] + [sentinel(c) for c in rest]
         join = "LEFT JOIN raw.viewers w ON w.k = x.k AND w.src = x.src AND w.viewer = x.viewer" if stay else ""
         return f"{head} {', '.join(sel)} {canon(t)} {join}" + (f" WHERE {' AND '.join(stay)}" if stay else "") + ";"
     if t == "events":
@@ -1992,9 +2005,8 @@ def view_sql(t, cols, name, viewers, arrivals=None):
             if c == "kind":
                 sel += [f"{query.current_kind_sql('x.kind', 'j_.sim', 'x.value')} AS kind", "x.kind AS written_kind"]
                 continue
-            sel.append({"node": "nullif(x.node, -1) AS node", "peer": "nullif(x.peer, -1) AS peer",
-                        "value": f"{query.current_value_sql('x.kind', 'j_.sim', 'x.value')} AS value"
-                        }.get(c, plain(c)))
+            sel.append(f"{query.current_value_sql('x.kind', 'j_.sim', 'x.value')} AS value" if c == "value"
+                       else sentinel(c))
             if c == "t_us":
                 sel.append("x.t_us / 1000.0 AS t_ms")
         if "detail" in cols:
@@ -2002,35 +2014,26 @@ def view_sql(t, cols, name, viewers, arrivals=None):
                        "string_split(trim(x.detail), ' '), lambda p: {'key': split_part(p, '=', 1), "
                        "'value': p[strpos(p, '=') + 1:]})) END AS detail_map")
         return f"{head} {', '.join(sel)} {canon(t)};"
-    if t in ("seconds", "bins"):
+    if t in NONE_ALL:
         sel = ["x.k", "x.src"] + [plain(c) if c in ID_COLS else nullify(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
-    if t == "node_bins":
-        sel = ["x.k", "x.src"] + [("nullif(x.viewer, -1) AS viewer" if c == "viewer" else plain(c)) for c in rest]
-        return f"{head} {', '.join(sel)} {canon(t)};"
-    if t == "forecast":
-        sel = ["x.k", "x.src"] + [nullify(c) if c in ("horizon_ms", "held_ms", "mean_ms") else plain(c) for c in rest]
+    if t in ("node_bins", "forecast", "arrivals", "seed_decisions"):
+        sel = ["x.k", "x.src"] + [sentinel(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "parents":
-        sel = ["x.k", "x.src"] + [nullify(c) if c == "parent" else plain(c) for c in rest]
+        sel = ["x.k", "x.src"] + [sentinel(c) for c in rest]
         if "n" not in cols:
             sel.append("NULL::BIGINT AS n")
         return f"{head} {', '.join(sel)} {canon(t)};"
-    if t == "arrivals":
-        sel = ["x.k", "x.src"] + [nullify(c) if c in ARRIVAL_NONE else plain(c) for c in rest]
-        return f"{head} {', '.join(sel)} {canon(t)};"
-    if t == "seed_decisions":
-        sel = ["x.k", "x.src"] + [nullify(c) if c == "peer" else plain(c) for c in rest]
-        return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "seed_sends":
-        star = "x.* REPLACE (nullif(x.peer, -1) AS peer)" if "peer" in cols else "x.*"
+        star = replaced()
         return query.seed_sends_view(f"main.{ident(name)}", f"(SELECT {star} {canon(t)})",
                                      f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
     if t == "asks":
         return query.asks_view(f"main.{ident(name)}", f"(SELECT x.* {canon(t)})",
                                f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
     if t == "haves":
-        star = "x.* REPLACE (nullif(x.peer, -1) AS peer)" if "peer" in cols else "x.*"
+        star = replaced()
         return query.haves_view(f"main.{ident(name)}", f"(SELECT {star} {canon(t)})",
                                 f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
     return f"{head} x.* {canon(t)};"
@@ -2345,131 +2348,13 @@ TABLE_DOCS = {
         "table", "a table", "name", "metric_catalog ON metric_catalog.tbl = table_catalog.name",
         "This list: each table's grain, keys, joins and description."),
 }
-# The sims' tables' normalization in the views.
-NORMALIZED = {
-    "viewers": "node is the viewer's node in both sims (strims-sim's host); churned BOOLEAN; arrive_ms NULL for a "
-               "viewer there from the start; up NULL without a limit; hostile false where a sim didn't say.",
-    "viewer_seconds": "only the seconds the viewer was there (its stay overlaps the second), in both sims; lag_ms "
-                      "NULL in a second without a read.",
-    "events": "kind the vocabulary's current id: a retired kind's replacement for the run's sim (event_kinds' "
-              "replaced_by), and strims-sim's retired parent_lost of value -1 (its viewer never stopped counting "
-              "on the parent) parent_departed, its value NULL (vocab.toml's notes on parent_lost); written_kind "
-              "the id the run wrote; t_ms = t_us / 1000; node and peer NULL for none; detail_map: detail as a MAP "
-              "where it is key=value pairs.",
-    "seconds": "-1 (no reading) NULL.", "bins": "-1 (no reading) NULL.",
-    "node_bins": "viewer NULL for the seed and hostile hosts.",
-    "stalls": "The unit played is the sim's: a frame in strims-sim, a chunk in the ppspp sim, whose stalls are "
-              "one chunk's lateness and so often far shorter than a frame's. A unit read twice counts at its "
-              "first read. scoring.sql's playback_of(runs, delay_ms) plays reads the same way at any delay.",
-    "parents": "parent NULL for none; n NULL where the sim wrote none. Only hybrid push gives a stream push "
-               "parents: empty in other modes.",
-    "forecast": "horizon_ms, held_ms and mean_ms NULL where -1 (no estimate, never held).",
-    "arrivals": "peer, parent, last_ask_peer and viewer NULL where -1: no source (a chunk the node published), no "
-                "open parent, no request, a node that is no viewer (the seed).",
-    "asks": "Every rival kept, in both rounds: a row per request and channel it weighed, the asked row (picked) "
-            "first; grace_ms, outcome, reason and t_outcome_ms are the asked row's, NULL on a rival's. The sims "
-            "write what a request was decided on (peer_honest the peer's at the request); the view adds its "
-            "truth from arrivals, as spec_requests' columns are: held_ms, the peer's first hold of the chunk in "
-            "its incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation; "
-            "NULL if none), and from it live (held by since_ms and channel_open_ms, in whole ms), err_ms, "
-            "pred_err_ms, held_by_p50, held_by_p90 and held_by_p99, and held_by_horizon (held by "
-            "predicted_horizon_ms, NULL where a log has none), all NULL (live too) for a job whose "
-            "arrivals the catalog lacks: unknown, not never held. Main's (the HAVE world's request "
-            "log) has one round, 'flight'; its predicted_ms and predicted_horizon_ms are a rival's "
-            "route expectation (first sight plus its announcement lag's mean, and plus its horizon), "
-            "NULL on the asked row, which a HAVE decided, and its predicted_p90_ms and predicted_p99_ms "
-            "NULL (it predicts no quantiles); timeout_ms, predicted_horizon_ms, have_ms (the row's "
-            "peer's HAVE of the chunk) and released_ms (push's release of it to pull) are its own; "
-            "grace_ms, frontier_seq, hole_seq and state_age_ms are NULL there.",
-    "haves": "Main's HAVE log: a row per chunk a HAVE first announced on a channel; peer NULL where -1 (a key "
-             "that named no link). The sims write the HAVE (haves_log); the view adds held_ms, the announcing "
-             "peer's first hold of the chunk in its incarnation then (arrivals' earliest row of node = peer, seq, "
-             "incarnation = peer_incarnation; NULL if none), delay_ms (t_ms - held_ms: the knowledge delay) and "
-             "live (held by channel_open_ms: not a backlog the channel's first HAVEs announce), all NULL (live "
-             "too) for a job whose arrivals the catalog lacks.",
-    "seed_decisions": "The seed's own decisions (its seed log, both sims, SPEC): a row per decision, n its "
-                      "place in the seed's log (k, node, n key it), its kind saying which columns hold it, the "
-                      "rest NULL; peer NULL for a decision about the allocation (window, answer_rate; an older run's -1 "
-                      "reads NULL too). A request "
-                      "row's subscribers are the stream's before the answer, its holders, copies, held and "
-                      "per_holder NULL where no admission read them; a released or closed row's subscribers "
-                      "those left; a window's capacity_bps NULL until measured, its signals (pushed, behind, "
-                      "overloaded, in_use, saturated) a check's alone. A check reads what the holder said of its "
-                      "due push, and the world decides how it said it: its latest STATE on the HAVE-removal lines "
-                      "(frontier_seq, hole_seq, state_age_ms; silent counts the checks its frontier hadn't "
-                      "reached the push), its HAVEs on main (those three NULL; silent counts the checks its HAVEs "
-                      "didn't announce it).",
-    "seed_sends": "Every chunk the seed pushed or answered, once its send ended (its seed log, both sims, SPEC): "
-                  "n is its place in the seed's log (k, node, n key it), peer the neighbour (an older run's -1, a "
-                  "neighbour gone before the log's take, reads NULL), t_ms the end (written to the frame, or "
-                  "dropped), queued_ms the push's queueing or the answered request's arrival; bytes NULL unless "
-                  "written; cancel_ms NULL without the peer's CANCEL of the chunk by the end. fate 'suppressed' "
-                  "is main's alone (the peer's HAVEs announced the chunk). declared reads what the peer said of "
-                  "the chunk as the world has it said: its latest STATE covering it on the HAVE-removal lines "
-                  "(by its frontier, after its hole), its HAVEs on main (asks' declares, the requester's side, "
-                  "reads the same). The sims write the send (seed_sends_log); the view adds held_ms, the "
-                  "peer's first hold of the chunk in its incarnation then (arrivals' earliest row of node = peer, "
-                  "seq, incarnation = peer_incarnation), a written push's delivery where it comes after queued_ms; "
-                  "NULL where the peer never held the chunk in that incarnation (written is the seed's side: the "
-                  "peer left with the push in flight, or never held the chunk), and NULL for a job whose "
-                  "arrivals the catalog lacks: unknown, not never held.",
-}
-STANDARD_KEYS = {"seconds": "k, sec", "viewer_seconds": "k, viewer, sec", "viewers": "k, viewer",
-                 "events": "k, t_us, kind, node", "bins": "k, bin", "node_bins": "k, bin, node",
-                 "reads": "k, viewer, t_ms", "forecast": "k, node, peer, seq",
-                 "stalls": "k, viewer, delay_ms, t_ms", "parents": "k, node, n",
-                 "asks": "k, node, ask, peer", "haves": "k, node, peer, seq",
-                 "arrivals": "k, node, seq, incarnation", "spec_requests": "k, node, peer, seq, t_ms",
-                 "parks": "k, node, peer, seq, t_ms",
-                 "seed_decisions": "k, node, n", "seed_sends": "k, node, n"}
-STANDARD_JOINS = {"seconds": "jobs USING (k, src); verdict_seconds USING (k, src, sec)",
-                  "bins": "jobs USING (k, src) (bin_ms, the bins' width); node_bins USING (k, src, bin) (each "
-                          "node's in the bin); seconds and verdict_seconds ON (k, src) and sec = t_ms // 1000 (the "
-                          "second the bin starts in)",
-                  "arrivals": "viewers USING (k, src, node); asks and haves ON (k, src) and arrivals.node = their "
-                              "peer, seq, arrivals.incarnation = their peer_incarnation (the peer's holds: the "
-                              "earliest is their views' truth); spec_requests ON (k, src) and arrivals.node = "
-                              "spec_requests.peer, seq, arrivals.t_ms = held_ms, and parks ON (k, src, node, seq) "
-                              "and arrivals.t_ms = parks.held_ms (the holder's hold)",
-                  "spec_requests": "viewers USING (k, src, node) (the requester); asks USING (k, src, t_ms, node, "
-                                   "peer, seq) for round 'spec' AND picked (the decision; its rivals by ask); "
-                                   "parks ON (k, src) and parks.node = peer, parks.peer = node, seq, "
-                                   "parks.t_ms between t_ms and t_outcome_ms (the holder's park or refusal); "
-                                   "arrivals ON (k, src) and arrivals.node = peer, seq, arrivals.t_ms = held_ms (the "
-                                   "holder's hold)",
-                  "parks": "viewers USING (k, src, node) (the holder); spec_requests ON (k, src) and "
-                           "spec_requests.node = parks.peer, spec_requests.peer = parks.node, seq, parks.t_ms "
-                           "between their t_ms and t_outcome_ms (the request as its requester logged it), asks the "
-                           "same with picked (either round's); arrivals ON (k, src, node, seq) and arrivals.t_ms = "
-                           "parks.held_ms (the holder's hold)",
-                  "viewer_seconds": "viewers USING (k, src, viewer)", "reads": "viewers USING (k, src, viewer)",
-                  "events": "viewers USING (k, src, node)", "node_bins": "viewers USING (k, src, node)",
-                  "forecast": "viewers USING (k, src, node)", "stalls": "viewers USING (k, src, viewer)",
-                  "parents": "viewers USING (k, src, node)", "viewers": "reads, viewer_seconds, stalls USING (k, src, viewer)",
-                  "asks": "viewers USING (k, src, node); spec_requests USING (k, src, t_ms, node, peer, seq) for "
-                          "round 'spec' AND picked; arrivals ON (k, src) and arrivals.node = asks.peer, seq, "
-                          "arrivals.incarnation = asks.peer_incarnation (the peer's holds, the view's truth)",
-                  "haves": "viewers USING (k, src, node); arrivals ON (k, src) and arrivals.node = haves.peer, seq, "
-                           "arrivals.incarnation = haves.peer_incarnation (the peer's holds, the view's truth); "
-                           "asks ON (k, src, node, peer, seq) for a request's knowledge",
-                  "seed_decisions": "viewers ON (k, src) and viewers.node = seed_decisions.peer (the neighbour; "
-                                    "none for one that isn't a viewer); parents ON (k, src) and parents.node = "
-                                    "seed_decisions.peer, stream and parents.t_ms >= seed_decisions.t_ms, the "
-                                    "first such row (the child's side of a grant or a close: parents is a "
-                                    "history, every change of the child's without the time condition); "
-                                    "seed_sends ON (k, src, node, peer, peer_incarnation, seq) and seed_sends.how "
-                                    "= 'push' for a cancel's push (at most one), with seed_sends.t_ms = "
-                                    "seed_decisions.due_ms for a check's (exactly one): without how, "
-                                    "peer_incarnation and due_ms a decision meets an answer of its chunk "
-                                    "too, or a push of it written before",
-                  "seed_sends": "viewers ON (k, src) and viewers.node = seed_sends.peer (the neighbour); arrivals "
-                                "ON (k, src) and arrivals.node = seed_sends.peer, seq, arrivals.incarnation = "
-                                "seed_sends.peer_incarnation (the holder's hold, the view's held_ms: the "
-                                "push's delivery, at most one); seed_decisions ON (k, src, node, peer, peer_incarnation, seq) and "
-                                "seed_decisions.kind = 'cancel' for the CANCELs of its chunk, not one to one (a "
-                                "peer cancels a chunk more than once, and a CANCEL of several chunks is logged "
-                                "at its first): the one at seed_decisions.t_ms = seed_sends.cancel_ms is the "
-                                "first that named the chunk alone, none for a range's"}
+# The sims' tables' registries, as fields.toml's tables declare them (read
+# as this module loads): what each one's view changes, its keys and its
+# joins.
+TABLE_DOCS_OF = vocab.fields(FIELDS)["tables"]
+NORMALIZED = {t: e["normalized"] for t, e in TABLE_DOCS_OF.items() if e.get("normalized")}
+STANDARD_KEYS = {t: e["keys"] for t, e in TABLE_DOCS_OF.items() if e.get("keys")}
+STANDARD_JOINS = {t: e["joins"] for t, e in TABLE_DOCS_OF.items() if e.get("joins")}
 VERDICT_DOCS = {
     "onset": "the first second a trigger held (trees, delivery or latency), NULL if none",
     "trees": "the first second of TREES_SECS with the smoothed hit share under TREES_SHARE",

@@ -127,28 +127,34 @@ in `lines` (SKILL.md's rules); main registers the table (below).
 Main's examples: 9af57af6, 7973c432, b16bf6a3, 051596ac.
 
 11. **`store_host.TABLES`**, and `store_host.SAMPLE_TABLES` for a bulky
-    table: a sample table changes the farm's uploads and what a pull
-    fetches (b16bf6a3). The farm's hosts run this file (SKILL.md's farm
-    rule).
-12. **The catalog:**
-    - `catalog.STANDARD_KEYS`, once the key is unique on real data:
-      count the duplicates over the catalog first, with the key's
-      columns in place of these:
+    table (fields.toml's `sample`): literal tuples, as the farm's hosts
+    run this file alone (SKILL.md's farm rule), which test_catalog's
+    `Registries` holds to fields.toml's tables in its order. A sample
+    table changes the farm's uploads and what a pull fetches
+    (b16bf6a3).
+12. **The catalog**, whose registries are fields.toml's table entry
+    (`catalog.STANDARD_KEYS`, `catalog.STANDARD_JOINS` and
+    `catalog.NORMALIZED` are its `keys`, `joins` and `normalized`):
+    - its `keys`, once the key is unique on real data: count the
+      duplicates over the catalog first, with the key's columns in place
+      of these:
 
           python3 hack/sim-db/simdb.py lake 'SELECT count(*) AS n FROM (SELECT k, node, peer, seq, t_ms FROM NAME GROUP BY ALL HAVING count(*) > 1)'
 
-    - `catalog.STANDARD_JOINS`, each join checked on real data the same
-      way;
-    - `catalog.NORMALIZED` for what the view changes, and a
-      `catalog.view_sql` case where it nullifies a sentinel or joins
-      truth (a `query.<t>_view` with its `query.LOGGED` name, as `asks`
-      and `haves` have);
+    - its `joins`, each join checked on real data the same way;
+    - its `normalized` for what the view changes; the view reads -1 as
+      NULL in each column whose `none` (or `older_none`) is -1, a
+      negative time below 0 (`catalog.VIEW_NONE`), and a table whose
+      `none` is -1 in every numeric column but the ids; a
+      `catalog.view_sql` case where it joins truth (a `query.<t>_view`
+      with its `query.LOGGED` name, as `asks` and `haves` have);
     - a view whose truth joins another sample table (`asks` and `haves`
       read `arrivals`) needs that table too: fetch and pull bring it
       along, or the view refuses. It never reads a table it lacks as
       "never held".
-13. **`query.TABLE_KNOBS`**, the knob a run writes the table under; the
-    hints of `query.need` and simdb.py's help are made from it.
+13. **The table's `knobs`** (`query.TABLE_KNOBS`), the knob a run writes
+    the table under; the hints of `query.need` and simdb.py's help are
+    made from it.
 14. **Docs:** the joins paragraph of catalog.py's module docs, and
     simdb.py's `SQL_DOC` where the table joins the viewers. simdb.py's
     help and `simdb.py fetch`'s help list `store_host.TABLES` and

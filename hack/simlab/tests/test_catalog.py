@@ -84,11 +84,12 @@ simlab.verdict's derive pool:
   DocsVersion  docs_version hashes the code that loaded, and covers every
                name catalogs_sql's code reads
   Registries   every one of store_host's TABLES has its STANDARD_KEYS
-               and STANDARD_JOINS, and they name no other; SAMPLE_TABLES
-               are TABLES; fields.toml's tables are TABLES, each main
-               writes written by both sims, with the knobs
-               query.TABLE_KNOBS gives; the two sims' ZSTD lists name the
-               same tables
+               and STANDARD_JOINS, and they name no other; store_host's
+               literal TABLES and SAMPLE_TABLES are fields.toml's tables
+               and sample tables, in its order, each main writes written by
+               both sims; the registries (keys, joins, normalization,
+               query.TABLE_KNOBS) and the views' nullification are
+               fields.toml's; the two sims' ZSTD lists name the same tables
   Commands     simdb.py's lake --param, view and describe over the
                catalog, as a caller runs them: params bound typed or as
                text, one missing named; the saved views listed, run with
@@ -1520,8 +1521,11 @@ class Registries(unittest.TestCase):
 
     def test_fields_tables_are_tables_both_sims_write(self):
         tables = vocab.fields(catalog.FIELDS)["tables"]
-        self.assertEqual(sorted(set(tables) - set(store_host.TABLES)), [],
-                         "fields.toml declares tables store_host.TABLES lacks: register them on main first")
+        # store_host's tuples are literal (the farm's hosts run it alone):
+        # fields.toml's, in its order.
+        self.assertEqual(list(store_host.TABLES), list(tables),
+                         "store_host.TABLES isn't fields.toml's tables: register a table on main first")
+        self.assertEqual(list(store_host.SAMPLE_TABLES), [t for t, e in tables.items() if e.get("sample")])
         for t, tab in tables.items():
             with self.subTest(table=t):
                 self.assertIn(tab["sims"], ([], ["strims-sim", "ppspp"]), "a table one sim writes and the other doesn't")
@@ -1536,11 +1540,25 @@ class Registries(unittest.TestCase):
         self.assertEqual(lists["strims-sim"], lists["ppspp"], "the sims' ZSTD lists")
         self.assertEqual(sorted(set(lists["ppspp"]) - set(store_host.TABLES)), [])
 
-    def test_the_knobs_are_fields_tomls(self):
+    def test_the_registries_are_fields_tomls(self):
+        tables = vocab.fields(catalog.FIELDS)["tables"]
         self.assertEqual(sorted(set(query.TABLE_KNOBS) - set(store_host.TABLES)), [])
-        for t, tab in vocab.fields(catalog.FIELDS)["tables"].items():
+        for t, tab in tables.items():
             with self.subTest(table=t):
                 self.assertEqual(sorted(tab.get("knobs", ())), sorted(query.TABLE_KNOBS.get(t, ())))
+                self.assertEqual(catalog.STANDARD_KEYS[t], tab["keys"])
+                self.assertEqual(catalog.STANDARD_JOINS[t], tab["joins"])
+                self.assertEqual(catalog.NORMALIZED.get(t), tab.get("normalized"))
+        # The views read -1 as none where fields.toml says a sim writes it
+        # so, or older runs did; seconds and bins in every numeric column
+        # but the ids.
+        self.assertEqual(catalog.VIEW_NONE["arrivals"], {"peer", "parent", "last_ask_peer", "viewer"})
+        self.assertEqual(catalog.VIEW_NONE["seed_sends"], {"peer"})
+        self.assertEqual(catalog.NONE_ALL, {"seconds", "bins"})
+        self.assertEqual(catalog.NONE_NEGATIVE["viewers"], {"arrive_ms"})
+        sql = catalog.view_sql("bins", {"k": "VARCHAR", "src": "VARCHAR", "bin": "BIGINT", "zz_old": "BIGINT"},
+                               "bins", {}, {})
+        self.assertIn('x."bin", nullif(x."zz_old", -1) AS "zz_old"', sql)
         # A table's grain names them, in each sim.
         grain = catalog.field_docs()["tables"]["arrivals"][0]
         self.assertTrue(grain.endswith(", with `STRIMS_SIM_FORECAST=1` or `STRIMS_SIM_SPEC=1` in strims-sim, "

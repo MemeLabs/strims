@@ -75,6 +75,20 @@
           "description": "How a sim writes none: an empty field, -1, 0, a negative time (before the start), or JSON's null.",
           "title": "None"
         },
+        "older_none": {
+          "anyOf": [
+            {
+              "const": "-1",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How older runs wrote none, which the catalog's view reads as none too.",
+          "title": "Older None"
+        },
         "params": {
           "anyOf": [
             {
@@ -298,6 +312,20 @@
           "default": null,
           "description": "What the catalog's view changes.",
           "title": "Normalized"
+        },
+        "none": {
+          "anyOf": [
+            {
+              "const": "-1",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Every numeric column but the ids writes none as -1, declared or not: the view reads -1 as none in each.",
+          "title": "None"
         },
         "shared": {
           "anyOf": [
