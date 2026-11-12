@@ -13,6 +13,7 @@ import monkey from "../../../assets/directory/monkey.png";
 import { Message } from "../../apis/strims/chat/v1/chat";
 import { useChat, useRoom } from "../../contexts/Chat";
 import { useCall, useClient } from "../../contexts/FrontendApi";
+import { useErrorToast } from "../../contexts/Notification";
 import { useSession } from "../../contexts/Session";
 import { useOpenListing } from "../../hooks/directory";
 import { useStableCallback } from "../../hooks/useStableCallback";
@@ -47,20 +48,27 @@ const UserContextMenuItems: React.FC<UserContextMenuItemsProps> = ({
   const ignored = uiConfigIgnores.has(Base64.fromUint8Array(peerKey, true));
   const [networkKey] = getNetworkKeys();
 
+  // The menu closes at once: a failed call says so in a toast.
+  const errorToast = useErrorToast();
+
   const handleHighlightClick = useStableCallback(() => {
     if (highlighted) {
-      void client.chat.unhighlight({ networkKey, peerKey });
+      client.chat
+        .unhighlight({ networkKey, peerKey })
+        .catch(errorToast(`Couldn't unhighlight ${nick}`));
     } else {
-      void client.chat.highlight({ networkKey, alias: nick });
+      client.chat
+        .highlight({ networkKey, alias: nick })
+        .catch(errorToast(`Couldn't highlight ${nick}`));
     }
     onClose();
   });
 
   const handleIgnoreClick = useStableCallback(() => {
     if (ignored) {
-      void client.chat.unignore({ networkKey, peerKey });
+      client.chat.unignore({ networkKey, peerKey }).catch(errorToast(`Couldn't unignore ${nick}`));
     } else {
-      void client.chat.ignore({ networkKey, alias: nick });
+      client.chat.ignore({ networkKey, alias: nick }).catch(errorToast(`Couldn't ignore ${nick}`));
     }
     onClose();
   });
@@ -153,15 +161,16 @@ interface TagMenuItemProps {
 const TagMenuItem: React.FC<TagMenuItemProps> = ({ nick, peerKey, onClick }) => {
   const client = useClient();
   const [, { getNetworkKeys }] = useRoom();
+  const errorToast = useErrorToast();
 
   const [networkKey] = getNetworkKeys();
 
   const handleTagClick = useStableCallback((e: React.MouseEvent<HTMLElement>) => {
     const color = e.currentTarget.dataset["color"];
     if (color) {
-      void client.chat.tag({ networkKey, alias: nick, color });
+      client.chat.tag({ networkKey, alias: nick, color }).catch(errorToast(`Couldn't tag ${nick}`));
     } else {
-      void client.chat.untag({ networkKey, peerKey });
+      client.chat.untag({ networkKey, peerKey }).catch(errorToast(`Couldn't untag ${nick}`));
     }
     onClick();
   });

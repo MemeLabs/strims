@@ -5,15 +5,16 @@ import "./chat.stories.scss";
 
 import { PassThrough } from "stream";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { ReactNode, useEffect, useRef, useState } from "react";
 
 import * as directoryv1 from "../../../../apis/strims/network/v1/directory/directory";
 import { RoomButtons } from "../../../../components/Chat/RoomMenu";
+import Toast from "../../../../components/Notification/Toast";
 import { Topic } from "../../../../contexts/Chat";
 import { ChatDirectoryService, MockChat, roomUsers } from "../../../contexts/Chat";
 import { replay } from "../../../mocks/chat/MessageEmitter";
 import ChatService, { MockWhisperThread } from "../../../mocks/chat/service";
-import { StaticNetwork, Story, fixtures } from "../../../storybook";
+import { MockNotifications, StaticNetwork, Story, fixtures } from "../../../storybook";
 
 const roomNames = [
   "general",
@@ -101,18 +102,62 @@ const Menu: React.FC<MenuProps> = ({ tab }) => {
 interface MenuStoryProps extends MenuProps {
   directory?: () => ChatDirectoryService;
   whispers?: MockWhisperThread[];
+  /** The chat mock over `whispers`; default the plain one. */
+  chat?: (whispers: MockWhisperThread[]) => ChatService;
   wide?: boolean;
+  /** Beside the menu, under its notifications (toasts, a step). */
+  children?: ReactNode;
 }
 
-const MenuStory: React.FC<MenuStoryProps> = ({ directory, whispers = threads, wide, ...props }) => (
-  <MockChat chat={() => new ChatService(replay([]), { whispers })} directory={directory}>
-    <StaticNetwork>
-      <div className={wide ? "chat_story chat_story--wide" : "chat_story"}>
-        <Menu {...props} />
-      </div>
-    </StaticNetwork>
+const MenuStory: React.FC<MenuStoryProps> = ({
+  directory,
+  whispers = threads,
+  chat = (w) => new ChatService(replay([]), { whispers: w }),
+  wide,
+  children,
+  ...props
+}) => (
+  <MockChat chat={() => chat(whispers)} directory={directory}>
+    <MockNotifications>
+      <StaticNetwork>
+        <div className={wide ? "chat_story chat_story--wide" : "chat_story"}>
+          <Menu {...props} />
+        </div>
+        {children}
+      </StaticNetwork>
+    </MockNotifications>
   </MockChat>
 );
+
+class FailingDeleteChatService extends ChatService {
+  deleteWhisperThread(): never {
+    throw new Error("the profile's store is read-only");
+  }
+}
+
+// Opens the first whisper thread's menu, as a right-click does, and clicks
+// its delete.
+const DeleteFirstThread: React.FC = () => {
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const row = document.querySelector<HTMLElement>(".whispers_list__row");
+      const item = Array.from(document.querySelectorAll<HTMLElement>(".context_menu__item")).find(
+        (el) => el.textContent.trim() === "delete thread"
+      );
+      if (item) {
+        clearInterval(timer);
+        item.click();
+      } else if (row) {
+        const r = row.getBoundingClientRect();
+        row.dispatchEvent(
+          new MouseEvent("contextmenu", { bubbles: true, clientX: r.left + 40, clientY: r.top })
+        );
+      }
+    }, 50);
+    return () => clearInterval(timer);
+  }, []);
+  return null;
+};
 
 const stories: Story[] = [
   { name: "Rooms", component: () => <MenuStory /> },
@@ -133,6 +178,19 @@ const stories: Story[] = [
         whispers={[]}
         directory={() => new RoomsDirectoryService(1, 2, [])}
       />
+    ),
+  },
+  {
+    // Deleting soadsoap's thread fails: a toast says so (the menu has closed).
+    name: "Delete thread error",
+    component: () => (
+      <MenuStory
+        tab="whispers"
+        chat={(w) => new FailingDeleteChatService(replay([]), { whispers: w })}
+      >
+        <DeleteFirstThread />
+        <Toast timeoutMs={10 * 60 * 1000} />
+      </MenuStory>
     ),
   },
   { name: "Settings", component: () => <MenuStory tab="settings" /> },

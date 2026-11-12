@@ -17,6 +17,7 @@ import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
 import { Topic, useChat } from "../../contexts/Chat";
 import { useCall, useClient } from "../../contexts/FrontendApi";
 import { NetworkContext } from "../../contexts/Network";
+import { useErrorToast } from "../../contexts/Notification";
 import { useListings } from "../../hooks/directory";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";
@@ -253,8 +254,12 @@ const WhispersListItem: React.FC<WhispersListItemProps> = ({ onChange, thread, o
     openMenu(e);
   });
 
+  // The menu closes at once: a failed delete says so in a toast.
+  const errorToast = useErrorToast();
   const handleDeleteThreadClick = useStableCallback(() => {
-    void client.chat.deleteWhisperThread({ peerKey: thread.peerKey });
+    client.chat
+      .deleteWhisperThread({ peerKey: thread.peerKey })
+      .catch(errorToast(`Couldn't delete the whispers with ${thread.alias}`));
     closeMenu();
   });
 
