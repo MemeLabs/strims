@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """The verdicts on the sims' runs, and the derived tables made from them.
 
-The verdicts judge a run's series, `Report::series`'s fields
+The verdicts judge a run's series, `Report::series_data`'s fields
 (hack/sim-db makes them from a run's tables, hack/capture/analyze.py
 from a testbed run's nodes too), over the stream's seconds (not the
 run's tail):

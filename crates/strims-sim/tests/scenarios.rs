@@ -2520,7 +2520,7 @@ fn calibration_star() {
         |s| calibration_star_scenario(s, &c),
         |_| Ok(()),
     );
-    // A farm job's row carries the run's seconds (`Report::series`).
+    // A farm job's row carries the run's seconds (`Report::series_data`).
     if !knob::<String>("STRIMS_SIM_JOB").is_some_and(|j| j == "1") {
         for r in &reports {
             println!("SERIES {}", calibration_series(r));

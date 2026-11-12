@@ -6,15 +6,25 @@ don't).
 
 ## The sims
 
-1. **strims-sim.** `Report::row` in `crates/strims-sim/src/measures.rs`
-   writes the row (`j.int`, `j.num`, `j.nums`, ...). Document the field
-   with a sentence of measures.rs's module docs that names it in
-   backticks: `catalog.row_docs` takes the first sentence of the sims'
+1. **strims-sim.** Declare the field first, in
+   `crates/strims-wan/fields.toml` (its `rows` entry: the sims that
+   write it, its type, unit, none and description; a family's `{param}`
+   parts with their values), then run
+   `python3 hack/simlab/vocab.py write`. `Report::row` in
+   `crates/strims-sim/src/measures.rs` writes the row through the
+   generated names (`crates/strims-sim/src/fields.rs`):
+   `j.int(RowInt::Streams, n)`, `j.num`, `j.nums`, ..., a family's name
+   by its constructor (`RowNum::delivery_who`), each key taking its
+   declared type. Document the field with a sentence of measures.rs's
+   module docs that names it in backticks: `catalog.row_docs` takes the
+   first sentence of the sims'
    docs (`catalog.DOC_FILES`) and of suite.py's module docs that names
    a field, an upper-case part of a name (`stalls_per_min_D`) standing
    for any digits.
-   - A per-second series field goes in `Report::series`' doc table and
-     `series_data`, and in the `seconds` row of tables.rs's doc table.
+   - A per-second series field is a `seconds` column: declared under
+     fields.toml's `columns.seconds`, written in `Report::series_data`
+     (its doc table, and its `cols::Seconds` column), and in the
+     `seconds` row of tables.rs's doc table.
    - A bins counter goes in `NODE_BIN_COUNTERS` and `bin_cols`.
 2. **The ppspp sim.** `job_row` in `crates/strims-ppspp/tests/sim.rs`
    (`row.int`, `row.num`, ...), with comment lines right above the line

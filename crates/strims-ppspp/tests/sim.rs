@@ -4016,7 +4016,7 @@ impl Sim {
     }
 
     /// The run second by second from the stream's start ([`Sim::series`]),
-    /// for the tables: the fields of strims-sim's `Report::series`, a chunk
+    /// for the tables: the fields of strims-sim's `Report::series_data`, a chunk
     /// a frame here (lags are per chunk), and the meter's and the seed's
     /// readings at each second's end.
     fn series_data(&self) -> Option<SeriesData> {

@@ -10,13 +10,13 @@
 //!
 //! | table | one row per | columns |
 //! |---|---|---|
-//! | `seconds` | second of [`Report::series`] | `sec`, then the series' per-second fields: `present`, `hits`, `misses`, `pruned`, `parents`, `capacity` (the seed's relay busy-time reading, `PushStats::upload_capacity`, at the stats tick that opens the second: one tick before the one the second's counters come from), `busy` (the same tick's, in thousandths), `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, `budget_capacity` (the capacity reading the seed's budget was measured from, `PushStats::seed_budget_capacity`, at `capacity`'s tick: empty until measured, -1 without a reading), and `written` for a media swarm |
+//! | `seconds` | second of `Report::series_data` | `sec`, then the series' per-second fields: `present`, `hits`, `misses`, `pruned`, `parents`, `capacity` (the seed's relay busy-time reading, `PushStats::upload_capacity`, at the stats tick that opens the second: one tick before the one the second's counters come from), `busy` (the same tick's, in thousandths), `avail`, `copies`, `sent`, `pushed`, `seed_ovh`, `viewer_ovh`, `budget_capacity` (the capacity reading the seed's budget was measured from, `PushStats::seed_budget_capacity`, at `capacity`'s tick: empty until measured, -1 without a reading), and `written` for a media swarm |
 //! | `viewer_seconds` | viewer and second it was there ([`Report::presence`]) | `viewer`, `sec`, `lag_ms` (the series' `lag`: the p99 of the frames read in the second, -1 without any), `frames` |
 //! | `reads` | frame a viewer read (duplicates too) | `viewer`, `t_ms` (when it was read: its write time plus its lag), `seq`, `lag_ms` |
 //! | `stalls` | stall of a viewer's playout at each delay of [`DELAYS_MS`] (`hack/capture/analyze.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`) | `viewer`, `delay_ms`, `t_ms` (when it began, on the `reads`' clock), `stall_ms`: [`playout::play`] over the viewer's `reads`, as `hack/sim-db`'s `playback(delay_ms)` plays them |
 //! | `parents` | change of a node's push parent of a stream ([`Report::parent_changes`]) | `t_ms`, `node` (its host, as in `events`), `n` (the change's place among the node's, from 0, in time order: a pass's changes share its `t_ms`, in the order the node made them), `stream`, `parent` (the host from then on, -1 for none), `reason`: `open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their channel closed, the stream started anew, or the node stopped without closing its links: a crash, an abrupt departure) |
-//! | `bins` | bin of [`Scenario::wire_bins`] | [`bin_cols`]: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, `capacity` (the relay busy-time reading, `PushStats::upload_capacity`) and `busy`, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`), then [`ACK_COLS`], the acknowledgements alone their uplinks carried, packets and wire bytes, summed over those viewers and the seed's: TCP's pure ACKs (`*_up_ack_packets`, `*_up_ack_bytes`) and the data channels' SACKs (`*_up_sack_packets`, `*_up_sack_bytes`), none of them in `*_up_bytes`, `*_up_packets` or `*_small_packets`; and `budget_capacity` (the capacity reading the seed's budget was measured from, at the bin's end: `PushStats::seed_budget_capacity`, empty until measured) |
-//! | `node_bins` | node and bin, with `STRIMS_SIM_BIN_NODES=1` | [`node_bin_cols`]: `bin`, `t_ms`, `node` (its host), `viewer` (its number in `viewers`, -1 for the seed and hostile hosts), what it did in the bin |
+//! | `bins` | bin of [`Scenario::wire_bins`] | `bin_cols`: `bin`, `t_ms` (its start); the honest viewers present at both its edges and what they did in it (the series' counters, summed, and their median open parents at its end); the seed's meter, `capacity` (the relay busy-time reading, `PushStats::upload_capacity`) and `busy`, the uplink it had and its copies at its end and what it sent; then [`NODE_COLS`] (timeouts, wasted chunks, answers refused and dropped, parent switches, sheds taken and sent, message bytes, payloads, retransmits, drops) and [`WAIT_COLS`] summed over those viewers (`viewer_`) and the seed's (`seed_`), and the window model's window falls and timeouts (`*_window_cuts`, `*_rtos`), then [`ACK_COLS`], the acknowledgements alone their uplinks carried, packets and wire bytes, summed over those viewers and the seed's: TCP's pure ACKs (`*_up_ack_packets`, `*_up_ack_bytes`) and the data channels' SACKs (`*_up_sack_packets`, `*_up_sack_bytes`), none of them in `*_up_bytes`, `*_up_packets` or `*_small_packets`; and `budget_capacity` (the capacity reading the seed's budget was measured from, at the bin's end: `PushStats::seed_budget_capacity`, empty until measured) |
+//! | `node_bins` | node and bin, with `STRIMS_SIM_BIN_NODES=1` | `node_bin_cols`: `bin`, `t_ms`, `node` (its host), `viewer` (its number in `viewers`, -1 for the seed and hostile hosts), what it did in the bin |
 //! | `viewers` | viewer, in `viewer_seconds`' and `reads`' numbering | `viewer`, `host`, `name`, `up` (its uplink at the start in bytes per second, -1 without a limit; its steps are `events`' `uplink_rate`), `hostile`, `churned` (it restarted), `clock_ms` (its clock's offset), `arrive_ms` (when it booted, [`HostSpec::arrive_at`]: the run's start, negative, for one that came with it) and `depart_ms` (when it left for good, [`Fault::Depart`]; empty if it stayed) |
 //! | `events` | timed event | `t_us`, `kind` (its id: the vocabulary, [`strims_wan::vocab`] from `crates/strims-wan/vocab.toml`, gives each kind, the sims that write it and what its other columns hold), `node` (the host it happened to, -1 for none), `peer` (another host, -1 for none), `value`, `detail` |
 //! | `forecast` | sample of a node's forecast log ([`strims_ppspp::LagForecast`]): a HAVE's announcement lag, with `STRIMS_SIM_FORECAST=1` | `t_ms` (the HAVE's arrival), `node`, `viewer`, `peer` (the hosts), `peer_honest` (not a hostile host), `stream`, `seq` (the chunk), `sample_ms` (the lag: from our first sight of the chunk's unit to the HAVE), `mean_ms` (the mean of the peer's lag estimate before the sample, -1 before its first sample), `horizon_ms` (how late a sample still fits that estimate: the later of its decaying peak and its mean plus two deviations, -1 before its first sample), `samples` (the estimate's so far), `fresh` (its latest sample was recent enough for a candidate), `lazy` (we asked the peer for lazy HAVEs), `first_sight` (this HAVE set the unit's first sight: the sample is 0), `run` (the sample's place in the HAVE's run of its stream's bins: a whole unit's HAVE gives one per chunk, the same lag each), `seen_ms` (our first sight of the unit, `t_ms - sample_ms`), `held_ms` (when the peer first stored the chunk, in the incarnation it had at the sample: its runner's held log, `Runner::take_held`, a seed's own writes included; empty if that incarnation never did), `channel_open_ms` (when our channel with the peer opened) and `live` (it was held after both hosts' incarnations started and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce) |
@@ -71,44 +71,13 @@ use strims_base::stats::WaitHistogram;
 use strims_wan::playout::{self, DELAYS_MS};
 use strims_wan::vocab::Kind;
 
+use crate::fields::{Column, JsonRow, MetaInt, MetaInts, MetaJson, MetaText, Ty, ZSTD, cols};
 use crate::report::{HostReport, NODE_BIN_COUNTERS, NodeBinRecord, Report, ViewerReport};
 use crate::spec::{Departure, Fault, HostClass, HostIx};
 pub use crate::wan::UP_COUNTERS;
 
-/// A column's type, as `hack/sim-db` names it.
-#[derive(Clone, Copy)]
-pub(crate) enum Col {
-    Int,
-    Text,
-    Bool,
-}
-
-impl Col {
-    fn name(self) -> &'static str {
-        match self {
-            Col::Int => "BIGINT",
-            Col::Text => "VARCHAR",
-            Col::Bool => "BOOLEAN",
-        }
-    }
-}
-
 /// How much of a [`Table`]'s CSV it holds before writing it to its file.
 const SPILL: usize = 1 << 20;
-
-/// The tables that grow with a run's nodes and its length, written
-/// zstd-compressed, `<name>.csv.zst` (`hack/sim-db` reads either): an
-/// overloaded run's come to gigabytes of CSV, which a job's dir holds until
-/// it is folded. The others are a run's summaries, `<name>.csv`.
-pub const ZSTD: [&str; 7] = [
-    "reads",
-    "node_bins",
-    "events",
-    "forecast",
-    "arrivals",
-    "haves",
-    "asks",
-];
 
 /// Where a [`Table`]'s rows go: its file, or a zstd stream onto it.
 enum Sink {
@@ -160,7 +129,7 @@ pub fn read_table(dir: &Path, name: &str) -> io::Result<String> {
 /// take. [`Table::finish`] writes the rest and `<name>.schema.json`.
 pub(crate) struct Table {
     name: &'static str,
-    cols: Vec<(String, Col)>,
+    cols: Vec<(String, Ty)>,
     dir: PathBuf,
     file: Sink,
     /// The rows not written yet.
@@ -173,8 +142,12 @@ pub(crate) struct Table {
 impl Table {
     /// Creates the table's file in `dir` ([`ZSTD`]), its header the first
     /// line.
-    pub fn new(dir: &Path, name: &'static str, cols: &[(&str, Col)]) -> io::Result<Table> {
-        let cols: Vec<(String, Col)> = cols.iter().map(|&(n, c)| (n.to_owned(), c)).collect();
+    pub fn new<C: Column>(dir: &Path, cols: &[C]) -> io::Result<Table> {
+        let name = C::TABLE;
+        let cols: Vec<(String, Ty)> = cols
+            .iter()
+            .map(|&c| (c.name().to_owned(), c.ty()))
+            .collect();
         let file = sink(dir, name)?;
         let mut csv = String::new();
         let header: Vec<&str> = cols.iter().map(|(n, _)| n.as_str()).collect();
@@ -188,12 +161,6 @@ impl Table {
             csv,
             failed: None,
         })
-    }
-
-    /// A table of integer columns.
-    pub fn ints_named(dir: &Path, name: &'static str, cols: &[String]) -> io::Result<Table> {
-        let cols: Vec<(&str, Col)> = cols.iter().map(|n| (n.as_str(), Col::Int)).collect();
-        Table::new(dir, name, &cols)
     }
 
     /// Appends a row of integers, `None` an empty field (`NULL` to
@@ -256,7 +223,7 @@ impl Table {
         let cols: Vec<String> = self
             .cols
             .iter()
-            .map(|(n, c)| format!("{{\"name\":\"{n}\",\"type\":\"{}\"}}", c.name()))
+            .map(|(n, c)| format!("{{\"name\":\"{n}\",\"type\":\"{}\"}}", c.sql()))
             .collect();
         std::fs::write(
             self.dir.join(format!("{}.schema.json", self.name)),
@@ -336,73 +303,76 @@ pub const ACK_COLS: [&str; 4] = [
 ];
 
 /// The `bins` table's columns ([`Report::write_tables`]).
-pub fn bin_cols() -> Vec<String> {
-    let mut cols: Vec<String> = [
-        "bin",
-        "t_ms",
-        "present",
-        "hits",
-        "misses",
-        "pruned",
-        "parents",
-        "viewer_ovh",
-        "viewer_up_bytes",
-        "viewer_up_packets",
-        "viewer_small_packets",
-        "capacity",
-        "busy",
-        "avail",
-        "copies",
-        "sent",
-        "pushed",
-        "seed_ovh",
-        "seed_up_bytes",
-        "seed_up_packets",
-        "seed_small_packets",
+pub(crate) fn bin_cols() -> Vec<cols::Bins> {
+    let mut cols: Vec<cols::Bins> = [
+        cols::Bins::Bin,
+        cols::Bins::TMs,
+        cols::Bins::Present,
+        cols::Bins::Hits,
+        cols::Bins::Misses,
+        cols::Bins::Pruned,
+        cols::Bins::Parents,
+        cols::Bins::ViewerOvh,
+        cols::Bins::ViewerUpBytes,
+        cols::Bins::ViewerUpPackets,
+        cols::Bins::ViewerSmallPackets,
+        cols::Bins::Capacity,
+        cols::Bins::Busy,
+        cols::Bins::Avail,
+        cols::Bins::Copies,
+        cols::Bins::Sent,
+        cols::Bins::Pushed,
+        cols::Bins::SeedOvh,
+        cols::Bins::SeedUpBytes,
+        cols::Bins::SeedUpPackets,
+        cols::Bins::SeedSmallPackets,
     ]
-    .map(String::from)
     .to_vec();
-    for who in ["viewer", "seed"] {
+    for who in cols::Bins::WHO_OF_WHO_COUNTER {
         cols.extend(
             NODE_COLS
                 .iter()
                 .chain(&WAIT_COLS)
-                .map(|c| format!("{who}_{c}")),
+                .map(|c| cols::Bins::who_counter(who, c)),
         );
     }
-    for who in ["viewer", "seed"] {
-        cols.push(format!("{who}_window_cuts"));
-        cols.push(format!("{who}_rtos"));
+    for who in cols::Bins::WHO_OF_WHO_WINDOW_CUTS {
+        cols.push(cols::Bins::who_window_cuts(who));
+        cols.push(cols::Bins::who_rtos(who));
     }
-    for who in ["viewer", "seed"] {
-        cols.extend(ACK_COLS.iter().map(|c| format!("{who}_{c}")));
+    for who in cols::Bins::WHO_OF_WHO_COUNTER {
+        cols.extend(ACK_COLS.iter().map(|c| cols::Bins::who_counter(who, c)));
     }
-    cols.push("budget_capacity".into());
+    cols.push(cols::Bins::BudgetCapacity);
     cols
 }
 
 /// The `node_bins` table's columns: a node's in one bin.
-pub fn node_bin_cols() -> Vec<String> {
-    let mut cols: Vec<String> = [
-        "bin",
-        "t_ms",
-        "node",
-        "viewer",
-        "hits",
-        "misses",
-        "pruned",
-        "parents",
-        "ovh",
-        "up_bytes",
-        "up_packets",
-        "small_packets",
+pub(crate) fn node_bin_cols() -> Vec<cols::NodeBins> {
+    let mut cols: Vec<cols::NodeBins> = [
+        cols::NodeBins::Bin,
+        cols::NodeBins::TMs,
+        cols::NodeBins::Node,
+        cols::NodeBins::Viewer,
+        cols::NodeBins::Hits,
+        cols::NodeBins::Misses,
+        cols::NodeBins::Pruned,
+        cols::NodeBins::Parents,
+        cols::NodeBins::Ovh,
+        cols::NodeBins::UpBytes,
+        cols::NodeBins::UpPackets,
+        cols::NodeBins::SmallPackets,
     ]
-    .map(String::from)
     .to_vec();
-    cols.extend(NODE_COLS.iter().chain(&WAIT_COLS).map(|c| c.to_string()));
-    cols.push("window_cuts".into());
-    cols.push("rtos".into());
-    cols.extend(ACK_COLS.iter().map(|c| c.to_string()));
+    cols.extend(
+        NODE_COLS
+            .iter()
+            .chain(&WAIT_COLS)
+            .map(cols::NodeBins::counter),
+    );
+    cols.push(cols::NodeBins::WindowCuts);
+    cols.push(cols::NodeBins::Rtos);
+    cols.extend(ACK_COLS.iter().map(cols::NodeBins::counter));
     cols
 }
 
@@ -510,9 +480,9 @@ impl Report {
         let viewers: Vec<_> = self.viewers.iter().filter(|v| v.swarm == swarm).collect();
         let series = self.series_data(swarm);
         if let Some(s) = &series {
-            let mut cols = vec![("sec", Col::Int)];
-            cols.extend(s.cols.iter().map(|(n, _)| (*n, Col::Int)));
-            let mut t = Table::new(dir, "seconds", &cols)?;
+            let mut cols = vec![cols::Seconds::Sec];
+            cols.extend(s.cols.iter().map(|(n, _)| *n));
+            let mut t = Table::new(dir, &cols)?;
             let mut row = Vec::with_capacity(cols.len());
             for k in 0..s.len() {
                 row.clear();
@@ -520,24 +490,23 @@ impl Report {
                 row.extend(s.cols.iter().map(|(n, v)| {
                     let x = v.get(k).copied().unwrap_or(-1);
                     // A budget not measured yet: no reading of it.
-                    (*n != "budget_capacity" || x != 0).then_some(x)
+                    (*n != cols::Seconds::BudgetCapacity || x != 0).then_some(x)
                 }));
                 t.opt_ints(&row);
             }
             t.finish()?;
             let mut t = Table::new(
                 dir,
-                "viewer_seconds",
                 &[
-                    ("viewer", Col::Int),
-                    ("sec", Col::Int),
-                    ("lag_ms", Col::Int),
-                    ("frames", Col::Int),
+                    cols::ViewerSeconds::Viewer,
+                    cols::ViewerSeconds::Sec,
+                    cols::ViewerSeconds::LagMs,
+                    cols::ViewerSeconds::Frames,
                 ],
             )?;
             for (i, (lag, frames)) in s.lag.iter().zip(&s.frames).enumerate() {
                 for (k, (l, f)) in lag.iter().zip(frames).enumerate() {
-                    // A second it wasn't there in (see `Report::series`).
+                    // A second it wasn't there in (see `Report::series_data`).
                     if *f < 0 {
                         continue;
                     }
@@ -549,22 +518,20 @@ impl Report {
         let ms_from = |at: Duration| ms_since(at, start);
         let mut t = Table::new(
             dir,
-            "reads",
             &[
-                ("viewer", Col::Int),
-                ("t_ms", Col::Int),
-                ("seq", Col::Int),
-                ("lag_ms", Col::Int),
+                cols::Reads::Viewer,
+                cols::Reads::TMs,
+                cols::Reads::Seq,
+                cols::Reads::LagMs,
             ],
         )?;
         let mut stalls = Table::new(
             dir,
-            "stalls",
             &[
-                ("viewer", Col::Int),
-                ("delay_ms", Col::Int),
-                ("t_ms", Col::Int),
-                ("stall_ms", Col::Int),
+                cols::Stalls::Viewer,
+                cols::Stalls::DelayMs,
+                cols::Stalls::TMs,
+                cols::Stalls::StallMs,
             ],
         )?;
         for (i, v) in viewers.iter().enumerate() {
@@ -582,14 +549,13 @@ impl Report {
         stalls.finish()?;
         let mut t = Table::new(
             dir,
-            "parents",
             &[
-                ("t_ms", Col::Int),
-                ("node", Col::Int),
-                ("n", Col::Int),
-                ("stream", Col::Int),
-                ("parent", Col::Int),
-                ("reason", Col::Text),
+                cols::Parents::TMs,
+                cols::Parents::Node,
+                cols::Parents::N,
+                cols::Parents::Stream,
+                cols::Parents::Parent,
+                cols::Parents::Reason,
             ],
         )?;
         // Each node's changes so far: a pass's share its time, and
@@ -635,17 +601,16 @@ impl Report {
         }
         let mut t = Table::new(
             dir,
-            "viewers",
             &[
-                ("viewer", Col::Int),
-                ("host", Col::Int),
-                ("name", Col::Text),
-                ("up", Col::Int),
-                ("hostile", Col::Bool),
-                ("churned", Col::Bool),
-                ("clock_ms", Col::Int),
-                ("arrive_ms", Col::Int),
-                ("depart_ms", Col::Int),
+                cols::Viewers::Viewer,
+                cols::Viewers::Host,
+                cols::Viewers::Name,
+                cols::Viewers::Up,
+                cols::Viewers::Hostile,
+                cols::Viewers::Churned,
+                cols::Viewers::ClockMs,
+                cols::Viewers::ArriveMs,
+                cols::Viewers::DepartMs,
             ],
         )?;
         for (i, v) in viewers.iter().enumerate() {
@@ -679,53 +644,36 @@ impl Report {
             decisions.finish()?;
             sends.finish()?;
         }
-        let ints = |v: &[i64]| {
-            let v: Vec<String> = v.iter().map(i64::to_string).collect();
-            v.join(",")
-        };
-        let mut meta = String::from("{\"sim\":\"strims-sim\"");
+        let mut meta = JsonRow::default();
+        meta.str(MetaText::Sim, "strims-sim");
         if let Some(sw) = self.scenario.swarms.first() {
-            let _ = write!(
-                meta,
-                ",\"seed\":{},\"streams\":{}",
-                sw.seed,
-                sw.options.stream_count.max(1)
-            );
+            meta.int(MetaInt::Seed, sw.seed)
+                .int(MetaInt::Streams, sw.options.stream_count.max(1));
         }
         if let Some(s) = &series {
-            let _ = write!(
-                meta,
-                ",\"rate\":{},\"chunk\":{},\"frame\":{},\"secs\":{},\"seed_up\":[{}],\"viewer_up\":{},\"seconds\":{},\"hostile\":[{}]",
-                s.rate,
-                s.chunk,
-                s.frame,
-                s.secs,
-                s.seed_up.join(","),
-                s.viewer_up,
-                s.len(),
-                ints(&s.hostile),
-            );
+            meta.int(MetaInt::Rate, s.rate)
+                .int(MetaInt::Chunk, s.chunk)
+                .int(MetaInt::Frame, s.frame)
+                .int(MetaInt::Secs, s.secs)
+                .json(MetaJson::SeedUp, format_args!("[{}]", s.seed_up.join(",")))
+                .int(MetaInt::ViewerUp, s.viewer_up)
+                .int(MetaInt::Seconds, s.len())
+                .ints(MetaInts::Hostile, s.hostile.iter().copied());
         }
         let lost: u64 = self.hosts.iter().map(|h| h.forecasts_lost).sum();
         let parents_lost: u64 = self.hosts.iter().map(|h| h.parents_lost).sum();
-        let _ = write!(
-            meta,
-            ",\"viewers\":{},\"bin_ms\":{},\"forecasts_lost\":{lost},\"parents_lost\":{parents_lost}",
-            viewers.len(),
-            width.as_millis()
-        );
+        meta.int(MetaInt::Viewers, viewers.len())
+            .int(MetaInt::BinMs, width.as_millis())
+            .int(MetaInt::ForecastsLost, lost)
+            .int(MetaInt::ParentsLost, parents_lost);
         if self.scenario.request_logs {
             let sum = |f: fn(&HostReport) -> u64| -> u64 { self.hosts.iter().map(f).sum() };
-            let _ = write!(
-                meta,
-                ",\"held_lost\":{},\"haves_lost\":{},\"asks_lost\":{},\"seed_log_lost\":{}",
-                sum(|h| h.held_lost),
-                sum(|h| h.haves_lost),
-                sum(|h| h.requests_lost),
-                sum(|h| h.seed_log_lost)
-            );
+            meta.int(MetaInt::HeldLost, sum(|h| h.held_lost))
+                .int(MetaInt::HavesLost, sum(|h| h.haves_lost))
+                .int(MetaInt::AsksLost, sum(|h| h.requests_lost))
+                .int(MetaInt::SeedLogLost, sum(|h| h.seed_log_lost));
         }
-        meta.push('}');
+        let mut meta = meta.finish();
         meta.push('\n');
         std::fs::write(dir.join("series_meta.json"), meta)
     }
@@ -768,7 +716,7 @@ impl Report {
     ) -> io::Result<Table> {
         let nb = self.node_bins();
         let edges = nb.edges().max(self.wire_bins.len() as u64);
-        let mut t = Table::ints_named(dir, "bins", &bin_cols())?;
+        let mut t = Table::new(dir, &bin_cols())?;
         let w = width.as_millis() as i64;
         let start = self
             .scenario
@@ -855,7 +803,7 @@ impl Report {
     ) -> io::Result<Table> {
         let nb = self.node_bins();
         let edges = nb.edges().max(self.wire_bins.len() as u64);
-        let mut t = Table::ints_named(dir, "node_bins", &node_bin_cols())?;
+        let mut t = Table::new(dir, &node_bin_cols())?;
         let w = width.as_millis() as i64;
         let node_cols = node_cols();
         for k in 0..edges.saturating_sub(1) {
@@ -901,14 +849,13 @@ impl Report {
     ) -> io::Result<Table> {
         let mut t = Table::new(
             dir,
-            "events",
             &[
-                ("t_us", Col::Int),
-                ("kind", Col::Text),
-                ("node", Col::Int),
-                ("peer", Col::Int),
-                ("value", Col::Int),
-                ("detail", Col::Text),
+                cols::Events::TUs,
+                cols::Events::Kind,
+                cols::Events::Node,
+                cols::Events::Peer,
+                cols::Events::Value,
+                cols::Events::Detail,
             ],
         )?;
         let us = |at: Duration| -> i64 {
@@ -1116,27 +1063,26 @@ impl Report {
     ) -> io::Result<Table> {
         let mut t = Table::new(
             dir,
-            "forecast",
             &[
-                ("t_ms", Col::Int),
-                ("node", Col::Int),
-                ("viewer", Col::Int),
-                ("peer", Col::Int),
-                ("peer_honest", Col::Bool),
-                ("stream", Col::Int),
-                ("seq", Col::Int),
-                ("sample_ms", Col::Int),
-                ("mean_ms", Col::Int),
-                ("horizon_ms", Col::Int),
-                ("samples", Col::Int),
-                ("fresh", Col::Bool),
-                ("lazy", Col::Bool),
-                ("first_sight", Col::Bool),
-                ("run", Col::Int),
-                ("seen_ms", Col::Int),
-                ("held_ms", Col::Int),
-                ("channel_open_ms", Col::Int),
-                ("live", Col::Bool),
+                cols::Forecast::TMs,
+                cols::Forecast::Node,
+                cols::Forecast::Viewer,
+                cols::Forecast::Peer,
+                cols::Forecast::PeerHonest,
+                cols::Forecast::Stream,
+                cols::Forecast::Seq,
+                cols::Forecast::SampleMs,
+                cols::Forecast::MeanMs,
+                cols::Forecast::HorizonMs,
+                cols::Forecast::Samples,
+                cols::Forecast::Fresh,
+                cols::Forecast::Lazy,
+                cols::Forecast::FirstSight,
+                cols::Forecast::Run,
+                cols::Forecast::SeenMs,
+                cols::Forecast::HeldMs,
+                cols::Forecast::ChannelOpenMs,
+                cols::Forecast::Live,
             ],
         )?;
         let ms = |at: Duration| -> i64 {
@@ -1250,23 +1196,22 @@ impl Report {
         let hostn = |x: Option<HostIx>| x.map_or(-1, |h| h as i64).to_string();
         let mut t = Table::new(
             dir,
-            "arrivals",
             &[
-                ("t_ms", Col::Int),
-                ("node", Col::Int),
-                ("viewer", Col::Int),
-                ("seq", Col::Int),
-                ("how", Col::Text),
-                ("peer", Col::Int),
-                ("parent", Col::Int),
-                ("expected_ms", Col::Int),
-                ("released_ms", Col::Int),
-                ("asked_ms", Col::Int),
-                ("asks", Col::Int),
-                ("last_ask_peer", Col::Int),
-                ("last_ask_ms", Col::Int),
-                ("rtt_ms", Col::Int),
-                ("incarnation", Col::Int),
+                cols::Arrivals::TMs,
+                cols::Arrivals::Node,
+                cols::Arrivals::Viewer,
+                cols::Arrivals::Seq,
+                cols::Arrivals::How,
+                cols::Arrivals::Peer,
+                cols::Arrivals::Parent,
+                cols::Arrivals::ExpectedMs,
+                cols::Arrivals::ReleasedMs,
+                cols::Arrivals::AskedMs,
+                cols::Arrivals::Asks,
+                cols::Arrivals::LastAskPeer,
+                cols::Arrivals::LastAskMs,
+                cols::Arrivals::RttMs,
+                cols::Arrivals::Incarnation,
             ],
         )?;
         let starts = incarnations(&self.scenario);
@@ -1309,25 +1254,10 @@ impl Report {
     /// numbered by its place in its seed's log (the order taken), every
     /// column as `strims_ppspp`'s seed log writes it.
     fn seed_tables(&self, dir: &Path, start: Duration) -> io::Result<(Table, Table)> {
-        use strims_ppspp::scheduler_peer::seed_log::{
-            Column, ColumnType, DECISION_COLUMNS, RowHead, SEND_COLUMNS, decision_fields,
-            send_fields,
-        };
+        use strims_ppspp::scheduler_peer::seed_log::{RowHead, decision_fields, send_fields};
         let starts = incarnations(&self.scenario);
-        let cols = |c: &[Column]| -> Vec<(&'static str, Col)> {
-            c.iter()
-                .map(|c| {
-                    let ty = match c.ty {
-                        ColumnType::Text => Col::Text,
-                        ColumnType::Bool => Col::Bool,
-                        ColumnType::Int => Col::Int,
-                    };
-                    (c.name, ty)
-                })
-                .collect()
-        };
-        let mut t = Table::new(dir, "seed_decisions", &cols(&DECISION_COLUMNS))?;
-        let mut sends = Table::new(dir, "seed_sends", &cols(&SEND_COLUMNS))?;
+        let mut t = Table::new(dir, &cols::SeedDecisions::all())?;
+        let mut sends = Table::new(dir, &cols::SeedSends::all())?;
         // A row's time, the seed's host, its place in the seed's log, and
         // the peer's host with its incarnation at `then`.
         let head =
@@ -1362,17 +1292,16 @@ impl Report {
         let ms = |at: Duration| ms_from(start, at);
         let mut t = Table::new(
             dir,
-            "haves",
             &[
-                ("t_ms", Col::Int),
-                ("node", Col::Int),
-                ("honest", Col::Bool),
-                ("peer", Col::Int),
-                ("peer_honest", Col::Bool),
-                ("stream", Col::Int),
-                ("seq", Col::Int),
-                ("channel_open_ms", Col::Int),
-                ("peer_incarnation", Col::Int),
+                cols::Haves::TMs,
+                cols::Haves::Node,
+                cols::Haves::Honest,
+                cols::Haves::Peer,
+                cols::Haves::PeerHonest,
+                cols::Haves::Stream,
+                cols::Haves::Seq,
+                cols::Haves::ChannelOpenMs,
+                cols::Haves::PeerIncarnation,
             ],
         )?;
         let starts = incarnations(&self.scenario);
@@ -1401,7 +1330,7 @@ impl Report {
     /// rival, times from `start`.
     fn asks_table(&self, dir: &Path, start: Duration) -> io::Result<Table> {
         let ms = |at: Duration| ms_from(start, at);
-        let mut t = Table::new(dir, "asks", &ASK_COLS)?;
+        let mut t = Table::new(dir, &ASK_COLS)?;
         let starts = incarnations(&self.scenario);
         let mut ask = 0u64;
         for (h, r) in self.hosts.iter().enumerate() {
@@ -1496,30 +1425,30 @@ fn incarnation(starts: &[Vec<Duration>], h: HostIx, at: Duration) -> usize {
 
 /// The columns of the `asks` table (see the [module docs](self)), as the
 /// ppspp sim writes them too.
-const ASK_COLS: [(&str, Col); 25] = [
-    ("t_ms", Col::Int),
-    ("node", Col::Int),
-    ("honest", Col::Bool),
-    ("ask", Col::Int),
-    ("round", Col::Text),
-    ("peer", Col::Int),
-    ("peer_honest", Col::Bool),
-    ("picked", Col::Bool),
-    ("declares", Col::Bool),
-    ("stream", Col::Int),
-    ("seq", Col::Int),
-    ("timeout_ms", Col::Int),
-    ("rtt_ms", Col::Int),
-    ("predicted_ms", Col::Int),
-    ("predicted_p90_ms", Col::Int),
-    ("predicted_p99_ms", Col::Int),
-    ("predicted_horizon_ms", Col::Int),
-    ("have_ms", Col::Int),
-    ("released_ms", Col::Int),
-    ("outcome", Col::Text),
-    ("reason", Col::Text),
-    ("t_outcome_ms", Col::Int),
-    ("channel_open_ms", Col::Int),
-    ("since_ms", Col::Int),
-    ("peer_incarnation", Col::Int),
+const ASK_COLS: [cols::Asks; 25] = [
+    cols::Asks::TMs,
+    cols::Asks::Node,
+    cols::Asks::Honest,
+    cols::Asks::Ask,
+    cols::Asks::Round,
+    cols::Asks::Peer,
+    cols::Asks::PeerHonest,
+    cols::Asks::Picked,
+    cols::Asks::Declares,
+    cols::Asks::Stream,
+    cols::Asks::Seq,
+    cols::Asks::TimeoutMs,
+    cols::Asks::RttMs,
+    cols::Asks::PredictedMs,
+    cols::Asks::PredictedP90Ms,
+    cols::Asks::PredictedP99Ms,
+    cols::Asks::PredictedHorizonMs,
+    cols::Asks::HaveMs,
+    cols::Asks::ReleasedMs,
+    cols::Asks::Outcome,
+    cols::Asks::Reason,
+    cols::Asks::TOutcomeMs,
+    cols::Asks::ChannelOpenMs,
+    cols::Asks::SinceMs,
+    cols::Asks::PeerIncarnation,
 ];

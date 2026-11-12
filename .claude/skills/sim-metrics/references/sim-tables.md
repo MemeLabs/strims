@@ -39,21 +39,29 @@ main (SKILL.md's order of work).
    - The records collected in `crates/strims-sim/src/world.rs` as the
      nodes hand them over.
    - The table built with `Table::new` in
-     `crates/strims-sim/src/tables.rs`, named in `ZSTD` if it is large.
+     `crates/strims-sim/src/tables.rs` from its generated columns (a
+     `Column` enum per table, as `cols::Stalls`); a large table has
+     `zstd = true` in its fields.toml entry, which the generated `ZSTD`
+     lists.
      A table spills to its file as it fills (67ceca95), so write a large
      log's rows as they are taken rather than holding them to the end.
    - Times in true ms from the stream's start; hosts numbered as
      `events` numbers them; a peer's incarnation as `arrivals` counts
      it (`incarnations` and `incarnation` in tables.rs).
    - A `<log>_lost` key in `series_meta.json`, beside `held_lost` and
-     the others, written whenever the knob is on, alike on every line,
-     so that 0 says the log was on and lost nothing.
+     the others, declared under fields.toml's `meta`, written whenever
+     the knob is on, alike on every line, so that 0 says the log was on
+     and lost nothing.
 4. **The ppspp sim** (`crates/strims-ppspp/tests/sim.rs`): `Sim::keep_*`
    (`Sim::keep_requests`), the table in `Sim::write_tables` through
    `Table::typed`, the same `ZSTD` entry (test_catalog's `Registries`
    holds the two lists alike), the `series_meta.json` key, and the knob,
    `SIM_<X>`, read with `knob::<u32>` where the job starts.
 5. **Columns.**
+   - Declared first: the table in fields.toml's `tables` (its sims,
+     grain and keys) and each column in its `columns` table (type, unit,
+     none, description). `python3 hack/simlab/vocab.py write` generates
+     each sim's `cols` enums, which strims-sim's tables take.
    - Keys: a log stamped once per pass needs an order column, and a
      wide log whose records repeat every natural key (several of one
      kind at one ms) needs an ordinal column, so its key is unique.

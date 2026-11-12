@@ -324,5 +324,26 @@ class Queries(unittest.TestCase):
         self.assertEqual((vocab.scope("join"), vocab.scope("latency")), ("viewer", "run"))
 
 
+class Fields(unittest.TestCase):
+    def test_every_entry_says_what_it_is_and_who_writes_it(self):
+        doc = vocab.fields()
+        entries = [(f"{s}.{k}", e) for s in ("rows", "meta") for k, e in doc[s].items()]
+        entries += [(f"columns.{t}.{k}", e) for t, cols in doc["columns"].items() for k, e in cols.items()]
+        self.assertTrue(entries)
+        for name, e in entries:
+            with self.subTest(name):
+                self.assertTrue(e.get("description"))
+                self.assertLessEqual(set(e["sims"]), set(vocab.SIMS))
+                self.assertLessEqual(set(e.get("lines", ())), set(vocab.LINES))
+                self.assertTrue(e["sims"] or e.get("lines"), "an entry no sim writes names the lines that do")
+
+    def test_a_familys_names_are_its_params_by_sim(self):
+        key = "stalls_per_min_{delay}{pop}"
+        e = vocab.fields()["rows"][key]
+        self.assertEqual(vocab.expand(key, e, "strims-sim"), ["stalls_per_min_1250", "stalls_per_min_1250_honest",
+                                                              "stalls_per_min_4250", "stalls_per_min_4250_honest"])
+        self.assertEqual(vocab.expand(key, e, "ppspp"), ["stalls_per_min_1250", "stalls_per_min_4250"])
+
+
 if __name__ == "__main__":
     unittest.main()

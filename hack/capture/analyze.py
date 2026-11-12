@@ -99,7 +99,7 @@ index.jsonl, whose jobs' tables hack/sim-db pulls into its cache and
 reads, the rows and series there; a testbed matrix's rows.jsonl and run
 dirs), index.jsonl or rows.jsonl files, or testbed run dirs
 (`hack/testbed/run.sh`'s out dir). A sim run's series is its tables'
-(`seconds` and `viewer_seconds`, which `Report::series` documents), with
+(`seconds` and `viewer_seconds`, which `Report::series_data` documents), with
 `STRIMS_SIM_SERIES=1` (strims-sim, where `calibration_star` always has
 it) or `SIM_SERIES=1` (the ppspp sim's `sim_job`); a testbed run's comes
 from its nodes' lines. `--where` keeps the runs whose env (or row field) has
@@ -495,7 +495,7 @@ def node_arg(args, flag, default):
 
 
 def testbed_series(d, env):
-    """A testbed run dir's series, in `Report::series`'s fields."""
+    """A testbed run dir's series, in `Report::series_data`'s fields."""
     env = {**settings(d / "settings"), **env}
     viewers = int(env.get("VIEWERS", 3))
     args = env.get("NODE_ARGS", "")

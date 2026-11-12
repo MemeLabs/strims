@@ -1,0 +1,3707 @@
+#:schema vocab.schema.json
+# The sims' recorded names: every field of a run's row, key of its
+# series_meta.json and column of its tables that either sim writes (the
+# real stack's crates/strims-sim and the ppspp sim,
+# crates/strims-ppspp/tests/sim.rs), and every name a line writes before
+# main does. hack/simlab/vocab.py makes each sim's module of its names
+# from it (crates/strims-sim/src/fields.rs,
+# crates/strims-ppspp/tests/sim/fields.rs), through which the sims write
+# them: a name a sim writes that isn't here for it doesn't compile, and one
+# here it doesn't write is dead code. hack/simlab/spec.py checks it
+# (`python3 hack/simlab/vocab.py check`) and writes its schema,
+# vocab.schema.json.
+#
+# [rows.<id>], [meta.<id>] (series_meta.json's keys) and
+# [columns.<table>.<id>] each declare a name, or a family of names: an id
+# with {param} parts, its names those of every value of its params.
+#   sims          the sims that write it: strims-sim, ppspp; [] for one
+#                 only a line writes
+#   lines         the lines that write it and main doesn't: decl (the
+#                 HAVE removal's declared-summary line, seed-cover), p4tf
+#                 (its park4 line, seed-cover-p4tf); a family's values a
+#                 line adds to main's are keyed by the line in its params
+#   type          int, num, text, bool, ints (a list of integers), nums (a
+#                 list of numbers), json (another JSON value)
+#   unit          ms, us, s, bytes, fraction, ...
+#   none          how a sim writes "none" where it isn't left out: empty
+#                 (an empty field), -1, 0, negative (a time before the
+#                 start)
+#   params        a family's {param = values}: a list, or a table of lists
+#                 by sim (and line); a list of such tables is their union
+#   code.<sim>    {param = [Rust expressions]}: the code's arrays a param's
+#                 values are, concatenated, which a generated test holds
+#                 equal
+#   description   what it holds
+#   notes.<sim>   that sim's own doc of it, where it says more or other
+#
+# [tables.<name>]: a table either sim writes. sims and lines as above,
+# grain (a row per what), keys and joins (the catalog's), knobs (the
+# settings that write it, less their sim's prefix, STRIMS_SIM_ or SIM_),
+# sample (a sample table: store_host.SAMPLE_TABLES), zstd (written as
+# <name>.csv.zst), normalized (what the catalog's view changes), shared
+# (its columns are a shared formatter's), description, notes.<sim>.
+
+[rows."{role}_ack_{why}"]
+sims = ["strims-sim"]
+type = "int"
+params = { role = ["seed", "viewer"], why = ["now", "quick", "read", "timer", "data"] }
+code.strims-sim = { why = ["crate::ACK_WHYS"] }
+description = "With the window model, the acknowledgements the seed's TCP receivers sent, of what its viewers sent it, and the honest viewers' (summed), of what reached them, by why (`crate::ACK_WHYS`: `seed_ack_now`, `viewer_ack_timer`, ...), pure ones and those data carried alike; and the mean and p90 of the delayed ones' waits (`*_delack_mean_ms`, `*_delack_p90_ms`, to the millisecond below), from the first byte owed to the timer's send."
+
+[rows."{role}_delack_mean_ms"]
+sims = ["strims-sim"]
+type = "num"
+unit = "ms"
+params = { role = ["seed", "viewer"] }
+description = "With the window model, the acknowledgements the seed's TCP receivers sent, of what its viewers sent it, and the honest viewers' (summed), of what reached them, by why (`crate::ACK_WHYS`: `seed_ack_now`, `viewer_ack_timer`, ...), pure ones and those data carried alike; and the mean and p90 of the delayed ones' waits (`*_delack_mean_ms`, `*_delack_p90_ms`, to the millisecond below), from the first byte owed to the timer's send."
+
+[rows."{role}_delack_p90_ms"]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+params = { role = ["seed", "viewer"] }
+description = "With the window model, the acknowledgements the seed's TCP receivers sent, of what its viewers sent it, and the honest viewers' (summed), of what reached them, by why (`crate::ACK_WHYS`: `seed_ack_now`, `viewer_ack_timer`, ...), pure ones and those data carried alike; and the mean and p90 of the delayed ones' waits (`*_delack_mean_ms`, `*_delack_p90_ms`, to the millisecond below), from the first byte owed to the timer's send."
+
+[rows."{reading}_err_{role}_ms"]
+sims = ["strims-sim"]
+type = "num"
+unit = "ms"
+params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"], role = ["seeds", "forwarders"] }
+description = "The row's `<reading>_err_<role>_ms`, `<reading>_fp_<role>` and `<reading>_fn_<role>` score the meter's delay (`qd`), vnic's path excess (`qdv`) and queued time (`qdb`) against the standing queue, and the queued time (`qdbi`) and the latest round trips' excess (`qdl`) against the wait at the moment."
+
+[rows."{reading}_fn_{role}"]
+sims = ["strims-sim"]
+type = "num"
+params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"], role = ["seeds", "forwarders"] }
+description = "In WAN mode, the share of the truth's positives that reading `reading` read negative, over the meter samples of role `role` (`seeds`, `forwarders`) while a swarm streams (Report::queue_delay_accuracy), the readings and thresholds as `{reading}_fp_{role}`'s. Left out without samples."
+
+[rows."{reading}_fp_{role}"]
+sims = ["strims-sim"]
+type = "num"
+params = { reading = ["qd", "qdv", "qdb", "qdbi", "qdl"], role = ["seeds", "forwarders"] }
+description = "In WAN mode, the share of the truth's negatives that reading `reading` read positive, over the meter samples of role `role` (`seeds`, `forwarders`) while a swarm streams (Report::queue_delay_accuracy): `qd`, `qdv` and `qdb` (the meter's delay, vnic's path excess and queued time) against the standing queue, `qdbi` and `qdl` (the queued time, the latest round trips' excess) against the wait at the moment; positive from QUEUE_DELAY_THRESHOLD_MS, the truth from SATURATED_STANDING_MS. Left out without samples."
+
+[rows."{window}_p{p}"]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+params = [{ window = ["cwnd_kib"], p = ["10", "50", "90"] }, { window = ["flight_kib", "flight_kib_busy", "reqs_out", "reqs_out_busy", "ledbat_qd_ms", "cto_ms"], p = ["50", "90"] }]
+description = "Most samples of a push channel have nothing out, so the flight and the requests out also read over the samples with any (`*_busy_*`), with the share of samples with requests out (`reqs_out_share`)."
+
+[rows."{event}_p{p}_ms"]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+params = { event = ["join", "caught_up"], p = ["50", "90"] }
+consts.strims-sim = ["p"]
+consts.ppspp = ["p"]
+description = "over every join (`Report::joins`), the ms to its first frame (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read nothing) and to catching up (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`);"
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows.access]
+sims = ["ppspp"]
+type = "text"
+description = "In WAN mode, the access link of the config's first site (the seed's); `-` outside WAN mode."
+
+[rows.announce_bps]
+sims = ["ppspp"]
+type = "num"
+unit = "bytes/s"
+description = "The bytes of the ANNOUNCEs with entries that reached the seed per second of the stream (over stream_secs)."
+
+[rows.announce_bytes]
+sims = ["ppspp"]
+type = "int"
+unit = "bytes"
+description = "The bytes of the ANNOUNCEs with entries that reached the seed."
+
+[rows.announce_share]
+sims = ["ppspp"]
+type = "num"
+unit = "fraction"
+description = "The bytes of the ANNOUNCEs with entries that reached the seed, as a share of what the viewers sent."
+
+[rows.announces]
+sims = ["ppspp"]
+type = "int"
+description = "ANNOUNCEs with entries that reached the seed."
+
+[rows.arrivals]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "The run's arrivals profile, its knob's text (STRIMS_SIM_ARRIVALS, SIM_ARRIVALS); left out for one with every viewer from the start (strims-sim) or without arrivals or departures (the ppspp sim)."
+
+[rows.arrived]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "`arrived`, `arrived_honest`: the viewers that arrived after the run's start (`HostSpec::arrive_at`), and of them the honest; `departed`, `departed_honest`, those that left for good;"
+
+[rows.arrived_honest]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "`arrived`, `arrived_honest`: the viewers that arrived after the run's start (`HostSpec::arrive_at`), and of them the honest; `departed`, `departed_honest`, those that left for good;"
+
+[rows.asks]
+sims = ["ppspp"]
+type = "int"
+description = "The ANNOUNCE messages the seed sent, over all its channels in the swarm, at the end (the channels' outbound announce counters). Not the asks table's requests."
+
+[rows.barred]
+sims = ["ppspp"]
+type = "int"
+description = "The neighbours an adaptive seed barred from holding a copy."
+
+[rows.barred_honest]
+sims = ["ppspp"]
+type = "int"
+description = "Of the neighbours an adaptive seed barred, the honest ones."
+
+[rows.bucket_p50_ms]
+sims = ["strims-sim"]
+type = "ints"
+unit = "ms"
+description = "Per BUCKET (30 s) of the first swarm's stream time from its start, the median lag in ms of the frames its viewers read (Report::lag_buckets)."
+
+[rows.bucket_p99_ms]
+sims = ["strims-sim"]
+type = "ints"
+unit = "ms"
+description = "Per BUCKET (30 s) of the first swarm's stream time from its start, the p99 lag in ms of the frames its viewers read (Report::lag_buckets)."
+
+[rows.budget_capacity]
+sims = ["ppspp"]
+type = "int"
+unit = "bytes/s"
+none = "null"
+description = "The capacity reading the seed's budget was measured from (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`), median over the samples after the warm-up while it writes, once measured; null if never."
+notes.ppspp = "Pair: strims-sim's `meter_budget_seeds` is the same reading, as deciles over the seed's uplink."
+
+[rows.busy_seeds_p50]
+sims = ["strims-sim"]
+type = "num"
+description = "The median busy fraction of the seeds' meters over their samples while a swarm streams (Report::busy_median)."
+
+[rows.bytes]
+sims = ["ppspp"]
+type = "int"
+unit = "bytes"
+description = "The bytes of the frames with ppspp data every node sent over the run."
+
+[rows.cap_depth_rho]
+sims = ["strims-sim"]
+type = "num"
+description = "`cap_depth_rho`: Spearman's rank correlation of the uplink with the mean push-tree depth (a stream's hops to the seed), and `cap_depth_rho_startup` over the first `BUCKET`: negative while strong uplinks sit near the seed;"
+
+[rows.cap_depth_rho_startup]
+sims = ["strims-sim"]
+type = "num"
+description = "`cap_depth_rho`: Spearman's rank correlation of the uplink with the mean push-tree depth (a stream's hops to the seed), and `cap_depth_rho_startup` over the first `BUCKET`: negative while strong uplinks sit near the seed;"
+
+[rows.cap_fanout_rho]
+sims = ["strims-sim"]
+type = "num"
+description = "`cap_fanout_rho`: with the mean children;"
+
+[rows.cap_hops_rho]
+sims = ["strims-sim"]
+type = "num"
+description = "`cap_hops_rho`: with the mean hops to the seed in the link graph (through hosts other than infrastructure);"
+
+[rows.case]
+sims = ["ppspp"]
+type = "text"
+description = "The allocation the job ran: for cable-seed, its seed policy's allocation (SIM_SEED_POLICY: adaptive or admission); for an AbScenario, its AllocCase (SIM_CASE, AdaptiveQos by default)."
+
+[rows.caught_up_never]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "over every join (`Report::joins`), the ms to its first frame (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read nothing) and to catching up (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`);"
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows.chunk]
+sims = ["ppspp"]
+type = "int"
+description = "The stream's chunk size, in bytes."
+
+[rows.chunks_read]
+sims = ["ppspp"]
+type = "int"
+description = "The chunks the honest viewers read, summed: those watching at the run's end and those that left for good."
+notes.ppspp = "strims-sim's row writes no counterpart."
+
+[rows.churn_leaves]
+sims = ["ppspp"]
+type = "int"
+description = "With churn (SIM_CHURN), the churn's leaves done by the run's end."
+
+[rows."clock_{class}"]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "empty"
+params = { class = ["lt_100ms", "lt_2s", "lt_15s", "le_10min"] }
+code.strims-sim = { class = ["crate::skew::SkewClass::ALL.map(crate::skew::SkewClass::name)"] }
+code.ppspp = { class = ["crate::CLOCK_CLASSES"] }
+description = "With clock skew, the hosts (nodes) whose clock offset is of class `class`: under 100 ms, 2 s or 15 s, or up to 10 min (SkewClass)."
+
+[rows."clock_{class}_delivery"]
+sims = ["ppspp"]
+type = "num"
+params = { class = ["lt_100ms", "lt_2s", "lt_15s", "le_10min"] }
+code.ppspp = { class = ["crate::CLOCK_CLASSES"] }
+description = "With clock skew, the share of the stream's chunks the honest viewers of clock class `class` read, of those due them (Sim::delivered, with arrivals or departures)."
+
+[rows."clock_{class}_lag_p99_ms"]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+params = { class = ["lt_100ms", "lt_2s", "lt_15s", "le_10min"] }
+code.ppspp = { class = ["crate::CLOCK_CLASSES"] }
+description = "With clock skew, the lag p99 in ms of the honest viewers of clock class `class` after their warm-ups."
+
+[rows."clock_{class}_viewers"]
+sims = ["ppspp"]
+type = "int"
+params = { class = ["lt_100ms", "lt_2s", "lt_15s", "le_10min"] }
+code.ppspp = { class = ["crate::CLOCK_CLASSES"] }
+description = "With clock skew, the honest viewers of clock class `class` whose places were never taken again; left out for a class without any."
+
+[rows.clock_max_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "With clock skew, the largest clock offset's magnitude, in ms."
+
+[rows.clock_offsets_ms]
+sims = ["strims-sim", "ppspp"]
+type = "ints"
+unit = "ms"
+none = "empty"
+description = "With clock skew, every host's (node's) clock offset in signed ms, by host index."
+
+[rows.clock_skew]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+none = "empty"
+description = "The clock skew the run's clocks had (STRIMS_SIM_CLOCK_SKEW, SIM_CLOCK_SKEW): its knob's text."
+
+[rows.collude]
+sims = ["ppspp"]
+type = "int"
+description = "1 when SIM_COLLUDE is set and not 0 (the greedy viewers collude), else 0."
+
+[rows.control_bps_link]
+sims = ["strims-sim"]
+type = "num"
+description = "The bytes per link per second the hosts wrote to measure their paths with vnic's frames on the keepalive port, over every host (Report::path_overhead); left out without link time."
+
+[rows.cross_delivery]
+sims = ["ppspp"]
+type = "num"
+description = "The cross-traffic swarm's delivery (CrossReport); 0 without one."
+
+[rows.cross_p50_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "The cross-traffic swarm's median lag in ms (CrossReport); 0 without one."
+
+[rows.cross_p99_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "The cross-traffic swarm's p99 lag in ms (CrossReport); 0 without one."
+
+[rows.cut_from_seed_share]
+sims = ["strims-sim"]
+type = "num"
+unit = "fraction"
+description = "Over the honest viewers' stats samples from NET_WARM after their arrival on, in rounds of a second, the share with no path to their swarm's seed through honest hosts (Report::eclipse)."
+
+[rows.dataless_msgs]
+sims = ["ppspp"]
+type = "int"
+description = "In a media run, the honest messages that named a data-less chunk."
+
+[rows.declined]
+sims = ["strims-sim"]
+type = "int"
+description = "STREAM_REQUESTs declined, over every host (Report::declined)."
+notes.strims-sim = "STREAM_REQUESTs declined, every host's; the ppspp sim's `declines_idle` is a share of its declines, another reading."
+
+[rows.declined_wrongly]
+sims = ["strims-sim"]
+type = "int"
+description = "STREAM_REQUESTs declined in samples where the node's upload rate was under half of what it could upload then, over every host (Report::declined)."
+notes.strims-sim = "Declines in samples whose upload rate was under half of what the node could upload then, by the meter's rate, every host's; the ppspp sim's `declines_idle` is the share of its declines with the uplink idle."
+
+[rows.declines_idle]
+sims = ["ppspp"]
+type = "num"
+description = "Of the STREAM_REQUESTs the honest viewers declined over the samples, the share declined in a second in which the viewer used under half its uplink (Shape::declines_idle over Shape::declines); left out without declines."
+notes.ppspp = "A share of declines; strims-sim's `declined` and `declined_wrongly` are counts, by its meter's rate."
+
+[rows.delivery]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+unit = "fraction"
+description = "The share of what the viewers were owed that they read: delivered over written frames of the first swarm, summed over its viewers, each owed every frame the seed wrote while it was there (Report::owed), those written while it was down included; a media swarm's viewer is owed the frames from its first on."
+notes.ppspp = "The chunks read over the chunks due, summed over the honest viewers whose places were never taken again (Sim::delivered: an arrival is due the chunks from its reader's start, a departure those published CAUGHT_UP before it left)."
+
+[rows."delivery_{who}"]
+sims = ["strims-sim"]
+type = "num"
+unit = "fraction"
+params = { who = ["honest", "hostile"] }
+description = "With hostile hosts, Report::delivery over the honest viewers (`honest`) and over the hostile hosts (`hostile`)."
+
+[rows.depart]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "The run's departures profile, its knob's text (STRIMS_SIM_DEPART, SIM_DEPART); left out without departures."
+
+[rows.depart_excess_lag_area_ms_s]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows.depart_lag_peak_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows.depart_recover_censored]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows.depart_recover_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows.depart_stayed]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows.depart_stranded]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows.departed]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "`arrived`, `arrived_honest`: the viewers that arrived after the run's start (`HostSpec::arrive_at`), and of them the honest; `departed`, `departed_honest`, those that left for good;"
+
+[rows.departed_honest]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "`arrived`, `arrived_honest`: the viewers that arrived after the run's start (`HostSpec::arrive_at`), and of them the honest; `departed`, `departed_honest`, those that left for good;"
+
+[rows.depth1_up_p50]
+sims = ["strims-sim"]
+type = "num"
+description = "`seed_nbr_up_p50` and `depth1_up_p50`: the median uplink of the seed's neighbours, and of the viewers it pushes to, each second's median over the run;"
+
+[rows."depth_{hops}"]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+params = { hops = ["1", "2", "3", "4", "5", "6"] }
+code.ppspp = { hops = ["1..=crate::DEPTH_HOPS"] }
+description = "Of the viewers' (viewer, stream) samples once a second from DEPTH_WARM after the stream's start, the share that reach the seed through a chain of open parents `hops` hops long, 1 to 6 (Report::depths)."
+notes.ppspp = "Of the honest (viewer, stream) samples (Shape::depth), the share through a chain of open parents `hops` hops from the seed, up to DEPTH_HOPS."
+
+[rows.depth_cycle]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "Of the viewers' (viewer, stream) samples, the share whose chain of open parents is a cycle (Report::depths)."
+notes.ppspp = "Of the honest (viewer, stream) samples, the share in a cycle."
+
+[rows.depth_deeper]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "Of the viewers' (viewer, stream) samples, the share through a chain of open parents deeper than 6 hops (Report::depths)."
+notes.ppspp = "Of the honest (viewer, stream) samples, the share through a chain deeper than DEPTH_HOPS."
+
+[rows.depth_none]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "Of the viewers' (viewer, stream) samples once a second from DEPTH_WARM after the stream's start, the share with no open parent (Report::depths)."
+notes.ppspp = "Of the honest (viewer, stream) samples (Shape::depth), the share with no open parent."
+
+[rows.depth_pull_rooted]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "Of the viewers' (viewer, stream) samples, the share whose chain ends at a viewer with no open parent: a subtree rooted in pull (Report::depths)."
+notes.ppspp = "Of the honest (viewer, stream) samples, the share whose chain ends at a viewer with no open parent."
+
+[rows.down_wire]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The bytes every host received through its downlink (WAN mode's down bytes; outside it what it downloaded)."
+notes.ppspp = "The bytes every node received through its downlink (EndStats::down_bytes)."
+
+[rows.dup_bytes]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The waste in the honest viewers' inbound data: data bytes received less the new, stale and invalid ones (ChannelMetrics inbound), over the honest hosts but the seeds."
+notes.ppspp = "Over the honest viewers' runners but the seed's and the grabbers' (whose pulls aren't honest viewers' waste)."
+
+[rows.duplicates]
+sims = ["strims-sim"]
+type = "num"
+description = "Chunks received that their node already had (SwarmSchedulerStats::wasted_chunks), over all chunks received (data bytes received over the chunk size), summed over the first swarm's hosts (Report::duplicates)."
+notes.strims-sim = "A meaning of its own, distinct from `dup_bytes`."
+
+[rows.echo_forged]
+sims = ["ppspp"]
+type = "int"
+description = "The honest nodes' echoes of path probes they never sent (PathMeter::unknown_echoes), over their links."
+
+[rows.eclipsed_share]
+sims = ["strims-sim"]
+type = "num"
+unit = "fraction"
+description = "Over the honest viewers' stats samples from NET_WARM after their arrival on, in rounds of a second, the share with no honest neighbour (hostile and infrastructure hosts don't count; a link counts when either end reported it) (Report::eclipse)."
+
+[rows.exch_answered]
+sims = ["strims-sim"]
+type = "int"
+description = "The honest viewers' peer exchanges that ended Answered (ExchangeOutcome)."
+
+[rows.exch_connected]
+sims = ["strims-sim"]
+type = "int"
+description = "The honest viewers' peer exchanges that ended Connected (ExchangeOutcome)."
+
+[rows.exch_failed]
+sims = ["strims-sim"]
+type = "int"
+description = "The honest viewers' peer exchanges that ended Failed (ExchangeOutcome)."
+
+[rows.exch_not_connected]
+sims = ["strims-sim"]
+type = "int"
+description = "The honest viewers' peer exchanges that ended NotConnected (ExchangeOutcome)."
+
+[rows.exch_rejected]
+sims = ["strims-sim"]
+type = "int"
+description = "The honest viewers' peer exchanges that ended Rejected (ExchangeOutcome)."
+
+[rows.exch_remote_connected]
+sims = ["strims-sim"]
+type = "int"
+description = "The honest viewers' peer exchanges that ended RemoteConnected (ExchangeOutcome)."
+
+[rows.exch_timed_out]
+sims = ["strims-sim"]
+type = "int"
+description = "The honest viewers' peer exchanges that ended TimedOut (ExchangeOutcome)."
+
+[rows.failure]
+sims = ["strims-sim"]
+type = "text"
+none = "empty"
+description = "The test's check's failure, empty when it passed."
+
+[rows."fanout_p{p}"]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+params = { p = ["50", "90"] }
+consts.strims-sim = ["p"]
+consts.ppspp = ["p"]
+description = "Relays' fan-out, its p-th percentile: push subscribers per transfer sample of a first-swarm viewer or relay that had any."
+notes.ppspp = "Per sample of each honest relay, its push subscribers over all streams (Shape::fanout), its p-th percentile."
+
+[rows.frame_bytes_mean]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+unit = "bytes"
+description = "The mean size of the vnic frames the honest hosts wrote: frame bytes over frames."
+notes.ppspp = "The mean size of the frames with ppspp data every node sent (Sent::frame_bytes over Sent::frames)."
+
+[rows.frames]
+sims = ["ppspp"]
+type = "int"
+description = "The frames with ppspp data every node sent over the run."
+
+[rows.free_rider_slots]
+sims = ["ppspp"]
+type = "num"
+description = "Of the seed's push slots (one stream at one neighbour) over the samples after the warm-up, the share at free riders."
+
+[rows.free_riders]
+sims = ["ppspp"]
+type = "int"
+description = "The greedy viewers that free-ride."
+
+[rows.grabber_slots]
+sims = ["ppspp"]
+type = "num"
+description = "Of the seed's push slots (one stream at one neighbour) over the samples after the warm-up, the share at grabbers."
+
+[rows.grabbers]
+sims = ["ppspp"]
+type = "int"
+description = "The greedy viewers that grab."
+
+[rows.grafts]
+sims = ["ppspp"]
+type = "int"
+description = "With SIM_LOOPS=1, the grafts asked, on either side."
+
+[rows.grafts_down]
+sims = ["ppspp"]
+type = "int"
+description = "With SIM_LOOPS=1, the grafts that asked one of the asking viewer's own descendants for the stream."
+
+[rows.greedy]
+sims = ["ppspp"]
+type = "int"
+description = "1 unless SIM_GREEDY is 0: whether the config's greedy viewers run greedy."
+
+[rows.greedy_held_s]
+sims = ["ppspp"]
+type = "int"
+unit = "s"
+description = "The longest a greedy viewer held a slot without a break, sampled once a second over the run, in s."
+
+[rows.have_lazy_in_share]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+unit = "fraction"
+description = "The honest viewers' mean share of their channels whose peer asked them for lazy HAVEs, over their meter samples with channels while a swarm streams (Report::lazy_shares)."
+notes.ppspp = "Over the samples of honest viewers with channels, the mean share of their channels whose peer asked them for lazy HAVEs (Shape::lazy)."
+
+[rows.have_lazy_out_share]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+unit = "fraction"
+description = "The honest viewers' mean share of their channels whose peer they ask for lazy HAVEs, over their meter samples with channels while a swarm streams (Report::lazy_shares)."
+notes.ppspp = "Over the samples of honest viewers with channels, the mean share of their channels whose peer they ask for lazy HAVEs (Shape::lazy)."
+
+[rows.holder_changes]
+sims = ["ppspp"]
+type = "int"
+description = "The samples after the warm-up at which the seed's holders changed."
+
+[rows.holder_copy]
+sims = ["ppspp"]
+type = "num"
+description = "Per pair of consecutive samples after the warm-up and honest whole-copy holder in both, its median share of its copy got as on-time pushes (Sim::holder_copies)."
+
+[rows.holder_short]
+sims = ["ppspp"]
+type = "num"
+description = "Per pair of consecutive samples after the warm-up and honest whole-copy holder in both, the share of those intervals in which it got under HOLDER_WHOLE of its copy as on-time pushes (Sim::holder_copies)."
+
+[rows.join_unread]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "over every join (`Report::joins`), the ms to its first frame (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read nothing) and to catching up (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`);"
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows.known_uplink]
+sims = ["strims-sim"]
+type = "int"
+description = "1 when any host was told its upload capacity (HostSpec::upload_capacity, STRIMS_SIM_KNOWN_UPLINK), else 0."
+
+[rows.lag_max_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "The worst lag in ms of a chunk the honest viewers read after their warm-ups (Sim::steady)."
+
+[rows.lag_p50_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "The median lag in ms of every frame the first swarm's viewers read: read time less the write time the frame carries (Report::lag)."
+notes.ppspp = "The median lag in ms of the chunks the honest viewers read after their warm-ups (Sim::steady: from each one's arrival plus warm_secs to its departure)."
+
+[rows."lag_p50_ms_{who}"]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+params = { who = ["honest", "hostile"] }
+description = "With hostile hosts, the median lag in ms of the frames written between the first swarm's start and stop, over the honest viewers (`honest`) and over the hostile hosts (`hostile`)."
+
+[rows.lag_p99_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "The p99 lag in ms of every frame the first swarm's viewers read: read time less the write time the frame carries (Report::lag)."
+notes.ppspp = "The p99 lag in ms of the chunks the honest viewers read after their warm-ups (Sim::steady)."
+
+[rows."lag_p99_ms_{who}"]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+params = { who = ["honest", "hostile"] }
+description = "With hostile hosts, the p99 lag in ms of the frames written between the first swarm's start and stop, over the honest viewers (`honest`) and over the hostile hosts (`hostile`)."
+
+[rows.lag_p99_ms_weak]
+sims = ["strims-sim"]
+type = "num"
+unit = "ms"
+description = "`lag_p99_ms_weak`: the lag p99 of the weakest quarter;"
+
+[rows.liar_graft_span_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "How long an honest viewer's stream's liar parent lasted on average, in ms."
+
+[rows.liar_grafts]
+sims = ["ppspp"]
+type = "num"
+description = "Of the honest viewers' streams over the samples after the warm-up, the share whose parent is a liar."
+
+[rows.liar_hold_max_s]
+sims = ["ppspp"]
+type = "num"
+unit = "s"
+description = "How long a liar held a copy at a time, the longest, in s."
+
+[rows.liar_hold_s]
+sims = ["ppspp"]
+type = "num"
+unit = "s"
+description = "How long a liar held a copy at a time, the mean, in s."
+
+[rows.liar_slots]
+sims = ["ppspp"]
+type = "num"
+description = "Of the seed's push slots (one stream at one neighbour) over the samples after the warm-up, the share at liars."
+
+[rows.liars]
+sims = ["ppspp"]
+type = "int"
+description = "The greedy viewers that lie."
+
+[rows.links_dropped_per_host_min]
+sims = ["strims-sim"]
+type = "num"
+description = "Links the honest viewers lost, per minute of run they were there for (Report::link_churn)."
+
+[rows.links_formed_per_host_min]
+sims = ["strims-sim"]
+type = "num"
+description = "Links the honest viewers made, per minute of run they were there for (Report::link_churn)."
+
+[rows.links_p50]
+sims = ["strims-sim"]
+type = "int"
+description = "The median of the honest viewers' link counts over their stats samples from NET_WARM after their arrival on, while they were there (Report::link_counts)."
+
+[rows.links_p90]
+sims = ["strims-sim"]
+type = "int"
+description = "The p90 of the honest viewers' link counts over their stats samples from NET_WARM after their arrival on, while they were there (Report::link_counts)."
+
+[rows.loop_len_p50]
+sims = ["ppspp"]
+type = "int"
+description = "With SIM_LOOPS=1, the median members of the push loops that formed."
+
+[rows."loop_life_p{p}_ms"]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+params = { p = ["50", "90"] }
+consts.ppspp = ["p"]
+description = "With SIM_LOOPS=1, the p50 and p90 in ms of the lifetimes of the push loops that broke; left out without any."
+
+[rows.loops]
+sims = ["ppspp"]
+type = "int"
+description = "With SIM_LOOPS=1, the push loops (cycles of open parents) that formed, found at each second's sample."
+
+[rows.loops_alive]
+sims = ["ppspp"]
+type = "int"
+description = "With SIM_LOOPS=1, the push loops still there at the run's end."
+
+[rows."loops_by_{how}"]
+sims = ["ppspp"]
+type = "int"
+params = { how = ["switch", "graft_after_silent_prune", "graft_after_lossy_prune", "graft_after_shed", "graft_after_decline", "graft_after_nothing_logged", "unknown"] }
+description = "With SIM_LOOPS=1, the push loops that formed, by how their newest edge formed: a switch, a graft after a silent prune, a lossy prune, a shed or a decline, a graft after nothing logged, or unknown (Loops::edge)."
+
+[rows.loops_tap_lost]
+sims = ["ppspp"]
+type = "int"
+description = "With SIM_LOOPS=1, the decision tap's events dropped between drains."
+
+[rows.mbit]
+sims = ["ppspp"]
+type = "num"
+description = "The stream's rate, in Mbit/s (Config::stream_rate)."
+
+[rows.media]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "A media swarm's encoder (MediaSpec); left out without media."
+
+[rows.media_kbit]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "A media swarm's media rate: media bytes over the stream's seconds, in kbit/s; left out without media."
+
+[rows."meter_{role}"]
+sims = ["strims-sim"]
+type = "nums"
+params = { role = ["seeds", "forwarders", "others"] }
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over each role's samples (`meter_seeds`, `meter_forwarders`, `meter_others`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
+notes.strims-sim = "Pair: the ppspp sim's `meter_{role}_p{p}` hold the same reading as scalars, its roles `seed` (here `seeds`), `relays` (honest viewers with a child; here `forwarders`, hosts that answered a STREAM_REQUEST, another population) and `others`."
+
+[rows."meter_{role}_p{p}"]
+sims = ["ppspp"]
+type = "num"
+params = { role = ["seed", "relays", "others"], p = ["10", "50", "90"] }
+consts.ppspp = ["p"]
+description = "Per sample of each honest node whose upload meter has a capacity: the capacity (the relay busy-time reading, `PushStats::upload_capacity`, the seed's too) over the node's true uplink, for the seed, relays and the other viewers: the row's `meter_seed_p*`, `meter_relays_p*` and `meter_others_p*`."
+notes.ppspp = "Pair: strims-sim's `meter_{role}` hold the same reading as one list of p10/p50/p90 by role: `seeds`, `forwarders` (hosts that answered a STREAM_REQUEST, not this sim's `relays`) and `others`."
+
+[rows.meter_bucket_forwarders]
+sims = ["strims-sim"]
+type = "nums"
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over each role's samples (`meter_seeds`, `meter_forwarders`, `meter_others`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
+
+[rows.meter_bucket_seeds]
+sims = ["strims-sim"]
+type = "nums"
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over each role's samples (`meter_seeds`, `meter_forwarders`, `meter_others`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
+
+[rows.meter_budget_seeds]
+sims = ["strims-sim"]
+type = "nums"
+description = "An adaptive seed's budget takes its own reading (`MeterSample::budget_capacity`): its p10/p50/p90 ÷ the uplink over the seeds' samples once measured (`meter_budget_seeds`, `Report::budget_readings`)."
+notes.strims-sim = "Pair: the ppspp sim's `budget_capacity` is the same reading, its median in bytes per second."
+
+[rows.mismatches]
+sims = ["ppspp"]
+type = "int"
+description = "Bytes the honest viewers read that weren't the stream's (a media run's: the padded media's), summed."
+
+[rows.msgs_per_payload]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "Messages per channel payload, over the honest hosts' outbound ppspp (ChannelMetrics messages over payloads)."
+
+[rows."n_{role}"]
+sims = ["strims-sim"]
+type = "int"
+params = { role = ["seeds", "forwarders", "others"] }
+description = "The hosts of each role (Report::roles): the swarms' seeds (`seeds`); forwarders, the other hosts that answered a STREAM_REQUEST, accepted or declined (`forwarders`); and the rest (`others`)."
+
+[rows."off_{change}"]
+sims = ["strims-sim"]
+type = "nums"
+params = { change = ["drop", "rise"] }
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90 over each role's samples (`meter_seeds`, `meter_forwarders`, `meter_others`), its median per bucket (`meter_bucket_seeds`, `meter_bucket_forwarders`), and how it tracked changes (`off_drop`, `off_rise`, below)."
+
+[rows."off_{change}_n"]
+sims = ["strims-sim"]
+type = "int"
+params = { change = ["drop", "rise"] }
+description = "The changes of a seed's or forwarder's available upload that tracking measured, drops (`drop`) and rises (`rise`) (Report::tracking); with tracking only."
+
+[rows.ovh_leaf_p50]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "The median over the honest hosts of no role (Report::roles: neither seed nor forwarder) of their overhead per second over their uplinks."
+notes.ppspp = "Over the honest viewers that accepted no subscription (leaves), each over the time it was there."
+
+[rows.ovh_leaf_p90]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "The p90 over the honest hosts of no role (Report::roles) of their overhead per second over their uplinks."
+notes.ppspp = "Over the honest viewers that accepted no subscription (leaves), each over the time it was there."
+
+[rows.ovh_relay_p50]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "The median over the honest forwarders (Report::roles) of their overhead per second over their uplinks: wire bytes less ppspp chunk data, over the uplink times the run's seconds."
+notes.ppspp = "Over the honest viewers that accepted a subscription (relays), each over the time it was there."
+
+[rows.ovh_seed]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "The seed's overhead per second over its uplink: wire bytes less ppspp chunk data, over the uplink times the run's seconds."
+
+[rows.packets_ack]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The row's `packets_ack` and `up_acks` count both kinds, over the whole run and every host."
+
+[rows.packets_up]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "In WAN mode, the packets through every host's uplink, acknowledgements included."
+notes.ppspp = "The packets through every node's uplink (frames off WAN mode); acknowledgements aren't modelled (packets_ack is 0)."
+
+[rows.parent_changes_per_min]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+unit = "per minute"
+description = "Parent changes (prunes and switches) per viewer-minute: over the first swarm's viewers for the stream's span, or with arrivals or departures per minute each viewer was there."
+notes.ppspp = "Prunes and switches (PushStats) per honest viewer-minute after the warm-up; with arrivals or departures per minute each honest viewer was there after its own warm-up (at least a minute)."
+
+[rows.parent_lost]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the honest viewers' push parents that departed (`Report::parent_losses`, counted per departure: `parent_lost`) and the streams they parented (`parent_lost_streams`), and how long the viewers took to notice (`parent_lost_noticed_p50_ms`, `parent_lost_noticed_p90_ms`; `parent_lost_unnoticed`, never);"
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows."parent_lost_noticed_p{p}_ms"]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+params = { p = ["50", "90"] }
+consts.strims-sim = ["p"]
+description = "the honest viewers' push parents that departed (`Report::parent_losses`, counted per departure: `parent_lost`) and the streams they parented (`parent_lost_streams`), and how long the viewers took to notice (`parent_lost_noticed_p50_ms`, `parent_lost_noticed_p90_ms`; `parent_lost_unnoticed`, never);"
+
+[rows.parent_lost_streams]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the honest viewers' push parents that departed (`Report::parent_losses`, counted per departure: `parent_lost`) and the streams they parented (`parent_lost_streams`), and how long the viewers took to notice (`parent_lost_noticed_p50_ms`, `parent_lost_noticed_p90_ms`; `parent_lost_unnoticed`, never);"
+
+[rows.parent_lost_unnoticed]
+sims = ["strims-sim"]
+type = "int"
+description = "the honest viewers' push parents that departed (`Report::parent_losses`, counted per departure: `parent_lost`) and the streams they parented (`parent_lost_streams`), and how long the viewers took to notice (`parent_lost_noticed_p50_ms`, `parent_lost_noticed_p90_ms`; `parent_lost_unnoticed`, never);"
+
+[rows.park_cancelled]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "the answered ones' delays; the NOT_YETs that settled other requests; and the requests parked, how they ended, and those answered NOT_YET at once."
+
+[rows.park_expired]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "Request parking: speculative requests and how they ended, with the answered ones' delays; the NOT_YETs that settled other requests; and the requests parked, how they ended, and those answered NOT_YET at once."
+
+[rows.park_refused]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "requests; and the requests parked, how they ended, and those answered NOT_YET at once."
+
+[rows.park_released]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "Request parking: speculative requests and how they ended, with the answered ones' delays; the NOT_YETs that settled other requests; and the requests parked, how they ended, and those answered NOT_YET at once."
+
+[rows.parked]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "Request parking: speculative requests and how they ended, with the answered ones' delays; the NOT_YETs that settled other requests; and the requests parked, how they ended, and those answered NOT_YET at once."
+
+[rows.passed]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "1 when the test's check passed, else 0."
+
+[rows.payload_bytes]
+sims = ["ppspp"]
+type = "int"
+unit = "bytes"
+description = "The bytes of the chunks the honest viewers read: chunks_read times the chunk size."
+
+[rows.peak_committed]
+sims = ["strims-sim"]
+type = "num"
+description = "The highest push commitment over the uplink cap at any host (Report::peak_committed)."
+
+[rows.peers]
+sims = ["ppspp"]
+type = "int"
+description = "The viewers the config has (Config::peers)."
+
+[rows.ping_bps_link]
+sims = ["strims-sim"]
+type = "num"
+description = "The bytes per link per second of ppspp's PING and PONG messages (9 and 17 bytes, before their payloads' headers), over every host (Report::path_overhead); left out without link time."
+
+[rows.pool_trial_wins]
+sims = ["strims-sim"]
+type = "num"
+description = "Of the honest viewers' pool probes whose trials ended, the share whose link stayed (pool-probe); left out without trials."
+
+[rows.pool_trials_per_host_min]
+sims = ["strims-sim"]
+type = "num"
+description = "The honest viewers' pool probes whose trials ended, per minute of run they were there for (pool-probe); left out without trials."
+
+[rows.pps_p50]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "In WAN mode, the median over the honest forwarders and others of their packets per second through their uplinks."
+notes.ppspp = "The median over the honest viewers of their packets up per second they were there."
+
+[rows.pps_p90]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "In WAN mode, the p90 over the honest forwarders and others of their packets per second through their uplinks."
+notes.ppspp = "The p90 over the honest viewers of their packets up per second they were there."
+
+[rows.pruned]
+sims = ["strims-sim"]
+type = "int"
+description = "Parents cancelled for misses: the first swarm's runner counters summed over every host (SwarmCounters::pruned)."
+
+[rows.push_hits]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "Pushes that arrived before their deadline: the first swarm's runner counters summed over every host (SwarmCounters::hits)."
+notes.ppspp = "PushStats' hits, a child's, summed over the honest viewers."
+
+[rows.push_late]
+sims = ["ppspp"]
+type = "int"
+description = "Pushes that arrived after their release to pull: PushStats' late, a child's, summed over the honest viewers."
+
+[rows.push_misses]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "Pushes that didn't arrive by their deadline, released to pull: the first swarm's runner counters summed over every host (SwarmCounters::misses)."
+notes.ppspp = "PushStats' misses, a child's, summed over the honest viewers."
+
+[rows.push_unsolicited]
+sims = ["ppspp"]
+type = "int"
+description = "Pushes that came from a peer that isn't the parent: PushStats' unsolicited, a child's, summed over the honest viewers."
+
+[rows.queue_delay_seeds_had]
+sims = ["strims-sim"]
+type = "num"
+description = "The share of the seeds' meter samples while a swarm streams that had a queueing delay (Report::queue_delay_deciles)."
+
+[rows.queue_delay_seeds_ms]
+sims = ["strims-sim"]
+type = "nums"
+unit = "ms"
+description = "The p10, p50 and p90 in ms of the seeds' meters' queueing delay while a swarm streams, over the samples that had one (Report::queue_delay_deciles)."
+
+[rows.reads_end_s]
+sims = ["ppspp"]
+type = "num"
+unit = "s"
+description = "When the run ended (Report::finish), in s from t0: the span the seed's and the viewers' rates are over."
+notes.ppspp = "Pair, if their definitions match: strims-sim's `sim_secs`."
+
+[rows.reads_hash]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "A digest of the honest viewers' reads as 16 hex digits, which a change that moves only readers changes and the trace may not."
+notes.strims-sim = "The first 16 hex digits of a SHA-256 over each honest viewer's swarm, host and frames read, then each frame's seq and lag (Report::reads_hash)."
+notes.ppspp = "An FNV digest over each honest viewer's node and its reads' digest, in node order (Sim::reads_hash)."
+
+[rows.rejoin_p90_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The p90 in ms from each rejoin's start to its catching up: every viewer's joins after its first that caught up; left out without any."
+notes.strims-sim = "Pair: the ppspp sim writes a churn run's rejoins as `join_p50_ms` and `join_p90_ms`, the first joins' names too."
+
+[rows.relay_accepted]
+sims = ["ppspp"]
+type = "int"
+description = "Subscriptions the honest viewers accepted as parents: PushStats' accepted, summed over the honest viewers at the run's end."
+notes.ppspp = "PushStats' accepted over the honest viewers; strims-sim's row writes no counterpart."
+
+[rows.relay_rejected]
+sims = ["ppspp"]
+type = "int"
+description = "Subscriptions the honest viewers rejected as parents: PushStats' rejected, summed over the honest viewers at the run's end."
+notes.ppspp = "PushStats' rejected over the honest viewers; strims-sim's row writes no counterpart."
+
+[rows.relay_share]
+sims = ["ppspp"]
+type = "num"
+unit = "fraction"
+description = "Over the samples, the honest viewers with at least one push subscriber over the honest viewers (Shape::relays, Shape::viewers)."
+
+[rows.relay_sheds]
+sims = ["ppspp"]
+type = "int"
+description = "Subscribers the honest viewers closed because their uplink saturated: PushStats' sheds_sent, summed over the honest viewers at the run's end."
+notes.ppspp = "Pair: PushStats' sheds_sent over the honest viewers, the counter strims-sim's bins and node_bins write as `sheds_sent`; strims-sim's row writes none of relay_accepted, relay_rejected or this."
+
+[rows.relinks]
+sims = ["ppspp"]
+type = "int"
+description = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+
+[rows.reports_invalid]
+sims = ["ppspp"]
+type = "int"
+description = "The report entries from honest viewers that were invalid: the parent is the reporter, the stream is past the count, or the entry is past report_entry_limit (ReportCounters::invalid)."
+
+[rows.reports_misses_unseen]
+sims = ["ppspp"]
+type = "int"
+description = "The report entries from honest viewers with more misses than hits whose reporter's repairs don't come later than the hits (ReportCounters::misses_unseen)."
+
+[rows.reports_reporter_fed]
+sims = ["ppspp"]
+type = "int"
+description = "The report entries from honest viewers whose reporter takes the stream from the seed (ReportCounters::reporter_fed)."
+
+[rows.reports_reporter_silent]
+sims = ["ppspp"]
+type = "int"
+description = "The report entries from honest viewers whose reporter doesn't announce the stream (ReportCounters::reporter_silent)."
+
+[rows.reports_subject_unfed]
+sims = ["ppspp"]
+type = "int"
+description = "The report entries from honest viewers whose parent doesn't take the stream from the seed (ReportCounters::subject_unfed)."
+
+[rows.reports_tallied]
+sims = ["ppspp"]
+type = "int"
+description = "The entries of honest viewers' reports that the seed counted in its tally, at the end: none of ReportCounters' reasons to count an entry for nothing (unknown, invalid, reporter_fed, subject_unfed, reporter_silent, ...) applied (ReportCounters::tallied)."
+
+[rows.reports_too_early]
+sims = ["ppspp"]
+type = "int"
+description = "The report entries from honest viewers whose reporter's first copies of the stream come well before its parent's hits (ReportCounters::too_early)."
+
+[rows.reports_unknown]
+sims = ["ppspp"]
+type = "int"
+description = "The report entries from honest viewers whose parent isn't a neighbour, or whose id two neighbours share (ReportCounters::unknown)."
+
+[rows.reqs_out_max]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The most requests out on an honest host's open channel of the first swarm at any stats sample (WindowSamples); left out without samples."
+
+[rows.reqs_out_share]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+unit = "fraction"
+description = "Most samples of a push channel have nothing out, so the flight and the requests out also read over the samples with any (`*_busy_*`), with the share of samples with requests out (`reqs_out_share`)."
+
+[rows.request_timeouts]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "Of the honest viewers' timeouts (`timeouts`), the requests that timed out (the others: speculative ones that expired or were answered NOT_YET)."
+
+[rows.requests_not_yet]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "Request parking: speculative requests and how they ended, with the answered ones' delays; the NOT_YETs that settled other requests; and the requests parked, how they ended, and those answered NOT_YET at once."
+
+[rows.resets]
+sims = ["ppspp"]
+type = "int"
+description = "Reads the honest viewers made that hit a stream reset (store::Error::StreamReset), summed."
+
+[rows.run_tag]
+sims = ["ppspp"]
+type = "text"
+description = "The run's capture directory name: its seed and a hash of its config (run_tag)."
+
+[rows.scenario]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "The scenario's name."
+notes.ppspp = "SIM_SCENARIO's: cable-seed (the default), or the AbScenario the job ran."
+
+[rows.secs]
+sims = ["ppspp"]
+type = "int"
+description = "The stream's length, in s (Config::stream_secs)."
+
+[rows.seed]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The run's seed."
+
+[rows."seed_{queue}_wait_p{p}_ms"]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+params = { queue = ["push", "answer"], p = ["50", "99"] }
+consts.strims-sim = ["p"]
+consts.ppspp = ["p"]
+description = "How long the seed's pushes (`push`) and answers (`answer`) waited in its runner's queues: their p50 and p99, in ms; left out without any."
+
+[rows.seed_answered]
+sims = ["ppspp"]
+type = "int"
+description = "Chunks the seed sent as answers to requests: chunks sent less pushed (its swarm stats)."
+
+[rows.seed_answers_dropped]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The seed's answers dropped at write time (SwarmCounters::answers_dropped)."
+
+[rows.seed_answers_queued]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The seed's answers queued in its runner (SwarmCounters::answers_queued)."
+
+[rows.seed_answers_refused]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The seed's answers its full queue refused (SwarmCounters::answers_refused)."
+
+[rows."seed_asks_{held}"]
+sims = ["ppspp"]
+type = "int"
+params = { held = ["held_by_none", "held_by_1_2", "held_by_3_plus"] }
+description = "With SIM_LOOPS=1, the chunks honest viewers asked the seed for, by how many of the asker's other neighbours had held them for HELD_FOR: none (`held_by_none`), one or two (`held_by_1_2`), three or more (`held_by_3_plus`)."
+
+[rows.seed_asks_held_by_none_parentless]
+sims = ["ppspp"]
+type = "int"
+description = "With SIM_LOOPS=1, of the chunks asked of the seed that no other neighbour held, those whose stream had no open parent at the asker."
+
+[rows.seed_budget]
+sims = ["strims-sim"]
+type = "int"
+description = "An adaptive seed's budget in stream slots at its latest check, 0 until measured (PushStats::seed_budget)."
+notes.strims-sim = "The adaptive seed's budget in stream slots, distinct from the ppspp sim's `seed_slots`."
+
+[rows.seed_budget_changes_per_min]
+sims = ["strims-sim"]
+type = "num"
+unit = "per minute"
+description = "An adaptive seed's budget changes per minute of stream: consecutive seed samples of the first swarm, from its start to its stop, whose budgets differ."
+
+[rows.seed_capacity]
+sims = ["ppspp"]
+type = "int"
+unit = "bytes/s"
+description = "The seed's capacity estimate (`AllocSample::capacity`, `PushStats::upload_capacity`), the relay busy-time reading despite its name (not its budget's, `budget_capacity`), median over the samples after the warm-up while it writes (0 without one)."
+notes.ppspp = "Pair: strims-sim's `meter_seeds` holds the same reading (the seed's relay busy-time capacity), as deciles over its uplink; Phase 2 names it meter_seed_bps_p50."
+
+[rows.seed_copies]
+sims = ["strims-sim"]
+type = "int"
+description = "An adaptive seed's copies in effect at its latest check (PushStats::seed_copies)."
+notes.strims-sim = "The adaptive seed's copies, distinct from the ppspp sim's `seed_slots`."
+
+[rows.seed_copies_changes_per_min]
+sims = ["strims-sim"]
+type = "num"
+unit = "per minute"
+description = "An adaptive seed's copies changes per minute of stream: consecutive seed samples of the first swarm, from its start to its stop, whose copies differ."
+
+[rows.seed_data_share]
+sims = ["strims-sim"]
+type = "num"
+unit = "fraction"
+description = "The seed's share of the ppspp data bytes sent on the first swarm's channels, from the runner stats: chunk data alone, with no vpn, handshake or protocol overhead (Report::data_share)."
+notes.strims-sim = "Pair: the ppspp sim's `seed_share` (the seed's share of DATA bytes)."
+
+[rows.seed_distinct]
+sims = ["ppspp"]
+type = "num"
+description = "Of the chunks the seed sent, the share that were distinct chunks (distinct_chunks_sent over chunks_sent)."
+
+[rows.seed_drop_p99_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after each drop of its available upload (Report::lag_after_changes); with tracking only."
+
+[rows.seed_first_wave]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "An adaptive seed's first wave: the most copies its window opened before its budget was measured (PushStats::seed_first_wave); 0 for another seed."
+
+[rows.seed_first_wave_capacity]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The first wave's `seed_first_wave_capacity` is the budget's busy time's unbounded reading, neither of them."
+
+[rows.seed_mb_up]
+sims = ["ppspp"]
+type = "num"
+description = "The seed's wire bytes up over the run, in MB."
+
+[rows.seed_nbr_up_p50]
+sims = ["strims-sim"]
+type = "num"
+description = "`seed_nbr_up_p50` and `depth1_up_p50`: the median uplink of the seed's neighbours, and of the viewers it pushes to, each second's median over the run;"
+
+[rows.seed_objective_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "The seed's objective, median over the samples after the warm-up, in ms: the p90 over neighbours of the latest stream's mean one-way delay after publishing, as the neighbours' reports give it (AllocSample::objective)."
+
+[rows.seed_offers_30s]
+sims = ["strims-sim"]
+type = "int"
+description = "Offers to link the first swarm's seed, answered or refused, in the run's first EARLY_OFFERS."
+
+[rows.seed_offers_per_min]
+sims = ["strims-sim"]
+type = "num"
+unit = "per minute"
+description = "`seed_offers_per_min`: offers to link the seed answered and refused, per minute of run."
+
+[rows.seed_pps]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "The seed's packets through its uplink per second of the run (WAN mode in strims-sim, left out outside it)."
+
+[rows.seed_pull_share]
+sims = ["ppspp"]
+type = "num"
+unit = "fraction"
+description = "Of the chunks the seed sent, the share that answered requests: chunks sent less pushed, over chunks sent (its swarm stats)."
+
+[rows.seed_pushed]
+sims = ["ppspp"]
+type = "int"
+description = "Chunks the seed pushed (its swarm stats' pushed_chunks)."
+
+[rows.seed_rise_p99_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after each rise of its available upload (Report::lag_after_changes); with tracking only."
+
+[rows.seed_rtt_greedy_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "The median of the seed's latest round trips to the greedy viewers, in ms, over its links to them with a reading; left out without any."
+
+[rows.seed_rtt_honest_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "The median of the seed's latest round trips to the honest viewers, in ms, over its links to them with a reading; left out without any."
+
+[rows.seed_share]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+unit = "fraction"
+description = "The seed's share of the upload: its bytes over the seed's, viewers' and relays' together (UploadDistribution::seed_share, everything they wrote to their links)."
+notes.strims-sim = "The seed's share of every byte the swarm wrote to its links. The ppspp sim's `seed_share` is another reading: the seed's share of DATA bytes, this sim's `seed_data_share`."
+notes.ppspp = "The seed's share of all data bytes sent (Sim::uploaded over every node, none from a greedy viewer)."
+
+[rows.seed_slots]
+sims = ["ppspp"]
+type = "num"
+description = "The seed's push subscriptions (stream slots), mean over the samples after the warm-up."
+notes.ppspp = "Distinct from strims-sim's `seed_budget` and `seed_copies`."
+
+[rows.seed_timeouts]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The seed's requests that timed out unanswered (Report::timeouts)."
+
+[rows.seed_unmeasured_greedy]
+sims = ["ppspp"]
+type = "int"
+description = "The seed's links to greedy viewers without a round-trip reading at the run's end."
+
+[rows.seed_unmeasured_honest]
+sims = ["ppspp"]
+type = "int"
+description = "The seed's links to honest viewers without a round-trip reading at the run's end."
+
+[rows.seed_up_bw]
+sims = ["ppspp"]
+type = "int"
+description = "The seed's uplink, in bytes per second."
+
+[rows.seed_uplink]
+sims = ["ppspp"]
+type = "num"
+description = "The seed's use of its uplink: its wire bytes up over its uplink times the run's span (reads_end_s)."
+
+[rows.seed_wire_per_written]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "The seed's wire bytes through its uplink, its transports' framing included, over the bytes it wrote to its sockets."
+notes.ppspp = "The seed's wire bytes up over them less its TCP/IP headers (Sent::transport_bytes)."
+
+[rows.send_buffer_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The scenario's send buffer's uplink queue, in ms (STRIMS_SIM_SEND_BUFFER, WAN mode); 0 without one."
+
+[rows.sent_kbit]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "A media swarm's stream rate: the bytes its seed sent of the stream over the stream's seconds, in kbit/s; left out without media."
+
+[rows.settled_s]
+sims = ["ppspp"]
+type = "num"
+unit = "s"
+description = "When the seed's holders (AllocSample::holders) last changed after the stream started, in s."
+
+[rows.shed]
+sims = ["strims-sim"]
+type = "int"
+description = "Parents lost because the parent closed the subscription: the first swarm's runner counters summed over every host (SwarmCounters::shed)."
+
+[rows.sign]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "A media swarm's signing policy (MediaSpec); left out without media."
+
+[rows.sign_wait_p50_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "The median wait in ms of each media chunk to be signed; left out without media."
+
+[rows.sign_wait_p99_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "The p99 wait in ms of each media chunk to be signed; left out without media."
+
+[rows.signed_lag_p50_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "In a media run, the median lag in ms of the media chunks the honest viewers read after their warm-ups, from their unit's signing."
+
+[rows.signed_lag_p99_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "In a media run, the p99 lag in ms of the media chunks the honest viewers read after their warm-ups, from their unit's signing."
+
+[rows.sim_secs]
+sims = ["strims-sim"]
+type = "num"
+unit = "s"
+description = "The run's simulated length in seconds: turmoil's elapsed time when the run ended."
+notes.strims-sim = "Pair, if their definitions match: the ppspp sim's `reads_end_s`."
+
+[rows.small_packet_share]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+unit = "fraction"
+description = "In WAN mode, the small packets over the packets through every host's uplink, acknowledgements counted small."
+notes.ppspp = "Small packets over the packets through every node's uplink."
+
+[rows.source_resolved_p90_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The p90 over the honest viewers of the ms from each one's arrival to its pool first resolving a swarm's source (pool-find); left out without any."
+
+[rows.spec_answered]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "Request parking: speculative requests and how they ended, with the answered ones' delays; the NOT_YETs that settled other requests; and the requests parked, how they ended, and those answered NOT_YET at once."
+
+[rows.spec_cancelled]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "Request parking: speculative requests and how they ended, with the answered ones' delays; the NOT_YETs that settled other requests; and the requests parked, how they ended, and those answered NOT_YET at once."
+
+[rows.spec_expired]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "Request parking: speculative requests and how they ended, with the answered ones' delays; the NOT_YETs that settled other requests; and the requests parked, how they ended, and those answered NOT_YET at once."
+
+[rows.spec_not_yet]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "Request parking: speculative requests and how they ended, with the answered ones' delays; the NOT_YETs that settled other requests; and the requests parked, how they ended, and those answered NOT_YET at once."
+
+[rows.spec_sent]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "Request parking: speculative requests and how they ended, with the answered ones' delays; the NOT_YETs that settled other requests; and the requests parked, how they ended, and those answered NOT_YET at once."
+
+[rows."spec_wait_p{p}_ms"]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+params = { p = ["50", "99"] }
+description = "The p50 and p99 in ms of the answered speculative requests' delays, over every host's runner (strims-sim) or the honest askers (the ppspp sim); left out without any."
+
+[rows.stale_bytes]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The stale data bytes the honest viewers received (ChannelMetrics::stale_bytes, inbound), over the honest hosts but the seeds."
+notes.ppspp = "Over the honest viewers' runners but the seed's and the grabbers'."
+
+[rows."stalled_share_{delay}{pop}"]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+unit = "fraction"
+params = { delay = ["1250", "4250"], pop = { strims-sim = ["", "_honest"], ppspp = [""] } }
+code.strims-sim = { delay = ["strims_wan::playout::DELAYS_MS"] }
+code.ppspp = { delay = ["strims_wan::playout::DELAYS_MS"] }
+description = "The row's playback columns, as the ppspp sim's rows have them: per delay `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last frame's play, or its departure if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its reader's start, or the stream's if later, as `Report::joins` times it) to its playback's start (`startup_ms_D`); with hostile hosts, the honest viewers' too, with `_honest`."
+notes.ppspp = "The playback columns, as strims-sim's rows have them: per delay `D` of `DELAYS_MS`, the honest viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last chunk's play, or its leaving for good if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its arrival, or the stream's start if later) to its playback's start (`startup_ms_D`)."
+
+[rows."stalls_per_min_{delay}{pop}"]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+params = { delay = ["1250", "4250"], pop = { strims-sim = ["", "_honest"], ppspp = [""] } }
+code.strims-sim = { delay = ["strims_wan::playout::DELAYS_MS"] }
+code.ppspp = { delay = ["strims_wan::playout::DELAYS_MS"] }
+description = "The row's playback columns, as the ppspp sim's rows have them: per delay `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last frame's play, or its departure if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its reader's start, or the stream's if later, as `Report::joins` times it) to its playback's start (`startup_ms_D`); with hostile hosts, the honest viewers' too, with `_honest`."
+notes.ppspp = "The playback columns, as strims-sim's rows have them: per delay `D` of `DELAYS_MS`, the honest viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last chunk's play, or its leaving for good if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its arrival, or the stream's start if later) to its playback's start (`startup_ms_D`)."
+
+[rows.standing_forwarders]
+sims = ["strims-sim"]
+type = "num"
+description = "The share of the forwarders' uplink queue samples while a swarm streams that waited longer than STANDING_QUEUE (Report::standing_queue); 0 outside WAN mode."
+
+[rows.standing_seeds]
+sims = ["strims-sim"]
+type = "num"
+description = "The share of the seeds' uplink queue samples while a swarm streams that waited longer than STANDING_QUEUE (Report::standing_queue); 0 outside WAN mode."
+
+[rows."startup_ms_{delay}{pop}"]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+params = { delay = ["1250", "4250"], pop = { strims-sim = ["", "_honest"], ppspp = [""] } }
+code.strims-sim = { delay = ["strims_wan::playout::DELAYS_MS"] }
+code.ppspp = { delay = ["strims_wan::playout::DELAYS_MS"] }
+description = "The row's playback columns, as the ppspp sim's rows have them: per delay `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last frame's play, or its departure if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its reader's start, or the stream's if later, as `Report::joins` times it) to its playback's start (`startup_ms_D`); with hostile hosts, the honest viewers' too, with `_honest`."
+notes.ppspp = "The playback columns, as strims-sim's rows have them: per delay `D` of `DELAYS_MS`, the honest viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last chunk's play, or its leaving for good if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its arrival, or the stream's start if later) to its playback's start (`startup_ms_D`)."
+
+[rows.stream_end_s]
+sims = ["ppspp"]
+type = "num"
+unit = "s"
+description = "When the stream ended, in s from t0: the stream's length (stream_secs) after its start at 1 s."
+
+[rows.stream_per_media]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "A media swarm's stream bytes over its media bytes; left out without media."
+
+[rows.streams]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The first swarm's stream count: the streams its stream is split into."
+notes.ppspp = "The config's `Config::stream_count`."
+notes.strims-sim = "Scenario swarm 0's `SwarmOptions::stream_count`, at least 1 (1 without a swarm)."
+
+[rows.stripe_p90_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "The p90 in ms of the worst stripe's lag: per honest viewer and munro published after its warm-up, how long after publishing its last chunk arrived (Sim::munro_lags); munros it never received whole are left out."
+
+[rows.stripe_p99_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "The p99 in ms of the worst stripe's lag: per honest viewer and munro published after its warm-up, how long after publishing its last chunk arrived (Sim::munro_lags)."
+
+[rows.super_peer_children]
+sims = ["ppspp"]
+type = "int"
+description = "In a run with a super-peer (the last datacenter site but the seed's), its push subscribers at the end (PushStats::children); 0 without one."
+
+[rows.super_peer_declined]
+sims = ["ppspp"]
+type = "int"
+description = "In a run with a super-peer, the subscriptions it rejected (PushStats::rejected); 0 without one."
+
+[rows.switched]
+sims = ["strims-sim"]
+type = "int"
+description = "Parents replaced: the first swarm's runner counters summed over every host (SwarmCounters::switched)."
+
+[rows.switches]
+sims = ["ppspp"]
+type = "int"
+description = "With SIM_LOOPS=1, the switches asked."
+
+[rows.switches_down]
+sims = ["ppspp"]
+type = "int"
+description = "With SIM_LOOPS=1, the switches that asked one of the asking viewer's own descendants for the stream."
+
+[rows.test]
+sims = ["strims-sim"]
+type = "text"
+description = "The sweep test the job ran (strims-sim's tests/scenarios.rs name)."
+
+[rows.timeouts]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The honest viewers' requests that timed out unanswered, over every incarnation (SwarmCounters::timeouts): every host but the seed and the hostile ones."
+
+[rows.timeouts_hostile]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "With hostile hosts, their requests that timed out unanswered (strims-sim's hostile hosts; the ppspp sim's greedy viewers and adversaries); left out without any."
+
+[rows.timeouts_spec_expired]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "The requests of swarm `swarm` that ended without data, every incarnation's, as the ppspp sim's rows count them: those that timed out unanswered (`crate::stats::SwarmCounters::timeouts`) and the speculative ones that expired or that their holder answered NOT_YET (the row's `timeouts_spec_expired`, `timeouts_spec_not_yet`); of the honest viewers (every host but the seed and the hostile ones), the seed's, and the hostile hosts'."
+
+[rows.timeouts_spec_not_yet]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "The requests of swarm `swarm` that ended without data, every incarnation's, as the ppspp sim's rows count them: those that timed out unanswered (`crate::stats::SwarmCounters::timeouts`) and the speculative ones that expired or that their holder answered NOT_YET (the row's `timeouts_spec_expired`, `timeouts_spec_not_yet`); of the honest viewers (every host but the seed and the hostile ones), the seed's, and the hostile hosts'."
+
+[rows.top_seed_link_s]
+sims = ["strims-sim"]
+type = "num"
+unit = "s"
+description = "`top_seed_link_s`: when the strongest viewer first neighbours the seed, seconds after the stream's start or its arrival, whichever came last (the stream's length if never);"
+
+[rows.trace]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "The run's trace digest as 16 hex digits: what the nodes sent, which a rerun must reproduce."
+notes.strims-sim = "The first 16 hex digits of the trace hash over the run's events and a few of its reads."
+
+[rows.underruns]
+sims = ["ppspp"]
+type = "int"
+description = "Reads the honest viewers made that hit a buffer underrun (store::Error::BufferUnderrun), summed."
+
+[rows.unit]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "A media swarm's chunks per unit; left out without media."
+
+[rows.units_per_s]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+unit = "s"
+description = "A media swarm's units signed a second (each peer's signature verifications); left out without media."
+
+[rows.up_ack]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound ppspp ACK message bytes (ChannelMetrics::ack_bytes), not the transports' acknowledgements (`up_acks`)."
+
+[rows.up_acks]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The row's `packets_ack` and `up_acks` count both kinds, over the whole run and every host."
+
+[rows.up_announce]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound ANNOUNCE message bytes (ChannelMetrics::announce_bytes)."
+
+[rows.up_chan_hdr]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound channel payload headers, in bytes (ChannelMetrics::header_bytes)."
+
+[rows.up_data_hdr]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound DATA message headers, in bytes (ChannelMetrics::data_header_bytes)."
+
+[rows.up_have]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound HAVE message bytes (ChannelMetrics::have_bytes)."
+
+[rows.up_hostile]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The uplinks' bytes by layer over every host, in the ppspp sim's rows' terms (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
+notes.ppspp = "The uplinks' bytes by layer over every node, in strims-sim's rows' terms: the ppspp layers from the seed's and the honest viewers' runners (`up_hostile` is the frames of greedy viewers and adversaries, whose runners count what the harness rewrites), vnic's control records, and TCP/IP headers in WAN mode."
+
+[rows.up_integrity]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound integrity bytes (ChannelMetrics::integrity_bytes)."
+
+[rows.up_payload]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound ppspp chunk data bytes (ChannelMetrics::data_bytes over their runners), a layer of `up_wire`."
+
+[rows.up_ping]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound PING and PONG message bytes (ChannelMetrics::ping_bytes)."
+
+[rows.up_ports]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The uplinks' bytes by layer over every host, in the ppspp sim's rows' terms (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
+
+[rows.up_request]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound REQUEST message bytes (ChannelMetrics::request_bytes)."
+
+[rows.up_session]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound session (handshake) message bytes (ChannelMetrics::session_bytes)."
+
+[rows.up_signed]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound signed integrity bytes (ChannelMetrics::signed_integrity_bytes)."
+
+[rows.up_state]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound STATE message bytes (ChannelMetrics::state_bytes), the lines' summaries in place of HAVEs."
+
+[rows.up_stream]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The honest hosts' outbound STREAM_REQUEST, STREAM_CANCEL, STREAM_OPEN and STREAM_CLOSE bytes (ChannelMetrics::stream_bytes)."
+
+[rows.up_transport]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The uplinks' bytes by layer over every host, in the ppspp sim's rows' terms (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
+
+[rows.up_vnic]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The uplinks' bytes by layer over every host, in the ppspp sim's rows' terms (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
+
+[rows.up_wire]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The uplinks' bytes by layer over every host, in the ppspp sim's rows' terms (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
+
+[rows.upq_ms_max]
+sims = ["strims-sim"]
+type = "num"
+unit = "ms"
+description = "Then in WAN mode the honest hosts' uplink queues' waits over their samples while a swarm streams, in ms (`upq_ms_*`: p50, p90 and the longest)."
+
+[rows."upq_ms_p{p}"]
+sims = ["strims-sim"]
+type = "num"
+unit = "ms"
+params = { p = ["50", "90"] }
+consts.strims-sim = ["p"]
+description = "Then in WAN mode the honest hosts' uplink queues' waits over their samples while a swarm streams, in ms (`upq_ms_*`: p50, p90 and the longest)."
+
+[rows.useful_bytes]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "The bytes of the stream the honest viewers read: each one's frames received times the frame size (a media swarm's chunk size)."
+notes.ppspp = "The chunks the honest viewers read, the cross-traffic swarm's included, times the chunk size."
+
+[rows.v_barred_with_children]
+sims = ["ppspp"]
+type = "int"
+description = "Honest holders barred that had a real child at the sample before."
+
+[rows.v_honest]
+sims = ["ppspp"]
+type = "int"
+description = "The reports' verdicts against the real subtrees: honest holder samples."
+
+[rows.v_judged]
+sims = ["ppspp"]
+type = "int"
+description = "Honest holder samples a quorum judged."
+
+[rows.v_liars]
+sims = ["ppspp"]
+type = "int"
+description = "Liar holder samples."
+
+[rows.v_liars_judged]
+sims = ["ppspp"]
+type = "int"
+description = "Liar holder samples a quorum judged."
+
+[rows.v_liars_served]
+sims = ["ppspp"]
+type = "int"
+description = "Liar holder samples a quorum saw serve."
+
+[rows.v_not_kept]
+sims = ["ppspp"]
+type = "int"
+description = "Honest holder samples at which the seed pushed to the holder and its pushes didn't keep up."
+
+[rows.v_served]
+sims = ["ppspp"]
+type = "int"
+description = "Honest holder samples a quorum saw serve."
+
+[rows.v_served_childless]
+sims = ["ppspp"]
+type = "int"
+description = "Honest holder samples a quorum saw serve without a real child."
+
+[rows.v_with_children]
+sims = ["ppspp"]
+type = "int"
+description = "Honest holder samples with a real child."
+
+[rows.v_with_reporters]
+sims = ["ppspp"]
+type = "int"
+description = "Honest holder samples with a real child among the seed's neighbours (one that can report)."
+
+[rows."viewer_util_p{p}"]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+params = { p = ["50", "90", "95"] }
+consts.strims-sim = ["p"]
+consts.ppspp = ["p"]
+description = "The p-th percentile over the first swarm's viewers and relays of their uplink use: bytes written to sockets over the uplink for the stream's span (with arrivals or departures, the span each was there for)."
+notes.ppspp = "Over the honest viewers: wire bytes up over the uplink for the time each was there."
+
+[rows.wall_secs]
+sims = ["strims-sim"]
+type = "num"
+unit = "s"
+description = "The wall-clock seconds the run took: no deterministic reading, it moves from run to run."
+
+[rows.warm]
+sims = ["ppspp"]
+type = "int"
+description = "The warm-up, in s, before which the steady measures don't count (Config::warm_secs)."
+
+[rows.wasted]
+sims = ["ppspp"]
+type = "int"
+description = "Chunks the honest viewers received that they already had (SwarmSchedulerStats::wasted_chunks), summed."
+
+[rows.wire_per_media]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "Every host's upload per media byte per viewer: the bytes uploaded over the media bytes times the viewers; left out without media."
+
+[rows.wire_per_useful]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+description = "The wire bytes through every uplink (`up_wire`) over the bytes of the stream the honest viewers read (`useful_bytes`)."
+
+[rows.worst_region_p99_ms]
+sims = ["ppspp"]
+type = "int"
+unit = "ms"
+description = "In WAN mode, the worst region's lag p99 in ms: per region, its honest viewers' lag p99 after their warm-ups (Sim::region_p99); 0 outside WAN mode."
+
+[meta.sim]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "The sim that wrote the run: strims-sim or ppspp."
+
+[meta.seed]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The first swarm's seed: its host in strims-sim, its node (0) in the ppspp sim."
+
+[meta.streams]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The first swarm's stream count, at least 1: the streams of the parents table and of the logs run from 0 below it, whether or not a table has rows of each."
+notes.ppspp = "The config's `Config::stream_count`."
+notes.strims-sim = "Scenario swarm 0's `SwarmOptions::stream_count`; left out without a swarm."
+
+[meta.rate]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The stream's rate, in bytes per second."
+
+[meta.chunk]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The stream's chunk size, in bytes."
+
+[meta.frame]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The size of the frames the series counts, in bytes: strims-sim's frame (FRAME_LEN; a media swarm's chunk), the ppspp sim's chunk."
+
+[meta.secs]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "s"
+description = "The stream's length in seconds; the seconds after it are the run's tail."
+
+[meta.seed_up]
+sims = ["strims-sim", "ppspp"]
+type = "json"
+description = "`[s, bytes per second]`: the seed's uplink from the start and at each step, `s` from the stream's start."
+
+[meta.viewer_up]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The viewers' uplinks, summed."
+
+[meta.seconds]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The number of seconds of the series: the seconds table's rows."
+
+[meta.hostile]
+sims = ["strims-sim"]
+type = "ints"
+description = "The hostile viewers' numbers."
+
+[meta.viewers]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The number of viewers: the viewers table's rows."
+
+[meta.bin_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "The width of the bins and node_bins tables' bins, in ms (STRIMS_SIM_BIN_MS, SIM_BIN_MS)."
+
+[meta.forecasts_lost]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The forecast samples the nodes' caps left out."
+
+[meta.parents_lost]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The parent changes the logs' caps left out."
+
+[meta.held_lost]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "With the request logs on, the held log's records the caps left out."
+
+[meta.haves_lost]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "With the request logs on, the HAVE log's records the caps left out."
+
+[meta.asks_lost]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "With the request logs on, the request log's records the caps left out: requests, each with its rivals."
+
+[meta.seed_log_lost]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "With it too, the seed log's decisions and sends its caps left out are `seed_log_lost`."
+notes.ppspp = "With `SIM_SPEC=1` the seed log's decisions and sends its caps left out are `seed_log_lost`."
+
+[meta.logs_lost]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "With the request logs on, the park and event logs' records their caps left out."
+
+[tables.seconds]
+sims = ["strims-sim", "ppspp"]
+grain = "second of `Report::series_data`"
+keys = "k, sec"
+joins = "jobs USING (k, src); verdict_seconds USING (k, src, sec)"
+sample = false
+zstd = false
+normalized = "-1 (no reading) NULL."
+notes.ppspp = "grain: second of `Sim::series`"
+
+[columns.seconds.sec]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The second, from the stream's start: second k is [k, k + 1) s after it, through the run's end."
+
+[columns.seconds.present]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "The honest viewers' transfer samples in the second: the honest viewers there while the stats tick once a second, more with a finer `Scenario::stats_every` (each viewer once per tick)."
+
+[columns.seconds.hits]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Over the viewers, pushes before their deadline, deadlines released to pull, and parents pruned (`hits`, `misses`, `pruned`, in that order)."
+
+[columns.seconds.misses]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Over the viewers, pushes before their deadline, deadlines released to pull, and parents pruned (`hits`, `misses`, `pruned`, in that order)."
+
+[columns.seconds.pruned]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Over the viewers, pushes before their deadline, deadlines released to pull, and parents pruned (`hits`, `misses`, `pruned`, in that order)."
+
+[columns.seconds.parents]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "The viewers' median count of streams with an open parent."
+
+[columns.seconds.capacity]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "the seed's relay busy-time reading, `PushStats::upload_capacity`, at the stats tick that opens the second: one tick before the one the second's counters come from"
+notes.ppspp = "the seed's relay busy-time reading, `PushStats::upload_capacity`, at the second's end, the sample its counters come from: strims-sim's is a tick older"
+
+[columns.seconds.busy]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "the same tick's, in thousandths"
+
+[columns.seconds.avail]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "The seed's meter at its last reading in the second, the stats tick that opens it (one tick before the one the second's counters come from): `capacity` the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, the seed's too), `busy` in thousandths; and the uplink it had at the second's middle (`capacity`, `busy`, `avail`, in that order)."
+
+[columns.seconds.copies]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "The adaptive seed's copies at the second's middle (as of the tick that opens it)."
+
+[columns.seconds.sent]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Chunks the seed sent, and of them pushes (`sent`, `pushed`, in that order)."
+
+[columns.seconds.pushed]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Chunks the seed sent, and of them pushes (`sent`, `pushed`, in that order)."
+
+[columns.seconds.seed_ovh]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Bytes the seed and the honest viewers (summed) wrote to their links that weren't chunk data (`crate::TransferSample::overhead`; the row's `up_transport` and `up_acks` have the transports') (`seed_ovh`, `viewer_ovh`, in that order)."
+
+[columns.seconds.viewer_ovh]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Bytes the seed and the honest viewers (summed) wrote to their links that weren't chunk data (`crate::TransferSample::overhead`; the row's `up_transport` and `up_acks` have the transports') (`seed_ovh`, `viewer_ovh`, in that order)."
+
+[columns.seconds.budget_capacity]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "the capacity reading the seed's budget was measured from, `PushStats::seed_budget_capacity`, at `capacity`'s tick: empty until measured, -1 without a reading"
+notes.ppspp = "the capacity reading the seed's budget was measured from, `PushStats::seed_budget_capacity`, at the second's end: empty until measured"
+
+[columns.seconds.written]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "A media swarm's chunks published: those holding media, then with those of padding alone (`written`, `chunks`, in that order)."
+
+[tables.viewer_seconds]
+sims = ["strims-sim", "ppspp"]
+grain = "viewer and second it was there (`Report::presence`)"
+keys = "k, viewer, sec"
+joins = "viewers USING (k, src, viewer)"
+sample = false
+zstd = false
+normalized = "only the seconds the viewer was there (its stay overlaps the second), in both sims; lag_ms NULL in a second without a read."
+notes.ppspp = "grain: viewer and second"
+
+[columns.viewer_seconds.viewer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The viewer, numbered as the viewers table numbers it."
+
+[columns.viewer_seconds.sec]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The second, from the stream's start, as the seconds table's."
+
+[columns.viewer_seconds.lag_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "-1"
+description = "the series' `lag`: the p99 of the frames read in the second, -1 without any"
+notes.ppspp = "the series' `lag`, -1 without a read"
+
+[columns.viewer_seconds.frames]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The frames the viewer read in the second (chunks in the ppspp sim)."
+notes.strims-sim = "A second the viewer wasn't there in has no row."
+notes.ppspp = "Every second has a row; a viewer not there reads none."
+
+[tables.reads]
+sims = ["strims-sim", "ppspp"]
+grain = "frame a viewer read (duplicates too)"
+keys = "k, viewer, t_ms"
+joins = "viewers USING (k, src, viewer)"
+sample = true
+zstd = true
+notes.ppspp = "grain: chunk a viewer read"
+
+[columns.reads.viewer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The viewer that read the frame, numbered as the viewers table numbers it."
+
+[columns.reads.t_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "when it was read: its write time plus its lag"
+notes.ppspp = "when it read it"
+
+[columns.reads.seq]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the chunk"
+
+[columns.reads.lag_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "from its publishing"
+
+[tables.stalls]
+sims = ["strims-sim", "ppspp"]
+grain = "stall of a viewer's playout at each delay of `DELAYS_MS` (`hack/capture/analyze.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`)"
+keys = "k, viewer, delay_ms, t_ms"
+joins = "viewers USING (k, src, viewer)"
+sample = false
+zstd = false
+normalized = "The unit played is the sim's: a frame in strims-sim, a chunk in the ppspp sim, whose stalls are one chunk's lateness and so often far shorter than a frame's. A unit read twice counts at its first read. scoring.sql's playback_of(runs, delay_ms) plays reads the same way at any delay."
+
+[columns.stalls.viewer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The viewer whose playout stalled, numbered as the viewers table numbers it."
+
+[columns.stalls.delay_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "The playout's delay behind the stream, one of DELAYS_MS (1250, 4250), in ms."
+
+[columns.stalls.t_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "when it began, on the `reads`' clock"
+
+[columns.stalls.stall_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "`playout::play` over the viewer's `reads`, as `hack/sim-db`'s `playback(delay_ms)` plays them"
+
+[tables.bins]
+sims = ["strims-sim", "ppspp"]
+grain = "bin of `Scenario::wire_bins`"
+keys = "k, bin"
+joins = "jobs USING (k, src) (bin_ms, the bins' width); node_bins USING (k, src, bin) (each node's in the bin); seconds and verdict_seconds ON (k, src) and sec = t_ms // 1000 (the second the bin starts in)"
+sample = false
+zstd = false
+normalized = "-1 (no reading) NULL."
+notes.ppspp = "grain: bin of `Sim::keep_tables`' width"
+
+[columns.bins."{who}_{counter}"]
+sims = ["strims-sim", "ppspp"]
+lines = ["decl", "p4tf"]
+type = "int"
+none = "-1"
+params = { who = ["viewer", "seed"], counter = { strims-sim = ["timeouts", "wasted", "answers_refused", "answers_dropped", "switched", "shed", "sheds_sent", "have_bytes", "ack_bytes", "request_bytes", "announce_bytes", "stream_bytes", "session_bytes", "ping_bytes", "header_bytes", "integrity_bytes", "data_bytes", "payloads", "have_only_payloads", "retransmits", "drops", "push_waits", "push_wait_p50_ms", "push_wait_p99_ms", "answer_waits", "answer_wait_p50_ms", "answer_wait_p99_ms", "up_ack_packets", "up_ack_bytes", "up_sack_packets", "up_sack_bytes"], ppspp = ["timeouts", "wasted", "answers_refused", "answers_dropped", "switched", "shed", "sheds_sent", "have_bytes", "ack_bytes", "request_bytes", "announce_bytes", "stream_bytes", "session_bytes", "ping_bytes", "header_bytes", "integrity_bytes", "data_bytes", "payloads", "have_only_payloads", "retransmits", "drops", "push_waits", "push_wait_p50_ms", "push_wait_p99_ms", "answer_waits", "answer_wait_p50_ms", "answer_wait_p99_ms"], decl = ["state_bytes", "spec_sent", "spec_answered", "spec_not_yet", "spec_expired", "spec_cancelled", "requests_not_yet", "parked", "park_released", "park_expired", "park_cancelled", "park_refused", "not_yet_sent", "not_yet_received"], p4tf = ["state_bytes", "spec_sent", "spec_answered", "spec_not_yet", "spec_expired", "spec_cancelled", "requests_not_yet", "parked", "park_released", "park_expired", "park_cancelled", "park_refused", "not_yet_sent", "not_yet_received"] } }
+consts.strims-sim = ["who"]
+consts.ppspp = ["who"]
+code.strims-sim = { counter = ["crate::tables::NODE_COLS", "crate::tables::WAIT_COLS", "crate::tables::ACK_COLS"] }
+code.ppspp = { counter = ["crate::NODE_COLS", "crate::WAIT_COLS"] }
+description = "A node's counters in the bins beyond the series', as the ppspp sim's tables name them too: requests timed out and chunks wasted, answers a full queue refused (`answers_refused`) and answers dropped at write time (`answers_dropped`, ppspp's `DataDropped`), parents replaced (`switched`), parents lost to their closing the subscription (`shed`) and subscribers closed for a saturated uplink (`sheds_sent`), outbound message bytes by kind, payloads and those of HAVEs alone (from the node's `NODE_BIN_COUNTERS`), then stream messages that lost a packet and packets lost (the network's `UP_COUNTERS`). What a bin's waits give: pushes written and answers sent in it, and the p50 and p99 of their waits (empty without any). The window model's acknowledgements alone through a host's uplink, as `UP_COUNTERS` names them: TCP's pure ACKs and the data channels' SACKs, packets and wire bytes of each. The row's `packets_ack` and `up_acks` count both kinds, over the whole run and every host."
+notes.ppspp = "`NodeCounts`' counters: requests timed out, chunks wasted, answers a full queue refused and answers dropped at write time (`strims_ppspp::SwarmCounters`), parents replaced, parents lost to their closing the subscription and subscribers closed for a saturated uplink (`PushStats`' `switched`, `shed`, `sheds_sent`), its outbound messages' bytes by kind, its payloads and those of HAVEs alone (`ChannelMetrics`), and its stream messages that lost a packet and datagrams lost (`Sim::wan_stats`). What a bin's waits give: pushes written and answers sent in it, and the p50 and p99 of their waits (empty without any: `NONE`)."
+
+[columns.bins."{who}_window_cuts"]
+sims = ["strims-sim"]
+type = "int"
+none = "-1"
+params = { who = ["viewer", "seed"] }
+consts.strims-sim = ["who"]
+description = "The window model's window falls in the bin, summed over the honest viewers present (`viewer`) and the seed's (`seed`)."
+
+[columns.bins."{who}_rtos"]
+sims = ["strims-sim"]
+type = "int"
+none = "-1"
+params = { who = ["viewer", "seed"] }
+code.strims-sim = { who = ["crate::fields::cols::Bins::WHO_OF_WHO_WINDOW_CUTS"] }
+description = "The window model's retransmission timeouts in the bin, summed over the honest viewers present (`viewer`) and the seed's (`seed`)."
+
+[columns.bins.bin]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The bin, from the stream's start: bin k is [k, k + 1) bin_ms after it."
+
+[columns.bins.t_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "its start"
+
+[columns.bins.present]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "The honest viewers with readings at both of the bin's edges, the ones the bin sums over."
+
+[columns.bins.hits]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Pushes before their deadline in the bin, over the honest viewers present."
+
+[columns.bins.misses]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Deadlines released to pull in the bin, over the honest viewers present."
+
+[columns.bins.pruned]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Parents pruned in the bin, over the honest viewers present."
+
+[columns.bins.parents]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "The honest viewers present's median count of streams with an open parent, at the bin's end."
+
+[columns.bins.viewer_ovh]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Bytes the honest viewers present wrote to their links that weren't chunk data, in the bin."
+
+[columns.bins.viewer_up_bytes]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+none = "-1"
+description = "Wire bytes through the honest viewers present's uplinks in the bin (WAN mode)."
+
+[columns.bins.viewer_up_packets]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Packets through the honest viewers present's uplinks in the bin (WAN mode)."
+
+[columns.bins.viewer_small_packets]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Small packets through the honest viewers present's uplinks in the bin (WAN mode)."
+
+[columns.bins.capacity]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "the relay busy-time reading, `PushStats::upload_capacity`"
+
+[columns.bins.busy]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "The seed's meter's busy fraction, in thousandths, at the bin's end."
+
+[columns.bins.avail]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "The seed's uplink at the bin's end, in bytes per second."
+
+[columns.bins.copies]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "The adaptive seed's copies at the bin's end."
+
+[columns.bins.sent]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Chunks the seed sent in the bin."
+
+[columns.bins.pushed]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Chunks the seed pushed in the bin."
+
+[columns.bins.seed_ovh]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Bytes the seed wrote to its links that weren't chunk data, in the bin."
+
+[columns.bins.seed_up_bytes]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+none = "-1"
+description = "Wire bytes through the seed's uplink in the bin (WAN mode)."
+
+[columns.bins.seed_up_packets]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Packets through the seed's uplink in the bin (WAN mode)."
+
+[columns.bins.seed_small_packets]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "Small packets through the seed's uplink in the bin (WAN mode)."
+
+[columns.bins.budget_capacity]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "the capacity reading the seed's budget was measured from, at the bin's end: `PushStats::seed_budget_capacity`, empty until measured"
+
+[tables.viewers]
+sims = ["strims-sim", "ppspp"]
+grain = "viewer, in `viewer_seconds`' and `reads`' numbering"
+keys = "k, viewer"
+joins = "reads, viewer_seconds, stalls USING (k, src, viewer)"
+sample = false
+zstd = false
+normalized = "node is the viewer's node in both sims (strims-sim's host); churned BOOLEAN; arrive_ms NULL for a viewer there from the start; up NULL without a limit; hostile false where a sim didn't say."
+notes.ppspp = "grain: viewer"
+
+[columns.viewers.viewer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The viewer's number, as viewer_seconds, reads and stalls number it."
+
+[columns.viewers.host]
+sims = ["strims-sim"]
+type = "int"
+description = "The viewer's host, as events numbers hosts."
+
+[columns.viewers.name]
+sims = ["strims-sim"]
+type = "text"
+description = "The viewer's host's name."
+
+[columns.viewers.up]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "its uplink at the start in bytes per second, -1 without a limit; its steps are `events`' `uplink_rate`"
+notes.ppspp = "its uplink at the run's end in bytes per second: an `incident`'s, if one slowed it"
+
+[columns.viewers.hostile]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "Whether the viewer is a hostile host."
+
+[columns.viewers.churned]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "it restarted"
+notes.ppspp = "it left at least once"
+
+[columns.viewers.clock_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "its clock's offset"
+
+[columns.viewers.arrive_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "negative"
+description = "when it booted, `HostSpec::arrive_at`: the run's start, negative, for one that came with it"
+notes.ppspp = "when it arrived, -1000 for the start; `Arrivals`"
+
+[columns.viewers.depart_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "when it left for good, `Fault::Depart`; empty if it stayed"
+notes.ppspp = "when it left for good, empty if it stayed; `Depart`"
+
+[columns.viewers.node]
+sims = ["ppspp"]
+type = "int"
+description = "The viewer's node, as events numbers nodes."
+
+[tables.events]
+sims = ["strims-sim", "ppspp"]
+grain = "timed event"
+keys = "k, t_us, kind, node"
+joins = "viewers USING (k, src, node)"
+sample = false
+zstd = true
+normalized = "kind the vocabulary's current id: a retired kind's replacement for the run's sim (event_kinds' replaced_by), and strims-sim's retired parent_lost of value -1 (its viewer never stopped counting on the parent) parent_departed, its value NULL (vocab.toml's notes on parent_lost); written_kind the id the run wrote; t_ms = t_us / 1000; node and peer NULL for none; detail_map: detail as a MAP where it is key=value pairs."
+notes.ppspp = "grain: timed event (`TimedEvent`)"
+
+[columns.events.t_us]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "us"
+description = "When the event happened, in µs of true time from the stream's start."
+
+[columns.events.kind]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "its id: the vocabulary, `strims_wan::vocab` from `crates/strims-wan/vocab.toml`, gives each kind, the sims that write it and what its other columns hold"
+
+[columns.events.node]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "the host it happened to, -1 for none"
+
+[columns.events.peer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "another host, -1 for none"
+notes.ppspp = "-1 for none"
+
+[columns.events.value]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The event's value: its kind's, as crates/strims-wan/vocab.toml gives each kind's."
+
+[columns.events.detail]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "The event's detail: its kind's, as crates/strims-wan/vocab.toml gives each kind's."
+
+[tables.parents]
+sims = ["strims-sim", "ppspp"]
+grain = "change of a node's push parent of a stream (`Report::parent_changes`)"
+keys = "k, node, n"
+joins = "viewers USING (k, src, node)"
+sample = false
+zstd = false
+normalized = "parent NULL for none; n NULL where the sim wrote none. Only hybrid push gives a stream push parents: empty in other modes."
+notes.ppspp = "grain: change of a node's open parent of a stream of its swarm (`Sim::take_parents`)"
+
+[columns.parents.t_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "When the node's push parent of the stream changed, in ms of true time from the stream's start."
+
+[columns.parents.node]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "its host, as in `events`"
+notes.ppspp = "as in `events`"
+
+[columns.parents.n]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the change's place among the node's, from 0, in time order: a pass's changes share its `t_ms`, in the order the node made them"
+notes.ppspp = "the change's place among the node's, from 0, in time order: the changes the runner made in one call share its `t_ms`, in the order it made them"
+
+[columns.parents.stream]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The stream whose push parent changed."
+
+[columns.parents.parent]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "the host from then on, -1 for none"
+notes.ppspp = "the node from then on, -1 for none"
+
+[columns.parents.reason]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "`open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their channel closed, the stream started anew, or the node stopped without closing its links: a crash, an abrupt departure)"
+notes.ppspp = "`open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their link closed, the stream started anew, or the node left, departed or died)"
+
+[tables.node_bins]
+sims = ["strims-sim", "ppspp"]
+grain = "node and bin"
+keys = "k, bin, node"
+joins = "viewers USING (k, src, node)"
+knobs = ["BIN_NODES"]
+sample = false
+zstd = true
+normalized = "viewer NULL for the seed and hostile hosts."
+
+[columns.node_bins."{counter}"]
+sims = ["strims-sim", "ppspp"]
+lines = ["decl", "p4tf"]
+type = "int"
+none = "empty"
+params = { counter = { strims-sim = ["timeouts", "wasted", "answers_refused", "answers_dropped", "switched", "shed", "sheds_sent", "have_bytes", "ack_bytes", "request_bytes", "announce_bytes", "stream_bytes", "session_bytes", "ping_bytes", "header_bytes", "integrity_bytes", "data_bytes", "payloads", "have_only_payloads", "retransmits", "drops", "push_waits", "push_wait_p50_ms", "push_wait_p99_ms", "answer_waits", "answer_wait_p50_ms", "answer_wait_p99_ms", "up_ack_packets", "up_ack_bytes", "up_sack_packets", "up_sack_bytes"], ppspp = ["timeouts", "wasted", "answers_refused", "answers_dropped", "switched", "shed", "sheds_sent", "have_bytes", "ack_bytes", "request_bytes", "announce_bytes", "stream_bytes", "session_bytes", "ping_bytes", "header_bytes", "integrity_bytes", "data_bytes", "payloads", "have_only_payloads", "retransmits", "drops", "push_waits", "push_wait_p50_ms", "push_wait_p99_ms", "answer_waits", "answer_wait_p50_ms", "answer_wait_p99_ms"], decl = ["state_bytes", "spec_sent", "spec_answered", "spec_not_yet", "spec_expired", "spec_cancelled", "requests_not_yet", "parked", "park_released", "park_expired", "park_cancelled", "park_refused", "not_yet_sent", "not_yet_received"], p4tf = ["state_bytes", "spec_sent", "spec_answered", "spec_not_yet", "spec_expired", "spec_cancelled", "requests_not_yet", "parked", "park_released", "park_expired", "park_cancelled", "park_refused", "not_yet_sent", "not_yet_received"] } }
+code.strims-sim = { counter = ["crate::tables::NODE_COLS", "crate::tables::WAIT_COLS", "crate::tables::ACK_COLS"] }
+code.ppspp = { counter = ["crate::NODE_COLS", "crate::WAIT_COLS"] }
+description = "A node's counters in the bins beyond the series', as the ppspp sim's tables name them too: requests timed out and chunks wasted, answers a full queue refused (`answers_refused`) and answers dropped at write time (`answers_dropped`, ppspp's `DataDropped`), parents replaced (`switched`), parents lost to their closing the subscription (`shed`) and subscribers closed for a saturated uplink (`sheds_sent`), outbound message bytes by kind, payloads and those of HAVEs alone (from the node's `NODE_BIN_COUNTERS`), then stream messages that lost a packet and packets lost (the network's `UP_COUNTERS`). What a bin's waits give: pushes written and answers sent in it, and the p50 and p99 of their waits (empty without any). The window model's acknowledgements alone through a host's uplink, as `UP_COUNTERS` names them: TCP's pure ACKs and the data channels' SACKs, packets and wire bytes of each. The row's `packets_ack` and `up_acks` count both kinds, over the whole run and every host."
+notes.ppspp = "`NodeCounts`' counters: requests timed out, chunks wasted, answers a full queue refused and answers dropped at write time (`strims_ppspp::SwarmCounters`), parents replaced, parents lost to their closing the subscription and subscribers closed for a saturated uplink (`PushStats`' `switched`, `shed`, `sheds_sent`), its outbound messages' bytes by kind, its payloads and those of HAVEs alone (`ChannelMetrics`), and its stream messages that lost a packet and datagrams lost (`Sim::wan_stats`). What a bin's waits give: pushes written and answers sent in it, and the p50 and p99 of their waits (empty without any: `NONE`)."
+
+[columns.node_bins.bin]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The bin, from the stream's start, as the bins table's."
+
+[columns.node_bins.t_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "The bin's start, in ms from the stream's start."
+
+[columns.node_bins.node]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "its host"
+
+[columns.node_bins.viewer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "its number in `viewers`, -1 for the seed and hostile hosts"
+notes.ppspp = "its number here, -1 for none"
+
+[columns.node_bins.hits]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The node's pushes before their deadline in the bin."
+
+[columns.node_bins.misses]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The node's deadlines released to pull in the bin."
+
+[columns.node_bins.pruned]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The node's parents pruned in the bin."
+
+[columns.node_bins.parents]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The node's streams with an open parent at the bin's end."
+
+[columns.node_bins.ovh]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "Bytes the node wrote to its links that weren't chunk data, in the bin."
+
+[columns.node_bins.up_bytes]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "Wire bytes through the node's uplink in the bin (WAN mode)."
+
+[columns.node_bins.up_packets]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+description = "Packets through the node's uplink in the bin (WAN mode)."
+
+[columns.node_bins.small_packets]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "Small packets through the node's uplink in the bin (WAN mode)."
+
+[columns.node_bins.window_cuts]
+sims = ["strims-sim"]
+type = "int"
+description = "The window model's window falls on the node's links in the bin."
+
+[columns.node_bins.rtos]
+sims = ["strims-sim"]
+type = "int"
+description = "The window model's retransmission timeouts on the node's links in the bin."
+
+[tables.forecast]
+sims = ["strims-sim", "ppspp"]
+grain = "sample of a node's forecast log (`strims_ppspp::LagForecast`): a HAVE's announcement lag"
+keys = "k, node, peer, seq"
+joins = "viewers USING (k, src, node)"
+knobs = ["FORECAST"]
+sample = true
+zstd = true
+normalized = "horizon_ms, held_ms and mean_ms NULL where -1 (no estimate, never held)."
+notes.ppspp = "grain: sample of a node's forecast log (`Runner::set_forecasts`)"
+
+[columns.forecast.t_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "the HAVE's arrival"
+
+[columns.forecast.node]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The node whose forecast log sampled the HAVE: its host in strims-sim, its node in the ppspp sim."
+
+[columns.forecast.viewer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The node's number in the viewers table; -1 for one that is no viewer (the seed, a hostile host)."
+
+[columns.forecast.peer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the hosts"
+notes.ppspp = "nodes"
+
+[columns.forecast.peer_honest]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "not a hostile host"
+notes.ppspp = "the seed, or an honest viewer at the end: a greedy one's HAVEs can claim what it never held"
+
+[columns.forecast.stream]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The HAVE's chunk's stream."
+
+[columns.forecast.seq]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the chunk"
+
+[columns.forecast.sample_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "the lag: from our first sight of the chunk's unit to the HAVE"
+
+[columns.forecast.mean_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "-1"
+description = "the mean of the peer's lag estimate before the sample, -1 before its first sample"
+
+[columns.forecast.horizon_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "-1"
+description = "how late a sample still fits that estimate: the later of its decaying peak and its mean plus two deviations, -1 before its first sample"
+notes.ppspp = "-1 before the estimate's first sample"
+
+[columns.forecast.samples]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the estimate's so far"
+
+[columns.forecast.fresh]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "its latest sample was recent enough for a candidate"
+
+[columns.forecast.lazy]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "we asked the peer for lazy HAVEs"
+
+[columns.forecast.first_sight]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "this HAVE set the unit's first sight: the sample is 0"
+
+[columns.forecast.run]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the sample's place in the HAVE's run of its stream's bins: a whole unit's HAVE gives one per chunk, the same lag each"
+notes.ppspp = "`LagForecast`, as strims-sim's"
+
+[columns.forecast.seen_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "our first sight of the unit, `t_ms - sample_ms`"
+notes.ppspp = "our first sight of the chunk"
+
+[columns.forecast.held_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "-1"
+description = "when the peer first stored the chunk, in the incarnation it had at the sample: its runner's held log, `Runner::take_held`, a seed's own writes included; empty if that incarnation never did"
+notes.ppspp = "when the peer first stored the chunk, in the incarnation it had at the sample: its runner's held log, `Runner::take_held`, the seed's own writes included; empty if that incarnation never did"
+
+[columns.forecast.channel_open_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "when our channel with the peer opened"
+
+[columns.forecast.live]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "it was held after both hosts' incarnations started and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce"
+notes.ppspp = "it was held after both nodes took their places and after the channel opened: the HAVE tracked its arrival, not a backlog the channel's first HAVEs announce"
+
+[columns.forecast.tail_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "by the 99th, at least `horizon_ms`"
+
+[columns.forecast.extrapolated]
+sims = []
+lines = ["decl", "p4tf"]
+type = "bool"
+description = "the signing time is the signing clock's extrapolation"
+
+[tables.spec_requests]
+sims = []
+lines = ["decl", "p4tf"]
+grain = "speculative request of a node's park log, once it ended (`Scenario::sched_logs`)"
+keys = "k, node, peer, seq, t_ms"
+joins = "viewers USING (k, src, node) (the requester); asks USING (k, src, t_ms, node, peer, seq) for round 'spec' AND picked (the decision; its rivals by ask); parks ON (k, src) and parks.node = peer, parks.peer = node, seq, parks.t_ms between t_ms and t_outcome_ms (the holder's park or refusal); arrivals ON (k, src) and arrivals.node = peer, seq, arrivals.t_ms = held_ms (the holder's hold)"
+knobs = ["SPEC"]
+sample = false
+zstd = false
+notes.ppspp = "grain: speculative request of a node's park log (`Runner::set_park_log`), once it ended"
+
+[columns.spec_requests.t_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "sent"
+
+[columns.spec_requests.node]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "the requester's host"
+notes.ppspp = "the requester"
+
+[columns.spec_requests.viewer]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "The requester's number in the viewers table."
+
+[columns.spec_requests.honest]
+sims = []
+lines = ["decl", "p4tf"]
+type = "bool"
+description = "not a hostile host"
+notes.ppspp = "the node is the seed or an honest viewer"
+
+[columns.spec_requests.peer]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "the holder's host"
+notes.ppspp = "the holder's node"
+
+[columns.spec_requests.peer_honest]
+sims = []
+lines = ["decl", "p4tf"]
+type = "bool"
+description = "Whether the holder is the seed or an honest viewer, in its incarnation then."
+
+[columns.spec_requests.stream]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "The requested chunk's stream."
+
+[columns.spec_requests.seq]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "The requested chunk."
+
+[columns.spec_requests.grace_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "The grace the speculative request gave the holder to hold the chunk, in ms."
+
+[columns.spec_requests.rtt_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "the requester's round trip to the holder then"
+
+[columns.spec_requests.predictor]
+sims = []
+lines = ["decl", "p4tf"]
+type = "text"
+description = "`model`"
+
+[columns.spec_requests.predicted_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "When the requester's model of the holder expected it to hold the chunk, by its median, in ms as t_ms."
+
+[columns.spec_requests.predicted_p90_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "when the requester's model of the holder expected it to hold the chunk, by its median, its 90th and its 99th percentiles"
+
+[columns.spec_requests.predicted_p99_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "when the requester's model of the holder expected it to hold the chunk, by its median, its 90th and its 99th percentiles"
+
+[columns.spec_requests.frontier_seq]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "the holder's newest chunk of the stream, as its latest STATE declared it"
+
+[columns.spec_requests.hole_seq]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+none = "empty"
+description = "the newest chunk of the stream before it the holder lacked, as that STATE declared it; empty without one"
+
+[columns.spec_requests.outcome]
+sims = []
+lines = ["decl", "p4tf"]
+type = "text"
+description = "`answered`, `not_yet`, `expired`, `cancelled` or `closed`"
+
+[columns.spec_requests.reason]
+sims = []
+lines = ["decl", "p4tf"]
+type = "text"
+description = "an expiry's `grace`, `invalid` or `window`"
+
+[columns.spec_requests.t_outcome_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "When the request ended, in ms as t_ms."
+
+[columns.spec_requests.held_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "the holder's first hold, as `forecast`'s: empty if never"
+notes.ppspp = "the holder's first hold, as `forecast`'s: empty if never, or not in its incarnation then"
+
+[columns.spec_requests.channel_open_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "When the requester's channel with the holder opened, in ms as t_ms."
+
+[columns.spec_requests.live]
+sims = []
+lines = ["decl", "p4tf"]
+type = "bool"
+description = "as `forecast`'s"
+
+[columns.spec_requests.err_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "the request's earliness, not the prediction's error: `held_ms - (t_ms + rtt_ms / 2)`, the holder's first hold against the request's arrival by half the round trip; positive, the request came early by that much and the holder had to park it; zero or less, the holder held it already"
+
+[columns.spec_requests.pred_err_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "the prediction's error: `held_ms - predicted_ms`, positive when the hold came after the predicted median"
+
+[columns.spec_requests.held_by_p50]
+sims = []
+lines = ["decl", "p4tf"]
+type = "bool"
+none = "empty"
+description = "the holder held it by the predicted median: `held_ms <= predicted_ms`, in ms; empty without a hold or a prediction"
+
+[columns.spec_requests.held_by_p90]
+sims = []
+lines = ["decl", "p4tf"]
+type = "bool"
+description = "the same by `predicted_p90_ms`"
+
+[columns.spec_requests.held_by_p99]
+sims = []
+lines = ["decl", "p4tf"]
+type = "bool"
+description = "by `predicted_p99_ms`"
+
+[tables.parks]
+sims = []
+lines = ["decl", "p4tf"]
+grain = "request a node parked or refused, from its park log, once it ended"
+keys = "k, node, peer, seq, t_ms"
+joins = "viewers USING (k, src, node) (the holder); spec_requests ON (k, src) and spec_requests.node = parks.peer, spec_requests.peer = parks.node, seq, parks.t_ms between their t_ms and t_outcome_ms (the request as its requester logged it), asks the same with picked (either round's); arrivals ON (k, src, node, seq) and arrivals.t_ms = parks.held_ms (the holder's hold)"
+knobs = ["SPEC"]
+sample = false
+zstd = false
+
+[columns.parks.t_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "it came; a dropped answer's, when its write failed"
+
+[columns.parks.node]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "the holder's host"
+notes.ppspp = "the holder"
+
+[columns.parks.viewer]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "The holder's number in the viewers table."
+
+[columns.parks.honest]
+sims = []
+lines = ["decl", "p4tf"]
+type = "bool"
+description = "Whether the holder is the seed or an honest viewer, in its incarnation then."
+
+[columns.parks.peer]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "the requester's host"
+notes.ppspp = "the requester's node"
+
+[columns.parks.peer_honest]
+sims = []
+lines = ["decl", "p4tf"]
+type = "bool"
+description = "Whether the requester is the seed or an honest viewer, in its incarnation then."
+
+[columns.parks.stream]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "The parked request's chunk's stream."
+
+[columns.parks.seq]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+description = "The parked request's chunk."
+
+[columns.parks.grace_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "empty for a dropped answer; a park waits at most `PARK_CAP`"
+
+[columns.parks.had]
+sims = []
+lines = ["decl", "p4tf"]
+type = "bool"
+description = "the holder's map had the chunk: it held it once, or announced it"
+
+[columns.parks.outcome]
+sims = []
+lines = ["decl", "p4tf"]
+type = "text"
+description = "`released`, `expired`, `cancelled`, `closed` or `refused`"
+
+[columns.parks.reason]
+sims = []
+lines = ["decl", "p4tf"]
+type = "text"
+description = "a refusal's `full`, `behind_window`, `ahead`, `no_grace`, `range`, `dropped` or `outside`, the last with no NOT_YET; a release's `queue_full`: `released` counts the requests a full queue let go unanswered too; an expiry's `dataless`"
+
+[columns.parks.t_outcome_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "When the park ended, in ms as t_ms."
+
+[columns.parks.held_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "the holder's own first stored copy of the chunk in that incarnation: empty if never"
+notes.ppspp = "the holder's own first hold of the chunk, from its data's arrival: empty if never"
+
+[tables.arrivals]
+sims = ["strims-sim", "ppspp"]
+grain = "chunk a host first held (its held log, `strims_ppspp::Held`)"
+keys = "k, node, seq, incarnation"
+joins = "viewers USING (k, src, node); asks and haves ON (k, src) and arrivals.node = their peer, seq, arrivals.incarnation = their peer_incarnation (the peer's holds: the earliest is their views' truth); spec_requests ON (k, src) and arrivals.node = spec_requests.peer, seq, arrivals.t_ms = held_ms, and parks ON (k, src, node, seq) and arrivals.t_ms = parks.held_ms (the holder's hold)"
+knobs = ["FORECAST", "SPEC"]
+sample = true
+zstd = true
+normalized = "peer, parent, last_ask_peer and viewer NULL where -1: no source (a chunk the node published), no open parent, no request, a node that is no viewer (the seed)."
+notes.ppspp = "grain: chunk a node stored (its held log, `Runner::take_held`, `Held`)"
+
+[columns.arrivals.t_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "when it first held it: the `forecast` table's `held_ms` is this row's, in the incarnation the sample's peer had"
+
+[columns.arrivals.node]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the host"
+
+[columns.arrivals.viewer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "The host's number in the viewers table; -1 for one that is no viewer (the seed, a hostile host)."
+
+[columns.arrivals.seq]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the chunk"
+
+[columns.arrivals.how]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "`own`: published, or no data message named it, so an unattributed store too; `push`: pushed by the stream's open parent; `answer`: an answer to a request of ours, which wins over `push` when the parent's push answered our request; `other`"
+
+[columns.arrivals.peer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "the source's host, -1 for none"
+notes.ppspp = "nodes, -1 for none"
+
+[columns.arrivals.parent]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "the stream's open parent's then, -1 for none"
+notes.ppspp = "nodes, -1 for none"
+
+[columns.arrivals.expected_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "when push first expected it: a HAVE marked it the parent's to push"
+
+[columns.arrivals.released_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "when push's deadline, or the parent's going, released it to pull"
+
+[columns.arrivals.asked_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "our first request for it"
+
+[columns.arrivals.asks]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the requests"
+
+[columns.arrivals.last_ask_peer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "the last one's host and time"
+
+[columns.arrivals.last_ask_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "the last one's host and time"
+
+[columns.arrivals.rtt_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "the source channel's smoothed round trip then"
+
+[columns.arrivals.incarnation]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the host's then: its restarts by the hold, the first 0"
+notes.ppspp = "the node's then: its joins by the hold, `Sim::joined`, the seed's 0"
+
+[tables.asks]
+sims = ["strims-sim", "ppspp"]
+grain = "channel a request of a node's weighed, from its request log (`strims_ppspp::RequestRecord`): every request the request round made, once it ended, the asked peer's row and then one per rival"
+keys = "k, node, ask, peer"
+joins = "viewers USING (k, src, node); spec_requests USING (k, src, t_ms, node, peer, seq) for round 'spec' AND picked; arrivals ON (k, src) and arrivals.node = asks.peer, seq, arrivals.incarnation = asks.peer_incarnation (the peer's holds, the view's truth)"
+knobs = ["SPEC"]
+sample = true
+zstd = true
+normalized = "Every rival kept, in both rounds: a row per request and channel it weighed, the asked row (picked) first; grace_ms, outcome, reason and t_outcome_ms are the asked row's, NULL on a rival's. The sims write what a request was decided on (peer_honest the peer's at the request); the view adds its truth from arrivals, as spec_requests' columns are: held_ms, the peer's first hold of the chunk in its incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation; NULL if none), and from it live (held by since_ms and channel_open_ms, in whole ms), err_ms, pred_err_ms, held_by_p50, held_by_p90 and held_by_p99, and held_by_horizon (held by predicted_horizon_ms, NULL where a log has none), all NULL (live too) for a job whose arrivals the catalog lacks: unknown, not never held. Main's (the HAVE world's request log) has one round, 'flight'; its predicted_ms and predicted_horizon_ms are a rival's route expectation (first sight plus its announcement lag's mean, and plus its horizon), NULL on the asked row, which a HAVE decided, and its predicted_p90_ms and predicted_p99_ms NULL (it predicts no quantiles); timeout_ms, predicted_horizon_ms, have_ms (the row's peer's HAVE of the chunk) and released_ms (push's release of it to pull) are its own; grace_ms, frontier_seq, hole_seq and state_age_ms are NULL there."
+description = "The line's `grace_ms` (requests here carry none), `frontier_seq`, `hole_seq` and `state_age_ms` (no STATE summaries) are absent. The truth (`held_ms`, `live`, `err_ms`, `pred_err_ms`, `held_by_p50/p90/p99`, and `held_by_horizon` by the horizon) is `hack/sim-db`'s view's, from `arrivals`, as the line's"
+notes.ppspp = "grain: channel a request of a node's weighed, from its request log (`Runner::take_requests`, `RequestRecord`): every request the request round made, once it ended, the asked peer's row and then one per rival A node whose place a new viewer takes leaves its requests still open unrecorded. The truth is `hack/sim-db`'s view's, from `arrivals`"
+
+[columns.asks.t_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "the request went"
+
+[columns.asks.node]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the requester's host"
+
+[columns.asks.honest]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "as `haves`'"
+
+[columns.asks.ask]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the request's number in the run, from 0: its rows share it"
+
+[columns.asks.round]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "`flight`: the request round, its flight window's, the only one here"
+notes.ppspp = "`flight`"
+
+[columns.asks.peer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the row's channel's host"
+
+[columns.asks.peer_honest]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "as `haves`'"
+
+[columns.asks.picked]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "the row is the asked peer's; else a rival's: another channel whose route had fresh window room and an announcement lag for the stream, which the round weighed: one expected to deliver the chunk sooner would have taken it"
+
+[columns.asks.declares]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "a HAVE from the row's peer had announced the chunk"
+
+[columns.asks.stream]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The asked chunk's stream."
+
+[columns.asks.seq]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The asked chunk."
+
+[columns.asks.timeout_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "the asked row only: the request's timeout, from its time"
+notes.ppspp = "the asked row's"
+
+[columns.asks.rtt_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "the requester's smoothed round trip to the row's peer then"
+
+[columns.asks.predicted_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "a rival's: when the route expected it to hold the chunk, the chunk's first sight plus its announcement lag's mean; empty on the asked row, which a HAVE decided"
+notes.ppspp = "a rival's route expectation, by its announcement lag's mean; empty on the asked row"
+
+[columns.asks.predicted_p90_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "The route's p90 expectation of when the row's peer would hold the chunk. The routes predict no quantiles, so both sims write it empty on every row (`predicted_horizon_ms` holds the route's latest expectation); the lab's `held_by_p90` and forecast.py's p90 read it."
+
+[columns.asks.predicted_p99_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "The route's p99 expectation of when the row's peer would hold the chunk. The routes predict no quantiles, so both sims write it empty on every row; the lab's `held_by_p99` and forecast.py's p99 read it."
+
+[columns.asks.predicted_horizon_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "a rival's: the latest the route expected it to hold the chunk, the chunk's first sight plus its announcement lag's horizon, the later of the lag's decaying peak and its mean plus two deviations; empty on the asked row"
+notes.ppspp = "a rival's latest expectation, by the lag's horizon; empty on the asked row"
+
+[columns.asks.have_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "when a HAVE from the row's peer first announced the chunk, the knowledge the request rested on; empty without one"
+notes.ppspp = "the row's peer's HAVE of the chunk"
+
+[columns.asks.released_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "when push's deadline released the chunk to pull, empty if push never expected it"
+notes.ppspp = "push released the chunk to pull"
+
+[columns.asks.outcome]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "the asked row only: `answered`, `expired`, `elsewhere`: the chunk came from another peer first and the request settled unanswered, at its timeout or as the read position passed it, or `closed`"
+notes.ppspp = "`answered`, `expired`, `elsewhere` or `closed`; the asked row's"
+
+[columns.asks.reason]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "an expiry's `timeout`"
+notes.ppspp = "`timeout`"
+
+[columns.asks.t_outcome_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "the asked row only"
+
+[columns.asks.channel_open_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "When the requester's channel with the row's peer opened, in ms as t_ms."
+
+[columns.asks.since_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "when the requester's incarnation then began"
+notes.ppspp = "when the requester's incarnation then joined"
+
+[columns.asks.peer_incarnation]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the peer's then"
+
+[columns.asks.grace_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+description = "the request's grace, the asked row only: a flight request's is 0 while speculating"
+
+[columns.asks.frontier_seq]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+none = "empty"
+description = "the peer's newest chunk of the stream, and the newest before it the peer lacked, as its latest STATE declared them; empty without one"
+
+[columns.asks.hole_seq]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+none = "empty"
+description = "the peer's newest chunk of the stream, and the newest before it the peer lacked, as its latest STATE declared them; empty without one"
+
+[columns.asks.state_age_ms]
+sims = []
+lines = ["decl", "p4tf"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "that STATE's age at the decision: the request's time less its arrival, by the requester's clock; empty without one"
+
+[tables.haves]
+sims = ["strims-sim", "ppspp"]
+grain = "chunk a HAVE first announced to a host on a channel (its request log, `strims_ppspp::HaveRecord`): once per chunk and channel, past the tracked history none"
+keys = "k, node, peer, seq"
+joins = "viewers USING (k, src, node); arrivals ON (k, src) and arrivals.node = haves.peer, seq, arrivals.incarnation = haves.peer_incarnation (the peer's holds, the view's truth); asks ON (k, src, node, peer, seq) for a request's knowledge"
+knobs = ["SPEC"]
+sample = true
+zstd = true
+normalized = "Main's HAVE log: a row per chunk a HAVE first announced on a channel; peer NULL where -1 (a key that named no link). The sims write the HAVE (haves_log); the view adds held_ms, the announcing peer's first hold of the chunk in its incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation; NULL if none), delay_ms (t_ms - held_ms: the knowledge delay) and live (held by channel_open_ms: not a backlog the channel's first HAVEs announce), all NULL (live too) for a job whose arrivals the catalog lacks."
+description = "The `forecast` table samples the same HAVEs in the hybrid, where the chunk's first sight is known, under its own cap; this table has every one. The knowledge delay is `t_ms` less the peer's hold, `arrivals`' earliest `t_ms` of node = peer, seq and incarnation = peer_incarnation"
+notes.ppspp = "grain: chunk a HAVE first announced to a node on a channel (its request log, `Runner::take_haves`, `HaveRecord`) The `forecast` table samples a capped subset of these HAVEs; the knowledge delay is `t_ms` less the peer's hold in that incarnation, from `arrivals` (`hack/sim-db`'s view)"
+
+[columns.haves.t_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "the HAVE arrived"
+
+[columns.haves.node]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the receiver's host"
+
+[columns.haves.honest]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "not a hostile host"
+notes.ppspp = "the node is the seed or its incarnation then an honest viewer's, `Sim::joined`"
+
+[columns.haves.peer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "-1"
+description = "the announcing host"
+notes.ppspp = "-1 for a key that named no link"
+
+[columns.haves.peer_honest]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "the same, in its incarnation then"
+
+[columns.haves.stream]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "The announced chunk's stream."
+
+[columns.haves.seq]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the chunk"
+
+[columns.haves.channel_open_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "when the channel opened: a chunk held before then comes in its first HAVEs, a backlog rather than an arrival"
+
+[columns.haves.peer_incarnation]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "empty"
+description = "the peer's then, as `arrivals`' `incarnation` counts them"
+notes.ppspp = "as `arrivals`' `incarnation`; empty without a peer"
+
+[tables.seed_decisions]
+sims = ["strims-sim", "ppspp"]
+grain = "decision of the seed's seed log (`strims_ppspp::SeedDecision`)"
+keys = "k, node, n"
+joins = "viewers ON (k, src) and viewers.node = seed_decisions.peer (the neighbour; none for one that isn't a viewer); parents ON (k, src) and parents.node = seed_decisions.peer, stream and parents.t_ms >= seed_decisions.t_ms, the first such row (the child's side of a grant or a close: parents is a history, every change of the child's without the time condition); seed_sends ON (k, src, node, peer, peer_incarnation, seq) and seed_sends.how = 'push' for a cancel's push (at most one), with seed_sends.t_ms = seed_decisions.due_ms for a check's (exactly one): without how, peer_incarnation and due_ms a decision meets an answer of its chunk too, or a push of it written before"
+knobs = ["SPEC"]
+sample = false
+zstd = false
+normalized = "The seed's own decisions (its seed log, both sims, SPEC): a row per decision, n its place in the seed's log (k, node, n key it), its kind saying which columns hold it, the rest NULL; peer NULL for a decision about the allocation (window, answer_rate; an older run's -1 reads NULL too). A request row's subscribers are the stream's before the answer, its holders, copies, held and per_holder NULL where no admission read them; a released or closed row's subscribers those left; a window's capacity_bps NULL until measured, its signals (pushed, behind, overloaded, in_use, saturated) a check's alone. A check reads what the holder said of its due push, and the world decides how it said it: its latest STATE on the HAVE-removal lines (frontier_seq, hole_seq, state_age_ms; silent counts the checks its frontier hadn't reached the push), its HAVEs on main (those three NULL; silent counts the checks its HAVEs didn't announce it)."
+shared = "seed_log"
+
+[columns.seed_decisions.t_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "when the seed decided, in ms of true time from the stream's start, as the sim's other tables count it"
+
+[columns.seed_decisions.node]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the seed: its host in strims-sim, its node in the ppspp sim"
+
+[columns.seed_decisions.n]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the decision's place in the seed's log, from 0, in the order the seed logged its decisions; with node it keys the table"
+
+[columns.seed_decisions.peer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "empty"
+description = "the neighbour the decision is about, numbered as node is; empty for a decision about the allocation, a window or answer_rate row"
+
+[columns.seed_decisions.peer_incarnation]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "empty"
+description = "the neighbour's incarnation then, as the sim's arrivals count them; empty without a peer"
+
+[columns.seed_decisions.kind]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "what the seed decided: request, a STREAM_REQUEST answered; deferred, one the first wave's ramp held, answered later by a request row; released, the peer's STREAM_CANCEL of a subscription; closed, a subscription the seed ended; holder_joined and holder_left, the peer took or gave up a copy; barred, the peer may hold none for a while; check, a holder's reading at an allocation check, once a second; cancel, the peer's CANCEL of a chunk; window, the allocation's window; answer_rate, the answer gate's pace as it changed"
+
+[columns.seed_decisions.stream]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the stream of a request, deferred, released or closed row; of a check's due push; of a cancel's chunk"
+
+[columns.seed_decisions.seq]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "a chunk: a check's due push, or a cancel's chunk (the CANCEL's bin's first where why is none)"
+
+[columns.seed_decisions.why]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "a request's rule: seed_holder, seed_no_copy, seed_barred, seed_streams_held, subscribed (the peer asked again), silent, pin, measured or unmeasured; a closed row's reason: a holder's leaving's (silent, unserved, past_copies, idle or closed), silent (the peer went silent), spill, pin, saturated, declined, or channel (its channel closed: no STREAM_CLOSE went); a holder_left's: silent, unserved, past_copies, idle or closed; a bar's: silent or unserved; a cancel's, where the seed's push of the chunk stood: none, queued (dropped at write time) or written; a window's phase: check, first_wave, ramp or ramp_end"
+
+[columns.seed_decisions.granted]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "a request's: accepted, a STREAM_OPEN following, or declined with a STREAM_CLOSE"
+
+[columns.seed_decisions.subscribers]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the stream's subscribers: a request's before its answer, a released or closed row's left after it"
+
+[columns.seed_decisions.holders]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "empty"
+description = "the holders of a copy: a request's as the seed's admission read them (empty where none did: a pin, a peer asking again, a silent one); a holder_joined's after it; a holder_left's left; a window's"
+
+[columns.seed_decisions.copies]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "empty"
+description = "the copies in effect: a request's as the seed's admission read them (empty where none did); a holder_joined's, a holder_left's or a window's"
+
+[columns.seed_decisions.held]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "empty"
+description = "the streams the peer held: a request's as the seed's admission read them (empty where none did); a check's, the holder's subscriptions"
+
+[columns.seed_decisions.per_holder]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "empty"
+description = "the streams a holder may hold: a request's (empty where no admission read it) or a window's; empty before the budget is measured"
+
+[columns.seed_decisions.satellite]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "a holder_joined's or a check's: the peer holds streams spilled from other holders, with no copy of its own"
+
+[columns.seed_decisions.kept]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "a released row's: a holder's cancel of a stream of its copy, which the seed keeps for a near satellite to take while no one else does"
+
+[columns.seed_decisions.rtt_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "the peer's link's smallest round trip over the last one or two windows: a holder_joined's, a holder_left's or a check's"
+
+[columns.seed_decisions.until_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "a bar's: the peer holds no copy until then, in ms as t_ms"
+
+[columns.seed_decisions.bars]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "a bar's: the peer's bars so far, this one included"
+
+[columns.seed_decisions.reporters]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "a bar's: the reporters that voted on the peer at the latest check"
+
+[columns.seed_decisions.due_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "a check's: when the due push was written, the first written to the holder in the interval before last, in ms as t_ms"
+
+[columns.seed_decisions.judged]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "a check's: the due push was written at least ANNOUNCE_TIMEOUT before, so this check judged it"
+
+[columns.seed_decisions.frontier_seq]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "empty"
+description = "a check's, where peers send STATE summaries: the holder's latest STATE's newest chunk of the due push's stream; empty without one, or where peers send HAVEs"
+
+[columns.seed_decisions.hole_seq]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "empty"
+description = "a check's: that STATE's newest chunk before its frontier the holder lacked; empty without one"
+
+[columns.seed_decisions.state_age_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "a check's: that STATE's age at the check; empty without one"
+
+[columns.seed_decisions.silent]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "a check's: the checks in a row at which the holder didn't say it holds its due push (its HAVEs didn't announce it, or its latest STATE's frontier hadn't reached it), after this one; a bar comes at SILENT_CHECKS"
+
+[columns.seed_decisions.queue_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "a check's: how far the holder's link's least round trip since the last check stood above its smallest, the queue below the runner its pushes waited behind"
+
+[columns.seed_decisions.delivered_bps]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes/s"
+description = "a check's: the least delivery rate the holder's link read since the last check, in bytes per second"
+
+[columns.seed_decisions.wait_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "a check's: the shortest wait in the seed's queue of a push written to the holder or cancelled by it since the last check"
+
+[columns.seed_decisions.stale]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "a check's: a push to the holder went stale since the last check"
+
+[columns.seed_decisions.budget]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "a window's: the budget in stream slots"
+
+[columns.seed_decisions.measured]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "a window's: the budget is measured"
+
+[columns.seed_decisions.capacity_bps]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes/s"
+none = "empty"
+description = "a window's: the capacity reading the budget was measured from, in bytes per second; empty until measured"
+
+[columns.seed_decisions.pushed]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "a window's at a check: the holders with a push written or gone stale since the last check"
+
+[columns.seed_decisions.behind]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "a window's at a check: those of them behind, a push waiting past PUSH_WAIT_TARGET or gone stale"
+
+[columns.seed_decisions.overloaded]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "a window's at a check: those of them overloaded, a push waiting past PUSH_WAIT_OVERLOAD or gone stale"
+
+[columns.seed_decisions.in_use]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "a window's at a check: the holders of a copy with a subscription"
+
+[columns.seed_decisions.saturated]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "a window's at a check: the uplink was busy at least SHED_UTILIZATION of the time"
+
+[columns.seed_decisions.unconstrained]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "a window's: the budget has room for every neighbour's every stream"
+
+[columns.seed_decisions.rate_bps]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes/s"
+description = "an answer_rate's: the pace of the node's hybrid answers, in bytes per second"
+
+[columns.seed_decisions.reading_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "an answer_rate's: the node's queueing delay below the runner the answer gate read; empty without a reading"
+
+[columns.seed_decisions.engaged]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "an answer_rate's: the pace binds the answers"
+
+[tables.seed_sends]
+sims = ["strims-sim", "ppspp"]
+grain = "chunk the seed pushed or answered, once its send ended, from its seed log (`strims_ppspp::SeedSend`)"
+keys = "k, node, n"
+joins = "viewers ON (k, src) and viewers.node = seed_sends.peer (the neighbour); arrivals ON (k, src) and arrivals.node = seed_sends.peer, seq, arrivals.incarnation = seed_sends.peer_incarnation (the holder's hold, the view's held_ms: the push's delivery, at most one); seed_decisions ON (k, src, node, peer, peer_incarnation, seq) and seed_decisions.kind = 'cancel' for the CANCELs of its chunk, not one to one (a peer cancels a chunk more than once, and a CANCEL of several chunks is logged at its first): the one at seed_decisions.t_ms = seed_sends.cancel_ms is the first that named the chunk alone, none for a range's"
+knobs = ["SPEC"]
+sample = false
+zstd = false
+normalized = "Every chunk the seed pushed or answered, once its send ended (its seed log, both sims, SPEC): n is its place in the seed's log (k, node, n key it), peer the neighbour (an older run's -1, a neighbour gone before the log's take, reads NULL), t_ms the end (written to the frame, or dropped), queued_ms the push's queueing or the answered request's arrival; bytes NULL unless written; cancel_ms NULL without the peer's CANCEL of the chunk by the end. fate 'suppressed' is main's alone (the peer's HAVEs announced the chunk). declared reads what the peer said of the chunk as the world has it said: its latest STATE covering it on the HAVE-removal lines (by its frontier, after its hole), its HAVEs on main (asks' declares, the requester's side, reads the same). The sims write the send (seed_sends_log); the view adds held_ms, the peer's first hold of the chunk in its incarnation then (arrivals' earliest row of node = peer, seq, incarnation = peer_incarnation), a written push's delivery where it comes after queued_ms; NULL where the peer never held the chunk in that incarnation (written is the seed's side: the peer left with the push in flight, or never held the chunk), and NULL for a job whose arrivals the catalog lacks: unknown, not never held."
+shared = "seed_log"
+
+[columns.seed_sends.t_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "when the send ended, written to the frame or dropped, in ms of true time from the stream's start, as the sim's other tables count it"
+
+[columns.seed_sends.node]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the seed: its host in strims-sim, its node in the ppspp sim"
+
+[columns.seed_sends.n]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the send's place in the seed's log, from 0, in the order the seed's sends ended; with node it keys the table"
+
+[columns.seed_sends.peer]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+none = "empty"
+description = "the neighbour sent to, numbered as node is; empty if the sim can't name it"
+
+[columns.seed_sends.peer_incarnation]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the neighbour's incarnation when the chunk was queued, as the sim's arrivals count them"
+
+[columns.seed_sends.how]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "push, to a subscriber of the chunk's stream, or answer, to the peer's request"
+
+[columns.seed_sends.stream]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the chunk's stream"
+
+[columns.seed_sends.seq]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+description = "the chunk"
+
+[columns.seed_sends.queued_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+description = "when the push was queued, or the answered request came (a released park's: its release), in ms as t_ms"
+
+[columns.seed_sends.fate]
+sims = ["strims-sim", "ppspp"]
+type = "text"
+description = "written, to the peer's frame; stale, a push dropped at write time for waiting past PUSH_STALE; cancelled, a push dropped at write time, the peer having cancelled the chunk; suppressed, a push dropped at write time, the peer's HAVEs having announced the chunk (where peers send HAVEs); refused, the peer's queue was full; dropped, unwritable at write time (its data gone, data-less, or too large for an empty frame); closed, a push still queued when the peer's channel closed"
+
+[columns.seed_sends.bytes]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "the frame bytes written for the chunk, integrity included (an answer of several chunks: its share); empty unless written"
+
+[columns.seed_sends.cancel_ms]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "the peer's first CANCEL of the chunk, if it came by the end, in ms as t_ms; empty without one"
+
+[columns.seed_sends.declared]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "at the end, the peer said it holds the chunk: its HAVEs announced it, or, where peers send STATE summaries, its latest STATE covered it (at or after its oldest chunk, by its frontier, after its hole)"
+
+[columns.seed_sends.subscribed]
+sims = ["strims-sim", "ppspp"]
+type = "bool"
+description = "at the end, the peer was subscribed to the chunk's stream"

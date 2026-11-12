@@ -1,0 +1,363 @@
+{% macro names_block(en, sim, indent) %}
+{{ en.doc | rustdoc(indent) }}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum {{ en.name }} {
+{% for v in en.variants %}
+{{ v.doc | rustdoc(indent + 4) }}
+    {{ v.variant }}{% if v.family %}(u16){% endif %},
+{% endfor %}
+}
+
+impl {{ en.name }} {
+{% for c in en.consts %}
+    /// `{{ c.key }}`'s `{{ c.param }}` values for {{ sim }}, which its code
+    /// loops over.
+    pub(crate) const {{ c.name }}: [{{ c.ty }}; {{ c.vals | length }}] = [{% for x in c.vals %}{{ x }}, {% endfor %}];
+
+{% endfor %}
+    /// The name, as {{ sim }} writes it.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+{% for v in en.variants %}
+{% if v.family %}
+            {{ en.name }}::{{ v.variant }}(i) => at(&{{ v.names_const }}, i),
+{% else %}
+            {{ en.name }}::{{ v.variant }} => "{{ v.key }}",
+{% endif %}
+{% endfor %}
+        }
+    }
+{% for v in en.variants if v.family %}
+
+    /// `{{ v.key }}`'s name of {{ v.params | map("code") | join(", ") }}: a panic for values
+    /// `fields.toml` doesn't give {{ sim }}.
+    pub(crate) fn {{ v.fn }}({% for p in v.params %}{{ p }}: impl Display{% if not loop.last %}, {% endif %}{% endfor %}) -> {{ en.name }} {
+        {{ en.name }}::{{ v.variant }}(of(&{{ v.names_const }}, format_args!("{{ v.key }}")))
+    }
+{% endfor %}
+}
+
+impl sealed::Sealed for {{ en.name }} {}
+
+impl Key for {{ en.name }} {
+    fn name(self) -> &'static str {
+        {{ en.name }}::name(self)
+    }
+}
+{% if en.table %}
+
+impl Column for {{ en.name }} {
+    const TABLE: &'static str = "{{ en.table }}";
+
+    fn ty(self) -> Ty {
+        match self {
+{% for group in en.ty_groups %}
+            {% for v in group.variants %}{{ en.name }}::{{ v.variant }}{% if v.family %}(_){% endif %}{% if not loop.last %} | {% endif %}{% endfor %} => Ty::{{ group.ty }},
+{% endfor %}
+        }
+    }
+}
+{% endif %}
+{% for v in en.variants if v.family %}
+
+/// `{{ v.key }}`'s names for {{ sim }}.
+const {{ v.names_const }}: [&str; {{ v.names | length }}] = [{% for n in v.names %}"{{ n }}", {% endfor %}];
+{% endfor %}
+{% endmacro %}
+{{ header }}
+//! The names {{ sim }} records, as `crates/strims-wan/fields.toml` declares
+//! them: its row's fields and its `series_meta.json` keys by type
+//! ({{ key_enums | map("code_link") | join(", ") }}), which [`JsonRow`] writes each as
+//! its type, and each table's columns ([`cols`], each table's enum a
+//! [`Column`]). A name the document doesn't give {{ sim }} has no variant
+//! here, and a variant {{ sim }} never writes is dead code. A family (an id
+//! with `{param}` parts) is a variant holding its name's place among the
+//! family's names: its constructor takes the params' values and panics on
+//! one the document doesn't give {{ sim }}; the values the code loops over
+//! are the family's consts.
+
+// The variants are the vocabulary's names, whatever they share.
+#![allow(clippy::enum_variant_names)]
+
+use std::fmt::{Arguments, Display, Write};
+
+/// A recorded name: a row field, a `series_meta.json` key or a column.
+pub(crate) trait Key: Copy + sealed::Sealed {
+    /// The name, as {{ sim }} writes it.
+    fn name(self) -> &'static str;
+}
+
+mod sealed {
+    /// Only this module's names are [`Key`](super::Key)s, and only Rust's
+    /// integers and their options are [`Int`](super::Int)s.
+    pub trait Sealed {}
+}
+
+/// An integer [`JsonRow`] writes: one of Rust's integer types, or an
+/// [`Option`] of one (null for `None`).
+pub(crate) trait Int: sealed::Sealed {
+    /// Appends the integer's JSON to `out`.
+    fn json(&self, out: &mut String);
+}
+{% for t in int_types %}
+
+impl sealed::Sealed for {{ t }} {}
+impl Int for {{ t }} {
+    fn json(&self, out: &mut String) {
+        let _ = write!(out, "{self}");
+    }
+}
+{% endfor %}
+
+impl<T: Int> sealed::Sealed for Option<T> {}
+impl<T: Int> Int for Option<T> {
+    fn json(&self, out: &mut String) {
+        match self {
+            Some(v) => v.json(out),
+            None => out.push_str("null"),
+        }
+    }
+}
+{% for kt in key_traits %}
+
+/// A row field or `series_meta.json` key that holds {{ kt.holds }}.
+pub(crate) trait {{ kt.name }}: Key {}
+{% for en in kt.enums %}
+impl {{ kt.name }} for {{ en }} {}
+{% endfor %}
+{% endfor %}
+
+/// A JSON object written key by key: a run's row, or its
+/// `series_meta.json`. Its keys are this module's names, each written as
+/// its type.
+#[derive(Default)]
+pub(crate) struct JsonRow(String);
+
+impl JsonRow {
+    /// Starts field `key`: the text its value follows.
+    fn key(&mut self, key: &str) -> &mut String {
+        self.0.push(if self.0.is_empty() { '{' } else { ',' });
+        let _ = write!(self.0, "\"{key}\":");
+        &mut self.0
+    }
+
+    fn field(&mut self, key: &str, value: Arguments) -> &mut Self {
+        let _ = self.key(key).write_fmt(value);
+        self
+    }
+{% if "int" in methods %}
+
+    /// An integer, or null.
+    pub(crate) fn int(&mut self, key: impl IntKey, v: impl Int) -> &mut Self {
+        v.json(self.key(key.name()));
+        self
+    }
+{% endif %}
+{% if "num" in methods %}
+
+    /// A number; JSON has no NaN or infinity, so those are null.
+    pub(crate) fn num(&mut self, key: impl NumKey, v: f64) -> &mut Self {
+        if v.is_finite() {
+            self.field(key.name(), format_args!("{v}"))
+        } else {
+            self.field(key.name(), format_args!("null"))
+        }
+    }
+{% endif %}
+{% if "bool" in methods %}
+
+    /// A boolean.
+    pub(crate) fn bool(&mut self, key: impl BoolKey, v: bool) -> &mut Self {
+        self.field(key.name(), format_args!("{v}"))
+    }
+{% endif %}
+{% if "ints" in methods %}
+
+    /// A list of integers.
+    pub(crate) fn ints(&mut self, key: impl IntsKey, v: impl IntoIterator<Item = impl Int>) -> &mut Self {
+        let out = self.key(key.name());
+        out.push('[');
+        for (i, x) in v.into_iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            x.json(out);
+        }
+        out.push(']');
+        self
+    }
+{% endif %}
+{% if "nums" in methods %}
+
+    /// A list of numbers, to four places; null for NaN and infinity.
+    pub(crate) fn nums(&mut self, key: impl NumsKey, v: impl IntoIterator<Item = f64>) -> &mut Self {
+        let v: Vec<String> = v
+            .into_iter()
+            .map(|x| if x.is_finite() { format!("{x:.4}") } else { "null".to_owned() })
+            .collect();
+        self.field(key.name(), format_args!("[{}]", v.join(",")))
+    }
+{% endif %}
+{% if "text" in methods %}
+
+{% if text_check == "filter" %}
+    /// A string, its quotes, backslashes and control characters left out
+    /// (names and hashes).
+    pub(crate) fn str(&mut self, key: impl TextKey, v: &str) -> &mut Self {
+        let v: String = v
+            .chars()
+            .filter(|c| *c != '"' && *c != '\\' && !c.is_control())
+            .collect();
+        self.field(key.name(), format_args!("\"{v}\""))
+    }
+{% else %}
+    /// A string without quotes, backslashes or control characters (names
+    /// and tokens); one with any is the sim's mistake.
+    pub(crate) fn str(&mut self, key: impl TextKey, v: &str) -> &mut Self {
+        assert!(!v.contains(|c: char| c == '"' || c == '\\' || c.is_control()), "{v:?}");
+        self.field(key.name(), format_args!("\"{v}\""))
+    }
+{% endif %}
+{% endif %}
+{% if "json" in methods %}
+
+    /// Another JSON value, as `v` formats it.
+    pub(crate) fn json(&mut self, key: impl JsonKey, v: Arguments) -> &mut Self {
+        self.field(key.name(), v)
+    }
+{% endif %}
+
+    /// The object's text.
+    pub(crate) fn finish(&mut self) -> String {
+        if self.0.is_empty() {
+            self.0.push('{');
+        }
+        self.0.push('}');
+        std::mem::take(&mut self.0)
+    }
+}
+
+/// A column's type, as `hack/sim-db` names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Ty {
+    Int,
+    Text,
+    Bool,
+}
+
+impl Ty {
+    /// Its name in a table's schema file.
+    pub(crate) fn sql(self) -> &'static str {
+        match self {
+            Ty::Int => "BIGINT",
+            Ty::Text => "VARCHAR",
+            Ty::Bool => "BOOLEAN",
+        }
+    }
+}
+
+/// A table's column.
+pub(crate) trait Column: Key {
+    /// The table.
+    const TABLE: &'static str;
+
+    /// The column's type.
+    fn ty(self) -> Ty;
+}
+
+/// The tables {{ sim }} writes zstd-compressed, `<name>.csv.zst`.
+pub(crate) const ZSTD: [&str; {{ zstd | length }}] = [{% for t in zstd %}"{{ t }}", {% endfor %}];
+{% for en in enums %}
+
+{{ names_block(en, sim, 0) }}
+{% endfor %}
+
+/// Each table's columns.
+pub(crate) mod cols {
+    use super::{Column, Key, Ty, sealed};
+{% if col_families %}
+    use super::{at, of};
+    use std::fmt::Display;
+{% endif %}
+{% for en in tables %}
+
+{{ names_block(en, sim, 4) }}
+{% endfor %}
+{% for b in bridges %}
+
+    /// The `{{ b.table }}` table's columns: the {{ b.shared }} formatter's
+    /// ([`{{ b.path }}::{{ b.const }}`]), as `fields.toml` declares them.
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct {{ b.name }}(&'static {{ b.path }}::Column);
+
+    impl {{ b.name }} {
+        /// Every column, in the formatter's order.
+        pub(crate) fn all() -> Vec<{{ b.name }}> {
+            {{ b.path }}::{{ b.const }}.iter().map({{ b.name }}).collect()
+        }
+    }
+
+    impl sealed::Sealed for {{ b.name }} {}
+
+    impl Key for {{ b.name }} {
+        fn name(self) -> &'static str {
+            self.0.name
+        }
+    }
+
+    impl Column for {{ b.name }} {
+        const TABLE: &'static str = "{{ b.table }}";
+
+        fn ty(self) -> Ty {
+            match self.0.ty {
+                {{ b.path }}::ColumnType::Int => Ty::Int,
+                {{ b.path }}::ColumnType::Text => Ty::Text,
+                {{ b.path }}::ColumnType::Bool => Ty::Bool,
+            }
+        }
+    }
+{% endfor %}
+}
+{% if families %}
+
+/// The place of the name `name` formats among a family's `names`.
+// A name the document doesn't give the sim is the sim's mistake, never
+// a peer's input: it stops the run.
+#[allow(clippy::panic)]
+fn of(names: &[&'static str], name: Arguments) -> u16 {
+    let name = name.to_string();
+    match names.iter().position(|n| *n == name) {
+        Some(i) => i as u16,
+        None => panic!("{name}: crates/strims-wan/fields.toml gives {{ sim }} no such name"),
+    }
+}
+
+/// The name at place `i` among a family's `names`.
+fn at(names: &[&'static str], i: u16) -> &'static str {
+    names.get(usize::from(i)).copied().unwrap_or_default()
+}
+{% endif %}
+{% if tests %}
+
+#[cfg(test)]
+mod tests {
+    use std::fmt::Display;
+
+    fn strings<T: Display>(v: impl IntoIterator<Item = T>) -> Vec<String> {
+        v.into_iter().map(|x| x.to_string()).collect()
+    }
+
+    /// Each family's params whose values are the code's arrays hold
+    /// those arrays, in order.
+    #[test]
+    fn params_are_the_codes_arrays() {
+{% for t in tests %}
+        assert_eq!(
+            [{% for c in t.code %}strings({{ c }}){% if not loop.last %}, {% endif %}{% endfor %}].concat(),
+            [{% for v in t.want %}"{{ v }}", {% endfor %}],
+            "{{ t.what | fmtsafe }}"
+        );
+{% endfor %}
+    }
+}
+{% endif %}

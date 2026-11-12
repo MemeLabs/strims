@@ -65,7 +65,7 @@
 //!   honest neighbour (eclipsed: hostile and infrastructure hosts don't
 //!   count) and with no path to their swarm's seed through honest hosts
 //!   (cut off) ([`Report::eclipse`]).
-//! - **series** ([`Report::series`]): with transfer samples, a swarm's run
+//! - **series** (`Report::series_data`): with transfer samples, a swarm's run
 //!   second by second from its stream's start to the run's end, which the
 //!   tables carry ([`Report::write_tables`]) for
 //!   `hack/capture/analyze.py`'s collapse verdicts: each viewer's lag and
@@ -84,11 +84,11 @@
 //!   reads as it always has, and the new columns are left out.
 
 use std::collections::BTreeMap;
-use std::fmt::Write;
 use std::time::Duration;
 
 use sha2::{Digest, Sha256};
 
+use crate::fields::{JsonRow, RowInt, RowInts, RowNum, RowNums, RowText, cols};
 use crate::report::{HostReport, Percentiles, Report, ViewerReport, spearman};
 use crate::skew::SkewClass;
 use crate::spec::{HostClass, HostIx};
@@ -142,14 +142,14 @@ impl Joins {
 /// links had their time to form.
 pub const NET_WARM: Duration = Duration::from_secs(10);
 /// The row's peer exchange columns, by `ExchangeOutcome` name.
-const EXCHANGE_COLS: [(&str, &str); 7] = [
-    ("exch_connected", "Connected"),
-    ("exch_remote_connected", "RemoteConnected"),
-    ("exch_answered", "Answered"),
-    ("exch_rejected", "Rejected"),
-    ("exch_not_connected", "NotConnected"),
-    ("exch_failed", "Failed"),
-    ("exch_timed_out", "TimedOut"),
+const EXCHANGE_COLS: [(RowInt, &str); 7] = [
+    (RowInt::ExchConnected, "Connected"),
+    (RowInt::ExchRemoteConnected, "RemoteConnected"),
+    (RowInt::ExchAnswered, "Answered"),
+    (RowInt::ExchRejected, "Rejected"),
+    (RowInt::ExchNotConnected, "NotConnected"),
+    (RowInt::ExchFailed, "Failed"),
+    (RowInt::ExchTimedOut, "TimedOut"),
 ];
 
 /// The width of the stream-time buckets.
@@ -431,13 +431,13 @@ impl Report {
             };
             for (t, d) in t.iter().zip(DELAYS_MS) {
                 if let Some(x) = t.stalls_per_min() {
-                    j.num(&format!("stalls_per_min_{d}{suffix}"), x);
+                    j.num(RowNum::stalls_per_min_delay_pop(d, suffix), x);
                 }
                 if let Some(x) = t.stalled_share() {
-                    j.num(&format!("stalled_share_{d}{suffix}"), x);
+                    j.num(RowNum::stalled_share_delay_pop(d, suffix), x);
                 }
                 if let Some(x) = t.startup_ms() {
-                    j.int(&format!("startup_ms_{d}{suffix}"), x.max(0) as u64);
+                    j.int(RowInt::startup_ms_delay_pop(d, suffix), x.max(0) as u64);
                 }
             }
         }
@@ -485,26 +485,26 @@ impl Report {
             .copied()
             .filter(|&h| self.scenario.departure(h).is_some())
             .collect();
-        j.int("arrived", arrived.len() as u64)
+        j.int(RowInt::Arrived, arrived.len() as u64)
             .int(
-                "arrived_honest",
+                RowInt::ArrivedHonest,
                 arrived.iter().filter(honest).count() as u64,
             )
-            .int("departed", departed.len() as u64)
+            .int(RowInt::Departed, departed.len() as u64)
             .int(
-                "departed_honest",
+                RowInt::DepartedHonest,
                 departed.iter().filter(honest).count() as u64,
             );
         let s = self.joins(swarm);
         for (name, v) in [("join", &s.first), ("caught_up", &s.caught_up)] {
-            for p in [50, 90] {
+            for p in RowInt::P_OF_EVENT_P_P_MS.map(u32::from) {
                 if let Some(x) = Joins::at(v, p) {
-                    j.int(&format!("{name}_p{p}_ms"), x);
+                    j.int(RowInt::event_p_p_ms(name, p), x);
                 }
             }
         }
-        j.int("join_unread", s.n - s.first.len() as u64)
-            .int("caught_up_never", s.n - s.caught_up.len() as u64);
+        j.int(RowInt::JoinUnread, s.n - s.first.len() as u64)
+            .int(RowInt::CaughtUpNever, s.n - s.caught_up.len() as u64);
         let losses: Vec<&crate::ParentLoss> = self
             .parent_losses
             .iter()
@@ -515,24 +515,27 @@ impl Report {
             .filter_map(|l| Some(l.noticed_ms?.saturating_sub(l.departed_ms)))
             .collect();
         took.sort_unstable();
-        j.int("parent_lost", losses.len() as u64)
+        j.int(RowInt::ParentLost, losses.len() as u64)
             .int(
-                "parent_lost_streams",
-                losses.iter().map(|l| l.streams as u64).sum(),
+                RowInt::ParentLostStreams,
+                losses.iter().map(|l| l.streams as u64).sum::<u64>(),
             )
-            .int("parent_lost_unnoticed", (losses.len() - took.len()) as u64);
-        for p in [50, 90] {
+            .int(
+                RowInt::ParentLostUnnoticed,
+                (losses.len() - took.len()) as u64,
+            );
+        for p in RowInt::P_OF_PARENT_LOST_NOTICED_P_P_MS.map(u32::from) {
             if let Some(x) = Joins::at(&took, p) {
-                j.int(&format!("parent_lost_noticed_p{p}_ms"), x);
+                j.int(RowInt::parent_lost_noticed_p_p_ms(p), x);
             }
         }
         if let Some(r) = self.departure_recovery(swarm) {
-            j.int("depart_stayed", r.stayed as u64)
-                .int("depart_stranded", r.stranded as u64)
-                .int("depart_lag_peak_ms", u64::from(r.peak_ms))
-                .int("depart_excess_lag_area_ms_s", r.excess_ms_s)
-                .int("depart_recover_ms", r.recover_ms)
-                .int("depart_recover_censored", u64::from(r.censored));
+            j.int(RowInt::DepartStayed, r.stayed as u64)
+                .int(RowInt::DepartStranded, r.stranded as u64)
+                .int(RowInt::DepartLagPeakMs, u64::from(r.peak_ms))
+                .int(RowInt::DepartExcessLagAreaMsS, r.excess_ms_s)
+                .int(RowInt::DepartRecoverMs, r.recover_ms)
+                .int(RowInt::DepartRecoverCensored, u64::from(r.censored));
         }
     }
 
@@ -1183,21 +1186,24 @@ impl Report {
     pub fn row(&self, test: &str, failure: Option<&str>) -> String {
         let reads = self.reads_hash();
         let mut j = JsonRow::default();
-        j.str("test", test)
-            .str("scenario", &self.scenario.name)
-            .int("seed", self.seed)
-            .str("trace", self.trace_hash.get(..16).unwrap_or_default())
-            .str("reads_hash", reads.get(..16).unwrap_or_default())
-            .int("passed", u64::from(failure.is_none()))
-            .str("failure", failure.unwrap_or_default())
+        j.str(RowText::Test, test)
+            .str(RowText::Scenario, &self.scenario.name)
+            .int(RowInt::Seed, self.seed)
+            .str(
+                RowText::Trace,
+                self.trace_hash.get(..16).unwrap_or_default(),
+            )
+            .str(RowText::ReadsHash, reads.get(..16).unwrap_or_default())
+            .int(RowInt::Passed, u64::from(failure.is_none()))
+            .str(RowText::Failure, failure.unwrap_or_default())
             .int(
-                "send_buffer_ms",
+                RowInt::SendBufferMs,
                 self.scenario
                     .send_buffer
                     .map_or(0, |b| b.uplink_queue.as_millis() as u64),
             )
             .int(
-                "known_uplink",
+                RowInt::KnownUplink,
                 u64::from(
                     self.scenario
                         .hosts
@@ -1205,22 +1211,22 @@ impl Report {
                         .any(|h| h.upload_capacity.is_some()),
                 ),
             )
-            .str("clock_skew", &self.scenario.clock_skew.to_string());
+            .str(RowText::ClockSkew, &self.scenario.clock_skew.to_string());
         if !self.scenario.clock_skew.is_off() {
             let (per, max) = self.clock_classes();
             let offsets = self.hosts.iter().map(|h| h.clock_offset.as_millis());
-            j.signed_ints("clock_offsets_ms", offsets)
-                .int("clock_max_ms", max.as_millis().unsigned_abs());
+            j.ints(RowInts::ClockOffsetsMs, offsets)
+                .int(RowInt::ClockMaxMs, max.as_millis().unsigned_abs());
             for (c, n) in SkewClass::ALL.into_iter().zip(per) {
-                j.int(&format!("clock_{}", c.name()), n);
+                j.int(RowInt::clock_class(c.name()), n);
             }
         }
         let swarm = 0;
         if !self.scenario.arrivals.is_t0() {
-            j.str("arrivals", &self.scenario.arrivals.to_string());
+            j.str(RowText::Arrivals, &self.scenario.arrivals.to_string());
         }
         if let Some(d) = self.scenario.departures {
-            j.str("depart", &d.to_string());
+            j.str(RowText::Depart, &d.to_string());
         }
         let lag = self.lag(swarm);
         let buckets = self.lag_buckets(swarm);
@@ -1229,12 +1235,18 @@ impl Report {
             .swarms
             .get(swarm)
             .map_or(1, |s| s.options.stream_count.max(1));
-        j.int("streams", streams as u64)
-            .num("delivery", self.delivery(swarm))
-            .int("lag_p50_ms", u64::from(lag.p50))
-            .int("lag_p99_ms", u64::from(lag.p99))
-            .ints("bucket_p50_ms", buckets.iter().map(|p| u64::from(p.p50)))
-            .ints("bucket_p99_ms", buckets.iter().map(|p| u64::from(p.p99)));
+        j.int(RowInt::Streams, streams as u64)
+            .num(RowNum::Delivery, self.delivery(swarm))
+            .int(RowInt::LagP50Ms, u64::from(lag.p50))
+            .int(RowInt::LagP99Ms, u64::from(lag.p99))
+            .ints(
+                RowInts::BucketP50Ms,
+                buckets.iter().map(|p| u64::from(p.p50)),
+            )
+            .ints(
+                RowInts::BucketP99Ms,
+                buckets.iter().map(|p| u64::from(p.p99)),
+            );
         self.playback_cols(swarm, &mut j);
         let roles = self.roles();
         for (name, hosts) in [
@@ -1243,8 +1255,8 @@ impl Report {
             ("others", &roles.others),
         ] {
             let d = self.meter_deciles(hosts);
-            j.nums(&format!("meter_{name}"), d.into_iter())
-                .int(&format!("n_{name}"), hosts.len() as u64);
+            j.nums(RowNums::meter_role(name), d)
+                .int(RowInt::n_role(name), hosts.len() as u64);
         }
         let mut budget: Vec<f64> = roles
             .seeds
@@ -1252,29 +1264,29 @@ impl Report {
             .flat_map(|&h| self.budget_readings(h))
             .collect();
         if !budget.is_empty() {
-            j.nums("meter_budget_seeds", deciles(&mut budget).into_iter());
+            j.nums(RowNums::MeterBudgetSeeds, deciles(&mut budget));
         }
         j.nums(
-            "meter_bucket_seeds",
-            self.meter_buckets(swarm, &roles.seeds).into_iter(),
+            RowNums::MeterBucketSeeds,
+            self.meter_buckets(swarm, &roles.seeds),
         )
         .nums(
-            "meter_bucket_forwarders",
-            self.meter_buckets(swarm, &roles.forwarders).into_iter(),
+            RowNums::MeterBucketForwarders,
+            self.meter_buckets(swarm, &roles.forwarders),
         );
         let (qd, had) = self.queue_delay_deciles(&roles.seeds);
-        j.nums("queue_delay_seeds_ms", qd.into_iter())
-            .num("queue_delay_seeds_had", had)
-            .num("busy_seeds_p50", self.busy_median(&roles.seeds))
-            .num("standing_seeds", self.standing_queue(&roles.seeds))
+        j.nums(RowNums::QueueDelaySeedsMs, qd)
+            .num(RowNum::QueueDelaySeedsHad, had)
+            .num(RowNum::BusySeedsP50, self.busy_median(&roles.seeds))
+            .num(RowNum::StandingSeeds, self.standing_queue(&roles.seeds))
             .num(
-                "standing_forwarders",
+                RowNum::StandingForwarders,
                 self.standing_queue(&roles.forwarders),
             )
-            .num("peak_committed", self.peak_committed());
+            .num(RowNum::PeakCommitted, self.peak_committed());
         let [lazy_out, lazy_in] = self.lazy_shares();
-        j.num("have_lazy_out_share", lazy_out)
-            .num("have_lazy_in_share", lazy_in);
+        j.num(RowNum::HaveLazyOutShare, lazy_out)
+            .num(RowNum::HaveLazyInShare, lazy_in);
         type Reading = fn(&MeterSample) -> Option<u32>;
         let readings: [(&str, QueueTruth, Reading); 5] = [
             ("qd", QueueTruth::Standing, |m| m.queue_delay_ms),
@@ -1288,17 +1300,18 @@ impl Report {
                 if let Some([err, fp, fneg]) =
                     self.queue_delay_accuracy(hosts, QUEUE_DELAY_THRESHOLD_MS, truth, read)
                 {
-                    j.num(&format!("{reading}_err_{name}_ms"), err)
-                        .num(&format!("{reading}_fp_{name}"), fp)
-                        .num(&format!("{reading}_fn_{name}"), fneg);
+                    j.num(RowNum::reading_err_role_ms(reading, name), err)
+                        .num(RowNum::reading_fp_role(reading, name), fp)
+                        .num(RowNum::reading_fn_role(reading, name), fneg);
                 }
             }
         }
         let (wrong, declined) = self.declined();
-        j.int("declined_wrongly", wrong).int("declined", declined);
+        j.int(RowInt::DeclinedWrongly, wrong)
+            .int(RowInt::Declined, declined);
         if let Some((control, pings)) = self.path_overhead() {
-            j.num("control_bps_link", control)
-                .num("ping_bps_link", pings);
+            j.num(RowNum::ControlBpsLink, control)
+                .num(RowNum::PingBpsLink, pings);
         }
         let tracking = self.tracking();
         if !tracking.is_empty() {
@@ -1310,19 +1323,16 @@ impl Report {
                     .collect();
                 let n = v.len() as u64;
                 let max = v.iter().copied().fold(0.0, f64::max);
-                j.nums(
-                    &format!("off_{name}"),
-                    [deciles(&mut v)[1], max].into_iter(),
-                )
-                .int(&format!("off_{name}_n"), n);
+                j.nums(RowNums::off_change(name), [deciles(&mut v)[1], max])
+                    .int(RowInt::off_change_n(name), n);
             }
             let (drop, rise) = self.lag_after_changes(swarm);
-            j.int("seed_drop_p99_ms", u64::from(drop.p99))
-                .int("seed_rise_p99_ms", u64::from(rise.p99));
+            j.int(RowInt::SeedDropP99Ms, u64::from(drop.p99))
+                .int(RowInt::SeedRiseP99Ms, u64::from(rise.p99));
         }
         let (budget, copies) = self.seed_changes(swarm);
-        j.num("seed_budget_changes_per_min", budget)
-            .num("seed_copies_changes_per_min", copies);
+        j.num(RowNum::SeedBudgetChangesPerMin, budget)
+            .num(RowNum::SeedCopiesChangesPerMin, copies);
         if let Some(seed) = self
             .scenario
             .swarms
@@ -1330,10 +1340,10 @@ impl Report {
             .and_then(|s| self.hosts.get(s.seed))
             .and_then(|h| h.runner.seeds.get(&swarm))
         {
-            j.int("seed_first_wave", seed.first_wave as u64)
-                .int("seed_first_wave_capacity", seed.first_wave_capacity)
-                .int("seed_budget", seed.budget as u64)
-                .int("seed_copies", seed.copies as u64);
+            j.int(RowInt::SeedFirstWave, seed.first_wave as u64)
+                .int(RowInt::SeedFirstWaveCapacity, seed.first_wave_capacity)
+                .int(RowInt::SeedBudget, seed.budget as u64)
+                .int(RowInt::SeedCopies, seed.copies as u64);
         }
         // The seed's answers queued, refused and dropped, and how long its
         // pushes and answers waited in its runner's queues.
@@ -1345,15 +1355,15 @@ impl Report {
             .map(|h| &h.runner)
         {
             let c = r.swarm(swarm);
-            j.int("seed_answers_queued", c.answers_queued)
-                .int("seed_answers_refused", c.answers_refused)
-                .int("seed_answers_dropped", c.answers_dropped);
+            j.int(RowInt::SeedAnswersQueued, c.answers_queued)
+                .int(RowInt::SeedAnswersRefused, c.answers_refused)
+                .int(RowInt::SeedAnswersDropped, c.answers_dropped);
             if let Some(w) = r.waits.get(&swarm) {
                 for (name, h) in [("push", &w[0]), ("answer", &w[1])] {
-                    for p in [50, 99] {
+                    for p in RowInt::P_OF_SEED_QUEUE_WAIT_P_P_MS {
                         if let Some(d) = h.percentile(f64::from(p)) {
                             j.int(
-                                &format!("seed_{name}_wait_p{p}_ms"),
+                                RowInt::seed_queue_wait_p_p_ms(name, p),
                                 d.as_millis().max(0) as u64,
                             );
                         }
@@ -1381,9 +1391,9 @@ impl Report {
                 })
                 .collect();
             util.sort_by(f64::total_cmp);
-            for p in [50, 90, 95] {
+            for p in RowNum::P_OF_VIEWER_UTIL_P_P.map(usize::from) {
                 if let Some(&u) = util.get(util.len().saturating_sub(1) * p / 100) {
-                    j.num(&format!("viewer_util_p{p}"), u);
+                    j.num(RowNum::viewer_util_p_p(p), u);
                 }
             }
             // Relays' fan-out: push subscribers per transfer sample of a
@@ -1401,9 +1411,9 @@ impl Report {
                 })
                 .collect();
             fanout.sort_unstable();
-            for p in [50, 90] {
+            for p in RowInt::P_OF_FANOUT_P_P.map(usize::from) {
                 if let Some(&f) = fanout.get(fanout.len().saturating_sub(1) * p / 100) {
-                    j.int(&format!("fanout_p{p}"), f as u64);
+                    j.int(RowInt::fanout_p_p(p), f as u64);
                 }
             }
             if let Some(d) = self.depths(swarm) {
@@ -1427,7 +1437,7 @@ impl Report {
                 false => viewers * secs / 60.0,
             };
             j.num(
-                "parent_changes_per_min",
+                RowNum::ParentChangesPerMin,
                 (c.pruned + c.switched) as f64 / minutes,
             );
         }
@@ -1435,18 +1445,18 @@ impl Report {
         // Requests timed out ([`Report::timeouts`]): the honest viewers',
         // the seed's, and with hostile hosts theirs below.
         let (timeouts, seed_timeouts, hostile_timeouts) = self.timeouts(swarm);
-        j.num("seed_data_share", self.data_share(swarm))
-            .num("seed_share", self.uploads(swarm).seed_share)
-            .num("duplicates", self.duplicates(swarm))
-            .int("push_hits", c.hits)
-            .int("push_misses", c.misses)
-            .int("pruned", c.pruned)
-            .int("shed", c.shed)
-            .int("switched", c.switched)
-            .int("timeouts", timeouts)
-            .int("seed_timeouts", seed_timeouts)
-            .num("sim_secs", self.sim_secs)
-            .num("wall_secs", self.wall_secs);
+        j.num(RowNum::SeedDataShare, self.data_share(swarm))
+            .num(RowNum::SeedShare, self.uploads(swarm).seed_share)
+            .num(RowNum::Duplicates, self.duplicates(swarm))
+            .int(RowInt::PushHits, c.hits)
+            .int(RowInt::PushMisses, c.misses)
+            .int(RowInt::Pruned, c.pruned)
+            .int(RowInt::Shed, c.shed)
+            .int(RowInt::Switched, c.switched)
+            .int(RowInt::Timeouts, timeouts)
+            .int(RowInt::SeedTimeouts, seed_timeouts)
+            .num(RowNum::SimSecs, self.sim_secs)
+            .num(RowNum::WallSecs, self.wall_secs);
         self.window_cols(swarm, &mut j);
         let [links_p50, links_p90] = self.link_counts();
         let [formed, dropped] = self.link_churn();
@@ -1468,18 +1478,18 @@ impl Report {
                 .map_or(Duration::ZERO, |s| s.stop);
             for (name, hosts) in [("honest", &honest), ("hostile", &hostile)] {
                 let lag = self.lag_of_between(swarm, hosts, s, e);
-                j.int(&format!("lag_p99_ms_{name}"), u64::from(lag.p99))
-                    .int(&format!("lag_p50_ms_{name}"), u64::from(lag.p50))
-                    .num(&format!("delivery_{name}"), self.delivery_of(swarm, hosts));
+                j.int(RowInt::lag_p99_ms_who(name), u64::from(lag.p99))
+                    .int(RowInt::lag_p50_ms_who(name), u64::from(lag.p50))
+                    .num(RowNum::delivery_who(name), self.delivery_of(swarm, hosts));
             }
-            j.int("timeouts_hostile", hostile_timeouts);
+            j.int(RowInt::TimeoutsHostile, hostile_timeouts);
         }
-        j.int("links_p50", links_p50)
-            .int("links_p90", links_p90)
-            .num("links_formed_per_host_min", formed)
-            .num("links_dropped_per_host_min", dropped)
-            .num("eclipsed_share", eclipsed)
-            .num("cut_from_seed_share", cut);
+        j.int(RowInt::LinksP50, links_p50)
+            .int(RowInt::LinksP90, links_p90)
+            .num(RowNum::LinksFormedPerHostMin, formed)
+            .num(RowNum::LinksDroppedPerHostMin, dropped)
+            .num(RowNum::EclipsedShare, eclipsed)
+            .num(RowNum::CutFromSeedShare, cut);
         for (key, v) in self.capacity_position(swarm) {
             j.num(key, v);
         }
@@ -1492,8 +1502,8 @@ impl Report {
             });
         let minutes = self.viewer_minutes(&viewers);
         if trials > 0 && minutes > 0.0 {
-            j.num("pool_trials_per_host_min", trials as f64 / minutes)
-                .num("pool_trial_wins", wins as f64 / trials as f64);
+            j.num(RowNum::PoolTrialsPerHostMin, trials as f64 / minutes)
+                .num(RowNum::PoolTrialWins, wins as f64 / trials as f64);
         }
         // A seed's first wave of offers, and when its viewers found it
         // (`pool-find`).
@@ -1503,7 +1513,7 @@ impl Report {
             .get(swarm)
             .and_then(|s| self.hosts.get(s.seed))
         {
-            j.int("seed_offers_30s", r.offers_early);
+            j.int(RowInt::SeedOffers30s, r.offers_early);
         }
         let mut resolved: Vec<u64> = viewers
             .iter()
@@ -1514,7 +1524,7 @@ impl Report {
             .collect();
         resolved.sort_unstable();
         if let Some(&p90) = resolved.get(((resolved.len() as f64 - 1.0) * 0.9).round() as usize) {
-            j.int("source_resolved_p90_ms", p90);
+            j.int(RowInt::SourceResolvedP90Ms, p90);
         }
         let mut rejoins: Vec<u64> = self
             .viewers
@@ -1524,7 +1534,7 @@ impl Report {
             .collect();
         rejoins.sort_unstable();
         if let Some(&p90) = rejoins.get(((rejoins.len() as f64 - 1.0) * 0.9).round() as usize) {
-            j.int("rejoin_p90_ms", p90);
+            j.int(RowInt::RejoinP90Ms, p90);
         }
         if self.scenario.profiled() {
             self.audience_cols(swarm, &mut j);
@@ -1575,11 +1585,11 @@ impl Report {
         }
         for (role, (whys, waits)) in [("seed", seed), ("viewer", viewer)] {
             for (why, n) in crate::ACK_WHYS.iter().zip(whys) {
-                j.int(&format!("{role}_ack_{why}"), n);
+                j.int(RowInt::role_ack_why(role, why), n);
             }
             if let (Some(mean), Some(p90)) = (waits.mean_ms(), waits.quantile_ms(0.9)) {
-                j.num(&format!("{role}_delack_mean_ms"), mean)
-                    .int(&format!("{role}_delack_p90_ms"), p90);
+                j.num(RowNum::role_delack_mean_ms(role), mean)
+                    .int(RowInt::role_delack_p90_ms(role), p90);
             }
         }
     }
@@ -1665,29 +1675,29 @@ impl Report {
         let waste = down
             .data_bytes
             .saturating_sub(down.new_bytes + down.stale_bytes + down.invalid_bytes);
-        j.int("up_payload", up.data_bytes)
-            .int("up_data_hdr", up.data_header_bytes)
-            .int("up_integrity", up.integrity_bytes)
-            .int("up_signed", up.signed_integrity_bytes)
-            .int("up_have", up.have_bytes)
-            .int("up_ack", up.ack_bytes)
-            .int("up_request", up.request_bytes)
-            .int("up_ping", up.ping_bytes)
-            .int("up_stream", up.stream_bytes)
-            .int("up_announce", up.announce_bytes)
-            .int("up_session", up.session_bytes)
-            .int("up_chan_hdr", up.header_bytes)
-            .int("up_hostile", hostile_bytes)
-            .int("up_vnic", vnic)
-            .int("up_ports", ports)
-            .int("up_transport", transport)
-            .int("up_acks", acks)
-            .int("up_wire", up_wire)
-            .int("down_wire", wire_down)
-            .int("dup_bytes", waste)
-            .int("stale_bytes", down.stale_bytes)
-            .int("useful_bytes", useful)
-            .num("wire_per_useful", up_wire as f64 / useful.max(1) as f64);
+        j.int(RowInt::UpPayload, up.data_bytes)
+            .int(RowInt::UpDataHdr, up.data_header_bytes)
+            .int(RowInt::UpIntegrity, up.integrity_bytes)
+            .int(RowInt::UpSigned, up.signed_integrity_bytes)
+            .int(RowInt::UpHave, up.have_bytes)
+            .int(RowInt::UpAck, up.ack_bytes)
+            .int(RowInt::UpRequest, up.request_bytes)
+            .int(RowInt::UpPing, up.ping_bytes)
+            .int(RowInt::UpStream, up.stream_bytes)
+            .int(RowInt::UpAnnounce, up.announce_bytes)
+            .int(RowInt::UpSession, up.session_bytes)
+            .int(RowInt::UpChanHdr, up.header_bytes)
+            .int(RowInt::UpHostile, hostile_bytes)
+            .int(RowInt::UpVnic, vnic)
+            .int(RowInt::UpPorts, ports)
+            .int(RowInt::UpTransport, transport)
+            .int(RowInt::UpAcks, acks)
+            .int(RowInt::UpWire, up_wire)
+            .int(RowInt::DownWire, wire_down)
+            .int(RowInt::DupBytes, waste)
+            .int(RowInt::StaleBytes, down.stale_bytes)
+            .int(RowInt::UsefulBytes, useful)
+            .num(RowNum::WirePerUseful, up_wire as f64 / useful.max(1) as f64);
 
         let share = |i: HostIx| {
             let h = self.hosts.get(i)?;
@@ -1708,18 +1718,18 @@ impl Report {
         let (relays, leaves) = (shares(&roles.forwarders), shares(&roles.others));
         let seed = self.scenario.swarms.first().map(|s| s.seed);
         if let Some(x) = seed.and_then(share) {
-            j.num("ovh_seed", x);
+            j.num(RowNum::OvhSeed, x);
         }
         if let Some(h) = seed.and_then(|s| self.hosts.get(s)) {
             j.num(
-                "seed_wire_per_written",
+                RowNum::SeedWirePerWritten,
                 wire(h).0 as f64 / h.uploaded.max(1) as f64,
             );
         }
         for (name, v, p) in [
-            ("ovh_relay_p50", &relays, 50),
-            ("ovh_leaf_p50", &leaves, 50),
-            ("ovh_leaf_p90", &leaves, 90),
+            (RowNum::OvhRelayP50, &relays, 50),
+            (RowNum::OvhLeafP50, &leaves, 50),
+            (RowNum::OvhLeafP90, &leaves, 90),
         ] {
             if let Some(x) = at(v, p) {
                 j.num(name, x);
@@ -1735,24 +1745,27 @@ impl Report {
                 .map(|p| p as f64 / secs)
                 .collect();
             pps.sort_by(f64::total_cmp);
-            j.int("packets_up", packets)
-                .int("packets_ack", ack_packets)
-                .num("small_packet_share", small as f64 / packets.max(1) as f64);
-            for (name, p) in [("pps_p50", 50), ("pps_p90", 90)] {
+            j.int(RowInt::PacketsUp, packets)
+                .int(RowInt::PacketsAck, ack_packets)
+                .num(
+                    RowNum::SmallPacketShare,
+                    small as f64 / packets.max(1) as f64,
+                );
+            for (name, p) in [(RowNum::PpsP50, 50), (RowNum::PpsP90, 90)] {
                 if let Some(x) = at(&pps, p) {
                     j.num(name, x);
                 }
             }
             if let Some(p) = seed.and_then(|s| wire(self.hosts.get(s)?).1) {
-                j.num("seed_pps", p as f64 / secs);
+                j.num(RowNum::SeedPps, p as f64 / secs);
             }
         }
         j.num(
-            "frame_bytes_mean",
+            RowNum::FrameBytesMean,
             frame_bytes as f64 / frames.max(1) as f64,
         )
         .num(
-            "msgs_per_payload",
+            RowNum::MsgsPerPayload,
             up.messages() as f64 / up.payloads.max(1) as f64,
         );
     }
@@ -1791,13 +1804,13 @@ impl Report {
         ] {
             for &p in ps {
                 if let Some(x) = h.percentile(f64::from(p)) {
-                    j.num(&format!("{name}_p{p}"), x as f64 / unit);
+                    j.num(RowNum::window_p_p(name, p), x as f64 / unit);
                 }
             }
         }
         if let Some(n) = w.requests_out.max() {
-            j.int("reqs_out_max", n).num(
-                "reqs_out_share",
+            j.int(RowInt::ReqsOutMax, n).num(
+                RowNum::ReqsOutShare,
                 requests.count() as f64 / w.requests_out.count() as f64,
             );
         }
@@ -1820,13 +1833,13 @@ impl Report {
             );
         }
         waits.sort_unstable();
-        for p in [50, 90] {
+        for p in RowNum::P_OF_UPQ_MS_P_P.map(usize::from) {
             if let Some(&x) = waits.get(waits.len().saturating_sub(1) * p / 100) {
-                j.num(&format!("upq_ms_p{p}"), x as f64 / 1e3);
+                j.num(RowNum::upq_ms_p_p(p), x as f64 / 1e3);
             }
         }
         if let Some(&x) = waits.last() {
-            j.num("upq_ms_max", x as f64 / 1e3);
+            j.num(RowNum::UpqMsMax, x as f64 / 1e3);
         }
     }
 
@@ -2022,7 +2035,7 @@ impl Report {
     /// - `lag_p99_ms_weak`: the lag p99 of the weakest quarter;
     /// - `seed_offers_per_min`: offers to link the seed answered and
     ///   refused, per minute of run.
-    pub fn capacity_position(&self, swarm: usize) -> Vec<(&'static str, f64)> {
+    pub(crate) fn capacity_position(&self, swarm: usize) -> Vec<(RowNum, f64)> {
         let mut out = Vec::new();
         let Some(spec) = self.scenario.swarms.get(swarm) else {
             return out;
@@ -2063,10 +2076,10 @@ impl Report {
                 m
             };
             if let Some(r) = rho(&mean_depth(spec.stop)) {
-                out.push(("cap_depth_rho", r));
+                out.push((RowNum::CapDepthRho, r));
             }
             if let Some(r) = rho(&mean_depth(spec.start + BUCKET)) {
-                out.push(("cap_depth_rho_startup", r));
+                out.push((RowNum::CapDepthRhoStartup, r));
             }
             let mut by_second: BTreeMap<Duration, Vec<f64>> = BTreeMap::new();
             for &(t, v, k) in &walk {
@@ -2080,7 +2093,7 @@ impl Report {
                 v.dedup();
             }
             if let Some(m) = median(by_second.into_values().filter_map(median).collect()) {
-                out.push(("depth1_up_p50", m));
+                out.push((RowNum::Depth1UpP50, m));
             }
         }
         let mut children: BTreeMap<HostIx, (f64, u64)> = BTreeMap::new();
@@ -2094,7 +2107,7 @@ impl Report {
             }
         }
         if let Some(r) = rho(&children) {
-            out.push(("cap_fanout_rho", r));
+            out.push((RowNum::CapFanoutRho, r));
         }
         let rounds = self.link_rounds();
         let infra: Vec<bool> = (0..self.hosts.len())
@@ -2145,17 +2158,17 @@ impl Report {
             }
         }
         if let Some(r) = rho(&hops) {
-            out.push(("cap_hops_rho", r));
+            out.push((RowNum::CapHopsRho, r));
         }
         if let Some(m) = median(seed_nbrs) {
-            out.push(("seed_nbr_up_p50", m));
+            out.push((RowNum::SeedNbrUpP50, m));
         }
         let length = spec.stop.saturating_sub(spec.start).as_secs_f64();
         let came = top.map_or(spec.start, |h| self.presence(h).0.max(spec.start));
         let linked = top_linked.map_or(length, |t| {
             (t as f64 - came.as_secs_f64()).clamp(0.0, length)
         });
-        out.push(("top_seed_link_s", linked));
+        out.push((RowNum::TopSeedLinkS, linked));
         let mut by_up: Vec<(f64, HostIx)> = up.iter().map(|(&h, &u)| (u, h)).collect();
         by_up.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
         let weak: Vec<HostIx> = by_up
@@ -2164,14 +2177,14 @@ impl Report {
             .map(|&(_, h)| h)
             .collect();
         let lag = self.lag_of_between(swarm, &weak, spec.start, spec.stop);
-        out.push(("lag_p99_ms_weak", f64::from(lag.p99)));
+        out.push((RowNum::LagP99MsWeak, f64::from(lag.p99)));
         let minutes = self.scenario.duration.as_secs_f64() / 60.0;
         if let Some(r) = self.hosts.get(spec.seed)
             && minutes > 0.0
         {
             let answered = r.exchange_outcomes.get("Answered").copied().unwrap_or(0);
             out.push((
-                "seed_offers_per_min",
+                RowNum::SeedOffersPerMin,
                 (answered + r.offers_refused) as f64 / minutes,
             ));
         }
@@ -2270,7 +2283,7 @@ impl Report {
     /// open parent, `h` hops from the seed (1 to 6), deeper, in a cycle,
     /// and in a chain that ends at a viewer with no open parent. `None`
     /// without transfer samples.
-    pub fn depths(&self, swarm: usize) -> Option<Vec<(&'static str, f64)>> {
+    pub(crate) fn depths(&self, swarm: usize) -> Option<Vec<(RowNum, f64)>> {
         let walk = self.depth_walk(swarm)?;
         let mut counts = [0u64; 10];
         for &(_, _, k) in &walk {
@@ -2283,16 +2296,16 @@ impl Report {
             return None;
         }
         let names = [
-            "depth_none",
-            "depth_1",
-            "depth_2",
-            "depth_3",
-            "depth_4",
-            "depth_5",
-            "depth_6",
-            "depth_deeper",
-            "depth_cycle",
-            "depth_pull_rooted",
+            RowNum::DepthNone,
+            RowNum::depth_hops("1"),
+            RowNum::depth_hops("2"),
+            RowNum::depth_hops("3"),
+            RowNum::depth_hops("4"),
+            RowNum::depth_hops("5"),
+            RowNum::depth_hops("6"),
+            RowNum::DepthDeeper,
+            RowNum::DepthCycle,
+            RowNum::DepthPullRooted,
         ];
         Some(
             names
@@ -2303,10 +2316,11 @@ impl Report {
         )
     }
 
-    /// Swarm `swarm`'s run second by second, as one JSON object; `None`
-    /// without transfer samples ([`Scenario::transfer_samples`]). Second
-    /// `k` is `[k, k + 1)` s after the stream's start, through the run's
-    /// end. Its fields, the per-second ones as arrays:
+    /// Swarm `swarm`'s run second by second, for the tables
+    /// ([`Report::write_tables`]); `None` without transfer samples
+    /// ([`Scenario::transfer_samples`]). Second `k` is `[k, k + 1)` s after
+    /// the stream's start, through the run's end. Its fields, the
+    /// per-second ones by second:
     ///
     /// | field | |
     /// |---|---|
@@ -2327,12 +2341,6 @@ impl Report {
     ///
     /// [`Scenario::transfer_samples`]: crate::Scenario::transfer_samples
     /// [`Scenario::stats_every`]: crate::Scenario::stats_every
-    pub fn series(&self, swarm: usize) -> Option<String> {
-        self.series_data(swarm).map(|s| s.json())
-    }
-
-    /// [`Report::series`]'s values, for its JSON object and for the
-    /// tables ([`Report::write_tables`]).
     pub(crate) fn series_data(&self, swarm: usize) -> Option<SeriesData> {
         let spec = self.scenario.swarms.get(swarm)?;
         let viewers: Vec<_> = self.viewers.iter().filter(|v| v.swarm == swarm).collect();
@@ -2512,20 +2520,20 @@ impl Report {
             .map(|(i, _)| i as i64)
             .collect();
         let mut cols = vec![
-            ("present", present),
-            ("hits", hits),
-            ("misses", misses),
-            ("pruned", pruned),
-            ("parents", parents),
-            ("capacity", capacity),
-            ("busy", busy),
-            ("avail", avail),
-            ("copies", copies),
-            ("sent", sent),
-            ("pushed", pushed),
-            ("seed_ovh", seed_ovh),
-            ("viewer_ovh", viewer_ovh),
-            ("budget_capacity", budget_capacity),
+            (cols::Seconds::Present, present),
+            (cols::Seconds::Hits, hits),
+            (cols::Seconds::Misses, misses),
+            (cols::Seconds::Pruned, pruned),
+            (cols::Seconds::Parents, parents),
+            (cols::Seconds::Capacity, capacity),
+            (cols::Seconds::Busy, busy),
+            (cols::Seconds::Avail, avail),
+            (cols::Seconds::Copies, copies),
+            (cols::Seconds::Sent, sent),
+            (cols::Seconds::Pushed, pushed),
+            (cols::Seconds::SeedOvh, seed_ovh),
+            (cols::Seconds::ViewerOvh, viewer_ovh),
+            (cols::Seconds::BudgetCapacity, budget_capacity),
         ];
         // A media swarm's chunks sent each second, those holding media, by
         // their first byte (`written`, what `frames` counts): its other
@@ -2537,7 +2545,7 @@ impl Report {
                     *w += 1;
                 }
             }
-            cols.push(("written", written));
+            cols.push((cols::Seconds::Written, written));
         }
         Some(SeriesData {
             rate: self.swarm_rate(swarm) as u64,
@@ -2568,39 +2576,39 @@ impl Report {
         let waits = Percentiles::of(m.sign_waits.iter().copied());
         let uploaded: u64 = self.hosts.iter().map(|h| h.uploaded).sum();
         let viewers = spec.viewers.len().max(1) as f64;
-        j.str("media", &media.encoder.to_string())
-            .str("sign", &media.sign.to_string())
-            .int("unit", m.unit_chunks)
-            .num("media_kbit", m.media_bytes as f64 * 8e-3 / secs)
-            .num("sent_kbit", m.sent_bytes as f64 * 8e-3 / secs)
+        j.str(RowText::Media, &media.encoder.to_string())
+            .str(RowText::Sign, &media.sign.to_string())
+            .int(RowInt::Unit, m.unit_chunks)
+            .num(RowNum::MediaKbit, m.media_bytes as f64 * 8e-3 / secs)
+            .num(RowNum::SentKbit, m.sent_bytes as f64 * 8e-3 / secs)
             .num(
-                "stream_per_media",
+                RowNum::StreamPerMedia,
                 m.sent_bytes as f64 / m.media_bytes.max(1) as f64,
             )
-            .num("units_per_s", m.units as f64 / secs)
-            .int("sign_wait_p50_ms", u64::from(waits.p50))
-            .int("sign_wait_p99_ms", u64::from(waits.p99))
+            .num(RowNum::UnitsPerS, m.units as f64 / secs)
+            .int(RowInt::SignWaitP50Ms, u64::from(waits.p50))
+            .int(RowInt::SignWaitP99Ms, u64::from(waits.p99))
             .num(
-                "wire_per_media",
+                RowNum::WirePerMedia,
                 uploaded as f64 / (m.media_bytes.max(1) as f64 * viewers),
             );
     }
 }
 
-/// A swarm's run second by second ([`Report::series`]): its stream, each
-/// viewer's `lag` and `frames` by second, and the per-second columns in
-/// the JSON object's order.
+/// A swarm's run second by second ([`Report::series_data`]): its stream,
+/// each viewer's `lag` and `frames` by second, and the per-second columns
+/// in the `seconds` table's order.
 pub(crate) struct SeriesData {
     pub rate: u64,
     pub chunk: u64,
     pub frame: u64,
     pub secs: u64,
-    /// `[s, bytes per second]` pairs, as the JSON object writes them.
+    /// `[s, bytes per second]` pairs, as `series_meta.json` writes them.
     pub seed_up: Vec<String>,
     pub viewer_up: u64,
     pub lag: Vec<Vec<i64>>,
     pub frames: Vec<Vec<i64>>,
-    pub cols: Vec<(&'static str, Vec<i64>)>,
+    pub cols: Vec<(cols::Seconds, Vec<i64>)>,
     /// The hostile viewers' places in `lag` and `frames`.
     pub hostile: Vec<i64>,
 }
@@ -2609,101 +2617,6 @@ impl SeriesData {
     /// The seconds in the series.
     pub fn len(&self) -> usize {
         self.cols.first().map_or(0, |(_, v)| v.len())
-    }
-
-    fn json(&self) -> String {
-        let ints = |v: &[i64]| {
-            let v: Vec<String> = v.iter().map(i64::to_string).collect();
-            format!("[{}]", v.join(","))
-        };
-        let nested = |v: &[Vec<i64>]| {
-            let v: Vec<String> = v.iter().map(|x| ints(x)).collect();
-            format!("[{}]", v.join(","))
-        };
-        let mut j = JsonRow::default();
-        j.int("rate", self.rate)
-            .int("chunk", self.chunk)
-            .int("frame", self.frame)
-            .int("secs", self.secs)
-            .field("seed_up", format_args!("[{}]", self.seed_up.join(",")))
-            .int("viewer_up", self.viewer_up)
-            .field("lag", format_args!("{}", nested(&self.lag)))
-            .field("frames", format_args!("{}", nested(&self.frames)));
-        for (name, v) in &self.cols {
-            j.field(name, format_args!("{}", ints(v)));
-        }
-        // The hostile viewers' places in `lag` and `frames`, if any: `hits`,
-        // `misses`, `pruned`, `present` and `parents` leave them out.
-        if !self.hostile.is_empty() {
-            j.field("hostile", format_args!("{}", ints(&self.hostile)));
-        }
-        j.finish()
-    }
-}
-
-/// A JSON object written field by field.
-#[derive(Default)]
-struct JsonRow(String);
-
-impl JsonRow {
-    fn field(&mut self, key: &str, value: std::fmt::Arguments) -> &mut Self {
-        self.0.push(if self.0.is_empty() { '{' } else { ',' });
-        let _ = write!(self.0, "\"{key}\":{value}");
-        self
-    }
-
-    fn int(&mut self, key: &str, v: u64) -> &mut Self {
-        self.field(key, format_args!("{v}"))
-    }
-
-    fn ints(&mut self, key: &str, v: impl Iterator<Item = u64>) -> &mut Self {
-        let v: Vec<String> = v.map(|x| x.to_string()).collect();
-        self.field(key, format_args!("[{}]", v.join(",")))
-    }
-
-    fn signed_ints(&mut self, key: &str, v: impl Iterator<Item = i64>) -> &mut Self {
-        let v: Vec<String> = v.map(|x| x.to_string()).collect();
-        self.field(key, format_args!("[{}]", v.join(",")))
-    }
-
-    /// JSON has no NaN or infinity, so those are null.
-    fn num(&mut self, key: &str, v: f64) -> &mut Self {
-        if v.is_finite() {
-            self.field(key, format_args!("{v}"))
-        } else {
-            self.field(key, format_args!("null"))
-        }
-    }
-
-    fn nums(&mut self, key: &str, v: impl Iterator<Item = f64>) -> &mut Self {
-        let v: Vec<String> = v
-            .map(|x| {
-                if x.is_finite() {
-                    format!("{x:.4}")
-                } else {
-                    "null".to_owned()
-                }
-            })
-            .collect();
-        self.field(key, format_args!("[{}]", v.join(",")))
-    }
-
-    /// A string without quotes, backslashes or control characters (names
-    /// and hashes).
-    fn str(&mut self, key: &str, v: &str) -> &mut Self {
-        let v: String = v
-            .chars()
-            .filter(|c| *c != '"' && *c != '\\' && !c.is_control())
-            .collect();
-        self.field(key, format_args!("\"{v}\""))
-    }
-
-    fn finish(&mut self) -> String {
-        if self.0.is_empty() {
-            self.0.push('{');
-        }
-        self.0.push('}');
-        std::mem::take(&mut self.0)
     }
 }
 
@@ -2843,7 +2756,11 @@ mod tests {
                 ..HostReport::default()
             })
             .collect();
-        let got: BTreeMap<&str, f64> = r.capacity_position(0).into_iter().collect();
+        let got: BTreeMap<&str, f64> = r
+            .capacity_position(0)
+            .into_iter()
+            .map(|(k, v)| (k.name(), v))
+            .collect();
         assert!((got["cap_depth_rho"] + 1.0).abs() < 1e-9, "{got:?}");
         assert!((got["cap_hops_rho"] + 1.0).abs() < 1e-9, "{got:?}");
         assert_eq!(got["seed_nbr_up_p50"], 4_000.0);

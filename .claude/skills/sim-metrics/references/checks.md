@@ -20,6 +20,11 @@ every row key, every column of every table and `series_meta.json`:
 - `--expect TABLE.COL` names a column the change means to add or move.
   Anything else that differs fails the check, and a difference always
   has a cause: the sims are deterministic.
+- A vocabulary commit, one that changes how the sims name what they
+  record and not what they record (fields.toml, the generated modules,
+  their call sites), is neutral with no `--expect`, over the `vocab`
+  set (`neutral.VOCAB`: the audit's cells and every writer they leave
+  off).
 - The commit message gives the cells and seeds compared, the tables and
   columns that moved, and that nothing else did. Save the comparison
   itself (`--json`) in the notebook under target/, naming what it

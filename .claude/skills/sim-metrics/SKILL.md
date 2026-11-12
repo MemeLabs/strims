@@ -12,7 +12,11 @@ a view or reading the user's selection: sim-console.
 
 Both sims (strims-sim, and the ppspp sim in
 `crates/strims-ppspp/tests/sim.rs`) write each run's row (one JSON
-line), its tables (CSV beside a schema file each) and its events.
+line), its tables (CSV beside a schema file each) and its events. Every
+name they record is declared in `crates/strims-wan/fields.toml` (its
+schema is `hack/simlab/spec.py`): `python3 hack/simlab/vocab.py write`
+generates each sim's typed names from it, and strims-sim writes through
+its module (`crates/strims-sim/src/fields.rs`).
 `hack/simlab/store_host.py` folds a job's tables into the cache, and the
 farm's hosts run that same file. The catalog (`hack/simlab/catalog.py`)
 indexes the cache into the DuckLake: views over the tables, the
@@ -86,12 +90,17 @@ the Rust and Python checks, and what each golden diff means.
   on a branch was lost when the branch merged main (9af57af6). test_catalog's
   `Registries` fails on a branch whose sims document a table that
   `store_host.TABLES` lacks.
-- **A branch's own logs.** Metrics that measure something main has land
-  on main first, and branches get them by merging main. The log of a
-  mechanism that exists only on a branch (today spec_requests, parks,
-  and the STATE columns of the HAVE-removal line's asks) keeps its docs
-  in that branch's sims, and main's catalog shows those columns
-  undocumented until the mechanism lands.
+- **Every recorded name is declared on main first.** Metrics that
+  measure something main has land on main first, and branches get them
+  by merging main. Every name a sim records, a line's included (today
+  spec_requests, parks, and the STATE columns of the HAVE-removal line's
+  asks), is declared in `crates/strims-wan/fields.toml` on main before
+  any sim writes it: a line's declarations are its branch's bottom
+  commit, landed on main before the rest. An entry only lines write has
+  `sims = []` and names them in `lines`, so main's generated modules
+  leave it out, and a line adds its sim to the entry when it writes the
+  name. A dropped line's entries leave in the commit that adds its
+  `crates/TRIED.md` entry.
 - **The farm runs store_host.py and worker.py.** The farm ships both to
   its hosts from the main checkout, so a change landed during a run can
   hand its hosts different code. Before landing a change to either,
@@ -155,6 +164,8 @@ commit message carries the evidence of each check the change called for:
 
 Read these rather than any copy of them, this skill included:
 
+- `crates/strims-wan/fields.toml`, every name the sims record, whose
+  schema is `hack/simlab/spec.py`
 - `store_host.TABLES`, `store_host.SAMPLE_TABLES`; `query.TABLE_KNOBS`
 - `catalog.DOC_FILES`, `catalog.NORMALIZED`, `catalog.STANDARD_KEYS`,
   `catalog.STANDARD_JOINS`, `catalog.TABLE_DOCS`, `catalog.VERDICT_DOCS`,

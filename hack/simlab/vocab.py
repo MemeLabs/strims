@@ -1,17 +1,37 @@
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
-"""The sims' event vocabulary, crates/strims-wan/vocab.toml (its header
-says what it holds): loaded, checked and asked, stdlib alone, so
-analyze.py and the scripts under the plain python3 or `python -I` read it
-too; and the files made from it, committed beside their readers:
+"""The sims' vocabulary: their events, crates/strims-wan/vocab.toml, and
+their recorded names, crates/strims-wan/fields.toml (each header says what
+it holds): loaded, checked and asked, stdlib alone, so analyze.py and the
+scripts under the plain python3 or `python -I` read them too; and the
+files made from them, committed beside their readers:
 
-  crates/strims-wan/src/vocab.rs             the document, its kinds as Rust
-                                             (strims_wan::vocab, the sims'
-                                             Kind) and its other names
+  crates/strims-wan/src/vocab.rs             the events document, its kinds
+                                             as Rust (strims_wan::vocab, the
+                                             sims' Kind) and its other names
   src/devtools/components/console/vocab.ts   the console's lists
+  crates/strims-sim/src/fields.rs            each sim's recorded names, the
+  crates/strims-ppspp/tests/sim/fields.rs    enums it writes them through
+                                             (templates/fields.rs.j2)
+  crates/strims-ppspp/src/seed_log_columns.rs
+                                             the seed log's tables' columns
+                                             (templates/seed_log_columns.rs.j2),
+                                             once a sim writes them
+  crates/strims-wan/vocab.schema.json        fields.toml's schema, for an
+                                             editor (spec.py's)
 
   python3 hack/simlab/vocab.py write         makes them
-  python3 hack/simlab/vocab.py check         exits 1 while either differs
+  python3 hack/simlab/vocab.py check         exits 1 while one differs, or
+                                             fields.toml doesn't check
+
+Making the fields' files takes jinja2, pydantic (spec.py, which checks
+fields.toml) and rustfmt; the script runs under hack/'s venv for them.
+
+  fields(path=None) -> dict    fields.toml (NAMES by default), parsed
+  products(params, who)        a family's params for a sim or a line, as
+                               products {param: [values]}
+  expand(key, entry, who)      the names an entry holds for `who`
+  field_outputs(path=None)     fields.toml's files {path: text}
 
   load(path=None) -> dict      the document (DOCUMENT by default), checked:
                                VocabError names its problems
@@ -62,8 +82,10 @@ in its order:
 """
 
 import functools
+import importlib.util
 import json
 import re
+import subprocess
 import sys
 import textwrap
 import tomllib
@@ -627,16 +649,365 @@ def write(path=None):
     return out
 
 
+# --- the recorded names: fields.toml ---------------------------------------------
+
+NAMES = ROOT / "crates" / "strims-wan" / "fields.toml"
+SCHEMA = ROOT / "crates" / "strims-wan" / "vocab.schema.json"
+TEMPLATES = Path(__file__).with_name("templates")
+# Each sim's generated module of its recorded names.
+FIELD_MODULES = {"strims-sim": ROOT / "crates" / "strims-sim" / "src" / "fields.rs",
+                 "ppspp": ROOT / "crates" / "strims-ppspp" / "tests" / "sim" / "fields.rs"}
+# The shared formatters, by fields.toml's tables' `shared`: the module made
+# of their tables' columns, the Rust path of the formatter that writes them
+# (its Column and ColumnType), and each table's const there.
+SHARED = {"seed_log": {"module": ROOT / "crates" / "strims-ppspp" / "src" / "seed_log_columns.rs",
+                       "rust": "strims_ppspp::scheduler_peer::seed_log",
+                       "consts": {"seed_decisions": ("DECISION_COLUMNS", "decision_fields", "DecisionCol"),
+                                  "seed_sends": ("SEND_COLUMNS", "send_fields", "SendCol")},
+                       "head": "HeadCol"}}
+LINES = ("decl", "p4tf")
+PARAM = re.compile(r"\{([a-z][a-z0-9_]*)\}")
+# The row's enums, by type: (enum, what its fields hold).
+ROW_ENUMS = {"int": ("RowInt", "an integer"), "num": ("RowNum", "a number (null where not finite)"),
+             "text": ("RowText", "text"), "bool": ("RowBool", "a boolean"),
+             "ints": ("RowInts", "a list of integers"), "nums": ("RowNums", "a list of numbers"),
+             "json": ("RowJson", "another JSON value")}
+COLUMN_TYPES = {"int": "Int", "text": "Text", "bool": "Bool"}
+
+
+@functools.cache
+def _fields(path):
+    try:
+        return tomllib.loads(Path(path).read_text())
+    except tomllib.TOMLDecodeError as e:
+        raise VocabError(f"{Path(path).name}: {e}") from None
+
+
+def fields(path=None):
+    """fields.toml (NAMES by default), parsed; spec.check checks it."""
+    return _fields(str(path or NAMES))
+
+
+def products(params, who):
+    """A family's params for `who` (a sim or a line), as products
+    [{param: [values]}]: a param's values a list, or a table of lists by
+    sim (and line); a list of products their union."""
+    out = []
+    for p in params if isinstance(params, list) else [params]:
+        d = {}
+        for k, v in p.items():
+            vs = v.get(who) if isinstance(v, dict) else v
+            if vs is None:
+                break
+            d[k] = vs
+        else:
+            out.append(d)
+    return out
+
+
+def expand(key, entry, who):
+    """The names entry `key` (a name, or a family: {param} parts) holds for
+    `who`, in order."""
+    if "{" not in key:
+        return [key]
+    parts = PARAM.split(key)
+    out = []
+    for p in products(entry.get("params") or {}, who):
+        combos = [[]]
+        for name in parts[1::2]:
+            combos = [c + [v] for c in combos for v in p[name]]
+        for combo in combos:
+            s = parts[0] + "".join(v + parts[2 * i + 2] for i, v in enumerate(combo))
+            if s not in out:
+                out.append(s)
+    return out
+
+
+def camel(name):
+    """A name's Rust variant: `lag_p99_ms` is `LagP99Ms`."""
+    return "".join(p[:1].upper() + p[1:] for p in name.split("_") if p)
+
+
+def family_fn(key):
+    """A family's constructor: its id with each {param} its name,
+    `stalls_per_min_{delay}{pop}`'s `stalls_per_min_delay_pop`."""
+    return re.sub(r"_+", "_", PARAM.sub(r"_\1_", key)).strip("_")
+
+
+def _variant_doc(entry, sim, family_names=None):
+    out = entry["description"]
+    note = entry.get("notes", {}).get(sim)
+    if note:
+        out += f"\n\n{sim}: {note}"
+    if entry.get("unit"):
+        out += f"\n\nUnit: {entry['unit']}."
+    if entry.get("none"):
+        out += f" None is written {_NONE_TEXT[entry['none']]}." if entry.get("unit") else \
+            f"\n\nNone is written {_NONE_TEXT[entry['none']]}."
+    return out
+
+
+_NONE_TEXT = {"empty": "as an empty field", "-1": "as -1", "0": "as 0", "negative": "as a negative time",
+              "null": "as null"}
+
+
+def _variants(entries, sim, prefix):
+    out = []
+    for key, e in entries:
+        v = {"key": key, "doc": _variant_doc(e, sim), "family": "{" in key, "type": e["type"]}
+        if v["family"]:
+            fn = family_fn(key)
+            v.update(fn=fn, variant=camel(fn), params=PARAM.findall(key), names=expand(key, e, sim),
+                     names_const=f"{prefix}_{fn}".upper())
+        else:
+            v["variant"] = camel(key)
+        out.append(v)
+    seen = {}
+    for v in out:
+        if v["variant"] in seen:
+            raise VocabError(f"{v['key']} and {seen[v['variant']]} are both variant {v['variant']}")
+        seen[v["variant"]] = v["key"]
+    return out
+
+
+def _ty_groups(variants):
+    groups = []
+    for t in ("int", "text", "bool"):
+        vs = [v for v in variants if v["type"] == t]
+        if vs:
+            groups.append({"ty": COLUMN_TYPES[t], "variants": vs})
+    return groups
+
+
+def _code_tests(doc, sim):
+    out = []
+    sections = [("rows", doc.get("rows", {}))] + [(f"columns.{t}", c) for t, c in doc.get("columns", {}).items()]
+    for section, entries in sections:
+        for key, e in entries.items():
+            if sim not in e.get("sims", []):
+                continue
+            for param, code in e.get("code", {}).get(sim, {}).items():
+                prods = products(e["params"], sim)
+                if len(prods) != 1:
+                    raise VocabError(f"[{section}.{key}]: code for a union of products")
+                out.append({"what": f"{section} {key}'s {param}", "code": code, "want": prods[0][param]})
+    return out
+
+
+def _enum(name, doc, variants, sim, consts=(), table=None):
+    en = {"name": name, "doc": doc, "variants": variants, "consts": list(consts), "table": table}
+    if table:
+        en["ty_groups"] = _ty_groups(variants)
+    return en
+
+
+def _consts(entries, sim):
+    """The families' params the code loops over (an entry's `consts` for
+    `sim`), as consts: their values, typed (the least unsigned integer
+    holding numbers, else &str)."""
+    out = []
+    for key, e in entries:
+        for param in e.get("consts", {}).get(sim, []):
+            prods = products(e["params"], sim)
+            if len(prods) != 1:
+                raise VocabError(f"{key}: consts of a union of products")
+            vals = prods[0][param]
+            if all(v.isdigit() for v in vals):
+                top = max(int(v) for v in vals)
+                ty = next(t for t, m in (("u8", 255), ("u16", 65535), ("u32", 2**32 - 1), ("u64", 2**64 - 1))
+                          if top <= m)
+                shown = [str(int(v)) for v in vals]
+            else:
+                ty, shown = "&str", [json.dumps(v) for v in vals]
+            out.append({"key": key, "param": param, "name": f"{param}_of_{family_fn(key)}".upper(), "ty": ty,
+                        "vals": shown})
+    return out
+
+
+# The integer types JsonRow writes as integers.
+INT_TYPES = ("u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize")
+# By type: the key trait JsonRow's method of it takes, and what it holds.
+KEY_TRAITS = {"int": ("IntKey", "an integer"), "num": ("NumKey", "a number"), "bool": ("BoolKey", "a boolean"),
+              "ints": ("IntsKey", "a list of integers"), "nums": ("NumsKey", "a list of numbers"),
+              "text": ("TextKey", "text"), "json": ("JsonKey", "another JSON value")}
+META_ENUMS = {t: "Meta" + n[3:] for t, (n, _) in ROW_ENUMS.items()}
+# How each sim's JsonRow::str treats a quote, backslash or control
+# character: leaves it out, or stops the run.
+TEXT_CHECK = {"strims-sim": "filter", "ppspp": "assert"}
+
+
+def field_module(doc, sim, header):
+    """Sim `sim`'s module of its recorded names, as document `doc` gives
+    them, before rustfmt."""
+    import jinja2
+
+    def written(entries):
+        return [(k, e) for k, e in entries.items() if sim in e.get("sims", [])]
+
+    enums = []
+    key_enums = []
+    by_type = {}
+    rows = written(doc.get("rows", {}))
+    meta = written(doc.get("meta", {}))
+    for typ, (name, holds) in ROW_ENUMS.items():
+        of = [(k, e) for k, e in rows if e["type"] == typ]
+        if of:
+            enums.append(_enum(name, f"The row's fields that hold {holds}.", _variants(of, sim, name), sim,
+                               _consts(of, sim)))
+            key_enums.append(name)
+            by_type.setdefault(typ, []).append(name)
+    for typ, name in META_ENUMS.items():
+        of = [(k, e) for k, e in meta if e["type"] == typ]
+        if of:
+            enums.append(_enum(name, f"The keys of `series_meta.json` that hold {ROW_ENUMS[typ][1]}.",
+                               _variants(of, sim, name), sim))
+            key_enums.append(name)
+            by_type.setdefault(typ, []).append(name)
+    tables = []
+    bridges = []
+    for t, tab in doc.get("tables", {}).items():
+        cols = written(doc.get("columns", {}).get(t, {}))
+        if not cols:
+            continue
+        if tab.get("shared"):
+            sh = SHARED[tab["shared"]]
+            bridges.append({"name": camel(t), "table": t, "path": sh["rust"], "const": sh["consts"][t][0],
+                            "shared": tab["shared"]})
+            continue
+        grain = tab.get("grain")
+        tables.append(_enum(camel(t), f"The `{t}` table's columns" + (f": a row per {grain}." if grain else "."),
+                            _variants(cols, sim, f"cols_{t}"), sim, _consts(cols, sim), table=t))
+    zstd = [t for t, tab in doc.get("tables", {}).items() if tab.get("zstd") and sim in tab.get("sims", [])]
+    families = any(v["family"] for en in enums + tables for v in en["variants"])
+    key_traits = [{"name": KEY_TRAITS[t][0], "holds": KEY_TRAITS[t][1], "enums": by_type[t]}
+                  for t in KEY_TRAITS if t in by_type]
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(TEMPLATES), trim_blocks=True, lstrip_blocks=True,
+                             keep_trailing_newline=True, undefined=jinja2.StrictUndefined)
+    env.filters["rustdoc"] = lambda text, indent: "\n".join(_rustdoc(text, indent))
+    env.filters["code"] = lambda s: f"`{s}`"
+    env.filters["code_link"] = lambda s: f"[`{s}`]"
+    env.filters["fmtsafe"] = lambda s: s.replace("{", "{{").replace("}", "}}")
+    return env.get_template("fields.rs.j2").render(
+        header=header, sim=sim, enums=enums, key_enums=key_enums, tables=tables, bridges=bridges, zstd=zstd,
+        families=families, col_families=any(v["family"] for en in tables for v in en["variants"]),
+        tests=_code_tests(doc, sim), int_types=INT_TYPES, key_traits=key_traits, methods=set(by_type),
+        text_check=TEXT_CHECK[sim])
+
+
+def _rustdoc(text, indent):
+    """`text` (paragraphs split by blank lines) as `///` lines at
+    `indent`, wrapped."""
+    pad = " " * indent + "///"
+    out = []
+    for i, para in enumerate(text.split("\n\n")):
+        if i:
+            out.append(pad)
+        out += _doc_lines(para, indent)
+    return out
+
+
+FIELDS_HEADER = ("// Copyright 2026 Strims contributors\n"
+                 "// SPDX-License-Identifier: AGPL-3.0-only\n"
+                 "// @generated by hack/simlab/vocab.py from crates/strims-wan/fields.toml: edit\n"
+                 "// the document, then run `python3 hack/simlab/vocab.py write`.\n")
+
+
+def rustfmt(text):
+    """`text` as rustfmt (the toolchain's, edition 2024) formats it."""
+    p = subprocess.run(["rustfmt", "--edition", "2024", "--emit", "stdout"], input=text, capture_output=True,
+                       text=True, cwd=ROOT)
+    if p.returncode != 0:
+        raise VocabError(f"rustfmt: {p.stderr.strip()}")
+    return p.stdout
+
+
+def field_outputs(path=None):
+    """The files made from fields.toml (at `path`, NAMES by default),
+    {path: text}: each sim's module of its names and the document's JSON
+    schema. Checks the document first (spec.check)."""
+    from . import spec
+    doc = fields(path)
+    if found := spec.check(doc):
+        raise VocabError("\n".join(found))
+    out = {}
+    for sim, p in FIELD_MODULES.items():
+        out[p] = rustfmt(field_module(doc, sim, FIELDS_HEADER))
+    for kind, sh in SHARED.items():
+        text = shared_module(doc, kind, FIELDS_HEADER)
+        if text is not None:
+            out[sh["module"]] = rustfmt(text)
+    out[SCHEMA] = json.dumps(spec.schema(), indent=2) + "\n"
+    return out
+
+
+def _jinja():
+    import jinja2
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(TEMPLATES), trim_blocks=True, lstrip_blocks=True,
+                             keep_trailing_newline=True, undefined=jinja2.StrictUndefined)
+    env.filters["rust_str"] = lambda s: json.dumps(s, ensure_ascii=False)
+    return env
+
+
+def shared_module(doc, kind, header):
+    """The shared formatter `kind`'s module of its tables' columns, before
+    rustfmt; None while no sim writes them (a line's tables): each table's
+    column list, and its names as enums, the columns its tables open with
+    alike (by name and type) one enum of them all."""
+    sh = SHARED[kind]
+    tables = []
+    for t, tab in doc.get("tables", {}).items():
+        if tab.get("shared") != kind or not tab.get("sims"):
+            continue
+        const, fields_fn, enum = sh["consts"][t]
+        cols = [{"name": k, "variant": camel(k), "ty": COLUMN_TYPES[e["type"]], "doc": e.get("description") or "",
+                 "type": e["type"]}
+                for k, e in doc.get("columns", {}).get(t, {}).items() if e.get("sims")]
+        tables.append({"table": t, "const": const, "enum": enum, "what": f"[`{fields_fn}`](super::{fields_fn})",
+                       "columns": cols})
+    if not tables:
+        return None
+    head = 0
+    while all(head < len(t["columns"]) for t in tables) and len({(t["columns"][head]["name"],
+                                                                     t["columns"][head]["type"])
+                                                                    for t in tables}) == 1:
+        head += 1
+    for t in tables:
+        for i, c in enumerate(t["columns"]):
+            c["enum"] = sh["head"] if i < head else t["enum"]
+        t["own"] = t["columns"][head:]
+    return _jinja().get_template("seed_log_columns.rs.j2").render(
+        header=header, tables=tables, head=tables[0]["columns"][:head], head_enum=sh["head"],
+        head_tables=[t["table"] for t in tables])
+
+
+def all_outputs():
+    return {**outputs(), **field_outputs()}
+
+
+def _main_stale():
+    return [p for p, text in all_outputs().items() if not p.exists() or p.read_text() != text]
+
+
+def _main_write():
+    out = []
+    for p, text in all_outputs().items():
+        if not p.exists() or p.read_text() != text:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text)
+            out.append(p)
+    return out
+
+
 def main(argv):
     if len(argv) != 1 or argv[0] not in ("write", "check"):
         print("usage: python3 hack/simlab/vocab.py write|check", file=sys.stderr)
         return 2
     try:
         if argv[0] == "write":
-            for p in write():
+            for p in _main_write():
                 print(f"wrote {p.relative_to(ROOT)}")
             return 0
-        bad = stale()
+        bad = _main_stale()
     except VocabError as e:
         print(f"vocab: {e}", file=sys.stderr)
         return 1
@@ -646,4 +1017,9 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.path.insert(0, str(ROOT / "hack"))
+    from simlab import bootstrap
+    if not all(importlib.util.find_spec(m) for m in ("jinja2", "pydantic")):
+        bootstrap.engine(__file__)
+    from simlab import vocab as _self
+    sys.exit(_self.main(sys.argv[1:]))

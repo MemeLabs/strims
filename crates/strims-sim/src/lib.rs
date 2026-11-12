@@ -124,6 +124,7 @@ pub mod arrivals;
 pub mod bench;
 mod control;
 mod fast_map;
+mod fields;
 mod host;
 mod hostile;
 pub mod measures;

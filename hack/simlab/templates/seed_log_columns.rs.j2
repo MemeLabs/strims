@@ -1,0 +1,50 @@
+{% macro col_enum(name, doc, cols) %}
+{{ doc }}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum {{ name }} {
+{% for c in cols %}
+    {{ c.variant }},
+{% endfor %}
+}
+
+impl {{ name }} {
+    /// The column's name.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+{% for c in cols %}
+            {{ name }}::{{ c.variant }} => "{{ c.name }}",
+{% endfor %}
+        }
+    }
+}
+{% endmacro %}
+{{ header }}
+//! The seed log's tables' columns, as `crates/strims-wan/fields.toml`
+//! declares them: each table's list of its columns' names, types and docs,
+//! in the order both sims write them through
+//! [`decision_fields`](super::decision_fields) and
+//! [`send_fields`](super::send_fields), and their names as enums, which the
+//! formatter writes each column by (a column it never writes is dead
+//! code): [`{{ head_enum }}`] for the columns
+{% for t in head_tables %}{% if loop.first %}//! `{{ t }}`{% elif loop.last %} and `{{ t }}`{% else %}, `{{ t }}`{% endif %}{% endfor %} open with alike, then each table's own.
+
+use super::{Column, ColumnType};
+{% for t in tables %}
+
+/// The `{{ t.table }}` table's columns ({{ t.what }}).
+pub const {{ t.const }}: [Column; {{ t.columns | length }}] = [
+{% for c in t.columns %}
+    Column {
+        name: "{{ c.name }}",
+        ty: ColumnType::{{ c.ty }},
+        doc: {{ c.doc | rust_str }},
+    },
+{% endfor %}
+];
+{% endfor %}
+
+{{ col_enum(head_enum, "/// The columns every seed table opens with, which [`RowHead`](super::RowHead)\n/// fills; each table's docs say what each holds there.", head) }}
+{% for t in tables %}
+
+{{ col_enum(t.enum, "/// The `" ~ t.table ~ "` table's own columns, after [`" ~ head_enum ~ "`]'s.", t.own) }}
+{% endfor %}
