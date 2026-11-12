@@ -32,8 +32,7 @@ const stories: Story[] = [
     ),
   },
   {
-    // Submitted with an address that isn't one. lib/hostRegex's pattern
-    // isn't anchored, so only a value without a letter or digit fails it.
+    // Submitted with a host where the node takes an http(s) URL.
     name: "Invalid",
     component: () => (
       <SettingsStory
@@ -41,7 +40,7 @@ const stories: Story[] = [
         submit
         services={() => ({
           hlsEgress: new HLSEgressService({
-            config: { enabled: true, publicServerAddr: "://" },
+            config: { enabled: true, publicServerAddr: "cdn.strims.gg" },
           }),
         })}
       />

@@ -34,9 +34,8 @@ const stories: Story[] = [
     ),
   },
   {
-    // Submitted with no server address and a public one that isn't one.
-    // lib/hostRegex's pattern isn't anchored, so only a value without a
-    // letter or digit fails it.
+    // Submitted with a server address without its port and a public
+    // address with a scheme (the node puts it in rtmp://<address>/live/…).
     name: "Invalid",
     component: () => (
       <SettingsStory
@@ -44,7 +43,11 @@ const stories: Story[] = [
         submit
         services={() => ({
           videoIngress: new VideoIngressService({
-            config: { enabled: true, serverAddr: "", publicServerAddr: "://" },
+            config: {
+              enabled: true,
+              serverAddr: "127.0.0.1",
+              publicServerAddr: "rtmp://ingress.strims.gg",
+            },
           }),
         })}
       />

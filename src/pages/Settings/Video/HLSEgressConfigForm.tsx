@@ -10,7 +10,7 @@ import { HLSEgressConfig } from "../../../apis/strims/video/v1/hls_egress";
 import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
-import hostRegex from "../../../lib/hostRegex";
+import { isAddrLength, isHttpUrl } from "../../../lib/address";
 
 interface HLSEgressConfigFormData {
   enabled: boolean;
@@ -74,12 +74,12 @@ const HLSEgressConfigForm = () => {
         <TextInput
           control={control}
           rules={{
-            pattern: {
-              value: hostRegex({
-                localhost: false,
-                strictPort: false,
-              }),
-              message: "Invalid address format",
+            validate: {
+              length: (v: string) => isAddrLength(v) || "Public address is too long",
+              url: (v: string) =>
+                !v ||
+                isHttpUrl(v) ||
+                "Public address must be an http:// or https:// URL, e.g. https://cdn.strims.gg",
             },
           }}
           label="Public address"

@@ -17,7 +17,7 @@ import {
 } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
-import hostRegex from "../../../lib/hostRegex";
+import { isAddrLength, isHostOptionalPort, isHostPort } from "../../../lib/address";
 import ForwardLink from "../ForwardLink";
 
 interface VideoIngressConfigFormData {
@@ -90,9 +90,10 @@ const VideoIngressConfigForm = () => {
               value: true,
               message: "Server address is required",
             },
-            pattern: {
-              value: hostRegex(),
-              message: "Invalid address format",
+            validate: {
+              length: (v: string) => isAddrLength(v) || "Server address is too long",
+              hostPort: (v: string) =>
+                isHostPort(v) || "Server address must be host:port, e.g. 127.0.0.1:1935",
             },
           }}
           label="Server address"
@@ -103,12 +104,12 @@ const VideoIngressConfigForm = () => {
         <TextInput
           control={control}
           rules={{
-            pattern: {
-              value: hostRegex({
-                localhost: false,
-                strictPort: false,
-              }),
-              message: "Invalid address format",
+            validate: {
+              length: (v: string) => isAddrLength(v) || "Public address is too long",
+              host: (v: string) =>
+                !v ||
+                isHostOptionalPort(v) ||
+                "Public address must be a host, optionally with a port, e.g. ingress.strims.gg",
             },
           }}
           label="Public address"
