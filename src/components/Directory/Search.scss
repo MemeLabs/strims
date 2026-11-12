@@ -13,7 +13,7 @@
     overflow: hidden;
     align-items: center;
     padding: 0 0.5rem;
-    box-shadow: 0 1px 2px var(--color-opac-b-14) inset;
+    box-shadow: var(--shadow-inset);
     background-color: var(--color-background-input);
   }
 

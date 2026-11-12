@@ -17,7 +17,7 @@
 
   &__modal {
     position: absolute;
-    background: var(--color-slate-4);
+    background: var(--color-background-modal);
     box-shadow: var(--shadow-elevation-4);
     border-radius: var(--border-radius-medium);
     box-sizing: border-box;
@@ -27,10 +27,6 @@
     left: 50%;
     transform: translateX(-50%);
     padding: 20px;
-
-    @at-root .theme--light & {
-      background: var(--body-foreground);
-    }
   }
 
   &__form {
@@ -45,7 +41,7 @@
   }
 
   &__peer {
-    color: var(--color-grey-3);
+    color: var(--color-text-modal-detail);
     font-size: 0.9rem;
   }
 

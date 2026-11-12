@@ -12,7 +12,7 @@
     flex-direction: row;
     align-items: center;
     position: relative;
-    border: 1px solid black;
+    border: 1px solid var(--color--border-notification);
     background: var(--color--background-notification);
     padding: 10px;
     opacity: 0;

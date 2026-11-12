@@ -55,7 +55,7 @@
       &:after {
         display: block;
         content: "";
-        background: var(--color-strims-orange-2);
+        background: var(--color-accent-nav-indicator-idle);
         border-radius: 2px;
         height: 8px;
         top: 100%;
@@ -73,7 +73,7 @@
       &--active:after,
       &:hover:after {
         transform: translateY(-4px);
-        background: var(--color-strims-orange-14);
+        background: var(--color-accent-nav-indicator);
       }
     }
   }
@@ -149,7 +149,7 @@
     left: 0;
     height: 100vh;
     width: 100vw;
-    background: var(--color-slate-8);
+    background: var(--color-background-layout-body);
     display: flex;
     --settings-padding: calc((100vw - 1200px) / 2);
 
@@ -167,7 +167,7 @@
       position: fixed;
       top: 20px;
       right: 20px;
-      border: 2px solid var(--color-grey-8);
+      border: 2px solid var(--color-border-settings-close);
       border-radius: var(--border-radius-rounded);
       display: flex;
       align-items: center;

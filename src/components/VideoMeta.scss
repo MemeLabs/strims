@@ -4,7 +4,7 @@
 .video_meta {
   display: flex;
   flex-direction: row;
-  border-top: 1px solid var(--color-slate-4);
+  border-top: 1px solid var(--color-border-video-meta);
   padding: 0.6rem;
 
   &__logo {
@@ -39,7 +39,7 @@
   }
 
   &__viewers {
-    color: var(--color-strims-orange-5);
+    color: var(--color-text-video-meta-viewers);
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -54,12 +54,12 @@
     cursor: pointer;
     height: 2rem;
     width: 2rem;
-    color: var(--color-grey-6);
+    color: var(--color-text-video-meta-toggle);
 
     &:hover {
       border-radius: var(--border-radius-small);
-      background: var(--color-opac-w-2);
-      color: var(--color-grey-10);
+      background: var(--color-background-icon-button-hover);
+      color: var(--color-text-video-meta-toggle-hover);
     }
 
     svg {

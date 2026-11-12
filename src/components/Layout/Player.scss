@@ -14,11 +14,7 @@
 
 .player_embed {
   height: 100%;
-  background: var(--color-slate-2);
-
-  @at-root .theme--light & {
-    background: var(--body-foreground);
-  }
+  background: var(--color-background-layout-player);
 
   &__media {
     position: absolute;

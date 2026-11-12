@@ -20,15 +20,15 @@
   th {
     text-align: left;
     background: var(--color-background-table);
-    border-bottom: 1px solid var(--color-opac-w-2);
+    border-bottom: 1px solid var(--color-border-table);
     padding: 10px;
     white-space: nowrap;
 
     &:first-child {
-      border-left: 1px solid var(--color-opac-w-2);
+      border-left: 1px solid var(--color-border-table);
     }
     &:last-child {
-      border-right: 1px solid var(--color-opac-w-2);
+      border-right: 1px solid var(--color-border-table);
     }
   }
 
@@ -47,7 +47,7 @@
   }
 
   thead th {
-    border-top: 1px solid var(--color-opac-w-2);
+    border-top: 1px solid var(--color-border-table);
     text-transform: uppercase;
     font-weight: bold;
     font-size: 0.8rem;
@@ -119,7 +119,7 @@
       padding: 0.2rem;
 
       &:hover {
-        background-color: var(--color-opac-w-2);
+        background-color: var(--color-background-icon-button-hover);
       }
     }
   }
@@ -159,7 +159,7 @@
   &__menu {
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--color-opac-w-3);
+    border: 1px solid var(--color-border-control);
     right: 0;
     margin-top: 5px;
     background: var(--color-background-input);
@@ -178,7 +178,7 @@
   }
 
   &__hr {
-    border-bottom: 1px solid var(--color-slate-12);
+    border-bottom: 1px solid var(--color-border-table-menu-divider);
   }
 }
 
@@ -191,7 +191,7 @@
     padding: 0 10px;
     display: flex;
     align-items: center;
-    border: 1px solid var(--color-opac-w-3);
+    border: 1px solid var(--color-border-control);
     background: var(--color-background-input);
     border-radius: var(--border-radius-small);
   }
@@ -208,7 +208,7 @@
     justify-content: center;
 
     &:hover {
-      background-color: var(--color-opac-w-2);
+      background-color: var(--color-background-icon-button-hover);
     }
   }
 }
