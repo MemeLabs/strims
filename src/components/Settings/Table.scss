@@ -219,21 +219,20 @@
   &__modal_mask {
     background: rgba(0, 0, 0, 0.5);
     content: "";
-    height: 100vh;
-    left: 0;
+    inset: 0;
     position: fixed;
-    top: 0;
-    width: 100vw;
     z-index: 1;
   }
 
   &__modal {
-    background: white;
+    background: var(--color-background-layout-body);
+    box-sizing: border-box;
     left: 50%;
-    margin-left: -420px;
+    max-width: calc(100% - 20px);
     padding: 20px;
     position: fixed;
     top: 50%;
+    transform: translate(-50%, -50%);
     width: 800px;
     z-index: 999;
   }
