@@ -1,0 +1,40 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// The search in a bar like the layout's header, its menu over the page below.
+.directory_story__header {
+  display: flex;
+  justify-content: center;
+  height: 50px;
+  background: var(--color-background-layout-header);
+  box-shadow: var(--shadow-elevation-2);
+}
+
+.directory_story__tile {
+  width: 320px;
+  padding: 10px;
+}
+
+.directory_story__images {
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+  align-items: flex-start;
+
+  figure {
+    margin: 0;
+  }
+
+  img {
+    display: block;
+    width: 240px;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    background: black;
+  }
+
+  figcaption {
+    margin-top: 4px;
+    font-size: 0.8rem;
+  }
+}

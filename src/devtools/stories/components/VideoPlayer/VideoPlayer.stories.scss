@@ -1,0 +1,59 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+.video_story {
+  padding: 20px;
+}
+
+// A player's box: its controls sit at its bottom.
+.video_player.video_story__player {
+  position: relative;
+  width: 800px;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  background-color: black;
+  background-size: cover;
+  background-position: center;
+}
+
+// The sliders show only under the pointer: these stories show them so.
+.video_story__player--hover {
+  .video_progress_bar__slider,
+  .video_volume__slider {
+    opacity: 1;
+  }
+}
+
+// A slider alone, in the controls' bar, its whole width.
+.video_story__bar {
+  .video_player__controls {
+    position: relative;
+  }
+
+  .progress_bar,
+  .volume {
+    width: 100%;
+  }
+}
+
+.video_story__logo {
+  display: flex;
+  justify-content: center;
+  padding: 40px;
+}
+
+// The whole player, as the layout's player column sizes it.
+.video_story__swarm {
+  position: relative;
+  width: 800px;
+  max-width: calc(100% - 40px);
+  margin: 20px;
+  background: black;
+}
+
+.video_story__caption {
+  margin: 0 20px;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}

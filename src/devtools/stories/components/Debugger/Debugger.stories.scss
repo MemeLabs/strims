@@ -1,0 +1,22 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// The frame under a portlet the story moved over it (portlet.ts).
+.debugger_story {
+  height: 100%;
+  min-height: 560px;
+
+  &--large {
+    min-height: 760px;
+  }
+}
+
+.debugger_story__portlet_content {
+  padding: 8px;
+  font-size: 12px;
+  color: #222;
+
+  p {
+    margin: 0 0 8px;
+  }
+}
