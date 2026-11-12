@@ -89,6 +89,7 @@
     position: relative;
     text-align: center;
     width: 40px;
+    color: white;
     transition: filter var(--timing-medium) ease-in-out;
     filter: #{"grayscale(0)"};
     --badge-color: var(--color-hinted-grey-7);
