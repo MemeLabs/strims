@@ -91,6 +91,10 @@ TAIL = vocab.TAIL
 # the tables each needs), so the lab's queries and the catalog's read one
 # definition.
 SCORING_MACROS = ("viewer_phases_of",)
+# The retired event ids the views keep as their runs wrote them: the park4
+# line's runs hold parent_lost with a second meaning too (vocab.toml's
+# description), which its replacements don't relabel.
+KEPT_IDS = ("parent_lost",)
 
 
 @dataclasses.dataclass
@@ -418,9 +422,21 @@ def views(sel, derived=True, fetch=True, say=None):
                                                          "union_by_name=true);")}
                 if "host" in got:
                     cols = "x.* REPLACE (coalesce(x.node, x.host) AS node)" if "node" in got else "x.*, x.host AS node"
+            join = ""
+            if t == "events":
+                # A retired kind's events read as its replacement's for the
+                # run's sim (none where the runs don't name it: a retired
+                # kind's replacement by sim then reads as it was written),
+                # written_kind the id the run wrote.
+                sim = "NULL::VARCHAR"
+                if "sim" in columns(files(srcs, "runs")):
+                    sim = ("CASE r_.sim " + " ".join(f"WHEN {q(a)} THEN {q(b)}" for a, b in verdict.SIM_NAMES.items())
+                           + " ELSE r_.sim END")
+                    join = "JOIN (SELECT DISTINCT k, src, sim FROM runs_all) r_ USING (k, src) "
+                cols = f"x.* REPLACE ({current_kind_sql('x.kind', sim)} AS kind), x.kind AS written_kind"
             view = LOGGED.get(t, t)
             sql.append(f"CREATE VIEW {view} AS SELECT {cols} FROM read_parquet({plist(f)}, union_by_name=true) x "
-                       "SEMI JOIN runs USING (k, src);")
+                       f"{join}SEMI JOIN runs USING (k, src);")
             have.add(t)
     if "asks" in have:
         sql.append(asks_view("asks", "asks_log", "arrivals", columns(files(srcs, "asks")),
@@ -436,6 +452,25 @@ def views(sel, derived=True, fetch=True, say=None):
     sql += macros(have)
     sql += scoring_macros(have)
     return Views("\n".join(sql), have)
+
+
+def current_kind_sql(kind, sim):
+    """SQL of an event's kind as the vocabulary's current id: `kind`, SQL
+    of the id its run wrote, a retired one as its replacement for the
+    run's sim (`sim`, SQL of a vocab.SIMS name: vocab.current), but
+    KEPT_IDS', and a current one as it is. The events views read it, the
+    catalog's and these."""
+    whens = []
+    for kid in vocab.retired():
+        if kid in KEPT_IDS:
+            continue
+        by = {s: c for s in vocab.SIMS if (c := vocab.current(kid, s))}
+        if len(by) == len(vocab.SIMS) and len(set(by.values())) == 1:
+            whens.append(f"WHEN {q(kid)} THEN {q(by[vocab.SIMS[0]])}")
+        else:
+            sims = " ".join(f"WHEN {q(s)} THEN {q(c)}" for s, c in by.items())
+            whens.append(f"WHEN {q(kid)} THEN CASE {sim} {sims} ELSE {kind} END")
+    return f"CASE {kind} {' '.join(whens)} ELSE {kind} END" if whens else kind
 
 
 def columns(paths):

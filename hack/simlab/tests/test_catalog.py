@@ -44,6 +44,9 @@ simlab.verdict's derive pool:
                parks, arrivals), folded by the store, as they are; forecast
                in either schema (tail_ms and extrapolated, or first_sight
                and lazy), the other's columns NULL
+  Retired      a job of each sim whose events hold retired ids: the
+               catalog's events view and the cache's read each as its
+               replacement for the job's sim, written_kind the id written
   Docs         a change to the docs alone (a registry's entry, a doc row
                of a sim's file, the vocabulary) makes the doc tables again
                and nothing else, describe showing it, the event counts
@@ -111,7 +114,8 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import ask, catalog, describe, engine, query, store, store_host, suite, verdict, views, vocab  # noqa: E402
+from simlab import (ask, catalog, describe, engine, forecast, query, store, store_host, suite, verdict,  # noqa: E402
+                    views, vocab)
 
 
 class Fixture(unittest.TestCase):
@@ -905,6 +909,51 @@ class Tables(Fixture):
                                 {"peer": 3, "held_ms": None, "live": False, "err_ms": None, "pred_err_ms": None,
                                  "held_by_p50": None, "held_by_p90": None}])
 
+
+
+class Retired(Fixture):
+    """A job of each sim whose events hold retired ids beside current ones:
+    the catalog's events view, and the cache's (simlab.query's), read each
+    as its replacement for the job's sim (vocab.current), written_kind the
+    id it wrote."""
+
+    EVENTS = {
+        "suite/wt/old-pp": (0, [(1000, "uplink", 0, -1, 5_000_000, ""), (2000, "parent_lost", 3, 1, 1, "graceful"),
+                                (3000, "first_read", 2, -1, 400, "")]),
+        "suite/wt/old-ss": (2, [(1000, "up_step", 0, -1, 4_000_000, ""), (1500, "uplink", 0, -1, 3_000_000, ""),
+                                (2000, "first_frame", 2, -1, 300, ""), (2500, "parent_lost", 3, 1, 250, ""),
+                                (2600, "parent_lost", 4, 1, -1, ""), (3000, "uplink_rate", 0, -1, 2_000_000, "")]),
+    }
+    # (written, current) of each, in time order.
+    WANT = {"suite/wt/old-pp": [("uplink", "uplink_rate"), ("parent_lost", "parent_lost"),
+                                ("first_read", "first_read")],
+            "suite/wt/old-ss": [("up_step", "uplink_rate"), ("uplink", "rate_limit"), ("first_frame", "first_read"),
+                                ("parent_lost", "parent_lost"), ("parent_lost", "parent_lost"),
+                                ("uplink_rate", "uplink_rate")]}
+
+    def fold(self, src, job, events):
+        k = f"k-{src.rsplit('/', 1)[1]}"
+        d = self.root / "jobs-retired" / src.replace("/", "~")
+        meta = golden_cli.job_dir(d, (src, k, *golden_cli.JOBS[job][2:]))
+        golden_cli.write_table(d, "events", [("t_us", "BIGINT"), ("kind", "VARCHAR"), ("node", "BIGINT"),
+                                             ("peer", "BIGINT"), ("value", "BIGINT"), ("detail", "VARCHAR")],
+                               [(t * 1000, *e) for t, *e in events])
+        db = self.root / "jobs-retired" / f"{src.replace('/', '~')}.duckdb"
+        store_host.fold(db, [meta], src)
+        store_host.export(db, store_host.cache_root() / "cache" / src)
+        return k
+
+    def test_retired_ids_read_as_their_replacements(self):
+        keys = {src: self.fold(src, job, events) for src, (job, events) in self.EVENTS.items()}
+        self.assertEqual(self.index()[0].failed, {})
+        for src, k in keys.items():
+            got = catalog.lake(f"SELECT written_kind, kind FROM events WHERE k = {catalog.q(k)} ORDER BY t_us;")
+            self.assertEqual([(r["written_kind"], r["kind"]) for r in got], self.WANT[src], src)
+            with query.views(query.Selection(src=[src]), derived=False) as v:
+                got = v.records("SELECT written_kind, kind FROM events ORDER BY t_us;")
+            self.assertEqual([(r["written_kind"], r["kind"]) for r in got], self.WANT[src], src)
+        # What aligns on the events' kind names current ids alone.
+        self.assertLessEqual(set(forecast.ALIGN_KINDS), set(vocab.kinds()))
 
 
 class DocsFixture(Fixture):

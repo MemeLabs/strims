@@ -176,9 +176,11 @@ column_gaps'):
                     the sims' tables, normalized: viewers `node` in both
                     sims, `churned` BOOLEAN, `arrive_ms` NULL for a viewer
                     there from the start; viewer_seconds without the
-                    seconds a viewer wasn't there; events' `detail` also as
-                    a MAP where it is key=value; -1 for none or no reading
-                    NULL
+                    seconds a viewer wasn't there; events' `kind` the
+                    vocabulary's current id (a retired one's replacement
+                    for the run's sim; `written_kind` the id written) and
+                    `detail` also as a MAP where it is key=value; -1 for
+                    none or no reading NULL
   verdicts, verdict_seconds, episodes, derived_events, viewer_phases,
   phase_windows
                     analyze.py's verdicts, of the current verdict_version
@@ -1798,6 +1800,9 @@ def view_sql(t, cols, name, viewers, arrivals=None):
     if t == "events":
         sel = ["x.k", "x.src"]
         for c in rest:
+            if c == "kind":
+                sel += [f"{query.current_kind_sql('x.kind', 'j_.sim')} AS kind", "x.kind AS written_kind"]
+                continue
             sel.append({"node": "nullif(x.node, -1) AS node", "peer": "nullif(x.peer, -1) AS peer",
                         "value": "CASE WHEN x.kind = 'parent_lost' AND x.value = -1 THEN NULL ELSE x.value END AS value"
                         }.get(c, plain(c)))
@@ -2131,7 +2136,8 @@ TABLE_DOCS = {
         "viewer's, or viewer, its node's viewer's alone, as a join's), description, what node, peer, value "
         "(value_meaning, its unit after it) and detail hold, details (detail's values), notes (that sim's, where "
         "its kind differs), env_gate (the knob a sim writes it under), replaced_by (a retired kind's current id "
-        "for that sim: a retired kind's events of that sim read as that kind's), documented, n (how many events: "
+        "for that sim: its events of that sim read as that kind's in events.kind, written_kind keeping the id, "
+        "but parent_lost's, kept as written), documented, n (how many events: "
         "0 for a kind no run has written), and when first and last seen."),
     "table_catalog": (
         "table", "a table", "name", "metric_catalog ON metric_catalog.tbl = table_catalog.name",
@@ -2143,8 +2149,11 @@ NORMALIZED = {
                "viewer there from the start; up NULL without a limit; hostile false where a sim didn't say.",
     "viewer_seconds": "only the seconds the viewer was there (its stay overlaps the second), in both sims; lag_ms "
                       "NULL in a second without a read.",
-    "events": "t_ms = t_us / 1000; node and peer NULL for none; a retired parent_lost's value NULL if the viewer "
-              "never stopped counting on the parent; detail_map: detail as a MAP where it is key=value pairs.",
+    "events": "kind the vocabulary's current id: a retired kind's replacement for the run's sim (event_kinds' "
+              "replaced_by), but parent_lost's, kept as written (the park4 line's runs hold it with a second "
+              "meaning too); written_kind the id the run wrote; t_ms = t_us / 1000; node and peer NULL for none; a "
+              "retired parent_lost's value NULL if the viewer never stopped counting on the parent; detail_map: "
+              "detail as a MAP where it is key=value pairs.",
     "seconds": "-1 (no reading) NULL.", "bins": "-1 (no reading) NULL.",
     "node_bins": "viewer NULL for the seed and hostile hosts.",
     "stalls": "The unit played is the sim's: a frame in strims-sim, a chunk in the ppspp sim, whose stalls are "
