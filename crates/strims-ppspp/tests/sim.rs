@@ -966,6 +966,11 @@ struct Node {
     max_queue_delay: Duration,
     errors: u64,
     removed: BTreeSet<PeerKey>,
+    /// With the forecast or request logs, the node each peer key its
+    /// runner forgot since the logs' last take named ([`Sim::forget_peer`],
+    /// [`Sim::take_forecasts`]): what the runner logged of a peer before or
+    /// as it went still names it.
+    gone: BTreeMap<PeerKey, usize>,
     /// The cross-traffic swarm, if any.
     cross: Option<Side>,
     /// Bytes and packets through its uplink and downlink (TCP framing
@@ -2412,6 +2417,7 @@ impl Sim {
                 max_queue_delay: Duration::ZERO,
                 errors: 0,
                 removed: BTreeSet::new(),
+                gone: BTreeMap::new(),
                 cross,
                 wire: EndStats::default(),
                 sent: Sent::default(),
@@ -3026,7 +3032,7 @@ impl Sim {
         for l in links {
             let (to, rpeer) = (self.links[l].to, self.links[l].rpeer);
             self.take_parents(to);
-            self.nodes[to].runner.remove_peer(rpeer);
+            self.forget_peer(to, rpeer, i);
             self.touch(to);
         }
         self.touch(i);
@@ -3236,8 +3242,8 @@ impl Sim {
     fn unlink(&mut self, j: usize, i: usize, l: usize) {
         let rpeer = self.links[l].peer;
         self.take_parents(j);
+        self.forget_peer(j, rpeer, i);
         let n = &mut self.nodes[j];
-        n.runner.remove_peer(rpeer);
         n.links.remove(&i);
         n.vtime.remove(&l);
         self.touch(j);
@@ -3575,9 +3581,9 @@ impl Sim {
                 "honest frame failed: {e}"
             );
             self.take_parents(to);
+            self.forget_peer(to, rpeer, self.links[link].from);
             let node = &mut self.nodes[to];
             node.errors += 1;
-            node.runner.remove_peer(rpeer);
             node.removed.insert(rpeer);
         }
     }
@@ -3689,7 +3695,21 @@ impl Sim {
         }
     }
 
-    /// With the tables, moves node `i`'s forecast log into the harness's.
+    /// Node `j`'s runner forgets its peer `key`, node `i`. With the logs,
+    /// the key names `i` until their next take ([`Sim::take_forecasts`]),
+    /// so the records the runner writes as the peer goes (its pushes still
+    /// queued, a holder's leaving, the asks in flight), taken after the
+    /// link that named it, still name it, as node-core's do.
+    fn forget_peer(&mut self, j: usize, key: PeerKey, i: usize) {
+        if self.forecasts.is_some() || self.requests.is_some() {
+            self.nodes[j].gone.insert(key, i);
+        }
+        self.nodes[j].runner.remove_peer(key);
+    }
+
+    /// With the tables, moves node `i`'s forecast log into the harness's,
+    /// its records' peers named by the node's links and the peers it forgot
+    /// since the last take.
     fn take_forecasts(&mut self, i: usize) {
         if self.forecasts.is_none() && self.requests.is_none() {
             return;
@@ -3701,6 +3721,7 @@ impl Sim {
         let (haves, haves_lost) = n.runner.take_haves(n.swarm);
         let (asks, asks_lost) = n.runner.take_requests(n.swarm);
         let seed = n.runner.take_seed_log(n.swarm);
+        let gone = std::mem::take(&mut n.gone);
         if self.held.len() <= i {
             self.held.resize_with(i + 1, Vec::new);
         }
@@ -3710,10 +3731,9 @@ impl Sim {
         );
         self.forecasts_lost += lost;
         let n = &self.nodes[i];
-        let peers: BTreeMap<PeerKey, usize> = n
-            .links
-            .iter()
-            .map(|(&to, &l)| (self.links[l].peer, to))
+        let peers: BTreeMap<PeerKey, usize> = gone
+            .into_iter()
+            .chain(n.links.iter().map(|(&to, &l)| (self.links[l].peer, to)))
             .collect();
         let peer = |k: &PeerKey| peers.get(k).copied().unwrap_or(usize::MAX);
         let of = |k: Option<PeerKey>| k.map_or(usize::MAX, |k| peer(&k));
@@ -7652,6 +7672,84 @@ fn sim_seed_tables_say_what_the_seed_did(sim: &Sim, d: &Path) {
     }
     let meta = std::fs::read_to_string(d.join("series_meta.json")).unwrap();
     assert!(meta.contains("\"seed_log_lost\":0"), "{meta}");
+}
+
+/// A neighbour that went is still named by every record of it
+/// ([`Sim::forget_peer`]): 24 viewers trickle in, the seed among each
+/// one's neighbours, and 60 % of them leave abruptly within 2 s from 16 s
+/// in, so their links close at their read timeout ([`READ_TIMEOUT`]),
+/// where the runner ends what it had of them (the seed's subscriptions and
+/// holders, the asks in flight) and the link goes before the logs' next
+/// take. With the request and seed logs on, no row of the seed's tables
+/// (but its decisions about the allocation), the asks or the HAVEs names
+/// no peer, and the seed's tables name viewers that left as their links
+/// closed.
+#[test]
+fn sim_logs_name_a_neighbour_gone_before_their_take() {
+    let mut cfg = audience_config(24, 24, 45, Arrivals::Trickle(None));
+    cfg.greedy = Greedy::Nodes(vec![]);
+    cfg.seed_degree = 24;
+    cfg.depart = Some(Depart {
+        share: 0.6,
+        at: Duration::from_secs(16),
+        window: Duration::from_secs(2),
+        abrupt: true,
+    });
+    let mut sim = Sim::new(cfg);
+    sim.keep_tables(Duration::from_millis(1000), false, false);
+    sim.keep_requests();
+    sim.run();
+    let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "sim_logs_name_a_neighbour_gone_before_their_take-{}",
+        std::process::id()
+    ));
+    sim.write_tables(&d).unwrap();
+    let rows = |t: &str| -> Vec<BTreeMap<String, String>> {
+        let csv = read_table(&d, t).unwrap();
+        let mut lines = csv.lines();
+        let head: Vec<&str> = lines.next().unwrap().split(',').collect();
+        lines
+            .map(|l| {
+                head.iter()
+                    .zip(l.split(','))
+                    .map(|(&c, v)| (c.to_owned(), v.to_owned()))
+                    .collect()
+            })
+            .collect()
+    };
+    let gone: BTreeSet<String> = (1..sim.nodes.len())
+        .filter(|&i| sim.nodes[i].role == Role::Gone)
+        .map(|i| i.to_string())
+        .collect();
+    assert!(!gone.is_empty());
+    let mut of_gone = 0;
+    for t in ["seed_sends", "seed_decisions", "asks", "haves"] {
+        let rows = rows(t);
+        assert!(!rows.is_empty(), "{t}");
+        let unnamed: Vec<&BTreeMap<String, String>> = rows
+            .iter()
+            .filter(|r| {
+                !(t == "seed_decisions" && ["window", "answer_rate"].contains(&r["kind"].as_str()))
+            })
+            .filter(|r| r["peer"] == "-1" || r["peer"].is_empty())
+            .collect();
+        assert!(
+            unnamed.is_empty(),
+            "{t}: {} of {} rows name no peer, the first {:?}",
+            unnamed.len(),
+            rows.len(),
+            unnamed.first()
+        );
+        if t == "seed_decisions" {
+            of_gone += rows
+                .iter()
+                .filter(|r| ["holder_left", "closed"].contains(&r["kind"].as_str()))
+                .filter(|r| gone.contains(&r["peer"]))
+                .count();
+        }
+    }
+    assert!(of_gone > 0, "the seed's closes name viewers that left");
+    let _ = std::fs::remove_dir_all(&d);
 }
 
 /// Both tables' doc rows here are the seed log's own
