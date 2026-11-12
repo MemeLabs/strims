@@ -546,13 +546,13 @@ ppspp = "A seed step (`SeedStep::Uplink`): the seed's uplink becomes `value`; `n
 class = "observation"
 sims = ["strims-sim", "ppspp"]
 replaced_by = { strims-sim = "parent_noticed", ppspp = "parent_departed" }
-description = "A viewer's push parent departed (`depart`). Under this id the park4 branches' older runs also hold the scheduler's own event of a parent's channel closing, `parent_channel_closed`'s meaning (a row per stream, `value` the stream), which their replacements don't relabel."
+description = "A viewer's push parent departed (`depart`), as older runs name it. Their rows read as the current kinds by sim and, in strims-sim, by `value` (the lab's events views, `simlab.query.current_kind_sql`): the ppspp sim's as `parent_departed`; strims-sim's as `parent_noticed`, and those of `value` -1 as `parent_departed` with no `value`."
 node = "the viewer"
 peer = "the parent that departed"
 
 [kinds.parent_lost.notes]
-strims-sim = "`Report::parent_losses`: a host that departed while it was a push parent of one of the viewer's streams of the first swarm, at the viewer's last stats sample before. Timed when the viewer stopped counting on it (its link to it closed, or a stats sample named it parent of no stream), or at the departure if it never did; `value` the ms from the departure until then, -1 if it never did (a `parent_departed` with no `parent_noticed`); `detail` empty."
-ppspp = "Timed at the departure, one for each neighbour whose open parent it was on some stream; `value` the streams it was the parent of; `detail` the departure's, graceful or abrupt."
+strims-sim = "`Report::parent_losses`: a host that departed while it was a push parent of one of the viewer's streams of the first swarm, at the viewer's last stats sample before. Timed when the viewer stopped counting on it (its link to it closed, or a stats sample named it parent of no stream), or at the departure if it never did; `value` the ms from the departure until then, -1 if it never did; `detail` empty. A row of `value` 0 or more reads as `parent_noticed`, its `value` as it is; one of -1, timed at the departure, as `parent_departed`, its `value` none (it held no stream count)."
+ppspp = "Timed at the departure, one for each neighbour whose open parent it was on some stream; `value` the streams it was the parent of; `detail` the departure's, graceful or abrupt. It reads as `parent_departed`, its `value` and `detail` as they are."
 
 # --- phases -----------------------------------------------------------------
 # What each second of a run, and of each viewer, is (`verdict.timeline`):

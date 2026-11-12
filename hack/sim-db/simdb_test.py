@@ -1580,9 +1580,11 @@ class Catalog(unittest.TestCase):
         ev = {r["kind"]: r for r in self.q("SELECT * FROM events WHERE k = 'k1'")}
         self.assertEqual((ev["join"]["node"], ev["join"]["peer"], ev["join"]["t_ms"]), (None, None, 2.0))
         self.assertEqual(ev["join"]["detail_map"], {"from": "3", "to": "4"})
-        # A retired parent_lost's -1, a loss never noticed, reads NULL; its replacements' values are their own.
-        self.assertEqual((ev["parent_lost"]["value"], ev["parent_lost"]["detail_map"]), (None, None))
-        self.assertEqual(ev["parent_noticed"]["value"], 40)
+        # strims-sim's retired parent_lost of -1, a loss never noticed, reads as a parent_departed with no value;
+        # its replacements' values are their own.
+        self.assertEqual((ev["parent_departed"]["written_kind"], ev["parent_departed"]["value"],
+                          ev["parent_departed"]["detail_map"]), ("parent_lost", None, None))
+        self.assertEqual((ev["parent_noticed"]["written_kind"], ev["parent_noticed"]["value"]), ("parent_noticed", 40))
         self.assertEqual([r["written"] for r in self.q("SELECT written FROM seconds ORDER BY sec")], [None, 10])
         self.assertEqual([r["seed_meter"] for r in self.q("SELECT seed_meter FROM bins ORDER BY bin")], [None, 5])
 

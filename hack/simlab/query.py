@@ -91,10 +91,12 @@ TAIL = vocab.TAIL
 # the tables each needs), so the lab's queries and the catalog's read one
 # definition.
 SCORING_MACROS = ("viewer_phases_of",)
-# The retired event ids the views keep as their runs wrote them: the park4
-# line's runs hold parent_lost with a second meaning too (vocab.toml's
-# description), which its replacements don't relabel.
-KEPT_IDS = ("parent_lost",)
+# The retired kinds whose rows of a sim read as another kind by their
+# value, as vocab.toml's notes on the kind say: {(id, sim): (value, current
+# id)}, the row's value then none. strims-sim's parent_lost of -1, a
+# departure its viewer never noticed, timed at the departure, is a
+# parent_departed, with no stream count.
+BY_VALUE = {("parent_lost", "strims-sim"): (-1, "parent_departed")}
 
 
 @dataclasses.dataclass
@@ -433,7 +435,8 @@ def views(sel, derived=True, fetch=True, say=None):
                     sim = ("CASE r_.sim " + " ".join(f"WHEN {q(a)} THEN {q(b)}" for a, b in verdict.SIM_NAMES.items())
                            + " ELSE r_.sim END")
                     join = "JOIN (SELECT DISTINCT k, src, sim FROM runs_all) r_ USING (k, src) "
-                cols = f"x.* REPLACE ({current_kind_sql('x.kind', sim)} AS kind), x.kind AS written_kind"
+                cols = (f"x.* REPLACE ({current_kind_sql('x.kind', sim, 'x.value')} AS kind, "
+                        f"{current_value_sql('x.kind', sim, 'x.value')} AS value), x.kind AS written_kind")
             view = LOGGED.get(t, t)
             sql.append(f"CREATE VIEW {view} AS SELECT {cols} FROM read_parquet({plist(f)}, union_by_name=true) x "
                        f"{join}SEMI JOIN runs USING (k, src);")
@@ -454,23 +457,36 @@ def views(sel, derived=True, fetch=True, say=None):
     return Views("\n".join(sql), have)
 
 
-def current_kind_sql(kind, sim):
+def by_value_sql(kind, sim, value):
+    """SQL of whether an event is a BY_VALUE row, by its `kind`, `sim` and
+    `value` (SQL of each, as current_kind_sql's), and the kind it reads
+    as: [(condition, id)]."""
+    return [(f"{kind} = {q(kid)} AND {sim} = {q(s)} AND {value} = {v}", c) for (kid, s), (v, c) in BY_VALUE.items()]
+
+
+def current_kind_sql(kind, sim, value):
     """SQL of an event's kind as the vocabulary's current id: `kind`, SQL
     of the id its run wrote, a retired one as its replacement for the
-    run's sim (`sim`, SQL of a vocab.SIMS name: vocab.current), but
-    KEPT_IDS', and a current one as it is. The events views read it, the
-    catalog's and these."""
-    whens = []
+    run's sim (`sim`, SQL of a vocab.SIMS name: vocab.current), a
+    BY_VALUE row by its `value` (SQL), and a current one as it is. The
+    events views read it, the catalog's and these, with
+    current_value_sql's value."""
+    whens = [f"WHEN {cond} THEN {q(c)}" for cond, c in by_value_sql(kind, sim, value)]
     for kid in vocab.retired():
-        if kid in KEPT_IDS:
-            continue
         by = {s: c for s in vocab.SIMS if (c := vocab.current(kid, s))}
         if len(by) == len(vocab.SIMS) and len(set(by.values())) == 1:
-            whens.append(f"WHEN {q(kid)} THEN {q(by[vocab.SIMS[0]])}")
+            whens.append(f"WHEN {kind} = {q(kid)} THEN {q(by[vocab.SIMS[0]])}")
         else:
             sims = " ".join(f"WHEN {q(s)} THEN {q(c)}" for s, c in by.items())
-            whens.append(f"WHEN {q(kid)} THEN CASE {sim} {sims} ELSE {kind} END")
-    return f"CASE {kind} {' '.join(whens)} ELSE {kind} END" if whens else kind
+            whens.append(f"WHEN {kind} = {q(kid)} THEN CASE {sim} {sims} ELSE {kind} END")
+    return f"CASE {' '.join(whens)} ELSE {kind} END" if whens else kind
+
+
+def current_value_sql(kind, sim, value):
+    """SQL of an event's value as its current kind (current_kind_sql)
+    holds it: none on a BY_VALUE row, else `value`."""
+    conds = [f"({cond})" for cond, _ in by_value_sql(kind, sim, value)]
+    return f"CASE WHEN {' OR '.join(conds)} THEN NULL ELSE {value} END" if conds else value
 
 
 def columns(paths):

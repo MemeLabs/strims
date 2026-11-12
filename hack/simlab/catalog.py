@@ -178,9 +178,10 @@ column_gaps'):
                     there from the start; viewer_seconds without the
                     seconds a viewer wasn't there; events' `kind` the
                     vocabulary's current id (a retired one's replacement
-                    for the run's sim; `written_kind` the id written) and
-                    `detail` also as a MAP where it is key=value; -1 for
-                    none or no reading NULL
+                    for the run's sim, strims-sim's parent_lost by its
+                    value; `written_kind` the id written) and `detail`
+                    also as a MAP where it is key=value; -1 for none or
+                    no reading NULL
   verdicts, verdict_seconds, episodes, derived_events, viewer_phases,
   phase_windows
                     analyze.py's verdicts, of the current verdict_version
@@ -1240,6 +1241,7 @@ def index(workers=None, progress=None, wait=True):
             if not locked_out(e):
                 raise
         warn_undocumented()
+        warn_branch_ids()
         say("write", f"index: compacting ({took():.0f} s in)")
         skipped = compacted(say)
         say("done", f"index: done in {took():.0f} s")
@@ -1801,10 +1803,10 @@ def view_sql(t, cols, name, viewers, arrivals=None):
         sel = ["x.k", "x.src"]
         for c in rest:
             if c == "kind":
-                sel += [f"{query.current_kind_sql('x.kind', 'j_.sim')} AS kind", "x.kind AS written_kind"]
+                sel += [f"{query.current_kind_sql('x.kind', 'j_.sim', 'x.value')} AS kind", "x.kind AS written_kind"]
                 continue
             sel.append({"node": "nullif(x.node, -1) AS node", "peer": "nullif(x.peer, -1) AS peer",
-                        "value": "CASE WHEN x.kind = 'parent_lost' AND x.value = -1 THEN NULL ELSE x.value END AS value"
+                        "value": f"{query.current_value_sql('x.kind', 'j_.sim', 'x.value')} AS value"
                         }.get(c, plain(c)))
             if c == "t_us":
                 sel.append("x.t_us / 1000.0 AS t_ms")
@@ -2136,8 +2138,8 @@ TABLE_DOCS = {
         "viewer's, or viewer, its node's viewer's alone, as a join's), description, what node, peer, value "
         "(value_meaning, its unit after it) and detail hold, details (detail's values), notes (that sim's, where "
         "its kind differs), env_gate (the knob a sim writes it under), replaced_by (a retired kind's current id "
-        "for that sim: its events of that sim read as that kind's in events.kind, written_kind keeping the id, "
-        "but parent_lost's, kept as written), documented, n (how many events: "
+        "for that sim: its events of that sim read as that kind's in events.kind, written_kind keeping the id; "
+        "strims-sim's parent_lost of value -1 as parent_departed), documented, n (how many events: "
         "0 for a kind no run has written), and when first and last seen."),
     "table_catalog": (
         "table", "a table", "name", "metric_catalog ON metric_catalog.tbl = table_catalog.name",
@@ -2150,10 +2152,10 @@ NORMALIZED = {
     "viewer_seconds": "only the seconds the viewer was there (its stay overlaps the second), in both sims; lag_ms "
                       "NULL in a second without a read.",
     "events": "kind the vocabulary's current id: a retired kind's replacement for the run's sim (event_kinds' "
-              "replaced_by), but parent_lost's, kept as written (the park4 line's runs hold it with a second "
-              "meaning too); written_kind the id the run wrote; t_ms = t_us / 1000; node and peer NULL for none; a "
-              "retired parent_lost's value NULL if the viewer never stopped counting on the parent; detail_map: "
-              "detail as a MAP where it is key=value pairs.",
+              "replaced_by), and strims-sim's retired parent_lost of value -1 (its viewer never stopped counting "
+              "on the parent) parent_departed, its value NULL (vocab.toml's notes on parent_lost); written_kind "
+              "the id the run wrote; t_ms = t_us / 1000; node and peer NULL for none; detail_map: detail as a MAP "
+              "where it is key=value pairs.",
     "seconds": "-1 (no reading) NULL.", "bins": "-1 (no reading) NULL.",
     "node_bins": "viewer NULL for the seed and hostile hosts.",
     "stalls": "The unit played is the sim's: a frame in strims-sim, a chunk in the ppspp sim, whose stalls are "
@@ -2457,6 +2459,27 @@ def column_gaps():
 
 def names_text(names, most=8):
     return ", ".join(names[:most]) + (f" and {len(names) - most} more" if len(names) > most else "")
+
+
+def warn_branch_ids():
+    """Warns on stderr of the jobs that ran with the scheduler log on
+    (SIM_SPEC) whose events hold parent_lost: a branch older than the
+    vocabulary wrote them, whose scheduler named a parent's channel
+    closing (parent_channel_closed's meaning) by that id too. The views
+    read such rows as departures all the same (query.current_kind_sql),
+    so the jobs want running again on a branch rebased onto it."""
+    try:
+        r = lake("SELECT count(*) AS n, count(DISTINCT e.k) AS jobs, list(DISTINCT e.k ORDER BY e.k)[:3] AS some "
+                 "FROM raw.events e SEMI JOIN (SELECT k, src FROM main.jobs WHERE "
+                 f"coalesce({knob('env', 'SPEC')}, '') NOT IN ('', '0')) j USING (k, src) "
+                 "WHERE e.kind = 'parent_lost';")[0]
+    except store_host.DuckError:
+        return
+    if r["n"]:
+        print(f"index: {r['n']} parent_lost events in {r['jobs']} jobs that ran with SIM_SPEC ({', '.join(r['some'])}"
+              f"{', ...' if r['jobs'] > 3 else ''}): a branch older than the vocabulary wrote them, under which the id "
+              "also names a parent's channel closing; the views read them as departures: run them again on a branch "
+              "rebased onto the vocabulary", file=sys.stderr)
 
 
 def warn_undocumented():

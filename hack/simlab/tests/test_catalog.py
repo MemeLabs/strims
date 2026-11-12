@@ -46,7 +46,9 @@ simlab.verdict's derive pool:
                and lazy), the other's columns NULL
   Retired      a job of each sim whose events hold retired ids: the
                catalog's events view and the cache's read each as its
-               replacement for the job's sim, written_kind the id written
+               replacement for the job's sim (strims-sim's parent_lost by
+               its value), written_kind the id written; a parent_lost in a
+               job with the scheduler log on warned of
   Docs         a change to the docs alone (a registry's entry, a doc row
                of a sim's file, the vocabulary) makes the doc tables again
                and nothing else, describe showing it, the event counts
@@ -925,11 +927,11 @@ class Retired(Fixture):
                                 (2600, "parent_lost", 4, 1, -1, ""), (3000, "uplink_rate", 0, -1, 2_000_000, "")]),
     }
     # (written, current) of each, in time order.
-    WANT = {"suite/wt/old-pp": [("uplink", "uplink_rate"), ("parent_lost", "parent_lost"),
-                                ("first_read", "first_read")],
-            "suite/wt/old-ss": [("up_step", "uplink_rate"), ("uplink", "rate_limit"), ("first_frame", "first_read"),
-                                ("parent_lost", "parent_lost"), ("parent_lost", "parent_lost"),
-                                ("uplink_rate", "uplink_rate")]}
+    WANT = {"suite/wt/old-pp": [("uplink", "uplink_rate", 5_000_000), ("parent_lost", "parent_departed", 1),
+                                ("first_read", "first_read", 400)],
+            "suite/wt/old-ss": [("up_step", "uplink_rate", 4_000_000), ("uplink", "rate_limit", 3_000_000),
+                                ("first_frame", "first_read", 300), ("parent_lost", "parent_noticed", 250),
+                                ("parent_lost", "parent_departed", None), ("uplink_rate", "uplink_rate", 2_000_000)]}
 
     def fold(self, src, job, events):
         k = f"k-{src.rsplit('/', 1)[1]}"
@@ -945,15 +947,40 @@ class Retired(Fixture):
 
     def test_retired_ids_read_as_their_replacements(self):
         keys = {src: self.fold(src, job, events) for src, (job, events) in self.EVENTS.items()}
-        self.assertEqual(self.index()[0].failed, {})
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(self.index()[0].failed, {})
         for src, k in keys.items():
-            got = catalog.lake(f"SELECT written_kind, kind FROM events WHERE k = {catalog.q(k)} ORDER BY t_us;")
-            self.assertEqual([(r["written_kind"], r["kind"]) for r in got], self.WANT[src], src)
+            got = catalog.lake(f"SELECT written_kind, kind, value FROM events WHERE k = {catalog.q(k)} ORDER BY t_us;")
+            self.assertEqual([(r["written_kind"], r["kind"], r["value"]) for r in got], self.WANT[src], src)
             with query.views(query.Selection(src=[src]), derived=False) as v:
-                got = v.records("SELECT written_kind, kind FROM events ORDER BY t_us;")
-            self.assertEqual([(r["written_kind"], r["kind"]) for r in got], self.WANT[src], src)
+                got = v.records("SELECT written_kind, kind, value FROM events ORDER BY t_us;")
+            self.assertEqual([(r["written_kind"], r["kind"], r["value"]) for r in got], self.WANT[src], src)
+        # The detail of a ppspp parent_lost is its departure's, as parent_departed's.
+        self.assertEqual(catalog.lake(f"SELECT detail FROM events WHERE k = {catalog.q(keys['suite/wt/old-pp'])} "
+                                      "AND kind = 'parent_departed';"), [{"detail": "graceful"}])
         # What aligns on the events' kind names current ids alone.
         self.assertLessEqual(set(forecast.ALIGN_KINDS), set(vocab.kinds()))
+
+    def test_a_parent_lost_of_a_job_with_the_scheduler_log_warns(self):
+        src = "suite/wt/old-spec"
+        sim, test, cell, arm, seed, env, *rest = golden_cli.JOBS[2][2:]
+        k = f"k-{src.rsplit('/', 1)[1]}"
+        d = self.root / "jobs-retired" / src.replace("/", "~")
+        meta = golden_cli.job_dir(d, (src, k, sim, test, cell, arm, seed, {**env, "STRIMS_SIM_SPEC": "1"}, *rest))
+        golden_cli.write_table(d, "events", [("t_us", "BIGINT"), ("kind", "VARCHAR"), ("node", "BIGINT"),
+                                             ("peer", "BIGINT"), ("value", "BIGINT"), ("detail", "VARCHAR")],
+                               [(1_000_000, "parent_lost", 3, 1, 250, "")])
+        db = self.root / "jobs-retired" / f"{src.replace('/', '~')}.duckdb"
+        store_host.fold(db, [meta], src)
+        store_host.export(db, store_host.cache_root() / "cache" / src)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.index()
+        self.assertIn(f"index: 1 parent_lost events in 1 jobs that ran with SIM_SPEC ({k}): a branch older than "
+                      "the vocabulary wrote them", err.getvalue())
+        # Read as a departure all the same.
+        self.assertEqual(catalog.lake(f"SELECT written_kind, kind FROM events WHERE k = {catalog.q(k)};"),
+                         [{"written_kind": "parent_lost", "kind": "parent_noticed"}])
 
 
 class DocsFixture(Fixture):
