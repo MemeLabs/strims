@@ -1462,17 +1462,16 @@ class MainDocs(unittest.TestCase):
             main = catalog.main_docs()
         self.assertIsNotNone(main)
         for p in ("hack/simlab/catalog.py", "hack/simlab/sql/scoring.sql", "hack/sim-suite/suite.py",
-                  "crates/strims-wan/vocab.toml", catalog.relative(catalog.FIELDS)):
-            # A doc file main lacks yet, it doesn't name.
-            have = subprocess.run(["git", "rev-parse", "-q", "--verify", f"main:{p}"], cwd=catalog.ROOT,
-                                  capture_output=True, text=True).stdout.strip()
-            self.assertEqual(main.get(p), have or None, p)
+                  "crates/strims-wan/vocab.toml", catalog.relative(catalog.FIELDS),
+                  catalog.relative(catalog.METRICS_DOC)):
+            self.assertEqual(main[p], git("rev-parse", f"main:{p}"), p)
         self.assertTrue(all(catalog.docs_path(p) for p in main))
         # This checkout's: its files as they loaded or as an index reads
         # them, as git names their contents.
         ids = catalog.docs_ids()
         self.assertTrue(all(catalog.docs_path(p) for p in ids))
-        for p in ("hack/simlab/catalog.py", "hack/simlab/sql/scoring.sql", catalog.relative(catalog.FIELDS)):
+        for p in ("hack/simlab/catalog.py", "hack/simlab/sql/scoring.sql", catalog.relative(catalog.FIELDS),
+                  catalog.relative(catalog.METRICS_DOC)):
             self.assertEqual(ids[p], git("hash-object", p), p)
         # Another lake (a fixture's, SIM_DB_ROOT's elsewhere) has no main
         # to keep its docs for.
