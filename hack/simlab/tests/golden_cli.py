@@ -423,8 +423,11 @@ VOLATILE = re.compile(r'("(?:at|sha256|bytes)": )(?:"[^"]*"|-?[0-9.e+]+)')
 VOLATILE_COLS = ("indexed_at", "written_at", "mtime_ns", "inode", "bytes", "size")
 VOLATILE_KEYS = ("indexed_at",)
 # Its tables of what it read of the checkout's code, which moves as the
-# code does.
+# code does; and catalog_info's keys alike: docs_version hashes the sims'
+# rustdoc, which moves with any doc comment of theirs (the doc tables'
+# fingerprints hold what reaches the catalog).
 CODE_TABLES = ("raw.inputs",)
+CODE_KEYS = ("docs_version",)
 # A table with at most this many rows is dumped whole.
 SMALL = 40
 
@@ -467,8 +470,9 @@ def catalog_dump(root, jobs):
     """Every catalog table and view: its columns and types, its rows'
     count and a fingerprint of them (their text in order, md5), and a
     small one's rows, as `lake --json` gives them; volatile columns and
-    keys (VOLATILE_COLS, VOLATILE_KEYS) left out, the fixture's paths
-    named as normal() names them, a link's inode in its name as <N>."""
+    keys (VOLATILE_COLS, VOLATILE_KEYS) and the code's (CODE_TABLES,
+    CODE_KEYS) left out, the fixture's paths named as normal() names
+    them, a link's inode in its name as <N>."""
     cols, text = lake_json(root, jobs, "SELECT table_schema AS s, table_name AS t, column_name AS c, data_type AS ty "
                                        "FROM information_schema.columns WHERE table_catalog = 'lake' "
                                        "ORDER BY s, t, ordinal_position")
@@ -483,7 +487,7 @@ def catalog_dump(root, jobs):
     def body(t, cs):
         names = [c for c, _ in cs]
         keep = [c for c in names if c not in VOLATILE_COLS]
-        where = (f" WHERE key NOT IN ({', '.join(repr(k) for k in VOLATILE_KEYS)})"
+        where = (f" WHERE key NOT IN ({', '.join(repr(k) for k in (*VOLATILE_KEYS, *CODE_KEYS))})"
                  if {"key", "value"} <= set(names) else "")
         return f"(SELECT {', '.join(map(ident, keep))} FROM {t}{where})"
 

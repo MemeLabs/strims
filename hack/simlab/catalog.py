@@ -37,6 +37,9 @@ DuckLake, so that any question is one SQL statement over it.
                  old snapshots
   scoring_sql(cols, temp=False, suite=None)
                  the scoring objects, as SQL (below)
+  docs_version() -> str
+                 a hash of what the doc tables are made from but the
+                 catalog's columns (below)
 
 hack/sim-db/simdb.py's index, fetch, lake, view and describe commands
 call these (hack/sim-db/catalog.py's), printing an index's and a fetch's
@@ -177,7 +180,11 @@ table_catalog's joins say.
 
 `index` makes the scoring objects from simlab.suite's METRICS and
 sql/scoring.sql, again whenever either changes (catalog_info's
-scoring_version); suite.py loads its own into each session, TEMP.
+scoring_version); suite.py loads its own into each session, TEMP. It
+makes the doc tables (table_catalog, metric_catalog and event_kinds:
+catalogs_sql) with every change it makes, and on their own whenever the
+docs they are made from change (catalog_info's docs_version: below),
+the counts of what the runs hold kept as they were.
 
 An experiment's `tiers` are suite.py's TIERS (as they are now) its cells
 came from: each cell is matched by its name, test and env (a farm cell's
@@ -350,7 +357,9 @@ def scan_cache():
 
 
 def inputs():
-    """The metadata files the catalog reads, {path: (size, mtime_ns, kind)}."""
+    """The metadata files the catalog reads and the code making its
+    tables, {path: (size, mtime_ns, kind)}; the files the doc tables are
+    made from are docs_version's."""
     main = simdb().main_checkout() / "target"
     farm = main / "sim-farm"
     runs = main / "sim-suite" / "farm-runs"
@@ -371,9 +380,8 @@ def inputs():
                     add(Path(e.path) / "matrices", "matrices")
     for n, kind in (("costs.jsonl", "costs"), ("s3.jsonl", "s3"), ("bin-hashes.json", "bin_hashes")):
         add(farm / n, kind)
-    for p in (simdb().main_checkout() / "hack" / "sim-farm" / "farm.py", SUITE_PY,
-              ROOT / "hack" / "simlab" / "suite.py", ROOT / "hack" / "simlab" / "verdict.py", Path(__file__),
-              Path(vocab.__file__), vocab.DOCUMENT, *DOC_FILES):
+    for p in (simdb().main_checkout() / "hack" / "sim-farm" / "farm.py", ROOT / "hack" / "simlab" / "suite.py",
+              ROOT / "hack" / "simlab" / "verdict.py", Path(__file__)):
         add(p, "code")
     return out
 
@@ -624,7 +632,7 @@ def row_docs(names):
     """The rows' fields' docs, {field: text}: the first sentence of the
     sims' and suite.py's docs naming the field (doc_sentences), else the
     comment lines nearest above the line that writes it into a sim's row
-    (strims-sim's measures, the ppspp sim's job_row)."""
+    (row_comments)."""
     sentences = doc_sentences()
     out = {}
     for n in names:
@@ -632,6 +640,14 @@ def row_docs(names):
             if any(p.match(n) for p in pats):
                 out[n] = s if len(s) <= 600 else s[:597] + "..."
                 break
+    return out | {n: text for n, text in row_comments().items() if n not in out}
+
+
+def row_comments():
+    """The comment lines nearest above the first line that writes each
+    field into a sim's row with any (strims-sim's measures, the ppspp
+    sim's job_row), {field: text}."""
+    out = {}
     for path in DOC_FILES[1:]:
         with contextlib.suppress(OSError):
             lines = path.read_text().splitlines()
@@ -786,7 +802,8 @@ def state():
     current = current and info.get("verdict_version") == x["version"]
     if current:
         _, sv = lake_scoring(lake_columns())
-        current = not sv or info.get("scoring_version") == sv
+        current = all(not v or info.get(k) == v for k, v in (("scoring_version", sv),
+                                                              ("docs_version", lake_docs_version())))
     return {"info": info, "current": current}
 
 
@@ -915,8 +932,9 @@ class Progress:
 
 @dataclasses.dataclass
 class Indexed:
-    """What an index did: whether it changed the catalog (only its scoring
-    objects, with `scoring`); the cache sources whose files it added,
+    """What an index did: whether it changed the catalog (only its doc
+    tables, with `docs`, and its scoring objects with them, with
+    `scoring`); the cache sources whose files it added,
     replaced or let go, and how many files each way; the sources it judged
     (their verdicts made, or found made), and those whose verdicts failed,
     {src: why} (they wait for the next index)."""
@@ -928,6 +946,7 @@ class Indexed:
     replaced: int = 0
     gone: int = 0
     scoring: bool = False
+    docs: bool = False
     elapsed_s: float = 0.0
 
 
@@ -984,18 +1003,25 @@ def index(workers=None, progress=None, wait=True):
         if not (gone or changed or new or ins_changed or need_verdicts) and info.get("verdict_version") == version:
             cols = lake_columns()
             scoring, sv = lake_scoring(cols)
-            if not sv or info.get("scoring_version") == sv:
+            moved = {k: v for k, v in (("scoring_version", sv), ("docs_version", lake_docs_version()))
+                     if v and info.get(k) != v}
+            if not moved:
                 say("done", f"the catalog is up to date ({took():.1f} s)")
                 return Indexed(elapsed_s=took())
-            # Only the scoring objects changed: they, their docs and their
-            # version, alone.
+            # Only the docs or the scoring objects changed: the doc tables
+            # (scoring_docs among them), the scoring objects where theirs
+            # did, and the versions, alone.
             with scratch() as tmp:
-                lake("\n".join(["BEGIN;", *scoring, "DELETE FROM raw.info WHERE key = 'scoring_version';",
-                                 f"INSERT INTO raw.info VALUES ('scoring_version', {q(sv)});",
-                                 *catalogs_sql(cols, tmp), "COMMIT;"]), write=True, out=None)
+                lake("\n".join(["BEGIN;", *catalogs_sql(cols, tmp, recount=False),
+                                *(scoring if "scoring_version" in moved else []),
+                                f"DELETE FROM raw.info WHERE key IN ({', '.join(q(k) for k in moved)});",
+                                "INSERT INTO raw.info VALUES " + ", ".join(f"({q(k)}, {q(v)})" for k, v in moved.items())
+                                + ";", "COMMIT;"]), write=True, out=None)
             warn_undocumented()
-            say("done", f"index: the scoring macros made again ({took():.1f} s)")
-            return Indexed(changed=True, scoring=True, elapsed_s=took())
+            what = "the scoring macros and the docs" if "scoring_version" in moved else "the docs"
+            say("done", f"index: {what} made again ({', '.join(f'{k} {v}' for k, v in moved.items())}; "
+                f"{took():.1f} s)")
+            return Indexed(changed=True, scoring="scoring_version" in moved, docs=True, elapsed_s=took())
         say("scan", f"index: {len(new)} new files, {len(changed)} changed, {len(gone)} gone; "
             f"{len(ins_changed)} metadata files changed; verdicts for {len(need_verdicts)} sources")
         derived = verdict.derive(need_verdicts, workers, lambda m, done, total: say("derive", m, done, total))
@@ -1625,6 +1651,8 @@ def main_sql(cols, version, tmp, ins, parsed):
     scoring, sv = lake_scoring(cols)
     if sv:
         info["scoring_version"] = sv
+    if dv := lake_docs_version():
+        info["docs_version"] = dv
     out.append("DELETE FROM raw.info;")
     out.append("INSERT INTO raw.info VALUES " + ", ".join(f"({q(k)}, {q(v)})" for k, v in info.items()) + ";")
     # The catalogs first: the scoring macros read event_kinds.
@@ -1981,8 +2009,10 @@ def kind_docs():
     return out
 
 
-def catalogs_sql(cols, tmp):
-    """metric_catalog, event_kinds and table_catalog, made again."""
+def catalogs_sql(cols, tmp, recount=True):
+    """metric_catalog, event_kinds and table_catalog, made again: the
+    events of each kind counted again, or without `recount` kept as
+    event_kinds holds them (the runs unchanged)."""
     docs = doc_tables()
     out = []
     # table_catalog
@@ -2058,10 +2088,12 @@ ORDER BY d.tbl, d.name;""")
     # event_kinds: the vocabulary's kinds, and the kinds the runs hold that
     # it lacks (undocumented warns of them)
     seen = []
-    if "events" in cols:
+    if not recount:
+        seen.append("SELECT sim, kind, n, first_seen, last_seen FROM main.event_kinds WHERE n > 0")
+    elif "events" in cols:
         seen.append("SELECT j.sim, e.kind, count(*) AS n, min(j.ran_at) AS first_seen, max(j.ran_at) AS last_seen "
                     "FROM raw.events e JOIN main.jobs j USING (k, src) GROUP BY ALL")
-    if "derived_events" in cols:
+    if recount and "derived_events" in cols:
         seen.append(f"SELECT {q(DERIVED_SIM)} AS sim, e.kind, count(*) AS n, min(j.ran_at), max(j.ran_at) "
                     "FROM main.derived_events e JOIN main.jobs j USING (k) GROUP BY ALL")
     seen_sql = " UNION ALL ".join(seen) or ("SELECT NULL::VARCHAR AS sim, NULL::VARCHAR AS kind, 0::BIGINT AS n, "
@@ -2358,6 +2390,60 @@ def scoring_docs():
     recs.append({"name": "scoring.sql", "kind": "macros", "grain": None, "keys": None, "joins": None,
                  "description": " ".join(h for h in header if h)})
     return recs
+
+
+# --- the docs' version ------------------------------------------------------------
+
+
+def docs_version():
+    """A hash of what the doc tables (catalogs_sql's) are made from but the
+    catalog's columns, which change only with an index that makes them
+    again anyway: what the catalog reads of the sims' docs (DOC_FILES: their
+    doc tables, sentences and row comments), of suite.py's (its module
+    docs' sentences, METRICS with their comments, GUARDRAILS), of
+    run_metrics' docstring, of scoring.sql (scoring_docs) and of the
+    vocabulary (kind_docs), each as DOCS_VALUES gives it now; the registries
+    (DOCS_DATA), as this process holds them; and the code that puts them
+    together with the columns (DOCS_CODE), as it loaded."""
+    parts = [canonical(f()) for f in DOCS_VALUES] + [canonical(globals()[n]) for n in DOCS_DATA]
+    return hashlib.sha256("\n".join([repr(parts), *DOCS_SOURCES]).encode()).hexdigest()[:12]
+
+
+def lake_docs_version():
+    """docs_version; none, with a warning, when what it reads doesn't
+    load."""
+    try:
+        return docs_version()
+    except Exception as e:
+        print(f"index: no docs_version: what the docs are made from doesn't load ({e})", file=sys.stderr)
+        return None
+
+
+def canonical(v):
+    """`v` for repr to give the same text in every process: its sets
+    sorted, its patterns their text."""
+    if isinstance(v, re.Pattern):
+        return v.pattern
+    if isinstance(v, (set, frozenset)):
+        return sorted((canonical(x) for x in v), key=repr)
+    if isinstance(v, dict):
+        return {k: canonical(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [canonical(x) for x in v]
+    return v
+
+
+# What the doc tables are made from, which docs_version hashes: the docs as
+# the catalog reads them, each one's function; the registries, by name;
+# and the code that puts them together with the columns, its source read
+# as the module loads, so a process hashes the code it runs (as
+# SCORING_SOURCES are). catalogs_sql reads nothing else but the columns and
+# the SQL helpers (q, ident, jsonl, read_jsonl).
+DOCS_VALUES = (doc_tables, doc_sentences, row_comments, run_metric_docs, suite_metrics, guards, scoring_docs, kind_docs)
+DOCS_DATA = ("TABLE_DOCS", "NORMALIZED", "STANDARD_KEYS", "STANDARD_JOINS", "VERDICT_DOCS", "VERDICT_TABLES",
+             "KIND_COLS", "DERIVED_SIM", "UNITS", "PLAIN", "BACKTICK", "OWN", "META")
+DOCS_CODE = (catalogs_sql, sim_tables, row_docs, column_docs, paren, unit_of)
+DOCS_SOURCES = tuple(inspect.getsource(f) for f in DOCS_CODE)
 
 
 # --- maintenance ------------------------------------------------------------------

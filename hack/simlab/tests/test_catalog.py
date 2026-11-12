@@ -29,6 +29,13 @@ simlab.verdict's derive pool:
                parks, arrivals), folded by the store, as they are; forecast
                in either schema (tail_ms and extrapolated, or first_sight
                and lazy), the other's columns NULL
+  Docs         a change to the docs alone (a registry's entry, a doc row
+               of a sim's file, the vocabulary) makes the doc tables again
+               and nothing else, describe showing it, the event counts
+               kept, then nothing to do; the docs as they were give the
+               version they had
+  DocsVersion  docs_version hashes the code that loaded, and covers every
+               name catalogs_sql's code reads
   Registries   every one of store_host's TABLES has its STANDARD_KEYS
                and STANDARD_JOINS, and they name no other; SAMPLE_TABLES
                are TABLES
@@ -550,6 +557,118 @@ class Tables(Fixture):
                                 {"peer": 3, "held_ms": None, "live": False, "err_ms": None, "pred_err_ms": None,
                                  "held_by_p50": None, "held_by_p90": None}])
 
+
+
+class Docs(Fixture):
+    MARK = "A docs-only marker."
+
+    def described(self, topic):
+        """describe's text of `topic`, from readers opened now."""
+        pool = catalog.pool("docs", size=1, guard=engine.Guard("1GB", 1, "1GiB"))
+        try:
+            return describe.describe(topic, pool)
+        finally:
+            pool.close()
+
+    def info(self):
+        return {r["key"]: r["value"] for r in catalog.lake("SELECT * FROM catalog_info;")}
+
+    def kinds(self):
+        return catalog.lake("SELECT * FROM event_kinds ORDER BY sim, kind;")
+
+    def docs_index(self):
+        """An index that makes the doc tables again and nothing else, then
+        one with nothing to do: the docs_version it recorded."""
+        got, events = self.index()
+        self.assertEqual((got.changed, got.docs, got.scoring, got.sources, got.judged), (True, True, False, [], []))
+        self.assertEqual([e.kind for e in events], ["done"])
+        version = catalog.docs_version()
+        self.assertRegex(events[0].message, rf"^index: the docs made again \(docs_version {version}; [0-9.]+ s\)$")
+        self.assertEqual(self.info()["docs_version"], version)
+        got, events = self.index()
+        self.assertFalse(got.changed)
+        self.assertRegex(events[-1].message, r"^the catalog is up to date \(")
+        return version
+
+    def test_a_change_to_the_docs_alone_makes_the_doc_tables_again(self):
+        self.index()
+        self.assertFalse(self.index()[0].changed)
+        first, kinds = self.info()["docs_version"], self.kinds()
+        self.assertEqual(first, catalog.docs_version())
+        self.assertTrue(any(r["n"] for r in kinds))
+        # A registry's entry, as 0d09ff96's keys and joins were.
+        with mock.patch.dict(catalog.STANDARD_KEYS, {"viewers": "k, viewer, marker"}):
+            keyed = self.docs_index()
+            self.assertEqual(catalog.lake("SELECT keys FROM table_catalog WHERE name = 'viewers';"),
+                             [{"keys": "k, viewer, marker"}])
+            self.assertIn("keys: k, viewer, marker", self.described("viewers"))
+            # The runs' counts kept as they were.
+            self.assertEqual(self.kinds(), kinds)
+        # The entry as it was: the version it had.
+        self.assertEqual(self.docs_index(), first)
+        self.assertNotIn("k, viewer, marker", self.described("viewers"))
+        # A doc row of a sim's file, in a copy of it: the same text
+        # elsewhere is the same version.
+        copies = []
+        (self.root / "doc-files").mkdir()
+        for p in catalog.DOC_FILES:
+            copies.append(Path(shutil.copy(p, self.root / "doc-files" / p.name)))
+        with mock.patch.object(catalog, "DOC_FILES", tuple(copies)):
+            self.assertFalse(self.index()[0].changed)
+            row = "/// | `viewers` | viewer | `viewer`, "
+            text = copies[1].read_text()
+            self.assertEqual(text.count(row), 1)
+            copies[1].write_text(text.replace(row, f"/// | `viewers` | viewer | {self.MARK} `viewer`, "))
+            edited = self.docs_index()
+            desc = catalog.lake("SELECT description FROM table_catalog WHERE name = 'viewers';")[0]["description"]
+            self.assertTrue(desc.startswith(f"ppspp: {self.MARK} `viewer`, "), desc)
+            self.assertIn(self.MARK, self.described("viewers"))
+            # The vocabulary: a kind the runs hold that it lacks keeps its
+            # count, undocumented.
+            doc = without(vocab.load(), "uplink_rate")
+            err = io.StringIO()
+            with mock.patch.object(vocab, "load", lambda path=None: doc), contextlib.redirect_stderr(err):
+                lacking = self.docs_index()
+            self.assertEqual(err.getvalue(), "index: event kind uplink_rate (strims-sim) isn't in the vocabulary, "
+                                             "crates/strims-wan/vocab.toml\n")
+            was = next(r for r in kinds if (r["kind"], r["sim"]) == ("uplink_rate", "strims-sim"))
+            now = next(r for r in self.kinds() if (r["kind"], r["sim"]) == ("uplink_rate", "strims-sim"))
+            self.assertGreater(was["n"], 0)
+            self.assertEqual((now["documented"], now["description"]), (False, None))
+            self.assertEqual({c: now[c] for c in ("n", "first_seen", "last_seen")},
+                             {c: was[c] for c in ("n", "first_seen", "last_seen")})
+        self.assertEqual(len({first, keyed, edited, lacking}), 4)
+        # The docs as they were: their version, and the tables as they were.
+        self.assertEqual(self.docs_index(), first)
+        self.assertEqual(self.kinds(), kinds)
+        self.assertNotIn(self.MARK, self.described("viewers"))
+
+
+class DocsVersion(unittest.TestCase):
+    def test_the_version_hashes_the_code_that_loaded(self):
+        # As scoring_version and derived_version: a process that outlives
+        # an edit to catalog.py hashes the code it runs.
+        version = catalog.docs_version()
+        with mock.patch("inspect.getsource", lambda f: "an edited file's text"):
+            self.assertEqual(catalog.docs_version(), version)
+
+    def test_it_covers_every_name_catalogs_sqls_code_reads(self):
+        # Each module-level name the code putting the docs together reads
+        # is that code's, a value docs_version hashes, a registry it
+        # hashes, or a helper making SQL.
+        import ast
+        import inspect
+        import textwrap
+        covered = ({f.__name__ for f in (*catalog.DOCS_CODE, *catalog.DOCS_VALUES)} | set(catalog.DOCS_DATA)
+                   | {"q", "ident", "jsonl", "read_jsonl"})
+        for f in catalog.DOCS_CODE:
+            tree = ast.parse(textwrap.dedent(inspect.getsource(f)))
+            own = {a.arg for a in ast.walk(tree) if isinstance(a, ast.arg)} | {
+                n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
+            read = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)} - own
+            names = {n for n in read if hasattr(catalog, n) and not inspect.ismodule(getattr(catalog, n))
+                     and not isinstance(getattr(catalog, n), type)}
+            self.assertEqual(sorted(names - covered), [], f.__name__)
 
 
 class Registries(unittest.TestCase):
