@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTitle } from "react-use";
 
+import { InputError } from "../../../components/Form";
 import {
   fromStyleSheetFormValue,
   toStyleSheetFormValue,
@@ -36,6 +37,18 @@ const ChatModifierEditForm: React.FC = () => {
 
   if (getRes.loading) {
     return null;
+  }
+
+  if (getRes.error) {
+    return (
+      <>
+        <TableTitleBar
+          label="Edit Modifier"
+          backLink={`/settings/chat-servers/${serverId}/modifiers`}
+        />
+        <InputError error={getRes.error.message || "Error loading modifier"} />
+      </>
+    );
   }
 
   const { modifier } = getRes.value;
